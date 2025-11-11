@@ -40,6 +40,26 @@ CREATE TABLE IF NOT EXISTS verificaciones_inventario (
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Si la tabla ya existía, agregar columnas faltantes
+DO $$
+BEGIN
+    -- Agregar campo 'updated_at' si no existe
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'verificaciones_inventario' AND column_name = 'updated_at'
+    ) THEN
+        ALTER TABLE verificaciones_inventario ADD COLUMN updated_at TIMESTAMP DEFAULT NOW();
+    END IF;
+
+    -- Agregar campo 'motivo_rechazo' si no existe
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'verificaciones_inventario' AND column_name = 'motivo_rechazo'
+    ) THEN
+        ALTER TABLE verificaciones_inventario ADD COLUMN motivo_rechazo TEXT;
+    END IF;
+END $$;
+
 -- =====================================================
 -- 3. TABLA: verificaciones_detalle
 -- =====================================================
@@ -62,6 +82,26 @@ CREATE TABLE IF NOT EXISTS verificaciones_detalle (
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Si la tabla ya existía, agregar columnas faltantes
+DO $$
+BEGIN
+    -- Agregar campo 'aprobado' si no existe
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'verificaciones_detalle' AND column_name = 'aprobado'
+    ) THEN
+        ALTER TABLE verificaciones_detalle ADD COLUMN aprobado BOOLEAN DEFAULT false;
+    END IF;
+
+    -- Agregar campo 'updated_at' si no existe
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'verificaciones_detalle' AND column_name = 'updated_at'
+    ) THEN
+        ALTER TABLE verificaciones_detalle ADD COLUMN updated_at TIMESTAMP DEFAULT NOW();
+    END IF;
+END $$;
 
 -- Índices para mejorar el rendimiento
 CREATE INDEX IF NOT EXISTS idx_verificaciones_detalle_verificacion

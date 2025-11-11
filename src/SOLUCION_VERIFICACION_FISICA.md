@@ -22,7 +22,20 @@ Las **tablas de base de datos necesarias para el módulo de Verificación Físic
 2. En el panel lateral, haz clic en **🛢️ SQL Editor**
 3. Haz clic en **"+ New query"**
 
-### Paso 2: Ejecutar el Script de Configuración
+### Paso 2A: Si las tablas YA EXISTEN (error de columna faltante)
+
+**Si recibiste el error:** `column vd.aprobado does not exist`
+
+Esto significa que las tablas ya existen pero les faltan columnas. Ejecuta primero:
+
+1. Abre el archivo `VERIFICACION_FIX_COLUMNAS.sql` (está en la carpeta `src`)
+2. **Copia TODO el contenido** del archivo
+3. **Pega** en el editor SQL de Supabase
+4. Haz clic en **"Run"**
+5. Deberías ver mensajes con ✅ indicando qué columnas se agregaron
+6. **Luego continúa al Paso 2B**
+
+### Paso 2B: Ejecutar el Script de Configuración Completo
 
 1. Abre el archivo `VERIFICACION_INVENTARIO_SETUP.sql` (está en la carpeta `src`)
 2. **Copia TODO el contenido** del archivo
@@ -156,6 +169,12 @@ ALTER TABLE productos ADD COLUMN activo BOOLEAN DEFAULT true;
 ---
 
 ## 🐛 Solución de Problemas
+
+### ❌ Error: "column vd.aprobado does not exist" o "column ... does not exist"
+**Problema**: Las tablas existen pero les faltan columnas
+**Solución**:
+1. Ejecuta primero `VERIFICACION_FIX_COLUMNAS.sql` (Paso 2A)
+2. Luego ejecuta `VERIFICACION_INVENTARIO_SETUP.sql` (Paso 2B)
 
 ### ❌ Error: "relation verificaciones_inventario does not exist"
 **Problema**: No ejecutaste el script SQL
