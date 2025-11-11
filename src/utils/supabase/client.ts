@@ -32,9 +32,9 @@ export async function getUserProfile(userId: string) {
   try {
     console.log('🔍 getUserProfile: Buscando perfil para user ID:', userId);
     
-    // Crear un timeout de 5 segundos
+    // Crear un timeout de 8 segundos (aumentado de 5)
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Timeout: getUserProfile tardó más de 5 segundos')), 5000)
+      setTimeout(() => reject(new Error('Timeout: getUserProfile tardó más de 8 segundos')), 8000)
     );
     
     const queryPromise = supabase
@@ -49,7 +49,12 @@ export async function getUserProfile(userId: string) {
     ]) as any;
     
     if (error) {
-      console.error('❌ Error obteniendo perfil:', error);
+      // Si es error "no rows found", no es un error crítico
+      if (error.code === 'PGRST116') {
+        console.log('ℹ️ No se encontró perfil en tabla usuarios (esto es normal si no se ha creado)');
+      } else {
+        console.error('❌ Error obteniendo perfil:', error);
+      }
       return null;
     }
     

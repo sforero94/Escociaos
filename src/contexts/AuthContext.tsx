@@ -67,21 +67,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('🔍 Verificando usuario actual...');
       setIsLoading(true);
       
-      // Timeout de seguridad de 10 segundos
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Timeout: La verificación tardó demasiado')), 10000)
-      );
-      
       const supabase = getSupabase();
-      const checkPromise = supabase.auth.getSession();
       
-      const { data: { session }, error } = await Promise.race([
-        checkPromise,
-        timeoutPromise
-      ]) as any;
+      // Simplificado: Sin timeout aquí, Supabase maneja esto internamente
+      const { data: { session }, error } = await supabase.auth.getSession();
       
       if (error) {
         console.error('❌ Error obteniendo sesión:', error);
+        setUser(null);
+        setProfile(null);
+        setSession(null);
         setIsLoading(false);
         return;
       }
@@ -98,7 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.error('❌ Error verificando usuario:', error);
-      // Si hay error o timeout, establecer como no autenticado
+      // Si hay error, establecer como no autenticado
       setUser(null);
       setProfile(null);
       setSession(null);
@@ -111,43 +106,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       console.log('👤 Cargando datos del usuario...');
       const currentUser = currentSession.user;
+      
+      // Establecer user y session INMEDIATAMENTE
       setUser(currentUser);
       setSession(currentSession);
 
-      // Obtener perfil con timeout de 5 segundos
-      console.log('📋 Buscando perfil en tabla usuarios...');
+      // Crear perfil temporal por defecto (INMEDIATO)
+      const temporalProfile = {
+        id: currentUser.id,
+        nombre: currentUser.email?.split('@')[0] || 'Usuario',
+        email: currentUser.email || '',
+        rol: 'Administrador',
+      };
+
+      // Establecer perfil temporal PRIMERO para que la app funcione de inmediato
+      setProfile(temporalProfile);
+      console.log('✅ Perfil temporal establecido (app lista):', temporalProfile);
+
+      // OPCIONAL: Intentar obtener perfil real de la tabla en background
+      // Si falla o tarda, no importa porque ya tenemos el temporal
+      console.log('📋 Intentando obtener perfil real de tabla usuarios (opcional)...');
       
       try {
-        const userProfile = await getUserProfile(currentUser.id);
+        // Timeout más corto (3 segundos) porque no es crítico
+        const timeoutPromise = new Promise<null>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout en background')), 3000)
+        );
+        
+        const profilePromise = getUserProfile(currentUser.id);
+        
+        const userProfile = await Promise.race([
+          profilePromise,
+          timeoutPromise
+        ]);
         
         if (userProfile) {
-          console.log('✅ Perfil encontrado:', userProfile.nombre);
+          console.log('✅ Perfil real encontrado, actualizando:', userProfile.nombre);
           setProfile(userProfile);
         } else {
-          console.warn('⚠️ No se encontró perfil en la tabla usuarios. Creando perfil temporal...');
-          // Si no hay perfil, crear uno básico desde auth
-          const basicProfile = {
-            id: currentUser.id,
-            nombre: currentUser.email?.split('@')[0] || 'Usuario',
-            email: currentUser.email || '',
-            rol: 'Administrador', // Rol por defecto
-          };
-          setProfile(basicProfile);
-          console.log('📝 Perfil temporal creado:', basicProfile);
-          console.log('💡 NOTA: Para usar el perfil completo, crea el registro en la tabla usuarios');
+          console.log('ℹ️ Sin perfil en tabla, usando temporal (esto es normal)');
         }
-      } catch (profileError) {
-        console.error('❌ Error obteniendo perfil (timeout o error de red):', profileError);
-        // Crear perfil de emergencia si falla la consulta
-        const basicProfile = {
-          id: currentUser.id,
-          nombre: currentUser.email?.split('@')[0] || 'Usuario',
-          email: currentUser.email || '',
-          rol: 'Administrador',
-        };
-        setProfile(basicProfile);
-        console.log('📝 Perfil de emergencia creado debido a error:', basicProfile);
+      } catch (profileError: any) {
+        // No es crítico, ya tenemos perfil temporal
+        if (profileError.message === 'Timeout en background') {
+          console.log('⏱️ Timeout obteniendo perfil real, usando temporal (OK)');
+        } else {
+          console.log('ℹ️ No se pudo obtener perfil real, usando temporal (OK):', profileError.message);
+        }
       }
+
     } catch (error) {
       console.error('❌ Error cargando datos del usuario:', error);
       // Establecer datos básicos aunque falle
