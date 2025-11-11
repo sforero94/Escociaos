@@ -176,6 +176,10 @@ ALTER TABLE productos ADD COLUMN activo BOOLEAN DEFAULT true;
 1. Ejecuta primero `VERIFICACION_FIX_COLUMNAS.sql` (Paso 2A)
 2. Luego ejecuta `VERIFICACION_INVENTARIO_SETUP.sql` (Paso 2B)
 
+### ❌ Error: "cannot change name of view column ... to ..."
+**Problema**: La vista existe con estructura diferente
+**Solución**: El script ahora incluye `DROP VIEW` antes de recrearla. Ejecuta el script completo nuevamente.
+
 ### ❌ Error: "relation verificaciones_inventario does not exist"
 **Problema**: No ejecutaste el script SQL
 **Solución**: Sigue los pasos 1-3 arriba

@@ -82,6 +82,9 @@ WHERE table_name IN ('verificaciones_inventario', 'verificaciones_detalle', 'pro
   AND column_name IN ('aprobado', 'updated_at', 'motivo_rechazo', 'activo')
 ORDER BY table_name, column_name;
 
+-- Eliminar vista existente que pueda tener estructura diferente
+DROP VIEW IF EXISTS vista_resumen_verificaciones CASCADE;
+
 -- =====================================================
 -- Mensaje final
 -- =====================================================

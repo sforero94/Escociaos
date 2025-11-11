@@ -173,7 +173,11 @@ CREATE TRIGGER trigger_calcular_diferencias
 -- =====================================================
 -- Proporciona un resumen agregado de cada verificación
 
-CREATE OR REPLACE VIEW vista_resumen_verificaciones AS
+-- Eliminar vista existente si tiene estructura diferente
+DROP VIEW IF EXISTS vista_resumen_verificaciones CASCADE;
+
+-- Crear vista con estructura completa
+CREATE VIEW vista_resumen_verificaciones AS
 SELECT
   v.id,
   v.fecha_inicio,
