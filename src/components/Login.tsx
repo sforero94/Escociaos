@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { signIn } from '../utils/supabase/client';
-import loginImage from 'figma:asset/a5137a5cf75d4b4712a958a64a7a74aa50a566e8.png';
+// import loginImage from 'figma:asset/a5137a5cf75d4b4712a958a64a7a74aa50a566e8.png';
 
 interface LoginProps {
   onLoginSuccess: () => void;
@@ -53,13 +53,15 @@ export function Login({ onLoginSuccess }: LoginProps) {
           
           {/* Imagen del logo */}
           <div className="text-center mb-8">
+            {/* Imagen de Figma comentada temporalmente
             <div className="inline-block mb-6">
-              <img 
-                src={loginImage} 
-                alt="Escocia Hass" 
+              <img
+                src={loginImage}
+                alt="Escocia Hass"
                 className="w-full max-w-sm mx-auto rounded-2xl"
               />
             </div>
+            */}
             <h1 className="text-3xl text-[#172E08] mb-2">
               Sistema de Gestión Agrícola
             </h1>
