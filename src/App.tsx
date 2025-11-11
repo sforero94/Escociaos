@@ -11,6 +11,8 @@ import { MovementsDashboard } from './components/inventory/MovementsDashboard';
 import { VerificacionesList } from './components/inventory/VerificacionesList';
 import { NuevaVerificacion } from './components/inventory/NuevaVerificacion';
 import { ConteoFisico } from './components/inventory/ConteoFisico';
+import { AplicacionesList } from './components/aplicaciones/AplicacionesList';
+import { CalculadoraAplicaciones } from './components/aplicaciones/CalculadoraAplicaciones';
 
 /**
  * Componente de placeholder para módulos en desarrollo
@@ -69,10 +71,11 @@ function LayoutRoutes() {
         </Route>
 
         {/* Aplicaciones */}
-        <Route
-          path="aplicaciones"
-          element={<ComingSoon moduleName="Aplicaciones Fitosanitarias" />}
-        />
+        <Route path="aplicaciones">
+          <Route index element={<AplicacionesList />} />
+          <Route path="calculadora" element={<CalculadoraAplicaciones />} />
+          <Route path=":id" element={<ComingSoon moduleName="Detalle de Aplicación" />} />
+        </Route>
 
         {/* Monitoreo */}
         <Route

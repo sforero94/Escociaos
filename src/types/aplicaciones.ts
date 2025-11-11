@@ -1,0 +1,180 @@
+// types/aplicaciones.ts
+// Tipos TypeScript para el módulo de Aplicaciones
+
+export type TipoAplicacion = 'fumigacion' | 'fertilizacion';
+export type TamanoCaneca = 20 | 200 | 500 | 1000;
+export type TipoArbol = 'grandes' | 'medianos' | 'pequenos' | 'clonales';
+export type EstadoAplicacion = 'planificada' | 'en_ejecucion' | 'cerrada';
+
+// Configuración General (Paso 1)
+export interface ConfiguracionAplicacion {
+  nombre: string;
+  tipo: TipoAplicacion;
+  fecha_inicio: string;
+  proposito?: string;
+  agronomo_responsable?: string;
+  lotes_seleccionados: LoteSeleccionado[];
+}
+
+export interface LoteSeleccionado {
+  lote_id: string;
+  lote_nombre: string;
+  sublotes: string[];
+  area_hectareas: number;
+  arboles: {
+    grandes: number;
+    medianos: number;
+    pequenos: number;
+    clonales: number;
+    total: number;
+  };
+  // Específico de fumigación
+  calibracion_litros_arbol?: number;
+  tamano_caneca?: TamanoCaneca;
+  mezcla_asignada?: string; // ID de la mezcla
+}
+
+// Mezcla y Productos (Paso 2)
+export interface Mezcla {
+  id: string;
+  nombre: string;
+  productos: ProductoEnMezcla[];
+}
+
+export interface ProductoEnMezcla {
+  producto_id: string;
+  producto_nombre: string;
+  producto_categoria: string;
+  producto_unidad: 'litros' | 'kilos' | 'unidades';
+  
+  // Dosis según tipo de aplicación
+  // Para fumigación: cc o gramos por caneca de 200L
+  dosis_por_caneca?: number;
+  unidad_dosis?: 'cc' | 'gramos';
+  
+  // Para fertilización: kilos por árbol según tamaño
+  dosis_grandes?: number;
+  dosis_medianos?: number;
+  dosis_pequenos?: number;
+  dosis_clonales?: number;
+  
+  // Cálculos
+  cantidad_total_necesaria: number;
+  inventario_disponible?: number;
+  cantidad_faltante?: number;
+}
+
+// Cálculos de Aplicación
+export interface CalculosPorLote {
+  lote_id: string;
+  lote_nombre: string;
+  
+  // Fumigación
+  litros_mezcla?: number;
+  numero_canecas?: number;
+  
+  // Fertilización
+  kilos_totales?: number;
+  numero_bultos?: number;
+  
+  // Productos necesarios para este lote
+  productos: {
+    producto_id: string;
+    cantidad_necesaria: number;
+  }[];
+}
+
+// Lista de Compras (Paso 3)
+export interface ItemListaCompras {
+  producto_id: string;
+  producto_nombre: string;
+  producto_categoria: string;
+  unidad: 'litros' | 'kilos' | 'unidades';
+  
+  inventario_actual: number;
+  cantidad_necesaria: number;
+  cantidad_faltante: number;
+  
+  presentacion_comercial: string; // ej: "Bulto de 25kg", "Tarro de 1L"
+  unidades_a_comprar: number;
+  
+  ultimo_precio_unitario?: number;
+  costo_estimado?: number;
+  
+  alerta?: 'sin_precio' | 'sin_stock' | 'normal';
+}
+
+export interface ListaCompras {
+  items: ItemListaCompras[];
+  costo_total_estimado: number;
+  productos_sin_precio: number;
+  productos_sin_stock: number;
+}
+
+// Estado completo de la calculadora
+export interface EstadoCalculadora {
+  paso_actual: 1 | 2 | 3;
+  configuracion: ConfiguracionAplicacion | null;
+  mezclas: Mezcla[];
+  calculos: CalculosPorLote[];
+  lista_compras: ListaCompras | null;
+  guardando: boolean;
+  error: string | null;
+}
+
+// Aplicación guardada en BD
+export interface Aplicacion {
+  id: string;
+  nombre: string;
+  tipo: TipoAplicacion;
+  fecha_inicio: string;
+  fecha_cierre?: string;
+  estado: EstadoAplicacion;
+  proposito?: string;
+  agronomo_responsable?: string;
+  
+  // JSON de configuración
+  configuracion: ConfiguracionAplicacion;
+  mezclas: Mezcla[];
+  calculos: CalculosPorLote[];
+  lista_compras: ListaCompras;
+  
+  // Metadatos
+  creado_en: string;
+  creado_por: string;
+  actualizado_en: string;
+}
+
+// Producto del catálogo (para selección)
+export interface ProductoCatalogo {
+  id: string;
+  nombre: string;
+  categoria: string;
+  grupo: string;
+  unidad_medida: 'litros' | 'kilos' | 'unidades';
+  estado_fisico: 'liquido' | 'solido';
+  presentacion_comercial: string;
+  ultimo_precio_unitario?: number;
+  cantidad_actual: number;
+  
+  // Para mostrar en UI
+  display_nombre?: string; // "Producto (Categoría) - Stock: X"
+}
+
+// Lote del catálogo (para selección)
+export interface LoteCatalogo {
+  id: string;
+  nombre: string;
+  area_hectareas: number;
+  sublotes: {
+    id: string;
+    nombre: string;
+  }[];
+  conteo_arboles: {
+    grandes: number;
+    medianos: number;
+    pequenos: number;
+    clonales: number;
+    total: number;
+  };
+}

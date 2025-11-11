@@ -109,12 +109,22 @@ export function ConteoFisico() {
         `
         )
         .eq('verificacion_id', id)
-        .order('contado', { ascending: true }) // Los no contados primero
-        .order('producto.nombre', { ascending: true });
+        .order('contado', { ascending: true }); // Los no contados primero
 
-      if (errorDets) throw errorDets;
+      if (errorDets) {
+        console.error('Error cargando verificación:', errorDets);
+        throw errorDets;
+      }
 
-      setDetalles(dets || []);
+      // Ordenar manualmente por nombre de producto después de obtener los datos
+      const detsSorted = (dets || []).sort((a, b) => {
+        if (a.contado === b.contado) {
+          return (a.producto?.nombre || '').localeCompare(b.producto?.nombre || '');
+        }
+        return a.contado ? 1 : -1;
+      });
+
+      setDetalles(detsSorted);
 
       // Si hay productos, ir al primero no contado
       if (dets && dets.length > 0) {
