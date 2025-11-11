@@ -3,6 +3,7 @@ import { ArrowUpCircle, ArrowDownCircle, RefreshCw, ChevronDown, Package } from 
 import { getSupabase } from '../../utils/supabase/client';
 import { formatNumber } from '../../utils/format';
 import { Button } from '../ui/button';
+import { useToast } from '../shared/Toast';
 
 interface Movement {
   id: number;
@@ -23,6 +24,7 @@ interface ProductMovementsProps {
 }
 
 export function ProductMovements({ productId, productName, unidadMedida }: ProductMovementsProps) {
+  const { showError, showSuccess } = useToast();
   const [movements, setMovements] = useState<Movement[]>([]);
   const [loading, setLoading] = useState(true);
   const [limit, setLimit] = useState(10);
@@ -42,10 +44,17 @@ export function ProductMovements({ productId, productName, unidadMedida }: Produ
         .order('created_at', { ascending: false })
         .limit(limit);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error cargando movimientos:', error);
+        showError('❌ No se pudieron cargar los movimientos del producto.');
+        return;
+      }
+
       setMovements(data || []);
+      showSuccess(`✅ ${data.length} movimientos cargados`);
     } catch (err: any) {
       console.error('Error cargando movimientos:', err);
+      showError('❌ Error inesperado al cargar movimientos.');
     } finally {
       setLoading(false);
     }

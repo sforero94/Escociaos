@@ -8,6 +8,7 @@ import { InventoryNav } from './InventoryNav';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../shared/Toast';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface NewPurchaseProps {
   onNavigate?: (view: string) => void;
@@ -33,6 +34,7 @@ interface PurchaseItem {
 
 export function NewPurchase({ onNavigate }: NewPurchaseProps) {
   const navigate = useNavigate();
+  const { profile } = useAuth();
   const { showSuccess, showError, showWarning, showInfo, ToastContainer } = useToast();
   
   const [products, setProducts] = useState<Product[]>([]);
@@ -232,7 +234,7 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
     setShowConfirmDialog(true);
   };
 
-  // Guardar compra después de confirmación
+  // Guardar compra después de confirmación usando función SQL transaccional
   const confirmPurchase = async () => {
     setShowConfirmDialog(false);
     setIsSaving(true);
@@ -241,96 +243,52 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
     try {
       const supabase = getSupabase();
 
-      // Crear la compra principal
-      const { data: compraData, error: compraError } = await supabase
-        .from('compras')
-        .insert([
-          {
-            fecha: purchaseData.fecha,
-            proveedor: purchaseData.proveedor,
-            numero_factura: purchaseData.numero_factura,
-            total: calculateTotal(),
-            estado: 'completada',
-          },
-        ])
-        .select()
-        .single();
+      // Preparar items en formato JSONB para la función SQL
+      const items = purchaseItems.map(item => ({
+        producto_id: parseInt(item.producto_id),
+        cantidad: parseFloat(item.cantidad),
+        precio_unitario: parseFloat(item.precio_unitario),
+        lote_producto: item.lote_producto || null,
+        fecha_vencimiento: item.fecha_vencimiento || null,
+        permitido_gerencia: item.permitido_gerencia
+      }));
 
-      if (compraError) throw compraError;
+      // Llamar a la función PostgreSQL que ejecuta todo en una transacción atómica
+      const { data, error } = await supabase.rpc('registrar_compra', {
+        p_fecha: purchaseData.fecha,
+        p_proveedor: purchaseData.proveedor,
+        p_numero_factura: purchaseData.numero_factura,
+        p_total: calculateTotal(),
+        p_items: items,
+        p_user_id: profile?.id || null
+      });
 
-      // Crear detalles de compra y movimientos de inventario
-      for (const item of purchaseItems) {
-        const cantidad = parseFloat(item.cantidad);
-        const precioUnitario = parseFloat(item.precio_unitario);
-        const productoId = parseInt(item.producto_id);
-
-        // Insertar detalle de compra
-        const { error: detalleError } = await supabase
-          .from('detalles_compra')
-          .insert([
-            {
-              compra_id: compraData.id,
-              producto_id: productoId,
-              cantidad: cantidad,
-              precio_unitario: precioUnitario,
-              subtotal: cantidad * precioUnitario,
-              lote_producto: item.lote_producto || null,
-              fecha_vencimiento: item.fecha_vencimiento || null,
-              permitido_gerencia: item.permitido_gerencia,
-            },
-          ]);
-
-        if (detalleError) throw detalleError;
-
-        // Obtener cantidad actual del producto
-        const { data: productoData, error: productoError } = await supabase
-          .from('productos')
-          .select('cantidad_actual')
-          .eq('id', productoId)
-          .single();
-
-        if (productoError) throw productoError;
-
-        const cantidadAnterior = productoData.cantidad_actual;
-        const cantidadNueva = cantidadAnterior + cantidad;
-
-        // Actualizar cantidad en productos
-        const { error: updateError } = await supabase
-          .from('productos')
-          .update({ cantidad_actual: cantidadNueva })
-          .eq('id', productoId);
-
-        if (updateError) throw updateError;
-
-        // Registrar movimiento de inventario
-        const { error: movimientoError } = await supabase
-          .from('movimientos_inventario')
-          .insert([
-            {
-              producto_id: productoId,
-              tipo_movimiento: 'entrada',
-              cantidad: cantidad,
-              cantidad_anterior: cantidadAnterior,
-              cantidad_nueva: cantidadNueva,
-              referencia_id: compraData.id,
-              tipo_referencia: 'compra',
-              notas: `Compra #${purchaseData.numero_factura} - ${purchaseData.proveedor}`,
-            },
-          ]);
-
-        if (movimientoError) throw movimientoError;
+      if (error) {
+        console.error('Error al registrar compra:', error);
+        // Mostrar mensaje de error más específico
+        if (error.message.includes('Ya existe una compra')) {
+          showError('❌ Esta factura ya fue registrada anteriormente');
+        } else if (error.message.includes('no existe o no está activo')) {
+          showError('❌ Uno de los productos seleccionados no existe o no está activo');
+        } else {
+          showError(`❌ ${error.message || 'Error al registrar la compra'}`);
+        }
+        return;
       }
 
-      showSuccess(`✅ Compra registrada exitosamente: ${purchaseItems.length} producto(s) - Factura ${purchaseData.numero_factura}`);
+      // Mostrar éxito con datos del resultado
+      showSuccess(`✅ Compra registrada exitosamente: ${data.items_procesados} producto(s) - Factura ${data.numero_factura}`);
       showInfo('📊 Inventario actualizado automáticamente');
-      
+
+      console.log('✅ Compra registrada:', data);
+
       setShowSuccessView(true);
       setTimeout(() => {
         navigate('/inventario/movimientos');
       }, 2000);
     } catch (err: any) {
-      console.error('Error guardando compra:', err);
-      showError(`❌ Error al guardar: ${err.message || 'Intente nuevamente'}`);
+      console.error('Error inesperado guardando compra:', err);
+      showError(`❌ Error inesperado: ${err.message || 'Por favor intente nuevamente'}`);
     } finally {
       setIsSaving(false);
     }

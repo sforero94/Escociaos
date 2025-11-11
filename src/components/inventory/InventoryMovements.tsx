@@ -5,6 +5,7 @@ import { formatNumber } from '../../utils/format';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { InventoryNav } from './InventoryNav';
+import { useToast } from '../shared/Toast';
 
 interface Movement {
   id: number;
@@ -31,6 +32,7 @@ interface Product {
 }
 
 export function InventoryMovements() {
+  const { showError, showSuccess, showInfo, ToastContainer } = useToast();
   const [movements, setMovements] = useState<Movement[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,10 +67,16 @@ export function InventoryMovements() {
         .eq('activo', true)
         .order('nombre');
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error cargando productos:', error);
+        showError('❌ No se pudieron cargar los productos para filtros.');
+        return;
+      }
+
       setProducts(data || []);
     } catch (err: any) {
       console.error('Error cargando productos:', err);
+      showError('❌ Error inesperado al cargar productos.');
     }
   };
 
@@ -78,7 +86,7 @@ export function InventoryMovements() {
 
     try {
       const supabase = getSupabase();
-      
+
       // Query base
       let query = supabase
         .from('movimientos_inventario')
@@ -107,8 +115,13 @@ export function InventoryMovements() {
 
       const { data, error } = await query;
 
-      if (error) throw error;
-      
+      if (error) {
+        console.error('Error cargando movimientos:', error);
+        showError('❌ No se pudieron cargar los movimientos. Por favor intente nuevamente.');
+        setError('Error al cargar los movimientos');
+        return;
+      }
+
       // Debug: Ver qué tipo_movimiento viene de la BD
       if (data && data.length > 0) {
         console.log('🔍 Ejemplo de movimiento desde BD:', {
@@ -118,10 +131,12 @@ export function InventoryMovements() {
           producto: data[0].producto
         });
       }
-      
+
       setMovements(data || []);
+      showSuccess(`✅ ${data.length} movimientos cargados`);
     } catch (err: any) {
       console.error('Error cargando movimientos:', err);
+      showError('❌ Error inesperado al cargar movimientos. Verifique su conexión.');
       setError('Error al cargar los movimientos');
     } finally {
       setLoading(false);
@@ -216,6 +231,7 @@ export function InventoryMovements() {
 
   return (
     <div className="space-y-6">
+      <ToastContainer />
       {/* Barra de navegación */}
       <InventoryNav />
       

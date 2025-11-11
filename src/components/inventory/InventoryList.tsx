@@ -7,6 +7,7 @@ import { getSupabase } from '../../utils/supabase/client';
 import { ProductForm } from './ProductForm';
 import { ProductMovements } from './ProductMovements';
 import { InventoryNav } from './InventoryNav';
+import { useToast } from '../shared/Toast';
 
 interface InventoryListProps {
   onNavigate?: (view: string, productId?: number) => void;
@@ -24,12 +25,13 @@ interface Product {
 }
 
 export function InventoryList({ onNavigate }: InventoryListProps) {
+  const { showError, showSuccess, ToastContainer } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('todas');
   const [isLoading, setIsLoading] = useState(true);
-  
+
   // Estados para el formulario de productos
   const [isProductFormOpen, setIsProductFormOpen] = useState(false);
   const [editingProductId, setEditingProductId] = useState<number | null>(null);
@@ -57,11 +59,17 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
 
       if (error) {
         console.error('Error cargando productos:', error);
-      } else if (data) {
+        showError('❌ No se pudieron cargar los productos. Por favor intente nuevamente.');
+        return;
+      }
+
+      if (data) {
         setProducts(data);
+        showSuccess(`✅ ${data.length} productos cargados exitosamente`);
       }
     } catch (error) {
       console.error('Error inesperado:', error);
+      showError('❌ Error inesperado al cargar productos. Verifique su conexión.');
     } finally {
       setIsLoading(false);
     }
@@ -119,6 +127,7 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
 
   return (
     <div className="space-y-6">
+      <ToastContainer />
       {/* Barra de navegación */}
       <InventoryNav />
       
