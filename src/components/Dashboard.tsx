@@ -1,334 +1,518 @@
 import { useEffect, useState } from 'react';
 import { Package, Sprout, Activity, TrendingUp, DollarSign, MapPin } from 'lucide-react';
-import { MetricCard } from './ui/MetricCard';
-import { AlertBanner } from './ui/AlertBanner';
 import { getSupabase } from '../utils/supabase/client';
+import { formatCurrency, formatNumber, formatWeight, formatCompact, formatRelativeTime } from '../utils/format';
+import { 
+  MetricCard, 
+  MetricCardGrid, 
+  AlertList, 
+  AlertListHeader, 
+  AlertListContainer,
+  type Alerta 
+} from './dashboard';
 
 interface DashboardProps {
   onNavigate: (view: string) => void;
 }
 
-interface DashboardData {
-  inventoryValue: number;
-  inventoryAlerts: number;
-  applicationsActive: number;
-  nextApplication: string;
-  criticalIncidents: number;
-  lastMonitoring: string;
-  weekProduction: number;
-  avgPerTree: number;
-  monthlySales: number;
-  activeClients: number;
-  totalLots: number;
-  topLot: string;
+/**
+ * Métricas principales del dashboard
+ */
+interface DashboardMetrics {
+  inventarioValor: number;           // Valor total del inventario en COP
+  aplicacionesActivas: number;       // Aplicaciones en ejecución
+  monitoreosCriticos: number;        // Monitoreos críticos (últimos 7 días)
+  produccionSemanal: number;         // Producción semanal en kg
+  ventasMes: number;                 // Ventas del mes actual en COP
+  lotesActivos: number;              // Número de lotes activos
+  
+  // Datos adicionales para subtítulos
+  inventarioAlertas: number;
+  proximaAplicacion: string;
+  ultimoMonitoreo: string;
+  promedioArbol: number;
+  clientesActivos: number;
+  loteTopNombre: string;
 }
 
 export function Dashboard({ onNavigate }: DashboardProps) {
-  const [data, setData] = useState<DashboardData>({
-    inventoryValue: 0,
-    inventoryAlerts: 0,
-    applicationsActive: 0,
-    nextApplication: 'Cargando...',
-    criticalIncidents: 0,
-    lastMonitoring: 'Cargando...',
-    weekProduction: 0,
-    avgPerTree: 0,
-    monthlySales: 0,
-    activeClients: 0,
-    totalLots: 8,
-    topLot: 'Cargando...',
-  });
-  const [alerts, setAlerts] = useState<Array<{ type: 'warning' | 'error' | 'success'; message: string; time: string }>>([]);
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [alertas, setAlertas] = useState<Alerta[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [errors, setErrors] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     loadDashboardData();
-    // Actualizar cada 30 segundos
-    const interval = setInterval(loadDashboardData, 30000);
+    
+    // Auto-refresh cada 5 minutos
+    const interval = setInterval(loadDashboardData, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
+  /**
+   * Carga todos los datos del dashboard en paralelo
+   */
   const loadDashboardData = async () => {
     try {
       const supabase = getSupabase();
-
-      // Cargar todas las métricas en paralelo
-      const [
-        inventoryData,
-        applicationsData,
-        monitoringData,
-        productionData,
-        salesData,
-        lotesData,
-      ] = await Promise.all([
-        loadInventoryMetrics(supabase),
-        loadApplicationsMetrics(supabase),
-        loadMonitoringMetrics(supabase),
-        loadProductionMetrics(supabase),
-        loadSalesMetrics(supabase),
+      
+      // Ejecutar todas las queries en paralelo usando Promise.allSettled
+      // para que si una falla, las demás continúen
+      const results = await Promise.allSettled([
+        loadInventarioMetrics(supabase),
+        loadAplicacionesMetrics(supabase),
+        loadMonitoreosMetrics(supabase),
+        loadProduccionMetrics(supabase),
+        loadVentasMetrics(supabase),
         loadLotesMetrics(supabase),
       ]);
 
-      // Actualizar datos
-      setData({
-        inventoryValue: inventoryData.total / 1000000,
-        inventoryAlerts: inventoryData.alerts,
-        applicationsActive: applicationsData.count,
-        nextApplication: applicationsData.next || 'Sin aplicaciones programadas',
-        criticalIncidents: monitoringData.critical,
-        lastMonitoring: monitoringData.lastDate || 'Sin registros',
-        weekProduction: productionData.total,
-        avgPerTree: productionData.total / 12000, // 12,000 árboles
-        monthlySales: salesData.total / 1000000,
-        activeClients: salesData.clients,
-        totalLots: lotesData.count,
-        topLot: lotesData.topLot || 'Sin datos',
+      // Extraer resultados con valores por defecto si falla
+      const [
+        inventarioResult,
+        aplicacionesResult,
+        monitoreosResult,
+        produccionResult,
+        ventasResult,
+        lotesResult,
+      ] = results;
+
+      // Determinar qué métricas fallaron
+      const newErrors: Record<string, boolean> = {
+        inventario: inventarioResult.status === 'rejected',
+        aplicaciones: aplicacionesResult.status === 'rejected',
+        monitoreos: monitoreosResult.status === 'rejected',
+        produccion: produccionResult.status === 'rejected',
+        ventas: ventasResult.status === 'rejected',
+        lotes: lotesResult.status === 'rejected',
+      };
+      setErrors(newErrors);
+
+      // Obtener valores o usar defaults
+      const inventario = inventarioResult.status === 'fulfilled' 
+        ? inventarioResult.value 
+        : { valorTotal: 0, alertas: 0 };
+      
+      const aplicaciones = aplicacionesResult.status === 'fulfilled'
+        ? aplicacionesResult.value
+        : { activas: 0, proxima: 'Sin datos' };
+      
+      const monitoreos = monitoreosResult.status === 'fulfilled'
+        ? monitoreosResult.value
+        : { criticos: 0, ultimo: 'Sin datos' };
+      
+      const produccion = produccionResult.status === 'fulfilled'
+        ? produccionResult.value
+        : { semanal: 0, promedio: 0 };
+      
+      const ventas = ventasResult.status === 'fulfilled'
+        ? ventasResult.value
+        : { mes: 0, clientes: 0 };
+      
+      const lotes = lotesResult.status === 'fulfilled'
+        ? lotesResult.value
+        : { activos: 0, topNombre: 'Sin datos' };
+
+      // Actualizar métricas
+      setMetrics({
+        inventarioValor: inventario.valorTotal,
+        aplicacionesActivas: aplicaciones.activas,
+        monitoreosCriticos: monitoreos.criticos,
+        produccionSemanal: produccion.semanal,
+        ventasMes: ventas.mes,
+        lotesActivos: lotes.activos,
+        
+        inventarioAlertas: inventario.alertas,
+        proximaAplicacion: aplicaciones.proxima,
+        ultimoMonitoreo: monitoreos.ultimo,
+        promedioArbol: produccion.promedio,
+        clientesActivos: ventas.clientes,
+        loteTopNombre: lotes.topNombre,
       });
 
-      // Cargar alertas
-      await loadAlerts(supabase, inventoryData.alerts, monitoringData.critical);
+      // Cargar alertas (de forma independiente)
+      await loadAlertas(supabase);
 
     } catch (error) {
-      console.error('Error cargando datos del dashboard:', error);
+      console.error('❌ Error general cargando dashboard:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Funciones auxiliares para cargar métricas
-  const loadInventoryMetrics = async (supabase: any) => {
-    const { data, error } = await supabase
-      .from('productos')
-      .select('cantidad_actual, precio_unitario, stock_minimo')
-      .eq('activo', true);
-
-    if (error) {
-      console.error('Error cargando inventario:', error);
-      return { total: 0, alerts: 0 };
-    }
-
-    const total = data?.reduce(
-      (sum: number, p: any) => sum + (p.cantidad_actual || 0) * (p.precio_unitario || 0),
-      0
-    ) || 0;
-
-    const alerts = data?.filter(
-      (p: any) => (p.cantidad_actual || 0) < (p.stock_minimo || 0)
-    ).length || 0;
-
-    return { total, alerts };
-  };
-
-  const loadApplicationsMetrics = async (supabase: any) => {
-    const { count, error } = await supabase
-      .from('aplicaciones')
-      .select('*', { count: 'exact', head: true })
-      .eq('estado', 'En ejecución');
-
-    if (error) {
-      console.error('Error cargando aplicaciones:', error);
-      return { count: 0, next: null };
-    }
-
-    // Obtener próxima aplicación programada
-    const { data: nextApp } = await supabase
-      .from('aplicaciones')
-      .select('fecha_aplicacion, nombre_aplicacion')
-      .eq('estado', 'Programada')
-      .order('fecha_aplicacion', { ascending: true })
-      .limit(1)
-      .single();
-
-    const nextText = nextApp
-      ? `${nextApp.nombre_aplicacion} - ${new Date(nextApp.fecha_aplicacion).toLocaleDateString('es-ES')}`
-      : null;
-
-    return { count: count || 0, next: nextText };
-  };
-
-  const loadMonitoringMetrics = async (supabase: any) => {
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-    const { data, error } = await supabase
-      .from('monitoreos')
-      .select('gravedad_texto, fecha_monitoreo')
-      .eq('gravedad_texto', 'Alta')
-      .gte('fecha_monitoreo', weekAgo);
-
-    if (error) {
-      console.error('Error cargando monitoreos:', error);
-      return { critical: 0, lastDate: null };
-    }
-
-    // Obtener último monitoreo
-    const { data: lastMon } = await supabase
-      .from('monitoreos')
-      .select('fecha_monitoreo')
-      .order('fecha_monitoreo', { ascending: false })
-      .limit(1)
-      .single();
-
-    const lastDate = lastMon
-      ? new Date(lastMon.fecha_monitoreo).toLocaleDateString('es-ES')
-      : null;
-
-    return { critical: data?.length || 0, lastDate };
-  };
-
-  const loadProductionMetrics = async (supabase: any) => {
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-    const { data, error } = await supabase
-      .from('cosechas')
-      .select('kilos_cosechados')
-      .gte('fecha_cosecha', weekAgo);
-
-    if (error) {
-      console.error('Error cargando producción:', error);
-      return { total: 0 };
-    }
-
-    const total = data?.reduce(
-      (sum: number, c: any) => sum + parseFloat(c.kilos_cosechados || 0),
-      0
-    ) || 0;
-
-    return { total };
-  };
-
-  const loadSalesMetrics = async (supabase: any) => {
-    const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-    const { data, error } = await supabase
-      .from('despachos')
-      .select('valor_total, cliente_id')
-      .gte('fecha_despacho', monthAgo);
-
-    if (error) {
-      console.error('Error cargando ventas:', error);
-      return { total: 0, clients: 0 };
-    }
-
-    const total = data?.reduce(
-      (sum: number, d: any) => sum + parseFloat(d.valor_total || 0),
-      0
-    ) || 0;
-
-    const clients = new Set(data?.map((d: any) => d.cliente_id) || []).size;
-
-    return { total, clients };
-  };
-
-  const loadLotesMetrics = async (supabase: any) => {
-    const { count, error } = await supabase
-      .from('lotes')
-      .select('*', { count: 'exact', head: true })
-      .eq('activo', true);
-
-    if (error) {
-      console.error('Error cargando lotes:', error);
-      return { count: 0, topLot: null };
-    }
-
-    // Obtener lote más productivo (puedes personalizar la lógica)
-    const { data: topLote } = await supabase
-      .from('lotes')
-      .select('nombre')
-      .eq('activo', true)
-      .order('hectareas', { ascending: false })
-      .limit(1)
-      .single();
-
-    return { count: count || 8, topLot: topLote?.nombre };
-  };
-
-  const loadAlerts = async (supabase: any, lowStockCount: number, criticalCount: number) => {
-    const newAlerts: Array<{ type: 'warning' | 'error' | 'success'; message: string; time: string }> = [];
-
-    // Alertas de stock bajo
-    if (lowStockCount > 0) {
-      const { data: lowStock } = await supabase
+  /**
+   * 1. INVENTARIO - Valor Total
+   * SELECT SUM(cantidad_actual * ultimo_precio_unitario) FROM productos
+   */
+  const loadInventarioMetrics = async (supabase: any) => {
+    try {
+      const { data, error } = await supabase
         .from('productos')
-        .select('nombre')
-        .lt('cantidad_actual', supabase.raw('stock_minimo'))
-        .limit(3);
+        .select('cantidad_actual, precio_unitario, stock_minimo')
+        .eq('activo', true);
 
-      lowStock?.forEach((p: any) => {
-        newAlerts.push({
-          type: 'warning',
-          message: `⚠️ Stock bajo: ${p.nombre}`,
-          time: 'Ahora',
-        });
-      });
+      if (error) throw error;
+
+      // Calcular valor total
+      const valorTotal = data?.reduce(
+        (sum: number, p: any) => sum + ((p.cantidad_actual || 0) * (p.precio_unitario || 0)),
+        0
+      ) || 0;
+
+      // Contar alertas de stock bajo
+      const alertas = data?.filter(
+        (p: any) => (p.cantidad_actual || 0) <= (p.stock_minimo || 0)
+      ).length || 0;
+
+      return { valorTotal, alertas };
+    } catch (error) {
+      console.error('❌ Error cargando inventario:', error);
+      throw error;
     }
+  };
 
-    // Alertas de monitoreos críticos
-    if (criticalCount > 0) {
-      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      
-      const { data: critical } = await supabase
+  /**
+   * 2. APLICACIONES En Ejecución
+   * SELECT COUNT(*) FROM aplicaciones WHERE estado = 'en_ejecucion'
+   */
+  const loadAplicacionesMetrics = async (supabase: any) => {
+    try {
+      // Contar aplicaciones activas
+      const { count, error } = await supabase
+        .from('aplicaciones')
+        .select('*', { count: 'exact', head: true })
+        .eq('estado', 'En ejecución');
+
+      if (error) throw error;
+
+      // Obtener próxima aplicación programada
+      const { data: proxima, error: errorProxima } = await supabase
+        .from('aplicaciones')
+        .select('nombre_aplicacion, fecha_aplicacion')
+        .eq('estado', 'Programada')
+        .order('fecha_aplicacion', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (errorProxima && errorProxima.code !== 'PGRST116') {
+        console.warn('⚠️ Error obteniendo próxima aplicación:', errorProxima);
+      }
+
+      const proximaTexto = proxima
+        ? `${proxima.nombre_aplicacion}`
+        : 'Sin aplicaciones programadas';
+
+      return { activas: count || 0, proxima: proximaTexto };
+    } catch (error) {
+      console.error('❌ Error cargando aplicaciones:', error);
+      throw error;
+    }
+  };
+
+  /**
+   * 3. MONITOREOS Críticos (últimos 7 días)
+   * SELECT COUNT(*) FROM monitoreos 
+   * WHERE gravedad = 'Alta' AND fecha >= NOW() - INTERVAL '7 days'
+   */
+  const loadMonitoreosMetrics = async (supabase: any) => {
+    try {
+      const hace7Dias = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split('T')[0];
+
+      // Contar monitoreos críticos de últimos 7 días
+      const { data, error } = await supabase
         .from('monitoreos')
-        .select(`
-          plaga_enfermedad_id,
-          plagas_enfermedades_catalogo(nombre),
-          lotes(nombre)
-        `)
+        .select('fecha_monitoreo')
         .eq('gravedad_texto', 'Alta')
-        .gte('fecha_monitoreo', weekAgo)
+        .gte('fecha_monitoreo', hace7Dias);
+
+      if (error) throw error;
+
+      // Obtener fecha del último monitoreo
+      const { data: ultimo, error: errorUltimo } = await supabase
+        .from('monitoreos')
+        .select('fecha_monitoreo')
+        .order('fecha_monitoreo', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (errorUltimo && errorUltimo.code !== 'PGRST116') {
+        console.warn('⚠️ Error obteniendo último monitoreo:', errorUltimo);
+      }
+
+      const ultimoTexto = ultimo
+        ? formatRelativeTime(ultimo.fecha_monitoreo)
+        : 'Sin registros';
+
+      return { criticos: data?.length || 0, ultimo: ultimoTexto };
+    } catch (error) {
+      console.error('❌ Error cargando monitoreos:', error);
+      throw error;
+    }
+  };
+
+  /**
+   * 4. PRODUCCIÓN Semanal (kg)
+   * SELECT SUM(kilos_cosechados) FROM cosechas
+   * WHERE fecha >= NOW() - INTERVAL '7 days'
+   */
+  const loadProduccionMetrics = async (supabase: any) => {
+    try {
+      const hace7Dias = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split('T')[0];
+
+      const { data, error } = await supabase
+        .from('cosechas')
+        .select('kilos_cosechados')
+        .gte('fecha_cosecha', hace7Dias);
+
+      if (error) throw error;
+
+      const semanal = data?.reduce(
+        (sum: number, c: any) => sum + parseFloat(c.kilos_cosechados || 0),
+        0
+      ) || 0;
+
+      // Promedio por árbol (asumiendo 12,000 árboles)
+      const totalArboles = 12000;
+      const promedio = semanal > 0 ? semanal / totalArboles : 0;
+
+      return { semanal, promedio };
+    } catch (error) {
+      console.error('❌ Error cargando producción:', error);
+      throw error;
+    }
+  };
+
+  /**
+   * 5. VENTAS del Mes (COP)
+   * SELECT SUM(valor_total) FROM despachos
+   * WHERE fecha >= DATE_TRUNC('month', NOW())
+   */
+  const loadVentasMetrics = async (supabase: any) => {
+    try {
+      // Calcular primer día del mes actual
+      const primerDiaMes = new Date();
+      primerDiaMes.setDate(1);
+      const primerDiaMesISO = primerDiaMes.toISOString().split('T')[0];
+
+      const { data, error } = await supabase
+        .from('despachos')
+        .select('valor_total, cliente_id')
+        .gte('fecha_despacho', primerDiaMesISO);
+
+      if (error) throw error;
+
+      // Sumar valor total del mes
+      const mes = data?.reduce(
+        (sum: number, d: any) => sum + parseFloat(d.valor_total || 0),
+        0
+      ) || 0;
+
+      // Contar clientes únicos activos este mes
+      const clientes = new Set(data?.map((d: any) => d.cliente_id) || []).size;
+
+      return { mes, clientes };
+    } catch (error) {
+      console.error('❌ Error cargando ventas:', error);
+      throw error;
+    }
+  };
+
+  /**
+   * 6. LOTES Activos
+   * SELECT COUNT(*) FROM lotes WHERE activo = true
+   */
+  const loadLotesMetrics = async (supabase: any) => {
+    try {
+      const { count, error } = await supabase
+        .from('lotes')
+        .select('*', { count: 'exact', head: true })
+        .eq('activo', true);
+
+      if (error) throw error;
+
+      // Obtener lote más grande (por hectáreas)
+      const { data: top, error: errorTop } = await supabase
+        .from('lotes')
+        .select('nombre, hectareas')
+        .eq('activo', true)
+        .order('hectareas', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (errorTop && errorTop.code !== 'PGRST116') {
+        console.warn('⚠️ Error obteniendo lote top:', errorTop);
+      }
+
+      const topNombre = top
+        ? `${top.nombre} (${formatNumber(top.hectareas, 1)} ha)`
+        : 'Sin datos';
+
+      return { activos: count || 0, topNombre };
+    } catch (error) {
+      console.error('❌ Error cargando lotes:', error);
+      throw error;
+    }
+  };
+
+  /**
+   * Cargar ALERTAS del sistema
+   * 1. Stock bajo
+   * 2. Productos por vencer (30 días)
+   * 3. Monitoreos críticos recientes
+   */
+  const loadAlertas = async (supabase: any) => {
+    try {
+      const nuevasAlertas: Alerta[] = [];
+
+      // 1. ALERTAS DE STOCK BAJO
+      const { data: stockBajo, error: errorStock } = await supabase
+        .from('productos')
+        .select('nombre, cantidad_actual, stock_minimo, fecha_actualizacion')
+        .eq('activo', true)
+        .order('fecha_actualizacion', { ascending: false });
+
+      if (!errorStock && stockBajo) {
+        // Filtrar en JS productos con stock bajo (Supabase no soporta comparación entre columnas)
+        const productosBajos = stockBajo
+          .filter((p: any) => (p.cantidad_actual || 0) <= (p.stock_minimo || 0))
+          .slice(0, 3); // Máximo 3
+
+        productosBajos.forEach((p: any) => {
+          nuevasAlertas.push({
+            id: `stock-${p.nombre}`,
+            tipo: 'stock',
+            mensaje: `⚠️ Stock bajo: ${p.nombre} - Solo ${formatNumber(p.cantidad_actual || 0)} unidades`,
+            fecha: p.fecha_actualizacion || new Date().toISOString(),
+            prioridad: 'alta',
+          });
+        });
+      }
+
+      // 2. ALERTAS DE PRODUCTOS POR VENCER (próximos 30 días)
+      const en30Dias = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split('T')[0];
+      const hoy = new Date().toISOString().split('T')[0];
+
+      const { data: porVencer, error: errorVencer } = await supabase
+        .from('productos')
+        .select('nombre, fecha_vencimiento')
+        .lte('fecha_vencimiento', en30Dias)
+        .gte('fecha_vencimiento', hoy)
+        .order('fecha_vencimiento', { ascending: true })
         .limit(2);
 
-      critical?.forEach((m: any) => {
-        newAlerts.push({
-          type: 'error',
-          message: `🔴 ${m.plagas_enfermedades_catalogo?.nombre || 'Incidencia'}: Nivel crítico en ${m.lotes?.nombre || 'lote'}`,
-          time: 'Últimos 7 días',
+      if (!errorVencer && porVencer && porVencer.length > 0) {
+        porVencer.forEach((p: any) => {
+          nuevasAlertas.push({
+            id: `venc-${p.nombre}`,
+            tipo: 'vencimiento',
+            mensaje: `📅 Próximo a vencer: ${p.nombre}`,
+            fecha: p.fecha_vencimiento,
+            prioridad: 'media',
+          });
         });
-      });
+      }
+
+      // 3. ALERTAS DE MONITOREOS CRÍTICOS RECIENTES
+      const { data: criticos, error: errorCriticos } = await supabase
+        .from('monitoreos')
+        .select(`
+          id,
+          fecha_monitoreo,
+          gravedad_texto,
+          lote_id,
+          plaga_enfermedad_id,
+          lotes(nombre),
+          plagas_enfermedades_catalogo(nombre)
+        `)
+        .eq('gravedad_texto', 'Alta')
+        .order('fecha_monitoreo', { ascending: false })
+        .limit(2);
+
+      if (!errorCriticos && criticos && criticos.length > 0) {
+        criticos.forEach((m: any) => {
+          const plagaNombre = m.plagas_enfermedades_catalogo?.nombre || 'Incidencia';
+          const loteNombre = m.lotes?.nombre || 'lote desconocido';
+
+          nuevasAlertas.push({
+            id: `mon-${m.id}`,
+            tipo: 'monitoreo',
+            mensaje: `🔴 ${plagaNombre}: Nivel crítico en ${loteNombre}`,
+            fecha: m.fecha_monitoreo,
+            prioridad: 'alta',
+          });
+        });
+      }
+
+      // Limitar a máximo 5 alertas y ordenar por fecha
+      const alertasOrdenadas = nuevasAlertas
+        .sort((a, b) => {
+          if (!a.fecha) return 1;
+          if (!b.fecha) return -1;
+          return new Date(b.fecha).getTime() - new Date(a.fecha).getTime();
+        })
+        .slice(0, 5);
+
+      setAlertas(alertasOrdenadas);
+    } catch (error) {
+      console.error('❌ Error cargando alertas:', error);
+      setAlertas([]);
     }
-
-    // Alertas de aplicaciones próximas
-    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const { data: upcomingApps } = await supabase
-      .from('aplicaciones')
-      .select('nombre_aplicacion, fecha_aplicacion')
-      .eq('estado', 'Programada')
-      .lte('fecha_aplicacion', tomorrow)
-      .limit(2);
-
-    upcomingApps?.forEach((app: any) => {
-      newAlerts.push({
-        type: 'warning',
-        message: `📅 Aplicación programada: ${app.nombre_aplicacion}`,
-        time: new Date(app.fecha_aplicacion).toLocaleDateString('es-ES'),
-      });
-    });
-
-    // Si no hay alertas, mostrar mensaje positivo
-    if (newAlerts.length === 0) {
-      newAlerts.push({
-        type: 'success',
-        message: '✅ No hay alertas pendientes - Todo está en orden',
-        time: 'Ahora',
-      });
-    }
-
-    setAlerts(newAlerts.slice(0, 5)); // Máximo 5 alertas
   };
 
+  /**
+   * Handler para navegación desde alertas
+   */
+  const handleAlertClick = (alerta: Alerta) => {
+    if (alerta.tipo === 'stock') {
+      onNavigate('inventory');
+    } else if (alerta.tipo === 'monitoreo') {
+      onNavigate('monitoring');
+    } else if (alerta.tipo === 'vencimiento') {
+      onNavigate('inventory');
+    }
+  };
+
+  /**
+   * Obtener valor formateado o placeholder si hay error
+   */
+  const getValueOrPlaceholder = (
+    metricKey: keyof typeof errors,
+    value: any,
+    formatter?: (v: any) => string
+  ) => {
+    if (errors[metricKey]) return '--';
+    return formatter ? formatter(value) : value;
+  };
+
+  // Loading state
   if (isLoading) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-8">
         <div>
-          <h1 className="text-[#333333] mb-2">Dashboard</h1>
-          <p className="text-[#6B7280]">Cargando datos...</p>
+          <h1 className="text-[#172E08] mb-2">Dashboard</h1>
+          <p className="text-[#4D240F]/70">Cargando datos del cultivo...</p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        
+        <MetricCardGrid>
           {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i} className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
-              <div className="h-20 bg-gray-200 rounded"></div>
+            <div
+              key={i}
+              className="bg-white rounded-2xl p-6 border border-gray-200 animate-pulse"
+            >
+              <div className="space-y-3">
+                <div className="h-4 bg-gray-200 rounded w-24"></div>
+                <div className="h-8 bg-gray-200 rounded w-32"></div>
+                <div className="h-3 bg-gray-200 rounded w-40"></div>
+              </div>
             </div>
           ))}
-        </div>
+        </MetricCardGrid>
       </div>
     );
   }
@@ -341,104 +525,122 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         <div className="relative">
           <h1 className="text-[#172E08] mb-2">Dashboard</h1>
           <p className="text-[#4D240F]/70">
-            Vista general del cultivo de Escocia Hass
+            Vista general del cultivo Escocia Hass - 52 hectáreas
           </p>
         </div>
       </div>
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <MetricCardGrid>
+        {/* 1. INVENTARIO */}
         <MetricCard
           title="INVENTARIO"
-          value={`$${data.inventoryValue.toFixed(1)}M`}
-          subtitle={`${data.inventoryAlerts} alertas`}
-          icon={Package}
-          alert={
-            data.inventoryAlerts > 0
-              ? { count: data.inventoryAlerts, type: 'warning' }
-              : undefined
+          value={
+            metrics
+              ? getValueOrPlaceholder(
+                  'inventario',
+                  formatCurrency(metrics.inventarioValor)
+                )
+              : '--'
           }
-          actionLabel="Ver detalles"
-          onAction={() => onNavigate('inventory')}
+          icon={<Package className="w-6 h-6" />}
+          color={metrics && metrics.inventarioAlertas > 0 ? 'yellow' : 'green'}
+          subtitle={
+            metrics
+              ? `${formatNumber(metrics.inventarioAlertas)} productos con stock bajo`
+              : 'Cargando...'
+          }
+          onClick={() => onNavigate('inventory')}
         />
 
+        {/* 2. APLICACIONES */}
         <MetricCard
           title="APLICACIONES"
-          value={data.applicationsActive}
-          subtitle={`Próxima: ${data.nextApplication}`}
-          icon={Sprout}
-          actionLabel="Nueva aplicación"
-          onAction={() => onNavigate('applications')}
+          value={
+            metrics
+              ? getValueOrPlaceholder(
+                  'aplicaciones',
+                  `${formatNumber(metrics.aplicacionesActivas)} activas`
+                )
+              : '--'
+          }
+          icon={<Sprout className="w-6 h-6" />}
+          color="green"
+          subtitle={metrics ? `Próxima: ${metrics.proximaAplicacion}` : 'Cargando...'}
+          onClick={() => onNavigate('applications')}
         />
 
+        {/* 3. MONITOREO */}
         <MetricCard
           title="MONITOREO"
-          value={`${data.criticalIncidents} Críticas`}
-          subtitle={`Último: ${data.lastMonitoring}`}
-          icon={Activity}
-          alert={
-            data.criticalIncidents > 0
-              ? { count: data.criticalIncidents, type: 'error' }
-              : undefined
+          value={
+            metrics
+              ? getValueOrPlaceholder(
+                  'monitoreos',
+                  `${formatNumber(metrics.monitoreosCriticos)} críticas`
+                )
+              : '--'
           }
-          actionLabel="Registrar monitoreo"
-          onAction={() => onNavigate('monitoring')}
+          icon={<Activity className="w-6 h-6" />}
+          color={metrics && metrics.monitoreosCriticos > 0 ? 'red' : 'green'}
+          subtitle={metrics ? `Último: ${metrics.ultimoMonitoreo}` : 'Cargando...'}
+          onClick={() => onNavigate('monitoring')}
         />
 
+        {/* 4. PRODUCCIÓN */}
         <MetricCard
           title="PRODUCCIÓN"
-          value={`${data.weekProduction} kg`}
-          subtitle={`Promedio: ${data.avgPerTree.toFixed(3)} kg/árbol`}
-          icon={TrendingUp}
-          actionLabel="Registrar cosecha"
-          onAction={() => onNavigate('production')}
+          value={
+            metrics
+              ? getValueOrPlaceholder('produccion', formatWeight(metrics.produccionSemanal))
+              : '--'
+          }
+          icon={<TrendingUp className="w-6 h-6" />}
+          color="green"
+          subtitle={
+            metrics
+              ? `Promedio: ${formatNumber(metrics.promedioArbol, 3)} kg/árbol`
+              : 'Cargando...'
+          }
+          onClick={() => onNavigate('production')}
         />
 
+        {/* 5. VENTAS */}
         <MetricCard
           title="VENTAS"
-          value={`$${data.monthlySales.toFixed(1)}M`}
-          subtitle={`${data.activeClients} clientes activos`}
-          icon={DollarSign}
-          actionLabel="Nuevo despacho"
-          onAction={() => onNavigate('sales')}
+          value={
+            metrics
+              ? getValueOrPlaceholder('ventas', formatCurrency(metrics.ventasMes))
+              : '--'
+          }
+          icon={<DollarSign className="w-6 h-6" />}
+          color="blue"
+          subtitle={
+            metrics
+              ? `${formatNumber(metrics.clientesActivos)} clientes activos`
+              : 'Cargando...'
+          }
+          onClick={() => onNavigate('sales')}
         />
 
+        {/* 6. LOTES */}
         <MetricCard
           title="LOTES"
-          value={data.totalLots}
-          subtitle={`Más productivo: ${data.topLot}`}
-          icon={MapPin}
-          alert={{ count: data.totalLots, type: 'success' }}
-          actionLabel="Ver lotes"
-          onAction={() => onNavigate('lots')}
+          value={
+            metrics ? getValueOrPlaceholder('lotes', formatNumber(metrics.lotesActivos)) : '--'
+          }
+          icon={<MapPin className="w-6 h-6" />}
+          color="gray"
+          subtitle={metrics ? `Más grande: ${metrics.loteTopNombre}` : 'Cargando...'}
+          onClick={() => onNavigate('lots')}
         />
-      </div>
+      </MetricCardGrid>
 
       {/* Alerts Section */}
-      <div className="relative">
-        <div className="absolute -top-4 -right-4 w-32 h-32 bg-[#BFD97D]/10 rounded-full blur-2xl"></div>
-        <div className="relative bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)] border border-[#73991C]/5">
-          <h2 className="text-[#172E08] mb-4">Alertas Recientes</h2>
-          <div className="space-y-3">
-            {alerts.map((alert, index) => (
-              <AlertBanner
-                key={index}
-                type={alert.type}
-                message={alert.message}
-                timestamp={alert.time}
-                onClick={() => {
-                  // Navegar según el tipo de alerta
-                  if (alert.message.includes('stock')) {
-                    onNavigate('inventory');
-                  } else if (alert.message.includes('incidencias')) {
-                    onNavigate('monitoring');
-                  }
-                }}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
+      <AlertListContainer>
+        <AlertListHeader titulo="Alertas Recientes" count={alertas.length} />
+        <AlertList alertas={alertas} onAlertClick={handleAlertClick} maxAlertas={5} />
+      </AlertListContainer>
     </div>
   );
 }

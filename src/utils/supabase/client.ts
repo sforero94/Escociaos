@@ -28,17 +28,37 @@ export async function getCurrentUser() {
 // Función auxiliar para obtener el perfil completo (con rol)
 export async function getUserProfile(userId: string) {
   const supabase = getSupabase();
-  const { data, error } = await supabase
-    .from('usuarios')
-    .select('*')
-    .eq('id', userId)
-    .single();
   
-  if (error) {
-    console.error('Error obteniendo perfil:', error);
+  try {
+    console.log('🔍 getUserProfile: Buscando perfil para user ID:', userId);
+    
+    // Crear un timeout de 5 segundos
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Timeout: getUserProfile tardó más de 5 segundos')), 5000)
+    );
+    
+    const queryPromise = supabase
+      .from('usuarios')
+      .select('*')
+      .eq('id', userId)
+      .single();
+    
+    const { data, error } = await Promise.race([
+      queryPromise,
+      timeoutPromise
+    ]) as any;
+    
+    if (error) {
+      console.error('❌ Error obteniendo perfil:', error);
+      return null;
+    }
+    
+    console.log('✅ Perfil obtenido exitosamente:', data);
+    return data;
+  } catch (error) {
+    console.error('❌ Excepción en getUserProfile:', error);
     return null;
   }
-  return data;
 }
 
 // Función para cerrar sesión

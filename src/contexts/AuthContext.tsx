@@ -33,20 +33,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Cargar sesión inicial
   useEffect(() => {
+    console.log('🔐 AuthProvider: Iniciando verificación de usuario...');
     checkUser();
 
     // Escuchar cambios en la autenticación
     const supabase = getSupabase();
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state changed:', event);
+        console.log('🔐 Auth state changed:', event, session ? 'con sesión' : 'sin sesión');
         
         if (event === 'SIGNED_IN' && session) {
+          setIsLoading(true);
           await loadUserData(session);
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
           setProfile(null);
           setSession(null);
+          setIsLoading(false);
         } else if (event === 'TOKEN_REFRESHED' && session) {
           setSession(session);
         }
@@ -61,16 +64,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Verificar usuario actual
   const checkUser = async () => {
     try {
+      console.log('🔍 Verificando usuario actual...');
       setIsLoading(true);
+      
+      // Timeout de seguridad de 10 segundos
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Timeout: La verificación tardó demasiado')), 10000)
+      );
+      
       const supabase = getSupabase();
-      const { data: { session } } = await supabase.auth.getSession();
+      const checkPromise = supabase.auth.getSession();
+      
+      const { data: { session }, error } = await Promise.race([
+        checkPromise,
+        timeoutPromise
+      ]) as any;
+      
+      if (error) {
+        console.error('❌ Error obteniendo sesión:', error);
+        setIsLoading(false);
+        return;
+      }
       
       if (session) {
+        console.log('✅ Sesión encontrada, cargando usuario...');
         await loadUserData(session);
+      } else {
+        console.log('ℹ️ No hay sesión activa');
+        setUser(null);
+        setProfile(null);
+        setSession(null);
+        setIsLoading(false);
       }
     } catch (error) {
-      console.error('Error verificando usuario:', error);
-    } finally {
+      console.error('❌ Error verificando usuario:', error);
+      // Si hay error o timeout, establecer como no autenticado
+      setUser(null);
+      setProfile(null);
+      setSession(null);
       setIsLoading(false);
     }
   };
@@ -78,27 +109,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Cargar datos del usuario
   const loadUserData = async (currentSession: Session) => {
     try {
+      console.log('👤 Cargando datos del usuario...');
       const currentUser = currentSession.user;
       setUser(currentUser);
       setSession(currentSession);
 
-      // Obtener perfil
-      const userProfile = await getUserProfile(currentUser.id);
+      // Obtener perfil con timeout de 5 segundos
+      console.log('📋 Buscando perfil en tabla usuarios...');
       
-      if (userProfile) {
-        setProfile(userProfile);
-      } else {
-        // Si no hay perfil, crear uno básico desde auth
-        setProfile({
+      try {
+        const userProfile = await getUserProfile(currentUser.id);
+        
+        if (userProfile) {
+          console.log('✅ Perfil encontrado:', userProfile.nombre);
+          setProfile(userProfile);
+        } else {
+          console.warn('⚠️ No se encontró perfil en la tabla usuarios. Creando perfil temporal...');
+          // Si no hay perfil, crear uno básico desde auth
+          const basicProfile = {
+            id: currentUser.id,
+            nombre: currentUser.email?.split('@')[0] || 'Usuario',
+            email: currentUser.email || '',
+            rol: 'Administrador', // Rol por defecto
+          };
+          setProfile(basicProfile);
+          console.log('📝 Perfil temporal creado:', basicProfile);
+          console.log('💡 NOTA: Para usar el perfil completo, crea el registro en la tabla usuarios');
+        }
+      } catch (profileError) {
+        console.error('❌ Error obteniendo perfil (timeout o error de red):', profileError);
+        // Crear perfil de emergencia si falla la consulta
+        const basicProfile = {
           id: currentUser.id,
           nombre: currentUser.email?.split('@')[0] || 'Usuario',
           email: currentUser.email || '',
-          rol: 'Administrador', // Rol por defecto
-        });
-        console.warn('No se encontró perfil en la tabla usuarios. Usando datos de auth.');
+          rol: 'Administrador',
+        };
+        setProfile(basicProfile);
+        console.log('📝 Perfil de emergencia creado debido a error:', basicProfile);
       }
     } catch (error) {
-      console.error('Error cargando datos del usuario:', error);
+      console.error('❌ Error cargando datos del usuario:', error);
+      // Establecer datos básicos aunque falle
+      const basicProfile = {
+        id: currentSession.user.id,
+        nombre: currentSession.user.email?.split('@')[0] || 'Usuario',
+        email: currentSession.user.email || '',
+        rol: 'Administrador',
+      };
+      setUser(currentSession.user);
+      setProfile(basicProfile);
+      console.log('📝 Perfil de emergencia creado:', basicProfile);
+    } finally {
+      console.log('✅ AuthContext: Carga completada, isLoading = false');
+      setIsLoading(false);
     }
   };
 
@@ -140,6 +204,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshProfile,
     hasRole,
   };
+
+  // Debug: Log del estado cada vez que cambia
+  useEffect(() => {
+    console.log('🔐 AuthContext - Estado actualizado:', {
+      hasUser: !!user,
+      hasProfile: !!profile,
+      isLoading,
+      isAuthenticated: !!user && !!profile,
+      profileData: profile ? { nombre: profile.nombre, rol: profile.rol } : null,
+    });
+  }, [user, profile, isLoading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

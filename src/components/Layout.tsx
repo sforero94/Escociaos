@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   Package,
@@ -17,30 +18,59 @@ import { Button } from './ui/button';
 import { useAuth } from '../contexts/AuthContext';
 
 interface LayoutProps {
-  currentView: string;
-  onNavigate: (view: string) => void;
+  onNavigate?: (view: string) => void;
   children: React.ReactNode;
-  userName?: string;
-  userRole?: string;
-  onLogout?: () => void;
 }
 
-export function Layout({ currentView, onNavigate, children }: LayoutProps) {
+/**
+ * Layout principal de la aplicación
+ * Compatible con React Router
+ */
+export function Layout({ onNavigate, children }: LayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { profile, signOut } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const handleLogout = async () => {
     await signOut();
   };
 
+  /**
+   * Menú de navegación principal
+   */
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'inventory', label: 'Inventario', icon: Package },
-    { id: 'applications', label: 'Aplicaciones', icon: Sprout },
-    { id: 'monitoring', label: 'Monitoreo', icon: Activity },
-    { id: 'production', label: 'Producción', icon: TrendingUp },
-    { id: 'settings', label: 'Configuración', icon: Settings },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/' },
+    { id: 'inventory', label: 'Inventario', icon: Package, path: '/inventario' },
+    { id: 'applications', label: 'Aplicaciones', icon: Sprout, path: '/aplicaciones' },
+    { id: 'monitoring', label: 'Monitoreo', icon: Activity, path: '/monitoreo' },
+    { id: 'production', label: 'Producción', icon: TrendingUp, path: '/produccion' },
+    { id: 'settings', label: 'Configuración', icon: Settings, path: '/configuracion' },
   ];
+
+  /**
+   * Verificar si una ruta está activa
+   */
+  const isActive = (path: string) => {
+    if (path === '/') {
+      return location.pathname === '/';
+    }
+    return location.pathname.startsWith(path);
+  };
+
+  /**
+   * Manejar navegación
+   */
+  const handleNavigateClick = (path: string, id: string) => {
+    // Si hay callback de navegación (para compatibilidad), llamarlo
+    if (onNavigate) {
+      onNavigate(id);
+    }
+    // Navegar con React Router
+    navigate(path);
+    // Cerrar menú móvil
+    setMobileMenuOpen(false);
+  };
 
   return (
     <div className="min-h-screen bg-[#F8FAF5]">
@@ -64,7 +94,10 @@ export function Layout({ currentView, onNavigate, children }: LayoutProps) {
 
       {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
-        <div className="lg:hidden fixed inset-0 bg-[#172E08]/20 backdrop-blur-sm z-40" onClick={() => setMobileMenuOpen(false)} />
+        <div
+          className="lg:hidden fixed inset-0 bg-[#172E08]/20 backdrop-blur-sm z-40"
+          onClick={() => setMobileMenuOpen(false)}
+        />
       )}
 
       {/* Mobile Menu */}
@@ -76,15 +109,13 @@ export function Layout({ currentView, onNavigate, children }: LayoutProps) {
         <nav className="p-4 space-y-2">
           {menuItems.map((item) => {
             const Icon = item.icon;
+            const active = isActive(item.path);
             return (
               <button
                 key={item.id}
-                onClick={() => {
-                  onNavigate(item.id);
-                  setMobileMenuOpen(false);
-                }}
+                onClick={() => handleNavigateClick(item.path, item.id)}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                  currentView === item.id
+                  active
                     ? 'bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white shadow-lg shadow-[#73991C]/20'
                     : 'text-[#172E08] hover:bg-[#E7EDDD]/50'
                 }`}
@@ -96,6 +127,7 @@ export function Layout({ currentView, onNavigate, children }: LayoutProps) {
           })}
         </nav>
 
+        {/* User Info - Mobile */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-[#73991C]/10 bg-white/80 backdrop-blur-xl">
           <div className="mb-3 px-4">
             <p className="text-sm text-[#172E08]">{profile?.nombre || 'Usuario'}</p>
@@ -131,12 +163,13 @@ export function Layout({ currentView, onNavigate, children }: LayoutProps) {
         <nav className="p-4 space-y-2">
           {menuItems.map((item) => {
             const Icon = item.icon;
+            const active = isActive(item.path);
             return (
               <button
                 key={item.id}
-                onClick={() => onNavigate(item.id)}
+                onClick={() => handleNavigateClick(item.path, item.id)}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                  currentView === item.id
+                  active
                     ? 'bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white shadow-lg shadow-[#73991C]/20'
                     : 'text-[#172E08] hover:bg-[#E7EDDD]/50'
                 }`}
@@ -148,7 +181,7 @@ export function Layout({ currentView, onNavigate, children }: LayoutProps) {
           })}
         </nav>
 
-        {/* User Info */}
+        {/* User Info - Desktop */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-[#73991C]/10 bg-white/80 backdrop-blur-xl">
           <div className="mb-3 px-4">
             <p className="text-sm text-[#172E08]">{profile?.nombre || 'Usuario'}</p>
