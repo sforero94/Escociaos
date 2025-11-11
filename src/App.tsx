@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { Login } from './components/Login';
@@ -6,6 +6,8 @@ import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { InventoryList } from './components/inventory/InventoryList';
 import { NewPurchase } from './components/inventory/NewPurchase';
+import { InventoryMovements } from './components/inventory/InventoryMovements';
+import { MovementsDashboard } from './components/inventory/MovementsDashboard';
 
 /**
  * Componente de placeholder para módulos en desarrollo
@@ -27,66 +29,10 @@ function ComingSoon({ moduleName }: { moduleName: string }) {
 }
 
 /**
- * Wrapper del Dashboard con navegación
+ * Wrapper de Dashboard
  */
 function DashboardWrapper() {
-  const navigate = useNavigate();
-
-  const handleNavigate = (view: string) => {
-    const routeMap: Record<string, string> = {
-      dashboard: '/',
-      inventory: '/inventario',
-      applications: '/aplicaciones',
-      monitoring: '/monitoreo',
-      production: '/produccion',
-      sales: '/ventas',
-      lots: '/lotes',
-      settings: '/configuracion',
-    };
-
-    const path = routeMap[view] || '/';
-    navigate(path);
-  };
-
-  return <Dashboard onNavigate={handleNavigate} />;
-}
-
-/**
- * Wrapper de InventoryList con navegación
- */
-function InventoryListWrapper() {
-  const navigate = useNavigate();
-
-  const handleNavigate = (view: string) => {
-    if (view === 'inventory-new-purchase') {
-      navigate('/inventario/nueva-compra');
-    } else if (view === 'dashboard') {
-      navigate('/');
-    } else {
-      navigate('/inventario');
-    }
-  };
-
-  return <InventoryList onNavigate={handleNavigate} />;
-}
-
-/**
- * Wrapper de NewPurchase con navegación
- */
-function NewPurchaseWrapper() {
-  const navigate = useNavigate();
-
-  const handleNavigate = (view: string) => {
-    if (view === 'inventory') {
-      navigate('/inventario');
-    } else if (view === 'dashboard') {
-      navigate('/');
-    } else {
-      navigate('/inventario');
-    }
-  };
-
-  return <NewPurchase onNavigate={handleNavigate} />;
+  return <Dashboard />;
 }
 
 /**
@@ -101,12 +47,14 @@ function LayoutRoutes() {
 
         {/* Inventario - Rutas anidadas */}
         <Route path="inventario">
-          <Route index element={<InventoryListWrapper />} />
-          <Route path="nueva-compra" element={<NewPurchaseWrapper />} />
+          <Route index element={<InventoryList />} />
+          <Route path="dashboard" element={<MovementsDashboard />} />
+          <Route path="nueva-compra" element={<NewPurchase />} />
           <Route
             path="producto/:id"
             element={<ComingSoon moduleName="Detalle de Producto" />}
           />
+          <Route path="movimientos" element={<InventoryMovements />} />
         </Route>
 
         {/* Aplicaciones */}

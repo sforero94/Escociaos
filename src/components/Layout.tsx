@@ -13,6 +13,9 @@ import {
   X,
   LogOut,
   Leaf,
+  History,
+  BarChart3,
+  ShoppingCart,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { useAuth } from '../contexts/AuthContext';
@@ -37,15 +40,55 @@ export function Layout({ onNavigate, children }: LayoutProps) {
   };
 
   /**
-   * Menú de navegación principal
+   * Menú de navegación principal con secciones y subítems
    */
-  const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/' },
-    { id: 'inventory', label: 'Inventario', icon: Package, path: '/inventario' },
-    { id: 'applications', label: 'Aplicaciones', icon: Sprout, path: '/aplicaciones' },
-    { id: 'monitoring', label: 'Monitoreo', icon: Activity, path: '/monitoreo' },
-    { id: 'production', label: 'Producción', icon: TrendingUp, path: '/produccion' },
-    { id: 'settings', label: 'Configuración', icon: Settings, path: '/configuracion' },
+  const menuStructure = [
+    {
+      type: 'item' as const,
+      id: 'dashboard',
+      label: 'Dashboard',
+      icon: LayoutDashboard,
+      path: '/',
+    },
+    {
+      type: 'section' as const,
+      id: 'inventario-section',
+      label: 'INVENTARIO',
+      items: [
+        { id: 'inventory', label: 'Productos', icon: Package, path: '/inventario' },
+        { id: 'inventory-dashboard', label: 'Dashboard', icon: BarChart3, path: '/inventario/dashboard' },
+        { id: 'inventory-movements', label: 'Movimientos', icon: History, path: '/inventario/movimientos' },
+        { id: 'inventory-new-purchase', label: 'Nueva Compra', icon: ShoppingCart, path: '/inventario/nueva-compra' },
+      ],
+    },
+    {
+      type: 'item' as const,
+      id: 'applications',
+      label: 'Aplicaciones',
+      icon: Sprout,
+      path: '/aplicaciones',
+    },
+    {
+      type: 'item' as const,
+      id: 'monitoring',
+      label: 'Monitoreo',
+      icon: Activity,
+      path: '/monitoreo',
+    },
+    {
+      type: 'item' as const,
+      id: 'production',
+      label: 'Producción',
+      icon: TrendingUp,
+      path: '/produccion',
+    },
+    {
+      type: 'item' as const,
+      id: 'settings',
+      label: 'Configuración',
+      icon: Settings,
+      path: '/configuracion',
+    },
   ];
 
   /**
@@ -106,24 +149,55 @@ export function Layout({ onNavigate, children }: LayoutProps) {
           mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <nav className="p-4 space-y-2">
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            const active = isActive(item.path);
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleNavigateClick(item.path, item.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                  active
-                    ? 'bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white shadow-lg shadow-[#73991C]/20'
-                    : 'text-[#172E08] hover:bg-[#E7EDDD]/50'
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-                <span>{item.label}</span>
-              </button>
-            );
+        <nav className="p-4 space-y-2 overflow-y-auto h-[calc(100%-120px)]">
+          {menuStructure.map((item) => {
+            if (item.type === 'item') {
+              const Icon = item.icon;
+              const active = isActive(item.path);
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleNavigateClick(item.path, item.id)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                    active
+                      ? 'bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white shadow-lg shadow-[#73991C]/20'
+                      : 'text-[#172E08] hover:bg-[#E7EDDD]/50'
+                  }`}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span>{item.label}</span>
+                </button>
+              );
+            } else if (item.type === 'section') {
+              return (
+                <div key={item.id} className="mb-4">
+                  <p className="text-xs text-[#4D240F]/60 uppercase tracking-wide px-2 py-2 mb-1">
+                    {item.label}
+                  </p>
+                  <nav className="space-y-1">
+                    {item.items.map((subItem) => {
+                      const Icon = subItem.icon;
+                      const active = isActive(subItem.path);
+                      return (
+                        <button
+                          key={subItem.id}
+                          onClick={() => handleNavigateClick(subItem.path, subItem.id)}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 ${
+                            active
+                              ? 'bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white shadow-lg shadow-[#73991C]/20'
+                              : 'text-[#172E08] hover:bg-[#E7EDDD]/50'
+                          }`}
+                        >
+                          <Icon className="w-4 h-4" />
+                          <span className="text-sm">{subItem.label}</span>
+                        </button>
+                      );
+                    })}
+                  </nav>
+                </div>
+              );
+            }
+            return null;
           })}
         </nav>
 
@@ -160,24 +234,55 @@ export function Layout({ onNavigate, children }: LayoutProps) {
         </div>
 
         {/* Navigation */}
-        <nav className="p-4 space-y-2">
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            const active = isActive(item.path);
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleNavigateClick(item.path, item.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                  active
-                    ? 'bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white shadow-lg shadow-[#73991C]/20'
-                    : 'text-[#172E08] hover:bg-[#E7EDDD]/50'
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-                <span>{item.label}</span>
-              </button>
-            );
+        <nav className="p-4 space-y-2 overflow-y-auto h-[calc(100vh-220px)]">
+          {menuStructure.map((item) => {
+            if (item.type === 'item') {
+              const Icon = item.icon;
+              const active = isActive(item.path);
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleNavigateClick(item.path, item.id)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                    active
+                      ? 'bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white shadow-lg shadow-[#73991C]/20'
+                      : 'text-[#172E08] hover:bg-[#E7EDDD]/50'
+                  }`}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span>{item.label}</span>
+                </button>
+              );
+            } else if (item.type === 'section') {
+              return (
+                <div key={item.id} className="mb-4">
+                  <p className="text-xs text-[#4D240F]/60 uppercase tracking-wide px-2 py-2 mb-1">
+                    {item.label}
+                  </p>
+                  <nav className="space-y-1">
+                    {item.items.map((subItem) => {
+                      const Icon = subItem.icon;
+                      const active = isActive(subItem.path);
+                      return (
+                        <button
+                          key={subItem.id}
+                          onClick={() => handleNavigateClick(subItem.path, subItem.id)}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 ${
+                            active
+                              ? 'bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white shadow-lg shadow-[#73991C]/20'
+                              : 'text-[#172E08] hover:bg-[#E7EDDD]/50'
+                          }`}
+                        >
+                          <Icon className="w-4 h-4" />
+                          <span className="text-sm">{subItem.label}</span>
+                        </button>
+                      );
+                    })}
+                  </nav>
+                </div>
+              );
+            }
+            return null;
           })}
         </nav>
 

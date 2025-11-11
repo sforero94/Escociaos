@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Search, Plus, Package, AlertTriangle, Loader2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Search, Plus, Package, AlertTriangle, Loader2, Edit, Eye, History, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { getSupabase } from '../../utils/supabase/client';
+import { ProductForm } from './ProductForm';
+import { ProductMovements } from './ProductMovements';
+import { InventoryNav } from './InventoryNav';
 
 interface InventoryListProps {
-  onNavigate: (view: string, productId?: number) => void;
+  onNavigate?: (view: string, productId?: number) => void;
 }
 
 interface Product {
@@ -25,6 +29,14 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('todas');
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Estados para el formulario de productos
+  const [isProductFormOpen, setIsProductFormOpen] = useState(false);
+  const [editingProductId, setEditingProductId] = useState<number | null>(null);
+
+  // Estados para el modal de movimientos
+  const [showMovementsModal, setShowMovementsModal] = useState(false);
+  const [selectedProductForMovements, setSelectedProductForMovements] = useState<Product | null>(null);
 
   useEffect(() => {
     loadProducts();
@@ -90,6 +102,11 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
     }).format(value);
   };
 
+  const handleEditProduct = (productId: number) => {
+    setEditingProductId(productId);
+    setIsProductFormOpen(true);
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -102,19 +119,44 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
 
   return (
     <div className="space-y-6">
+      {/* Barra de navegación */}
+      <InventoryNav />
+      
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-[#172E08] mb-2">Inventario</h1>
           <p className="text-[#4D240F]/70">{products.length} productos registrados</p>
         </div>
-        <Button
-          onClick={() => onNavigate('inventory-new-purchase')}
-          className="bg-gradient-to-r from-[#73991C] to-[#BFD97D] hover:shadow-lg hover:shadow-[#73991C]/30 text-white rounded-xl transition-all duration-200 hover:-translate-y-0.5"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Nueva Compra
-        </Button>
+        <div className="flex flex-wrap gap-3">
+          {/* Link a Movimientos */}
+          <Link
+            to="/inventario/movimientos"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 border-2 border-[#73991C] text-[#73991C] bg-white hover:bg-[#F8FAF5] rounded-xl transition-all duration-200 font-medium"
+          >
+            <History className="w-4 h-4" />
+            Ver Movimientos
+          </Link>
+          
+          <Button
+            onClick={() => {
+              setEditingProductId(null);
+              setIsProductFormOpen(true);
+            }}
+            className="bg-[#73991C] hover:bg-[#5f7d17] text-white rounded-xl transition-all duration-200"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Nuevo Producto
+          </Button>
+          
+          <Button
+            onClick={() => onNavigate && onNavigate('inventory-new-purchase')}
+            className="bg-gradient-to-r from-[#73991C] to-[#BFD97D] hover:shadow-lg hover:shadow-[#73991C]/30 text-white rounded-xl transition-all duration-200 hover:-translate-y-0.5"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Nueva Compra
+          </Button>
+        </div>
       </div>
 
       {/* Search and Filters */}
@@ -158,12 +200,13 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
                 <th className="text-right px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase">Stock Mín.</th>
                 <th className="text-right px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase">Valor Unit.</th>
                 <th className="text-center px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase">Alertas</th>
+                <th className="text-center px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#73991C]/5">
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center">
+                  <td colSpan={8} className="px-6 py-12 text-center">
                     <Package className="w-12 h-12 text-[#4D240F]/40 mx-auto mb-3" />
                     <p className="text-[#4D240F]/60">No se encontraron productos</p>
                   </td>
@@ -173,7 +216,7 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
                   <tr
                     key={product.id}
                     className="hover:bg-[#E7EDDD]/20 cursor-pointer transition-all duration-200"
-                    onClick={() => onNavigate('inventory-detail', product.id)}
+                    onClick={() => onNavigate && onNavigate('inventory-detail', product.id)}
                   >
                     <td className="px-6 py-4">
                       <p className="text-[#172E08]">{product.nombre}</p>
@@ -210,6 +253,32 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
                         </div>
                       )}
                     </td>
+                    <td className="px-6 py-4 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <Button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditProduct(product.id);
+                          }}
+                          size="sm"
+                          className="bg-[#73991C] hover:bg-[#5f7d17] text-white rounded-xl transition-all duration-200"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedProductForMovements(product);
+                            setShowMovementsModal(true);
+                          }}
+                          size="sm"
+                          variant="outline"
+                          className="border-[#73991C]/20 text-[#73991C] hover:bg-[#73991C]/5 rounded-xl transition-all duration-200"
+                        >
+                          <History className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}
@@ -242,6 +311,56 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
           </p>
         </div>
       </div>
+
+      {/* Formulario de Productos */}
+      {isProductFormOpen && (
+        <ProductForm
+          isOpen={isProductFormOpen}
+          productId={editingProductId}
+          onClose={() => {
+            setIsProductFormOpen(false);
+            setEditingProductId(null);
+          }}
+          onSuccess={loadProducts}
+        />
+      )}
+
+      {/* Modal de Movimientos del Producto */}
+      {showMovementsModal && selectedProductForMovements && (
+        <div className="fixed inset-0 bg-[#172E08]/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-[0_8px_32px_rgba(115,153,28,0.2)] animate-in fade-in zoom-in duration-200">
+            {/* Header del Modal */}
+            <div className="bg-gradient-to-r from-[#73991C] to-[#BFD97D] px-6 py-4 flex items-center justify-between border-b border-[#73991C]/10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                  <History className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl text-white">Historial de Movimientos</h2>
+                  <p className="text-sm text-white/80">{selectedProductForMovements.nombre}</p>
+                </div>
+              </div>
+              <Button
+                onClick={() => setShowMovementsModal(false)}
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-white/20 rounded-xl transition-all duration-200"
+              >
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+
+            {/* Contenido del Modal */}
+            <div className="overflow-y-auto p-6 bg-[#F8FAF5]" style={{ maxHeight: 'calc(90vh - 80px)' }}>
+              <ProductMovements
+                productId={selectedProductForMovements.id}
+                productName={selectedProductForMovements.nombre}
+                unidadMedida={selectedProductForMovements.unidad_medida}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
