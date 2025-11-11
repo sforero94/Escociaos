@@ -126,7 +126,6 @@ export function Login({ onLoginSuccess }: LoginProps) {
 
           {/* Footer */}
           <div className="mt-8 text-center text-sm text-[#4D240F]/60">
-            <p>Sistema GlobalGAP certificado</p>
             <p className="mt-1">52 hectáreas • 8 lotes • 12,000 árboles</p>
           </div>
         </div>

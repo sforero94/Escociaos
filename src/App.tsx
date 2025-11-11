@@ -8,6 +8,9 @@ import { InventoryList } from './components/inventory/InventoryList';
 import { NewPurchase } from './components/inventory/NewPurchase';
 import { InventoryMovements } from './components/inventory/InventoryMovements';
 import { MovementsDashboard } from './components/inventory/MovementsDashboard';
+import { VerificacionesList } from './components/inventory/VerificacionesList';
+import { NuevaVerificacion } from './components/inventory/NuevaVerificacion';
+import { ConteoFisico } from './components/inventory/ConteoFisico';
 
 /**
  * Componente de placeholder para módulos en desarrollo
@@ -55,6 +58,14 @@ function LayoutRoutes() {
             element={<ComingSoon moduleName="Detalle de Producto" />}
           />
           <Route path="movimientos" element={<InventoryMovements />} />
+          
+          {/* Verificaciones - Rutas anidadas */}
+          <Route path="verificaciones">
+            <Route index element={<VerificacionesList />} />
+            <Route path="nueva" element={<NuevaVerificacion />} />
+            <Route path="conteo/:id" element={<ConteoFisico />} />
+            <Route path=":id" element={<ComingSoon moduleName="Detalle de Verificación" />} />
+          </Route>
         </Route>
 
         {/* Aplicaciones */}

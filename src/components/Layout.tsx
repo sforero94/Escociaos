@@ -16,6 +16,7 @@ import {
   History,
   BarChart3,
   ShoppingCart,
+  ClipboardCheck,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { useAuth } from '../contexts/AuthContext';
@@ -59,6 +60,7 @@ export function Layout({ onNavigate, children }: LayoutProps) {
         { id: 'inventory-dashboard', label: 'Dashboard', icon: BarChart3, path: '/inventario/dashboard' },
         { id: 'inventory-movements', label: 'Movimientos', icon: History, path: '/inventario/movimientos' },
         { id: 'inventory-new-purchase', label: 'Nueva Compra', icon: ShoppingCart, path: '/inventario/nueva-compra' },
+        { id: 'inventory-verificaciones', label: 'Verificaciones', icon: ClipboardCheck, path: '/inventario/verificaciones' },
       ],
     },
     {
