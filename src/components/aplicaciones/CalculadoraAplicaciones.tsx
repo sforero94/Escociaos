@@ -241,7 +241,7 @@ export function CalculadoraAplicaciones() {
       const aplicacionData = {
         codigo_aplicacion: codigoAplicacion,
         nombre_aplicacion: state.configuracion.nombre,
-        tipo_aplicacion: state.configuracion.tipo === 'fumigacion' ? 'fumigación' : 'fertilización',
+        tipo_aplicacion: state.configuracion.tipo === 'fumigacion' ? 'Fumigacion' : 'Fertilizacion',
         proposito: state.configuracion.proposito || null,
         fecha_recomendacion: state.configuracion.fecha_inicio,
         agronomo_responsable: state.configuracion.agronomo_responsable || null,
