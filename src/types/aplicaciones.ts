@@ -1,7 +1,7 @@
 // types/aplicaciones.ts
 // Tipos TypeScript para el módulo de Aplicaciones
 
-export type TipoAplicacion = 'fumigacion' | 'fertilizacion';
+export type TipoAplicacion = 'fumigacion' | 'fertilizacion' | 'drench';
 export type TamanoCaneca = 20 | 200 | 500 | 1000;
 export type TipoArbol = 'grandes' | 'medianos' | 'pequenos' | 'clonales';
 export type EstadoAplicacion = 'planificada' | 'en_ejecucion' | 'cerrada';

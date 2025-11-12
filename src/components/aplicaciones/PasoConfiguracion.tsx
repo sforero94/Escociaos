@@ -264,6 +264,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
             >
               <option value="fumigacion">Fumigación</option>
               <option value="fertilizacion">Fertilización</option>
+              <option value="drench">Drench</option>
             </select>
           </div>
 

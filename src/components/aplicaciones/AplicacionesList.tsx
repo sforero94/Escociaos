@@ -20,6 +20,7 @@ import type { Aplicacion, TipoAplicacion, EstadoAplicacion } from '../../types/a
 const TIPOS_LABELS: Record<TipoAplicacion, string> = {
   fumigacion: 'Fumigación',
   fertilizacion: 'Fertilización',
+  drench: 'Drench',
 };
 
 const ESTADO_LABELS: Record<EstadoAplicacion, string> = {
