@@ -195,3 +195,43 @@ export interface BlancoBiologico {
   link_info?: string;
   activo?: boolean;
 }
+
+// ============================================================================
+// MOVIMIENTOS DIARIOS (Durante Aplicación)
+// ============================================================================
+
+export interface MovimientoDiario {
+  id?: string;
+  aplicacion_id: string;
+  fecha_movimiento: string; // ISO date string
+  lote_id: string;
+  lote_nombre: string;
+  producto_id: string;
+  producto_nombre: string;
+  producto_unidad: 'litros' | 'kilos' | 'unidades';
+  cantidad_utilizada: number;
+  responsable: string;
+  notas?: string;
+
+  // Metadata
+  creado_en?: string;
+  creado_por?: string;
+  actualizado_en?: string;
+}
+
+export interface ResumenMovimientosDiarios {
+  producto_id: string;
+  producto_nombre: string;
+  total_utilizado: number;
+  cantidad_planeada: number;
+  diferencia: number;
+  porcentaje_usado: number;
+  excede_planeado: boolean;
+}
+
+export interface AlertaMovimientoDiario {
+  tipo: 'warning' | 'error' | 'info';
+  producto_nombre: string;
+  mensaje: string;
+  porcentaje_usado: number;
+}
