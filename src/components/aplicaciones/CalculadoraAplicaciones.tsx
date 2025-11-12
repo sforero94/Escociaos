@@ -215,44 +215,272 @@ export function CalculadoraAplicaciones() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuario no autenticado');
 
-      // Preparar datos para guardar
+      // =============================================================
+      // PASO 1: INSERTAR APLICACIÓN BASE
+      // =============================================================
+      
+      // Generar código único (formato: APL-YYYYMMDD-XXX)
+      const fecha = new Date();
+      const codigoBase = `APL-${fecha.getFullYear()}${String(fecha.getMonth() + 1).padStart(2, '0')}${String(fecha.getDate()).padStart(2, '0')}`;
+      
+      // Buscar último código del día
+      const { data: ultimaAplicacion } = await supabase
+        .from('aplicaciones')
+        .select('codigo_aplicacion')
+        .like('codigo_aplicacion', `${codigoBase}%`)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      let codigoAplicacion = `${codigoBase}-001`;
+      if (ultimaAplicacion?.codigo_aplicacion) {
+        const ultimoNumero = parseInt(ultimaAplicacion.codigo_aplicacion.split('-')[2]) || 0;
+        codigoAplicacion = `${codigoBase}-${String(ultimoNumero + 1).padStart(3, '0')}`;
+      }
+
       const aplicacionData = {
-        nombre: state.configuracion.nombre,
-        tipo: state.configuracion.tipo,
-        fecha_inicio: state.configuracion.fecha_inicio,
-        estado: 'planificada' as const,
-        proposito: state.configuracion.proposito,
-        agronomo_responsable: state.configuracion.agronomo_responsable,
-        
-        // Guardar todo como JSON
-        configuracion: state.configuracion,
-        mezclas: state.mezclas,
-        calculos: state.calculos,
-        lista_compras: state.lista_compras,
-        
-        // Metadatos
-        creado_por: user.id,
-        creado_en: new Date().toISOString(),
-        actualizado_en: new Date().toISOString()
+        codigo_aplicacion: codigoAplicacion,
+        nombre_aplicacion: state.configuracion.nombre,
+        tipo_aplicacion: state.configuracion.tipo === 'fumigacion' ? 'fumigación' : 'fertilización',
+        proposito: state.configuracion.proposito || null,
+        fecha_recomendacion: state.configuracion.fecha_inicio,
+        agronomo_responsable: state.configuracion.agronomo_responsable || null,
+        estado: 'Calculada' as const,
+        fecha_inicio_ejecucion: null,
+        fecha_fin_ejecucion: null,
       };
 
-      // Insertar en Supabase
-      const { data, error } = await supabase
+      console.log('📝 Insertando aplicación:', aplicacionData);
+
+      const { data: aplicacion, error: errorAplicacion } = await supabase
         .from('aplicaciones')
         .insert([aplicacionData])
         .select()
         .single();
 
-      if (error) throw error;
+      if (errorAplicacion) {
+        console.error('❌ Error insertando aplicación:', errorAplicacion);
+        throw errorAplicacion;
+      }
 
-      // Éxito - redirigir al detalle de la aplicación
-      navigate(`/aplicaciones/${data.id}`);
+      console.log('✅ Aplicación insertada:', aplicacion.id);
+
+      // =============================================================
+      // PASO 2: INSERTAR LOTES
+      // =============================================================
+      
+      const lotesData = state.configuracion.lotes_seleccionados.map((lote) => ({
+        aplicacion_id: aplicacion.id,
+        lote_id: lote.lote_id,
+        sublotes_ids: lote.sublotes_ids || null,
+        arboles_grandes: lote.conteo_arboles.grandes,
+        arboles_medianos: lote.conteo_arboles.medianos,
+        arboles_pequenos: lote.conteo_arboles.pequenos,
+        arboles_clonales: lote.conteo_arboles.clonales,
+        total_arboles: lote.conteo_arboles.total,
+        calibracion_litros_arbol: state.configuracion.tipo === 'fumigacion' 
+          ? lote.calibracion_litros_arbol 
+          : null,
+        tamano_caneca: state.configuracion.tipo === 'fumigacion'
+          ? lote.tamano_caneca
+          : null,
+      }));
+
+      console.log('📝 Insertando lotes:', lotesData.length);
+
+      const { error: errorLotes } = await supabase
+        .from('aplicaciones_lotes')
+        .insert(lotesData);
+
+      if (errorLotes) {
+        console.error('❌ Error insertando lotes:', errorLotes);
+        throw errorLotes;
+      }
+
+      console.log('✅ Lotes insertados');
+
+      // =============================================================
+      // PASO 3: INSERTAR MEZCLAS Y PRODUCTOS
+      // =============================================================
+      
+      for (const mezcla of state.mezclas) {
+        // Insertar mezcla
+        const mezclaData = {
+          aplicacion_id: aplicacion.id,
+          nombre: mezcla.nombre,
+          numero_orden: mezcla.numero_orden,
+        };
+
+        console.log('📝 Insertando mezcla:', mezclaData.nombre);
+
+        const { data: mezclaInsertada, error: errorMezcla } = await supabase
+          .from('aplicaciones_mezclas')
+          .insert([mezclaData])
+          .select()
+          .single();
+
+        if (errorMezcla) {
+          console.error('❌ Error insertando mezcla:', errorMezcla);
+          throw errorMezcla;
+        }
+
+        console.log('✅ Mezcla insertada:', mezclaInsertada.id);
+
+        // Insertar productos de la mezcla
+        const productosData = mezcla.productos.map((producto) => ({
+          mezcla_id: mezclaInsertada.id,
+          producto_id: producto.producto_id,
+          dosis_por_caneca: state.configuracion?.tipo === 'fumigacion' 
+            ? producto.dosis_por_caneca 
+            : null,
+          unidad_dosis: state.configuracion?.tipo === 'fumigacion'
+            ? producto.unidad_dosis
+            : null,
+          dosis_grandes: state.configuracion?.tipo === 'fertilizacion'
+            ? producto.dosis_grandes
+            : null,
+          dosis_medianos: state.configuracion?.tipo === 'fertilizacion'
+            ? producto.dosis_medianos
+            : null,
+          dosis_pequenos: state.configuracion?.tipo === 'fertilizacion'
+            ? producto.dosis_pequenos
+            : null,
+          dosis_clonales: state.configuracion?.tipo === 'fertilizacion'
+            ? producto.dosis_clonales
+            : null,
+          cantidad_total_necesaria: producto.cantidad_total_necesaria,
+          producto_nombre: producto.producto_nombre,
+          producto_categoria: producto.producto_categoria,
+          producto_unidad: producto.producto_unidad,
+        }));
+
+        console.log('📝 Insertando productos de mezcla:', productosData.length);
+
+        const { error: errorProductos } = await supabase
+          .from('aplicaciones_productos')
+          .insert(productosData);
+
+        if (errorProductos) {
+          console.error('❌ Error insertando productos:', errorProductos);
+          throw errorProductos;
+        }
+
+        console.log('✅ Productos insertados');
+      }
+
+      // =============================================================
+      // PASO 4: INSERTAR CÁLCULOS POR LOTE
+      // =============================================================
+      
+      const calculosData = state.calculos.map((calculo) => {
+        // Buscar datos del lote
+        const loteConfig = state.configuracion!.lotes_seleccionados.find(
+          (l) => l.lote_id === calculo.lote_id
+        );
+
+        return {
+          aplicacion_id: aplicacion.id,
+          lote_id: calculo.lote_id,
+          lote_nombre: calculo.lote_nombre,
+          area_hectareas: loteConfig?.area_hectareas || null,
+          total_arboles: calculo.total_arboles,
+          // Fumigación
+          litros_mezcla: state.configuracion?.tipo === 'fumigacion'
+            ? calculo.litros_mezcla
+            : null,
+          numero_canecas: state.configuracion?.tipo === 'fumigacion'
+            ? calculo.numero_canecas
+            : null,
+          // Fertilización
+          kilos_totales: state.configuracion?.tipo === 'fertilizacion'
+            ? calculo.kilos_totales
+            : null,
+          numero_bultos: state.configuracion?.tipo === 'fertilizacion'
+            ? calculo.numero_bultos
+            : null,
+          kilos_grandes: state.configuracion?.tipo === 'fertilizacion'
+            ? calculo.kilos_grandes
+            : null,
+          kilos_medianos: state.configuracion?.tipo === 'fertilizacion'
+            ? calculo.kilos_medianos
+            : null,
+          kilos_pequenos: state.configuracion?.tipo === 'fertilizacion'
+            ? calculo.kilos_pequenos
+            : null,
+          kilos_clonales: state.configuracion?.tipo === 'fertilizacion'
+            ? calculo.kilos_clonales
+            : null,
+        };
+      });
+
+      console.log('📝 Insertando cálculos:', calculosData.length);
+
+      const { error: errorCalculos } = await supabase
+        .from('aplicaciones_calculos')
+        .insert(calculosData);
+
+      if (errorCalculos) {
+        console.error('❌ Error insertando cálculos:', errorCalculos);
+        throw errorCalculos;
+      }
+
+      console.log('✅ Cálculos insertados');
+
+      // =============================================================
+      // PASO 5: INSERTAR LISTA DE COMPRAS
+      // =============================================================
+      
+      if (state.lista_compras && state.lista_compras.items.length > 0) {
+        const comprasData = state.lista_compras.items.map((item) => ({
+          aplicacion_id: aplicacion.id,
+          producto_id: item.producto_id,
+          producto_nombre: item.producto_nombre,
+          producto_categoria: item.producto_categoria,
+          unidad: item.unidad,
+          inventario_actual: item.inventario_actual,
+          cantidad_necesaria: item.cantidad_necesaria,
+          cantidad_faltante: item.cantidad_faltante,
+          presentacion_comercial: item.presentacion_comercial || null,
+          unidades_a_comprar: item.unidades_a_comprar,
+          precio_unitario: item.ultimo_precio_unitario || null,
+          costo_estimado: item.costo_estimado || null,
+          alerta: item.alerta || 'normal',
+        }));
+
+        console.log('📝 Insertando lista de compras:', comprasData.length);
+
+        const { error: errorCompras } = await supabase
+          .from('aplicaciones_compras')
+          .insert(comprasData);
+
+        if (errorCompras) {
+          console.error('❌ Error insertando lista de compras:', errorCompras);
+          throw errorCompras;
+        }
+
+        console.log('✅ Lista de compras insertada');
+      }
+
+      // =============================================================
+      // ÉXITO - REDIRIGIR
+      // =============================================================
+      
+      console.log('🎉 Aplicación guardada exitosamente:', aplicacion.id);
+      console.log('📋 Código:', codigoAplicacion);
+
+      // Redirigir al listado con mensaje de éxito
+      navigate('/aplicaciones', { 
+        state: { 
+          success: true, 
+          mensaje: `Aplicación ${codigoAplicacion} guardada exitosamente` 
+        } 
+      });
       
     } catch (error) {
-      console.error('Error al guardar aplicación:', error);
+      console.error('💥 Error al guardar aplicación:', error);
       setState((prev) => ({
         ...prev,
-        error: error instanceof Error ? error.message : 'Error al guardar',
+        error: error instanceof Error ? error.message : 'Error al guardar la aplicación',
       }));
     } finally {
       setState((prev) => ({ ...prev, guardando: false }));

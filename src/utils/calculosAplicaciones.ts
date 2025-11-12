@@ -22,7 +22,7 @@ export function calcularFumigacion(
   lote: LoteSeleccionado,
   mezcla: Mezcla
 ): CalculosPorLote {
-  const total_arboles = lote.arboles.total;
+  const total_arboles = lote.conteo_arboles.total;
   const calibracion = lote.calibracion_litros_arbol || 0;
   const tamano_caneca = lote.tamano_caneca || 200;
 
@@ -47,7 +47,8 @@ export function calcularFumigacion(
 
   return {
     lote_id: lote.lote_id,
-    lote_nombre: lote.lote_nombre,
+    lote_nombre: lote.nombre,
+    total_arboles,
     litros_mezcla: Math.ceil(litros_mezcla * 100) / 100,
     numero_canecas: Math.ceil(numero_canecas * 100) / 100,
     productos
@@ -65,12 +66,24 @@ export function calcularFertilizacion(
   lote: LoteSeleccionado,
   mezcla: Mezcla
 ): CalculosPorLote {
+  // Calcular kilos por cada tipo de árbol para cada producto
+  let kilos_grandes_total = 0;
+  let kilos_medianos_total = 0;
+  let kilos_pequenos_total = 0;
+  let kilos_clonales_total = 0;
+
   const productos = mezcla.productos.map(producto => {
     // Calcular kilos por cada tipo de árbol
-    const kilos_grandes = lote.arboles.grandes * (producto.dosis_grandes || 0);
-    const kilos_medianos = lote.arboles.medianos * (producto.dosis_medianos || 0);
-    const kilos_pequenos = lote.arboles.pequenos * (producto.dosis_pequenos || 0);
-    const kilos_clonales = lote.arboles.clonales * (producto.dosis_clonales || 0);
+    const kilos_grandes = lote.conteo_arboles.grandes * (producto.dosis_grandes || 0);
+    const kilos_medianos = lote.conteo_arboles.medianos * (producto.dosis_medianos || 0);
+    const kilos_pequenos = lote.conteo_arboles.pequenos * (producto.dosis_pequenos || 0);
+    const kilos_clonales = lote.conteo_arboles.clonales * (producto.dosis_clonales || 0);
+
+    // Acumular para totales
+    kilos_grandes_total += kilos_grandes;
+    kilos_medianos_total += kilos_medianos;
+    kilos_pequenos_total += kilos_pequenos;
+    kilos_clonales_total += kilos_clonales;
 
     // Total de kilos para este producto en este lote
     const cantidad_necesaria = kilos_grandes + kilos_medianos + kilos_pequenos + kilos_clonales;
@@ -90,9 +103,14 @@ export function calcularFertilizacion(
 
   return {
     lote_id: lote.lote_id,
-    lote_nombre: lote.lote_nombre,
+    lote_nombre: lote.nombre,
+    total_arboles: lote.conteo_arboles.total,
     kilos_totales: Math.ceil(kilos_totales * 100) / 100,
     numero_bultos,
+    kilos_grandes: Math.ceil(kilos_grandes_total * 100) / 100,
+    kilos_medianos: Math.ceil(kilos_medianos_total * 100) / 100,
+    kilos_pequenos: Math.ceil(kilos_pequenos_total * 100) / 100,
+    kilos_clonales: Math.ceil(kilos_clonales_total * 100) / 100,
     productos
   };
 }
@@ -248,13 +266,10 @@ export function formatearNumero(valor: number, decimales: number = 2): string {
  */
 export function validarLoteFumigacion(lote: LoteSeleccionado): string | null {
   if (!lote.calibracion_litros_arbol || lote.calibracion_litros_arbol <= 0) {
-    return `El lote ${lote.lote_nombre} necesita calibración (L/árbol)`;
+    return `El lote ${lote.nombre} necesita calibración (L/árbol)`;
   }
   if (!lote.tamano_caneca) {
-    return `El lote ${lote.lote_nombre} necesita tamaño de caneca`;
-  }
-  if (!lote.mezcla_asignada) {
-    return `El lote ${lote.lote_nombre} necesita una mezcla asignada`;
+    return `El lote ${lote.nombre} necesita tamaño de caneca`;
   }
   return null;
 }

@@ -112,10 +112,10 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
 
     const nuevoLote: LoteSeleccionado = {
       lote_id: lote.id,
-      lote_nombre: lote.nombre,
-      sublotes: lote.sublotes.map((s) => s.id),
+      nombre: lote.nombre,
+      sublotes_ids: lote.sublotes.map((s) => s.id),
       area_hectareas: lote.area_hectareas,
-      arboles: lote.conteo_arboles,
+      conteo_arboles: lote.conteo_arboles,
       // Valores por defecto para fumigación
       calibracion_litros_arbol: formData.tipo === 'fumigacion' ? 20 : undefined,
       tamano_caneca: formData.tipo === 'fumigacion' ? 200 : undefined,
@@ -211,7 +211,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
     formData.lotes_seleccionados?.reduce(
       (acc, lote) => ({
         area: acc.area + lote.area_hectareas,
-        arboles: acc.arboles + lote.arboles.total,
+        arboles: acc.arboles + lote.conteo_arboles.total,
       }),
       { area: 0, arboles: 0 }
     ) || { area: 0, arboles: 0 };
@@ -376,10 +376,10 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
                 <div>
                   <h3 className="text-[#172E08] flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-[#73991C]" />
-                    {lote.lote_nombre}
+                    {lote.nombre}
                   </h3>
                   <p className="text-sm text-[#4D240F]/70">
-                    {lote.area_hectareas} ha • {lote.arboles.total} árboles
+                    {lote.area_hectareas} ha • {lote.conteo_arboles.total} árboles
                   </p>
                 </div>
                 <button
@@ -395,19 +395,19 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
               <div className="grid grid-cols-4 gap-2 mb-3">
                 <div className="text-center p-2 bg-white rounded-lg">
                   <div className="text-xs text-[#4D240F]/70">Grandes</div>
-                  <div className="text-[#172E08]">{lote.arboles.grandes}</div>
+                  <div className="text-[#172E08]">{lote.conteo_arboles.grandes}</div>
                 </div>
                 <div className="text-center p-2 bg-white rounded-lg">
                   <div className="text-xs text-[#4D240F]/70">Medianos</div>
-                  <div className="text-[#172E08]">{lote.arboles.medianos}</div>
+                  <div className="text-[#172E08]">{lote.conteo_arboles.medianos}</div>
                 </div>
                 <div className="text-center p-2 bg-white rounded-lg">
                   <div className="text-xs text-[#4D240F]/70">Pequeños</div>
-                  <div className="text-[#172E08]">{lote.arboles.pequenos}</div>
+                  <div className="text-[#172E08]">{lote.conteo_arboles.pequenos}</div>
                 </div>
                 <div className="text-center p-2 bg-white rounded-lg">
                   <div className="text-xs text-[#4D240F]/70">Clonales</div>
-                  <div className="text-[#172E08]">{lote.arboles.clonales}</div>
+                  <div className="text-[#172E08]">{lote.conteo_arboles.clonales}</div>
                 </div>
               </div>
 

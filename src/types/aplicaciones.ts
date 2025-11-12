@@ -18,10 +18,10 @@ export interface ConfiguracionAplicacion {
 
 export interface LoteSeleccionado {
   lote_id: string;
-  lote_nombre: string;
-  sublotes: string[];
+  nombre: string; // Cambio de lote_nombre a nombre para consistencia
+  sublotes_ids?: string[]; // Cambio de sublotes a sublotes_ids para consistencia con BD
   area_hectareas: number;
-  arboles: {
+  conteo_arboles: { // Cambio de arboles a conteo_arboles para consistencia
     grandes: number;
     medianos: number;
     pequenos: number;
@@ -31,14 +31,15 @@ export interface LoteSeleccionado {
   // Específico de fumigación
   calibracion_litros_arbol?: number;
   tamano_caneca?: TamanoCaneca;
-  mezcla_asignada?: string; // ID de la mezcla
 }
 
 // Mezcla y Productos (Paso 2)
 export interface Mezcla {
   id: string;
   nombre: string;
+  numero_orden: number;
   productos: ProductoEnMezcla[];
+  lotes_asignados?: string[]; // IDs de lotes asignados a esta mezcla
 }
 
 export interface ProductoEnMezcla {
@@ -68,6 +69,7 @@ export interface ProductoEnMezcla {
 export interface CalculosPorLote {
   lote_id: string;
   lote_nombre: string;
+  total_arboles: number;
   
   // Fumigación
   litros_mezcla?: number;
@@ -76,6 +78,10 @@ export interface CalculosPorLote {
   // Fertilización
   kilos_totales?: number;
   numero_bultos?: number;
+  kilos_grandes?: number;
+  kilos_medianos?: number;
+  kilos_pequenos?: number;
+  kilos_clonales?: number;
   
   // Productos necesarios para este lote
   productos: {
