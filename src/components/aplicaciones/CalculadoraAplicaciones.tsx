@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   Settings,
   Beaker,
@@ -9,8 +9,11 @@ import {
   ChevronRight,
   X,
   AlertTriangle,
+  FileDown,
+  Loader2,
 } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
+import { generarPDFListaCompras } from '../../utils/generarPDFListaCompras';
 import type {
   EstadoCalculadora,
   ConfiguracionAplicacion,
@@ -73,6 +76,242 @@ export function CalculadoraAplicaciones() {
   const [state, setState] = useState<EstadoCalculadora>(INITIAL_STATE);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [validationError, setValidationError] = useState('');
+  const [cargandoDatos, setCargandoDatos] = useState(false);
+
+  // Parámetros de la URL
+  const { id } = useParams<{ id: string }>();
+  const modoEdicion = !!id;
+
+  // ==========================================================================
+  // CARGAR DATOS EN MODO EDICIÓN
+  // ==========================================================================
+
+  useEffect(() => {
+    if (modoEdicion && id) {
+      cargarAplicacion();
+    }
+  }, [id, modoEdicion]);
+
+  const cargarAplicacion = async () => {
+    try {
+      setCargandoDatos(true);
+      console.log('📥 Cargando aplicación para editar:', id);
+
+      // 1. Obtener aplicación base
+      const { data: aplicacion, error: errorAplicacion } = await supabase
+        .from('aplicaciones')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (errorAplicacion) {
+        console.error('❌ Error cargando aplicación:', errorAplicacion);
+        throw errorAplicacion;
+      }
+
+      if (!aplicacion) {
+        throw new Error('Aplicación no encontrada');
+      }
+
+      console.log('✅ Aplicación cargada:', aplicacion);
+
+      // 2. Obtener lotes con conteo de árboles
+      const { data: lotesData, error: errorLotes } = await supabase
+        .from('aplicaciones_lotes')
+        .select(`
+          *,
+          lotes (
+            id,
+            nombre,
+            area_hectareas
+          )
+        `)
+        .eq('aplicacion_id', id);
+
+      if (errorLotes) {
+        console.error('❌ Error cargando lotes:', errorLotes);
+        throw errorLotes;
+      }
+
+      console.log('✅ Lotes cargados:', lotesData);
+
+      // 3. Obtener mezclas
+      const { data: mezclas, error: errorMezclas } = await supabase
+        .from('aplicaciones_mezclas')
+        .select('*')
+        .eq('aplicacion_id', id)
+        .order('numero_mezcla');
+
+      if (errorMezclas) {
+        console.error('❌ Error cargando mezclas:', errorMezclas);
+        throw errorMezclas;
+      }
+
+      console.log('✅ Mezclas cargadas:', mezclas);
+
+      // 4. Obtener productos de cada mezcla
+      const mezclasConProductos = await Promise.all(
+        (mezclas || []).map(async (mezcla) => {
+          const { data: productos, error: errorProductos } = await supabase
+            .from('aplicaciones_productos')
+            .select('*')
+            .eq('mezcla_id', mezcla.id);
+
+          if (errorProductos) {
+            console.error('❌ Error cargando productos de mezcla:', errorProductos);
+            throw errorProductos;
+          }
+
+          return {
+            id: mezcla.id,
+            numero_orden: mezcla.numero_mezcla,
+            nombre: mezcla.nombre_mezcla || `Mezcla ${mezcla.numero_mezcla}`,
+            productos: (productos || []).map(p => ({
+              producto_id: p.producto_id,
+              producto_nombre: p.producto_nombre,
+              producto_categoria: p.producto_categoria,
+              producto_unidad: p.producto_unidad,
+              dosis_por_caneca: p.dosis_por_caneca || undefined,
+              unidad_dosis: p.unidad_dosis || undefined,
+              dosis_grandes: p.dosis_grandes || undefined,
+              dosis_medianos: p.dosis_medianos || undefined,
+              dosis_pequenos: p.dosis_pequenos || undefined,
+              dosis_clonales: p.dosis_clonales || undefined,
+              cantidad_total_necesaria: p.cantidad_total_necesaria || 0,
+            }))
+          };
+        })
+      );
+
+      console.log('✅ Productos cargados:', mezclasConProductos);
+
+      // 5. Obtener cálculos
+      const { data: calculos, error: errorCalculos } = await supabase
+        .from('aplicaciones_calculos')
+        .select('*')
+        .eq('aplicacion_id', id);
+
+      if (errorCalculos) {
+        console.error('❌ Error cargando cálculos:', errorCalculos);
+        throw errorCalculos;
+      }
+
+      console.log('✅ Cálculos cargados:', calculos);
+
+      // 6. Obtener lista de compras
+      const { data: compras, error: errorCompras } = await supabase
+        .from('aplicaciones_compras')
+        .select('*')
+        .eq('aplicacion_id', id);
+
+      if (errorCompras) {
+        console.error('❌ Error cargando lista de compras:', errorCompras);
+        throw errorCompras;
+      }
+
+      console.log('✅ Lista de compras cargada:', compras);
+
+      // 7. Mapear datos a la configuración
+      const tipoAplicacion = aplicacion.tipo_aplicacion === 'Fumigación' 
+        ? 'fumigacion' 
+        : aplicacion.tipo_aplicacion === 'Fertilización'
+        ? 'fertilizacion'
+        : 'drench';
+
+      // Parsear blanco_biologico
+      let blancoBiologico: string[] = [];
+      if (aplicacion.blanco_biologico) {
+        try {
+          blancoBiologico = JSON.parse(aplicacion.blanco_biologico);
+          if (!Array.isArray(blancoBiologico)) {
+            blancoBiologico = [];
+          }
+        } catch (e) {
+          blancoBiologico = [];
+        }
+      }
+
+      const configuracion: ConfiguracionAplicacion = {
+        nombre: aplicacion.nombre_aplicacion || '',
+        tipo: tipoAplicacion,
+        fecha_inicio: aplicacion.fecha_recomendacion || new Date().toISOString().split('T')[0],
+        proposito: aplicacion.proposito || undefined,
+        agronomo_responsable: aplicacion.agronomo_responsable || undefined,
+        blanco_biologico: blancoBiologico.length > 0 ? blancoBiologico : undefined,
+        lotes_seleccionados: (lotesData || []).map(lote => ({
+          lote_id: lote.lote_id,
+          nombre: lote.lotes?.nombre || 'Sin nombre',
+          sublotes_ids: lote.sublotes_ids || [],
+          area_hectareas: lote.lotes?.area_hectareas || 0,
+          conteo_arboles: {
+            grandes: lote.arboles_grandes || 0,
+            medianos: lote.arboles_medianos || 0,
+            pequenos: lote.arboles_pequenos || 0,
+            clonales: lote.arboles_clonales || 0,
+            total: lote.total_arboles || 0,
+          },
+          calibracion_litros_arbol: lote.calibracion_litros_arbol || undefined,
+          tamano_caneca: lote.tamano_caneca || undefined,
+        }))
+      };
+
+      const calculosData: CalculosPorLote[] = (calculos || []).map(calc => ({
+        lote_id: calc.lote_id,
+        lote_nombre: calc.lote_nombre,
+        total_arboles: calc.total_arboles,
+        litros_mezcla: calc.litros_mezcla || undefined,
+        numero_canecas: calc.numero_canecas || undefined,
+        kilos_totales: calc.kilos_totales || undefined,
+        numero_bultos: calc.numero_bultos || undefined,
+        kilos_grandes: calc.kilos_grandes || undefined,
+        kilos_medianos: calc.kilos_medianos || undefined,
+        kilos_pequenos: calc.kilos_pequenos || undefined,
+        kilos_clonales: calc.kilos_clonales || undefined,
+      }));
+
+      const listaCompras: ListaCompras | null = compras && compras.length > 0 ? {
+        items: compras.map(item => ({
+          producto_id: item.producto_id,
+          producto_nombre: item.producto_nombre,
+          producto_categoria: item.producto_categoria,
+          unidad: item.unidad,
+          inventario_actual: item.inventario_actual,
+          cantidad_necesaria: item.cantidad_necesaria,
+          cantidad_faltante: item.cantidad_faltante,
+          presentacion_comercial: item.presentacion_comercial || undefined,
+          unidades_a_comprar: item.unidades_a_comprar,
+          ultimo_precio_unitario: item.precio_unitario || undefined,
+          costo_estimado: item.costo_estimado || undefined,
+          alerta: item.alerta as 'normal' | 'sin_precio' | 'sin_stock' | undefined,
+        })),
+        costo_total_estimado: compras.reduce((sum, item) => sum + (item.costo_estimado || 0), 0),
+        productos_sin_precio: compras.filter(item => !item.precio_unitario).length,
+        productos_sin_stock: compras.filter(item => item.cantidad_faltante > 0).length,
+      } : null;
+
+      // 8. Actualizar estado
+      setState({
+        paso_actual: 1,
+        configuracion,
+        mezclas: mezclasConProductos as Mezcla[],
+        calculos: calculosData,
+        lista_compras: listaCompras,
+        guardando: false,
+        error: null,
+      });
+
+      console.log('🎉 Datos cargados y estado actualizado correctamente');
+
+    } catch (error) {
+      console.error('💥 Error cargando aplicación:', error);
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Error cargando la aplicación'
+      }));
+    } finally {
+      setCargandoDatos(false);
+    }
+  };
 
   // ==========================================================================
   // VALIDACIONES POR PASO
@@ -215,69 +454,166 @@ export function CalculadoraAplicaciones() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuario no autenticado');
 
-      // =============================================================
-      // PASO 1: INSERTAR APLICACIÓN BASE
-      // =============================================================
-      
-      // Generar código único (formato: APL-YYYYMMDD-XXX)
-      const fecha = new Date();
-      const codigoBase = `APL-${fecha.getFullYear()}${String(fecha.getMonth() + 1).padStart(2, '0')}${String(fecha.getDate()).padStart(2, '0')}`;
-      
-      // Buscar último código del día
-      const { data: ultimaAplicacion } = await supabase
-        .from('aplicaciones')
-        .select('codigo_aplicacion')
-        .like('codigo_aplicacion', `${codigoBase}%`)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+      let aplicacionId: string;
+      let codigoAplicacion: string;
 
-      let codigoAplicacion = `${codigoBase}-001`;
-      if (ultimaAplicacion?.codigo_aplicacion) {
-        const ultimoNumero = parseInt(ultimaAplicacion.codigo_aplicacion.split('-')[2]) || 0;
-        codigoAplicacion = `${codigoBase}-${String(ultimoNumero + 1).padStart(3, '0')}`;
+      if (modoEdicion && id) {
+        // =============================================================
+        // MODO EDICIÓN: ACTUALIZAR APLICACIÓN EXISTENTE
+        // =============================================================
+        
+        console.log('📝 Actualizando aplicación:', id);
+
+        // Obtener código existente
+        const { data: aplicacionExistente } = await supabase
+          .from('aplicaciones')
+          .select('codigo_aplicacion')
+          .eq('id', id)
+          .single();
+
+        codigoAplicacion = aplicacionExistente?.codigo_aplicacion || '';
+
+        // Actualizar aplicación base
+        const aplicacionData = {
+          nombre_aplicacion: state.configuracion.nombre,
+          tipo_aplicacion: state.configuracion.tipo === 'fumigacion' 
+            ? 'Fumigación' 
+            : state.configuracion.tipo === 'fertilizacion'
+            ? 'Fertilización'
+            : 'Drench',
+          proposito: state.configuracion.proposito || null,
+          blanco_biologico: state.configuracion.blanco_biologico 
+            ? JSON.stringify(state.configuracion.blanco_biologico)
+            : null,
+          fecha_recomendacion: state.configuracion.fecha_inicio,
+          agronomo_responsable: state.configuracion.agronomo_responsable || null,
+          updated_at: new Date().toISOString(),
+        };
+
+        const { error: errorAplicacion } = await supabase
+          .from('aplicaciones')
+          .update(aplicacionData)
+          .eq('id', id);
+
+        if (errorAplicacion) {
+          console.error('❌ Error actualizando aplicación:', errorAplicacion);
+          throw errorAplicacion;
+        }
+
+        console.log('✅ Aplicación actualizada');
+
+        // Eliminar relaciones existentes
+        console.log('🗑️ Eliminando relaciones existentes...');
+
+        // Eliminar lotes
+        await supabase
+          .from('aplicaciones_lotes')
+          .delete()
+          .eq('aplicacion_id', id);
+
+        // Eliminar productos de mezclas
+        const { data: mezclasExistentes } = await supabase
+          .from('aplicaciones_mezclas')
+          .select('id')
+          .eq('aplicacion_id', id);
+
+        if (mezclasExistentes && mezclasExistentes.length > 0) {
+          const mezclaIds = mezclasExistentes.map(m => m.id);
+          
+          await supabase
+            .from('aplicaciones_productos')
+            .delete()
+            .in('mezcla_id', mezclaIds);
+        }
+
+        // Eliminar mezclas
+        await supabase
+          .from('aplicaciones_mezclas')
+          .delete()
+          .eq('aplicacion_id', id);
+
+        // Eliminar cálculos
+        await supabase
+          .from('aplicaciones_calculos')
+          .delete()
+          .eq('aplicacion_id', id);
+
+        // Eliminar lista de compras
+        await supabase
+          .from('aplicaciones_compras')
+          .delete()
+          .eq('aplicacion_id', id);
+
+        console.log('✅ Relaciones eliminadas');
+
+        aplicacionId = id;
+
+      } else {
+        // =============================================================
+        // MODO CREACIÓN: INSERTAR NUEVA APLICACIÓN
+        // =============================================================
+        
+        // Generar código único (formato: APL-YYYYMMDD-XXX)
+        const fecha = new Date();
+        const codigoBase = `APL-${fecha.getFullYear()}${String(fecha.getMonth() + 1).padStart(2, '0')}${String(fecha.getDate()).padStart(2, '0')}`;
+        
+        // Buscar último código del día
+        const { data: ultimaAplicacion } = await supabase
+          .from('aplicaciones')
+          .select('codigo_aplicacion')
+          .like('codigo_aplicacion', `${codigoBase}%`)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        codigoAplicacion = `${codigoBase}-001`;
+        if (ultimaAplicacion?.codigo_aplicacion) {
+          const ultimoNumero = parseInt(ultimaAplicacion.codigo_aplicacion.split('-')[2]) || 0;
+          codigoAplicacion = `${codigoBase}-${String(ultimoNumero + 1).padStart(3, '0')}`;
+        }
+
+        const aplicacionData = {
+          codigo_aplicacion: codigoAplicacion,
+          nombre_aplicacion: state.configuracion.nombre,
+          tipo_aplicacion: state.configuracion.tipo === 'fumigacion' 
+            ? 'Fumigación' 
+            : state.configuracion.tipo === 'fertilizacion'
+            ? 'Fertilización'
+            : 'Drench',
+          proposito: state.configuracion.proposito || null,
+          blanco_biologico: state.configuracion.blanco_biologico 
+            ? JSON.stringify(state.configuracion.blanco_biologico)
+            : null,
+          fecha_recomendacion: state.configuracion.fecha_inicio,
+          agronomo_responsable: state.configuracion.agronomo_responsable || null,
+          estado: 'Calculada' as const,
+          fecha_inicio_ejecucion: null,
+          fecha_fin_ejecucion: null,
+        };
+
+        console.log('📝 Insertando aplicación:', aplicacionData);
+
+        const { data: aplicacion, error: errorAplicacion } = await supabase
+          .from('aplicaciones')
+          .insert([aplicacionData])
+          .select()
+          .single();
+
+        if (errorAplicacion) {
+          console.error('❌ Error insertando aplicación:', errorAplicacion);
+          throw errorAplicacion;
+        }
+
+        console.log('✅ Aplicación insertada:', aplicacion.id);
+        aplicacionId = aplicacion.id;
       }
 
-      const aplicacionData = {
-        codigo_aplicacion: codigoAplicacion,
-        nombre_aplicacion: state.configuracion.nombre,
-        tipo_aplicacion: state.configuracion.tipo === 'fumigacion' 
-          ? 'Fumigación' 
-          : state.configuracion.tipo === 'fertilizacion'
-          ? 'Fertilización'
-          : 'Drench',
-        proposito: state.configuracion.proposito || null,
-        blanco_biologico: state.configuracion.blanco_biologico 
-          ? JSON.stringify(state.configuracion.blanco_biologico)
-          : null,
-        fecha_recomendacion: state.configuracion.fecha_inicio,
-        agronomo_responsable: state.configuracion.agronomo_responsable || null,
-        estado: 'Calculada' as const,
-        fecha_inicio_ejecucion: null,
-        fecha_fin_ejecucion: null,
-      };
-
-      console.log('📝 Insertando aplicación:', aplicacionData);
-
-      const { data: aplicacion, error: errorAplicacion } = await supabase
-        .from('aplicaciones')
-        .insert([aplicacionData])
-        .select()
-        .single();
-
-      if (errorAplicacion) {
-        console.error('❌ Error insertando aplicación:', errorAplicacion);
-        throw errorAplicacion;
-      }
-
-      console.log('✅ Aplicación insertada:', aplicacion.id);
-
       // =============================================================
-      // PASO 2: INSERTAR LOTES
+      // PASO 2: INSERTAR LOTES (común para creación y edición)
       // =============================================================
       
       const lotesData = state.configuracion.lotes_seleccionados.map((lote) => ({
-        aplicacion_id: aplicacion.id,
+        aplicacion_id: aplicacionId,
         lote_id: lote.lote_id,
         sublotes_ids: lote.sublotes_ids || null,
         arboles_grandes: lote.conteo_arboles.grandes,
@@ -313,7 +649,7 @@ export function CalculadoraAplicaciones() {
       for (const mezcla of state.mezclas) {
         // Insertar mezcla
         const mezclaData = {
-          aplicacion_id: aplicacion.id,
+          aplicacion_id: aplicacionId,
           numero_mezcla: mezcla.numero_orden,
           nombre_mezcla: mezcla.nombre,
         };
@@ -386,7 +722,7 @@ export function CalculadoraAplicaciones() {
         );
 
         return {
-          aplicacion_id: aplicacion.id,
+          aplicacion_id: aplicacionId,
           lote_id: calculo.lote_id,
           lote_nombre: calculo.lote_nombre,
           area_hectareas: loteConfig?.area_hectareas || null,
@@ -439,7 +775,7 @@ export function CalculadoraAplicaciones() {
       
       if (state.lista_compras && state.lista_compras.items.length > 0) {
         const comprasData = state.lista_compras.items.map((item) => ({
-          aplicacion_id: aplicacion.id,
+          aplicacion_id: aplicacionId,
           producto_id: item.producto_id,
           producto_nombre: item.producto_nombre,
           producto_categoria: item.producto_categoria,
@@ -472,14 +808,16 @@ export function CalculadoraAplicaciones() {
       // ÉXITO - REDIRIGIR
       // =============================================================
       
-      console.log('🎉 Aplicación guardada exitosamente:', aplicacion.id);
+      console.log(`🎉 Aplicación ${modoEdicion ? 'actualizada' : 'guardada'} exitosamente:`, aplicacionId);
       console.log('📋 Código:', codigoAplicacion);
 
       // Redirigir al listado con mensaje de éxito
       navigate('/aplicaciones', { 
         state: { 
           success: true, 
-          mensaje: `Aplicación ${codigoAplicacion} guardada exitosamente` 
+          mensaje: modoEdicion 
+            ? `Aplicación ${codigoAplicacion} actualizada exitosamente`
+            : `Aplicación ${codigoAplicacion} guardada exitosamente` 
         } 
       });
       
@@ -524,6 +862,21 @@ export function CalculadoraAplicaciones() {
   // RENDER
   // ==========================================================================
 
+  // Mostrar loading mientras se cargan datos en modo edición
+  if (cargandoDatos) {
+    return (
+      <div className="min-h-screen bg-[#F8FAF5] flex items-center justify-center">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-12 text-center max-w-md">
+          <Loader2 className="w-12 h-12 text-[#73991C] animate-spin mx-auto mb-4" />
+          <h2 className="text-xl text-[#172E08] mb-2">Cargando aplicación...</h2>
+          <p className="text-sm text-[#4D240F]/70">
+            Estamos recuperando los datos de la aplicación
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F8FAF5] py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-[1200px] mx-auto">
@@ -531,7 +884,9 @@ export function CalculadoraAplicaciones() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 mb-8">
           {/* Título */}
           <div className="mb-8">
-            <h1 className="text-[#172E08] mb-2">Nueva Aplicación</h1>
+            <h1 className="text-[#172E08] mb-2">
+              {modoEdicion ? 'Editar Aplicación' : 'Nueva Aplicación'}
+            </h1>
             <p className="text-[#4D240F]/70">
               Calcula productos, dosis y genera lista de compras automáticamente
             </p>

@@ -13,6 +13,9 @@ import {
   CheckCircle2,
   Clock,
   Loader2,
+  Edit2,
+  Trash2,
+  X,
 } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import type { Aplicacion, TipoAplicacion, EstadoAplicacion } from '../../types/aplicaciones';
@@ -50,10 +53,25 @@ export function AplicacionesList() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filtroTipo, setFiltroTipo] = useState<TipoAplicacion | 'todos'>('todos');
   const [filtroEstado, setFiltroEstado] = useState<EstadoAplicacion | 'todos'>('todos');
+  const [menuAbiertoId, setMenuAbiertoId] = useState<string | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const [eliminando, setEliminando] = useState<string | null>(null);
 
   useEffect(() => {
     loadAplicaciones();
   }, []);
+
+  // Cerrar menú al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (menuAbiertoId) {
+        setMenuAbiertoId(null);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [menuAbiertoId]);
 
   const loadAplicaciones = async () => {
     try {
@@ -89,54 +107,47 @@ export function AplicacionesList() {
         throw error;
       }
 
-      // Mapear datos de BD al formato de la interfaz
-      const aplicacionesMapeadas: Aplicacion[] = (data || []).map((row: any) => {
-        // Extraer lotes seleccionados
-        const lotesSeleccionados = (row.aplicaciones_lotes || []).map((al: any) => ({
-          lote_id: al.lote_id,
-          nombre: al.lotes?.nombre || 'Lote sin nombre',
-          sublotes_ids: [],
-          area_hectareas: 0,
-          conteo_arboles: {
-            grandes: 0,
-            medianos: 0,
-            pequenos: 0,
-            clonales: 0,
-            total: 0,
-          },
-        }));
+      console.log('📊 Datos crudos de Supabase:', data);
 
-        // Parsear blanco_biologico de forma segura
-        let blancoBiologico: string[] = [];
-        if (row.blanco_biologico) {
-          try {
-            // Intentar parsear como JSON
-            blancoBiologico = JSON.parse(row.blanco_biologico);
-            // Si no es array, convertirlo a array
-            if (!Array.isArray(blancoBiologico)) {
+      // Mapear datos de BD al formato de la interfaz
+      const aplicacionesMapeadas: Aplicacion[] = [];
+      
+      (data || []).forEach((row: any) => {
+        try {
+          // Extraer lotes seleccionados
+          const lotesSeleccionados = (row.aplicaciones_lotes || []).map((al: any) => ({
+            lote_id: al.lote_id,
+            nombre: al.lotes?.nombre || 'Lote sin nombre',
+            sublotes_ids: [],
+            area_hectareas: 0,
+            conteo_arboles: {
+              grandes: 0,
+              medianos: 0,
+              pequenos: 0,
+              clonales: 0,
+              total: 0,
+            },
+          }));
+
+          // Parsear blanco_biologico de forma segura
+          let blancoBiologico: string[] = [];
+          if (row.blanco_biologico) {
+            try {
+              // Intentar parsear como JSON
+              blancoBiologico = JSON.parse(row.blanco_biologico);
+              // Si no es array, convertirlo a array
+              if (!Array.isArray(blancoBiologico)) {
+                blancoBiologico = [];
+              }
+            } catch (e) {
+              // Si falla el parse, es texto plano - dejarlo como array vacío
+              console.warn(`⚠️  blanco_biologico no es JSON válido para aplicación ${row.id}:`, row.blanco_biologico);
               blancoBiologico = [];
             }
-          } catch (e) {
-            // Si falla el parse, es texto plano - dejarlo como array vacío
-            console.warn('blanco_biologico no es JSON válido:', row.blanco_biologico);
-            blancoBiologico = [];
           }
-        }
 
-        return {
-          id: row.id,
-          nombre: row.nombre_aplicacion || 'Sin nombre',
-          tipo: row.tipo_aplicacion === 'Fumigación' 
-            ? 'fumigacion' 
-            : row.tipo_aplicacion === 'Fertilización'
-            ? 'fertilizacion'
-            : 'drench',
-          fecha_inicio: row.fecha_recomendacion || row.created_at,
-          fecha_cierre: row.fecha_fin_ejecucion,
-          estado: row.estado as EstadoAplicacion,
-          proposito: row.proposito,
-          agronomo_responsable: row.agronomo_responsable,
-          configuracion: {
+          aplicacionesMapeadas.push({
+            id: row.id,
             nombre: row.nombre_aplicacion || 'Sin nombre',
             tipo: row.tipo_aplicacion === 'Fumigación' 
               ? 'fumigacion' 
@@ -144,25 +155,42 @@ export function AplicacionesList() {
               ? 'fertilizacion'
               : 'drench',
             fecha_inicio: row.fecha_recomendacion || row.created_at,
+            fecha_cierre: row.fecha_fin_ejecucion,
+            estado: row.estado as EstadoAplicacion,
             proposito: row.proposito,
             agronomo_responsable: row.agronomo_responsable,
-            blanco_biologico: blancoBiologico,
-            lotes_seleccionados: lotesSeleccionados,
-          },
-          mezclas: [],
-          calculos: [],
-          lista_compras: {
-            items: [],
-            costo_total_estimado: 0,
-            productos_sin_precio: 0,
-            productos_sin_stock: 0,
-          },
-          creado_en: row.created_at,
-          creado_por: '',
-          actualizado_en: row.updated_at,
-        };
+            configuracion: {
+              nombre: row.nombre_aplicacion || 'Sin nombre',
+              tipo: row.tipo_aplicacion === 'Fumigación' 
+                ? 'fumigacion' 
+                : row.tipo_aplicacion === 'Fertilización'
+                ? 'fertilizacion'
+                : 'drench',
+              fecha_inicio: row.fecha_recomendacion || row.created_at,
+              proposito: row.proposito,
+              agronomo_responsable: row.agronomo_responsable,
+              blanco_biologico: blancoBiologico,
+              lotes_seleccionados: lotesSeleccionados,
+            },
+            mezclas: [],
+            calculos: [],
+            lista_compras: {
+              items: [],
+              costo_total_estimado: 0,
+              productos_sin_precio: 0,
+              productos_sin_stock: 0,
+            },
+            creado_en: row.created_at,
+            creado_por: '',
+            actualizado_en: row.updated_at,
+          });
+        } catch (rowError) {
+          console.error(`❌ Error procesando aplicación ${row.id}:`, rowError);
+          // Continuar con el siguiente registro
+        }
       });
 
+      console.log('✅ Aplicaciones mapeadas correctamente:', aplicacionesMapeadas.length);
       setAplicaciones(aplicacionesMapeadas);
     } catch (error) {
       console.error('Error cargando aplicaciones:', error);
@@ -190,6 +218,120 @@ export function AplicacionesList() {
     planificadas: aplicaciones.filter((a) => a.estado === 'Calculada').length,
     en_ejecucion: aplicaciones.filter((a) => a.estado === 'En ejecución').length,
     cerradas: aplicaciones.filter((a) => a.estado === 'Cerrada').length,
+  };
+
+  /**
+   * ELIMINAR APLICACIÓN
+   */
+  const handleEliminar = async (aplicacionId: string) => {
+    try {
+      console.log('🗑️ Iniciando eliminación de aplicación:', aplicacionId);
+
+      // 1. Eliminar relaciones con lotes
+      const { error: errorLotes } = await supabase
+        .from('aplicaciones_lotes')
+        .delete()
+        .eq('aplicacion_id', aplicacionId);
+
+      if (errorLotes) {
+        console.error('❌ Error eliminando relaciones con lotes:', errorLotes);
+        throw errorLotes;
+      }
+
+      console.log('✅ Lotes eliminados');
+
+      // 2. Obtener IDs de mezclas
+      const { data: mezclas, error: errorMezclas } = await supabase
+        .from('aplicaciones_mezclas')
+        .select('id')
+        .eq('aplicacion_id', aplicacionId);
+
+      if (errorMezclas) {
+        console.error('❌ Error obteniendo mezclas:', errorMezclas);
+        throw errorMezclas;
+      }
+
+      console.log('✅ Mezclas obtenidas:', mezclas?.length || 0);
+
+      // 3. Eliminar productos de las mezclas
+      if (mezclas && mezclas.length > 0) {
+        const mezclaIds = mezclas.map(m => m.id);
+
+        const { error: errorProductosMezcla } = await supabase
+          .from('aplicaciones_productos')
+          .delete()
+          .in('mezcla_id', mezclaIds);
+
+        if (errorProductosMezcla) {
+          console.error('❌ Error eliminando productos de mezclas:', errorProductosMezcla);
+          throw errorProductosMezcla;
+        }
+
+        console.log('✅ Productos de mezclas eliminados');
+
+        // 4. Eliminar mezclas
+        const { error: errorDeleteMezclas } = await supabase
+          .from('aplicaciones_mezclas')
+          .delete()
+          .in('id', mezclaIds);
+
+        if (errorDeleteMezclas) {
+          console.error('❌ Error eliminando mezclas:', errorDeleteMezclas);
+          throw errorDeleteMezclas;
+        }
+
+        console.log('✅ Mezclas eliminadas');
+      }
+
+      // 5. Eliminar cálculos
+      const { error: errorCalculos } = await supabase
+        .from('aplicaciones_calculos')
+        .delete()
+        .eq('aplicacion_id', aplicacionId);
+
+      if (errorCalculos) {
+        console.error('❌ Error eliminando cálculos:', errorCalculos);
+        throw errorCalculos;
+      }
+
+      console.log('✅ Cálculos eliminados');
+
+      // 6. Eliminar lista de compras
+      const { error: errorCompras } = await supabase
+        .from('aplicaciones_compras')
+        .delete()
+        .eq('aplicacion_id', aplicacionId);
+
+      if (errorCompras) {
+        console.error('❌ Error eliminando lista de compras:', errorCompras);
+        throw errorCompras;
+      }
+
+      console.log('✅ Lista de compras eliminada');
+
+      // 7. Finalmente, eliminar la aplicación
+      const { error: errorAplicacion } = await supabase
+        .from('aplicaciones')
+        .delete()
+        .eq('id', aplicacionId);
+
+      if (errorAplicacion) {
+        console.error('❌ Error eliminando aplicación:', errorAplicacion);
+        throw errorAplicacion;
+      }
+
+      console.log('✅ Aplicación eliminada');
+
+      // Actualizar lista local
+      setAplicaciones(aplicaciones.filter(a => a.id !== aplicacionId));
+      setEliminando(null);
+      
+      console.log('🎉 Eliminación completada exitosamente');
+      alert('Aplicación eliminada exitosamente');
+    } catch (error) {
+      console.error('💥 Error eliminando aplicación:', error);
+      alert('Error al eliminar la aplicación. Por favor intenta nuevamente.');
+    }
   };
 
   return (
@@ -385,15 +527,57 @@ export function AplicacionesList() {
                     </div>
 
                     {/* Acciones */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // TODO: Mostrar menú de opciones
-                      }}
-                      className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-                    >
-                      <MoreVertical className="w-5 h-5 text-[#4D240F]/70" />
-                    </button>
+                    <div className="relative">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setMenuAbiertoId(
+                            menuAbiertoId === aplicacion.id ? null : aplicacion.id
+                          );
+                          setMenuPosition({
+                            top: rect.bottom + window.scrollY,
+                            left: rect.left + window.scrollX - 192 + rect.width,
+                          });
+                        }}
+                        className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+                      >
+                        <MoreVertical className="w-5 h-5 text-[#4D240F]/70" />
+                      </button>
+
+                      {/* Dropdown menu */}
+                      {menuAbiertoId === aplicacion.id && menuPosition && (
+                        <div
+                          className="fixed w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[9999]"
+                          style={{
+                            top: `${menuPosition.top}px`,
+                            left: `${menuPosition.left}px`,
+                          }}
+                        >
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/aplicaciones/${aplicacion.id}/editar`);
+                            }}
+                            className="w-full px-4 py-2 text-left text-sm text-[#172E08] hover:bg-gray-50 flex items-center gap-2 transition-colors"
+                          >
+                            <Edit2 className="w-4 h-4 text-gray-500" />
+                            Editar
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEliminando(aplicacion.id);
+                              setMenuAbiertoId(null);
+                            }}
+                            className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Eliminar
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -401,6 +585,43 @@ export function AplicacionesList() {
           </div>
         )}
       </div>
+
+      {/* Modal de confirmación de eliminación */}
+      {eliminando && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg text-[#172E08]">Eliminar Aplicación</h3>
+                <p className="text-sm text-[#4D240F]/70">Esta acción no se puede deshacer</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-[#4D240F]/70 mb-6">
+              ¿Estás seguro de que deseas eliminar esta aplicación? Se eliminarán todos los
+              datos asociados incluyendo mezclas, cálculos y relaciones con lotes.
+            </p>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setEliminando(null)}
+                className="flex-1 px-4 py-2 border border-gray-300 text-[#4D240F] rounded-lg hover:bg-gray-50 transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => handleEliminar(eliminando)}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

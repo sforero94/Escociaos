@@ -74,6 +74,7 @@ function LayoutRoutes() {
         <Route path="aplicaciones">
           <Route index element={<AplicacionesList />} />
           <Route path="calculadora" element={<CalculadoraAplicaciones />} />
+          <Route path=":id/editar" element={<CalculadoraAplicaciones />} />
           <Route path=":id" element={<ComingSoon moduleName="Detalle de Aplicación" />} />
         </Route>
 

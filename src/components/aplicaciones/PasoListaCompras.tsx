@@ -7,14 +7,12 @@ import {
   DollarSign,
   Package,
   TrendingUp,
+  Edit2,
+  Save,
+  X as XIcon,
 } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
-import {
-  generarListaCompras,
-  formatearMoneda,
-  formatearNumero,
-  calcularTotalesProductos,
-} from '../../utils/calculosAplicaciones';
+import { generarPDFListaCompras } from '../../utils/generarPDFListaCompras';
 import type {
   ConfiguracionAplicacion,
   Mezcla,
@@ -44,6 +42,11 @@ export function PasoListaCompras({
   const [lista, setLista] = useState<ListaCompras | null>(lista_compras);
   const [cargando, setCargando] = useState(false);
   const [inventario, setInventario] = useState<ProductoCatalogo[]>([]);
+  
+  // Estado para edición manual
+  const [modoEdicion, setModoEdicion] = useState(false);
+  const [itemsEditables, setItemsEditables] = useState<Record<string, ItemListaCompras>>({});
+  const [cambiosSinGuardar, setCambiosSinGuardar] = useState(false);
 
   /**
    * GENERAR LISTA DE COMPRAS AL MONTAR
@@ -51,6 +54,13 @@ export function PasoListaCompras({
   useEffect(() => {
     if (!lista_compras) {
       generarLista();
+    } else {
+      // Inicializar items editables
+      const editables: Record<string, ItemListaCompras> = {};
+      lista_compras.items.forEach((item) => {
+        editables[item.producto_id] = { ...item };
+      });
+      setItemsEditables(editables);
     }
   }, []);
 
@@ -99,11 +109,131 @@ export function PasoListaCompras({
   };
 
   /**
-   * EXPORTAR LISTA A PDF (función placeholder)
+   * EXPORTAR LISTA A PDF
    */
   const exportarPDF = () => {
-    alert('Función de exportar PDF en desarrollo');
-    // TODO: Implementar generación de PDF
+    if (lista) {
+      // Datos de la empresa (podrías cargarlos de configuración global)
+      const datosEmpresa = {
+        nombre: 'Escocia Hass',
+        nit: '900.XXX.XXX-X', // Actualizar con NIT real
+        direccion: 'Dirección del cultivo', // Actualizar con dirección real
+        telefono: '+57 XXX XXX XXXX', // Actualizar con teléfono real
+        email: 'contacto@escocia-hass.com', // Actualizar con email real
+      };
+
+      generarPDFListaCompras(lista, configuracion, datosEmpresa);
+    } else {
+      alert('No hay lista de compras para exportar');
+    }
+  };
+
+  /**
+   * ACTIVAR MODO EDICIÓN
+   */
+  const activarEdicion = () => {
+    setModoEdicion(true);
+    setCambiosSinGuardar(false);
+  };
+
+  /**
+   * CANCELAR EDICIÓN
+   */
+  const cancelarEdicion = () => {
+    if (cambiosSinGuardar) {
+      if (!confirm('¿Descartar cambios sin guardar?')) {
+        return;
+      }
+    }
+
+    // Restaurar valores originales
+    if (lista) {
+      const editables: Record<string, ItemListaCompras> = {};
+      lista.items.forEach((item) => {
+        editables[item.producto_id] = { ...item };
+      });
+      setItemsEditables(editables);
+    }
+
+    setModoEdicion(false);
+    setCambiosSinGuardar(false);
+  };
+
+  /**
+   * Extrae el tamaño numérico de una presentación comercial
+   */
+  const extraerTamanoPresentacion = (presentacion: string): number => {
+    const match = presentacion.match(/(\d+\.?\d*)/);
+    return match ? parseFloat(match[1]) : 1;
+  };
+
+  /**
+   * EDITAR CANTIDAD DE UN PRODUCTO
+   */
+  const editarCantidad = (
+    productoId: string,
+    campo: 'unidades_a_comprar' | 'cantidad_faltante',
+    valor: number
+  ) => {
+    const item = itemsEditables[productoId];
+    if (!item) return;
+
+    const itemActualizado = { ...item };
+
+    if (campo === 'unidades_a_comprar') {
+      itemActualizado.unidades_a_comprar = Math.max(0, valor);
+
+      // Recalcular cantidad faltante basado en unidades
+      const tamanoPresentacion = extraerTamanoPresentacion(item.presentacion_comercial);
+      const nuevaCantidadFaltante = itemActualizado.unidades_a_comprar * tamanoPresentacion;
+      itemActualizado.cantidad_faltante = nuevaCantidadFaltante;
+    } else if (campo === 'cantidad_faltante') {
+      itemActualizado.cantidad_faltante = Math.max(0, valor);
+
+      // Recalcular unidades basado en cantidad
+      const tamanoPresentacion = extraerTamanoPresentacion(item.presentacion_comercial);
+      itemActualizado.unidades_a_comprar = Math.ceil(valor / tamanoPresentacion);
+    }
+
+    // Recalcular costo
+    if (item.ultimo_precio_unitario) {
+      const tamanoPresentacion = extraerTamanoPresentacion(item.presentacion_comercial);
+      itemActualizado.costo_estimado =
+        itemActualizado.unidades_a_comprar * tamanoPresentacion * item.ultimo_precio_unitario;
+    }
+
+    setItemsEditables((prev) => ({
+      ...prev,
+      [productoId]: itemActualizado,
+    }));
+
+    setCambiosSinGuardar(true);
+  };
+
+  /**
+   * GUARDAR CAMBIOS DE EDICIÓN
+   */
+  const guardarCambios = () => {
+    if (!lista) return;
+
+    // Crear nueva lista con items editados
+    const itemsActualizados = Object.values(itemsEditables);
+
+    // Recalcular totales
+    const nuevosCostos = itemsActualizados
+      .filter((item) => item.cantidad_faltante > 0)
+      .reduce((sum, item) => sum + (item.costo_estimado || 0), 0);
+
+    const nuevaLista: ListaCompras = {
+      ...lista,
+      items: itemsActualizados,
+      costo_total_estimado: nuevosCostos,
+    };
+
+    setLista(nuevaLista);
+    onUpdate(nuevaLista);
+    setModoEdicion(false);
+    setCambiosSinGuardar(false);
   };
 
   if (cargando) {
@@ -133,8 +263,17 @@ export function PasoListaCompras({
   }
 
   // Separar productos: a comprar vs disponibles
-  const productosAComprar = lista.items.filter((item) => item.cantidad_faltante > 0);
-  const productosDisponibles = lista.items.filter((item) => item.cantidad_faltante === 0);
+  const productosAComprar = modoEdicion 
+    ? Object.values(itemsEditables).filter((item) => item.cantidad_faltante > 0) 
+    : lista.items.filter((item) => item.cantidad_faltante > 0);
+  const productosDisponibles = modoEdicion
+    ? Object.values(itemsEditables).filter((item) => item.cantidad_faltante === 0)
+    : lista.items.filter((item) => item.cantidad_faltante === 0);
+  
+  // Recalcular costo total en tiempo real cuando está en modo edición
+  const costoTotalActual = modoEdicion
+    ? productosAComprar.reduce((sum, item) => sum + (item.costo_estimado || 0), 0)
+    : lista.costo_total_estimado;
 
   return (
     <div className="space-y-6">
@@ -145,14 +284,60 @@ export function PasoListaCompras({
           <p className="text-sm text-[#4D240F]/70 mt-1">Comparación con inventario disponible</p>
         </div>
 
-        <button
-          onClick={exportarPDF}
-          className="px-4 py-2 border border-gray-300 text-[#4D240F] rounded-lg hover:bg-gray-50 transition-all flex items-center gap-2"
-        >
-          <Download className="w-4 h-4" />
-          <span className="hidden sm:inline">Exportar PDF</span>
-        </button>
+        <div className="flex gap-2">
+          {/* Botón Editar/Guardar/Cancelar */}
+          {!modoEdicion ? (
+            <button
+              onClick={activarEdicion}
+              className="px-4 py-2 border border-gray-300 text-[#4D240F] rounded-lg hover:bg-gray-50 transition-all flex items-center gap-2"
+            >
+              <Edit2 className="w-4 h-4" />
+              <span className="hidden sm:inline">Editar Cantidades</span>
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={cancelarEdicion}
+                className="px-4 py-2 border border-gray-300 text-[#4D240F] rounded-lg hover:bg-gray-50 transition-all flex items-center gap-2"
+              >
+                <XIcon className="w-4 h-4" />
+                <span className="hidden sm:inline">Cancelar</span>
+              </button>
+              <button
+                onClick={guardarCambios}
+                disabled={!cambiosSinGuardar}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+              >
+                <Save className="w-4 h-4" />
+                <span className="hidden sm:inline">Guardar Cambios</span>
+              </button>
+            </>
+          )}
+
+          {/* Botón Exportar PDF */}
+          <button
+            onClick={exportarPDF}
+            disabled={modoEdicion}
+            className="px-4 py-2 border border-gray-300 text-[#4D240F] rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+          >
+            <Download className="w-4 h-4" />
+            <span className="hidden sm:inline">Exportar PDF</span>
+          </button>
+        </div>
       </div>
+
+      {/* ALERTA DE MODO EDICIÓN */}
+      {modoEdicion && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3">
+          <Edit2 className="w-5 h-5 text-blue-600 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="text-blue-900">Modo de edición activado</p>
+            <p className="text-blue-700 text-sm">
+              Puedes modificar las cantidades a comprar. Los costos se recalcularán automáticamente.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* RESUMEN GENERAL */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -184,7 +369,7 @@ export function PasoListaCompras({
             <div className="text-sm text-yellow-700">Inversión Estimada</div>
           </div>
           <div className="text-2xl text-yellow-900">
-            {formatearMoneda(lista.costo_total_estimado)}
+            {formatearMoneda(costoTotalActual)}
           </div>
         </div>
       </div>
@@ -265,14 +450,50 @@ export function PasoListaCompras({
                         {formatearNumero(item.cantidad_necesaria)} {item.unidad}
                       </td>
                       <td className="px-4 py-3 text-right text-sm">
-                        <span className="text-red-600">
-                          {formatearNumero(item.cantidad_faltante)} {item.unidad}
-                        </span>
+                        {modoEdicion ? (
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={item.cantidad_faltante}
+                            onChange={(e) =>
+                              editarCantidad(
+                                item.producto_id,
+                                'cantidad_faltante',
+                                parseFloat(e.target.value) || 0
+                              )
+                            }
+                            className="w-24 px-2 py-1 text-sm text-right border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                        ) : (
+                          <span className="text-red-600">
+                            {formatearNumero(item.cantidad_faltante)} {item.unidad}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <div className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-red-100 text-red-800">
-                          {item.unidades_a_comprar} × {item.presentacion_comercial}
-                        </div>
+                        {modoEdicion ? (
+                          <div className="flex items-center justify-center gap-1">
+                            <input
+                              type="number"
+                              min="0"
+                              value={item.unidades_a_comprar}
+                              onChange={(e) =>
+                                editarCantidad(
+                                  item.producto_id,
+                                  'unidades_a_comprar',
+                                  parseInt(e.target.value) || 0
+                                )
+                              }
+                              className="w-16 px-2 py-1 text-sm text-center border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            />
+                            <span className="text-xs text-[#4D240F]/70">×</span>
+                            <span className="text-xs text-[#4D240F]/70">{item.presentacion_comercial}</span>
+                          </div>
+                        ) : (
+                          <div className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-red-100 text-red-800">
+                            {item.unidades_a_comprar} × {item.presentacion_comercial}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right text-sm">
                         {item.alerta === 'sin_precio' ? (
@@ -407,7 +628,7 @@ export function PasoListaCompras({
           <div>
             <div className="text-[#4D240F]/70 mb-1">Inversión Estimada:</div>
             <div className="text-[#172E08] text-lg">
-              {formatearMoneda(lista.costo_total_estimado)}
+              {formatearMoneda(costoTotalActual)}
             </div>
           </div>
         </div>
