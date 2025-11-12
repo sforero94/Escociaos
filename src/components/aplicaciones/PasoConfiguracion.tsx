@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
-import { Sprout, Calendar, MapPin, Plus, X, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Sprout, Calendar, MapPin, Plus, X, AlertCircle, Bug } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import type {
   ConfiguracionAplicacion,
   LoteSeleccionado,
   LoteCatalogo,
   TipoAplicacion,
+  BlancoBiologico,
 } from '../../types/aplicaciones';
 
 interface PasoConfiguracionProps {
@@ -23,12 +24,21 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
     fecha_inicio: configuracion?.fecha_inicio || '',
     proposito: configuracion?.proposito || '',
     agronomo_responsable: configuracion?.agronomo_responsable || '',
+    blanco_biologico: configuracion?.blanco_biologico || [],
     lotes_seleccionados: configuracion?.lotes_seleccionados || [],
   });
 
   // Catálogo de lotes disponibles
   const [lotesCatalogo, setLotesCatalogo] = useState<LoteCatalogo[]>([]);
   const [cargandoLotes, setCargandoLotes] = useState(true);
+  
+  // Catálogo de blancos biológicos
+  const [blancosBiologicos, setBlancosBiologicos] = useState<BlancoBiologico[]>([]);
+  const [cargandoBlancos, setCargandoBlancos] = useState(true);
+  
+  // Búsqueda de blancos biológicos
+  const [busquedaBlanco, setBusquedaBlanco] = useState('');
+  const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
 
   // Lote seleccionado para agregar
   const [loteAAgregar, setLoteAAgregar] = useState<string>('');
@@ -94,6 +104,89 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
       setCargandoLotes(false);
     }
   };
+
+  /**
+   * CARGAR BLANCOS BIÓLOGICOS
+   */
+  useEffect(() => {
+    cargarBlancosBiologicos();
+  }, []);
+
+  const cargarBlancosBiologicos = async () => {
+    try {
+      console.log('🔍 Iniciando carga de blancos biológicos...');
+      
+      const { data, error } = await supabase
+        .from('plagas_enfermedades_catalogo')
+        .select('id, nombre, tipo, descripcion, link_info, activo')
+        .eq('activo', true)
+        .order('nombre');
+
+      console.log('📊 Respuesta de Supabase:', { data, error });
+
+      if (error) {
+        console.error('❌ Error cargando blancos biológicos:', error);
+        throw error;
+      }
+
+      console.log('✅ Blancos biológicos cargados:', data);
+      setBlancosBiologicos(data || []);
+    } catch (error) {
+      console.error('💥 Error en cargarBlancosBiologicos:', error);
+      setBlancosBiologicos([]);
+    } finally {
+      setCargandoBlancos(false);
+    }
+  };
+
+  /**
+   * AGREGAR BLANCO BIOLÓGICO
+   */
+  const agregarBlanco = (blancoId: string) => {
+    if (!formData.blanco_biologico?.includes(blancoId)) {
+      setFormData((prev) => ({
+        ...prev,
+        blanco_biologico: [...(prev.blanco_biologico || []), blancoId],
+      }));
+    }
+    setBusquedaBlanco('');
+    setMostrarSugerencias(false);
+  };
+
+  /**
+   * QUITAR BLANCO BIOLÓGICO
+   */
+  const quitarBlanco = (blancoId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      blanco_biologico: (prev.blanco_biologico || []).filter((id) => id !== blancoId),
+    }));
+  };
+
+  /**
+   * FILTRAR BLANCOS POR BÚSQUEDA
+   */
+  const blancosFiltrados = blancosBiologicos.filter((blanco) => {
+    // No mostrar los ya seleccionados
+    if (formData.blanco_biologico?.includes(blanco.id)) return false;
+    
+    // Filtrar por búsqueda
+    if (!busquedaBlanco.trim()) return false;
+    
+    const busqueda = busquedaBlanco.toLowerCase();
+    return (
+      blanco.nombre.toLowerCase().includes(busqueda) ||
+      blanco.tipo?.toLowerCase().includes(busqueda) ||
+      blanco.descripcion?.toLowerCase().includes(busqueda)
+    );
+  });
+
+  /**
+   * OBTENER BLANCOS SELECCIONADOS
+   */
+  const blancosSeleccionados = blancosBiologicos.filter((blanco) =>
+    formData.blanco_biologico?.includes(blanco.id)
+  );
 
   /**
    * AGREGAR LOTE A LA SELECCIÓN
@@ -181,6 +274,11 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
       });
     }
 
+    // Validación de blancos biológicos
+    if (!formData.blanco_biologico || formData.blanco_biologico.length === 0) {
+      nuevosErrores.blanco_biologico = 'Debes seleccionar al menos un blanco biológico';
+    }
+
     setErrores(nuevosErrores);
     return Object.keys(nuevosErrores).length === 0;
   };
@@ -264,6 +362,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
             >
               <option value="fumigacion">Fumigación</option>
               <option value="fertilizacion">Fertilización</option>
+              <option value="drench">Drench</option>
             </select>
           </div>
 
@@ -320,6 +419,113 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
               rows={3}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
             />
+          </div>
+
+          {/* Blancos Biológicos */}
+          <div className="md:col-span-2">
+            <label className="block text-sm text-[#4D240F] mb-2">
+              Blancos Biológicos (Plagas/Enfermedades) *
+            </label>
+            
+            {cargandoBlancos ? (
+              <div className="p-4 bg-gray-50 rounded-lg text-center">
+                <p className="text-sm text-[#4D240F]/70">Cargando blancos biológicos...</p>
+              </div>
+            ) : blancosBiologicos.length === 0 ? (
+              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-sm text-yellow-800">
+                  ⚠️ No hay blancos biológicos disponibles. Verifica la tabla en Supabase.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {/* Input de búsqueda con sugerencias */}
+                <div className="relative">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={busquedaBlanco}
+                      onChange={(e) => {
+                        setBusquedaBlanco(e.target.value);
+                        setMostrarSugerencias(true);
+                      }}
+                      onFocus={() => setMostrarSugerencias(true)}
+                      placeholder="Buscar plaga o enfermedad... (ej: trips, phytophthora)"
+                      className="w-full px-4 py-2.5 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C] transition-all"
+                    />
+                    <Bug className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#4D240F]/50" />
+                  </div>
+
+                  {/* Sugerencias desplegables */}
+                  {mostrarSugerencias && blancosFiltrados.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                      {blancosFiltrados.map((blanco) => (
+                        <button
+                          key={blanco.id}
+                          type="button"
+                          onClick={() => agregarBlanco(blanco.id)}
+                          className="w-full text-left px-4 py-3 hover:bg-[#73991C]/5 transition-colors border-b border-gray-100 last:border-b-0"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">
+                              {blanco.tipo === 'plaga' ? '🐛' : '🍄'}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm text-[#172E08] font-medium">
+                                {blanco.nombre}
+                              </div>
+                              {blanco.descripcion && (
+                                <div className="text-xs text-[#4D240F]/60 truncate">
+                                  {blanco.descripcion}
+                                </div>
+                              )}
+                              <div className="text-xs text-[#73991C] capitalize mt-0.5">
+                                {blanco.tipo}
+                              </div>
+                            </div>
+                            <Plus className="w-4 h-4 text-[#73991C]" />
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Blancos seleccionados (chips/tags) */}
+                {blancosSeleccionados.length > 0 && (
+                  <div className="border border-[#73991C]/30 bg-[#73991C]/5 rounded-lg p-4">
+                    <div className="text-xs text-[#4D240F]/70 mb-2">
+                      Seleccionados ({blancosSeleccionados.length}):
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {blancosSeleccionados.map((blanco) => (
+                        <div
+                          key={blanco.id}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border-2 border-[#73991C] rounded-full text-sm"
+                        >
+                          <span>{blanco.tipo === 'plaga' ? '🐛' : '🍄'}</span>
+                          <span className="text-[#172E08]">{blanco.nombre}</span>
+                          <button
+                            type="button"
+                            onClick={() => quitarBlanco(blanco.id)}
+                            className="ml-1 text-[#4D240F]/70 hover:text-red-600 transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            
+            {errores.blanco_biologico && (
+              <p className="text-red-600 text-sm mt-2 flex items-center gap-1">
+                <AlertCircle className="w-4 h-4" />
+                {errores.blanco_biologico}
+              </p>
+            )}
           </div>
         </div>
       </div>

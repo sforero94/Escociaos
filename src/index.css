@@ -703,6 +703,10 @@
     margin-bottom: calc(var(--spacing) * 8);
   }
 
+  .ml-1 {
+    margin-left: calc(var(--spacing) * 1);
+  }
+
   .ml-2 {
     margin-left: calc(var(--spacing) * 2);
   }
@@ -850,6 +854,10 @@
 
   .h-full {
     height: 100%;
+  }
+
+  .max-h-64 {
+    max-height: calc(var(--spacing) * 64);
   }
 
   .max-h-\[90vh\] {
@@ -1358,6 +1366,10 @@
 
   .border-\[\#73991C\]\/20 {
     border-color: oklab(63.2076% -.0887151 .122113 / .2);
+  }
+
+  .border-\[\#73991C\]\/30 {
+    border-color: oklab(63.2076% -.0887151 .122113 / .3);
   }
 
   .border-\[\#BFD97D\] {
@@ -2834,6 +2846,11 @@
 
   .placeholder\:text-muted-foreground::placeholder {
     color: var(--muted-foreground);
+  }
+
+  .last\:border-b-0:last-child {
+    border-bottom-style: var(--tw-border-style);
+    border-bottom-width: 0;
   }
 
   @media (hover: hover) {

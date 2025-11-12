@@ -20,24 +20,25 @@ import type { Aplicacion, TipoAplicacion, EstadoAplicacion } from '../../types/a
 const TIPOS_LABELS: Record<TipoAplicacion, string> = {
   fumigacion: 'Fumigación',
   fertilizacion: 'Fertilización',
+  drench: 'Drench',
 };
 
 const ESTADO_LABELS: Record<EstadoAplicacion, string> = {
-  planificada: 'Planificada',
-  en_ejecucion: 'En Ejecución',
-  cerrada: 'Cerrada',
+  'Calculada': 'Planificada',
+  'En ejecución': 'En Ejecución',
+  'Cerrada': 'Cerrada',
 };
 
 const ESTADO_COLORS: Record<EstadoAplicacion, string> = {
-  planificada: 'bg-blue-100 text-blue-700 border-blue-200',
-  en_ejecucion: 'bg-green-100 text-green-700 border-green-200',
-  cerrada: 'bg-gray-100 text-gray-700 border-gray-200',
+  'Calculada': 'bg-blue-100 text-blue-700 border-blue-200',
+  'En ejecución': 'bg-green-100 text-green-700 border-green-200',
+  'Cerrada': 'bg-gray-100 text-gray-700 border-gray-200',
 };
 
 const ESTADO_ICONS: Record<EstadoAplicacion, typeof Clock> = {
-  planificada: Clock,
-  en_ejecucion: Play,
-  cerrada: CheckCircle2,
+  'Calculada': Clock,
+  'En ejecución': Play,
+  'Cerrada': CheckCircle2,
 };
 
 export function AplicacionesList() {
@@ -58,16 +59,111 @@ export function AplicacionesList() {
     try {
       setIsLoading(true);
 
-      // TODO: Implementar carga desde Supabase
-      // const { data, error } = await supabase
-      //   .from('aplicaciones')
-      //   .select('*')
-      //   .order('fecha_inicio', { ascending: false });
+      const { data, error } = await supabase
+        .from('aplicaciones')
+        .select(`
+          id,
+          codigo_aplicacion,
+          nombre_aplicacion,
+          tipo_aplicacion,
+          proposito,
+          blanco_biologico,
+          fecha_recomendacion,
+          agronomo_responsable,
+          estado,
+          fecha_inicio_ejecucion,
+          fecha_fin_ejecucion,
+          created_at,
+          updated_at,
+          aplicaciones_lotes (
+            lote_id,
+            lotes (
+              nombre
+            )
+          )
+        `)
+        .order('created_at', { ascending: false });
 
-      // Por ahora, datos de ejemplo
-      const mockData: Aplicacion[] = [];
+      if (error) {
+        console.error('Error cargando aplicaciones:', error);
+        throw error;
+      }
 
-      setAplicaciones(mockData);
+      // Mapear datos de BD al formato de la interfaz
+      const aplicacionesMapeadas: Aplicacion[] = (data || []).map((row: any) => {
+        // Extraer lotes seleccionados
+        const lotesSeleccionados = (row.aplicaciones_lotes || []).map((al: any) => ({
+          lote_id: al.lote_id,
+          nombre: al.lotes?.nombre || 'Lote sin nombre',
+          sublotes_ids: [],
+          area_hectareas: 0,
+          conteo_arboles: {
+            grandes: 0,
+            medianos: 0,
+            pequenos: 0,
+            clonales: 0,
+            total: 0,
+          },
+        }));
+
+        // Parsear blanco_biologico de forma segura
+        let blancoBiologico: string[] = [];
+        if (row.blanco_biologico) {
+          try {
+            // Intentar parsear como JSON
+            blancoBiologico = JSON.parse(row.blanco_biologico);
+            // Si no es array, convertirlo a array
+            if (!Array.isArray(blancoBiologico)) {
+              blancoBiologico = [];
+            }
+          } catch (e) {
+            // Si falla el parse, es texto plano - dejarlo como array vacío
+            console.warn('blanco_biologico no es JSON válido:', row.blanco_biologico);
+            blancoBiologico = [];
+          }
+        }
+
+        return {
+          id: row.id,
+          nombre: row.nombre_aplicacion || 'Sin nombre',
+          tipo: row.tipo_aplicacion === 'Fumigación' 
+            ? 'fumigacion' 
+            : row.tipo_aplicacion === 'Fertilización'
+            ? 'fertilizacion'
+            : 'drench',
+          fecha_inicio: row.fecha_recomendacion || row.created_at,
+          fecha_cierre: row.fecha_fin_ejecucion,
+          estado: row.estado as EstadoAplicacion,
+          proposito: row.proposito,
+          agronomo_responsable: row.agronomo_responsable,
+          configuracion: {
+            nombre: row.nombre_aplicacion || 'Sin nombre',
+            tipo: row.tipo_aplicacion === 'Fumigación' 
+              ? 'fumigacion' 
+              : row.tipo_aplicacion === 'Fertilización'
+              ? 'fertilizacion'
+              : 'drench',
+            fecha_inicio: row.fecha_recomendacion || row.created_at,
+            proposito: row.proposito,
+            agronomo_responsable: row.agronomo_responsable,
+            blanco_biologico: blancoBiologico,
+            lotes_seleccionados: lotesSeleccionados,
+          },
+          mezclas: [],
+          calculos: [],
+          lista_compras: {
+            items: [],
+            costo_total_estimado: 0,
+            productos_sin_precio: 0,
+            productos_sin_stock: 0,
+          },
+          creado_en: row.created_at,
+          creado_por: '',
+          actualizado_en: row.updated_at,
+        };
+      });
+
+      setAplicaciones(aplicacionesMapeadas);
     } catch (error) {
       console.error('Error cargando aplicaciones:', error);
     } finally {
@@ -91,9 +187,9 @@ export function AplicacionesList() {
   // Estadísticas
   const stats = {
     total: aplicaciones.length,
-    planificadas: aplicaciones.filter((a) => a.estado === 'planificada').length,
-    en_ejecucion: aplicaciones.filter((a) => a.estado === 'en_ejecucion').length,
-    cerradas: aplicaciones.filter((a) => a.estado === 'cerrada').length,
+    planificadas: aplicaciones.filter((a) => a.estado === 'Calculada').length,
+    en_ejecucion: aplicaciones.filter((a) => a.estado === 'En ejecución').length,
+    cerradas: aplicaciones.filter((a) => a.estado === 'Cerrada').length,
   };
 
   return (
@@ -183,6 +279,7 @@ export function AplicacionesList() {
             <option value="todos">Todos los tipos</option>
             <option value="fumigacion">Fumigación</option>
             <option value="fertilizacion">Fertilización</option>
+            <option value="drench">Drench</option>
           </select>
 
           {/* Filtro por estado */}
@@ -192,9 +289,9 @@ export function AplicacionesList() {
             className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
           >
             <option value="todos">Todos los estados</option>
-            <option value="planificada">Planificada</option>
-            <option value="en_ejecucion">En Ejecución</option>
-            <option value="cerrada">Cerrada</option>
+            <option value="Calculada">Planificada</option>
+            <option value="En ejecución">En Ejecución</option>
+            <option value="Cerrada">Cerrada</option>
           </select>
         </div>
       </div>

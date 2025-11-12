@@ -1,10 +1,10 @@
 // types/aplicaciones.ts
 // Tipos TypeScript para el módulo de Aplicaciones
 
-export type TipoAplicacion = 'fumigacion' | 'fertilizacion';
+export type TipoAplicacion = 'fumigacion' | 'fertilizacion' | 'drench';
 export type TamanoCaneca = 20 | 200 | 500 | 1000;
 export type TipoArbol = 'grandes' | 'medianos' | 'pequenos' | 'clonales';
-export type EstadoAplicacion = 'planificada' | 'en_ejecucion' | 'cerrada';
+export type EstadoAplicacion = 'Calculada' | 'En ejecución' | 'Cerrada';
 
 // Configuración General (Paso 1)
 export interface ConfiguracionAplicacion {
@@ -13,6 +13,7 @@ export interface ConfiguracionAplicacion {
   fecha_inicio: string;
   proposito?: string;
   agronomo_responsable?: string;
+  blanco_biologico: string[]; // Array de IDs de plagas/enfermedades
   lotes_seleccionados: LoteSeleccionado[];
 }
 
@@ -183,4 +184,14 @@ export interface LoteCatalogo {
     clonales: number;
     total: number;
   };
+}
+
+// Plaga/Enfermedad del catálogo (para selección)
+export interface BlancoBiologico {
+  id: string;
+  nombre: string;
+  tipo: string;
+  descripcion?: string;
+  link_info?: string;
+  activo?: boolean;
 }

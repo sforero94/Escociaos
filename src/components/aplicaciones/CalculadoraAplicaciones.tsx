@@ -241,8 +241,15 @@ export function CalculadoraAplicaciones() {
       const aplicacionData = {
         codigo_aplicacion: codigoAplicacion,
         nombre_aplicacion: state.configuracion.nombre,
-        tipo_aplicacion: state.configuracion.tipo === 'fumigacion' ? 'fumigación' : 'fertilización',
+        tipo_aplicacion: state.configuracion.tipo === 'fumigacion' 
+          ? 'Fumigación' 
+          : state.configuracion.tipo === 'fertilizacion'
+          ? 'Fertilización'
+          : 'Drench',
         proposito: state.configuracion.proposito || null,
+        blanco_biologico: state.configuracion.blanco_biologico 
+          ? JSON.stringify(state.configuracion.blanco_biologico)
+          : null,
         fecha_recomendacion: state.configuracion.fecha_inicio,
         agronomo_responsable: state.configuracion.agronomo_responsable || null,
         estado: 'Calculada' as const,
@@ -307,11 +314,11 @@ export function CalculadoraAplicaciones() {
         // Insertar mezcla
         const mezclaData = {
           aplicacion_id: aplicacion.id,
-          nombre: mezcla.nombre,
-          numero_orden: mezcla.numero_orden,
+          numero_mezcla: mezcla.numero_orden,
+          nombre_mezcla: mezcla.nombre,
         };
 
-        console.log('📝 Insertando mezcla:', mezclaData.nombre);
+        console.log('📝 Insertando mezcla:', mezclaData.nombre_mezcla);
 
         const { data: mezclaInsertada, error: errorMezcla } = await supabase
           .from('aplicaciones_mezclas')
