@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { X, Edit, PlayCircle, CheckCircle, Calendar, Droplet, Package, MapPin, Target, TrendingUp } from 'lucide-react';
+import { X, Edit, PlayCircle, CheckCircle, Calendar, Droplet, Package, MapPin, Target, TrendingUp, ShoppingCart } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { Button } from '../ui/button';
-import type { Aplicacion } from '../../types/aplicaciones';
+import { generarPDFListaCompras } from '../../utils/generarPDFListaCompras';
+import type { Aplicacion, ListaCompras } from '../../types/aplicaciones';
 
 interface DetalleAplicacionProps {
   aplicacion: Aplicacion;
@@ -34,6 +35,7 @@ export function DetalleAplicacion({
   const [lotes, setLotes] = useState<string[]>([]);
   const [blancoBiologico, setBlancoBiologico] = useState<string>('');
   const [fechaFinEstimada, setFechaFinEstimada] = useState<string>('');
+  const [descargandoPDF, setDescargandoPDF] = useState(false);
 
   useEffect(() => {
     cargarDatos();
@@ -257,6 +259,68 @@ export function DetalleAplicacion({
     if (aplicacion.tipo === 'fumigacion') return 'Fumigación';
     if (aplicacion.tipo === 'fertilizacion') return 'Fertilización';
     return 'Drench';
+  };
+
+  /**
+   * Descargar lista de compras en PDF
+   */
+  const descargarListaCompras = async () => {
+    setDescargandoPDF(true);
+    try {
+      // Cargar lista de compras desde BD
+      const { data: compras, error } = await supabase
+        .from('aplicaciones_compras')
+        .select('*')
+        .eq('aplicacion_id', aplicacion.id);
+
+      if (error) throw error;
+
+      if (!compras || compras.length === 0) {
+        alert('No hay lista de compras para exportar');
+        return;
+      }
+
+      // Construir objeto lista
+      const lista: ListaCompras = {
+        items: compras.map((c) => ({
+          producto_id: c.producto_id,
+          producto_nombre: c.producto_nombre,
+          unidad: c.unidad,
+          inventario_actual: c.inventario_actual,
+          cantidad_necesaria: c.cantidad_necesaria,
+          cantidad_faltante: c.cantidad_faltante,
+          unidades_a_comprar: c.unidades_a_comprar,
+          presentacion_comercial: c.presentacion_comercial,
+          costo_estimado: c.costo_estimado,
+          alerta: c.alerta,
+        })),
+        costo_total_estimado: compras.reduce((sum, c) => sum + (c.costo_estimado || 0), 0),
+        productos_sin_precio: compras.filter(c => !c.costo_estimado || c.costo_estimado === 0).length,
+      };
+
+      // ESTO ES LO MISMO QUE exportarPDF() de PasoListaCompras
+      const configuracion = {
+        nombre_aplicacion: aplicacion.nombre,
+        tipo_aplicacion: aplicacion.tipo,
+        fecha_inicio: aplicacion.fecha_inicio,
+      };
+
+      const datosEmpresa = {
+        nombre: 'Escocia Hass',
+        nit: '900.XXX.XXX-X',
+        direccion: 'Dirección del cultivo',
+        telefono: '+57 XXX XXX XXXX',
+        email: 'contacto@escocia-hass.com',
+      };
+
+      generarPDFListaCompras(lista, configuracion, datosEmpresa);
+
+    } catch (error: any) {
+      console.error('Error:', error);
+      alert('Error al generar el PDF');
+    } finally {
+      setDescargandoPDF(false);
+    }
   };
 
   return (
@@ -500,34 +564,48 @@ export function DetalleAplicacion({
 
         {/* FOOTER con botones mejorados */}
         <div className="border-t border-[#73991C]/10 p-5 bg-white/50 backdrop-blur-sm">
-          <div className="flex flex-wrap items-center justify-end gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* Botón de lista de compras a la izquierda */}
             <Button
-              onClick={onEditar}
-              disabled={aplicacion.estado !== 'Calculada'}
+              onClick={descargarListaCompras}
               variant="outline"
-              className="border-[#73991C]/30 text-[#73991C] hover:bg-[#73991C]/10 hover:border-[#73991C]"
+              className="border-[#4D240F]/30 text-[#4D240F] hover:bg-[#4D240F]/10 hover:border-[#4D240F]"
+              disabled={descargandoPDF}
             >
-              <Edit className="w-4 h-4 mr-2" />
-              Editar
+              <ShoppingCart className="w-4 h-4 mr-2" />
+              Ver Lista de Compras
             </Button>
 
-            <Button
-              onClick={onRegistrarMovimientos}
-              disabled={aplicacion.estado === 'Cerrada'}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              <PlayCircle className="w-4 h-4 mr-2" />
-              Registrar Movimientos
-            </Button>
+            {/* Botones de acción a la derecha */}
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                onClick={onEditar}
+                disabled={aplicacion.estado !== 'Calculada'}
+                variant="outline"
+                className="border-[#73991C]/30 text-[#73991C] hover:bg-[#73991C]/10 hover:border-[#73991C]"
+              >
+                <Edit className="w-4 h-4 mr-2" />
+                Editar
+              </Button>
 
-            <Button
-              onClick={onCerrarAplicacion}
-              disabled={aplicacion.estado !== 'En ejecución'}
-              className="bg-[#73991C] hover:bg-[#5f7d17] text-white"
-            >
-              <CheckCircle className="w-4 h-4 mr-2" />
-              Cerrar Aplicación
-            </Button>
+              <Button
+                onClick={onRegistrarMovimientos}
+                disabled={aplicacion.estado === 'Cerrada'}
+                className="bg-[#4D240F] hover:bg-[#3d1c0c] text-white"
+              >
+                <PlayCircle className="w-4 h-4 mr-2" />
+                Registrar Movimientos
+              </Button>
+
+              <Button
+                onClick={onCerrarAplicacion}
+                disabled={aplicacion.estado !== 'En ejecución'}
+                className="bg-[#73991C] hover:bg-[#5f7d17] text-white"
+              >
+                <CheckCircle className="w-4 h-4 mr-2" />
+                Cerrar Aplicación
+              </Button>
+            </div>
           </div>
         </div>
       </div>

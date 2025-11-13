@@ -373,16 +373,53 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
         0
       );
 
-      // 1. Actualizar estado de la aplicación
+      // Calcular días de aplicación
+      const fechaInicio = new Date(datosFinales.fechaInicioReal);
+      const fechaFin = new Date(datosFinales.fechaFinReal);
+      const diasAplicacion = Math.ceil((fechaFin.getTime() - fechaInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+      // Obtener usuario actual
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // 1️⃣ CREAR REGISTRO EN aplicaciones_cierre
+      const { data: cierreData, error: errorCierre } = await supabase
+        .from('aplicaciones_cierre')
+        .insert([
+          {
+            aplicacion_id: aplicacion.id,
+            fecha_cierre: datosFinales.fechaFinReal,
+            dias_aplicacion: diasAplicacion,
+            valor_jornal: datosFinales.valorJornal,
+            observaciones_generales: datosFinales.observaciones || null,
+            cerrado_por: user?.email || null,
+          },
+        ])
+        .select()
+        .single();
+
+      if (errorCierre) {
+        console.error('❌ Error creando registro de cierre:', errorCierre);
+        throw new Error('Error al crear registro de cierre: ' + errorCierre.message);
+      }
+
+      console.log('✅ Registro de cierre creado:', cierreData.id);
+
+      // 2️⃣ ACTUALIZAR TABLA aplicaciones (simplificado)
       const { error: errorUpdate } = await supabase
         .from('aplicaciones')
         .update({
           estado: 'Cerrada',
+          fecha_cierre: datosFinales.fechaFinReal,
           fecha_inicio_ejecucion: datosFinales.fechaInicioReal,
           fecha_fin_ejecucion: datosFinales.fechaFinReal,
           jornales_utilizados: totalJornales,
           valor_jornal: datosFinales.valorJornal,
           observaciones_cierre: datosFinales.observaciones,
+          // 💰 CAMPOS DE COSTOS - Ahora se guardan correctamente
+          costo_total_insumos: costoInsumos,
+          costo_total_mano_obra: costoManoObra,
+          costo_total: costoTotal,
+          costo_por_arbol: costoPorArbol,
         })
         .eq('id', aplicacion.id);
 
@@ -393,7 +430,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
 
       console.log('✅ Aplicación actualizada a estado Cerrada');
 
-      // 2. Consolidar inventario de productos aplicados
+      // 3️⃣ CONSOLIDAR INVENTARIO DE PRODUCTOS APLICADOS
       if (movimientos.length > 0) {
         console.log('📦 Consolidando inventario...');
 
@@ -413,9 +450,6 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
         });
 
         console.log('📊 Productos consolidados:', Object.fromEntries(consolidado));
-
-        // Obtener usuario actual
-        const { data: { user } } = await supabase.auth.getUser();
 
         // Para cada producto: actualizar inventario y crear movimiento
         for (const [productoId, { nombre, cantidad }] of consolidado.entries()) {

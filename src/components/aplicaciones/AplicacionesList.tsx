@@ -551,12 +551,12 @@ export function AplicacionesList() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            setAplicacionDetalle(aplicacion); // Esto abrirá el detalle que tiene el botón de cerrar
+                            navigate(`/aplicaciones/${aplicacion.id}/movimientos`);
                           }}
-                          className="px-4 py-2 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-lg hover:from-[#5f7d17] hover:to-[#9db86d] transition-all flex items-center gap-2"
+                          className="px-4 py-2 bg-gradient-to-r from-[#4D240F] to-[#4D240F]/80 text-white rounded-lg hover:from-[#3d1c0c] hover:to-[#3d1c0c]/80 transition-all flex items-center gap-2"
                         >
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span>Cerrar Aplicación</span>
+                          <ClipboardList className="w-4 h-4" />
+                          <span>Registrar Movimientos</span>
                         </button>
                       )}
 
@@ -687,7 +687,7 @@ export function AplicacionesList() {
           }}
           onCerrarAplicacion={() => {
             setAplicacionDetalle(null);
-            navigate(`/aplicaciones/${aplicacionDetalle.id}/movimientos`);
+            navigate(`/aplicaciones/${aplicacionDetalle.id}/cierre`);
           }}
         />
       )}

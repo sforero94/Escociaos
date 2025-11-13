@@ -19,6 +19,7 @@ interface Product {
   unidad_medida: string;
   precio_unitario: number;
   cantidad_actual: number;
+  presentacion_kg_l?: number; // 🆕 Agregar presentación comercial
 }
 
 interface PurchaseItem {
@@ -78,7 +79,7 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
         const supabase = getSupabase();
         const { data, error } = await supabase
           .from('productos')
-          .select('id, nombre, unidad_medida, precio_unitario, cantidad_actual')
+          .select('id, nombre, unidad_medida, precio_unitario, cantidad_actual, presentacion_kg_l')
           .eq('activo', true)
           .order('nombre');
 
@@ -552,6 +553,27 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
                               className="border-[#73991C]/20 focus:border-[#73991C] rounded-lg text-sm h-9"
                               required
                             />
+                            {/* 🆕 Mostrar conversión a unidad comercial */}
+                            {item.producto_id && item.cantidad && (() => {
+                              const product = getProduct(item.producto_id);
+                              const cantidad = parseFloat(item.cantidad);
+                              
+                              if (product?.presentacion_kg_l && cantidad > 0) {
+                                const unidadesComerciales = cantidad / product.presentacion_kg_l;
+                                const nombreUnidad = product.unidad_medida?.toLowerCase().includes('kilo') || product.unidad_medida?.toLowerCase().includes('kg')
+                                  ? 'bulto(s)'
+                                  : product.unidad_medida?.toLowerCase().includes('litro') || product.unidad_medida?.toLowerCase().includes('l')
+                                  ? 'tarro(s)'
+                                  : 'unidad(es)';
+                                
+                                return (
+                                  <p className="text-xs text-[#73991C] mt-1">
+                                    ≈ {unidadesComerciales.toFixed(2)} {nombreUnidad} de {product.presentacion_kg_l} {product.unidad_medida}
+                                  </p>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
 
                           {/* Precio Unitario */}

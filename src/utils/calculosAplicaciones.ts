@@ -12,7 +12,18 @@ import type {
 } from '../types/aplicaciones';
 
 /**
- * CÁLCULOS PARA FUMIGACIÓN
+ * CÁLCULOS PARA FUMIGACIÓN Y DRENCH
+ * 
+ * IMPORTANTE: Fumigación y Drench usan LA MISMA LÓGICA de cálculo:
+ * - Fumigación: Aplicación foliar (spray sobre hojas)
+ * - Drench: Aplicación edáfica (directo al suelo/raíz)
+ * 
+ * Ambos métodos comparten:
+ * - Uso de calibración (L/árbol)
+ * - Trabajo con canecas de mezcla
+ * - Dosis por caneca (cc o g)
+ * - Conversión automática: cc → L, g → Kg
+ * 
  * Fórmulas según documento de diseño:
  * - Litros de mezcla = (# árboles × calibración L/árbol)
  * - # canecas = Litros de mezcla / Tamaño caneca
@@ -60,11 +71,12 @@ export function calcularFumigacion(
  * Fórmulas según documento de diseño:
  * - Kilos por árbol según tamaño (Grande/Mediano/Clonal)
  * - Kilos totales por lote = Σ(árboles de cada tamaño × dosis correspondiente)
- * - Bultos necesarios = Kilos totales / Tamaño de bulto
+ * - Bultos necesarios = Kilos totales / presentacion_kg_l de cada producto
  */
 export function calcularFertilizacion(
   lote: LoteSeleccionado,
-  mezcla: Mezcla
+  mezcla: Mezcla,
+  productosInfo?: Map<string, { presentacion_kg_l: number }> // 👈 NUEVO PARÁMETRO OPCIONAL
 ): CalculosPorLote {
   // Calcular kilos por cada tipo de árbol para cada producto
   let kilos_grandes_total = 0;
@@ -97,9 +109,18 @@ export function calcularFertilizacion(
   // Calcular total de kilos de todos los productos
   const kilos_totales = productos.reduce((sum, p) => sum + p.cantidad_necesaria, 0);
 
-  // Calcular número de bultos (asumiendo bulto promedio de 25kg)
-  // En la práctica, cada producto puede tener diferente presentación
-  const numero_bultos = Math.ceil(kilos_totales / 25);
+  // ✅ SOLUCIÓN: Calcular bultos por producto usando su presentación real
+  const numero_bultos = productos.reduce((total, producto) => {
+    const info = productosInfo?.get(producto.producto_id);
+    const presentacion = info?.presentacion_kg_l || 25; // Fallback a 25kg si no hay info
+    const bultosProducto = Math.ceil(producto.cantidad_necesaria / presentacion);
+
+    if (productosInfo) {
+      console.log(`📦 Producto ${producto.producto_id}: ${producto.cantidad_necesaria} Kg ÷ ${presentacion} Kg/bulto = ${bultosProducto} bultos`);
+    }
+
+    return total + bultosProducto;
+  }, 0);
 
   return {
     lote_id: lote.lote_id,

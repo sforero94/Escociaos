@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Play, X, Calendar, AlertCircle } from 'lucide-react';
+import { Play, X, Calendar, AlertCircle, Package } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -9,6 +9,13 @@ interface IniciarEjecucionModalProps {
   aplicacion: Aplicacion;
   onClose: () => void;
   onSuccess: () => void;
+}
+
+interface ProductoFaltante {
+  nombre: string;
+  necesario: number;
+  disponible: number;
+  unidad: string;
 }
 
 export function IniciarEjecucionModal({
@@ -21,7 +28,125 @@ export function IniciarEjecucionModal({
     new Date().toISOString().split('T')[0]
   );
   const [loading, setLoading] = useState(false);
+  const [validandoStock, setValidandoStock] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [productosFaltantes, setProductosFaltantes] = useState<ProductoFaltante[]>([]);
+  const [stockValidado, setStockValidado] = useState(false);
+
+  /**
+   * VALIDAR STOCK SUFICIENTE
+   */
+  const validarStockSuficiente = async (): Promise<boolean> => {
+    try {
+      setValidandoStock(true);
+      setError(null);
+      setProductosFaltantes([]);
+
+      console.log('🔍 Validando stock para aplicación:', aplicacion.id);
+
+      // 1. Cargar productos necesarios de todas las mezclas
+      const { data: mezclas, error: errorMezclas } = await supabase
+        .from('aplicaciones_mezclas')
+        .select('id')
+        .eq('aplicacion_id', aplicacion.id);
+
+      if (errorMezclas) {
+        console.error('❌ Error cargando mezclas:', errorMezclas);
+        throw new Error('Error al cargar mezclas');
+      }
+
+      if (!mezclas || mezclas.length === 0) {
+        console.log('✅ No hay productos definidos, puede continuar');
+        setStockValidado(true);
+        return true;
+      }
+
+      const mezclasIds = mezclas.map(m => m.id);
+
+      const { data: productosNecesarios, error: errorProductos } = await supabase
+        .from('aplicaciones_productos')
+        .select('producto_id, producto_nombre, cantidad_total_necesaria, producto_unidad')
+        .in('mezcla_id', mezclasIds);
+
+      if (errorProductos) {
+        console.error('❌ Error cargando productos:', errorProductos);
+        throw new Error('Error al cargar productos necesarios');
+      }
+
+      if (!productosNecesarios || productosNecesarios.length === 0) {
+        console.log('✅ No hay productos, puede continuar');
+        setStockValidado(true);
+        return true;
+      }
+
+      // 2. Consolidar cantidades por producto (puede haber duplicados en diferentes mezclas)
+      const necesidadesPorProducto = new Map<string, { nombre: string; cantidad: number; unidad: string }>();
+      
+      productosNecesarios.forEach(p => {
+        const actual = necesidadesPorProducto.get(p.producto_id);
+        if (actual) {
+          actual.cantidad += p.cantidad_total_necesaria || 0;
+        } else {
+          necesidadesPorProducto.set(p.producto_id, {
+            nombre: p.producto_nombre,
+            cantidad: p.cantidad_total_necesaria || 0,
+            unidad: p.producto_unidad || 'L/Kg'
+          });
+        }
+      });
+
+      // 3. Cargar stock actual de productos
+      const productosIds = Array.from(necesidadesPorProducto.keys());
+      
+      const { data: productosStock, error: errorStock } = await supabase
+        .from('productos')
+        .select('id, nombre, cantidad_actual, unidad_medida')
+        .in('id', productosIds);
+
+      if (errorStock) {
+        console.error('❌ Error cargando stock:', errorStock);
+        throw new Error('Error al cargar inventario actual');
+      }
+
+      const stockMap = new Map(productosStock?.map(p => [p.id, { disponible: p.cantidad_actual || 0, unidad: p.unidad_medida }]) || []);
+
+      // 4. Verificar faltantes
+      const faltantes: ProductoFaltante[] = [];
+
+      necesidadesPorProducto.forEach((necesidad, productoId) => {
+        const stock = stockMap.get(productoId);
+        const disponible = stock?.disponible || 0;
+
+        if (disponible < necesidad.cantidad) {
+          faltantes.push({
+            nombre: necesidad.nombre,
+            necesario: necesidad.cantidad,
+            disponible: disponible,
+            unidad: stock?.unidad || necesidad.unidad
+          });
+        }
+      });
+
+      // 5. Resultado
+      if (faltantes.length > 0) {
+        console.warn('⚠️ Stock insuficiente:', faltantes);
+        setProductosFaltantes(faltantes);
+        setStockValidado(false);
+        return false;
+      }
+
+      console.log('✅ Stock suficiente para todos los productos');
+      setStockValidado(true);
+      return true;
+
+    } catch (err: any) {
+      console.error('❌ Error validando stock:', err);
+      setError(err.message || 'Error al validar inventario');
+      return false;
+    } finally {
+      setValidandoStock(false);
+    }
+  };
 
   const handleIniciar = async () => {
     try {
@@ -41,6 +166,27 @@ export function IniciarEjecucionModal({
       if (fechaInicioDate > hoy) {
         setError('La fecha de inicio no puede ser futura');
         return;
+      }
+
+      // 🆕 VALIDAR STOCK si no se ha validado aún
+      if (!stockValidado) {
+        const stockSuficiente = await validarStockSuficiente();
+        if (!stockSuficiente) {
+          // Si hay faltantes, preguntar al usuario
+          const confirmar = window.confirm(
+            `⚠️ STOCK INSUFICIENTE\n\n` +
+            `${productosFaltantes.length} producto(s) no tienen suficiente inventario:\n\n` +
+            productosFaltantes.map(p => 
+              `• ${p.nombre}: Necesita ${p.necesario.toFixed(2)} ${p.unidad}, Disponible ${p.disponible.toFixed(2)} ${p.unidad}`
+            ).join('\n') +
+            `\n\n¿Desea iniciar de todos modos?`
+          );
+          
+          if (!confirmar) {
+            setLoading(false);
+            return;
+          }
+        }
       }
 
       // Actualizar aplicación a estado "En ejecución"

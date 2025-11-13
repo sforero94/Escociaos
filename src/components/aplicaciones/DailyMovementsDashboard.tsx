@@ -45,8 +45,19 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
     movimientos: true
   });
 
-  // Validar que la aplicación esté en ejecución
-  if (aplicacion.estado !== 'En ejecución') {
+  // Auto-cerrar si la aplicación se cierra mientras estamos aquí
+  useEffect(() => {
+    if (aplicacion.estado === 'Cerrada' && onClose) {
+      console.log('🔒 Aplicación cerrada detectada, cerrando dashboard de movimientos...');
+      // Cerrar inmediatamente sin mostrar modal
+      onClose();
+    }
+  }, [aplicacion.estado, onClose]);
+
+  // Validar que la aplicación esté en ejecución SOLO si estamos en modo modal
+  // Si NO hay onClose (página dedicada), permitir visualización en cualquier estado
+  // IMPORTANTE: No mostrar este modal si la aplicación está "Cerrada" porque ya se cerró arriba
+  if (aplicacion.estado !== 'En ejecución' && aplicacion.estado !== 'Cerrada' && onClose) {
     return (
       <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
@@ -140,9 +151,9 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
 
       if (errorProductos) throw errorProductos;
 
-      // 3. Para fertilización/drench, cargar presentacion_kg_l de cada producto
+      // 3. Para fertilización, cargar presentacion_kg_l de cada producto
       let presentacionMap = new Map<string, number>();
-      if (aplicacion.tipo === 'fertilizacion' || aplicacion.tipo === 'drench') {
+      if (aplicacion.tipo === 'fertilizacion') {
         const productosIds = Array.from(new Set((productosData || []).map(p => p.producto_id)));
         if (productosIds.length > 0) {
           const { data: presentacionesData, error: errorPresentaciones } = await supabase
@@ -165,8 +176,8 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
         const productosMovimiento = (productosData || [])
           .filter(p => p.movimiento_diario_id === mov.id)
           .map(p => {
-            // Para fertilización/drench, convertir Kg a bultos para mostrar en UI
-            if ((aplicacion.tipo === 'fertilizacion' || aplicacion.tipo === 'drench') && presentacionMap.has(p.producto_id)) {
+            // Para fertilización, convertir Kg a bultos para mostrar en UI
+            if (aplicacion.tipo === 'fertilizacion' && presentacionMap.has(p.producto_id)) {
               const presentacion = presentacionMap.get(p.producto_id)!;
               const cantidadEnBultos = p.cantidad_utilizada / presentacion;
               return {
@@ -724,7 +735,7 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
                           </div>
                           <div className="text-right">
                             <p className="text-sm text-[#172E08]">
-                              {producto.cantidad_utilizada} {producto.unidad === 'bultos' ? 'bultos' : producto.unidad}
+                              {producto.cantidad_utilizada} {producto.unidad}
                             </p>
                           </div>
                         </div>

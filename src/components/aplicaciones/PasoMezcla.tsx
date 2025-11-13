@@ -310,9 +310,45 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
   /**
    * RECALCULAR TODO (TODAS LAS MEZCLAS)
    */
-  const recalcularTodo = (mezclasParaCalcular: Mezcla[]) => {
+  const recalcularTodo = async (mezclasParaCalcular: Mezcla[]) => {
     const nuevosCalculos: CalculosPorLote[] = [];
     const nuevosErrores: string[] = [];
+
+    // 🆕 Para fertilización: cargar presentaciones de productos
+    let productosInfo: Map<string, { presentacion_kg_l: number }> | undefined;
+    
+    if (configuracion.tipo === 'fertilizacion') {
+      productosInfo = new Map();
+      
+      // Obtener IDs únicos de todos los productos en todas las mezclas
+      const productosIds = Array.from(new Set(
+        mezclasParaCalcular.flatMap(m => m.productos.map(p => p.producto_id))
+      ));
+      
+      if (productosIds.length > 0) {
+        try {
+          const { data: productosData, error: errorProductos } = await supabase
+            .from('productos')
+            .select('id, presentacion_kg_l')
+            .in('id', productosIds);
+          
+          if (!errorProductos && productosData) {
+            productosData.forEach(p => {
+              if (p.presentacion_kg_l) {
+                productosInfo!.set(p.id, {
+                  presentacion_kg_l: p.presentacion_kg_l
+                });
+              }
+            });
+            console.log(`✅ Cargadas ${productosInfo.size} presentaciones de productos`);
+          } else {
+            console.error('❌ Error cargando presentaciones:', errorProductos);
+          }
+        } catch (err) {
+          console.error('❌ Error al cargar presentaciones:', err);
+        }
+      }
+    }
 
     // Calcular por cada mezcla y sus lotes asignados
     mezclasParaCalcular.forEach((mezcla) => {
@@ -332,7 +368,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
         const calculo =
           configuracion.tipo === 'fumigacion' || configuracion.tipo === 'drench'
             ? calcularFumigacion(lote, mezcla)
-            : calcularFertilizacion(lote, mezcla);
+            : calcularFertilizacion(lote, mezcla, productosInfo); // 👈 Pasar productosInfo
 
         nuevosCalculos.push(calculo);
       });

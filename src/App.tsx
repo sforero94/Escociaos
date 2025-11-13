@@ -1,7 +1,7 @@
 import { AplicacionesList } from './components/aplicaciones/AplicacionesList';
 import { CalculadoraAplicaciones } from './components/aplicaciones/CalculadoraAplicaciones';
-import { DailyMovements } from './components/aplicaciones/DailyMovements';
-
+import { DailyMovementsDashboardWrapper } from './components/aplicaciones/DailyMovementsDashboardWrapper';
+import { CierreAplicacionWrapper } from './components/aplicaciones/CierreAplicacionWrapper';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
@@ -15,7 +15,6 @@ import { MovementsDashboard } from './components/inventory/MovementsDashboard';
 import { VerificacionesList } from './components/inventory/VerificacionesList';
 import { NuevaVerificacion } from './components/inventory/NuevaVerificacion';
 import { ConteoFisico } from './components/inventory/ConteoFisico';
-import { SistemaMonitoreo } from './components/testing/SistemaMonitoreo';
 
 /**
  * Componente de placeholder para módulos en desarrollo
@@ -77,15 +76,14 @@ function LayoutRoutes() {
         <Route path="aplicaciones">
           <Route index element={<AplicacionesList />} />
           <Route path="calculadora" element={<CalculadoraAplicaciones />} />
-          <Route path=":id/editar" element={<CalculadoraAplicaciones />} />
-          <Route path=":id/movimientos" element={<DailyMovements />} />
-          <Route path=":id" element={<ComingSoon moduleName="Detalle de Aplicación" />} />
+          <Route path=":id/movimientos" element={<DailyMovementsDashboardWrapper />} />
+          <Route path=":id/cierre" element={<CierreAplicacionWrapper />} />
         </Route>
 
         {/* Monitoreo */}
         <Route
           path="monitoreo"
-          element={<SistemaMonitoreo />}
+          element={<ComingSoon moduleName="Monitoreo de Plagas" />}
         />
 
         {/* Producción */}
