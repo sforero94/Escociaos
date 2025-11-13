@@ -1,18 +1,11 @@
-import { useState, useEffect } from 'react';
-import {
-  ShoppingCart,
-  AlertTriangle,
-  CheckCircle,
-  Download,
-  DollarSign,
-  Package,
-  TrendingUp,
-  Edit2,
-  Save,
-  X as XIcon,
-} from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { generarPDFListaCompras } from '../../utils/generarPDFListaCompras';
+import { 
+  formatearMoneda, 
+  formatearNumero, 
+  calcularTotalesProductos, 
+  generarListaCompras 
+} from '../../utils/calculosAplicaciones';
 import type {
   ConfiguracionAplicacion,
   Mezcla,

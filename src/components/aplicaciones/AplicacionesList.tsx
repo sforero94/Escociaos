@@ -16,8 +16,10 @@ import {
   Edit2,
   Trash2,
   X,
+  ClipboardList,
 } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
+import { IniciarEjecucionModal } from './IniciarEjecucionModal';
 import type { Aplicacion, TipoAplicacion, EstadoAplicacion } from '../../types/aplicaciones';
 
 const TIPOS_LABELS: Record<TipoAplicacion, string> = {
@@ -56,6 +58,7 @@ export function AplicacionesList() {
   const [menuAbiertoId, setMenuAbiertoId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [eliminando, setEliminando] = useState<string | null>(null);
+  const [iniciarEjecucionId, setIniciarEjecucionId] = useState<string | null>(null);
 
   useEffect(() => {
     loadAplicaciones();
@@ -564,6 +567,31 @@ export function AplicacionesList() {
                             <Edit2 className="w-4 h-4 text-gray-500" />
                             Editar
                           </button>
+                          {aplicacion.estado === 'En ejecución' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/aplicaciones/${aplicacion.id}/movimientos`);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 flex items-center gap-2 transition-colors"
+                            >
+                              <ClipboardList className="w-4 h-4" />
+                              Movimientos Diarios
+                            </button>
+                          )}
+                          {aplicacion.estado === 'Calculada' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setIniciarEjecucionId(aplicacion.id);
+                                setMenuAbiertoId(null);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm text-green-600 hover:bg-green-50 flex items-center gap-2 transition-colors"
+                            >
+                              <Play className="w-4 h-4" />
+                              Iniciar Ejecución
+                            </button>
+                          )}
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -621,6 +649,18 @@ export function AplicacionesList() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de iniciar ejecución */}
+      {iniciarEjecucionId && (
+        <IniciarEjecucionModal
+          aplicacion={aplicaciones.find(a => a.id === iniciarEjecucionId)!}
+          onClose={() => setIniciarEjecucionId(null)}
+          onSuccess={() => {
+            setIniciarEjecucionId(null);
+            loadAplicaciones();
+          }}
+        />
       )}
     </div>
   );

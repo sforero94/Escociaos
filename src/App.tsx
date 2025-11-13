@@ -1,3 +1,7 @@
+import { AplicacionesList } from './components/aplicaciones/AplicacionesList';
+import { CalculadoraAplicaciones } from './components/aplicaciones/CalculadoraAplicaciones';
+import { DailyMovements } from './components/aplicaciones/DailyMovements';
+
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
@@ -11,8 +15,6 @@ import { MovementsDashboard } from './components/inventory/MovementsDashboard';
 import { VerificacionesList } from './components/inventory/VerificacionesList';
 import { NuevaVerificacion } from './components/inventory/NuevaVerificacion';
 import { ConteoFisico } from './components/inventory/ConteoFisico';
-import { AplicacionesList } from './components/aplicaciones/AplicacionesList';
-import { CalculadoraAplicaciones } from './components/aplicaciones/CalculadoraAplicaciones';
 
 /**
  * Componente de placeholder para módulos en desarrollo
@@ -75,6 +77,7 @@ function LayoutRoutes() {
           <Route index element={<AplicacionesList />} />
           <Route path="calculadora" element={<CalculadoraAplicaciones />} />
           <Route path=":id/editar" element={<CalculadoraAplicaciones />} />
+          <Route path=":id/movimientos" element={<DailyMovements />} />
           <Route path=":id" element={<ComingSoon moduleName="Detalle de Aplicación" />} />
         </Route>
 

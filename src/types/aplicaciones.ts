@@ -195,3 +195,168 @@ export interface BlancoBiologico {
   link_info?: string;
   activo?: boolean;
 }
+
+// ============================================================================
+// MOVIMIENTOS DIARIOS (Durante ejecución de aplicación)
+// ============================================================================
+
+export interface MovimientoDiario {
+  id?: string;
+  aplicacion_id: string;
+  fecha_movimiento: string; // ISO date string (YYYY-MM-DD)
+  lote_id: string;
+  lote_nombre: string;
+  producto_id: string;
+  producto_nombre: string;
+  producto_categoria: string;
+  producto_unidad: 'litros' | 'kilos' | 'unidades';
+  cantidad_utilizada: number;
+  
+  // Trazabilidad de canecas (solo para fumigación)
+  numero_canecas_utilizadas?: number;
+  numero_canecas_planeadas?: number;
+  
+  // Costo del producto (cargado desde productos.ultimo_precio_unitario)
+  costo_unitario?: number;
+  
+  responsable: string;
+  notas?: string;
+  
+  // Metadata
+  creado_en?: string;
+  created_by?: string;
+  actualizado_en?: string;
+}
+
+export interface ResumenMovimientoDiario {
+  producto_id: string;
+  producto_nombre: string;
+  producto_unidad: 'litros' | 'kilos' | 'unidades';
+  total_utilizado: number;
+  cantidad_planeada: number;
+  diferencia: number;
+  porcentaje_usado: number;
+  excede_planeado: boolean;
+}
+
+export interface AlertaMovimiento {
+  tipo: 'warning' | 'error' | 'info';
+  producto_nombre: string;
+  mensaje: string;
+  porcentaje_usado: number;
+}
+
+// ============================================================================
+// CIERRE DE APLICACIÓN
+// ============================================================================
+
+export interface JornalesPorActividad {
+  aplicacion: number; // Jornales para aplicar el producto
+  mezcla: number; // Jornales para preparar mezclas
+  transporte: number; // Jornales para transporte
+  otros?: number; // Otros jornales
+}
+
+export interface DetalleCierreLote {
+  lote_id: string;
+  lote_nombre: string;
+  
+  // Datos planeados (de cálculos)
+  canecas_planeadas?: number;
+  litros_planeados?: number;
+  kilos_planeados?: number;
+  
+  // Datos reales (de movimientos diarios)
+  canecas_reales?: number;
+  litros_reales?: number;
+  kilos_reales?: number;
+  
+  // Jornales por lote
+  jornales: JornalesPorActividad;
+  
+  // Costos calculados
+  costo_insumos: number;
+  costo_mano_obra: number;
+  costo_total: number;
+  costo_por_arbol: number;
+  
+  // Desviaciones (%)
+  desviacion_canecas?: number;
+  desviacion_litros?: number;
+  desviacion_kilos?: number;
+  
+  // Eficiencias
+  arboles_por_jornal?: number;
+  litros_por_arbol?: number;
+  kilos_por_arbol?: number;
+}
+
+export interface ComparacionProducto {
+  producto_id: string;
+  producto_nombre: string;
+  producto_unidad: 'litros' | 'kilos' | 'unidades';
+  cantidad_planeada: number;
+  cantidad_real: number;
+  diferencia: number;
+  porcentaje_desviacion: number;
+  costo_unitario?: number;
+  costo_total: number;
+}
+
+export interface CierreAplicacion {
+  id?: string;
+  aplicacion_id: string;
+  
+  // Datos generales
+  fecha_inicio: string; // Referencia de la aplicación
+  fecha_final: string;
+  dias_aplicacion: number;
+  valor_jornal: number;
+  
+  // Jornales totales
+  jornales_totales: JornalesPorActividad;
+  
+  // Observaciones
+  observaciones_generales?: string;
+  condiciones_meteorologicas?: string;
+  problemas_encontrados?: string;
+  ajustes_realizados?: string;
+  
+  // Detalles por lote
+  detalles_lotes: DetalleCierreLote[];
+  
+  // Comparación de productos
+  comparacion_productos: ComparacionProducto[];
+  
+  // Totales calculados
+  costo_insumos_total: number;
+  costo_mano_obra_total: number;
+  costo_total: number;
+  costo_promedio_por_arbol: number;
+  
+  // Eficiencias globales
+  total_arboles_tratados: number;
+  total_jornales: number;
+  arboles_por_jornal: number;
+  
+  // Alertas y validaciones
+  requiere_aprobacion: boolean; // true si desviación > 20%
+  desviacion_maxima: number; // Mayor desviación encontrada
+  aprobado_por?: string; // UUID del usuario que aprobó
+  fecha_aprobacion?: string;
+  
+  // Metadata
+  created_at?: string;
+  created_by?: string;
+  updated_at?: string;
+}
+
+export interface ResumenCierre {
+  total_movimientos: number;
+  total_productos: number;
+  total_lotes: number;
+  dias_ejecucion: number;
+  desviacion_promedio: number;
+  productos_con_desviacion_alta: number; // > 20%
+  alertas: string[];
+}
