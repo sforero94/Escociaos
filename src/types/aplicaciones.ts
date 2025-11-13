@@ -1,7 +1,8 @@
 // types/aplicaciones.ts
 // Tipos TypeScript para el módulo de Aplicaciones
 
-export type TipoAplicacion = 'fumigacion' | 'fertilizacion' | 'drench';
+// 🚨 TIPOS CORREGIDOS SEGÚN /supabase_tablas.md
+export type TipoAplicacion = 'Fumigación' | 'Fertilización' | 'Drench'; // ✅ Con mayúscula y tilde
 export type TamanoCaneca = 20 | 200 | 500 | 1000;
 export type TipoArbol = 'grandes' | 'medianos' | 'pequenos' | 'clonales';
 export type EstadoAplicacion = 'Calculada' | 'En ejecución' | 'Cerrada';
@@ -9,7 +10,7 @@ export type EstadoAplicacion = 'Calculada' | 'En ejecución' | 'Cerrada';
 // Configuración General (Paso 1)
 export interface ConfiguracionAplicacion {
   nombre: string;
-  tipo: TipoAplicacion;
+  tipo_aplicacion: TipoAplicacion; // ✅ Corregido de 'tipo' a 'tipo_aplicacion'
   fecha_inicio_planeada: string;
   fecha_fin_planeada?: string;
   fecha_recomendacion?: string;
@@ -133,28 +134,44 @@ export interface EstadoCalculadora {
 }
 
 // Aplicación guardada en BD
+// 🚨 CORREGIDO: Interfaz debe coincidir con tabla 'aplicaciones' en BD
 export interface Aplicacion {
   id: string;
-  nombre: string;
-  tipo: TipoAplicacion;
-  fecha_inicio: string;
-  fecha_fin_estimada?: string;
-  fecha_cierre?: string;
-  estado: EstadoAplicacion;
+  codigo_aplicacion?: string; // ✅ Campo de BD
+  nombre_aplicacion?: string; // ✅ Campo de BD  
+  tipo_aplicacion: TipoAplicacion; // ✅ Corregido de 'tipo' a 'tipo_aplicacion'
   proposito?: string;
-  agronomo_responsable?: string;
   blanco_biologico?: string | string[];
   
-  // JSON de configuración
-  configuracion: ConfiguracionAplicacion;
-  mezclas: Mezcla[];
-  calculos: CalculosPorLote[];
-  lista_compras: ListaCompras;
+  // Fechas
+  fecha_inicio_planeada?: string; // ✅ Campo de BD
+  fecha_fin_planeada?: string; // ✅ Campo de BD
+  fecha_recomendacion?: string; // ✅ Campo de BD
+  fecha_inicio_ejecucion?: string; // ✅ Campo de BD
+  fecha_fin_ejecucion?: string; // ✅ Campo de BD
+  fecha_cierre?: string; // ✅ Campo de BD (timestamptz)
   
-  // Metadatos
-  creado_en: string;
-  creado_por: string;
-  actualizado_en: string;
+  // Estado y responsable
+  estado: EstadoAplicacion; // ✅ Campo de BD
+  agronomo_responsable?: string; // ✅ Campo de BD
+  
+  // Costos
+  jornales_utilizados?: number; // ✅ Campo de BD
+  valor_jornal?: number; // ✅ Campo de BD
+  costo_total_insumos?: number; // ✅ Campo de BD
+  costo_total_mano_obra?: number; // ✅ Campo de BD
+  costo_total?: number; // ✅ Campo de BD
+  costo_por_arbol?: number; // ✅ Campo de BD
+  arboles_jornal?: number; // ✅ Campo de BD
+  observaciones_cierre?: string; // ✅ Campo de BD
+  
+  // Auditoría
+  created_at?: string; // ✅ Campo de BD
+  updated_at?: string; // ✅ Campo de BD
+  
+  // CAMPOS LEGACY (pueden existir en memoria pero no en BD directamente)
+  nombre?: string; // Alias de nombre_aplicacion
+  tipo?: TipoAplicacion; // Alias de tipo_aplicacion (para compatibilidad)
 }
 
 // Producto del catálogo (para selección)

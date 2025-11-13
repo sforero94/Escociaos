@@ -153,7 +153,7 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
 
       // 3. Para fertilización, cargar presentacion_kg_l de cada producto
       let presentacionMap = new Map<string, number>();
-      if (aplicacion.tipo === 'fertilizacion') {
+      if (aplicacion.tipo_aplicacion === 'Fertilización') {
         const productosIds = Array.from(new Set((productosData || []).map(p => p.producto_id)));
         if (productosIds.length > 0) {
           const { data: presentacionesData, error: errorPresentaciones } = await supabase
@@ -177,15 +177,8 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
           .filter(p => p.movimiento_diario_id === mov.id)
           .map(p => {
             // Para fertilización, convertir Kg a bultos para mostrar en UI
-            if (aplicacion.tipo === 'fertilizacion' && presentacionMap.has(p.producto_id)) {
+            if (aplicacion.tipo_aplicacion === 'Fertilización' && presentacionMap.has(p.producto_id)) {
               const presentacion = presentacionMap.get(p.producto_id)!;
-              const cantidadEnBultos = p.cantidad_utilizada / presentacion;
-              return {
-                ...p,
-                cantidad_utilizada: cantidadEnBultos,
-                unidad: 'bultos' as any, // Se muestra como "bultos" en UI
-                presentacion_kg_l: presentacion // Guardar para usar en calcularResumen
-              };
             }
             return p;
           });

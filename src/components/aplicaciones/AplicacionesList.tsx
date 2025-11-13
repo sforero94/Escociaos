@@ -24,9 +24,9 @@ import { DetalleAplicacion } from './DetalleAplicacion';
 import type { Aplicacion, TipoAplicacion, EstadoAplicacion } from '../../types/aplicaciones';
 
 const TIPOS_LABELS: Record<TipoAplicacion, string> = {
-  fumigacion: 'Fumigación',
-  fertilizacion: 'Fertilización',
-  drench: 'Drench',
+  'Fumigación': 'Fumigación',
+  'Fertilización': 'Fertilización',
+  'Drench': 'Drench',
 };
 
 const ESTADO_LABELS: Record<EstadoAplicacion, string> = {
@@ -153,6 +153,16 @@ export function AplicacionesList() {
 
           aplicacionesMapeadas.push({
             id: row.id,
+            nombre_aplicacion: row.nombre_aplicacion || 'Sin nombre',
+            tipo_aplicacion: row.tipo_aplicacion as TipoAplicacion,
+            fecha_inicio_planeada: row.fecha_recomendacion || row.created_at,
+            fecha_fin_ejecucion: row.fecha_fin_ejecucion,
+            estado: row.estado as EstadoAplicacion,
+            proposito: row.proposito,
+            agronomo_responsable: row.agronomo_responsable,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+            // Campos legacy para compatibilidad con UI vieja
             nombre: row.nombre_aplicacion || 'Sin nombre',
             tipo: row.tipo_aplicacion === 'Fumigación' 
               ? 'fumigacion' 
@@ -161,17 +171,10 @@ export function AplicacionesList() {
               : 'drench',
             fecha_inicio: row.fecha_recomendacion || row.created_at,
             fecha_cierre: row.fecha_fin_ejecucion,
-            estado: row.estado as EstadoAplicacion,
-            proposito: row.proposito,
-            agronomo_responsable: row.agronomo_responsable,
             configuracion: {
               nombre: row.nombre_aplicacion || 'Sin nombre',
-              tipo: row.tipo_aplicacion === 'Fumigación' 
-                ? 'fumigacion' 
-                : row.tipo_aplicacion === 'Fertilización'
-                ? 'fertilizacion'
-                : 'drench',
-              fecha_inicio: row.fecha_recomendacion || row.created_at,
+              tipo_aplicacion: row.tipo_aplicacion as TipoAplicacion,
+              fecha_inicio_planeada: row.fecha_recomendacion || row.created_at,
               proposito: row.proposito,
               agronomo_responsable: row.agronomo_responsable,
               blanco_biologico: blancoBiologico,
@@ -211,7 +214,7 @@ export function AplicacionesList() {
       app.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
       app.proposito?.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchTipo = filtroTipo === 'todos' || app.tipo === filtroTipo;
+    const matchTipo = filtroTipo === 'todos' || app.tipo_aplicacion === filtroTipo;
     const matchEstado = filtroEstado === 'todos' || app.estado === filtroEstado;
 
     return matchSearch && matchTipo && matchEstado;
@@ -478,7 +481,7 @@ export function AplicacionesList() {
           <div className="divide-y divide-gray-200">
             {aplicacionesFiltradas.map((aplicacion) => {
               const EstadoIcon = ESTADO_ICONS[aplicacion.estado];
-              const TipoIcon = aplicacion.tipo === 'fumigacion' ? Droplet : Leaf;
+              const TipoIcon = aplicacion.tipo_aplicacion === 'Fumigación' ? Droplet : Leaf;
 
               return (
                 <div
@@ -511,7 +514,7 @@ export function AplicacionesList() {
                         <div className="flex flex-wrap items-center gap-4 text-sm text-[#4D240F]/70">
                           <span className="flex items-center gap-1">
                             <TipoIcon className="w-4 h-4" />
-                            {TIPOS_LABELS[aplicacion.tipo]}
+                            {TIPOS_LABELS[aplicacion.tipo_aplicacion]}
                           </span>
                           <span className="flex items-center gap-1">
                             <Calendar className="w-4 h-4" />

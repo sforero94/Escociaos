@@ -382,25 +382,193 @@ export function MovementsDashboard() {
       {/* Barra de navegación */}
       <InventoryNav />
       
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-[#172E08] mb-2">Dashboard de Movimientos</h1>
-          <p className="text-[#4D240F]/70">Vista general de la actividad del inventario</p>
+      {/* Header - SIN BOTÓN */}
+      <div>
+        <h1 className="text-[#172E08] mb-2">Dashboard de Inventario</h1>
+        <p className="text-[#4D240F]/70">Vista general de la actividad y evolución del inventario</p>
+      </div>
+
+      {/* 🔝 GRÁFICO DE EVOLUCIÓN - ÚLTIMOS 6 MESES (PRIORIDAD #1) */}
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+        <div className="flex items-center gap-2 mb-6">
+          <BarChart3 className="w-5 h-5 text-[#73991C]" />
+          <h2 className="text-xl text-[#172E08]">
+            Evolución del Inventario - Últimos 6 Meses
+          </h2>
         </div>
         
-        <Link to="/inventario/movimientos">
-          <Button className="bg-[#73991C] hover:bg-[#5f7d17] text-white rounded-xl transition-all duration-200">
-            <BarChart3 className="w-4 h-4 mr-2" />
-            Ver Todos los Movimientos
-          </Button>
-        </Link>
+        {monthlyData.length === 0 ? (
+          <div className="text-center py-12">
+            <BarChart3 className="w-16 h-16 text-[#4D240F]/40 mx-auto mb-4" />
+            <p className="text-[#4D240F]/60">No hay datos suficientes para mostrar</p>
+          </div>
+        ) : (
+          <>
+            <div className="w-full h-[400px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart
+                  data={monthlyData}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                >
+                  <defs>
+                    <linearGradient id="colorValorInventario" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.05} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                  <XAxis 
+                    dataKey="mes" 
+                    tick={{ fill: '#4D240F', fontSize: 12 }}
+                    tickLine={{ stroke: '#9CA3AF' }}
+                  />
+                  {/* Eje Y izquierdo - Movimientos (COP) */}
+                  <YAxis 
+                    yAxisId="left"
+                    tick={{ fill: '#4D240F', fontSize: 12 }}
+                    tickLine={{ stroke: '#9CA3AF' }}
+                    label={{ 
+                      value: 'Movimientos (COP)', 
+                      angle: -90, 
+                      position: 'insideLeft',
+                      style: { fill: '#4D240F', fontSize: 12 }
+                    }}
+                    tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`}
+                  />
+                  {/* Eje Y derecho - Valor Inventario (COP) */}
+                  <YAxis 
+                    yAxisId="right"
+                    orientation="right"
+                    tick={{ fill: '#3B82F6', fontSize: 12 }}
+                    tickLine={{ stroke: '#3B82F6' }}
+                    label={{ 
+                      value: 'Valor Inventario (COP)', 
+                      angle: 90, 
+                      position: 'insideRight',
+                      style: { fill: '#3B82F6', fontSize: 12 }
+                    }}
+                    tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`}
+                  />
+                  <Tooltip 
+                    formatter={(value: number) => formatCurrency(value)}
+                    contentStyle={{
+                      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                      border: '1px solid #73991C',
+                      borderRadius: '12px',
+                      padding: '12px'
+                    }}
+                  />
+                  <Legend 
+                    wrapperStyle={{ paddingTop: '20px' }}
+                    iconType="square"
+                  />
+                  
+                  {/* Barras de Entradas (COP) - verde */}
+                  <Bar 
+                    yAxisId="left"
+                    dataKey="entradas" 
+                    name="Entradas (COP)" 
+                    fill="#28A745"
+                    radius={[8, 8, 0, 0]}
+                  />
+                  
+                  {/* Barras de Salidas (COP) - rojo */}
+                  <Bar 
+                    yAxisId="left"
+                    dataKey="salidas" 
+                    name="Salidas (COP)" 
+                    fill="#DC3545"
+                    radius={[8, 8, 0, 0]}
+                  />
+                  
+                  {/* Línea de Valor Inventario (COP) - azul */}
+                  <Area 
+                    yAxisId="right"
+                    type="monotone" 
+                    dataKey="valorInventario" 
+                    name="Valor Inventario (COP)" 
+                    stroke="#3B82F6"
+                    strokeWidth={3}
+                    fill="url(#colorValorInventario)"
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Cards de explicación debajo del gráfico */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-200">
+              <div className="flex items-start gap-3 p-4 bg-[#28A745]/5 rounded-xl border border-[#28A745]/20">
+                <div className="w-3 h-3 bg-[#28A745] rounded-sm mt-1 flex-shrink-0"></div>
+                <div>
+                  <p className="text-sm text-[#28A745]">Entradas</p>
+                  <p className="text-xs text-[#4D240F]/70 mt-1">Valor de productos que ingresan</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-3 p-4 bg-[#DC3545]/5 rounded-xl border border-[#DC3545]/20">
+                <div className="w-3 h-3 bg-[#DC3545] rounded-sm mt-1 flex-shrink-0"></div>
+                <div>
+                  <p className="text-sm text-[#DC3545]">Salidas</p>
+                  <p className="text-xs text-[#4D240F]/70 mt-1">Valor de productos que salen</p>
+                </div>
+              </div>
+              
+              <div className="flex items-start gap-3 p-4 bg-[#3B82F6]/5 rounded-xl border border-[#3B82F6]/20">
+                <div className="w-3 h-3 bg-[#3B82F6] rounded-sm mt-1 flex-shrink-0"></div>
+                <div>
+                  <p className="text-sm text-[#3B82F6]">Valor Inventario</p>
+                  <p className="text-xs text-[#4D240F]/70 mt-1">Valoración total al final del mes</p>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ⚡ ACCIONES RÁPIDAS (POSICIÓN #2) */}
+      <div className="bg-gradient-to-br from-[#73991C] to-[#5f7d17] rounded-2xl shadow-[0_8px_32px_rgba(115,153,28,0.2)] p-6 text-white">
+        <h2 className="text-xl mb-4 flex items-center gap-2">
+          <Package className="w-5 h-5" />
+          Acciones Rápidas
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Link
+            to="/inventario/movimientos"
+            className="bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-xl p-4 transition-all duration-200 hover:shadow-lg group"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <BarChart3 className="w-5 h-5 group-hover:scale-110 transition-transform" />
+              <p className="font-medium">Ver Todos los Movimientos</p>
+            </div>
+            <p className="text-sm text-white/90">Accede al historial completo con filtros</p>
+          </Link>
+          <Link
+            to="/inventario"
+            className="bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-xl p-4 transition-all duration-200 hover:shadow-lg group"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Package className="w-5 h-5 group-hover:scale-110 transition-transform" />
+              <p className="font-medium">Ir a Inventario</p>
+            </div>
+            <p className="text-sm text-white/90">Ver productos y stock actual</p>
+          </Link>
+          <Link
+            to="/inventario/nueva-compra"
+            className="bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-xl p-4 transition-all duration-200 hover:shadow-lg group"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <ShoppingCart className="w-5 h-5 group-hover:scale-110 transition-transform" />
+              <p className="font-medium">Registrar Compra</p>
+            </div>
+            <p className="text-sm text-white/90">Agregar nueva entrada de inventario</p>
+          </Link>
+        </div>
       </div>
 
       {/* Selector de rango de tiempo */}
       <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-4 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-          <span className="text-sm text-[#4D240F]/70">Período:</span>
+          <span className="text-sm text-[#4D240F]/70">Período para métricas:</span>
           <div className="flex gap-2">
             {(['7', '30', '90'] as const).map((days) => (
               <button
@@ -678,200 +846,6 @@ export function MovementsDashboard() {
               ? 'Más salidas que entradas (inventario en disminución)'
               : 'Entradas y salidas equilibradas'}
           </p>
-        </div>
-      </div>
-
-      {/* Gráfica Mixta - Últimos 6 Meses */}
-      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
-        <div className="flex items-center gap-2 mb-6">
-          <BarChart3 className="w-5 h-5 text-[#73991C]" />
-          <h2 className="text-xl text-[#172E08]">
-            Evolución del Inventario - Últimos 6 Meses
-          </h2>
-        </div>
-        
-        {monthlyData.length === 0 ? (
-          <div className="text-center py-12">
-            <BarChart3 className="w-16 h-16 text-[#4D240F]/40 mx-auto mb-4" />
-            <p className="text-[#4D240F]/60">No hay datos suficientes para mostrar</p>
-          </div>
-        ) : (
-          <div className="w-full h-[400px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart
-                data={monthlyData}
-                margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
-              >
-                <defs>
-                  <linearGradient id="colorValorInventario" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.05} />
-                  </linearGradient>
-                </defs>
-                
-                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                
-                <XAxis 
-                  dataKey="mes" 
-                  stroke="#4D240F"
-                  tick={{ fill: '#4D240F', fontSize: 12 }}
-                />
-                
-                {/* Eje izquierdo para Entradas/Salidas */}
-                <YAxis 
-                  yAxisId="left"
-                  stroke="#4D240F"
-                  tick={{ fill: '#4D240F', fontSize: 12 }}
-                  tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`}
-                  label={{ 
-                    value: 'Movimientos (COP)', 
-                    angle: -90, 
-                    position: 'insideLeft',
-                    style: { fill: '#4D240F', fontSize: 12 }
-                  }}
-                />
-                
-                {/* Eje derecho para Valoración */}
-                <YAxis 
-                  yAxisId="right"
-                  orientation="right"
-                  stroke="#3B82F6"
-                  tick={{ fill: '#3B82F6', fontSize: 12 }}
-                  tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`}
-                  label={{ 
-                    value: 'Valor Inventario (COP)', 
-                    angle: 90, 
-                    position: 'insideRight',
-                    style: { fill: '#3B82F6', fontSize: 12 }
-                  }}
-                />
-                
-                <Tooltip 
-                  contentStyle={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                    border: '1px solid #73991C',
-                    borderRadius: '12px',
-                    padding: '12px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-                  }}
-                  formatter={(value: number, name: string) => {
-                    const labels: { [key: string]: string } = {
-                      'entradas': 'Entradas',
-                      'salidas': 'Salidas',
-                      'valorInventario': 'Valor Inventario'
-                    };
-                    return [formatCurrency(value), labels[name] || name];
-                  }}
-                  labelStyle={{ color: '#172E08', fontWeight: 600, marginBottom: '8px' }}
-                />
-                
-                <Legend 
-                  wrapperStyle={{ paddingTop: '20px' }}
-                  formatter={(value: string) => {
-                    const labels: { [key: string]: string } = {
-                      'entradas': 'Entradas (COP)',
-                      'salidas': 'Salidas (COP)',
-                      'valorInventario': 'Valor Inventario (COP)'
-                    };
-                    return labels[value] || value;
-                  }}
-                />
-                
-                {/* Barras de Entradas (Verde) */}
-                <Bar 
-                  yAxisId="left"
-                  dataKey="entradas" 
-                  fill="#28A745" 
-                  radius={[8, 8, 0, 0]}
-                  maxBarSize={60}
-                />
-                
-                {/* Barras de Salidas (Rojo) */}
-                <Bar 
-                  yAxisId="left"
-                  dataKey="salidas" 
-                  fill="#DC3545" 
-                  radius={[8, 8, 0, 0]}
-                  maxBarSize={60}
-                />
-                
-                {/* Área de Valoración (Azul) */}
-                <Area 
-                  yAxisId="right"
-                  type="monotone" 
-                  dataKey="valorInventario" 
-                  stroke="#3B82F6" 
-                  strokeWidth={3}
-                  fill="url(#colorValorInventario)"
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-
-        {/* Leyenda descriptiva */}
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="flex items-center gap-3 p-3 bg-[#28A745]/5 rounded-xl border border-[#28A745]/20">
-            <div className="w-4 h-8 bg-[#28A745] rounded"></div>
-            <div>
-              <p className="text-xs text-[#4D240F]/60">Entradas</p>
-              <p className="text-sm text-[#172E08]">Valor de productos que ingresan</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 p-3 bg-[#DC3545]/5 rounded-xl border border-[#DC3545]/20">
-            <div className="w-4 h-8 bg-[#DC3545] rounded"></div>
-            <div>
-              <p className="text-xs text-[#4D240F]/60">Salidas</p>
-              <p className="text-sm text-[#172E08]">Valor de productos que salen</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 p-3 bg-[#3B82F6]/5 rounded-xl border border-[#3B82F6]/20">
-            <div className="w-4 h-8 bg-gradient-to-b from-[#3B82F6]/30 to-[#3B82F6]/5 rounded border-2 border-[#3B82F6]"></div>
-            <div>
-              <p className="text-xs text-[#4D240F]/60">Valor Inventario</p>
-              <p className="text-sm text-[#172E08]">Valoración total al final del mes</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Acciones Rápidas */}
-      <div className="bg-gradient-to-br from-[#73991C] to-[#5f7d17] rounded-2xl shadow-[0_8px_32px_rgba(115,153,28,0.2)] p-6 text-white">
-        <h2 className="text-xl mb-4 flex items-center gap-2">
-          <Package className="w-5 h-5" />
-          Acciones Rápidas
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Link
-            to="/inventario/movimientos"
-            className="bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-xl p-4 transition-all duration-200 hover:shadow-lg group"
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <BarChart3 className="w-5 h-5 group-hover:scale-110 transition-transform" />
-              <p className="font-medium">Ver Todos los Movimientos</p>
-            </div>
-            <p className="text-sm text-white/90">Accede al historial completo con filtros</p>
-          </Link>
-          <Link
-            to="/inventario"
-            className="bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-xl p-4 transition-all duration-200 hover:shadow-lg group"
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <Package className="w-5 h-5 group-hover:scale-110 transition-transform" />
-              <p className="font-medium">Ir a Inventario</p>
-            </div>
-            <p className="text-sm text-white/90">Ver productos y stock actual</p>
-          </Link>
-          <Link
-            to="/inventario/nueva-compra"
-            className="bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-xl p-4 transition-all duration-200 hover:shadow-lg group"
-          >
-            <div className="flex items-center gap-2 mb-2">
-              <ShoppingCart className="w-5 h-5 group-hover:scale-110 transition-transform" />
-              <p className="font-medium">Registrar Compra</p>
-            </div>
-            <p className="text-sm text-white/90">Agregar nueva entrada de inventario</p>
-          </Link>
         </div>
       </div>
     </div>

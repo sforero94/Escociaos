@@ -22,9 +22,8 @@ interface ProductoFormulario {
   producto_id: string;
   producto_nombre: string;
   producto_categoria: string;
-  estado_fisico: 'Líquido' | 'Sólido';
   cantidad_utilizada: string;
-  unidad: 'cc' | 'L' | 'g' | 'Kg';
+  unidad_producto?: 'cc' | 'L' | 'bultos'; // 🚨 CORREGIDO: Para fumigación/drench usa cc o L, para fertilización usa bultos
   presentacion_kg_l?: number; // SOLO para fertilización: cuántos Kg por bulto
 }
 
@@ -33,11 +32,15 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 🚨 DIAGNÓSTICO - Verificar tipo de aplicación
+  console.log('🚨 TIPO DE APLICACIÓN RECIBIDA:', aplicacion.tipo_aplicacion);
+  console.log('🚨 APLICACIÓN COMPLETA:', aplicacion);
+
   // Estados del formulario
   const [fechaMovimiento, setFechaMovimiento] = useState(obtenerFechaHoy());
   const [loteId, setLoteId] = useState('');
-  const [numeroCanecas, setNumeroCanecas] = useState('');
-  const [numeroBultos, setNumeroBultos] = useState('');
+  const [numeroCanecas, setNumeroCanecas] = useState(''); // Total para fumigación/drench
+  const [numeroBultos, setNumeroBultos] = useState(''); // Total para fertilización
   const [responsable, setResponsable] = useState('');
   const [condicionesMeteorologicas, setCondicionesMeteorologicas] = useState('');
   const [notas, setNotas] = useState('');
@@ -50,6 +53,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
   const [lotes, setLotes] = useState<LoteSeleccionado[]>([]);
   const [productosDisponibles, setProductosDisponibles] = useState<any[]>([]);
   const [canecasPorLote, setCanecasPorLote] = useState<Record<string, number>>({});
+  const [bultosPorLote, setBultosPorLote] = useState<Record<string, number>>({});
 
   // Cargar datos al montar
   useEffect(() => {
@@ -82,14 +86,15 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
 
       setLotes(lotesFormateados);
 
-      // Cargar cálculos de canecas por lote (fumigación Y DRENCH)
-      if (aplicacion.tipo === 'fumigacion' || aplicacion.tipo === 'drench') {
-        const { data: calculosData, error: errorCalculos } = await supabase
-          .from('aplicaciones_calculos')
-          .select('lote_id, numero_canecas')
-          .eq('aplicacion_id', aplicacion.id);
+      // Cargar cálculos por lote según tipo de aplicación
+      const { data: calculosData, error: errorCalculos } = await supabase
+        .from('aplicaciones_calculos')
+        .select('lote_id, numero_canecas, numero_bultos')
+        .eq('aplicacion_id', aplicacion.id);
 
-        if (!errorCalculos && calculosData) {
+      if (!errorCalculos && calculosData) {
+        if (aplicacion.tipo_aplicacion === 'Fumigación' || aplicacion.tipo_aplicacion === 'Drench') {
+          // Cargar canecas planeadas por lote
           const canecasMap: Record<string, number> = {};
           calculosData.forEach(calc => {
             if (calc.numero_canecas) {
@@ -97,10 +102,19 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
             }
           });
           setCanecasPorLote(canecasMap);
+        } else if (aplicacion.tipo_aplicacion === 'Fertilización') {
+          // Cargar bultos planeados por lote
+          const bultosMap: Record<string, number> = {};
+          calculosData.forEach(calc => {
+            if (calc.numero_bultos) {
+              bultosMap[calc.lote_id] = calc.numero_bultos;
+            }
+          });
+          setBultosPorLote(bultosMap);
         }
       }
 
-      // Cargar productos de las mezclas CON estado físico
+      // Cargar productos de las mezclas
       const { data: mezclasData, error: errorMezclas } = await supabase
         .from('aplicaciones_mezclas')
         .select('id')
@@ -124,32 +138,6 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
 
         if (errorProductos) throw errorProductos;
 
-        // Obtener IDs únicos de productos
-        const productosIds = Array.from(new Set((productosData || []).map(p => p.producto_id)));
-        console.log('🔍 IDs de productos para consultar estado físico:', productosIds);
-
-        // Cargar estado_fisico desde la tabla productos
-        const { data: productosCompletos, error: errorProductosCompletos } = await supabase
-          .from('productos')
-          .select('id, estado_fisico')
-          .in('id', productosIds);
-
-        console.log('🧪 Productos completos con estado_fisico:', productosCompletos);
-        if (errorProductosCompletos) {
-          console.error('❌ Error cargando estado_fisico:', errorProductosCompletos);
-          throw errorProductosCompletos;
-        }
-
-        // Crear mapa de estado_fisico
-        const estadoFisicoMap = new Map<string, string>();
-        (productosCompletos || []).forEach(p => {
-          console.log(`📌 Producto ${p.id}: estado_fisico = ${p.estado_fisico}`);
-          // Normalizar: convertir a minúsculas y mapear valores conocidos
-          const estadoNormalizado = p.estado_fisico?.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-          const estadoFinal = (estadoNormalizado === 'liquido' || estadoNormalizado === 'líquido') ? 'Líquido' : 'Sólido';
-          estadoFisicoMap.set(p.id, estadoFinal);
-        });
-
         // Eliminar duplicados por producto_id
         const productosUnicos = new Map<string, any>();
         (productosData || []).forEach(p => {
@@ -159,8 +147,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
               producto_nombre: p.producto_nombre,
               producto_categoria: p.producto_categoria,
               producto_unidad: p.producto_unidad,
-              cantidad_total_necesaria: p.cantidad_total_necesaria,
-              estado_fisico: estadoFisicoMap.get(p.producto_id) || 'Líquido'
+              cantidad_total_necesaria: p.cantidad_total_necesaria
             });
           }
         });
@@ -207,10 +194,9 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
     const producto = productosDisponibles.find(p => p.producto_id === productoSeleccionadoId);
     if (!producto) return;
 
-    // Cargar presentacion_kg_l del producto desde la tabla productos
+    // Cargar presentacion_kg_l del producto SOLO para fertilización
     let presentacionKgL: number | undefined;
-    if (aplicacion.tipo === 'fertilizacion') {
-      // Solo fertilización necesita presentacion_kg_l para convertir bultos
+    if (aplicacion.tipo_aplicacion === 'Fertilización') {
       try {
         const { data: productoData, error: errorProducto } = await supabase
           .from('productos')
@@ -228,24 +214,12 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       }
     }
 
-    // Para fertilización, siempre usar Kg (se convertirá de bultos a Kg al guardar)
-    // Para fumigación y drench, determinar unidad según estado físico
-    let unidadDefault: 'cc' | 'L' | 'g' | 'Kg';
-    if (aplicacion.tipo === 'fertilizacion') {
-      // Usar Kg como unidad base para fertilización sólida
-      unidadDefault = 'Kg';
-    } else {
-      // Para fumigación y drench: según estado físico del producto
-      unidadDefault = producto.estado_fisico === 'Líquido' ? 'cc' : 'g';
-    }
-
     const nuevoProducto: ProductoFormulario = {
       producto_id: producto.producto_id,
       producto_nombre: producto.producto_nombre,
       producto_categoria: producto.producto_categoria,
-      estado_fisico: producto.estado_fisico,
       cantidad_utilizada: '',
-      unidad: unidadDefault,
+      unidad_producto: aplicacion.tipo_aplicacion === 'Fertilización' ? 'bultos' : 'cc', // 🚨 CORREGIDO: Para fumigación/drench inicia en 'cc'
       presentacion_kg_l: presentacionKgL
     };
 
@@ -264,9 +238,9 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
     setProductosAgregados(nuevosProductos);
   };
 
-  const actualizarUnidadProducto = (index: number, unidad: 'cc' | 'L' | 'g' | 'Kg') => {
+  const actualizarUnidadProducto = (index: number, unidad: 'cc' | 'L') => {
     const nuevosProductos = [...productosAgregados];
-    nuevosProductos[index].unidad = unidad;
+    nuevosProductos[index].unidad_producto = unidad;
     setProductosAgregados(nuevosProductos);
   };
 
@@ -280,16 +254,15 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       return false;
     }
     
-    // Validación de canecas para fumigación Y DRENCH
-    if (aplicacion.tipo === 'fumigacion' || aplicacion.tipo === 'drench') {
+    // Validación según tipo de aplicación
+    if (aplicacion.tipo_aplicacion === 'Fumigación' || aplicacion.tipo_aplicacion === 'Drench') {
       if (!numeroCanecas || parseFloat(numeroCanecas) <= 0) {
         setError('El número de canecas debe ser mayor a 0');
         return false;
       }
     }
     
-    // Validación de bultos solo para fertilización
-    if (aplicacion.tipo === 'fertilizacion') {
+    if (aplicacion.tipo_aplicacion === 'Fertilización') {
       if (!numeroBultos || parseFloat(numeroBultos) <= 0) {
         setError('El número de bultos debe ser mayor a 0');
         return false;
@@ -301,15 +274,6 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       return false;
     }
     
-    // Validación de condiciones meteorológicas comentada temporalmente
-    // hasta que el schema cache de Supabase se actualice
-    /*
-    if (!condicionesMeteorologicas) {
-      setError('Las condiciones meteorológicas son requeridas');
-      return false;
-    }
-    */
-    
     if (productosAgregados.length === 0) {
       setError('Debes agregar al menos un producto');
       return false;
@@ -319,6 +283,23 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
     for (const producto of productosAgregados) {
       if (!producto.cantidad_utilizada || parseFloat(producto.cantidad_utilizada) <= 0) {
         setError(`El producto "${producto.producto_nombre}" necesita una cantidad válida`);
+        return false;
+      }
+    }
+
+    // Validar que la suma de productos no exceda el total
+    const totalProductos = productosAgregados.reduce((sum, p) => sum + parseFloat(p.cantidad_utilizada), 0);
+    
+    if (aplicacion.tipo_aplicacion === 'Fertilización') {
+      const totalBultos = parseFloat(numeroBultos);
+      if (totalProductos > totalBultos) {
+        setError(`La suma de bultos por producto (${totalProductos}) excede el total de bultos (${totalBultos})`);
+        return false;
+      }
+    } else if (aplicacion.tipo_aplicacion === 'Fumigación' || aplicacion.tipo_aplicacion === 'Drench') {
+      const totalCanecas = parseFloat(numeroCanecas);
+      if (totalProductos > totalCanecas) {
+        setError(`La suma de canecas por producto (${totalProductos}) excede el total de canecas (${totalCanecas})`);
         return false;
       }
     }
@@ -351,10 +332,8 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         fecha_movimiento: fechaMovimiento,
         lote_id: loteId,
         lote_nombre: lote.nombre,
-        // Para fumigación Y DRENCH: guardar numero_canecas
-        // Para fertilización: guardar numero_bultos
-        numero_canecas: (aplicacion.tipo === 'fumigacion' || aplicacion.tipo === 'drench') ? parseFloat(numeroCanecas) : undefined,
-        numero_bultos: aplicacion.tipo === 'fertilizacion' ? parseFloat(numeroBultos) : undefined,
+        numero_canecas: (aplicacion.tipo_aplicacion === 'Fumigación' || aplicacion.tipo_aplicacion === 'Drench') ? parseFloat(numeroCanecas) : undefined,
+        numero_bultos: aplicacion.tipo_aplicacion === 'Fertilización' ? parseFloat(numeroBultos) : undefined,
         responsable: responsable.trim(),
         condiciones_meteorologicas: condicionesMeteorologicas.trim() || undefined,
         notas: notas.trim() || undefined,
@@ -371,16 +350,26 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       if (!movimientoCreado) throw new Error('No se pudo crear el movimiento');
 
       // 2. Crear productos del movimiento (hijos)
-      // IMPORTANTE: Solo para FERTILIZACIÓN convertir bultos a Kg usando presentacion_kg_l
-      // Fumigación y drench guardan las cantidades directamente en litros/cc (NO hay conversión)
+      // 🚨 CONVERSIÓN A UNIDADES BASE SEGÚN /supabase_tablas.md:
+      // - Fertilización: bultos → Kg (usando presentacion_kg_l)
+      // - Fumigación/Drench: guardar directamente en cc o L (SIN CONVERSIÓN)
       const productosParaInsertar: Omit<MovimientoDiarioProducto, 'id' | 'created_at'>[] = productosAgregados.map(p => {
-        let cantidadFinal = parseFloat(p.cantidad_utilizada);
-        let unidadFinal = p.unidad;
+        let cantidadFinal: number;
+        let unidadFinal: 'cc' | 'L' | 'g' | 'Kg';
 
-        // Solo para fertilización: convertir bultos a Kg usando presentacion_kg_l
-        if (aplicacion.tipo === 'fertilizacion' && p.presentacion_kg_l) {
+        if (aplicacion.tipo_aplicacion === 'Fertilización') {
+          // Convertir bultos a Kg
+          if (!p.presentacion_kg_l) {
+            throw new Error(`El producto ${p.producto_nombre} no tiene presentación en Kg/bulto configurada`);
+          }
           cantidadFinal = parseFloat(p.cantidad_utilizada) * p.presentacion_kg_l;
-          console.log(`🔄 Conversión Fertilización: ${p.cantidad_utilizada} bultos × ${p.presentacion_kg_l} Kg/bulto = ${cantidadFinal} Kg`);
+          unidadFinal = 'Kg';
+          console.log(`✅ Fertilización: ${p.cantidad_utilizada} bultos × ${p.presentacion_kg_l} Kg/bulto = ${cantidadFinal} Kg`);
+        } else {
+          // Fumigación/Drench: Guardar directamente en cc o L (SIN CONVERSIÓN)
+          cantidadFinal = parseFloat(p.cantidad_utilizada);
+          unidadFinal = p.unidad_producto as 'cc' | 'L'; // Ya viene correcto desde el selector
+          console.log(`✅ Fumigación/Drench: ${cantidadFinal} ${unidadFinal} (sin conversión)`);
         }
 
         return {
@@ -425,8 +414,6 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
     }
   };
 
-  const loteSeleccionado = lotes.find(l => l.lote_id === loteId);
-
   return (
     <div className="bg-white rounded-2xl border border-[#73991C]/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
       <div className="flex items-center justify-between mb-6">
@@ -437,9 +424,9 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
           <div>
             <h3 className="text-lg text-[#172E08]">Nuevo Movimiento Diario</h3>
             <p className="text-sm text-[#4D240F]/60">
-              {aplicacion.tipo === 'fertilizacion'
-                ? 'Registra bultos aplicados de cada producto'
-                : 'Registra canecas aplicadas y productos líquidos utilizados'
+              {aplicacion.tipo_aplicacion === 'Fertilización'
+                ? 'Registra bultos totales y bultos aplicados de cada producto'
+                : 'Registra canecas totales y canecas aplicadas de cada producto'
               }
             </p>
           </div>
@@ -498,11 +485,11 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         </div>
 
         {/* Número de Canecas - PARA FUMIGACIÓN Y DRENCH */}
-        {(aplicacion.tipo === 'fumigacion' || aplicacion.tipo === 'drench') && (
+        {(aplicacion.tipo_aplicacion === 'Fumigación' || aplicacion.tipo_aplicacion === 'Drench') && (
           <div>
             <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
               <Droplet className="w-4 h-4 text-[#73991C]" />
-              Número de Canecas Aplicadas
+              Número TOTAL de Canecas Aplicadas
               <span className="text-red-500">*</span>
             </label>
             <div className="flex gap-3">
@@ -511,7 +498,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
                 value={numeroCanecas}
                 onChange={(e) => setNumeroCanecas(e.target.value)}
                 placeholder="0"
-                step="1"
+                step="0.1"
                 min="0"
                 disabled={loading}
                 className="flex-1 bg-white border-[#73991C]/20 focus:border-[#73991C] disabled:opacity-50 disabled:cursor-not-allowed"
@@ -531,11 +518,11 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         )}
 
         {/* Número de Bultos - SOLO PARA FERTILIZACIÓN */}
-        {aplicacion.tipo === 'fertilizacion' && (
+        {aplicacion.tipo_aplicacion === 'Fertilización' && (
           <div>
             <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
-              <Droplet className="w-4 h-4 text-[#73991C]" />
-              Número de Bultos Usados
+              <Package className="w-4 h-4 text-[#73991C]" />
+              Número TOTAL de Bultos Usados
               <span className="text-red-500">*</span>
             </label>
             <div className="flex gap-3">
@@ -553,6 +540,13 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
                 bultos
               </div>
             </div>
+            {loteId && bultosPorLote[loteId] && (
+              <div className="mt-2 p-3 bg-[#73991C]/5 border border-[#73991C]/20 rounded-lg">
+                <p className="text-xs text-[#4D240F]/70">
+                  📊 <strong>Planeado:</strong> {bultosPorLote[loteId]} bultos para este lote
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -560,9 +554,9 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         <div className="border-t border-[#73991C]/10 pt-6">
           <h4 className="text-sm text-[#172E08] mb-4 flex items-center gap-2">
             <Package className="w-4 h-4 text-[#73991C]" />
-            {(aplicacion.tipo === 'fumigacion' || aplicacion.tipo === 'drench')
-              ? 'Productos Utilizados en las Canecas'
-              : 'Bultos Usados de cada Producto'
+            {aplicacion.tipo_aplicacion === 'Fertilización'
+              ? 'Bultos Usados de cada Producto'
+              : 'Canecas Aplicadas de cada Producto'
             }
             <span className="text-red-500">*</span>
           </h4>
@@ -618,24 +612,23 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
                       value={producto.cantidad_utilizada}
                       onChange={(e) => actualizarCantidadProducto(index, e.target.value)}
                       placeholder="0"
-                      step={aplicacion.tipo === 'fertilizacion' ? '1' : '0.01'}
+                      step={aplicacion.tipo_aplicacion === 'Fertilización' ? '1' : '0.1'}
                       min="0"
                       disabled={loading}
                       className="w-32 bg-white border-[#73991C]/20 focus:border-[#73991C] disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                     
-                    {/* FERTILIZACIÓN: mostrar "bultos" estático */}
-                    {aplicacion.tipo === 'fertilizacion' ? (
+                    {/* 🚨 CORREGIDO: Unidad según tipo de aplicación */}
+                    {aplicacion.tipo_aplicacion === 'Fertilización' ? (
                       <div className="px-4 py-2 bg-[#E7EDDD] border border-[#73991C]/20 rounded-lg text-[#172E08] text-sm min-w-[80px] flex items-center justify-center">
                         bultos
                       </div>
                     ) : (
-                      /* FUMIGACIÓN Y DRENCH: SOLO LÍQUIDOS (cc/L) */
                       <select
-                        value={producto.unidad}
-                        onChange={(e) => actualizarUnidadProducto(index, e.target.value as any)}
+                        value={producto.unidad_producto || 'cc'}
+                        onChange={(e) => actualizarUnidadProducto(index, e.target.value as 'cc' | 'L')}
                         disabled={loading}
-                        className="px-3 py-2 border border-[#73991C]/20 rounded-lg bg-white text-[#172E08] text-sm focus:outline-none focus:ring-2 focus:ring-[#73991C] disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-4 py-2 bg-white border border-[#73991C]/20 rounded-lg text-[#172E08] text-sm min-w-[80px] focus:outline-none focus:ring-2 focus:ring-[#73991C] disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <option value="cc">cc</option>
                         <option value="L">L</option>
@@ -688,7 +681,6 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
           <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
             <Cloud className="w-4 h-4 text-[#73991C]" />
             Condiciones Meteorológicas
-            <span className="text-red-500">*</span>
           </label>
           <select
             value={condicionesMeteorologicas}
@@ -696,7 +688,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
             disabled={loading}
             className="w-full px-4 py-3 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <option value="">Selecciona las condiciones</option>
+            <option value="">Selecciona las condiciones (opcional)</option>
             <option value="soleadas">☀️ Soleadas</option>
             <option value="nubladas">☁️ Nubladas</option>
             <option value="lluvia suave">🌦️ Lluvia Suave</option>
@@ -758,8 +750,10 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
           <span className="text-[#73991C] mt-0.5">ℹ️</span>
           <span>
             Este es un movimiento <strong>provisional</strong> que no afecta el inventario inmediatamente.
-            Se registra el número de canecas aplicadas y los productos mezclados en ellas.
-            Al cerrar la aplicación, podrás revisar y ajustar si hay diferencias entre lo planeado y lo real.
+            {aplicacion.tipo_aplicacion === 'Fertilización' 
+              ? ' Se registran los bultos totales usados y los bultos de cada producto. Al cerrar la aplicación, se convertirán a Kg según la presentación de cada producto.'
+              : ' Se registran las canecas totales aplicadas y las canecas de cada producto. Al cerrar la aplicación, se convertirán a litros.'
+            }
           </span>
         </p>
       </div>

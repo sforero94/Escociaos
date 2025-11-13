@@ -615,8 +615,8 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                         <div>
                           <p className="text-xs text-[#4D240F]/70 mb-1">Tipo</p>
                           <p className="text-sm text-[#172E08] font-medium">
-                            {aplicacion.tipo === 'fumigacion' ? 'Fumigación' : 
-                             aplicacion.tipo === 'fertilizacion' ? 'Fertilización' : 'Drench'}
+                            {aplicacion.tipo_aplicacion === 'Fumigación' ? 'Fumigación' : 
+                             aplicacion.tipo_aplicacion === 'Fertilización' ? 'Fertilización' : 'Drench'}
                           </p>
                         </div>
                         <div>
@@ -699,7 +699,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                     </div>
 
                     {/* Tabla de Canecas (solo para fumigación) */}
-                    {aplicacion.tipo === 'fumigacion' && (
+                    {aplicacion.tipo_aplicacion === 'Fumigación' && (
                       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mt-4">
                         <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
                           <h4 className="text-sm text-[#172E08] font-medium">Control de Canecas</h4>
@@ -987,8 +987,8 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                           <div className="flex justify-between">
                             <span className="text-[#4D240F]/70">Tipo:</span>
                             <span className="text-[#172E08]">
-                              {aplicacion.tipo === 'fumigacion' ? 'Fumigación' : 
-                               aplicacion.tipo === 'fertilizacion' ? 'Fertilización' : 'Drench'}
+                              {aplicacion.tipo_aplicacion === 'Fumigación' ? 'Fumigación' : 
+                               aplicacion.tipo_aplicacion === 'Fertilización' ? 'Fertilización' : 'Drench'}
                             </span>
                           </div>
                           <div className="flex justify-between">

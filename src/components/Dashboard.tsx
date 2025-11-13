@@ -325,14 +325,14 @@ export function Dashboard({ onNavigate }: DashboardProps) {
 
           aplicado = movimientos?.reduce((sum: number, m: any) => sum + (m.numero_canecas || 0), 0) || 0;
 
-          // Obtener canecas planificadas de aplicaciones_lotes_planificado
-          const { data: planificado, error: errorPlan } = await supabase
-            .from('aplicaciones_lotes_planificado')
-            .select('canecas_planificado')
+          // Obtener canecas planificadas de aplicaciones_calculos
+          const { data: calculos, error: errorCalc } = await supabase
+            .from('aplicaciones_calculos')
+            .select('numero_canecas')
             .eq('aplicacion_id', app.id);
 
-          if (!errorPlan && planificado) {
-            total = planificado.reduce((sum: number, p: any) => sum + (p.canecas_planificado || 0), 0);
+          if (!errorCalc && calculos) {
+            total = calculos.reduce((sum: number, c: any) => sum + (c.numero_canecas || 0), 0);
           }
 
           unidad = 'canecas';
@@ -370,19 +370,28 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             }
           }
 
-          // Obtener total planificado de aplicaciones_productos_planificado
-          const { data: planificado, error: errorPlan } = await supabase
-            .from('aplicaciones_productos_planificado')
-            .select('cantidad_total_planificada, unidad')
+          // Obtener total planificado de aplicaciones_productos
+          const { data: mezclas, error: errorMezclas } = await supabase
+            .from('aplicaciones_mezclas')
+            .select('id')
             .eq('aplicacion_id', app.id);
 
-          if (!errorPlan && planificado) {
-            total = planificado.reduce((sum: number, p: any) => {
-              const cantidad = parseFloat(p.cantidad_total_planificada || 0);
-              // Convertir a kg si está en gramos
-              const cantidadKg = p.unidad === 'g' ? cantidad / 1000 : cantidad;
-              return sum + cantidadKg;
-            }, 0);
+          if (!errorMezclas && mezclas && mezclas.length > 0) {
+            const mezclasIds = mezclas.map((m: any) => m.id);
+            
+            const { data: productos, error: errorProd } = await supabase
+              .from('aplicaciones_productos')
+              .select('cantidad_total_necesaria, producto_unidad')
+              .in('mezcla_id', mezclasIds);
+
+            if (!errorProd && productos) {
+              total = productos.reduce((sum: number, p: any) => {
+                const cantidad = parseFloat(p.cantidad_total_necesaria || 0);
+                // Convertir a kg si está en gramos
+                const cantidadKg = p.producto_unidad === 'gramos' ? cantidad / 1000 : cantidad;
+                return sum + cantidadKg;
+              }, 0);
+            }
           }
 
           unidad = 'kg';
@@ -425,7 +434,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     try {
       const { data: productos, error } = await supabase
         .from('productos')
-        .select('cantidad_actual, precio_unitario, estado, fecha_vencimiento')
+        .select('cantidad_actual, precio_unitario, estado')
         .eq('activo', true);
 
       if (error) throw error;
@@ -492,53 +501,54 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       // 1. Stock bajo
       const { data: stockBajo, error: errorStock } = await supabase
         .from('productos')
-        .select('nombre, cantidad_actual, stock_minimo, fecha_actualizacion')
+        .select('nombre, cantidad_actual, stock_minimo, updated_at')
         .eq('activo', true)
-        .order('fecha_actualizacion', { ascending: false });
+        .order('updated_at', { ascending: false });
 
       if (!errorStock && stockBajo) {
         const productosBajos = stockBajo
           .filter((p: any) => (p.cantidad_actual || 0) <= (p.stock_minimo || 0))
-          .slice(0, 3);
+          .slice(0, 5);
 
         productosBajos.forEach((p: any) => {
           nuevasAlertas.push({
             id: `stock-${p.nombre}`,
             tipo: 'stock',
             mensaje: `⚠️ Stock bajo: ${p.nombre} - Solo ${formatNumber(p.cantidad_actual || 0)} unidades`,
-            fecha: p.fecha_actualizacion || new Date().toISOString(),
+            fecha: p.updated_at || new Date().toISOString(),
             prioridad: 'alta',
           });
         });
       }
 
-      // 2. Productos próximos a vencer (30 días)
-      const en30Dias = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      const hoy = new Date().toISOString().split('T')[0];
-
-      const { data: porVencer, error: errorVencer } = await supabase
+      // 2. Productos vencidos (basado en campo estado)
+      const { data: productosVencidos, error: errorVencidos } = await supabase
         .from('productos')
-        .select('nombre, fecha_vencimiento')
-        .lte('fecha_vencimiento', en30Dias)
-        .gte('fecha_vencimiento', hoy)
-        .order('fecha_vencimiento', { ascending: true })
+        .select('nombre, updated_at')
+        .eq('activo', true)
+        .eq('estado', 'Vencido')
+        .order('updated_at', { ascending: false })
         .limit(2);
 
-      if (!errorVencer && porVencer && porVencer.length > 0) {
-        porVencer.forEach((p: any) => {
+      if (!errorVencidos && productosVencidos && productosVencidos.length > 0) {
+        productosVencidos.forEach((p: any) => {
           nuevasAlertas.push({
             id: `venc-${p.nombre}`,
             tipo: 'vencimiento',
-            mensaje: `📅 Próximo a vencer: ${p.nombre}`,
-            fecha: p.fecha_vencimiento,
-            prioridad: 'media',
+            mensaje: `📅 Producto vencido: ${p.nombre}`,
+            fecha: p.updated_at,
+            prioridad: 'alta',
           });
         });
       }
 
-      // Ordenar y limitar
+      // Ordenar por prioridad y fecha
       const alertasOrdenadas = nuevasAlertas
         .sort((a, b) => {
+          // Primero por prioridad
+          if (a.prioridad === 'alta' && b.prioridad !== 'alta') return -1;
+          if (a.prioridad !== 'alta' && b.prioridad === 'alta') return 1;
+          // Luego por fecha
           if (!a.fecha) return 1;
           if (!b.fecha) return -1;
           return new Date(b.fecha).getTime() - new Date(a.fecha).getTime();

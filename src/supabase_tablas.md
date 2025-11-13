@@ -512,8 +512,10 @@ Registro provisional de movimientos diarios durante la ejecución de aplicacione
 | `fecha_movimiento` | `date` | Fecha del movimiento | NOT NULL |
 | `lote_id` | `uuid` | Lote donde se aplicó | NOT NULL, FK → lotes(id) |
 | `lote_nombre` | `text` | Nombre del lote (cache) | NOT NULL |
-| `numero_canecas` | `numeric` | Número total de canecas aplicadas | NOT NULL, CHECK >= 0 |
+| `numero_canecas` | `numeric` | Número total de canecas aplicadas (fumigación/drench) | CHECK >= 0 |
+| `numero_bultos` | `numeric` | Número total de bultos usados (fertilización) | CHECK >= 0 |
 | `responsable` | `text` | Responsable del movimiento | NOT NULL |
+| `condiciones_meteorologicas` | `text` | Condiciones del clima durante aplicación | CHECK IN ('soleadas', 'nubladas', 'lluvia suave', 'lluvia fuerte') |
 | `notas` | `text` | Observaciones | |
 | `created_at` | `timestamptz` | Fecha creación | DEFAULT now() |
 | `created_by` | `uuid` | Usuario que registró | FK → auth.users(id) |
@@ -525,11 +527,16 @@ Registro provisional de movimientos diarios durante la ejecución de aplicacione
 
 **Propósito:**
 Los movimientos diarios son registros **provisionales** durante la ejecución de aplicaciones que:
-- Registran el número de canecas aplicadas por día en cada lote (sin duplicar el conteo)
+- Registran el número de canecas aplicadas (fumigación/drench) o bultos usados (fertilización) por día en cada lote
 - Los productos utilizados en cada movimiento se registran en la tabla relacionada `movimientos_diarios_productos`
 - Mantienen trazabilidad para GlobalGAP sin afectar inventario inmediatamente
 - Permiten comparar lo planificado vs lo realmente utilizado
 - Se revisan al cerrar la aplicación antes de crear los movimientos definitivos de inventario
+
+**Notas importantes:**
+- Para fumigación y drench: se usa `numero_canecas` (NULL para fertilización)
+- Para fertilización: se usa `numero_bultos` (NULL para fumigación/drench)
+- Los productos individuales se registran en `movimientos_diarios_productos` con sus unidades apropiadas (cc/L/g/Kg)
 
 **Índices:**
 - PK: `movimientos_diarios_pkey` (id)
@@ -1186,7 +1193,7 @@ aplicaciones
   → aplicaciones_cierre
   → aplicaciones_lotes_real (jornales, costos)
   → aplicaciones_productos_real (productos usados)
-  → movimientos_inventario (salidas de bodega)
+  → movimientos_inventario (salidas)
 ```
 
 **De cosecha a cliente:**
@@ -1225,6 +1232,7 @@ lotes
 | 2025-11-13 | Agregada tabla `movimientos_diarios` | Sistema |
 | 2025-11-13 | Agregadas columnas `costo_por_arbol` y `arboles_jornal` a tabla `aplicaciones` para métricas de eficiencia | Sistema |
 | 2025-11-13 | Reestructuración de sistema de movimientos diarios: modificada tabla `movimientos_diarios` (agregado `numero_canecas`, eliminadas columnas de productos individuales) y creada tabla `movimientos_diarios_productos` para evitar duplicación de conteo de canecas | Sistema |
+| 2025-11-13 | Actualización documentación tabla `movimientos_diarios`: agregado campo `numero_bultos` para fertilización y campo `condiciones_meteorologicas` ENUM | Sistema |
 
 ---
 

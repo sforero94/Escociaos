@@ -1,13 +1,27 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, CheckCircle, Package, Loader2, Search } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, Package, Loader2, Search, Calculator, ChevronDown } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '../ui/collapsible';
 import { getSupabase } from '../../utils/supabase/client';
 import { InventoryNav } from './InventoryNav';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../shared/Toast';
 import { ConfirmDialog } from '../shared/ConfirmDialog';
+
+// VERSION 2.0 - Placeholders grises, selector de unidades funcional, un solo buscador
 
 interface NewPurchaseProps {
   onNavigate?: (view: string) => void;
@@ -19,17 +33,33 @@ interface Product {
   unidad_medida: string;
   precio_unitario: number;
   cantidad_actual: number;
-  presentacion_kg_l?: number; // 🆕 Agregar presentación comercial
+  presentacion_kg_l?: number;
 }
 
 interface PurchaseItem {
   id: string; // ID temporal para React keys
   producto_id: string;
-  cantidad: string;
-  precio_unitario: string;
-  lote_producto: string;
+  producto_nombre: string;
+  
+  // NUEVOS CAMPOS
+  presentacion_cantidad: number;      // Ej: 25
+  presentacion_unidad: string;        // Ej: 'kg' | 'L' | 'unidad'
+  cantidad_bultos: number;            // Ej: 4
+  precio_por_bulto: number;           // Ej: 50000
+  
+  // CAMPOS CALCULADOS
+  cantidad_total: number;             // = cantidad_bultos × presentacion_cantidad
+  costo_total: number;                // = cantidad_bultos × precio_por_bulto
+  precio_unitario_real: number;       // = costo_total ÷ cantidad_total
+  
+  // CAMPOS EXISTENTES
+  cantidad: number;                   // Para BD = cantidad_total
+  unidad: string;                     // Para BD = presentacion_unidad
+  numero_lote: string;
   fecha_vencimiento: string;
-  permitido_gerencia: boolean | null; // null = sin seleccionar, true = Sí, false = No
+  costo_unitario: number;             // Para BD = precio_unitario_real
+  permitido_gerencia: boolean | null;
+  subtotal: number;                   // Para BD = costo_total
 }
 
 export function NewPurchase({ onNavigate }: NewPurchaseProps) {
@@ -55,11 +85,21 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
     {
       id: crypto.randomUUID(),
       producto_id: '',
-      cantidad: '',
-      precio_unitario: '',
-      lote_producto: '',
+      producto_nombre: '',
+      presentacion_cantidad: 0,
+      presentacion_unidad: 'kg',
+      cantidad_bultos: 0,
+      precio_por_bulto: 0,
+      cantidad_total: 0,
+      costo_total: 0,
+      precio_unitario_real: 0,
+      cantidad: 0,
+      unidad: 'kg',
+      numero_lote: '',
       fecha_vencimiento: '',
+      costo_unitario: 0,
       permitido_gerencia: null,
+      subtotal: 0,
     },
   ]);
 
@@ -70,7 +110,6 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
   const loadProducts = async () => {
     setIsLoading(true);
     
-    // Intentar hasta 3 veces con delay incremental
     let retries = 3;
     let delay = 1000;
     
@@ -90,14 +129,13 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
         
         setProducts(data || []);
         console.log('✅ Productos cargados exitosamente:', data?.length || 0);
-        return; // Éxito, salir del loop
+        return;
         
       } catch (err: any) {
         retries--;
         console.error(`Error cargando productos (intentos restantes: ${retries}):`, err);
         
         if (retries === 0) {
-          // Último intento fallido
           showError(`❌ Error al cargar productos: ${err?.message || 'Error de conexión'}`);
           console.error('Error final cargando productos:', {
             message: err?.message,
@@ -106,9 +144,8 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
             hint: err?.hint
           });
         } else {
-          // Esperar antes de reintentar
           await new Promise(resolve => setTimeout(resolve, delay));
-          delay *= 2; // Backoff exponencial
+          delay *= 2;
         }
       }
     }
@@ -133,11 +170,21 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
       {
         id: crypto.randomUUID(),
         producto_id: '',
-        cantidad: '',
-        precio_unitario: '',
-        lote_producto: '',
+        producto_nombre: '',
+        presentacion_cantidad: 0,
+        presentacion_unidad: 'kg',
+        cantidad_bultos: 0,
+        precio_por_bulto: 0,
+        cantidad_total: 0,
+        costo_total: 0,
+        precio_unitario_real: 0,
+        cantidad: 0,
+        unidad: 'kg',
+        numero_lote: '',
         fecha_vencimiento: '',
+        costo_unitario: 0,
         permitido_gerencia: null,
+        subtotal: 0,
       },
     ]);
     showInfo('➕ Producto agregado a la lista');
@@ -161,11 +208,15 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
         if (item.id === id) {
           const updated = { ...item, [field]: value };
           
-          // Si cambia el producto, auto-cargar el precio unitario
+          // Si cambia el producto, cargar la presentación y precio
           if (field === 'producto_id' && value) {
             const product = products.find((p) => p.id === parseInt(value));
             if (product) {
-              updated.precio_unitario = product.precio_unitario.toString();
+              updated.producto_nombre = product.nombre;
+              updated.presentacion_cantidad = product.presentacion_kg_l || 0;
+              updated.presentacion_unidad = product.unidad_medida || 'kg';
+              updated.unidad = product.unidad_medida || 'kg';
+              updated.precio_por_bulto = product.precio_unitario || 0;
             }
           }
           
@@ -176,16 +227,53 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
     );
   };
 
-  // Calcular subtotal de un item
-  const calculateSubtotal = (item: PurchaseItem): number => {
-    const cantidad = parseFloat(item.cantidad) || 0;
-    const precio = parseFloat(item.precio_unitario) || 0;
-    return cantidad * precio;
+  // FUNCIÓN DE CÁLCULO AUTOMÁTICO
+  const recalcularProducto = (itemId: string) => {
+    setPurchaseItems(items => items.map(item => {
+      if (item.id !== itemId) return item;
+      
+      const cantidadBultos = item.cantidad_bultos || 0;
+      const precioPorBulto = item.precio_por_bulto || 0;
+      const presentacionCantidad = item.presentacion_cantidad || 0;
+      
+      // Validar que los valores sean válidos
+      if (cantidadBultos <= 0 || precioPorBulto <= 0 || presentacionCantidad <= 0) {
+        return {
+          ...item,
+          cantidad_total: 0,
+          costo_total: 0,
+          precio_unitario_real: 0,
+          cantidad: 0,
+          costo_unitario: 0,
+          subtotal: 0
+        };
+      }
+      
+      // CÁLCULO 1: Total en kg/L = cantidad_bultos × presentacion_cantidad
+      const cantidadTotal = cantidadBultos * presentacionCantidad;
+      
+      // CÁLCULO 2: Costo Total = cantidad_bultos × precio_por_bulto
+      const costoTotal = cantidadBultos * precioPorBulto;
+      
+      // CÁLCULO 3: Precio Unitario Real = costo_total ÷ cantidad_total
+      const precioUnitarioReal = costoTotal / cantidadTotal;
+      
+      return {
+        ...item,
+        cantidad_total: cantidadTotal,
+        costo_total: costoTotal,
+        precio_unitario_real: precioUnitarioReal,
+        // Guardar también para la BD
+        cantidad: cantidadTotal,
+        costo_unitario: precioUnitarioReal,
+        subtotal: costoTotal
+      };
+    }));
   };
 
   // Calcular total general
   const calculateTotal = (): number => {
-    return purchaseItems.reduce((sum, item) => sum + calculateSubtotal(item), 0);
+    return purchaseItems.reduce((sum, item) => sum + (item.costo_total || 0), 0);
   };
 
   // Formatear moneda
@@ -195,23 +283,6 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
       currency: 'COP',
       minimumFractionDigits: 0,
     }).format(value);
-  };
-
-  // Obtener nombre del producto
-  const getProductName = (productId: string): string => {
-    const product = products.find((p) => p.id === parseInt(productId));
-    return product?.nombre || '';
-  };
-
-  // Obtener producto completo
-  const getProduct = (productId: string): Product | undefined => {
-    return products.find((p) => p.id === parseInt(productId));
-  };
-
-  // Obtener unidad de medida
-  const getProductUnit = (productId: string): string => {
-    const product = products.find((p) => p.id === parseInt(productId));
-    return product?.unidad_medida || '';
   };
 
   // Validar formulario
@@ -234,12 +305,16 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
         showError(`❌ Producto ${productNum}: Debe seleccionar un producto`);
         return false;
       }
-      if (!item.cantidad || parseFloat(item.cantidad) <= 0) {
-        showError(`❌ Producto ${productNum}: La cantidad debe ser mayor a 0`);
+      if (!item.presentacion_cantidad || item.presentacion_cantidad <= 0) {
+        showError(`❌ ${item.producto_nombre}: Debe especificar la presentación comercial`);
         return false;
       }
-      if (!item.precio_unitario || parseFloat(item.precio_unitario) <= 0) {
-        showError(`❌ Producto ${productNum}: El precio debe ser mayor a 0`);
+      if (!item.cantidad_bultos || item.cantidad_bultos <= 0) {
+        showError(`❌ ${item.producto_nombre}: Debe especificar cuántos bultos compró`);
+        return false;
+      }
+      if (!item.precio_por_bulto || item.precio_por_bulto <= 0) {
+        showError(`❌ ${item.producto_nombre}: Debe especificar el precio por bulto`);
         return false;
       }
       if (item.permitido_gerencia === null) {
@@ -275,10 +350,9 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
       const { data: { user } } = await supabase.auth.getUser();
 
       // Insertar cada producto como un registro individual en 'compras'
-      // Según el schema: cada registro en 'compras' es UN producto comprado
       for (const item of purchaseItems) {
-        const cantidad = parseFloat(item.cantidad);
-        const precioUnitario = parseFloat(item.precio_unitario);
+        const cantidad = item.cantidad_total;
+        const precioUnitario = item.precio_unitario_real;
         const productoId = item.producto_id;
 
         // Obtener datos del producto
@@ -293,7 +367,7 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
         const cantidadAnterior = productoData.cantidad_actual;
         const cantidadNueva = cantidadAnterior + cantidad;
 
-        // Insertar registro de compra (un registro por producto según schema)
+        // Insertar registro de compra
         const { data: compraData, error: compraError } = await supabase
           .from('compras')
           .insert([
@@ -303,11 +377,11 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
               numero_factura: purchaseData.numero_factura || null,
               producto_id: productoId,
               cantidad: cantidad,
-              unidad: productoData.unidad_medida,
-              numero_lote_producto: item.lote_producto || null,
+              unidad: item.presentacion_unidad,
+              numero_lote_producto: item.numero_lote || null,
               fecha_vencimiento: item.fecha_vencimiento || null,
               costo_unitario: precioUnitario,
-              costo_total: cantidad * precioUnitario,
+              costo_total: item.costo_total,
               link_factura: null,
               usuario_registro: user?.email || null,
             },
@@ -325,7 +399,7 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
           .from('productos')
           .update({ 
             cantidad_actual: cantidadNueva,
-            precio_unitario: precioUnitario, // Actualizar precio unitario con el de la compra
+            precio_unitario: precioUnitario,
           })
           .eq('id', productoId);
 
@@ -338,15 +412,15 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
             {
               fecha_movimiento: purchaseData.fecha,
               producto_id: productoId,
-              tipo_movimiento: 'Entrada', // Enum con mayúscula inicial
+              tipo_movimiento: 'Entrada',
               cantidad: cantidad,
-              unidad: productoData.unidad_medida,
+              unidad: item.presentacion_unidad,
               factura: purchaseData.numero_factura || null,
               saldo_anterior: cantidadAnterior,
               saldo_nuevo: cantidadNueva,
-              valor_movimiento: cantidad * precioUnitario,
+              valor_movimiento: item.costo_total,
               responsable: user?.email || null,
-              observaciones: `Compra - Factura: ${purchaseData.numero_factura || 'Sin número'} - Proveedor: ${purchaseData.proveedor} - Producto: ${productoData.nombre}`,
+              observaciones: `Compra - ${item.cantidad_bultos} bultos de ${item.presentacion_cantidad} ${item.presentacion_unidad} - Factura: ${purchaseData.numero_factura || 'Sin número'} - Proveedor: ${purchaseData.proveedor}`,
               provisional: false,
             },
           ]);
@@ -424,7 +498,7 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
                       onChange={(e) =>
                         setPurchaseData({ ...purchaseData, fecha: e.target.value })
                       }
-                      className="border-[#73991C]/20 focus:border-[#73991C] rounded-xl"
+                      className="border-[#73991C]/20 focus:border-[#73991C] rounded-xl h-12"
                       required
                     />
                   </div>
@@ -441,7 +515,7 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
                       onChange={(e) =>
                         setPurchaseData({ ...purchaseData, proveedor: e.target.value })
                       }
-                      className="border-[#73991C]/20 focus:border-[#73991C] rounded-xl"
+                      className="border-[#73991C]/20 focus:border-[#73991C] rounded-xl h-12 placeholder:text-gray-400"
                       required
                     />
                   </div>
@@ -458,7 +532,7 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
                       onChange={(e) =>
                         setPurchaseData({ ...purchaseData, numero_factura: e.target.value })
                       }
-                      className="border-[#73991C]/20 focus:border-[#73991C] rounded-xl"
+                      className="border-[#73991C]/20 focus:border-[#73991C] rounded-xl h-12 placeholder:text-gray-400"
                       required
                     />
                   </div>
@@ -474,7 +548,7 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
                     placeholder="Buscar productos disponibles..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 border-[#73991C]/20 focus:border-[#73991C] rounded-xl"
+                    className="pl-10 border-[#73991C]/20 focus:border-[#73991C] rounded-xl h-12 placeholder:text-gray-400"
                   />
                 </div>
                 {searchTerm && (
@@ -502,165 +576,213 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
                   </Button>
                 </div>
 
-                <div className="space-y-3">
-                  {purchaseItems.map((item, index) => {
-                    const subtotal = calculateSubtotal(item);
-                    const unit = getProductUnit(item.producto_id);
+                <div className="space-y-4">
+                  {purchaseItems.map((item, index) => (
+                    <div
+                      key={item.id}
+                      className="relative bg-white/80 backdrop-blur-sm rounded-2xl p-4 md:p-6 border border-[#73991C]/10 shadow-sm space-y-4"
+                    >
+                      {/* Botón eliminar - absolute top right */}
+                      {purchaseItems.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeItem(item.id)}
+                          className="absolute top-2 right-2 hover:bg-red-50 hover:text-red-600 h-8 w-8"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                      
+                      {/* FILA 1: Selector de Producto */}
+                      <div>
+                        <Label className="text-sm text-[#172E08] mb-2">
+                          Producto *
+                        </Label>
+                        <Select
+                          value={item.producto_id}
+                          onValueChange={(value) => updateItem(item.id, 'producto_id', value)}
+                        >
+                          <SelectTrigger className="h-12 border-[#73991C]/20 focus:border-[#73991C] rounded-xl">
+                            <SelectValue placeholder="Seleccionar producto..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {filteredProducts.map((producto) => (
+                              <SelectItem key={producto.id} value={producto.id.toString()}>
+                                {producto.nombre}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
 
-                    return (
-                      <div
-                        key={item.id}
-                        className="bg-[#F8FAF5] rounded-xl p-4 border border-[#73991C]/10"
-                      >
-                        {/* Primera fila: Campos principales */}
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start mb-3">
-                          {/* Producto */}
-                          <div className="md:col-span-4">
-                            <Label className="text-xs text-[#4D240F]/70 mb-1">
-                              Producto *
-                            </Label>
-                            <select
-                              value={item.producto_id}
-                              onChange={(e) =>
-                                updateItem(item.id, 'producto_id', e.target.value)
-                              }
-                              className="w-full px-3 py-2 border border-[#73991C]/20 rounded-lg text-sm focus:outline-none focus:border-[#73991C] bg-white"
-                              required
-                            >
-                              <option value="">Seleccionar...</option>
-                              {filteredProducts.map((product) => (
-                                <option key={product.id} value={product.id}>
-                                  {product.nombre}
-                                </option>
-                              ))}
-                            </select>
+                      {/* FILA 2: Presentación Comercial EDITABLE */}
+                      <div className="space-y-2">
+                        <Label className="text-sm text-[#172E08]">
+                          Presentación de esta compra
+                        </Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="25"
+                            value={item.presentacion_cantidad || ''}
+                            onChange={(e) => {
+                              updateItem(item.id, 'presentacion_cantidad', parseFloat(e.target.value) || 0);
+                              recalcularProducto(item.id);
+                            }}
+                            className="h-12 text-lg border-[#73991C]/20 focus:border-[#73991C] rounded-xl bg-white placeholder:text-gray-400"
+                          />
+                          <Select
+                            value={item.presentacion_unidad}
+                            onValueChange={(value) => {
+                              updateItem(item.id, 'presentacion_unidad', value);
+                              updateItem(item.id, 'unidad', value);
+                              recalcularProducto(item.id);
+                            }}
+                          >
+                            <SelectTrigger className="h-12 border-[#73991C]/20 focus:border-[#73991C] rounded-xl bg-white">
+                              <SelectValue placeholder="Seleccionar unidad" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-white">
+                              <SelectItem value="kg">Kilogramos (kg)</SelectItem>
+                              <SelectItem value="L">Litros (L)</SelectItem>
+                              <SelectItem value="Galones">Galones</SelectItem>
+                              <SelectItem value="unidad">Unidades</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <p className="text-xs text-[#4D240F]/60">
+                          Si la presentación cambió respecto al producto guardado, edítala aquí
+                        </p>
+                      </div>
+
+                      {/* FILA 3: ¿Cuántos bultos/tarros compraste? */}
+                      <div className="space-y-2">
+                        <Label className="text-sm text-[#172E08] font-medium">
+                          ¿Cuántos bultos/tarros compraste? *
+                        </Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          placeholder="Ej: 4"
+                          value={item.cantidad_bultos || ''}
+                          onChange={(e) => {
+                            updateItem(item.id, 'cantidad_bultos', parseInt(e.target.value) || 0);
+                            recalcularProducto(item.id);
+                          }}
+                          className="h-14 text-xl font-semibold border-2 border-[#73991C]/30 focus:border-[#73991C] rounded-xl bg-white placeholder:text-gray-400"
+                          required
+                        />
+                      </div>
+
+                      {/* FILA 4: Precio por bulto/tarro */}
+                      <div className="space-y-2">
+                        <Label className="text-sm text-[#172E08] font-medium">
+                          Precio por bulto/tarro *
+                        </Label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#172E08] text-lg font-medium">
+                            $
+                          </span>
+                          <Input
+                            type="number"
+                            min="0"
+                            placeholder="50000"
+                            value={item.precio_por_bulto || ''}
+                            onChange={(e) => {
+                              updateItem(item.id, 'precio_por_bulto', parseFloat(e.target.value) || 0);
+                              recalcularProducto(item.id);
+                            }}
+                            className="h-14 text-xl font-semibold pl-8 border-2 border-[#73991C]/30 focus:border-[#73991C] rounded-xl bg-white placeholder:text-gray-400"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      {/* FILA 5: Cálculos Automáticos */}
+                      {item.cantidad_total > 0 && (
+                        <div className="bg-[#F5F5DC] rounded-xl p-4 space-y-3 border border-[#73991C]/20">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Calculator className="w-4 h-4 text-[#73991C]" />
+                            <span className="text-xs font-medium text-[#172E08]/70 uppercase tracking-wide">
+                              Cálculo Automático
+                            </span>
                           </div>
-
-                          {/* Cantidad */}
-                          <div className="md:col-span-2">
-                            <Label className="text-xs text-[#4D240F]/70 mb-1">
-                              Cantidad * {unit && `(${unit})`}
-                            </Label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              placeholder="0"
-                              value={item.cantidad}
-                              onChange={(e) =>
-                                updateItem(item.id, 'cantidad', e.target.value)
-                              }
-                              className="border-[#73991C]/20 focus:border-[#73991C] rounded-lg text-sm h-9"
-                              required
-                            />
-                            {/* 🆕 Mostrar conversión a unidad comercial */}
-                            {item.producto_id && item.cantidad && (() => {
-                              const product = getProduct(item.producto_id);
-                              const cantidad = parseFloat(item.cantidad);
-                              
-                              if (product?.presentacion_kg_l && cantidad > 0) {
-                                const unidadesComerciales = cantidad / product.presentacion_kg_l;
-                                const nombreUnidad = product.unidad_medida?.toLowerCase().includes('kilo') || product.unidad_medida?.toLowerCase().includes('kg')
-                                  ? 'bulto(s)'
-                                  : product.unidad_medida?.toLowerCase().includes('litro') || product.unidad_medida?.toLowerCase().includes('l')
-                                  ? 'tarro(s)'
-                                  : 'unidad(es)';
-                                
-                                return (
-                                  <p className="text-xs text-[#73991C] mt-1">
-                                    ≈ {unidadesComerciales.toFixed(2)} {nombreUnidad} de {product.presentacion_kg_l} {product.unidad_medida}
-                                  </p>
-                                );
-                              }
-                              return null;
-                            })()}
-                          </div>
-
-                          {/* Precio Unitario */}
-                          <div className="md:col-span-2">
-                            <Label className="text-xs text-[#4D240F]/70 mb-1">
-                              Precio Unit. *
-                            </Label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              placeholder="0"
-                              value={item.precio_unitario}
-                              onChange={(e) =>
-                                updateItem(item.id, 'precio_unitario', e.target.value)
-                              }
-                              className="border-[#73991C]/20 focus:border-[#73991C] rounded-lg text-sm h-9"
-                              required
-                            />
-                          </div>
-
-                          {/* Subtotal */}
-                          <div className="md:col-span-3">
-                            <Label className="text-xs text-[#4D240F]/70 mb-1">
-                              Subtotal
-                            </Label>
-                            <div className="px-3 py-2 bg-[#73991C]/5 rounded-lg text-sm font-medium text-[#172E08] h-9 flex items-center">
-                              {formatCurrency(subtotal)}
+                          
+                          <div className="space-y-2">
+                            {/* Total kg/L */}
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-[#172E08]">
+                                Total {item.presentacion_unidad || 'kg'}:
+                              </span>
+                              <span className="text-lg font-bold text-[#73991C]">
+                                {(item.cantidad_total || 0).toFixed(2)} {item.presentacion_unidad || 'kg'}
+                              </span>
+                            </div>
+                            
+                            {/* Costo Total */}
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-[#172E08]">
+                                Costo Total:
+                              </span>
+                              <span className="text-xl font-bold text-[#172E08]">
+                                {formatCurrency(item.costo_total || 0)}
+                              </span>
+                            </div>
+                            
+                            {/* Precio Unitario Real */}
+                            <div className="flex justify-between items-center pt-2 border-t border-[#73991C]/20">
+                              <span className="text-xs text-[#4D240F]/70">
+                                Precio unitario real:
+                              </span>
+                              <span className="text-sm font-medium text-[#4D240F]/70">
+                                {formatCurrency(item.precio_unitario_real || 0)}/{item.presentacion_unidad || 'kg'}
+                              </span>
                             </div>
                           </div>
-
-                          {/* Botón Eliminar */}
-                          <div className="md:col-span-1 flex items-end">
-                            {purchaseItems.length > 1 && (
-                              <Button
-                                type="button"
-                                onClick={() => removeItem(item.id)}
-                                size="sm"
-                                variant="ghost"
-                                className="h-9 w-9 p-0 hover:bg-red-50 hover:text-red-600"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            )}
-                          </div>
                         </div>
+                      )}
 
-                        {/* Segunda fila: Campos adicionales */}
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
-                          {/* Lote */}
-                          <div className="md:col-span-3">
-                            <Label className="text-xs text-[#4D240F]/70 mb-1">
-                              Lote
-                            </Label>
+                      {/* FILA 6: Detalles Adicionales (Colapsable) */}
+                      <Collapsible>
+                        <CollapsibleTrigger className="flex items-center gap-2 text-sm text-[#73991C] hover:text-[#172E08] transition-colors">
+                          <ChevronDown className="w-4 h-4" />
+                          Más detalles (lote, vencimiento)
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="space-y-3 mt-3 pt-3 border-t border-[#73991C]/10">
+                          {/* Número de Lote */}
+                          <div>
+                            <Label className="text-sm text-[#172E08]">Número de Lote</Label>
                             <Input
                               type="text"
                               placeholder="Ej: L-2025-001"
-                              value={item.lote_producto}
-                              onChange={(e) =>
-                                updateItem(item.id, 'lote_producto', e.target.value)
-                              }
-                              className="border-[#73991C]/20 focus:border-[#73991C] rounded-lg text-sm h-9"
+                              value={item.numero_lote || ''}
+                              onChange={(e) => updateItem(item.id, 'numero_lote', e.target.value)}
+                              className="h-10 border-[#73991C]/20 focus:border-[#73991C] rounded-xl mt-1"
                             />
                           </div>
-
-                          {/* Fecha Vencimiento */}
-                          <div className="md:col-span-3">
-                            <Label className="text-xs text-[#4D240F]/70 mb-1">
-                              Fecha Vencimiento
-                            </Label>
+                          
+                          {/* Fecha de Vencimiento */}
+                          <div>
+                            <Label className="text-sm text-[#172E08]">Fecha de Vencimiento</Label>
                             <Input
                               type="date"
-                              value={item.fecha_vencimiento}
-                              onChange={(e) =>
-                                updateItem(item.id, 'fecha_vencimiento', e.target.value)
-                              }
-                              className="border-[#73991C]/20 focus:border-[#73991C] rounded-lg text-sm h-9"
+                              value={item.fecha_vencimiento || ''}
+                              onChange={(e) => updateItem(item.id, 'fecha_vencimiento', e.target.value)}
+                              className="h-10 border-[#73991C]/20 focus:border-[#73991C] rounded-xl mt-1"
                             />
                           </div>
-
+                          
                           {/* Permitido por Gerencia */}
-                          <div className="md:col-span-6">
-                            <Label className="text-xs text-[#4D240F]/70 mb-1">
+                          <div className="space-y-2">
+                            <Label className="text-sm text-[#172E08] font-medium">
                               Permitido por Gerencia *
                             </Label>
-                            <div className="flex items-center gap-4 h-9">
-                              <label className="flex items-center gap-2 cursor-pointer">
+                            <div className="flex gap-4">
+                              <label className="flex items-center space-x-2 cursor-pointer">
                                 <input
                                   type="radio"
                                   name={`pg-${item.id}`}
@@ -670,7 +792,7 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
                                 />
                                 <span className="text-sm text-[#172E08]">Sí</span>
                               </label>
-                              <label className="flex items-center gap-2 cursor-pointer">
+                              <label className="flex items-center space-x-2 cursor-pointer">
                                 <input
                                   type="radio"
                                   name={`pg-${item.id}`}
@@ -682,10 +804,10 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
                               </label>
                             </div>
                           </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                        </CollapsibleContent>
+                      </Collapsible>
+                    </div>
+                  ))}
                 </div>
 
                 {/* Total */}
@@ -699,20 +821,20 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
                 </div>
               </div>
 
-              {/* Botones */}
-              <div className="flex gap-3 justify-end">
+              {/* Botones finales */}
+              <div className="flex gap-4">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => navigate('/inventario')}
-                  className="rounded-xl border-[#73991C]/20 hover:bg-[#E7EDDD]/50"
+                  className="flex-1 border-[#73991C]/20 hover:bg-[#73991C]/5 rounded-xl h-12"
                 >
                   Cancelar
                 </Button>
                 <Button
                   type="submit"
-                  disabled={isSaving}
-                  className="bg-gradient-to-r from-[#73991C] to-[#BFD97D] hover:from-[#5f7d17] hover:to-[#a8c96d] text-white rounded-xl shadow-lg shadow-[#73991C]/20"
+                  disabled={isSaving || purchaseItems.length === 0}
+                  className="flex-1 bg-[#73991C] hover:bg-[#5f7d17] text-white rounded-xl h-12"
                 >
                   {isSaving ? (
                     <>
@@ -727,105 +849,50 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
             </form>
           </div>
 
-          {/* Panel de Resumen - 1 columna */}
+          {/* Panel lateral de resumen */}
           <div className="lg:col-span-1">
-            <div className="bg-gradient-to-br from-[#F8FAF5] to-[#BFD97D]/20 rounded-2xl p-6 border-2 border-[#BFD97D] shadow-sm sticky top-6">
-              <h3 className="text-[#172E08] mb-4 flex items-center gap-2">
-                📊 Resumen de Compra
-              </h3>
-
-              <div className="space-y-4">
-                {/* Información General */}
-                <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4">
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-[#4D240F]/70">Proveedor:</span>
-                      <span className="font-medium text-[#172E08]">
-                        {purchaseData.proveedor || '-'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-[#4D240F]/70">Factura:</span>
-                      <span className="font-medium text-[#172E08]">
-                        {purchaseData.numero_factura || '-'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-[#4D240F]/70">Fecha:</span>
-                      <span className="font-medium text-[#172E08]">
-                        {new Date(purchaseData.fecha).toLocaleDateString('es-CO')}
-                      </span>
-                    </div>
+            <div className="sticky top-6 bg-gradient-to-br from-[#F8FAF5] to-[#BFD97D]/20 rounded-2xl p-6 border border-[#73991C]/20 shadow-lg">
+              <h3 className="text-[#172E08] mb-4">Resumen</h3>
+              
+              <div className="space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-[#4D240F]/70">Productos:</span>
+                  <span className="text-[#172E08] font-medium">{purchaseItems.length}</span>
+                </div>
+                
+                <div className="flex justify-between text-sm">
+                  <span className="text-[#4D240F]/70">Proveedor:</span>
+                  <span className="text-[#172E08] font-medium truncate max-w-[150px]">
+                    {purchaseData.proveedor || '-'}
+                  </span>
+                </div>
+                
+                <div className="flex justify-between text-sm">
+                  <span className="text-[#4D240F]/70">Factura:</span>
+                  <span className="text-[#172E08] font-medium">
+                    {purchaseData.numero_factura || '-'}
+                  </span>
+                </div>
+                
+                <div className="border-t border-[#73991C]/20 pt-3 mt-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[#172E08]">Total:</span>
+                    <span className="text-[#73991C] text-xl">
+                      {formatCurrency(calculateTotal())}
+                    </span>
                   </div>
                 </div>
-
-                {/* Productos */}
-                <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4">
-                  <p className="text-sm text-[#4D240F]/70 mb-2">Productos en Compra</p>
-                  <p className="text-3xl font-bold text-[#73991C]">{purchaseItems.length}</p>
-                </div>
-
-                {/* Total */}
-                <div className="bg-gradient-to-br from-[#73991C] to-[#5f7d17] rounded-xl p-4">
-                  <p className="text-sm text-white/80 mb-1">Valor Total</p>
-                  <p className="text-2xl font-bold text-white">
-                    {formatCurrency(calculateTotal())}
-                  </p>
-                </div>
-
-                {/* Lista de Productos Seleccionados */}
-                {purchaseItems.some(item => item.producto_id) && (
-                  <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4">
-                    <p className="text-sm font-medium text-[#172E08] mb-3">
-                      Productos Seleccionados:
-                    </p>
-                    <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                      {purchaseItems.map((item, index) => {
-                        if (!item.producto_id) return null;
-                        const product = getProduct(item.producto_id);
-                        if (!product) return null;
-
-                        return (
-                          <div
-                            key={item.id}
-                            className="text-xs bg-[#F8FAF5] rounded-lg p-3 border border-[#73991C]/10"
-                          >
-                            <div className="flex items-start justify-between mb-1">
-                              <span className="font-medium text-[#172E08] flex-1">
-                                {index + 1}. {product.nombre}
-                              </span>
-                              <span className={`text-xs font-medium ml-2 ${
-                                item.permitido_gerencia === true 
-                                  ? 'text-green-600' 
-                                  : item.permitido_gerencia === false 
-                                  ? 'text-red-600' 
-                                  : 'text-gray-400'
-                              }`}>
-                                PG: {
-                                  item.permitido_gerencia === true ? '✅ Sí' :
-                                  item.permitido_gerencia === false ? '❌ No' :
-                                  '⚠️ Sin definir'
-                                }
-                              </span>
-                            </div>
-                            {item.cantidad && (
-                              <p className="text-[#4D240F]/60">
-                                Cantidad: {item.cantidad} {product.unidad_medida}
-                              </p>
-                            )}
-                            {item.precio_unitario && (
-                              <p className="text-[#4D240F]/60">
-                                Precio: {formatCurrency(parseFloat(item.precio_unitario))}
-                              </p>
-                            )}
-                            {item.cantidad && item.precio_unitario && (
-                              <p className="text-[#73991C] font-medium mt-1">
-                                Subtotal: {formatCurrency(calculateSubtotal(item))}
-                              </p>
-                            )}
-                          </div>
-                        );
-                      })}
+                
+                {purchaseItems.some(item => item.cantidad_total > 0) && (
+                  <div className="bg-[#73991C]/10 rounded-xl p-3 mt-4">
+                    <p className="text-xs text-[#172E08] mb-2">Detalles:</p>
+                    <div className="space-y-1">
+                      {purchaseItems.filter(item => item.cantidad_total > 0).map((item) => (
+                        <div key={item.id} className="text-xs text-[#4D240F]/80">
+                          <span className="font-medium">{item.producto_nombre || 'Producto'}:</span>{' '}
+                          {item.cantidad_bultos} bultos × {item.presentacion_cantidad} {item.presentacion_unidad} = {item.cantidad_total.toFixed(2)} {item.presentacion_unidad}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -835,16 +902,15 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
         </div>
       </div>
 
-      {/* Diálogo de Confirmación */}
+      {/* Diálogo de confirmación */}
       <ConfirmDialog
         isOpen={showConfirmDialog}
-        title="Confirmar Registro de Compra"
-        message={`¿Confirma el registro de compra con ${purchaseItems.length} producto(s) por un valor total de ${formatCurrency(calculateTotal())}?\n\nProveedor: ${purchaseData.proveedor}\nFactura: ${purchaseData.numero_factura}`}
-        confirmText="Sí, Registrar Compra"
-        cancelText="Cancelar"
-        type="success"
+        onClose={() => setShowConfirmDialog(false)}
         onConfirm={confirmPurchase}
-        onCancel={() => setShowConfirmDialog(false)}
+        title="Confirmar Compra"
+        message={`¿Está seguro de registrar esta compra de ${purchaseItems.length} producto(s) por un total de ${formatCurrency(calculateTotal())}?`}
+        confirmText="Sí, registrar"
+        cancelText="Cancelar"
       />
     </div>
   );

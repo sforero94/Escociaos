@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Search, Package, Calendar, Filter, X, ArrowUpCircle, ArrowDownCircle, RefreshCw } from 'lucide-react';
+import { RefreshCw, Search, Calendar, Filter, X, Plus, Package, ArrowUpCircle, ArrowDownCircle, RotateCcw } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
-import { formatNumber } from '../../utils/format';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { NuevoMovimientoModal } from './NuevoMovimientoModal';
 import { InventoryNav } from './InventoryNav';
 
 interface Movement {
@@ -11,13 +11,13 @@ interface Movement {
   producto_id: number;
   tipo_movimiento: string;
   cantidad: number;
-  saldo_anterior: number;
-  saldo_nuevo: number;
-  referencia_id: number | null;
-  tipo_referencia: string | null;
-  notas: string | null;
+  saldo_anterior: number | null;
+  saldo_nuevo: number | null;
+  aplicacion_id: string | null;
+  observaciones: string | null;
   created_at: string;
-  created_by: string | null;
+  fecha_movimiento: string;
+  lote_aplicacion: string | null;
   producto?: {
     nombre: string;
     unidad_medida: string;
@@ -35,6 +35,7 @@ export function InventoryMovements() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Estados de filtros
   const [selectedProduct, setSelectedProduct] = useState<string>('');
@@ -141,12 +142,11 @@ export function InventoryMovements() {
   const filteredMovements = movements.filter(mov => {
     if (!searchTerm) return true;
     const productName = mov.producto?.nombre || '';
-    const notas = mov.notas || '';
+    const notas = mov.observaciones || '';
     const search = searchTerm.toLowerCase();
     return (
       productName.toLowerCase().includes(search) ||
-      notas.toLowerCase().includes(search) ||
-      mov.tipo_referencia?.toLowerCase().includes(search)
+      notas.toLowerCase().includes(search)
     );
   });
 
@@ -157,24 +157,39 @@ export function InventoryMovements() {
   const paginatedMovements = filteredMovements.slice(startIndex, endIndex);
 
   const getMovementIcon = (type: string) => {
-    const isEntrada = type?.toLowerCase()?.trim() === 'entrada';
-    return isEntrada
-      ? <ArrowUpCircle className="w-8 h-8 text-[#28A745]" />
-      : <ArrowDownCircle className="w-8 h-8 text-[#DC3545]" />;
+    const typeNormalized = type?.toLowerCase()?.trim();
+    
+    if (typeNormalized === 'entrada') {
+      return <ArrowUpCircle className="w-5 h-5 text-[#28A745]" />;
+    } else if (typeNormalized === 'ajuste') {
+      return <RotateCcw className="w-5 h-5 text-[#F59E0B]" />;
+    } else {
+      return <ArrowDownCircle className="w-5 h-5 text-[#DC3545]" />;
+    }
   };
 
   const getMovementColor = (type: string) => {
-    const isEntrada = type?.toLowerCase()?.trim() === 'entrada';
-    return isEntrada
-      ? 'border-[#28A745]/20 hover:border-[#28A745]/40' 
-      : 'border-[#DC3545]/20 hover:border-[#DC3545]/40';
+    const typeNormalized = type?.toLowerCase()?.trim();
+    
+    if (typeNormalized === 'entrada') {
+      return 'border-[#28A745]/20 hover:border-[#28A745]/40';
+    } else if (typeNormalized === 'ajuste') {
+      return 'border-[#F59E0B]/20 hover:border-[#F59E0B]/40';
+    } else {
+      return 'border-[#DC3545]/20 hover:border-[#DC3545]/40';
+    }
   };
 
   const getMovementBadgeColor = (type: string) => {
-    const isEntrada = type?.toLowerCase()?.trim() === 'entrada';
-    return isEntrada
-      ? 'bg-[#28A745]/10 text-[#28A745]'
-      : 'bg-[#DC3545]/10 text-[#DC3545]';
+    const typeNormalized = type?.toLowerCase()?.trim();
+    
+    if (typeNormalized === 'entrada') {
+      return 'bg-[#28A745]/10 text-[#28A745]';
+    } else if (typeNormalized === 'ajuste') {
+      return 'bg-[#F59E0B]/10 text-[#F59E0B]';
+    } else {
+      return 'bg-[#DC3545]/10 text-[#DC3545]';
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -202,6 +217,16 @@ export function InventoryMovements() {
     return `${tipos[tipo] || tipo} #${id}`;
   };
 
+  const formatNumber = (num: number | null | undefined, decimals: number = 2): string => {
+    if (num === null || num === undefined || isNaN(num)) {
+      return '0.00';
+    }
+    return num.toLocaleString('es-CO', {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
+  };
+
   const hasActiveFilters = selectedProduct || selectedType || startDate || endDate;
 
   if (loading) {
@@ -225,13 +250,22 @@ export function InventoryMovements() {
           <h1 className="text-[#172E08] mb-2">Movimientos de Inventario</h1>
           <p className="text-[#4D240F]/70">Historial completo de entradas y salidas de productos</p>
         </div>
-        <Button
-          onClick={loadMovements}
-          className="bg-[#73991C] hover:bg-[#5f7d17] text-white rounded-xl transition-all duration-200"
-        >
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Actualizar
-        </Button>
+        <div className="flex gap-3">
+          <Button
+            onClick={() => setIsModalOpen(true)}
+            className="bg-[#73991C] hover:bg-[#5f7d17] text-white rounded-xl transition-all duration-200"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Nuevo Movimiento
+          </Button>
+          <Button
+            onClick={loadMovements}
+            className="bg-[#73991C] hover:bg-[#5f7d17] text-white rounded-xl transition-all duration-200"
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Actualizar
+          </Button>
+        </div>
       </div>
 
       {/* Filtros */}
@@ -372,80 +406,75 @@ export function InventoryMovements() {
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-2">
           {paginatedMovements.map(movement => (
             <div
               key={movement.id}
-              className={`bg-white/80 backdrop-blur-sm rounded-2xl border-2 ${getMovementColor(movement.tipo_movimiento)} p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)] hover:shadow-[0_6px_28px_rgba(115,153,28,0.12)] transition-all duration-200`}
+              className={`bg-white/80 backdrop-blur-sm rounded-xl border ${getMovementColor(movement.tipo_movimiento)} px-4 py-3 shadow-sm hover:shadow-md transition-all duration-200`}
             >
-              <div className="flex items-start justify-between">
-                {/* Info Principal */}
-                <div className="flex items-start gap-4 flex-1">
-                  {/* Icono */}
-                  <div>
+              <div className="flex items-center justify-between gap-4">
+                {/* Icono y Producto */}
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="flex-shrink-0">
                     {getMovementIcon(movement.tipo_movimiento)}
                   </div>
-
-                  {/* Detalles */}
-                  <div className="flex-1">
-                    {/* Producto y tipo */}
-                    <div className="flex items-center gap-3 mb-2 flex-wrap">
-                      <h3 className="text-lg text-[#172E08]">
+                  
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <h3 className="text-sm text-[#172E08] truncate">
                         {movement.producto?.nombre || 'Producto eliminado'}
                       </h3>
-                      <span className={`px-3 py-1 rounded-lg text-xs uppercase tracking-wide ${getMovementBadgeColor(movement.tipo_movimiento)}`}>
+                      <span className={`px-2 py-0.5 rounded text-xs uppercase tracking-wide flex-shrink-0 ${getMovementBadgeColor(movement.tipo_movimiento)}`}>
                         {movement.tipo_movimiento}
                       </span>
                     </div>
-
-                    {/* Cantidad y cambio de stock */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
-                      <div>
-                        <p className="text-xs text-[#4D240F]/60 mb-1 uppercase tracking-wide">Cantidad</p>
-                        <p className="text-lg text-[#172E08]">
-                          {movement.tipo_movimiento?.toLowerCase()?.trim() === 'entrada' ? '+' : '-'}
-                          {formatNumber(Math.abs(movement.cantidad), 2)} {movement.producto?.unidad_medida}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-[#4D240F]/60 mb-1 uppercase tracking-wide">Stock Anterior</p>
-                        <p className="text-sm text-[#4D240F]/70">
-                          {formatNumber(movement.saldo_anterior, 2)} {movement.producto?.unidad_medida}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-[#4D240F]/60 mb-1 uppercase tracking-wide">Stock Nuevo</p>
-                        <p className="text-sm text-[#172E08]">
-                          {formatNumber(movement.saldo_nuevo, 2)} {movement.producto?.unidad_medida}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Referencia y notas */}
-                    <div className="flex flex-wrap gap-4 text-sm text-[#4D240F]/70">
-                      {movement.tipo_referencia && (
-                        <div className="flex items-center gap-1">
-                          <span className="text-[#73991C]">●</span>
-                          <span>Referencia:</span>{' '}
-                          <span className="text-[#172E08]">{formatReferencia(movement.tipo_referencia, movement.referencia_id)}</span>
-                        </div>
+                    
+                    {/* Info secundaria en una sola línea */}
+                    <div className="flex items-center gap-3 text-xs text-[#4D240F]/60">
+                      {movement.aplicacion_id && (
+                        <span>Apl: #{movement.aplicacion_id.substring(0, 6)}</span>
                       )}
-                      {movement.notas && (
-                        <div className="flex items-center gap-1">
-                          <span className="text-[#73991C]">●</span>
-                          <span>Notas:</span>{' '}
-                          <span className="text-[#172E08]">{movement.notas}</span>
-                        </div>
+                      {movement.lote_aplicacion && (
+                        <span>Lote: {movement.lote_aplicacion}</span>
+                      )}
+                      {movement.observaciones && (
+                        <span className="truncate max-w-[200px]">{movement.observaciones}</span>
                       )}
                     </div>
                   </div>
                 </div>
 
+                {/* Cantidad */}
+                <div className="text-center flex-shrink-0">
+                  <p className="text-xs text-[#4D240F]/50 uppercase tracking-wide mb-0.5">Cantidad</p>
+                  <p className="text-sm text-[#172E08]">
+                    {movement.tipo_movimiento?.toLowerCase()?.trim() === 'entrada' ? '+' : ''}
+                    {movement.tipo_movimiento?.toLowerCase()?.trim() === 'salida otros' ? '-' : ''}
+                    {formatNumber(Math.abs(movement.cantidad), 2)} {movement.producto?.unidad_medida}
+                  </p>
+                </div>
+
+                {/* Stock Anterior */}
+                <div className="text-center flex-shrink-0 hidden sm:block">
+                  <p className="text-xs text-[#4D240F]/50 uppercase tracking-wide mb-0.5">Stock Anterior</p>
+                  <p className="text-sm text-[#4D240F]/70">
+                    {formatNumber(movement.saldo_anterior, 2)} {movement.producto?.unidad_medida}
+                  </p>
+                </div>
+
+                {/* Stock Nuevo */}
+                <div className="text-center flex-shrink-0">
+                  <p className="text-xs text-[#4D240F]/50 uppercase tracking-wide mb-0.5">Stock Nuevo</p>
+                  <p className="text-sm text-[#172E08]">
+                    {formatNumber(movement.saldo_nuevo, 2)} {movement.producto?.unidad_medida}
+                  </p>
+                </div>
+
                 {/* Fecha */}
-                <div className="text-right text-sm text-[#4D240F]/60 ml-4">
-                  <div className="whitespace-nowrap">
+                <div className="text-right flex-shrink-0 hidden md:block">
+                  <p className="text-xs text-[#4D240F]/60 whitespace-nowrap">
                     {formatDate(movement.created_at)}
-                  </div>
+                  </p>
                 </div>
               </div>
             </div>
@@ -540,6 +569,13 @@ export function InventoryMovements() {
           </div>
         </div>
       )}
+
+      {/* Modal de Nuevo Movimiento */}
+      <NuevoMovimientoModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={loadMovements}
+      />
     </div>
   );
 }
