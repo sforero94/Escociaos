@@ -128,17 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('📋 Intentando obtener perfil real de tabla usuarios (opcional)...');
       
       try {
-        // Timeout más corto (3 segundos) porque no es crítico
-        const timeoutPromise = new Promise<null>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout en background')), 3000)
-        );
-        
-        const profilePromise = getUserProfile(currentUser.id);
-        
-        const userProfile = await Promise.race([
-          profilePromise,
-          timeoutPromise
-        ]);
+        const userProfile = await getUserProfile(currentUser.id);
         
         if (userProfile) {
           console.log('✅ Perfil real encontrado, actualizando:', userProfile.nombre);
@@ -148,11 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch (profileError: any) {
         // No es crítico, ya tenemos perfil temporal
-        if (profileError.message === 'Timeout en background') {
-          console.log('⏱️ Timeout obteniendo perfil real, usando temporal (OK)');
-        } else {
-          console.log('ℹ️ No se pudo obtener perfil real, usando temporal (OK):', profileError.message);
-        }
+        console.log('ℹ️ No se pudo obtener perfil real, usando temporal (OK):', profileError?.message);
       }
 
     } catch (error) {

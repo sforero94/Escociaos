@@ -221,7 +221,7 @@ export function DailyMovements() {
           <CierreAplicacion
             aplicacion={aplicacion}
             onClose={() => setMostrarCierre(false)}
-            onCierreCompleto={() => {
+            onCerrado={() => {
               setMostrarCierre(false);
               cargarAplicacion(); // Recargar para actualizar el estado
             }}

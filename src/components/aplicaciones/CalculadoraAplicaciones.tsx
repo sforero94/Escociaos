@@ -201,7 +201,23 @@ export function CalculadoraAplicaciones() {
       // 6. Obtener lista de compras
       const { data: compras, error: errorCompras } = await supabase
         .from('aplicaciones_compras')
-        .select('*')
+        .select(`
+          id,
+          aplicacion_id,
+          producto_id,
+          producto_nombre,
+          producto_categoria,
+          unidad,
+          inventario_actual,
+          cantidad_necesaria,
+          cantidad_faltante,
+          presentacion_comercial,
+          unidades_a_comprar,
+          precio_unitario,
+          costo_estimado,
+          alerta,
+          created_at
+        `)
         .eq('aplicacion_id', id);
 
       if (errorCompras) {
@@ -234,7 +250,9 @@ export function CalculadoraAplicaciones() {
       const configuracion: ConfiguracionAplicacion = {
         nombre: aplicacion.nombre_aplicacion || '',
         tipo: tipoAplicacion,
-        fecha_inicio: aplicacion.fecha_recomendacion || new Date().toISOString().split('T')[0],
+        fecha_inicio_planeada: aplicacion.fecha_inicio_planeada || new Date().toISOString().split('T')[0],
+        fecha_fin_planeada: aplicacion.fecha_fin_planeada || undefined,
+        fecha_recomendacion: aplicacion.fecha_recomendacion || undefined,
         proposito: aplicacion.proposito || undefined,
         agronomo_responsable: aplicacion.agronomo_responsable || undefined,
         blanco_biologico: blancoBiologico.length > 0 ? blancoBiologico : undefined,
@@ -323,7 +341,7 @@ export function CalculadoraAplicaciones() {
       return false;
     }
 
-    const { nombre, tipo, fecha_inicio, lotes_seleccionados } = state.configuracion;
+    const { nombre, tipo, fecha_inicio_planeada, lotes_seleccionados } = state.configuracion;
 
     if (!nombre || nombre.trim() === '') {
       setValidationError('Debes ingresar un nombre para la aplicación');
@@ -335,7 +353,7 @@ export function CalculadoraAplicaciones() {
       return false;
     }
 
-    if (!fecha_inicio) {
+    if (!fecha_inicio_planeada) {
       setValidationError('Debes seleccionar una fecha de inicio');
       return false;
     }
@@ -485,7 +503,9 @@ export function CalculadoraAplicaciones() {
           blanco_biologico: state.configuracion.blanco_biologico 
             ? JSON.stringify(state.configuracion.blanco_biologico)
             : null,
-          fecha_recomendacion: state.configuracion.fecha_inicio,
+          fecha_inicio_planeada: state.configuracion.fecha_inicio_planeada,
+          fecha_fin_planeada: state.configuracion.fecha_fin_planeada || null,
+          fecha_recomendacion: state.configuracion.fecha_recomendacion || null,
           agronomo_responsable: state.configuracion.agronomo_responsable || null,
           updated_at: new Date().toISOString(),
         };
@@ -584,7 +604,9 @@ export function CalculadoraAplicaciones() {
           blanco_biologico: state.configuracion.blanco_biologico 
             ? JSON.stringify(state.configuracion.blanco_biologico)
             : null,
-          fecha_recomendacion: state.configuracion.fecha_inicio,
+          fecha_inicio_planeada: state.configuracion.fecha_inicio_planeada,
+          fecha_fin_planeada: state.configuracion.fecha_fin_planeada || null,
+          fecha_recomendacion: state.configuracion.fecha_recomendacion || null,
           agronomo_responsable: state.configuracion.agronomo_responsable || null,
           estado: 'Calculada' as const,
           fecha_inicio_ejecucion: null,
@@ -788,9 +810,11 @@ export function CalculadoraAplicaciones() {
           precio_unitario: item.ultimo_precio_unitario || null,
           costo_estimado: item.costo_estimado || null,
           alerta: item.alerta || 'normal',
+          // NO incluir 'estado' - ese campo pertenece a la tabla productos, no a aplicaciones_compras
         }));
 
         console.log('📝 Insertando lista de compras:', comprasData.length);
+        console.log('📋 Sample item:', comprasData[0]);
 
         const { error: errorCompras } = await supabase
           .from('aplicaciones_compras')
@@ -798,6 +822,7 @@ export function CalculadoraAplicaciones() {
 
         if (errorCompras) {
           console.error('❌ Error insertando lista de compras:', errorCompras);
+          console.error('❌ Datos que se intentaron insertar:', comprasData[0]);
           throw errorCompras;
         }
 

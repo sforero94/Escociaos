@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { IniciarEjecucionModal } from './IniciarEjecucionModal';
+import { DetalleAplicacion } from './DetalleAplicacion';
 import type { Aplicacion, TipoAplicacion, EstadoAplicacion } from '../../types/aplicaciones';
 
 const TIPOS_LABELS: Record<TipoAplicacion, string> = {
@@ -59,6 +60,7 @@ export function AplicacionesList() {
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [eliminando, setEliminando] = useState<string | null>(null);
   const [iniciarEjecucionId, setIniciarEjecucionId] = useState<string | null>(null);
+  const [aplicacionDetalle, setAplicacionDetalle] = useState<Aplicacion | null>(null);
 
   useEffect(() => {
     loadAplicaciones();
@@ -482,7 +484,7 @@ export function AplicacionesList() {
                 <div
                   key={aplicacion.id}
                   className="p-4 hover:bg-gray-50 transition-colors cursor-pointer"
-                  onClick={() => navigate(`/aplicaciones/${aplicacion.id}`)}
+                  onClick={() => setAplicacionDetalle(aplicacion)}
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex items-start gap-4 flex-1">
@@ -659,6 +661,26 @@ export function AplicacionesList() {
           onSuccess={() => {
             setIniciarEjecucionId(null);
             loadAplicaciones();
+          }}
+        />
+      )}
+
+      {/* Modal de detalle de aplicación */}
+      {aplicacionDetalle && (
+        <DetalleAplicacion
+          aplicacion={aplicacionDetalle}
+          onClose={() => setAplicacionDetalle(null)}
+          onEditar={() => {
+            setAplicacionDetalle(null);
+            navigate(`/aplicaciones/${aplicacionDetalle.id}/editar`);
+          }}
+          onRegistrarMovimientos={() => {
+            setAplicacionDetalle(null);
+            navigate(`/aplicaciones/${aplicacionDetalle.id}/movimientos`);
+          }}
+          onCerrarAplicacion={() => {
+            setAplicacionDetalle(null);
+            navigate(`/aplicaciones/${aplicacionDetalle.id}/movimientos`);
           }}
         />
       )}

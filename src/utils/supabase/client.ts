@@ -32,34 +32,31 @@ export async function getUserProfile(userId: string) {
   try {
     console.log('🔍 getUserProfile: Buscando perfil para user ID:', userId);
     
-    // Crear un timeout de 8 segundos (aumentado de 5)
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Timeout: getUserProfile tardó más de 8 segundos')), 8000)
-    );
-    
-    const queryPromise = supabase
+    // Query simple sin timeout race - dejar que Supabase maneje sus propios timeouts
+    const { data, error } = await supabase
       .from('usuarios')
       .select('*')
       .eq('id', userId)
-      .single();
-    
-    const { data, error } = await Promise.race([
-      queryPromise,
-      timeoutPromise
-    ]) as any;
+      .maybeSingle(); // maybeSingle() no lanza error si no encuentra registros
     
     if (error) {
-      // Si es error "no rows found", no es un error crítico
-      if (error.code === 'PGRST116') {
-        console.log('ℹ️ No se encontró perfil en tabla usuarios (esto es normal si no se ha creado)');
-      } else {
-        console.error('❌ Error obteniendo perfil:', error);
-      }
+      console.error('❌ Error obteniendo perfil:', error);
+      return null;
+    }
+    
+    if (!data) {
+      console.log('ℹ️ No se encontró perfil en tabla usuarios (esto es normal si no se ha creado)');
       return null;
     }
     
     console.log('✅ Perfil obtenido exitosamente:', data);
-    return data;
+    return {
+      id: data.id,
+      nombre: data.nombre_completo || 'Usuario',
+      email: data.email,
+      rol: data.rol || 'Administrador',
+      created_at: data.created_at
+    };
   } catch (error) {
     console.error('❌ Excepción en getUserProfile:', error);
     return null;

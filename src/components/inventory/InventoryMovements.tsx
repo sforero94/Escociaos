@@ -11,8 +11,8 @@ interface Movement {
   producto_id: number;
   tipo_movimiento: string;
   cantidad: number;
-  cantidad_anterior: number;
-  cantidad_nueva: number;
+  saldo_anterior: number;
+  saldo_nuevo: number;
   referencia_id: number | null;
   tipo_referencia: string | null;
   notas: string | null;
@@ -410,13 +410,13 @@ export function InventoryMovements() {
                       <div>
                         <p className="text-xs text-[#4D240F]/60 mb-1 uppercase tracking-wide">Stock Anterior</p>
                         <p className="text-sm text-[#4D240F]/70">
-                          {formatNumber(movement.cantidad_anterior, 2)} {movement.producto?.unidad_medida}
+                          {formatNumber(movement.saldo_anterior, 2)} {movement.producto?.unidad_medida}
                         </p>
                       </div>
                       <div>
                         <p className="text-xs text-[#4D240F]/60 mb-1 uppercase tracking-wide">Stock Nuevo</p>
                         <p className="text-sm text-[#172E08]">
-                          {formatNumber(movement.cantidad_nueva, 2)} {movement.producto?.unidad_medida}
+                          {formatNumber(movement.saldo_nuevo, 2)} {movement.producto?.unidad_medida}
                         </p>
                       </div>
                     </div>

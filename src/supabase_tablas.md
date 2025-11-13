@@ -1,8 +1,8 @@
 # 📊 SUPABASE - ESQUEMA DE TABLAS
 ## Sistema de Gestión Escocia Hass
 
-**Última actualización:** 2025-11-12
-**Versión:** 1.0
+**Última actualización:** 2025-11-13
+**Versión:** 1.1
 **Propósito:** Documentación técnica completa del esquema de base de datos
 
 ---
@@ -245,11 +245,26 @@ Registro maestro de aplicaciones fitosanitarias o fertilización.
 | `tipo_aplicacion` | `tipo_aplicacion` | Fumigación o Fertilización | NOT NULL (ENUM) |
 | `proposito` | `text` | Propósito de la aplicación | |
 | `blanco_biologico` | `text` | Plaga/enfermedad objetivo | |
-| `fecha_recomendacion` | `date` | Fecha recomendada | |
+| **Fechas Planificadas** | | | |
+| `fecha_inicio_planeada` | `date` | Fecha planeada de inicio | |
+| `fecha_fin_planeada` | `date` | Fecha planeada de fin | |
+| `fecha_recomendacion` | `date` | Fecha recomendada por agrónomo | |
+| **Ejecución** | | | |
 | `agronomo_responsable` | `text` | Nombre del agrónomo | |
 | `estado` | `estado_aplicacion` | Estado actual | DEFAULT 'Calculada' (ENUM) |
 | `fecha_inicio_ejecucion` | `date` | Inicio real de aplicación | |
 | `fecha_fin_ejecucion` | `date` | Fin real de aplicación | |
+| `fecha_cierre` | `timestamptz` | Timestamp de cierre | |
+| **Costos y Métricas** | | | |
+| `jornales_utilizados` | `numeric` | Total jornales usados | DEFAULT 0 |
+| `valor_jornal` | `numeric` | Valor COP por jornal | DEFAULT 0 |
+| `costo_total_insumos` | `numeric` | Costo total productos | DEFAULT 0 |
+| `costo_total_mano_obra` | `numeric` | Costo total jornales | DEFAULT 0 |
+| `costo_total` | `numeric` | Costo total aplicación | DEFAULT 0 |
+| `costo_por_arbol` | `numeric` | Costo calculado por árbol | |
+| `arboles_jornal` | `numeric` | Árboles procesados por jornal | |
+| `observaciones_cierre` | `text` | Observaciones al cerrar | |
+| **Auditoría** | | | |
 | `created_at` | `timestamptz` | Fecha creación | DEFAULT now() |
 | `updated_at` | `timestamptz` | Fecha actualización | DEFAULT now() |
 
@@ -487,11 +502,7 @@ Registro provisional de movimientos diarios durante la ejecución de aplicacione
 | `fecha_movimiento` | `date` | Fecha del movimiento | NOT NULL |
 | `lote_id` | `uuid` | Lote donde se aplicó | NOT NULL, FK → lotes(id) |
 | `lote_nombre` | `text` | Nombre del lote (cache) | NOT NULL |
-| `producto_id` | `uuid` | Producto utilizado | NOT NULL, FK → productos(id) |
-| `producto_nombre` | `text` | Nombre del producto (cache) | NOT NULL |
-| `producto_categoria` | `text` | Categoría del producto (cache) | NOT NULL |
-| `producto_unidad` | `text` | Unidad de medida (cache) | NOT NULL |
-| `cantidad_utilizada` | `numeric` | Cantidad utilizada | NOT NULL, CHECK > 0 |
+| `numero_canecas` | `numeric` | Número total de canecas aplicadas | NOT NULL, CHECK >= 0 |
 | `responsable` | `text` | Responsable del movimiento | NOT NULL |
 | `notas` | `text` | Observaciones | |
 | `created_at` | `timestamptz` | Fecha creación | DEFAULT now() |
@@ -500,10 +511,12 @@ Registro provisional de movimientos diarios durante la ejecución de aplicacione
 **Relaciones:**
 - N:1 con `aplicaciones`
 - N:1 con `lotes`
-- N:1 con `productos`
+- 1:N con `movimientos_diarios_productos` (detalle de productos utilizados)
 
 **Propósito:**
 Los movimientos diarios son registros **provisionales** durante la ejecución de aplicaciones que:
+- Registran el número de canecas aplicadas por día en cada lote (sin duplicar el conteo)
+- Los productos utilizados en cada movimiento se registran en la tabla relacionada `movimientos_diarios_productos`
 - Mantienen trazabilidad para GlobalGAP sin afectar inventario inmediatamente
 - Permiten comparar lo planificado vs lo realmente utilizado
 - Se revisan al cerrar la aplicación antes de crear los movimientos definitivos de inventario
@@ -512,7 +525,43 @@ Los movimientos diarios son registros **provisionales** durante la ejecución de
 - PK: `movimientos_diarios_pkey` (id)
 - INDEX: `idx_movimientos_aplicacion` (aplicacion_id)
 - INDEX: `idx_movimientos_fecha` (fecha_movimiento)
-- INDEX: `idx_movimientos_producto` (producto_id)
+
+---
+
+### 📍 `movimientos_diarios_productos`
+Detalle de productos utilizados en cada movimiento diario (relación N:N entre movimientos y productos).
+
+| Campo | Tipo | Descripción | Constraints |
+|-------|------|-------------|-------------|
+| `id` | `uuid` | Identificador único | PK, DEFAULT uuid_generate_v4() |
+| `movimiento_diario_id` | `uuid` | Referencia al movimiento diario | NOT NULL, FK → movimientos_diarios(id) ON DELETE CASCADE |
+| `producto_id` | `uuid` | Producto utilizado | NOT NULL, FK → productos(id) ON DELETE RESTRICT |
+| `producto_nombre` | `text` | Nombre del producto (cache) | NOT NULL |
+| `producto_categoria` | `text` | Categoría del producto (cache) | NOT NULL |
+| `cantidad_utilizada` | `numeric` | Cantidad utilizada del producto | NOT NULL, CHECK > 0 |
+| `unidad` | `text` | Unidad de medida | NOT NULL, CHECK IN ('cc', 'L', 'g', 'Kg') |
+| `created_at` | `timestamptz` | Fecha creación | DEFAULT now() |
+
+**Relaciones:**
+- N:1 con `movimientos_diarios`
+- N:1 con `productos`
+
+**Propósito:**
+Esta tabla permite registrar múltiples productos mezclados en las canecas de un movimiento diario:
+- Evita duplicar el conteo de canecas (se cuenta en movimientos_diarios)
+- Registra la cantidad de cada producto usado en unidades apropiadas (cc/L para líquidos, g/Kg para sólidos)
+- Facilita el cálculo de consumo real por producto al cerrar la aplicación
+
+**Ejemplo:**
+Si en un día se aplican 5 canecas en un lote, y cada caneca contiene 3 productos mezclados:
+- 1 registro en `movimientos_diarios` (numero_canecas = 5)
+- 3 registros en `movimientos_diarios_productos` (uno por cada producto con su cantidad)
+
+**Índices:**
+- PK: `movimientos_diarios_productos_pkey` (id)
+- INDEX: `idx_mdp_movimiento` (movimiento_diario_id)
+- INDEX: `idx_mdp_producto` (producto_id)
+- INDEX: `idx_mdp_created_at` (created_at)
 
 ---
 
@@ -1164,6 +1213,8 @@ lotes
 |-------|--------|-------------|
 | 2025-11-12 | Creación inicial del documento | Sistema |
 | 2025-11-13 | Agregada tabla `movimientos_diarios` | Sistema |
+| 2025-11-13 | Agregadas columnas `costo_por_arbol` y `arboles_jornal` a tabla `aplicaciones` para métricas de eficiencia | Sistema |
+| 2025-11-13 | Reestructuración de sistema de movimientos diarios: modificada tabla `movimientos_diarios` (agregado `numero_canecas`, eliminadas columnas de productos individuales) y creada tabla `movimientos_diarios_productos` para evitar duplicación de conteo de canecas | Sistema |
 
 ---
 

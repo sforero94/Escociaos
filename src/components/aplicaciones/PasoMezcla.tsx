@@ -622,16 +622,9 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
 
                         <div>
                           <label className="block text-xs text-[#4D240F]/70 mb-1">Unidad</label>
-                          <select
-                            value={producto.unidad_dosis || 'cc'}
-                            onChange={(e) =>
-                              actualizarDosis(producto.producto_id, 'unidad_dosis', e.target.value as any)
-                            }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
-                          >
-                            <option value="cc">cc</option>
-                            <option value="gramos">gramos</option>
-                          </select>
+                          <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-[#172E08]">
+                            {producto.unidad_dosis === 'cc' ? 'cc (líquido)' : 'gramos (sólido)'}
+                          </div>
                         </div>
                       </div>
                     )}

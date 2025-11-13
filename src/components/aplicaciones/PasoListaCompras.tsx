@@ -1,3 +1,16 @@
+import { useState, useEffect } from 'react';
+import { 
+  Package, 
+  ShoppingCart, 
+  CheckCircle, 
+  AlertTriangle, 
+  DollarSign, 
+  Download, 
+  Edit2, 
+  Save, 
+  X as XIcon,
+  TrendingUp 
+} from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { generarPDFListaCompras } from '../../utils/generarPDFListaCompras';
 import { 
@@ -204,6 +217,30 @@ export function PasoListaCompras({
   };
 
   /**
+   * EDITAR PRECIO UNITARIO DE UN PRODUCTO (solo para cotizaciones)
+   * Este precio NO afecta la tabla de productos, solo el reporte de lista de compras
+   */
+  const editarPrecioUnitario = (productoId: string, nuevoPrecio: number) => {
+    const item = itemsEditables[productoId];
+    if (!item) return;
+
+    const itemActualizado = { ...item };
+    itemActualizado.ultimo_precio_unitario = Math.max(0, nuevoPrecio);
+
+    // Recalcular costo con el nuevo precio
+    const tamanoPresentacion = extraerTamanoPresentacion(item.presentacion_comercial);
+    itemActualizado.costo_estimado =
+      itemActualizado.unidades_a_comprar * tamanoPresentacion * nuevoPrecio;
+
+    setItemsEditables((prev) => ({
+      ...prev,
+      [productoId]: itemActualizado,
+    }));
+
+    setCambiosSinGuardar(true);
+  };
+
+  /**
    * GUARDAR CAMBIOS DE EDICIÓN
    */
   const guardarCambios = () => {
@@ -326,7 +363,8 @@ export function PasoListaCompras({
           <div className="flex-1">
             <p className="text-blue-900">Modo de edición activado</p>
             <p className="text-blue-700 text-sm">
-              Puedes modificar las cantidades a comprar. Los costos se recalcularán automáticamente.
+              Puedes modificar las cantidades y los precios unitarios. Los costos se recalcularán automáticamente. 
+              <strong> Los precios editados aquí NO afectan el inventario</strong>, solo se usan para este reporte.
             </p>
           </div>
         </div>
@@ -421,6 +459,9 @@ export function PasoListaCompras({
                       A Comprar
                     </th>
                     <th className="px-4 py-3 text-right text-xs text-[#4D240F] uppercase tracking-wider">
+                      Precio Unit.
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs text-[#4D240F] uppercase tracking-wider">
                       Costo Est.
                     </th>
                   </tr>
@@ -489,6 +530,33 @@ export function PasoListaCompras({
                         )}
                       </td>
                       <td className="px-4 py-3 text-right text-sm">
+                        {modoEdicion ? (
+                          <div className="flex items-center justify-end gap-1">
+                            <span className="text-xs text-[#4D240F]/70">$</span>
+                            <input
+                              type="number"
+                              step="100"
+                              min="0"
+                              value={item.ultimo_precio_unitario || 0}
+                              onChange={(e) =>
+                                editarPrecioUnitario(
+                                  item.producto_id,
+                                  parseFloat(e.target.value) || 0
+                                )
+                              }
+                              className="w-24 px-2 py-1 text-sm text-right border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                              placeholder="0"
+                            />
+                          </div>
+                        ) : item.alerta === 'sin_precio' ? (
+                          <span className="text-yellow-600">Sin precio</span>
+                        ) : (
+                          <span className="text-[#172E08]">
+                            {formatearMoneda(item.ultimo_precio_unitario || 0)}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm">
                         {item.alerta === 'sin_precio' ? (
                           <span className="text-yellow-600">Sin precio</span>
                         ) : (
@@ -502,7 +570,7 @@ export function PasoListaCompras({
                 </tbody>
                 <tfoot className="bg-gray-50">
                   <tr>
-                    <td colSpan={5} className="px-4 py-3 text-right text-[#172E08]">
+                    <td colSpan={6} className="px-4 py-3 text-right text-[#172E08]">
                       TOTAL A COMPRAR:
                     </td>
                     <td className="px-4 py-3 text-right text-[#172E08]">

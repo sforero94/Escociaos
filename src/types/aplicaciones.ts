@@ -10,7 +10,9 @@ export type EstadoAplicacion = 'Calculada' | 'En ejecución' | 'Cerrada';
 export interface ConfiguracionAplicacion {
   nombre: string;
   tipo: TipoAplicacion;
-  fecha_inicio: string;
+  fecha_inicio_planeada: string;
+  fecha_fin_planeada?: string;
+  fecha_recomendacion?: string;
   proposito?: string;
   agronomo_responsable?: string;
   blanco_biologico: string[]; // Array de IDs de plagas/enfermedades
@@ -135,10 +137,12 @@ export interface Aplicacion {
   nombre: string;
   tipo: TipoAplicacion;
   fecha_inicio: string;
+  fecha_fin_estimada?: string;
   fecha_cierre?: string;
   estado: EstadoAplicacion;
   proposito?: string;
   agronomo_responsable?: string;
+  blanco_biologico?: string | string[];
   
   // JSON de configuración
   configuracion: ConfiguracionAplicacion;
@@ -206,26 +210,24 @@ export interface MovimientoDiario {
   fecha_movimiento: string; // ISO date string (YYYY-MM-DD)
   lote_id: string;
   lote_nombre: string;
-  producto_id: string;
-  producto_nombre: string;
-  producto_categoria: string;
-  producto_unidad: 'litros' | 'kilos' | 'unidades';
-  cantidad_utilizada: number;
-  
-  // Trazabilidad de canecas (solo para fumigación)
-  numero_canecas_utilizadas?: number;
-  numero_canecas_planeadas?: number;
-  
-  // Costo del producto (cargado desde productos.ultimo_precio_unitario)
-  costo_unitario?: number;
-  
+  numero_canecas: number; // Número total de canecas aplicadas
   responsable: string;
   notas?: string;
   
   // Metadata
-  creado_en?: string;
+  created_at?: string;
   created_by?: string;
-  actualizado_en?: string;
+}
+
+export interface MovimientoDiarioProducto {
+  id?: string;
+  movimiento_diario_id: string;
+  producto_id: string;
+  producto_nombre: string;
+  producto_categoria: string;
+  cantidad_utilizada: number;
+  unidad: 'cc' | 'L' | 'g' | 'Kg'; // Unidades específicas por estado físico
+  created_at?: string;
 }
 
 export interface ResumenMovimientoDiario {

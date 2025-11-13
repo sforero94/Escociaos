@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Sprout, Calendar, MapPin, Plus, X, AlertCircle, Bug } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
+import { formatearFecha } from '../../utils/fechas';
+import { DateInput } from '../ui/date-input';
 import type {
   ConfiguracionAplicacion,
   LoteSeleccionado,
@@ -21,7 +23,9 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
   const [formData, setFormData] = useState<Partial<ConfiguracionAplicacion>>({
     nombre: configuracion?.nombre || '',
     tipo: configuracion?.tipo || 'fumigacion',
-    fecha_inicio: configuracion?.fecha_inicio || '',
+    fecha_inicio_planeada: configuracion?.fecha_inicio_planeada || '',
+    fecha_fin_planeada: configuracion?.fecha_fin_planeada || '',
+    fecha_recomendacion: configuracion?.fecha_recomendacion || '',
     proposito: configuracion?.proposito || '',
     agronomo_responsable: configuracion?.agronomo_responsable || '',
     blanco_biologico: configuracion?.blanco_biologico || [],
@@ -254,8 +258,8 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
       nuevosErrores.nombre = 'El nombre es requerido';
     }
 
-    if (!formData.fecha_inicio) {
-      nuevosErrores.fecha_inicio = 'La fecha de inicio es requerida';
+    if (!formData.fecha_inicio_planeada) {
+      nuevosErrores.fecha_inicio_planeada = 'La fecha de inicio es requerida';
     }
 
     if (!formData.lotes_seleccionados || formData.lotes_seleccionados.length === 0) {
@@ -274,11 +278,6 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
       });
     }
 
-    // Validación de blancos biológicos
-    if (!formData.blanco_biologico || formData.blanco_biologico.length === 0) {
-      nuevosErrores.blanco_biologico = 'Debes seleccionar al menos un blanco biológico';
-    }
-
     setErrores(nuevosErrores);
     return Object.keys(nuevosErrores).length === 0;
   };
@@ -291,7 +290,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
     if (
       formData.nombre &&
       formData.tipo &&
-      formData.fecha_inicio &&
+      formData.fecha_inicio_planeada &&
       formData.lotes_seleccionados &&
       formData.lotes_seleccionados.length > 0
     ) {
@@ -366,29 +365,50 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
             </select>
           </div>
 
-          {/* Fecha */}
+          {/* Fecha Inicio Planeada */}
           <div>
             <label className="block text-sm text-[#4D240F] mb-1">
-              Fecha Estimada de Inicio *
+              Fecha Inicio Planeada *
             </label>
-            <input
-              type="date"
-              value={formData.fecha_inicio}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, fecha_inicio: e.target.value }))
+            <DateInput
+              value={formData.fecha_inicio_planeada || ''}
+              onChange={(valor) =>
+                setFormData((prev) => ({ ...prev, fecha_inicio_planeada: valor }))
               }
-              className={`
-                w-full px-3 py-2 border rounded-lg
-                ${errores.fecha_inicio ? 'border-red-300' : 'border-gray-300'}
-                focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]
-              `}
+              required
             />
-            {errores.fecha_inicio && (
+            {errores.fecha_inicio_planeada && (
               <p className="text-red-600 text-sm mt-1 flex items-center gap-1">
                 <AlertCircle className="w-4 h-4" />
-                {errores.fecha_inicio}
+                {errores.fecha_inicio_planeada}
               </p>
             )}
+          </div>
+
+          {/* Fecha Fin Planeada */}
+          <div>
+            <label className="block text-sm text-[#4D240F] mb-1">
+              Fecha Fin Planeada
+            </label>
+            <DateInput
+              value={formData.fecha_fin_planeada || ''}
+              onChange={(valor) =>
+                setFormData((prev) => ({ ...prev, fecha_fin_planeada: valor }))
+              }
+            />
+          </div>
+
+          {/* Fecha de Recomendación */}
+          <div>
+            <label className="block text-sm text-[#4D240F] mb-1">
+              Fecha de Recomendación
+            </label>
+            <DateInput
+              value={formData.fecha_recomendacion || ''}
+              onChange={(valor) =>
+                setFormData((prev) => ({ ...prev, fecha_recomendacion: valor }))
+              }
+            />
           </div>
 
           {/* Agrónomo */}

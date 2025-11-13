@@ -68,22 +68,51 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
 
   const loadProducts = async () => {
     setIsLoading(true);
-    try {
-      const supabase = getSupabase();
-      const { data, error } = await supabase
-        .from('productos')
-        .select('id, nombre, unidad_medida, precio_unitario, cantidad_actual')
-        .eq('activo', true)
-        .order('nombre');
+    
+    // Intentar hasta 3 veces con delay incremental
+    let retries = 3;
+    let delay = 1000;
+    
+    while (retries > 0) {
+      try {
+        const supabase = getSupabase();
+        const { data, error } = await supabase
+          .from('productos')
+          .select('id, nombre, unidad_medida, precio_unitario, cantidad_actual')
+          .eq('activo', true)
+          .order('nombre');
 
-      if (error) throw error;
-      setProducts(data || []);
-    } catch (err) {
-      console.error('Error cargando productos:', err);
-      showError('❌ Error al cargar los productos');
-    } finally {
-      setIsLoading(false);
+        if (error) {
+          console.error('Error en query productos:', error);
+          throw error;
+        }
+        
+        setProducts(data || []);
+        console.log('✅ Productos cargados exitosamente:', data?.length || 0);
+        return; // Éxito, salir del loop
+        
+      } catch (err: any) {
+        retries--;
+        console.error(`Error cargando productos (intentos restantes: ${retries}):`, err);
+        
+        if (retries === 0) {
+          // Último intento fallido
+          showError(`❌ Error al cargar productos: ${err?.message || 'Error de conexión'}`);
+          console.error('Error final cargando productos:', {
+            message: err?.message,
+            code: err?.code,
+            details: err?.details,
+            hint: err?.hint
+          });
+        } else {
+          // Esperar antes de reintentar
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2; // Backoff exponencial
+        }
+      }
     }
+    
+    setIsLoading(false);
   };
 
   // Filtrar productos por búsqueda
@@ -241,51 +270,20 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
     try {
       const supabase = getSupabase();
 
-      // Crear la compra principal
-      const { data: compraData, error: compraError } = await supabase
-        .from('compras')
-        .insert([
-          {
-            fecha: purchaseData.fecha,
-            proveedor: purchaseData.proveedor,
-            numero_factura: purchaseData.numero_factura,
-            total: calculateTotal(),
-            estado: 'completada',
-          },
-        ])
-        .select()
-        .single();
+      // Obtener usuario actual
+      const { data: { user } } = await supabase.auth.getUser();
 
-      if (compraError) throw compraError;
-
-      // Crear detalles de compra y movimientos de inventario
+      // Insertar cada producto como un registro individual en 'compras'
+      // Según el schema: cada registro en 'compras' es UN producto comprado
       for (const item of purchaseItems) {
         const cantidad = parseFloat(item.cantidad);
         const precioUnitario = parseFloat(item.precio_unitario);
-        const productoId = parseInt(item.producto_id);
+        const productoId = item.producto_id;
 
-        // Insertar detalle de compra
-        const { error: detalleError } = await supabase
-          .from('detalles_compra')
-          .insert([
-            {
-              compra_id: compraData.id,
-              producto_id: productoId,
-              cantidad: cantidad,
-              precio_unitario: precioUnitario,
-              subtotal: cantidad * precioUnitario,
-              lote_producto: item.lote_producto || null,
-              fecha_vencimiento: item.fecha_vencimiento || null,
-              permitido_gerencia: item.permitido_gerencia,
-            },
-          ]);
-
-        if (detalleError) throw detalleError;
-
-        // Obtener cantidad actual del producto
+        // Obtener datos del producto
         const { data: productoData, error: productoError } = await supabase
           .from('productos')
-          .select('cantidad_actual')
+          .select('cantidad_actual, unidad_medida, nombre')
           .eq('id', productoId)
           .single();
 
@@ -294,10 +292,40 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
         const cantidadAnterior = productoData.cantidad_actual;
         const cantidadNueva = cantidadAnterior + cantidad;
 
+        // Insertar registro de compra (un registro por producto según schema)
+        const { data: compraData, error: compraError } = await supabase
+          .from('compras')
+          .insert([
+            {
+              fecha_compra: purchaseData.fecha,
+              proveedor: purchaseData.proveedor,
+              numero_factura: purchaseData.numero_factura || null,
+              producto_id: productoId,
+              cantidad: cantidad,
+              unidad: productoData.unidad_medida,
+              numero_lote_producto: item.lote_producto || null,
+              fecha_vencimiento: item.fecha_vencimiento || null,
+              costo_unitario: precioUnitario,
+              costo_total: cantidad * precioUnitario,
+              link_factura: null,
+              usuario_registro: user?.email || null,
+            },
+          ])
+          .select()
+          .single();
+
+        if (compraError) {
+          console.error('Error guardando compra:', compraError);
+          throw compraError;
+        }
+
         // Actualizar cantidad en productos
         const { error: updateError } = await supabase
           .from('productos')
-          .update({ cantidad_actual: cantidadNueva })
+          .update({ 
+            cantidad_actual: cantidadNueva,
+            precio_unitario: precioUnitario, // Actualizar precio unitario con el de la compra
+          })
           .eq('id', productoId);
 
         if (updateError) throw updateError;
@@ -307,14 +335,18 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
           .from('movimientos_inventario')
           .insert([
             {
+              fecha_movimiento: purchaseData.fecha,
               producto_id: productoId,
-              tipo_movimiento: 'entrada',
+              tipo_movimiento: 'Entrada', // Enum con mayúscula inicial
               cantidad: cantidad,
-              cantidad_anterior: cantidadAnterior,
-              cantidad_nueva: cantidadNueva,
-              referencia_id: compraData.id,
-              tipo_referencia: 'compra',
-              notas: `Compra #${purchaseData.numero_factura} - ${purchaseData.proveedor}`,
+              unidad: productoData.unidad_medida,
+              factura: purchaseData.numero_factura || null,
+              saldo_anterior: cantidadAnterior,
+              saldo_nuevo: cantidadNueva,
+              valor_movimiento: cantidad * precioUnitario,
+              responsable: user?.email || null,
+              observaciones: `Compra - Factura: ${purchaseData.numero_factura || 'Sin número'} - Proveedor: ${purchaseData.proveedor} - Producto: ${productoData.nombre}`,
+              provisional: false,
             },
           ]);
 

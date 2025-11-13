@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Package, User, FileText, Plus, X, AlertTriangle, Info } from 'lucide-react';
+import { Save, X, Calendar, Package, Droplet, User, Plus, Trash2, AlertTriangle, FileText, Cloud } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
+import { obtenerFechaHoy } from '../../utils/fechas';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { validarFormularioMovimiento } from '../../utils/dailyMovementUtils';
-import type {
-  MovimientoDiario,
-  Aplicacion,
+import type { 
+  Aplicacion, 
+  MovimientoDiario, 
+  MovimientoDiarioProducto,
   LoteSeleccionado,
   ProductoEnMezcla
 } from '../../types/aplicaciones';
@@ -17,23 +18,35 @@ interface DailyMovementFormProps {
   onCancel: () => void;
 }
 
+interface ProductoFormulario {
+  producto_id: string;
+  producto_nombre: string;
+  producto_categoria: string;
+  estado_fisico: 'liquido' | 'solido';
+  cantidad_utilizada: string;
+  unidad: 'cc' | 'L' | 'g' | 'Kg';
+}
+
 export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMovementFormProps) {
   const supabase = getSupabase();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Estados del formulario
-  const [fechaMovimiento, setFechaMovimiento] = useState(new Date().toISOString().split('T')[0]);
+  const [fechaMovimiento, setFechaMovimiento] = useState(obtenerFechaHoy());
   const [loteId, setLoteId] = useState('');
-  const [productoId, setProductoId] = useState('');
-  const [cantidadUtilizada, setCantidadUtilizada] = useState('');
-  const [numeroCanecasUtilizadas, setNumeroCanecasUtilizadas] = useState('');
+  const [numeroCanecas, setNumeroCanecas] = useState('');
   const [responsable, setResponsable] = useState('');
+  const [condicionesMeteorologicas, setCondicionesMeteorologicas] = useState('');
   const [notas, setNotas] = useState('');
+
+  // Productos agregados (lista dinámica)
+  const [productosAgregados, setProductosAgregados] = useState<ProductoFormulario[]>([]);
+  const [productoSeleccionadoId, setProductoSeleccionadoId] = useState('');
 
   // Datos de la aplicación
   const [lotes, setLotes] = useState<LoteSeleccionado[]>([]);
-  const [productos, setProductos] = useState<ProductoEnMezcla[]>([]);
+  const [productosDisponibles, setProductosDisponibles] = useState<any[]>([]);
   const [canecasPorLote, setCanecasPorLote] = useState<Record<string, number>>({});
 
   // Cargar datos al montar
@@ -85,7 +98,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         }
       }
 
-      // Cargar productos de las mezclas
+      // Cargar productos de las mezclas CON estado físico
       const { data: mezclasData, error: errorMezclas } = await supabase
         .from('aplicaciones_mezclas')
         .select('id')
@@ -98,13 +111,45 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
 
         const { data: productosData, error: errorProductos } = await supabase
           .from('aplicaciones_productos')
-          .select('*')
+          .select(`
+            producto_id,
+            producto_nombre,
+            producto_categoria,
+            producto_unidad,
+            cantidad_total_necesaria
+          `)
           .in('mezcla_id', mezclaIds);
 
         if (errorProductos) throw errorProductos;
 
+        // Obtener IDs únicos de productos
+        const productosIds = Array.from(new Set((productosData || []).map(p => p.producto_id)));
+        console.log('🔍 IDs de productos para consultar estado físico:', productosIds);
+
+        // Cargar estado_fisico desde la tabla productos
+        const { data: productosCompletos, error: errorProductosCompletos } = await supabase
+          .from('productos')
+          .select('id, estado_fisico')
+          .in('id', productosIds);
+
+        console.log('🧪 Productos completos con estado_fisico:', productosCompletos);
+        if (errorProductosCompletos) {
+          console.error('❌ Error cargando estado_fisico:', errorProductosCompletos);
+          throw errorProductosCompletos;
+        }
+
+        // Crear mapa de estado_fisico
+        const estadoFisicoMap = new Map<string, string>();
+        (productosCompletos || []).forEach(p => {
+          console.log(`📌 Producto ${p.id}: estado_fisico = ${p.estado_fisico}`);
+          // Normalizar: convertir a minúsculas y mapear valores conocidos
+          const estadoNormalizado = p.estado_fisico?.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          const estadoFinal = (estadoNormalizado === 'liquido' || estadoNormalizado === 'líquido') ? 'liquido' : 'solido';
+          estadoFisicoMap.set(p.id, estadoFinal);
+        });
+
         // Eliminar duplicados por producto_id
-        const productosUnicos = new Map<string, ProductoEnMezcla>();
+        const productosUnicos = new Map<string, any>();
         (productosData || []).forEach(p => {
           if (!productosUnicos.has(p.producto_id)) {
             productosUnicos.set(p.producto_id, {
@@ -113,11 +158,12 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
               producto_categoria: p.producto_categoria,
               producto_unidad: p.producto_unidad,
               cantidad_total_necesaria: p.cantidad_total_necesaria,
+              estado_fisico: estadoFisicoMap.get(p.producto_id) || 'liquido'
             });
           }
         });
 
-        setProductos(Array.from(productosUnicos.values()));
+        setProductosDisponibles(Array.from(productosUnicos.values()));
       }
     } catch (err: any) {
       console.error('Error cargando datos:', err);
@@ -129,7 +175,6 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        // Cargar perfil del usuario
         const { data: profile } = await supabase
           .from('usuarios')
           .select('nombre_completo')
@@ -145,23 +190,99 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
     }
   };
 
+  const agregarProducto = () => {
+    if (!productoSeleccionadoId) {
+      setError('Selecciona un producto para agregar');
+      return;
+    }
+
+    // Verificar si ya está agregado
+    if (productosAgregados.some(p => p.producto_id === productoSeleccionadoId)) {
+      setError('Este producto ya fue agregado');
+      return;
+    }
+
+    const producto = productosDisponibles.find(p => p.producto_id === productoSeleccionadoId);
+    if (!producto) return;
+
+    // Determinar unidad según estado físico
+    const unidadDefault = producto.estado_fisico === 'liquido' ? 'cc' : 'g';
+
+    const nuevoProducto: ProductoFormulario = {
+      producto_id: producto.producto_id,
+      producto_nombre: producto.producto_nombre,
+      producto_categoria: producto.producto_categoria,
+      estado_fisico: producto.estado_fisico,
+      cantidad_utilizada: '',
+      unidad: unidadDefault
+    };
+
+    setProductosAgregados([...productosAgregados, nuevoProducto]);
+    setProductoSeleccionadoId('');
+    setError(null);
+  };
+
+  const eliminarProducto = (index: number) => {
+    setProductosAgregados(productosAgregados.filter((_, i) => i !== index));
+  };
+
+  const actualizarCantidadProducto = (index: number, cantidad: string) => {
+    const nuevosProductos = [...productosAgregados];
+    nuevosProductos[index].cantidad_utilizada = cantidad;
+    setProductosAgregados(nuevosProductos);
+  };
+
+  const actualizarUnidadProducto = (index: number, unidad: 'cc' | 'L' | 'g' | 'Kg') => {
+    const nuevosProductos = [...productosAgregados];
+    nuevosProductos[index].unidad = unidad;
+    setProductosAgregados(nuevosProductos);
+  };
+
+  const validarFormulario = () => {
+    if (!fechaMovimiento) {
+      setError('La fecha es requerida');
+      return false;
+    }
+    if (!loteId) {
+      setError('Debes seleccionar un lote');
+      return false;
+    }
+    if (!numeroCanecas || parseFloat(numeroCanecas) <= 0) {
+      setError('El número de canecas debe ser mayor a 0');
+      return false;
+    }
+    if (!responsable.trim()) {
+      setError('El responsable es requerido');
+      return false;
+    }
+    // Validación de condiciones meteorológicas comentada temporalmente
+    // hasta que el schema cache de Supabase se actualice
+    /*
+    if (!condicionesMeteorologicas) {
+      setError('Las condiciones meteorológicas son requeridas');
+      return false;
+    }
+    */
+    if (productosAgregados.length === 0) {
+      setError('Debes agregar al menos un producto');
+      return false;
+    }
+
+    // Validar que todos los productos tengan cantidad
+    for (const producto of productosAgregados) {
+      if (!producto.cantidad_utilizada || parseFloat(producto.cantidad_utilizada) <= 0) {
+        setError(`El producto "${producto.producto_nombre}" necesita una cantidad válida`);
+        return false;
+      }
+    }
+
+    return true;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const validacion = validarFormularioMovimiento({
-      fechaMovimiento,
-      loteId,
-      productoId,
-      cantidadUtilizada,
-      responsable,
-      notas,
-      numeroCanecasUtilizadas,
-      esFumigacion: aplicacion.tipo === 'fumigacion',
-      tieneCanecasPlaneadas: !!canecasPorLote[loteId]
-    });
-
-    if (!validacion.valido) {
-      setError(validacion.mensaje);
+    if (!validarFormulario()) {
       return;
     }
 
@@ -173,51 +294,61 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuario no autenticado');
 
-      // Encontrar información del lote y producto
+      // Encontrar información del lote
       const lote = lotes.find(l => l.lote_id === loteId);
-      const producto = productos.find(p => p.producto_id === productoId);
+      if (!lote) throw new Error('Lote no encontrado');
 
-      if (!lote || !producto) {
-        throw new Error('Lote o producto no encontrado');
-      }
-
-      // Crear movimiento diario
-      const nuevoMovimiento: MovimientoDiario = {
+      // 1. Crear movimiento diario (padre)
+      const nuevoMovimiento: Omit<MovimientoDiario, 'id' | 'created_at'> = {
         aplicacion_id: aplicacion.id,
         fecha_movimiento: fechaMovimiento,
         lote_id: loteId,
         lote_nombre: lote.nombre,
-        producto_id: productoId,
-        producto_nombre: producto.producto_nombre,
-        producto_categoria: producto.producto_categoria,
-        producto_unidad: producto.producto_unidad,
-        cantidad_utilizada: parseFloat(cantidadUtilizada),
+        numero_canecas: parseFloat(numeroCanecas),
         responsable: responsable.trim(),
+        condiciones_meteorologicas: condicionesMeteorologicas.trim() || undefined,
         notas: notas.trim() || undefined,
         created_by: user.id,
       };
 
-      // Agregar canecas si es fumigación
-      if (aplicacion.tipo === 'fumigacion' && numeroCanecasUtilizadas && canecasPorLote[loteId]) {
-        nuevoMovimiento.numero_canecas_utilizadas = parseInt(numeroCanecasUtilizadas);
-        nuevoMovimiento.numero_canecas_planeadas = canecasPorLote[loteId];
+      const { data: movimientoCreado, error: errorMovimiento } = await supabase
+        .from('movimientos_diarios')
+        .insert([nuevoMovimiento])
+        .select()
+        .single();
+
+      if (errorMovimiento) throw errorMovimiento;
+      if (!movimientoCreado) throw new Error('No se pudo crear el movimiento');
+
+      // 2. Crear productos del movimiento (hijos)
+      const productosParaInsertar: Omit<MovimientoDiarioProducto, 'id' | 'created_at'>[] = productosAgregados.map(p => ({
+        movimiento_diario_id: movimientoCreado.id,
+        producto_id: p.producto_id,
+        producto_nombre: p.producto_nombre,
+        producto_categoria: p.producto_categoria,
+        cantidad_utilizada: parseFloat(p.cantidad_utilizada),
+        unidad: p.unidad
+      }));
+
+      const { error: errorProductos } = await supabase
+        .from('movimientos_diarios_productos')
+        .insert(productosParaInsertar);
+
+      if (errorProductos) {
+        // Si falla, intentar eliminar el movimiento creado
+        await supabase.from('movimientos_diarios').delete().eq('id', movimientoCreado.id);
+        throw errorProductos;
       }
 
-      const { error: errorInsert } = await supabase
-        .from('movimientos_diarios')
-        .insert([nuevoMovimiento]);
-
-      if (errorInsert) throw errorInsert;
-
-      console.log('✅ Movimiento diario registrado exitosamente');
+      console.log('✅ Movimiento diario y productos registrados exitosamente');
 
       // Limpiar formulario
-      setFechaMovimiento(new Date().toISOString().split('T')[0]);
+      setFechaMovimiento(obtenerFechaHoy());
       setLoteId('');
-      setProductoId('');
-      setCantidadUtilizada('');
-      setNumeroCanecasUtilizadas('');
+      setNumeroCanecas('');
+      setCondicionesMeteorologicas('');
       setNotas('');
+      setProductosAgregados([]);
 
       // Notificar éxito
       onSuccess();
@@ -230,7 +361,6 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
     }
   };
 
-  const productoSeleccionado = productos.find(p => p.producto_id === productoId);
   const loteSeleccionado = lotes.find(l => l.lote_id === loteId);
 
   return (
@@ -243,7 +373,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
           <div>
             <h3 className="text-lg text-[#172E08]">Nuevo Movimiento Diario</h3>
             <p className="text-sm text-[#4D240F]/60">
-              Registra el uso de insumos durante la aplicación
+              Registra canecas aplicadas y productos utilizados
             </p>
           </div>
         </div>
@@ -272,7 +402,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
             type="date"
             value={fechaMovimiento}
             onChange={(e) => setFechaMovimiento(e.target.value)}
-            max={new Date().toISOString().split('T')[0]}
+            max={obtenerFechaHoy()}
             disabled={loading}
             className="w-full px-4 py-3 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
           />
@@ -300,88 +430,142 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
           </select>
         </div>
 
-        {/* Producto */}
+        {/* Número de Canecas */}
         <div>
           <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
-            <Package className="w-4 h-4 text-[#73991C]" />
-            Producto
-            <span className="text-red-500">*</span>
-          </label>
-          <select
-            value={productoId}
-            onChange={(e) => setProductoId(e.target.value)}
-            disabled={loading}
-            className="w-full px-4 py-3 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <option value="">Selecciona un producto</option>
-            {productos.map(producto => (
-              <option key={producto.producto_id} value={producto.producto_id}>
-                {producto.producto_nombre} ({producto.producto_categoria})
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Cantidad Utilizada */}
-        <div>
-          <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
-            Cantidad Utilizada
+            <Droplet className="w-4 h-4 text-[#73991C]" />
+            Número de Canecas Aplicadas
             <span className="text-red-500">*</span>
           </label>
           <div className="flex gap-3">
             <Input
               type="number"
-              value={cantidadUtilizada}
-              onChange={(e) => setCantidadUtilizada(e.target.value)}
-              placeholder="0.00"
-              step="0.01"
+              value={numeroCanecas}
+              onChange={(e) => setNumeroCanecas(e.target.value)}
+              placeholder="0"
+              step="1"
               min="0"
               disabled={loading}
               className="flex-1 bg-white border-[#73991C]/20 focus:border-[#73991C] disabled:opacity-50 disabled:cursor-not-allowed"
             />
-            {productoSeleccionado && (
-              <div className="px-4 py-3 bg-[#E7EDDD] border border-[#73991C]/20 rounded-xl text-[#172E08] min-w-[100px] flex items-center justify-center">
-                {productoSeleccionado.producto_unidad}
-              </div>
-            )}
-          </div>
-          {productoSeleccionado && (
-            <p className="text-xs text-[#4D240F]/60 mt-2">
-              Planeado: {productoSeleccionado.cantidad_total_necesaria.toFixed(2)} {productoSeleccionado.producto_unidad}
-            </p>
-          )}
-        </div>
-
-        {/* Número de Canecas (solo fumigación) */}
-        {aplicacion.tipo === 'fumigacion' && loteId && canecasPorLote[loteId] && (
-          <div>
-            <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
-              <Package className="w-4 h-4 text-[#73991C]" />
-              Número de Canecas Utilizadas
-              <span className="text-red-500">*</span>
-            </label>
-            <div className="flex gap-3">
-              <Input
-                type="number"
-                value={numeroCanecasUtilizadas}
-                onChange={(e) => setNumeroCanecasUtilizadas(e.target.value)}
-                placeholder="0"
-                step="1"
-                min="0"
-                disabled={loading}
-                className="flex-1 bg-white border-[#73991C]/20 focus:border-[#73991C] disabled:opacity-50 disabled:cursor-not-allowed"
-              />
-              <div className="px-4 py-3 bg-[#E7EDDD] border border-[#73991C]/20 rounded-xl text-[#172E08] min-w-[120px] flex items-center justify-center">
-                canecas
-              </div>
+            <div className="px-4 py-3 bg-[#E7EDDD] border border-[#73991C]/20 rounded-xl text-[#172E08] min-w-[120px] flex items-center justify-center">
+              canecas
             </div>
+          </div>
+          {loteId && canecasPorLote[loteId] && (
             <div className="mt-2 p-3 bg-[#73991C]/5 border border-[#73991C]/20 rounded-lg">
               <p className="text-xs text-[#4D240F]/70">
                 📊 <strong>Planeado:</strong> {canecasPorLote[loteId]} canecas para este lote
               </p>
             </div>
+          )}
+        </div>
+
+        {/* Productos Utilizados */}
+        <div className="border-t border-[#73991C]/10 pt-6">
+          <h4 className="text-sm text-[#172E08] mb-4 flex items-center gap-2">
+            <Package className="w-4 h-4 text-[#73991C]" />
+            Productos Utilizados en las Canecas
+            <span className="text-red-500">*</span>
+          </h4>
+
+          {/* Selector de producto */}
+          <div className="flex gap-3 mb-4">
+            <select
+              value={productoSeleccionadoId}
+              onChange={(e) => setProductoSeleccionadoId(e.target.value)}
+              disabled={loading}
+              className="flex-1 px-4 py-3 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <option value="">Selecciona un producto para agregar</option>
+              {productosDisponibles
+                .filter(p => !productosAgregados.some(pa => pa.producto_id === p.producto_id))
+                .map(producto => (
+                  <option key={producto.producto_id} value={producto.producto_id}>
+                    {producto.producto_nombre} ({producto.producto_categoria})
+                  </option>
+                ))}
+            </select>
+            <Button
+              type="button"
+              onClick={agregarProducto}
+              disabled={loading || !productoSeleccionadoId}
+              className="bg-[#73991C] hover:bg-[#5f7d17] text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Agregar
+            </Button>
           </div>
-        )}
+
+          {/* Lista de productos agregados */}
+          {productosAgregados.length > 0 ? (
+            <div className="space-y-3">
+              {productosAgregados.map((producto, index) => (
+                <div
+                  key={index}
+                  className="bg-[#F8FAF5] border border-[#73991C]/20 rounded-xl p-4 flex items-center gap-4"
+                >
+                  <div className="flex-1">
+                    <p className="text-sm text-[#172E08] mb-1">
+                      {producto.producto_nombre}
+                    </p>
+                    <p className="text-xs text-[#4D240F]/60">
+                      {producto.producto_categoria}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <Input
+                      type="number"
+                      value={producto.cantidad_utilizada}
+                      onChange={(e) => actualizarCantidadProducto(index, e.target.value)}
+                      placeholder="0"
+                      step="0.01"
+                      min="0"
+                      disabled={loading}
+                      className="w-32 bg-white border-[#73991C]/20 focus:border-[#73991C]"
+                    />
+                    <select
+                      value={producto.unidad}
+                      onChange={(e) => actualizarUnidadProducto(index, e.target.value as any)}
+                      disabled={loading}
+                      className="px-3 py-2 border border-[#73991C]/20 rounded-lg bg-white text-[#172E08] text-sm focus:outline-none focus:ring-2 focus:ring-[#73991C]"
+                    >
+                      {producto.estado_fisico === 'liquido' ? (
+                        <>
+                          <option value="cc">cc</option>
+                          <option value="L">L</option>
+                        </>
+                      ) : (
+                        <>
+                          <option value="g">g</option>
+                          <option value="Kg">Kg</option>
+                        </>
+                      )}
+                    </select>
+                    <Button
+                      type="button"
+                      onClick={() => eliminarProducto(index)}
+                      disabled={loading}
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-8 text-center border-2 border-dashed border-[#73991C]/20 rounded-xl">
+              <Package className="w-12 h-12 text-[#73991C]/30 mx-auto mb-3" />
+              <p className="text-sm text-[#4D240F]/50">
+                No hay productos agregados. Selecciona un producto arriba para comenzar.
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* Responsable */}
         <div>
@@ -398,6 +582,27 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
             disabled={loading}
             className="bg-white border-[#73991C]/20 focus:border-[#73991C] disabled:opacity-50 disabled:cursor-not-allowed"
           />
+        </div>
+
+        {/* Condiciones Meteorológicas */}
+        <div>
+          <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
+            <Cloud className="w-4 h-4 text-[#73991C]" />
+            Condiciones Meteorológicas
+            <span className="text-red-500">*</span>
+          </label>
+          <select
+            value={condicionesMeteorologicas}
+            onChange={(e) => setCondicionesMeteorologicas(e.target.value)}
+            disabled={loading}
+            className="w-full px-4 py-3 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <option value="">Selecciona las condiciones</option>
+            <option value="soleadas">☀️ Soleadas</option>
+            <option value="nubladas">☁️ Nubladas</option>
+            <option value="lluvia suave">🌦️ Lluvia Suave</option>
+            <option value="lluvia fuerte">⛈️ Lluvia Fuerte</option>
+          </select>
         </div>
 
         {/* Notas */}
@@ -440,7 +645,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
               </>
             ) : (
               <>
-                <Plus className="w-4 h-4 mr-2" />
+                <Save className="w-4 h-4 mr-2" />
                 Registrar Movimiento
               </>
             )}
@@ -454,6 +659,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
           <span className="text-[#73991C] mt-0.5">ℹ️</span>
           <span>
             Este es un movimiento <strong>provisional</strong> que no afecta el inventario inmediatamente.
+            Se registra el número de canecas aplicadas y los productos mezclados en ellas.
             Al cerrar la aplicación, podrás revisar y ajustar si hay diferencias entre lo planeado y lo real.
           </span>
         </p>
