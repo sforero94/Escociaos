@@ -363,6 +363,25 @@ export function CalculadoraAplicaciones() {
       return false;
     }
 
+    // Validar calibración para fumigaciones
+    if (tipo === 'fumigacion') {
+      const lotesSinCalibracion = lotes_seleccionados.filter(
+        l => !l.calibracion_litros_arbol || 
+             l.calibracion_litros_arbol <= 0 || 
+             !l.tamano_caneca
+      );
+      
+      if (lotesSinCalibracion.length > 0) {
+        const nombres = lotesSinCalibracion
+          .map(l => l.nombre)
+          .join(', ');
+        setValidationError(
+          `Los siguientes lotes necesitan calibración completa (L/árbol y tamaño de caneca): ${nombres}`
+        );
+        return false;
+      }
+    }
+
     setValidationError('');
     return true;
   };
@@ -383,7 +402,8 @@ export function CalculadoraAplicaciones() {
 
     // Validar que todos los productos tengan dosis configuradas
     const productosSinDosis = state.mezclas.flatMap((m) => m.productos).filter((p) => {
-      if (state.configuracion?.tipo === 'fumigacion') {
+      if (state.configuracion?.tipo === 'fumigacion' || state.configuracion?.tipo === 'drench') {
+        // Fumigación y Drench usan dosis por caneca
         return !p.dosis_por_caneca || p.dosis_por_caneca <= 0;
       } else {
         // Fertilización: al menos una dosis debe ser > 0

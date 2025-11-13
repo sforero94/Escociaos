@@ -188,9 +188,9 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       // Obtener próxima aplicación programada
       const { data: proxima, error: errorProxima } = await supabase
         .from('aplicaciones')
-        .select('nombre_aplicacion, fecha')
-        .eq('estado', 'Programada')
-        .order('fecha', { ascending: true })
+        .select('nombre_aplicacion, fecha_inicio_planeada')
+        .eq('estado', 'Calculada')
+        .order('fecha_inicio_planeada', { ascending: true })
         .limit(1)
         .maybeSingle();
 
@@ -337,9 +337,9 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       // Obtener lote más grande (por hectáreas)
       const { data: top, error: errorTop } = await supabase
         .from('lotes')
-        .select('nombre, area')
+        .select('nombre, area_hectareas')
         .eq('activo', true)
-        .order('area', { ascending: false })
+        .order('area_hectareas', { ascending: false })
         .limit(1)
         .maybeSingle();
 
@@ -348,7 +348,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       }
 
       const topNombre = top
-        ? `${top.nombre} (${formatNumber(top.area, 1)} ha)`
+        ? `${top.nombre} (${formatNumber(top.area_hectareas, 1)} ha)`
         : 'Sin datos';
 
       return { activos: count || 0, topNombre };

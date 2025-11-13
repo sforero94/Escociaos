@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, ChevronRight, Check, FileText } from 'lucide-react';
+import { X, ChevronRight, Check, FileText, Users, Calendar } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { formatearFecha, obtenerFechaHoy } from '../../utils/fechas';
 import type { Aplicacion } from '../../types/aplicaciones';
@@ -26,10 +26,23 @@ interface ResumenInsumo {
   aplicado: number;
 }
 
+interface LoteConArboles {
+  lote_id: string;
+  nombre: string;
+  arboles: number;
+}
+
+// Nueva estructura para jornales por lote y actividad
+interface JornalPorLote {
+  lote_id: string;
+  preparacion: number;
+  aplicacion: number;
+  transporte: number;
+}
+
 interface DatosFinales {
-  jornales: number;
+  jornalesPorLote: JornalPorLote[];
   valorJornal: number;
-  arbolesJornal: number;
   fechaInicioReal: string;
   fechaFinReal: string;
   observaciones: string;
@@ -49,16 +62,15 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
   const [resumenInsumos, setResumenInsumos] = useState<ResumenInsumo[]>([]);
   const [canecasPlaneadas, setCanecasPlaneadas] = useState(0);
   const [canecasAplicadas, setCanecasAplicadas] = useState(0);
-  const [lotes, setLotes] = useState<{ nombre: string; arboles: number }[]>([]);
+  const [lotes, setLotes] = useState<LoteConArboles[]>([]);
   const [blancoBiologico, setBlancoBiologico] = useState<string>('');
   const [fechaInicioPlaneada, setFechaInicioPlaneada] = useState<string>('');
   const [fechaFinPlaneada, setFechaFinPlaneada] = useState<string>('');
 
-  // Datos finales del usuario
+  // Datos finales del usuario - nueva estructura con matriz
   const [datosFinales, setDatosFinales] = useState<DatosFinales>({
-    jornales: 0,
-    valorJornal: 0,
-    arbolesJornal: 0,
+    jornalesPorLote: [],
+    valorJornal: 50000, // Valor por defecto
     fechaInicioReal: aplicacion.fecha_inicio || '',
     fechaFinReal: obtenerFechaHoy(),
     observaciones: '',
@@ -74,13 +86,15 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
     try {
       console.log('🔍 Cargando datos para cierre de aplicación:', aplicacion.id);
 
-      // 1. Cargar aplicación completa
+      // 1. Cargar aplicación completa con lotes
       const { data: appData } = await supabase
         .from('aplicaciones')
         .select(`
           *,
           aplicaciones_lotes (
+            lote_id,
             lotes (
+              id,
               nombre,
               total_arboles
             )
@@ -92,11 +106,22 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
       console.log('📋 Datos de aplicación:', appData);
 
       // Extraer lotes con árboles
-      const lotesData = appData?.aplicaciones_lotes?.map((al: any) => ({
+      const lotesData: LoteConArboles[] = appData?.aplicaciones_lotes?.map((al: any) => ({
+        lote_id: al.lotes?.id || '',
         nombre: al.lotes?.nombre || 'Sin nombre',
         arboles: al.lotes?.total_arboles || 0,
       })) || [];
+      
       setLotes(lotesData);
+
+      // Inicializar matriz de jornales con los lotes cargados
+      const jornalesIniciales: JornalPorLote[] = lotesData.map(lote => ({
+        lote_id: lote.lote_id,
+        preparacion: 0,
+        aplicacion: 0,
+        transporte: 0,
+      }));
+      setDatosFinales(prev => ({ ...prev, jornalesPorLote: jornalesIniciales }));
 
       console.log('🌳 Lotes cargados:', lotesData);
       console.log('🌳 Total árboles:', lotesData.reduce((sum, l) => sum + l.arboles, 0));
@@ -184,7 +209,6 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
             .in('id', productosIds);
 
           console.log('💰 Productos con precios desde BD:', productos);
-          console.log('❌ Error productos:', errorProductos);
 
           if (errorProductos) {
             console.error('❌ ERROR al cargar precios de productos:', errorProductos);
@@ -192,6 +216,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
               `No se pudieron cargar los precios: ${errorProductos.message}. Verifica tus permisos o contacta al administrador.`
             );
             setMovimientos([]);
+            setLoading(false);
             return;
           }
 
@@ -199,6 +224,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
             console.warn('⚠️ No se encontraron precios para los productos');
             setError('No hay precios configurados para los productos utilizados');
             setMovimientos([]);
+            setLoading(false);
             return;
           }
 
@@ -209,17 +235,17 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
           if (productosSinPrecio.length > 0) {
             console.warn('⚠️ Productos sin precio:', productosSinPrecio);
             setError(
-              `${productosSinPrecio.length} producto(s) no tienen precio asignado. Por favor actualiza los precios antes de cerrar.`
+              `${productosSinPrecio.length} producto(s) no tienen precio asignado. Por favor actualiza los precios en el módulo de Inventario antes de cerrar.`
             );
+            setMovimientos([]);
+            setLoading(false);
+            return;
           }
 
           // Crear mapa de costos
           const costosMap = new Map(productos.map((p) => [p.id, p.precio_unitario || 0]));
 
-          console.log('🗺️ Mapa de costos creado:', Object.fromEntries(costosMap));
-
-          // Consolidar productos por movimiento (agrupar por fecha)
-          
+          // Consolidar productos por movimiento
           movimientosDiarios.forEach(mov => {
             const productosDeMov = productosMovimientos.filter(
               p => p.movimiento_diario_id === mov.id
@@ -295,63 +321,159 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
         insumo.planeado += prod.cantidad_total_necesaria || 0;
       });
 
-      // Agregar aplicados (de los movimientos consolidados)
-      movimientosConsolidados?.forEach((mov) => {
+      // Agregar aplicados
+      movimientosConsolidados.forEach((mov) => {
         const key = mov.producto_id;
         if (!insumosMap.has(key)) {
           insumosMap.set(key, {
             nombre: mov.producto_nombre,
-            unidad: 'litros',
+            unidad: 'L/Kg',
             planeado: 0,
             aplicado: 0,
           });
         }
         const insumo = insumosMap.get(key)!;
-        insumo.aplicado += mov.cantidad_utilizada || 0;
+        insumo.aplicado += mov.cantidad_utilizada;
       });
 
-      const insumos = Array.from(insumosMap.values());
-      console.log('📋 Resumen de insumos:', insumos);
-      setResumenInsumos(insumos);
+      setResumenInsumos(Array.from(insumosMap.values()));
+
+      console.log('✅ Datos cargados exitosamente');
     } catch (err: any) {
       console.error('Error cargando datos:', err);
-      setError(err.message || 'Error al cargar los datos');
+      setError('Error al cargar los datos: ' + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCerrarAplicacion = async () => {
-    setProcesando(true);
+  /**
+   * ACTUALIZAR JORNAL DE UN LOTE EN UNA ACTIVIDAD ESPECÍFICA
+   */
+  const actualizarJornal = (loteId: string, actividad: 'preparacion' | 'aplicacion' | 'transporte', valor: number) => {
+    setDatosFinales(prev => ({
+      ...prev,
+      jornalesPorLote: prev.jornalesPorLote.map(j =>
+        j.lote_id === loteId ? { ...j, [actividad]: valor } : j
+      ),
+    }));
+  };
+
+  /**
+   * CERRAR APLICACIÓN
+   */
+  const cerrarAplicacion = async () => {
     try {
-      const totalArboles = lotes.reduce((sum, lote) => sum + lote.arboles, 0);
-      const costoInsumos = movimientos.reduce(
-        (sum, mov) => sum + mov.cantidad_utilizada * mov.costo_unitario,
+      setProcesando(true);
+      console.log('🔒 Iniciando cierre de aplicación...');
+
+      // Calcular total de jornales
+      const totalJornales = datosFinales.jornalesPorLote.reduce(
+        (sum, j) => sum + j.preparacion + j.aplicacion + j.transporte,
         0
       );
-      const costoManoObra = datosFinales.jornales * datosFinales.valorJornal;
-      const costoTotal = costoInsumos + costoManoObra;
-      const arbolesPorJornal = datosFinales.jornales > 0 ? totalArboles / datosFinales.jornales : 0;
 
-      const { error } = await supabase
+      // 1. Actualizar estado de la aplicación
+      const { error: errorUpdate } = await supabase
         .from('aplicaciones')
         .update({
           estado: 'Cerrada',
-          fecha_cierre: new Date().toISOString(),
           fecha_inicio_ejecucion: datosFinales.fechaInicioReal,
           fecha_fin_ejecucion: datosFinales.fechaFinReal,
-          jornales_utilizados: datosFinales.jornales,
+          jornales_utilizados: totalJornales,
           valor_jornal: datosFinales.valorJornal,
-          costo_total_insumos: costoInsumos,
-          costo_total_mano_obra: costoManoObra,
-          costo_total: costoTotal,
-          costo_por_arbol: totalArboles > 0 ? costoTotal / totalArboles : 0,
-          arboles_jornal: arbolesPorJornal,
           observaciones_cierre: datosFinales.observaciones,
         })
         .eq('id', aplicacion.id);
 
-      if (error) throw error;
+      if (errorUpdate) {
+        console.error('❌ Error actualizando aplicación:', errorUpdate);
+        throw new Error('Error al actualizar la aplicación: ' + errorUpdate.message);
+      }
+
+      console.log('✅ Aplicación actualizada a estado Cerrada');
+
+      // 2. Consolidar inventario de productos aplicados
+      if (movimientos.length > 0) {
+        console.log('📦 Consolidando inventario...');
+
+        // Agrupar movimientos por producto
+        const consolidado = new Map<string, { nombre: string; cantidad: number }>();
+
+        movimientos.forEach((mov) => {
+          if (!consolidado.has(mov.producto_id)) {
+            consolidado.set(mov.producto_id, {
+              nombre: mov.producto_nombre,
+              cantidad: 0,
+            });
+          }
+
+          const item = consolidado.get(mov.producto_id)!;
+          item.cantidad += mov.cantidad_utilizada;
+        });
+
+        console.log('📊 Productos consolidados:', Object.fromEntries(consolidado));
+
+        // Obtener usuario actual
+        const { data: { user } } = await supabase.auth.getUser();
+
+        // Para cada producto: actualizar inventario y crear movimiento
+        for (const [productoId, { nombre, cantidad }] of consolidado.entries()) {
+          // a) Obtener datos actuales del producto
+          const { data: producto, error: errorProd } = await supabase
+            .from('productos')
+            .select('cantidad_actual, unidad_medida, precio_unitario')
+            .eq('id', productoId)
+            .single();
+
+          if (errorProd || !producto) {
+            console.error(`❌ Error obteniendo producto ${productoId}:`, errorProd);
+            throw new Error(`Error obteniendo datos del producto ${nombre}`);
+          }
+
+          const saldoAnterior = producto.cantidad_actual || 0;
+          const saldoNuevo = saldoAnterior - cantidad;
+
+          // b) Actualizar inventario
+          const { error: errorUpdate } = await supabase
+            .from('productos')
+            .update({ cantidad_actual: saldoNuevo })
+            .eq('id', productoId);
+
+          if (errorUpdate) {
+            console.error(`❌ Error actualizando inventario de ${productoId}:`, errorUpdate);
+            throw new Error(`Error actualizando inventario de ${nombre}`);
+          }
+
+          // c) Crear movimiento de salida
+          const { error: errorMov } = await supabase
+            .from('movimientos_inventario')
+            .insert({
+              fecha_movimiento: datosFinales.fechaFinReal,
+              producto_id: productoId,
+              tipo_movimiento: 'Salida por Aplicación',
+              cantidad: cantidad,
+              unidad: producto.unidad_medida,
+              lote_aplicacion: lotes.map(l => l.nombre).join(', '),
+              aplicacion_id: aplicacion.id,
+              saldo_anterior: saldoAnterior,
+              saldo_nuevo: saldoNuevo,
+              valor_movimiento: cantidad * (producto.precio_unitario || 0),
+              responsable: user?.email,
+              observaciones: `Cierre de aplicación: ${aplicacion.nombre}`,
+              provisional: false
+            });
+
+          if (errorMov) {
+            console.error(`❌ Error creando movimiento de inventario para ${productoId}:`, errorMov);
+            throw new Error(`Error registrando movimiento de ${nombre}`);
+          }
+
+          console.log(`✅ Producto ${nombre}: ${saldoAnterior.toFixed(2)} → ${saldoNuevo.toFixed(2)} ${producto.unidad_medida}`);
+        }
+
+        console.log('✅ Inventario consolidado exitosamente');
+      }
 
       console.log('✅ Aplicación cerrada exitosamente');
       onCerrado();
@@ -371,368 +493,553 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
     }).format(valor);
   };
 
+  // Cálculos
   const totalArboles = lotes.reduce((sum, lote) => sum + lote.arboles, 0);
   const costoInsumos = movimientos.reduce(
     (sum, mov) => sum + mov.cantidad_utilizada * mov.costo_unitario,
     0
   );
-  const costoManoObra = datosFinales.jornales * datosFinales.valorJornal;
+  const totalJornales = datosFinales.jornalesPorLote.reduce(
+    (sum, j) => sum + j.preparacion + j.aplicacion + j.transporte,
+    0
+  );
+  const costoManoObra = totalJornales * datosFinales.valorJornal;
   const costoTotal = costoInsumos + costoManoObra;
   const costoPorArbol = totalArboles > 0 ? costoTotal / totalArboles : 0;
-  const arbolesPorJornal = datosFinales.jornales > 0 ? totalArboles / datosFinales.jornales : 0;
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* HEADER */}
-        <div className="bg-[#73991C] px-6 py-4 text-white flex items-center justify-between">
+        <div className="bg-gradient-to-r from-[#73991C] to-[#BFD97D] px-6 py-4 text-white flex items-center justify-between">
           <div>
-            <h2 className="text-lg">Cerrar Aplicación: {aplicacion.nombre}</h2>
-            <div className="flex items-center gap-6 mt-2 text-sm text-white/80">
-              <span className={paso === 'revision' ? 'text-white' : ''}>
-                1. Revisión
-              </span>
-              <ChevronRight className="w-4 h-4" />
-              <span className={paso === 'datos-finales' ? 'text-white' : ''}>
-                2. Datos Finales
-              </span>
-              <ChevronRight className="w-4 h-4" />
-              <span className={paso === 'confirmacion' ? 'text-white' : ''}>
-                3. Confirmación
-              </span>
-            </div>
+            <h2 className="text-xl">Cerrar Aplicación</h2>
+            <p className="text-sm text-white/90 mt-1">{aplicacion.nombre}</p>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-white/20 rounded">
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+          >
             <X className="w-5 h-5" />
           </button>
+        </div>
+
+        {/* STEPPER */}
+        <div className="bg-gray-50 px-6 py-3 border-b border-gray-200">
+          <div className="flex items-center justify-center gap-2">
+            <div className={`flex items-center gap-2 ${paso === 'revision' ? 'text-[#73991C]' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${paso === 'revision' ? 'bg-[#73991C] text-white' : 'bg-gray-200'}`}>
+                1
+              </div>
+              <span className="text-sm hidden sm:inline">Revisión</span>
+            </div>
+            
+            <ChevronRight className="w-4 h-4 text-gray-400" />
+            
+            <div className={`flex items-center gap-2 ${paso === 'datos-finales' ? 'text-[#73991C]' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${paso === 'datos-finales' ? 'bg-[#73991C] text-white' : 'bg-gray-200'}`}>
+                2
+              </div>
+              <span className="text-sm hidden sm:inline">Jornales</span>
+            </div>
+            
+            <ChevronRight className="w-4 h-4 text-gray-400" />
+            
+            <div className={`flex items-center gap-2 ${paso === 'confirmacion' ? 'text-[#73991C]' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${paso === 'confirmacion' ? 'bg-[#73991C] text-white' : 'bg-gray-200'}`}>
+                3
+              </div>
+              <span className="text-sm hidden sm:inline">Confirmación</span>
+            </div>
+          </div>
         </div>
 
         {/* CONTENIDO */}
         <div className="flex-1 overflow-y-auto p-6">
           {loading ? (
             <div className="flex items-center justify-center h-64">
-              <div className="w-8 h-8 border-4 border-[#73991C]/30 border-t-[#73991C] rounded-full animate-spin" />
+              <div className="w-12 h-12 border-4 border-[#73991C]/30 border-t-[#73991C] rounded-full animate-spin" />
             </div>
           ) : error ? (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-              {error}
+            <div className="bg-red-50 border-2 border-red-200 text-red-700 px-6 py-4 rounded-xl">
+              <p className="font-medium">⚠️ Error</p>
+              <p className="text-sm mt-1">{error}</p>
             </div>
           ) : (
             <>
-              {/* PASO 1: REVISIÓN */}
+              {/* ========================================= */}
+              {/* PASO 1: REVISIÓN - TABLA MEJORADA */}
+              {/* ========================================= */}
               {paso === 'revision' && (
                 <div className="space-y-6">
                   <div>
-                    <h3 className="text-sm text-[#172E08] mb-3 pb-2 border-b-2 border-[#73991C]">
-                      Resumen de Canecas
-                    </h3>
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="text-left py-2 px-3 text-xs text-[#4D240F]/70">
-                            Planeado
-                          </th>
-                          <th className="text-left py-2 px-3 text-xs text-[#4D240F]/70">
-                            Aplicado
-                          </th>
-                          <th className="text-left py-2 px-3 text-xs text-[#4D240F]/70">
-                            Diferencia
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="border-b">
-                          <td className="py-2 px-3 text-[#172E08]">{canecasPlaneadas}</td>
-                          <td className="py-2 px-3 text-[#73991C]">{canecasAplicadas}</td>
-                          <td
-                            className={`py-2 px-3 ${
-                              canecasAplicadas > canecasPlaneadas
-                                ? 'text-red-600'
-                                : canecasAplicadas < canecasPlaneadas
-                                ? 'text-yellow-600'
-                                : 'text-gray-600'
-                            }`}
-                          >
-                            {canecasAplicadas > canecasPlaneadas ? '+' : ''}
-                            {canecasAplicadas - canecasPlaneadas}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
+                    <h3 className="text-lg text-[#172E08] mb-4">Resumen de la Aplicación</h3>
+                    
+                    {/* Información General */}
+                    <div className="bg-gradient-to-br from-[#73991C]/5 to-[#BFD97D]/5 border border-[#73991C]/20 rounded-xl p-5 mb-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <p className="text-xs text-[#4D240F]/70 mb-1">Tipo</p>
+                          <p className="text-sm text-[#172E08] font-medium">
+                            {aplicacion.tipo === 'fumigacion' ? 'Fumigación' : 
+                             aplicacion.tipo === 'fertilizacion' ? 'Fertilización' : 'Drench'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-[#4D240F]/70 mb-1">Lotes</p>
+                          <p className="text-sm text-[#172E08] font-medium">{lotes.length} lotes</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-[#4D240F]/70 mb-1">Total Árboles</p>
+                          <p className="text-sm text-[#172E08] font-medium">{totalArboles.toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-[#4D240F]/70 mb-1">Propósito</p>
+                          <p className="text-sm text-[#172E08] font-medium truncate">{aplicacion.proposito || 'No especificado'}</p>
+                        </div>
+                      </div>
+                    </div>
 
-                  <div>
-                    <h3 className="text-sm text-[#172E08] mb-3 pb-2 border-b-2 border-[#73991C]">
-                      Resumen de Productos
-                    </h3>
-                    <table className="w-full text-sm">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="text-left py-2 px-3 text-xs text-[#4D240F]/70">
-                            Producto
-                          </th>
-                          <th className="text-right py-2 px-3 text-xs text-[#4D240F]/70">
-                            Planeado
-                          </th>
-                          <th className="text-right py-2 px-3 text-xs text-[#4D240F]/70">
-                            Aplicado
-                          </th>
-                          <th className="text-right py-2 px-3 text-xs text-[#4D240F]/70">
-                            Diferencia
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {resumenInsumos.length === 0 ? (
-                          <tr>
-                            <td colSpan={4} className="py-6 text-center text-[#4D240F]/50 text-sm">
-                              No hay productos registrados
-                            </td>
-                          </tr>
-                        ) : (
-                          resumenInsumos.map((insumo, index) => {
-                            const diferencia = insumo.aplicado - insumo.planeado;
-                            return (
-                              <tr key={index} className="border-b hover:bg-gray-50">
-                                <td className="py-2 px-3">
-                                  <div className="text-[#172E08]">{insumo.nombre}</div>
-                                  <div className="text-xs text-[#4D240F]/50">{insumo.unidad}</div>
-                                </td>
-                                <td className="py-2 px-3 text-right text-[#172E08]">
-                                  {insumo.planeado.toFixed(2)}
-                                </td>
-                                <td className="py-2 px-3 text-right text-[#73991C]">
-                                  {insumo.aplicado.toFixed(2)}
-                                </td>
-                                <td
-                                  className={`py-2 px-3 text-right ${
-                                    diferencia > 0.1
-                                      ? 'text-red-600'
-                                      : diferencia < -0.1
-                                      ? 'text-yellow-600'
-                                      : 'text-gray-600'
-                                  }`}
-                                >
-                                  {diferencia > 0 ? '+' : ''}
-                                  {diferencia.toFixed(2)}
-                                </td>
+                    {/* Tabla de Insumos - Mejorada */}
+                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                      <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                        <h4 className="text-sm text-[#172E08] font-medium">Insumos Utilizados</h4>
+                      </div>
+                      
+                      {resumenInsumos.length === 0 ? (
+                        <div className="p-8 text-center">
+                          <p className="text-sm text-[#4D240F]/70">No hay insumos registrados</p>
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-4 py-3 text-left text-xs text-[#4D240F]/70">Producto</th>
+                                <th className="px-4 py-3 text-right text-xs text-[#4D240F]/70">Planeado</th>
+                                <th className="px-4 py-3 text-right text-xs text-[#4D240F]/70">Aplicado</th>
+                                <th className="px-4 py-3 text-right text-xs text-[#4D240F]/70">Diferencia</th>
+                                <th className="px-4 py-3 text-center text-xs text-[#4D240F]/70">Estado</th>
                               </tr>
-                            );
-                          })
-                        )}
-                      </tbody>
-                    </table>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {resumenInsumos.map((insumo, index) => {
+                                const diferencia = insumo.aplicado - insumo.planeado;
+                                const porcentaje = insumo.planeado > 0 
+                                  ? ((insumo.aplicado / insumo.planeado) * 100)
+                                  : 0;
+                                const esCritico = Math.abs(diferencia / insumo.planeado) > 0.15;
+
+                                return (
+                                  <tr key={index} className="hover:bg-gray-50 transition-colors">
+                                    <td className="px-4 py-3 text-sm text-[#172E08]">
+                                      {insumo.nombre}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-[#4D240F]/70 text-right">
+                                      {insumo.planeado.toFixed(2)} {insumo.unidad}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-[#172E08] font-medium text-right">
+                                      {insumo.aplicado.toFixed(2)} {insumo.unidad}
+                                    </td>
+                                    <td className={`px-4 py-3 text-sm text-right ${
+                                      diferencia > 0 ? 'text-orange-600' : diferencia < 0 ? 'text-blue-600' : 'text-gray-600'
+                                    }`}>
+                                      {diferencia > 0 ? '+' : ''}{diferencia.toFixed(2)} {insumo.unidad}
+                                    </td>
+                                    <td className="px-4 py-3 text-center">
+                                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs ${
+                                        esCritico 
+                                          ? 'bg-red-100 text-red-700'
+                                          : 'bg-green-100 text-green-700'
+                                      }`}>
+                                        {esCritico ? '⚠️ Desviado' : '✓ OK'}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Tabla de Canecas (solo para fumigación) */}
+                    {aplicacion.tipo === 'fumigacion' && (
+                      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mt-4">
+                        <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                          <h4 className="text-sm text-[#172E08] font-medium">Control de Canecas</h4>
+                        </div>
+                        <div className="p-4">
+                          <div className="grid grid-cols-3 gap-4">
+                            <div className="text-center">
+                              <p className="text-xs text-[#4D240F]/70 mb-1">Planeadas</p>
+                              <p className="text-2xl text-[#172E08] font-semibold">{canecasPlaneadas}</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-[#4D240F]/70 mb-1">Aplicadas</p>
+                              <p className="text-2xl text-[#73991C] font-semibold">{canecasAplicadas}</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-[#4D240F]/70 mb-1">Diferencia</p>
+                              <p className={`text-2xl font-semibold ${
+                                canecasAplicadas - canecasPlaneadas > 0 ? 'text-orange-600' : 
+                                canecasAplicadas - canecasPlaneadas < 0 ? 'text-blue-600' : 'text-gray-600'
+                              }`}>
+                                {canecasAplicadas - canecasPlaneadas > 0 ? '+' : ''}
+                                {canecasAplicadas - canecasPlaneadas}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
 
-              {/* PASO 2: DATOS FINALES */}
+              {/* ========================================= */}
+              {/* PASO 2: DATOS FINALES - MATRIZ DE JORNALES */}
+              {/* ========================================= */}
               {paso === 'datos-finales' && (
                 <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm text-[#4D240F]/70 mb-2">
-                        Jornales Utilizados
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.5"
-                        value={datosFinales.jornales}
-                        onChange={(e) =>
-                          setDatosFinales({ ...datosFinales, jornales: parseFloat(e.target.value) || 0 })
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#73991C]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm text-[#4D240F]/70 mb-2">
-                        Valor del Jornal (COP)
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="1000"
-                        value={datosFinales.valorJornal}
-                        onChange={(e) =>
-                          setDatosFinales({
-                            ...datosFinales,
-                            valorJornal: parseFloat(e.target.value) || 0,
-                          })
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#73991C]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm text-[#4D240F]/70 mb-2">
-                        Fecha Inicio Real
-                      </label>
-                      <input
-                        type="date"
-                        value={datosFinales.fechaInicioReal}
-                        onChange={(e) =>
-                          setDatosFinales({ ...datosFinales, fechaInicioReal: e.target.value })
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#73991C]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm text-[#4D240F]/70 mb-2">
-                        Fecha Fin Real
-                      </label>
-                      <input
-                        type="date"
-                        value={datosFinales.fechaFinReal}
-                        onChange={(e) =>
-                          setDatosFinales({ ...datosFinales, fechaFinReal: e.target.value })
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#73991C]"
-                      />
-                    </div>
-                  </div>
-
                   <div>
-                    <label className="block text-sm text-[#4D240F]/70 mb-2">
-                      Observaciones de Cierre
-                    </label>
-                    <textarea
-                      rows={4}
-                      value={datosFinales.observaciones}
-                      onChange={(e) =>
-                        setDatosFinales({ ...datosFinales, observaciones: e.target.value })
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-[#73991C]"
-                      placeholder="Observaciones generales sobre la aplicación..."
-                    />
+                    <h3 className="text-lg text-[#172E08] mb-2">Registro de Jornales</h3>
+                    <p className="text-sm text-[#4D240F]/70 mb-4">
+                      Registra los jornales utilizados por lote y tipo de actividad
+                    </p>
+
+                    {/* Matriz de Jornales */}
+                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-6">
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-sm text-[#172E08]">Lote</th>
+                              <th className="px-4 py-3 text-center text-sm text-[#4D240F]/70">
+                                <div className="flex items-center justify-center gap-2">
+                                  <Users className="w-4 h-4" />
+                                  Preparación
+                                </div>
+                              </th>
+                              <th className="px-4 py-3 text-center text-sm text-[#4D240F]/70">
+                                <div className="flex items-center justify-center gap-2">
+                                  <Users className="w-4 h-4" />
+                                  Aplicación
+                                </div>
+                              </th>
+                              <th className="px-4 py-3 text-center text-sm text-[#4D240F]/70">
+                                <div className="flex items-center justify-center gap-2">
+                                  <Users className="w-4 h-4" />
+                                  Transporte
+                                </div>
+                              </th>
+                              <th className="px-4 py-3 text-center text-sm text-[#172E08] font-medium bg-gray-100">
+                                Total
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {lotes.map((lote, index) => {
+                              const jornal = datosFinales.jornalesPorLote.find(j => j.lote_id === lote.lote_id) || {
+                                lote_id: lote.lote_id,
+                                preparacion: 0,
+                                aplicacion: 0,
+                                transporte: 0,
+                              };
+                              const totalLote = jornal.preparacion + jornal.aplicacion + jornal.transporte;
+
+                              return (
+                                <tr key={lote.lote_id} className="hover:bg-gray-50 transition-colors">
+                                  <td className="px-4 py-3">
+                                    <div>
+                                      <p className="text-sm text-[#172E08] font-medium">{lote.nombre}</p>
+                                      <p className="text-xs text-[#4D240F]/60">{lote.arboles.toLocaleString()} árboles</p>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3 text-center">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.5"
+                                      value={jornal.preparacion || ''}
+                                      onChange={(e) => actualizarJornal(lote.lote_id, 'preparacion', parseFloat(e.target.value) || 0)}
+                                      className="w-20 px-2 py-1.5 text-center border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C] text-sm"
+                                      placeholder="0"
+                                    />
+                                  </td>
+                                  <td className="px-4 py-3 text-center">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.5"
+                                      value={jornal.aplicacion || ''}
+                                      onChange={(e) => actualizarJornal(lote.lote_id, 'aplicacion', parseFloat(e.target.value) || 0)}
+                                      className="w-20 px-2 py-1.5 text-center border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C] text-sm"
+                                      placeholder="0"
+                                    />
+                                  </td>
+                                  <td className="px-4 py-3 text-center">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.5"
+                                      value={jornal.transporte || ''}
+                                      onChange={(e) => actualizarJornal(lote.lote_id, 'transporte', parseFloat(e.target.value) || 0)}
+                                      className="w-20 px-2 py-1.5 text-center border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C] text-sm"
+                                      placeholder="0"
+                                    />
+                                  </td>
+                                  <td className="px-4 py-3 text-center bg-gray-50">
+                                    <span className="text-sm text-[#172E08] font-semibold">
+                                      {totalLote.toFixed(1)}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          <tfoot className="bg-[#73991C]/10">
+                            <tr>
+                              <td className="px-4 py-3 text-sm text-[#172E08] font-semibold">
+                                Total General
+                              </td>
+                              <td className="px-4 py-3 text-center text-sm text-[#172E08] font-medium">
+                                {datosFinales.jornalesPorLote.reduce((sum, j) => sum + j.preparacion, 0).toFixed(1)}
+                              </td>
+                              <td className="px-4 py-3 text-center text-sm text-[#172E08] font-medium">
+                                {datosFinales.jornalesPorLote.reduce((sum, j) => sum + j.aplicacion, 0).toFixed(1)}
+                              </td>
+                              <td className="px-4 py-3 text-center text-sm text-[#172E08] font-medium">
+                                {datosFinales.jornalesPorLote.reduce((sum, j) => sum + j.transporte, 0).toFixed(1)}
+                              </td>
+                              <td className="px-4 py-3 text-center text-lg text-[#73991C] font-bold bg-[#73991C]/20">
+                                {totalJornales.toFixed(1)}
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Valor del Jornal y Fechas */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                      <div>
+                        <label className="block text-sm text-[#4D240F]/70 mb-2">
+                          Valor del Jornal (COP)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1000"
+                          value={datosFinales.valorJornal}
+                          onChange={(e) =>
+                            setDatosFinales({
+                              ...datosFinales,
+                              valorJornal: parseFloat(e.target.value) || 0,
+                            })
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm text-[#4D240F]/70 mb-2">
+                          Fecha Inicio Real
+                        </label>
+                        <input
+                          type="date"
+                          value={datosFinales.fechaInicioReal}
+                          onChange={(e) =>
+                            setDatosFinales({ ...datosFinales, fechaInicioReal: e.target.value })
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm text-[#4D240F]/70 mb-2">
+                          Fecha Fin Real
+                        </label>
+                        <input
+                          type="date"
+                          value={datosFinales.fechaFinReal}
+                          onChange={(e) =>
+                            setDatosFinales({ ...datosFinales, fechaFinReal: e.target.value })
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Observaciones */}
+                    <div>
+                      <label className="block text-sm text-[#4D240F]/70 mb-2">
+                        Observaciones de Cierre
+                      </label>
+                      <textarea
+                        rows={4}
+                        value={datosFinales.observaciones}
+                        onChange={(e) =>
+                          setDatosFinales({ ...datosFinales, observaciones: e.target.value })
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+                        placeholder="Describe cualquier incidencia, clima, rendimiento del personal, etc..."
+                      />
+                    </div>
+
+                    {/* Resumen de Costos */}
+                    <div className="bg-gradient-to-br from-[#73991C]/5 to-[#BFD97D]/5 border border-[#73991C]/20 rounded-xl p-5 mt-6">
+                      <h4 className="text-sm text-[#172E08] font-medium mb-3">Resumen de Costos</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <p className="text-xs text-[#4D240F]/70 mb-1">Insumos</p>
+                          <p className="text-lg text-[#172E08] font-semibold">
+                            {formatearMoneda(costoInsumos)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-[#4D240F]/70 mb-1">Mano de Obra</p>
+                          <p className="text-lg text-[#172E08] font-semibold">
+                            {formatearMoneda(costoManoObra)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-[#4D240F]/70 mb-1">Total</p>
+                          <p className="text-lg text-[#73991C] font-bold">
+                            {formatearMoneda(costoTotal)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-[#4D240F]/70 mb-1">Costo/Árbol</p>
+                          <p className="text-lg text-[#172E08] font-semibold">
+                            {formatearMoneda(costoPorArbol)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
 
+              {/* ========================================= */}
               {/* PASO 3: CONFIRMACIÓN */}
+              {/* ========================================= */}
               {paso === 'confirmacion' && (
                 <div className="space-y-6">
-                  {/* Información General */}
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <h3 className="text-sm text-[#172E08] mb-3">Información General</h3>
-                    <div className="grid grid-cols-2 gap-3 text-sm">
-                      <div>
-                        <span className="text-[#4D240F]/70">Tipo:</span>
-                        <span className="ml-2 text-[#172E08]">
-                          {aplicacion.tipo === 'fumigacion'
-                            ? 'Fumigación'
-                            : aplicacion.tipo === 'fertilizacion'
-                            ? 'Fertilización'
-                            : 'Drench'}
-                        </span>
+                  <div className="bg-gradient-to-br from-[#73991C]/5 to-[#BFD97D]/5 border-2 border-[#73991C]/30 rounded-xl p-6">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-12 h-12 bg-[#73991C] rounded-full flex items-center justify-center">
+                        <Check className="w-6 h-6 text-white" />
                       </div>
                       <div>
-                        <span className="text-[#4D240F]/70">Propósito:</span>
-                        <span className="ml-2 text-[#172E08]">
-                          {aplicacion.proposito || 'No especificado'}
-                        </span>
-                      </div>
-                      <div className="col-span-2">
-                        <span className="text-[#4D240F]/70">Blanco Biológico:</span>
-                        <span className="ml-2 text-[#172E08]">{blancoBiologico}</span>
-                      </div>
-                      <div>
-                        <span className="text-[#4D240F]/70">Fecha Inicio Planeada:</span>
-                        <span className="ml-2 text-[#172E08]">
-                          {formatearFecha(fechaInicioPlaneada)}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[#4D240F]/70">Fecha Fin Planeada:</span>
-                        <span className="ml-2 text-[#172E08]">
-                          {formatearFecha(fechaFinPlaneada)}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[#4D240F]/70">Fecha Inicio Real:</span>
-                        <span className="ml-2 text-[#73991C]">
-                          {formatearFecha(datosFinales.fechaInicioReal)}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[#4D240F]/70">Fecha Fin Real:</span>
-                        <span className="ml-2 text-[#73991C]">
-                          {formatearFecha(datosFinales.fechaFinReal)}
-                        </span>
+                        <h3 className="text-lg text-[#172E08]">Confirmar Cierre</h3>
+                        <p className="text-sm text-[#4D240F]/70">
+                          Revisa los datos antes de cerrar la aplicación
+                        </p>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Lotes */}
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <h3 className="text-sm text-[#172E08] mb-3">Lotes Aplicados</h3>
-                    <div className="space-y-2">
-                      {lotes.map((lote, index) => (
-                        <div key={index} className="flex justify-between text-sm">
-                          <span className="text-[#172E08]">{lote.nombre}</span>
-                          <span className="text-[#4D240F]/70">
-                            {lote.arboles.toLocaleString('es-CO')} árboles
-                          </span>
+                    {/* Resumen Final */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Información General */}
+                      <div>
+                        <h4 className="text-sm text-[#172E08] font-medium mb-3">Información General</h4>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-[#4D240F]/70">Aplicación:</span>
+                            <span className="text-[#172E08] font-medium">{aplicacion.nombre}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-[#4D240F]/70">Tipo:</span>
+                            <span className="text-[#172E08]">
+                              {aplicacion.tipo === 'fumigacion' ? 'Fumigación' : 
+                               aplicacion.tipo === 'fertilizacion' ? 'Fertilización' : 'Drench'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-[#4D240F]/70">Lotes:</span>
+                            <span className="text-[#172E08]">{lotes.length} lotes</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-[#4D240F]/70">Árboles:</span>
+                            <span className="text-[#172E08]">{totalArboles.toLocaleString()}</span>
+                          </div>
                         </div>
-                      ))}
-                      <div className="border-t pt-2 mt-2 flex justify-between text-sm">
-                        <span className="text-[#172E08]">Total</span>
-                        <span className="text-[#172E08]">
-                          {totalArboles.toLocaleString('es-CO')} árboles
-                        </span>
+                      </div>
+
+                      {/* Fechas y Jornales */}
+                      <div>
+                        <h4 className="text-sm text-[#172E08] font-medium mb-3">Ejecución</h4>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-[#4D240F]/70">Inicio:</span>
+                            <span className="text-[#172E08]">{formatearFecha(datosFinales.fechaInicioReal)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-[#4D240F]/70">Fin:</span>
+                            <span className="text-[#172E08]">{formatearFecha(datosFinales.fechaFinReal)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-[#4D240F]/70">Jornales:</span>
+                            <span className="text-[#172E08] font-medium">{totalJornales.toFixed(1)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-[#4D240F]/70">Valor Jornal:</span>
+                            <span className="text-[#172E08]">{formatearMoneda(datosFinales.valorJornal)}</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
+
+                    {/* Costos Totales */}
+                    <div className="mt-6 pt-6 border-t-2 border-[#73991C]/20">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="text-center">
+                          <p className="text-xs text-[#4D240F]/70 mb-1">Insumos</p>
+                          <p className="text-base text-[#172E08] font-semibold">
+                            {formatearMoneda(costoInsumos)}
+                          </p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-[#4D240F]/70 mb-1">Mano de Obra</p>
+                          <p className="text-base text-[#172E08] font-semibold">
+                            {formatearMoneda(costoManoObra)}
+                          </p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-[#4D240F]/70 mb-1">Costo Total</p>
+                          <p className="text-lg text-[#73991C] font-bold">
+                            {formatearMoneda(costoTotal)}
+                          </p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-xs text-[#4D240F]/70 mb-1">Costo/Árbol</p>
+                          <p className="text-base text-[#172E08] font-semibold">
+                            {formatearMoneda(costoPorArbol)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Observaciones */}
+                    {datosFinales.observaciones && (
+                      <div className="mt-6 pt-6 border-t-2 border-[#73991C]/20">
+                        <h4 className="text-sm text-[#172E08] font-medium mb-2">Observaciones</h4>
+                        <p className="text-sm text-[#4D240F]/70 italic">
+                          "{datosFinales.observaciones}"
+                        </p>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Resumen de Costos */}
-                  <div className="bg-[#F8FAF5] border-2 border-[#73991C] rounded-lg p-5">
-                    <h3 className="text-sm text-[#172E08] mb-4">Resumen de Costos</h3>
-                    <div className="space-y-3">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-[#4D240F]/70">Insumos</span>
-                        <span className="text-[#172E08]">{formatearMoneda(costoInsumos)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-[#4D240F]/70">
-                          Mano de Obra ({datosFinales.jornales} jornales × {formatearMoneda(datosFinales.valorJornal)})
-                        </span>
-                        <span className="text-[#172E08]">{formatearMoneda(costoManoObra)}</span>
-                      </div>
-                      <div className="border-t-2 border-[#73991C] pt-3 flex justify-between">
-                        <span className="text-[#172E08]">Total</span>
-                        <span className="text-[#73991C] text-lg">
-                          {formatearMoneda(costoTotal)}
-                        </span>
-                      </div>
-                    </div>
+                  {/* Advertencia */}
+                  <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
+                    <p className="text-sm text-yellow-800">
+                      ⚠️ <strong>Importante:</strong> Al cerrar esta aplicación se descontarán los insumos del inventario
+                      y no se podrán realizar más modificaciones.
+                    </p>
                   </div>
-
-                  {/* Métricas */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-                      <div className="text-xs text-blue-600 mb-1">Costo por Árbol</div>
-                      <div className="text-lg text-blue-700">
-                        {formatearMoneda(costoPorArbol)}
-                      </div>
-                    </div>
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
-                      <div className="text-xs text-green-600 mb-1">Árboles por Jornal</div>
-                      <div className="text-lg text-green-700">
-                        {arbolesPorJornal.toFixed(0)}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Botón Ver Reporte */}
-                  <button
-                    disabled
-                    className="w-full py-3 border-2 border-dashed border-gray-300 text-gray-400 rounded-lg flex items-center justify-center gap-2 cursor-not-allowed"
-                  >
-                    <FileText className="w-5 h-5" />
-                    Ver Reporte Detallado (Próximamente)
-                  </button>
                 </div>
               )}
             </>
@@ -740,58 +1047,72 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
         </div>
 
         {/* FOOTER - BOTONES */}
-        <div className="border-t p-4 bg-gray-50 flex items-center justify-between">
-          <button
-            onClick={() => {
-              if (paso === 'datos-finales') setPaso('revision');
-              if (paso === 'confirmacion') setPaso('datos-finales');
-            }}
-            disabled={paso === 'revision'}
-            className="px-4 py-2 text-sm text-[#4D240F]/70 hover:text-[#4D240F] disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            ← Anterior
-          </button>
+        {!loading && !error && (
+          <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+            <div>
+              {paso !== 'revision' && (
+                <button
+                  onClick={() => {
+                    if (paso === 'datos-finales') setPaso('revision');
+                    if (paso === 'confirmacion') setPaso('datos-finales');
+                  }}
+                  className="px-4 py-2 text-[#4D240F]/70 hover:text-[#172E08] transition-colors"
+                >
+                  ← Anterior
+                </button>
+              )}
+            </div>
 
-          <div className="flex gap-2">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-sm border border-gray-300 text-gray-700 rounded hover:bg-gray-100"
-            >
-              Cancelar
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 border border-gray-300 text-[#4D240F]/70 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                Cancelar
+              </button>
 
-            {paso !== 'confirmacion' ? (
-              <button
-                onClick={() => {
-                  if (paso === 'revision') setPaso('datos-finales');
-                  if (paso === 'datos-finales') setPaso('confirmacion');
-                }}
-                className="px-4 py-2 text-sm bg-[#73991C] text-white rounded hover:bg-[#5f7d17] flex items-center gap-2"
-              >
-                Siguiente
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            ) : (
-              <button
-                onClick={handleCerrarAplicacion}
-                disabled={procesando}
-                className="px-6 py-2 text-sm bg-[#73991C] text-white rounded hover:bg-[#5f7d17] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                {procesando ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Cerrando...
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-4 h-4" />
-                    Confirmar Cierre
-                  </>
-                )}
-              </button>
-            )}
+              {paso === 'revision' && (
+                <button
+                  onClick={() => setPaso('datos-finales')}
+                  className="px-6 py-2 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-lg hover:from-[#5f7d17] hover:to-[#9db86d] transition-all flex items-center gap-2"
+                >
+                  Continuar
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              )}
+
+              {paso === 'datos-finales' && (
+                <button
+                  onClick={() => setPaso('confirmacion')}
+                  className="px-6 py-2 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-lg hover:from-[#5f7d17] hover:to-[#9db86d] transition-all flex items-center gap-2"
+                >
+                  Continuar
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              )}
+
+              {paso === 'confirmacion' && (
+                <button
+                  onClick={cerrarAplicacion}
+                  disabled={procesando}
+                  className="px-6 py-2 bg-gradient-to-r from-green-600 to-green-500 text-white rounded-lg hover:from-green-700 hover:to-green-600 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {procesando ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Cerrando...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      Cerrar Aplicación
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

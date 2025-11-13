@@ -372,7 +372,6 @@ export function NewPurchase({ onNavigate }: NewPurchaseProps) {
   if (showSuccessView) {
     return (
       <div className="space-y-6">
-        <ToastContainer />
         <InventoryNav />
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="text-center">

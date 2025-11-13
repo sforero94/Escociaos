@@ -190,13 +190,13 @@ export function generarListaCompras(
       ? Math.ceil(cantidad_faltante / presentacion_size) 
       : 0;
 
-    // Calcular costo
-    const precio_unitario = productoInventario.ultimo_precio_unitario || 0;
-    const costo_estimado = unidades_a_comprar * presentacion_size * precio_unitario;
+    // Calcular costo usando precio_presentacion (precio por bulto/envase completo)
+    const precio_presentacion = productoInventario.precio_presentacion || 0;
+    const costo_estimado = unidades_a_comprar * precio_presentacion;
 
     // Determinar alerta
     let alerta: 'sin_precio' | 'sin_stock' | 'normal' = 'normal';
-    if (!precio_unitario || precio_unitario === 0) {
+    if (!precio_presentacion || precio_presentacion === 0) {
       alerta = 'sin_precio';
       productos_sin_precio++;
     }
@@ -216,7 +216,8 @@ export function generarListaCompras(
       cantidad_faltante,
       presentacion_comercial: productoInventario.presentacion_comercial,
       unidades_a_comprar,
-      ultimo_precio_unitario: precio_unitario,
+      ultimo_precio_unitario: productoInventario.ultimo_precio_unitario || 0,  // Precio por Kg/L
+      precio_presentacion,  // Precio por bulto/envase completo
       costo_estimado,
       alerta
     });

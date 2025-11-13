@@ -213,9 +213,9 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
       sublotes_ids: lote.sublotes.map((s) => s.id),
       area_hectareas: lote.area_hectareas,
       conteo_arboles: lote.conteo_arboles,
-      // Valores por defecto para fumigación
-      calibracion_litros_arbol: formData.tipo === 'fumigacion' ? 20 : undefined,
-      tamano_caneca: formData.tipo === 'fumigacion' ? 200 : undefined,
+      // Valores por defecto para fumigación y drench (ambos usan canecas)
+      calibracion_litros_arbol: (formData.tipo === 'fumigacion' || formData.tipo === 'drench') ? 20 : undefined,
+      tamano_caneca: (formData.tipo === 'fumigacion' || formData.tipo === 'drench') ? 200 : undefined,
     };
 
     setFormData((prev) => ({
@@ -268,6 +268,27 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
 
     // Validaciones específicas de fumigación
     if (formData.tipo === 'fumigacion') {
+      // Validar blanco biológico solo en fumigación (OBLIGATORIO)
+      if (!formData.blanco_biologico || formData.blanco_biologico.length === 0) {
+        nuevosErrores.blanco_biologico = 'Debes seleccionar al menos un blanco biológico para fumigaciones';
+      }
+
+      // Validar calibración y canecas
+      formData.lotes_seleccionados?.forEach((lote) => {
+        if (!lote.calibracion_litros_arbol || lote.calibracion_litros_arbol <= 0) {
+          nuevosErrores[`lote_${lote.lote_id}`] = 'Falta calibración';
+        }
+        if (!lote.tamano_caneca) {
+          nuevosErrores[`lote_${lote.lote_id}`] = 'Falta tamaño de caneca';
+        }
+      });
+    }
+
+    // Validaciones específicas de drench (igual a fumigación pero blanco biológico OPCIONAL)
+    if (formData.tipo === 'drench') {
+      // Blanco biológico es opcional para drench
+
+      // Validar calibración y canecas (igual a fumigación)
       formData.lotes_seleccionados?.forEach((lote) => {
         if (!lote.calibracion_litros_arbol || lote.calibracion_litros_arbol <= 0) {
           nuevosErrores[`lote_${lote.lote_id}`] = 'Falta calibración';
@@ -441,112 +462,216 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
             />
           </div>
 
-          {/* Blancos Biológicos */}
-          <div className="md:col-span-2">
-            <label className="block text-sm text-[#4D240F] mb-2">
-              Blancos Biológicos (Plagas/Enfermedades) *
-            </label>
-            
-            {cargandoBlancos ? (
-              <div className="p-4 bg-gray-50 rounded-lg text-center">
-                <p className="text-sm text-[#4D240F]/70">Cargando blancos biológicos...</p>
-              </div>
-            ) : blancosBiologicos.length === 0 ? (
-              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <p className="text-sm text-yellow-800">
-                  ⚠️ No hay blancos biológicos disponibles. Verifica la tabla en Supabase.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {/* Input de búsqueda con sugerencias */}
-                <div className="relative">
+          {/* Blancos Biológicos - Solo para fumigación */}
+          {formData.tipo === 'fumigacion' && (
+            <div className="md:col-span-2">
+              <label className="block text-sm text-[#4D240F] mb-2">
+                Blancos Biológicos (Plagas/Enfermedades) *
+              </label>
+              
+              {cargandoBlancos ? (
+                <div className="p-4 bg-gray-50 rounded-lg text-center">
+                  <p className="text-sm text-[#4D240F]/70">Cargando blancos biológicos...</p>
+                </div>
+              ) : blancosBiologicos.length === 0 ? (
+                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-yellow-800">
+                    ⚠️ No hay blancos biológicos disponibles. Verifica la tabla en Supabase.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* Input de búsqueda con sugerencias */}
                   <div className="relative">
-                    <input
-                      type="text"
-                      value={busquedaBlanco}
-                      onChange={(e) => {
-                        setBusquedaBlanco(e.target.value);
-                        setMostrarSugerencias(true);
-                      }}
-                      onFocus={() => setMostrarSugerencias(true)}
-                      placeholder="Buscar plaga o enfermedad... (ej: trips, phytophthora)"
-                      className="w-full px-4 py-2.5 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C] transition-all"
-                    />
-                    <Bug className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#4D240F]/50" />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={busquedaBlanco}
+                        onChange={(e) => {
+                          setBusquedaBlanco(e.target.value);
+                          setMostrarSugerencias(true);
+                        }}
+                        onFocus={() => setMostrarSugerencias(true)}
+                        placeholder="Buscar plaga o enfermedad... (ej: trips, phytophthora)"
+                        className="w-full px-4 py-2.5 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C] transition-all"
+                      />
+                      <Bug className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#4D240F]/50" />
+                    </div>
+
+                    {/* Sugerencias desplegables */}
+                    {mostrarSugerencias && blancosFiltrados.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                        {blancosFiltrados.map((blanco) => (
+                          <button
+                            key={blanco.id}
+                            type="button"
+                            onClick={() => agregarBlanco(blanco.id)}
+                            className="w-full text-left px-4 py-3 hover:bg-[#73991C]/5 transition-colors border-b border-gray-100 last:border-b-0"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">
+                                {blanco.tipo === 'plaga' ? '🐛' : '🍄'}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm text-[#172E08] font-medium">
+                                  {blanco.nombre}
+                                </div>
+                                {blanco.descripcion && (
+                                  <div className="text-xs text-[#4D240F]/60 truncate">
+                                    {blanco.descripcion}
+                                  </div>
+                                )}
+                                <div className="text-xs text-[#73991C] capitalize mt-0.5">
+                                  {blanco.tipo}
+                                </div>
+                              </div>
+                              <Plus className="w-4 h-4 text-[#73991C]" />
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
-                  {/* Sugerencias desplegables */}
-                  {mostrarSugerencias && blancosFiltrados.length > 0 && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-                      {blancosFiltrados.map((blanco) => (
-                        <button
-                          key={blanco.id}
-                          type="button"
-                          onClick={() => agregarBlanco(blanco.id)}
-                          className="w-full text-left px-4 py-3 hover:bg-[#73991C]/5 transition-colors border-b border-gray-100 last:border-b-0"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-lg">
-                              {blanco.tipo === 'plaga' ? '🐛' : '🍄'}
-                            </span>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm text-[#172E08] font-medium">
-                                {blanco.nombre}
-                              </div>
-                              {blanco.descripcion && (
-                                <div className="text-xs text-[#4D240F]/60 truncate">
-                                  {blanco.descripcion}
-                                </div>
-                              )}
-                              <div className="text-xs text-[#73991C] capitalize mt-0.5">
-                                {blanco.tipo}
-                              </div>
-                            </div>
-                            <Plus className="w-4 h-4 text-[#73991C]" />
+                  {/* Blancos seleccionados (chips/tags) */}
+                  {blancosSeleccionados.length > 0 && (
+                    <div className="border border-[#73991C]/30 bg-[#73991C]/5 rounded-lg p-4">
+                      <div className="text-xs text-[#4D240F]/70 mb-2">
+                        Seleccionados ({blancosSeleccionados.length}):
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {blancosSeleccionados.map((blanco) => (
+                          <div
+                            key={blanco.id}
+                            className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border-2 border-[#73991C] rounded-full text-sm"
+                          >
+                            <span>{blanco.tipo === 'plaga' ? '🐛' : '🍄'}</span>
+                            <span className="text-[#172E08]">{blanco.nombre}</span>
+                            <button
+                              type="button"
+                              onClick={() => quitarBlanco(blanco.id)}
+                              className="ml-1 text-[#4D240F]/70 hover:text-red-600 transition-colors"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
                           </div>
-                        </button>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
+              )}
+              
+              {errores.blanco_biologico && (
+                <p className="text-red-600 text-sm mt-2 flex items-center gap-1">
+                  <AlertCircle className="w-4 h-4" />
+                  {errores.blanco_biologico}
+                </p>
+              )}
+            </div>
+          )}
 
-                {/* Blancos seleccionados (chips/tags) */}
-                {blancosSeleccionados.length > 0 && (
-                  <div className="border border-[#73991C]/30 bg-[#73991C]/5 rounded-lg p-4">
-                    <div className="text-xs text-[#4D240F]/70 mb-2">
-                      Seleccionados ({blancosSeleccionados.length}):
+          {/* Blancos Biológicos - Para drench (OPCIONAL) */}
+          {formData.tipo === 'drench' && (
+            <div className="md:col-span-2">
+              <label className="block text-sm text-[#4D240F] mb-2">
+                Blancos Biológicos (Plagas/Enfermedades) <span className="text-gray-400 text-xs">(Opcional)</span>
+              </label>
+              
+              {cargandoBlancos ? (
+                <div className="p-4 bg-gray-50 rounded-lg text-center">
+                  <p className="text-sm text-[#4D240F]/70">Cargando blancos biológicos...</p>
+                </div>
+              ) : blancosBiologicos.length === 0 ? (
+                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-yellow-800">
+                    ⚠️ No hay blancos biológicos disponibles. Verifica la tabla en Supabase.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* Input de búsqueda con sugerencias */}
+                  <div className="relative">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={busquedaBlanco}
+                        onChange={(e) => {
+                          setBusquedaBlanco(e.target.value);
+                          setMostrarSugerencias(true);
+                        }}
+                        onFocus={() => setMostrarSugerencias(true)}
+                        placeholder="Buscar plaga o enfermedad... (ej: trips, phytophthora)"
+                        className="w-full px-4 py-2.5 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C] transition-all"
+                      />
+                      <Bug className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#4D240F]/50" />
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      {blancosSeleccionados.map((blanco) => (
-                        <div
-                          key={blanco.id}
-                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border-2 border-[#73991C] rounded-full text-sm"
-                        >
-                          <span>{blanco.tipo === 'plaga' ? '🐛' : '🍄'}</span>
-                          <span className="text-[#172E08]">{blanco.nombre}</span>
+
+                    {/* Sugerencias desplegables */}
+                    {mostrarSugerencias && blancosFiltrados.length > 0 && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                        {blancosFiltrados.map((blanco) => (
                           <button
+                            key={blanco.id}
                             type="button"
-                            onClick={() => quitarBlanco(blanco.id)}
-                            className="ml-1 text-[#4D240F]/70 hover:text-red-600 transition-colors"
+                            onClick={() => agregarBlanco(blanco.id)}
+                            className="w-full text-left px-4 py-3 hover:bg-[#73991C]/5 transition-colors border-b border-gray-100 last:border-b-0"
                           >
-                            <X className="w-4 h-4" />
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg">
+                                {blanco.tipo === 'plaga' ? '🐛' : '🍄'}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm text-[#172E08] font-medium">
+                                  {blanco.nombre}
+                                </div>
+                                {blanco.descripcion && (
+                                  <div className="text-xs text-[#4D240F]/60 truncate">
+                                    {blanco.descripcion}
+                                  </div>
+                                )}
+                                <div className="text-xs text-[#73991C] capitalize mt-0.5">
+                                  {blanco.tipo}
+                                </div>
+                              </div>
+                              <Plus className="w-4 h-4 text-[#73991C]" />
+                            </div>
                           </button>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            )}
-            
-            {errores.blanco_biologico && (
-              <p className="text-red-600 text-sm mt-2 flex items-center gap-1">
-                <AlertCircle className="w-4 h-4" />
-                {errores.blanco_biologico}
-              </p>
-            )}
-          </div>
+
+                  {/* Blancos seleccionados (chips/tags) */}
+                  {blancosSeleccionados.length > 0 && (
+                    <div className="border border-[#73991C]/30 bg-[#73991C]/5 rounded-lg p-4">
+                      <div className="text-xs text-[#4D240F]/70 mb-2">
+                        Seleccionados ({blancosSeleccionados.length}):
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {blancosSeleccionados.map((blanco) => (
+                          <div
+                            key={blanco.id}
+                            className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border-2 border-[#73991C] rounded-full text-sm"
+                          >
+                            <span>{blanco.tipo === 'plaga' ? '🐛' : '🍄'}</span>
+                            <span className="text-[#172E08]">{blanco.nombre}</span>
+                            <button
+                              type="button"
+                              onClick={() => quitarBlanco(blanco.id)}
+                              className="ml-1 text-[#4D240F]/70 hover:text-red-600 transition-colors"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -639,6 +764,47 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
 
               {/* Configuración específica de fumigación */}
               {formData.tipo === 'fumigacion' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-[#4D240F] mb-1">
+                      Calibración (L/árbol)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={lote.calibracion_litros_arbol || ''}
+                      onChange={(e) =>
+                        actualizarLote(
+                          lote.lote_id,
+                          'calibracion_litros_arbol',
+                          parseFloat(e.target.value)
+                        )
+                      }
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-[#4D240F] mb-1">
+                      Tamaño Caneca (L)
+                    </label>
+                    <select
+                      value={lote.tamano_caneca || 200}
+                      onChange={(e) =>
+                        actualizarLote(lote.lote_id, 'tamano_caneca', parseInt(e.target.value))
+                      }
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+                    >
+                      <option value={20}>20L</option>
+                      <option value={200}>200L</option>
+                      <option value={500}>500L</option>
+                      <option value={1000}>1000L</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Configuración específica de drench (igual a fumigación) */}
+              {formData.tipo === 'drench' && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs text-[#4D240F] mb-1">

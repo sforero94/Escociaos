@@ -45,6 +45,41 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
     movimientos: true
   });
 
+  // Validar que la aplicación esté en ejecución
+  if (aplicacion.estado !== 'En ejecución') {
+    return (
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
+              <AlertTriangle className="w-6 h-6 text-yellow-600" />
+            </div>
+            <div>
+              <h3 className="text-lg text-[#172E08]">Aplicación No Iniciada</h3>
+              <p className="text-sm text-[#4D240F]/70">No se pueden registrar movimientos</p>
+            </div>
+          </div>
+
+          <p className="text-sm text-[#4D240F]/70 mb-6">
+            Esta aplicación está en estado <span className="font-medium text-[#172E08]">"{aplicacion.estado}"</span>. 
+            {' '}Debes iniciar la ejecución antes de poder registrar movimientos diarios.
+          </p>
+
+          <div className="flex gap-3">
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="flex-1 px-4 py-2 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-lg hover:from-[#5f7d17] hover:to-[#9db86d] transition-all"
+              >
+                Entendido
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Datos
   const [movimientos, setMovimientos] = useState<MovimientoConProductos[]>([]);
   const [productosPlanificados, setProductosPlanificados] = useState<ProductoEnMezcla[]>([]);
@@ -54,7 +89,7 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
     planeadas: number;
     utilizadas: number;
     porcentaje: number;
-  } | null>(null);
+  }>({ planeadas: 0, utilizadas: 0, porcentaje: 0 });
 
   useEffect(() => {
     loadData();
@@ -105,11 +140,50 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
 
       if (errorProductos) throw errorProductos;
 
-      // 3. Agrupar productos por movimiento
-      const movimientosConProductos: MovimientoConProductos[] = movimientosData.map(mov => ({
-        ...mov,
-        productos: (productosData || []).filter(p => p.movimiento_diario_id === mov.id)
-      }));
+      // 3. Para fertilización/drench, cargar presentacion_kg_l de cada producto
+      let presentacionMap = new Map<string, number>();
+      if (aplicacion.tipo === 'fertilizacion' || aplicacion.tipo === 'drench') {
+        const productosIds = Array.from(new Set((productosData || []).map(p => p.producto_id)));
+        if (productosIds.length > 0) {
+          const { data: presentacionesData, error: errorPresentaciones } = await supabase
+            .from('productos')
+            .select('id, presentacion_kg_l')
+            .in('id', productosIds);
+          
+          if (!errorPresentaciones && presentacionesData) {
+            presentacionesData.forEach(p => {
+              if (p.presentacion_kg_l) {
+                presentacionMap.set(p.id, p.presentacion_kg_l);
+              }
+            });
+          }
+        }
+      }
+
+      // 4. Agrupar productos por movimiento y convertir Kg a bultos si aplica
+      const movimientosConProductos: MovimientoConProductos[] = movimientosData.map(mov => {
+        const productosMovimiento = (productosData || [])
+          .filter(p => p.movimiento_diario_id === mov.id)
+          .map(p => {
+            // Para fertilización/drench, convertir Kg a bultos para mostrar en UI
+            if ((aplicacion.tipo === 'fertilizacion' || aplicacion.tipo === 'drench') && presentacionMap.has(p.producto_id)) {
+              const presentacion = presentacionMap.get(p.producto_id)!;
+              const cantidadEnBultos = p.cantidad_utilizada / presentacion;
+              return {
+                ...p,
+                cantidad_utilizada: cantidadEnBultos,
+                unidad: 'bultos' as any, // Se muestra como "bultos" en UI
+                presentacion_kg_l: presentacion // Guardar para usar en calcularResumen
+              };
+            }
+            return p;
+          });
+
+        return {
+          ...mov,
+          productos: productosMovimiento
+        };
+      });
 
       setMovimientos(movimientosConProductos);
     } catch (err: any) {
@@ -204,7 +278,12 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
         
         // Convertir a unidad base (L o Kg) para comparar con planificado
         let cantidadEnUnidadBase = producto.cantidad_utilizada;
-        if (producto.unidad === 'cc') {
+        
+        if (producto.unidad === 'bultos' && (producto as any).presentacion_kg_l) {
+          // Para bultos: convertir de nuevo a Kg usando presentacion_kg_l
+          cantidadEnUnidadBase = producto.cantidad_utilizada * (producto as any).presentacion_kg_l;
+          console.log(`🔄 Resumen - Convertir ${producto.cantidad_utilizada} bultos × ${(producto as any).presentacion_kg_l} = ${cantidadEnUnidadBase} Kg`);
+        } else if (producto.unidad === 'cc') {
           cantidadEnUnidadBase = producto.cantidad_utilizada / 1000; // cc a L
         } else if (producto.unidad === 'g') {
           cantidadEnUnidadBase = producto.cantidad_utilizada / 1000; // g a Kg
@@ -386,8 +465,8 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
         </div>
       </div>
 
-      {/* Resumen de Canecas Totales */}
-      {canecasTotales && (
+      {/* Resumen de Canecas/Bultos Totales */}
+      {aplicacion.tipo === 'fumigacion' && canecasTotales && (
         <div className="bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 rounded-2xl border border-[#73991C]/20 p-6">
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 bg-[#73991C]/20 rounded-xl flex items-center justify-center">
@@ -598,12 +677,25 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
                               year: 'numeric'
                             })}
                           </div>
-                          <div className="flex items-center gap-2 px-3 py-1 bg-[#73991C]/10 rounded-lg">
-                            <Droplet className="w-4 h-4 text-[#73991C]" />
-                            <span className="text-sm text-[#172E08]">
-                              {mov.numero_canecas} caneca{mov.numero_canecas !== 1 ? 's' : ''}
-                            </span>
-                          </div>
+                          
+                          {/* Mostrar canecas o bultos según el tipo de aplicación */}
+                          {mov.numero_canecas !== undefined && mov.numero_canecas !== null && (
+                            <div className="flex items-center gap-2 px-3 py-1 bg-[#73991C]/10 rounded-lg">
+                              <Droplet className="w-4 h-4 text-[#73991C]" />
+                              <span className="text-sm text-[#172E08]">
+                                {mov.numero_canecas} caneca{mov.numero_canecas !== 1 ? 's' : ''}
+                              </span>
+                            </div>
+                          )}
+                          
+                          {mov.numero_bultos !== undefined && mov.numero_bultos !== null && (
+                            <div className="flex items-center gap-2 px-3 py-1 bg-[#73991C]/10 rounded-lg">
+                              <Package className="w-4 h-4 text-[#73991C]" />
+                              <span className="text-sm text-[#172E08]">
+                                {mov.numero_bultos} bulto{mov.numero_bultos !== 1 ? 's' : ''}
+                              </span>
+                            </div>
+                          )}
                         </div>
                         <p className="text-xs text-[#4D240F]/70">{mov.lote_nombre}</p>
                       </div>
@@ -632,7 +724,7 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
                           </div>
                           <div className="text-right">
                             <p className="text-sm text-[#172E08]">
-                              {producto.cantidad_utilizada} {producto.unidad}
+                              {producto.cantidad_utilizada} {producto.unidad === 'bultos' ? 'bultos' : producto.unidad}
                             </p>
                           </div>
                         </div>

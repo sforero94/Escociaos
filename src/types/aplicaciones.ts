@@ -104,10 +104,11 @@ export interface ItemListaCompras {
   cantidad_necesaria: number;
   cantidad_faltante: number;
   
-  presentacion_comercial: string; // ej: "Bulto de 25kg", "Tarro de 1L"
+  presentacion_comercial: string; // ej: "50 Kg", "5 L"
   unidades_a_comprar: number;
   
-  ultimo_precio_unitario?: number;
+  ultimo_precio_unitario?: number;  // Precio por Kg/L (unidad base)
+  precio_presentacion?: number;     // Precio por bulto/envase completo
   costo_estimado?: number;
   
   alerta?: 'sin_precio' | 'sin_stock' | 'normal';
@@ -165,7 +166,8 @@ export interface ProductoCatalogo {
   unidad_medida: 'litros' | 'kilos' | 'unidades';
   estado_fisico: 'liquido' | 'solido';
   presentacion_comercial: string;
-  ultimo_precio_unitario?: number;
+  ultimo_precio_unitario?: number;  // Precio por Kg/L (unidad base)
+  precio_presentacion?: number;     // Precio por bulto/envase completo
   cantidad_actual: number;
   
   // Para mostrar en UI
@@ -210,9 +212,11 @@ export interface MovimientoDiario {
   fecha_movimiento: string; // ISO date string (YYYY-MM-DD)
   lote_id: string;
   lote_nombre: string;
-  numero_canecas: number; // Número total de canecas aplicadas
+  numero_canecas?: number; // Número total de canecas aplicadas (fumigación) - NULL para fertilización
+  numero_bultos?: number; // Número total de bultos usados (fertilización/drench) - NULL para fumigación
   responsable: string;
   notas?: string;
+  condiciones_meteorologicas?: string;
   
   // Metadata
   created_at?: string;
@@ -226,7 +230,7 @@ export interface MovimientoDiarioProducto {
   producto_nombre: string;
   producto_categoria: string;
   cantidad_utilizada: number;
-  unidad: 'cc' | 'L' | 'g' | 'Kg'; // Unidades específicas por estado físico
+  unidad: 'cc' | 'L' | 'g' | 'Kg'; // Siempre se guarda en unidades base (cc/L/g/Kg)
   created_at?: string;
 }
 

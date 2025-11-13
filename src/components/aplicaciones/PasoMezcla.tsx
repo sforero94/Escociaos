@@ -51,27 +51,38 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
     try {
       // Filtrar productos según tipo de aplicación
       let categorias: string[] = [];
+      let estadoFisico: 'Líquido' | 'Sólido' | undefined = undefined;
 
       if (configuracion.tipo === 'fumigacion') {
-        categorias = [
-          'Fungicida',
-          'Insecticida',
-          'Acaricida',
-          'Herbicida',
-          'Biocontrolador',
-          'Coadyuvante',
-        ];
+        // Fumigación: TODOS los productos líquidos (pesticidas y fertilizantes)
+        estadoFisico = 'Líquido';
+      } else if (configuracion.tipo === 'drench') {
+        // Drench: TODOS los productos líquidos (pesticidas y fertilizantes)
+        estadoFisico = 'Líquido';
       } else {
+        // Fertilización: productos sólidos
         categorias = ['Fertilizante'];
+        estadoFisico = 'Sólido';
       }
 
-      const { data, error } = await supabase
+      // Construir query con filtros
+      let query = supabase
         .from('productos')
         .select('*')
-        .in('categoria', categorias)
         .eq('estado', 'OK')
-        .eq('activo', true)
-        .order('nombre');
+        .eq('activo', true);
+
+      // Filtrar por categorías solo si es fertilización
+      if (configuracion.tipo === 'fertilizacion') {
+        query = query.in('categoria', categorias);
+      }
+
+      // Agregar filtro de estado físico si está definido
+      if (estadoFisico) {
+        query = query.eq('estado_fisico', estadoFisico);
+      }
+
+      const { data, error } = await query.order('nombre');
 
       if (error) throw error;
 
@@ -153,7 +164,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
     // Validar dosis de productos
     const nuevosErrores: string[] = [];
     mezcla_en_edicion.productos.forEach((producto) => {
-      if (configuracion.tipo === 'fumigacion') {
+      if (configuracion.tipo === 'fumigacion' || configuracion.tipo === 'drench') {
         const error = validarProductoFumigacion(producto);
         if (error) nuevosErrores.push(error);
       } else {
@@ -249,10 +260,10 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
       inventario_disponible: producto.cantidad_actual,
 
       // Inicializar dosis según tipo
-      ...(configuracion.tipo === 'fumigacion'
+      ...(configuracion.tipo === 'fumigacion' || configuracion.tipo === 'drench'
         ? {
             dosis_por_caneca: 0,
-            unidad_dosis: (producto.estado_fisico === 'liquido' ? 'cc' : 'gramos') as const,
+            unidad_dosis: (producto.estado_fisico === 'Líquido' ? 'cc' : 'gramos') as const,
           }
         : {
             dosis_grandes: 0,
@@ -311,15 +322,15 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
         const lote = configuracion.lotes_seleccionados.find((l) => l.lote_id === loteId);
         if (!lote) return;
 
-        // Validar lote
-        if (configuracion.tipo === 'fumigacion') {
+        // Validar lote (fumigación y drench usan la misma validación)
+        if (configuracion.tipo === 'fumigacion' || configuracion.tipo === 'drench') {
           const error = validarLoteFumigacion(lote);
           if (error) nuevosErrores.push(error);
         }
 
-        // Calcular
+        // Calcular (drench usa el mismo cálculo que fumigación)
         const calculo =
-          configuracion.tipo === 'fumigacion'
+          configuracion.tipo === 'fumigacion' || configuracion.tipo === 'drench'
             ? calcularFumigacion(lote, mezcla)
             : calcularFertilizacion(lote, mezcla);
 
@@ -457,7 +468,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                         <p className="text-xs text-[#4D240F]/70">{producto.producto_categoria}</p>
                       </div>
                       <div className="text-right">
-                        {configuracion.tipo === 'fumigacion' ? (
+                        {(configuracion.tipo === 'fumigacion' || configuracion.tipo === 'drench') ? (
                           <p className="text-[#73991C]">
                             {producto.dosis_por_caneca} {producto.unidad_dosis}/caneca
                           </p>
@@ -598,6 +609,39 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
 
                     {/* Dosis - Fumigación */}
                     {configuracion.tipo === 'fumigacion' && (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-[#4D240F]/70 mb-1">
+                            Dosis por caneca *
+                          </label>
+                          <input
+                            type="number"
+                            value={producto.dosis_por_caneca || ''}
+                            onChange={(e) =>
+                              actualizarDosis(
+                                producto.producto_id,
+                                'dosis_por_caneca',
+                                parseFloat(e.target.value) || 0
+                              )
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                            placeholder="0"
+                            step="0.01"
+                            min="0"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs text-[#4D240F]/70 mb-1">Unidad</label>
+                          <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-[#172E08]">
+                            {producto.unidad_dosis === 'cc' ? 'cc (líquido)' : 'gramos (sólido)'}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Dosis - Drench (igual a fumigación) */}
+                    {configuracion.tipo === 'drench' && (
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs text-[#4D240F]/70 mb-1">
@@ -792,7 +836,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                     <p className="text-[#172E08]">{formatearNumero(calculo.total_arboles)}</p>
                   </div>
 
-                  {configuracion.tipo === 'fumigacion' && (
+                  {(configuracion.tipo === 'fumigacion' || configuracion.tipo === 'drench') && (
                     <>
                       <div>
                         <p className="text-[#4D240F]/70 text-xs mb-1">Litros Mezcla</p>

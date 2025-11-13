@@ -49,54 +49,64 @@ Este esquema de base de datos soporta un sistema completo de gestión agronómic
 
 ### `tipo_aplicacion`
 ```sql
-'Fumigacion' | 'Fertilizacion'
+'Fumigación' | 'Fertilización' | 'Drench'
 ```
 
 ### `estado_aplicacion`
 ```sql
-'Calculada' | 'En ejecucion' | 'Cerrada'
+'Calculada' | 'En ejecución' | 'Cerrada'
 ```
 
 ### `categoria_producto`
 ```sql
-'Fungicida' | 'Insecticida' | 'Acaricida' | 'Herbicida' |
-'Biocontrolador' | 'Coadyuvante' | 'Fertilizante'
+'Fertilizante' | 'Fungicida' | 'Insecticida' | 'Acaricida' | 
+'Herbicida' | 'Biocontrolador' | 'Coadyuvante' | 'Herramienta' | 
+'Equipo' | 'Otros'
 ```
 
 ### `grupo_producto`
 ```sql
-'Fitosanitario' | 'Fertilizante' | 'Biocontrol' |
-'Coadyuvante' | 'Enmienda'
+'Agroinsumos' | 'Herramientas' | 'Maquinaria y equipo'
+```
+
+### `tipo_aplicacion_producto`
+```sql
+'Foliar' | 'Edáfico' | 'Drench'
 ```
 
 ### `estado_fisico`
 ```sql
-'liquido' | 'solido' | 'granular' | 'polvo'
+'Liquido' | 'Sólido'
 ```
 
 ### `estado_producto`
 ```sql
-'OK' | 'Agotado' | 'Bajo Stock' | 'Vencido' | 'Por Vencer'
+'OK' | 'Sin existencias' | 'Vencido' | 'Perdido'
 ```
 
-### `tipo_movimiento_inventario`
+### `tipo_movimiento`
 ```sql
-'Entrada' | 'Salida' | 'Ajuste' | 'Verificacion'
+'Entrada' | 'Salida por Aplicación' | 'Salida Otros' | 'Ajuste'
 ```
 
 ### `estado_verificacion`
 ```sql
-'En proceso' | 'Completada' | 'Rechazada' | 'Aprobada'
+'En proceso' | 'Completada' | 'Pendiente Aprobación' | 'Aprobada' | 'Rechazada'
 ```
 
-### `gravedad_nivel`
+### `gravedad_texto`
 ```sql
 'Baja' | 'Media' | 'Alta'
 ```
 
 ### `rol_usuario`
 ```sql
-'Administrador' | 'Agronomo' | 'Operario' | 'Consulta'
+'Administrador' | 'Verificador' | 'Gerencia'
+```
+
+### `condiciones_meteorologicas`
+```sql
+'soleadas' | 'nubladas' | 'lluvia suave' | 'lluvia fuerte'
 ```
 
 ---
@@ -280,7 +290,7 @@ Registro maestro de aplicaciones fitosanitarias o fertilización.
 
 **Estados:**
 - **Calculada:** Planificada pero no iniciada
-- **En ejecucion:** En proceso de aplicación
+- **En ejecución:** En proceso de aplicación
 - **Cerrada:** Finalizada y costos registrados
 
 ---
@@ -602,7 +612,7 @@ Registro de todos los movimientos de inventario.
 | `id` | `uuid` | Identificador único | PK, DEFAULT uuid_generate_v4() |
 | `fecha_movimiento` | `date` | Fecha del movimiento | NOT NULL |
 | `producto_id` | `uuid` | Producto afectado | NOT NULL, FK → productos(id) |
-| `tipo_movimiento` | `tipo_movimiento_inventario` | Tipo de movimiento | NOT NULL (ENUM) |
+| `tipo_movimiento` | `tipo_movimiento` | Tipo de movimiento | NOT NULL (ENUM) |
 | `cantidad` | `numeric` | Cantidad del movimiento | NOT NULL |
 | `unidad` | `text` | Unidad de medida | NOT NULL |
 | `lote_aplicacion` | `text` | Lote donde se aplicó | |
@@ -622,9 +632,9 @@ Registro de todos los movimientos de inventario.
 
 **Tipos de movimiento:**
 - **Entrada:** Compras, ajustes positivos
-- **Salida:** Aplicaciones, ajustes negativos
+- **Salida por Aplicación:** Aplicaciones, ajustes negativos
+- **Salida Otros:** Salidas no relacionadas con aplicaciones
 - **Ajuste:** Correcciones de inventario
-- **Verificacion:** Ajustes por verificación física
 
 ---
 
@@ -760,7 +770,7 @@ Registro de monitoreos fitosanitarios.
 | `individuos_encontrados` | `integer` | Individuos encontrados | NOT NULL, CHECK >= 0 |
 | `incidencia` | `numeric` | Incidencia % | GENERATED: (afectados/monitoreados)*100 |
 | `severidad` | `numeric` | Severidad | GENERATED: individuos/afectados |
-| `gravedad_texto` | `gravedad_nivel` | Nivel gravedad texto | (ENUM) |
+| `gravedad_texto` | `gravedad_texto` | Nivel gravedad texto | (ENUM) |
 | `gravedad_numerica` | `integer` | Nivel gravedad 1-3 | CHECK IN (1,2,3) |
 | `observaciones` | `text` | Observaciones | |
 | `monitor` | `text` | Persona que monitorea | |
@@ -840,8 +850,9 @@ Proceso de verificación física de inventario.
 **Estados:**
 - **En proceso:** Verificación en curso
 - **Completada:** Finalizada por verificador
-- **Rechazada:** Rechazada por supervisor
+- **Pendiente Aprobación:** Revisada pero no aprobada
 - **Aprobada:** Aprobada y ajustes aplicados
+- **Rechazada:** Rechazada por supervisor
 
 ---
 
@@ -888,9 +899,8 @@ Perfiles de usuarios del sistema.
 
 **Roles:**
 - **Administrador:** Acceso completo
-- **Agronomo:** Crear aplicaciones, monitoreos
-- **Operario:** Registro de ejecución
-- **Consulta:** Solo lectura
+- **Verificador:** Realizar verificaciones de inventario
+- **Gerencia:** Autorizar aplicaciones y ajustes
 
 ---
 
@@ -1158,8 +1168,8 @@ GROUP BY a.id;
    ├─ aplicaciones_compras
    └─ aplicaciones_productos_planificado
 
-2. Iniciar ejecución (estado='En ejecucion')
-   └─ UPDATE aplicaciones SET estado='En ejecucion'
+2. Iniciar ejecución (estado='En ejecución')
+   └─ UPDATE aplicaciones SET estado='En ejecución'
 
 3. Cerrar aplicación (estado='Cerrada')
    ├─ aplicaciones_cierre

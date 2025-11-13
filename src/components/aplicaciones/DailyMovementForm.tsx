@@ -22,9 +22,10 @@ interface ProductoFormulario {
   producto_id: string;
   producto_nombre: string;
   producto_categoria: string;
-  estado_fisico: 'liquido' | 'solido';
+  estado_fisico: 'Líquido' | 'Sólido';
   cantidad_utilizada: string;
   unidad: 'cc' | 'L' | 'g' | 'Kg';
+  presentacion_kg_l?: number; // Para fertilización/drench: cuántos Kg/L por bulto
 }
 
 export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMovementFormProps) {
@@ -36,6 +37,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
   const [fechaMovimiento, setFechaMovimiento] = useState(obtenerFechaHoy());
   const [loteId, setLoteId] = useState('');
   const [numeroCanecas, setNumeroCanecas] = useState('');
+  const [numeroBultos, setNumeroBultos] = useState('');
   const [responsable, setResponsable] = useState('');
   const [condicionesMeteorologicas, setCondicionesMeteorologicas] = useState('');
   const [notas, setNotas] = useState('');
@@ -144,7 +146,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
           console.log(`📌 Producto ${p.id}: estado_fisico = ${p.estado_fisico}`);
           // Normalizar: convertir a minúsculas y mapear valores conocidos
           const estadoNormalizado = p.estado_fisico?.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-          const estadoFinal = (estadoNormalizado === 'liquido' || estadoNormalizado === 'líquido') ? 'liquido' : 'solido';
+          const estadoFinal = (estadoNormalizado === 'liquido' || estadoNormalizado === 'líquido') ? 'Líquido' : 'Sólido';
           estadoFisicoMap.set(p.id, estadoFinal);
         });
 
@@ -158,7 +160,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
               producto_categoria: p.producto_categoria,
               producto_unidad: p.producto_unidad,
               cantidad_total_necesaria: p.cantidad_total_necesaria,
-              estado_fisico: estadoFisicoMap.get(p.producto_id) || 'liquido'
+              estado_fisico: estadoFisicoMap.get(p.producto_id) || 'Líquido'
             });
           }
         });
@@ -190,7 +192,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
     }
   };
 
-  const agregarProducto = () => {
+  const agregarProducto = async () => {
     if (!productoSeleccionadoId) {
       setError('Selecciona un producto para agregar');
       return;
@@ -205,8 +207,37 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
     const producto = productosDisponibles.find(p => p.producto_id === productoSeleccionadoId);
     if (!producto) return;
 
-    // Determinar unidad según estado físico
-    const unidadDefault = producto.estado_fisico === 'liquido' ? 'cc' : 'g';
+    // Cargar presentacion_kg_l del producto desde la tabla productos
+    let presentacionKgL: number | undefined;
+    if (aplicacion.tipo === 'fertilizacion') {
+      // Solo fertilización necesita presentacion_kg_l para convertir bultos
+      try {
+        const { data: productoData, error: errorProducto } = await supabase
+          .from('productos')
+          .select('presentacion_kg_l')
+          .eq('id', productoSeleccionadoId)
+          .single();
+        
+        if (errorProducto) {
+          console.error('Error cargando presentacion_kg_l:', errorProducto);
+        } else {
+          presentacionKgL = productoData?.presentacion_kg_l;
+        }
+      } catch (err) {
+        console.error('Error al cargar presentacion:', err);
+      }
+    }
+
+    // Para fertilización, siempre usar Kg (se convertirá de bultos a Kg al guardar)
+    // Para fumigación y drench, determinar unidad según estado físico
+    let unidadDefault: 'cc' | 'L' | 'g' | 'Kg';
+    if (aplicacion.tipo === 'fertilizacion') {
+      // Usar Kg como unidad base para fertilización sólida
+      unidadDefault = 'Kg';
+    } else {
+      // Para fumigación y drench: según estado físico del producto
+      unidadDefault = producto.estado_fisico === 'Líquido' ? 'cc' : 'g';
+    }
 
     const nuevoProducto: ProductoFormulario = {
       producto_id: producto.producto_id,
@@ -214,7 +245,8 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       producto_categoria: producto.producto_categoria,
       estado_fisico: producto.estado_fisico,
       cantidad_utilizada: '',
-      unidad: unidadDefault
+      unidad: unidadDefault,
+      presentacion_kg_l: presentacionKgL
     };
 
     setProductosAgregados([...productosAgregados, nuevoProducto]);
@@ -247,14 +279,28 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       setError('Debes seleccionar un lote');
       return false;
     }
-    if (!numeroCanecas || parseFloat(numeroCanecas) <= 0) {
-      setError('El número de canecas debe ser mayor a 0');
-      return false;
+    
+    // Validación de canecas para fumigación Y DRENCH
+    if (aplicacion.tipo === 'fumigacion' || aplicacion.tipo === 'drench') {
+      if (!numeroCanecas || parseFloat(numeroCanecas) <= 0) {
+        setError('El número de canecas debe ser mayor a 0');
+        return false;
+      }
     }
+    
+    // Validación de bultos solo para fertilización
+    if (aplicacion.tipo === 'fertilizacion') {
+      if (!numeroBultos || parseFloat(numeroBultos) <= 0) {
+        setError('El número de bultos debe ser mayor a 0');
+        return false;
+      }
+    }
+    
     if (!responsable.trim()) {
       setError('El responsable es requerido');
       return false;
     }
+    
     // Validación de condiciones meteorológicas comentada temporalmente
     // hasta que el schema cache de Supabase se actualice
     /*
@@ -263,6 +309,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       return false;
     }
     */
+    
     if (productosAgregados.length === 0) {
       setError('Debes agregar al menos un producto');
       return false;
@@ -304,7 +351,10 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         fecha_movimiento: fechaMovimiento,
         lote_id: loteId,
         lote_nombre: lote.nombre,
-        numero_canecas: parseFloat(numeroCanecas),
+        // Para fumigación Y DRENCH: guardar numero_canecas
+        // Para fertilización: guardar numero_bultos
+        numero_canecas: (aplicacion.tipo === 'fumigacion' || aplicacion.tipo === 'drench') ? parseFloat(numeroCanecas) : undefined,
+        numero_bultos: aplicacion.tipo === 'fertilizacion' ? parseFloat(numeroBultos) : undefined,
         responsable: responsable.trim(),
         condiciones_meteorologicas: condicionesMeteorologicas.trim() || undefined,
         notas: notas.trim() || undefined,
@@ -321,14 +371,26 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       if (!movimientoCreado) throw new Error('No se pudo crear el movimiento');
 
       // 2. Crear productos del movimiento (hijos)
-      const productosParaInsertar: Omit<MovimientoDiarioProducto, 'id' | 'created_at'>[] = productosAgregados.map(p => ({
-        movimiento_diario_id: movimientoCreado.id,
-        producto_id: p.producto_id,
-        producto_nombre: p.producto_nombre,
-        producto_categoria: p.producto_categoria,
-        cantidad_utilizada: parseFloat(p.cantidad_utilizada),
-        unidad: p.unidad
-      }));
+      // IMPORTANTE: Para fertilización/drench, convertir bultos a Kg usando presentacion_kg_l
+      const productosParaInsertar: Omit<MovimientoDiarioProducto, 'id' | 'created_at'>[] = productosAgregados.map(p => {
+        let cantidadFinal = parseFloat(p.cantidad_utilizada);
+        let unidadFinal = p.unidad;
+
+        // Si es fertilización/drench, convertir bultos a Kg/L
+        if ((aplicacion.tipo === 'fertilizacion') && p.presentacion_kg_l) {
+          cantidadFinal = parseFloat(p.cantidad_utilizada) * p.presentacion_kg_l;
+          console.log(`🔄 Conversión: ${p.cantidad_utilizada} bultos × ${p.presentacion_kg_l} Kg/bulto = ${cantidadFinal} Kg`);
+        }
+
+        return {
+          movimiento_diario_id: movimientoCreado.id,
+          producto_id: p.producto_id,
+          producto_nombre: p.producto_nombre,
+          producto_categoria: p.producto_categoria,
+          cantidad_utilizada: cantidadFinal,
+          unidad: unidadFinal
+        };
+      });
 
       const { error: errorProductos } = await supabase
         .from('movimientos_diarios_productos')
@@ -346,6 +408,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       setFechaMovimiento(obtenerFechaHoy());
       setLoteId('');
       setNumeroCanecas('');
+      setNumeroBultos('');
       setCondicionesMeteorologicas('');
       setNotas('');
       setProductosAgregados([]);
@@ -373,7 +436,10 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
           <div>
             <h3 className="text-lg text-[#172E08]">Nuevo Movimiento Diario</h3>
             <p className="text-sm text-[#4D240F]/60">
-              Registra canecas aplicadas y productos utilizados
+              {(aplicacion.tipo === 'fumigacion' || aplicacion.tipo === 'drench')
+                ? 'Registra canecas aplicadas y productos utilizados'
+                : 'Registra bultos usados de cada insumo'
+              }
             </p>
           </div>
         </div>
@@ -430,42 +496,73 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
           </select>
         </div>
 
-        {/* Número de Canecas */}
-        <div>
-          <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
-            <Droplet className="w-4 h-4 text-[#73991C]" />
-            Número de Canecas Aplicadas
-            <span className="text-red-500">*</span>
-          </label>
-          <div className="flex gap-3">
-            <Input
-              type="number"
-              value={numeroCanecas}
-              onChange={(e) => setNumeroCanecas(e.target.value)}
-              placeholder="0"
-              step="1"
-              min="0"
-              disabled={loading}
-              className="flex-1 bg-white border-[#73991C]/20 focus:border-[#73991C] disabled:opacity-50 disabled:cursor-not-allowed"
-            />
-            <div className="px-4 py-3 bg-[#E7EDDD] border border-[#73991C]/20 rounded-xl text-[#172E08] min-w-[120px] flex items-center justify-center">
-              canecas
+        {/* Número de Canecas - PARA FUMIGACIÓN Y DRENCH */}
+        {(aplicacion.tipo === 'fumigacion' || aplicacion.tipo === 'drench') && (
+          <div>
+            <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
+              <Droplet className="w-4 h-4 text-[#73991C]" />
+              Número de Canecas Aplicadas
+              <span className="text-red-500">*</span>
+            </label>
+            <div className="flex gap-3">
+              <Input
+                type="number"
+                value={numeroCanecas}
+                onChange={(e) => setNumeroCanecas(e.target.value)}
+                placeholder="0"
+                step="1"
+                min="0"
+                disabled={loading}
+                className="flex-1 bg-white border-[#73991C]/20 focus:border-[#73991C] disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+              <div className="px-4 py-3 bg-[#E7EDDD] border border-[#73991C]/20 rounded-xl text-[#172E08] min-w-[120px] flex items-center justify-center">
+                canecas
+              </div>
+            </div>
+            {loteId && canecasPorLote[loteId] && (
+              <div className="mt-2 p-3 bg-[#73991C]/5 border border-[#73991C]/20 rounded-lg">
+                <p className="text-xs text-[#4D240F]/70">
+                  📊 <strong>Planeado:</strong> {canecasPorLote[loteId]} canecas para este lote
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Número de Bultos - SOLO PARA FERTILIZACIÓN */}
+        {aplicacion.tipo === 'fertilizacion' && (
+          <div>
+            <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
+              <Droplet className="w-4 h-4 text-[#73991C]" />
+              Número de Bultos Usados
+              <span className="text-red-500">*</span>
+            </label>
+            <div className="flex gap-3">
+              <Input
+                type="number"
+                value={numeroBultos}
+                onChange={(e) => setNumeroBultos(e.target.value)}
+                placeholder="0"
+                step="1"
+                min="0"
+                disabled={loading}
+                className="flex-1 bg-white border-[#73991C]/20 focus:border-[#73991C] disabled:opacity-50 disabled:cursor-not-allowed"
+              />
+              <div className="px-4 py-3 bg-[#E7EDDD] border border-[#73991C]/20 rounded-xl text-[#172E08] min-w-[120px] flex items-center justify-center">
+                bultos
+              </div>
             </div>
           </div>
-          {loteId && canecasPorLote[loteId] && (
-            <div className="mt-2 p-3 bg-[#73991C]/5 border border-[#73991C]/20 rounded-lg">
-              <p className="text-xs text-[#4D240F]/70">
-                📊 <strong>Planeado:</strong> {canecasPorLote[loteId]} canecas para este lote
-              </p>
-            </div>
-          )}
-        </div>
+        )}
 
         {/* Productos Utilizados */}
         <div className="border-t border-[#73991C]/10 pt-6">
           <h4 className="text-sm text-[#172E08] mb-4 flex items-center gap-2">
             <Package className="w-4 h-4 text-[#73991C]" />
-            Productos Utilizados en las Canecas
+            {(aplicacion.tipo === 'fumigacion' || aplicacion.tipo === 'drench')
+              ? 'Productos Utilizados en las Canecas'
+              : 'Bultos Usados de cada Producto'
+            }
             <span className="text-red-500">*</span>
           </h4>
 
@@ -520,29 +617,39 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
                       value={producto.cantidad_utilizada}
                       onChange={(e) => actualizarCantidadProducto(index, e.target.value)}
                       placeholder="0"
-                      step="0.01"
+                      step={aplicacion.tipo === 'fertilizacion' ? '1' : '0.01'}
                       min="0"
                       disabled={loading}
                       className="w-32 bg-white border-[#73991C]/20 focus:border-[#73991C]"
                     />
-                    <select
-                      value={producto.unidad}
-                      onChange={(e) => actualizarUnidadProducto(index, e.target.value as any)}
-                      disabled={loading}
-                      className="px-3 py-2 border border-[#73991C]/20 rounded-lg bg-white text-[#172E08] text-sm focus:outline-none focus:ring-2 focus:ring-[#73991C]"
-                    >
-                      {producto.estado_fisico === 'liquido' ? (
-                        <>
-                          <option value="cc">cc</option>
-                          <option value="L">L</option>
-                        </>
-                      ) : (
-                        <>
-                          <option value="g">g</option>
-                          <option value="Kg">Kg</option>
-                        </>
-                      )}
-                    </select>
+                    
+                    {/* Para fertilización/drench: mostrar "bultos" estático */}
+                    {aplicacion.tipo === 'fertilizacion' ? (
+                      <div className="px-4 py-2 bg-[#E7EDDD] border border-[#73991C]/20 rounded-lg text-[#172E08] text-sm min-w-[80px] flex items-center justify-center">
+                        bultos
+                      </div>
+                    ) : (
+                      /* Para fumigación: selector de unidad según estado físico */
+                      <select
+                        value={producto.unidad}
+                        onChange={(e) => actualizarUnidadProducto(index, e.target.value as any)}
+                        disabled={loading}
+                        className="px-3 py-2 border border-[#73991C]/20 rounded-lg bg-white text-[#172E08] text-sm focus:outline-none focus:ring-2 focus:ring-[#73991C]"
+                      >
+                        {producto.estado_fisico === 'Líquido' ? (
+                          <>
+                            <option value="cc">cc</option>
+                            <option value="L">L</option>
+                          </>
+                        ) : (
+                          <>
+                            <option value="g">g</option>
+                            <option value="Kg">Kg</option>
+                          </>
+                        )}
+                      </select>
+                    )}
+                    
                     <Button
                       type="button"
                       onClick={() => eliminarProducto(index)}

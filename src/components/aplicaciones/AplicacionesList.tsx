@@ -532,81 +532,88 @@ export function AplicacionesList() {
                     </div>
 
                     {/* Acciones */}
-                    <div className="relative">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          setMenuAbiertoId(
-                            menuAbiertoId === aplicacion.id ? null : aplicacion.id
-                          );
-                          setMenuPosition({
-                            top: rect.bottom + window.scrollY,
-                            left: rect.left + window.scrollX - 192 + rect.width,
-                          });
-                        }}
-                        className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-                      >
-                        <MoreVertical className="w-5 h-5 text-[#4D240F]/70" />
-                      </button>
-
-                      {/* Dropdown menu */}
-                      {menuAbiertoId === aplicacion.id && menuPosition && (
-                        <div
-                          className="fixed w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[9999]"
-                          style={{
-                            top: `${menuPosition.top}px`,
-                            left: `${menuPosition.left}px`,
+                    <div className="flex items-center gap-2">
+                      {/* Botón principal según estado */}
+                      {aplicacion.estado === 'Calculada' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIniciarEjecucionId(aplicacion.id);
                           }}
+                          className="px-4 py-2 bg-gradient-to-r from-green-600 to-green-500 text-white rounded-lg hover:from-green-700 hover:to-green-600 transition-all flex items-center gap-2"
                         >
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/aplicaciones/${aplicacion.id}/editar`);
+                          <Play className="w-4 h-4" />
+                          <span>Iniciar Ejecución</span>
+                        </button>
+                      )}
+                      
+                      {aplicacion.estado === 'En ejecución' && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAplicacionDetalle(aplicacion); // Esto abrirá el detalle que tiene el botón de cerrar
+                          }}
+                          className="px-4 py-2 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-lg hover:from-[#5f7d17] hover:to-[#9db86d] transition-all flex items-center gap-2"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>Cerrar Aplicación</span>
+                        </button>
+                      )}
+
+                      {/* Menú de 3 puntos - solo Editar y Eliminar */}
+                      <div className="relative">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            setMenuAbiertoId(
+                              menuAbiertoId === aplicacion.id ? null : aplicacion.id
+                            );
+                            setMenuPosition({
+                              top: rect.bottom + window.scrollY,
+                              left: rect.left + window.scrollX - 192 + rect.width,
+                            });
+                          }}
+                          className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+                        >
+                          <MoreVertical className="w-5 h-5 text-[#4D240F]/70" />
+                        </button>
+
+                        {/* Dropdown menu - solo Editar y Eliminar */}
+                        {menuAbiertoId === aplicacion.id && menuPosition && (
+                          <div
+                            className="fixed w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[9999]"
+                            style={{
+                              top: `${menuPosition.top}px`,
+                              left: `${menuPosition.left}px`,
                             }}
-                            className="w-full px-4 py-2 text-left text-sm text-[#172E08] hover:bg-gray-50 flex items-center gap-2 transition-colors"
                           >
-                            <Edit2 className="w-4 h-4 text-gray-500" />
-                            Editar
-                          </button>
-                          {aplicacion.estado === 'En ejecución' && (
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                navigate(`/aplicaciones/${aplicacion.id}/movimientos`);
-                              }}
-                              className="w-full px-4 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 flex items-center gap-2 transition-colors"
-                            >
-                              <ClipboardList className="w-4 h-4" />
-                              Movimientos Diarios
-                            </button>
-                          )}
-                          {aplicacion.estado === 'Calculada' && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setIniciarEjecucionId(aplicacion.id);
+                                navigate(`/aplicaciones/calculadora/${aplicacion.id}`);
                                 setMenuAbiertoId(null);
                               }}
-                              className="w-full px-4 py-2 text-left text-sm text-green-600 hover:bg-green-50 flex items-center gap-2 transition-colors"
+                              className="w-full px-4 py-2 text-left text-sm text-[#172E08] hover:bg-gray-50 flex items-center gap-2 transition-colors"
                             >
-                              <Play className="w-4 h-4" />
-                              Iniciar Ejecución
+                              <Edit2 className="w-4 h-4 text-gray-500" />
+                              Editar
                             </button>
-                          )}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEliminando(aplicacion.id);
-                              setMenuAbiertoId(null);
-                            }}
-                            className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            Eliminar
-                          </button>
-                        </div>
-                      )}
+                            
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEliminando(aplicacion.id);
+                                setMenuAbiertoId(null);
+                              }}
+                              className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Eliminar
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>

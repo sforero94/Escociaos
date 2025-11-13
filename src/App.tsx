@@ -15,6 +15,7 @@ import { MovementsDashboard } from './components/inventory/MovementsDashboard';
 import { VerificacionesList } from './components/inventory/VerificacionesList';
 import { NuevaVerificacion } from './components/inventory/NuevaVerificacion';
 import { ConteoFisico } from './components/inventory/ConteoFisico';
+import { SistemaMonitoreo } from './components/testing/SistemaMonitoreo';
 
 /**
  * Componente de placeholder para módulos en desarrollo
@@ -84,7 +85,7 @@ function LayoutRoutes() {
         {/* Monitoreo */}
         <Route
           path="monitoreo"
-          element={<ComingSoon moduleName="Monitoreo de Plagas" />}
+          element={<SistemaMonitoreo />}
         />
 
         {/* Producción */}

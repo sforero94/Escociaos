@@ -49,10 +49,9 @@ export function PasoListaCompras({
   const [cargando, setCargando] = useState(false);
   const [inventario, setInventario] = useState<ProductoCatalogo[]>([]);
   
-  // Estado para edición manual
+  // Estado para edición manual - inline directa
   const [modoEdicion, setModoEdicion] = useState(false);
   const [itemsEditables, setItemsEditables] = useState<Record<string, ItemListaCompras>>({});
-  const [cambiosSinGuardar, setCambiosSinGuardar] = useState(false);
 
   /**
    * GENERAR LISTA DE COMPRAS AL MONTAR
@@ -95,8 +94,12 @@ export function PasoListaCompras({
         grupo: p.grupo,
         unidad_medida: p.unidad_medida,
         estado_fisico: p.estado_fisico,
-        presentacion_comercial: p.presentacion_kg_l ? `${p.presentacion_kg_l} ${p.unidad_medida}` : p.unidad_medida,
-        ultimo_precio_unitario: p.precio_unitario || 0,
+        // Construir presentación: "50 Kg" o fallback a "1 Kg/L"
+        presentacion_comercial: p.presentacion_kg_l && p.presentacion_kg_l > 0
+          ? `${p.presentacion_kg_l} ${p.unidad_medida === 'kilos' ? 'Kg' : p.unidad_medida === 'litros' ? 'L' : p.unidad_medida}`
+          : `1 ${p.unidad_medida === 'kilos' ? 'Kg' : p.unidad_medida === 'litros' ? 'L' : p.unidad_medida}`,
+        ultimo_precio_unitario: p.precio_unitario || 0,      // Precio por Kg/L
+        precio_presentacion: p.precio_presentacion || 0,     // Precio por bulto/envase
         cantidad_actual: p.cantidad_actual || 0,
       }));
 
@@ -139,19 +142,12 @@ export function PasoListaCompras({
    */
   const activarEdicion = () => {
     setModoEdicion(true);
-    setCambiosSinGuardar(false);
   };
 
   /**
    * CANCELAR EDICIÓN
    */
   const cancelarEdicion = () => {
-    if (cambiosSinGuardar) {
-      if (!confirm('¿Descartar cambios sin guardar?')) {
-        return;
-      }
-    }
-
     // Restaurar valores originales
     if (lista) {
       const editables: Record<string, ItemListaCompras> = {};
@@ -162,15 +158,23 @@ export function PasoListaCompras({
     }
 
     setModoEdicion(false);
-    setCambiosSinGuardar(false);
   };
 
   /**
    * Extrae el tamaño numérico de una presentación comercial
    */
-  const extraerTamanoPresentacion = (presentacion: string): number => {
-    const match = presentacion.match(/(\d+\.?\d*)/);
-    return match ? parseFloat(match[1]) : 1;
+  const extraerTamanoPresentacion = (presentacion: string | undefined): number => {
+    if (!presentacion) return 1;
+    
+    // Normalizar: reemplazar coma europea por punto decimal
+    const normalizada = presentacion.replace(/,/g, '.');
+    
+    // Buscar primer número (entero o decimal)
+    const match = normalizada.match(/(\d+\.?\d*)/);
+    const valor = match ? parseFloat(match[1]) : 1;
+    
+    // Validar que sea un número válido
+    return isNaN(valor) || valor <= 0 ? 1 : valor;
   };
 
   /**
@@ -201,43 +205,33 @@ export function PasoListaCompras({
       itemActualizado.unidades_a_comprar = Math.ceil(valor / tamanoPresentacion);
     }
 
-    // Recalcular costo
-    if (item.ultimo_precio_unitario) {
-      const tamanoPresentacion = extraerTamanoPresentacion(item.presentacion_comercial);
-      itemActualizado.costo_estimado =
-        itemActualizado.unidades_a_comprar * tamanoPresentacion * item.ultimo_precio_unitario;
-    }
+    // Recalcular costo usando precio_presentacion
+    itemActualizado.costo_estimado = itemActualizado.unidades_a_comprar * (item.precio_presentacion || 0);
 
     setItemsEditables((prev) => ({
       ...prev,
       [productoId]: itemActualizado,
     }));
-
-    setCambiosSinGuardar(true);
   };
 
   /**
-   * EDITAR PRECIO UNITARIO DE UN PRODUCTO (solo para cotizaciones)
+   * EDITAR PRECIO DE PRESENTACIÓN (precio por bulto/envase completo)
    * Este precio NO afecta la tabla de productos, solo el reporte de lista de compras
    */
-  const editarPrecioUnitario = (productoId: string, nuevoPrecio: number) => {
+  const editarPrecioPresentacion = (productoId: string, nuevoPrecio: number) => {
     const item = itemsEditables[productoId];
     if (!item) return;
 
     const itemActualizado = { ...item };
-    itemActualizado.ultimo_precio_unitario = Math.max(0, nuevoPrecio);
+    itemActualizado.precio_presentacion = Math.max(0, nuevoPrecio);
 
     // Recalcular costo con el nuevo precio
-    const tamanoPresentacion = extraerTamanoPresentacion(item.presentacion_comercial);
-    itemActualizado.costo_estimado =
-      itemActualizado.unidades_a_comprar * tamanoPresentacion * nuevoPrecio;
+    itemActualizado.costo_estimado = itemActualizado.unidades_a_comprar * nuevoPrecio;
 
     setItemsEditables((prev) => ({
       ...prev,
       [productoId]: itemActualizado,
     }));
-
-    setCambiosSinGuardar(true);
   };
 
   /**
@@ -263,7 +257,6 @@ export function PasoListaCompras({
     setLista(nuevaLista);
     onUpdate(nuevaLista);
     setModoEdicion(false);
-    setCambiosSinGuardar(false);
   };
 
   if (cargando) {
@@ -335,7 +328,6 @@ export function PasoListaCompras({
               </button>
               <button
                 onClick={guardarCambios}
-                disabled={!cambiosSinGuardar}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all flex items-center gap-2"
               >
                 <Save className="w-4 h-4" />
@@ -425,6 +417,22 @@ export function PasoListaCompras({
                 <strong>{lista.productos_sin_stock}</strong> producto(s) no tienen stock
                 disponible y deben comprarse en su totalidad.
               </p>
+            </div>
+          )}
+
+          {/* Alerta si hay productos sin presentación configurada */}
+          {lista.items.some(item => item.presentacion_comercial.startsWith('1 ')) && (
+            <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-orange-900">
+                  <strong>Algunos productos no tienen presentación comercial configurada</strong>
+                </p>
+                <p className="text-orange-700 text-sm mt-1">
+                  Los productos sin tamaño de presentación se calcularán en unidades individuales (1 Kg/L). 
+                  Para calcular correctamente en bultos, configura el campo "presentacion_kg_l" en la tabla de productos.
+                </p>
+              </div>
             </div>
           )}
         </div>
@@ -524,8 +532,17 @@ export function PasoListaCompras({
                             <span className="text-xs text-[#4D240F]/70">{item.presentacion_comercial}</span>
                           </div>
                         ) : (
-                          <div className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-red-100 text-red-800">
-                            {item.unidades_a_comprar} × {item.presentacion_comercial}
+                          <div className="flex flex-col items-center gap-1">
+                            <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm ${
+                              item.presentacion_comercial.startsWith('1 ')
+                                ? 'bg-orange-100 text-orange-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {item.unidades_a_comprar} × {item.presentacion_comercial}
+                            </div>
+                            {item.presentacion_comercial.startsWith('1 ') && (
+                              <span className="text-xs text-orange-600">Sin presentación</span>
+                            )}
                           </div>
                         )}
                       </td>
@@ -535,16 +552,16 @@ export function PasoListaCompras({
                             <span className="text-xs text-[#4D240F]/70">$</span>
                             <input
                               type="number"
-                              step="100"
+                              step="1000"
                               min="0"
-                              value={item.ultimo_precio_unitario || 0}
+                              value={item.precio_presentacion || 0}
                               onChange={(e) =>
-                                editarPrecioUnitario(
+                                editarPrecioPresentacion(
                                   item.producto_id,
                                   parseFloat(e.target.value) || 0
                                 )
                               }
-                              className="w-24 px-2 py-1 text-sm text-right border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                              className="w-28 px-2 py-1 text-sm text-right border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
                               placeholder="0"
                             />
                           </div>
@@ -552,7 +569,7 @@ export function PasoListaCompras({
                           <span className="text-yellow-600">Sin precio</span>
                         ) : (
                           <span className="text-[#172E08]">
-                            {formatearMoneda(item.ultimo_precio_unitario || 0)}
+                            {formatearMoneda(item.precio_presentacion || 0)}
                           </span>
                         )}
                       </td>
