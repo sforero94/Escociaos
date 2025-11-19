@@ -235,7 +235,37 @@ export function AplicacionesList() {
     try {
       console.log('🗑️ Iniciando eliminación de aplicación:', aplicacionId);
 
-      // 1. Eliminar relaciones con lotes
+      // 1. Verificar y eliminar movimientos de inventario primero
+      console.log('🔍 Verificando movimientos de inventario...');
+      const { data: movimientos, error: errorCheckMovimientos } = await supabase
+        .from('movimientos_inventario')
+        .select('id')
+        .eq('aplicacion_id', aplicacionId);
+
+      if (errorCheckMovimientos) {
+        console.error('❌ Error verificando movimientos:', errorCheckMovimientos);
+        throw errorCheckMovimientos;
+      }
+
+      if (movimientos && movimientos.length > 0) {
+        console.log(`⚠️ Encontrados ${movimientos.length} movimientos de inventario. Eliminando...`);
+        
+        const { error: errorDeleteMovimientos } = await supabase
+          .from('movimientos_inventario')
+          .delete()
+          .eq('aplicacion_id', aplicacionId);
+
+        if (errorDeleteMovimientos) {
+          console.error('❌ Error eliminando movimientos de inventario:', errorDeleteMovimientos);
+          throw errorDeleteMovimientos;
+        }
+        
+        console.log('✅ Movimientos de inventario eliminados');
+      } else {
+        console.log('ℹ️ No hay movimientos de inventario asociados');
+      }
+
+      // 2. Eliminar relaciones con lotes
       const { error: errorLotes } = await supabase
         .from('aplicaciones_lotes')
         .delete()
@@ -248,7 +278,7 @@ export function AplicacionesList() {
 
       console.log('✅ Lotes eliminados');
 
-      // 2. Obtener IDs de mezclas
+      // 3. Obtener IDs de mezclas
       const { data: mezclas, error: errorMezclas } = await supabase
         .from('aplicaciones_mezclas')
         .select('id')
@@ -261,7 +291,7 @@ export function AplicacionesList() {
 
       console.log('✅ Mezclas obtenidas:', mezclas?.length || 0);
 
-      // 3. Eliminar productos de las mezclas
+      // 4. Eliminar productos de las mezclas
       if (mezclas && mezclas.length > 0) {
         const mezclaIds = mezclas.map(m => m.id);
 
@@ -277,7 +307,7 @@ export function AplicacionesList() {
 
         console.log('✅ Productos de mezclas eliminados');
 
-        // 4. Eliminar mezclas
+        // 5. Eliminar mezclas
         const { error: errorDeleteMezclas } = await supabase
           .from('aplicaciones_mezclas')
           .delete()
@@ -291,7 +321,7 @@ export function AplicacionesList() {
         console.log('✅ Mezclas eliminadas');
       }
 
-      // 5. Eliminar cálculos
+      // 6. Eliminar cálculos
       const { error: errorCalculos } = await supabase
         .from('aplicaciones_calculos')
         .delete()
@@ -304,7 +334,7 @@ export function AplicacionesList() {
 
       console.log('✅ Cálculos eliminados');
 
-      // 6. Eliminar lista de compras
+      // 7. Eliminar lista de compras
       const { error: errorCompras } = await supabase
         .from('aplicaciones_compras')
         .delete()
@@ -317,7 +347,7 @@ export function AplicacionesList() {
 
       console.log('✅ Lista de compras eliminada');
 
-      // 7. Finalmente, eliminar la aplicación
+      // 8. Finalmente, eliminar la aplicación
       const { error: errorAplicacion } = await supabase
         .from('aplicaciones')
         .delete()

@@ -27,7 +27,7 @@ import {
   ResponsiveContainer 
 } from 'recharts';
 import { Button } from '../ui/button';
-import { InventoryNav } from './InventoryNav';
+import { InventorySubNav } from './InventorySubNav';
 
 interface RecentMovement {
   id: number;
@@ -314,11 +314,12 @@ export function MovementsDashboard() {
         
         if (monthIndex >= 0 && monthIndex < 6) {
           const isEntrada = mov.tipo_movimiento?.toLowerCase()?.trim() === 'entrada';
-          const valorMovimiento = (mov.cantidad || 0) * (mov.producto?.precio_unitario || 0);
+          const valorMovimiento = Math.abs((mov.cantidad || 0) * (mov.producto?.precio_unitario || 0));
           
           if (isEntrada) {
             monthsArray[monthIndex].entradas += valorMovimiento;
           } else {
+            // Salidas siempre positivas para mostrar en el mismo eje
             monthsArray[monthIndex].salidas += valorMovimiento;
           }
         }
@@ -380,7 +381,7 @@ export function MovementsDashboard() {
   return (
     <div className="space-y-6">
       {/* Barra de navegación */}
-      <InventoryNav />
+      <InventorySubNav />
       
       {/* Header - SIN BOTÓN */}
       <div>
@@ -422,9 +423,10 @@ export function MovementsDashboard() {
                     tick={{ fill: '#4D240F', fontSize: 12 }}
                     tickLine={{ stroke: '#9CA3AF' }}
                   />
-                  {/* Eje Y izquierdo - Movimientos (COP) */}
+                  {/* Eje Y izquierdo - Movimientos (COP) - Entradas y Salidas */}
                   <YAxis 
                     yAxisId="left"
+                    domain={[0, 'auto']}
                     tick={{ fill: '#4D240F', fontSize: 12 }}
                     tickLine={{ stroke: '#9CA3AF' }}
                     label={{ 
@@ -435,10 +437,11 @@ export function MovementsDashboard() {
                     }}
                     tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`}
                   />
-                  {/* Eje Y derecho - Valor Inventario (COP) */}
+                  {/* Eje Y derecho - Valor Inventario (COP) - Escala independiente */}
                   <YAxis 
                     yAxisId="right"
                     orientation="right"
+                    domain={[0, 'auto']}
                     tick={{ fill: '#3B82F6', fontSize: 12 }}
                     tickLine={{ stroke: '#3B82F6' }}
                     label={{ 
@@ -472,7 +475,7 @@ export function MovementsDashboard() {
                     radius={[8, 8, 0, 0]}
                   />
                   
-                  {/* Barras de Salidas (COP) - rojo */}
+                  {/* Barras de Salidas (COP) - rojo - Siempre positivas */}
                   <Bar 
                     yAxisId="left"
                     dataKey="salidas" 

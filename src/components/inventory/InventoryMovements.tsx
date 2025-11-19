@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
-import { RefreshCw, Search, Calendar, Filter, X, Plus, Package, ArrowUpCircle, ArrowDownCircle, RotateCcw } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
+import { Search, ArrowUpCircle, ArrowDownCircle, Filter, Plus, Loader2, RefreshCw, Calendar, RotateCcw, Package, X } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { NuevoMovimientoModal } from './NuevoMovimientoModal';
-import { InventoryNav } from './InventoryNav';
+import { InventorySubNav } from './InventorySubNav';
 
 interface Movement {
   id: number;
@@ -233,7 +233,7 @@ export function InventoryMovements() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-center py-12">
-          <RefreshCw className="w-8 h-8 text-[#73991C] animate-spin" />
+          <Loader2 className="w-8 h-8 text-[#73991C] animate-spin" />
         </div>
       </div>
     );
@@ -242,7 +242,7 @@ export function InventoryMovements() {
   return (
     <div className="space-y-6">
       {/* Barra de navegación */}
-      <InventoryNav />
+      <InventorySubNav />
       
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

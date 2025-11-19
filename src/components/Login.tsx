@@ -40,7 +40,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
   };
 
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-[#DEE5CC] flex items-center justify-center p-4 relative overflow-hidden">
       {/* Decorative background elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-20 -left-20 w-72 h-72 bg-[#73991C]/5 rounded-full blur-3xl"></div>
@@ -49,7 +49,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
 
       <div className="w-full max-w-md relative z-10">
         {/* Card con color de fondo de la imagen */}
-        <div className="bg-[#DDE5CB] rounded-3xl shadow-[0_8px_32px_rgba(115,153,28,0.15)] p-8 border border-[#73991C]/10">
+        <div className="bg-[#E7EDDE] rounded-3xl shadow-[0_8px_32px_rgba(115,153,28,0.15)] p-8 border border-[#73991C]/10">
           
           {/* Imagen del logo */}
           <div className="text-center mb-8">

@@ -10,6 +10,8 @@ import {
   Cloud,
   AlertCircle,
   CheckCircle,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import type { Aplicacion, JornalesPorActividad } from '../../types/aplicaciones';
 
@@ -21,6 +23,8 @@ interface PasoCierreDatosProps {
   onValorJornalChange: (valor: number) => void;
   jornales: JornalesPorActividad;
   onJornalesChange: (jornales: JornalesPorActividad) => void;
+  jornalesPorLote: { [loteId: string]: JornalesPorActividad };
+  onJornalesPorLoteChange: (jornalesPorLote: { [loteId: string]: JornalesPorActividad }) => void;
   observaciones: {
     generales: string;
     meteorologicas: string;
@@ -39,10 +43,14 @@ export function PasoCierreDatos({
   onValorJornalChange,
   jornales,
   onJornalesChange,
+  jornalesPorLote,
+  onJornalesPorLoteChange,
   observaciones,
   onObservacionesChange,
   movimientos,
 }: PasoCierreDatosProps) {
+  const [mostrarJornalesPorLote, setMostrarJornalesPorLote] = useState(false);
+
   const calcularDiasAplicacion = (): number => {
     const fechaInicio = new Date(aplicacion.fecha_inicio);
     const fechaFin = new Date(fechaFinal);
@@ -263,6 +271,165 @@ export function PasoCierreDatos({
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Jornales por Lote (Opcional - Colapsable) */}
+          <div className="border-t border-gray-200 pt-4 mt-4">
+            <button
+              type="button"
+              onClick={() => setMostrarJornalesPorLote(!mostrarJornalesPorLote)}
+              className="flex items-center gap-2 text-sm text-[#73991C] hover:text-[#172E08] transition-colors font-medium"
+            >
+              {mostrarJornalesPorLote ? (
+                <ChevronUp className="w-4 h-4" />
+              ) : (
+                <ChevronDown className="w-4 h-4" />
+              )}
+              Distribuir jornales por lote (opcional)
+            </button>
+            <p className="text-xs text-[#4D240F]/60 mt-1 ml-6">
+              Si deseas un control más detallado, puedes especificar los jornales utilizados en cada lote
+            </p>
+
+            {mostrarJornalesPorLote && (
+              <div className="mt-4 space-y-3">
+                {aplicacion.configuracion?.lotes_seleccionados?.map((lote) => {
+                  const loteId = lote.id || lote.lote_id;
+                  const jornalesLote = jornalesPorLote[loteId] || {
+                    aplicacion: 0,
+                    mezcla: 0,
+                    transporte: 0,
+                    otros: 0,
+                  };
+
+                  return (
+                    <div
+                      key={loteId}
+                      className="bg-gray-50 border border-gray-200 rounded-lg p-4"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <h5 className="text-sm text-[#172E08] font-medium">
+                          {lote.nombre || `Lote ${loteId}`}
+                        </h5>
+                        <span className="text-xs text-[#4D240F]/60">
+                          {lote.conteo_arboles?.total || 0} árboles
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        {/* Aplicación */}
+                        <div>
+                          <label className="block text-xs text-[#4D240F]/70 mb-1">
+                            Aplicación
+                          </label>
+                          <input
+                            type="number"
+                            value={jornalesLote.aplicacion}
+                            onChange={(e) => {
+                              const updated = {
+                                ...jornalesPorLote,
+                                [loteId]: {
+                                  ...jornalesLote,
+                                  aplicacion: Number(e.target.value),
+                                },
+                              };
+                              onJornalesPorLoteChange(updated);
+                            }}
+                            min="0"
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+                            placeholder="0"
+                          />
+                        </div>
+
+                        {/* Mezcla */}
+                        <div>
+                          <label className="block text-xs text-[#4D240F]/70 mb-1">
+                            Mezcla
+                          </label>
+                          <input
+                            type="number"
+                            value={jornalesLote.mezcla}
+                            onChange={(e) => {
+                              const updated = {
+                                ...jornalesPorLote,
+                                [loteId]: {
+                                  ...jornalesLote,
+                                  mezcla: Number(e.target.value),
+                                },
+                              };
+                              onJornalesPorLoteChange(updated);
+                            }}
+                            min="0"
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg text-[#172E08] focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500"
+                            placeholder="0"
+                          />
+                        </div>
+
+                        {/* Transporte */}
+                        <div>
+                          <label className="block text-xs text-[#4D240F]/70 mb-1">
+                            Transporte
+                          </label>
+                          <input
+                            type="number"
+                            value={jornalesLote.transporte}
+                            onChange={(e) => {
+                              const updated = {
+                                ...jornalesPorLote,
+                                [loteId]: {
+                                  ...jornalesLote,
+                                  transporte: Number(e.target.value),
+                                },
+                              };
+                              onJornalesPorLoteChange(updated);
+                            }}
+                            min="0"
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg text-[#172E08] focus:outline-none focus:ring-2 focus:ring-purple-200 focus:border-purple-500"
+                            placeholder="0"
+                          />
+                        </div>
+
+                        {/* Otros */}
+                        <div>
+                          <label className="block text-xs text-[#4D240F]/70 mb-1">
+                            Otros
+                          </label>
+                          <input
+                            type="number"
+                            value={jornalesLote.otros || 0}
+                            onChange={(e) => {
+                              const updated = {
+                                ...jornalesPorLote,
+                                [loteId]: {
+                                  ...jornalesLote,
+                                  otros: Number(e.target.value),
+                                },
+                              };
+                              onJornalesPorLoteChange(updated);
+                            }}
+                            min="0"
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg text-[#172E08] focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-500"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Subtotal de este lote */}
+                      <div className="mt-2 pt-2 border-t border-gray-300 flex justify-between items-center">
+                        <span className="text-xs text-[#4D240F]/70">Total lote:</span>
+                        <span className="text-sm text-[#172E08] font-medium">
+                          {jornalesLote.aplicacion +
+                            jornalesLote.mezcla +
+                            jornalesLote.transporte +
+                            (jornalesLote.otros || 0)}{' '}
+                          jornales
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>

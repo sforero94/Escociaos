@@ -69,9 +69,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       const supabase = getSupabase();
       
-      // Timeout de 2 segundos para evitar carga infinita
+      // Timeout de 10 segundos para evitar carga infinita
       const timeoutPromise = new Promise<{ data: { session: null }, error: any }>((_, reject) => {
-        setTimeout(() => reject(new Error('Timeout de autenticación (2s)')), 2000);
+        setTimeout(() => reject(new Error('Timeout de autenticación (10s)')), 10000);
       });
       
       const sessionPromise = supabase.auth.getSession();

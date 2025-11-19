@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Eye, Sprout, Package, Briefcase, TrendingUp, TrendingDown } from 'lucide-react';
 import { getSupabase } from '../utils/supabase/client';
 import { formatNumber } from '../utils/format';
+import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 import { 
   AlertList, 
   AlertListHeader, 
@@ -15,26 +16,246 @@ interface DashboardProps {
 }
 
 /**
- * Tarjeta de Monitoreo (placeholder)
+ * Tarjeta de Monitoreo con mini gráfica de tendencias
  */
 function MonitoreoCard({ onClick }: { onClick: () => void }) {
+  const [tendencias, setTendencias] = useState<TendenciaData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    cargarTendencias();
+  }, []);
+
+  const cargarTendencias = async () => {
+    try {
+      const supabase = getSupabase();
+
+      // Cargar catálogo de plagas de interés
+      const { data: catalogoPlagas, error: errorCatalogo } = await supabase
+        .from('plagas_enfermedades_catalogo')
+        .select('id, nombre')
+        .eq('activo', true);
+
+      if (errorCatalogo) throw errorCatalogo;
+
+      // Filtrar IDs de plagas de interés
+      const plagasInteresIds = catalogoPlagas
+        ?.filter(p => PLAGAS_INTERES.some(nombre => 
+          p.nombre.toLowerCase().includes(nombre.toLowerCase())
+        ))
+        .map(p => p.id) || [];
+
+      if (plagasInteresIds.length === 0) {
+        setTendencias([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Cargar TODOS los monitoreos de plagas de interés ordenados por fecha
+      const { data: monitoreos, error } = await supabase
+        .from('monitoreos')
+        .select(`
+          fecha_monitoreo,
+          incidencia,
+          plaga_enfermedad_id,
+          plagas_enfermedades_catalogo!inner(nombre)
+        `)
+        .in('plaga_enfermedad_id', plagasInteresIds)
+        .order('fecha_monitoreo', { ascending: false })
+        .limit(500);
+
+      if (error) throw error;
+
+      if (!monitoreos || monitoreos.length === 0) {
+        setTendencias([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Agrupar por semana-año y fecha completa para ordenamiento correcto
+      const datosPorSemana: { 
+        [semanaKey: string]: { 
+          semana: number;
+          año: number;
+          fechaMasReciente: string;
+          plagas: { [plaga: string]: number }
+        } 
+      } = {};
+
+      monitoreos.forEach(m => {
+        const fecha = new Date(m.fecha_monitoreo);
+        const semana = getNumeroSemana(fecha);
+        const año = fecha.getFullYear();
+        const semanaKey = `${año}-S${semana.toString().padStart(2, '0')}`;
+        const plagaNombre = (m.plagas_enfermedades_catalogo as any).nombre;
+
+        if (!datosPorSemana[semanaKey]) {
+          datosPorSemana[semanaKey] = {
+            semana,
+            año,
+            fechaMasReciente: m.fecha_monitoreo,
+            plagas: {}
+          };
+        }
+
+        // Actualizar fecha más reciente de la semana
+        if (m.fecha_monitoreo > datosPorSemana[semanaKey].fechaMasReciente) {
+          datosPorSemana[semanaKey].fechaMasReciente = m.fecha_monitoreo;
+        }
+
+        // Guardar solo el dato más reciente de cada plaga por semana
+        if (!datosPorSemana[semanaKey].plagas[plagaNombre] || 
+            m.fecha_monitoreo > datosPorSemana[semanaKey].fechaMasReciente) {
+          datosPorSemana[semanaKey].plagas[plagaNombre] = m.incidencia || 0;
+        }
+      });
+
+      // Ordenar semanas por fecha y tomar las últimas 4
+      const semanasOrdenadas = Object.entries(datosPorSemana)
+        .sort((a, b) => {
+          // Ordenar por año y luego por número de semana
+          const [keyA, dataA] = a;
+          const [keyB, dataB] = b;
+          
+          if (dataA.año !== dataB.año) {
+            return dataA.año - dataB.año;
+          }
+          return dataA.semana - dataB.semana;
+        })
+        .slice(-4); // Últimas 4 semanas con datos
+
+      // Obtener todas las plagas únicas de las últimas 4 semanas
+      const todasLasPlagas = new Set<string>();
+      semanasOrdenadas.forEach(([_, data]) => {
+        Object.keys(data.plagas).forEach(plaga => todasLasPlagas.add(plaga));
+      });
+
+      // Formatear para Recharts rellenando con 0 las plagas sin datos
+      const datosFormateados: TendenciaData[] = semanasOrdenadas.map(([key, data]) => {
+        const punto: TendenciaData = { semana: `S${data.semana}` };
+        
+        // Agregar todas las plagas, poniendo 0 si no tienen dato
+        todasLasPlagas.forEach(plaga => {
+          punto[plaga] = data.plagas[plaga] !== undefined 
+            ? Math.round(data.plagas[plaga] * 10) / 10 
+            : 0;
+        });
+        
+        return punto;
+      });
+
+      setTendencias(datosFormateados);
+    } catch (error) {
+      console.error('Error cargando tendencias de monitoreo:', error);
+      setTendencias([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const getNumeroSemana = (fecha: Date): number => {
+    const d = new Date(Date.UTC(fecha.getFullYear(), fecha.getMonth(), fecha.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  };
+
+  // Obtener plagas únicas para la leyenda
+  const plagasEnGrafico = tendencias.length > 0
+    ? Object.keys(tendencias[0]).filter(k => k !== 'semana')
+    : [];
+
+  const COLORES_PLAGAS = ['#73991C', '#E74C3C', '#3498DB', '#F39C12', '#9B59B6', '#1ABC9C'];
+
   return (
     <div
       onClick={onClick}
       className="bg-white rounded-2xl p-6 border border-gray-200 hover:border-[#73991C]/40 transition-all cursor-pointer group shadow-sm hover:shadow-md"
     >
-      <div className="flex items-start gap-4">
+      {/* Header */}
+      <div className="flex items-start gap-4 mb-4">
         <div className="w-12 h-12 bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
           <Eye className="w-6 h-6 text-[#73991C]" />
         </div>
         <div className="flex-1">
           <p className="text-xs text-[#4D240F]/60 mb-1 tracking-wide uppercase">Monitoreo</p>
-          <h3 className="text-[#172E08] mb-1">En Desarrollo</h3>
-          <p className="text-sm text-[#4D240F]/70">
-            Módulo de monitoreo de plagas y enfermedades
+          <h3 className="text-[#172E08] mb-1">Plagas de Interés</h3>
+          <p className="text-xs text-[#4D240F]/60">
+            Tendencias últimas 4 semanas
           </p>
         </div>
       </div>
+
+      {/* Mini Gráfica */}
+      {isLoading ? (
+        <div className="h-32 flex items-center justify-center">
+          <div className="w-6 h-6 border-3 border-[#73991C]/30 border-t-[#73991C] rounded-full animate-spin"></div>
+        </div>
+      ) : tendencias.length > 0 ? (
+        <>
+          <div className="h-32 -mx-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={tendencias} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                <XAxis 
+                  dataKey="semana" 
+                  tick={{ fill: '#4D240F', fontSize: 10 }}
+                  stroke="#E5E7EB"
+                  tickLine={false}
+                />
+                <YAxis 
+                  tick={{ fill: '#4D240F', fontSize: 10 }}
+                  stroke="#E5E7EB"
+                  tickLine={false}
+                  domain={[0, 'auto']}
+                />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'white', 
+                    border: '1px solid #E5E7EB',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    padding: '8px'
+                  }}
+                  formatter={(value: any) => `${value}%`}
+                />
+                {plagasEnGrafico.map((plaga, index) => (
+                  <Line
+                    key={plaga}
+                    type="monotone"
+                    dataKey={plaga}
+                    stroke={COLORES_PLAGAS[index % COLORES_PLAGAS.length]}
+                    strokeWidth={2}
+                    dot={{ r: 3 }}
+                    activeDot={{ r: 4 }}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Mini leyenda */}
+          <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-2">
+            {plagasEnGrafico.slice(0, 3).map((plaga, index) => (
+              <div key={plaga} className="flex items-center gap-1.5">
+                <div 
+                  className="w-2 h-2 rounded-full" 
+                  style={{ backgroundColor: COLORES_PLAGAS[index % COLORES_PLAGAS.length] }}
+                ></div>
+                <span className="text-xs text-[#4D240F]/70">{plaga}</span>
+              </div>
+            ))}
+            {plagasEnGrafico.length > 3 && (
+              <span className="text-xs text-[#4D240F]/50">+{plagasEnGrafico.length - 3} más</span>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="h-32 flex flex-col items-center justify-center text-[#4D240F]/50">
+          <Eye className="w-8 h-8 mb-2 opacity-30" />
+          <p className="text-xs">Sin datos de las últimas 4 semanas</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -143,6 +364,8 @@ function AplicacionesCard({
  */
 interface InventarioStats {
   valorTotal: number;
+  promedioTresMeses: number;
+  porcentajeCambio: number;
   porEstado: {
     ok: number;
     sinExistencias: number;
@@ -176,6 +399,11 @@ function InventarioCard({
   const valorEnMillones = (stats?.valorTotal || 0) / 1000000;
   const valorFormateado = `$${valorEnMillones.toFixed(1)}M`;
 
+  // Determinar si está subiendo o bajando
+  const porcentajeCambio = stats?.porcentajeCambio || 0;
+  const estaSubiendo = porcentajeCambio > 0;
+  const estaBajando = porcentajeCambio < 0;
+
   return (
     <div
       onClick={onClick}
@@ -186,10 +414,37 @@ function InventarioCard({
         <div className="w-12 h-12 bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
           <Package className="w-6 h-6 text-[#73991C]" />
         </div>
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <p className="text-xs text-[#4D240F]/60 mb-1 tracking-wide uppercase">Inventario</p>
-          <h3 className="text-2xl text-[#172E08]">{valorFormateado}</h3>
-          <p className="text-xs text-[#4D240F]/50">Valor total en productos</p>
+          
+          {/* Dos columnas: Valor e Indicador */}
+          <div className="flex items-start justify-between gap-4">
+            {/* Columna izquierda: Solo el valor */}
+            <div>
+              <h3 className="text-2xl text-[#172E08]">{valorFormateado}</h3>
+            </div>
+
+            {/* Columna derecha: Indicador de tendencia CON texto descriptivo */}
+            {porcentajeCambio !== 0 && (
+              <div className="flex flex-col items-end flex-shrink-0">
+                <div className={`flex items-center gap-1 mb-0.5 ${
+                  estaBajando ? 'text-green-600' : 'text-red-600'
+                }`}>
+                  {estaBajando ? (
+                    <TrendingDown className="w-4 h-4" />
+                  ) : (
+                    <TrendingUp className="w-4 h-4" />
+                  )}
+                  <span className="text-sm font-medium">
+                    {Math.abs(porcentajeCambio).toFixed(1)}%
+                  </span>
+                </div>
+                <p className="text-xs text-[#4D240F]/50 text-right">
+                  vs. promedio 3 últimos meses
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -439,11 +694,70 @@ export function Dashboard({ onNavigate }: DashboardProps) {
 
       if (error) throw error;
 
-      // Calcular valor total
+      // Calcular valor total ACTUAL
       const valorTotal = productos?.reduce(
         (sum: number, p: any) => sum + ((p.cantidad_actual || 0) * (p.precio_unitario || 0)),
         0
       ) || 0;
+
+      // Calcular promedio de los últimos 3 meses usando movimientos_inventario
+      const fechaActual = new Date();
+      const fechaTresMesesAtras = new Date();
+      fechaTresMesesAtras.setMonth(fechaActual.getMonth() - 3);
+
+      // Obtener todos los productos activos con sus precios
+      const { data: productosConPrecio, error: errorProductos } = await supabase
+        .from('productos')
+        .select('id, precio_unitario')
+        .eq('activo', true);
+
+      if (errorProductos) throw errorProductos;
+
+      // Crear un mapa de precios por producto
+      const preciosPorProducto = new Map();
+      productosConPrecio?.forEach((p: any) => {
+        preciosPorProducto.set(p.id, p.precio_unitario || 0);
+      });
+
+      // Obtener movimientos de los últimos 3 meses
+      const { data: movimientos, error: errorMovimientos } = await supabase
+        .from('movimientos_inventario')
+        .select('fecha_movimiento, producto_id, saldo_nuevo')
+        .gte('fecha_movimiento', fechaTresMesesAtras.toISOString().split('T')[0])
+        .order('fecha_movimiento', { ascending: true });
+
+      let promedioTresMeses = valorTotal; // Default al valor actual si no hay movimientos
+      let porcentajeCambio = 0;
+
+      if (!errorMovimientos && movimientos && movimientos.length > 0) {
+        // Agrupar por mes y calcular valor de inventario
+        const valoresPorMes: { [mes: string]: number } = {};
+
+        movimientos.forEach((mov: any) => {
+          const fecha = new Date(mov.fecha_movimiento);
+          const mesKey = `${fecha.getFullYear()}-${(fecha.getMonth() + 1).toString().padStart(2, '0')}`;
+          const precioUnitario = preciosPorProducto.get(mov.producto_id) || 0;
+          const valorEnEseMomento = (mov.saldo_nuevo || 0) * precioUnitario;
+
+          // Guardar el último saldo del mes
+          if (!valoresPorMes[mesKey]) {
+            valoresPorMes[mesKey] = 0;
+          }
+          valoresPorMes[mesKey] = valorEnEseMomento;
+        });
+
+        // Calcular promedio de los valores mensuales
+        const valoresMensuales = Object.values(valoresPorMes);
+        if (valoresMensuales.length > 0) {
+          const sumaValores = valoresMensuales.reduce((sum, val) => sum + val, 0);
+          promedioTresMeses = sumaValores / valoresMensuales.length;
+
+          // Calcular porcentaje de cambio
+          if (promedioTresMeses > 0) {
+            porcentajeCambio = ((valorTotal - promedioTresMeses) / promedioTresMeses) * 100;
+          }
+        }
+      }
 
       // Contar por estado
       const hoy = new Date().toISOString().split('T')[0];
@@ -475,6 +789,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
 
       setInventarioStats({
         valorTotal,
+        promedioTresMeses,
+        porcentajeCambio: Math.round(porcentajeCambio * 10) / 10, // Redondear a 1 decimal
         porEstado: {
           ok,
           sinExistencias,
@@ -486,6 +802,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       console.error('❌ Error cargando inventario:', error);
       setInventarioStats({
         valorTotal: 0,
+        promedioTresMeses: 0,
+        porcentajeCambio: 0,
         porEstado: { ok: 0, sinExistencias: 0, perdido: 0, vencido: 0 },
       });
     }
@@ -604,4 +922,20 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       </AlertListContainer>
     </div>
   );
+}
+
+// Plagas de interés para la mini gráfica
+const PLAGAS_INTERES = [
+  'Monalonion',
+  'Ácaro',
+  'Huevos de Ácaro',
+  'Ácaro Cristalino',
+  'Cucarrón marceño',
+  'Trips'
+];
+
+// Interfaz para datos de tendencias
+interface TendenciaData {
+  semana: string;
+  [plagaNombre: string]: number | string;
 }

@@ -6,7 +6,7 @@ import { Input } from '../ui/input';
 import { getSupabase } from '../../utils/supabase/client';
 import { ProductForm } from './ProductForm';
 import { ProductMovements } from './ProductMovements';
-import { InventoryNav } from './InventoryNav';
+import { InventorySubNav } from './InventorySubNav';
 
 interface InventoryListProps {
   onNavigate?: (view: string, productId?: number) => void;
@@ -120,7 +120,7 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
   return (
     <div className="space-y-6">
       {/* Barra de navegación */}
-      <InventoryNav />
+      <InventorySubNav />
       
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

@@ -1,0 +1,1327 @@
+import { useState, useEffect, useRef } from 'react';
+import { getSupabase } from '../../utils/supabase/client';
+import { Card } from '../ui/card';
+import { Button } from '../ui/button';
+import { Label } from '../ui/label';
+import { 
+  Calendar, 
+  TrendingUp, 
+  TrendingDown, 
+  AlertTriangle, 
+  CheckCircle2,
+  Bug,
+  Download,
+  Upload,
+  ChevronDown,
+  ChevronUp,
+  Filter,
+  Camera,
+  Table,
+  Settings
+} from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { toast } from 'sonner';
+import { TablaMonitoreos } from './TablaMonitoreos';
+import { CatalogoPlagas } from './CatalogoPlagas';
+
+// ============================================
+// INTERFACES
+// ============================================
+
+interface UltimoMonitoreo {
+  fechaInicio: string;
+  fechaFin: string;
+  incidenciaPromedio: number;
+  incidenciaAnterior: number;
+  plagasCriticas: { nombre: string; sublotes: number; incidenciaMax: number }[];
+  plagasControladas: { nombre: string; incidenciaAnterior: number; incidenciaActual: number }[];
+}
+
+interface TendenciaData {
+  semana: string;
+  [plagaNombre: string]: number | string;
+}
+
+interface Insight {
+  tipo: 'alerta' | 'alivio';
+  lote: string;
+  plaga: string;
+  incidenciaAnterior: number;
+  incidenciaActual: number;
+}
+
+interface PlagaCritica {
+  plaga: string;
+  lotes: {
+    lote: string;
+    incidenciaActual: number;
+    incidenciaAnterior: number;
+    tendencia: 'up' | 'down' | 'stable';
+  }[];
+}
+
+type RangoPeriodo = 'semana' | 'mes' | 'trimestre' | 'todo';
+type FiltroPlaga = 'interes' | 'cuarentenarias' | 'todos' | 'personalizar';
+
+// Plagas de interés predefinidas
+const PLAGAS_INTERES = [
+  'Monalonion',
+  'Ácaro',
+  'Huevos de Ácaro',
+  'Ácaro Cristalino',
+  'Cucarrón marceño',
+  'Trips'
+];
+
+// Plagas cuarentenarias
+const PLAGAS_CUARENTENARIAS = [
+  'Picudo',
+  'Stenoma Catenifer',
+  'Heilipus Lauri'
+];
+
+// ============================================
+// COMPONENTE PRINCIPAL
+// ============================================
+
+export function MonitoreoDashboardV2() {
+  const supabase = getSupabase();
+  
+  // Estados
+  const [isLoading, setIsLoading] = useState(true);
+  const [ultimoMonitoreo, setUltimoMonitoreo] = useState<UltimoMonitoreo | null>(null);
+  const [tendencias, setTendencias] = useState<TendenciaData[]>([]);
+  const [insights, setInsights] = useState<Insight[]>([]);
+  const [plagasCriticas, setPlagasCriticas] = useState<PlagaCritica[]>([]);
+  
+  // Selectores
+  const [rangoSeleccionado, setRangoSeleccionado] = useState<RangoPeriodo>('mes');
+  const [filtroPlaga, setFiltroPlaga] = useState<FiltroPlaga>('interes');
+  const [plagasSeleccionadas, setPlagasSeleccionadas] = useState<string[]>([]);
+  const [catalogoPlagas, setCatalogoPlagas] = useState<{ id: string; nombre: string }[]>([]);
+  
+  // UI
+  const [plagasExpandidas, setPlagasExpandidas] = useState<Set<string>>(new Set());
+  const [mostrarTablaCompleta, setMostrarTablaCompleta] = useState(false);
+  const [mostrarCatalogo, setMostrarCatalogo] = useState(false);
+  const graficoRef = useRef<HTMLDivElement>(null);
+
+  // ============================================
+  // CARGAR DATOS INICIALES
+  // ============================================
+
+  useEffect(() => {
+    cargarDatos();
+  }, [rangoSeleccionado]);
+
+  useEffect(() => {
+    if (filtroPlaga === 'todos' || filtroPlaga === 'interes' || filtroPlaga === 'cuarentenarias') {
+      cargarTendencias();
+    }
+  }, [filtroPlaga, plagasSeleccionadas]);
+
+  async function cargarDatos() {
+    setIsLoading(true);
+    try {
+      await Promise.all([
+        cargarCatalogoPlagas(),
+        cargarUltimoMonitoreo(),
+        cargarTendencias(),
+        cargarInsights(),
+        cargarPlagasCriticas()
+      ]);
+    } catch (error) {
+      console.error('Error cargando dashboard:', error);
+      toast.error('Error al cargar el dashboard');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  // ============================================
+  // 1. ÚLTIMO MONITOREO
+  // ============================================
+
+  async function cargarUltimoMonitoreo() {
+    try {
+      console.log('🔍 Cargando último monitoreo...');
+
+      // Obtener todos los monitoreos con lotes
+      const { data: monitoreos, error } = await supabase
+        .from('monitoreos')
+        .select(`
+          id,
+          fecha_monitoreo,
+          lote_id,
+          sublote_id,
+          plaga_enfermedad_id,
+          incidencia,
+          lotes!inner(nombre),
+          sublotes(nombre),
+          plagas_enfermedades_catalogo!inner(nombre)
+        `)
+        .order('fecha_monitoreo', { ascending: false })
+        .limit(2000);
+
+      if (error) throw error;
+      if (!monitoreos || monitoreos.length === 0) {
+        setUltimoMonitoreo(null);
+        return;
+      }
+
+      // Agrupar por lote y obtener fecha más reciente de cada lote
+      const lotesFechas: { [loteId: string]: string } = {};
+      monitoreos.forEach(m => {
+        if (!lotesFechas[m.lote_id] || m.fecha_monitoreo > lotesFechas[m.lote_id]) {
+          lotesFechas[m.lote_id] = m.fecha_monitoreo;
+        }
+      });
+
+      // Filtrar solo los monitoreos del último monitoreo de cada lote
+      const monitoreosUltimos = monitoreos.filter(m => 
+        lotesFechas[m.lote_id] === m.fecha_monitoreo
+      );
+
+      // Calcular rango de fechas
+      const fechas = monitoreosUltimos.map(m => m.fecha_monitoreo).sort();
+      const fechaInicio = fechas[0];
+      const fechaFin = fechas[fechas.length - 1];
+
+      // Calcular incidencia promedio
+      const incidenciaPromedio = monitoreosUltimos.reduce((sum, m) => sum + (m.incidencia || 0), 0) / monitoreosUltimos.length;
+
+      // Obtener monitoreo anterior para comparación
+      const fechasAnteriores = Object.values(lotesFechas);
+      const segundaFechaMasReciente = [...new Set(monitoreos.map(m => m.fecha_monitoreo))]
+        .filter(f => !fechasAnteriores.includes(f))
+        .sort()
+        .reverse()[0];
+
+      const monitoreosAnteriores = segundaFechaMasReciente
+        ? monitoreos.filter(m => m.fecha_monitoreo === segundaFechaMasReciente)
+        : [];
+
+      const incidenciaAnterior = monitoreosAnteriores.length > 0
+        ? monitoreosAnteriores.reduce((sum, m) => sum + (m.incidencia || 0), 0) / monitoreosAnteriores.length
+        : 0;
+
+      // Plagas críticas: >30% en 2+ sublotes
+      const plagasPorSublote: { [plagaId: string]: { nombre: string; sublotes: Set<string>; incidencias: number[] } } = {};
+      
+      monitoreosUltimos.forEach(m => {
+        if ((m.incidencia || 0) > 30) {
+          if (!plagasPorSublote[m.plaga_enfermedad_id]) {
+            plagasPorSublote[m.plaga_enfermedad_id] = {
+              nombre: (m.plagas_enfermedades_catalogo as any).nombre,
+              sublotes: new Set(),
+              incidencias: []
+            };
+          }
+          plagasPorSublote[m.plaga_enfermedad_id].sublotes.add(m.sublote_id || m.lote_id);
+          plagasPorSublote[m.plaga_enfermedad_id].incidencias.push(m.incidencia || 0);
+        }
+      });
+
+      const plagasCriticas = Object.values(plagasPorSublote)
+        .filter(p => p.sublotes.size >= 2)
+        .map(p => ({
+          nombre: p.nombre,
+          sublotes: p.sublotes.size,
+          incidenciaMax: Math.max(...p.incidencias)
+        }));
+
+      // Plagas controladas: estaba >10% antes y ahora está <10%
+      const plagasControladas: { nombre: string; incidenciaAnterior: number; incidenciaActual: number }[] = [];
+      
+      const plagasActuales: { [plagaId: string]: { nombre: string; incidencia: number } } = {};
+      monitoreosUltimos.forEach(m => {
+        if (!plagasActuales[m.plaga_enfermedad_id]) {
+          plagasActuales[m.plaga_enfermedad_id] = {
+            nombre: (m.plagas_enfermedades_catalogo as any).nombre,
+            incidencia: 0
+          };
+        }
+        plagasActuales[m.plaga_enfermedad_id].incidencia += (m.incidencia || 0);
+      });
+
+      const plagasAnteriores: { [plagaId: string]: number } = {};
+      monitoreosAnteriores.forEach(m => {
+        if (!plagasAnteriores[m.plaga_enfermedad_id]) {
+          plagasAnteriores[m.plaga_enfermedad_id] = 0;
+        }
+        plagasAnteriores[m.plaga_enfermedad_id] += (m.incidencia || 0);
+      });
+
+      Object.entries(plagasActuales).forEach(([plagaId, data]) => {
+        const incActual = data.incidencia / monitoreosUltimos.filter(m => m.plaga_enfermedad_id === plagaId).length;
+        const incAnt = plagasAnteriores[plagaId] 
+          ? plagasAnteriores[plagaId] / monitoreosAnteriores.filter(m => m.plaga_enfermedad_id === plagaId).length
+          : 0;
+
+        // Plaga controlada: estaba >10% antes y ahora está <10%
+        if (incAnt > 10 && incActual < 10) {
+          plagasControladas.push({
+            nombre: data.nombre,
+            incidenciaAnterior: incAnt,
+            incidenciaActual: incActual
+          });
+        }
+      });
+
+      setUltimoMonitoreo({
+        fechaInicio,
+        fechaFin,
+        incidenciaPromedio,
+        incidenciaAnterior,
+        plagasCriticas,
+        plagasControladas
+      });
+
+      console.log('✅ Último monitoreo cargado');
+    } catch (error) {
+      console.error('Error cargando último monitoreo:', error);
+    }
+  }
+
+  // ============================================
+  // 2. CATÁLOGO DE PLAGAS
+  // ============================================
+
+  async function cargarCatalogoPlagas() {
+    try {
+      const { data, error } = await supabase
+        .from('plagas_enfermedades_catalogo')
+        .select('id, nombre')
+        .eq('activo', true)
+        .order('nombre');
+
+      if (error) throw error;
+
+      setCatalogoPlagas(data || []);
+      console.log('✅ Catálogo de plagas cargado:', data?.length);
+    } catch (error) {
+      console.error('Error cargando catálogo:', error);
+    }
+  }
+
+  // ============================================
+  // 3. GRÁFICA DE TENDENCIAS
+  // ============================================
+
+  async function cargarTendencias() {
+    try {
+      console.log('📈 Cargando tendencias...');
+
+      // Calcular fechas según período seleccionado
+      const fechaFin = new Date();
+      let fechaInicio = new Date();
+
+      switch (rangoSeleccionado) {
+        case 'semana':
+          fechaInicio.setDate(fechaFin.getDate() - 7);
+          break;
+        case 'mes':
+          fechaInicio.setDate(fechaFin.getDate() - 30);
+          break;
+        case 'trimestre':
+          fechaInicio.setDate(fechaFin.getDate() - 90);
+          break;
+        case 'todo':
+          fechaInicio = new Date('1900-01-01');
+          break;
+      }
+
+      // Determinar qué plagas filtrar
+      let plagasAFiltrar: string[] = [];
+      
+      if (filtroPlaga === 'interes') {
+        // Buscar IDs de plagas de interés
+        const plagasInteresData = catalogoPlagas.filter(p => 
+          PLAGAS_INTERES.some(nombre => p.nombre.toLowerCase().includes(nombre.toLowerCase()))
+        );
+        plagasAFiltrar = plagasInteresData.map(p => p.id);
+      } else if (filtroPlaga === 'cuarentenarias') {
+        // Buscar IDs de plagas cuarentenarias
+        const plagasCuarentenariasData = catalogoPlagas.filter(p => 
+          PLAGAS_CUARENTENARIAS.some(nombre => p.nombre.toLowerCase().includes(nombre.toLowerCase()))
+        );
+        plagasAFiltrar = plagasCuarentenariasData.map(p => p.id);
+      } else if (filtroPlaga === 'personalizar') {
+        plagasAFiltrar = plagasSeleccionadas;
+      }
+      // Si es 'todos', no filtramos
+
+      // Query con paginación
+      const BATCH_SIZE = 1000;
+      let allData: any[] = [];
+      let currentOffset = 0;
+      let hasMore = true;
+
+      while (hasMore && allData.length < 5000) {
+        let query = supabase
+          .from('monitoreos')
+          .select(`
+            fecha_monitoreo,
+            incidencia,
+            plaga_enfermedad_id,
+            plagas_enfermedades_catalogo!inner(nombre)
+          `)
+          .gte('fecha_monitoreo', fechaInicio.toISOString().split('T')[0])
+          .lte('fecha_monitoreo', fechaFin.toISOString().split('T')[0])
+          .order('fecha_monitoreo', { ascending: true })
+          .range(currentOffset, currentOffset + BATCH_SIZE - 1);
+
+        // Aplicar filtro de plagas si corresponde
+        if (plagasAFiltrar.length > 0) {
+          query = query.in('plaga_enfermedad_id', plagasAFiltrar);
+        }
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          allData = [...allData, ...data];
+          currentOffset += BATCH_SIZE;
+          hasMore = data.length === BATCH_SIZE;
+        } else {
+          hasMore = false;
+        }
+      }
+
+      console.log(`✅ ${allData.length} registros cargados para tendencias`);
+
+      // Agrupar por semana y plaga
+      const datosPorSemana: { [semana: string]: { [plaga: string]: { sum: number; count: number; ultimaFecha: string } } } = {};
+
+      allData.forEach(m => {
+        const fecha = new Date(m.fecha_monitoreo);
+        const semana = getNumeroSemana(fecha);
+        const año = fecha.getFullYear();
+        const semanaKey = `S${semana} ${año}`;
+        const plagaNombre = (m.plagas_enfermedades_catalogo as any).nombre;
+
+        if (!datosPorSemana[semanaKey]) {
+          datosPorSemana[semanaKey] = {};
+        }
+        if (!datosPorSemana[semanaKey][plagaNombre]) {
+          datosPorSemana[semanaKey][plagaNombre] = { sum: 0, count: 0, ultimaFecha: m.fecha_monitoreo };
+        }
+
+        // Tomar el último dato de la semana
+        if (m.fecha_monitoreo > datosPorSemana[semanaKey][plagaNombre].ultimaFecha) {
+          datosPorSemana[semanaKey][plagaNombre] = {
+            sum: m.incidencia || 0,
+            count: 1,
+            ultimaFecha: m.fecha_monitoreo
+          };
+        }
+      });
+
+      // Formatear para Recharts
+      const datosFormateados: TendenciaData[] = Object.entries(datosPorSemana)
+        .map(([semana, plagas]) => {
+          const punto: TendenciaData = { semana };
+          Object.entries(plagas).forEach(([plaga, data]) => {
+            punto[plaga] = Math.round(data.sum * 10) / 10;
+          });
+          return punto;
+        })
+        .sort((a, b) => {
+          const [sA, añoA] = a.semana.split(' ');
+          const [sB, añoB] = b.semana.split(' ');
+          if (añoA !== añoB) return parseInt(añoA) - parseInt(añoB);
+          return parseInt(sA.substring(1)) - parseInt(sB.substring(1));
+        });
+
+      setTendencias(datosFormateados);
+      console.log('✅ Tendencias procesadas');
+    } catch (error) {
+      console.error('Error cargando tendencias:', error);
+    }
+  }
+
+  // ============================================
+  // 4. INSIGHTS AUTOMÁTICOS
+  // ============================================
+
+  async function cargarInsights() {
+    try {
+      console.log('💡 Generando insights...');
+
+      // Calcular fechas según período
+      const fechaFin = new Date();
+      let fechaInicio = new Date();
+      let fechaInicioAnterior = new Date();
+
+      switch (rangoSeleccionado) {
+        case 'semana':
+          fechaInicio.setDate(fechaFin.getDate() - 7);
+          fechaInicioAnterior.setDate(fechaFin.getDate() - 14);
+          break;
+        case 'mes':
+          fechaInicio.setDate(fechaFin.getDate() - 30);
+          fechaInicioAnterior.setDate(fechaFin.getDate() - 60);
+          break;
+        case 'trimestre':
+          fechaInicio.setDate(fechaFin.getDate() - 90);
+          fechaInicioAnterior.setDate(fechaFin.getDate() - 180);
+          break;
+        case 'todo':
+          // No generar insights para "todo"
+          setInsights([]);
+          return;
+      }
+
+      // Cargar datos del período actual y anterior
+      const { data: datosActuales, error: error1 } = await supabase
+        .from('monitoreos')
+        .select(`
+          lote_id,
+          plaga_enfermedad_id,
+          incidencia,
+          lotes!inner(nombre),
+          plagas_enfermedades_catalogo!inner(nombre)
+        `)
+        .gte('fecha_monitoreo', fechaInicio.toISOString().split('T')[0])
+        .lte('fecha_monitoreo', fechaFin.toISOString().split('T')[0])
+        .limit(5000);
+
+      const { data: datosAnteriores, error: error2 } = await supabase
+        .from('monitoreos')
+        .select(`
+          lote_id,
+          plaga_enfermedad_id,
+          incidencia,
+          lotes!inner(nombre),
+          plagas_enfermedades_catalogo!inner(nombre)
+        `)
+        .gte('fecha_monitoreo', fechaInicioAnterior.toISOString().split('T')[0])
+        .lt('fecha_monitoreo', fechaInicio.toISOString().split('T')[0])
+        .limit(5000);
+
+      if (error1 || error2) throw error1 || error2;
+
+      // Agrupar por lote y plaga
+      const agruparDatos = (datos: any[]) => {
+        const agrupado: { [key: string]: { sum: number; count: number; lote: string; plaga: string } } = {};
+        datos?.forEach(m => {
+          const key = `${m.lote_id}_${m.plaga_enfermedad_id}`;
+          if (!agrupado[key]) {
+            agrupado[key] = {
+              sum: 0,
+              count: 0,
+              lote: (m.lotes as any).nombre,
+              plaga: (m.plagas_enfermedades_catalogo as any).nombre
+            };
+          }
+          agrupado[key].sum += m.incidencia || 0;
+          agrupado[key].count += 1;
+        });
+        return agrupado;
+      };
+
+      const actuales = agruparDatos(datosActuales || []);
+      const anteriores = agruparDatos(datosAnteriores || []);
+
+      // Generar insights
+      const insightsGenerados: Insight[] = [];
+
+      Object.entries(actuales).forEach(([key, dataActual]) => {
+        const dataAnterior = anteriores[key];
+        if (!dataAnterior) return;
+
+        const incidenciaActual = dataActual.sum / dataActual.count;
+        const incidenciaAnterior = dataAnterior.sum / dataAnterior.count;
+
+        // ALERTA: Aumento que lleva sobre 20%
+        if (incidenciaAnterior < 20 && incidenciaActual >= 20) {
+          insightsGenerados.push({
+            tipo: 'alerta',
+            lote: dataActual.lote,
+            plaga: dataActual.plaga,
+            incidenciaAnterior: Math.round(incidenciaAnterior * 10) / 10,
+            incidenciaActual: Math.round(incidenciaActual * 10) / 10
+          });
+        }
+
+        // ALIVIO: Reducción que regresa por debajo de 10% (si estaba >15%)
+        if (incidenciaAnterior >= 15 && incidenciaActual < 10) {
+          insightsGenerados.push({
+            tipo: 'alivio',
+            lote: dataActual.lote,
+            plaga: dataActual.plaga,
+            incidenciaAnterior: Math.round(incidenciaAnterior * 10) / 10,
+            incidenciaActual: Math.round(incidenciaActual * 10) / 10
+          });
+        }
+      });
+
+      setInsights(insightsGenerados);
+      console.log('✅ Insights generados:', insightsGenerados.length);
+    } catch (error) {
+      console.error('Error generando insights:', error);
+    }
+  }
+
+  // ============================================
+  // 5. PLAGAS CRÍTICAS
+  // ============================================
+
+  async function cargarPlagasCriticas() {
+    try {
+      console.log('🐛 Cargando plagas críticas...');
+
+      // Calcular fechas según período
+      const fechaFin = new Date();
+      let fechaInicio = new Date();
+      let fechaInicioAnterior = new Date();
+
+      switch (rangoSeleccionado) {
+        case 'semana':
+          fechaInicio.setDate(fechaFin.getDate() - 7);
+          fechaInicioAnterior.setDate(fechaFin.getDate() - 14);
+          break;
+        case 'mes':
+          fechaInicio.setDate(fechaFin.getDate() - 30);
+          fechaInicioAnterior.setDate(fechaFin.getDate() - 60);
+          break;
+        case 'trimestre':
+          fechaInicio.setDate(fechaFin.getDate() - 90);
+          fechaInicioAnterior.setDate(fechaFin.getDate() - 180);
+          break;
+        case 'todo':
+          fechaInicio = new Date('1900-01-01');
+          fechaInicioAnterior = new Date('1900-01-01');
+          break;
+      }
+
+      // Cargar datos actuales
+      const { data: datosActuales, error: error1 } = await supabase
+        .from('monitoreos')
+        .select(`
+          lote_id,
+          plaga_enfermedad_id,
+          incidencia,
+          lotes!inner(nombre),
+          plagas_enfermedades_catalogo!inner(nombre)
+        `)
+        .gte('fecha_monitoreo', fechaInicio.toISOString().split('T')[0])
+        .lte('fecha_monitoreo', fechaFin.toISOString().split('T')[0])
+        .limit(5000);
+
+      // Cargar datos anteriores (solo si no es 'todo')
+      let datosAnteriores: any[] = [];
+      if (rangoSeleccionado !== 'todo') {
+        const { data, error } = await supabase
+          .from('monitoreos')
+          .select(`
+            lote_id,
+            plaga_enfermedad_id,
+            incidencia,
+            lotes!inner(nombre),
+            plagas_enfermedades_catalogo!inner(nombre)
+          `)
+          .gte('fecha_monitoreo', fechaInicioAnterior.toISOString().split('T')[0])
+          .lt('fecha_monitoreo', fechaInicio.toISOString().split('T')[0])
+          .limit(5000);
+        
+        if (!error) datosAnteriores = data || [];
+      }
+
+      if (error1) throw error1;
+
+      // Agrupar por plaga y lote
+      const plagasLotes: { 
+        [plagaNombre: string]: { 
+          [loteNombre: string]: { 
+            actual: number[]; 
+            anterior: number[] 
+          } 
+        } 
+      } = {};
+
+      datosActuales?.forEach(m => {
+        const plaga = (m.plagas_enfermedades_catalogo as any).nombre;
+        const lote = (m.lotes as any).nombre;
+        
+        if (!plagasLotes[plaga]) plagasLotes[plaga] = {};
+        if (!plagasLotes[plaga][lote]) plagasLotes[plaga][lote] = { actual: [], anterior: [] };
+        
+        plagasLotes[plaga][lote].actual.push(m.incidencia || 0);
+      });
+
+      datosAnteriores?.forEach(m => {
+        const plaga = (m.plagas_enfermedades_catalogo as any).nombre;
+        const lote = (m.lotes as any).nombre;
+        
+        if (!plagasLotes[plaga]) plagasLotes[plaga] = {};
+        if (!plagasLotes[plaga][lote]) plagasLotes[plaga][lote] = { actual: [], anterior: [] };
+        
+        plagasLotes[plaga][lote].anterior.push(m.incidencia || 0);
+      });
+
+      // Filtrar plagas críticas (incidencia >30% en al menos un lote)
+      const criticas: PlagaCritica[] = [];
+
+      Object.entries(plagasLotes).forEach(([plaga, lotes]) => {
+        const lotesData: PlagaCritica['lotes'] = [];
+        let tieneCritico = false;
+
+        Object.entries(lotes).forEach(([lote, data]) => {
+          const incidenciaActual = data.actual.length > 0
+            ? data.actual.reduce((a, b) => a + b, 0) / data.actual.length
+            : 0;
+          
+          const incidenciaAnterior = data.anterior.length > 0
+            ? data.anterior.reduce((a, b) => a + b, 0) / data.anterior.length
+            : 0;
+
+          if (incidenciaActual > 30) {
+            tieneCritico = true;
+          }
+
+          let tendencia: 'up' | 'down' | 'stable' = 'stable';
+          if (incidenciaActual > incidenciaAnterior + 5) tendencia = 'up';
+          else if (incidenciaActual < incidenciaAnterior - 5) tendencia = 'down';
+
+          lotesData.push({
+            lote,
+            incidenciaActual: Math.round(incidenciaActual * 10) / 10,
+            incidenciaAnterior: Math.round(incidenciaAnterior * 10) / 10,
+            tendencia
+          });
+        });
+
+        if (tieneCritico) {
+          criticas.push({
+            plaga,
+            lotes: lotesData.sort((a, b) => b.incidenciaActual - a.incidenciaActual)
+          });
+        }
+      });
+
+      setPlagasCriticas(criticas.sort((a, b) => 
+        Math.max(...b.lotes.map(l => l.incidenciaActual)) - Math.max(...a.lotes.map(l => l.incidenciaActual))
+      ));
+
+      console.log('✅ Plagas críticas cargadas:', criticas.length);
+    } catch (error) {
+      console.error('Error cargando plagas críticas:', error);
+    }
+  }
+
+  // ============================================
+  // FUNCIONES AUXILIARES
+  // ============================================
+
+  function getNumeroSemana(fecha: Date): number {
+    const d = new Date(Date.UTC(fecha.getFullYear(), fecha.getMonth(), fecha.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  }
+
+  function formatearFecha(fecha: string): string {
+    const d = new Date(fecha);
+    return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
+  }
+
+  function togglePlaga(plaga: string) {
+    setPlagasExpandidas(prev => {
+      const nuevo = new Set(prev);
+      if (nuevo.has(plaga)) {
+        nuevo.delete(plaga);
+      } else {
+        nuevo.add(plaga);
+      }
+      return nuevo;
+    });
+  }
+
+  async function exportarGrafico() {
+    // TODO: Implementar exportación con html2canvas
+    toast.info('Funcionalidad de exportar gráfico próximamente disponible');
+  }
+
+  // ============================================
+  // RENDER
+  // ============================================
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-[#73991C] border-r-transparent mb-4"></div>
+          <p className="text-[#4D240F]/70">Cargando dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Obtener plagas únicas del gráfico para la leyenda
+  const plagasEnGrafico = tendencias.length > 0
+    ? Object.keys(tendencias[0]).filter(k => k !== 'semana')
+    : [];
+
+  const COLORES_PLAGAS = [
+    '#73991C', // Verde aguacate
+    '#E74C3C', // Rojo
+    '#3498DB', // Azul
+    '#F39C12', // Naranja
+    '#9B59B6', // Púrpura
+    '#1ABC9C', // Turquesa
+    '#E67E22', // Naranja oscuro
+    '#34495E', // Gris azulado
+    '#16A085', // Verde azulado
+    '#C0392B', // Rojo oscuro
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* ============================================ */}
+      {/* TABLERO DE MONITOREO - HEADER */}
+      {/* ============================================ */}
+      
+      <div>
+        <h2 className="text-2xl text-[#172E08] mb-4">Tablero de Monitoreo</h2>
+        
+        {ultimoMonitoreo ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Tarjeta 1: Período */}
+            <Card className="p-4 bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10">
+              <div className="flex items-start justify-between mb-3">
+                <Calendar className="w-6 h-6 text-[#73991C]" />
+              </div>
+              <h3 className="text-sm text-[#172E08] mb-3 font-bold">Periodo de último monitoreo</h3>
+              <div className="space-y-1">
+                <p className="text-sm text-[#4D240F]/80">
+                  Fecha inicio: {formatearFecha(ultimoMonitoreo.fechaInicio)}
+                </p>
+                <p className="text-sm text-[#4D240F]/80">
+                  Fecha fin: {formatearFecha(ultimoMonitoreo.fechaFin)}
+                </p>
+              </div>
+            </Card>
+
+            {/* Tarjeta 2: Incidencia Promedio */}
+            <Card className="p-4 bg-gradient-to-br from-blue-50 to-blue-100">
+              <div className="flex items-start justify-between mb-2">
+                {ultimoMonitoreo.incidenciaPromedio > ultimoMonitoreo.incidenciaAnterior ? (
+                  <TrendingUp className="w-6 h-6 text-red-500" />
+                ) : (
+                  <TrendingDown className="w-6 h-6 text-green-500" />
+                )}
+              </div>
+              <h3 className="text-xs text-[#4D240F]/70 mb-1">Incidencia Promedio</h3>
+              <div className="flex items-baseline gap-2 mb-0.5">
+                <p className="text-2xl text-[#172E08] font-semibold">
+                  {ultimoMonitoreo.incidenciaPromedio.toFixed(1)}%
+                </p>
+                <span className={`text-sm font-medium ${ultimoMonitoreo.incidenciaPromedio > ultimoMonitoreo.incidenciaAnterior ? 'text-red-500' : 'text-green-500'}`}>
+                  {ultimoMonitoreo.incidenciaPromedio > ultimoMonitoreo.incidenciaAnterior ? '↑' : '↓'}
+                  {Math.abs(ultimoMonitoreo.incidenciaPromedio - ultimoMonitoreo.incidenciaAnterior).toFixed(1)}%
+                </span>
+              </div>
+              <p className="text-xs text-[#4D240F]/60">
+                Anterior: {ultimoMonitoreo.incidenciaAnterior.toFixed(1)}%
+              </p>
+            </Card>
+
+            {/* Tarjeta 3: Plagas Críticas */}
+            <Card className="p-4 bg-gradient-to-br from-red-50 to-orange-100">
+              <div className="flex items-start justify-between mb-2">
+                <AlertTriangle className="w-6 h-6 text-red-500" />
+                <span className="px-2 py-0.5 bg-red-500 text-white rounded-full text-xs font-medium">
+                  {ultimoMonitoreo.plagasCriticas.length}
+                </span>
+              </div>
+              <h3 className="text-xs text-[#4D240F]/70 mb-2 font-bold">Plagas Críticas ({'>'}30%)</h3>
+              {ultimoMonitoreo.plagasCriticas.length > 0 ? (
+                <div className="space-y-1">
+                  {ultimoMonitoreo.plagasCriticas.slice(0, 5).map((p, i) => (
+                    <p key={i} className="text-xs text-[#172E08] leading-tight">
+                      • {p.nombre} <span className="text-[#4D240F]/60">({p.sublotes} sublotes, máx {p.incidenciaMax.toFixed(0)}%)</span>
+                    </p>
+                  ))}
+                  {ultimoMonitoreo.plagasCriticas.length > 5 && (
+                    <p className="text-xs text-[#4D240F]/60 font-medium mt-1">
+                      +{ultimoMonitoreo.plagasCriticas.length - 5} más
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-green-600 font-medium">Sin plagas críticas</p>
+              )}
+            </Card>
+
+            {/* Tarjeta 4: Plagas Controladas */}
+            <Card className="p-4 bg-gradient-to-br from-green-50 to-emerald-100">
+              <div className="flex items-start justify-between mb-2">
+                <CheckCircle2 className="w-6 h-6 text-green-500" />
+                <span className="px-2 py-0.5 bg-green-500 text-white rounded-full text-xs font-medium">
+                  {ultimoMonitoreo.plagasControladas.length}
+                </span>
+              </div>
+              <h3 className="text-xs text-[#4D240F]/70 mb-2 font-bold">Plagas Controladas</h3>
+              {ultimoMonitoreo.plagasControladas.length > 0 ? (
+                <div className="space-y-1">
+                  {ultimoMonitoreo.plagasControladas.slice(0, 5).map((p, i) => (
+                    <p key={i} className="text-xs text-[#172E08] leading-tight">
+                      • {p.nombre} <span className="text-green-600 font-medium">({p.incidenciaAnterior.toFixed(1)}% → {p.incidenciaActual.toFixed(1)}%)</span>
+                    </p>
+                  ))}
+                  {ultimoMonitoreo.plagasControladas.length > 5 && (
+                    <p className="text-xs text-[#4D240F]/60 font-medium mt-1">
+                      +{ultimoMonitoreo.plagasControladas.length - 5} más
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-[#4D240F]/60">Ninguna en este período</p>
+              )}
+            </Card>
+          </div>
+        ) : (
+          <Card className="p-8 text-center">
+            <Bug className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+            <p className="text-[#4D240F]/60">No hay datos de monitoreo disponibles</p>
+          </Card>
+        )}
+      </div>
+
+      {/* ============================================ */}
+      {/* 2. BOTONES DE ACCIÓN PRINCIPALES */}
+      {/* ============================================ */}
+      
+      <div className="flex items-center justify-center gap-3 bg-white p-4 rounded-lg border border-gray-200">
+        <Button
+          onClick={() => setMostrarTablaCompleta(!mostrarTablaCompleta)}
+          variant="outline"
+          className="flex items-center gap-2"
+        >
+          <Table className="w-4 h-4" />
+          {mostrarTablaCompleta ? 'Regresar al tablero' : 'Ver todos los registros'}
+        </Button>
+
+        <Button
+          variant="outline"
+          className="flex items-center gap-2"
+          onClick={() => {
+            toast.info('Funcionalidad de descarga en desarrollo');
+          }}
+        >
+          <Download className="w-4 h-4" />
+          Descargar plantilla
+        </Button>
+
+        <Button
+          variant="outline"
+          className="flex items-center gap-2"
+          onClick={() => {
+            toast.info('Funcionalidad de carga en desarrollo');
+          }}
+        >
+          <Upload className="w-4 h-4" />
+          Cargar datos
+        </Button>
+
+        <Button
+          variant="outline"
+          className="flex items-center gap-2"
+          onClick={() => {
+            console.log('🔧 Cambiando mostrarCatalogo de', mostrarCatalogo, 'a', !mostrarCatalogo);
+            setMostrarCatalogo(!mostrarCatalogo);
+          }}
+        >
+          <Settings className="w-4 h-4" />
+          {mostrarCatalogo ? 'Regresar al tablero' : 'Modificar catálogo'}
+        </Button>
+      </div>
+
+      {/* ============================================ */}
+      {/* TABLA COMPLETA DE MONITOREOS (CONDICIONAL) */}
+      {/* ============================================ */}
+      
+      {mostrarTablaCompleta && (
+        <div className="animate-in fade-in duration-300">
+          <TablaMonitoreos />
+        </div>
+      )}
+
+      {/* ============================================ */}
+      {/* CATÁLOGO DE PLAGAS (CONDICIONAL) */}
+      {/* ============================================ */}
+      
+      {mostrarCatalogo && (
+        <div className="animate-in fade-in duration-300">
+          <CatalogoPlagas />
+        </div>
+      )}
+
+      {/* Mostrar el resto del dashboard solo si no hay tabla ni catálogo activos */}
+      {!mostrarTablaCompleta && !mostrarCatalogo && (
+        <>
+          {/* ============================================ */}
+          {/* 3. SELECTOR DE PERÍODO */}
+          {/* ============================================ */}
+          
+          <Card className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm text-[#4D240F]/70 mb-1">Período de Análisis</h3>
+                <p className="text-xs text-[#4D240F]/50">Selecciona el rango temporal</p>
+              </div>
+              <div className="flex gap-2">
+                {(['semana', 'mes', 'trimestre', 'todo'] as RangoPeriodo[]).map(rango => (
+                  <Button
+                    key={rango}
+                    onClick={() => setRangoSeleccionado(rango)}
+                    variant={rangoSeleccionado === rango ? 'default' : 'outline'}
+                    size="sm"
+                    className={rangoSeleccionado === rango ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
+                  >
+                    {rango.charAt(0).toUpperCase() + rango.slice(1)}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </Card>
+
+          {/* ============================================ */}
+          {/* 4. GRÁFICA DE TENDENCIAS */}
+          {/* ============================================ */}
+          
+          <Card className="p-6">
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg text-[#172E08] mb-1">Tendencias de Incidencia</h3>
+                  <p className="text-sm text-[#4D240F]/60">
+                    Evolución por semana • {tendencias.length} semanas registradas
+                  </p>
+                </div>
+                
+                <div className="flex gap-3 items-center">
+                  {/* Filtro de plagas */}
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => setFiltroPlaga('interes')}
+                      variant={filtroPlaga === 'interes' ? 'default' : 'outline'}
+                      size="sm"
+                      className={filtroPlaga === 'interes' ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
+                    >
+                      Plagas de Interés
+                    </Button>
+                    <Button
+                      onClick={() => setFiltroPlaga('cuarentenarias')}
+                      variant={filtroPlaga === 'cuarentenarias' ? 'default' : 'outline'}
+                      size="sm"
+                      className={filtroPlaga === 'cuarentenarias' ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
+                    >
+                      Plagas Cuarentenarias
+                    </Button>
+                    <Button
+                      onClick={() => setFiltroPlaga('todos')}
+                      variant={filtroPlaga === 'todos' ? 'default' : 'outline'}
+                      size="sm"
+                      className={filtroPlaga === 'todos' ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
+                    >
+                      Todas
+                    </Button>
+                    <Button
+                      onClick={() => setFiltroPlaga('personalizar')}
+                      variant={filtroPlaga === 'personalizar' ? 'default' : 'outline'}
+                      size="sm"
+                      className={filtroPlaga === 'personalizar' ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
+                    >
+                      <Filter className="w-4 h-4 mr-1" />
+                      Personalizar
+                    </Button>
+                  </div>
+
+                  {/* Exportar */}
+                  <Button
+                    onClick={exportarGrafico}
+                    variant="outline"
+                    size="sm"
+                  >
+                    <Camera className="w-4 h-4 mr-2" />
+                    Exportar Gráfico
+                  </Button>
+                </div>
+              </div>
+
+              {/* Selector personalizado de plagas */}
+              {filtroPlaga === 'personalizar' && (
+                <div className="mb-4 p-4 bg-[#F8FAF5] rounded-lg">
+                  <Label className="mb-2 block">Seleccionar plagas:</Label>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {catalogoPlagas.map(plaga => (
+                      <label key={plaga.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-white p-2 rounded transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={plagasSeleccionadas.includes(plaga.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setPlagasSeleccionadas([...plagasSeleccionadas, plaga.id]);
+                            } else {
+                              setPlagasSeleccionadas(plagasSeleccionadas.filter(id => id !== plaga.id));
+                            }
+                          }}
+                          className="rounded border-gray-300"
+                        />
+                        <span className="text-[#172E08]">{plaga.nombre}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <Button
+                    onClick={cargarTendencias}
+                    className="mt-3 bg-[#73991C] hover:bg-[#5C7A16]"
+                    size="sm"
+                  >
+                    Aplicar Filtro
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Gráfico */}
+            <div ref={graficoRef} className="bg-white p-4 rounded-lg">
+              <h4 className="text-center text-[#172E08] mb-4">
+                Tendencias de Incidencia - {rangoSeleccionado.charAt(0).toUpperCase() + rangoSeleccionado.slice(1)}
+              </h4>
+              
+              {tendencias.length > 0 ? (
+                <ResponsiveContainer width="100%" height={400}>
+                  <LineChart data={tendencias} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                    <XAxis 
+                      dataKey="semana" 
+                      tick={{ fill: '#4D240F', fontSize: 12 }}
+                      stroke="#9CA3AF"
+                    />
+                    <YAxis 
+                      label={{ value: 'Incidencia (%)', angle: -90, position: 'insideLeft', fill: '#4D240F' }}
+                      tick={{ fill: '#4D240F', fontSize: 12 }}
+                      stroke="#9CA3AF"
+                    />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'white', 
+                        border: '1px solid #E5E7EB',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                      }}
+                    />
+                    <Legend 
+                      wrapperStyle={{ paddingTop: '20px' }}
+                      iconType="line"
+                    />
+                    {plagasEnGrafico.map((plaga, index) => (
+                      <Line
+                        key={plaga}
+                        type="monotone"
+                        dataKey={plaga}
+                        stroke={COLORES_PLAGAS[index % COLORES_PLAGAS.length]}
+                        strokeWidth={2}
+                        dot={{ r: 4 }}
+                        activeDot={{ r: 6 }}
+                        name={plaga}
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[400px] flex items-center justify-center text-[#4D240F]/60">
+                  <div className="text-center">
+                    <Bug className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p>No hay datos para el período seleccionado</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </Card>
+
+          {/* ============================================ */}
+          {/* 5. INSIGHTS AUTOMÁTICOS */}
+          {/* ============================================ */}
+          
+          <Card className="p-6">
+            <h3 className="text-lg text-[#172E08] mb-4">Insights Automáticos</h3>
+            
+            {insights.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {(() => {
+                  // Agrupar insights por plaga
+                  const insightsPorPlaga: { [plaga: string]: Insight[] } = {};
+                  insights.forEach(insight => {
+                    if (!insightsPorPlaga[insight.plaga]) {
+                      insightsPorPlaga[insight.plaga] = [];
+                    }
+                    insightsPorPlaga[insight.plaga].push(insight);
+                  });
+
+                  // Renderizar una tarjeta por plaga
+                  return Object.entries(insightsPorPlaga).map(([plaga, insightsPlaga]) => {
+                    // Determinar si todos los insights son del mismo tipo
+                    const tipoMayoritario = insightsPlaga.filter(i => i.tipo === 'alerta').length >= insightsPlaga.length / 2 
+                      ? 'alerta' 
+                      : 'alivio';
+
+                    return (
+                      <div
+                        key={plaga}
+                        className="p-4 bg-white rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200"
+                      >
+                        {/* Título de la plaga */}
+                        <div className="flex items-start gap-3 mb-3 pb-3 border-b border-gray-100">
+                          {tipoMayoritario === 'alerta' ? (
+                            <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                          ) : (
+                            <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
+                          )}
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-[#172E08]">{plaga}</h4>
+                            <p className="text-xs text-[#4D240F]/60 mt-0.5">
+                              {insightsPlaga.length} lote{insightsPlaga.length !== 1 ? 's' : ''} con cambios
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Lista de lotes */}
+                        <div className="space-y-2">
+                          {insightsPlaga.map((insight, index) => (
+                            <div key={index} className="pl-2">
+                              <h5 className="text-sm text-[#172E08] font-medium mb-1">
+                                {insight.lote}
+                              </h5>
+                              <p className={`text-sm ${insight.tipo === 'alerta' ? 'text-red-700' : 'text-green-700'}`}>
+                                {insight.tipo === 'alerta' ? 'Tendencia creciente' : 'Controlada'}:{' '}
+                                <span className="font-medium">
+                                  {insight.incidenciaAnterior}% → {insight.incidenciaActual}%
+                                </span>
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-[#4D240F]/60">
+                <p>No hay cambios significativos en el período seleccionado</p>
+                <p className="text-sm mt-1">Los insights se generan comparando con el período anterior</p>
+              </div>
+            )}
+          </Card>
+
+          {/* ============================================ */}
+          {/* 6. PLAGAS CRÍTICAS */}
+          {/* ============================================ */}
+          
+          <Card className="p-6">
+            <h3 className="text-lg text-[#172E08] mb-4">
+              Plagas Críticas ({plagasCriticas.length})
+            </h3>
+            <p className="text-sm text-[#4D240F]/60 mb-6">
+              Plagas con incidencia {'>'} 30% en uno o más lotes
+            </p>
+
+            {plagasCriticas.length > 0 ? (
+              <div className="space-y-2">
+                {plagasCriticas.map((pc) => {
+                  const isExpanded = plagasExpandidas.has(pc.plaga);
+                  const maxIncidencia = Math.max(...pc.lotes.map(l => l.incidenciaActual));
+
+                  return (
+                    <div key={pc.plaga} className="border border-gray-200 rounded-lg overflow-hidden">
+                      {/* Header clickeable */}
+                      <div
+                        onClick={() => togglePlaga(pc.plaga)}
+                        className="p-4 bg-gradient-to-r from-red-50 to-orange-50 hover:from-red-100 hover:to-orange-100 cursor-pointer transition-colors flex items-center justify-between"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-6 h-6 flex items-center justify-center rounded-full bg-red-100">
+                            {isExpanded ? (
+                              <ChevronUp className="w-4 h-4 text-red-600" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4 text-red-600" />
+                            )}
+                          </div>
+                          <Bug className="w-5 h-5 text-red-600" />
+                          <div>
+                            <h4 className="text-[#172E08]">{pc.plaga}</h4>
+                            <p className="text-sm text-[#4D240F]/60">
+                              {pc.lotes.length} lote{pc.lotes.length !== 1 ? 's' : ''} afectado{pc.lotes.length !== 1 ? 's' : ''}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="px-3 py-1 bg-red-500 text-white rounded-full text-sm">
+                            Máx: {maxIncidencia}%
+                          </span>
+                          <span className="text-xs text-[#4D240F]/40">
+                            {isExpanded ? 'Clic para colapsar' : 'Clic para expandir'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Contenido expandible */}
+                      {isExpanded && (
+                        <div className="p-4 bg-white space-y-3">
+                          {pc.lotes.map((lote, index) => (
+                            <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                              <div className="flex-1">
+                                <h5 className="text-sm text-[#172E08] font-medium">{lote.lote}</h5>
+                                <div className="flex items-center gap-4 mt-1">
+                                  <span className="text-xs text-[#4D240F]/60">
+                                    Actual: <span className="font-medium text-red-600">{lote.incidenciaActual}%</span>
+                                  </span>
+                                  <span className="text-xs text-[#4D240F]/60">
+                                    Anterior: <span className="font-medium">{lote.incidenciaAnterior}%</span>
+                                  </span>
+                                </div>
+                              </div>
+                              
+                              {/* Mini gráfico de tendencia */}
+                              <div className="flex items-center gap-2">
+                                {lote.tendencia === 'up' && (
+                                  <div className="flex items-center gap-1 text-red-500">
+                                    <TrendingUp className="w-4 h-4" />
+                                    <span className="text-xs">↑ {(lote.incidenciaActual - lote.incidenciaAnterior).toFixed(1)}%</span>
+                                  </div>
+                                )}
+                                {lote.tendencia === 'down' && (
+                                  <div className="flex items-center gap-1 text-green-500">
+                                    <TrendingDown className="w-4 h-4" />
+                                    <span className="text-xs">↓ {(lote.incidenciaAnterior - lote.incidenciaActual).toFixed(1)}%</span>
+                                  </div>
+                                )}
+                                {lote.tendencia === 'stable' && (
+                                  <span className="text-xs text-gray-500">Estable</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-[#4D240F]/60">
+                <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-green-500" />
+                <p className="text-green-600">¡Excelente! No hay plagas críticas en el período seleccionado</p>
+              </div>
+            )}
+          </Card>
+        </>
+      )}
+    </div>
+  );
+}

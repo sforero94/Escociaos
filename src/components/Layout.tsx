@@ -6,8 +6,6 @@ import {
   Sprout,
   Activity,
   TrendingUp,
-  DollarSign,
-  MapPin,
   Settings,
   Menu,
   X,
@@ -17,6 +15,7 @@ import {
   BarChart3,
   ShoppingCart,
   ClipboardCheck,
+  Briefcase,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { useAuth } from '../contexts/AuthContext';
@@ -52,16 +51,19 @@ export function Layout({ onNavigate, children }: LayoutProps) {
       path: '/',
     },
     {
-      type: 'section' as const,
-      id: 'inventario-section',
-      label: 'INVENTARIO',
-      items: [
-        { id: 'inventory', label: 'Productos', icon: Package, path: '/inventario' },
-        { id: 'inventory-dashboard', label: 'Dashboard', icon: BarChart3, path: '/inventario/dashboard' },
-        { id: 'inventory-movements', label: 'Movimientos', icon: History, path: '/inventario/movimientos' },
-        { id: 'inventory-new-purchase', label: 'Nueva Compra', icon: ShoppingCart, path: '/inventario/nueva-compra' },
-        { id: 'inventory-verificaciones', label: 'Verificaciones', icon: ClipboardCheck, path: '/inventario/verificaciones' },
-      ],
+      type: 'item' as const,
+      id: 'inventario',
+      label: 'Inventario',
+      icon: Package,
+      path: '/inventario',
+    },
+    {
+      type: 'item' as const,
+      id: 'labores',
+      label: 'Labores',
+      icon: Briefcase,
+      path: '/labores',
+      disabled: true,
     },
     {
       type: 'item' as const,
@@ -156,47 +158,24 @@ export function Layout({ onNavigate, children }: LayoutProps) {
             if (item.type === 'item') {
               const Icon = item.icon;
               const active = isActive(item.path);
+              const disabled = 'disabled' in item && item.disabled;
               return (
                 <button
                   key={item.id}
-                  onClick={() => handleNavigateClick(item.path, item.id)}
+                  onClick={() => !disabled && handleNavigateClick(item.path, item.id)}
+                  disabled={disabled}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                    active
+                    disabled
+                      ? 'opacity-50 cursor-not-allowed text-[#172E08]'
+                      : active
                       ? 'bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white shadow-lg shadow-[#73991C]/20'
                       : 'text-[#172E08] hover:bg-[#E7EDDD]/50'
                   }`}
                 >
                   <Icon className="w-5 h-5" />
                   <span>{item.label}</span>
+                  {disabled && <span className="ml-auto text-xs">(En construcción)</span>}
                 </button>
-              );
-            } else if (item.type === 'section') {
-              return (
-                <div key={item.id} className="mb-4">
-                  <p className="text-xs text-[#4D240F]/60 uppercase tracking-wide px-2 py-2 mb-1">
-                    {item.label}
-                  </p>
-                  <nav className="space-y-1">
-                    {item.items.map((subItem) => {
-                      const Icon = subItem.icon;
-                      const active = isActive(subItem.path);
-                      return (
-                        <button
-                          key={subItem.id}
-                          onClick={() => handleNavigateClick(subItem.path, subItem.id)}
-                          className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 ${
-                            active
-                              ? 'bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white shadow-lg shadow-[#73991C]/20'
-                              : 'text-[#172E08] hover:bg-[#E7EDDD]/50'
-                          }`}
-                        >
-                          <Icon className="w-4 h-4" />
-                          <span className="text-sm">{subItem.label}</span>
-                        </button>
-                      );
-                    })}
-                  </nav>
-                </div>
               );
             }
             return null;
@@ -241,47 +220,24 @@ export function Layout({ onNavigate, children }: LayoutProps) {
             if (item.type === 'item') {
               const Icon = item.icon;
               const active = isActive(item.path);
+              const disabled = 'disabled' in item && item.disabled;
               return (
                 <button
                   key={item.id}
-                  onClick={() => handleNavigateClick(item.path, item.id)}
+                  onClick={() => !disabled && handleNavigateClick(item.path, item.id)}
+                  disabled={disabled}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                    active
+                    disabled
+                      ? 'opacity-50 cursor-not-allowed text-[#172E08]'
+                      : active
                       ? 'bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white shadow-lg shadow-[#73991C]/20'
                       : 'text-[#172E08] hover:bg-[#E7EDDD]/50'
                   }`}
                 >
                   <Icon className="w-5 h-5" />
                   <span>{item.label}</span>
+                  {disabled && <span className="ml-auto text-xs">(En construcción)</span>}
                 </button>
-              );
-            } else if (item.type === 'section') {
-              return (
-                <div key={item.id} className="mb-4">
-                  <p className="text-xs text-[#4D240F]/60 uppercase tracking-wide px-2 py-2 mb-1">
-                    {item.label}
-                  </p>
-                  <nav className="space-y-1">
-                    {item.items.map((subItem) => {
-                      const Icon = subItem.icon;
-                      const active = isActive(subItem.path);
-                      return (
-                        <button
-                          key={subItem.id}
-                          onClick={() => handleNavigateClick(subItem.path, subItem.id)}
-                          className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 ${
-                            active
-                              ? 'bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white shadow-lg shadow-[#73991C]/20'
-                              : 'text-[#172E08] hover:bg-[#E7EDDD]/50'
-                          }`}
-                        >
-                          <Icon className="w-4 h-4" />
-                          <span className="text-sm">{subItem.label}</span>
-                        </button>
-                      );
-                    })}
-                  </nav>
-                </div>
               );
             }
             return null;

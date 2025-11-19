@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ClipboardCheck, Plus, Eye, Loader2, Calendar, User, CheckCircle2, XCircle, Clock, AlertTriangle } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { useAuth } from '../../contexts/AuthContext';
-import { VerificacionesNav } from './VerificacionesNav';
+import { InventorySubNav } from './InventorySubNav';
 
 interface Verificacion {
   id: string;
@@ -180,7 +180,7 @@ export function VerificacionesList() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <VerificacionesNav />
+        <InventorySubNav />
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-8 h-8 text-[#73991C] animate-spin" />
         </div>
@@ -191,7 +191,7 @@ export function VerificacionesList() {
   return (
     <div className="space-y-6">
       {/* Navegación */}
-      <VerificacionesNav />
+      <InventorySubNav />
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

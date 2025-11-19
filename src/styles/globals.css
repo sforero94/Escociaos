@@ -54,7 +54,7 @@
   --secondary: #BFD97D;
   --secondary-foreground: #172E08;
   --muted: #E7EDDD;
-  --muted-foreground: #4D240F;
+  --muted-foreground: #9CA3AF;
   --accent: #BFD97D;
   --accent-foreground: #172E08;
   --destructive: #DC3545;
@@ -65,7 +65,7 @@
   --success-foreground: #ffffff;
   --border: rgba(115, 153, 28, 0.1);
   --input: transparent;
-  --input-background: #E7EDDD;
+  --input-background: #ffffff;
   --switch-background: #BFD97D;
   --font-weight-medium: 500;
   --font-weight-normal: 400;

@@ -216,7 +216,132 @@ export function PasoCierreConfirmacion({
         </div>
       </div>
 
-      {/* SECCIÓN 3: DESVIACIONES */}
+      {/* SECCIÓN 3: DETALLE POR LOTE */}
+      {detallesLotes.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <div className="bg-[#73991C]/10 border-b border-[#73991C]/20 px-6 py-4">
+            <div className="flex items-center gap-3">
+              <Package className="w-5 h-5 text-[#73991C]" />
+              <h4 className="text-[#172E08]">Detalle por Lote</h4>
+            </div>
+          </div>
+
+          <div className="p-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {detallesLotes.map((lote) => (
+                <div
+                  key={lote.lote_id}
+                  className="border border-gray-200 rounded-lg p-4 bg-gradient-to-br from-white to-gray-50"
+                >
+                  <h5 className="text-sm text-[#172E08] font-medium mb-3">
+                    {lote.lote_nombre}
+                  </h5>
+
+                  <div className="space-y-2">
+                    {/* Canecas/Bultos según el tipo de aplicación */}
+                    {aplicacion.tipo === 'fumigacion' && lote.canecas_planeadas !== undefined && (
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-[#4D240F]/70">Canecas:</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[#172E08]">
+                            {formatearNumero(lote.canecas_planeadas || 0, 1)} planeadas
+                          </span>
+                          <span className="text-[#4D240F]/40">→</span>
+                          <span className="text-[#73991C] font-medium">
+                            {formatearNumero(lote.canecas_reales || 0, 1)} reales
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {aplicacion.tipo === 'fertilizacion' && lote.kilos_planeados !== undefined && (
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-[#4D240F]/70">Bultos (kg):</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[#172E08]">
+                            {formatearNumero(lote.kilos_planeados || 0, 1)} planeados
+                          </span>
+                          <span className="text-[#4D240F]/40">→</span>
+                          <span className="text-[#73991C] font-medium">
+                            {formatearNumero(lote.kilos_reales || 0, 1)} reales
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Litros */}
+                    {lote.litros_planeados !== undefined && (
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-[#4D240F]/70">Litros:</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[#172E08]">
+                            {formatearNumero(lote.litros_planeados || 0, 1)} planeados
+                          </span>
+                          <span className="text-[#4D240F]/40">→</span>
+                          <span className="text-[#73991C] font-medium">
+                            {formatearNumero(lote.litros_reales || 0, 1)} reales
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Jornales si existen */}
+                    {lote.jornales && (
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        <div className="text-xs text-[#4D240F]/70 mb-2">Jornales utilizados:</div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          {lote.jornales.aplicacion > 0 && (
+                            <div className="flex justify-between">
+                              <span className="text-[#4D240F]/60">Aplicación:</span>
+                              <span className="text-[#172E08] font-medium">
+                                {lote.jornales.aplicacion}
+                              </span>
+                            </div>
+                          )}
+                          {lote.jornales.mezcla > 0 && (
+                            <div className="flex justify-between">
+                              <span className="text-[#4D240F]/60">Mezcla:</span>
+                              <span className="text-[#172E08] font-medium">
+                                {lote.jornales.mezcla}
+                              </span>
+                            </div>
+                          )}
+                          {lote.jornales.transporte > 0 && (
+                            <div className="flex justify-between">
+                              <span className="text-[#4D240F]/60">Transporte:</span>
+                              <span className="text-[#172E08] font-medium">
+                                {lote.jornales.transporte}
+                              </span>
+                            </div>
+                          )}
+                          {(lote.jornales.otros || 0) > 0 && (
+                            <div className="flex justify-between">
+                              <span className="text-[#4D240F]/60">Otros:</span>
+                              <span className="text-[#172E08] font-medium">
+                                {lote.jornales.otros}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Costo por árbol */}
+                    <div className="mt-3 pt-3 border-t border-gray-200 flex justify-between items-center">
+                      <span className="text-xs text-[#4D240F]/70">Costo por árbol:</span>
+                      <span className="text-sm text-[#73991C] font-medium">
+                        {formatearMoneda(lote.costo_por_arbol || 0)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SECCIÓN 4: DESVIACIONES */}
       {desviacionesAltas.length > 0 && (
         <div className="bg-red-50 border-2 border-red-300 rounded-xl p-6">
           <div className="flex items-start gap-4">
@@ -253,7 +378,7 @@ export function PasoCierreConfirmacion({
         </div>
       )}
 
-      {/* SECCIÓN 4: OBSERVACIONES */}
+      {/* SECCIÓN 5: OBSERVACIONES */}
       {(observaciones.generales ||
         observaciones.meteorologicas ||
         observaciones.problemas ||

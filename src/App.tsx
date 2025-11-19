@@ -12,9 +12,12 @@ import { InventoryList } from './components/inventory/InventoryList';
 import { NewPurchase } from './components/inventory/NewPurchase';
 import { InventoryMovements } from './components/inventory/InventoryMovements';
 import { MovementsDashboard } from './components/inventory/MovementsDashboard';
+import { PurchaseHistory } from './components/inventory/PurchaseHistory';
 import { VerificacionesList } from './components/inventory/VerificacionesList';
 import { NuevaVerificacion } from './components/inventory/NuevaVerificacion';
 import { ConteoFisico } from './components/inventory/ConteoFisico';
+import { MonitoreoDashboardV2 } from './components/monitoreo/MonitoreoDashboardV2';
+import { ConfiguracionDashboard } from './components/configuracion/ConfiguracionDashboard';
 
 /**
  * Componente de placeholder para módulos en desarrollo
@@ -57,6 +60,7 @@ function LayoutRoutes() {
           <Route index element={<InventoryList />} />
           <Route path="dashboard" element={<MovementsDashboard />} />
           <Route path="nueva-compra" element={<NewPurchase />} />
+          <Route path="compras" element={<PurchaseHistory />} />
           <Route
             path="producto/:id"
             element={<ComingSoon moduleName="Detalle de Producto" />}
@@ -83,7 +87,13 @@ function LayoutRoutes() {
         {/* Monitoreo */}
         <Route
           path="monitoreo"
-          element={<ComingSoon moduleName="Monitoreo de Plagas" />}
+          element={<MonitoreoDashboardV2 />}
+        />
+
+        {/* Labores - En construcción */}
+        <Route
+          path="labores"
+          element={<ComingSoon moduleName="Labores Culturales" />}
         />
 
         {/* Producción */}
@@ -101,7 +111,7 @@ function LayoutRoutes() {
         {/* Configuración */}
         <Route
           path="configuracion"
-          element={<ComingSoon moduleName="Configuración" />}
+          element={<ConfiguracionDashboard />}
         />
 
         {/* Ruta 404 - Redirigir al dashboard */}
