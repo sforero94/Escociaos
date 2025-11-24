@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { BarChart3, History, ShoppingCart, ClipboardCheck, Package } from 'lucide-react';
+import { BarChart3, History, ShoppingCart, ClipboardCheck, Package, Upload } from 'lucide-react';
 
 /**
  * Submenú horizontal para las páginas de Inventario
@@ -43,6 +43,13 @@ export function InventorySubNav() {
       subtitle: 'Conteos físicos',
       icon: ClipboardCheck,
       path: '/inventario/verificaciones',
+    },
+    {
+      id: 'importar',
+      label: 'Importar CSV',
+      subtitle: 'Carga masiva',
+      icon: Upload,
+      path: '/inventario/importar',
     },
     {
       id: 'productos',

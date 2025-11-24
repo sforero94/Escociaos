@@ -16,6 +16,7 @@ import { PurchaseHistory } from './components/inventory/PurchaseHistory';
 import { VerificacionesList } from './components/inventory/VerificacionesList';
 import { NuevaVerificacion } from './components/inventory/NuevaVerificacion';
 import { ConteoFisico } from './components/inventory/ConteoFisico';
+import { ImportarProductosPage } from './components/inventory/ImportarProductosPage';
 import { MonitoreoDashboardV2 } from './components/monitoreo/MonitoreoDashboardV2';
 import { ConfiguracionDashboard } from './components/configuracion/ConfiguracionDashboard';
 
@@ -66,6 +67,7 @@ function LayoutRoutes() {
             element={<ComingSoon moduleName="Detalle de Producto" />}
           />
           <Route path="movimientos" element={<InventoryMovements />} />
+          <Route path="importar" element={<ImportarProductosPage />} />
           
           {/* Verificaciones - Rutas anidadas */}
           <Route path="verificaciones">

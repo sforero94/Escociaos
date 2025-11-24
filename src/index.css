@@ -1020,6 +1020,10 @@
     max-height: 500px;
   }
 
+  .min-h-4 {
+    min-height: calc(var(--spacing) * 4);
+  }
+
   .min-h-\[60vh\] {
     min-height: 60vh;
   }
@@ -1314,8 +1318,16 @@
     list-style-position: inside;
   }
 
+  .list-decimal {
+    list-style-type: decimal;
+  }
+
   .list-disc {
     list-style-type: disc;
+  }
+
+  .list-none {
+    list-style-type: none;
   }
 
   .auto-rows-min {
@@ -1336,6 +1348,10 @@
 
   .grid-cols-4 {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .grid-cols-\[0_1fr\] {
+    grid-template-columns: 0 1fr;
   }
 
   .grid-rows-\[auto_auto\] {
@@ -1380,6 +1396,10 @@
 
   .justify-end {
     justify-content: flex-end;
+  }
+
+  .justify-items-start {
+    justify-items: start;
   }
 
   .gap-1 {
@@ -1458,6 +1478,10 @@
     --tw-space-x-reverse: 0;
     margin-inline-start: calc(calc(var(--spacing) * 2) * var(--tw-space-x-reverse));
     margin-inline-end: calc(calc(var(--spacing) * 2) * calc(1 - var(--tw-space-x-reverse)));
+  }
+
+  .gap-y-0\.5 {
+    row-gap: calc(var(--spacing) * .5);
   }
 
   :where(.divide-y > :not(:last-child)) {
@@ -2621,6 +2645,17 @@
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
   }
 
+  .to-white\/80 {
+    --tw-gradient-to: #fffc;
+    --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .to-white\/80 {
+      --tw-gradient-to: color-mix(in oklab, var(--color-white) 80%, transparent);
+    }
+  }
+
   .to-yellow-100\/50 {
     --tw-gradient-to: color-mix(in srgb, oklch(.973 .071 103.193) 50%, transparent);
     --tw-gradient-stops: var(--tw-gradient-via-stops, var(--tw-gradient-position), var(--tw-gradient-from) var(--tw-gradient-from-position), var(--tw-gradient-to) var(--tw-gradient-to-position));
@@ -2976,6 +3011,10 @@
     color: oklab(63.2076% -.0887151 .122113 / .3);
   }
 
+  .text-\[\#73991C\]\/40 {
+    color: oklab(63.2076% -.0887151 .122113 / .4);
+  }
+
   .text-\[\#73991C\]\/50 {
     color: oklab(63.2076% -.0887151 .122113 / .5);
   }
@@ -3038,6 +3077,10 @@
 
   .text-card-foreground {
     color: var(--card-foreground);
+  }
+
+  .text-destructive {
+    color: var(--destructive);
   }
 
   .text-foreground {
@@ -3218,6 +3261,10 @@
 
   .opacity-60 {
     opacity: .6;
+  }
+
+  .opacity-80 {
+    opacity: .8;
   }
 
   .opacity-100 {
@@ -3640,6 +3687,12 @@
   @media (hover: hover) {
     .hover\:bg-\[\#73991C\]\/10:hover {
       background-color: oklab(63.2076% -.0887151 .122113 / .1);
+    }
+  }
+
+  @media (hover: hover) {
+    .hover\:bg-\[\#73991C\]\/90:hover {
+      background-color: oklab(63.2076% -.0887151 .122113 / .9);
     }
   }
 
@@ -4215,6 +4268,14 @@
     grid-template-columns: 1fr auto;
   }
 
+  .has-\[\>svg\]\:grid-cols-\[calc\(var\(--spacing\)\*4\)_1fr\]:has( > svg) {
+    grid-template-columns: calc(var(--spacing) * 4) 1fr;
+  }
+
+  .has-\[\>svg\]\:gap-x-3:has( > svg) {
+    column-gap: calc(var(--spacing) * 3);
+  }
+
   .has-\[\>svg\]\:px-2\.5:has( > svg) {
     padding-inline: calc(var(--spacing) * 2.5);
   }
@@ -4295,6 +4356,16 @@
 
   .data-\[size\=sm\]\:h-8[data-size="sm"] {
     height: calc(var(--spacing) * 8);
+  }
+
+  :is(.\*\:data-\[slot\=alert-description\]\:text-destructive\/90 > *)[data-slot="alert-description"] {
+    color: var(--destructive);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    :is(.\*\:data-\[slot\=alert-description\]\:text-destructive\/90 > *)[data-slot="alert-description"] {
+      color: color-mix(in oklab, var(--destructive) 90%, transparent);
+    }
   }
 
   :is(.\*\:data-\[slot\=select-value\]\:line-clamp-1 > *)[data-slot="select-value"] {
@@ -4676,6 +4747,11 @@
     }
   }
 
+  .\[\&_p\]\:leading-relaxed p {
+    --tw-leading: var(--leading-relaxed);
+    line-height: var(--leading-relaxed);
+  }
+
   .\[\&_svg\]\:pointer-events-none svg {
     pointer-events: none;
   }
@@ -4715,6 +4791,20 @@
 
   .\[\&\:last-child\]\:pb-6:last-child {
     padding-bottom: calc(var(--spacing) * 6);
+  }
+
+  .\[\&\>svg\]\:size-4 > svg {
+    width: calc(var(--spacing) * 4);
+    height: calc(var(--spacing) * 4);
+  }
+
+  .\[\&\>svg\]\:translate-y-0\.5 > svg {
+    --tw-translate-y: calc(var(--spacing) * .5);
+    translate: var(--tw-translate-x) var(--tw-translate-y);
+  }
+
+  .\[\&\>svg\]\:text-current > svg {
+    color: currentColor;
   }
 }
 

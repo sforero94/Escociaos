@@ -101,6 +101,10 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
         },
       }));
 
+      // Debug: Verificar datos de lotes
+      console.log('📊 Lotes cargados desde BD:', data);
+      console.log('📊 Lotes formateados:', lotesFormateados);
+
       setLotesCatalogo(lotesFormateados);
     } catch (error) {
       console.error('Error cargando lotes:', error);
