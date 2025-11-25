@@ -7,6 +7,9 @@ export type TamanoCaneca = 20 | 200 | 500 | 1000;
 export type TipoArbol = 'grandes' | 'medianos' | 'pequenos' | 'clonales';
 export type EstadoAplicacion = 'Calculada' | 'En ejecución' | 'Cerrada';
 
+// 🚨 NUEVO: Tipo ENUM para unidades de medida (normalizado en toda la BD)
+export type UnidadMedida = 'Litros' | 'Kilos' | 'Unidades';
+
 // Configuración General (Paso 1)
 export interface ConfiguracionAplicacion {
   nombre: string;
@@ -50,7 +53,7 @@ export interface ProductoEnMezcla {
   producto_id: string;
   producto_nombre: string;
   producto_categoria: string;
-  producto_unidad: 'litros' | 'kilos' | 'unidades';
+  producto_unidad: UnidadMedida; // 🚨 ACTUALIZADO: Usar tipo ENUM
   
   // Dosis según tipo de aplicación
   // Para fumigación: cc o gramos por caneca de 200L
@@ -99,7 +102,7 @@ export interface ItemListaCompras {
   producto_id: string;
   producto_nombre: string;
   producto_categoria: string;
-  unidad: 'litros' | 'kilos' | 'unidades';
+  unidad: UnidadMedida; // 🚨 ACTUALIZADO: Usar tipo ENUM
   
   inventario_actual: number;
   cantidad_necesaria: number;
@@ -180,7 +183,7 @@ export interface ProductoCatalogo {
   nombre: string;
   categoria: string;
   grupo: string;
-  unidad_medida: 'litros' | 'kilos' | 'unidades';
+  unidad_medida: UnidadMedida; // 🚨 ACTUALIZADO: Usar tipo ENUM
   estado_fisico: 'liquido' | 'solido';
   presentacion_comercial: string;
   ultimo_precio_unitario?: number;  // Precio por Kg/L (unidad base)
@@ -254,7 +257,7 @@ export interface MovimientoDiarioProducto {
 export interface ResumenMovimientoDiario {
   producto_id: string;
   producto_nombre: string;
-  producto_unidad: 'litros' | 'kilos' | 'unidades';
+  producto_unidad: UnidadMedida; // 🚨 ACTUALIZADO: Usar tipo ENUM
   total_utilizado: number;
   cantidad_planeada: number;
   diferencia: number;
@@ -317,7 +320,7 @@ export interface DetalleCierreLote {
 export interface ComparacionProducto {
   producto_id: string;
   producto_nombre: string;
-  producto_unidad: 'litros' | 'kilos' | 'unidades';
+  producto_unidad: UnidadMedida; // 🚨 ACTUALIZADO: Usar tipo ENUM
   cantidad_planeada: number;
   cantidad_real: number;
   diferencia: number;

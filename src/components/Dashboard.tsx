@@ -51,7 +51,7 @@ function MonitoreoCard({ onClick }: { onClick: () => void }) {
         return;
       }
 
-      // Cargar TODOS los monitoreos de plagas de interés ordenados por fecha
+      // ✅ CORREGIDO: Cargar datos igual que GraficoTendencias (por fecha, luego agrupar por semana)
       const { data: monitoreos, error } = await supabase
         .from('monitoreos')
         .select(`
@@ -61,8 +61,8 @@ function MonitoreoCard({ onClick }: { onClick: () => void }) {
           plagas_enfermedades_catalogo!inner(nombre)
         `)
         .in('plaga_enfermedad_id', plagasInteresIds)
-        .order('fecha_monitoreo', { ascending: false })
-        .limit(500);
+        .order('fecha_monitoreo', { ascending: true })
+        .limit(1000);
 
       if (error) throw error;
 
@@ -72,75 +72,63 @@ function MonitoreoCard({ onClick }: { onClick: () => void }) {
         return;
       }
 
-      // Agrupar por semana-año y fecha completa para ordenamiento correcto
+      // ✅ CORREGIDO: Agrupar por SEMANA y plaga (como en el módulo)
       const datosPorSemana: { 
         [semanaKey: string]: { 
-          semana: number;
-          año: number;
-          fechaMasReciente: string;
-          plagas: { [plaga: string]: number }
+          semana: number; 
+          año: number; 
+          plagas: { [plaga: string]: number[] } 
         } 
       } = {};
+      
+      const plagasUnicas = new Set<string>();
 
-      monitoreos.forEach(m => {
+      monitoreos.forEach((m) => {
         const fecha = new Date(m.fecha_monitoreo);
         const semana = getNumeroSemana(fecha);
         const año = fecha.getFullYear();
-        const semanaKey = `${año}-S${semana.toString().padStart(2, '0')}`;
+        const semanaKey = `${año}-S${semana}`;
         const plagaNombre = (m.plagas_enfermedades_catalogo as any).nombre;
+        const incidencia = parseFloat(m.incidencia as any) || 0;
+
+        plagasUnicas.add(plagaNombre);
 
         if (!datosPorSemana[semanaKey]) {
           datosPorSemana[semanaKey] = {
             semana,
             año,
-            fechaMasReciente: m.fecha_monitoreo,
             plagas: {}
           };
         }
-
-        // Actualizar fecha más reciente de la semana
-        if (m.fecha_monitoreo > datosPorSemana[semanaKey].fechaMasReciente) {
-          datosPorSemana[semanaKey].fechaMasReciente = m.fecha_monitoreo;
+        if (!datosPorSemana[semanaKey].plagas[plagaNombre]) {
+          datosPorSemana[semanaKey].plagas[plagaNombre] = [];
         }
-
-        // Guardar solo el dato más reciente de cada plaga por semana
-        if (!datosPorSemana[semanaKey].plagas[plagaNombre] || 
-            m.fecha_monitoreo > datosPorSemana[semanaKey].fechaMasReciente) {
-          datosPorSemana[semanaKey].plagas[plagaNombre] = m.incidencia || 0;
-        }
+        datosPorSemana[semanaKey].plagas[plagaNombre].push(incidencia);
       });
 
-      // Ordenar semanas por fecha y tomar las últimas 4
+      // ✅ Ordenar por año y semana, tomar últimas 4
       const semanasOrdenadas = Object.entries(datosPorSemana)
         .sort((a, b) => {
-          // Ordenar por año y luego por número de semana
-          const [keyA, dataA] = a;
-          const [keyB, dataB] = b;
+          const [_keyA, dataA] = a;
+          const [_keyB, dataB] = b;
           
           if (dataA.año !== dataB.año) {
             return dataA.año - dataB.año;
           }
           return dataA.semana - dataB.semana;
         })
-        .slice(-4); // Últimas 4 semanas con datos
+        .slice(-4); // Últimas 4 semanas
 
-      // Obtener todas las plagas únicas de las últimas 4 semanas
-      const todasLasPlagas = new Set<string>();
-      semanasOrdenadas.forEach(([_, data]) => {
-        Object.keys(data.plagas).forEach(plaga => todasLasPlagas.add(plaga));
-      });
-
-      // Formatear para Recharts rellenando con 0 las plagas sin datos
+      // ✅ Formatear para Recharts - calcular promedio por semana
       const datosFormateados: TendenciaData[] = semanasOrdenadas.map(([key, data]) => {
         const punto: TendenciaData = { semana: `S${data.semana}` };
-        
-        // Agregar todas las plagas, poniendo 0 si no tienen dato
-        todasLasPlagas.forEach(plaga => {
-          punto[plaga] = data.plagas[plaga] !== undefined 
-            ? Math.round(data.plagas[plaga] * 10) / 10 
-            : 0;
+
+        // Calcular promedio de cada plaga en esa semana
+        Object.entries(data.plagas).forEach(([plaga, incidencias]) => {
+          const promedio = incidencias.reduce((a, b) => a + b, 0) / incidencias.length;
+          punto[plaga] = Math.round(promedio * 10) / 10;
         });
-        
+
         return punto;
       });
 
@@ -273,11 +261,20 @@ interface AplicacionProgress {
   unidad: string;
 }
 
+interface AplicacionPlaneada {
+  id: string;
+  nombre: string;
+  num_lotes: number;
+  fecha_inicio: string | null;
+  fecha_fin: string | null;
+}
+
 interface AplicacionesStats {
   planeadas: number;
   activas: number;
   completadas: number;
   aplicacionesEnProgreso: AplicacionProgress[];
+  aplicacionesPlaneadas: AplicacionPlaneada[];
 }
 
 function AplicacionesCard({ 
@@ -330,7 +327,7 @@ function AplicacionesCard({
       </div>
 
       {/* Progreso de aplicaciones activas */}
-      <div className="space-y-3">
+      <div className="space-y-3 mb-4">
         {stats?.aplicacionesEnProgreso && stats.aplicacionesEnProgreso.length > 0 ? (
           stats.aplicacionesEnProgreso.slice(0, 2).map((app) => (
             <div key={app.id} className="space-y-1.5">
@@ -355,6 +352,39 @@ function AplicacionesCard({
           </p>
         )}
       </div>
+
+      {/* Aplicaciones planeadas */}
+      {stats?.aplicacionesPlaneadas && stats.aplicacionesPlaneadas.length > 0 && (
+        <div className="pt-4 border-t border-gray-100 space-y-2">
+          <p className="text-xs text-[#4D240F]/60 mb-3 uppercase tracking-wide">Planificadas</p>
+          {stats.aplicacionesPlaneadas.map((app) => (
+            <div 
+              key={app.id} 
+              className="bg-blue-50/50 border border-blue-100 rounded-xl p-3"
+            >
+              <div className="flex items-start justify-between mb-2">
+                <h4 className="text-sm text-[#172E08] flex-1 pr-2 line-clamp-2">{app.nombre}</h4>
+                <span className="text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">
+                  {app.num_lotes} {app.num_lotes === 1 ? 'lote' : 'lotes'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-[#4D240F]/60">
+                {app.fecha_inicio && app.fecha_fin ? (
+                  <>
+                    <span>{new Date(app.fecha_inicio).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })}</span>
+                    <span>→</span>
+                    <span>{new Date(app.fecha_fin).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })}</span>
+                  </>
+                ) : app.fecha_inicio ? (
+                  <span>Inicio: {new Date(app.fecha_inicio).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                ) : (
+                  <span className="italic">Sin fechas definidas</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -665,11 +695,44 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         });
       }
 
+      // 3. Cargar aplicaciones planeadas
+      const aplicacionesPlaneadasRaw = aplicaciones?.filter((a: any) => a.estado === 'Calculada') || [];
+      const aplicacionesPlaneadasConLotes: AplicacionPlaneada[] = [];
+
+      for (const app of aplicacionesPlaneadasRaw.slice(0, 3)) {
+        // Contar número de lotes
+        const { data: lotes, error: errorLotes } = await supabase
+          .from('aplicaciones_lotes')
+          .select('lote_id')
+          .eq('aplicacion_id', app.id);
+
+        if (errorLotes) {
+          console.warn('Error cargando lotes de aplicación:', errorLotes);
+          continue;
+        }
+
+        // Obtener fechas planeadas
+        const { data: appCompleta, error: errorApp } = await supabase
+          .from('aplicaciones')
+          .select('fecha_inicio_planeada, fecha_fin_planeada')
+          .eq('id', app.id)
+          .single();
+
+        aplicacionesPlaneadasConLotes.push({
+          id: app.id,
+          nombre: app.nombre_aplicacion,
+          num_lotes: lotes?.length || 0,
+          fecha_inicio: appCompleta?.fecha_inicio_planeada || null,
+          fecha_fin: appCompleta?.fecha_fin_planeada || null,
+        });
+      }
+
       setAplicacionesStats({
         planeadas,
         activas,
         completadas,
         aplicacionesEnProgreso,
+        aplicacionesPlaneadas: aplicacionesPlaneadasConLotes,
       });
     } catch (error) {
       console.error('❌ Error cargando aplicaciones:', error);
@@ -678,6 +741,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         activas: 0,
         completadas: 0,
         aplicacionesEnProgreso: [],
+        aplicacionesPlaneadas: [],
       });
     }
   };

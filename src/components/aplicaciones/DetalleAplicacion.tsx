@@ -74,7 +74,7 @@ export function DetalleAplicacion({
       setLotes(lotesNombres);
 
       // Extraer fecha fin estimada
-      setFechaFinEstimada(appData?.fecha_fin_estimada || '');
+      setFechaFinEstimada(appData?.fecha_fin_planeada || '');
 
       // Extraer blanco biológico
       if (appData?.blanco_biologico) {
@@ -232,11 +232,13 @@ export function DetalleAplicacion({
 
   const formatearFecha = (fecha: string | null) => {
     if (!fecha) return '-';
-    return new Date(fecha).toLocaleDateString('es-CO', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
+    // Extraer año, mes, día directamente del string para evitar problemas de zona horaria
+    const [year, month, day] = fecha.split('T')[0].split('-');
+    
+    const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+    const mesNombre = meses[parseInt(month) - 1];
+    
+    return `${parseInt(day)} de ${mesNombre} de ${year}`;
   };
 
   const getEstadoBadge = (estado: string) => {
@@ -381,7 +383,7 @@ export function DetalleAplicacion({
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <p className="text-xs text-[#4D240F]/60">Fecha Inicio (Planeada)</p>
-                      <p className="text-sm text-[#172E08]">{formatearFecha(aplicacion.fecha_inicio)}</p>
+                      <p className="text-sm text-[#172E08]">{formatearFecha(aplicacion.fecha_inicio_planeada)}</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs text-[#4D240F]/60">Fecha Fin (Planeada)</p>
@@ -389,7 +391,7 @@ export function DetalleAplicacion({
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs text-[#4D240F]/60">Fecha Inicio (Real)</p>
-                      <p className="text-sm text-[#172E08]">{formatearFecha(aplicacion.fecha_inicio)}</p>
+                      <p className="text-sm text-[#172E08]">{formatearFecha(aplicacion.fecha_inicio_ejecucion)}</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs text-[#4D240F]/60">Fecha Fin (Real)</p>
@@ -442,11 +444,14 @@ export function DetalleAplicacion({
                   <div className="grid grid-cols-3 gap-4">
                     <div className="text-center p-4 bg-[#F8FAF5] rounded-xl">
                       <p className="text-xs text-[#4D240F]/60 mb-1">Planeado</p>
-                      <p className="text-2xl text-[#172E08]">{canecasPlaneadas}</p>
+                      <p className="text-2xl text-[#172E08]">{canecasPlaneadas.toFixed(1)}</p>
                     </div>
                     <div className="text-center p-4 bg-[#73991C]/5 rounded-xl">
                       <p className="text-xs text-[#4D240F]/60 mb-1">Aplicado</p>
-                      <p className="text-2xl text-[#73991C]">{canecasAplicadas}</p>
+                      <p className="text-2xl text-[#73991C]">{canecasAplicadas.toFixed(1)}</p>
+                      <p className="text-xs text-[#4D240F]/60 mt-1">
+                        ({canecasPlaneadas > 0 ? ((canecasAplicadas / canecasPlaneadas) * 100).toFixed(0) : 0}%)
+                      </p>
                     </div>
                     <div className="text-center p-4 bg-[#F8FAF5] rounded-xl">
                       <p className="text-xs text-[#4D240F]/60 mb-1">Diferencia</p>
@@ -458,7 +463,10 @@ export function DetalleAplicacion({
                           : 'text-gray-600'
                       }`}>
                         {canecasAplicadas > canecasPlaneadas ? '+' : ''}
-                        {canecasAplicadas - canecasPlaneadas}
+                        {(canecasAplicadas - canecasPlaneadas).toFixed(1)}
+                      </p>
+                      <p className="text-xs text-[#4D240F]/60 mt-1">
+                        ({canecasPlaneadas > 0 ? (((canecasAplicadas - canecasPlaneadas) / canecasPlaneadas) * 100).toFixed(0) : 0}%)
                       </p>
                     </div>
                   </div>

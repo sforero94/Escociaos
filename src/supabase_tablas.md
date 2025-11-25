@@ -514,6 +514,10 @@ Registro provisional de movimientos diarios durante la ejecución de aplicacione
 | `lote_nombre` | `text` | Nombre del lote (cache) | NOT NULL |
 | `numero_canecas` | `numeric` | Número total de canecas aplicadas (fumigación/drench) | CHECK >= 0 |
 | `numero_bultos` | `numeric` | Número total de bultos usados (fertilización) | CHECK >= 0 |
+| `equipo_aplicacion` | `text` | Equipo usado para la aplicación | CHECK IN ('Bomba espalda', 'Bomba estacionaria', 'Fumiducto') |
+| `personal` | `text` | Personal que participó en la aplicación | |
+| `hora_inicio` | `time` | Hora de inicio de la aplicación | DEFAULT '07:20:00' |
+| `hora_fin` | `time` | Hora de finalización de la aplicación | DEFAULT '15:50:00' |
 | `responsable` | `text` | Responsable del movimiento | NOT NULL |
 | `condiciones_meteorologicas` | `text` | Condiciones del clima durante aplicación | CHECK IN ('soleadas', 'nubladas', 'lluvia suave', 'lluvia fuerte') |
 | `notas` | `text` | Observaciones | |

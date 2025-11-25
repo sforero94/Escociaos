@@ -47,6 +47,9 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
   // Lote seleccionado para agregar
   const [loteAAgregar, setLoteAAgregar] = useState<string>('');
 
+  // Búsqueda de lotes
+  const [busquedaLote, setBusquedaLote] = useState<string>('');
+
   // Errores de validación
   const [errores, setErrores] = useState<Record<string, string>>({});
 
@@ -683,35 +686,85 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
       <div>
         <h2 className="text-lg text-[#172E08] mb-4">Lotes a Aplicar</h2>
 
-        {/* Selector para agregar lotes */}
-        <div className="flex gap-2 mb-4">
-          <select
-            value={loteAAgregar}
-            onChange={(e) => setLoteAAgregar(e.target.value)}
+        {/* Barra de búsqueda de lotes */}
+        <div className="mb-4">
+          <input
+            type="text"
+            value={busquedaLote}
+            onChange={(e) => setBusquedaLote(e.target.value)}
+            placeholder="Buscar lote por nombre..."
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
             disabled={cargandoLotes}
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
-          >
-            <option value="">
-              {cargandoLotes ? 'Cargando lotes...' : 'Selecciona un lote'}
-            </option>
-            {lotesCatalogo
-              .filter((lote) => !formData.lotes_seleccionados?.some((l) => l.lote_id === lote.id))
-              .map((lote) => (
-                <option key={lote.id} value={lote.id}>
-                  {lote.nombre} - {lote.area_hectareas}ha - {lote.conteo_arboles.total} árboles
-                </option>
-              ))}
-          </select>
-          <button
-            type="button"
-            onClick={agregarLote}
-            disabled={!loteAAgregar}
-            className="px-4 py-2 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-lg hover:from-[#5f7d17] hover:to-[#9db86d] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Agregar
-          </button>
+          />
         </div>
+
+        {/* Grid de lotes disponibles con checkboxes */}
+        {cargandoLotes ? (
+          <div className="p-8 bg-gray-50 rounded-lg text-center">
+            <p className="text-sm text-[#4D240F]/70">Cargando lotes...</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+            {lotesCatalogo
+              .filter((lote) => 
+                lote.nombre.toLowerCase().includes(busquedaLote.toLowerCase())
+              )
+              .map((lote) => {
+                const yaSeleccionado = formData.lotes_seleccionados?.some((l) => l.lote_id === lote.id);
+
+                return (
+                  <button
+                    key={lote.id}
+                    type="button"
+                    onClick={() => {
+                      if (yaSeleccionado) {
+                        // Quitar lote
+                        quitarLote(lote.id);
+                      } else {
+                        // Agregar lote
+                        const nuevoLote: LoteSeleccionado = {
+                          lote_id: lote.id,
+                          nombre: lote.nombre,
+                          sublotes_ids: lote.sublotes.map((s) => s.id),
+                          area_hectareas: lote.area_hectareas,
+                          conteo_arboles: lote.conteo_arboles,
+                          calibracion_litros_arbol: (formData.tipo === 'fumigacion' || formData.tipo === 'drench') ? 20 : undefined,
+                          tamano_caneca: (formData.tipo === 'fumigacion' || formData.tipo === 'drench') ? 200 : undefined,
+                        };
+                        setFormData((prev) => ({
+                          ...prev,
+                          lotes_seleccionados: [...(prev.lotes_seleccionados || []), nuevoLote],
+                        }));
+                      }
+                    }}
+                    className={`
+                      p-4 rounded-xl border-2 text-left transition-all
+                      ${yaSeleccionado
+                        ? 'border-[#73991C] bg-[#73991C]/5'
+                        : 'border-gray-200 hover:border-gray-300'
+                      }
+                    `}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <p className="text-[#172E08] mb-1">{lote.nombre}</p>
+                        <p className="text-xs text-[#4D240F]/70">
+                          {lote.area_hectareas}ha • {lote.conteo_arboles.total} árboles
+                        </p>
+                      </div>
+                      {yaSeleccionado && (
+                        <div className="w-6 h-6 bg-[#73991C] rounded-full flex items-center justify-center text-white flex-shrink-0">
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+          </div>
+        )}
 
         {errores.lotes && (
           <p className="text-red-600 text-sm mb-4 flex items-center gap-1">

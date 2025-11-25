@@ -51,22 +51,25 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
 
   const cargarProductos = async () => {
     try {
-      // CAMBIO: Cargar TODOS los productos (sólidos y líquidos)
-      // Algunos productos sólidos se disuelven en agua para las aplicaciones
+      // 🚨 CARGAR SOLO PRODUCTOS DE AGROINSUMOS (como blancos biológicos)
+      console.log('🔍 Cargando productos de Agroinsumos...');
       
-      // Construir query - sin filtro de estado físico
-      const query = supabase
+      const { data, error } = await supabase
         .from('productos')
         .select('*')
         .eq('estado', 'OK')
         .eq('activo', true)
+        .eq('grupo', 'Agroinsumos') // 🚨 FILTRAR POR GRUPO
         .order('nombre');
 
-      const { data, error } = await query;
+      if (error) {
+        console.error('❌ Error cargando productos:', error);
+        throw error;
+      }
 
-      if (error) throw error;
+      console.log('✅ Productos de Agroinsumos cargados:', data);
 
-      const productosFormateados: ProductoCatalogo[] = data.map((p) => ({
+      const productosFormateados: ProductoCatalogo[] = (data || []).map((p) => ({
         id: p.id,
         nombre: p.nombre,
         categoria: p.categoria,
@@ -81,7 +84,8 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
 
       setProductosCatalogo(productosFormateados);
     } catch (error) {
-      console.error('Error cargando productos:', error);
+      console.error('💥 Error en cargarProductos:', error);
+      setProductosCatalogo([]);
     } finally {
       setCargandoProductos(false);
     }

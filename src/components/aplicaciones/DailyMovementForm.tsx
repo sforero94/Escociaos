@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, X, Calendar, Package, Droplet, User, Plus, Trash2, AlertTriangle, FileText, Cloud } from 'lucide-react';
+import { Save, X, Calendar, Package, Droplet, User, Plus, Trash2, AlertTriangle, FileText, Cloud, Clock } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { obtenerFechaHoy } from '../../utils/fechas';
 import { Button } from '../ui/button';
@@ -9,7 +9,8 @@ import type {
   MovimientoDiario, 
   MovimientoDiarioProducto,
   LoteSeleccionado,
-  ProductoEnMezcla
+  ProductoEnMezcla,
+  UnidadMedida // 🚨 NUEVO: Importar el tipo ENUM
 } from '../../types/aplicaciones';
 
 interface DailyMovementFormProps {
@@ -23,7 +24,7 @@ interface ProductoFormulario {
   producto_nombre: string;
   producto_categoria: string;
   cantidad_utilizada: string;
-  unidad_producto?: 'cc' | 'L' | 'bultos'; // 🚨 CORREGIDO: Para fumigación/drench usa cc o L, para fertilización usa bultos
+  unidad_producto: string; // 🚨 CAMBIO: Ahora es la unidad_medida del producto desde BD (Litros o Kilos)
   presentacion_kg_l?: number; // SOLO para fertilización: cuántos Kg por bulto
 }
 
@@ -41,6 +42,10 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
   const [loteId, setLoteId] = useState('');
   const [numeroCanecas, setNumeroCanecas] = useState(''); // Total para fumigación/drench
   const [numeroBultos, setNumeroBultos] = useState(''); // Total para fertilización
+  const [equipoAplicacion, setEquipoAplicacion] = useState(''); // 🆕 NUEVO CAMPO
+  const [personal, setPersonal] = useState(''); // 🆕 NUEVO CAMPO
+  const [horaInicio, setHoraInicio] = useState('07:20'); // 🆕 NUEVO CAMPO
+  const [horaFin, setHoraFin] = useState('15:50'); // 🆕 NUEVO CAMPO
   const [responsable, setResponsable] = useState('');
   const [condicionesMeteorologicas, setCondicionesMeteorologicas] = useState('');
   const [notas, setNotas] = useState('');
@@ -152,12 +157,52 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
           }
         });
 
-        setProductosDisponibles(Array.from(productosUnicos.values()));
+        const productosArray = Array.from(productosUnicos.values());
+        setProductosDisponibles(productosArray);
+
+        // 🆕 PRECARGAR TODOS LOS PRODUCTOS AUTOMÁTICAMENTE
+        await precargarProductos(productosArray);
       }
     } catch (err: any) {
       console.error('Error cargando datos:', err);
       setError('Error al cargar los datos de la aplicación');
     }
+  };
+
+  // 🆕 NUEVA FUNCIÓN: Precargar todos los productos
+  const precargarProductos = async (productos: any[]) => {
+    const productosFormulario: ProductoFormulario[] = [];
+
+    for (const producto of productos) {
+      // Cargar presentacion_kg_l del producto SOLO para fertilización
+      let presentacionKgL: number | undefined;
+      if (aplicacion.tipo_aplicacion === 'Fertilización') {
+        try {
+          const { data: productoData, error: errorProducto } = await supabase
+            .from('productos')
+            .select('presentacion_kg_l')
+            .eq('id', producto.producto_id)
+            .single();
+          
+          if (!errorProducto && productoData) {
+            presentacionKgL = productoData.presentacion_kg_l;
+          }
+        } catch (err) {
+          console.error('Error al cargar presentacion:', err);
+        }
+      }
+
+      productosFormulario.push({
+        producto_id: producto.producto_id,
+        producto_nombre: producto.producto_nombre,
+        producto_categoria: producto.producto_categoria,
+        cantidad_utilizada: '',
+        unidad_producto: producto.producto_unidad,
+        presentacion_kg_l: presentacionKgL
+      });
+    }
+
+    setProductosAgregados(productosFormulario);
   };
 
   const cargarUsuarioActual = async () => {
@@ -219,7 +264,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       producto_nombre: producto.producto_nombre,
       producto_categoria: producto.producto_categoria,
       cantidad_utilizada: '',
-      unidad_producto: aplicacion.tipo_aplicacion === 'Fertilización' ? 'bultos' : 'cc', // 🚨 CORREGIDO: Para fumigación/drench inicia en 'cc'
+      unidad_producto: producto.producto_unidad, // 🚨 CAMBIO: Ahora es la unidad_medida del producto desde BD (Litros o Kilos)
       presentacion_kg_l: presentacionKgL
     };
 
@@ -332,8 +377,12 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         fecha_movimiento: fechaMovimiento,
         lote_id: loteId,
         lote_nombre: lote.nombre,
-        numero_canecas: (aplicacion.tipo_aplicacion === 'Fumigación' || aplicacion.tipo_aplicacion === 'Drench') ? parseFloat(numeroCanecas) : undefined,
-        numero_bultos: aplicacion.tipo_aplicacion === 'Fertilización' ? parseFloat(numeroBultos) : undefined,
+        numero_canecas: (aplicacion.tipo_aplicacion === 'Fumigación' || aplicacion.tipo_aplicacion === 'Drench') ? parseInt(numeroCanecas, 10) : undefined,
+        numero_bultos: aplicacion.tipo_aplicacion === 'Fertilización' ? parseInt(numeroBultos, 10) : undefined,
+        equipo_aplicacion: equipoAplicacion.trim() || undefined, // 🆕 NUEVO CAMPO
+        personal: personal.trim() || undefined, //  NUEVO CAMPO
+        hora_inicio: horaInicio || undefined, // 🆕 NUEVO CAMPO
+        hora_fin: horaFin || undefined, // 🆕 NUEVO CAMPO
         responsable: responsable.trim(),
         condiciones_meteorologicas: condicionesMeteorologicas.trim() || undefined,
         notas: notas.trim() || undefined,
@@ -350,26 +399,35 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       if (!movimientoCreado) throw new Error('No se pudo crear el movimiento');
 
       // 2. Crear productos del movimiento (hijos)
-      // 🚨 CONVERSIÓN A UNIDADES BASE SEGÚN /supabase_tablas.md:
-      // - Fertilización: bultos → Kg (usando presentacion_kg_l)
-      // - Fumigación/Drench: guardar directamente en cc o L (SIN CONVERSIÓN)
+      // 🚨 NORMALIZACIÓN DE UNIDADES USANDO EL ENUM unidad_medida:
+      // - productos.unidad_medida viene como 'Litros', 'Kilos', 'Unidades' (ENUM)
+      // - Se guarda en movimientos_diarios_productos.unidad como 'Litros' o 'Kilos'
+      // - Fertilización: bultos → Kilos (usando presentacion_kg_l)
+      // - Fumigación/Drench: cantidad directa en Litros o Kilos
       const productosParaInsertar: Omit<MovimientoDiarioProducto, 'id' | 'created_at'>[] = productosAgregados.map(p => {
         let cantidadFinal: number;
-        let unidadFinal: 'cc' | 'L' | 'g' | 'Kg';
+        let unidadFinal: UnidadMedida;
+
+        console.log('🔍 PRODUCTO A GUARDAR:', {
+          nombre: p.producto_nombre,
+          cantidad_utilizada: p.cantidad_utilizada,
+          unidad_producto: p.unidad_producto,
+          tipo_aplicacion: aplicacion.tipo_aplicacion
+        });
 
         if (aplicacion.tipo_aplicacion === 'Fertilización') {
-          // Convertir bultos a Kg
+          // Convertir bultos a Kilos
           if (!p.presentacion_kg_l) {
             throw new Error(`El producto ${p.producto_nombre} no tiene presentación en Kg/bulto configurada`);
           }
           cantidadFinal = parseFloat(p.cantidad_utilizada) * p.presentacion_kg_l;
-          unidadFinal = 'Kg';
-          console.log(`✅ Fertilización: ${p.cantidad_utilizada} bultos × ${p.presentacion_kg_l} Kg/bulto = ${cantidadFinal} Kg`);
+          unidadFinal = 'Kilos';
+          console.log(`✅ Fertilización: ${p.cantidad_utilizada} bultos × ${p.presentacion_kg_l} Kg/bulto = ${cantidadFinal} Kilos`);
         } else {
-          // Fumigación/Drench: Guardar directamente en cc o L (SIN CONVERSIÓN)
+          // Fumigación/Drench: Ya viene en Litros o Kilos desde la BD
           cantidadFinal = parseFloat(p.cantidad_utilizada);
-          unidadFinal = p.unidad_producto as 'cc' | 'L'; // Ya viene correcto desde el selector
-          console.log(`✅ Fumigación/Drench: ${cantidadFinal} ${unidadFinal} (sin conversión)`);
+          unidadFinal = p.unidad_producto as UnidadMedida; // Cast seguro porque viene del ENUM
+          console.log(`✅ Fumigación/Drench: ${cantidadFinal} ${unidadFinal}`);
         }
 
         return {
@@ -399,6 +457,10 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       setLoteId('');
       setNumeroCanecas('');
       setNumeroBultos('');
+      setEquipoAplicacion(''); // 🆕
+      setPersonal(''); // 🆕
+      setHoraInicio('07:20'); // 🆕
+      setHoraFin('15:50'); // 🆕
       setCondicionesMeteorologicas('');
       setNotas('');
       setProductosAgregados([]);
@@ -484,6 +546,74 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
           </select>
         </div>
 
+        {/* 🆕 NUEVO: Equipo de Aplicación */}
+        <div>
+          <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
+            <Droplet className="w-4 h-4 text-[#73991C]" />
+            Equipo de Aplicación
+          </label>
+          <select
+            value={equipoAplicacion}
+            onChange={(e) => setEquipoAplicacion(e.target.value)}
+            disabled={loading}
+            className="w-full px-4 py-3 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <option value="">Selecciona el equipo (opcional)</option>
+            <option value="Bomba espalda">🎒 Bomba espalda</option>
+            <option value="Bomba estacionaria">⚙️ Bomba estacionaria</option>
+            <option value="Fumiducto">🚜 Fumiducto</option>
+          </select>
+        </div>
+
+        {/* 🆕 NUEVO: Personal */}
+        <div>
+          <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
+            <User className="w-4 h-4 text-[#73991C]" />
+            Personal que Participó
+          </label>
+          <Input
+            type="text"
+            value={personal}
+            onChange={(e) => setPersonal(e.target.value)}
+            placeholder="Ej: Juan Pérez, María García"
+            disabled={loading}
+            className="bg-white border-[#73991C]/20 focus:border-[#73991C] disabled:opacity-50 disabled:cursor-not-allowed"
+          />
+          <p className="text-xs text-[#4D240F]/60 mt-1">
+            Nombres del personal que realizó la aplicación (opcional)
+          </p>
+        </div>
+
+        {/* 🆕 NUEVO: Horario de Trabajo */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-[#73991C]" />
+              Hora de Inicio
+            </label>
+            <input
+              type="time"
+              value={horaInicio}
+              onChange={(e) => setHoraInicio(e.target.value)}
+              disabled={loading}
+              className="w-full px-4 py-3 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-[#73991C]" />
+              Hora de Fin
+            </label>
+            <input
+              type="time"
+              value={horaFin}
+              onChange={(e) => setHoraFin(e.target.value)}
+              disabled={loading}
+              className="w-full px-4 py-3 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+          </div>
+        </div>
+
         {/* Número de Canecas - PARA FUMIGACIÓN Y DRENCH */}
         {(aplicacion.tipo_aplicacion === 'Fumigación' || aplicacion.tipo_aplicacion === 'Drench') && (
           <div>
@@ -498,7 +628,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
                 value={numeroCanecas}
                 onChange={(e) => setNumeroCanecas(e.target.value)}
                 placeholder="0"
-                step="0.1"
+                step="1"
                 min="0"
                 disabled={loading}
                 className="flex-1 bg-white border-[#73991C]/20 focus:border-[#73991C] disabled:opacity-50 disabled:cursor-not-allowed"
@@ -561,35 +691,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
             <span className="text-red-500">*</span>
           </h4>
 
-          {/* Selector de producto */}
-          <div className="flex gap-3 mb-4">
-            <select
-              value={productoSeleccionadoId}
-              onChange={(e) => setProductoSeleccionadoId(e.target.value)}
-              disabled={loading}
-              className="flex-1 px-4 py-3 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <option value="">Selecciona un producto para agregar</option>
-              {productosDisponibles
-                .filter(p => !productosAgregados.some(pa => pa.producto_id === p.producto_id))
-                .map(producto => (
-                  <option key={producto.producto_id} value={producto.producto_id}>
-                    {producto.producto_nombre} ({producto.producto_categoria})
-                  </option>
-                ))}
-            </select>
-            <Button
-              type="button"
-              onClick={agregarProducto}
-              disabled={loading || !productoSeleccionadoId}
-              className="bg-[#73991C] hover:bg-[#5f7d17] text-white disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Agregar
-            </Button>
-          </div>
-
-          {/* Lista de productos agregados */}
+          {/* Lista de productos precargados */}
           {productosAgregados.length > 0 ? (
             <div className="space-y-3">
               {productosAgregados.map((producto, index) => (
@@ -612,27 +714,21 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
                       value={producto.cantidad_utilizada}
                       onChange={(e) => actualizarCantidadProducto(index, e.target.value)}
                       placeholder="0"
-                      step={aplicacion.tipo_aplicacion === 'Fertilización' ? '1' : '0.1'}
+                      step="0.01"
                       min="0"
                       disabled={loading}
                       className="w-32 bg-white border-[#73991C]/20 focus:border-[#73991C] disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                     
-                    {/* 🚨 CORREGIDO: Unidad según tipo de aplicación */}
+                    {/* Unidad estática desde BD (no editable) */}
                     {aplicacion.tipo_aplicacion === 'Fertilización' ? (
                       <div className="px-4 py-2 bg-[#E7EDDD] border border-[#73991C]/20 rounded-lg text-[#172E08] text-sm min-w-[80px] flex items-center justify-center">
                         bultos
                       </div>
                     ) : (
-                      <select
-                        value={producto.unidad_producto || 'cc'}
-                        onChange={(e) => actualizarUnidadProducto(index, e.target.value as 'cc' | 'L')}
-                        disabled={loading}
-                        className="px-4 py-2 bg-white border border-[#73991C]/20 rounded-lg text-[#172E08] text-sm min-w-[80px] focus:outline-none focus:ring-2 focus:ring-[#73991C] disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <option value="cc">cc</option>
-                        <option value="L">L</option>
-                      </select>
+                      <div className="px-4 py-2 bg-[#E7EDDD] border border-[#73991C]/20 rounded-lg text-[#172E08] text-sm min-w-[80px] flex items-center justify-center">
+                        {producto.unidad_producto}
+                      </div>
                     )}
                     
                     <Button
@@ -653,7 +749,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
             <div className="p-8 text-center border-2 border-dashed border-[#73991C]/20 rounded-xl">
               <Package className="w-12 h-12 text-[#73991C]/30 mx-auto mb-3" />
               <p className="text-sm text-[#4D240F]/50">
-                No hay productos agregados. Selecciona un producto arriba para comenzar.
+                Cargando productos...
               </p>
             </div>
           )}

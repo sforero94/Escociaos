@@ -675,11 +675,16 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
                         <div className="flex items-center gap-3 mb-2">
                           <div className="flex items-center gap-2 text-sm text-[#172E08]">
                             <Calendar className="w-4 h-4 text-[#73991C]" />
-                            {new Date(mov.fecha_movimiento).toLocaleDateString('es-CO', {
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric'
-                            })}
+                            {/* 🚨 FIX: Parsear fecha sin conversión de timezone */}
+                            {(() => {
+                              const [year, month, day] = mov.fecha_movimiento.split('-');
+                              const fecha = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                              return fecha.toLocaleDateString('es-CO', {
+                                day: '2-digit',
+                                month: 'short',
+                                year: 'numeric'
+                              });
+                            })()}
                           </div>
                           
                           {/* Mostrar canecas o bultos según el tipo de aplicación */}
@@ -728,7 +733,18 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
                           </div>
                           <div className="text-right">
                             <p className="text-sm text-[#172E08]">
-                              {producto.cantidad_utilizada} {producto.unidad}
+                              {/* 🚨 FIX: Mapear unidades abreviadas a nombres amigables */}
+                              {producto.cantidad_utilizada} {(() => {
+                                const unidadMap: Record<string, string> = {
+                                  'L': 'L',
+                                  'cc': 'cc',
+                                  'Kg': 'Kg',
+                                  'g': 'g',
+                                  'litros': 'L',
+                                  'kilos': 'Kg'
+                                };
+                                return unidadMap[producto.unidad] || producto.unidad;
+                              })()}
                             </p>
                           </div>
                         </div>
