@@ -5,7 +5,7 @@
 
 import Papa from 'papaparse';
 import { CSVRowRaw, ValidationResult, Monitoreo } from '../types/monitoreo';
-import { calcularIncidencia, calcularSeveridad, clasificarGravedad } from './calculosMonitoreo';
+import { calcularIncidencia, clasificarGravedad } from './calculosMonitoreo';
 
 // Mapeo de columnas del CSV - maneja múltiples variantes de nombres
 function obtenerValorColumna(row: any, posiblesNombres: string[]): string {
@@ -241,13 +241,17 @@ export async function procesarYGuardarCSV(
       
       const total = sublotesFaltantes.length;
       const mensaje = total > 5 
-        ? `${mensajeFaltantes} y ${total - 5} más. Crea estos sublotes en Configuración → Sublotes.`
-        : `${mensajeFaltantes}. Crea estos sublotes en Configuración → Sublotes.`;
+        ? `${mensajeFaltantes} y ${total - 5} más`
+        : `${mensajeFaltantes}`;
       
       console.warn('⚠️ [procesarYGuardarCSV] Sublotes faltantes:', sublotesFaltantes);
       return {
         success: false,
-        message: `Sublotes no encontrados en la base de datos: ${mensaje}`,
+        message: `❌ No se encontraron los siguientes sublotes en la base de datos: ${mensaje}. 
+
+📝 Acción requerida: Ve a Configuración → Sublotes y crea estos sublotes antes de cargar el CSV. 
+
+💡 Asegúrate de que los nombres en el CSV coincidan EXACTAMENTE con los nombres en la base de datos.`,
         insertados: 0
       };
     }
@@ -468,7 +472,6 @@ function transformarFila(
   const individuos = parseEntero(row['Individuos Encontrados']);
   
   const incidencia = calcularIncidencia(arbolesAfectados, arbolesMonitoreados);
-  const severidad = calcularSeveridad(individuos, arbolesAfectados);
   const gravedad = clasificarGravedad(incidencia);
   
   // SOLO campos que existen en la tabla monitoreos según supabase_tablas.md

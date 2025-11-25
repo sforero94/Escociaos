@@ -2,10 +2,15 @@ import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { LotesConfig } from './LotesConfig';
 import { SublotesConfig } from './SublotesConfig';
-import { MapPin, Sprout, Settings } from 'lucide-react';
+import { UsuariosConfig } from './UsuariosConfig';
+import { useAuth } from '../../contexts/AuthContext';
+import { MapPin, Sprout, Settings, Users } from 'lucide-react';
 
 export function ConfiguracionDashboard() {
-  const [activeTab, setActiveTab] = useState('lotes');
+  const { profile } = useAuth();
+  const [activeTab, setActiveTab] = useState('general');
+
+  const isGerencia = profile?.rol === 'Gerencia';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#F8FAF5] via-white to-[#BFD97D]/10 p-6">
@@ -22,6 +27,26 @@ export function ConfiguracionDashboard() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="bg-white/80 backdrop-blur-sm border border-[#BFD97D]/30 p-1">
             <TabsTrigger
+              value="general"
+              className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-[#73991C] data-[state=active]:to-[#5c7a16] data-[state=active]:text-white"
+              disabled
+            >
+              <Settings className="w-4 h-4 mr-2" />
+              General
+              <span className="ml-2 text-xs opacity-60">(Próximamente)</span>
+            </TabsTrigger>
+            
+            {isGerencia && (
+              <TabsTrigger
+                value="usuarios"
+                className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-[#73991C] data-[state=active]:to-[#5c7a16] data-[state=active]:text-white"
+              >
+                <Users className="w-4 h-4 mr-2" />
+                Usuarios
+              </TabsTrigger>
+            )}
+            
+            <TabsTrigger
               value="lotes"
               className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-[#73991C] data-[state=active]:to-[#5c7a16] data-[state=active]:text-white"
             >
@@ -35,24 +60,7 @@ export function ConfiguracionDashboard() {
               <Sprout className="w-4 h-4 mr-2" />
               Sublotes
             </TabsTrigger>
-            <TabsTrigger
-              value="general"
-              className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-[#73991C] data-[state=active]:to-[#5c7a16] data-[state=active]:text-white"
-              disabled
-            >
-              <Settings className="w-4 h-4 mr-2" />
-              General
-              <span className="ml-2 text-xs opacity-60">(Próximamente)</span>
-            </TabsTrigger>
           </TabsList>
-
-          <TabsContent value="lotes" className="space-y-6">
-            <LotesConfig />
-          </TabsContent>
-
-          <TabsContent value="sublotes" className="space-y-6">
-            <SublotesConfig />
-          </TabsContent>
 
           <TabsContent value="general" className="space-y-6">
             <div className="text-center py-12">
@@ -62,6 +70,20 @@ export function ConfiguracionDashboard() {
                 Esta funcionalidad estará disponible próximamente
               </p>
             </div>
+          </TabsContent>
+
+          {isGerencia && (
+            <TabsContent value="usuarios" className="space-y-6">
+              <UsuariosConfig />
+            </TabsContent>
+          )}
+
+          <TabsContent value="lotes" className="space-y-6">
+            <LotesConfig />
+          </TabsContent>
+
+          <TabsContent value="sublotes" className="space-y-6">
+            <SublotesConfig />
           </TabsContent>
         </Tabs>
       </div>

@@ -239,7 +239,7 @@ function PurchaseDetailModal({ purchase, onClose }: { purchase: Purchase; onClos
 /**
  * Historial de Compras - Lista de todas las compras registradas
  */
-export function PurchaseHistory() {
+export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }) {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [filteredPurchases, setFilteredPurchases] = useState<Purchase[]>([]);
   const [loading, setLoading] = useState(true);
@@ -325,7 +325,7 @@ export function PurchaseHistory() {
 
   return (
     <div className="space-y-6">
-      <InventorySubNav />
+      {!hideSubNav && <InventorySubNav />}
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

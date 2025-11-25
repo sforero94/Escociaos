@@ -1,3 +1,13 @@
+import { ProductDetail } from './components/inventory/ProductDetail';
+import { ImportarProductosPage } from './components/inventory/ImportarProductosPage';
+import { ComingSoon } from './components/shared/ComingSoon';
+import { InventoryMovements } from './components/inventory/InventoryMovements';
+import { MovementsDashboard } from './components/inventory/MovementsDashboard';
+import { PurchaseHistory } from './components/inventory/PurchaseHistory';
+import { ComprasIntegrado } from './components/inventory/ComprasIntegrado';
+import { VerificacionesList } from './components/inventory/VerificacionesList';
+import { NuevaVerificacion } from './components/inventory/NuevaVerificacion';
+import { ConteoFisico } from './components/inventory/ConteoFisico';
 import { AplicacionesList } from './components/aplicaciones/AplicacionesList';
 import { CalculadoraAplicaciones } from './components/aplicaciones/CalculadoraAplicaciones';
 import { DailyMovementsDashboardWrapper } from './components/aplicaciones/DailyMovementsDashboardWrapper';
@@ -10,34 +20,11 @@ import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { InventoryList } from './components/inventory/InventoryList';
 import { NewPurchase } from './components/inventory/NewPurchase';
-import { InventoryMovements } from './components/inventory/InventoryMovements';
-import { MovementsDashboard } from './components/inventory/MovementsDashboard';
-import { PurchaseHistory } from './components/inventory/PurchaseHistory';
-import { VerificacionesList } from './components/inventory/VerificacionesList';
-import { NuevaVerificacion } from './components/inventory/NuevaVerificacion';
-import { ConteoFisico } from './components/inventory/ConteoFisico';
-import { ImportarProductosPage } from './components/inventory/ImportarProductosPage';
 import { MonitoreoDashboardV2 } from './components/monitoreo/MonitoreoDashboardV2';
+import { RegistrosMonitoreo } from './components/monitoreo/RegistrosMonitoreo';
+import { CargaMasiva } from './components/monitoreo/CargaMasiva';
+import { CatalogoPlagas } from './components/monitoreo/CatalogoPlagas';
 import { ConfiguracionDashboard } from './components/configuracion/ConfiguracionDashboard';
-
-/**
- * Componente de placeholder para módulos en desarrollo
- */
-function ComingSoon({ moduleName }: { moduleName: string }) {
-  return (
-    <div className="text-center py-12">
-      <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 rounded-2xl mb-4 shadow-lg">
-        <span className="text-3xl">🚧</span>
-      </div>
-      <h2 className="text-2xl text-[#172E08] mb-2">
-        {moduleName} - En Desarrollo
-      </h2>
-      <p className="text-[#4D240F]/70">
-        Esta funcionalidad estará disponible próximamente
-      </p>
-    </div>
-  );
-}
 
 /**
  * Wrapper de Dashboard
@@ -60,11 +47,10 @@ function LayoutRoutes() {
         <Route path="inventario">
           <Route index element={<InventoryList />} />
           <Route path="dashboard" element={<MovementsDashboard />} />
-          <Route path="nueva-compra" element={<NewPurchase />} />
-          <Route path="compras" element={<PurchaseHistory />} />
+          <Route path="compras" element={<ComprasIntegrado />} />
           <Route
             path="producto/:id"
-            element={<ComingSoon moduleName="Detalle de Producto" />}
+            element={<ProductDetail />}
           />
           <Route path="movimientos" element={<InventoryMovements />} />
           <Route path="importar" element={<ImportarProductosPage />} />
@@ -90,6 +76,18 @@ function LayoutRoutes() {
         <Route
           path="monitoreo"
           element={<MonitoreoDashboardV2 />}
+        />
+        <Route
+          path="monitoreo/registros"
+          element={<RegistrosMonitoreo />}
+        />
+        <Route
+          path="monitoreo/carga-masiva"
+          element={<CargaMasiva />}
+        />
+        <Route
+          path="monitoreo/catalogo"
+          element={<CatalogoPlagas />}
         />
 
         {/* Labores - En construcción */}

@@ -1,10 +1,10 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { BarChart3, History, ShoppingCart, ClipboardCheck, Package, Upload } from 'lucide-react';
+import { BarChart3, List, Upload, Settings } from 'lucide-react';
 
 /**
- * Submenú horizontal para las páginas de Inventario
+ * Submenú horizontal para las páginas de Monitoreo
  */
-export function InventorySubNav() {
+export function MonitoreoSubNav() {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -12,43 +12,36 @@ export function InventorySubNav() {
     {
       id: 'tablero',
       label: 'Tablero',
-      subtitle: 'Vista general',
+      subtitle: 'Tendencias e insights',
       icon: BarChart3,
-      path: '/inventario/dashboard',
+      path: '/monitoreo',
     },
     {
-      id: 'movimientos',
-      label: 'Movimientos',
-      subtitle: 'Historial completo',
-      icon: History,
-      path: '/inventario/movimientos',
+      id: 'registros',
+      label: 'Registros de monitoreo',
+      subtitle: 'Ver todos',
+      icon: List,
+      path: '/monitoreo/registros',
     },
     {
-      id: 'compras',
-      label: 'Compras',
-      subtitle: 'Registros de compras',
-      icon: ShoppingCart,
-      path: '/inventario/compras',
+      id: 'carga-masiva',
+      label: 'Carga Masiva',
+      subtitle: 'Importar datos',
+      icon: Upload,
+      path: '/monitoreo/carga-masiva',
     },
     {
-      id: 'verificaciones',
-      label: 'Verificaciones',
-      subtitle: 'Conteos físicos',
-      icon: ClipboardCheck,
-      path: '/inventario/verificaciones',
-    },
-    {
-      id: 'productos',
-      label: 'Base de Productos',
-      subtitle: 'Lista de productos',
-      icon: Package,
-      path: '/inventario',
+      id: 'catalogo',
+      label: 'Modificar catálogo',
+      subtitle: 'Plagas y enfermedades',
+      icon: Settings,
+      path: '/monitoreo/catalogo',
     },
   ];
 
   const isActive = (path: string) => {
-    if (path === '/inventario') {
-      return location.pathname === '/inventario';
+    if (path === '/monitoreo') {
+      return location.pathname === '/monitoreo';
     }
     return location.pathname.startsWith(path);
   };

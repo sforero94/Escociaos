@@ -156,8 +156,8 @@ export function SublotesConfig() {
     }
 
     try {
-      // Excluir campos calculados/generados y el ID
-      const { id, ...dataToSave } = editForm;
+      // Excluir campos calculados/generados, el ID y campos de relación
+      const { id, lote_nombre, lotes, total_arboles, ...dataToSave } = editForm as any;
 
       if (isCreating) {
         // Crear nuevo sublote

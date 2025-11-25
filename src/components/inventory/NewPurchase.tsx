@@ -37,6 +37,7 @@ interface Producto {
   categoria: string;
   precio_unitario: number | null;
   cantidad_actual: number;
+  activo: boolean;
 }
 
 interface ProductoCompra {
@@ -74,7 +75,7 @@ interface DatosCompra {
 // COMPONENTE PRINCIPAL
 // ============================================
 
-export function NewPurchase() {
+export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { showSuccess, showError, showWarning, showInfo, ToastContainer } = useToast();
@@ -110,7 +111,7 @@ export function NewPurchase() {
     try {
       const { data, error } = await getSupabase()
         .from('productos')
-        .select('id, nombre, presentacion_kg_l, unidad_medida, categoria, precio_unitario, cantidad_actual')
+        .select('id, nombre, presentacion_kg_l, unidad_medida, categoria, precio_unitario, cantidad_actual, activo')
         .eq('activo', true)
         .order('nombre');
 
@@ -345,6 +346,8 @@ export function NewPurchase() {
           .update({
             cantidad_actual: cantidadNueva,
             precio_unitario: item.precio_unitario_real,
+            // REGLA DE NEGOCIO: Si el producto está inactivo y ahora tiene cantidad > 0, activarlo automáticamente
+            activo: cantidadNueva > 0 ? true : productoData.activo,
             updated_at: new Date().toISOString(),
           })
           .eq('id', item.producto_id);
@@ -381,6 +384,11 @@ export function NewPurchase() {
       setTimeout(() => {
         navigate('/inventario/movimientos');
       }, 2000);
+
+      // Llamar a la función de éxito si está definida
+      if (onSuccess) {
+        onSuccess();
+      }
     } catch (err: any) {
       console.error('Error guardando compra:', err);
       showError(`❌ Error al guardar: ${err.message || 'Intente nuevamente'}`);

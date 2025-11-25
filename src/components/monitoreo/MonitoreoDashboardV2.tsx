@@ -1,28 +1,34 @@
-import { useState, useEffect, useRef } from 'react';
-import { getSupabase } from '../../utils/supabase/client';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
+import { toast } from 'sonner@2.0.3';
+import { CatalogoPlagas } from './CatalogoPlagas';
+import { CargaCSV } from './CargaCSV';
+import { TablaMonitoreos } from './TablaMonitoreos';
+import { RegistroMonitoreo } from './RegistroMonitoreo';
+import { MonitoreoSubNav } from './MonitoreoSubNav';
 import { 
-  Calendar, 
-  TrendingUp, 
-  TrendingDown, 
-  AlertTriangle, 
-  CheckCircle2,
   Bug,
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
+  Calendar,
+  BarChart3,
+  CheckCircle2,
+  XCircle,
+  Table,
   Download,
   Upload,
-  ChevronDown,
-  ChevronUp,
+  Settings,
   Filter,
   Camera,
-  Table,
-  Settings
+  ChevronUp,
+  ChevronDown,
+  Plus
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { toast } from 'sonner';
-import { TablaMonitoreos } from './TablaMonitoreos';
-import { CatalogoPlagas } from './CatalogoPlagas';
+import { useState, useEffect, useRef } from 'react';
+import { getSupabase } from '../../utils/supabase/client';
 
 // ============================================
 // INTERFACES
@@ -104,6 +110,7 @@ export function MonitoreoDashboardV2() {
   const [plagasExpandidas, setPlagasExpandidas] = useState<Set<string>>(new Set());
   const [mostrarTablaCompleta, setMostrarTablaCompleta] = useState(false);
   const [mostrarCatalogo, setMostrarCatalogo] = useState(false);
+  const [mostrarRegistroMonitoreo, setMostrarRegistroMonitoreo] = useState(false);
   const graficoRef = useRef<HTMLDivElement>(null);
 
   // ============================================
@@ -780,165 +787,26 @@ export function MonitoreoDashboardV2() {
 
   return (
     <div className="space-y-6">
-      {/* ============================================ */}
-      {/* TABLERO DE MONITOREO - HEADER */}
-      {/* ============================================ */}
+      {/* SubNav de Monitoreo */}
+      <MonitoreoSubNav />
       
+      {/* Header del Tablero */}
       <div>
-        <h2 className="text-2xl text-[#172E08] mb-4">Tablero de Monitoreo</h2>
-        
-        {ultimoMonitoreo ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-            {/* Tarjeta 1: Período */}
-            <Card className="p-4 bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10">
-              <div className="flex items-start justify-between mb-3">
-                <Calendar className="w-6 h-6 text-[#73991C]" />
-              </div>
-              <h3 className="text-sm text-[#172E08] mb-3 font-bold">Periodo de último monitoreo</h3>
-              <div className="space-y-1">
-                <p className="text-sm text-[#4D240F]/80">
-                  Fecha inicio: {formatearFecha(ultimoMonitoreo.fechaInicio)}
-                </p>
-                <p className="text-sm text-[#4D240F]/80">
-                  Fecha fin: {formatearFecha(ultimoMonitoreo.fechaFin)}
-                </p>
-              </div>
-            </Card>
-
-            {/* Tarjeta 2: Incidencia Promedio */}
-            <Card className="p-4 bg-gradient-to-br from-blue-50 to-blue-100">
-              <div className="flex items-start justify-between mb-2">
-                {ultimoMonitoreo.incidenciaPromedio > ultimoMonitoreo.incidenciaAnterior ? (
-                  <TrendingUp className="w-6 h-6 text-red-500" />
-                ) : (
-                  <TrendingDown className="w-6 h-6 text-green-500" />
-                )}
-              </div>
-              <h3 className="text-xs text-[#4D240F]/70 mb-1">Incidencia Promedio</h3>
-              <div className="flex items-baseline gap-2 mb-0.5">
-                <p className="text-2xl text-[#172E08] font-semibold">
-                  {ultimoMonitoreo.incidenciaPromedio.toFixed(1)}%
-                </p>
-                <span className={`text-sm font-medium ${ultimoMonitoreo.incidenciaPromedio > ultimoMonitoreo.incidenciaAnterior ? 'text-red-500' : 'text-green-500'}`}>
-                  {ultimoMonitoreo.incidenciaPromedio > ultimoMonitoreo.incidenciaAnterior ? '↑' : '↓'}
-                  {Math.abs(ultimoMonitoreo.incidenciaPromedio - ultimoMonitoreo.incidenciaAnterior).toFixed(1)}%
-                </span>
-              </div>
-              <p className="text-xs text-[#4D240F]/60">
-                Anterior: {ultimoMonitoreo.incidenciaAnterior.toFixed(1)}%
-              </p>
-            </Card>
-
-            {/* Tarjeta 3: Plagas Críticas */}
-            <Card className="p-4 bg-gradient-to-br from-red-50 to-orange-100">
-              <div className="flex items-start justify-between mb-2">
-                <AlertTriangle className="w-6 h-6 text-red-500" />
-                <span className="px-2 py-0.5 bg-red-500 text-white rounded-full text-xs font-medium">
-                  {ultimoMonitoreo.plagasCriticas.length}
-                </span>
-              </div>
-              <h3 className="text-xs text-[#4D240F]/70 mb-2 font-bold">Plagas Críticas ({'>'}30%)</h3>
-              {ultimoMonitoreo.plagasCriticas.length > 0 ? (
-                <div className="space-y-1">
-                  {ultimoMonitoreo.plagasCriticas.slice(0, 5).map((p, i) => (
-                    <p key={i} className="text-xs text-[#172E08] leading-tight">
-                      • {p.nombre} <span className="text-[#4D240F]/60">({p.sublotes} sublotes, máx {p.incidenciaMax.toFixed(0)}%)</span>
-                    </p>
-                  ))}
-                  {ultimoMonitoreo.plagasCriticas.length > 5 && (
-                    <p className="text-xs text-[#4D240F]/60 font-medium mt-1">
-                      +{ultimoMonitoreo.plagasCriticas.length - 5} más
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <p className="text-sm text-green-600 font-medium">Sin plagas críticas</p>
-              )}
-            </Card>
-
-            {/* Tarjeta 4: Plagas Controladas */}
-            <Card className="p-4 bg-gradient-to-br from-green-50 to-emerald-100">
-              <div className="flex items-start justify-between mb-2">
-                <CheckCircle2 className="w-6 h-6 text-green-500" />
-                <span className="px-2 py-0.5 bg-green-500 text-white rounded-full text-xs font-medium">
-                  {ultimoMonitoreo.plagasControladas.length}
-                </span>
-              </div>
-              <h3 className="text-xs text-[#4D240F]/70 mb-2 font-bold">Plagas Controladas</h3>
-              {ultimoMonitoreo.plagasControladas.length > 0 ? (
-                <div className="space-y-1">
-                  {ultimoMonitoreo.plagasControladas.slice(0, 5).map((p, i) => (
-                    <p key={i} className="text-xs text-[#172E08] leading-tight">
-                      • {p.nombre} <span className="text-green-600 font-medium">({p.incidenciaAnterior.toFixed(1)}% → {p.incidenciaActual.toFixed(1)}%)</span>
-                    </p>
-                  ))}
-                  {ultimoMonitoreo.plagasControladas.length > 5 && (
-                    <p className="text-xs text-[#4D240F]/60 font-medium mt-1">
-                      +{ultimoMonitoreo.plagasControladas.length - 5} más
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <p className="text-xs text-[#4D240F]/60">Ninguna en este período</p>
-              )}
-            </Card>
-          </div>
-        ) : (
-          <Card className="p-8 text-center">
-            <Bug className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-            <p className="text-[#4D240F]/60">No hay datos de monitoreo disponibles</p>
-          </Card>
-        )}
+        <h2 className="text-2xl text-[#172E08] mb-2">Tablero de Monitoreo</h2>
+        <p className="text-sm text-[#4D240F]/70">
+          Análisis de tendencias e insights automáticos
+        </p>
       </div>
-
+      
       {/* ============================================ */}
-      {/* 2. BOTONES DE ACCIÓN PRINCIPALES */}
+      {/* MODAL DE REGISTRO DE MONITOREO */}
       {/* ============================================ */}
       
-      <div className="flex items-center justify-center gap-3 bg-white p-4 rounded-lg border border-gray-200">
-        <Button
-          onClick={() => setMostrarTablaCompleta(!mostrarTablaCompleta)}
-          variant="outline"
-          className="flex items-center gap-2"
-        >
-          <Table className="w-4 h-4" />
-          {mostrarTablaCompleta ? 'Regresar al tablero' : 'Ver todos los registros'}
-        </Button>
-
-        <Button
-          variant="outline"
-          className="flex items-center gap-2"
-          onClick={() => {
-            toast.info('Funcionalidad de descarga en desarrollo');
-          }}
-        >
-          <Download className="w-4 h-4" />
-          Descargar plantilla
-        </Button>
-
-        <Button
-          variant="outline"
-          className="flex items-center gap-2"
-          onClick={() => {
-            toast.info('Funcionalidad de carga en desarrollo');
-          }}
-        >
-          <Upload className="w-4 h-4" />
-          Cargar datos
-        </Button>
-
-        <Button
-          variant="outline"
-          className="flex items-center gap-2"
-          onClick={() => {
-            console.log('🔧 Cambiando mostrarCatalogo de', mostrarCatalogo, 'a', !mostrarCatalogo);
-            setMostrarCatalogo(!mostrarCatalogo);
-          }}
-        >
-          <Settings className="w-4 h-4" />
-          {mostrarCatalogo ? 'Regresar al tablero' : 'Modificar catálogo'}
-        </Button>
-      </div>
+      <RegistroMonitoreo
+        open={mostrarRegistroMonitoreo}
+        onClose={() => setMostrarRegistroMonitoreo(false)}
+        onSuccess={() => cargarDatos()}
+      />
 
       {/* ============================================ */}
       {/* TABLA COMPLETA DE MONITOREOS (CONDICIONAL) */}

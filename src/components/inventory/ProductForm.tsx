@@ -37,7 +37,7 @@ interface ProductData {
   periodo_carencia_dias: number | '';
   tipo_aplicacion: string;
   estado_fisico: string;
-  permitido_gerencia: boolean;
+  permitido_gerencia: boolean | null;
   
   // Composición nutricional (SOLO FERTILIZANTES)
   nitrogeno: number | '';
@@ -89,7 +89,7 @@ const initialFormData: ProductData = {
   periodo_carencia_dias: '',
   tipo_aplicacion: '',
   estado_fisico: '',
-  permitido_gerencia: false,
+  permitido_gerencia: null,
   nitrogeno: '',
   fosforo: '',
   potasio: '',
@@ -197,8 +197,8 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
     // Validación de "Permitido por Gerencia" para insumos no-fertilizantes
     const isInsumo = formData.grupo === 'Agroinsumos';
     const isFertilizante = formData.categoria === 'Fertilizante';
-    if (isInsumo && !isFertilizante && !formData.permitido_gerencia) {
-      return 'Debe marcar "Permitido por Gerencia" para productos agroinsumos';
+    if (isInsumo && !isFertilizante && formData.permitido_gerencia === null) {
+      return 'Debe seleccionar Sí o No en "Permitido por Gerencia" (requerido por GlobalGAP)';
     }
     
     // Validaciones de números no negativos
@@ -413,12 +413,12 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                       required
                     >
                       <option value="">Seleccionar...</option>
-                      <option value="Litros">Litros</option>
-                      <option value="Kilos">Kilos</option>
-                      <option value="Unidades">Unidades</option>
-                      <option value="Cajas">Cajas</option>
-                      <option value="Gramos">Gramos</option>
-                      <option value="Mililitros">Mililitros</option>
+                      <option value="litros">Litros</option>
+                      <option value="kilos">Kilos</option>
+                      <option value="unidades">Unidades</option>
+                      <option value="cajas">Cajas</option>
+                      <option value="gramos">Gramos</option>
+                      <option value="mililitros">Mililitros</option>
                     </select>
                   </div>
 
@@ -740,20 +740,37 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                           placeholder="Ej: 7"
                         />
                       </div>
-                    </div>
 
-                    {/* Permitido por Gerencia */}
-                    <div className="flex items-center mt-4">
-                      <input
-                        type="checkbox"
-                        name="permitido_gerencia"
-                        checked={formData.permitido_gerencia}
-                        onChange={handleChange}
-                        className="w-4 h-4 text-[#73991C] border-gray-300 rounded focus:ring-[#73991C]"
-                      />
-                      <label className="ml-2 text-sm text-gray-700">
-                        Permitido por Gerencia <span className="text-red-500">*</span>
-                      </label>
+                      {/* Permitido por Gerencia */}
+                      <div className="md:col-span-2">
+                        <label className="block text-sm text-gray-700 mb-1">
+                          Permitido por Gerencia <span className="text-red-500">*</span>
+                        </label>
+                        <div className="flex gap-6 mt-2">
+                          <label className="flex items-center cursor-pointer">
+                            <input
+                              type="radio"
+                              name="permitido_gerencia"
+                              value="si"
+                              checked={formData.permitido_gerencia === true}
+                              onChange={() => setFormData(prev => ({ ...prev, permitido_gerencia: true }))}
+                              className="w-4 h-4 text-[#73991C] border-gray-300 focus:ring-[#73991C]"
+                            />
+                            <span className="ml-2 text-sm text-gray-700">Sí</span>
+                          </label>
+                          <label className="flex items-center cursor-pointer">
+                            <input
+                              type="radio"
+                              name="permitido_gerencia"
+                              value="no"
+                              checked={formData.permitido_gerencia === false}
+                              onChange={() => setFormData(prev => ({ ...prev, permitido_gerencia: false }))}
+                              className="w-4 h-4 text-[#73991C] border-gray-300 focus:ring-[#73991C]"
+                            />
+                            <span className="ml-2 text-sm text-gray-700">No</span>
+                          </label>
+                        </div>
+                      </div>
                     </div>
                   </>
                 )}

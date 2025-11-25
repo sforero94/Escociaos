@@ -385,7 +385,7 @@ export function MovementsDashboard() {
       
       {/* Header - SIN BOTÓN */}
       <div>
-        <h1 className="text-[#172E08] mb-2">Dashboard de Inventario</h1>
+        <h1 className="text-[#172E08] mb-2">Tablero de Inventario</h1>
         <p className="text-[#4D240F]/70">Vista general de la actividad y evolución del inventario</p>
       </div>
 

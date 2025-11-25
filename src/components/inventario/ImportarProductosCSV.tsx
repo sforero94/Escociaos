@@ -199,7 +199,13 @@ export function ImportarProductosCSV() {
     setResultado(null);
 
     try {
-      const texto = await archivo.text();
+      // ✅ SOLUCIÓN: Usar FileReader con codificación UTF-8 explícita
+      const texto = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(archivo, 'UTF-8');
+      });
 
       const response = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-1ccce916/inventario/importar-productos`,

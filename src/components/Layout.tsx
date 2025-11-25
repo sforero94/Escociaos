@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { useAuth } from '../contexts/AuthContext';
+import { ImageWithFallback } from './figma/ImageWithFallback';
 
 interface LayoutProps {
   onNavigate?: (view: string) => void;
@@ -55,7 +56,7 @@ export function Layout({ onNavigate, children }: LayoutProps) {
       id: 'inventario',
       label: 'Inventario',
       icon: Package,
-      path: '/inventario',
+      path: '/inventario/dashboard',
     },
     {
       type: 'item' as const,
@@ -204,8 +205,12 @@ export function Layout({ onNavigate, children }: LayoutProps) {
         {/* Logo */}
         <div className="p-6 border-b border-[#73991C]/10">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-gradient-to-br from-[#73991C] to-[#BFD97D] rounded-xl flex items-center justify-center shadow-lg shadow-[#73991C]/20">
-              <Leaf className="w-7 h-7 text-white" />
+            <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-[#73991C]/20 overflow-hidden">
+              <ImageWithFallback 
+                src="https://ywhtjwawnkeqlwxbvgup.supabase.co/storage/v1/object/sign/photos/ehlogo.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV80N2U5N2FlMi1lMDc1LTRiNzEtODI0Ny1mMzgwOGYzYzM0ODIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwaG90b3MvZWhsb2dvLnBuZyIsImlhdCI6MTc2NDAzMzkwNSwiZXhwIjoyMDc5MzkzOTA1fQ.T74UbHfbH9pZ9Xqj35Ljb3dPmIP7f6YpSJPFRoN-83o"
+                alt="Escocia Hass Logo"
+                className="w-full h-full object-cover"
+              />
             </div>
             <div>
               <h2 className="text-[#172E08]">Escocia Hass</h2>

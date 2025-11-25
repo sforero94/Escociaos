@@ -10,6 +10,7 @@ interface Product {
   unidad_medida: string;
   cantidad_actual: number;
   precio_unitario: number;
+  activo: boolean;
 }
 
 interface NuevoMovimientoModalProps {
@@ -45,7 +46,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
       const supabase = getSupabase();
       const { data, error } = await supabase
         .from('productos')
-        .select('id, nombre, unidad_medida, cantidad_actual, precio_unitario')
+        .select('id, nombre, unidad_medida, cantidad_actual, precio_unitario, activo')
         .eq('activo', true)
         .ilike('nombre', `%${searchTerm}%`)
         .order('nombre')
@@ -135,7 +136,11 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
       // 2. Actualizar cantidad_actual en productos
       const { error: prodError } = await supabase
         .from('productos')
-        .update({ cantidad_actual: nuevoSaldo })
+        .update({ 
+          cantidad_actual: nuevoSaldo,
+          // REGLA DE NEGOCIO: Si después del movimiento la cantidad > 0, activar automáticamente
+          activo: nuevoSaldo > 0 ? true : selectedProduct.activo
+        })
         .eq('id', selectedProduct.id);
 
       if (prodError) throw prodError;

@@ -37,6 +37,8 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
   const [cargandoProductos, setCargandoProductos] = useState(true);
 
   const [productoSeleccionado, setProductoSeleccionado] = useState<string>('');
+  const [busquedaProducto, setBusquedaProducto] = useState<string>('');
+  const [mostrarResultados, setMostrarResultados] = useState<boolean>(false);
   const [calculos, setCalculos] = useState<CalculosPorLote[]>(calculosIniciales);
   const [errores, setErrores] = useState<string[]>([]);
 
@@ -49,40 +51,18 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
 
   const cargarProductos = async () => {
     try {
-      // Filtrar productos según tipo de aplicación
-      let categorias: string[] = [];
-      let estadoFisico: 'Líquido' | 'Sólido' | undefined = undefined;
-
-      if (configuracion.tipo === 'fumigacion') {
-        // Fumigación: TODOS los productos líquidos (pesticidas y fertilizantes)
-        estadoFisico = 'Líquido';
-      } else if (configuracion.tipo === 'drench') {
-        // Drench: TODOS los productos líquidos (pesticidas y fertilizantes)
-        estadoFisico = 'Líquido';
-      } else {
-        // Fertilización: productos sólidos
-        categorias = ['Fertilizante'];
-        estadoFisico = 'Sólido';
-      }
-
-      // Construir query con filtros
-      let query = supabase
+      // CAMBIO: Cargar TODOS los productos (sólidos y líquidos)
+      // Algunos productos sólidos se disuelven en agua para las aplicaciones
+      
+      // Construir query - sin filtro de estado físico
+      const query = supabase
         .from('productos')
         .select('*')
         .eq('estado', 'OK')
-        .eq('activo', true);
+        .eq('activo', true)
+        .order('nombre');
 
-      // Filtrar por categorías solo si es fertilización
-      if (configuracion.tipo === 'fertilizacion') {
-        query = query.in('categoria', categorias);
-      }
-
-      // Agregar filtro de estado físico si está definido
-      if (estadoFisico) {
-        query = query.eq('estado_fisico', estadoFisico);
-      }
-
-      const { data, error } = await query.order('nombre');
+      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -96,7 +76,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
         presentacion_comercial: p.presentacion_kg_l ? `${p.presentacion_kg_l} ${p.unidad_medida}` : p.unidad_medida,
         ultimo_precio_unitario: p.precio_unitario || 0,
         cantidad_actual: p.cantidad_actual || 0,
-        display_nombre: `${p.nombre} (${p.categoria}) - Stock: ${p.cantidad_actual || 0} ${p.unidad_medida}`,
+        display_nombre: `${p.nombre} (${p.categoria} - ${p.estado_fisico}) - Stock: ${p.cantidad_actual || 0} ${p.unidad_medida}`,
       }));
 
       setProductosCatalogo(productosFormateados);
@@ -279,6 +259,8 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
     });
 
     setProductoSeleccionado('');
+    setBusquedaProducto('');
+    setMostrarResultados(false);
   };
 
   /**
@@ -593,6 +575,15 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
             </label>
 
             <div className="flex gap-3 mb-4">
+              <input
+                type="text"
+                value={busquedaProducto}
+                onChange={(e) => setBusquedaProducto(e.target.value)}
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                placeholder="Buscar producto..."
+                disabled={cargandoProductos}
+              />
+
               <select
                 value={productoSeleccionado}
                 onChange={(e) => setProductoSeleccionado(e.target.value)}
@@ -602,11 +593,15 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                 <option value="">
                   {cargandoProductos ? 'Cargando productos...' : 'Seleccionar producto'}
                 </option>
-                {productosCatalogo.map((producto) => (
-                  <option key={producto.id} value={producto.id}>
-                    {producto.display_nombre}
-                  </option>
-                ))}
+                {productosCatalogo
+                  .filter((producto) =>
+                    producto.display_nombre.toLowerCase().includes(busquedaProducto.toLowerCase())
+                  )
+                  .map((producto) => (
+                    <option key={producto.id} value={producto.id}>
+                      {producto.display_nombre}
+                    </option>
+                  ))}
               </select>
 
               <button

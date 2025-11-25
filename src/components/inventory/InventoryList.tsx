@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, Plus, Package, AlertTriangle, Loader2, Edit, Eye, History, X } from 'lucide-react';
+import { Search, Plus, Package, AlertTriangle, Loader2, Edit, Eye, History, X, ChevronUp, ChevronDown, Filter } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { getSupabase } from '../../utils/supabase/client';
 import { ProductForm } from './ProductForm';
 import { ProductMovements } from './ProductMovements';
 import { InventorySubNav } from './InventorySubNav';
+import { useNavigate } from 'react-router-dom';
 
 interface InventoryListProps {
   onNavigate?: (view: string, productId?: number) => void;
@@ -21,14 +22,29 @@ interface Product {
   unidad_medida: string;
   stock_minimo: number;
   precio_unitario: number;
+  activo: boolean;
 }
 
 export function InventoryList({ onNavigate }: InventoryListProps) {
+  const navigate = useNavigate();
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('todas');
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Estados para ordenamiento
+  const [sortColumn, setSortColumn] = useState<keyof Product | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  
+  // Estados para filtros por columna
+  const [columnFilters, setColumnFilters] = useState<{
+    estado: string;
+    unidad_medida: string;
+  }>({
+    estado: 'todos',
+    unidad_medida: 'todas',
+  });
   
   // Estados para el formulario de productos
   const [isProductFormOpen, setIsProductFormOpen] = useState(false);
@@ -44,7 +60,7 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
 
   useEffect(() => {
     filterProducts();
-  }, [searchQuery, categoryFilter, products]);
+  }, [searchQuery, categoryFilter, products, sortColumn, sortDirection, columnFilters]);
 
   const loadProducts = async () => {
     try {
@@ -52,7 +68,6 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
       const { data, error } = await supabase
         .from('productos')
         .select('*')
-        .eq('activo', true)
         .order('nombre');
 
       if (error) {
@@ -82,12 +97,48 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
       filtered = filtered.filter((p) => p.categoria === categoryFilter);
     }
 
+    // Filtrar por estado
+    if (columnFilters.estado !== 'todos') {
+      filtered = filtered.filter((p) => p.estado === columnFilters.estado);
+    }
+
+    // Filtrar por unidad de medida
+    if (columnFilters.unidad_medida !== 'todas') {
+      filtered = filtered.filter((p) => p.unidad_medida === columnFilters.unidad_medida);
+    }
+
+    // Ordenar
+    if (sortColumn) {
+      filtered = filtered.sort((a, b) => {
+        const aValue = a[sortColumn];
+        const bValue = b[sortColumn];
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return sortDirection === 'asc'
+            ? aValue.localeCompare(bValue)
+            : bValue.localeCompare(aValue);
+        }
+        return sortDirection === 'asc'
+          ? (aValue as number) - (bValue as number)
+          : (bValue as number) - (aValue as number);
+      });
+    }
+
     setFilteredProducts(filtered);
   };
 
   const getCategories = () => {
     const categories = new Set(products.map((p) => p.categoria));
     return Array.from(categories).sort();
+  };
+
+  const getStates = () => {
+    const states = new Set(products.map((p) => p.estado));
+    return Array.from(states).sort();
+  };
+
+  const getUnits = () => {
+    const units = new Set(products.map((p) => p.unidad_medida));
+    return Array.from(units).sort();
   };
 
   const hasLowStock = (product: Product) => {
@@ -105,6 +156,64 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
   const handleEditProduct = (productId: number) => {
     setEditingProductId(productId);
     setIsProductFormOpen(true);
+  };
+
+  const handleToggleActivo = async (productId: number, activo: boolean, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    try {
+      const { projectId, publicAnonKey } = await import('../../utils/supabase/info.tsx');
+      
+      const response = await fetch(
+        `https://${projectId}.supabase.co/functions/v1/make-server-1ccce916/inventario/toggle-producto-activo`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${publicAnonKey}`,
+          },
+          body: JSON.stringify({
+            productoId: productId,
+            activo: !activo,
+          }),
+        }
+      );
+
+      const resultado = await response.json();
+
+      if (resultado.success) {
+        // Recargar productos para reflejar el cambio
+        await loadProducts();
+      } else {
+        console.error('Error al cambiar estado del producto:', resultado.error);
+        alert(`Error: ${resultado.error}`);
+      }
+    } catch (error) {
+      console.error('Error al cambiar estado del producto:', error);
+      alert('Error al cambiar el estado del producto');
+    }
+  };
+
+  const handleSort = (column: keyof Product) => {
+    if (sortColumn === column) {
+      // Si ya está ordenando por esta columna, cambiar dirección
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Nueva columna, ordenar ascendente
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  const SortIcon = ({ column }: { column: keyof Product }) => {
+    if (sortColumn !== column) {
+      return <ChevronUp className="w-4 h-4 opacity-30" />;
+    }
+    return sortDirection === 'asc' ? (
+      <ChevronUp className="w-4 h-4" />
+    ) : (
+      <ChevronDown className="w-4 h-4" />
+    );
   };
 
   if (isLoading) {
@@ -129,15 +238,6 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
           <p className="text-[#4D240F]/70">{products.length} productos registrados</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          {/* Link a Movimientos */}
-          <Link
-            to="/inventario/movimientos"
-            className="inline-flex items-center justify-center gap-2 px-4 py-2 border-2 border-[#73991C] text-[#73991C] bg-white hover:bg-[#F8FAF5] rounded-xl transition-all duration-200 font-medium"
-          >
-            <History className="w-4 h-4" />
-            Ver Movimientos
-          </Link>
-          
           <Button
             onClick={() => {
               setEditingProductId(null);
@@ -147,14 +247,6 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
           >
             <Plus className="w-4 h-4 mr-2" />
             Nuevo Producto
-          </Button>
-          
-          <Button
-            onClick={() => onNavigate && onNavigate('inventory-new-purchase')}
-            className="bg-gradient-to-r from-[#73991C] to-[#BFD97D] hover:shadow-lg hover:shadow-[#73991C]/30 text-white rounded-xl transition-all duration-200 hover:-translate-y-0.5"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Nueva Compra
           </Button>
         </div>
       </div>
@@ -184,6 +276,30 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
               </option>
             ))}
           </select>
+          <select
+            value={columnFilters.estado}
+            onChange={(e) => setColumnFilters({ ...columnFilters, estado: e.target.value })}
+            className="px-4 py-2 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+          >
+            <option value="todos">Todos los estados</option>
+            {getStates().map((state) => (
+              <option key={state} value={state}>
+                {state}
+              </option>
+            ))}
+          </select>
+          <select
+            value={columnFilters.unidad_medida}
+            onChange={(e) => setColumnFilters({ ...columnFilters, unidad_medida: e.target.value })}
+            className="px-4 py-2 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+          >
+            <option value="todas">Todas las unidades</option>
+            {getUnits().map((unit) => (
+              <option key={unit} value={unit}>
+                {unit}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -193,14 +309,55 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
           <table className="w-full">
             <thead className="bg-gradient-to-r from-[#E7EDDD]/50 to-[#E7EDDD]/30 border-b border-[#73991C]/10">
               <tr>
-                <th className="text-left px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase">Producto</th>
-                <th className="text-left px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase">Categoría</th>
-                <th className="text-left px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase">Estado</th>
-                <th className="text-right px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase">Cantidad</th>
-                <th className="text-right px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase">Stock Mín.</th>
-                <th className="text-right px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase">Valor Unit.</th>
-                <th className="text-center px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase">Alertas</th>
-                <th className="text-center px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase">Acciones</th>
+                <th 
+                  onClick={() => handleSort('nombre')}
+                  className="text-left px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase cursor-pointer hover:bg-[#E7EDDD]/50 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    Producto
+                    <SortIcon column="nombre" />
+                  </div>
+                </th>
+                <th 
+                  onClick={() => handleSort('categoria')}
+                  className="text-left px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase cursor-pointer hover:bg-[#E7EDDD]/50 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    Categoría
+                    <SortIcon column="categoria" />
+                  </div>
+                </th>
+                <th 
+                  onClick={() => handleSort('estado')}
+                  className="text-left px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase cursor-pointer hover:bg-[#E7EDDD]/50 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    Estado
+                    <SortIcon column="estado" />
+                  </div>
+                </th>
+                <th 
+                  onClick={() => handleSort('cantidad_actual')}
+                  className="text-right px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase cursor-pointer hover:bg-[#E7EDDD]/50 transition-colors"
+                >
+                  <div className="flex items-center justify-end gap-2">
+                    Cantidad Actual
+                    <SortIcon column="cantidad_actual" />
+                  </div>
+                </th>
+                <th 
+                  className="text-right px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase"
+                >
+                  Valor Total
+                </th>
+                <th 
+                  className="text-center px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase"
+                >
+                  Activo
+                </th>
+                <th className="text-center px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase">
+                  Acciones
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#73991C]/5">
@@ -240,21 +397,38 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
                     <td className="px-6 py-4 text-right text-[#172E08]">
                       {product.cantidad_actual} {product.unidad_medida}
                     </td>
-                    <td className="px-6 py-4 text-right text-[#4D240F]/70">
-                      {product.stock_minimo} {product.unidad_medida}
-                    </td>
                     <td className="px-6 py-4 text-right text-[#172E08]">
-                      {formatCurrency(product.precio_unitario || 0)}
+                      {formatCurrency(product.cantidad_actual * (product.precio_unitario || 0))}
                     </td>
                     <td className="px-6 py-4 text-center">
-                      {hasLowStock(product) && (
-                        <div className="inline-flex items-center justify-center w-8 h-8 bg-[#FFC107]/10 rounded-lg">
-                          <AlertTriangle className="w-4 h-4 text-[#FFC107]" />
-                        </div>
-                      )}
+                      <button
+                        onClick={(e) => handleToggleActivo(product.id, product.activo, e)}
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:ring-offset-2 ${
+                          product.activo ? 'bg-[#73991C]' : 'bg-[#4D240F]/20'
+                        }`}
+                        title={product.activo ? 'Desactivar producto' : 'Activar producto'}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                            product.activo ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
                     </td>
                     <td className="px-6 py-4 text-center">
                       <div className="flex items-center justify-center gap-2">
+                        <Button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/inventario/producto/${product.id}`);
+                          }}
+                          size="sm"
+                          variant="outline"
+                          className="border-[#73991C]/20 text-[#73991C] hover:bg-[#73991C]/5 rounded-xl transition-all duration-200"
+                          title="Ver detalles"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
                         <Button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -262,6 +436,7 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
                           }}
                           size="sm"
                           className="bg-[#73991C] hover:bg-[#5f7d17] text-white rounded-xl transition-all duration-200"
+                          title="Editar"
                         >
                           <Edit className="w-4 h-4" />
                         </Button>
@@ -274,6 +449,7 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
                           size="sm"
                           variant="outline"
                           className="border-[#73991C]/20 text-[#73991C] hover:bg-[#73991C]/5 rounded-xl transition-all duration-200"
+                          title="Ver movimientos"
                         >
                           <History className="w-4 h-4" />
                         </Button>
