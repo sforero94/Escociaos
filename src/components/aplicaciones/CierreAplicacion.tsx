@@ -144,7 +144,9 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
             setBlancoBiologico('No especificado');
           }
         } catch {
-          setBlancoBiologico('No especificado');
+          // Si no es JSON válido, usar el valor como texto plano
+          console.warn(`⚠️  blanco_biologico no es JSON válido para aplicación ${aplicacion.id}: ${appData.blanco_biologico}`);
+          setBlancoBiologico(appData.blanco_biologico);
         }
       } else {
         setBlancoBiologico('No especificado');
@@ -708,11 +710,15 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                           <div className="grid grid-cols-3 gap-4">
                             <div className="text-center">
                               <p className="text-xs text-[#4D240F]/70 mb-1">Planeadas</p>
-                              <p className="text-2xl text-[#172E08] font-semibold">{canecasPlaneadas}</p>
+                              <p className="text-2xl text-[#172E08] font-semibold">
+                                {Math.round(canecasPlaneadas * 100) / 100}
+                              </p>
                             </div>
                             <div className="text-center">
                               <p className="text-xs text-[#4D240F]/70 mb-1">Aplicadas</p>
-                              <p className="text-2xl text-[#73991C] font-semibold">{canecasAplicadas}</p>
+                              <p className="text-2xl text-[#73991C] font-semibold">
+                                {Math.round(canecasAplicadas * 100) / 100}
+                              </p>
                             </div>
                             <div className="text-center">
                               <p className="text-xs text-[#4D240F]/70 mb-1">Diferencia</p>
@@ -721,7 +727,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                                 canecasAplicadas - canecasPlaneadas < 0 ? 'text-blue-600' : 'text-gray-600'
                               }`}>
                                 {canecasAplicadas - canecasPlaneadas > 0 ? '+' : ''}
-                                {canecasAplicadas - canecasPlaneadas}
+                                {Math.round((canecasAplicadas - canecasPlaneadas) * 100) / 100}
                               </p>
                             </div>
                           </div>

@@ -9,6 +9,7 @@ import { VerificacionesList } from './components/inventory/VerificacionesList';
 import { NuevaVerificacion } from './components/inventory/NuevaVerificacion';
 import { ConteoFisico } from './components/inventory/ConteoFisico';
 import { AplicacionesList } from './components/aplicaciones/AplicacionesList';
+import { AplicacionesMain } from './components/aplicaciones/AplicacionesMain';
 import { CalculadoraAplicaciones } from './components/aplicaciones/CalculadoraAplicaciones';
 import { DailyMovementsDashboardWrapper } from './components/aplicaciones/DailyMovementsDashboardWrapper';
 import { CierreAplicacionWrapper } from './components/aplicaciones/CierreAplicacionWrapper';
@@ -66,7 +67,7 @@ function LayoutRoutes() {
 
         {/* Aplicaciones */}
         <Route path="aplicaciones">
-          <Route index element={<AplicacionesList />} />
+          <Route index element={<AplicacionesMain />} />
           <Route path="calculadora" element={<CalculadoraAplicaciones />} />
           <Route path=":id/movimientos" element={<DailyMovementsDashboardWrapper />} />
           <Route path=":id/cierre" element={<CierreAplicacionWrapper />} />
