@@ -36,6 +36,7 @@ import {
 } from '../ui/card';
 import { Alert, AlertDescription } from '../ui/alert';
 import { Badge } from '../ui/badge';
+import { Switch } from '../ui/switch';
 import Papa from 'papaparse';
 import {
   UserPlus,
@@ -194,6 +195,28 @@ const Personal: React.FC = () => {
       await fetchEmpleados();
     } catch (error: any) {
       showAlert('error', `Error al eliminar: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Función para cambiar estado del empleado
+  const handleToggleEstado = async (id: string, nuevoEstado: 'Activo' | 'Inactivo') => {
+    try {
+      setLoading(true);
+      const { error } = await getSupabase()
+        .from('empleados')
+        .update({
+          estado: nuevoEstado,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+      showAlert('success', `Empleado ${nuevoEstado.toLowerCase()} exitosamente`);
+      await fetchEmpleados();
+    } catch (error: any) {
+      showAlert('error', `Error al cambiar estado: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -372,11 +395,26 @@ María García,9876543210,3109876543,maria@example.com,Activo,Jefe de Cosecha,In
       )}
 
       {/* Barra de acciones */}
-      <Card className="mb-6">
+      <Card className="mb-6 border border-gray-200">
         <CardContent className="pt-6">
           <div className="flex flex-col md:flex-row gap-4 items-end md:items-center justify-between">
+            {/* Filtro por estado */}
+            <div className="w-full md:w-32">
+              <Label htmlFor="filter-estado">Estado</Label>
+              <Select value={filterEstado} onValueChange={setFilterEstado}>
+                <SelectTrigger id="filter-estado" className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Todos">Todos</SelectItem>
+                  <SelectItem value="Activo">Activo</SelectItem>
+                  <SelectItem value="Inactivo">Inactivo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Búsqueda */}
-            <div className="flex-1 max-w-md">
+            <div className="flex-1 max-w-full">
               <Label htmlFor="search">Buscar</Label>
               <div className="relative mt-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -391,21 +429,6 @@ María García,9876543210,3109876543,maria@example.com,Activo,Jefe de Cosecha,In
               </div>
             </div>
 
-            {/* Filtro por estado */}
-            <div className="w-full md:w-48">
-              <Label htmlFor="filter-estado">Estado</Label>
-              <Select value={filterEstado} onValueChange={setFilterEstado}>
-                <SelectTrigger id="filter-estado" className="mt-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Todos">Todos</SelectItem>
-                  <SelectItem value="Activo">Activo</SelectItem>
-                  <SelectItem value="Inactivo">Inactivo</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
             {/* Botones de acción */}
             <div className="flex gap-2">
               <Button
@@ -413,7 +436,7 @@ María García,9876543210,3109876543,maria@example.com,Activo,Jefe de Cosecha,In
                 onClick={handleDownloadTemplate}
                 className="flex items-center gap-2"
               >
-                <Download className="h-4 w-4" />
+                <FileText className="h-4 w-4" />
                 <span className="hidden md:inline">Plantilla CSV</span>
               </Button>
 
@@ -617,20 +640,25 @@ María García,9876543210,3109876543,maria@example.com,Activo,Jefe de Cosecha,In
                       <TableCell>{empleado.cargo || '-'}</TableCell>
                       <TableCell>{empleado.telefono || '-'}</TableCell>
                       <TableCell>
-                        <Badge
-                          variant={
+                        <div className="flex items-center gap-3">
+                          <Switch
+                            checked={empleado.estado === 'Activo'}
+                            onCheckedChange={(checked) =>
+                              handleToggleEstado(
+                                empleado.id!,
+                                checked ? 'Activo' : 'Inactivo'
+                              )
+                            }
+                            disabled={loading}
+                          />
+                          <span className={`text-sm font-medium ${
                             empleado.estado === 'Activo'
-                              ? 'default'
-                              : 'secondary'
-                          }
-                          className={
-                            empleado.estado === 'Activo'
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-gray-100 text-gray-800'
-                          }
-                        >
-                          {empleado.estado}
-                        </Badge>
+                              ? 'text-green-700'
+                              : 'text-gray-500'
+                          }`}>
+                            {empleado.estado}
+                          </span>
+                        </div>
                       </TableCell>
                       <TableCell>
                         {empleado.salario
