@@ -4,7 +4,6 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { signIn } from '../utils/supabase/client';
-import loginImage from 'figma:asset/a5137a5cf75d4b4712a958a64a7a74aa50a566e8.png';
 
 interface LoginProps {
   onLoginSuccess: () => void;
@@ -54,9 +53,9 @@ export function Login({ onLoginSuccess }: LoginProps) {
           {/* Imagen del logo */}
           <div className="text-center mb-8">
             <div className="inline-block mb-6">
-              <img 
-                src={loginImage} 
-                alt="Escocia Hass" 
+              <img
+                src="https://ywhtjwawnkeqlwxbvgup.supabase.co/storage/v1/object/sign/photos/grafica%203.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV80N2U5N2FlMi1lMDc1LTRiNzEtODI0Ny1mMzgwOGYzYzM0ODIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwaG90b3MvZ3JhZmljYSAzLnBuZyIsImlhdCI6MTc2NDcxNTIzMiwiZXhwIjoxNzk2MjUxMjMyfQ.gG3wTzZCKPNkyBdD0h2goOYBectef0hvLWm_Uvl8j0s"
+                alt="Escocia Hass"
                 className="w-full max-w-sm mx-auto rounded-2xl"
               />
             </div>
