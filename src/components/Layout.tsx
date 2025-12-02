@@ -17,6 +17,7 @@ import {
   ClipboardCheck,
   Briefcase,
   Users,
+  Wrench,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { useAuth } from '../contexts/AuthContext';
@@ -63,9 +64,8 @@ export function Layout({ onNavigate, children }: LayoutProps) {
       type: 'item' as const,
       id: 'labores',
       label: 'Labores',
-      icon: Briefcase,
+      icon: Wrench,
       path: '/labores',
-      disabled: true,
     },
     {
       type: 'item' as const,

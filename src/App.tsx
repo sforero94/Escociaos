@@ -26,6 +26,7 @@ import { CargaMasiva } from './components/monitoreo/CargaMasiva';
 import { CatalogoPlagas } from './components/monitoreo/CatalogoPlagas';
 import { ConfiguracionDashboard } from './components/configuracion/ConfiguracionDashboard';
 import Personal from './components/empleados/Personal';
+import Labores from './components/labores/Labores';
 
 /**
  * Wrapper de Dashboard
@@ -91,11 +92,8 @@ function LayoutRoutes() {
           element={<CatalogoPlagas />}
         />
 
-        {/* Labores - En construcción */}
-        <Route
-          path="labores"
-          element={<ComingSoon moduleName="Labores Culturales" />}
-        />
+        {/* Labores */}
+        <Route path="labores" element={<Labores />} />
 
         {/* Personal */}
         <Route path="personal" element={<Personal />} />
