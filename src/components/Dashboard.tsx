@@ -4,12 +4,12 @@ import { Eye, Sprout, Package, Briefcase, TrendingUp, TrendingDown } from 'lucid
 import { getSupabase } from '../utils/supabase/client';
 import { formatNumber } from '../utils/format';
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
-import { 
-  AlertList, 
-  AlertListHeader, 
+import {
+  AlertList,
+  AlertListHeader,
   AlertListContainer,
-  type Alerta 
-} from './dashboard';
+  type Alerta
+} from '../dashboard';
 
 interface DashboardProps {
   onNavigate?: (view: string) => void;
