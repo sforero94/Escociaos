@@ -34,6 +34,7 @@ import {
 import CrearEditarTareaDialog from './CrearEditarTareaDialog';
 import RegistrarTrabajoDialog from './RegistrarTrabajoDialog';
 import CatalogoTiposDialog from './CatalogoTiposDialog';
+import ReportesView from './ReportesView';
 
 // Tipos
 export interface TipoTarea {
