@@ -32,6 +32,7 @@ import {
 
 // Importar subcomponentes
 import CrearEditarTareaDialog from './CrearEditarTareaDialog';
+import RegistrarTrabajoDialog from './RegistrarTrabajoDialog';
 
 // Tipos
 export interface TipoTarea {
@@ -738,20 +739,19 @@ const Labores: React.FC = () => {
         onError={(message) => showAlert('error', message)}
       />
 
-      {/* Placeholder dialogs for future implementation */}
-      {showRegistroDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold mb-4">Registrar Trabajo</h3>
-            <p className="text-gray-600 mb-4">
-              Funcionalidad completa próximamente. Por ahora puede gestionar tareas desde el Kanban.
-            </p>
-            <Button onClick={() => setShowRegistroDialog(false)} className="w-full">
-              Cerrar
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* Diálogos */}
+      <RegistrarTrabajoDialog
+        open={showRegistroDialog}
+        onOpenChange={setShowRegistroDialog}
+        tarea={tareaSeleccionada}
+        empleados={empleados}
+        onSuccess={() => {
+          cargarTareas();
+          setShowRegistroDialog(false);
+          setTareaSeleccionada(null);
+        }}
+        onError={(message) => showAlert('error', message)}
+      />
 
       {showCatalogoDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
