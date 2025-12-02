@@ -16,6 +16,7 @@ import {
   ShoppingCart,
   ClipboardCheck,
   Briefcase,
+  Users,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { useAuth } from '../contexts/AuthContext';
@@ -65,6 +66,13 @@ export function Layout({ onNavigate, children }: LayoutProps) {
       icon: Briefcase,
       path: '/labores',
       disabled: true,
+    },
+    {
+      type: 'item' as const,
+      id: 'personal',
+      label: 'Personal',
+      icon: Users,
+      path: '/personal',
     },
     {
       type: 'item' as const,

@@ -25,6 +25,7 @@ import { RegistrosMonitoreo } from './components/monitoreo/RegistrosMonitoreo';
 import { CargaMasiva } from './components/monitoreo/CargaMasiva';
 import { CatalogoPlagas } from './components/monitoreo/CatalogoPlagas';
 import { ConfiguracionDashboard } from './components/configuracion/ConfiguracionDashboard';
+import Personal from './components/empleados/Personal';
 
 /**
  * Wrapper de Dashboard
@@ -95,6 +96,9 @@ function LayoutRoutes() {
           path="labores"
           element={<ComingSoon moduleName="Labores Culturales" />}
         />
+
+        {/* Personal */}
+        <Route path="personal" element={<Personal />} />
 
         {/* Producción */}
         <Route
