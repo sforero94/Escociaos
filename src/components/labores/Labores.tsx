@@ -33,6 +33,7 @@ import {
 // Importar subcomponentes
 import CrearEditarTareaDialog from './CrearEditarTareaDialog';
 import RegistrarTrabajoDialog from './RegistrarTrabajoDialog';
+import CatalogoTiposDialog from './CatalogoTiposDialog';
 
 // Tipos
 export interface TipoTarea {
@@ -753,17 +754,15 @@ const Labores: React.FC = () => {
         onError={(message) => showAlert('error', message)}
       />
 
-      {showCatalogoDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <h3 className="text-lg font-semibold mb-4">Catálogo de Tipos de Tareas</h3>
-          <p className="text-gray-600 mb-4">
-            Funcionalidad completa próximamente. Por ahora puede gestionar tareas desde el Kanban.
-          </p>
-          <Button onClick={() => setShowCatalogoDialog(false)} className="w-full">
-            Cerrar
-          </Button>
-        </div>
-      )}
+      <CatalogoTiposDialog
+        open={showCatalogoDialog}
+        onOpenChange={setShowCatalogoDialog}
+        onSuccess={() => {
+          cargarTiposTareas();
+          setShowCatalogoDialog(false);
+        }}
+        onError={(message) => showAlert('error', message)}
+      />
     </div>
   );
 };
