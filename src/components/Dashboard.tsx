@@ -9,7 +9,7 @@ import {
   AlertListHeader,
   AlertListContainer,
   type Alerta
-} from '../dashboard';
+} from './dashboard';
 
 interface DashboardProps {
   onNavigate?: (view: string) => void;
