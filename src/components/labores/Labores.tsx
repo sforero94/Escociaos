@@ -714,13 +714,11 @@ const Labores: React.FC = () => {
 
         {/* Tab: Reportes */}
         <TabsContent value="reportes">
-          <div className="text-center py-12">
-            <FileBarChart className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600">Módulo de reportes en desarrollo</p>
-            <p className="text-sm text-gray-500 mt-2">
-              Próximamente: Análisis de rendimiento, costos y productividad
-            </p>
-          </div>
+          <ReportesView
+            tareas={tareas}
+            empleados={empleados}
+            tiposTareas={tiposTareas}
+          />
         </TabsContent>
       </Tabs>
 
