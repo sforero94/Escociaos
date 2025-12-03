@@ -142,8 +142,8 @@ const ReportesView: React.FC<ReportesViewProps> = ({
 
   const procesarDatos = (registros: any[]) => {
     // Estadísticas generales
-    const totalCostos = registros.reduce((sum, r) => sum + (r.costo_jornal || 0), 0);
-    const totalJornales = registros.reduce((sum, r) => sum + (r.fraccion_jornal || 0), 0);
+    const totalCostos = registros.reduce((sum, r) => sum + (Number(r.costo_jornal) || 0), 0);
+    const totalJornales = registros.reduce((sum, r) => sum + (Number(r.fraccion_jornal) || 0), 0);
     const empleadosUnicos = new Set(registros.map(r => r.empleado_id)).size;
 
     // Tareas únicas completadas en el período
@@ -155,7 +155,7 @@ const ReportesView: React.FC<ReportesViewProps> = ({
       tareasEnProceso: tareas.filter(t => t.estado === 'En Proceso').length,
       totalCostos,
       totalJornales,
-      promedioCostoTarea: tareasUnicas > 0 ? totalCostos / tareasUnicas : 0,
+      promedioCostoTarea: tareasUnicas > 0 ? Number((totalCostos / tareasUnicas).toFixed(2)) : 0,
       empleadosActivos: empleadosUnicos,
     });
 
@@ -172,8 +172,8 @@ const ReportesView: React.FC<ReportesViewProps> = ({
       }
 
       const data = costosTipoMap.get(tipoNombre)!;
-      data.costo += registro.costo_jornal || 0;
-      data.jornales += registro.fraccion_jornal || 0;
+      data.costo += Number(registro.costo_jornal) || 0;
+      data.jornales += Number(registro.fraccion_jornal) || 0;
       data.tareas.add(registro.tarea_id);
     });
 
@@ -197,8 +197,8 @@ const ReportesView: React.FC<ReportesViewProps> = ({
       }
 
       const data = costosEmpleadoMap.get(empleadoNombre)!;
-      data.costo += registro.costo_jornal || 0;
-      data.jornales += registro.fraccion_jornal || 0;
+      data.costo += Number(registro.costo_jornal) || 0;
+      data.jornales += Number(registro.fraccion_jornal) || 0;
       data.tareas.add(registro.tarea_id);
     });
 
@@ -221,8 +221,8 @@ const ReportesView: React.FC<ReportesViewProps> = ({
       }
 
       const data = tendenciaMap.get(fecha)!;
-      data.costo += registro.costo_jornal || 0;
-      data.jornales += registro.fraccion_jornal || 0;
+      data.costo += Number(registro.costo_jornal) || 0;
+      data.jornales += Number(registro.fraccion_jornal) || 0;
     });
 
     const tendenciaArray: TendenciaCostos[] = Array.from(tendenciaMap.entries())
@@ -238,8 +238,8 @@ const ReportesView: React.FC<ReportesViewProps> = ({
 
   const COLORS = ['#73991C', '#E74C3C', '#3498DB', '#F39C12', '#9B59B6', '#1ABC9C', '#34495E', '#E67E22'];
 
-  const formatCurrency = (value: number) => `$${value.toLocaleString('es-CO')}`;
-  const formatNumber = (value: number) => value.toFixed(2);
+  const formatCurrency = (value: number) => `$${Number(value).toLocaleString('es-CO')}`;
+  const formatNumber = (value: number) => Number(value).toFixed(2);
 
   if (loading) {
     return (
@@ -552,11 +552,11 @@ const ReportesView: React.FC<ReportesViewProps> = ({
                     </TableCell>
                     <TableCell className="text-right">
                       <Badge variant="outline">
-                        {registro.fraccion_jornal} ({Math.round(parseFloat(registro.fraccion_jornal) * 12)}h)
+                        {registro.fraccion_jornal} ({Math.round(Number(registro.fraccion_jornal) * 12)}h)
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      {formatCurrency(registro.costo_jornal || 0)}
+                      {formatCurrency(Number(registro.costo_jornal) || 0)}
                     </TableCell>
                   </TableRow>
                 ))}

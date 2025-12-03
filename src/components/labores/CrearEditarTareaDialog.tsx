@@ -24,14 +24,22 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '../ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '../ui/command';
 import { Badge } from '../ui/badge';
 import { Checkbox } from '../ui/checkbox';
-import { CalendarIcon, X, ChevronDown } from 'lucide-react';
+import { CalendarIcon, X, ChevronDown, Check } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 // Import types from main component
-import type { Tarea, TipoTarea, Empleado, Lote, Sublote } from './Labores';
+import type { Tarea, TipoTarea, Empleado, Lote } from './Labores';
 
 interface CrearEditarTareaDialogProps {
   open: boolean;
@@ -39,7 +47,6 @@ interface CrearEditarTareaDialogProps {
   tarea: Tarea | null;
   tiposTareas: TipoTarea[];
   lotes: Lote[];
-  sublotes: Sublote[];
   empleados: Empleado[];
   onSuccess: () => void;
   onError: (message: string) => void;
@@ -51,7 +58,6 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
   tarea,
   tiposTareas,
   lotes,
-  sublotes,
   empleados,
   onSuccess,
   onError,
@@ -64,7 +70,6 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
     descripcion: '',
     lote_id: '', // Keep for backward compatibility
     lote_ids: [] as string[], // New: Multiple lotes
-    sublote_id: '',
     estado: 'Banco' as Tarea['estado'],
     prioridad: 'Media' as Tarea['prioridad'],
     fecha_estimada_inicio: '',
@@ -75,7 +80,7 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
   });
 
   const [loading, setLoading] = useState(false);
-  const [filteredSublotes, setFilteredSublotes] = useState<Sublote[]>([]);
+  const [openCombobox, setOpenCombobox] = useState(false);
 
   // Initialize form when tarea changes
   useEffect(() => {
@@ -87,7 +92,6 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
         descripcion: tarea.descripcion || '',
         lote_id: tarea.lote_id || '', // Backward compatibility
         lote_ids: tarea.lotes?.map(l => l.id) || [], // Multiple lotes
-        sublote_id: tarea.sublote_id || '',
         estado: tarea.estado || 'Banco',
         prioridad: tarea.prioridad || 'Media',
         fecha_estimada_inicio: tarea.fecha_estimada_inicio || '',
@@ -105,7 +109,6 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
         descripcion: '',
         lote_id: '',
         lote_ids: [], // Start with empty array
-        sublote_id: '',
         estado: 'Banco',
         prioridad: 'Media',
         fecha_estimada_inicio: '',
@@ -117,22 +120,9 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
     }
   }, [tarea]);
 
-  // Filter sublotes when lote changes
-  useEffect(() => {
-    if (formData.lote_id) {
-      setFilteredSublotes(sublotes.filter(s => s.lote_id === formData.lote_id));
-    } else {
-      setFilteredSublotes([]);
-    }
-  }, [formData.lote_id, sublotes]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-
-    // Clear sublote if lote changes
-    if (field === 'lote_id') {
-      setFormData(prev => ({ ...prev, sublote_id: '' }));
-    }
   };
 
   const generateTaskCode = () => {
@@ -155,7 +145,6 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
         fecha_estimada_fin: formData.fecha_estimada_fin || null,
         tipo_tarea_id: formData.tipo_tarea_id || null,
         lote_id: formData.lote_ids.length > 0 ? formData.lote_ids[0] : null, // Backward compatibility - use first lote
-        sublote_id: formData.sublote_id || null,
         responsable_id: formData.responsable_id || null,
       };
 
@@ -339,112 +328,99 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
           {/* Ubicación */}
           <div className="border-t pt-4">
             <h3 className="text-lg font-semibold mb-4">Ubicación</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="lotes">Lotes</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="w-full justify-between text-left font-normal"
-                      disabled={loading}
-                    >
-                      {formData.lote_ids.length > 0
-                        ? `${formData.lote_ids.length} lote${formData.lote_ids.length > 1 ? 's' : ''} seleccionado${formData.lote_ids.length > 1 ? 's' : ''}`
-                        : "Seleccionar lotes"
-                      }
-                      <ChevronDown className="h-4 w-4 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[280px] p-0" align="start">
-                    <div className="p-2">
-                      <div className="space-y-2 max-h-48 overflow-y-auto">
-                        {lotes.map((lote) => (
-                          <div key={lote.id} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`lote-${lote.id}`}
-                              checked={formData.lote_ids.includes(lote.id)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setFormData(prev => ({
-                                    ...prev,
-                                    lote_ids: [...prev.lote_ids, lote.id]
-                                  }));
-                                } else {
-                                  setFormData(prev => ({
-                                    ...prev,
-                                    lote_ids: prev.lote_ids.filter(id => id !== lote.id)
-                                  }));
-                                }
+            <div className="space-y-2">
+              <Label htmlFor="lotes">Lotes</Label>
+              <Popover open={openCombobox} onOpenChange={setOpenCombobox}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={openCombobox}
+                    className="w-full justify-between text-left font-normal"
+                    disabled={loading}
+                    onClick={() => console.log('Click en selector de lotes. Total lotes:', lotes.length)}
+                  >
+                    {formData.lote_ids.length > 0
+                      ? `${formData.lote_ids.length} lote${formData.lote_ids.length > 1 ? 's' : ''} seleccionado${formData.lote_ids.length > 1 ? 's' : ''}`
+                      : "Seleccionar lotes"
+                    }
+                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[400px] p-0 z-[9999]">
+                  <Command>
+                    <CommandInput placeholder="Buscar lotes..." />
+                    <CommandList>
+                      <CommandEmpty>No se encontraron lotes.</CommandEmpty>
+                      <CommandGroup>
+                        {lotes.map((lote) => {
+                          const isSelected = formData.lote_ids.includes(lote.id);
+                          return (
+                            <CommandItem
+                              key={lote.id}
+                              value={lote.nombre}
+                              onSelect={() => {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  lote_ids: isSelected
+                                    ? prev.lote_ids.filter(id => id !== lote.id)
+                                    : [...prev.lote_ids, lote.id]
+                                }));
                               }}
-                            />
-                            <Label
-                              htmlFor={`lote-${lote.id}`}
-                              className="text-sm font-normal cursor-pointer"
                             >
+                              <Check
+                                className={`mr-2 h-4 w-4 ${
+                                  isSelected ? 'opacity-100' : 'opacity-0'
+                                }`}
+                              />
                               {lote.nombre}
-                            </Label>
-                          </div>
-                        ))}
-                      </div>
-                      {formData.lote_ids.length > 0 && (
-                        <div className="border-t pt-2 mt-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setFormData(prev => ({ ...prev, lote_ids: [] }))}
-                            className="w-full text-xs"
-                          >
-                            Limpiar selección
-                          </Button>
-                        </div>
-                      )}
+                              {lote.area_hectareas && (
+                                <span className="ml-auto text-xs text-muted-foreground">
+                                  {lote.area_hectareas} ha
+                                </span>
+                              )}
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                  {formData.lote_ids.length > 0 && (
+                    <div className="border-t p-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setFormData(prev => ({ ...prev, lote_ids: [] }))}
+                        className="w-full text-xs"
+                      >
+                        Limpiar selección
+                      </Button>
                     </div>
-                  </PopoverContent>
-                </Popover>
-                {formData.lote_ids.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {formData.lote_ids.map((loteId) => {
-                      const lote = lotes.find(l => l.id === loteId);
-                      return lote ? (
-                        <Badge key={loteId} variant="secondary" className="text-xs">
-                          {lote.nombre}
-                          <button
-                            type="button"
-                            onClick={() => setFormData(prev => ({
-                              ...prev,
-                              lote_ids: prev.lote_ids.filter(id => id !== loteId)
-                            }))}
-                            className="ml-1 hover:bg-gray-300 rounded-full p-0.5"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </Badge>
-                      ) : null;
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="sublote">Sublote</Label>
-                <Select
-                  value={formData.sublote_id}
-                  onValueChange={(value) => handleInputChange('sublote_id', value)}
-                  disabled={loading || formData.lote_ids.length === 0}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar sublote" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {filteredSublotes.map((sublote) => (
-                      <SelectItem key={sublote.id} value={sublote.id}>
-                        {sublote.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                  )}
+                </PopoverContent>
+              </Popover>
+              {formData.lote_ids.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {formData.lote_ids.map((loteId) => {
+                    const lote = lotes.find(l => l.id === loteId);
+                    return lote ? (
+                      <Badge key={loteId} variant="secondary" className="text-xs">
+                        {lote.nombre}
+                        <button
+                          type="button"
+                          onClick={() => setFormData(prev => ({
+                            ...prev,
+                            lote_ids: prev.lote_ids.filter(id => id !== loteId)
+                          }))}
+                          className="ml-1 hover:bg-gray-300 rounded-full p-0.5"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ) : null;
+                  })}
+                </div>
+              )}
             </div>
           </div>
 

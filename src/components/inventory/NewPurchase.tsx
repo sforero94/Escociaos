@@ -141,7 +141,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
       producto_id: '',
       producto_nombre: '',
       presentacion_cantidad: 0,
-      presentacion_unidad: 'kg',
+      presentacion_unidad: 'Kilos',
       cantidad_bultos: 1,
       precio_por_bulto: 0,
       cantidad_total: 0,
@@ -175,7 +175,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
 
         // Auto-rellenar con datos del producto
         const presentacionCantidad = productoSeleccionado.presentacion_kg_l || 1;
-        const presentacionUnidad = productoSeleccionado.unidad_medida || 'kg';
+        const presentacionUnidad = productoSeleccionado.unidad_medida || 'Kilos';
         const precioPorBulto = productoSeleccionado.precio_unitario || 0;
 
         return {
@@ -297,7 +297,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
       }
 
       if (item.permitido_gerencia === null) {
-        showError(`❌ Producto ${num}: Debe marcar "Permitido por Gerencia" (requerido por GlobalGAP)`);
+        showError(`❌ Producto ${num}: Debe marcar "Permitido por Gerencia"`);
         return false;
       }
     }
@@ -664,15 +664,6 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
                   </div>
                 )}
 
-                {/* Info GlobalGAP */}
-                <div className="pt-4 border-t border-[#73991C]/20">
-                  <div className="flex gap-2 text-xs text-[#4D240F]/60">
-                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                    <p>
-                      El campo "Permitido por Gerencia" es obligatorio para cumplimiento GlobalGAP
-                    </p>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
@@ -777,9 +768,9 @@ const TarjetaProducto: React.FC<TarjetaProductoProps> = ({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="kg">Kilogramos (kg)</SelectItem>
-                <SelectItem value="L">Litros (L)</SelectItem>
-                <SelectItem value="unidad">Unidades</SelectItem>
+                <SelectItem value="Kilos">Kilogramos (kg)</SelectItem>
+                <SelectItem value="Litros">Litros (L)</SelectItem>
+                <SelectItem value="Unidades">Unidades</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -869,11 +860,11 @@ const TarjetaProducto: React.FC<TarjetaProductoProps> = ({
           </div>
         )}
 
-        {/* FILA 6: Trazabilidad y GlobalGAP - SIEMPRE VISIBLES */}
+        {/* FILA 6: Trazabilidad - SIEMPRE VISIBLES */}
         <div className="space-y-3 pt-3 border-t border-[#73991C]/10">
           <h4 className="text-sm font-medium text-[#172E08] flex items-center gap-2">
             <Package className="w-4 h-4 text-[#73991C]" />
-            Trazabilidad y GlobalGAP
+            Trazabilidad
           </h4>
           
           {/* Número de Lote */}
@@ -902,8 +893,7 @@ const TarjetaProducto: React.FC<TarjetaProductoProps> = ({
           {/* Permitido por Gerencia */}
           <div className="space-y-2">
             <Label className="text-sm text-[#172E08] font-medium">
-              Permitido por Gerencia *{' '}
-              <span className="text-xs font-normal text-[#4D240F]/60">(GlobalGAP)</span>
+              Permitido por Gerencia *
             </Label>
             <RadioGroup
               value={item.permitido_gerencia === null ? '' : item.permitido_gerencia ? 'si' : 'no'}

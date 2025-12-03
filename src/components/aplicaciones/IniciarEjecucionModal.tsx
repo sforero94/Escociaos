@@ -244,7 +244,7 @@ export function IniciarEjecucionModal({
                 </p>
                 <ul className="text-xs text-blue-800 space-y-1 ml-4 list-disc">
                   <li>Registrar movimientos diarios de productos</li>
-                  <li>Mantener trazabilidad para GlobalGAP</li>
+                  <li>Mantener trazabilidad</li>
                   <li>Comparar lo planificado vs lo ejecutado</li>
                 </ul>
               </div>

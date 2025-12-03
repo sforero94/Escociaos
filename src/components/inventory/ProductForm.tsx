@@ -198,7 +198,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
     const isInsumo = formData.grupo === 'Agroinsumos';
     const isFertilizante = formData.categoria === 'Fertilizante';
     if (isInsumo && !isFertilizante && formData.permitido_gerencia === null) {
-      return 'Debe seleccionar Sí o No en "Permitido por Gerencia" (requerido por GlobalGAP)';
+      return 'Debe seleccionar Sí o No en "Permitido por Gerencia"';
     }
     
     // Validaciones de números no negativos
@@ -413,9 +413,9 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                       required
                     >
                       <option value="">Seleccionar...</option>
-                      <option value="litros">Litros</option>
-                      <option value="kilos">Kilos</option>
-                      <option value="unidades">Unidades</option>
+                      <option value="Litros">Litros</option>
+                      <option value="Kilos">Kilos</option>
+                      <option value="Unidades">Unidades</option>
                       <option value="cajas">Cajas</option>
                       <option value="gramos">Gramos</option>
                       <option value="mililitros">Mililitros</option>

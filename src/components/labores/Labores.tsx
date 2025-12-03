@@ -118,7 +118,6 @@ const Labores: React.FC = () => {
   const [tiposTareas, setTiposTareas] = useState<TipoTarea[]>([]);
   const [empleados, setEmpleados] = useState<Empleado[]>([]);
   const [lotes, setLotes] = useState<Lote[]>([]);
-  const [sublotes, setSublotes] = useState<Sublote[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -160,7 +159,6 @@ const Labores: React.FC = () => {
         cargarTiposTareas(),
         cargarEmpleados(),
         cargarLotes(),
-        cargarSublotes(),
       ]);
     } catch (error: any) {
       showAlert('error', `Error al cargar datos: ${error.message}`);
@@ -268,16 +266,6 @@ const Labores: React.FC = () => {
     setLotes(data || []);
   };
 
-  // Cargar sublotes
-  const cargarSublotes = async () => {
-    const { data, error } = await getSupabase()
-      .from('sublotes')
-      .select('id, lote_id, nombre')
-      .order('nombre', { ascending: true });
-
-    if (error) throw error;
-    setSublotes(data || []);
-  };
 
   // Función para mostrar alertas
   const showAlert = (
@@ -800,7 +788,6 @@ const Labores: React.FC = () => {
         tarea={tareaSeleccionada}
         tiposTareas={tiposTareas}
         lotes={lotes}
-        sublotes={sublotes}
         empleados={empleados}
         onSuccess={() => {
           cargarTareas();
