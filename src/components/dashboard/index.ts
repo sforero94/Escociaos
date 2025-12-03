@@ -4,7 +4,6 @@
  * Barrel export para facilitar las importaciones
  */
 
-export { MetricCard, MetricCardGrid, MetricCardSkeleton } from './MetricCard';
 
 export {
   AlertList,

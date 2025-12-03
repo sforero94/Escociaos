@@ -11,11 +11,6 @@ import {
   X,
   LogOut,
   Leaf,
-  History,
-  BarChart3,
-  ShoppingCart,
-  ClipboardCheck,
-  Briefcase,
   Users,
   Wrench,
 } from 'lucide-react';

@@ -9,7 +9,7 @@ import {
   AlertListHeader,
   AlertListContainer,
   type Alerta
-} from './dashboard';
+} from './dashboard/index';
 
 interface DashboardProps {
   onNavigate?: (view: string) => void;
@@ -514,20 +514,23 @@ function InventarioCard({
 }
 
 /**
- * Tarjeta de Labores (placeholder)
+ * Tarjeta de Labores - Now functional
  */
-function LaboresCard() {
+function LaboresCard({ onClick }: { onClick: () => void }) {
   return (
-    <div className="bg-white rounded-2xl p-6 border border-gray-200 opacity-60 cursor-not-allowed shadow-sm">
+    <div
+      onClick={onClick}
+      className="bg-white rounded-2xl p-6 border border-gray-200 hover:border-[#73991C]/40 transition-all cursor-pointer group shadow-sm hover:shadow-md"
+    >
       <div className="flex items-start gap-4">
-        <div className="w-12 h-12 bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl flex items-center justify-center">
-          <Briefcase className="w-6 h-6 text-gray-400" />
+        <div className="w-12 h-12 bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+          <Briefcase className="w-6 h-6 text-[#73991C]" />
         </div>
         <div className="flex-1">
           <p className="text-xs text-[#4D240F]/60 mb-1 tracking-wide uppercase">Labores</p>
-          <h3 className="text-[#172E08] mb-1">En Desarrollo</h3>
+          <h3 className="text-[#172E08] mb-1">Gestión Activa</h3>
           <p className="text-sm text-[#4D240F]/70">
-            Módulo de gestión de labores culturales
+            Control de tareas y registro de trabajo diario
           </p>
         </div>
       </div>
@@ -976,7 +979,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           loading={isLoading} 
           onClick={() => navigate('/inventario/dashboard')} 
         />
-        <LaboresCard />
+        <LaboresCard onClick={() => navigate('/labores')} />
       </div>
 
       {/* Alertas */}

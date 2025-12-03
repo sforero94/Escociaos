@@ -29,11 +29,8 @@ import Personal from './components/empleados/Personal';
 import Labores from './components/labores/Labores';
 
 /**
- * Wrapper de Dashboard
+ * Dashboard component - no wrapper needed
  */
-function DashboardWrapper() {
-  return <Dashboard />;
-}
 
 /**
  * Layout con rutas anidadas
@@ -43,7 +40,7 @@ function LayoutRoutes() {
     <Layout>
       <Routes>
         {/* Dashboard - Ruta principal */}
-        <Route index element={<DashboardWrapper />} />
+        <Route index element={<Dashboard />} />
 
         {/* Inventario - Rutas anidadas */}
         <Route path="inventario">
