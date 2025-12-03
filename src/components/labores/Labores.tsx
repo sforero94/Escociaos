@@ -420,9 +420,9 @@ const Labores: React.FC = () => {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#73991C]"></div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="flex gap-4 overflow-x-auto pb-4 min-h-[600px]">
               {/* Columna: Banco de Tareas */}
-              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 flex-shrink-0 w-80 min-h-full">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <ListTodo className="h-5 w-5 text-gray-600" />
@@ -496,7 +496,7 @@ const Labores: React.FC = () => {
               </div>
 
               {/* Columna: Programadas */}
-              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 flex-shrink-0 w-80 min-h-full">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <Calendar className="h-5 w-5 text-blue-600" />
@@ -570,7 +570,7 @@ const Labores: React.FC = () => {
               </div>
 
               {/* Columna: En Proceso */}
-              <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
+              <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200 flex-shrink-0 w-80 min-h-full">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <Cog className="h-5 w-5 text-yellow-600" />
@@ -636,7 +636,7 @@ const Labores: React.FC = () => {
               </div>
 
               {/* Columna: Completadas */}
-              <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+              <div className="bg-green-50 rounded-lg p-4 border border-green-200 flex-shrink-0 w-80 min-h-full">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <CheckCircle className="h-5 w-5 text-green-600" />
@@ -673,7 +673,7 @@ const Labores: React.FC = () => {
               </div>
 
               {/* Columna: Canceladas */}
-              <div className="bg-red-50 rounded-lg p-4 border border-red-200">
+              <div className="bg-red-50 rounded-lg p-4 border border-red-200 flex-shrink-0 w-80 min-h-full">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <XCircle className="h-5 w-5 text-red-600" />
