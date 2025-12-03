@@ -89,9 +89,9 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
         observaciones: tarea.observaciones || '',
       });
     } else {
-      // Reset form for new task
+      // Reset form for new task with auto-generated code
       setFormData({
-        codigo_tarea: '',
+        codigo_tarea: generateTaskCode(),
         nombre: '',
         tipo_tarea_id: '',
         descripcion: '',
@@ -201,10 +201,13 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
               <Input
                 id="codigo_tarea"
                 value={formData.codigo_tarea}
-                onChange={(e) => handleInputChange('codigo_tarea', e.target.value)}
-                placeholder="Se generará automáticamente"
+                readOnly
+                className="bg-gray-50"
                 disabled={loading}
               />
+              <p className="text-xs text-gray-500">
+                Código generado automáticamente
+              </p>
             </div>
 
             <div className="space-y-2">
