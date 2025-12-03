@@ -73,8 +73,11 @@ export interface Tarea {
   tipo_tarea_id?: string;
   tipo_tarea?: TipoTarea;
   descripcion?: string;
-  lote_id?: string;
-  lote?: Lote;
+  lote_id?: string; // Deprecated - kept for backward compatibility
+  lote?: Lote; // Deprecated - kept for backward compatibility
+  lotes?: Lote[]; // New: Multiple lotes support
+  lote_nombres?: string; // Aggregated lote names from view
+  num_lotes?: number; // Number of lotes assigned
   sublote_id?: string;
   sublote?: Sublote;
   estado: 'Banco' | 'Programada' | 'En Proceso' | 'Completada' | 'Cancelada';
@@ -176,15 +179,17 @@ const Labores: React.FC = () => {
     if (error) throw error;
 
     // Transformar datos para incluir objetos anidados
-    const tareasTransformadas = data?.map(t => ({
+    const tareasTransformadas = data?.map((t: any) => ({
       ...t,
       tipo_tarea: t.tipo_tarea_nombre ? {
         nombre: t.tipo_tarea_nombre,
         categoria: t.tipo_tarea_categoria,
       } : undefined,
-      lote: t.lote_nombre ? { nombre: t.lote_nombre } : undefined,
+      lote: t.lote_nombre ? { nombre: t.lote_nombre } : undefined, // Backward compatibility
       sublote: t.sublote_nombre ? { nombre: t.sublote_nombre } : undefined,
       responsable: t.responsable_nombre ? { nombre: t.responsable_nombre } : undefined,
+      // Multiple lotes will be loaded separately if needed
+      lotes: [], // Will be populated by separate query if needed
     })) || [];
 
     setTareas(tareasTransformadas as Tarea[]);
@@ -460,7 +465,9 @@ const Labores: React.FC = () => {
                         </p>
                         <div className="flex items-center justify-between text-xs text-gray-500">
                           <span>{tarea.tipo_tarea?.nombre || 'Sin tipo'}</span>
-                          <span>{tarea.lote?.nombre || 'Sin lote'}</span>
+                          <span>
+                            {tarea.lote_nombres || tarea.lote?.nombre || 'Sin lote'}
+                          </span>
                         </div>
                         <div className="flex gap-1 pt-2">
                           <Button
@@ -542,7 +549,9 @@ const Labores: React.FC = () => {
                         </p>
                         <div className="flex items-center justify-between text-xs text-gray-500">
                           <span>{tarea.tipo_tarea?.nombre || 'Sin tipo'}</span>
-                          <span>{tarea.lote?.nombre || 'Sin lote'}</span>
+                          <span>
+                            {tarea.lote_nombres || tarea.lote?.nombre || 'Sin lote'}
+                          </span>
                         </div>
                         <div className="flex gap-1 pt-2">
                           <Button
@@ -624,7 +633,9 @@ const Labores: React.FC = () => {
                         </p>
                         <div className="flex items-center justify-between text-xs text-gray-500">
                           <span>{tarea.tipo_tarea?.nombre || 'Sin tipo'}</span>
-                          <span>{tarea.lote?.nombre || 'Sin lote'}</span>
+                          <span>
+                            {tarea.lote_nombres || tarea.lote?.nombre || 'Sin lote'}
+                          </span>
                         </div>
                         <div className="flex gap-1 pt-2">
                           <Button

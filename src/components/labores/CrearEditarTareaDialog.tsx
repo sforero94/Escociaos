@@ -19,8 +19,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '../ui/popover';
 import { Badge } from '../ui/badge';
-import { CalendarIcon, X } from 'lucide-react';
+import { Checkbox } from '../ui/checkbox';
+import { CalendarIcon, X, ChevronDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -56,7 +62,8 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
     nombre: '',
     tipo_tarea_id: '',
     descripcion: '',
-    lote_id: '',
+    lote_id: '', // Keep for backward compatibility
+    lote_ids: [] as string[], // New: Multiple lotes
     sublote_id: '',
     estado: 'Banco' as Tarea['estado'],
     prioridad: 'Media' as Tarea['prioridad'],
@@ -78,7 +85,8 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
         nombre: tarea.nombre || '',
         tipo_tarea_id: tarea.tipo_tarea_id || '',
         descripcion: tarea.descripcion || '',
-        lote_id: tarea.lote_id || '',
+        lote_id: tarea.lote_id || '', // Backward compatibility
+        lote_ids: tarea.lotes?.map(l => l.id) || [], // Multiple lotes
         sublote_id: tarea.sublote_id || '',
         estado: tarea.estado || 'Banco',
         prioridad: tarea.prioridad || 'Media',
@@ -96,6 +104,7 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
         tipo_tarea_id: '',
         descripcion: '',
         lote_id: '',
+        lote_ids: [], // Start with empty array
         sublote_id: '',
         estado: 'Banco',
         prioridad: 'Media',
@@ -145,10 +154,12 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
         fecha_estimada_inicio: formData.fecha_estimada_inicio || null,
         fecha_estimada_fin: formData.fecha_estimada_fin || null,
         tipo_tarea_id: formData.tipo_tarea_id || null,
-        lote_id: formData.lote_id || null,
+        lote_id: formData.lote_ids.length > 0 ? formData.lote_ids[0] : null, // Backward compatibility - use first lote
         sublote_id: formData.sublote_id || null,
         responsable_id: formData.responsable_id || null,
       };
+
+      let taskId: string;
 
       if (tarea?.id) {
         // Update existing task
@@ -158,13 +169,38 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
           .eq('id', tarea.id);
 
         if (error) throw error;
+        taskId = tarea.id;
       } else {
         // Create new task
-        const { error } = await getSupabase()
+        const { data, error } = await getSupabase()
           .from('tareas')
-          .insert([taskData]);
+          .insert([taskData])
+          .select('id')
+          .single();
 
         if (error) throw error;
+        taskId = data.id;
+      }
+
+      // Handle multiple lotes assignment
+      if (formData.lote_ids.length > 0) {
+        // Delete existing assignments
+        await getSupabase()
+          .from('tareas_lotes')
+          .delete()
+          .eq('tarea_id', taskId);
+
+        // Insert new assignments
+        const loteAssignments = formData.lote_ids.map(loteId => ({
+          tarea_id: taskId,
+          lote_id: loteId,
+        }));
+
+        const { error: loteError } = await getSupabase()
+          .from('tareas_lotes')
+          .insert(loteAssignments);
+
+        if (loteError) throw loteError;
       }
 
       onSuccess();
@@ -305,23 +341,89 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
             <h3 className="text-lg font-semibold mb-4">Ubicación</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="lote">Lote</Label>
-                <Select
-                  value={formData.lote_id}
-                  onValueChange={(value) => handleInputChange('lote_id', value)}
-                  disabled={loading}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar lote" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {lotes.map((lote) => (
-                      <SelectItem key={lote.id} value={lote.id}>
-                        {lote.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="lotes">Lotes</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-between text-left font-normal"
+                      disabled={loading}
+                    >
+                      {formData.lote_ids.length > 0
+                        ? `${formData.lote_ids.length} lote${formData.lote_ids.length > 1 ? 's' : ''} seleccionado${formData.lote_ids.length > 1 ? 's' : ''}`
+                        : "Seleccionar lotes"
+                      }
+                      <ChevronDown className="h-4 w-4 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-full p-0" align="start">
+                    <div className="p-2">
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {lotes.map((lote) => (
+                          <div key={lote.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`lote-${lote.id}`}
+                              checked={formData.lote_ids.includes(lote.id)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    lote_ids: [...prev.lote_ids, lote.id]
+                                  }));
+                                } else {
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    lote_ids: prev.lote_ids.filter(id => id !== lote.id)
+                                  }));
+                                }
+                              }}
+                            />
+                            <Label
+                              htmlFor={`lote-${lote.id}`}
+                              className="text-sm font-normal cursor-pointer"
+                            >
+                              {lote.nombre}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                      {formData.lote_ids.length > 0 && (
+                        <div className="border-t pt-2 mt-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setFormData(prev => ({ ...prev, lote_ids: [] }))}
+                            className="w-full text-xs"
+                          >
+                            Limpiar selección
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                {formData.lote_ids.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {formData.lote_ids.map((loteId) => {
+                      const lote = lotes.find(l => l.id === loteId);
+                      return lote ? (
+                        <Badge key={loteId} variant="secondary" className="text-xs">
+                          {lote.nombre}
+                          <button
+                            type="button"
+                            onClick={() => setFormData(prev => ({
+                              ...prev,
+                              lote_ids: prev.lote_ids.filter(id => id !== loteId)
+                            }))}
+                            className="ml-1 hover:bg-gray-300 rounded-full p-0.5"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ) : null;
+                    })}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -329,7 +431,7 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
                 <Select
                   value={formData.sublote_id}
                   onValueChange={(value) => handleInputChange('sublote_id', value)}
-                  disabled={loading || !formData.lote_id}
+                  disabled={loading || formData.lote_ids.length === 0}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Seleccionar sublote" />
