@@ -34,6 +34,7 @@ import {
 import CrearEditarTareaDialog from './CrearEditarTareaDialog';
 import RegistrarTrabajoDialog from './RegistrarTrabajoDialog';
 import CatalogoTiposDialog from './CatalogoTiposDialog';
+import TareaDetalleDialog from './TareaDetalleDialog';
 import ReportesView from './ReportesView';
 
 // Tipos
@@ -122,6 +123,7 @@ const Labores: React.FC = () => {
   const [showCrearDialog, setShowCrearDialog] = useState(false);
   const [showRegistroDialog, setShowRegistroDialog] = useState(false);
   const [showCatalogoDialog, setShowCatalogoDialog] = useState(false);
+  const [showDetalleDialog, setShowDetalleDialog] = useState(false);
   const [tareaSeleccionada, setTareaSeleccionada] = useState<Tarea | null>(null);
 
   // Estados de alertas
@@ -265,6 +267,12 @@ const Labores: React.FC = () => {
   const handleRegistrarTrabajo = (tarea: Tarea) => {
     setTareaSeleccionada(tarea);
     setShowRegistroDialog(true);
+  };
+
+  // Manejar vista de detalles
+  const handleVerDetalles = (tarea: Tarea) => {
+    setTareaSeleccionada(tarea);
+    setShowDetalleDialog(true);
   };
 
   // Manejar cambio de estado de tarea
@@ -458,6 +466,14 @@ const Labores: React.FC = () => {
                           <Button
                             size="sm"
                             variant="outline"
+                            onClick={() => handleVerDetalles(tarea)}
+                            className="h-7 px-2 text-xs"
+                          >
+                            Ver Detalles
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
                             onClick={() => handleEditarTarea(tarea)}
                             className="h-7 px-2 text-xs"
                           >
@@ -529,6 +545,14 @@ const Labores: React.FC = () => {
                           <span>{tarea.lote?.nombre || 'Sin lote'}</span>
                         </div>
                         <div className="flex gap-1 pt-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleVerDetalles(tarea)}
+                            className="h-7 px-2 text-xs"
+                          >
+                            Ver Detalles
+                          </Button>
                           <Button
                             size="sm"
                             variant="outline"
@@ -760,6 +784,12 @@ const Labores: React.FC = () => {
           setShowCatalogoDialog(false);
         }}
         onError={(message) => showAlert('error', message)}
+      />
+
+      <TareaDetalleDialog
+        open={showDetalleDialog}
+        onOpenChange={setShowDetalleDialog}
+        tarea={tareaSeleccionada}
       />
     </div>
   );
