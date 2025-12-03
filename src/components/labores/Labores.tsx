@@ -194,7 +194,6 @@ const Labores: React.FC = () => {
       .from('tipos_tareas')
       .select('*')
       .eq('activo', true)
-      .order('categoria', { ascending: true })
       .order('nombre', { ascending: true });
 
     if (error) throw error;
