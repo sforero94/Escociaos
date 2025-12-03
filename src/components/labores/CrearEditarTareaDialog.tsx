@@ -123,8 +123,9 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
 
     try {
       // Generate code for new tasks
+      const { lote_ids, ...formDataWithoutLoteIds } = formData; // Exclude lote_ids from database insert
       const taskData = {
-        ...formData,
+        ...formDataWithoutLoteIds,
         codigo_tarea: formData.codigo_tarea || generateTaskCode(),
         jornales_estimados: formData.jornales_estimados ? parseFloat(formData.jornales_estimados) : null,
         fecha_estimada_inicio: formData.fecha_estimada_inicio || null,
