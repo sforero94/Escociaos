@@ -42,48 +42,53 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
   onSuccess,
   onError,
 }) => {
-  // Form state
-  const [formData, setFormData] = useState({
-    empleado_id: '',
-    fecha_trabajo: new Date().toISOString().split('T')[0], // Today's date
-    fraccion_jornal: '1.0' as RegistroTrabajo['fraccion_jornal'],
-    observaciones: '',
-  });
-
+  // Multi-step form state
+  const [currentStep, setCurrentStep] = useState(1);
+  const [fechaTrabajo, setFechaTrabajo] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedEmpleados, setSelectedEmpleados] = useState<{ empleado: Empleado; fraccion: RegistroTrabajo['fraccion_jornal']; observaciones: string }[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedEmpleado, setSelectedEmpleado] = useState<Empleado | null>(null);
 
   // Reset form when dialog opens
   useEffect(() => {
     if (open) {
-      setFormData({
-        empleado_id: '',
-        fecha_trabajo: new Date().toISOString().split('T')[0],
-        fraccion_jornal: '1.0',
-        observaciones: '',
-      });
-      setSelectedEmpleado(null);
+      setCurrentStep(1);
+      setFechaTrabajo(new Date().toISOString().split('T')[0]);
+      setSelectedEmpleados([]);
     }
   }, [open]);
 
-  // Update selected employee when empleado_id changes
-  useEffect(() => {
-    if (formData.empleado_id) {
-      const empleado = empleados.find(e => e.id === formData.empleado_id);
-      setSelectedEmpleado(empleado || null);
-    } else {
-      setSelectedEmpleado(null);
-    }
-  }, [formData.empleado_id, empleados]);
+  const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, 3));
+  const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1));
 
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+  const addEmpleado = (empleado: Empleado) => {
+    if (!selectedEmpleados.find(se => se.empleado.id === empleado.id)) {
+      setSelectedEmpleados(prev => [...prev, {
+        empleado,
+        fraccion: '1.0' as RegistroTrabajo['fraccion_jornal'],
+        observaciones: ''
+      }]);
+    }
   };
 
-  const calculateCostoJornal = () => {
-    if (!selectedEmpleado?.salario) return 0;
-    const fraccion = parseFloat(formData.fraccion_jornal);
-    return selectedEmpleado.salario * fraccion;
+  const removeEmpleado = (empleadoId: string) => {
+    setSelectedEmpleados(prev => prev.filter(se => se.empleado.id !== empleadoId));
+  };
+
+  const updateEmpleadoFraccion = (empleadoId: string, fraccion: RegistroTrabajo['fraccion_jornal']) => {
+    setSelectedEmpleados(prev => prev.map(se =>
+      se.empleado.id === empleadoId ? { ...se, fraccion } : se
+    ));
+  };
+
+  const updateEmpleadoObservaciones = (empleadoId: string, observaciones: string) => {
+    setSelectedEmpleados(prev => prev.map(se =>
+      se.empleado.id === empleadoId ? { ...se, observaciones } : se
+    ));
+  };
+
+  const calculateCostoJornal = (empleado: Empleado, fraccion: RegistroTrabajo['fraccion_jornal']) => {
+    if (!empleado.salario) return 0;
+    return empleado.salario * parseFloat(fraccion);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -94,25 +99,27 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
       return;
     }
 
+    if (selectedEmpleados.length === 0) {
+      onError('Debe seleccionar al menos un empleado');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const costoJornal = calculateCostoJornal();
-      const valorJornalEmpleado = selectedEmpleado?.salario || 0;
-
-      const registroData = {
+      const registrosData = selectedEmpleados.map(se => ({
         tarea_id: tarea.id,
-        empleado_id: formData.empleado_id,
-        fecha_trabajo: formData.fecha_trabajo,
-        fraccion_jornal: formData.fraccion_jornal,
-        observaciones: formData.observaciones || null,
-        valor_jornal_empleado: valorJornalEmpleado,
-        costo_jornal: costoJornal,
-      };
+        empleado_id: se.empleado.id,
+        fecha_trabajo: fechaTrabajo,
+        fraccion_jornal: se.fraccion,
+        observaciones: se.observaciones || null,
+        valor_jornal_empleado: se.empleado.salario || 0,
+        costo_jornal: calculateCostoJornal(se.empleado, se.fraccion),
+      }));
 
       const { error } = await getSupabase()
         .from('registros_trabajo')
-        .insert([registroData]);
+        .insert(registrosData);
 
       if (error) throw error;
 
@@ -132,172 +139,268 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
     { value: '1.0', label: '1 jornal completo (12 horas)', horas: 12 },
   ];
 
-  const costoJornal = calculateCostoJornal();
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Clock className="h-5 w-5" />
-            Registrar Trabajo
+            Registrar Trabajo - {tarea?.nombre}
           </DialogTitle>
           <DialogDescription>
-            Registre el trabajo realizado en la tarea "{tarea?.nombre}"
+            Siga los pasos para registrar el trabajo realizado
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Información de la tarea */}
-          {tarea && (
-            <div className="bg-gray-50 p-4 rounded-lg border">
-              <h3 className="font-semibold text-sm text-gray-900 mb-2">Tarea Seleccionada</h3>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-600">Código:</span>
-                  <span className="ml-2 font-medium">{tarea.codigo_tarea}</span>
+        {/* Progress indicator */}
+        <div className="flex items-center justify-center mb-6">
+          <div className="flex items-center space-x-4">
+            {[1, 2, 3].map((step) => (
+              <div key={step} className="flex items-center">
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                    step <= currentStep
+                      ? 'bg-[#73991C] text-white'
+                      : 'bg-gray-200 text-gray-600'
+                  }`}
+                >
+                  {step}
                 </div>
-                <div>
-                  <span className="text-gray-600">Tipo:</span>
-                  <span className="ml-2">{tarea.tipo_tarea?.nombre || 'Sin tipo'}</span>
-                </div>
-                <div>
-                  <span className="text-gray-600">Lote:</span>
-                  <span className="ml-2">{tarea.lote?.nombre || 'Sin lote'}</span>
-                </div>
-                <div>
-                  <span className="text-gray-600">Estado:</span>
-                  <Badge
-                    variant={
-                      tarea.estado === 'En Proceso' ? 'default' :
-                      tarea.estado === 'Completada' ? 'secondary' : 'outline'
-                    }
-                    className="ml-2"
-                  >
-                    {tarea.estado}
-                  </Badge>
+                <span className={`ml-2 text-sm ${
+                  step <= currentStep ? 'text-[#73991C] font-medium' : 'text-gray-500'
+                }`}>
+                  {step === 1 ? 'Fecha' : step === 2 ? 'Empleados' : 'Jornales'}
+                </span>
+                {step < 3 && (
+                  <div className={`w-12 h-0.5 mx-4 ${
+                    step < currentStep ? 'bg-[#73991C]' : 'bg-gray-200'
+                  }`} />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {/* Step 1: Select Date */}
+          {currentStep === 1 && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <CalendarIcon className="h-16 w-16 text-[#73991C] mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                  Seleccionar Fecha del Trabajo
+                </h3>
+                <p className="text-gray-600">
+                  Elija la fecha en que se realizó el trabajo
+                </p>
+              </div>
+
+              <div className="flex justify-center">
+                <div className="space-y-2">
+                  <Label htmlFor="fecha_trabajo" className="text-center block">
+                    Fecha del Trabajo
+                  </Label>
+                  <Input
+                    id="fecha_trabajo"
+                    type="date"
+                    value={fechaTrabajo}
+                    onChange={(e) => setFechaTrabajo(e.target.value)}
+                    disabled={loading}
+                    max={new Date().toISOString().split('T')[0]}
+                    className="text-center text-lg"
+                  />
                 </div>
               </div>
             </div>
           )}
 
-          {/* Selección de empleado */}
-          <div className="space-y-2">
-            <Label htmlFor="empleado">Empleado *</Label>
-            <Select
-              value={formData.empleado_id}
-              onValueChange={(value) => handleInputChange('empleado_id', value)}
-              disabled={loading}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccionar empleado" />
-              </SelectTrigger>
-              <SelectContent>
-                {empleados.map((empleado) => (
-                  <SelectItem key={empleado.id} value={empleado.id}>
-                    <div className="flex items-center gap-2">
-                      <span>{empleado.nombre}</span>
-                      {empleado.cargo && (
-                        <Badge variant="outline" className="text-xs">
-                          {empleado.cargo}
-                        </Badge>
-                      )}
-                      {empleado.salario && (
-                        <span className="text-xs text-gray-500">
-                          ${empleado.salario.toLocaleString()}/jornal
-                        </span>
-                      )}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Step 2: Select Employees */}
+          {currentStep === 2 && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <div className="h-16 w-16 bg-[#73991C]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-2xl">👥</span>
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                  Seleccionar Empleados
+                </h3>
+                <p className="text-gray-600">
+                  Elija los empleados que trabajaron en esta tarea
+                </p>
+              </div>
 
-          {/* Fecha y fracción de jornal */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="fecha_trabajo">Fecha del Trabajo *</Label>
-              <Input
-                id="fecha_trabajo"
-                type="date"
-                value={formData.fecha_trabajo}
-                onChange={(e) => handleInputChange('fecha_trabajo', e.target.value)}
-                disabled={loading}
-                max={new Date().toISOString().split('T')[0]} // No future dates
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="fraccion_jornal">Fracción de Jornal *</Label>
-              <Select
-                value={formData.fraccion_jornal}
-                onValueChange={(value) => handleInputChange('fraccion_jornal', value)}
-                disabled={loading}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {fraccionJornalOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      <div className="flex items-center justify-between w-full">
-                        <span>{option.label}</span>
-                        <span className="text-xs text-gray-500 ml-2">
-                          {option.horas}h
-                        </span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {empleados.map((empleado) => {
+                  const isSelected = selectedEmpleados.some(se => se.empleado.id === empleado.id);
+                  return (
+                    <div
+                      key={empleado.id}
+                      onClick={() => isSelected ? removeEmpleado(empleado.id) : addEmpleado(empleado)}
+                      className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                        isSelected
+                          ? 'border-[#73991C] bg-[#73991C]/5'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-medium text-gray-900">{empleado.nombre}</h4>
+                          {empleado.cargo && (
+                            <Badge variant="outline" className="text-xs mt-1">
+                              {empleado.cargo}
+                            </Badge>
+                          )}
+                          {empleado.salario && (
+                            <p className="text-sm text-gray-600 mt-1">
+                              ${empleado.salario.toLocaleString()}/jornal
+                            </p>
+                          )}
+                        </div>
+                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                          isSelected ? 'border-[#73991C] bg-[#73991C]' : 'border-gray-300'
+                        }`}>
+                          {isSelected && <span className="text-white text-sm">✓</span>}
+                        </div>
                       </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+                    </div>
+                  );
+                })}
+              </div>
 
-          {/* Información del costo */}
-          {selectedEmpleado && (
-            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-              <h3 className="font-semibold text-sm text-blue-900 mb-3 flex items-center gap-2">
-                <DollarSign className="h-4 w-4" />
-                Cálculo del Costo
-              </h3>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-blue-700">Salario base:</span>
-                  <span className="ml-2 font-medium">
-                    ${selectedEmpleado.salario?.toLocaleString() || 0}
-                  </span>
+              {selectedEmpleados.length > 0 && (
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <p className="text-sm text-blue-800">
+                    <strong>{selectedEmpleados.length}</strong> empleado{selectedEmpleados.length !== 1 ? 's' : ''} seleccionado{selectedEmpleados.length !== 1 ? 's' : ''}
+                  </p>
                 </div>
-                <div>
-                  <span className="text-blue-700">Fracción:</span>
-                  <span className="ml-2 font-medium">
-                    {formData.fraccion_jornal} ({fraccionJornalOptions.find(o => o.value === formData.fraccion_jornal)?.horas}h)
-                  </span>
-                </div>
-                <div className="col-span-2 border-t border-blue-300 pt-2">
-                  <span className="text-blue-900 font-semibold">Costo total:</span>
-                  <span className="ml-2 text-lg font-bold text-blue-700">
-                    ${costoJornal.toLocaleString()}
-                  </span>
+              )}
+            </div>
+          )}
+
+          {/* Step 3: Assign Jornales */}
+          {currentStep === 3 && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <DollarSign className="h-16 w-16 text-[#73991C] mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                  Asignar Jornales
+                </h3>
+                <p className="text-gray-600">
+                  Especifique las fracciones de jornal y observaciones para cada empleado
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                {selectedEmpleados.map((selectedEmpleado, index) => (
+                  <div key={selectedEmpleado.empleado.id} className="bg-gray-50 p-4 rounded-lg border">
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <h4 className="font-medium text-gray-900">
+                          {selectedEmpleado.empleado.nombre}
+                        </h4>
+                        {selectedEmpleado.empleado.cargo && (
+                          <Badge variant="outline" className="text-xs mt-1">
+                            {selectedEmpleado.empleado.cargo}
+                          </Badge>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => removeEmpleado(selectedEmpleado.empleado.id)}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        ✕
+                      </Button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Fracción de Jornal</Label>
+                        <Select
+                          value={selectedEmpleado.fraccion}
+                          onValueChange={(value) => updateEmpleadoFraccion(selectedEmpleado.empleado.id, value as RegistroTrabajo['fraccion_jornal'])}
+                          disabled={loading}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {fraccionJornalOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                <div className="flex items-center justify-between w-full">
+                                  <span>{option.label}</span>
+                                  <span className="text-xs text-gray-500 ml-2">
+                                    {option.horas}h
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Costo Calculado</Label>
+                        <div className="bg-white p-3 rounded border text-center">
+                          <span className="text-lg font-semibold text-[#73991C]">
+                            ${calculateCostoJornal(selectedEmpleado.empleado, selectedEmpleado.fraccion).toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 mt-4">
+                      <Label>Observaciones</Label>
+                      <Textarea
+                        value={selectedEmpleado.observaciones}
+                        onChange={(e) => updateEmpleadoObservaciones(selectedEmpleado.empleado.id, e.target.value)}
+                        placeholder="Observaciones específicas para este empleado..."
+                        rows={2}
+                        disabled={loading}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                <h4 className="font-semibold text-green-900 mb-2">Resumen del Registro</h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-green-700">Fecha:</span>
+                    <span className="ml-2 font-medium">{new Date(fechaTrabajo).toLocaleDateString('es-CO')}</span>
+                  </div>
+                  <div>
+                    <span className="text-green-700">Empleados:</span>
+                    <span className="ml-2 font-medium">{selectedEmpleados.length}</span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-green-700">Costo Total:</span>
+                    <span className="ml-2 text-lg font-bold text-green-700">
+                      ${selectedEmpleados.reduce((total, se) =>
+                        total + calculateCostoJornal(se.empleado, se.fraccion), 0
+                      ).toLocaleString()}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
           )}
+        </div>
 
-          {/* Observaciones */}
-          <div className="space-y-2">
-            <Label htmlFor="observaciones">Observaciones</Label>
-            <Textarea
-              id="observaciones"
-              value={formData.observaciones}
-              onChange={(e) => handleInputChange('observaciones', e.target.value)}
-              placeholder="Observaciones sobre el trabajo realizado..."
-              rows={3}
-              disabled={loading}
-            />
-          </div>
+        <DialogFooter className="flex justify-between">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={prevStep}
+            disabled={currentStep === 1 || loading}
+          >
+            Anterior
+          </Button>
 
-          <DialogFooter>
+          <div className="flex gap-2">
             <Button
               type="button"
               variant="outline"
@@ -306,15 +409,31 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
             >
               Cancelar
             </Button>
-            <Button
-              type="submit"
-              disabled={loading || !formData.empleado_id || !formData.fecha_trabajo}
-              className="bg-[#73991C] hover:bg-[#5a7716]"
-            >
-              {loading ? 'Registrando...' : 'Registrar Trabajo'}
-            </Button>
-          </DialogFooter>
-        </form>
+
+            {currentStep < 3 ? (
+              <Button
+                type="button"
+                onClick={nextStep}
+                disabled={
+                  (currentStep === 1 && !fechaTrabajo) ||
+                  (currentStep === 2 && selectedEmpleados.length === 0)
+                }
+                className="bg-[#73991C] hover:bg-[#5a7716]"
+              >
+                Siguiente
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                onClick={handleSubmit}
+                disabled={loading}
+                className="bg-[#73991C] hover:bg-[#5a7716]"
+              >
+                {loading ? 'Registrando...' : 'Registrar Trabajo'}
+              </Button>
+            )}
+          </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
