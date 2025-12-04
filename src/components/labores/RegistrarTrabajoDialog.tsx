@@ -123,10 +123,16 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
 
       if (error) throw error;
 
+      // Success message indicating automatic status change
       onSuccess();
       onOpenChange(false);
     } catch (error: any) {
-      onError(`Error al registrar trabajo: ${error.message}`);
+      // Handle specific validation errors from the database trigger
+      if (error.message?.includes('jornales registrados')) {
+        onError('Error de validación: ' + error.message);
+      } else {
+        onError(`Error al registrar trabajo: ${error.message}`);
+      }
     } finally {
       setLoading(false);
     }

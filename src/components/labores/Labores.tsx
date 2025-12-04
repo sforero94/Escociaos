@@ -301,7 +301,12 @@ const Labores: React.FC = () => {
       showAlert('success', `Estado cambiado a "${nuevoEstado}"`);
       await cargarTareas();
     } catch (error: any) {
-      showAlert('error', `Error al cambiar estado: ${error.message}`);
+      // Handle specific validation errors from the database trigger
+      if (error.message?.includes('jornales registrados')) {
+        showAlert('error', 'Error de validación: ' + error.message);
+      } else {
+        showAlert('error', `Error al cambiar estado: ${error.message}`);
+      }
     }
   };
 
