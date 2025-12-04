@@ -372,14 +372,17 @@ const CatalogoTiposDialog: React.FC<CatalogoTiposDialogProps> = ({
                       <SelectValue placeholder="Seleccionar categoría" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Aplicación de Productos">Aplicación de Productos</SelectItem>
-                      <SelectItem value="Mantenimiento">Mantenimiento</SelectItem>
+                      <SelectItem value="Mantenimiento del cultivo">Mantenimiento del cultivo</SelectItem>
                       <SelectItem value="Cosecha">Cosecha</SelectItem>
-                      <SelectItem value="Preparación de Suelo">Preparación de Suelo</SelectItem>
-                      <SelectItem value="Riego">Riego</SelectItem>
+                      <SelectItem value="Proyectos Especiales">Proyectos Especiales</SelectItem>
+                      <SelectItem value="Aplicaciones Fitosanitarias">Aplicaciones Fitosanitarias</SelectItem>
+                      <SelectItem value="Fertilización y Enmiendas">Fertilización y Enmiendas</SelectItem>
                       <SelectItem value="Monitoreo">Monitoreo</SelectItem>
-                      <SelectItem value="Administrativo">Administrativo</SelectItem>
-                      <SelectItem value="Otro">Otro</SelectItem>
+                      <SelectItem value="Infraestructura">Infraestructura</SelectItem>
+                      <SelectItem value="Siembra">Siembra</SelectItem>
+                      <SelectItem value="Administrativas">Administrativas</SelectItem>
+                      <SelectItem value="Apoyo Finca">Apoyo Finca</SelectItem>
+                      <SelectItem value="Otras">Otras</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
