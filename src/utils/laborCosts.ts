@@ -23,8 +23,14 @@ export interface CostCalculationResult {
 export const STANDARD_WORKDAY_HOURS = 8;
 
 /**
+ * Average weeks per month for monthly salary calculations
+ */
+export const WEEKS_PER_MONTH = 4.33;
+
+/**
  * Calculate labor costs using standardized formula
- * Formula: (salary + benefits + allowances) / weeklyHours * 8 * fractionWorked
+ * Formula: (salary + benefits + allowances) / (weeklyHours * WEEKS_PER_MONTH) * 8 * fractionWorked
+ * Note: Assumes salary is MONTHLY
  */
 export function calculateLaborCost(params: CostCalculationParams): CostCalculationResult {
   const { salary, benefits, allowances, weeklyHours, fractionWorked } = params;
@@ -38,8 +44,10 @@ export function calculateLaborCost(params: CostCalculationParams): CostCalculati
     throw new Error('Fraction worked must be between 0 and 3');
   }
 
-  // Calculate hourly rate
-  const hourlyRate = (salary + benefits + allowances) / weeklyHours;
+  // Calculate hourly rate from MONTHLY salary
+  // Convert weekly hours to monthly hours: weeklyHours * 4.33 (average weeks per month)
+  const monthlyHours = weeklyHours * WEEKS_PER_MONTH;
+  const hourlyRate = (salary + benefits + allowances) / monthlyHours;
 
   // Calculate daily cost (8 hours)
   const dailyCost = hourlyRate * STANDARD_WORKDAY_HOURS;
