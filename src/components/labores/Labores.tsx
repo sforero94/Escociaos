@@ -75,7 +75,8 @@ export interface Tarea {
   descripcion?: string;
   lote_id?: string; // Deprecated - kept for backward compatibility
   lote?: Lote; // Deprecated - kept for backward compatibility
-  lotes?: Lote[]; // New: Multiple lotes support
+  lote_ids?: string[]; // New: Array of lote UUIDs stored directly in tareas table
+  lotes?: Lote[]; // New: Multiple lotes support (populated from lote_ids)
   lote_nombres?: string; // Aggregated lote names from view
   num_lotes?: number; // Number of lotes assigned
   sublote_id?: string;
@@ -176,12 +177,18 @@ const Labores: React.FC = () => {
 
     if (error) throw error;
 
-    // Load lote assignments for each task
-    const loteAssignments = await cargarLoteAssignments();
-
     // Transformar datos para incluir objetos anidados
     const tareasTransformadas = data?.map((t: any) => {
-      const taskLotes = loteAssignments[t.id] || [];
+      // Convert lote_ids array to lote objects
+      const taskLotes: Lote[] = [];
+      if (t.lote_ids && Array.isArray(t.lote_ids)) {
+        // Find matching lote objects from the lotes state
+        t.lote_ids.forEach((loteId: string) => {
+          const lote = lotes.find(l => l.id === loteId);
+          if (lote) taskLotes.push(lote);
+        });
+      }
+
       return {
         ...t,
         tipo_tarea: t.tipo_tarea_nombre ? {
@@ -191,7 +198,7 @@ const Labores: React.FC = () => {
         lote: t.lote_nombre ? { nombre: t.lote_nombre } : undefined, // Backward compatibility
         sublote: t.sublote_nombre ? { nombre: t.sublote_nombre } : undefined,
         responsable: t.responsable_nombre ? { nombre: t.responsable_nombre } : undefined,
-        // Multiple lotes: actual lote objects from junction table
+        // Multiple lotes: populate from lote_ids array
         lotes: taskLotes,
       };
     }) || [];
@@ -199,36 +206,6 @@ const Labores: React.FC = () => {
     setTareas(tareasTransformadas as Tarea[]);
   };
 
-  // Cargar asignaciones de lotes desde la tabla junction
-  const cargarLoteAssignments = async (): Promise<Record<string, Lote[]>> => {
-    const { data, error } = await getSupabase()
-      .from('tareas_lotes')
-      .select(`
-        tarea_id,
-        lote_id,
-        lotes (
-          id,
-          nombre,
-          area_hectareas
-        )
-      `);
-
-    if (error) throw error;
-
-    // Group by tarea_id
-    const assignments: Record<string, Lote[]> = {};
-    data?.forEach((assignment: any) => {
-      const tareaId = assignment.tarea_id;
-      if (!assignments[tareaId]) {
-        assignments[tareaId] = [];
-      }
-      if (assignment.lotes) {
-        assignments[tareaId].push(assignment.lotes);
-      }
-    });
-
-    return assignments;
-  };
 
   // Cargar tipos de tareas
   const cargarTiposTareas = async () => {

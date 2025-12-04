@@ -123,15 +123,15 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
 
     try {
       // Generate code for new tasks
-      const { lote_ids, ...formDataWithoutLoteIds } = formData; // Exclude lote_ids from database insert
       const taskData = {
-        ...formDataWithoutLoteIds,
+        ...formData,
         codigo_tarea: formData.codigo_tarea || generateTaskCode(),
         jornales_estimados: formData.jornales_estimados ? parseFloat(formData.jornales_estimados) : null,
         fecha_estimada_inicio: formData.fecha_estimada_inicio || null,
         fecha_estimada_fin: formData.fecha_estimada_fin || null,
         tipo_tarea_id: formData.tipo_tarea_id || null,
-        lote_id: formData.lote_ids.length > 0 ? formData.lote_ids[0] : null, // Backward compatibility - use first lote
+        lote_ids: formData.lote_ids, // Now send lote_ids array directly to database
+        lote_id: formData.lote_ids.length > 0 ? formData.lote_ids[0] : null, // Keep for backward compatibility
         responsable_id: formData.responsable_id || null,
       };
 
@@ -158,26 +158,8 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
         taskId = data.id;
       }
 
-      // Handle multiple lotes assignment
-      if (formData.lote_ids.length > 0) {
-        // Delete existing assignments
-        await getSupabase()
-          .from('tareas_lotes')
-          .delete()
-          .eq('tarea_id', taskId);
-
-        // Insert new assignments
-        const loteAssignments = formData.lote_ids.map(loteId => ({
-          tarea_id: taskId,
-          lote_id: loteId,
-        }));
-
-        const { error: loteError } = await getSupabase()
-          .from('tareas_lotes')
-          .insert(loteAssignments);
-
-        if (loteError) throw loteError;
-      }
+      // Multiple lotes are now stored directly in the tareas.lote_ids array column
+      // No need for junction table operations
 
       onSuccess();
       onOpenChange(false);
