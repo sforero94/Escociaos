@@ -106,8 +106,20 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
     const jornalesEstimados = tarea.jornales_estimados || 0;
     const progresoJornales = jornalesEstimados > 0 ? (jornalesRegistrados / jornalesEstimados) * 100 : 0;
 
+    // Costo actual viene directamente de registros_trabajo (ya calculado correctamente)
     const costoActual = registrosTrabajo.reduce((sum, r) => sum + r.costo_jornal, 0);
-    const costoEstimado = jornalesEstimados * (empleados.find(e => e.id === tarea.responsable_id)?.salario || 0);
+    
+    // Costo estimado usando el costo por hora del responsable
+    const responsable = empleados.find(e => e.id === tarea.responsable_id);
+    let costoEstimado = 0;
+    if (responsable) {
+      const salario = responsable.salario || 0;
+      const prestaciones = responsable.prestaciones_sociales || 0;
+      const auxilios = responsable.auxilios_no_salariales || 0;
+      const horasSemanales = responsable.horas_semanales || 48;
+      const costoHora = (salario + prestaciones + auxilios) / horasSemanales;
+      costoEstimado = costoHora * 8 * jornalesEstimados;
+    }
 
     const diasTranscurridos = tarea.fecha_estimada_inicio
       ? Math.max(0, Math.ceil((new Date().getTime() - new Date(tarea.fecha_estimada_inicio).getTime()) / (1000 * 60 * 60 * 24)))

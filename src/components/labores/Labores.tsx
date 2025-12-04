@@ -52,6 +52,9 @@ export interface Empleado {
   cargo?: string;
   estado: 'Activo' | 'Inactivo';
   salario?: number;
+  prestaciones_sociales?: number;
+  auxilios_no_salariales?: number;
+  horas_semanales?: number;
 }
 
 export interface Lote {
@@ -223,7 +226,7 @@ const Labores: React.FC = () => {
   const cargarEmpleados = async () => {
     const { data, error } = await getSupabase()
       .from('empleados')
-      .select('id, nombre, cargo, estado, salario')
+      .select('id, nombre, cargo, estado, salario, prestaciones_sociales, auxilios_no_salariales, horas_semanales')
       .eq('estado', 'Activo')
       .order('nombre', { ascending: true });
 

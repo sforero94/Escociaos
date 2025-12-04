@@ -48,6 +48,9 @@ import {
   Activity,
 } from 'lucide-react';
 
+// Import PDF generation utility
+import { generarPDFReportesLabores } from '../../utils/generarPDFReportesLabores';
+
 // Import types from main component
 import type { Tarea, Empleado, TipoTarea } from './Labores';
 
@@ -66,6 +69,13 @@ interface CostoPorTipo {
 
 interface CostoPorEmpleado {
   empleado: string;
+  costo: number;
+  jornales: number;
+  tareas: number;
+}
+
+interface CostoPorLote {
+  lote: string;
   costo: number;
   jornales: number;
   tareas: number;
@@ -104,8 +114,12 @@ const ReportesView: React.FC<ReportesViewProps> = ({
   const [estadisticasGenerales, setEstadisticasGenerales] = useState<EstadisticasGenerales | null>(null);
   const [costosPorTipo, setCostosPorTipo] = useState<CostoPorTipo[]>([]);
   const [costosPorEmpleado, setCostosPorEmpleado] = useState<CostoPorEmpleado[]>([]);
+  const [costosPorLote, setCostosPorLote] = useState<CostoPorLote[]>([]); // ✨ NUEVO
   const [tendenciaCostos, setTendenciaCostos] = useState<TendenciaCostos[]>([]);
   const [registrosTrabajo, setRegistrosTrabajo] = useState<any[]>([]);
+  
+  // ✨ NUEVO: Estado del toggle Jornales/Costos
+  const [vistaGrafico, setVistaGrafico] = useState<'costos' | 'jornales'>('costos');
 
   // Cargar datos al montar y cuando cambian las fechas
   useEffect(() => {
@@ -122,7 +136,7 @@ const ReportesView: React.FC<ReportesViewProps> = ({
         .from('registros_trabajo')
         .select(`
           *,
-          tareas!inner(codigo_tarea, nombre, tipo_tarea_id, lote_id, sublote_id),
+          tareas!inner(codigo_tarea, nombre, tipo_tarea_id, lote_id, lote:lotes!lote_id(nombre)),
           empleados!inner(nombre, cargo, salario)
         `)
         .gte('fecha_trabajo', fechaInicio)
@@ -211,6 +225,31 @@ const ReportesView: React.FC<ReportesViewProps> = ({
 
     setCostosPorEmpleado(costosEmpleadoArray);
 
+    // ✨ NUEVO: Costos por lote
+    const costosLoteMap = new Map<string, { costo: number; jornales: number; tareas: Set<string> }>();
+
+    registros.forEach(registro => {
+      const loteNombre = registro.tareas?.lote?.nombre || 'Sin lote';
+
+      if (!costosLoteMap.has(loteNombre)) {
+        costosLoteMap.set(loteNombre, { costo: 0, jornales: 0, tareas: new Set() });
+      }
+
+      const data = costosLoteMap.get(loteNombre)!;
+      data.costo += Number(registro.costo_jornal) || 0;
+      data.jornales += Number(registro.fraccion_jornal) || 0;
+      data.tareas.add(registro.tarea_id);
+    });
+
+    const costosLoteArray: CostoPorLote[] = Array.from(costosLoteMap.entries()).map(([lote, data]) => ({
+      lote,
+      costo: data.costo,
+      jornales: data.jornales,
+      tareas: data.tareas.size,
+    })).sort((a, b) => b.costo - a.costo);
+
+    setCostosPorLote(costosLoteArray);
+
     // Tendencia de costos por fecha
     const tendenciaMap = new Map<string, { costo: number; jornales: number }>();
 
@@ -240,6 +279,19 @@ const ReportesView: React.FC<ReportesViewProps> = ({
 
   const formatCurrency = (value: number) => `$${Number(value).toLocaleString('es-CO')}`;
   const formatNumber = (value: number) => Number(value).toFixed(2);
+
+  // Función para exportar PDF
+  const exportarPDF = () => {
+    if (!estadisticasGenerales || registrosTrabajo.length === 0) return;
+
+    generarPDFReportesLabores(
+      registrosTrabajo,
+      tiposTareas,
+      estadisticasGenerales,
+      fechaInicio,
+      fechaFin
+    );
+  };
 
   if (loading) {
     return (
@@ -281,6 +333,16 @@ const ReportesView: React.FC<ReportesViewProps> = ({
             <Filter className="h-4 w-4 mr-2" />
             Actualizar
           </Button>
+          <Button
+            onClick={exportarPDF}
+            variant="default"
+            size="sm"
+            disabled={!estadisticasGenerales || registrosTrabajo.length === 0}
+            className="bg-[#73991C] hover:bg-[#5a7a15]"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Exportar PDF
+          </Button>
         </div>
       </div>
 
@@ -308,7 +370,7 @@ const ReportesView: React.FC<ReportesViewProps> = ({
             <CardContent>
               <div className="text-2xl font-bold">{formatNumber(estadisticasGenerales.totalJornales)}</div>
               <p className="text-xs text-muted-foreground">
-                Equivalente a {Math.round(estadisticasGenerales.totalJornales * 12)} horas
+                Equivalente a {Math.round(estadisticasGenerales.totalJornales * 8)} horas
               </p>
             </CardContent>
           </Card>
@@ -341,17 +403,48 @@ const ReportesView: React.FC<ReportesViewProps> = ({
         </div>
       )}
 
+      {/* ✨ NUEVO: Toggle de Visualización */}
+      {estadisticasGenerales && (
+        <div className="flex items-center justify-center">
+          <div className="bg-gray-100 p-1 rounded-lg flex">
+            <button
+              onClick={() => setVistaGrafico('costos')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                vistaGrafico === 'costos'
+                  ? 'bg-[#73991C] text-white shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              💰 Por Costos
+            </button>
+            <button
+              onClick={() => setVistaGrafico('jornales')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                vistaGrafico === 'jornales'
+                  ? 'bg-[#73991C] text-white shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              ⏰ Por Jornales
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Gráficos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Costos por Tipo de Tarea */}
+        {/* ✨ MODIFICADO: Costos/Jornales por Tipo de Tarea */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5" />
-              Costos por Tipo de Tarea
+              {vistaGrafico === 'costos' ? 'Costos por Tipo' : 'Jornales por Tipo'}
             </CardTitle>
             <CardDescription>
-              Distribución de costos laborales por categoría de trabajo
+              {vistaGrafico === 'costos' 
+                ? 'Distribución de costos laborales por categoría de trabajo'
+                : 'Distribución de Jornales por categoría de trabajo'
+              }
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -365,60 +458,81 @@ const ReportesView: React.FC<ReportesViewProps> = ({
                   height={80}
                   fontSize={12}
                 />
-                <YAxis tickFormatter={formatCurrency} />
+                <YAxis 
+                  tickFormatter={vistaGrafico === 'costos' ? formatCurrency : formatNumber} 
+                />
                 <Tooltip
-                  formatter={(value: any) => [formatCurrency(value), 'Costo']}
+                  formatter={(value: any) => [
+                    vistaGrafico === 'costos' ? formatCurrency(value) : formatNumber(value),
+                    vistaGrafico === 'costos' ? 'Costo' : 'Jornales'
+                  ]}
                   labelStyle={{ color: '#000' }}
                 />
-                <Bar dataKey="costo" fill="#73991C" />
+                <Bar 
+                  dataKey={vistaGrafico === 'costos' ? 'costo' : 'jornales'} 
+                  fill="#73991C" 
+                />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        {/* Distribución por Empleado */}
+        {/* ✨ MODIFICADO: Distribución por Lote */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <PieChartIcon className="h-5 w-5" />
-              Distribución por Empleado
+              <BarChart3 className="h-5 w-5" />
+              {vistaGrafico === 'costos' ? 'Costos por Lote' : 'Jornales por Lote'}
             </CardTitle>
             <CardDescription>
-              Participación de cada empleado en los costos totales
+              {vistaGrafico === 'costos' 
+                ? 'Distribución de costos laborales por lote'
+                : 'Distribución de Jornales por lote'
+              }
             </CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={costosPorEmpleado}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ empleado, costo }) => `${empleado}: ${formatCurrency(costo)}`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="costo"
-                >
-                  {costosPorEmpleado.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value: any) => formatCurrency(value)} />
-              </PieChart>
+              <BarChart data={costosPorLote}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="lote"
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                  fontSize={12}
+                />
+                <YAxis 
+                  tickFormatter={vistaGrafico === 'costos' ? formatCurrency : formatNumber} 
+                />
+                <Tooltip
+                  formatter={(value: any) => [
+                    vistaGrafico === 'costos' ? formatCurrency(value) : formatNumber(value),
+                    vistaGrafico === 'costos' ? 'Costo' : 'Jornales'
+                  ]}
+                  labelStyle={{ color: '#000' }}
+                />
+                <Bar 
+                  dataKey={vistaGrafico === 'costos' ? 'costo' : 'jornales'} 
+                  fill="#73991C" 
+                />
+              </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        {/* Tendencia de Costos */}
+        {/* ✨ MODIFICADO: Tendencia de Costos/Jornales */}
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Activity className="h-5 w-5" />
-              Tendencia de Costos Diarios
+              {vistaGrafico === 'costos' ? 'Tendencia de Costos Diarios' : 'Tendencia de Jornales Diarios'}
             </CardTitle>
             <CardDescription>
-              Evolución de los costos laborales a lo largo del período seleccionado
+              {vistaGrafico === 'costos' 
+                ? 'Evolución de los costos laborales a lo largo del período seleccionado'
+                : 'Evolución de los jornales a lo largo del período seleccionado'
+              }
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -426,17 +540,17 @@ const ReportesView: React.FC<ReportesViewProps> = ({
               <AreaChart data={tendenciaCostos}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="fecha" />
-                <YAxis tickFormatter={formatCurrency} />
+                <YAxis tickFormatter={vistaGrafico === 'costos' ? formatCurrency : formatNumber} />
                 <Tooltip
                   formatter={(value: any, name: string) => [
-                    name === 'costo' ? formatCurrency(value) : formatNumber(value),
-                    name === 'costo' ? 'Costo' : 'Jornales'
+                    vistaGrafico === 'costo' ? formatCurrency(value) : formatNumber(value),
+                    vistaGrafico === 'costos' ? 'Costo' : 'Jornales'
                   ]}
                   labelStyle={{ color: '#000' }}
                 />
                 <Area
                   type="monotone"
-                  dataKey="costo"
+                  dataKey={vistaGrafico === 'costos' ? 'costo' : 'jornales'}
                   stackId="1"
                   stroke="#73991C"
                   fill="#73991C"
@@ -552,7 +666,7 @@ const ReportesView: React.FC<ReportesViewProps> = ({
                     </TableCell>
                     <TableCell className="text-right">
                       <Badge variant="outline">
-                        {registro.fraccion_jornal} ({Math.round(Number(registro.fraccion_jornal) * 12)}h)
+                        {registro.fraccion_jornal} ({Math.round(Number(registro.fraccion_jornal) * 8)}h)
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right font-medium">

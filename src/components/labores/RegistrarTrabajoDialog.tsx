@@ -20,7 +20,7 @@ import {
   DialogTitle,
 } from '../ui/dialog';
 import { Badge } from '../ui/badge';
-import { CalendarIcon, Clock, DollarSign } from 'lucide-react';
+import { CalendarIcon, Clock, DollarSign, Search } from 'lucide-react';
 
 // Import types from main component
 import type { Tarea, Empleado, RegistroTrabajo } from './Labores';
@@ -47,6 +47,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
   const [fechaTrabajo, setFechaTrabajo] = useState(new Date().toISOString().split('T')[0]);
   const [selectedEmpleados, setSelectedEmpleados] = useState<{ empleado: Empleado; fraccion: RegistroTrabajo['fraccion_jornal']; observaciones: string }[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState(''); // ✨ NUEVO: Búsqueda de empleados
 
   // Reset form when dialog opens
   useEffect(() => {
@@ -54,11 +55,18 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
       setCurrentStep(1);
       setFechaTrabajo(new Date().toISOString().split('T')[0]);
       setSelectedEmpleados([]);
+      setSearchTerm(''); // ✨ NUEVO: Limpiar búsqueda al abrir
     }
   }, [open]);
 
   const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, 3));
   const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1));
+
+  // ✨ NUEVO: Filtrar empleados por búsqueda
+  const filteredEmpleados = empleados.filter(empleado =>
+    empleado.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (empleado.cargo && empleado.cargo.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
 
   const addEmpleado = (empleado: Empleado) => {
     if (!selectedEmpleados.find(se => se.empleado.id === empleado.id)) {
@@ -87,8 +95,16 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
   };
 
   const calculateCostoJornal = (empleado: Empleado, fraccion: RegistroTrabajo['fraccion_jornal']) => {
-    if (!empleado.salario) return 0;
-    return empleado.salario * parseFloat(fraccion);
+    const salario = empleado.salario || 0;
+    const prestaciones = empleado.prestaciones_sociales || 0;
+    const auxilios = empleado.auxilios_no_salariales || 0;
+    const horasSemanales = empleado.horas_semanales || 48; // Default 48h semanales
+    
+    // Costo por hora
+    const costoHora = (salario + prestaciones + auxilios) / horasSemanales;
+    
+    // Costo por jornal (8 horas × fracción)
+    return costoHora * 8 * parseFloat(fraccion);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -139,10 +155,10 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
   };
 
   const fraccionJornalOptions = [
-    { value: '0.25', label: '1/4 jornal (3 horas)', horas: 3 },
-    { value: '0.5', label: '1/2 jornal (6 horas)', horas: 6 },
-    { value: '0.75', label: '3/4 jornal (9 horas)', horas: 9 },
-    { value: '1.0', label: '1 jornal completo (12 horas)', horas: 12 },
+    { value: '0.25', label: '1/4 jornal (2 horas)', horas: 2 },
+    { value: '0.5', label: '1/2 jornal (4 horas)', horas: 4 },
+    { value: '0.75', label: '3/4 jornal (6 horas)', horas: 6 },
+    { value: '1.0', label: '1 jornal completo (8 horas)', horas: 8 },
   ];
 
   return (
@@ -235,42 +251,85 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {empleados.map((empleado) => {
-                  const isSelected = selectedEmpleados.some(se => se.empleado.id === empleado.id);
-                  return (
-                    <div
-                      key={empleado.id}
-                      onClick={() => isSelected ? removeEmpleado(empleado.id) : addEmpleado(empleado)}
-                      className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                        isSelected
-                          ? 'border-[#73991C] bg-[#73991C]/5'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h4 className="font-medium text-gray-900">{empleado.nombre}</h4>
-                          {empleado.cargo && (
-                            <Badge variant="outline" className="text-xs mt-1">
-                              {empleado.cargo}
-                            </Badge>
-                          )}
-                          {empleado.salario && (
-                            <p className="text-sm text-gray-600 mt-1">
-                              ${empleado.salario.toLocaleString()}/jornal
-                            </p>
-                          )}
-                        </div>
-                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                          isSelected ? 'border-[#73991C] bg-[#73991C]' : 'border-gray-300'
-                        }`}>
-                          {isSelected && <span className="text-white text-sm">✓</span>}
-                        </div>
-                      </div>
+              {/* ✨ NUEVO: Campo de búsqueda */}
+              <div className="max-w-md mx-auto">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <Input
+                    type="text"
+                    placeholder="Buscar empleado o cargo..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1 text-center">
+                  {filteredEmpleados.length} empleados encontrados
+                  {searchTerm && ` de ${empleados.length} totales`}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {filteredEmpleados.length === 0 ? (
+                  <div className="col-span-full flex flex-col items-center justify-center py-8 text-gray-400">
+                    <div className="p-3 bg-gray-50 rounded-full mb-3">
+                      <Search className="h-6 w-6 opacity-30" />
                     </div>
-                  );
-                })}
+                    <p className="text-sm font-medium">No se encontraron empleados</p>
+                    <p className="text-xs mt-1">
+                      {searchTerm ? `No hay empleados que coincidan con "${searchTerm}"` : 'No hay empleados disponibles'}
+                    </p>
+                    {searchTerm && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSearchTerm('')}
+                        className="mt-2 text-xs"
+                      >
+                        Limpiar búsqueda
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="col-span-full">
+                    {filteredEmpleados.map((empleado) => {
+                      const isSelected = selectedEmpleados.some(se => se.empleado.id === empleado.id);
+                      return (
+                        <div
+                          key={empleado.id}
+                          onClick={() => isSelected ? removeEmpleado(empleado.id) : addEmpleado(empleado)}
+                          className={`p-2.5 border-2 rounded-md cursor-pointer transition-all ${
+                            isSelected
+                              ? 'border-[#73991C] bg-[#73991C]/5'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="min-w-0 flex-1">
+                              <h4 className="font-medium text-gray-900 text-xs truncate">{empleado.nombre}</h4>
+                              {empleado.cargo && (
+                                <Badge variant="outline" className="text-[10px] mt-0.5 px-1 py-0">
+                                  {empleado.cargo}
+                                </Badge>
+                              )}
+                              {empleado.salario && (
+                                <p className="text-[10px] text-gray-500 mt-0.5">
+                                  ${empleado.salario.toLocaleString()}/jornal
+                                </p>
+                              )}
+                            </div>
+                            <div className={`w-4 h-4 rounded-full border flex items-center justify-center flex-shrink-0 ml-2 ${
+                              isSelected ? 'border-[#73991C] bg-[#73991C]' : 'border-gray-300'
+                            }`}>
+                              {isSelected && <span className="text-white text-[10px]">✓</span>}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {selectedEmpleados.length > 0 && (
