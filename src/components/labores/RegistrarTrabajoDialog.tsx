@@ -438,6 +438,23 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
                 </p>
               </div>
 
+              {/* DEBUG: Mostrar información de lotes */}
+              {tarea && (
+                <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg text-xs">
+                  <p className="font-bold mb-2">🔍 DEBUG - Información de Lotes:</p>
+                  <pre className="whitespace-pre-wrap">
+                    {JSON.stringify({
+                      'tarea.lotes existe': !!tarea.lotes,
+                      'tarea.lotes length': tarea.lotes?.length || 0,
+                      'tarea.lote_ids existe': !!tarea.lote_ids,
+                      'tarea.lote_ids': tarea.lote_ids,
+                      'prop lotes length': lotes.length,
+                      'tareaLotes calculados': (tarea.lotes || (tarea.lote_ids ? tarea.lote_ids.map(id => lotes.find(l => l.id === id)).filter(Boolean) : [])).length,
+                    }, null, 2)}
+                  </pre>
+                </div>
+              )}
+
               {selectedEmpleados.length > 0 && tarea && (
                 <div className="bg-white rounded-2xl border border-[#73991C]/10 shadow-[0_2px_12px_rgba(115,153,28,0.06)] overflow-hidden">
                   {/* Header */}
