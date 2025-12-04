@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from '../ui/dialog';
 import { Badge } from '../ui/badge';
+import { Checkbox } from '../ui/checkbox';
 import { CalendarIcon, Clock, DollarSign, Search } from 'lucide-react';
 
 // Import types from main component
@@ -96,6 +97,23 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
       delete newObs[empleadoId];
       return newObs;
     });
+  };
+
+  const toggleSelectAll = () => {
+    const allSelected = filteredEmpleados.every(emp => selectedEmpleados.some(se => se.id === emp.id));
+    if (allSelected) {
+      // Deselect all filtered employees
+      filteredEmpleados.forEach(emp => {
+        removeEmpleado(emp.id);
+      });
+    } else {
+      // Select all filtered employees
+      filteredEmpleados.forEach(emp => {
+        if (!selectedEmpleados.some(se => se.id === emp.id)) {
+          addEmpleado(emp);
+        }
+      });
+    }
   };
 
   const updateWorkFraccion = (empleadoId: string, loteId: string, fraccion: RegistroTrabajo['fraccion_jornal']) => {
@@ -291,9 +309,27 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
                   Seleccionar Empleados
                 </h3>
                 <p className="text-gray-600">
-                  Elija los empleados que trabajaron en esta tarea
+                  Seleccione múltiples empleados que trabajaron en esta tarea
                 </p>
               </div>
+
+              {/* Select All / Deselect All button */}
+              {filteredEmpleados.length > 0 && (
+                <div className="flex justify-center">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={toggleSelectAll}
+                    className="text-sm"
+                  >
+                    {filteredEmpleados.every(emp => selectedEmpleados.some(se => se.id === emp.id))
+                      ? 'Deseleccionar Todos'
+                      : 'Seleccionar Todos'
+                    }
+                  </Button>
+                </div>
+              )}
 
               {/* ✨ NUEVO: Campo de búsqueda */}
               <div className="max-w-md mx-auto">
@@ -338,25 +374,40 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
                 ) : (
                   <div className="col-span-full">
                     {filteredEmpleados.map((empleado) => {
-                      const isSelected = selectedEmpleados.some(se => se.empleado.id === empleado.id);
+                      const isSelected = selectedEmpleados.some(se => se.id === empleado.id);
                       return (
                         <div
                           key={empleado.id}
-                          onClick={() => isSelected ? removeEmpleado(empleado.id) : addEmpleado(empleado)}
-                          className={`p-2.5 border-2 rounded-md cursor-pointer transition-all ${
+                          className={`p-3 border-2 rounded-md transition-all ${
                             isSelected
                               ? 'border-[#73991C] bg-[#73991C]/5'
                               : 'border-gray-200 hover:border-gray-300'
                           }`}
                         >
-                          <div className="flex items-center justify-between">
-                            <div className="min-w-0 flex-1">
-                                <h4 className="font-medium text-gray-900 text-sm truncate">{empleado.nombre}</h4>
-                              </div>
-                            <div className={`w-4 h-4 rounded-full border flex items-center justify-center flex-shrink-0 ml-2 ${
-                              isSelected ? 'border-[#73991C] bg-[#73991C]' : 'border-gray-300'
-                            }`}>
-                              {isSelected && <span className="text-white text-[10px]">✓</span>}
+                          <div className="flex items-center space-x-3">
+                            <Checkbox
+                              id={`empleado-${empleado.id}`}
+                              checked={isSelected}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  addEmpleado(empleado);
+                                } else {
+                                  removeEmpleado(empleado.id);
+                                }
+                              }}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <label
+                                htmlFor={`empleado-${empleado.id}`}
+                                className="font-medium text-gray-900 text-sm cursor-pointer block"
+                              >
+                                {empleado.nombre}
+                              </label>
+                              {empleado.cargo && (
+                                <Badge variant="outline" className="text-xs mt-1">
+                                  {empleado.cargo}
+                                </Badge>
+                              )}
                             </div>
                           </div>
                         </div>
