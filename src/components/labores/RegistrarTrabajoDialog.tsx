@@ -225,7 +225,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[1920px] max-h-[100vh] overflow-hidden flex flex-col">
+      <DialogContent className="w-[95vw] h-[95vh] max-w-none overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Clock className="h-5 w-5" />
