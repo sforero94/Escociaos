@@ -225,7 +225,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Clock className="h-5 w-5" />
@@ -378,37 +378,44 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
                       return (
                         <div
                           key={empleado.id}
-                          className={`p-3 border-2 rounded-md transition-all ${
+                          className={`inline-flex items-center space-x-2 px-2 py-1 border rounded transition-all cursor-pointer text-sm ${
                             isSelected
                               ? 'border-[#73991C] bg-[#73991C]/5'
                               : 'border-gray-200 hover:border-gray-300'
                           }`}
+                          onClick={() => {
+                            if (isSelected) {
+                              removeEmpleado(empleado.id);
+                            } else {
+                              addEmpleado(empleado);
+                            }
+                          }}
                         >
-                          <div className="flex items-center space-x-3">
-                            <Checkbox
-                              id={`empleado-${empleado.id}`}
-                              checked={isSelected}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  addEmpleado(empleado);
-                                } else {
-                                  removeEmpleado(empleado.id);
-                                }
-                              }}
-                            />
-                            <div className="flex-1 min-w-0">
-                              <label
-                                htmlFor={`empleado-${empleado.id}`}
-                                className="font-medium text-gray-900 text-sm cursor-pointer block"
-                              >
-                                {empleado.nombre}
-                              </label>
-                              {empleado.cargo && (
-                                <Badge variant="outline" className="text-xs mt-1">
-                                  {empleado.cargo}
-                                </Badge>
-                              )}
-                            </div>
+                          <Checkbox
+                            id={`empleado-${empleado.id}`}
+                            checked={isSelected}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                addEmpleado(empleado);
+                              } else {
+                                removeEmpleado(empleado.id);
+                              }
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-3 h-3"
+                          />
+                          <div className="flex flex-col min-w-0">
+                            <label
+                              htmlFor={`empleado-${empleado.id}`}
+                              className="font-medium text-gray-900 cursor-pointer truncate max-w-32"
+                            >
+                              {empleado.nombre}
+                            </label>
+                            {empleado.cargo && (
+                              <span className="text-xs text-gray-500 truncate max-w-32">
+                                {empleado.cargo}
+                              </span>
+                            )}
                           </div>
                         </div>
                       );
