@@ -687,6 +687,14 @@ const Labores: React.FC = () => {
                           >
                             Completar
                           </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleEliminarTarea(tarea)}
+                            className="h-7 px-2 text-xs"
+                          >
+                            Eliminar
+                          </Button>
                         </div>
                       </div>
                     </div>
