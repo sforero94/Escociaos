@@ -88,7 +88,7 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
       const { data: empleadosData, error: errorEmpleados } = await getSupabase()
         .from('empleados')
         .select('*')
-        .eq('activo', true)
+        .eq('estado', 'Activo')
         .order('nombre');
 
       if (errorEmpleados) throw errorEmpleados;
