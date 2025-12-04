@@ -93,7 +93,7 @@ interface EstadisticasGenerales {
   tareasEnProceso: number;
   totalCostos: number;
   totalJornales: number;
-  promedioCostoTarea: number;
+  indicadorEficiencia: number; // % de utilización de capacidad
   empleadosActivos: number;
 }
 
@@ -136,8 +136,9 @@ const ReportesView: React.FC<ReportesViewProps> = ({
         .from('registros_trabajo')
         .select(`
           *,
-          tareas!inner(codigo_tarea, nombre, tipo_tarea_id, lote_id, lote:lotes!lote_id(nombre)),
-          empleados!inner(nombre, cargo, salario)
+          tareas!inner(codigo_tarea, nombre, tipo_tarea_id),
+          empleados!inner(nombre, cargo, salario),
+          lote:lotes!lote_id(nombre)
         `)
         .gte('fecha_trabajo', fechaInicio)
         .lte('fecha_trabajo', fechaFin)
@@ -163,13 +164,18 @@ const ReportesView: React.FC<ReportesViewProps> = ({
     // Tareas únicas completadas en el período
     const tareasUnicas = new Set(registros.map(r => r.tarea_id)).size;
 
+    // Calcular indicador de eficiencia: % de utilización de capacidad instalada
+    const diasPeriodo = Math.max(1, Math.ceil((new Date(fechaFin).getTime() - new Date(fechaInicio).getTime()) / (1000 * 60 * 60 * 24)));
+    const capacidadInstalada = empleadosUnicos * diasPeriodo; // Empleados × días × 1 jornal/día
+    const indicadorEficiencia = capacidadInstalada > 0 ? Number(((totalJornales / capacidadInstalada) * 100).toFixed(1)) : 0;
+
     setEstadisticasGenerales({
       totalTareas: tareasUnicas,
       tareasCompletadas: tareas.filter(t => t.estado === 'Completada').length,
       tareasEnProceso: tareas.filter(t => t.estado === 'En Proceso').length,
       totalCostos,
       totalJornales,
-      promedioCostoTarea: tareasUnicas > 0 ? Number((totalCostos / tareasUnicas).toFixed(2)) : 0,
+      indicadorEficiencia,
       empleadosActivos: empleadosUnicos,
     });
 
@@ -225,11 +231,11 @@ const ReportesView: React.FC<ReportesViewProps> = ({
 
     setCostosPorEmpleado(costosEmpleadoArray);
 
-    // ✨ NUEVO: Costos por lote
+    // ✨ ACTUALIZADO: Costos por lote (usando lote_id de registros_trabajo)
     const costosLoteMap = new Map<string, { costo: number; jornales: number; tareas: Set<string> }>();
 
     registros.forEach(registro => {
-      const loteNombre = registro.tareas?.lote?.nombre || 'Sin lote';
+      const loteNombre = registro.lote?.nombre || 'Sin lote';
 
       if (!costosLoteMap.has(loteNombre)) {
         costosLoteMap.set(loteNombre, { costo: 0, jornales: 0, tareas: new Set() });
@@ -390,13 +396,13 @@ const ReportesView: React.FC<ReportesViewProps> = ({
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Costo Promedio x Tarea</CardTitle>
+              <CardTitle className="text-sm font-medium">Eficiencia Operativa</CardTitle>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(estadisticasGenerales.promedioCostoTarea)}</div>
+              <div className="text-2xl font-bold">{estadisticasGenerales.indicadorEficiencia}%</div>
               <p className="text-xs text-muted-foreground">
-                Por tarea completada
+                Utilización de capacidad instalada
               </p>
             </CardContent>
           </Card>

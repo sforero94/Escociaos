@@ -35,6 +35,9 @@ import {
 // Import types from main component
 import type { Tarea, RegistroTrabajo, Empleado } from './Labores';
 
+// Import cost calculation utilities
+import { calculateTaskEstimatedCost } from '../../utils/laborCosts';
+
 interface TareaDetalleDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -111,15 +114,13 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
     
     // Costo estimado usando el costo por hora del responsable
     const responsable = empleados.find(e => e.id === tarea.responsable_id);
-    let costoEstimado = 0;
-    if (responsable) {
-      const salario = responsable.salario || 0;
-      const prestaciones = responsable.prestaciones_sociales || 0;
-      const auxilios = responsable.auxilios_no_salariales || 0;
-      const horasSemanales = responsable.horas_semanales || 48;
-      const costoHora = (salario + prestaciones + auxilios) / horasSemanales;
-      costoEstimado = costoHora * 8 * jornalesEstimados;
-    }
+    const costoEstimado = responsable ? calculateTaskEstimatedCost(
+      responsable.salario || 0,
+      responsable.prestaciones_sociales || 0,
+      responsable.auxilios_no_salariales || 0,
+      responsable.horas_semanales || 48,
+      jornalesEstimados
+    ) : 0;
 
     const diasTranscurridos = tarea.fecha_estimada_inicio
       ? Math.max(0, Math.ceil((new Date().getTime() - new Date(tarea.fecha_estimada_inicio).getTime()) / (1000 * 60 * 60 * 24)))

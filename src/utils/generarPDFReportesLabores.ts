@@ -12,8 +12,8 @@ interface RegistroTrabajo {
   tareas: {
     codigo_tarea: string;
     tipo_tarea_id: string;
-    lote: { nombre: string };
   };
+  lote: { nombre: string };
 }
 
 interface TipoTarea {
@@ -82,7 +82,7 @@ export function generarPDFReportesLabores(
     registro.empleados?.nombre || 'N/A',
     registro.tareas?.codigo_tarea || 'N/A',
     tiposTareas.find(t => t.id === registro.tareas?.tipo_tarea_id)?.nombre || 'Sin tipo',
-    registro.tareas?.lote?.nombre || 'Sin lote',
+    registro.lote?.nombre || 'Sin lote',
     formatearNumero(registro.fraccion_jornal),
     formatearMoneda(registro.costo_jornal)
   ]);
@@ -268,7 +268,7 @@ function generarMatrizDatos(registrosTrabajo: RegistroTrabajo[], tiposTareas: Ti
   // Procesar registros para llenar la matriz
   registrosTrabajo.forEach(registro => {
     const tipoNombre = tiposTareas.find(t => t.id === registro.tareas?.tipo_tarea_id)?.nombre || 'Sin tipo';
-    const loteNombre = registro.tareas?.lote?.nombre || 'Sin lote';
+    const loteNombre = registro.lote?.nombre || 'Sin lote';
 
     tiposUnicos.add(tipoNombre);
     lotesUnicos.add(loteNombre);

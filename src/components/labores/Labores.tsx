@@ -816,6 +816,7 @@ const Labores: React.FC = () => {
         onOpenChange={setShowRegistroDialog}
         tarea={tareaSeleccionada}
         empleados={empleados}
+        lotes={lotes}
         onSuccess={() => {
           cargarTareas();
           setShowRegistroDialog(false);

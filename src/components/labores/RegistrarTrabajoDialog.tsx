@@ -23,13 +23,17 @@ import { Badge } from '../ui/badge';
 import { CalendarIcon, Clock, DollarSign, Search } from 'lucide-react';
 
 // Import types from main component
-import type { Tarea, Empleado, RegistroTrabajo } from './Labores';
+import type { Tarea, Empleado, Lote, RegistroTrabajo } from './Labores';
+
+// Import cost calculation utilities
+import { calculateLaborCost, STANDARD_WORKDAY_HOURS } from '../../utils/laborCosts';
 
 interface RegistrarTrabajoDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tarea: Tarea | null;
   empleados: Empleado[];
+  lotes: Lote[];
   onSuccess: () => void;
   onError: (message: string) => void;
 }
@@ -39,13 +43,16 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
   onOpenChange,
   tarea,
   empleados,
+  lotes,
   onSuccess,
   onError,
 }) => {
   // Multi-step form state
   const [currentStep, setCurrentStep] = useState(1);
   const [fechaTrabajo, setFechaTrabajo] = useState(new Date().toISOString().split('T')[0]);
-  const [selectedEmpleados, setSelectedEmpleados] = useState<{ empleado: Empleado; fraccion: RegistroTrabajo['fraccion_jornal']; observaciones: string }[]>([]);
+  const [selectedEmpleados, setSelectedEmpleados] = useState<Empleado[]>([]);
+  const [workMatrix, setWorkMatrix] = useState<Record<string, Record<string, RegistroTrabajo['fraccion_jornal']>>>({}); // empleado_id -> lote_id -> fraccion
+  const [observaciones, setObservaciones] = useState<Record<string, Record<string, string>>>({}); // empleado_id -> lote_id -> observaciones
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState(''); // ✨ NUEVO: Búsqueda de empleados
 
@@ -55,6 +62,8 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
       setCurrentStep(1);
       setFechaTrabajo(new Date().toISOString().split('T')[0]);
       setSelectedEmpleados([]);
+      setWorkMatrix({});
+      setObservaciones({});
       setSearchTerm(''); // ✨ NUEVO: Limpiar búsqueda al abrir
     }
   }, [open]);
@@ -69,42 +78,56 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
   );
 
   const addEmpleado = (empleado: Empleado) => {
-    if (!selectedEmpleados.find(se => se.empleado.id === empleado.id)) {
-      setSelectedEmpleados(prev => [...prev, {
-        empleado,
-        fraccion: '1.0' as RegistroTrabajo['fraccion_jornal'],
-        observaciones: ''
-      }]);
+    if (!selectedEmpleados.find(se => se.id === empleado.id)) {
+      setSelectedEmpleados(prev => [...prev, empleado]);
     }
   };
 
   const removeEmpleado = (empleadoId: string) => {
-    setSelectedEmpleados(prev => prev.filter(se => se.empleado.id !== empleadoId));
+    setSelectedEmpleados(prev => prev.filter(se => se.id !== empleadoId));
+    // Also clean up the work matrix for this employee
+    setWorkMatrix(prev => {
+      const newMatrix = { ...prev };
+      delete newMatrix[empleadoId];
+      return newMatrix;
+    });
+    setObservaciones(prev => {
+      const newObs = { ...prev };
+      delete newObs[empleadoId];
+      return newObs;
+    });
   };
 
-  const updateEmpleadoFraccion = (empleadoId: string, fraccion: RegistroTrabajo['fraccion_jornal']) => {
-    setSelectedEmpleados(prev => prev.map(se =>
-      se.empleado.id === empleadoId ? { ...se, fraccion } : se
-    ));
+  const updateWorkFraccion = (empleadoId: string, loteId: string, fraccion: RegistroTrabajo['fraccion_jornal']) => {
+    setWorkMatrix(prev => ({
+      ...prev,
+      [empleadoId]: {
+        ...prev[empleadoId],
+        [loteId]: fraccion
+      }
+    }));
   };
 
-  const updateEmpleadoObservaciones = (empleadoId: string, observaciones: string) => {
-    setSelectedEmpleados(prev => prev.map(se =>
-      se.empleado.id === empleadoId ? { ...se, observaciones } : se
-    ));
+  const updateWorkObservaciones = (empleadoId: string, loteId: string, obs: string) => {
+    setObservaciones(prev => ({
+      ...prev,
+      [empleadoId]: {
+        ...prev[empleadoId],
+        [loteId]: obs
+      }
+    }));
   };
 
   const calculateCostoJornal = (empleado: Empleado, fraccion: RegistroTrabajo['fraccion_jornal']) => {
-    const salario = empleado.salario || 0;
-    const prestaciones = empleado.prestaciones_sociales || 0;
-    const auxilios = empleado.auxilios_no_salariales || 0;
-    const horasSemanales = empleado.horas_semanales || 48; // Default 48h semanales
-    
-    // Costo por hora
-    const costoHora = (salario + prestaciones + auxilios) / horasSemanales;
-    
-    // Costo por jornal (8 horas × fracción)
-    return costoHora * 8 * parseFloat(fraccion);
+    const costResult = calculateLaborCost({
+      salary: empleado.salario || 0,
+      benefits: empleado.prestaciones_sociales || 0,
+      allowances: empleado.auxilios_no_salariales || 0,
+      weeklyHours: empleado.horas_semanales || 48,
+      fractionWorked: parseFloat(fraccion),
+    });
+
+    return costResult.totalCost;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -120,18 +143,39 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
       return;
     }
 
+    // Get lotes for this task
+    const tareaLotes = tarea.lotes || (tarea.lote_ids ? tarea.lote_ids.map(id => lotes.find(l => l.id === id)).filter(Boolean) : []);
+
     setLoading(true);
 
     try {
-      const registrosData = selectedEmpleados.map(se => ({
-        tarea_id: tarea.id,
-        empleado_id: se.empleado.id,
-        fecha_trabajo: fechaTrabajo,
-        fraccion_jornal: se.fraccion,
-        observaciones: se.observaciones || null,
-        valor_jornal_empleado: se.empleado.salario || 0,
-        costo_jornal: calculateCostoJornal(se.empleado, se.fraccion),
-      }));
+      const registrosData: any[] = [];
+
+      // Iterate through work matrix to create records
+      selectedEmpleados.forEach(empleado => {
+        tareaLotes.forEach(lote => {
+          if (lote) {
+            const fraccion = workMatrix[empleado.id]?.[lote.id] || '0.0';
+            if (parseFloat(fraccion) > 0) { // Only create records for non-zero fractions
+              registrosData.push({
+                tarea_id: tarea.id,
+                empleado_id: empleado.id,
+                lote_id: lote.id,
+                fecha_trabajo: fechaTrabajo,
+                fraccion_jornal: fraccion,
+                observaciones: observaciones[empleado.id]?.[lote.id] || null,
+                valor_jornal_empleado: empleado.salario || 0,
+                costo_jornal: calculateCostoJornal(empleado, fraccion as RegistroTrabajo['fraccion_jornal']),
+              });
+            }
+          }
+        });
+      });
+
+      if (registrosData.length === 0) {
+        onError('Debe asignar al menos una fracción de jornal');
+        return;
+      }
 
       const { error } = await getSupabase()
         .from('registros_trabajo')
@@ -191,7 +235,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
                 <span className={`ml-2 text-sm ${
                   step <= currentStep ? 'text-[#73991C] font-medium' : 'text-gray-500'
                 }`}>
-                  {step === 1 ? 'Fecha' : step === 2 ? 'Empleados' : 'Jornales'}
+                  {step === 1 ? 'Fecha' : step === 2 ? 'Empleados' : 'Matriz'}
                 </span>
                 {step < 3 && (
                   <div className={`w-12 h-0.5 mx-4 ${
@@ -307,18 +351,8 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
                         >
                           <div className="flex items-center justify-between">
                             <div className="min-w-0 flex-1">
-                              <h4 className="font-medium text-gray-900 text-xs truncate">{empleado.nombre}</h4>
-                              {empleado.cargo && (
-                                <Badge variant="outline" className="text-[10px] mt-0.5 px-1 py-0">
-                                  {empleado.cargo}
-                                </Badge>
-                              )}
-                              {empleado.salario && (
-                                <p className="text-[10px] text-gray-500 mt-0.5">
-                                  ${empleado.salario.toLocaleString()}/jornal
-                                </p>
-                              )}
-                            </div>
+                                <h4 className="font-medium text-gray-900 text-sm truncate">{empleado.nombre}</h4>
+                              </div>
                             <div className={`w-4 h-4 rounded-full border flex items-center justify-center flex-shrink-0 ml-2 ${
                               isSelected ? 'border-[#73991C] bg-[#73991C]' : 'border-gray-300'
                             }`}>
@@ -342,93 +376,104 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
             </div>
           )}
 
-          {/* Step 3: Assign Jornales */}
+          {/* Step 3: Matrix Interface */}
           {currentStep === 3 && (
             <div className="space-y-6">
               <div className="text-center">
-                <DollarSign className="h-16 w-16 text-[#73991C] mx-auto mb-4" />
+                <div className="h-16 w-16 bg-[#73991C]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-2xl">📊</span>
+                </div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  Asignar Jornales
+                  Asignar Trabajo por Lote
                 </h3>
                 <p className="text-gray-600">
-                  Especifique las fracciones de jornal y observaciones para cada empleado
+                  Distribuya las fracciones de jornal entre empleados y lotes
                 </p>
               </div>
 
-              <div className="space-y-4">
-                {selectedEmpleados.map((selectedEmpleado, index) => (
-                  <div key={selectedEmpleado.empleado.id} className="bg-gray-50 p-4 rounded-lg border">
-                    <div className="flex items-start justify-between mb-4">
-                      <div>
-                        <h4 className="font-medium text-gray-900">
-                          {selectedEmpleado.empleado.nombre}
-                        </h4>
-                        {selectedEmpleado.empleado.cargo && (
-                          <Badge variant="outline" className="text-xs mt-1">
-                            {selectedEmpleado.empleado.cargo}
-                          </Badge>
-                        )}
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => removeEmpleado(selectedEmpleado.empleado.id)}
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        ✕
-                      </Button>
-                    </div>
+              {selectedEmpleados.length > 0 && tarea && (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse border border-gray-300">
+                    <thead>
+                      <tr className="bg-gray-50">
+                        <th className="border border-gray-300 p-3 text-left font-semibold">Empleado</th>
+                        {(tarea.lotes || (tarea.lote_ids ? tarea.lote_ids.map(id => lotes.find(l => l.id === id)).filter(Boolean) : [])).map((lote) => (
+                          <th key={lote?.id} className="border border-gray-300 p-3 text-center font-semibold min-w-[120px]">
+                            {lote?.nombre}
+                          </th>
+                        ))}
+                        <th className="border border-gray-300 p-3 text-center font-semibold">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedEmpleados.map((empleado) => {
+                        const tareaLotes = tarea.lotes || (tarea.lote_ids ? tarea.lote_ids.map(id => lotes.find(l => l.id === id)).filter(Boolean) : []);
+                        const totalFraccion = tareaLotes.reduce((sum, lote) => {
+                          if (lote) {
+                            const fraccion = workMatrix[empleado.id]?.[lote.id] || '0.0';
+                            return sum + parseFloat(fraccion);
+                          }
+                          return sum;
+                        }, 0);
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Fracción de Jornal</Label>
-                        <Select
-                          value={selectedEmpleado.fraccion}
-                          onValueChange={(value) => updateEmpleadoFraccion(selectedEmpleado.empleado.id, value as RegistroTrabajo['fraccion_jornal'])}
-                          disabled={loading}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {fraccionJornalOptions.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                <div className="flex items-center justify-between w-full">
-                                  <span>{option.label}</span>
-                                  <span className="text-xs text-gray-500 ml-2">
-                                    {option.horas}h
-                                  </span>
+                        return (
+                          <tr key={empleado.id} className="hover:bg-gray-50">
+                            <td className="border border-gray-300 p-3">
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium">{empleado.nombre}</span>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => removeEmpleado(empleado.id)}
+                                  className="text-red-600 hover:text-red-700 h-6 w-6 p-0"
+                                >
+                                  ✕
+                                </Button>
+                              </div>
+                            </td>
+                            {tareaLotes.map((lote) => (
+                              <td key={lote?.id} className="border border-gray-300 p-2 text-center">
+                                <div className="space-y-1">
+                                  <Select
+                                    value={workMatrix[empleado.id]?.[lote?.id || ''] || '0.0'}
+                                    onValueChange={(value) => updateWorkFraccion(empleado.id, lote?.id || '', value as RegistroTrabajo['fraccion_jornal'])}
+                                    disabled={loading}
+                                  >
+                                    <SelectTrigger className="h-8 text-xs">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="0.0">-</SelectItem>
+                                      <SelectItem value="0.25">1/4</SelectItem>
+                                      <SelectItem value="0.5">1/2</SelectItem>
+                                      <SelectItem value="0.75">3/4</SelectItem>
+                                      <SelectItem value="1.0">1</SelectItem>
+                                      <SelectItem value="1.5">1.5</SelectItem>
+                                      <SelectItem value="2.0">2</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  <Textarea
+                                    value={observaciones[empleado.id]?.[lote?.id || ''] || ''}
+                                    onChange={(e) => updateWorkObservaciones(empleado.id, lote?.id || '', e.target.value)}
+                                    placeholder="Obs..."
+                                    rows={1}
+                                    className="text-xs h-6 resize-none"
+                                    disabled={loading}
+                                  />
                                 </div>
-                              </SelectItem>
+                              </td>
                             ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Costo Calculado</Label>
-                        <div className="bg-white p-3 rounded border text-center">
-                          <span className="text-lg font-semibold text-[#73991C]">
-                            ${calculateCostoJornal(selectedEmpleado.empleado, selectedEmpleado.fraccion).toLocaleString()}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2 mt-4">
-                      <Label>Observaciones</Label>
-                      <Textarea
-                        value={selectedEmpleado.observaciones}
-                        onChange={(e) => updateEmpleadoObservaciones(selectedEmpleado.empleado.id, e.target.value)}
-                        placeholder="Observaciones específicas para este empleado..."
-                        rows={2}
-                        disabled={loading}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
+                            <td className="border border-gray-300 p-3 text-center font-semibold">
+                              {totalFraccion.toFixed(2)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
               <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                 <h4 className="font-semibold text-green-900 mb-2">Resumen del Registro</h4>
@@ -442,11 +487,15 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
                     <span className="ml-2 font-medium">{selectedEmpleados.length}</span>
                   </div>
                   <div className="col-span-2">
-                    <span className="text-green-700">Costo Total:</span>
-                    <span className="ml-2 text-lg font-bold text-green-700">
-                      ${selectedEmpleados.reduce((total, se) =>
-                        total + calculateCostoJornal(se.empleado, se.fraccion), 0
-                      ).toLocaleString()}
+                    <span className="text-green-700">Registros a crear:</span>
+                    <span className="ml-2 font-medium">
+                      {selectedEmpleados.reduce((total, empleado) => {
+                        const tareaLotes = tarea?.lotes || (tarea?.lote_ids ? tarea.lote_ids.map(id => lotes.find(l => l.id === id)).filter(Boolean) : []);
+                        return total + tareaLotes.filter(lote => {
+                          const fraccion = workMatrix[empleado.id]?.[lote?.id || ''] || '0.0';
+                          return parseFloat(fraccion) > 0;
+                        }).length;
+                      }, 0)}
                     </span>
                   </div>
                 </div>
