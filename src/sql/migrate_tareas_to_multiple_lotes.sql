@@ -50,7 +50,7 @@ SELECT
     -- Employee information
     e.nombre as responsable_nombre,
     -- Calculated fields
-    COALESCE(SUM(rt.fraccion_jornal), 0) as jornales_reales,
+    COALESCE(SUM(rt.fraccion_jornal::numeric), 0) as jornales_reales,
     COALESCE(SUM(rt.costo_jornal), 0) as costo_total,
     COUNT(DISTINCT rt.empleado_id) as num_empleados,
     COUNT(DISTINCT DATE(rt.fecha_trabajo)) as dias_trabajados
