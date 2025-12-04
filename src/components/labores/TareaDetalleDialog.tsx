@@ -154,42 +154,45 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* Usamos un ancho explícito para aprovechar más espacio en desktop */}
-      <DialogContent className="w-[min(1120px,100vw-2rem)] max-h-[90vh] p-0 gap-0 overflow-hidden flex flex-col bg-white">
-        {/* Header Compacto */}
-        <DialogHeader className="px-5 md:px-6 py-4 border-b bg-gray-50/60 flex-shrink-0">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4 pr-6 md:pr-10">
-            <div className="space-y-1 max-w-full md:max-w-[70%]">
-              <DialogTitle className="text-xl md:text-2xl font-bold text-gray-900 flex flex-wrap items-center gap-2">
-                {tarea.nombre}
-                <Badge variant="outline" className="font-normal text-xs text-gray-500 whitespace-nowrap">
+      <DialogContent className="sm:max-w-[95vw] md:max-w-[90vw] lg:max-w-[1200px] max-h-[90vh] p-0 gap-0 overflow-hidden flex flex-col bg-white">
+        {/* Header */}
+        <DialogHeader className="px-6 md:px-8 py-5 border-b bg-gray-50/80 flex-shrink-0 backdrop-blur-sm">
+          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 pr-8">
+            <div className="space-y-2 max-w-full md:max-w-[75%]">
+              <div className="flex flex-wrap items-center gap-3">
+                <DialogTitle className="text-2xl md:text-3xl font-bold text-gray-900 tracking-tight">
+                  {tarea.nombre}
+                </DialogTitle>
+                <Badge variant="outline" className="font-mono text-xs text-gray-500 bg-white">
                   {tarea.codigo_tarea}
                 </Badge>
-              </DialogTitle>
-              <DialogDescription className="flex flex-wrap items-center gap-2 text-sm text-gray-500">
-                <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(tarea.estado)}`}>
+              </div>
+              
+              <DialogDescription className="flex flex-wrap items-center gap-3 text-sm text-gray-600">
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border shadow-sm ${getStatusColor(tarea.estado)}`}>
                   {tarea.estado}
                 </span>
-                <span>•</span>
-                <span className="flex items-center gap-1">
-                  <Tag className="h-3 w-3" />
+                <span className="text-gray-300">|</span>
+                <span className="flex items-center gap-1.5 font-medium">
+                  <Tag className="h-3.5 w-3.5 text-gray-400" />
                   {tarea.tipo_tarea?.nombre || 'Sin tipo'}
                 </span>
               </DialogDescription>
             </div>
-            <div className="flex items-center gap-2 md:gap-3 mt-1 md:mt-0">
-               <Badge variant={getPriorityColor(tarea.prioridad)} className="whitespace-nowrap">
+
+            <div className="flex items-center gap-3 mt-1 md:mt-0">
+               <Badge variant={getPriorityColor(tarea.prioridad)} className="px-3 py-1 text-sm shadow-sm">
                   Prioridad {tarea.prioridad}
                </Badge>
             </div>
           </div>
         </DialogHeader>
 
-        <ScrollArea className="flex-1">
-          <div className="px-4 md:px-6 py-5 md:py-6 space-y-5 md:space-y-6 max-w-5xl mx-auto w-full">
+        <ScrollArea className="flex-1 bg-gray-50/30">
+          <div className="px-6 md:px-8 py-6 md:py-8 space-y-8 max-w-[1400px] mx-auto w-full">
             
-            {/* Métricas Compactas */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5">
+            {/* Métricas */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* Progreso */}
               <div className="bg-white px-4 py-3.5 md:p-4 rounded-xl border shadow-sm space-y-2.5 md:space-y-3 min-w-0">
                 <div className="flex items-center justify-between gap-3">
@@ -251,121 +254,154 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 md:gap-6">
-              {/* Columna Izquierda: Detalles */}
-              <div className="lg:col-span-1 space-y-5 md:space-y-6">
-                <div className="bg-gray-50 rounded-2xl p-4 md:p-5 border space-y-4 md:space-y-5">
-                  <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4" />
-                    Detalles Generales
-                  </h4>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              {/* Columna Izquierda: Detalles (4 columnas) */}
+              <div className="lg:col-span-4 space-y-6">
+                <div className="bg-white rounded-xl p-6 border shadow-sm space-y-6 h-full">
+                  <div className="flex items-center gap-2 pb-4 border-b">
+                    <div className="p-2 bg-blue-50 rounded-lg">
+                      <AlertCircle className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <h4 className="font-semibold text-gray-900">
+                      Detalles Generales
+                    </h4>
+                  </div>
                   
-                  <div className="space-y-3.5 text-sm leading-relaxed">
-                    <div className="flex items-start gap-3">
-                      <MapPin className="h-4 w-4 text-gray-400 mt-0.5" />
-                      <div>
-                        <p className="font-medium text-gray-900">Ubicación</p>
-                        <p className="text-gray-600">
+                  <div className="space-y-5">
+                    <div className="flex gap-4">
+                      <div className="mt-1 p-1.5 bg-gray-50 rounded-md h-fit">
+                        <MapPin className="h-4 w-4 text-gray-500" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-gray-500">Ubicación</p>
+                        <p className="text-base font-medium text-gray-900">
                           {tarea.lote?.nombre || 'Sin lote'}
-                          {tarea.sublote ? ` • ${tarea.sublote.nombre}` : ''}
                         </p>
+                        {tarea.sublote && (
+                          <p className="text-sm text-gray-600 bg-gray-50 px-2 py-0.5 rounded-md inline-block">
+                            {tarea.sublote.nombre}
+                          </p>
+                        )}
                       </div>
                     </div>
 
-                    <div className="flex items-start gap-3">
-                      <User className="h-4 w-4 text-gray-400 mt-0.5" />
-                      <div>
-                        <p className="font-medium text-gray-900">Responsable</p>
-                        <p className="text-gray-600">
+                    <div className="flex gap-4">
+                      <div className="mt-1 p-1.5 bg-gray-50 rounded-md h-fit">
+                        <User className="h-4 w-4 text-gray-500" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-gray-500">Responsable</p>
+                        <p className="text-base font-medium text-gray-900">
                           {empleados.find(e => e.id === tarea.responsable_id)?.nombre || 'Sin asignar'}
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-start gap-3">
-                      <Calendar className="h-4 w-4 text-gray-400 mt-0.5" />
-                      <div>
-                        <p className="font-medium text-gray-900">Fechas</p>
-                        <p className="text-gray-600 break-words">
-                          {tarea.fecha_estimada_inicio ? new Date(tarea.fecha_estimada_inicio).toLocaleDateString('es-CO') : 'N/A'}
-                          {' - '}
-                          {tarea.fecha_estimada_fin ? new Date(tarea.fecha_estimada_fin).toLocaleDateString('es-CO') : 'N/A'}
-                        </p>
+                    <div className="flex gap-4">
+                      <div className="mt-1 p-1.5 bg-gray-50 rounded-md h-fit">
+                        <Calendar className="h-4 w-4 text-gray-500" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-gray-500">Fechas Programadas</p>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex justify-between gap-4 text-sm">
+                            <span className="text-gray-600">Inicio:</span>
+                            <span className="font-medium text-gray-900">
+                              {tarea.fecha_estimada_inicio ? new Date(tarea.fecha_estimada_inicio).toLocaleDateString('es-CO') : 'N/A'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between gap-4 text-sm">
+                            <span className="text-gray-600">Fin:</span>
+                            <span className="font-medium text-gray-900">
+                              {tarea.fecha_estimada_fin ? new Date(tarea.fecha_estimada_fin).toLocaleDateString('es-CO') : 'N/A'}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
 
                   {tarea.observaciones && (
-                    <>
-                      <Separator />
-                      <div className="space-y-1.5">
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Observaciones</p>
-                        <p className="text-sm text-gray-700 leading-relaxed break-words">
+                    <div className="pt-4 border-t mt-4">
+                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Observaciones</p>
+                      <div className="bg-gray-50 p-3 rounded-lg border border-gray-100">
+                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
                           {tarea.observaciones}
                         </p>
                       </div>
-                    </>
+                    </div>
                   )}
                 </div>
               </div>
 
-              {/* Columna Derecha: Historial */}
-              <div className="lg:col-span-2">
-                <div className="bg-white rounded-2xl border shadow-sm h-full flex flex-col">
-                  <div className="px-4 md:px-5 py-3.5 md:py-4 border-b flex items-center justify-between bg-gray-50/60 rounded-t-2xl">
-                    <h4 className="font-semibold text-gray-900 flex items-center gap-2 text-sm md:text-base">
-                      <CheckCircle className="h-4 w-4 text-gray-500" />
-                      Historial de Trabajo
-                    </h4>
-                    <Badge variant="secondary" className="font-normal text-xs md:text-sm whitespace-nowrap">
+              {/* Columna Derecha: Historial (8 columnas) */}
+              <div className="lg:col-span-8">
+                <div className="bg-white rounded-xl border shadow-sm h-full flex flex-col overflow-hidden">
+                  <div className="px-6 py-4 border-b bg-gray-50/50 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-green-50 rounded-lg">
+                        <CheckCircle className="h-5 w-5 text-green-600" />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-900">Historial de Trabajo</h4>
+                        <p className="text-xs text-gray-500">Registro detallado de actividades</p>
+                      </div>
+                    </div>
+                    <Badge variant="secondary" className="px-3 py-1">
                       {registrosTrabajo.length} registros
                     </Badge>
                   </div>
 
-                  <div className="flex-1 overflow-hidden">
+                  <div className="flex-1 overflow-hidden min-h-[300px]">
                     {registrosTrabajo.length === 0 ? (
-                      <div className="h-44 md:h-48 flex flex-col items-center justify-center text-gray-500 px-4">
-                        <AlertTriangle className="h-8 w-8 mb-2 opacity-20" />
-                        <p className="text-sm">No hay registros de trabajo aún</p>
+                      <div className="h-full flex flex-col items-center justify-center text-gray-400 p-8">
+                        <div className="p-4 bg-gray-50 rounded-full mb-3">
+                          <AlertTriangle className="h-8 w-8 opacity-20" />
+                        </div>
+                        <p className="text-sm font-medium">No hay registros de trabajo aún</p>
+                        <p className="text-xs mt-1">Los registros aparecerán aquí cuando se reporten labores</p>
                       </div>
                     ) : (
                       <div className="overflow-x-auto">
                         <Table>
                           <TableHeader>
-                            <TableRow className="hover:bg-transparent">
-                              <TableHead className="w-[88px] md:w-[100px]">Fecha</TableHead>
-                              <TableHead>Empleado</TableHead>
-                              <TableHead className="text-right">Jornal</TableHead>
-                              <TableHead className="text-right">Costo</TableHead>
+                            <TableRow className="hover:bg-transparent bg-gray-50/30">
+                              <TableHead className="w-[120px] pl-6">Fecha</TableHead>
+                              <TableHead className="min-w-[200px]">Empleado</TableHead>
+                              <TableHead className="text-right w-[100px]">Jornal</TableHead>
+                              <TableHead className="text-right w-[120px] pr-6">Costo</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {registrosTrabajo.map((registro) => (
-                              <TableRow key={registro.id} className="hover:bg-gray-50/60">
-                                <TableCell className="font-medium text-[11px] md:text-xs whitespace-nowrap">
+                              <TableRow key={registro.id} className="hover:bg-blue-50/30 transition-colors">
+                                <TableCell className="pl-6 font-medium text-sm text-gray-600">
                                   {new Date(registro.fecha_trabajo).toLocaleDateString('es-CO', {
-                                    day: '2-digit',
-                                    month: 'short'
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric'
                                   })}
                                 </TableCell>
                                 <TableCell>
-                                  <div className="flex flex-col gap-0.5 min-w-0">
-                                    <span className="text-xs md:text-sm font-medium text-gray-900 break-words">
+                                  <div className="flex flex-col gap-1 py-1">
+                                    <span className="text-sm font-semibold text-gray-900">
                                       {(registro as any).empleados?.nombre || 'Desconocido'}
                                     </span>
                                     {(registro.observaciones) && (
-                                    <span className="text-[11px] md:text-xs text-gray-500 break-words">
-                                      {registro.observaciones}
-                                    </span>
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-right text-xs md:text-sm whitespace-nowrap">
-                                {registro.fraccion_jornal}
-                              </TableCell>
-                              <TableCell className="text-right text-xs md:text-sm font-medium text-gray-700 whitespace-nowrap">
-                                ${registro.costo_jornal.toLocaleString()}
-                              </TableCell>
+                                      <span className="text-xs text-gray-500 bg-gray-50 px-2 py-0.5 rounded w-fit max-w-full truncate">
+                                        {registro.observaciones}
+                                      </span>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Badge variant="outline" className="font-mono font-normal">
+                                    {registro.fraccion_jornal}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right pr-6 font-medium text-gray-900">
+                                  ${registro.costo_jornal.toLocaleString()}
+                                </TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
