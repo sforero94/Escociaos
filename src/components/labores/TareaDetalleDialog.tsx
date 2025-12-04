@@ -154,18 +154,19 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] p-0 gap-0 overflow-hidden flex flex-col bg-white">
+      {/* Usamos un ancho explícito para aprovechar más espacio en desktop */}
+      <DialogContent className="w-[min(1120px,100vw-2rem)] max-h-[90vh] p-0 gap-0 overflow-hidden flex flex-col bg-white">
         {/* Header Compacto */}
-        <DialogHeader className="px-6 py-4 border-b bg-gray-50/50 flex-shrink-0">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pr-8">
-            <div className="space-y-1">
-              <DialogTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
+        <DialogHeader className="px-5 md:px-6 py-4 border-b bg-gray-50/60 flex-shrink-0">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4 pr-6 md:pr-10">
+            <div className="space-y-1 max-w-full md:max-w-[70%]">
+              <DialogTitle className="text-xl md:text-2xl font-bold text-gray-900 flex flex-wrap items-center gap-2">
                 {tarea.nombre}
-                <Badge variant="outline" className="font-normal text-xs text-gray-500">
+                <Badge variant="outline" className="font-normal text-xs text-gray-500 whitespace-nowrap">
                   {tarea.codigo_tarea}
                 </Badge>
               </DialogTitle>
-              <DialogDescription className="flex items-center gap-2 text-sm text-gray-500">
+              <DialogDescription className="flex flex-wrap items-center gap-2 text-sm text-gray-500">
                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(tarea.estado)}`}>
                   {tarea.estado}
                 </span>
@@ -176,8 +177,8 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
                 </span>
               </DialogDescription>
             </div>
-            <div className="flex items-center gap-2">
-               <Badge variant={getPriorityColor(tarea.prioridad)}>
+            <div className="flex items-center gap-2 md:gap-3 mt-1 md:mt-0">
+               <Badge variant={getPriorityColor(tarea.prioridad)} className="whitespace-nowrap">
                   Prioridad {tarea.prioridad}
                </Badge>
             </div>
@@ -185,50 +186,50 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
         </DialogHeader>
 
         <ScrollArea className="flex-1">
-          <div className="p-6 space-y-6">
+          <div className="px-4 md:px-6 py-5 md:py-6 space-y-5 md:space-y-6 max-w-5xl mx-auto w-full">
             
             {/* Métricas Compactas */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5">
               {/* Progreso */}
-              <div className="bg-white p-4 rounded-lg border shadow-sm space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <div className="bg-white px-4 py-3.5 md:p-4 rounded-xl border shadow-sm space-y-2.5 md:space-y-3 min-w-0">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-xs md:text-sm font-medium text-gray-700">
                     <TrendingUp className="h-4 w-4 text-blue-600" />
                     Progreso
                   </div>
-                  <span className="text-xs font-medium text-gray-500">
+                  <span className="text-xs md:text-[13px] font-medium text-gray-500 whitespace-nowrap">
                     {metricas?.progresoJornales.toFixed(0)}%
                   </span>
                 </div>
-                <Progress value={metricas?.progresoJornales || 0} className="h-2" />
-                <div className="flex justify-between text-xs text-gray-500">
-                  <span>{metricas?.jornalesRegistrados.toFixed(1)} Jornales</span>
-                  <span>Meta: {metricas?.jornalesEstimados.toFixed(1)}</span>
+                <Progress value={metricas?.progresoJornales || 0} className="h-1.5 md:h-2" />
+                <div className="flex justify-between gap-3 text-[11px] md:text-xs text-gray-500">
+                  <span className="truncate">{metricas?.jornalesRegistrados.toFixed(1)} Jornales</span>
+                  <span className="truncate text-right">Meta: {metricas?.jornalesEstimados.toFixed(1)}</span>
                 </div>
               </div>
 
               {/* Tiempo */}
-              <div className="bg-white p-4 rounded-lg border shadow-sm space-y-3">
+              <div className="bg-white px-4 py-3.5 md:p-4 rounded-xl border shadow-sm space-y-2.5 md:space-y-3 min-w-0">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <div className="flex items-center gap-2 text-xs md:text-sm font-medium text-gray-700">
                     <Clock className="h-4 w-4 text-green-600" />
                     Tiempo
                   </div>
-                  <span className="text-xs font-medium text-gray-500">
+                  <span className="text-xs md:text-[13px] font-medium text-gray-500 whitespace-nowrap">
                     {metricas?.diasTranscurridos} / {metricas?.diasTotales} días
                   </span>
                 </div>
-                <Progress value={metricas?.progresoTiempo || 0} className="h-2" />
-                <div className="flex justify-between text-xs text-gray-500">
-                  <span>Inicio: {tarea.fecha_estimada_inicio ? new Date(tarea.fecha_estimada_inicio).toLocaleDateString('es-CO', {day: '2-digit', month: 'short'}) : '-'}</span>
-                  <span>Fin: {tarea.fecha_estimada_fin ? new Date(tarea.fecha_estimada_fin).toLocaleDateString('es-CO', {day: '2-digit', month: 'short'}) : '-'}</span>
+                <Progress value={metricas?.progresoTiempo || 0} className="h-1.5 md:h-2" />
+                <div className="flex justify-between gap-3 text-[11px] md:text-xs text-gray-500">
+                  <span className="truncate">Inicio: {tarea.fecha_estimada_inicio ? new Date(tarea.fecha_estimada_inicio).toLocaleDateString('es-CO', {day: '2-digit', month: 'short'}) : '-'}</span>
+                  <span className="truncate text-right">Fin: {tarea.fecha_estimada_fin ? new Date(tarea.fecha_estimada_fin).toLocaleDateString('es-CO', {day: '2-digit', month: 'short'}) : '-'}</span>
                 </div>
               </div>
 
               {/* Costos */}
-              <div className="bg-white p-4 rounded-lg border shadow-sm space-y-3">
+              <div className="bg-white px-4 py-3.5 md:p-4 rounded-xl border shadow-sm space-y-2.5 md:space-y-3 min-w-0">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <div className="flex items-center gap-2 text-xs md:text-sm font-medium text-gray-700">
                     <DollarSign className="h-4 w-4 text-purple-600" />
                     Costos
                   </div>
@@ -237,35 +238,35 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
                     ${((metricas?.costoActual || 0) - (metricas?.costoEstimado || 0)).toLocaleString()}
                   </span>
                 </div>
-                <div className="flex items-end justify-between">
-                   <div>
-                      <p className="text-2xl font-bold text-gray-900">${metricas?.costoActual.toLocaleString()}</p>
-                      <p className="text-xs text-gray-500">Costo Actual</p>
+                <div className="flex items-end justify-between gap-4">
+                   <div className="min-w-0">
+                      <p className="text-xl md:text-2xl font-bold text-gray-900 leading-tight break-words">${metricas?.costoActual.toLocaleString()}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Costo Actual</p>
                    </div>
-                   <div className="text-right">
-                      <p className="text-sm font-medium text-gray-700">${metricas?.costoEstimado.toLocaleString()}</p>
-                      <p className="text-xs text-gray-500">Estimado</p>
+                   <div className="text-right min-w-0">
+                      <p className="text-sm font-medium text-gray-700 break-words">${metricas?.costoEstimado.toLocaleString()}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Estimado</p>
                    </div>
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 md:gap-6">
               {/* Columna Izquierda: Detalles */}
-              <div className="lg:col-span-1 space-y-6">
-                <div className="bg-gray-50 rounded-lg p-4 border space-y-4">
+              <div className="lg:col-span-1 space-y-5 md:space-y-6">
+                <div className="bg-gray-50 rounded-2xl p-4 md:p-5 border space-y-4 md:space-y-5">
                   <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
                     <AlertCircle className="h-4 w-4" />
                     Detalles Generales
                   </h4>
                   
-                  <div className="space-y-3 text-sm">
+                  <div className="space-y-3.5 text-sm leading-relaxed">
                     <div className="flex items-start gap-3">
                       <MapPin className="h-4 w-4 text-gray-400 mt-0.5" />
                       <div>
                         <p className="font-medium text-gray-900">Ubicación</p>
                         <p className="text-gray-600">
-                          {tarea.lote?.nombre || 'Sin lote'} 
+                          {tarea.lote?.nombre || 'Sin lote'}
                           {tarea.sublote ? ` • ${tarea.sublote.nombre}` : ''}
                         </p>
                       </div>
@@ -285,8 +286,8 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
                       <Calendar className="h-4 w-4 text-gray-400 mt-0.5" />
                       <div>
                         <p className="font-medium text-gray-900">Fechas</p>
-                        <p className="text-gray-600">
-                          {tarea.fecha_estimada_inicio ? new Date(tarea.fecha_estimada_inicio).toLocaleDateString('es-CO') : 'N/A'} 
+                        <p className="text-gray-600 break-words">
+                          {tarea.fecha_estimada_inicio ? new Date(tarea.fecha_estimada_inicio).toLocaleDateString('es-CO') : 'N/A'}
                           {' - '}
                           {tarea.fecha_estimada_fin ? new Date(tarea.fecha_estimada_fin).toLocaleDateString('es-CO') : 'N/A'}
                         </p>
@@ -297,9 +298,9 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
                   {tarea.observaciones && (
                     <>
                       <Separator />
-                      <div className="space-y-1">
-                        <p className="text-xs font-medium text-gray-500 uppercase">Observaciones</p>
-                        <p className="text-sm text-gray-700 leading-relaxed">
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Observaciones</p>
+                        <p className="text-sm text-gray-700 leading-relaxed break-words">
                           {tarea.observaciones}
                         </p>
                       </div>
@@ -310,20 +311,20 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
 
               {/* Columna Derecha: Historial */}
               <div className="lg:col-span-2">
-                <div className="bg-white rounded-lg border shadow-sm h-full flex flex-col">
-                  <div className="p-4 border-b flex items-center justify-between bg-gray-50/50 rounded-t-lg">
-                    <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+                <div className="bg-white rounded-2xl border shadow-sm h-full flex flex-col">
+                  <div className="px-4 md:px-5 py-3.5 md:py-4 border-b flex items-center justify-between bg-gray-50/60 rounded-t-2xl">
+                    <h4 className="font-semibold text-gray-900 flex items-center gap-2 text-sm md:text-base">
                       <CheckCircle className="h-4 w-4 text-gray-500" />
                       Historial de Trabajo
                     </h4>
-                    <Badge variant="secondary" className="font-normal">
+                    <Badge variant="secondary" className="font-normal text-xs md:text-sm whitespace-nowrap">
                       {registrosTrabajo.length} registros
                     </Badge>
                   </div>
 
                   <div className="flex-1 overflow-hidden">
                     {registrosTrabajo.length === 0 ? (
-                      <div className="h-48 flex flex-col items-center justify-center text-gray-500">
+                      <div className="h-44 md:h-48 flex flex-col items-center justify-center text-gray-500 px-4">
                         <AlertTriangle className="h-8 w-8 mb-2 opacity-20" />
                         <p className="text-sm">No hay registros de trabajo aún</p>
                       </div>
@@ -332,7 +333,7 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
                         <Table>
                           <TableHeader>
                             <TableRow className="hover:bg-transparent">
-                              <TableHead className="w-[100px]">Fecha</TableHead>
+                              <TableHead className="w-[88px] md:w-[100px]">Fecha</TableHead>
                               <TableHead>Empleado</TableHead>
                               <TableHead className="text-right">Jornal</TableHead>
                               <TableHead className="text-right">Costo</TableHead>
@@ -340,31 +341,31 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
                           </TableHeader>
                           <TableBody>
                             {registrosTrabajo.map((registro) => (
-                              <TableRow key={registro.id} className="hover:bg-gray-50/50">
-                                <TableCell className="font-medium text-xs">
+                              <TableRow key={registro.id} className="hover:bg-gray-50/60">
+                                <TableCell className="font-medium text-[11px] md:text-xs whitespace-nowrap">
                                   {new Date(registro.fecha_trabajo).toLocaleDateString('es-CO', {
                                     day: '2-digit',
                                     month: 'short'
                                   })}
                                 </TableCell>
                                 <TableCell>
-                                  <div className="flex flex-col">
-                                    <span className="text-sm font-medium text-gray-900">
+                                  <div className="flex flex-col gap-0.5 min-w-0">
+                                    <span className="text-xs md:text-sm font-medium text-gray-900 break-words">
                                       {(registro as any).empleados?.nombre || 'Desconocido'}
                                     </span>
                                     {(registro.observaciones) && (
-                                      <span className="text-xs text-gray-500 truncate max-w-[150px] sm:max-w-[200px]" title={registro.observaciones}>
-                                        {registro.observaciones}
-                                      </span>
-                                    )}
-                                  </div>
-                                </TableCell>
-                                <TableCell className="text-right text-sm">
-                                  {registro.fraccion_jornal}
-                                </TableCell>
-                                <TableCell className="text-right text-sm font-medium text-gray-700">
-                                  ${registro.costo_jornal.toLocaleString()}
-                                </TableCell>
+                                    <span className="text-[11px] md:text-xs text-gray-500 break-words">
+                                      {registro.observaciones}
+                                    </span>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right text-xs md:text-sm whitespace-nowrap">
+                                {registro.fraccion_jornal}
+                              </TableCell>
+                              <TableCell className="text-right text-xs md:text-sm font-medium text-gray-700 whitespace-nowrap">
+                                ${registro.costo_jornal.toLocaleString()}
+                              </TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
