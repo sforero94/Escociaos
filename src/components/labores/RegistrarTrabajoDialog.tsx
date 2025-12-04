@@ -227,7 +227,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] h-[95vh] max-w-none overflow-hidden flex flex-col">
+      <DialogContent className="w-[95vw] h-[95vh] max-w-none sm:max-w-none overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Clock className="h-5 w-5" />
@@ -426,19 +426,25 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
           )}
 
           {/* Step 3: Matrix Interface */}
-          {currentStep === 3 && (
-            <div className="space-y-6">
-              <div className="text-center">
-                <div className="h-16 w-16 bg-[#73991C]/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-2xl">📊</span>
+          {currentStep === 3 && (() => {
+            // ✅ Calculate task lotes ONCE with correct priority: lote_ids > lotes
+            const tareaLotes = (tarea && tarea.lote_ids && tarea.lote_ids.length > 0)
+              ? tarea.lote_ids.map((id: string) => lotes.find((l: Lote) => l.id === id)).filter((l: Lote | undefined): l is Lote => l !== undefined)
+              : (tarea?.lotes && tarea.lotes.length > 0 ? tarea.lotes : []);
+
+            return (
+              <div className="space-y-6">
+                <div className="text-center">
+                  <div className="h-16 w-16 bg-[#73991C]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="text-2xl">📊</span>
+                  </div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                    Asignar Trabajo por Lote
+                  </h3>
+                  <p className="text-gray-600">
+                    Distribuya las fracciones de jornal entre empleados y lotes
+                  </p>
                 </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  Asignar Trabajo por Lote
-                </h3>
-                <p className="text-gray-600">
-                  Distribuya las fracciones de jornal entre empleados y lotes
-                </p>
-              </div>
 
 
               {selectedEmpleados.length > 0 && tarea && (
@@ -459,9 +465,9 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
                           <th className="text-left py-3 px-5 text-xs font-medium text-[#4D240F]/70 sticky left-0 bg-[#F8FAF5] z-10">
                             Empleado
                           </th>
-                          {(tarea.lotes || (tarea.lote_ids ? tarea.lote_ids.map(id => lotes.find(l => l.id === id)).filter(Boolean) : [])).map((lote) => (
-                            <th key={lote?.id} className="text-center py-3 px-4 text-xs font-medium text-[#4D240F]/70 min-w-[160px]">
-                              {lote?.nombre}
+                          {tareaLotes.map((lote: Lote) => (
+                            <th key={lote.id} className="text-center py-3 px-4 text-xs font-medium text-[#4D240F]/70 min-w-[160px]">
+                              {lote.nombre}
                             </th>
                           ))}
                           <th className="text-center py-3 px-4 text-xs font-medium text-[#4D240F]/70 sticky right-0 bg-[#F8FAF5] z-10">
@@ -471,13 +477,9 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
                       </thead>
                       <tbody className="divide-y divide-[#73991C]/5">
                         {selectedEmpleados.map((empleado) => {
-                          const tareaLotes = tarea.lotes || (tarea.lote_ids ? tarea.lote_ids.map(id => lotes.find(l => l.id === id)).filter(Boolean) : []);
                           const totalFraccion = tareaLotes.reduce((sum, lote) => {
-                            if (lote) {
-                              const fraccion = workMatrix[empleado.id]?.[lote.id] || '0.0';
-                              return sum + parseFloat(fraccion);
-                            }
-                            return sum;
+                            const fraccion = workMatrix[empleado.id]?.[lote.id] || '0.0';
+                            return sum + parseFloat(fraccion);
                           }, 0);
 
                           return (
@@ -498,12 +500,12 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
                                   </Button>
                                 </div>
                               </td>
-                              {tareaLotes.map((lote) => (
-                                <td key={lote?.id} className="py-2 px-3 text-center">
+                              {tareaLotes.map((lote: Lote) => (
+                                <td key={lote.id} className="py-2 px-3 text-center">
                                   <div className="space-y-2">
                                     <Select
-                                      value={workMatrix[empleado.id]?.[lote?.id || ''] || '0.0'}
-                                      onValueChange={(value) => updateWorkFraccion(empleado.id, lote?.id || '', value as RegistroTrabajo['fraccion_jornal'])}
+                                      value={workMatrix[empleado.id]?.[lote.id] || '0.0'}
+                                      onValueChange={(value) => updateWorkFraccion(empleado.id, lote.id, value as RegistroTrabajo['fraccion_jornal'])}
                                       disabled={loading}
                                     >
                                       <SelectTrigger className="h-9 text-xs border-[#73991C]/20 hover:border-[#73991C]/40">
@@ -511,17 +513,15 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
                                       </SelectTrigger>
                                       <SelectContent>
                                         <SelectItem value="0.0">-</SelectItem>
-                                        <SelectItem value="0.25">1/4</SelectItem>
-                                        <SelectItem value="0.5">1/2</SelectItem>
-                                        <SelectItem value="0.75">3/4</SelectItem>
-                                        <SelectItem value="1.0">1</SelectItem>
-                                        <SelectItem value="1.5">1.5</SelectItem>
-                                        <SelectItem value="2.0">2</SelectItem>
+                                        <SelectItem value="0.25">2 horas</SelectItem>
+                                        <SelectItem value="0.5">4 horas</SelectItem>
+                                        <SelectItem value="0.75">6 horas</SelectItem>
+                                        <SelectItem value="1.0">8 horas</SelectItem>
                                       </SelectContent>
                                     </Select>
                                     <Textarea
-                                      value={observaciones[empleado.id]?.[lote?.id || ''] || ''}
-                                      onChange={(e) => updateWorkObservaciones(empleado.id, lote?.id || '', e.target.value)}
+                                      value={observaciones[empleado.id]?.[lote.id] || ''}
+                                      onChange={(e) => updateWorkObservaciones(empleado.id, lote.id, e.target.value)}
                                       placeholder="Observaciones (opcional)..."
                                       rows={2}
                                       className="text-xs resize-none border-[#73991C]/20 focus:border-[#73991C]/40"
@@ -563,9 +563,8 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
                     <span className="text-green-700">Registros a crear:</span>
                     <span className="ml-2 font-medium">
                       {selectedEmpleados.reduce((total, empleado) => {
-                        const tareaLotes = tarea?.lotes || (tarea?.lote_ids ? tarea.lote_ids.map(id => lotes.find(l => l.id === id)).filter(Boolean) : []);
-                        return total + tareaLotes.filter(lote => {
-                          const fraccion = workMatrix[empleado.id]?.[lote?.id || ''] || '0.0';
+                        return total + tareaLotes.filter((lote: Lote) => {
+                          const fraccion = workMatrix[empleado.id]?.[lote.id] || '0.0';
                           return parseFloat(fraccion) > 0;
                         }).length;
                       }, 0)}
@@ -574,7 +573,8 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
                 </div>
               </div>
             </div>
-          )}
+            );
+          })()}
         </div>
 
         <DialogFooter className="flex justify-between">
