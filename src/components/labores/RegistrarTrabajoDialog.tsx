@@ -372,55 +372,44 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
                     )}
                   </div>
                 ) : (
-                  <div className="col-span-full">
-                    {filteredEmpleados.map((empleado) => {
-                      const isSelected = selectedEmpleados.some(se => se.id === empleado.id);
-                      return (
-                        <div
-                          key={empleado.id}
-                          className={`inline-flex items-center space-x-2 px-2 py-1 border rounded transition-all cursor-pointer text-sm ${
-                            isSelected
-                              ? 'border-[#73991C] bg-[#73991C]/5'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                          onClick={() => {
-                            if (isSelected) {
-                              removeEmpleado(empleado.id);
-                            } else {
-                              addEmpleado(empleado);
-                            }
-                          }}
-                        >
-                          <Checkbox
-                            id={`empleado-${empleado.id}`}
-                            checked={isSelected}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                addEmpleado(empleado);
-                              } else {
-                                removeEmpleado(empleado.id);
-                              }
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                            className="w-3 h-3"
-                          />
-                          <div className="flex flex-col min-w-0">
-                            <label
-                              htmlFor={`empleado-${empleado.id}`}
-                              className="font-medium text-gray-900 cursor-pointer truncate max-w-32"
-                            >
-                              {empleado.nombre}
-                            </label>
-                            {empleado.cargo && (
-                              <span className="text-xs text-gray-500 truncate max-w-32">
-                                {empleado.cargo}
-                              </span>
-                            )}
+                  filteredEmpleados.map((empleado) => {
+                    const isSelected = selectedEmpleados.some(se => se.id === empleado.id);
+                    return (
+                      <button
+                        key={empleado.id}
+                        type="button"
+                        onClick={() => {
+                          if (isSelected) {
+                            removeEmpleado(empleado.id);
+                          } else {
+                            addEmpleado(empleado);
+                          }
+                        }}
+                        className={`
+                          relative p-4 rounded-xl border-2 transition-all text-left
+                          hover:shadow-md
+                          ${isSelected
+                            ? 'border-[#73991C] bg-[#73991C]/5 shadow-sm'
+                            : 'border-gray-200 hover:border-gray-300 bg-white'
+                          }
+                        `}
+                      >
+                        {/* Check verde en esquina superior derecha al seleccionar */}
+                        {isSelected && (
+                          <div className="absolute top-2 right-2 w-5 h-5 bg-[#73991C] rounded-full flex items-center justify-center">
+                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        )}
+                        
+                        {/* Solo nombre, sin cargo */}
+                        <p className="font-medium text-sm text-gray-900 pr-6">
+                          {empleado.nombre}
+                        </p>
+                      </button>
+                    );
+                  })
                 )}
               </div>
 
@@ -450,86 +439,109 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
               </div>
 
               {selectedEmpleados.length > 0 && tarea && (
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse border border-gray-300">
-                    <thead>
-                      <tr className="bg-gray-50">
-                        <th className="border border-gray-300 p-3 text-left font-semibold">Empleado</th>
-                        {(tarea.lotes || (tarea.lote_ids ? tarea.lote_ids.map(id => lotes.find(l => l.id === id)).filter(Boolean) : [])).map((lote) => (
-                          <th key={lote?.id} className="border border-gray-300 p-3 text-center font-semibold min-w-[120px]">
-                            {lote?.nombre}
-                          </th>
-                        ))}
-                        <th className="border border-gray-300 p-3 text-center font-semibold">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedEmpleados.map((empleado) => {
-                        const tareaLotes = tarea.lotes || (tarea.lote_ids ? tarea.lote_ids.map(id => lotes.find(l => l.id === id)).filter(Boolean) : []);
-                        const totalFraccion = tareaLotes.reduce((sum, lote) => {
-                          if (lote) {
-                            const fraccion = workMatrix[empleado.id]?.[lote.id] || '0.0';
-                            return sum + parseFloat(fraccion);
-                          }
-                          return sum;
-                        }, 0);
+                <div className="bg-white rounded-2xl border border-[#73991C]/10 shadow-[0_2px_12px_rgba(115,153,28,0.06)] overflow-hidden">
+                  {/* Header */}
+                  <div className="px-5 py-3 bg-gradient-to-r from-[#73991C]/5 to-transparent border-b border-[#73991C]/10">
+                    <h3 className="text-sm text-[#172E08] flex items-center gap-2">
+                      <span className="text-xl">📋</span>
+                      Matriz de Asignación Empleado × Lote
+                    </h3>
+                  </div>
 
-                        return (
-                          <tr key={empleado.id} className="hover:bg-gray-50">
-                            <td className="border border-gray-300 p-3">
-                              <div className="flex items-center justify-between">
-                                <span className="font-medium">{empleado.nombre}</span>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => removeEmpleado(empleado.id)}
-                                  className="text-red-600 hover:text-red-700 h-6 w-6 p-0"
-                                >
-                                  ✕
-                                </Button>
-                              </div>
-                            </td>
-                            {tareaLotes.map((lote) => (
-                              <td key={lote?.id} className="border border-gray-300 p-2 text-center">
-                                <div className="space-y-1">
-                                  <Select
-                                    value={workMatrix[empleado.id]?.[lote?.id || ''] || '0.0'}
-                                    onValueChange={(value) => updateWorkFraccion(empleado.id, lote?.id || '', value as RegistroTrabajo['fraccion_jornal'])}
-                                    disabled={loading}
+                  {/* Tabla con scroll horizontal */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-[#F8FAF5]">
+                        <tr>
+                          <th className="text-left py-3 px-5 text-xs font-medium text-[#4D240F]/70 sticky left-0 bg-[#F8FAF5] z-10">
+                            Empleado
+                          </th>
+                          {(tarea.lotes || (tarea.lote_ids ? tarea.lote_ids.map(id => lotes.find(l => l.id === id)).filter(Boolean) : [])).map((lote) => (
+                            <th key={lote?.id} className="text-center py-3 px-4 text-xs font-medium text-[#4D240F]/70 min-w-[160px]">
+                              {lote?.nombre}
+                            </th>
+                          ))}
+                          <th className="text-center py-3 px-4 text-xs font-medium text-[#4D240F]/70 sticky right-0 bg-[#F8FAF5] z-10">
+                            Total
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#73991C]/5">
+                        {selectedEmpleados.map((empleado) => {
+                          const tareaLotes = tarea.lotes || (tarea.lote_ids ? tarea.lote_ids.map(id => lotes.find(l => l.id === id)).filter(Boolean) : []);
+                          const totalFraccion = tareaLotes.reduce((sum, lote) => {
+                            if (lote) {
+                              const fraccion = workMatrix[empleado.id]?.[lote.id] || '0.0';
+                              return sum + parseFloat(fraccion);
+                            }
+                            return sum;
+                          }, 0);
+
+                          return (
+                            <tr key={empleado.id} className="hover:bg-[#F8FAF5] transition-colors">
+                              <td className="py-3 px-5 sticky left-0 bg-white hover:bg-[#F8FAF5] z-10">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm font-medium text-[#172E08]">
+                                    {empleado.nombre}
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removeEmpleado(empleado.id)}
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50 h-7 w-7 p-0 ml-2"
                                   >
-                                    <SelectTrigger className="h-8 text-xs">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="0.0">-</SelectItem>
-                                      <SelectItem value="0.25">1/4</SelectItem>
-                                      <SelectItem value="0.5">1/2</SelectItem>
-                                      <SelectItem value="0.75">3/4</SelectItem>
-                                      <SelectItem value="1.0">1</SelectItem>
-                                      <SelectItem value="1.5">1.5</SelectItem>
-                                      <SelectItem value="2.0">2</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                  <Textarea
-                                    value={observaciones[empleado.id]?.[lote?.id || ''] || ''}
-                                    onChange={(e) => updateWorkObservaciones(empleado.id, lote?.id || '', e.target.value)}
-                                    placeholder="Obs..."
-                                    rows={1}
-                                    className="text-xs h-6 resize-none"
-                                    disabled={loading}
-                                  />
+                                    ✕
+                                  </Button>
                                 </div>
                               </td>
-                            ))}
-                            <td className="border border-gray-300 p-3 text-center font-semibold">
-                              {totalFraccion.toFixed(2)}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                              {tareaLotes.map((lote) => (
+                                <td key={lote?.id} className="py-2 px-3 text-center">
+                                  <div className="space-y-2">
+                                    <Select
+                                      value={workMatrix[empleado.id]?.[lote?.id || ''] || '0.0'}
+                                      onValueChange={(value) => updateWorkFraccion(empleado.id, lote?.id || '', value as RegistroTrabajo['fraccion_jornal'])}
+                                      disabled={loading}
+                                    >
+                                      <SelectTrigger className="h-9 text-xs border-[#73991C]/20 hover:border-[#73991C]/40">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="0.0">-</SelectItem>
+                                        <SelectItem value="0.25">1/4</SelectItem>
+                                        <SelectItem value="0.5">1/2</SelectItem>
+                                        <SelectItem value="0.75">3/4</SelectItem>
+                                        <SelectItem value="1.0">1</SelectItem>
+                                        <SelectItem value="1.5">1.5</SelectItem>
+                                        <SelectItem value="2.0">2</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    <Textarea
+                                      value={observaciones[empleado.id]?.[lote?.id || ''] || ''}
+                                      onChange={(e) => updateWorkObservaciones(empleado.id, lote?.id || '', e.target.value)}
+                                      placeholder="Observaciones (opcional)..."
+                                      rows={2}
+                                      className="text-xs resize-none border-[#73991C]/20 focus:border-[#73991C]/40"
+                                      disabled={loading}
+                                    />
+                                  </div>
+                                </td>
+                              ))}
+                              <td className="py-3 px-4 text-center sticky right-0 bg-white hover:bg-[#F8FAF5] z-10">
+                                <span className={`inline-flex items-center justify-center px-3 py-1 rounded-lg text-sm font-semibold ${
+                                  totalFraccion > 0
+                                    ? 'bg-[#73991C]/10 text-[#73991C]'
+                                    : 'bg-gray-100 text-gray-400'
+                                }`}>
+                                  {totalFraccion.toFixed(2)}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
 

@@ -158,12 +158,19 @@ const Labores: React.FC = () => {
   const cargarDatos = async () => {
     try {
       setLoading(true);
+      
+      // PRIMERO: Cargar recursos base (lotes, tipos, empleados) en paralelo
+      // Estos son independientes entre sí
       await Promise.all([
-        cargarTareas(),
         cargarTiposTareas(),
         cargarEmpleados(),
         cargarLotes(),
       ]);
+      
+      // DESPUÉS: Cargar tareas que dependen de lotes estar cargados
+      // para poder mapear lote_ids a objetos Lote correctamente
+      await cargarTareas();
+      
     } catch (error: any) {
       showAlert('error', `Error al cargar datos: ${error.message}`);
     } finally {
