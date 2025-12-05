@@ -146,17 +146,6 @@ const ReportesView: React.FC<ReportesViewProps> = ({
 
       if (errorRegistros) throw errorRegistros;
 
-      // 🔍 DIAGNÓSTICO TEMPORAL: Verificar estructura de datos de lotes
-      console.log('📊 Total registros cargados:', registros?.length);
-      console.log('📦 Primer registro completo:', registros?.[0]);
-      console.log('📦 Lote del primer registro (relación):', registros?.[0]?.lote);
-      console.log('📦 lote_id del primer registro (directo):', registros?.[0]?.lote_id);
-      console.log('📦 Muestra de 5 registros con lotes:', registros?.slice(0, 5).map(r => ({
-        fecha: r.fecha_trabajo,
-        lote_relacion: r.lote,
-        lote_id_directo: r.lote_id
-      })));
-
       setRegistrosTrabajo(registros || []);
       procesarDatos(registros || []);
     } catch (error: any) {
