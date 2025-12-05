@@ -4,6 +4,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
+import { formatearFecha } from '../../utils/fechas';
 import {
   Select,
   SelectContent,
@@ -586,7 +587,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className="text-green-700">Fecha:</span>
-                    <span className="ml-2 font-medium">{new Date(fechaTrabajo).toLocaleDateString('es-CO')}</span>
+                    <span className="ml-2 font-medium">{formatearFecha(fechaTrabajo)}</span>
                   </div>
                   <div>
                     <span className="text-green-700">Empleados:</span>

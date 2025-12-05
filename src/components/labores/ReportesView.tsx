@@ -3,6 +3,7 @@ import { getSupabase } from '../../utils/supabase/client';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
+import { formatearFecha, formatearFechaCorta } from '../../utils/fechas';
 import {
   Select,
   SelectContent,
@@ -272,7 +273,7 @@ const ReportesView: React.FC<ReportesViewProps> = ({
 
     const tendenciaArray: TendenciaCostos[] = Array.from(tendenciaMap.entries())
       .map(([fecha, data]) => ({
-        fecha: new Date(fecha).toLocaleDateString('es-CO', { month: 'short', day: 'numeric' }),
+        fecha: formatearFechaCorta(fecha),
         costo: data.costo,
         jornales: data.jornales,
       }))
@@ -660,7 +661,7 @@ const ReportesView: React.FC<ReportesViewProps> = ({
                 {registrosTrabajo.slice(0, 50).map((registro, index) => (
                   <TableRow key={index}>
                     <TableCell>
-                      {new Date(registro.fecha_trabajo).toLocaleDateString('es-CO')}
+                      {formatearFecha(registro.fecha_trabajo)}
                     </TableCell>
                     <TableCell>{registro.empleados?.nombre || 'N/A'}</TableCell>
                     <TableCell>{registro.tareas?.codigo_tarea || 'N/A'}</TableCell>

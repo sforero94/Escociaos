@@ -4,6 +4,7 @@ import { Badge } from '../ui/badge';
 import { Progress } from '../ui/progress';
 import { ScrollArea } from '../ui/scroll-area';
 import { Separator } from '../ui/separator';
+import { formatearFecha, formatearFechaCorta } from '../../utils/fechas';
 import {
   Dialog,
   DialogContent,
@@ -237,8 +238,8 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
                 </div>
                 <Progress value={metricas?.progresoTiempo || 0} className="h-1.5 md:h-2" />
                 <div className="flex justify-between gap-3 text-[11px] md:text-xs text-gray-500">
-                  <span className="truncate">Inicio: {tarea.fecha_estimada_inicio ? new Date(tarea.fecha_estimada_inicio).toLocaleDateString('es-CO', {day: '2-digit', month: 'short'}) : '-'}</span>
-                  <span className="truncate text-right">Fin: {tarea.fecha_estimada_fin ? new Date(tarea.fecha_estimada_fin).toLocaleDateString('es-CO', {day: '2-digit', month: 'short'}) : '-'}</span>
+                  <span className="truncate">Inicio: {tarea.fecha_estimada_inicio ? formatearFechaCorta(tarea.fecha_estimada_inicio) : '-'}</span>
+                  <span className="truncate text-right">Fin: {tarea.fecha_estimada_fin ? formatearFechaCorta(tarea.fecha_estimada_fin) : '-'}</span>
                 </div>
               </div>
 
@@ -319,13 +320,13 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
                       <div className="flex justify-between gap-2 text-sm">
                         <span className="text-gray-600">Inicio:</span>
                         <span className="font-medium text-gray-900 truncate">
-                          {tarea.fecha_estimada_inicio ? new Date(tarea.fecha_estimada_inicio).toLocaleDateString('es-CO') : 'N/A'}
+                          {tarea.fecha_estimada_inicio ? formatearFecha(tarea.fecha_estimada_inicio) : 'N/A'}
                         </span>
                       </div>
                       <div className="flex justify-between gap-2 text-sm">
                         <span className="text-gray-600">Fin:</span>
                         <span className="font-medium text-gray-900 truncate">
-                          {tarea.fecha_estimada_fin ? new Date(tarea.fecha_estimada_fin).toLocaleDateString('es-CO') : 'N/A'}
+                          {tarea.fecha_estimada_fin ? formatearFecha(tarea.fecha_estimada_fin) : 'N/A'}
                         </span>
                       </div>
                     </div>
@@ -386,11 +387,7 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
                         {registrosTrabajo.map((registro) => (
                           <TableRow key={registro.id} className="hover:bg-blue-50/30 transition-colors">
                             <TableCell className="pl-6 font-medium text-sm text-gray-600">
-                              {new Date(registro.fecha_trabajo).toLocaleDateString('es-CO', {
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric'
-                              })}
+                              {formatearFechaCorta(registro.fecha_trabajo)}
                             </TableCell>
                             <TableCell>
                               <div className="flex flex-col gap-1 py-1">
