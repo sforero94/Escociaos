@@ -6,6 +6,7 @@ import { Label } from '../ui/label';
 import { Button } from '../ui/button';
 import { Search, Calendar, MapPin, Bug, Filter, X, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatearFecha, formatearFechaCorta } from '../../utils/fechas';
 
 interface Monitoreo {
   id: string;
@@ -600,9 +601,9 @@ export function TablaMonitoreos() {
                                   <span>Semana {grupo.semana} • {grupo.año}</span>
                                 </h4>
                                 <p className="text-sm text-[#4D240F]/60 mt-0.5">
-                                  {new Date(grupo.fechaInicio).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}
+                                  {formatearFechaCorta(grupo.fechaInicio)}
                                   {' - '}
-                                  {new Date(grupo.fechaFin).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                  {formatearFecha(grupo.fechaFin)}
                                 </p>
                               </div>
                             </div>
@@ -624,11 +625,7 @@ export function TablaMonitoreos() {
                       {isExpanded && grupo.registros.map((m) => (
                         <tr key={m.id} className="hover:bg-[#F8FAF5]/50 transition-colors">
                           <td className="px-4 py-3 text-sm pl-16">
-                            {new Date(m.fecha_monitoreo).toLocaleDateString('es-CO', {
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric'
-                            })}
+                            {formatearFecha(m.fecha_monitoreo)}
                           </td>
                           <td className="px-4 py-3 text-sm text-[#172E08]">
                             {m.lote_nombre}

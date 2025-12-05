@@ -15,6 +15,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
+import { formatearFecha } from '../../utils/fechas';
 
 // ============================================
 // INTERFACES
@@ -361,7 +362,7 @@ export function VistasRapidas({ onVistaSeleccionada }: { onVistaSeleccionada: (f
 
               {/* FOOTER */}
               <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 flex items-center justify-between text-[#4D240F]/60">
-                <span>Actualizado: {vista.ultimaActualizacion.toLocaleDateString('es-CO')}</span>
+                <span>Actualizado: {formatearFecha(vista.ultimaActualizacion.toISOString().split('T')[0])}</span>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();

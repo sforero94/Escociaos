@@ -5,6 +5,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { NuevoMovimientoModal } from './NuevoMovimientoModal';
 import { InventorySubNav } from './InventorySubNav';
+import { formatearFechaHora } from '../../utils/fechas';
 
 interface Movement {
   id: number;
@@ -192,16 +193,7 @@ export function InventoryMovements() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('es-CO', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+  // Removed - now using formatearFechaHora from utils/fechas
 
   const formatReferencia = (tipo: string | null, id: number | null) => {
     if (!tipo || !id) return 'Manual';
@@ -473,7 +465,7 @@ export function InventoryMovements() {
                 {/* Fecha */}
                 <div className="text-right flex-shrink-0 hidden md:block">
                   <p className="text-xs text-[#4D240F]/60 whitespace-nowrap">
-                    {formatDate(movement.created_at)}
+                    {formatearFechaHora(movement.created_at)}
                   </p>
                 </div>
               </div>

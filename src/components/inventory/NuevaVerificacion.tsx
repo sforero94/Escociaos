@@ -4,6 +4,7 @@ import { ClipboardCheck, Loader2, AlertTriangle, Package } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { VerificacionesNav } from './VerificacionesNav';
+import { formatearFecha } from '../../utils/fechas';
 
 interface Producto {
   id: string;
@@ -331,11 +332,7 @@ export function NuevaVerificacion() {
               <div className="pt-4 border-t border-[#73991C]/10">
                 <p className="text-sm text-[#4D240F]/60 mb-1">Fecha de Inicio</p>
                 <p className="text-sm text-[#172E08]">
-                  {new Date().toLocaleDateString('es-CO', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                  })}
+                  {formatearFecha(new Date().toISOString().split('T')[0])}
                 </p>
               </div>
             </div>

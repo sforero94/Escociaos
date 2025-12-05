@@ -8,6 +8,7 @@ import { CSVUploader } from './components/CSVUploader';
 import { parseCSVFile, validarEstructuraCSV, procesarYGuardarCSV } from '../../utils/csvMonitoreo';
 import { ValidationResult } from '../../types/monitoreo';
 import { getSupabase } from '../../utils/supabase/client';
+import { formatearFecha } from '../../utils/fechas';
 
 type Paso = 'seleccionar' | 'validando' | 'preview' | 'cargando' | 'completado';
 
@@ -251,10 +252,10 @@ export function CargaCSV() {
                             <div>
                               <p className="text-green-800">✓ {validacion.stats.plagas} plagas únicas</p>
                               <p className="text-green-800">
-                                ✓ Desde: {validacion.stats.fechaInicio?.toLocaleDateString('es-CO')}
+                                ✓ Desde: {validacion.stats.fechaInicio && formatearFecha(validacion.stats.fechaInicio.toISOString().split('T')[0])}
                               </p>
                               <p className="text-green-800">
-                                ✓ Hasta: {validacion.stats.fechaFin?.toLocaleDateString('es-CO')}
+                                ✓ Hasta: {validacion.stats.fechaFin && formatearFecha(validacion.stats.fechaFin.toISOString().split('T')[0])}
                               </p>
                             </div>
                           </div>

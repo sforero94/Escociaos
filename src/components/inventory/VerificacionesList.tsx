@@ -4,6 +4,7 @@ import { ClipboardCheck, Plus, Eye, Loader2, Calendar, User, CheckCircle2, XCirc
 import { getSupabase } from '../../utils/supabase/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { InventorySubNav } from './InventorySubNav';
+import { formatearFechaCorta } from '../../utils/fechas';
 
 interface Verificacion {
   id: string;
@@ -121,17 +122,7 @@ export function VerificacionesList() {
     }).format(value);
   };
 
-  /**
-   * Formatear fecha
-   */
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('es-CO', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
+  // Removed - now using formatearFechaCorta from utils/fechas
 
   /**
    * Determinar la acción principal según el estado y el rol
@@ -294,7 +285,7 @@ export function VerificacionesList() {
                   {getEstadoIcon(verificacion.estado)}
                   <div>
                     <h3 className="text-lg text-[#172E08]">
-                      Verificación {formatDate(verificacion.fecha_inicio)}
+                      Verificación {formatearFechaCorta(verificacion.fecha_inicio)}
                     </h3>
                     <p className="text-sm text-[#4D240F]/60">
                       ID: {verificacion.id.substring(0, 8)}...
@@ -362,14 +353,14 @@ export function VerificacionesList() {
               {verificacion.fecha_completada && (
                 <div className="flex items-center gap-2 text-xs text-[#4D240F]/60 mb-3">
                   <Calendar className="w-3 h-3" />
-                  Completada: {formatDate(verificacion.fecha_completada)}
+                  Completada: {formatearFechaCorta(verificacion.fecha_completada)}
                 </div>
               )}
 
               {verificacion.fecha_revision && (
                 <div className="flex items-center gap-2 text-xs text-[#4D240F]/60 mb-3">
                   <User className="w-3 h-3" />
-                  Revisada por {verificacion.revisada_por} el {formatDate(verificacion.fecha_revision)}
+                  Revisada por {verificacion.revisada_por} el {formatearFechaCorta(verificacion.fecha_revision)}
                 </div>
               )}
 

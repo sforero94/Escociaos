@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Eye, Sprout, Package, Briefcase, TrendingUp, TrendingDown } from 'lucide-react';
 import { getSupabase } from '../utils/supabase/client';
 import { formatNumber } from '../utils/format';
+import { formatearFechaCorta } from '../utils/fechas';
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 import {
   AlertList,
@@ -371,12 +372,12 @@ function AplicacionesCard({
               <div className="flex items-center gap-2 text-xs text-[#4D240F]/60">
                 {app.fecha_inicio && app.fecha_fin ? (
                   <>
-                    <span>{new Date(app.fecha_inicio).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })}</span>
+                    <span>{formatearFechaCorta(app.fecha_inicio)}</span>
                     <span>→</span>
-                    <span>{new Date(app.fecha_fin).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })}</span>
+                    <span>{formatearFechaCorta(app.fecha_fin)}</span>
                   </>
                 ) : app.fecha_inicio ? (
-                  <span>Inicio: {new Date(app.fecha_inicio).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                  <span>Inicio: {formatearFechaCorta(app.fecha_inicio)}</span>
                 ) : (
                   <span className="italic">Sin fechas definidas</span>
                 )}

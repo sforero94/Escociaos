@@ -17,6 +17,7 @@ import {
   EyeOff
 } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
+import { formatearFecha } from '../../utils/fechas';
 
 // ============================================
 // INTERFACES
@@ -423,7 +424,7 @@ export function CatalogoPlagas() {
                     </td>
                     <td className="px-6 py-4 text-center text-[#4D240F]/60">
                       {plaga.ultima_vez
-                        ? new Date(plaga.ultima_vez).toLocaleDateString('es-CO')
+                        ? formatearFecha(plaga.ultima_vez)
                         : '-'}
                     </td>
                     <td className="px-6 py-4 text-center">

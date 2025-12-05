@@ -16,6 +16,7 @@ import {
 } from 'recharts';
 import { Calendar, TrendingUp, Download } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
+import { formatearFechaCorta } from '../../utils/fechas';
 
 // ============================================
 // INTERFACES
@@ -179,7 +180,7 @@ export function GraficoTendencias({
     const datosFormateados: TendenciaData[] = Object.entries(datosPorFecha)
       .map(([fecha, plagas]) => {
         const punto: TendenciaData = {
-          fecha: formatearFecha(fecha),
+          fecha: formatearFechaCorta(fecha),
           semana: obtenerNumeroSemana(new Date(fecha)),
         };
 
@@ -207,10 +208,7 @@ export function GraficoTendencias({
   // UTILIDADES
   // ============================================
 
-  const formatearFecha = (fecha: string): string => {
-    const date = new Date(fecha);
-    return date.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
-  };
+  // Removed - now using formatearFechaCorta from utils/fechas
 
   const obtenerNumeroSemana = (fecha: Date): number => {
     const primerDia = new Date(fecha.getFullYear(), 0, 1);
@@ -300,7 +298,7 @@ export function GraficoTendencias({
               Tendencias de Incidencia
             </h3>
             <p className="text-[#4D240F]/60">
-              {formatearFecha(rangoFechas.inicio ? rangoFechas.inicio.toISOString() : '1900-01-01')} - {formatearFecha(rangoFechas.fin.toISOString())}
+              {formatearFechaCorta(rangoFechas.inicio ? rangoFechas.inicio.toISOString().split('T')[0] : '1900-01-01')} - {formatearFechaCorta(rangoFechas.fin.toISOString().split('T')[0])}
             </p>
           </div>
         </div>

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
 import { formatNumber } from '../../utils/format';
 import { Link } from 'react-router-dom';
+import { formatearFechaHora } from '../../utils/fechas';
 import { 
   Package, 
   ArrowUpCircle, 
@@ -354,11 +355,9 @@ export function MovementsDashboard() {
     if (diffMins < 60) return `Hace ${diffMins} min`;
     if (diffHours < 24) return `Hace ${diffHours} h`;
     if (diffDays < 7) return `Hace ${diffDays} días`;
-    
-    return date.toLocaleDateString('es-CO', {
-      month: 'short',
-      day: 'numeric',
-    });
+
+    // Use formatearFechaHora for older dates
+    return formatearFechaHora(dateString);
   };
 
   const formatCurrency = (value: number): string => {

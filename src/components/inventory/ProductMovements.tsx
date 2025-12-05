@@ -3,6 +3,7 @@ import { ArrowUpCircle, ArrowDownCircle, RefreshCw, ChevronDown, Package } from 
 import { getSupabase } from '../../utils/supabase/client';
 import { formatNumber } from '../../utils/format';
 import { Button } from '../ui/button';
+import { formatearFechaHora } from '../../utils/fechas';
 
 interface Movement {
   id: number;
@@ -51,16 +52,7 @@ export function ProductMovements({ productId, productName, unidadMedida }: Produ
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('es-CO', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+  // Removed - now using formatearFechaHora from utils/fechas
 
   const formatReferencia = (tipo: string | null, id: number | null) => {
     if (!tipo || !id) return 'Manual';
@@ -196,7 +188,7 @@ export function ProductMovements({ productId, productName, unidadMedida }: Produ
 
                   {/* Fecha */}
                   <div className="text-right text-xs text-[#4D240F]/60 whitespace-nowrap">
-                    {formatDate(movement.created_at)}
+                    {formatearFechaHora(movement.created_at)}
                   </div>
                 </div>
               </div>

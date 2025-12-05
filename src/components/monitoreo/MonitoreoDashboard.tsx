@@ -21,6 +21,7 @@ import { VistasRapidas } from './VistasRapidas';
 import { CatalogoPlagas } from './CatalogoPlagas';
 import { CargaCSV } from './CargaCSV';
 import { TablaMonitoreos } from './TablaMonitoreos';
+import { formatearFecha } from '../../utils/fechas';
 
 // ============================================
 // INTERFACES
@@ -187,7 +188,7 @@ export function MonitoreoDashboard() {
     const nuevasMetricas: MetricaDashboard[] = [
       {
         label: 'Último Monitoreo',
-        valor: ultimaFecha.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }),
+        valor: formatearFecha(ultimaFecha.toISOString().split('T')[0]),
         icono: Calendar,
         color: 'blue'
       },

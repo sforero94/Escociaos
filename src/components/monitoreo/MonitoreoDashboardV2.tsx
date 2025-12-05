@@ -29,6 +29,7 @@ import {
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useState, useEffect, useRef } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
+import { formatearFechaCorta } from '../../utils/fechas';
 
 // ============================================
 // INTERFACES
@@ -730,10 +731,7 @@ export function MonitoreoDashboardV2() {
     return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
   }
 
-  function formatearFecha(fecha: string): string {
-    const d = new Date(fecha);
-    return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
-  }
+  // Removed - now using formatearFechaCorta from utils/fechas
 
   function togglePlaga(plaga: string) {
     setPlagasExpandidas(prev => {

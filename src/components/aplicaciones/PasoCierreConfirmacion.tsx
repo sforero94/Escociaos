@@ -15,6 +15,7 @@ import type {
   DetalleCierreLote,
   ComparacionProducto,
 } from '../../types/aplicaciones';
+import { formatearFecha } from '../../utils/fechas';
 
 interface PasoCierreConfirmacionProps {
   aplicacion: Aplicacion;
@@ -77,13 +78,7 @@ export function PasoCierreConfirmacion({
     }).format(valor);
   };
 
-  const formatearFecha = (fecha: string): string => {
-    return new Date(fecha).toLocaleDateString('es-CO', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  };
+  // Removed - now using formatearFecha from utils/fechas
 
   const desviacionesAltas = comparacionProductos.filter(
     (p) => Math.abs(p.porcentaje_desviacion) > 20

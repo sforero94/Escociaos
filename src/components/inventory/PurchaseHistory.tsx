@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { formatearFecha, formatearFechaHora } from '../../utils/fechas';
 
 interface Purchase {
   id: string;
@@ -52,14 +53,7 @@ function PurchaseDetailModal({ purchase, onClose }: { purchase: Purchase; onClos
     }).format(value);
   };
 
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('es-CO', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  };
+  // Removed - now using formatearFecha from utils/fechas
 
   return (
     <div className="fixed inset-0 bg-[#172E08]/20 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -99,7 +93,7 @@ function PurchaseDetailModal({ purchase, onClose }: { purchase: Purchase; onClos
                   <Calendar className="w-4 h-4 text-[#73991C]" />
                   <p className="text-xs text-[#4D240F]/60">Fecha de Compra</p>
                 </div>
-                <p className="text-[#172E08]">{formatDate(purchase.fecha_compra)}</p>
+                <p className="text-[#172E08]">{formatearFecha(purchase.fecha_compra)}</p>
               </div>
 
               <div className="bg-[#F8FAF5] rounded-xl p-4 border border-[#73991C]/10">
@@ -197,7 +191,7 @@ function PurchaseDetailModal({ purchase, onClose }: { purchase: Purchase; onClos
                   <Calendar className="w-4 h-4 text-[#73991C]" />
                   <p className="text-xs text-[#4D240F]/60">Fecha de Vencimiento</p>
                 </div>
-                <p className="text-[#172E08]">{formatDate(purchase.fecha_vencimiento)}</p>
+                <p className="text-[#172E08]">{purchase.fecha_vencimiento ? formatearFecha(purchase.fecha_vencimiento) : '-'}</p>
               </div>
             </div>
           )}
@@ -304,13 +298,7 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
     }).format(value);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('es-CO', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
+  // Removed - now using formatearFecha from utils/fechas
 
   if (loading) {
     return (
@@ -405,7 +393,7 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-[#73991C]" />
                         <span className="text-sm text-[#172E08]">
-                          {formatDate(purchase.fecha_compra)}
+                          {formatearFecha(purchase.fecha_compra)}
                         </span>
                       </div>
                     </td>
@@ -488,7 +476,7 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
                   <div>
                     <p className="text-xs text-[#4D240F]/60">Fecha</p>
                     <p className="text-sm text-[#172E08]">
-                      {formatDate(purchase.fecha_compra)}
+                      {formatearFecha(purchase.fecha_compra)}
                     </p>
                   </div>
                   <div>
