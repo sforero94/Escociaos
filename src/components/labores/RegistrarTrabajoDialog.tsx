@@ -197,6 +197,39 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
         return;
       }
 
+      // Check for duplicate records before inserting
+      const { data: existingRecords, error: checkError } = await getSupabase()
+        .from('registros_trabajo')
+        .select('empleado_id, lote_id, empleados(nombre), lotes(nombre)')
+        .eq('tarea_id', tarea.id)
+        .eq('fecha_trabajo', fechaTrabajo)
+        .in('empleado_id', registrosData.map(r => r.empleado_id))
+        .in('lote_id', registrosData.map(r => r.lote_id));
+
+      if (checkError) throw checkError;
+
+      // Find duplicates
+      const duplicates: string[] = [];
+      if (existingRecords && existingRecords.length > 0) {
+        registrosData.forEach(newRecord => {
+          const isDuplicate = (existingRecords as any[]).some(
+            (existing: any) =>
+              existing.empleado_id === newRecord.empleado_id &&
+              existing.lote_id === newRecord.lote_id
+          );
+          if (isDuplicate) {
+            const empleadoNombre = selectedEmpleados.find((e: Empleado) => e.id === newRecord.empleado_id)?.nombre || 'Desconocido';
+            const loteNombre = tareaLotes.find((l: Lote) => l && l.id === newRecord.lote_id)?.nombre || 'Desconocido';
+            duplicates.push(`${empleadoNombre} en ${loteNombre}`);
+          }
+        });
+      }
+
+      if (duplicates.length > 0) {
+        onError(`Ya existe registro de trabajo para esta fecha:\n${duplicates.join('\n')}`);
+        return;
+      }
+
       const { error } = await getSupabase()
         .from('registros_trabajo')
         .insert(registrosData);
