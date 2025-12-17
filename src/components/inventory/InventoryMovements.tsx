@@ -70,7 +70,6 @@ export function InventoryMovements() {
       if (error) throw error;
       setProducts(data || []);
     } catch (err: any) {
-      console.error('Error cargando productos:', err);
     }
   };
 
@@ -113,7 +112,6 @@ export function InventoryMovements() {
       
       // Debug: Ver qué tipo_movimiento viene de la BD
       if (data && data.length > 0) {
-        console.log('🔍 Ejemplo de movimiento desde BD:', {
           tipo_movimiento: data[0].tipo_movimiento,
           tipo_exact: `"${data[0].tipo_movimiento}"`,
           cantidad: data[0].cantidad,
@@ -123,7 +121,6 @@ export function InventoryMovements() {
       
       setMovements(data || []);
     } catch (err: any) {
-      console.error('Error cargando movimientos:', err);
       setError('Error al cargar los movimientos');
     } finally {
       setLoading(false);

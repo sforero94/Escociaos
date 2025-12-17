@@ -185,17 +185,86 @@ export function formatearFechaLarga(fecha: Date | string | null | undefined): st
  */
 export function formatearFechaCorta(fecha: Date | string | null | undefined): string {
   if (!fecha) return '';
-  
+
   const date = typeof fecha === 'string' ? new Date(fecha + 'T00:00:00') : fecha;
-  
+
   const mesesCortos = [
     'ene', 'feb', 'mar', 'abr', 'may', 'jun',
     'jul', 'ago', 'sep', 'oct', 'nov', 'dic'
   ];
-  
+
   const dia = date.getDate();
   const mes = mesesCortos[date.getMonth()];
   const anio = date.getFullYear();
-  
+
   return `${dia} ${mes} ${anio}`;
+}
+
+/**
+ * Calcula el rango de fechas según el período seleccionado
+ * @param periodo - 'mes_actual' | 'trimestre' | 'ytd' | 'ano_anterior' | 'rango_personalizado'
+ * @returns Objeto con fecha_desde y fecha_hasta en formato YYYY-MM-DD
+ */
+export function calcularRangoFechasPorPeriodo(periodo: string): { fecha_desde: string; fecha_hasta: string } {
+  const hoy = new Date();
+  const anioActual = hoy.getFullYear();
+  const mesActual = hoy.getMonth(); // 0-11
+
+  switch (periodo) {
+    case 'mes_actual': {
+      // Primer día del mes actual
+      const primerDia = new Date(anioActual, mesActual, 1);
+      // Último día del mes actual
+      const ultimoDia = new Date(anioActual, mesActual + 1, 0);
+
+      return {
+        fecha_desde: fechaAISODate(primerDia),
+        fecha_hasta: fechaAISODate(ultimoDia)
+      };
+    }
+
+    case 'trimestre': {
+      // Calcular primer mes del trimestre actual
+      const primerMesTrimestre = Math.floor(mesActual / 3) * 3;
+
+      // Primer día del trimestre
+      const primerDia = new Date(anioActual, primerMesTrimestre, 1);
+      // Último día del trimestre (último día del tercer mes)
+      const ultimoDia = new Date(anioActual, primerMesTrimestre + 3, 0);
+
+      return {
+        fecha_desde: fechaAISODate(primerDia),
+        fecha_hasta: fechaAISODate(ultimoDia)
+      };
+    }
+
+    case 'ytd': {
+      // Año hasta la fecha: 1 de enero hasta hoy
+      const primerDia = new Date(anioActual, 0, 1);
+
+      return {
+        fecha_desde: fechaAISODate(primerDia),
+        fecha_hasta: obtenerFechaHoy()
+      };
+    }
+
+    case 'ano_anterior': {
+      // Todo el año anterior
+      const primerDia = new Date(anioActual - 1, 0, 1);
+      const ultimoDia = new Date(anioActual - 1, 11, 31);
+
+      return {
+        fecha_desde: fechaAISODate(primerDia),
+        fecha_hasta: fechaAISODate(ultimoDia)
+      };
+    }
+
+    default:
+      // Para 'rango_personalizado' o cualquier otro caso, retornar vacío
+      // El componente debe manejar las fechas personalizadas por separado
+      return {
+        fecha_desde: '',
+        fecha_hasta: ''
+      };
+  }
 }

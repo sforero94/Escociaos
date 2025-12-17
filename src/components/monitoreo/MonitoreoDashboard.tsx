@@ -107,7 +107,6 @@ export function MonitoreoDashboard() {
       let currentOffset = 0;
       let hasMore = true;
 
-      console.log('🔄 Cargando datos en lotes...');
 
       while (hasMore && allMonitoreos.length < MAX_RECORDS) {
         let query = supabase
@@ -135,13 +134,11 @@ export function MonitoreoDashboard() {
           allMonitoreos = [...allMonitoreos, ...data];
           currentOffset += BATCH_SIZE;
           hasMore = data.length === BATCH_SIZE && allMonitoreos.length < MAX_RECORDS;
-          console.log(`✅ Lote cargado: ${data.length} registros (Total: ${allMonitoreos.length})`);
         } else {
           hasMore = false;
         }
       }
 
-      console.log(`✅ Monitoreos cargados (${rangoSeleccionado}):`, allMonitoreos?.length || 0);
 
       // Procesar datos
       await procesarMetricas(allMonitoreos || []);
@@ -149,7 +146,6 @@ export function MonitoreoDashboard() {
       await calcularTopPlagas(allMonitoreos || []);
 
     } catch (error) {
-      console.error('Error al cargar dashboard:', error);
     } finally {
       setIsLoading(false);
     }
@@ -234,7 +230,6 @@ export function MonitoreoDashboard() {
         descripcion: `Se detectaron ${criticos.length} monitoreos con gravedad alta. Revisa y programa tratamientos.`,
         accion: {
           texto: 'Ver Críticos',
-          onClick: () => console.log('Filtrar críticos')
         }
       });
     }

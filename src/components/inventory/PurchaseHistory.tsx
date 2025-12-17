@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
+import { useAuth } from '../../contexts/AuthContext';
 import { InventorySubNav } from './InventorySubNav';
 import {
   ShoppingCart,
@@ -13,6 +14,8 @@ import {
   Eye,
   X,
   ExternalLink,
+  Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -234,11 +237,14 @@ function PurchaseDetailModal({ purchase, onClose }: { purchase: Purchase; onClos
  * Historial de Compras - Lista de todas las compras registradas
  */
 export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }) {
+  const { user } = useAuth();
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [filteredPurchases, setFilteredPurchases] = useState<Purchase[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null);
+  const [purchaseToDelete, setPurchaseToDelete] = useState<Purchase | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadPurchases();
@@ -265,7 +271,6 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
 
       setPurchases(data || []);
     } catch (error) {
-      console.error('Error cargando compras:', error);
     } finally {
       setLoading(false);
     }
@@ -296,6 +301,114 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
       currency: 'COP',
       minimumFractionDigits: 0,
     }).format(value);
+  };
+
+  const handleDeletePurchase = async () => {
+    if (!purchaseToDelete) return;
+
+    try {
+      setDeleting(true);
+      const supabase = getSupabase();
+
+      // 1. Revertir inventario (restar la cantidad de la compra del producto)
+      const { data: currentProduct, error: productFetchError } = await supabase
+        .from('productos')
+        .select('cantidad_actual')
+        .eq('id', purchaseToDelete.producto_id)
+        .single();
+
+      if (productFetchError) throw new Error('Error al obtener producto: ' + productFetchError.message);
+
+      const nuevaCantidad = currentProduct.cantidad_actual - purchaseToDelete.cantidad;
+
+      if (nuevaCantidad < 0) {
+        alert('No se puede eliminar la compra porque resultaría en inventario negativo');
+        return;
+      }
+
+      const { error: inventoryError } = await supabase
+        .from('productos')
+        .update({
+          cantidad_actual: nuevaCantidad,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', purchaseToDelete.producto_id);
+
+      if (inventoryError) throw new Error('Error al actualizar inventario: ' + inventoryError.message);
+
+      // 2. Eliminar gasto pendiente asociado (si existe)
+      const { error: gastoError } = await supabase
+        .from('fin_gastos')
+        .delete()
+        .eq('compra_id', purchaseToDelete.id);
+
+      if (gastoError) {
+        // No lanzar error, puede que no exista
+      }
+
+      // 3. Eliminar factura de Storage (si existe)
+      if (purchaseToDelete.link_factura) {
+        const { error: storageError } = await supabase.storage
+          .from('facturas')
+          .remove([purchaseToDelete.link_factura]);
+
+        if (storageError) {
+          // No lanzar error, continuar con la eliminación
+        }
+      }
+
+      // 4. Eliminar movimiento de compra original y crear movimiento de ajuste
+      // 4a. Eliminar el movimiento original de la compra
+      const { error: movementDeleteError } = await supabase
+        .from('movimientos_inventario')
+        .delete()
+        .eq('compra_id', purchaseToDelete.id);
+
+      if (movementDeleteError) {
+      }
+
+      // 4b. Crear nuevo movimiento de ajuste que documente la eliminación
+      const { error: movementAjusteError } = await supabase
+        .from('movimientos_inventario')
+        .insert([
+          {
+            fecha_movimiento: new Date().toISOString().split('T')[0],
+            producto_id: purchaseToDelete.producto_id,
+            tipo_movimiento: 'Salida',
+            cantidad: purchaseToDelete.cantidad,
+            unidad: purchaseToDelete.unidad,
+            factura: null,
+            saldo_anterior: currentProduct.cantidad_actual,
+            saldo_nuevo: nuevaCantidad,
+            valor_movimiento: purchaseToDelete.costo_total,
+            responsable: user?.email || null,
+            observaciones: `Ajuste por eliminación de compra - Factura: ${purchaseToDelete.numero_factura || 'N/A'} - Proveedor: ${purchaseToDelete.proveedor} - Fecha original: ${purchaseToDelete.fecha_compra}`,
+            provisional: false,
+          },
+        ]);
+
+      if (movementAjusteError) {
+        // No lanzar error, continuar con la eliminación
+      }
+
+      // 5. Eliminar la compra
+      const { error: deleteError } = await supabase
+        .from('compras')
+        .delete()
+        .eq('id', purchaseToDelete.id);
+
+      if (deleteError) throw new Error('Error al eliminar compra: ' + deleteError.message);
+
+      // Recargar lista de compras
+      await loadPurchases();
+      setPurchaseToDelete(null);
+
+      alert('Compra eliminada exitosamente');
+    } catch (error: unknown) {
+      alert(error instanceof Error ? error.message : 'Error al eliminar la compra. Intenta de nuevo.');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   // Removed - now using formatearFecha from utils/fechas
@@ -433,13 +546,24 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
                       </span>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <Button
-                        onClick={() => setSelectedPurchase(purchase)}
-                        variant="ghost"
-                        className="text-[#73991C] hover:bg-[#73991C]/10 rounded-xl"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
+                      <div className="flex items-center justify-center gap-2">
+                        <Button
+                          onClick={() => setSelectedPurchase(purchase)}
+                          variant="ghost"
+                          className="text-[#73991C] hover:bg-[#73991C]/10 rounded-xl"
+                          title="Ver detalles"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          onClick={() => setPurchaseToDelete(purchase)}
+                          variant="ghost"
+                          className="text-red-600 hover:bg-red-50 rounded-xl"
+                          title="Eliminar compra"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -463,13 +587,24 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
                       {purchase.proveedor}
                     </p>
                   </div>
-                  <Button
-                    onClick={() => setSelectedPurchase(purchase)}
-                    variant="ghost"
-                    className="text-[#73991C] hover:bg-[#73991C]/10 rounded-xl -mr-2"
-                  >
-                    <Eye className="w-4 h-4" />
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      onClick={() => setSelectedPurchase(purchase)}
+                      variant="ghost"
+                      className="text-[#73991C] hover:bg-[#73991C]/10 rounded-xl"
+                      title="Ver detalles"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      onClick={() => setPurchaseToDelete(purchase)}
+                      variant="ghost"
+                      className="text-red-600 hover:bg-red-50 rounded-xl -mr-2"
+                      title="Eliminar compra"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -545,6 +680,87 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
           purchase={selectedPurchase}
           onClose={() => setSelectedPurchase(null)}
         />
+      )}
+
+      {/* Modal de Confirmación de Eliminación */}
+      {purchaseToDelete && (
+        <div className="fixed inset-0 bg-[#172E08]/20 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-red-500 to-red-600 px-6 py-4 flex items-center gap-3 rounded-t-2xl">
+              <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-white" />
+              </div>
+              <h2 className="text-white">Confirmar Eliminación</h2>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-4">
+              <p className="text-[#172E08]">
+                ¿Estás seguro de que deseas eliminar esta compra?
+              </p>
+
+              <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-2">
+                <p className="text-sm text-[#172E08]">
+                  <strong>Producto:</strong> {purchaseToDelete.producto?.nombre || 'Sin nombre'}
+                </p>
+                <p className="text-sm text-[#172E08]">
+                  <strong>Cantidad:</strong> {purchaseToDelete.cantidad} {purchaseToDelete.unidad}
+                </p>
+                <p className="text-sm text-[#172E08]">
+                  <strong>Proveedor:</strong> {purchaseToDelete.proveedor}
+                </p>
+                <p className="text-sm text-[#172E08]">
+                  <strong>Factura:</strong> {purchaseToDelete.numero_factura || 'Sin factura'}
+                </p>
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                <div className="flex gap-2">
+                  <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-yellow-800 space-y-1">
+                    <p className="font-medium">Esta acción:</p>
+                    <ul className="list-disc list-inside space-y-1 ml-2">
+                      <li>Restará {purchaseToDelete.cantidad} {purchaseToDelete.unidad} del inventario</li>
+                      <li>Eliminará el gasto pendiente asociado (si existe)</li>
+                      <li>Eliminará la factura adjunta (si existe)</li>
+                      <li>No se puede deshacer</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex gap-3 pt-2">
+                <Button
+                  onClick={() => setPurchaseToDelete(null)}
+                  variant="outline"
+                  className="flex-1 border-[#73991C]/30 text-[#73991C] hover:bg-[#73991C]/5 rounded-xl"
+                  disabled={deleting}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleDeletePurchase}
+                  className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-xl"
+                  disabled={deleting}
+                >
+                  {deleting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Eliminando...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Eliminar Compra
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

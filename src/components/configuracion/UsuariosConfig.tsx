@@ -57,7 +57,6 @@ export function UsuariosConfig() {
       if (error) throw error;
       setUsuarios(data || []);
     } catch (error: any) {
-      console.error('Error cargando usuarios:', error);
       toast.error('Error al cargar usuarios: ' + error.message);
     } finally {
       setLoading(false);
@@ -146,7 +145,6 @@ export function UsuariosConfig() {
       setModalOpen(false);
       cargarUsuarios();
     } catch (error: any) {
-      console.error('Error guardando usuario:', error);
       toast.error(error.message);
     }
   };
@@ -177,7 +175,6 @@ export function UsuariosConfig() {
       toast.success('Usuario eliminado exitosamente');
       cargarUsuarios();
     } catch (error: any) {
-      console.error('Error eliminando usuario:', error);
       toast.error(error.message);
     }
   };

@@ -44,7 +44,6 @@ export function DetalleAplicacion({
   const cargarDatos = async () => {
     setLoading(true);
     try {
-      console.log('🔍 Cargando datos para aplicación:', aplicacion.id);
 
       // 1. Cargar aplicación completa
       const { data: appData, error: appError } = await supabase
@@ -62,10 +61,8 @@ export function DetalleAplicacion({
         .single();
 
       if (appError) {
-        console.error('Error cargando aplicación:', appError);
       }
 
-      console.log('📋 Datos de aplicación:', appData);
 
       // Extraer lotes
       const lotesNombres = appData?.aplicaciones_lotes?.map(
@@ -104,7 +101,6 @@ export function DetalleAplicacion({
         .eq('aplicacion_id', aplicacion.id);
 
       if (errorCalculos) {
-        console.error('Error cargando cálculos:', errorCalculos);
       }
 
       const totalCanecasPlaneadas = calculos?.reduce(
@@ -120,7 +116,6 @@ export function DetalleAplicacion({
         .eq('aplicacion_id', aplicacion.id);
 
       if (errorMovimientos) {
-        console.error('Error cargando movimientos diarios:', errorMovimientos);
       }
 
       const totalCanecasAplicadas = movimientosDiarios?.reduce(
@@ -136,7 +131,6 @@ export function DetalleAplicacion({
         .eq('aplicacion_id', aplicacion.id);
 
       if (errorMezclas) {
-        console.error('Error cargando mezclas:', errorMezclas);
       }
 
       let productosPlaneados = null;
@@ -152,7 +146,6 @@ export function DetalleAplicacion({
         productosPlaneados = result.data;
 
         if (result.error) {
-          console.error('Error cargando productos planeados:', result.error);
         }
       }
 
@@ -224,7 +217,6 @@ export function DetalleAplicacion({
       setResumenInsumos(insumos);
 
     } catch (error) {
-      console.error('❌ Error cargando datos:', error);
     } finally {
       setLoading(false);
     }
@@ -318,7 +310,6 @@ export function DetalleAplicacion({
       generarPDFListaCompras(lista, configuracion, datosEmpresa);
 
     } catch (error: any) {
-      console.error('Error:', error);
       alert('Error al generar el PDF');
     } finally {
       setDescargandoPDF(false);

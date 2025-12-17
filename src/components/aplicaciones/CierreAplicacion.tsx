@@ -84,7 +84,6 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
     setLoading(true);
     setError(null);
     try {
-      console.log('🔍 Cargando datos para cierre de aplicación:', aplicacion.id);
 
       // 1. Cargar aplicación completa con lotes
       const { data: appData } = await supabase
@@ -103,7 +102,6 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
         .eq('id', aplicacion.id)
         .single();
 
-      console.log('📋 Datos de aplicación:', appData);
 
       // Extraer lotes con árboles
       const lotesData: LoteConArboles[] = appData?.aplicaciones_lotes?.map((al: any) => ({
@@ -123,8 +121,6 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
       }));
       setDatosFinales(prev => ({ ...prev, jornalesPorLote: jornalesIniciales }));
 
-      console.log('🌳 Lotes cargados:', lotesData);
-      console.log('🌳 Total árboles:', lotesData.reduce((sum, l) => sum + l.arboles, 0));
 
       // Extraer fechas planeadas
       setFechaInicioPlaneada(appData?.fecha_inicio_planeada || '');
@@ -171,7 +167,6 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
         throw new Error(`Error cargando movimientos: ${errorMovimientos.message}`);
       }
 
-      console.log('🚛 Movimientos diarios:', movimientosDiarios);
 
       // Variable para almacenar movimientos consolidados
       let movimientosConsolidados: Movimiento[] = [];
@@ -196,7 +191,6 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
           throw new Error(`Error cargando productos de movimientos: ${errorProductosMovimientos.message}`);
         }
 
-        console.log('📦 Productos de movimientos:', productosMovimientos);
 
         if (productosMovimientos && productosMovimientos.length > 0) {
           // Obtener IDs únicos de productos
@@ -208,10 +202,8 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
             .select('id, precio_unitario')
             .in('id', productosIds);
 
-          console.log('💰 Productos con precios desde BD:', productos);
 
           if (errorProductos) {
-            console.error('❌ ERROR al cargar precios de productos:', errorProductos);
             setError(
               `No se pudieron cargar los precios: ${errorProductos.message}. Verifica tus permisos o contacta al administrador.`
             );
@@ -221,7 +213,6 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
           }
 
           if (!productos || productos.length === 0) {
-            console.warn('⚠️ No se encontraron precios para los productos');
             setError('No hay precios configurados para los productos utilizados');
             setMovimientos([]);
             setLoading(false);
@@ -233,7 +224,6 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
             (p) => !p.precio_unitario || p.precio_unitario === 0
           );
           if (productosSinPrecio.length > 0) {
-            console.warn('⚠️ Productos sin precio:', productosSinPrecio);
             setError(
               `${productosSinPrecio.length} producto(s) no tienen precio asignado. Por favor actualiza los precios en el módulo de Inventario antes de cerrar.`
             );
@@ -271,14 +261,11 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
             });
           });
 
-          console.log('✅ Movimientos cargados con costos:', movimientosConsolidados);
           setMovimientos(movimientosConsolidados);
         } else {
-          console.warn('⚠️ No hay productos en los movimientos');
           setMovimientos([]);
         }
       } else {
-        console.warn('⚠️ No hay movimientos para esta aplicación');
         setMovimientos([]);
       }
 
@@ -301,7 +288,6 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
         productosPlaneados = result.data;
       }
 
-      console.log('📦 Productos planeados:', productosPlaneados);
 
       // 5. Consolidar insumos
       const insumosMap = new Map<string, ResumenInsumo>();
@@ -338,9 +324,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
 
       setResumenInsumos(Array.from(insumosMap.values()));
 
-      console.log('✅ Datos cargados exitosamente');
     } catch (err: any) {
-      console.error('Error cargando datos:', err);
       setError('Error al cargar los datos: ' + err.message);
     } finally {
       setLoading(false);
@@ -365,13 +349,22 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
   const cerrarAplicacion = async () => {
     try {
       setProcesando(true);
-      console.log('🔒 Iniciando cierre de aplicación...');
 
       // Calcular total de jornales
       const totalJornales = datosFinales.jornalesPorLote.reduce(
         (sum, j) => sum + j.preparacion + j.aplicacion + j.transporte,
         0
       );
+
+      // Calcular costos
+      const totalArboles = lotes.reduce((sum, lote) => sum + lote.arboles, 0);
+      const costoInsumos = movimientos.reduce(
+        (sum, mov) => sum + mov.cantidad_utilizada * mov.costo_unitario,
+        0
+      );
+      const costoManoObra = totalJornales * datosFinales.valorJornal;
+      const costoTotal = costoInsumos + costoManoObra;
+      const costoPorArbol = totalArboles > 0 ? costoTotal / totalArboles : 0;
 
       // Calcular días de aplicación
       const fechaInicio = new Date(datosFinales.fechaInicioReal);
@@ -398,11 +391,9 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
         .single();
 
       if (errorCierre) {
-        console.error('❌ Error creando registro de cierre:', errorCierre);
         throw new Error('Error al crear registro de cierre: ' + errorCierre.message);
       }
 
-      console.log('✅ Registro de cierre creado:', cierreData.id);
 
       // 2️⃣ ACTUALIZAR TABLA aplicaciones (simplificado)
       const { error: errorUpdate } = await supabase
@@ -424,15 +415,12 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
         .eq('id', aplicacion.id);
 
       if (errorUpdate) {
-        console.error('❌ Error actualizando aplicación:', errorUpdate);
         throw new Error('Error al actualizar la aplicación: ' + errorUpdate.message);
       }
 
-      console.log('✅ Aplicación actualizada a estado Cerrada');
 
       // 3️⃣ CONSOLIDAR INVENTARIO DE PRODUCTOS APLICADOS
       if (movimientos.length > 0) {
-        console.log('📦 Consolidando inventario...');
 
         // Agrupar movimientos por producto
         const consolidado = new Map<string, { nombre: string; cantidad: number }>();
@@ -449,7 +437,6 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
           item.cantidad += mov.cantidad_utilizada;
         });
 
-        console.log('📊 Productos consolidados:', Object.fromEntries(consolidado));
 
         // Para cada producto: actualizar inventario y crear movimiento
         for (const [productoId, { nombre, cantidad }] of consolidado.entries()) {
@@ -461,7 +448,6 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
             .single();
 
           if (errorProd || !producto) {
-            console.error(`❌ Error obteniendo producto ${productoId}:`, errorProd);
             throw new Error(`Error obteniendo datos del producto ${nombre}`);
           }
 
@@ -475,7 +461,6 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
             .eq('id', productoId);
 
           if (errorUpdate) {
-            console.error(`❌ Error actualizando inventario de ${productoId}:`, errorUpdate);
             throw new Error(`Error actualizando inventario de ${nombre}`);
           }
 
@@ -499,20 +484,15 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
             });
 
           if (errorMov) {
-            console.error(`❌ Error creando movimiento de inventario para ${productoId}:`, errorMov);
             throw new Error(`Error registrando movimiento de ${nombre}`);
           }
 
-          console.log(`✅ Producto ${nombre}: ${saldoAnterior.toFixed(2)} → ${saldoNuevo.toFixed(2)} ${producto.unidad_medida}`);
         }
 
-        console.log('✅ Inventario consolidado exitosamente');
       }
 
-      console.log('✅ Aplicación cerrada exitosamente');
       onCerrado();
     } catch (err: any) {
-      console.error('Error cerrando aplicación:', err);
       setError('Error al cerrar la aplicación: ' + err.message);
     } finally {
       setProcesando(false);

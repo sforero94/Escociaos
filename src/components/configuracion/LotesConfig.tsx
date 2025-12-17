@@ -56,7 +56,6 @@ export function LotesConfig() {
       if (error) throw error;
       setLotes(data || []);
     } catch (error) {
-      console.error('Error cargando lotes:', error);
       toast.error('Error al cargar los lotes');
     } finally {
       setLoading(false);
@@ -127,7 +126,6 @@ export function LotesConfig() {
       await cargarLotes();
       cancelarEdicion();
     } catch (error: any) {
-      console.error('Error guardando lote:', error);
       
       // Manejar error de duplicate key
       if (error.code === '23505') {
@@ -157,7 +155,6 @@ export function LotesConfig() {
     if (!loteToDelete) return;
 
     try {
-      console.log('🗑️ Intentando eliminar lote:', loteToDelete.id, loteToDelete.nombre);
       
       const { data, error } = await supabase
         .from('lotes')
@@ -165,20 +162,16 @@ export function LotesConfig() {
         .eq('id', loteToDelete.id)
         .select();
 
-      console.log('📊 Resultado de eliminación:', { data, error });
 
       if (error) {
-        console.error('❌ Error al eliminar:', error);
         throw error;
       }
       
-      console.log('✅ Lote eliminado exitosamente');
       toast.success('Lote eliminado exitosamente');
       await cargarLotes();
       setDeleteDialogOpen(false);
       setLoteToDelete(null);
     } catch (error: any) {
-      console.error('❌ Error eliminando lote:', error);
       
       // Cerrar el diálogo primero
       setDeleteDialogOpen(false);
@@ -257,7 +250,6 @@ export function LotesConfig() {
       await cargarLotes();
       toast.success('Orden actualizado');
     } catch (error) {
-      console.error('Error moviendo lote:', error);
       toast.error('Error al cambiar el orden');
     }
   }

@@ -95,7 +95,6 @@ export function CalculadoraAplicaciones() {
   const cargarAplicacion = async () => {
     try {
       setCargandoDatos(true);
-      console.log('📥 Cargando aplicación para editar:', id);
 
       // 1. Obtener aplicación base
       const { data: aplicacion, error: errorAplicacion } = await supabase
@@ -105,7 +104,6 @@ export function CalculadoraAplicaciones() {
         .single();
 
       if (errorAplicacion) {
-        console.error('❌ Error cargando aplicación:', errorAplicacion);
         throw errorAplicacion;
       }
 
@@ -113,7 +111,6 @@ export function CalculadoraAplicaciones() {
         throw new Error('Aplicación no encontrada');
       }
 
-      console.log('✅ Aplicación cargada:', aplicacion);
 
       // 2. Obtener lotes con conteo de árboles
       const { data: lotesData, error: errorLotes } = await supabase
@@ -129,11 +126,9 @@ export function CalculadoraAplicaciones() {
         .eq('aplicacion_id', id);
 
       if (errorLotes) {
-        console.error('❌ Error cargando lotes:', errorLotes);
         throw errorLotes;
       }
 
-      console.log('✅ Lotes cargados:', lotesData);
 
       // 3. Obtener mezclas
       const { data: mezclas, error: errorMezclas } = await supabase
@@ -143,11 +138,9 @@ export function CalculadoraAplicaciones() {
         .order('numero_mezcla');
 
       if (errorMezclas) {
-        console.error('❌ Error cargando mezclas:', errorMezclas);
         throw errorMezclas;
       }
 
-      console.log('✅ Mezclas cargadas:', mezclas);
 
       // 4. Obtener productos de cada mezcla
       const mezclasConProductos = await Promise.all(
@@ -158,7 +151,6 @@ export function CalculadoraAplicaciones() {
             .eq('mezcla_id', mezcla.id);
 
           if (errorProductos) {
-            console.error('❌ Error cargando productos de mezcla:', errorProductos);
             throw errorProductos;
           }
 
@@ -183,7 +175,6 @@ export function CalculadoraAplicaciones() {
         })
       );
 
-      console.log('✅ Productos cargados:', mezclasConProductos);
 
       // 5. Obtener cálculos
       const { data: calculos, error: errorCalculos } = await supabase
@@ -192,11 +183,9 @@ export function CalculadoraAplicaciones() {
         .eq('aplicacion_id', id);
 
       if (errorCalculos) {
-        console.error('❌ Error cargando cálculos:', errorCalculos);
         throw errorCalculos;
       }
 
-      console.log('✅ Cálculos cargados:', calculos);
 
       // 6. Obtener lista de compras
       const { data: compras, error: errorCompras } = await supabase
@@ -221,11 +210,9 @@ export function CalculadoraAplicaciones() {
         .eq('aplicacion_id', id);
 
       if (errorCompras) {
-        console.error('❌ Error cargando lista de compras:', errorCompras);
         throw errorCompras;
       }
 
-      console.log('✅ Lista de compras cargada:', compras);
 
       // 7. Mapear datos a la configuración
       const tipoAplicacion = aplicacion.tipo_aplicacion === 'Fumigación' 
@@ -318,10 +305,8 @@ export function CalculadoraAplicaciones() {
         error: null,
       });
 
-      console.log('🎉 Datos cargados y estado actualizado correctamente');
 
     } catch (error) {
-      console.error('💥 Error cargando aplicación:', error);
       setState(prev => ({
         ...prev,
         error: error instanceof Error ? error.message : 'Error cargando la aplicación'
@@ -500,7 +485,6 @@ export function CalculadoraAplicaciones() {
         // MODO EDICIÓN: ACTUALIZAR APLICACIÓN EXISTENTE
         // =============================================================
         
-        console.log('📝 Actualizando aplicación:', id);
 
         // Obtener código existente
         const { data: aplicacionExistente } = await supabase
@@ -536,14 +520,11 @@ export function CalculadoraAplicaciones() {
           .eq('id', id);
 
         if (errorAplicacion) {
-          console.error('❌ Error actualizando aplicación:', errorAplicacion);
           throw errorAplicacion;
         }
 
-        console.log('✅ Aplicación actualizada');
 
         // Eliminar relaciones existentes
-        console.log('🗑️ Eliminando relaciones existentes...');
 
         // Eliminar lotes
         await supabase
@@ -584,7 +565,6 @@ export function CalculadoraAplicaciones() {
           .delete()
           .eq('aplicacion_id', id);
 
-        console.log('✅ Relaciones eliminadas');
 
         aplicacionId = id;
 
@@ -633,7 +613,6 @@ export function CalculadoraAplicaciones() {
           fecha_fin_ejecucion: null,
         };
 
-        console.log('📝 Insertando aplicación:', aplicacionData);
 
         const { data: aplicacion, error: errorAplicacion } = await supabase
           .from('aplicaciones')
@@ -642,11 +621,9 @@ export function CalculadoraAplicaciones() {
           .single();
 
         if (errorAplicacion) {
-          console.error('❌ Error insertando aplicación:', errorAplicacion);
           throw errorAplicacion;
         }
 
-        console.log('✅ Aplicación insertada:', aplicacion.id);
         aplicacionId = aplicacion.id;
       }
 
@@ -671,18 +648,15 @@ export function CalculadoraAplicaciones() {
           : null,
       }));
 
-      console.log('📝 Insertando lotes:', lotesData.length);
 
       const { error: errorLotes } = await supabase
         .from('aplicaciones_lotes')
         .insert(lotesData);
 
       if (errorLotes) {
-        console.error('❌ Error insertando lotes:', errorLotes);
         throw errorLotes;
       }
 
-      console.log('✅ Lotes insertados');
 
       // =============================================================
       // PASO 3: INSERTAR MEZCLAS Y PRODUCTOS
@@ -696,7 +670,6 @@ export function CalculadoraAplicaciones() {
           nombre_mezcla: mezcla.nombre,
         };
 
-        console.log('📝 Insertando mezcla:', mezclaData.nombre_mezcla);
 
         const { data: mezclaInsertada, error: errorMezcla } = await supabase
           .from('aplicaciones_mezclas')
@@ -705,11 +678,9 @@ export function CalculadoraAplicaciones() {
           .single();
 
         if (errorMezcla) {
-          console.error('❌ Error insertando mezcla:', errorMezcla);
           throw errorMezcla;
         }
 
-        console.log('✅ Mezcla insertada:', mezclaInsertada.id);
 
         // Insertar productos de la mezcla
         const productosData = mezcla.productos.map((producto) => ({
@@ -739,18 +710,15 @@ export function CalculadoraAplicaciones() {
           producto_unidad: producto.producto_unidad,
         }));
 
-        console.log('📝 Insertando productos de mezcla:', productosData.length);
 
         const { error: errorProductos } = await supabase
           .from('aplicaciones_productos')
           .insert(productosData);
 
         if (errorProductos) {
-          console.error('❌ Error insertando productos:', errorProductos);
           throw errorProductos;
         }
 
-        console.log('✅ Productos insertados');
       }
 
       // =============================================================
@@ -798,18 +766,15 @@ export function CalculadoraAplicaciones() {
         };
       });
 
-      console.log('📝 Insertando cálculos:', calculosData.length);
 
       const { error: errorCalculos } = await supabase
         .from('aplicaciones_calculos')
         .insert(calculosData);
 
       if (errorCalculos) {
-        console.error('❌ Error insertando cálculos:', errorCalculos);
         throw errorCalculos;
       }
 
-      console.log('✅ Cálculos insertados');
 
       // =============================================================
       // PASO 5: INSERTAR LISTA DE COMPRAS
@@ -833,28 +798,21 @@ export function CalculadoraAplicaciones() {
           // NO incluir 'estado' - ese campo pertenece a la tabla productos, no a aplicaciones_compras
         }));
 
-        console.log('📝 Insertando lista de compras:', comprasData.length);
-        console.log('📋 Sample item:', comprasData[0]);
 
         const { error: errorCompras } = await supabase
           .from('aplicaciones_compras')
           .insert(comprasData);
 
         if (errorCompras) {
-          console.error('❌ Error insertando lista de compras:', errorCompras);
-          console.error('❌ Datos que se intentaron insertar:', comprasData[0]);
           throw errorCompras;
         }
 
-        console.log('✅ Lista de compras insertada');
       }
 
       // =============================================================
       // ÉXITO - REDIRIGIR
       // =============================================================
       
-      console.log(`🎉 Aplicación ${modoEdicion ? 'actualizada' : 'guardada'} exitosamente:`, aplicacionId);
-      console.log('📋 Código:', codigoAplicacion);
 
       // Redirigir al listado con mensaje de éxito
       navigate('/aplicaciones', { 
@@ -867,7 +825,6 @@ export function CalculadoraAplicaciones() {
       });
       
     } catch (error) {
-      console.error('💥 Error al guardar aplicación:', error);
       setState((prev) => ({
         ...prev,
         error: error instanceof Error ? error.message : 'Error al guardar la aplicación',

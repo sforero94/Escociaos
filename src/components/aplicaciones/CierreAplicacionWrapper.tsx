@@ -44,7 +44,6 @@ export function CierreAplicacionWrapper() {
 
       setAplicacion(data);
     } catch (err: any) {
-      console.error('Error cargando aplicación:', err);
       setError(err.message || 'Error cargando la aplicación');
     } finally {
       setLoading(false);

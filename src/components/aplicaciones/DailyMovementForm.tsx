@@ -34,8 +34,6 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
   const [error, setError] = useState<string | null>(null);
 
   // 🚨 DIAGNÓSTICO - Verificar tipo de aplicación
-  console.log('🚨 TIPO DE APLICACIÓN RECIBIDA:', aplicacion.tipo_aplicacion);
-  console.log('🚨 APLICACIÓN COMPLETA:', aplicacion);
 
   // Estados del formulario
   const [fechaMovimiento, setFechaMovimiento] = useState(obtenerFechaHoy());
@@ -164,7 +162,6 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         await precargarProductos(productosArray);
       }
     } catch (err: any) {
-      console.error('Error cargando datos:', err);
       setError('Error al cargar los datos de la aplicación');
     }
   };
@@ -188,7 +185,6 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
             presentacionKgL = productoData.presentacion_kg_l;
           }
         } catch (err) {
-          console.error('Error al cargar presentacion:', err);
         }
       }
 
@@ -220,7 +216,6 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         }
       }
     } catch (err: any) {
-      console.error('Error cargando usuario:', err);
     }
   };
 
@@ -250,12 +245,10 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
           .single();
         
         if (errorProducto) {
-          console.error('Error cargando presentacion_kg_l:', errorProducto);
         } else {
           presentacionKgL = productoData?.presentacion_kg_l;
         }
       } catch (err) {
-        console.error('Error al cargar presentacion:', err);
       }
     }
 
@@ -408,7 +401,6 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         let cantidadFinal: number;
         let unidadFinal: UnidadMedida;
 
-        console.log('🔍 PRODUCTO A GUARDAR:', {
           nombre: p.producto_nombre,
           cantidad_utilizada: p.cantidad_utilizada,
           unidad_producto: p.unidad_producto,
@@ -422,12 +414,10 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
           }
           cantidadFinal = parseFloat(p.cantidad_utilizada) * p.presentacion_kg_l;
           unidadFinal = 'Kilos';
-          console.log(`✅ Fertilización: ${p.cantidad_utilizada} bultos × ${p.presentacion_kg_l} Kg/bulto = ${cantidadFinal} Kilos`);
         } else {
           // Fumigación/Drench: Ya viene en Litros o Kilos desde la BD
           cantidadFinal = parseFloat(p.cantidad_utilizada);
           unidadFinal = p.unidad_producto as UnidadMedida; // Cast seguro porque viene del ENUM
-          console.log(`✅ Fumigación/Drench: ${cantidadFinal} ${unidadFinal}`);
         }
 
         return {
@@ -450,7 +440,6 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         throw errorProductos;
       }
 
-      console.log('✅ Movimiento diario y productos registrados exitosamente');
 
       // Limpiar formulario
       setFechaMovimiento(obtenerFechaHoy());
@@ -469,7 +458,6 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       onSuccess();
 
     } catch (err: any) {
-      console.error('Error guardando movimiento:', err);
       setError(err.message || 'Error al guardar el movimiento');
     } finally {
       setLoading(false);

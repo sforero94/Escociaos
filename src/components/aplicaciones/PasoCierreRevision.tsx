@@ -84,19 +84,12 @@ export function PasoCierreRevision({
   const cantidadesPlaneadas = useMemo(() => {
     const planeadas = new Map<string, number>();
 
-    console.log('=== DEBUG: Calculando cantidades planeadas ===');
-    console.log('aplicacion.mezclas:', aplicacion.mezclas);
-    console.log('aplicacion.calculos:', aplicacion.calculos);
-    console.log('aplicacion.lista_compras:', aplicacion.lista_compras);
 
     // Intentar obtener de mezclas (estructura principal)
     if (aplicacion.mezclas && aplicacion.mezclas.length > 0) {
-      console.log('Usando aplicacion.mezclas');
       aplicacion.mezclas.forEach((mezcla, index) => {
-        console.log(`Mezcla ${index}:`, mezcla);
         if (mezcla.productos && Array.isArray(mezcla.productos)) {
           mezcla.productos.forEach((producto) => {
-            console.log('Producto en mezcla:', producto);
             const productoId = producto.producto_id || producto.id;
             const cantidad = producto.cantidad_total_necesaria || producto.cantidad || 0;
             const actual = planeadas.get(productoId) || 0;
@@ -107,9 +100,7 @@ export function PasoCierreRevision({
     }
     // Intentar obtener de lista_compras como alternativa
     else if (aplicacion.lista_compras && aplicacion.lista_compras.length > 0) {
-      console.log('Usando aplicacion.lista_compras');
       aplicacion.lista_compras.forEach((item) => {
-        console.log('Item en lista_compras:', item);
         const productoId = item.producto_id || item.id;
         const cantidad = item.cantidad_total || item.cantidad || 0;
         const actual = planeadas.get(productoId) || 0;
@@ -118,9 +109,7 @@ export function PasoCierreRevision({
     }
     // Intentar obtener de calculos como última opción
     else if (aplicacion.calculos && aplicacion.calculos.length > 0) {
-      console.log('Usando aplicacion.calculos');
       aplicacion.calculos.forEach((calculo) => {
-        console.log('Calculo:', calculo);
         if (calculo.productos && Array.isArray(calculo.productos)) {
           calculo.productos.forEach((producto) => {
             const productoId = producto.producto_id || producto.id;
@@ -132,14 +121,12 @@ export function PasoCierreRevision({
       });
     }
 
-    console.log('Cantidades planeadas calculadas:', Object.fromEntries(planeadas));
     return planeadas;
   }, [aplicacion.mezclas, aplicacion.calculos, aplicacion.lista_compras]);
 
   // Calcular canecas planeadas totales desde aplicaciones_calculos
   const canecasPlaneadas = useMemo(() => {
     if (!aplicacion.calculos || aplicacion.calculos.length === 0) {
-      console.log('⚠️ No hay calculos disponibles para canecas planeadas');
       return 0;
     }
     
@@ -148,8 +135,6 @@ export function PasoCierreRevision({
       0
     );
     
-    console.log('🎯 Canecas planeadas totales:', total);
-    console.log('🎯 Detalle por lote:', aplicacion.calculos.map(c => ({
       lote: c.lote_nombre,
       canecas: c.numero_canecas,
     })));

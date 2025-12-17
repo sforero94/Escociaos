@@ -234,7 +234,6 @@ export function ImportarProductosCSV() {
         }, 3000);
       }
     } catch (error: any) {
-      console.error('Error al procesar CSV:', error);
       setResultado({
         success: false,
         message: error.message || 'Error al procesar el archivo'

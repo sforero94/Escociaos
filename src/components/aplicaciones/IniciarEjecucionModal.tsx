@@ -42,7 +42,6 @@ export function IniciarEjecucionModal({
       setError(null);
       setProductosFaltantes([]);
 
-      console.log('🔍 Validando stock para aplicación:', aplicacion.id);
 
       // 1. Cargar productos necesarios de todas las mezclas
       const { data: mezclas, error: errorMezclas } = await supabase
@@ -51,12 +50,10 @@ export function IniciarEjecucionModal({
         .eq('aplicacion_id', aplicacion.id);
 
       if (errorMezclas) {
-        console.error('❌ Error cargando mezclas:', errorMezclas);
         throw new Error('Error al cargar mezclas');
       }
 
       if (!mezclas || mezclas.length === 0) {
-        console.log('✅ No hay productos definidos, puede continuar');
         setStockValidado(true);
         return true;
       }
@@ -69,12 +66,10 @@ export function IniciarEjecucionModal({
         .in('mezcla_id', mezclasIds);
 
       if (errorProductos) {
-        console.error('❌ Error cargando productos:', errorProductos);
         throw new Error('Error al cargar productos necesarios');
       }
 
       if (!productosNecesarios || productosNecesarios.length === 0) {
-        console.log('✅ No hay productos, puede continuar');
         setStockValidado(true);
         return true;
       }
@@ -104,7 +99,6 @@ export function IniciarEjecucionModal({
         .in('id', productosIds);
 
       if (errorStock) {
-        console.error('❌ Error cargando stock:', errorStock);
         throw new Error('Error al cargar inventario actual');
       }
 
@@ -129,18 +123,15 @@ export function IniciarEjecucionModal({
 
       // 5. Resultado
       if (faltantes.length > 0) {
-        console.warn('⚠️ Stock insuficiente:', faltantes);
         setProductosFaltantes(faltantes);
         setStockValidado(false);
         return false;
       }
 
-      console.log('✅ Stock suficiente para todos los productos');
       setStockValidado(true);
       return true;
 
     } catch (err: any) {
-      console.error('❌ Error validando stock:', err);
       setError(err.message || 'Error al validar inventario');
       return false;
     } finally {
@@ -203,7 +194,6 @@ export function IniciarEjecucionModal({
 
       onSuccess();
     } catch (err: any) {
-      console.error('Error iniciando ejecución:', err);
       setError(err.message || 'Error al iniciar la ejecución');
     } finally {
       setLoading(false);

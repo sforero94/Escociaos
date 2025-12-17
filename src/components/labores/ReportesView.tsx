@@ -150,7 +150,6 @@ const ReportesView: React.FC<ReportesViewProps> = ({
       setRegistrosTrabajo(registros || []);
       procesarDatos(registros || []);
     } catch (error: any) {
-      console.error('Error cargando datos de reportes:', error);
     } finally {
       setLoading(false);
     }

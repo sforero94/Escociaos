@@ -99,7 +99,6 @@ export function SublotesConfig() {
       
       setSublotes(sublotesConLote);
     } catch (error) {
-      console.error('Error cargando datos:', error);
       toast.error('Error al cargar los datos');
     } finally {
       setLoading(false);
@@ -181,7 +180,6 @@ export function SublotesConfig() {
       await cargarDatos();
       cancelarEdicion();
     } catch (error: any) {
-      console.error('Error guardando sublote:', error);
       
       // Manejar error de duplicate key
       if (error.code === '23505') {
@@ -223,7 +221,6 @@ export function SublotesConfig() {
       setDeleteDialogOpen(false);
       setSubloteToDelete(null);
     } catch (error: any) {
-      console.error('Error eliminando sublote:', error);
       
       if (error.code === '23503') {
         const detalles = error.details || '';
@@ -287,7 +284,6 @@ export function SublotesConfig() {
       await cargarDatos();
       toast.success('Orden actualizado');
     } catch (error) {
-      console.error('Error moviendo sublote:', error);
       toast.error('Error al cambiar el orden');
     }
   }

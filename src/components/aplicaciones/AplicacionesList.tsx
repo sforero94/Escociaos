@@ -111,11 +111,9 @@ export function AplicacionesList() {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Error cargando aplicaciones:', error);
         throw error;
       }
 
-      console.log('📊 Datos crudos de Supabase:', data);
 
       // Mapear datos de BD al formato de la interfaz
       const aplicacionesMapeadas: Aplicacion[] = [];
@@ -149,7 +147,6 @@ export function AplicacionesList() {
               }
             } catch (e) {
               // Si falla el parse, es texto plano - dejarlo como array vacío
-              console.warn(`⚠️  blanco_biologico no es JSON válido para aplicación ${row.id}:`, row.blanco_biologico);
               blancoBiologico = [];
             }
           }
@@ -199,15 +196,12 @@ export function AplicacionesList() {
             actualizado_en: row.updated_at,
           });
         } catch (rowError) {
-          console.error(`❌ Error procesando aplicación ${row.id}:`, rowError);
           // Continuar con el siguiente registro
         }
       });
 
-      console.log('✅ Aplicaciones mapeadas correctamente:', aplicacionesMapeadas.length);
       setAplicaciones(aplicacionesMapeadas);
     } catch (error) {
-      console.error('Error cargando aplicaciones:', error);
     } finally {
       setIsLoading(false);
     }
@@ -239,22 +233,18 @@ export function AplicacionesList() {
    */
   const handleEliminar = async (aplicacionId: string) => {
     try {
-      console.log('🗑️ Iniciando eliminación de aplicación:', aplicacionId);
 
       // 1. Verificar y eliminar movimientos de inventario primero
-      console.log('🔍 Verificando movimientos de inventario...');
       const { data: movimientos, error: errorCheckMovimientos } = await supabase
         .from('movimientos_inventario')
         .select('id')
         .eq('aplicacion_id', aplicacionId);
 
       if (errorCheckMovimientos) {
-        console.error('❌ Error verificando movimientos:', errorCheckMovimientos);
         throw errorCheckMovimientos;
       }
 
       if (movimientos && movimientos.length > 0) {
-        console.log(`⚠️ Encontrados ${movimientos.length} movimientos de inventario. Eliminando...`);
         
         const { error: errorDeleteMovimientos } = await supabase
           .from('movimientos_inventario')
@@ -262,13 +252,10 @@ export function AplicacionesList() {
           .eq('aplicacion_id', aplicacionId);
 
         if (errorDeleteMovimientos) {
-          console.error('❌ Error eliminando movimientos de inventario:', errorDeleteMovimientos);
           throw errorDeleteMovimientos;
         }
         
-        console.log('✅ Movimientos de inventario eliminados');
       } else {
-        console.log('ℹ️ No hay movimientos de inventario asociados');
       }
 
       // 2. Eliminar relaciones con lotes
@@ -278,11 +265,9 @@ export function AplicacionesList() {
         .eq('aplicacion_id', aplicacionId);
 
       if (errorLotes) {
-        console.error('❌ Error eliminando relaciones con lotes:', errorLotes);
         throw errorLotes;
       }
 
-      console.log('✅ Lotes eliminados');
 
       // 3. Obtener IDs de mezclas
       const { data: mezclas, error: errorMezclas } = await supabase
@@ -291,11 +276,9 @@ export function AplicacionesList() {
         .eq('aplicacion_id', aplicacionId);
 
       if (errorMezclas) {
-        console.error('❌ Error obteniendo mezclas:', errorMezclas);
         throw errorMezclas;
       }
 
-      console.log('✅ Mezclas obtenidas:', mezclas?.length || 0);
 
       // 4. Eliminar productos de las mezclas
       if (mezclas && mezclas.length > 0) {
@@ -307,11 +290,9 @@ export function AplicacionesList() {
           .in('mezcla_id', mezclaIds);
 
         if (errorProductosMezcla) {
-          console.error('❌ Error eliminando productos de mezclas:', errorProductosMezcla);
           throw errorProductosMezcla;
         }
 
-        console.log('✅ Productos de mezclas eliminados');
 
         // 5. Eliminar mezclas
         const { error: errorDeleteMezclas } = await supabase
@@ -320,11 +301,9 @@ export function AplicacionesList() {
           .in('id', mezclaIds);
 
         if (errorDeleteMezclas) {
-          console.error('❌ Error eliminando mezclas:', errorDeleteMezclas);
           throw errorDeleteMezclas;
         }
 
-        console.log('✅ Mezclas eliminadas');
       }
 
       // 6. Eliminar cálculos
@@ -334,11 +313,9 @@ export function AplicacionesList() {
         .eq('aplicacion_id', aplicacionId);
 
       if (errorCalculos) {
-        console.error('❌ Error eliminando cálculos:', errorCalculos);
         throw errorCalculos;
       }
 
-      console.log('✅ Cálculos eliminados');
 
       // 7. Eliminar lista de compras
       const { error: errorCompras } = await supabase
@@ -347,11 +324,9 @@ export function AplicacionesList() {
         .eq('aplicacion_id', aplicacionId);
 
       if (errorCompras) {
-        console.error('❌ Error eliminando lista de compras:', errorCompras);
         throw errorCompras;
       }
 
-      console.log('✅ Lista de compras eliminada');
 
       // 8. Finalmente, eliminar la aplicación
       const { error: errorAplicacion } = await supabase
@@ -360,20 +335,16 @@ export function AplicacionesList() {
         .eq('id', aplicacionId);
 
       if (errorAplicacion) {
-        console.error('❌ Error eliminando aplicación:', errorAplicacion);
         throw errorAplicacion;
       }
 
-      console.log('✅ Aplicación eliminada');
 
       // Actualizar lista local
       setAplicaciones(aplicaciones.filter(a => a.id !== aplicacionId));
       setEliminando(null);
       
-      console.log('🎉 Eliminación completada exitosamente');
       alert('Aplicación eliminada exitosamente');
     } catch (error) {
-      console.error('💥 Error eliminando aplicación:', error);
       alert('Error al eliminar la aplicación. Por favor intenta nuevamente.');
     }
   };

@@ -161,7 +161,6 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
         setFormData(formattedData);
       }
     } catch (err: any) {
-      console.error('Error cargando producto:', err);
       setError('Error al cargar el producto');
     }
   };
@@ -268,7 +267,6 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
       setFormData(initialFormData);
       setCurrentSection(1);
     } catch (err: any) {
-      console.error('Error guardando producto:', err);
       if (err.code === '23505') {
         setError('Ya existe un producto con ese nombre');
       } else {

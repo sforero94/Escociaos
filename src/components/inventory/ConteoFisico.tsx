@@ -112,7 +112,6 @@ export function ConteoFisico() {
         .order('contado', { ascending: true }); // Los no contados primero
 
       if (errorDets) {
-        console.error('Error cargando verificación:', errorDets);
         throw errorDets;
       }
 
@@ -134,7 +133,6 @@ export function ConteoFisico() {
         }
       }
     } catch (err: any) {
-      console.error('Error cargando verificación:', err);
       setError('Error al cargar verificación: ' + err.message);
     } finally {
       setIsLoading(false);
@@ -179,7 +177,6 @@ export function ConteoFisico() {
       // Limpiar mensaje después de 2 segundos
       setTimeout(() => setSuccessMessage(''), 2000);
     } catch (err: any) {
-      console.error('Error guardando producto:', err);
       setError('Error al guardar: ' + err.message);
     } finally {
       setIsSaving(false);
@@ -245,7 +242,6 @@ export function ConteoFisico() {
       // Navegar a la lista
       navigate('/inventario/verificaciones');
     } catch (err: any) {
-      console.error('Error completando verificación:', err);
       setError('Error al completar: ' + err.message);
     } finally {
       setIsCompleting(false);

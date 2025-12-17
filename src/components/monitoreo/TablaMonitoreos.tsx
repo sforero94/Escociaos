@@ -62,7 +62,6 @@ export function TablaMonitoreos() {
   async function cargarMonitoreos() {
     try {
       setLoading(true);
-      console.log('🔍 Cargando todos los monitoreos con paginación...');
 
       // ✅ SOLUCIÓN: Cargar en lotes de 1000 hasta completar 5000
       const BATCH_SIZE = 1000;
@@ -72,7 +71,6 @@ export function TablaMonitoreos() {
       let hasMore = true;
 
       while (hasMore && allData.length < MAX_RECORDS) {
-        console.log(`📦 Cargando lote ${currentOffset / BATCH_SIZE + 1}...`);
         
         const { data, error, count } = await supabase
           .from('monitoreos')
@@ -96,7 +94,6 @@ export function TablaMonitoreos() {
           .order('fecha_monitoreo', { ascending: false });
 
         if (error) {
-          console.error('❌ Error cargando monitoreos:', error);
           throw error;
         }
 
@@ -105,7 +102,6 @@ export function TablaMonitoreos() {
           currentOffset += BATCH_SIZE;
           hasMore = data.length === BATCH_SIZE && allData.length < MAX_RECORDS;
           
-          console.log(`✅ Lote cargado: ${data.length} registros (Total acumulado: ${allData.length})`);
           
           // Si ya alcanzamos el total de la BD, detener
           if (count && allData.length >= count) {
@@ -116,8 +112,6 @@ export function TablaMonitoreos() {
         }
       }
 
-      console.log(`🎉 TOTAL CARGADO: ${allData.length} registros`);
-      console.log('📊 Total en BD:', allData.length);
 
       // Mapear los datos
       const monitoreosFormateados = allData?.map((m: any) => ({
@@ -145,7 +139,6 @@ export function TablaMonitoreos() {
         toast.success(`${monitoreosFormateados.length} registros cargados`);
       }
     } catch (error) {
-      console.error('Error cargando monitoreos:', error);
       toast.error('Error al cargar los monitoreos');
     } finally {
       setLoading(false);

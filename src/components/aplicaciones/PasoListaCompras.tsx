@@ -110,7 +110,6 @@ export function PasoListaCompras({
       setLista(nuevaLista);
       onUpdate(nuevaLista);
     } catch (error) {
-      console.error('Error generando lista de compras:', error);
       alert('Error al generar lista de compras');
     } finally {
       setCargando(false);

@@ -9,7 +9,6 @@ export function CargaMasiva() {
 
   const handleDownloadTemplate = () => {
     // TODO: Implementar descarga de plantilla
-    console.log('Descargando plantilla...');
     // Aquí se implementará la lógica para descargar un archivo CSV/Excel con la estructura correcta
   };
 
@@ -26,7 +25,6 @@ export function CargaMasiva() {
     setUploading(true);
     try {
       // TODO: Implementar carga de archivo
-      console.log('Cargando archivo:', selectedFile.name);
       // Aquí se implementará la lógica para procesar el archivo CSV/Excel
       
       // Simulación de carga
@@ -35,7 +33,6 @@ export function CargaMasiva() {
       alert('Archivo cargado exitosamente');
       setSelectedFile(null);
     } catch (error) {
-      console.error('Error cargando archivo:', error);
       alert('Error al cargar el archivo');
     } finally {
       setUploading(false);

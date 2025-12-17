@@ -12,7 +12,6 @@ export function ProtectedRoute({ children, fallback }: ProtectedRouteProps) {
 
   // Debug logs
   useEffect(() => {
-    console.log('🔒 ProtectedRoute - Estado:', {
       isLoading,
       isAuthenticated,
       hasUser: !!user,
@@ -22,7 +21,6 @@ export function ProtectedRoute({ children, fallback }: ProtectedRouteProps) {
 
   // Mostrar loader mientras carga
   if (isLoading) {
-    console.log('⏳ ProtectedRoute: Mostrando loader...');
     return (
       <div className="min-h-screen bg-[#F8FAF5] flex items-center justify-center">
         <div className="text-center">
@@ -35,11 +33,9 @@ export function ProtectedRoute({ children, fallback }: ProtectedRouteProps) {
 
   // Si no está autenticado, mostrar fallback o null
   if (!isAuthenticated) {
-    console.log('❌ ProtectedRoute: Usuario NO autenticado, mostrando fallback');
     return fallback ? <>{fallback}</> : null;
   }
 
   // Usuario autenticado, mostrar contenido
-  console.log('✅ ProtectedRoute: Usuario autenticado, mostrando contenido');
   return <>{children}</>;
 }

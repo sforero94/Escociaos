@@ -48,7 +48,6 @@ export function PasoCierreValidacion({
     try {
       // Validar que existan los datos necesarios
       if (!aplicacion.mezclas || aplicacion.mezclas.length === 0) {
-        console.warn('No hay mezclas configuradas en la aplicación');
         setComparacionProductos([]);
         setDetallesLotes([]);
         setDesviacionMaxima(0);
@@ -61,7 +60,6 @@ export function PasoCierreValidacion({
         !aplicacion.configuracion.lotes_seleccionados ||
         aplicacion.configuracion.lotes_seleccionados.length === 0
       ) {
-        console.warn('No hay lotes configurados en la aplicación');
         // Solo calcular productos sin lotes
         calcularSoloProductos();
         return;
@@ -69,7 +67,6 @@ export function PasoCierreValidacion({
 
       calcularTodo();
     } catch (error) {
-      console.error('Error en cálculos de validación:', error);
       setComparacionProductos([]);
       setDetallesLotes([]);
     }
@@ -98,7 +95,6 @@ export function PasoCierreValidacion({
       });
     });
 
-    console.log('📦 Productos map inicial (solo productos):', Array.from(productosMap.values()));
 
     // Sumar cantidades reales de movimientos
     movimientos.forEach((mov) => {
@@ -108,7 +104,6 @@ export function PasoCierreValidacion({
         // Actualizar costo unitario si está disponible
         if (mov.costo_unitario && producto.costo_unitario === 0) {
           producto.costo_unitario = mov.costo_unitario;
-          console.log(`💰 Costo cargado para ${producto.producto_nombre}: $${mov.costo_unitario}`);
         }
       }
     });
@@ -120,11 +115,9 @@ export function PasoCierreValidacion({
         p.cantidad_planeada > 0 ? (p.diferencia / p.cantidad_planeada) * 100 : 0;
       // Calcular costo total con el precio unitario real
       p.costo_total = p.cantidad_real * (p.costo_unitario || 0);
-      console.log(`📊 ${p.producto_nombre}: Cantidad=${p.cantidad_real} x Costo=$${p.costo_unitario} = Total=$${p.costo_total}`);
       return p;
     });
 
-    console.log('✅ Productos calculados (solo productos):', productosArray);
 
     setComparacionProductos(productosArray);
     onComparacionProductosCalculada(productosArray);

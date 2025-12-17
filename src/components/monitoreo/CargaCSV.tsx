@@ -39,25 +39,17 @@ export function CargaCSV() {
   };
 
   const handleFileSelect = async (file: File) => {
-    console.log('🔵 [CargaCSV] Archivo seleccionado:', file.name, file.size, 'bytes');
     setArchivo(file);
     setPaso('validando');
 
     try {
-      console.log('🔵 [CargaCSV] Iniciando parseCSVFile...');
       const data = await parseCSVFile(file);
-      console.log('✅ [CargaCSV] CSV parseado exitosamente. Filas:', data.length);
-      console.log('🔍 [CargaCSV] Primera fila:', data[0]);
       
-      console.log('🔵 [CargaCSV] Iniciando validación...');
       const validation = validarEstructuraCSV(data);
-      console.log('✅ [CargaCSV] Validación completada:', validation);
       
       setValidacion(validation);
       setPaso('preview');
     } catch (error) {
-      console.error('❌ [CargaCSV] Error validando CSV:', error);
-      console.error('❌ [CargaCSV] Stack trace:', error instanceof Error ? error.stack : 'No stack');
       setValidacion({
         isValid: false,
         errors: [`Error al leer el archivo CSV: ${error instanceof Error ? error.message : 'Error desconocido'}`],
@@ -77,16 +69,13 @@ export function CargaCSV() {
 
   const handleCargar = async () => {
     if (!archivo || !validacion?.isValid) {
-      console.log('⚠️ [CargaCSV] No se puede cargar. Archivo:', !!archivo, 'Validación válida:', validacion?.isValid);
       return;
     }
 
-    console.log('🔵 [CargaCSV] Iniciando carga...');
     setPaso('cargando');
     setProgreso(0);
 
     const supabase = getSupabase();
-    console.log('🔍 [CargaCSV] Cliente Supabase obtenido');
     
     // Simular progreso
     const interval = setInterval(() => {
@@ -94,9 +83,7 @@ export function CargaCSV() {
     }, 200);
 
     try {
-      console.log('🔵 [CargaCSV] Llamando a procesarYGuardarCSV...');
       const result = await procesarYGuardarCSV(archivo, supabase);
-      console.log('✅ [CargaCSV] Resultado de procesarYGuardarCSV:', result);
       
       clearInterval(interval);
       setProgreso(100);
@@ -104,15 +91,12 @@ export function CargaCSV() {
       setPaso('completado');
       
       if (result.success) {
-        console.log('✅ [CargaCSV] Carga exitosa. Cerrando en 2 segundos...');
         setTimeout(() => {
           cerrarModal();
         }, 2000);
       }
     } catch (error) {
       clearInterval(interval);
-      console.error('❌ [CargaCSV] Error cargando CSV:', error);
-      console.error('❌ [CargaCSV] Stack:', error instanceof Error ? error.stack : 'No stack');
       setResultado({
         success: false,
         message: `Error: ${error instanceof Error ? error.message : 'Desconocido'}`,

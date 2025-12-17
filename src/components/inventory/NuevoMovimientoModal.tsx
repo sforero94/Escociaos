@@ -55,7 +55,6 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
       if (error) throw error;
       setProducts(data || []);
     } catch (err: any) {
-      console.error('Error buscando productos:', err);
     } finally {
       setSearching(false);
     }
@@ -153,7 +152,6 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
       }, 1500);
 
     } catch (err: any) {
-      console.error('Error registrando movimiento:', err);
       setError(err.message || 'Error al registrar el movimiento');
     } finally {
       setLoading(false);

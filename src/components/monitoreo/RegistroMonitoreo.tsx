@@ -113,7 +113,6 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
       
       setPlagas(plagasData || []);
     } catch (error) {
-      console.error('Error cargando datos:', error);
       toast.error('Error al cargar los catálogos');
     }
   }
@@ -134,7 +133,6 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
         localStorage.removeItem(STORAGE_KEY);
       }
     } catch (error) {
-      console.error('Error restaurando sesión:', error);
     }
   }
 
@@ -145,7 +143,6 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
         monitores
       }));
     } catch (error) {
-      console.error('Error guardando sesión:', error);
     }
   }
 
@@ -265,7 +262,6 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
         };
       });
 
-      console.log('📤 Enviando registros a Supabase:', registros);
 
       // Insertar en batch
       const { error } = await supabase
@@ -288,7 +284,6 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
       }
 
     } catch (error: any) {
-      console.error('Error guardando registros:', error);
       toast.error(`Error al guardar: ${error.message || 'Desconocido'}`);
     } finally {
       setLoading(false);

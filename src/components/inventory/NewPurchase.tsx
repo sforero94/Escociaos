@@ -3,7 +3,8 @@ import { getSupabase } from '../../utils/supabase/client';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../shared/Toast';
-import { InventorySubNav } from './InventorySubNav';
+import { ProveedorDialog } from '../shared/ProveedorDialog';
+import { FacturaUploader } from '../shared/FacturaUploader';
 import {
   Package,
   Search,
@@ -24,6 +25,16 @@ import {
   SelectValue,
 } from '../ui/select';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
+
+// Vendor interface
+interface Proveedor {
+  id: string;
+  nombre: string;
+  nit?: string;
+  telefono?: string;
+  email?: string;
+  activo: boolean;
+}
 
 // ============================================
 // INTERFACES
@@ -66,9 +77,9 @@ interface ProductoCompra {
 
 interface DatosCompra {
   fecha: string;
-  proveedor: string;
+  proveedor_id: string;
   numero_factura: string;
-  link_factura: string;
+  url_factura: string;
 }
 
 // ============================================
@@ -83,24 +94,27 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
   // Estados principales
   const [datosCompra, setDatosCompra] = useState<DatosCompra>({
     fecha: new Date().toISOString().split('T')[0],
-    proveedor: '',
+    proveedor_id: '',
     numero_factura: '',
-    link_factura: '',
+    url_factura: '',
   });
 
   const [productosDisponibles, setProductosDisponibles] = useState<Producto[]>([]);
+  const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [terminoBusqueda, setTerminoBusqueda] = useState('');
   const [productosCompra, setProductosCompra] = useState<ProductoCompra[]>([]);
   const [mostrandoExito, setMostrandoExito] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  const [showProveedorDialog, setShowProveedorDialog] = useState(false);
 
   // ============================================
   // EFECTOS
   // ============================================
 
-  // Cargar productos disponibles al montar
+  // Cargar productos y proveedores disponibles al montar
   useEffect(() => {
     cargarProductos();
+    cargarProveedores();
   }, []);
 
   // ============================================
@@ -118,9 +132,29 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
       if (error) throw error;
       setProductosDisponibles(data || []);
     } catch (err: any) {
-      console.error('Error cargando productos:', err);
       showError('❌ Error al cargar productos');
     }
+  };
+
+  const cargarProveedores = async () => {
+    try {
+      const { data, error } = await getSupabase()
+        .from('fin_proveedores')
+        .select('*')
+        .eq('activo', true)
+        .order('nombre');
+
+      if (error) throw error;
+      setProveedores(data || []);
+    } catch (err: any) {
+      showError('❌ Error al cargar proveedores');
+    }
+  };
+
+  const handleProveedorCreated = (proveedorId: string) => {
+    // Reload vendors and select the newly created one
+    cargarProveedores();
+    setDatosCompra({ ...datosCompra, proveedor_id: proveedorId });
   };
 
   // ============================================
@@ -255,7 +289,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
 
   const validarFormulario = (): boolean => {
     // Validar datos generales
-    if (!datosCompra.proveedor.trim()) {
+    if (!datosCompra.proveedor_id) {
       showError('❌ El proveedor es obligatorio');
       return false;
     }
@@ -320,11 +354,15 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
         const cantidadAnterior = productoData.cantidad_actual || 0;
         const cantidadNueva = cantidadAnterior + item.cantidad_total;
 
+        // Get vendor name for backward compatibility
+        const proveedorNombre = proveedores.find(p => p.id === datosCompra.proveedor_id)?.nombre || '';
+
         // 1. Insertar en tabla compras
         const { error: compraError } = await getSupabase().from('compras').insert([
           {
             fecha_compra: datosCompra.fecha,
-            proveedor: datosCompra.proveedor,
+            proveedor: proveedorNombre, // For backward compatibility
+            proveedor_id: datosCompra.proveedor_id, // New FK reference
             numero_factura: datosCompra.numero_factura,
             producto_id: item.producto_id,
             cantidad: item.cantidad_total,
@@ -333,7 +371,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
             fecha_vencimiento: item.fecha_vencimiento || null,
             costo_unitario: item.precio_unitario_real,
             costo_total: item.costo_total,
-            link_factura: datosCompra.link_factura || null,
+            url_factura: datosCompra.url_factura || null,
             usuario_registro: user?.email || null,
           },
         ]);
@@ -390,7 +428,6 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
         onSuccess();
       }
     } catch (err: any) {
-      console.error('Error guardando compra:', err);
       showError(`❌ Error al guardar: ${err.message || 'Intente nuevamente'}`);
     } finally {
       setGuardando(false);
@@ -421,7 +458,6 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
   if (mostrandoExito) {
     return (
       <div className="space-y-6">
-        <InventorySubNav />
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="text-center">
             <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/20 rounded-2xl mb-4 shadow-lg">
@@ -444,7 +480,6 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
   return (
     <div className="space-y-6">
       <ToastContainer />
-      <InventorySubNav />
 
       <div className="max-w-7xl mx-auto px-4">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -482,15 +517,31 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
                   <Label htmlFor="proveedor" className="text-[#172E08] mb-2">
                     Proveedor *
                   </Label>
-                  <Input
-                    id="proveedor"
-                    type="text"
-                    placeholder="Nombre del proveedor"
-                    value={datosCompra.proveedor}
-                    onChange={(e) => setDatosCompra({ ...datosCompra, proveedor: e.target.value })}
-                    className="border-[#73991C]/20 focus:border-[#73991C] rounded-xl h-12"
+                  <Select
+                    value={datosCompra.proveedor_id}
+                    onValueChange={(value) => {
+                      if (value === 'CREATE_NEW') {
+                        setShowProveedorDialog(true);
+                      } else {
+                        setDatosCompra({ ...datosCompra, proveedor_id: value });
+                      }
+                    }}
                     required
-                  />
+                  >
+                    <SelectTrigger className="border-[#73991C]/20 focus:border-[#73991C] rounded-xl h-12">
+                      <SelectValue placeholder="Seleccionar proveedor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {proveedores.map((proveedor) => (
+                        <SelectItem key={proveedor.id} value={proveedor.id}>
+                          {proveedor.nombre}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="CREATE_NEW" className="text-[#73991C] font-medium border-t mt-1 pt-1">
+                        + Crear nuevo proveedor
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div>
@@ -511,17 +562,14 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
                 </div>
               </div>
 
+              {/* Factura */}
               <div className="mt-4">
-                <Label htmlFor="link_factura" className="text-[#172E08] mb-2">
-                  Link a Factura Digital (opcional)
-                </Label>
-                <Input
-                  id="link_factura"
-                  type="url"
-                  placeholder="URL de Google Drive o similar"
-                  value={datosCompra.link_factura}
-                  onChange={(e) => setDatosCompra({ ...datosCompra, link_factura: e.target.value })}
-                  className="border-[#73991C]/20 focus:border-[#73991C] rounded-xl h-12"
+                <FacturaUploader
+                  tipo="compra"
+                  currentUrl={datosCompra.url_factura}
+                  onUploadSuccess={(url) => setDatosCompra({ ...datosCompra, url_factura: url })}
+                  onRemove={() => setDatosCompra({ ...datosCompra, url_factura: '' })}
+                  disabled={guardando}
                 />
               </div>
             </div>
@@ -669,6 +717,14 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
           </div>
         </div>
       </div>
+
+      {/* Proveedor Creation Dialog */}
+      <ProveedorDialog
+        open={showProveedorDialog}
+        onOpenChange={setShowProveedorDialog}
+        onSuccess={handleProveedorCreated}
+        onError={(message) => showError(`❌ ${message}`)}
+      />
     </div>
   );
 };

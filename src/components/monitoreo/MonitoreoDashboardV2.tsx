@@ -139,7 +139,6 @@ export function MonitoreoDashboardV2() {
         cargarPlagasCriticas()
       ]);
     } catch (error) {
-      console.error('Error cargando dashboard:', error);
       toast.error('Error al cargar el dashboard');
     } finally {
       setIsLoading(false);
@@ -152,7 +151,6 @@ export function MonitoreoDashboardV2() {
 
   async function cargarUltimoMonitoreo() {
     try {
-      console.log('🔍 Cargando último monitoreo...');
 
       // Obtener todos los monitoreos con lotes
       const { data: monitoreos, error } = await supabase
@@ -285,9 +283,7 @@ export function MonitoreoDashboardV2() {
         plagasControladas
       });
 
-      console.log('✅ Último monitoreo cargado');
     } catch (error) {
-      console.error('Error cargando último monitoreo:', error);
     }
   }
 
@@ -306,9 +302,7 @@ export function MonitoreoDashboardV2() {
       if (error) throw error;
 
       setCatalogoPlagas(data || []);
-      console.log('✅ Catálogo de plagas cargado:', data?.length);
     } catch (error) {
-      console.error('Error cargando catálogo:', error);
     }
   }
 
@@ -318,7 +312,6 @@ export function MonitoreoDashboardV2() {
 
   async function cargarTendencias() {
     try {
-      console.log('📈 Cargando tendencias...');
 
       // Calcular fechas según período seleccionado
       const fechaFin = new Date();
@@ -397,7 +390,6 @@ export function MonitoreoDashboardV2() {
         }
       }
 
-      console.log(`✅ ${allData.length} registros cargados para tendencias`);
 
       // Agrupar por semana y plaga
       const datosPorSemana: { [semana: string]: { [plaga: string]: { sum: number; count: number; ultimaFecha: string } } } = {};
@@ -443,9 +435,7 @@ export function MonitoreoDashboardV2() {
         });
 
       setTendencias(datosFormateados);
-      console.log('✅ Tendencias procesadas');
     } catch (error) {
-      console.error('Error cargando tendencias:', error);
     }
   }
 
@@ -455,7 +445,6 @@ export function MonitoreoDashboardV2() {
 
   async function cargarInsights() {
     try {
-      console.log('💡 Generando insights...');
 
       // Calcular fechas según período
       const fechaFin = new Date();
@@ -566,9 +555,7 @@ export function MonitoreoDashboardV2() {
       });
 
       setInsights(insightsGenerados);
-      console.log('✅ Insights generados:', insightsGenerados.length);
     } catch (error) {
-      console.error('Error generando insights:', error);
     }
   }
 
@@ -578,7 +565,6 @@ export function MonitoreoDashboardV2() {
 
   async function cargarPlagasCriticas() {
     try {
-      console.log('🐛 Cargando plagas críticas...');
 
       // Calcular fechas según período
       const fechaFin = new Date();
@@ -713,9 +699,7 @@ export function MonitoreoDashboardV2() {
         Math.max(...b.lotes.map(l => l.incidenciaActual)) - Math.max(...a.lotes.map(l => l.incidenciaActual))
       ));
 
-      console.log('✅ Plagas críticas cargadas:', criticas.length);
     } catch (error) {
-      console.error('Error cargando plagas críticas:', error);
     }
   }
 

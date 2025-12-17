@@ -96,7 +96,6 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
       setEmpleados(empleadosData || []);
 
     } catch (error: any) {
-      console.error('Error cargando datos de tarea:', error);
     } finally {
       setLoading(false);
     }

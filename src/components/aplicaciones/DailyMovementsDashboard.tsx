@@ -48,7 +48,6 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
   // Auto-cerrar si la aplicación se cierra mientras estamos aquí
   useEffect(() => {
     if (aplicacion.estado === 'Cerrada' && onClose) {
-      console.log('🔒 Aplicación cerrada detectada, cerrando dashboard de movimientos...');
       // Cerrar inmediatamente sin mostrar modal
       onClose();
     }
@@ -120,7 +119,6 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
         loadCanecasPlaneadas()
       ]);
     } catch (error) {
-      console.error('Error cargando datos:', error);
     } finally {
       setLoading(false);
     }
@@ -191,7 +189,6 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
 
       setMovimientos(movimientosConProductos);
     } catch (err: any) {
-      console.error('Error cargando movimientos:', err);
     }
   };
 
@@ -235,7 +232,6 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
         setProductosPlanificados(Array.from(productosMap.values()));
       }
     } catch (err: any) {
-      console.error('Error cargando productos planificados:', err);
     }
   };
 
@@ -252,7 +248,6 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
       
       return totalPlaneadas;
     } catch (err: any) {
-      console.error('Error cargando canecas planeadas:', err);
       return 0;
     }
   };
@@ -286,7 +281,6 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
         if (producto.unidad === 'bultos' && (producto as any).presentacion_kg_l) {
           // Para bultos: convertir de nuevo a Kg usando presentacion_kg_l
           cantidadEnUnidadBase = producto.cantidad_utilizada * (producto as any).presentacion_kg_l;
-          console.log(`🔄 Resumen - Convertir ${producto.cantidad_utilizada} bultos × ${(producto as any).presentacion_kg_l} = ${cantidadEnUnidadBase} Kg`);
         } else if (producto.unidad === 'cc') {
           cantidadEnUnidadBase = producto.cantidad_utilizada / 1000; // cc a L
         } else if (producto.unidad === 'g') {
@@ -362,7 +356,6 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
         porcentaje
       });
     } catch (err) {
-      console.error('Error calculando canecas totales:', err);
     }
   };
 
@@ -380,7 +373,6 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
 
       await loadMovimientos();
     } catch (err: any) {
-      console.error('Error eliminando movimiento:', err);
       alert('Error al eliminar el movimiento');
     }
   };

@@ -56,7 +56,6 @@ export function VerificacionesList() {
 
       setVerificaciones(data || []);
     } catch (error) {
-      console.error('Error cargando verificaciones:', error);
     } finally {
       setIsLoading(false);
     }

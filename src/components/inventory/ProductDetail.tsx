@@ -111,7 +111,6 @@ export function ProductDetail() {
       if (error) throw error;
       setProduct(data);
     } catch (error) {
-      console.error('Error cargando producto:', error);
     } finally {
       setLoading(false);
     }

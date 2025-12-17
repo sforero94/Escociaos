@@ -71,12 +71,10 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
         .order('nombre');
 
       if (error) {
-        console.error('Error cargando productos:', error);
       } else if (data) {
         setProducts(data);
       }
     } catch (error) {
-      console.error('Error inesperado:', error);
     } finally {
       setIsLoading(false);
     }
@@ -185,11 +183,9 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
         // Recargar productos para reflejar el cambio
         await loadProducts();
       } else {
-        console.error('Error al cambiar estado del producto:', resultado.error);
         alert(`Error: ${resultado.error}`);
       }
     } catch (error) {
-      console.error('Error al cambiar estado del producto:', error);
       alert('Error al cambiar el estado del producto');
     }
   };

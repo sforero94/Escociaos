@@ -102,7 +102,6 @@ export function MovementsDashboard() {
         loadMonthlyData(),
       ]);
     } catch (err) {
-      console.error('Error cargando dashboard:', err);
     } finally {
       setLoading(false);
     }
@@ -123,7 +122,6 @@ export function MovementsDashboard() {
       if (error) throw error;
       setRecentMovements(data || []);
     } catch (err) {
-      console.error('Error cargando movimientos recientes:', err);
     }
   };
 
@@ -179,7 +177,6 @@ export function MovementsDashboard() {
 
       setTopProducts(sorted);
     } catch (err) {
-      console.error('Error cargando productos activos:', err);
     }
   };
 
@@ -257,7 +254,6 @@ export function MovementsDashboard() {
         promedioMensual,
       });
     } catch (err) {
-      console.error('Error cargando estadísticas:', err);
     }
   };
 
@@ -339,7 +335,6 @@ export function MovementsDashboard() {
 
       setMonthlyData(monthsArray);
     } catch (err) {
-      console.error('Error cargando datos mensuales:', err);
     }
   };
 

@@ -113,7 +113,6 @@ export function CatalogoPlagas() {
       aplicarFiltros(plagasConUsos, searchTerm, filtroActivo);
 
     } catch (error) {
-      console.error('Error al cargar plagas:', error);
       setError('Error al cargar el catálogo de plagas');
     } finally {
       setIsLoading(false);
@@ -238,7 +237,6 @@ export function CatalogoPlagas() {
       cerrarModal();
 
     } catch (error: any) {
-      console.error('Error al guardar:', error);
       if (error.code === '23505') {
         setError('Ya existe una plaga con ese nombre');
       } else {
@@ -272,7 +270,6 @@ export function CatalogoPlagas() {
 
       await cargarPlagas();
     } catch (error) {
-      console.error('Error al eliminar:', error);
       alert('Error al eliminar la plaga');
     }
   };
@@ -289,7 +286,6 @@ export function CatalogoPlagas() {
 
       await cargarPlagas();
     } catch (error) {
-      console.error('Error al cambiar estado:', error);
       alert('Error al cambiar el estado');
     }
   };

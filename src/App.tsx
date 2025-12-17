@@ -27,6 +27,11 @@ import { CatalogoPlagas } from './components/monitoreo/CatalogoPlagas';
 import { ConfiguracionDashboard } from './components/configuracion/ConfiguracionDashboard';
 import Personal from './components/empleados/Personal';
 import Labores from './components/labores/Labores';
+import { FinanzasDashboard } from './components/finanzas/FinanzasDashboard';
+import { GastosView } from './components/finanzas/GastosView';
+import { IngresosView } from './components/finanzas/IngresosView';
+import { ReportesView } from './components/finanzas/ReportesView';
+import { ConfiguracionFinanzas } from './components/finanzas/ConfiguracionFinanzas';
 
 /**
  * Dashboard component - no wrapper needed
@@ -94,6 +99,15 @@ function LayoutRoutes() {
 
         {/* Personal */}
         <Route path="personal" element={<Personal />} />
+
+        {/* Finanzas */}
+        <Route path="finanzas">
+          <Route index element={<FinanzasDashboard />} />
+          <Route path="gastos" element={<GastosView />} />
+          <Route path="ingresos" element={<IngresosView />} />
+          <Route path="reportes" element={<ReportesView />} />
+          <Route path="configuracion" element={<ConfiguracionFinanzas />} />
+        </Route>
 
         {/* Producción */}
         <Route

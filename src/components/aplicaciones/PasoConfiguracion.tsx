@@ -105,12 +105,9 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
       }));
 
       // Debug: Verificar datos de lotes
-      console.log('📊 Lotes cargados desde BD:', data);
-      console.log('📊 Lotes formateados:', lotesFormateados);
 
       setLotesCatalogo(lotesFormateados);
     } catch (error) {
-      console.error('Error cargando lotes:', error);
     } finally {
       setCargandoLotes(false);
     }
@@ -125,7 +122,6 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
 
   const cargarBlancosBiologicos = async () => {
     try {
-      console.log('🔍 Iniciando carga de blancos biológicos...');
       
       const { data, error } = await supabase
         .from('plagas_enfermedades_catalogo')
@@ -133,17 +129,13 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
         .eq('activo', true)
         .order('nombre');
 
-      console.log('📊 Respuesta de Supabase:', { data, error });
 
       if (error) {
-        console.error('❌ Error cargando blancos biológicos:', error);
         throw error;
       }
 
-      console.log('✅ Blancos biológicos cargados:', data);
       setBlancosBiologicos(data || []);
     } catch (error) {
-      console.error('💥 Error en cargarBlancosBiologicos:', error);
       setBlancosBiologicos([]);
     } finally {
       setCargandoBlancos(false);

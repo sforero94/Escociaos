@@ -13,6 +13,7 @@ import {
   Leaf,
   Users,
   Wrench,
+  DollarSign,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { useAuth } from '../contexts/AuthContext';
@@ -68,6 +69,13 @@ export function Layout({ onNavigate, children }: LayoutProps) {
       label: 'Personal',
       icon: Users,
       path: '/personal',
+    },
+    {
+      type: 'item' as const,
+      id: 'finanzas',
+      label: 'Finanzas',
+      icon: DollarSign,
+      path: '/finanzas',
     },
     {
       type: 'item' as const,

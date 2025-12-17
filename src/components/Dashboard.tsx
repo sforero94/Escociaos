@@ -135,7 +135,6 @@ function MonitoreoCard({ onClick }: { onClick: () => void }) {
 
       setTendencias(datosFormateados);
     } catch (error) {
-      console.error('Error cargando tendencias de monitoreo:', error);
       setTendencias([]);
     } finally {
       setIsLoading(false);
@@ -567,7 +566,6 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         loadAlertas(supabase),
       ]);
     } catch (error) {
-      console.error('❌ Error cargando dashboard:', error);
     } finally {
       setIsLoading(false);
     }
@@ -608,7 +606,6 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             .eq('aplicacion_id', app.id);
 
           if (errorMov) {
-            console.warn('Error cargando movimientos:', errorMov);
             continue;
           }
 
@@ -635,7 +632,6 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             .eq('aplicacion_id', app.id);
 
           if (errorMov) {
-            console.warn('Error cargando movimientos:', errorMov);
             continue;
           }
 
@@ -711,7 +707,6 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           .eq('aplicacion_id', app.id);
 
         if (errorLotes) {
-          console.warn('Error cargando lotes de aplicación:', errorLotes);
           continue;
         }
 
@@ -739,7 +734,6 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         aplicacionesPlaneadas: aplicacionesPlaneadasConLotes,
       });
     } catch (error) {
-      console.error('❌ Error cargando aplicaciones:', error);
       setAplicacionesStats({
         planeadas: 0,
         activas: 0,
@@ -867,7 +861,6 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         },
       });
     } catch (error) {
-      console.error('❌ Error cargando inventario:', error);
       setInventarioStats({
         valorTotal: 0,
         promedioTresMeses: 0,
@@ -943,7 +936,6 @@ export function Dashboard({ onNavigate }: DashboardProps) {
 
       setAlertas(alertasOrdenadas);
     } catch (error) {
-      console.error('❌ Error cargando alertas:', error);
       setAlertas([]);
     }
   };

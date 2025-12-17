@@ -31,7 +31,6 @@ export function Login({ onLoginSuccess }: LoginProps) {
       // Login exitoso - el AuthContext se actualizará automáticamente
       onLoginSuccess();
     } catch (err) {
-      console.error('Error en login:', err);
       setError('Ocurrió un error al iniciar sesión. Intenta nuevamente.');
     } finally {
       setIsLoading(false);

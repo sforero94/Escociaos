@@ -132,7 +132,6 @@ export function VistasRapidas({ onVistaSeleccionada }: { onVistaSeleccionada: (f
       await cargarResumenes(todasLasVistas);
 
     } catch (error) {
-      console.error('Error al cargar vistas:', error);
     } finally {
       setIsLoading(false);
     }
@@ -208,7 +207,6 @@ export function VistasRapidas({ onVistaSeleccionada }: { onVistaSeleccionada: (f
         };
 
       } catch (error) {
-        console.error(`Error al cargar resumen de vista ${vista.nombre}:`, error);
       }
     }
 

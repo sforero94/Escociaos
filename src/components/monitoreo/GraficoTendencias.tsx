@@ -102,7 +102,6 @@ export function GraficoTendencias({
       const fechaInicioStr = rangoFechas.inicio ? rangoFechas.inicio.toISOString().split('T')[0] : '1900-01-01';
       const fechaFinStr = rangoFechas.fin.toISOString().split('T')[0];
 
-      console.log('🔄 Cargando tendencias en lotes...');
 
       while (hasMore && allData.length < MAX_RECORDS) {
         let query = supabase
@@ -133,19 +132,16 @@ export function GraficoTendencias({
           allData = [...allData, ...data];
           currentOffset += BATCH_SIZE;
           hasMore = data.length === BATCH_SIZE && allData.length < MAX_RECORDS;
-          console.log(`✅ Lote cargado: ${data.length} registros (Total: ${allData.length})`);
         } else {
           hasMore = false;
         }
       }
 
-      console.log(`🎉 Tendencias cargadas: ${allData.length} registros`);
 
       // Procesar datos
       procesarDatos(allData || []);
 
     } catch (error) {
-      console.error('Error al cargar tendencias:', error);
     } finally {
       setIsLoading(false);
     }

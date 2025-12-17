@@ -50,10 +50,8 @@ export function NuevaVerificacion() {
       // Filtrar solo productos activos, pero si activo es null, incluirlos también
       const productosActivos = (data || []).filter(p => p.activo !== false);
       
-      console.log('Productos cargados:', data?.length, 'Activos:', productosActivos.length);
       setProductos(productosActivos);
     } catch (err: any) {
-      console.error('Error cargando productos:', err);
       setError('Error al cargar productos: ' + err.message);
     } finally {
       setIsLoading(false);
@@ -101,14 +99,12 @@ export function NuevaVerificacion() {
         .insert(detalles);
 
       if (errorDetalles) {
-        console.error('Error insertando detalles:', errorDetalles);
         throw errorDetalles;
       }
 
       // 3. Navegar al módulo de conteo físico
       navigate(`/inventario/verificaciones/conteo/${verificacion.id}`);
     } catch (err: any) {
-      console.error('Error creando verificación:', err);
       setError('Error al crear verificación: ' + err.message);
     } finally {
       setIsCreating(false);

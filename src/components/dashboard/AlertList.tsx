@@ -48,7 +48,6 @@ interface AlertListProps {
  * <AlertList
  *   alertas={alertas}
  *   loading={false}
- *   onAlertClick={(alerta) => console.log(alerta)}
  * />
  * ```
  */

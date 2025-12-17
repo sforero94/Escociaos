@@ -74,11 +74,9 @@ export function PasoCierreConfirmacion({
   const formatearNumero = (valor: number, decimales: number = 2): string => {
     return new Intl.NumberFormat('es-CO', {
       minimumFractionDigits: decimales,
-      maximumFractionDigals: decimales,
+      maximumFractionDigits: decimales,
     }).format(valor);
   };
-
-  // Removed - now using formatearFecha from utils/fechas
 
   const desviacionesAltas = comparacionProductos.filter(
     (p) => Math.abs(p.porcentaje_desviacion) > 20
