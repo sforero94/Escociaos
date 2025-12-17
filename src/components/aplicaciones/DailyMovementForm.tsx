@@ -401,12 +401,6 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         let cantidadFinal: number;
         let unidadFinal: UnidadMedida;
 
-          nombre: p.producto_nombre,
-          cantidad_utilizada: p.cantidad_utilizada,
-          unidad_producto: p.unidad_producto,
-          tipo_aplicacion: aplicacion.tipo_aplicacion
-        });
-
         if (aplicacion.tipo_aplicacion === 'Fertilización') {
           // Convertir bultos a Kilos
           if (!p.presentacion_kg_l) {

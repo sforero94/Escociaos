@@ -10,15 +10,6 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children, fallback }: ProtectedRouteProps) {
   const { isAuthenticated, isLoading, user, profile } = useAuth();
 
-  // Debug logs
-  useEffect(() => {
-      isLoading,
-      isAuthenticated,
-      hasUser: !!user,
-      hasProfile: !!profile,
-    });
-  }, [isLoading, isAuthenticated, user, profile]);
-
   // Mostrar loader mientras carga
   if (isLoading) {
     return (

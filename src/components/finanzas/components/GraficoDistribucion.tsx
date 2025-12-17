@@ -97,10 +97,6 @@ export function GraficoDistribucion({ data, loading = false, filtrosActivos }: G
   // Navegar a gastos con todos los filtros activos + categoría
   const handleBarClick = (data: any) => {
     if (data && data.categoria_id) {
-        categoria: data.categoria_id,
-        filtrosActivos
-      });
-
       navigate('/finanzas/gastos', {
         state: {
           categoria: data.categoria_id,

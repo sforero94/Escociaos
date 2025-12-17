@@ -97,10 +97,6 @@ export function GraficoDistribucionIngresos({ data, loading = false, filtrosActi
   // Navegar a ingresos con todos los filtros activos + categoría
   const handleBarClick = (data: any) => {
     if (data && data.categoria_id) {
-        categoria: data.categoria_id,
-        filtrosActivos
-      });
-
       navigate('/finanzas/ingresos', {
         state: {
           categoria: data.categoria_id,

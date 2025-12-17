@@ -109,16 +109,7 @@ export function InventoryMovements() {
       const { data, error } = await query;
 
       if (error) throw error;
-      
-      // Debug: Ver qué tipo_movimiento viene de la BD
-      if (data && data.length > 0) {
-          tipo_movimiento: data[0].tipo_movimiento,
-          tipo_exact: `"${data[0].tipo_movimiento}"`,
-          cantidad: data[0].cantidad,
-          producto: data[0].producto
-        });
-      }
-      
+
       setMovements(data || []);
     } catch (err: any) {
       setError('Error al cargar los movimientos');
