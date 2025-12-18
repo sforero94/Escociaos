@@ -6,6 +6,7 @@ import { FiltrosGlobales } from './components/FiltrosGlobales';
 import { GraficoTendencias } from './components/GraficoTendencias';
 import { GraficoDistribucion } from './components/GraficoDistribucion';
 import { GraficoDistribucionIngresos } from './components/GraficoDistribucionIngresos';
+import { GraficoDistribucionConceptos } from './components/GraficoDistribucionConceptos';
 import { FinanzasSubNav } from './components/FinanzasSubNav';
 import { useFinanzasData } from './hooks/useFinanzasData';
 import { getSupabase } from '../../utils/supabase/client';
@@ -29,14 +30,21 @@ export function FinanzasDashboard() {
   const [tendencias, setTendencias] = useState<TendenciaData[]>([]);
   const [distribucion, setDistribucion] = useState<DistribucionData[]>([]);
   const [distribucionIngresos, setDistribucionIngresos] = useState<DistribucionData[]>([]);
+  const [distribucionConceptos, setDistribucionConceptos] = useState<DistribucionData[]>([]);
+  const [categoriaConceptos, setCategoriaConceptos] = useState<string | undefined>(undefined);
   const [gastosPendientes, setGastosPendientes] = useState<number>(0);
 
-  const { loading, error, getKPIs, getTendencias, getDistribucion, getDistribucionIngresos } = useFinanzasData();
+  const { loading, error, getKPIs, getTendencias, getDistribucion, getDistribucionIngresos, getDistribucionConceptos } = useFinanzasData();
 
   // Cargar datos iniciales y cuando cambien los filtros
   useEffect(() => {
     cargarDatos();
   }, [filtros, filtros.periodo, filtros.negocio_id, filtros.region_id, filtros.fecha_desde, filtros.fecha_hasta]);
+
+  // Cargar datos de conceptos cuando cambie la categoría local
+  useEffect(() => {
+    cargarDistribucionConceptos();
+  }, [categoriaConceptos]);
 
   const cargarDatos = async () => {
     try {
@@ -65,6 +73,30 @@ export function FinanzasDashboard() {
       setTendencias(tendenciasData);
       setDistribucion(distribucionData);
       setDistribucionIngresos(distribucionIngresosData);
+
+      // Cargar también la distribución de conceptos con los filtros globales
+      await cargarDistribucionConceptos(filtrosConFechas);
+    } catch (err) {
+    }
+  };
+
+  const cargarDistribucionConceptos = async (filtrosBase?: FiltrosFinanzas) => {
+    try {
+      // Usar filtros base o calcular desde filtros actuales
+      let filtrosConFechas = filtrosBase || { ...filtros };
+
+      if (!filtrosBase && filtros.periodo && filtros.periodo !== 'rango_personalizado') {
+        const { fecha_desde, fecha_hasta } = calcularRangoFechasPorPeriodo(filtros.periodo);
+        filtrosConFechas = {
+          ...filtros,
+          fecha_desde,
+          fecha_hasta
+        };
+      }
+
+      // Llamar a getDistribucionConceptos con filtros globales + categoría local
+      const conceptosData = await getDistribucionConceptos(filtrosConFechas, categoriaConceptos);
+      setDistribucionConceptos(conceptosData);
     } catch (err) {
     }
   };
@@ -173,6 +205,14 @@ export function FinanzasDashboard() {
             filtrosActivos={filtros}
           />
         </div>
+
+        {/* Gráfico de Distribución por Conceptos - Ancho completo */}
+        <GraficoDistribucionConceptos
+          data={distribucionConceptos}
+          loading={loading}
+          filtrosActivos={filtros}
+          onCategoriaChange={setCategoriaConceptos}
+        />
 
         {/* Mensaje de error */}
         {error && (

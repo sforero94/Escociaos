@@ -395,6 +395,81 @@ export function useFinanzasData() {
     }
   };
 
+  /**
+   * Cargar datos para gráfico de distribución de gastos por concepto
+   * Permite filtrar opcionalmente por una categoría específica
+   */
+  const getDistribucionConceptos = async (
+    filtros: FiltrosFinanzas,
+    categoriaId?: string
+  ): Promise<DistribucionData[]> => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      let query = supabase
+        .from('fin_gastos')
+        .select(`
+          valor,
+          concepto_id,
+          categoria_id,
+          fin_conceptos_gastos (
+            nombre,
+            categoria_id
+          )
+        `)
+        .eq('estado', 'Confirmado');
+
+      // Aplicar filtros
+      if (filtros.fecha_desde) query = query.gte('fecha', filtros.fecha_desde);
+      if (filtros.fecha_hasta) query = query.lte('fecha', filtros.fecha_hasta);
+      query = aplicarFiltrosNegocioRegion(query, filtros);
+
+      // Filtro adicional por categoría (local al gráfico)
+      if (categoriaId) {
+        query = query.eq('categoria_id', categoriaId);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      // Agrupar por concepto
+      const distribucionPorConcepto: { [conceptoId: string]: { nombre: string; valor: number } } = {};
+
+      data?.forEach((gasto: any) => {
+        const conceptoId = gasto.concepto_id || 'sin_concepto';
+        const conceptoNombre = gasto.fin_conceptos_gastos?.nombre || 'Sin concepto';
+
+        if (!distribucionPorConcepto[conceptoId]) {
+          distribucionPorConcepto[conceptoId] = { nombre: conceptoNombre, valor: 0 };
+        }
+        distribucionPorConcepto[conceptoId].valor += gasto.valor || 0;
+      });
+
+      // Calcular total para porcentajes
+      const total = Object.values(distribucionPorConcepto).reduce((sum, con) => sum + con.valor, 0);
+
+      // Convertir a array con porcentajes
+      const distribucion: DistribucionData[] = Object.entries(distribucionPorConcepto)
+        .map(([conceptoId, { nombre, valor }]) => ({
+          categoria: nombre, // Usamos 'categoria' por compatibilidad con el tipo
+          categoria_id: conceptoId,
+          valor,
+          porcentaje: total > 0 ? Math.round((valor / total) * 100 * 10) / 10 : 0 // 1 decimal
+        }))
+        .sort((a, b) => b.valor - a.valor); // Ordenar por valor descendente
+
+      return distribucion;
+
+    } catch (err: any) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return {
     loading,
     error,
@@ -402,6 +477,7 @@ export function useFinanzasData() {
     getTendencias,
     getDistribucion,
     getDistribucionIngresos,
+    getDistribucionConceptos,
     getGastos,
     getIngresos
   };
