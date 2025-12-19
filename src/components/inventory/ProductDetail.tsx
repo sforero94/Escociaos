@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
-  ArrowLeft, 
-  Package, 
-  FileText, 
+import {
+  ArrowLeft,
+  Package,
+  FileText,
   Shield,
   Loader2,
   ExternalLink,
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { getSupabase } from '../../utils/supabase/client';
+import { useSafeMode } from '../../contexts/SafeModeContext';
 import { InventorySubNav } from './InventorySubNav';
 
 interface Product {
@@ -89,6 +90,7 @@ interface Product {
 export function ProductDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { isSafeModeEnabled } = useSafeMode();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -154,13 +156,16 @@ export function ProductDetail() {
     );
   }
 
-  if (!product) {
+  // Si el modo seguro está activado y el producto no está permitido, mostrar mensaje
+  if (!product || (isSafeModeEnabled && product.permitido_gerencia === false)) {
     return (
       <div className="space-y-6">
         <InventorySubNav />
         <div className="text-center py-12">
           <Package className="w-16 h-16 text-[#4D240F]/40 mx-auto mb-4" />
-          <p className="text-[#4D240F]/70">Producto no encontrado</p>
+          <p className="text-[#4D240F]/70">
+            {!product ? 'Producto no encontrado' : 'Este producto no está disponible en modo seguro'}
+          </p>
           <Button
             onClick={() => navigate('/inventario')}
             className="mt-4 bg-[#73991C] hover:bg-[#5f7d17] text-white rounded-xl"
@@ -190,7 +195,7 @@ export function ProductDetail() {
               Volver
             </Button>
           </div>
-          <h1 className="text-[#172E08] mb-2">{product.nombre}</h1>
+          <h1 className={`mb-2 ${!product.permitido_gerencia ? 'text-red-600 font-bold' : 'text-[#172E08]'}`}>{product.nombre}</h1>
           <div className="flex flex-wrap gap-2">
             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-[#73991C]/10 text-[#73991C]">
               {product.categoria}

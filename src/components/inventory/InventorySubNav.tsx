@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { BarChart3, History, ShoppingCart, ClipboardCheck, Package, Upload } from 'lucide-react';
+import { BarChart3, History, ShoppingCart, ClipboardCheck, Package } from 'lucide-react';
 
 /**
  * Submenú horizontal para las páginas de Inventario

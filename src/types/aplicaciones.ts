@@ -103,19 +103,20 @@ export interface ItemListaCompras {
   producto_nombre: string;
   producto_categoria: string;
   unidad: UnidadMedida; // 🚨 ACTUALIZADO: Usar tipo ENUM
-  
+
   inventario_actual: number;
   cantidad_necesaria: number;
   cantidad_faltante: number;
-  
+
   presentacion_comercial: string; // ej: "50 Kg", "5 L"
   unidades_a_comprar: number;
-  
+
   ultimo_precio_unitario?: number;  // Precio por Kg/L (unidad base)
   precio_presentacion?: number;     // Precio por bulto/envase completo
   costo_estimado?: number;
-  
+
   alerta?: 'sin_precio' | 'sin_stock' | 'normal';
+  permitido_gerencia?: boolean;
 }
 
 export interface ListaCompras {
@@ -189,7 +190,8 @@ export interface ProductoCatalogo {
   ultimo_precio_unitario?: number;  // Precio por Kg/L (unidad base)
   precio_presentacion?: number;     // Precio por bulto/envase completo
   cantidad_actual: number;
-  
+  permitido_gerencia?: boolean;
+
   // Para mostrar en UI
   display_nombre?: string; // "Producto (Categoría) - Stock: X"
 }

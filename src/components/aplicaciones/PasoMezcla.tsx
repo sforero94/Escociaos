@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, X, Calculator, AlertTriangle, Package, Beaker, Check, Edit2, Trash2 } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
+import { useSafeMode } from '../../contexts/SafeModeContext';
 import {
   calcularFumigacion,
   calcularFertilizacion,
@@ -27,6 +28,7 @@ interface PasoMezclaProps {
 
 export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales, onUpdate }: PasoMezclaProps) {
   const supabase = getSupabase();
+  const { isSafeModeEnabled } = useSafeMode();
 
   // Estado
   const [mezclas_guardadas, setMezclasGuardadas] = useState<Mezcla[]>(mezclas);
@@ -47,7 +49,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
    */
   useEffect(() => {
     cargarProductos();
-  }, [configuracion.tipo]);
+  }, [configuracion.tipo, isSafeModeEnabled]);
 
   const cargarProductos = async () => {
     try {
@@ -66,7 +68,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
       }
 
 
-      const productosFormateados: ProductoCatalogo[] = (data || []).map((p) => ({
+      let productosFormateados: ProductoCatalogo[] = (data || []).map((p) => ({
         id: p.id,
         nombre: p.nombre,
         categoria: p.categoria,
@@ -77,7 +79,13 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
         ultimo_precio_unitario: p.precio_unitario || 0,
         cantidad_actual: p.cantidad_actual || 0,
         display_nombre: `${p.nombre} (${p.categoria} - ${p.estado_fisico}) - Stock: ${p.cantidad_actual || 0} ${p.unidad_medida}`,
+        permitido_gerencia: p.permitido_gerencia,
       }));
+
+      // Filtrar productos no permitidos si modo seguro está activado
+      if (isSafeModeEnabled) {
+        productosFormateados = productosFormateados.filter((p) => p.permitido_gerencia !== false);
+      }
 
       setProductosCatalogo(productosFormateados);
     } catch (error) {
@@ -479,7 +487,9 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                       className="flex items-center justify-between text-sm p-2 bg-white rounded-lg"
                     >
                       <div className="flex-1">
-                        <p className="text-[#172E08]">{producto.producto_nombre}</p>
+                        <p className={`${productosCatalogo.find(p => p.id === producto.producto_id)?.permitido_gerencia === false ? 'text-red-600 font-bold' : 'text-[#172E08]'}`}>
+                          {producto.producto_nombre}
+                        </p>
                         <p className="text-xs text-[#4D240F]/70">{producto.producto_categoria}</p>
                       </div>
                       <div className="text-right">
@@ -621,7 +631,9 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1">
-                        <h4 className="text-[#172E08] mb-1">{producto.producto_nombre}</h4>
+                        <h4 className={`mb-1 ${productosCatalogo.find(p => p.id === producto.producto_id)?.permitido_gerencia === false ? 'text-red-600 font-bold' : 'text-[#172E08]'}`}>
+                          {producto.producto_nombre}
+                        </h4>
                         <p className="text-xs text-[#4D240F]/70">
                           {producto.producto_categoria} • Stock: {formatearNumero(producto.inventario_disponible)} {producto.producto_unidad}
                         </p>

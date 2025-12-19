@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getSupabase } from '../../utils/supabase/client';
 import { formatearFechaCorta } from '../../utils/fechas';
 
@@ -93,7 +94,8 @@ const PLAGAS_CUARENTENARIAS = [
 
 export function MonitoreoDashboardV2() {
   const supabase = getSupabase();
-  
+  const navigate = useNavigate();
+
   // Estados
   const [isLoading, setIsLoading] = useState(true);
   const [ultimoMonitoreo, setUltimoMonitoreo] = useState<UltimoMonitoreo | null>(null);
@@ -1172,6 +1174,31 @@ export function MonitoreoDashboardV2() {
           </Card>
         </>
       )}
+
+      {/* ============================================ */}
+      {/* BOTÓN FLOTANTE DE ACCIONES */}
+      {/* ============================================ */}
+
+      <div className="fixed bottom-8 right-8 flex flex-col gap-3 z-40">
+        {/* Botón: Nuevo Monitoreo */}
+        <Button
+          onClick={() => setMostrarRegistroMonitoreo(true)}
+          className="h-14 px-6 bg-[#73991C] hover:bg-[#5f7d17] text-white shadow-2xl hover:shadow-[#73991C]/30 rounded-2xl transition-all duration-300 hover:scale-105"
+        >
+          <Plus className="w-5 h-5 mr-2" />
+          Nuevo Monitoreo
+        </Button>
+
+        {/* Botón: Carga Masiva */}
+        <Button
+          onClick={() => navigate('/monitoreo/carga-masiva')}
+          variant="outline"
+          className="h-12 px-5 bg-white hover:bg-[#F8FAF5] border-2 border-[#73991C] text-[#73991C] shadow-lg hover:shadow-xl rounded-xl transition-all duration-300 hover:scale-105"
+        >
+          <Upload className="w-4 h-4 mr-2" />
+          Carga Masiva
+        </Button>
+      </div>
     </div>
   );
 }

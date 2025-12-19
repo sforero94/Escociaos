@@ -184,11 +184,47 @@ const Personal: React.FC = () => {
 
   // Función para eliminar empleado
   const handleDeleteEmpleado = async (id: string) => {
-    if (!window.confirm('¿Está seguro de eliminar este empleado?')) return;
-
     try {
       setLoading(true);
-      const { error } = await getSupabase().from('empleados').delete().eq('id', id);
+      const supabase = getSupabase();
+
+      // Verificar si el empleado tiene registros de trabajo
+      const { data: registrosTrabajo, error: errorRegistros } = await supabase
+        .from('registros_trabajo')
+        .select('id', { count: 'exact', head: true })
+        .eq('empleado_id', id);
+
+      if (errorRegistros) throw errorRegistros;
+
+      // Verificar si el empleado es responsable de alguna tarea
+      const { data: tareasResponsable, error: errorTareas } = await supabase
+        .from('tareas')
+        .select('id', { count: 'exact', head: true })
+        .eq('responsable_id', id);
+
+      if (errorTareas) throw errorTareas;
+
+      const tieneRegistros = (registrosTrabajo as any)?.count > 0;
+      const tieneTareas = (tareasResponsable as any)?.count > 0;
+
+      if (tieneRegistros || tieneTareas) {
+        const detalles = [];
+        if (tieneRegistros) detalles.push(`${(registrosTrabajo as any).count} registro(s) de trabajo`);
+        if (tieneTareas) detalles.push(`${(tareasResponsable as any).count} tarea(s) asignada(s)`);
+
+        const mensaje = `No se puede eliminar este empleado porque tiene:\n\n${detalles.join('\n')}\n\n¿Desea desactivarlo en su lugar?`;
+
+        if (window.confirm(mensaje)) {
+          // Desactivar en lugar de eliminar
+          await handleToggleEstado(id, 'Inactivo');
+        }
+        return;
+      }
+
+      // Si no tiene dependencias, confirmar eliminación
+      if (!window.confirm('¿Está seguro de eliminar este empleado? Esta acción no se puede deshacer.')) return;
+
+      const { error } = await supabase.from('empleados').delete().eq('id', id);
 
       if (error) throw error;
       showAlert('success', 'Empleado eliminado exitosamente');
@@ -254,6 +290,54 @@ const Personal: React.FC = () => {
     }));
   };
 
+  // Función auxiliar para limpiar y validar valores
+  const cleanValue = (value: any, defaultValue: any = undefined) => {
+    if (value === null || value === undefined || value === '') {
+      return defaultValue;
+    }
+    return value;
+  };
+
+  const parseNumber = (value: any, defaultValue: number | undefined = undefined) => {
+    if (value === null || value === undefined || value === '') {
+      return defaultValue;
+    }
+    const parsed = parseFloat(value);
+    return isNaN(parsed) ? defaultValue : parsed;
+  };
+
+  // Función para normalizar valores de medio_pago al enum correcto
+  const normalizeMedioPago = (value: string | undefined): string | undefined => {
+    if (!value) return undefined;
+
+    const normalizado = value.trim().toLowerCase();
+
+    // Mapeo de valores comunes a los valores correctos del enum
+    const mapeo: Record<string, string> = {
+      'efectivo': 'Efectivo',
+      'transferencia': 'Transferencia bancaria',
+      'transferencia bancaria': 'Transferencia bancaria',
+      'transferencia banco': 'Transferencia bancaria',
+      'transferencia electrónica': 'Transferencia bancaria',
+      'transferencia electronica': 'Transferencia bancaria',
+      'cheque': 'Cheque',
+    };
+
+    const valorMapeado = mapeo[normalizado];
+    if (valorMapeado) {
+      return valorMapeado;
+    }
+
+    // Si no encuentra mapeo, intentar encontrar coincidencia parcial
+    if (normalizado.includes('transfer')) {
+      return 'Transferencia bancaria';
+    }
+
+    // Si no se puede mapear, devolver undefined para que se omita el campo
+    console.warn(`Valor de medio_pago no reconocido: "${value}". Se omitirá este campo.`);
+    return undefined;
+  };
+
   // Función para procesar archivo CSV
   const handleCsvUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -265,39 +349,72 @@ const Personal: React.FC = () => {
       complete: (results) => {
         try {
           // Mapear datos CSV al formato de Empleado
-          const mappedData: Empleado[] = results.data.map((row: any) => ({
-            nombre: row.Nombre || row.nombre || '',
-            cedula: row.Cédula || row.cedula || row.Cedula || '',
-            telefono: row.Teléfono || row.telefono || row.Telefono || '',
-            email: row.Email || row.email || '',
-            estado: (row.Estado || row.estado || 'Activo') as
-              | 'Activo'
-              | 'Inactivo',
-            cargo: row.Cargo || row.cargo || '',
-            tipo_contrato: row['Tipo de Contrato'] || row.tipo_contrato || '',
-            fecha_inicio_contrato:
-              row['Fecha Inicio'] || row.fecha_inicio_contrato || '',
-            fecha_fin_contrato:
-              row['Fecha Fin'] || row.fecha_fin_contrato || '',
-            horas_semanales: parseFloat(
-              row['Horas Semanales'] || row.horas_semanales || 0
-            ),
-            periodicidad_pago:
-              row['Periodicidad Pago'] || row.periodicidad_pago || '',
-            salario: parseFloat(row.Salario || row.salario || 0),
-            prestaciones_sociales: parseFloat(
-              row['Prestaciones Sociales'] || row.prestaciones_sociales || 0
-            ),
-            auxilios_no_salariales: parseFloat(
-              row['Auxilios No Salariales'] || row.auxilios_no_salariales || 0
-            ),
-            medio_pago: row['Medio de Pago'] || row.medio_pago || '',
-            banco: row.Banco || row.banco || '',
-            numero_cuenta: row['Número de Cuenta'] || row.numero_cuenta || '',
-          }));
+          const mappedData: Empleado[] = results.data.map((row: any) => {
+            const empleado: any = {
+              nombre: cleanValue(row.Nombre || row.nombre, ''),
+              estado: (cleanValue(row.Estado || row.estado, 'Activo')) as 'Activo' | 'Inactivo',
+            };
 
-          // Filtrar filas vacías
-          const validData = mappedData.filter((emp) => emp.nombre.trim());
+            // Solo agregar campos opcionales si tienen valor
+            const cedula = cleanValue(row.Cédula || row.cedula || row.Cedula);
+            if (cedula) empleado.cedula = cedula;
+
+            const telefono = cleanValue(row.Teléfono || row.telefono || row.Telefono);
+            if (telefono) empleado.telefono = telefono;
+
+            const email = cleanValue(row.Email || row.email);
+            if (email) empleado.email = email;
+
+            const cargo = cleanValue(row.Cargo || row.cargo);
+            if (cargo) empleado.cargo = cargo;
+
+            const tipo_contrato = cleanValue(row['Tipo de Contrato'] || row.tipo_contrato);
+            if (tipo_contrato) empleado.tipo_contrato = tipo_contrato;
+
+            const fecha_inicio = cleanValue(row['Fecha Inicio'] || row.fecha_inicio_contrato);
+            if (fecha_inicio) empleado.fecha_inicio_contrato = fecha_inicio;
+
+            const fecha_fin = cleanValue(row['Fecha Fin'] || row.fecha_fin_contrato);
+            if (fecha_fin) empleado.fecha_fin_contrato = fecha_fin;
+
+            const horas = parseNumber(row['Horas Semanales'] || row.horas_semanales);
+            if (horas !== undefined) empleado.horas_semanales = horas;
+
+            const periodicidad = cleanValue(row['Periodicidad Pago'] || row.periodicidad_pago);
+            if (periodicidad) empleado.periodicidad_pago = periodicidad;
+
+            const salario = parseNumber(row.Salario || row.salario);
+            if (salario !== undefined) empleado.salario = salario;
+
+            const prestaciones = parseNumber(row['Prestaciones Sociales'] || row.prestaciones_sociales);
+            if (prestaciones !== undefined) empleado.prestaciones_sociales = prestaciones;
+
+            const auxilios = parseNumber(row['Auxilios No Salariales'] || row.auxilios_no_salariales);
+            if (auxilios !== undefined) empleado.auxilios_no_salariales = auxilios;
+
+            const medio_pago = normalizeMedioPago(row['Medio de Pago'] || row.medio_pago);
+            if (medio_pago) empleado.medio_pago = medio_pago;
+
+            const banco = cleanValue(row.Banco || row.banco);
+            if (banco) empleado.banco = banco;
+
+            const numero_cuenta = cleanValue(row['Número de Cuenta'] || row.numero_cuenta);
+            if (numero_cuenta) empleado.numero_cuenta = numero_cuenta;
+
+            return empleado;
+          });
+
+          // Filtrar filas vacías y validar datos mínimos requeridos
+          const validData = mappedData.filter((emp) => {
+            if (!emp.nombre || emp.nombre.trim() === '') {
+              return false;
+            }
+            // Validar que el estado sea válido
+            if (emp.estado !== 'Activo' && emp.estado !== 'Inactivo') {
+              emp.estado = 'Activo';
+            }
+            return true;
+          });
 
           if (validData.length === 0) {
             showAlert('error', 'No se encontraron datos válidos en el archivo');
@@ -321,17 +438,85 @@ const Personal: React.FC = () => {
   const handleSaveCsvData = async () => {
     try {
       setLoading(true);
-      const { error } = await getSupabase().from('empleados').insert(csvData);
+      const supabase = getSupabase();
 
-      if (error) throw error;
+      // Verificar que todos los registros tengan nombre
+      const invalidRecords = csvData.filter((emp: Empleado) => !emp.nombre || emp.nombre.trim() === '');
+      if (invalidRecords.length > 0) {
+        showAlert('error', `${invalidRecords.length} registro(s) sin nombre. Todos los empleados deben tener nombre.`);
+        return;
+      }
 
-      showAlert('success', `${csvData.length} empleados importados exitosamente`);
-      await fetchEmpleados();
-      setShowCsvDialog(false);
-      setCsvData([]);
-      setCsvPreview(false);
+      // Limpiar datos antes de insertar - eliminar campos undefined, null, o NaN
+      const cleanedData = csvData.map((emp: Empleado) => {
+        const cleaned: Record<string, any> = {};
+
+        Object.entries(emp).forEach(([key, value]) => {
+          // Solo incluir campos que tengan valores válidos
+          if (value !== undefined && value !== null && value !== '') {
+            // Para números, verificar que no sea NaN
+            if (typeof value === 'number' && !isNaN(value)) {
+              cleaned[key] = value;
+            } else if (typeof value !== 'number') {
+              cleaned[key] = value;
+            }
+          }
+        });
+
+        // Asegurar que siempre tenga nombre y estado
+        if (!cleaned.nombre) cleaned.nombre = emp.nombre;
+        if (!cleaned.estado) cleaned.estado = emp.estado || 'Activo';
+
+        return cleaned;
+      });
+
+      // Log para debug (se verá en la consola del navegador)
+      console.log('Datos a insertar (primer registro):', cleanedData[0]);
+
+      // Insertar en lotes de 100 para evitar problemas con inserciones masivas
+      const batchSize = 100;
+      let importedCount = 0;
+      let failedCount = 0;
+      const errors: string[] = [];
+
+      for (let i = 0; i < cleanedData.length; i += batchSize) {
+        const batch = cleanedData.slice(i, i + batchSize);
+
+        const { error } = await supabase
+          .from('empleados')
+          .insert(batch)
+          .select();
+
+        if (error) {
+          failedCount += batch.length;
+          console.error('Error en lote:', error);
+          console.error('Datos del lote que falló:', batch);
+          errors.push(`Lote ${Math.floor(i / batchSize) + 1}: ${error.message}`);
+
+          // Si es el primer error, mostrar detalles completos
+          if (errors.length === 1 && error.details) {
+            errors.push(`Detalles: ${error.details}`);
+          }
+        } else {
+          importedCount += batch.length;
+        }
+      }
+
+      if (importedCount > 0) {
+        showAlert('success', `${importedCount} empleado(s) importado(s) exitosamente`);
+        await fetchEmpleados();
+        setShowCsvDialog(false);
+        setCsvData([]);
+        setCsvPreview(false);
+      }
+
+      if (failedCount > 0) {
+        const errorMessage = `${failedCount} empleado(s) fallaron al importar:\n${errors.join('\n')}`;
+        showAlert('error', errorMessage);
+      }
     } catch (error: any) {
-      showAlert('error', `Error al importar: ${error.message}`);
+      console.error('Error completo:', error);
+      showAlert('error', `Error al importar: ${error.message || 'Error desconocido'}`);
     } finally {
       setLoading(false);
     }
@@ -340,8 +525,8 @@ const Personal: React.FC = () => {
   // Función para descargar template CSV
   const handleDownloadTemplate = () => {
     const template = `Nombre,Cédula,Teléfono,Email,Estado,Cargo,Tipo de Contrato,Fecha Inicio,Fecha Fin,Horas Semanales,Periodicidad Pago,Salario,Prestaciones Sociales,Auxilios No Salariales,Medio de Pago,Banco,Número de Cuenta
-Juan Pérez,1234567890,3001234567,juan@example.com,Activo,Operario de Campo,Indefinido,2024-01-15,,48,Quincenal,1500000,0,0,Transferencia bancaria,Bancolombia,12345678
-María García,9876543210,3109876543,maria@example.com,Activo,Jefe de Cosecha,Indefinido,2023-06-01,,48,Mensual,2500000,0,0,Transferencia bancaria,Davivienda,87654321`;
+Juan Pérez,1234567890,3001234567,juan@example.com,Activo,Operario de Campo,Indefinido,2024-01-15,,48,Quincenal,1500000,,,Transferencia bancaria,Bancolombia,12345678
+María García,9876543210,3109876543,maria@example.com,Activo,Jefe de Cosecha,Indefinido,2023-06-01,,48,Mensual,2500000,,,Transferencia bancaria,Davivienda,87654321`;
 
     const blob = new Blob([template], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);

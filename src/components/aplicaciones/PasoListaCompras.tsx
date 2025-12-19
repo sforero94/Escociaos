@@ -1,17 +1,18 @@
 import { useState, useEffect } from 'react';
-import { 
-  Package, 
-  ShoppingCart, 
-  CheckCircle, 
-  AlertTriangle, 
-  DollarSign, 
-  Download, 
-  Edit2, 
-  Save, 
+import {
+  Package,
+  ShoppingCart,
+  CheckCircle,
+  AlertTriangle,
+  DollarSign,
+  Download,
+  Edit2,
+  Save,
   X as XIcon,
-  TrendingUp 
+  TrendingUp
 } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
+import { useSafeMode } from '../../contexts/SafeModeContext';
 import { generarPDFListaCompras } from '../../utils/generarPDFListaCompras';
 import { 
   formatearMoneda, 
@@ -44,6 +45,7 @@ export function PasoListaCompras({
   onUpdate,
 }: PasoListaComprasProps) {
   const supabase = getSupabase();
+  const { isSafeModeEnabled } = useSafeMode();
 
   const [lista, setLista] = useState<ListaCompras | null>(lista_compras);
   const [cargando, setCargando] = useState(false);
@@ -87,7 +89,7 @@ export function PasoListaCompras({
 
       if (error) throw error;
 
-      const inventarioActual: ProductoCatalogo[] = data.map((p) => ({
+      let inventarioActual: ProductoCatalogo[] = data.map((p) => ({
         id: p.id,
         nombre: p.nombre,
         categoria: p.categoria,
@@ -101,7 +103,13 @@ export function PasoListaCompras({
         ultimo_precio_unitario: p.precio_unitario || 0,      // Precio por Kg/L
         precio_presentacion: p.precio_presentacion || 0,     // Precio por bulto/envase
         cantidad_actual: p.cantidad_actual || 0,
+        permitido_gerencia: p.permitido_gerencia,
       }));
+
+      // Filtrar productos no permitidos si modo seguro está activado
+      if (isSafeModeEnabled) {
+        inventarioActual = inventarioActual.filter((p) => p.permitido_gerencia !== false);
+      }
 
       setInventario(inventarioActual);
 
@@ -478,7 +486,7 @@ export function PasoListaCompras({
                     <tr key={item.producto_id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3">
                         <div>
-                          <div className="text-[#172E08]">{item.producto_nombre}</div>
+                          <div className={`${item.permitido_gerencia === false ? 'text-red-600 font-bold' : 'text-[#172E08]'}`}>{item.producto_nombre}</div>
                           <div className="text-sm text-[#4D240F]/70">{item.producto_categoria}</div>
                         </div>
                       </td>
@@ -636,7 +644,7 @@ export function PasoListaCompras({
                       <tr key={item.producto_id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-3">
                           <div>
-                            <div className="text-[#172E08]">{item.producto_nombre}</div>
+                            <div className={`${item.permitido_gerencia === false ? 'text-red-600 font-bold' : 'text-[#172E08]'}`}>{item.producto_nombre}</div>
                             <div className="text-sm text-[#4D240F]/70">
                               {item.producto_categoria}
                             </div>

@@ -14,6 +14,7 @@ import { DailyMovementsDashboardWrapper } from './components/aplicaciones/DailyM
 import { CierreAplicacionWrapper } from './components/aplicaciones/CierreAplicacionWrapper';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { SafeModeProvider } from './contexts/SafeModeContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { Login } from './components/Login';
 import { Layout } from './components/Layout';
@@ -174,7 +175,9 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppContent />
+        <SafeModeProvider>
+          <AppContent />
+        </SafeModeProvider>
       </AuthProvider>
     </BrowserRouter>
   );

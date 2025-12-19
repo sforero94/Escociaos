@@ -38,7 +38,7 @@ const GRUPOS_VALIDOS = ['Agroinsumos', 'Herramientas', 'Maquinaria y equipo'];
 
 const TIPOS_APLICACION_VALIDOS = ['Foliar', 'Edáfico', 'Drench'];
 const ESTADOS_FISICOS_VALIDOS = ['Líquido', 'Sólido']; // CON tilde según Supabase
-const UNIDADES_MEDIDA_VALIDAS = ['litros', 'kilos', 'unidades'];
+const UNIDADES_MEDIDA_VALIDAS = ['Litros', 'Kilos', 'Unidades']; // Con mayúscula inicial según el ENUM de BD
 
 interface ProductoCSV {
   nombre: string;

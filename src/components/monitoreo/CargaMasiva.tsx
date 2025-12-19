@@ -1,15 +1,71 @@
-import { Download, Upload } from 'lucide-react';
+import { Download, Upload, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
 import { Button } from '../ui/button';
 import { MonitoreoSubNav } from './MonitoreoSubNav';
 import { useState } from 'react';
+import * as XLSX from 'xlsx';
+import { getSupabase } from '../../utils/supabase/client';
+
+interface ResultadoCarga {
+  exito: boolean;
+  mensaje: string;
+  registrosInsertados?: number;
+  errores?: string[];
+}
 
 export function CargaMasiva() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [resultado, setResultado] = useState<ResultadoCarga | null>(null);
 
   const handleDownloadTemplate = () => {
-    // TODO: Implementar descarga de plantilla
-    // Aquí se implementará la lógica para descargar un archivo CSV/Excel con la estructura correcta
+    // Crear datos de ejemplo para la plantilla
+    const data = [
+      {
+        'Fecha (YYYY-MM-DD)': '2024-01-15',
+        'Lote': 'Lote 1',
+        'Sublote': 'Sublote A',
+        'Plaga/Enfermedad': 'Mosca de la fruta',
+        'Árboles Monitoreados': 35,
+        'Árboles Afectados': 5,
+        'Individuos Encontrados': 12,
+        'Monitor': 'Clara, Daniela',
+        'Observaciones': 'Presencia moderada en zona norte'
+      },
+      {
+        'Fecha (YYYY-MM-DD)': '2024-01-15',
+        'Lote': 'Lote 1',
+        'Sublote': 'Sublote B',
+        'Plaga/Enfermedad': 'Trips',
+        'Árboles Monitoreados': 35,
+        'Árboles Afectados': 3,
+        'Individuos Encontrados': 8,
+        'Monitor': 'Clara, Daniela',
+        'Observaciones': ''
+      }
+    ];
+
+    // Crear un libro de trabajo
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Monitoreos');
+
+    // Ajustar el ancho de las columnas
+    const columnWidths = [
+      { wch: 18 }, // Fecha
+      { wch: 15 }, // Lote
+      { wch: 15 }, // Sublote
+      { wch: 25 }, // Plaga/Enfermedad
+      { wch: 20 }, // Árboles Monitoreados
+      { wch: 18 }, // Árboles Afectados
+      { wch: 22 }, // Individuos Encontrados
+      { wch: 20 }, // Monitor
+      { wch: 35 }  // Observaciones
+    ];
+    worksheet['!cols'] = columnWidths;
+
+    // Generar el archivo y descargarlo
+    const fecha = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `plantilla_monitoreos_${fecha}.xlsx`);
   };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -23,20 +79,198 @@ export function CargaMasiva() {
     if (!selectedFile) return;
 
     setUploading(true);
+    setResultado(null);
+
     try {
-      // TODO: Implementar carga de archivo
-      // Aquí se implementará la lógica para procesar el archivo CSV/Excel
-      
-      // Simulación de carga
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      alert('Archivo cargado exitosamente');
-      setSelectedFile(null);
-    } catch (error) {
-      alert('Error al cargar el archivo');
+      // 1. Leer el archivo
+      const datos = await leerArchivo(selectedFile);
+
+      // 2. Procesar y validar los datos
+      const supabase = getSupabase();
+      const errores: string[] = [];
+      const registrosParaInsertar: any[] = [];
+
+      // Cargar catálogos necesarios
+      const { data: lotes } = await supabase.from('lotes').select('id, nombre') as { data: Array<{id: string, nombre: string}> | null };
+      const { data: plagas } = await supabase.from('plagas_enfermedades_catalogo').select('id, nombre') as { data: Array<{id: string, nombre: string}> | null };
+
+      if (!lotes || !plagas) {
+        throw new Error('No se pudieron cargar los catálogos de lotes y plagas');
+      }
+
+      // Procesar cada fila
+      for (let i = 0; i < datos.length; i++) {
+        const fila = datos[i];
+        const numFila = i + 2; // +2 porque Excel empieza en 1 y hay header
+
+        try {
+          // Validar fecha
+          const fecha = fila['Fecha (YYYY-MM-DD)'];
+          if (!fecha || !esFormatoFechaValido(fecha)) {
+            errores.push(`Fila ${numFila}: Fecha inválida "${fecha}"`);
+            continue;
+          }
+
+          // Buscar lote y sublote
+          const nombreLote = fila['Lote']?.trim();
+          const lote = lotes.find(l => l.nombre.toLowerCase() === nombreLote?.toLowerCase());
+
+          if (!lote) {
+            errores.push(`Fila ${numFila}: Lote "${nombreLote}" no encontrado`);
+            continue;
+          }
+
+          // Obtener sublotes del lote
+          const { data: sublotes } = await supabase
+            .from('sublotes')
+            .select('id, nombre')
+            .eq('lote_id', lote.id) as { data: Array<{id: string, nombre: string}> | null };
+
+          const nombreSublote = fila['Sublote']?.trim();
+          const sublote = sublotes?.find(s => s.nombre.toLowerCase() === nombreSublote?.toLowerCase());
+
+          if (!sublote) {
+            errores.push(`Fila ${numFila}: Sublote "${nombreSublote}" no encontrado en ${nombreLote}`);
+            continue;
+          }
+
+          // Buscar plaga
+          const nombrePlaga = fila['Plaga/Enfermedad']?.trim();
+          const plaga = plagas.find(p => p.nombre.toLowerCase() === nombrePlaga?.toLowerCase());
+
+          if (!plaga) {
+            errores.push(`Fila ${numFila}: Plaga/Enfermedad "${nombrePlaga}" no encontrada`);
+            continue;
+          }
+
+          // Validar números
+          const arbolesMonitoreados = parseInt(fila['Árboles Monitoreados']);
+          const arbolesAfectados = parseInt(fila['Árboles Afectados']);
+          const individuosEncontrados = parseInt(fila['Individuos Encontrados']);
+
+          if (isNaN(arbolesMonitoreados) || arbolesMonitoreados <= 0) {
+            errores.push(`Fila ${numFila}: Árboles Monitoreados inválido`);
+            continue;
+          }
+
+          if (isNaN(arbolesAfectados) || arbolesAfectados < 0) {
+            errores.push(`Fila ${numFila}: Árboles Afectados inválido`);
+            continue;
+          }
+
+          if (isNaN(individuosEncontrados) || individuosEncontrados < 0) {
+            errores.push(`Fila ${numFila}: Individuos Encontrados inválido`);
+            continue;
+          }
+
+          if (arbolesAfectados > arbolesMonitoreados) {
+            errores.push(`Fila ${numFila}: Árboles Afectados no puede ser mayor que Monitoreados`);
+            continue;
+          }
+
+          // Calcular métricas
+          const incidencia = (arbolesAfectados / arbolesMonitoreados) * 100;
+          const severidad = arbolesAfectados > 0 ? individuosEncontrados / arbolesAfectados : 0;
+
+          // Determinar gravedad
+          let gravedadTexto: 'Baja' | 'Media' | 'Alta' = 'Baja';
+          let gravedadNumerica: 1 | 2 | 3 = 1;
+
+          if (incidencia >= 30 || severidad >= 3) {
+            gravedadTexto = 'Alta';
+            gravedadNumerica = 3;
+          } else if (incidencia >= 15 || severidad >= 1.5) {
+            gravedadTexto = 'Media';
+            gravedadNumerica = 2;
+          }
+
+          // Preparar registro para insertar
+          registrosParaInsertar.push({
+            fecha_monitoreo: fecha,
+            lote_id: lote.id,
+            sublote_id: sublote.id,
+            plaga_enfermedad_id: plaga.id,
+            arboles_monitoreados: arbolesMonitoreados,
+            arboles_afectados: arbolesAfectados,
+            individuos_encontrados: individuosEncontrados,
+            incidencia: parseFloat(incidencia.toFixed(2)),
+            severidad: parseFloat(severidad.toFixed(2)),
+            gravedad_texto: gravedadTexto,
+            gravedad_numerica: gravedadNumerica,
+            monitor: fila['Monitor']?.trim() || null,
+            observaciones: fila['Observaciones']?.trim() || null
+          });
+
+        } catch (error: any) {
+          errores.push(`Fila ${numFila}: Error al procesar - ${error.message}`);
+        }
+      }
+
+      // 3. Insertar registros válidos
+      if (registrosParaInsertar.length > 0) {
+        const { error: insertError } = await supabase
+          .from('monitoreos')
+          .insert(registrosParaInsertar as any);
+
+        if (insertError) {
+          throw new Error(`Error al insertar en BD: ${insertError.message}`);
+        }
+      }
+
+      // 4. Mostrar resultado
+      setResultado({
+        exito: registrosParaInsertar.length > 0,
+        mensaje: registrosParaInsertar.length > 0
+          ? `Se insertaron exitosamente ${registrosParaInsertar.length} de ${datos.length} registros`
+          : 'No se pudieron insertar registros',
+        registrosInsertados: registrosParaInsertar.length,
+        errores: errores.length > 0 ? errores : undefined
+      });
+
+      if (registrosParaInsertar.length > 0) {
+        setSelectedFile(null);
+      }
+
+    } catch (error: any) {
+      setResultado({
+        exito: false,
+        mensaje: `Error al procesar el archivo: ${error.message}`,
+        errores: [error.message]
+      });
     } finally {
       setUploading(false);
     }
+  };
+
+  const leerArchivo = (file: File): Promise<any[]> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onload = (e) => {
+        try {
+          const data = e.target?.result;
+          const workbook = XLSX.read(data, { type: 'binary' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+          resolve(jsonData);
+        } catch (error) {
+          reject(error);
+        }
+      };
+
+      reader.onerror = () => reject(new Error('Error al leer el archivo'));
+      reader.readAsBinaryString(file);
+    });
+  };
+
+  const esFormatoFechaValido = (fecha: string): boolean => {
+    // Formato YYYY-MM-DD
+    const regex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!regex.test(fecha)) return false;
+
+    const date = new Date(fecha);
+    return date instanceof Date && !isNaN(date.getTime());
   };
 
   return (
@@ -156,6 +390,37 @@ export function CargaMasiva() {
           </div>
         </div>
       </div>
+
+      {/* Result Display */}
+      {resultado && (
+        <div className={`p-6 rounded-2xl border ${resultado.exito ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'} shadow-[0_4px_24px_rgba(0,0,0,0.05)]`}>
+          <div className="flex items-start gap-3">
+            {resultado.exito ? (
+              <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0" />
+            ) : (
+              <XCircle className="w-6 h-6 text-red-600 flex-shrink-0" />
+            )}
+            <div className="flex-1">
+              <h3 className={`font-medium mb-2 ${resultado.exito ? 'text-green-800' : 'text-red-800'}`}>
+                {resultado.mensaje}
+              </h3>
+              {resultado.errores && resultado.errores.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-sm font-medium text-gray-700 mb-2">Errores encontrados:</p>
+                  <ul className="space-y-1 text-sm text-gray-600 max-h-60 overflow-y-auto">
+                    {resultado.errores.map((error: string, idx: number) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
+                        <span>{error}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Información Adicional */}
       <div className="bg-gradient-to-r from-[#73991C]/10 to-[#BFD97D]/10 rounded-2xl border border-[#73991C]/20 p-6">

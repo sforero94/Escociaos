@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, Plus, Package, AlertTriangle, Loader2, Edit, Eye, History, X, ChevronUp, ChevronDown, Filter } from 'lucide-react';
+import { Search, Plus, Package, AlertTriangle, Loader2, Edit, Eye, History, X, ChevronUp, ChevronDown, Filter, Upload } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { getSupabase } from '../../utils/supabase/client';
@@ -8,6 +8,7 @@ import { ProductForm } from './ProductForm';
 import { ProductMovements } from './ProductMovements';
 import { InventorySubNav } from './InventorySubNav';
 import { useNavigate } from 'react-router-dom';
+import { useSafeMode } from '../../contexts/SafeModeContext';
 
 interface InventoryListProps {
   onNavigate?: (view: string, productId?: number) => void;
@@ -23,10 +24,12 @@ interface Product {
   stock_minimo: number;
   precio_unitario: number;
   activo: boolean;
+  permitido_gerencia: boolean;
 }
 
 export function InventoryList({ onNavigate }: InventoryListProps) {
   const navigate = useNavigate();
+  const { isSafeModeEnabled } = useSafeMode();
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -82,6 +85,11 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
 
   const filterProducts = () => {
     let filtered = products;
+
+    // Filtrar por modo seguro - ocultar productos no permitidos por gerencia
+    if (isSafeModeEnabled) {
+      filtered = filtered.filter((p) => p.permitido_gerencia !== false);
+    }
 
     // Filtrar por búsqueda
     if (searchQuery) {
@@ -235,6 +243,14 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
         </div>
         <div className="flex flex-wrap gap-3">
           <Button
+            onClick={() => navigate('/inventario/importar')}
+            variant="outline"
+            className="border-[#73991C] text-[#73991C] hover:bg-[#73991C]/10 rounded-xl transition-all duration-200"
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            Importar CSV
+          </Button>
+          <Button
             onClick={() => {
               setEditingProductId(null);
               setIsProductFormOpen(true);
@@ -372,7 +388,9 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
                     onClick={() => onNavigate && onNavigate('inventory-detail', product.id)}
                   >
                     <td className="px-6 py-4">
-                      <p className="text-[#172E08]">{product.nombre}</p>
+                      <p className={`${!product.permitido_gerencia ? 'text-red-600 font-bold' : 'text-[#172E08]'}`}>
+                        {product.nombre}
+                      </p>
                     </td>
                     <td className="px-6 py-4">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-[#73991C]/10 text-[#73991C] text-xs">

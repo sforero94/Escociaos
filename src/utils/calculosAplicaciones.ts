@@ -240,7 +240,8 @@ export function generarListaCompras(
       ultimo_precio_unitario: productoInventario.ultimo_precio_unitario || 0,  // Precio por Kg/L
       precio_presentacion,  // Precio por bulto/envase completo
       costo_estimado,
-      alerta
+      alerta,
+      permitido_gerencia: productoInventario.permitido_gerencia
     });
   });
 

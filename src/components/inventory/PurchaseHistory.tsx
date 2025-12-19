@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSafeMode } from '../../contexts/SafeModeContext';
 import { InventorySubNav } from './InventorySubNav';
 import {
   ShoppingCart,
@@ -39,6 +40,7 @@ interface Purchase {
   producto?: {
     nombre: string;
     categoria: string;
+    permitido_gerencia?: boolean;
   };
 }
 
@@ -136,7 +138,7 @@ function PurchaseDetailModal({ purchase, onClose }: { purchase: Purchase; onClos
                   <Package className="w-6 h-6 text-white" />
                 </div>
                 <div className="flex-1">
-                  <h4 className="text-[#172E08] mb-1">
+                  <h4 className={`mb-1 ${purchase.producto?.permitido_gerencia === false ? 'text-red-600 font-bold' : 'text-[#172E08]'}`}>
                     {purchase.producto?.nombre || 'Producto no disponible'}
                   </h4>
                   <p className="text-sm text-[#4D240F]/70">
@@ -238,6 +240,7 @@ function PurchaseDetailModal({ purchase, onClose }: { purchase: Purchase; onClos
  */
 export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }) {
   const { user } = useAuth();
+  const { isSafeModeEnabled } = useSafeMode();
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [filteredPurchases, setFilteredPurchases] = useState<Purchase[]>([]);
   const [loading, setLoading] = useState(true);
@@ -252,7 +255,7 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
 
   useEffect(() => {
     filterPurchases();
-  }, [searchQuery, purchases]);
+  }, [searchQuery, purchases, isSafeModeEnabled]);
 
   const loadPurchases = async () => {
     try {
@@ -263,7 +266,7 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
         .from('compras')
         .select(`
           *,
-          producto:productos(nombre, categoria)
+          producto:productos(nombre, categoria, permitido_gerencia)
         `)
         .order('fecha_compra', { ascending: false });
 
@@ -277,13 +280,20 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
   };
 
   const filterPurchases = () => {
+    let filtered = purchases;
+
+    // Filtrar por modo seguro - ocultar compras de productos no permitidos
+    if (isSafeModeEnabled) {
+      filtered = filtered.filter((purchase) => purchase.producto?.permitido_gerencia !== false);
+    }
+
     if (!searchQuery.trim()) {
-      setFilteredPurchases(purchases);
+      setFilteredPurchases(filtered);
       return;
     }
 
     const query = searchQuery.toLowerCase();
-    const filtered = purchases.filter((purchase) => {
+    filtered = filtered.filter((purchase) => {
       return (
         purchase.proveedor?.toLowerCase().includes(query) ||
         purchase.numero_factura?.toLowerCase().includes(query) ||
@@ -512,7 +522,7 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
                     </td>
                     <td className="px-6 py-4">
                       <div>
-                        <p className="text-sm text-[#172E08]">
+                        <p className={`text-sm ${purchase.producto?.permitido_gerencia === false ? 'text-red-600 font-bold' : 'text-[#172E08]'}`}>
                           {purchase.producto?.nombre || 'Sin nombre'}
                         </p>
                         <p className="text-xs text-[#4D240F]/60">
@@ -580,7 +590,7 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
-                    <h3 className="text-sm text-[#172E08] mb-1">
+                    <h3 className={`text-sm mb-1 ${purchase.producto?.permitido_gerencia === false ? 'text-red-600 font-bold' : 'text-[#172E08]'}`}>
                       {purchase.producto?.nombre || 'Sin nombre'}
                     </h3>
                     <p className="text-xs text-[#4D240F]/60">
