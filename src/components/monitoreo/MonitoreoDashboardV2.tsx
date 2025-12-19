@@ -7,6 +7,8 @@ import { CargaCSV } from './CargaCSV';
 import { TablaMonitoreos } from './TablaMonitoreos';
 import { RegistroMonitoreo } from './RegistroMonitoreo';
 import { MonitoreoSubNav } from './MonitoreoSubNav';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
+import { MapaCalorIncidencias } from './MapaCalorIncidencias';
 import { 
   Bug,
   TrendingUp,
@@ -115,6 +117,10 @@ export function MonitoreoDashboardV2() {
   const [mostrarCatalogo, setMostrarCatalogo] = useState(false);
   const [mostrarRegistroMonitoreo, setMostrarRegistroMonitoreo] = useState(false);
   const graficoRef = useRef<HTMLDivElement>(null);
+
+  // Pestañas y mapa de calor
+  const [tabActiva, setTabActiva] = useState<'general' | 'mapa-calor'>('general');
+  const [monitoreosCargados, setMonitoreosCargados] = useState<any[]>([]);
 
   // ============================================
   // CARGAR DATOS INICIALES
@@ -364,10 +370,10 @@ export function MonitoreoDashboardV2() {
         let query = supabase
           .from('monitoreos')
           .select(`
-            fecha_monitoreo,
-            incidencia,
-            plaga_enfermedad_id,
-            plagas_enfermedades_catalogo!inner(nombre)
+            *,
+            plagas_enfermedades_catalogo!inner(nombre),
+            sublotes!inner(nombre, lote_id),
+            lotes!inner(nombre)
           `)
           .gte('fecha_monitoreo', fechaInicio.toISOString().split('T')[0])
           .lte('fecha_monitoreo', fechaFin.toISOString().split('T')[0])
@@ -391,6 +397,9 @@ export function MonitoreoDashboardV2() {
           hasMore = false;
         }
       }
+
+      // Guardar monitoreos para el mapa de calor
+      setMonitoreosCargados(allData);
 
 
       // Agrupar por semana y plaga
@@ -842,10 +851,24 @@ export function MonitoreoDashboardV2() {
           </Card>
 
           {/* ============================================ */}
-          {/* 4. GRÁFICA DE TENDENCIAS */}
+          {/* 4. VISUALIZACIONES CON PESTAÑAS */}
           {/* ============================================ */}
-          
+
           <Card className="p-6">
+            <Tabs value={tabActiva} onValueChange={(value) => setTabActiva(value as 'general' | 'mapa-calor')} className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-6">
+                <TabsTrigger value="general" className="flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4" />
+                  Tendencias Generales
+                </TabsTrigger>
+                <TabsTrigger value="mapa-calor" className="flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4" />
+                  Mapa de Calor por Lote
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="general">
+                {/* GRÁFICA DE TENDENCIAS */}
             <div className="mb-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
@@ -994,6 +1017,15 @@ export function MonitoreoDashboardV2() {
                 </div>
               )}
             </div>
+              </TabsContent>
+
+              <TabsContent value="mapa-calor">
+                <MapaCalorIncidencias
+                  monitoreos={monitoreosCargados}
+                  rangoSeleccionado={rangoSeleccionado}
+                />
+              </TabsContent>
+            </Tabs>
           </Card>
 
           {/* ============================================ */}

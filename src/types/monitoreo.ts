@@ -109,3 +109,48 @@ export interface EstadisticaRapida {
   cambio: number;
   estado: 'critico' | 'alerta' | 'atencion' | 'normal';
 }
+
+// ============================================
+// INTERFACES PARA MAPA DE CALOR
+// ============================================
+
+export interface MonitoreoConRelaciones {
+  id: string;
+  fecha_monitoreo: Date | string;
+  lote_id: string;
+  sublote_id: string;
+  plaga_enfermedad_id: string;
+  arboles_monitoreados: number;
+  arboles_afectados: number;
+  incidencia: number;
+  gravedad_texto: 'Baja' | 'Media' | 'Alta';
+  plagas_enfermedades_catalogo: { nombre: string };
+  sublotes: { nombre: string; lote_id: string };
+  lotes: { nombre: string };
+}
+
+export interface CeldaMapaCalor {
+  plagaId: string;
+  plagaNombre: string;
+  loteId: string;
+  loteNombre: string;
+  incidenciaPromedio: number;
+  numeroMonitoreos: number;
+  monitoreos: MonitoreoConRelaciones[];
+}
+
+export interface FilaMapaCalor {
+  plagaId: string;
+  plagaNombre: string;
+  incidenciaPromedioTotal: number;
+  celdas: Map<string, CeldaMapaCalor>;
+}
+
+export interface DatosMapaCalor {
+  filas: FilaMapaCalor[];
+  columnas: Array<{
+    loteId: string;
+    loteNombre: string;
+    incidenciaPromedio: number;
+  }>;
+}
