@@ -170,23 +170,23 @@ export function CargaMasiva() {
             continue;
           }
 
-          // Calcular métricas
+          // Calcular incidencia para determinar gravedad
           const incidencia = (arbolesAfectados / arbolesMonitoreados) * 100;
-          const severidad = arbolesAfectados > 0 ? individuosEncontrados / arbolesAfectados : 0;
 
-          // Determinar gravedad
+          // Determinar gravedad basado en incidencia
           let gravedadTexto: 'Baja' | 'Media' | 'Alta' = 'Baja';
           let gravedadNumerica: 1 | 2 | 3 = 1;
 
-          if (incidencia >= 30 || severidad >= 3) {
+          if (incidencia >= 30) {
             gravedadTexto = 'Alta';
             gravedadNumerica = 3;
-          } else if (incidencia >= 15 || severidad >= 1.5) {
+          } else if (incidencia >= 15) {
             gravedadTexto = 'Media';
             gravedadNumerica = 2;
           }
 
           // Preparar registro para insertar
+          // NOTA: incidencia y severidad son calculadas automáticamente por la BD
           registrosParaInsertar.push({
             fecha_monitoreo: fecha,
             lote_id: lote.id,
@@ -195,8 +195,6 @@ export function CargaMasiva() {
             arboles_monitoreados: arbolesMonitoreados,
             arboles_afectados: arbolesAfectados,
             individuos_encontrados: individuosEncontrados,
-            incidencia: parseFloat(incidencia.toFixed(2)),
-            severidad: parseFloat(severidad.toFixed(2)),
             gravedad_texto: gravedadTexto,
             gravedad_numerica: gravedadNumerica,
             monitor: fila['Monitor']?.trim() || null,
