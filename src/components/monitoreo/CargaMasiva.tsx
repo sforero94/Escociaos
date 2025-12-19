@@ -104,10 +104,12 @@ export function CargaMasiva() {
         const numFila = i + 2; // +2 porque Excel empieza en 1 y hay header
 
         try {
-          // Validar fecha
-          const fecha = fila['Fecha (YYYY-MM-DD)'];
-          if (!fecha || !esFormatoFechaValido(fecha)) {
-            errores.push(`Fila ${numFila}: Fecha inválida "${fecha}"`);
+          // Validar y normalizar fecha
+          const fechaRaw = fila['Fecha (YYYY-MM-DD)'];
+          const fecha = normalizarFecha(fechaRaw);
+
+          if (!fecha) {
+            errores.push(`Fila ${numFila}: Fecha inválida "${fechaRaw}"`);
             continue;
           }
 
@@ -264,13 +266,40 @@ export function CargaMasiva() {
     });
   };
 
-  const esFormatoFechaValido = (fecha: string): boolean => {
-    // Formato YYYY-MM-DD
-    const regex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!regex.test(fecha)) return false;
+  const normalizarFecha = (fecha: any): string | null => {
+    // Si es un número, es un serial date de Excel
+    if (typeof fecha === 'number') {
+      // Excel almacena fechas como días desde 1/1/1900
+      // Convertir a fecha JavaScript (días desde 1/1/1970)
+      const fechaJS = new Date((fecha - 25569) * 86400 * 1000);
 
-    const date = new Date(fecha);
-    return date instanceof Date && !isNaN(date.getTime());
+      if (isNaN(fechaJS.getTime())) {
+        return null;
+      }
+
+      // Formatear como YYYY-MM-DD
+      const year = fechaJS.getFullYear();
+      const month = String(fechaJS.getMonth() + 1).padStart(2, '0');
+      const day = String(fechaJS.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    // Si es string, validar formato YYYY-MM-DD
+    if (typeof fecha === 'string') {
+      const regex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!regex.test(fecha)) {
+        return null;
+      }
+
+      const date = new Date(fecha);
+      if (isNaN(date.getTime())) {
+        return null;
+      }
+
+      return fecha;
+    }
+
+    return null;
   };
 
   return (
