@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { getSupabase, getCurrentUser, getUserProfile, signOut as supabaseSignOut } from '../utils/supabase/client';
 
@@ -30,6 +30,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  // Use ref instead of state to avoid stale closure issues in onAuthStateChange
+  const profileLoadedRef = useRef(false);
 
   // Cargar sesión inicial
   useEffect(() => {
@@ -41,17 +43,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('🔐 Auth state changed:', event, session ? 'con sesión' : 'sin sesión');
-        
+
         if (event === 'SIGNED_IN' && session) {
-          setIsLoading(true);
-          await loadUserData(session);
+          // Only show loading spinner if profile isn't loaded yet (initial login)
+          // This prevents the spinner from showing on tab switches
+          if (!profileLoadedRef.current) {
+            setIsLoading(true);
+            await loadUserData(session);
+          } else {
+            // Profile already loaded - just update session silently
+            setSession(session);
+            console.log('✅ Session refreshed silently (no profile reload)');
+          }
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
           setProfile(null);
           setSession(null);
           setIsLoading(false);
+          profileLoadedRef.current = false;
         } else if (event === 'TOKEN_REFRESHED' && session) {
+          // Token refresh should NOT trigger loading spinner
           setSession(session);
+          console.log('✅ Token refreshed silently');
         }
       }
     );
@@ -216,6 +229,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       console.log('✅ AuthContext: Carga completada, isLoading = false');
       setIsLoading(false);
+      profileLoadedRef.current = true;
     }
   };
 
@@ -243,6 +257,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setProfile(null);
       setSession(null);
+      profileLoadedRef.current = false;
       // Limpiar localStorage
       try {
         localStorage.removeItem('userProfile');

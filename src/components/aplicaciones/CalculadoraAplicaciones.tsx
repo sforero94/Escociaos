@@ -11,9 +11,11 @@ import {
   AlertTriangle,
   FileDown,
   Loader2,
+  Clock,
 } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { generarPDFListaCompras } from '../../utils/generarPDFListaCompras';
+import { useFormPersistence } from '../../hooks/useFormPersistence';
 import type {
   EstadoCalculadora,
   ConfiguracionAplicacion,
@@ -73,14 +75,22 @@ const INITIAL_STATE: EstadoCalculadora = {
 export function CalculadoraAplicaciones() {
   const navigate = useNavigate();
   const supabase = getSupabase();
-  const [state, setState] = useState<EstadoCalculadora>(INITIAL_STATE);
-  const [showCancelDialog, setShowCancelDialog] = useState(false);
-  const [validationError, setValidationError] = useState('');
-  const [cargandoDatos, setCargandoDatos] = useState(false);
 
   // Parámetros de la URL
   const { id } = useParams<{ id: string }>();
   const modoEdicion = !!id;
+
+  // Use form persistence for NEW applications only (not in edit mode)
+  const [state, setState, clearFormData] = useFormPersistence<EstadoCalculadora>({
+    key: modoEdicion ? `calculadora-edit-${id}` : 'calculadora-new-v1',
+    initialState: INITIAL_STATE,
+    debounceMs: 1500, // Longer debounce for complex form
+    enabled: !modoEdicion // Only enable for new applications
+  });
+
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [validationError, setValidationError] = useState('');
+  const [cargandoDatos, setCargandoDatos] = useState(false);
 
   // ==========================================================================
   // CARGAR DATOS EN MODO EDICIÓN
@@ -459,6 +469,7 @@ export function CalculadoraAplicaciones() {
   };
 
   const confirmarCancelar = () => {
+    clearFormData(); // Clear saved form data
     navigate('/aplicaciones');
   };
 
@@ -812,16 +823,19 @@ export function CalculadoraAplicaciones() {
       // =============================================================
       // ÉXITO - REDIRIGIR
       // =============================================================
-      
+
+
+      // Clear saved form data since we successfully saved
+      clearFormData();
 
       // Redirigir al listado con mensaje de éxito
-      navigate('/aplicaciones', { 
-        state: { 
-          success: true, 
-          mensaje: modoEdicion 
+      navigate('/aplicaciones', {
+        state: {
+          success: true,
+          mensaje: modoEdicion
             ? `Aplicación ${codigoAplicacion} actualizada exitosamente`
-            : `Aplicación ${codigoAplicacion} guardada exitosamente` 
-        } 
+            : `Aplicación ${codigoAplicacion} guardada exitosamente`
+        }
       });
       
     } catch (error) {
@@ -893,6 +907,29 @@ export function CalculadoraAplicaciones() {
               Calcula productos, dosis y genera lista de compras automáticamente
             </p>
           </div>
+
+          {/* Restoration Indicator */}
+          {state.paso_actual > 1 && !modoEdicion && (
+            <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
+              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Clock className="w-4 h-4 text-blue-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-blue-800 font-medium mb-1">
+                  Progreso restaurado automáticamente
+                </p>
+                <p className="text-xs text-blue-700">
+                  Puedes continuar donde lo dejaste. Tu progreso se guarda automáticamente.
+                </p>
+              </div>
+              <button
+                onClick={clearFormData}
+                className="text-sm text-blue-600 hover:text-blue-800 underline whitespace-nowrap flex-shrink-0"
+              >
+                Empezar de nuevo
+              </button>
+            </div>
+          )}
 
           {/* Stepper */}
           <div className="relative">
