@@ -19,6 +19,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogBody,
 } from '../../ui/dialog';
 import { Badge } from '../../ui/badge';
 import { Loader2, Plus, X } from 'lucide-react';
@@ -275,7 +276,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>
             {isEditing ? 'Editar Ingreso' : 'Nuevo Ingreso'}
@@ -293,7 +294,9 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
             <Loader2 className="w-8 h-8 animate-spin" />
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="contents">
+          <DialogBody>
+          <div className="space-y-6">
             {/* Información básica */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -482,25 +485,27 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
                 disabled={saving}
               />
             </div>
+          </div>
+        </DialogBody>
 
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onCancel}
-                disabled={saving}
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                disabled={saving}
-                className="bg-[#73991C] hover:bg-[#5a7716]"
-              >
-                {saving ? 'Guardando...' : (isEditing ? 'Actualizar Ingreso' : 'Crear Ingreso')}
-              </Button>
-            </DialogFooter>
-          </form>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            disabled={saving}
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="submit"
+            disabled={saving}
+            className="bg-[#73991C] hover:bg-[#5a7716]"
+          >
+            {saving ? 'Guardando...' : (isEditing ? 'Actualizar Ingreso' : 'Crear Ingreso')}
+          </Button>
+        </DialogFooter>
+      </form>
         )}
 
         {/* Modal para crear nuevo comprador */}

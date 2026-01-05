@@ -18,6 +18,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogBody,
 } from '../ui/dialog';
 import { Badge } from '../ui/badge';
 import { Switch } from '../ui/switch';
@@ -174,7 +175,7 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>
             {isEditing ? 'Editar Tarea' : 'Nueva Tarea'}
@@ -187,7 +188,9 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="contents">
+          <DialogBody>
+          <div className="space-y-6">
           {/* Información Básica */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -473,6 +476,8 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
               disabled={loading}
             />
           </div>
+          </div>
+          </DialogBody>
 
           <DialogFooter>
             <Button

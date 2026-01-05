@@ -18,6 +18,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogBody,
 } from '../../ui/dialog';
 import { Badge } from '../../ui/badge';
 import { AlertCircle, CheckCircle, Clock, Package } from 'lucide-react';
@@ -210,7 +211,7 @@ export function CompletarGastoDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Package className="w-5 h-5 text-orange-600" />
@@ -221,8 +222,11 @@ export function CompletarGastoDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Gasto Information Summary */}
-        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6">
+        <form onSubmit={handleSubmit} className="contents">
+          <DialogBody>
+            <div className="space-y-6">
+              {/* Gasto Information Summary */}
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
@@ -254,11 +258,10 @@ export function CompletarGastoDialog({
                   <p className="text-sm text-gray-700 mt-1">{gasto.observaciones}</p>
                 </div>
               )}
+              </div>
             </div>
           </div>
-        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
           {/* Business and Region */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -400,36 +403,38 @@ export function CompletarGastoDialog({
               disabled={loading}
             />
           </div>
+        </div>
+      </DialogBody>
 
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={loading}
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              disabled={loading || loadingCatalogs}
-              className="bg-green-600 hover:bg-green-700 text-white"
-            >
-              {loading ? (
-                <>
-                  <CheckCircle className="w-4 h-4 mr-2 animate-spin" />
-                  Completando...
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="w-4 h-4 mr-2" />
-                  Confirmar Gasto
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
+      <DialogFooter>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => onOpenChange(false)}
+          disabled={loading}
+        >
+          Cancelar
+        </Button>
+        <Button
+          type="submit"
+          disabled={loading || loadingCatalogs}
+          className="bg-green-600 hover:bg-green-700 text-white"
+        >
+          {loading ? (
+            <>
+              <CheckCircle className="w-4 h-4 mr-2 animate-spin" />
+              Completando...
+            </>
+          ) : (
+            <>
+              <CheckCircle className="w-4 h-4 mr-2" />
+              Confirmar Gasto
+            </>
+          )}
+        </Button>
+      </DialogFooter>
+    </form>
+    </DialogContent>
     </Dialog>
   );
 }

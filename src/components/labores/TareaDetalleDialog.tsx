@@ -167,7 +167,7 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[95vw] md:max-w-[90vw] lg:max-w-[1120px] max-h-[90vh] p-0 gap-0 overflow-hidden flex flex-col bg-white">
+      <DialogContent className="sm:max-w-[95vw] md:max-w-[90vw] lg:max-w-[1120px] p-0 gap-0 overflow-hidden flex flex-col bg-white">
         {/* Header */}
         <DialogHeader className="px-6 md:px-8 py-5 border-b bg-gray-50/80 flex-shrink-0 backdrop-blur-sm">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 pr-8">
@@ -201,7 +201,7 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
           </div>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 bg-gray-50/30">
+        <ScrollArea className="flex-1 min-h-0 bg-gray-50/30">
           <div className="px-6 md:px-8 py-6 md:py-8 space-y-6 max-w-[1120px] mx-auto w-full">
 
             {/* Métricas */}

@@ -8,6 +8,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogBody,
 } from '../../ui/dialog';
 import { Progress } from '../../ui/progress';
 import { Badge } from '../../ui/badge';
@@ -569,7 +570,7 @@ export function CargaMasivaIngresos({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="w-5 h-5 text-[#73991C]" />
@@ -580,6 +581,7 @@ export function CargaMasivaIngresos({
           </DialogDescription>
         </DialogHeader>
 
+        <DialogBody>
         <div className="space-y-6">
           {/* Step 1: Download Template */}
           <div className="border border-gray-200 rounded-lg p-4">
@@ -783,6 +785,7 @@ export function CargaMasivaIngresos({
             </ul>
           </div>
         </div>
+        </DialogBody>
 
         <DialogFooter>
           <Button

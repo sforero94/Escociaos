@@ -261,7 +261,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] h-[95vh] max-w-none sm:max-w-none overflow-hidden flex flex-col">
+      <DialogContent className="w-[95vw] max-w-6xl overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Clock className="h-5 w-5" />
@@ -273,7 +273,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
         </DialogHeader>
 
         {/* Progress indicator */}
-        <div className="flex items-center justify-center mb-6">
+        <div className="flex items-center justify-center mb-6 flex-shrink-0">
           <div className="flex items-center space-x-4">
             {[1, 2, 3].map((step) => (
               <div key={step} className="flex items-center">
