@@ -178,6 +178,44 @@ export function calcularTotalesProductos(
 }
 
 /**
+ * CALCULAR TOTALES GLOBALES DE PRODUCTOS PARA TODA LA APLICACIÓN
+ * Suma las cantidades desde todas las mezclas (usa cantidad_total_necesaria de cada mezcla)
+ * Útil para lista de compras y reportes globales
+ *
+ * IMPORTANTE: Esta función agrega correctamente desde mezclas donde cada una ya tiene
+ * su cantidad_total_necesaria calculada solo para sus lotes asignados.
+ * Esto previene duplicación cuando un mismo producto aparece en múltiples mezclas.
+ */
+export function calcularTotalesGlobalesProductos(
+  mezclas: Mezcla[]
+): ProductoEnMezcla[] {
+  const productosMap = new Map<string, ProductoEnMezcla>();
+
+  mezclas.forEach(mezcla => {
+    mezcla.productos.forEach(producto => {
+      const existing = productosMap.get(producto.producto_id);
+
+      if (existing) {
+        // Sumar cantidad_total_necesaria desde cada mezcla
+        existing.cantidad_total_necesaria += producto.cantidad_total_necesaria;
+      } else {
+        productosMap.set(producto.producto_id, {
+          ...producto,
+          cantidad_total_necesaria: producto.cantidad_total_necesaria
+        });
+      }
+    });
+  });
+
+  // Redondear totales
+  productosMap.forEach(producto => {
+    producto.cantidad_total_necesaria = Math.ceil(producto.cantidad_total_necesaria * 100) / 100;
+  });
+
+  return Array.from(productosMap.values());
+}
+
+/**
  * GENERAR LISTA DE COMPRAS
  * Cruza cantidades necesarias con inventario disponible
  * Fórmula: Cantidad a comprar = Max(0, Necesario - Disponible)
@@ -260,28 +298,6 @@ export function generarListaCompras(
 function extraerTamanoPresentacion(presentacion: string): number {
   const match = presentacion.match(/(\d+\.?\d*)/);
   return match ? parseFloat(match[1]) : 1;
-}
-
-/**
- * FORMATEAR MONEDA (PESOS COLOMBIANOS)
- */
-export function formatearMoneda(valor: number): string {
-  return new Intl.NumberFormat('es-CO', {
-    style: 'currency',
-    currency: 'COP',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(valor);
-}
-
-/**
- * FORMATEAR NÚMERO CON SEPARADOR DE MILES
- */
-export function formatearNumero(valor: number, decimales: number = 2): string {
-  return new Intl.NumberFormat('es-CO', {
-    minimumFractionDigits: decimales,
-    maximumFractionDigits: decimales
-  }).format(valor);
 }
 
 /**

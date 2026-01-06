@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
 import { Badge } from '../ui/badge';
 import { Progress } from '../ui/progress';
-import { ScrollArea } from '../ui/scroll-area';
 import { Separator } from '../ui/separator';
 import { formatearFecha, formatearFechaCorta } from '../../utils/fechas';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
+  DialogBody,
   DialogTitle,
   DialogDescription,
 } from '../ui/dialog';
@@ -20,6 +20,12 @@ import {
   TableHeader,
   TableRow,
 } from '../ui/table';
+import {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from '../ui/accordion';
 import {
   Clock,
   DollarSign,
@@ -67,7 +73,7 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
     try {
       setLoading(true);
 
-      // Load work records with employee details
+      // Load work records with employee and contractor details
       const { data: registros, error: errorRegistros } = await getSupabase()
         .from('registros_trabajo')
         .select(`
@@ -77,6 +83,12 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
             nombre,
             cargo,
             salario
+          ),
+          contratistas:contratista_id (
+            id,
+            nombre,
+            tipo_contrato,
+            tarifa_jornal
           )
         `)
         .eq('tarea_id', tarea.id)
@@ -146,6 +158,29 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
 
   const metricas = calcularMetricas();
 
+  // Group work records by date
+  const registrosPorDia = useMemo(() => {
+    const grupos: { [fecha: string]: RegistroTrabajo[] } = {};
+
+    registrosTrabajo.forEach((registro: RegistroTrabajo) => {
+      const fecha = registro.fecha_trabajo;
+      if (!grupos[fecha]) {
+        grupos[fecha] = [];
+      }
+      grupos[fecha].push(registro);
+    });
+
+    // Convert to array and sort by date (most recent first)
+    return Object.entries(grupos)
+      .map(([fecha, registros]) => ({
+        fecha,
+        registros,
+        totalJornales: registros.reduce((sum, r) => sum + parseFloat(r.fraccion_jornal), 0),
+        totalCosto: registros.reduce((sum, r) => sum + (r.costo_jornal || 0), 0),
+      }))
+      .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+  }, [registrosTrabajo]);
+
   if (!tarea) return null;
 
   const getPriorityColor = (priority: string) => {
@@ -167,7 +202,7 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[95vw] md:max-w-[90vw] lg:max-w-[1120px] p-0 gap-0 overflow-hidden flex flex-col bg-white">
+      <DialogContent className="w-[90vw] sm:max-w-none h-[96vh] p-0 gap-0 overflow-hidden flex flex-col bg-white">
         {/* Header */}
         <DialogHeader className="px-6 md:px-8 py-5 border-b bg-gray-50/80 flex-shrink-0 backdrop-blur-sm">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 pr-8">
@@ -201,7 +236,7 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
           </div>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 min-h-0 bg-gray-50/30">
+        <DialogBody className="flex-1 min-h-0 bg-gray-50/30">
           <div className="px-6 md:px-8 py-6 md:py-8 space-y-6 max-w-[1120px] mx-auto w-full">
 
             {/* Métricas */}
@@ -283,10 +318,22 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
                     <MapPin className="h-4 w-4 text-gray-500" />
                   </div>
                   <div className="space-y-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-500">Ubicación</p>
-                    <p className="text-base font-medium text-gray-900 truncate">
-                      {tarea.lote?.nombre || 'Sin lote'}
+                    <p className="text-sm font-medium text-gray-500">
+                      {tarea.lotes && tarea.lotes.length > 1 ? 'Lotes' : 'Lote'}
                     </p>
+                    {tarea.lotes && tarea.lotes.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {tarea.lotes.map((lote, idx) => (
+                          <Badge key={idx} variant="secondary" className="text-xs">
+                            {lote.nombre}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-base font-medium text-gray-900 truncate">
+                        {tarea.lote?.nombre || 'Sin lote'}
+                      </p>
+                    )}
                     {tarea.sublote && (
                       <p className="text-sm text-gray-600 bg-gray-50 px-2 py-0.5 rounded-md inline-block truncate">
                         {tarea.sublote.nombre}
@@ -372,52 +419,88 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
                     <p className="text-xs mt-1">Los registros aparecerán aquí cuando se reporten labores</p>
                   </div>
                 ) : (
-                  <div className="overflow-y-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="hover:bg-transparent bg-gray-50/30 sticky top-0">
-                          <TableHead className="w-[120px] pl-6">Fecha</TableHead>
-                          <TableHead className="min-w-[200px]">Empleado</TableHead>
-                          <TableHead className="text-right w-[100px]">Jornal</TableHead>
-                          <TableHead className="text-right w-[120px] pr-6">Costo</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {registrosTrabajo.map((registro) => (
-                          <TableRow key={registro.id} className="hover:bg-blue-50/30 transition-colors">
-                            <TableCell className="pl-6 font-medium text-sm text-gray-600">
-                              {formatearFechaCorta(registro.fecha_trabajo)}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex flex-col gap-1 py-1">
-                                <span className="text-sm font-semibold text-gray-900 truncate">
-                                  {(registro as any).empleados?.nombre || 'Desconocido'}
-                                </span>
-                                {(registro.observaciones) && (
-                                  <span className="text-xs text-gray-500 bg-gray-50 px-2 py-0.5 rounded w-fit max-w-full truncate">
-                                    {registro.observaciones}
+                  <div className="overflow-y-auto px-6 pb-4">
+                    <Accordion type="multiple" className="w-full">
+                      {registrosPorDia.map((diaData, idx) => (
+                        <AccordionItem key={diaData.fecha} value={diaData.fecha}>
+                          <AccordionTrigger className="hover:no-underline">
+                            <div className="flex items-center justify-between w-full pr-4">
+                              <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-2">
+                                  <Calendar className="h-4 w-4 text-gray-500" />
+                                  <span className="font-semibold text-gray-900">
+                                    {formatearFecha(diaData.fecha)}
                                   </span>
-                                )}
+                                </div>
+                                <Badge variant="secondary" className="text-xs">
+                                  {diaData.registros.length} {diaData.registros.length === 1 ? 'registro' : 'registros'}
+                                </Badge>
                               </div>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Badge variant="outline" className="font-mono font-normal">
-                                {registro.fraccion_jornal}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-right pr-6 font-medium text-gray-900">
-                              ${registro.costo_jornal.toLocaleString()}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                              <div className="flex items-center gap-4 text-sm">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-gray-500">Jornales:</span>
+                                  <span className="font-semibold text-gray-900">{diaData.totalJornales.toFixed(1)}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-gray-500">Costo:</span>
+                                  <span className="font-semibold text-gray-900">${diaData.totalCosto.toLocaleString()}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent>
+                            <Table>
+                              <TableHeader>
+                                <TableRow className="hover:bg-transparent bg-gray-50/30">
+                                  <TableHead className="min-w-[250px]">Empleado</TableHead>
+                                  <TableHead className="text-right w-[100px]">Jornal</TableHead>
+                                  <TableHead className="text-right w-[120px]">Costo</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {diaData.registros.map((registro) => (
+                                  <TableRow key={registro.id} className="hover:bg-blue-50/30 transition-colors">
+                                    <TableCell>
+                                      <div className="flex flex-col gap-1 py-1">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-sm font-semibold text-gray-900 truncate">
+                                            {(registro as any).empleados?.nombre || (registro as any).contratistas?.nombre || 'Desconocido'}
+                                          </span>
+                                          {(registro as any).contratistas && (
+                                            <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                                              {(registro as any).contratistas.tipo_contrato}
+                                            </Badge>
+                                          )}
+                                        </div>
+                                        {(registro.observaciones) && (
+                                          <span className="text-xs text-gray-500 bg-gray-50 px-2 py-0.5 rounded w-fit max-w-full truncate">
+                                            {registro.observaciones}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <Badge variant="outline" className="font-mono font-normal">
+                                        {registro.fraccion_jornal}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right font-medium text-gray-900">
+                                      ${registro.costo_jornal?.toLocaleString() || '0'}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </AccordionContent>
+                        </AccordionItem>
+                      ))}
+                    </Accordion>
                   </div>
                 )}
               </div>
             </div>
           </div>
-        </ScrollArea>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

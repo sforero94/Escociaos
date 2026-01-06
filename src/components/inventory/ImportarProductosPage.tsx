@@ -1,5 +1,5 @@
 import { InventorySubNav } from './InventorySubNav';
-import { ImportarProductosCSV } from '../inventario/ImportarProductosCSV';
+import { ImportarProductosCSV } from './ImportarProductosCSV';
 
 export function ImportarProductosPage() {
   return (

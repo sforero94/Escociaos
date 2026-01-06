@@ -33,13 +33,15 @@ export function DetalleAplicacion({
   const [canecasPlaneadas, setCanecasPlaneadas] = useState(0);
   const [canecasAplicadas, setCanecasAplicadas] = useState(0);
   const [lotes, setLotes] = useState<string[]>([]);
+  const [lotesData, setLotesData] = useState<Array<{id: string, nombre: string}>>([]);
+  const [selectedLote, setSelectedLote] = useState<string | null>(null);
   const [blancoBiologico, setBlancoBiologico] = useState<string>('');
   const [fechaFinEstimada, setFechaFinEstimada] = useState<string>('');
   const [descargandoPDF, setDescargandoPDF] = useState(false);
 
   useEffect(() => {
     cargarDatos();
-  }, [aplicacion.id]);
+  }, [aplicacion.id, selectedLote]);
 
   const cargarDatos = async () => {
     setLoading(true);
@@ -52,6 +54,7 @@ export function DetalleAplicacion({
           *,
           aplicaciones_lotes (
             lotes (
+              id,
               nombre,
               total_arboles
             )
@@ -64,10 +67,12 @@ export function DetalleAplicacion({
       }
 
 
-      // Extraer lotes
-      const lotesNombres = appData?.aplicaciones_lotes?.map(
-        (al: any) => al.lotes?.nombre || 'Sin nombre'
+      // Extraer lotes con IDs
+      const lotesConId = appData?.aplicaciones_lotes?.map(
+        (al: any) => ({id: al.lotes?.id || '', nombre: al.lotes?.nombre || 'Sin nombre'})
       ) || [];
+      setLotesData(lotesConId);
+      const lotesNombres = lotesConId.map(l => l.nombre);
       setLotes(lotesNombres);
 
       // Extraer fecha fin estimada
@@ -94,13 +99,20 @@ export function DetalleAplicacion({
         setBlancoBiologico('No especificado');
       }
 
-      // 2. Cargar canecas planeadas
-      const { data: calculos, error: errorCalculos } = await supabase
+      // 2. Cargar canecas planeadas (filtrar por lote si está seleccionado)
+      let calculosQuery = supabase
         .from('aplicaciones_calculos')
-        .select('numero_canecas')
+        .select('numero_canecas, lote_id')
         .eq('aplicacion_id', aplicacion.id);
 
+      if (selectedLote) {
+        calculosQuery = calculosQuery.eq('lote_id', selectedLote);
+      }
+
+      const { data: calculos, error: errorCalculos } = await calculosQuery;
+
       if (errorCalculos) {
+        console.error('Error loading canecas planeadas:', errorCalculos);
       }
 
       const totalCanecasPlaneadas = calculos?.reduce(
@@ -109,13 +121,20 @@ export function DetalleAplicacion({
       ) || 0;
       setCanecasPlaneadas(totalCanecasPlaneadas);
 
-      // 3. Cargar canecas aplicadas
-      const { data: movimientosDiarios, error: errorMovimientos } = await supabase
+      // 3. Cargar canecas aplicadas (filtrar por lote si está seleccionado)
+      let movimientosQuery = supabase
         .from('movimientos_diarios')
-        .select('numero_canecas')
+        .select('numero_canecas, lote_id')
         .eq('aplicacion_id', aplicacion.id);
 
+      if (selectedLote) {
+        movimientosQuery = movimientosQuery.eq('lote_id', selectedLote);
+      }
+
+      const { data: movimientosDiarios, error: errorMovimientos } = await movimientosQuery;
+
       if (errorMovimientos) {
+        console.error('Error loading canecas aplicadas:', errorMovimientos);
       }
 
       const totalCanecasAplicadas = movimientosDiarios?.reduce(
@@ -149,17 +168,23 @@ export function DetalleAplicacion({
         }
       }
 
-      // 5. Cargar productos aplicados (de movimientos_diarios_productos)
-      const { data: movimientos } = await supabase
+      // 5. Cargar productos aplicados (de movimientos_diarios_productos, filtrar por lote si está seleccionado)
+      let movimientosProductosQuery = supabase
         .from('movimientos_diarios')
-        .select('id')
+        .select('id, lote_id')
         .eq('aplicacion_id', aplicacion.id);
 
+      if (selectedLote) {
+        movimientosProductosQuery = movimientosProductosQuery.eq('lote_id', selectedLote);
+      }
+
+      const { data: movimientos } = await movimientosProductosQuery;
+
       let productosAplicados: any[] = [];
-      
+
       if (movimientos && movimientos.length > 0) {
         const movimientoIds = movimientos.map(m => m.id);
-        
+
         const { data, error } = await supabase
           .from('movimientos_diarios_productos')
           .select('producto_id, producto_nombre, cantidad_utilizada, unidad')
@@ -406,16 +431,31 @@ export function DetalleAplicacion({
                     <div className="space-y-1 col-span-2">
                       <p className="text-xs text-[#4D240F]/60 flex items-center gap-1">
                         <MapPin className="w-3 h-3" />
-                        Lotes
+                        Lotes {selectedLote && <span className="text-[#73991C] font-medium">(filtrado)</span>}
                       </p>
                       <div className="flex flex-wrap gap-2">
-                        {lotes.map((lote, idx) => (
-                          <span 
-                            key={idx} 
-                            className="px-2 py-1 bg-[#73991C]/10 text-[#73991C] rounded-lg text-xs"
+                        <button
+                          onClick={() => setSelectedLote(null)}
+                          className={`px-2 py-1 rounded-lg text-xs transition-all ${
+                            !selectedLote
+                              ? 'bg-[#73991C] text-white shadow-sm'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          Todos
+                        </button>
+                        {lotesData.map((lote, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => setSelectedLote(lote.id)}
+                            className={`px-2 py-1 rounded-lg text-xs transition-all ${
+                              selectedLote === lote.id
+                                ? 'bg-[#73991C] text-white shadow-sm'
+                                : 'bg-[#73991C]/10 text-[#73991C] hover:bg-[#73991C]/20'
+                            }`}
                           >
-                            {lote}
-                          </span>
+                            {lote.nombre}
+                          </button>
                         ))}
                       </div>
                     </div>

@@ -26,7 +26,9 @@ import { RegistrosMonitoreo } from './components/monitoreo/RegistrosMonitoreo';
 import { CargaMasiva } from './components/monitoreo/CargaMasiva';
 import { CatalogoPlagas } from './components/monitoreo/CatalogoPlagas';
 import { ConfiguracionDashboard } from './components/configuracion/ConfiguracionDashboard';
+import { Empleados } from './components/empleados/Empleados';
 import Personal from './components/empleados/Personal';
+import Contratistas from './components/empleados/Contratistas';
 import Labores from './components/labores/Labores';
 import { FinanzasDashboard } from './components/finanzas/FinanzasDashboard';
 import { GastosView } from './components/finanzas/GastosView';
@@ -98,8 +100,11 @@ function LayoutRoutes() {
         {/* Labores */}
         <Route path="labores" element={<Labores />} />
 
-        {/* Personal */}
-        <Route path="personal" element={<Personal />} />
+        {/* Empleados - Rutas anidadas */}
+        <Route path="empleados" element={<Empleados />}>
+          <Route index element={<Personal />} />
+          <Route path="contratistas" element={<Contratistas />} />
+        </Route>
 
         {/* Finanzas */}
         <Route path="finanzas">

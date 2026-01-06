@@ -3,38 +3,29 @@ import { getSupabase } from '../../utils/supabase/client';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { Textarea } from '../ui/textarea';
 import { formatearFecha } from '../../utils/fechas';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '../ui/dialog';
-import { Badge } from '../ui/badge';
-import { Checkbox } from '../ui/checkbox';
-import { CalendarIcon, Clock, DollarSign, Search } from 'lucide-react';
+import { StandardDialog } from '../ui/standard-dialog';
+import { CalendarIcon, Clock } from 'lucide-react';
 
 // Import types from main component
-import type { Tarea, Empleado, Lote, RegistroTrabajo } from './Labores';
+import type { Tarea, Empleado, Contratista, Trabajador, Lote, RegistroTrabajo } from './Labores';
+
+// Import shared components
+import { TrabajadorMultiSelect } from '../shared/TrabajadorMultiSelect';
+import { JornalFractionMatrix } from '../shared/JornalFractionMatrix';
 
 // Import cost calculation utilities
-import { calculateLaborCost, STANDARD_WORKDAY_HOURS } from '../../utils/laborCosts';
+import { calculateLaborCost, calculateContractorCost } from '../../utils/laborCosts';
+
+// Import shared types for matrix operations
+import type { WorkMatrix, ObservacionesMatrix } from '../../types/shared';
 
 interface RegistrarTrabajoDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tarea: Tarea | null;
   empleados: Empleado[];
+  contratistas: Contratista[];
   lotes: Lote[];
   onSuccess: () => void;
   onError: (message: string) => void;
@@ -45,6 +36,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
   onOpenChange,
   tarea,
   empleados,
+  contratistas,
   lotes,
   onSuccess,
   onError,
@@ -52,101 +44,64 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
   // Multi-step form state
   const [currentStep, setCurrentStep] = useState(1);
   const [fechaTrabajo, setFechaTrabajo] = useState(new Date().toISOString().split('T')[0]);
-  const [selectedEmpleados, setSelectedEmpleados] = useState<Empleado[]>([]);
-  const [workMatrix, setWorkMatrix] = useState<Record<string, Record<string, RegistroTrabajo['fraccion_jornal']>>>({}); // empleado_id -> lote_id -> fraccion
-  const [observaciones, setObservaciones] = useState<Record<string, Record<string, string>>>({}); // empleado_id -> lote_id -> observaciones
+  const [selectedTrabajadores, setSelectedTrabajadores] = useState<Trabajador[]>([]);
+  const [workMatrix, setWorkMatrix] = useState<WorkMatrix>({}); // Use shared WorkMatrix type
+  const [observaciones, setObservaciones] = useState<ObservacionesMatrix>({}); // Use shared ObservacionesMatrix type
   const [loading, setLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState(''); // ✨ NUEVO: Búsqueda de empleados
 
   // Reset form when dialog opens
   useEffect(() => {
     if (open) {
       setCurrentStep(1);
       setFechaTrabajo(new Date().toISOString().split('T')[0]);
-      setSelectedEmpleados([]);
+      setSelectedTrabajadores([]);
       setWorkMatrix({});
       setObservaciones({});
-      setSearchTerm(''); // ✨ NUEVO: Limpiar búsqueda al abrir
     }
   }, [open]);
 
   const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, 3));
   const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1));
 
-  // ✨ NUEVO: Filtrar empleados por búsqueda
-  const filteredEmpleados = empleados.filter(empleado =>
-    empleado.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (empleado.cargo && empleado.cargo.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
-
-  const addEmpleado = (empleado: Empleado) => {
-    if (!selectedEmpleados.find(se => se.id === empleado.id)) {
-      setSelectedEmpleados(prev => [...prev, empleado]);
-    }
-  };
-
-  const removeEmpleado = (empleadoId: string) => {
-    setSelectedEmpleados(prev => prev.filter(se => se.id !== empleadoId));
-    // Also clean up the work matrix for this employee
+  // Handle worker removal - cleanup work matrix when a worker is removed
+  const handleRemoveTrabajador = (trabajadorId: string) => {
+    setSelectedTrabajadores(prev => prev.filter(st => st.data.id !== trabajadorId));
     setWorkMatrix(prev => {
       const newMatrix = { ...prev };
-      delete newMatrix[empleadoId];
+      delete newMatrix[trabajadorId];
       return newMatrix;
     });
     setObservaciones(prev => {
       const newObs = { ...prev };
-      delete newObs[empleadoId];
+      delete newObs[trabajadorId];
       return newObs;
     });
   };
 
-  const toggleSelectAll = () => {
-    const allSelected = filteredEmpleados.every(emp => selectedEmpleados.some(se => se.id === emp.id));
-    if (allSelected) {
-      // Deselect all filtered employees
-      filteredEmpleados.forEach(emp => {
-        removeEmpleado(emp.id);
+  const calculateCostoJornal = (trabajador: Trabajador, fraccion: RegistroTrabajo['fraccion_jornal']) => {
+    if (trabajador.type === 'contratista') {
+      console.log('💵 Calculating contractor cost:', {
+        nombre: trabajador.data.nombre,
+        tarifa_jornal: trabajador.data.tarifa_jornal,
+        fraccion: fraccion,
+        fraccion_parsed: parseFloat(fraccion)
       });
+      const costResult = calculateContractorCost(
+        trabajador.data.tarifa_jornal,
+        parseFloat(fraccion)
+      );
+      console.log('💰 Contractor cost result:', costResult);
+      return costResult.totalCost;
     } else {
-      // Select all filtered employees
-      filteredEmpleados.forEach(emp => {
-        if (!selectedEmpleados.some(se => se.id === emp.id)) {
-          addEmpleado(emp);
-        }
+      const costResult = calculateLaborCost({
+        salary: trabajador.data.salario || 0,
+        benefits: trabajador.data.prestaciones_sociales || 0,
+        allowances: trabajador.data.auxilios_no_salariales || 0,
+        weeklyHours: trabajador.data.horas_semanales || 48,
+        fractionWorked: parseFloat(fraccion),
       });
+      return costResult.totalCost;
     }
-  };
-
-  const updateWorkFraccion = (empleadoId: string, loteId: string, fraccion: RegistroTrabajo['fraccion_jornal']) => {
-    setWorkMatrix(prev => ({
-      ...prev,
-      [empleadoId]: {
-        ...prev[empleadoId],
-        [loteId]: fraccion
-      }
-    }));
-  };
-
-  const updateWorkObservaciones = (empleadoId: string, loteId: string, obs: string) => {
-    setObservaciones(prev => ({
-      ...prev,
-      [empleadoId]: {
-        ...prev[empleadoId],
-        [loteId]: obs
-      }
-    }));
-  };
-
-  const calculateCostoJornal = (empleado: Empleado, fraccion: RegistroTrabajo['fraccion_jornal']) => {
-    const costResult = calculateLaborCost({
-      salary: empleado.salario || 0,
-      benefits: empleado.prestaciones_sociales || 0,
-      allowances: empleado.auxilios_no_salariales || 0,
-      weeklyHours: empleado.horas_semanales || 48,
-      fractionWorked: parseFloat(fraccion),
-    });
-
-    return costResult.totalCost;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -157,8 +112,8 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
       return;
     }
 
-    if (selectedEmpleados.length === 0) {
-      onError('Debe seleccionar al menos un empleado');
+    if (selectedTrabajadores.length === 0) {
+      onError('Debe seleccionar al menos un trabajador (empleado o contratista)');
       return;
     }
 
@@ -173,21 +128,32 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
       const registrosData: any[] = [];
 
       // Iterate through work matrix to create records
-      selectedEmpleados.forEach(empleado => {
+      selectedTrabajadores.forEach((trabajador: Trabajador) => {
         tareaLotes.forEach(lote => {
           if (lote) {
-            const fraccion = workMatrix[empleado.id]?.[lote.id] || '0.0';
-            if (parseFloat(fraccion) > 0) { // Only create records for non-zero fractions
-              registrosData.push({
+            const fraccion = workMatrix[trabajador.data.id]?.[lote.id] || '0.0';
+            if (parseFloat(fraccion) > 0) {
+              const registro: any = {
                 tarea_id: tarea.id,
-                empleado_id: empleado.id,
                 lote_id: lote.id,
                 fecha_trabajo: fechaTrabajo,
                 fraccion_jornal: fraccion,
-                observaciones: observaciones[empleado.id]?.[lote.id] || null,
-                valor_jornal_empleado: empleado.salario || 0,
-                costo_jornal: calculateCostoJornal(empleado, fraccion as RegistroTrabajo['fraccion_jornal']),
-              });
+                observaciones: observaciones[trabajador.data.id]?.[lote.id] || null,
+                costo_jornal: calculateCostoJornal(trabajador, fraccion as RegistroTrabajo['fraccion_jornal']),
+              };
+
+              // Set either empleado_id or contratista_id based on worker type
+              if (trabajador.type === 'empleado') {
+                registro.empleado_id = trabajador.data.id;
+                registro.contratista_id = null;
+                registro.valor_jornal_empleado = trabajador.data.salario || 0;
+              } else {
+                registro.empleado_id = null;
+                registro.contratista_id = trabajador.data.id;
+                registro.valor_jornal_empleado = null;
+              }
+
+              registrosData.push(registro);
             }
           }
         });
@@ -199,15 +165,33 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
       }
 
       // Check for duplicate records before inserting
-      const { data: existingRecords, error: checkError } = await getSupabase()
-        .from('registros_trabajo')
-        .select('empleado_id, lote_id, empleados(nombre), lotes(nombre)')
-        .eq('tarea_id', tarea.id)
-        .eq('fecha_trabajo', fechaTrabajo)
-        .in('empleado_id', registrosData.map(r => r.empleado_id))
-        .in('lote_id', registrosData.map(r => r.lote_id));
+      const empleadoIds = registrosData.filter(r => r.empleado_id).map(r => r.empleado_id);
+      const contratistaIds = registrosData.filter(r => r.contratista_id).map(r => r.contratista_id);
+      const loteIds = registrosData.map(r => r.lote_id);
 
-      if (checkError) throw checkError;
+      // Build OR conditions only for non-empty arrays
+      const orConditions: string[] = [];
+      if (empleadoIds.length > 0) {
+        orConditions.push(`empleado_id.in.(${empleadoIds.join(',')})`);
+      }
+      if (contratistaIds.length > 0) {
+        orConditions.push(`contratista_id.in.(${contratistaIds.join(',')})`);
+      }
+
+      // Only check for duplicates if we have workers to check
+      let existingRecords: any[] = [];
+      if (orConditions.length > 0) {
+        const { data, error: checkError } = await getSupabase()
+          .from('registros_trabajo')
+          .select('empleado_id, contratista_id, lote_id, empleados(nombre), contratistas(nombre)')
+          .eq('tarea_id', tarea.id)
+          .eq('fecha_trabajo', fechaTrabajo)
+          .or(orConditions.join(','))
+          .in('lote_id', loteIds);
+
+        if (checkError) throw checkError;
+        existingRecords = data || [];
+      }
 
       // Find duplicates
       const duplicates: string[] = [];
@@ -215,13 +199,18 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
         registrosData.forEach(newRecord => {
           const isDuplicate = (existingRecords as any[]).some(
             (existing: any) =>
-              existing.empleado_id === newRecord.empleado_id &&
+              (existing.empleado_id === newRecord.empleado_id && newRecord.empleado_id) ||
+              (existing.contratista_id === newRecord.contratista_id && newRecord.contratista_id) &&
               existing.lote_id === newRecord.lote_id
           );
           if (isDuplicate) {
-            const empleadoNombre = selectedEmpleados.find((e: Empleado) => e.id === newRecord.empleado_id)?.nombre || 'Desconocido';
-            const loteNombre = tareaLotes.find((l: Lote) => l && l.id === newRecord.lote_id)?.nombre || 'Desconocido';
-            duplicates.push(`${empleadoNombre} en ${loteNombre}`);
+            const trabajador = selectedTrabajadores.find((t: Trabajador) =>
+              (t.type === 'empleado' && t.data.id === newRecord.empleado_id) ||
+              (t.type === 'contratista' && t.data.id === newRecord.contratista_id)
+            );
+            const trabajadorNombre = trabajador?.data.nombre || 'Desconocido';
+            const loteNombre = tareaLotes.find((l: any) => l && l.id === newRecord.lote_id)?.nombre || 'Desconocido';
+            duplicates.push(`${trabajadorNombre} en ${loteNombre}`);
           }
         });
       }
@@ -231,11 +220,17 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
         return;
       }
 
+      console.log('📝 Attempting to insert work records:', JSON.stringify(registrosData, null, 2));
+
       const { error } = await getSupabase()
         .from('registros_trabajo')
         .insert(registrosData);
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Supabase insert error:', error);
+        console.error('❌ Error details:', JSON.stringify(error, null, 2));
+        throw error;
+      }
 
       // Success message indicating automatic status change
       onSuccess();
@@ -252,28 +247,75 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
     }
   };
 
-  const fraccionJornalOptions = [
-    { value: '0.25', label: '1/4 jornal (2 horas)', horas: 2 },
-    { value: '0.5', label: '1/2 jornal (4 horas)', horas: 4 },
-    { value: '0.75', label: '3/4 jornal (6 horas)', horas: 6 },
-    { value: '1.0', label: '1 jornal completo (8 horas)', horas: 8 },
-  ];
+  // Get task lots for Step 3 work matrix
+  const tareaLotes = (tarea && tarea.lote_ids && tarea.lote_ids.length > 0)
+    ? tarea.lote_ids.map((id: string) => lotes.find((l: Lote) => l.id === id)).filter((l: Lote | undefined): l is Lote => l !== undefined)
+    : (tarea?.lotes && tarea.lotes.length > 0 ? tarea.lotes : []);
+
+  const footerButtons = (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={prevStep}
+        disabled={currentStep === 1 || loading}
+      >
+        Anterior
+      </Button>
+
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => onOpenChange(false)}
+          disabled={loading}
+        >
+          Cancelar
+        </Button>
+
+        {currentStep < 3 ? (
+          <Button
+            type="button"
+            onClick={nextStep}
+            disabled={
+              (currentStep === 1 && !fechaTrabajo) ||
+              (currentStep === 2 && selectedTrabajadores.length === 0)
+            }
+            className="bg-[#73991C] hover:bg-[#5a7716]"
+          >
+            Siguiente
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            onClick={handleSubmit}
+            disabled={loading}
+            className="bg-[#73991C] hover:bg-[#5a7716]"
+          >
+            {loading ? 'Registrando...' : 'Registrar Trabajo'}
+          </Button>
+        )}
+      </div>
+    </>
+  );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-6xl overflow-hidden flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Clock className="h-5 w-5" />
-            Registrar Trabajo - {tarea?.nombre}
-          </DialogTitle>
-          <DialogDescription>
-            Siga los pasos para registrar el trabajo realizado
-          </DialogDescription>
-        </DialogHeader>
-
+    <StandardDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={
+        <>
+          <Clock className="h-5 w-5 inline mr-2" />
+          Registrar Trabajo - {tarea?.nombre}
+        </>
+      }
+      description="Siga los pasos para registrar el trabajo realizado"
+      size="xl"
+      footer={footerButtons}
+    >
+      <>
         {/* Progress indicator */}
-        <div className="flex items-center justify-center mb-6 flex-shrink-0">
+        <div className="flex items-center justify-center mb-6">
           <div className="flex items-center space-x-4">
             {[1, 2, 3].map((step) => (
               <div key={step} className="flex items-center">
@@ -301,7 +343,6 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
           {/* Step 1: Select Date */}
           {currentStep === 1 && (
             <div className="space-y-6">
@@ -334,7 +375,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
             </div>
           )}
 
-          {/* Step 2: Select Employees */}
+          {/* Step 2: Select Workers (Employees + Contractors) - Using Shared Component */}
           {currentStep === 2 && (
             <div className="space-y-6">
               <div className="text-center">
@@ -342,245 +383,59 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
                   <span className="text-2xl">👥</span>
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  Seleccionar Empleados
+                  Seleccionar Trabajadores
                 </h3>
                 <p className="text-gray-600">
-                  Seleccione múltiples empleados que trabajaron en esta tarea
+                  Seleccione empleados o contratistas que trabajaron en esta tarea
                 </p>
               </div>
 
-              {/* Select All / Deselect All button */}
-              {filteredEmpleados.length > 0 && (
-                <div className="flex justify-center">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={toggleSelectAll}
-                    className="text-sm"
-                  >
-                    {filteredEmpleados.every(emp => selectedEmpleados.some(se => se.id === emp.id))
-                      ? 'Deseleccionar Todos'
-                      : 'Seleccionar Todos'
-                    }
-                  </Button>
-                </div>
-              )}
-
-              {/* ✨ NUEVO: Campo de búsqueda */}
-              <div className="max-w-md mx-auto">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <Input
-                    type="text"
-                    placeholder="Buscar empleado o cargo..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                  />
-                </div>
-                <p className="text-xs text-gray-500 mt-1 text-center">
-                  {filteredEmpleados.length} empleados encontrados
-                  {searchTerm && ` de ${empleados.length} totales`}
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {filteredEmpleados.length === 0 ? (
-                  <div className="col-span-full flex flex-col items-center justify-center py-8 text-gray-400">
-                    <div className="p-3 bg-gray-50 rounded-full mb-3">
-                      <Search className="h-6 w-6 opacity-30" />
-                    </div>
-                    <p className="text-sm font-medium">No se encontraron empleados</p>
-                    <p className="text-xs mt-1">
-                      {searchTerm ? `No hay empleados que coincidan con "${searchTerm}"` : 'No hay empleados disponibles'}
-                    </p>
-                    {searchTerm && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setSearchTerm('')}
-                        className="mt-2 text-xs"
-                      >
-                        Limpiar búsqueda
-                      </Button>
-                    )}
-                  </div>
-                ) : (
-                  filteredEmpleados.map((empleado) => {
-                    const isSelected = selectedEmpleados.some(se => se.id === empleado.id);
-                    return (
-                      <button
-                        key={empleado.id}
-                        type="button"
-                        onClick={() => {
-                          if (isSelected) {
-                            removeEmpleado(empleado.id);
-                          } else {
-                            addEmpleado(empleado);
-                          }
-                        }}
-                        className={`
-                          relative p-4 rounded-xl border-2 transition-all text-left
-                          hover:shadow-md
-                          ${isSelected
-                            ? 'border-[#73991C] bg-[#73991C]/5 shadow-sm'
-                            : 'border-gray-200 hover:border-gray-300 bg-white'
-                          }
-                        `}
-                      >
-                        {/* Check verde en esquina superior derecha al seleccionar */}
-                        {isSelected && (
-                          <div className="absolute top-2 right-2 w-5 h-5 bg-[#73991C] rounded-full flex items-center justify-center">
-                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                            </svg>
-                          </div>
-                        )}
-                        
-                        {/* Solo nombre, sin cargo */}
-                        <p className="font-medium text-sm text-gray-900 pr-6">
-                          {empleado.nombre}
-                        </p>
-                      </button>
-                    );
-                  })
-                )}
-              </div>
-
-              {selectedEmpleados.length > 0 && (
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                  <p className="text-sm text-blue-800">
-                    <strong>{selectedEmpleados.length}</strong> empleado{selectedEmpleados.length !== 1 ? 's' : ''} seleccionado{selectedEmpleados.length !== 1 ? 's' : ''}
-                  </p>
-                </div>
-              )}
+              <TrabajadorMultiSelect
+                empleados={empleados}
+                contratistas={contratistas}
+                selectedTrabajadores={selectedTrabajadores}
+                onSelectionChange={setSelectedTrabajadores}
+                disabled={loading}
+              />
             </div>
           )}
 
-          {/* Step 3: Matrix Interface */}
-          {currentStep === 3 && (() => {
-            // ✅ Calculate task lotes ONCE with correct priority: lote_ids > lotes
-            const tareaLotes = (tarea && tarea.lote_ids && tarea.lote_ids.length > 0)
-              ? tarea.lote_ids.map((id: string) => lotes.find((l: Lote) => l.id === id)).filter((l: Lote | undefined): l is Lote => l !== undefined)
-              : (tarea?.lotes && tarea.lotes.length > 0 ? tarea.lotes : []);
-
-            return (
-              <div className="space-y-6">
-                <div className="text-center">
-                  <div className="h-16 w-16 bg-[#73991C]/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <span className="text-2xl">📊</span>
-                  </div>
-                  <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                    Asignar Trabajo por Lote
-                  </h3>
-                  <p className="text-gray-600">
-                    Distribuya las fracciones de jornal entre empleados y lotes
-                  </p>
+          {/* Step 3: Matrix Interface - Using Shared Component */}
+          {currentStep === 3 && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <div className="h-16 w-16 bg-[#73991C]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <span className="text-2xl">📊</span>
                 </div>
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                  Asignar Trabajo por Lote
+                </h3>
+                <p className="text-gray-600">
+                  Distribuya las fracciones de jornal entre trabajadores y lotes
+                </p>
+              </div>
 
-
-              {selectedEmpleados.length > 0 && tarea && (
-                <div className="bg-white rounded-2xl border border-[#73991C]/10 shadow-[0_2px_12px_rgba(115,153,28,0.06)] overflow-hidden">
-                  {/* Header */}
-                  <div className="px-5 py-3 bg-gradient-to-r from-[#73991C]/5 to-transparent border-b border-[#73991C]/10">
-                    <h3 className="text-sm text-[#172E08] flex items-center gap-2">
-                      <span className="text-xl">📋</span>
-                      Matriz de Asignación Empleado × Lote
-                    </h3>
-                  </div>
-
-                  {/* Tabla con scroll horizontal */}
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-[#F8FAF5]">
-                        <tr>
-                          <th className="text-left py-3 px-5 text-xs font-medium text-[#4D240F]/70 sticky left-0 bg-[#F8FAF5] z-10">
-                            Empleado
-                          </th>
-                          {tareaLotes.map((lote: Lote) => (
-                            <th key={lote.id} className="text-center py-3 px-4 text-xs font-medium text-[#4D240F]/70 min-w-[160px]">
-                              {lote.nombre}
-                            </th>
-                          ))}
-                          <th className="text-center py-3 px-4 text-xs font-medium text-[#4D240F]/70 sticky right-0 bg-[#F8FAF5] z-10">
-                            Total
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[#73991C]/5">
-                        {selectedEmpleados.map((empleado) => {
-                          const totalFraccion = tareaLotes.reduce((sum, lote) => {
-                            const fraccion = workMatrix[empleado.id]?.[lote.id] || '0.0';
-                            return sum + parseFloat(fraccion);
-                          }, 0);
-
-                          return (
-                            <tr key={empleado.id} className="hover:bg-[#F8FAF5] transition-colors">
-                              <td className="py-3 px-5 sticky left-0 bg-white hover:bg-[#F8FAF5] z-10">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm font-medium text-[#172E08]">
-                                    {empleado.nombre}
-                                  </span>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => removeEmpleado(empleado.id)}
-                                    className="text-red-600 hover:text-red-700 hover:bg-red-50 h-7 w-7 p-0 ml-2"
-                                  >
-                                    ✕
-                                  </Button>
-                                </div>
-                              </td>
-                              {tareaLotes.map((lote: Lote) => (
-                                <td key={lote.id} className="py-2 px-3 text-center">
-                                  <div className="space-y-2">
-                                    <Select
-                                      value={workMatrix[empleado.id]?.[lote.id] || '0.0'}
-                                      onValueChange={(value) => updateWorkFraccion(empleado.id, lote.id, value as RegistroTrabajo['fraccion_jornal'])}
-                                      disabled={loading}
-                                    >
-                                      <SelectTrigger className="h-9 text-xs border-[#73991C]/20 hover:border-[#73991C]/40">
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="0.0">-</SelectItem>
-                                        <SelectItem value="0.25">2 horas</SelectItem>
-                                        <SelectItem value="0.5">4 horas</SelectItem>
-                                        <SelectItem value="0.75">6 horas</SelectItem>
-                                        <SelectItem value="1.0">8 horas</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                    <Textarea
-                                      value={observaciones[empleado.id]?.[lote.id] || ''}
-                                      onChange={(e) => updateWorkObservaciones(empleado.id, lote.id, e.target.value)}
-                                      placeholder="Observaciones (opcional)..."
-                                      rows={2}
-                                      className="text-xs resize-none border-[#73991C]/20 focus:border-[#73991C]/40"
-                                      disabled={loading}
-                                    />
-                                  </div>
-                                </td>
-                              ))}
-                              <td className="py-3 px-4 text-center sticky right-0 bg-white hover:bg-[#F8FAF5] z-10">
-                                <span className={`inline-flex items-center justify-center px-3 py-1 rounded-lg text-sm font-semibold ${
-                                  totalFraccion > 0
-                                    ? 'bg-[#73991C]/10 text-[#73991C]'
-                                    : 'bg-gray-100 text-gray-400'
-                                }`}>
-                                  {totalFraccion.toFixed(2)}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
+              <JornalFractionMatrix
+                trabajadores={selectedTrabajadores}
+                lotes={tareaLotes}
+                workMatrix={workMatrix}
+                observaciones={observaciones}
+                onFraccionChange={(trabajadorId, loteId, frac) => {
+                  setWorkMatrix(prev => ({
+                    ...prev,
+                    [trabajadorId]: { ...prev[trabajadorId], [loteId]: frac }
+                  }));
+                }}
+                onObservacionesChange={(trabajadorId, loteId, obs) => {
+                  setObservaciones(prev => ({
+                    ...prev,
+                    [trabajadorId]: { ...prev[trabajadorId], [loteId]: obs }
+                  }));
+                }}
+                onRemoveTrabajador={handleRemoveTrabajador}
+                disabled={loading}
+                showCostPreview={true}
+              />
 
               <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                 <h4 className="font-semibold text-green-900 mb-2">Resumen del Registro</h4>
@@ -590,15 +445,15 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
                     <span className="ml-2 font-medium">{formatearFecha(fechaTrabajo)}</span>
                   </div>
                   <div>
-                    <span className="text-green-700">Empleados:</span>
-                    <span className="ml-2 font-medium">{selectedEmpleados.length}</span>
+                    <span className="text-green-700">Trabajadores:</span>
+                    <span className="ml-2 font-medium">{selectedTrabajadores.length}</span>
                   </div>
                   <div className="col-span-2">
                     <span className="text-green-700">Registros a crear:</span>
                     <span className="ml-2 font-medium">
-                      {selectedEmpleados.reduce((total, empleado) => {
+                      {selectedTrabajadores.reduce((total: number, trabajador: Trabajador) => {
                         return total + tareaLotes.filter((lote: Lote) => {
-                          const fraccion = workMatrix[empleado.id]?.[lote.id] || '0.0';
+                          const fraccion = workMatrix[trabajador.data.id]?.[lote.id] || '0.0';
                           return parseFloat(fraccion) > 0;
                         }).length;
                       }, 0)}
@@ -607,56 +462,9 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
                 </div>
               </div>
             </div>
-            );
-          })()}
-        </div>
-
-        <DialogFooter className="flex justify-between">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={prevStep}
-            disabled={currentStep === 1 || loading}
-          >
-            Anterior
-          </Button>
-
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={loading}
-            >
-              Cancelar
-            </Button>
-
-            {currentStep < 3 ? (
-              <Button
-                type="button"
-                onClick={nextStep}
-                disabled={
-                  (currentStep === 1 && !fechaTrabajo) ||
-                  (currentStep === 2 && selectedEmpleados.length === 0)
-                }
-                className="bg-[#73991C] hover:bg-[#5a7716]"
-              >
-                Siguiente
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                onClick={handleSubmit}
-                disabled={loading}
-                className="bg-[#73991C] hover:bg-[#5a7716]"
-              >
-                {loading ? 'Registrando...' : 'Registrar Trabajo'}
-              </Button>
-            )}
-          </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          )}
+      </>
+    </StandardDialog>
   );
 };
 

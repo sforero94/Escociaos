@@ -689,7 +689,7 @@ export function AplicacionesList() {
           onClose={() => setAplicacionDetalle(null)}
           onEditar={() => {
             setAplicacionDetalle(null);
-            navigate(`/aplicaciones/${aplicacionDetalle.id}/editar`);
+            navigate(`/aplicaciones/calculadora/${aplicacionDetalle.id}`);
           }}
           onRegistrarMovimientos={() => {
             setAplicacionDetalle(null);

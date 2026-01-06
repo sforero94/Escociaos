@@ -11,14 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '../ui/dialog';
+import { StandardDialog } from '../ui/standard-dialog';
 import { Badge } from '../ui/badge';
 import {
   Table,
@@ -228,20 +221,27 @@ const CatalogoTiposDialog: React.FC<CatalogoTiposDialogProps> = ({
 
   const categorias = Object.keys(tiposPorCategoria).sort();
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[70vw] max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            Catálogo de Tipos de Tareas
-          </DialogTitle>
-          <DialogDescription>
-            Gestiona los tipos de tareas disponibles para organizar el trabajo agrícola
-          </DialogDescription>
-        </DialogHeader>
+  const footerButtons = !showForm ? (
+    <Button variant="outline" onClick={() => onOpenChange(false)}>
+      Cerrar
+    </Button>
+  ) : null;
 
-        <div className="flex-1 overflow-y-auto min-h-0">
+  return (
+    <StandardDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={
+        <span className="flex items-center gap-2">
+          <Settings className="h-5 w-5" />
+          Catálogo de Tipos de Tareas
+        </span>
+      }
+      description="Gestiona los tipos de tareas disponibles para organizar el trabajo agrícola"
+      size="full"
+      footer={footerButtons}
+    >
+      <div className="space-y-6">
           {!showForm ? (
             // Vista de lista
             <div className="space-y-6">
@@ -429,17 +429,8 @@ const CatalogoTiposDialog: React.FC<CatalogoTiposDialogProps> = ({
               </div>
             </form>
           )}
-        </div>
-
-        {!showForm && (
-          <DialogFooter>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cerrar
-            </Button>
-          </DialogFooter>
-        )}
-      </DialogContent>
-    </Dialog>
+      </div>
+    </StandardDialog>
   );
 };
 

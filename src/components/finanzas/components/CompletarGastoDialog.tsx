@@ -11,15 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogBody,
-} from '../../ui/dialog';
+import { StandardDialog } from '../../ui/standard-dialog';
 import { Badge } from '../../ui/badge';
 import { AlertCircle, CheckCircle, Clock, Package } from 'lucide-react';
 import type { Gasto, Negocio, Region, CategoriaGasto, ConceptoGasto, Proveedor, MedioPago } from '../../../types/finanzas';
@@ -209,21 +201,51 @@ export function CompletarGastoDialog({
 
   if (!gasto) return null;
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl flex flex-col overflow-hidden">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Package className="w-5 h-5 text-orange-600" />
-            Completar Gasto Pendiente
-          </DialogTitle>
-          <DialogDescription>
-            Complete la información del gasto generado automáticamente desde una compra
-          </DialogDescription>
-        </DialogHeader>
+  const footerButtons = (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => onOpenChange(false)}
+        disabled={loading}
+      >
+        Cancelar
+      </Button>
+      <Button
+        type="submit"
+        disabled={loading || !formData.negocio_id || !formData.region_id || !formData.categoria_id || !formData.concepto_id || !formData.proveedor_id || !formData.medio_pago_id}
+        className="bg-green-600 hover:bg-green-700"
+      >
+        {loading ? (
+          <>
+            <CheckCircle className="mr-2 h-4 w-4 animate-spin" />
+            Completando...
+          </>
+        ) : (
+          <>
+            <CheckCircle className="mr-2 h-4 w-4" />
+            Completar Gasto
+          </>
+        )}
+      </Button>
+    </>
+  );
 
-        <form onSubmit={handleSubmit} className="contents">
-          <DialogBody>
+  return (
+    <StandardDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={
+        <>
+          <Package className="w-5 h-5 inline mr-2 text-orange-600" />
+          Completar Gasto Pendiente
+        </>
+      }
+      description="Complete la información del gasto generado automáticamente desde una compra"
+      size="md"
+      footer={footerButtons}
+    >
+      <form onSubmit={handleSubmit} className="contents">
             <div className="space-y-6">
               {/* Gasto Information Summary */}
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
@@ -404,37 +426,7 @@ export function CompletarGastoDialog({
             />
           </div>
         </div>
-      </DialogBody>
-
-      <DialogFooter>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => onOpenChange(false)}
-          disabled={loading}
-        >
-          Cancelar
-        </Button>
-        <Button
-          type="submit"
-          disabled={loading || loadingCatalogs}
-          className="bg-green-600 hover:bg-green-700 text-white"
-        >
-          {loading ? (
-            <>
-              <CheckCircle className="w-4 h-4 mr-2 animate-spin" />
-              Completando...
-            </>
-          ) : (
-            <>
-              <CheckCircle className="w-4 h-4 mr-2" />
-              Confirmar Gasto
-            </>
-          )}
-        </Button>
-      </DialogFooter>
-    </form>
-    </DialogContent>
-    </Dialog>
+      </form>
+    </StandardDialog>
   );
 }

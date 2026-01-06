@@ -3,6 +3,7 @@
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { formatearMoneda, formatearNumero } from './format';
 
 interface RegistroTrabajo {
   fecha_trabajo: string;
@@ -327,23 +328,4 @@ function formatearFecha(fecha: string): string {
     month: '2-digit',
     day: '2-digit'
   });
-}
-
-/**
- * Formatear moneda colombiana
- */
-function formatearMoneda(valor: number): string {
-  return new Intl.NumberFormat('es-CO', {
-    style: 'currency',
-    currency: 'COP',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(valor);
-}
-
-/**
- * Formatear número con 2 decimales
- */
-function formatearNumero(valor: number): string {
-  return Number(valor).toFixed(2);
 }

@@ -595,7 +595,7 @@ export function CalculadoraAplicaciones() {
           .like('codigo_aplicacion', `${codigoBase}%`)
           .order('created_at', { ascending: false })
           .limit(1)
-          .single();
+          .maybeSingle();
 
         codigoAplicacion = `${codigoBase}-001`;
         if (ultimaAplicacion?.codigo_aplicacion) {
@@ -625,14 +625,18 @@ export function CalculadoraAplicaciones() {
         };
 
 
-        const { data: aplicacion, error: errorAplicacion } = await supabase
+        const { data, error: errorAplicacion } = await supabase
           .from('aplicaciones')
           .insert([aplicacionData])
-          .select()
-          .single();
+          .select();
 
         if (errorAplicacion) {
           throw errorAplicacion;
+        }
+
+        const aplicacion = data?.[0];
+        if (!aplicacion) {
+          throw new Error('No se pudo crear la aplicación');
         }
 
         aplicacionId = aplicacion.id;
@@ -651,10 +655,10 @@ export function CalculadoraAplicaciones() {
         arboles_pequenos: lote.conteo_arboles.pequenos,
         arboles_clonales: lote.conteo_arboles.clonales,
         total_arboles: lote.conteo_arboles.total,
-        calibracion_litros_arbol: state.configuracion.tipo === 'fumigacion' 
-          ? lote.calibracion_litros_arbol 
+        calibracion_litros_arbol: ((state.configuracion as any)?.tipo === 'fumigacion' || (state.configuracion as any)?.tipo === 'drench')
+          ? lote.calibracion_litros_arbol
           : null,
-        tamano_caneca: state.configuracion.tipo === 'fumigacion'
+        tamano_caneca: ((state.configuracion as any)?.tipo === 'fumigacion' || (state.configuracion as any)?.tipo === 'drench')
           ? lote.tamano_caneca
           : null,
       }));
@@ -748,11 +752,11 @@ export function CalculadoraAplicaciones() {
           lote_nombre: calculo.lote_nombre,
           area_hectareas: loteConfig?.area_hectareas || null,
           total_arboles: calculo.total_arboles,
-          // Fumigación
-          litros_mezcla: state.configuracion?.tipo === 'fumigacion'
+          // Fumigación y Drench
+          litros_mezcla: ((state.configuracion as any)?.tipo === 'fumigacion' || (state.configuracion as any)?.tipo === 'drench')
             ? calculo.litros_mezcla
             : null,
-          numero_canecas: state.configuracion?.tipo === 'fumigacion'
+          numero_canecas: ((state.configuracion as any)?.tipo === 'fumigacion' || (state.configuracion as any)?.tipo === 'drench')
             ? calculo.numero_canecas
             : null,
           // Fertilización

@@ -4,14 +4,25 @@ import { getSupabase } from '../../utils/supabase/client';
 import { obtenerFechaHoy } from '../../utils/fechas';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import type { 
-  Aplicacion, 
-  MovimientoDiario, 
+import type {
+  Aplicacion,
+  MovimientoDiario,
   MovimientoDiarioProducto,
   LoteSeleccionado,
   ProductoEnMezcla,
   UnidadMedida // 🚨 NUEVO: Importar el tipo ENUM
 } from '../../types/aplicaciones';
+import type {
+  Empleado,
+  Contratista,
+  Trabajador,
+  Lote,
+  WorkMatrix,
+  ObservacionesMatrix
+} from '../../types/shared';
+import { TrabajadorMultiSelect } from '../shared/TrabajadorMultiSelect';
+import { JornalFractionMatrix } from '../shared/JornalFractionMatrix';
+import { calculateLaborCost, calculateContractorCost } from '../../utils/laborCosts';
 
 interface DailyMovementFormProps {
   aplicacion: Aplicacion;
@@ -58,10 +69,18 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
   const [canecasPorLote, setCanecasPorLote] = useState<Record<string, number>>({});
   const [bultosPorLote, setBultosPorLote] = useState<Record<string, number>>({});
 
+  // Worker tracking (employees + contractors)
+  const [empleadosDisponibles, setEmpleadosDisponibles] = useState<Empleado[]>([]);
+  const [contratistasDisponibles, setContratistasDisponibles] = useState<Contratista[]>([]);
+  const [selectedTrabajadores, setSelectedTrabajadores] = useState<Trabajador[]>([]);
+  const [workMatrix, setWorkMatrix] = useState<WorkMatrix>({});
+  const [observacionesMatrix, setObservacionesMatrix] = useState<ObservacionesMatrix>({});
+
   // Cargar datos al montar
   useEffect(() => {
     cargarDatosAplicacion();
     cargarUsuarioActual();
+    cargarTrabajadores();
   }, [aplicacion.id]);
 
   const cargarDatosAplicacion = async () => {
@@ -216,6 +235,34 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         }
       }
     } catch (err: any) {
+    }
+  };
+
+  const cargarTrabajadores = async () => {
+    try {
+      // Load employees
+      const { data: empleados, error: errorEmpleados } = await supabase
+        .from('empleados')
+        .select('*')
+        .eq('estado', 'Activo')
+        .order('nombre');
+
+      if (!errorEmpleados && empleados) {
+        setEmpleadosDisponibles(empleados);
+      }
+
+      // Load contractors
+      const { data: contratistas, error: errorContratistas } = await supabase
+        .from('contratistas')
+        .select('*')
+        .eq('estado', 'Activo')
+        .order('nombre');
+
+      if (!errorContratistas && contratistas) {
+        setContratistasDisponibles(contratistas);
+      }
+    } catch (err: any) {
+      console.error('Error al cargar trabajadores:', err);
     }
   };
 
@@ -434,19 +481,78 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         throw errorProductos;
       }
 
+      // 3. Save worker tracking data (employees + contractors)
+      if (selectedTrabajadores.length > 0) {
+        const trabajadoresData = selectedTrabajadores
+          .flatMap(trabajador => {
+            const trabajadorId = trabajador.data.id;
+            const fraccion = workMatrix[trabajadorId]?.[loteId] || '0.0';
+            if (parseFloat(fraccion) === 0) return [];
+
+            // Type-aware cost calculation
+            let costoJornal: number;
+            let valorJornal: number;
+
+            if (trabajador.type === 'empleado') {
+              const { totalCost } = calculateLaborCost({
+                salary: trabajador.data.salario || 0,
+                benefits: trabajador.data.prestaciones_sociales || 0,
+                allowances: trabajador.data.auxilios_no_salariales || 0,
+                weeklyHours: trabajador.data.horas_semanales || 48,
+                fractionWorked: parseFloat(fraccion),
+              });
+              costoJornal = totalCost;
+              valorJornal = trabajador.data.salario || 0;
+            } else {
+              // Contractor: simple flat rate
+              const { totalCost } = calculateContractorCost(
+                trabajador.data.tarifa_jornal || 0,
+                parseFloat(fraccion)
+              );
+              costoJornal = totalCost;
+              valorJornal = trabajador.data.tarifa_jornal || 0;
+            }
+
+            return [{
+              movimiento_diario_id: movimientoCreado.id,
+              empleado_id: trabajador.type === 'empleado' ? trabajador.data.id : null,
+              contratista_id: trabajador.type === 'contratista' ? trabajador.data.id : null,
+              lote_id: loteId,
+              fraccion_jornal: parseFloat(fraccion),
+              observaciones: observacionesMatrix[trabajadorId]?.[loteId] || null,
+              valor_jornal_trabajador: valorJornal,
+              costo_jornal: costoJornal,
+            }];
+          });
+
+        if (trabajadoresData.length > 0) {
+          const { error: errorTrabajadores } = await supabase
+            .from('movimientos_diarios_trabajadores')
+            .insert(trabajadoresData);
+
+          if (errorTrabajadores) {
+            // If worker save fails, delete the movement and products
+            await supabase.from('movimientos_diarios').delete().eq('id', movimientoCreado.id);
+            throw errorTrabajadores;
+          }
+        }
+      }
 
       // Limpiar formulario
       setFechaMovimiento(obtenerFechaHoy());
       setLoteId('');
       setNumeroCanecas('');
       setNumeroBultos('');
-      setEquipoAplicacion(''); // 🆕
-      setPersonal(''); // 🆕
-      setHoraInicio('07:20'); // 🆕
-      setHoraFin('15:50'); // 🆕
+      setEquipoAplicacion('');
+      setPersonal('');
+      setHoraInicio('07:20');
+      setHoraFin('15:50');
       setCondicionesMeteorologicas('');
       setNotas('');
       setProductosAgregados([]);
+      setSelectedTrabajadores([]);
+      setWorkMatrix({});
+      setObservacionesMatrix({});
 
       // Notificar éxito
       onSuccess();
@@ -547,23 +653,54 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
           </select>
         </div>
 
-        {/* 🆕 NUEVO: Personal */}
-        <div>
-          <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
+        {/* Worker Selection (Employees + Contractors) */}
+        <div className="border-t border-[#73991C]/10 pt-6">
+          <h4 className="text-sm text-[#172E08] mb-4 flex items-center gap-2">
             <User className="w-4 h-4 text-[#73991C]" />
-            Personal que Participó
-          </label>
-          <Input
-            type="text"
-            value={personal}
-            onChange={(e) => setPersonal(e.target.value)}
-            placeholder="Ej: Juan Pérez, María García"
+            Selección de Personal
+          </h4>
+
+          <TrabajadorMultiSelect
+            empleados={empleadosDisponibles}
+            contratistas={contratistasDisponibles}
+            selectedTrabajadores={selectedTrabajadores}
+            onSelectionChange={setSelectedTrabajadores}
             disabled={loading}
-            className="bg-white border-[#73991C]/20 focus:border-[#73991C] disabled:opacity-50 disabled:cursor-not-allowed"
           />
-          <p className="text-xs text-[#4D240F]/60 mt-1">
-            Nombres del personal que realizó la aplicación (opcional)
-          </p>
+
+          {selectedTrabajadores.length > 0 && loteId && (
+            <div className="mt-6">
+              <JornalFractionMatrix
+                trabajadores={selectedTrabajadores}
+                lotes={lotes.filter(l => l.lote_id === loteId).map(l => ({
+                  id: l.lote_id,
+                  nombre: l.nombre,
+                  area_hectareas: l.area_hectareas
+                }))}
+                workMatrix={workMatrix}
+                observaciones={observacionesMatrix}
+                onFraccionChange={(trabajadorId, loteId, frac) => {
+                  setWorkMatrix(prev => ({
+                    ...prev,
+                    [trabajadorId]: { ...prev[trabajadorId], [loteId]: frac }
+                  }));
+                }}
+                onObservacionesChange={(trabajadorId, loteId, obs) => {
+                  setObservacionesMatrix(prev => ({
+                    ...prev,
+                    [trabajadorId]: { ...prev[trabajadorId], [loteId]: obs }
+                  }));
+                }}
+                onRemoveTrabajador={(trabajadorId) => {
+                  setSelectedTrabajadores(prev =>
+                    prev.filter(t => t.data.id !== trabajadorId)
+                  );
+                }}
+                disabled={loading}
+                showCostPreview={true}
+              />
+            </div>
+          )}
         </div>
 
         {/* 🆕 NUEVO: Horario de Trabajo */}

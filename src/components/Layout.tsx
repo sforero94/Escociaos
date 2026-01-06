@@ -65,10 +65,10 @@ export function Layout({ onNavigate, children }: LayoutProps) {
     },
     {
       type: 'item' as const,
-      id: 'personal',
-      label: 'Personal',
+      id: 'empleados',
+      label: 'Empleados',
       icon: Users,
-      path: '/personal',
+      path: '/empleados',
     },
     {
       type: 'item' as const,

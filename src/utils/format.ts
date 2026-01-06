@@ -312,14 +312,45 @@ export function formatPhone(phone: string): string {
  */
 export function formatNIT(nit: string): string {
   const cleaned = nit.replace(/[.-]/g, '');
-  
+
   if (cleaned.length >= 9) {
     const digits = cleaned.slice(0, -1);
     const verifier = cleaned.slice(-1);
-    
+
     const formatted = digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
     return `${formatted}-${verifier}`;
   }
-  
+
   return nit;
+}
+
+// ============================================
+// Spanish-named aliases for PDF generation
+// ============================================
+
+/**
+ * Formatea un valor como moneda colombiana (alias en español)
+ * @param valor - Valor numérico
+ * @returns String formateado como "$X,XXX,XXX"
+ */
+export function formatearMoneda(valor: number): string {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(valor);
+}
+
+/**
+ * Formatea un número con separador de miles (alias en español)
+ * @param valor - Valor numérico
+ * @param decimales - Número de decimales (default: 2)
+ * @returns String formateado
+ */
+export function formatearNumero(valor: number, decimales: number = 2): string {
+  return new Intl.NumberFormat('es-CO', {
+    minimumFractionDigits: decimales,
+    maximumFractionDigits: decimales
+  }).format(valor);
 }

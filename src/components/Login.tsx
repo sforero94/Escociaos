@@ -123,8 +123,8 @@ export function Login({ onLoginSuccess }: LoginProps) {
           </form>
 
           {/* Footer */}
-          <div className="mt-8 text-center text-sm text-[#4D240F]/60">
-            <p className="mt-1">52 hectáreas • 8 lotes • 12,000 árboles</p>
+          <div className="text-center text-sm text-[#4D240F]/50">
+            <p>© {new Date().getFullYear()} Creado por think SID con ❤️.</p>
           </div>
         </div>
       </div>

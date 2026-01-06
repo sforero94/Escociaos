@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../ui/select';
+import { StandardDialog } from '../../ui/standard-dialog';
 import {
   Dialog,
   DialogContent,
@@ -19,7 +20,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogBody,
 } from '../../ui/dialog';
 import { Badge } from '../../ui/badge';
 import { Loader2, Plus, X } from 'lucide-react';
@@ -275,30 +275,42 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
   const isEditing = !!ingreso?.id;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl flex flex-col overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>
-            {isEditing ? 'Editar Ingreso' : 'Nuevo Ingreso'}
-          </DialogTitle>
-          <DialogDescription>
-            {isEditing
-              ? 'Modifica los detalles del ingreso seleccionado.'
-              : 'Registra un nuevo ingreso en el sistema.'
-            }
-          </DialogDescription>
-        </DialogHeader>
-
-        {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="w-8 h-8 animate-spin" />
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="contents">
-          <DialogBody>
-          <div className="space-y-6">
+    <>
+    <StandardDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={isEditing ? 'Editar Ingreso' : 'Nuevo Ingreso'}
+      description={isEditing ? 'Modifica los detalles del ingreso seleccionado.' : 'Registra un nuevo ingreso en el sistema.'}
+      size="lg"
+      footer={
+        <div className="flex gap-2 justify-end w-full">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            disabled={saving}
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="submit"
+            disabled={saving}
+            className="bg-[#73991C] hover:bg-[#5a7716]"
+            onClick={handleSubmit}
+          >
+            {saving ? 'Guardando...' : (isEditing ? 'Actualizar Ingreso' : 'Crear Ingreso')}
+          </Button>
+        </div>
+      }
+    >
+      {loading ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="w-8 h-8 animate-spin" />
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-3">
             {/* Información básica */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="fecha">Fecha *</Label>
                 <Input
@@ -323,66 +335,59 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
                   required
                 />
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="nombre">Nombre del Ingreso *</Label>
-              <Input
-                id="nombre"
-                value={formData.nombre}
-                onChange={(e) => handleInputChange('nombre', e.target.value)}
-                placeholder="Ej: Venta de palmito orgánico"
-                required
-              />
-            </div>
-
-            {/* Ubicación */}
-            <div className="border-t pt-4">
-              <h3 className="text-lg font-semibold mb-4">Ubicación</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="negocio">Negocio *</Label>
-                  <Select
-                    value={formData.negocio_id}
-                    onValueChange={(value) => handleInputChange('negocio_id', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar negocio" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {negocios.map((negocio) => (
-                        <SelectItem key={negocio.id} value={negocio.id}>
-                          {negocio.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="region">Región *</Label>
-                  <Select
-                    value={formData.region_id}
-                    onValueChange={(value) => handleInputChange('region_id', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar región" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {regiones.map((region) => (
-                        <SelectItem key={region.id} value={region.id}>
-                          {region.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2 md:col-span-3">
+                <Label htmlFor="nombre">Nombre del Ingreso *</Label>
+                <Input
+                  id="nombre"
+                  value={formData.nombre}
+                  onChange={(e) => handleInputChange('nombre', e.target.value)}
+                  placeholder="Ej: Venta de palmito orgánico"
+                  required
+                />
               </div>
             </div>
 
-            {/* Clasificación */}
-            <div className="border-t pt-4">
-              <h3 className="text-lg font-semibold mb-4">Clasificación</h3>
+            {/* Ubicación y Clasificación */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="negocio">Negocio *</Label>
+                <Select
+                  value={formData.negocio_id}
+                  onValueChange={(value) => handleInputChange('negocio_id', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar negocio" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {negocios.map((negocio) => (
+                      <SelectItem key={negocio.id} value={negocio.id}>
+                        {negocio.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="region">Región *</Label>
+                <Select
+                  value={formData.region_id}
+                  onValueChange={(value) => handleInputChange('region_id', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar región" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {regiones.map((region) => (
+                      <SelectItem key={region.id} value={region.id}>
+                        {region.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="space-y-2">
                 <Label htmlFor="categoria">Categoría *</Label>
                 <Select
@@ -401,176 +406,150 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
                     ))}
                   </SelectContent>
                 </Select>
-                {!formData.negocio_id && (
-                  <p className="text-sm text-gray-500">
-                    Selecciona un negocio primero para ver las categorías disponibles
-                  </p>
-                )}
               </div>
             </div>
 
             {/* Comprador y Medio de Pago */}
-            <div className="border-t pt-4">
-              <h3 className="text-lg font-semibold mb-4">Comprador y Pago</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="comprador">Comprador</Label>
-                  <div className="flex gap-2">
-                    <Select
-                      value={formData.comprador_id || undefined}
-                      onValueChange={(value) => handleInputChange('comprador_id', value)}
-                    >
-                      <SelectTrigger className="flex-1">
-                        <SelectValue placeholder="Seleccionar comprador (opcional)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {compradores.map((comprador) => (
-                          <SelectItem key={comprador.id} value={comprador.id}>
-                            {comprador.nombre}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowNewComprador(true)}
-                    >
-                      <Plus className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="medio_pago">Medio de Pago *</Label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="comprador">Comprador</Label>
+                <div className="flex gap-2">
                   <Select
-                    value={formData.medio_pago_id}
-                    onValueChange={(value) => handleInputChange('medio_pago_id', value)}
+                    value={formData.comprador_id || undefined}
+                    onValueChange={(value) => handleInputChange('comprador_id', value)}
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar medio de pago" />
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Seleccionar comprador (opcional)" />
                     </SelectTrigger>
                     <SelectContent>
-                      {mediosPago.map((medio) => (
-                        <SelectItem key={medio.id} value={medio.id}>
-                          {medio.nombre}
+                      {compradores.map((comprador) => (
+                        <SelectItem key={comprador.id} value={comprador.id}>
+                          {comprador.nombre}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowNewComprador(true)}
+                  >
+                    <Plus className="w-4 h-4" />
+                  </Button>
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="medio_pago">Medio de Pago *</Label>
+                <Select
+                  value={formData.medio_pago_id}
+                  onValueChange={(value) => handleInputChange('medio_pago_id', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar medio de pago" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {mediosPago.map((medio) => (
+                      <SelectItem key={medio.id} value={medio.id}>
+                        {medio.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
-            {/* Observaciones */}
+            {/* Observaciones and Factura */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="observaciones">Observaciones</Label>
+                <Textarea
+                  id="observaciones"
+                  value={formData.observaciones}
+                  onChange={(e) => handleInputChange('observaciones', e.target.value)}
+                  placeholder="Observaciones adicionales..."
+                  rows={2}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Factura</Label>
+                <FacturaUploader
+                  tipo="venta"
+                  currentUrl={formData.url_factura}
+                  onUploadSuccess={(url) => handleInputChange('url_factura', url)}
+                  onRemove={() => handleInputChange('url_factura', '')}
+                  disabled={saving}
+                />
+              </div>
+            </div>
+        </form>
+      )}
+    </StandardDialog>
+
+    {/* Modal para crear nuevo comprador */}
+    {showNewComprador && (
+      <Dialog open={showNewComprador} onOpenChange={setShowNewComprador}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Crear Nuevo Comprador</DialogTitle>
+            <DialogDescription>
+              Agrega un nuevo comprador al catálogo.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="observaciones">Observaciones</Label>
-              <Textarea
-                id="observaciones"
-                value={formData.observaciones}
-                onChange={(e) => handleInputChange('observaciones', e.target.value)}
-                placeholder="Observaciones adicionales..."
-                rows={3}
+              <Label htmlFor="nuevo-nombre">Nombre *</Label>
+              <Input
+                id="nuevo-nombre"
+                value={newCompradorData.nombre}
+                onChange={(e) => setNewCompradorData(prev => ({ ...prev, nombre: e.target.value }))}
+                placeholder="Nombre del comprador"
               />
             </div>
 
-            {/* Factura */}
-            <div className="border-t pt-4">
-              <FacturaUploader
-                tipo="venta"
-                currentUrl={formData.url_factura}
-                onUploadSuccess={(url) => handleInputChange('url_factura', url)}
-                onRemove={() => handleInputChange('url_factura', '')}
-                disabled={saving}
+            <div className="space-y-2">
+              <Label htmlFor="nuevo-telefono">Teléfono</Label>
+              <Input
+                id="nuevo-telefono"
+                value={newCompradorData.telefono}
+                onChange={(e) => setNewCompradorData(prev => ({ ...prev, telefono: e.target.value }))}
+                placeholder="Número de teléfono"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="nuevo-email">Email</Label>
+              <Input
+                id="nuevo-email"
+                type="email"
+                value={newCompradorData.email}
+                onChange={(e) => setNewCompradorData(prev => ({ ...prev, email: e.target.value }))}
+                placeholder="correo@ejemplo.com"
               />
             </div>
           </div>
-        </DialogBody>
 
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onCancel}
-            disabled={saving}
-          >
-            Cancelar
-          </Button>
-          <Button
-            type="submit"
-            disabled={saving}
-            className="bg-[#73991C] hover:bg-[#5a7716]"
-          >
-            {saving ? 'Guardando...' : (isEditing ? 'Actualizar Ingreso' : 'Crear Ingreso')}
-          </Button>
-        </DialogFooter>
-      </form>
-        )}
-
-        {/* Modal para crear nuevo comprador */}
-        {showNewComprador && (
-          <Dialog open={showNewComprador} onOpenChange={setShowNewComprador}>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>Crear Nuevo Comprador</DialogTitle>
-                <DialogDescription>
-                  Agrega un nuevo comprador al catálogo.
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="nuevo-nombre">Nombre *</Label>
-                  <Input
-                    id="nuevo-nombre"
-                    value={newCompradorData.nombre}
-                    onChange={(e) => setNewCompradorData(prev => ({ ...prev, nombre: e.target.value }))}
-                    placeholder="Nombre del comprador"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="nuevo-telefono">Teléfono</Label>
-                  <Input
-                    id="nuevo-telefono"
-                    value={newCompradorData.telefono}
-                    onChange={(e) => setNewCompradorData(prev => ({ ...prev, telefono: e.target.value }))}
-                    placeholder="Número de teléfono"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="nuevo-email">Email</Label>
-                  <Input
-                    id="nuevo-email"
-                    type="email"
-                    value={newCompradorData.email}
-                    onChange={(e) => setNewCompradorData(prev => ({ ...prev, email: e.target.value }))}
-                    placeholder="correo@ejemplo.com"
-                  />
-                </div>
-              </div>
-
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowNewComprador(false)}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  onClick={handleCreateComprador}
-                  className="bg-[#73991C] hover:bg-[#5a7716]"
-                >
-                  Crear Comprador
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        )}
-      </DialogContent>
-    </Dialog>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowNewComprador(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleCreateComprador}
+              className="bg-[#73991C] hover:bg-[#5a7716]"
+            >
+              Crear Comprador
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )}
+    </>
   );
 }

@@ -3,14 +3,7 @@ import { getSupabase } from '../../utils/supabase/client';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '../ui/dialog';
+import { StandardDialog } from '../ui/standard-dialog';
 import { Building2, Loader2 } from 'lucide-react';
 
 interface ProveedorDialogProps {
@@ -97,20 +90,48 @@ export function ProveedorDialog({
     onOpenChange(false);
   };
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Building2 className="w-5 h-5 text-[#73991C]" />
-            Crear Nuevo Proveedor
-          </DialogTitle>
-          <DialogDescription>
-            Complete la información del proveedor para agregarlo al catálogo
-          </DialogDescription>
-        </DialogHeader>
+  const footerButtons = (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={handleCancel}
+        disabled={saving}
+      >
+        Cancelar
+      </Button>
+      <Button
+        type="submit"
+        disabled={saving || !formData.nombre.trim()}
+        className="bg-[#73991C] hover:bg-[#5a7716] text-white"
+      >
+        {saving ? (
+          <>
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            Guardando...
+          </>
+        ) : (
+          'Crear Proveedor'
+        )}
+      </Button>
+    </>
+  );
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+  return (
+    <StandardDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={
+        <span className="flex items-center gap-2">
+          <Building2 className="w-5 h-5 text-[#73991C]" />
+          Crear Nuevo Proveedor
+        </span>
+      }
+      description="Complete la información del proveedor para agregarlo al catálogo"
+      size="sm"
+      footer={footerButtons}
+    >
+      <form onSubmit={handleSubmit} className="space-y-4 contents">
           {/* Nombre - Required */}
           <div className="space-y-2">
             <Label htmlFor="nombre">Nombre *</Label>
@@ -161,33 +182,7 @@ export function ProveedorDialog({
               disabled={saving}
             />
           </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleCancel}
-              disabled={saving}
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              disabled={saving || !formData.nombre.trim()}
-              className="bg-[#73991C] hover:bg-[#5a7716] text-white"
-            >
-              {saving ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Guardando...
-                </>
-              ) : (
-                'Crear Proveedor'
-              )}
-            </Button>
-          </DialogFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+    </StandardDialog>
   );
 }

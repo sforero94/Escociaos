@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../ui/select';
+import { StandardDialog } from '../../ui/standard-dialog';
 import {
   Dialog,
   DialogContent,
@@ -20,7 +21,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogBody,
 } from '../../ui/dialog';
 import { Badge } from '../../ui/badge';
 import { Loader2 } from 'lucide-react';
@@ -259,30 +259,41 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
 
   return (
     <>
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl flex flex-col overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>
-            {isEditing ? 'Editar Gasto' : 'Nuevo Gasto'}
-          </DialogTitle>
-          <DialogDescription>
-            {isEditing
-              ? 'Modifica los detalles del gasto seleccionado.'
-              : 'Registra un nuevo gasto en el sistema.'
-            }
-          </DialogDescription>
-        </DialogHeader>
-
-        {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="w-8 h-8 animate-spin" />
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="contents">
-          <DialogBody>
-          <div className="space-y-6">
+    <StandardDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={isEditing ? 'Editar Gasto' : 'Nuevo Gasto'}
+      description={isEditing ? 'Modifica los detalles del gasto seleccionado.' : 'Registra un nuevo gasto en el sistema.'}
+      size="lg"
+      footer={
+        <div className="flex gap-2 justify-end w-full">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            disabled={saving}
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="submit"
+            disabled={saving}
+            className="bg-[#73991C] hover:bg-[#5a7716]"
+            onClick={handleSubmit}
+          >
+            {saving ? 'Guardando...' : (isEditing ? 'Actualizar Gasto' : 'Crear Gasto')}
+          </Button>
+        </div>
+      }
+    >
+      {loading ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="w-8 h-8 animate-spin" />
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-3">
             {/* Información básica */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="fecha">Fecha *</Label>
                 <Input
@@ -307,208 +318,176 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
                   required
                 />
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="nombre">Nombre del Gasto *</Label>
-              <Input
-                id="nombre"
-                value={formData.nombre}
-                onChange={(e) => handleInputChange('nombre', e.target.value)}
-                placeholder="Ej: Compra de fertilizantes"
-                required
-              />
-            </div>
-
-            {/* Ubicación */}
-            <div className="border-t pt-4">
-              <h3 className="text-lg font-semibold mb-4">Ubicación</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="negocio">Negocio *</Label>
-                  <Select
-                    value={formData.negocio_id}
-                    onValueChange={(value) => handleInputChange('negocio_id', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar negocio" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {negocios.map((negocio) => (
-                        <SelectItem key={negocio.id} value={negocio.id}>
-                          {negocio.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="region">Región *</Label>
-                  <Select
-                    value={formData.region_id}
-                    onValueChange={(value) => handleInputChange('region_id', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar región" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {regiones.map((region) => (
-                        <SelectItem key={region.id} value={region.id}>
-                          {region.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2 md:col-span-3">
+                <Label htmlFor="nombre">Nombre del Gasto *</Label>
+                <Input
+                  id="nombre"
+                  value={formData.nombre}
+                  onChange={(e) => handleInputChange('nombre', e.target.value)}
+                  placeholder="Ej: Compra de fertilizantes"
+                  required
+                />
               </div>
             </div>
 
-            {/* Clasificación */}
-            <div className="border-t pt-4">
-              <h3 className="text-lg font-semibold mb-4">Clasificación</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="categoria">Categoría *</Label>
-                  <Select
-                    value={formData.categoria_id}
-                    onValueChange={(value) => handleInputChange('categoria_id', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar categoría" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categorias.map((categoria) => (
-                        <SelectItem key={categoria.id} value={categoria.id}>
-                          {categoria.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+            {/* Ubicación and Clasificación */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="negocio">Negocio *</Label>
+                <Select
+                  value={formData.negocio_id}
+                  onValueChange={(value) => handleInputChange('negocio_id', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar negocio" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {negocios.map((negocio) => (
+                      <SelectItem key={negocio.id} value={negocio.id}>
+                        {negocio.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="concepto">Concepto *</Label>
-                  <Select
-                    value={formData.concepto_id}
-                    onValueChange={(value) => handleInputChange('concepto_id', value)}
-                    disabled={!formData.categoria_id}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar concepto" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {conceptos.map((concepto) => (
-                        <SelectItem key={concepto.id} value={concepto.id}>
-                          {concepto.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="region">Región *</Label>
+                <Select
+                  value={formData.region_id}
+                  onValueChange={(value) => handleInputChange('region_id', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar región" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {regiones.map((region) => (
+                      <SelectItem key={region.id} value={region.id}>
+                        {region.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="categoria">Categoría *</Label>
+                <Select
+                  value={formData.categoria_id}
+                  onValueChange={(value) => handleInputChange('categoria_id', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar categoría" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categorias.map((categoria) => (
+                      <SelectItem key={categoria.id} value={categoria.id}>
+                        {categoria.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="concepto">Concepto *</Label>
+                <Select
+                  value={formData.concepto_id}
+                  onValueChange={(value) => handleInputChange('concepto_id', value)}
+                  disabled={!formData.categoria_id}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar concepto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {conceptos.map((concepto) => (
+                      <SelectItem key={concepto.id} value={concepto.id}>
+                        {concepto.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
             {/* Proveedor y Medio de Pago */}
-            <div className="border-t pt-4">
-              <h3 className="text-lg font-semibold mb-4">Proveedor y Pago</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="proveedor">Proveedor</Label>
-                  <Select
-                    value={formData.proveedor_id || undefined}
-                    onValueChange={(value) => {
-                      if (value === 'CREATE_NEW') {
-                        setShowProveedorDialog(true);
-                      } else {
-                        handleInputChange('proveedor_id', value);
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar proveedor (opcional)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {proveedores.map((proveedor) => (
-                        <SelectItem key={proveedor.id} value={proveedor.id}>
-                          {proveedor.nombre}
-                        </SelectItem>
-                      ))}
-                      <SelectItem value="CREATE_NEW" className="text-[#73991C] font-medium border-t mt-1 pt-1">
-                        + Crear nuevo proveedor
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="proveedor">Proveedor</Label>
+                <Select
+                  value={formData.proveedor_id || undefined}
+                  onValueChange={(value) => {
+                    if (value === 'CREATE_NEW') {
+                      setShowProveedorDialog(true);
+                    } else {
+                      handleInputChange('proveedor_id', value);
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar proveedor (opcional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {proveedores.map((proveedor) => (
+                      <SelectItem key={proveedor.id} value={proveedor.id}>
+                        {proveedor.nombre}
                       </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                    ))}
+                    <SelectItem value="CREATE_NEW" className="text-[#73991C] font-medium border-t mt-1 pt-1">
+                      + Crear nuevo proveedor
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="medio_pago">Medio de Pago *</Label>
-                  <Select
-                    value={formData.medio_pago_id}
-                    onValueChange={(value) => handleInputChange('medio_pago_id', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar medio de pago" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {mediosPago.map((medio) => (
-                        <SelectItem key={medio.id} value={medio.id}>
-                          {medio.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="medio_pago">Medio de Pago *</Label>
+                <Select
+                  value={formData.medio_pago_id}
+                  onValueChange={(value) => handleInputChange('medio_pago_id', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar medio de pago" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {mediosPago.map((medio) => (
+                      <SelectItem key={medio.id} value={medio.id}>
+                        {medio.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
-            {/* Observaciones */}
-            <div className="space-y-2">
-              <Label htmlFor="observaciones">Observaciones</Label>
-              <Textarea
-                id="observaciones"
-                value={formData.observaciones}
-                onChange={(e) => handleInputChange('observaciones', e.target.value)}
-                placeholder="Observaciones adicionales..."
-                rows={3}
-              />
+            {/* Observaciones and Factura */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="observaciones">Observaciones</Label>
+                <Textarea
+                  id="observaciones"
+                  value={formData.observaciones}
+                  onChange={(e) => handleInputChange('observaciones', e.target.value)}
+                  placeholder="Observaciones adicionales..."
+                  rows={2}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Factura</Label>
+                <FacturaUploader
+                  tipo="compra"
+                  currentUrl={formData.url_factura}
+                  onUploadSuccess={(url) => handleInputChange('url_factura', url)}
+                  onRemove={() => handleInputChange('url_factura', '')}
+                  disabled={saving}
+                />
+              </div>
             </div>
-
-            {/* Factura */}
-            <div className="border-t pt-4">
-              <FacturaUploader
-                tipo="compra"
-                currentUrl={formData.url_factura}
-                onUploadSuccess={(url) => handleInputChange('url_factura', url)}
-                onRemove={() => handleInputChange('url_factura', '')}
-                disabled={saving}
-              />
-            </div>
-          </div>
-          </DialogBody>
-
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onCancel}
-                disabled={saving}
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                disabled={saving}
-                className="bg-[#73991C] hover:bg-[#5a7716]"
-              >
-                {saving ? 'Guardando...' : (isEditing ? 'Actualizar Gasto' : 'Crear Gasto')}
-              </Button>
-            </DialogFooter>
-          </form>
-        )}
-
-      </DialogContent>
-    </Dialog>
+        </form>
+      )}
+    </StandardDialog>
 
     {/* Proveedor Creation Dialog */}
     <ProveedorDialog

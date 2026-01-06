@@ -112,3 +112,36 @@ export const DEFAULT_COST_PARAMS = {
   benefits: 0,
   allowances: 0,
 } as const;
+
+/**
+ * Calculate contractor labor costs using flat jornal rate
+ * For contractors, use tarifa_jornal directly instead of salary breakdown
+ *
+ * @param tarifaJornal - Fixed daily rate for a full jornal (8 hours)
+ * @param fractionWorked - Fraction of jornal worked (0.25, 0.5, 0.75, 1.0, etc.)
+ * @returns Cost calculation result with hourly rate, daily cost, and total cost
+ */
+export function calculateContractorCost(
+  tarifaJornal: number,
+  fractionWorked: number
+): CostCalculationResult {
+  // Input validation
+  if (tarifaJornal < 0) {
+    throw new Error('Tarifa jornal must be greater than or equal to 0');
+  }
+
+  if (fractionWorked < 0 || fractionWorked > 3) {
+    throw new Error('Fraction worked must be between 0 and 3');
+  }
+
+  // For contractors, tarifa_jornal is the daily cost for a full jornal
+  const dailyCost = tarifaJornal;
+  const totalCost = dailyCost * fractionWorked;
+  const hourlyRate = dailyCost / STANDARD_WORKDAY_HOURS;
+
+  return {
+    hourlyRate: Math.round(hourlyRate * 100) / 100,
+    dailyCost: Math.round(dailyCost * 100) / 100,
+    totalCost: Math.round(totalCost * 100) / 100,
+  };
+}

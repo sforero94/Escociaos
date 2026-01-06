@@ -4,6 +4,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { ListaCompras, ConfiguracionAplicacion } from '../types/aplicaciones';
+import { formatearMoneda, formatearNumero } from './format';
 
 interface DatosEmpresa {
   nombre: string;
@@ -416,26 +417,4 @@ export function generarPDFListaCompras(
   }.pdf`;
   
   doc.save(nombreArchivo);
-}
-
-/**
- * Formatear moneda colombiana
- */
-function formatearMoneda(valor: number): string {
-  return new Intl.NumberFormat('es-CO', {
-    style: 'currency',
-    currency: 'COP',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(valor);
-}
-
-/**
- * Formatear número con separador de miles
- */
-function formatearNumero(valor: number): string {
-  return new Intl.NumberFormat('es-CO', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(valor);
 }

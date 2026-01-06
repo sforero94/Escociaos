@@ -1,4 +1,5 @@
 // validation.ts - Funciones de validación para el sistema Escocia Hass
+import { formatNumber, formatCurrency } from './format';
 
 /**
  * Valida que un nombre de producto sea único en la base de datos
@@ -92,28 +93,6 @@ export function isValidURL(url: string): boolean {
   } catch {
     return false;
   }
-}
-
-/**
- * Formatea un número a moneda colombiana
- */
-export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('es-CO', {
-    style: 'currency',
-    currency: 'COP',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
-/**
- * Formatea un número con decimales
- */
-export function formatNumber(num: number, decimals: number = 2): string {
-  return new Intl.NumberFormat('es-CO', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(num);
 }
 
 /**

@@ -57,6 +57,21 @@ export interface Empleado {
   horas_semanales?: number;
 }
 
+export interface Contratista {
+  id: string;
+  nombre: string;
+  tipo_contrato: 'Jornal' | 'Contrato';
+  tarifa_jornal: number;
+  cedula?: string;
+  telefono?: string;
+  estado: 'Activo' | 'Inactivo';
+  fecha_inicio?: string;
+  fecha_fin?: string;
+  observaciones?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface Lote {
   id: string;
   nombre: string;
@@ -107,7 +122,9 @@ export interface Tarea {
 export interface RegistroTrabajo {
   id?: string;
   tarea_id: string;
-  empleado_id: string;
+  empleado_id?: string;      // Optional - work record has either empleado_id or contratista_id
+  contratista_id?: string;   // Optional - work record has either empleado_id or contratista_id
+  lote_id: string;
   fecha_trabajo: string;
   fraccion_jornal: '0.25' | '0.5' | '0.75' | '1.0';
   observaciones?: string;
@@ -115,12 +132,18 @@ export interface RegistroTrabajo {
   costo_jornal?: number;
 }
 
+// Union type for workers (employees or contractors)
+export type Trabajador =
+  | { type: 'empleado'; data: Empleado }
+  | { type: 'contratista'; data: Contratista };
+
 // Componente principal
 const Labores: React.FC = () => {
   // Estados principales
   const [tareas, setTareas] = useState<Tarea[]>([]);
   const [tiposTareas, setTiposTareas] = useState<TipoTarea[]>([]);
   const [empleados, setEmpleados] = useState<Empleado[]>([]);
+  const [contratistas, setContratistas] = useState<Contratista[]>([]);
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -159,11 +182,12 @@ const Labores: React.FC = () => {
     try {
       setLoading(true);
       
-      // PRIMERO: Cargar recursos base (lotes, tipos, empleados) en paralelo
+      // PRIMERO: Cargar recursos base (lotes, tipos, empleados, contratistas) en paralelo
       // Estos son independientes entre sí
       await Promise.all([
         cargarTiposTareas(),
         cargarEmpleados(),
+        cargarContratistas(),
         cargarLotes(),
       ]);
       
@@ -239,6 +263,18 @@ const Labores: React.FC = () => {
 
     if (error) throw error;
     setEmpleados(data || []);
+  };
+
+  // Cargar contratistas activos
+  const cargarContratistas = async () => {
+    const { data, error } = await getSupabase()
+      .from('contratistas')
+      .select('*')
+      .eq('estado', 'Activo')
+      .order('nombre', { ascending: true });
+
+    if (error) throw error;
+    setContratistas(data || []);
   };
 
   // Cargar lotes
@@ -804,6 +840,7 @@ const Labores: React.FC = () => {
           <ReportesView
             tareas={tareas}
             empleados={empleados}
+            contratistas={contratistas}
             tiposTareas={tiposTareas}
           />
         </TabsContent>
@@ -831,6 +868,7 @@ const Labores: React.FC = () => {
         onOpenChange={setShowRegistroDialog}
         tarea={tareaSeleccionada}
         empleados={empleados}
+        contratistas={contratistas}
         lotes={lotes}
         onSuccess={() => {
           cargarTareas();

@@ -38,3 +38,40 @@ export function calcularDensidad(individuosEncontrados: number, arbolesAfectados
   if (arbolesAfectados === 0) return 0;
   return individuosEncontrados / arbolesAfectados;
 }
+
+/**
+ * Calcula la tendencia de una serie de valores de incidencia
+ * @param incidencias - Array de valores de incidencia ordenados cronológicamente
+ * @returns 'subiendo' | 'bajando' | 'estable'
+ */
+export function calcularTendencia(incidencias: number[]): 'subiendo' | 'bajando' | 'estable' {
+  if (incidencias.length < 2) return 'estable';
+
+  // Calcular pendiente usando regresión lineal simple
+  const n = incidencias.length;
+  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+
+  for (let i = 0; i < n; i++) {
+    sumX += i;
+    sumY += incidencias[i];
+    sumXY += i * incidencias[i];
+    sumX2 += i * i;
+  }
+
+  const pendiente = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+
+  // Umbral: cambio de más de 2% por período = tendencia significativa
+  if (pendiente > 2) return 'subiendo';
+  if (pendiente < -2) return 'bajando';
+  return 'estable';
+}
+
+/**
+ * Formatea un cambio porcentual para mostrar en descripciones
+ * @param cambio - Porcentaje de cambio (ej: 25.5 para +25.5%)
+ * @returns String formateado (ej: "(+25.5%)" o "(-10.2%)")
+ */
+export function formatearCambio(cambio: number): string {
+  const signo = cambio >= 0 ? '+' : '';
+  return `(${signo}${cambio.toFixed(1)}%)`;
+}

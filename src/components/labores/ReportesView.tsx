@@ -53,11 +53,12 @@ import {
 import { generarPDFReportesLabores } from '../../utils/generarPDFReportesLabores';
 
 // Import types from main component
-import type { Tarea, Empleado, TipoTarea } from './Labores';
+import type { Tarea, Empleado, Contratista, TipoTarea } from './Labores';
 
 interface ReportesViewProps {
   tareas: Tarea[];
   empleados: Empleado[];
+  contratistas: Contratista[];
   tiposTareas: TipoTarea[];
 }
 
@@ -98,9 +99,19 @@ interface EstadisticasGenerales {
   empleadosActivos: number;
 }
 
+interface MatrizLoteActividad {
+  lotes: string[];
+  actividades: string[];
+  datos: Map<string, Map<string, { total: number; contrato: number }>>;
+  totalesPorLote: Map<string, { total: number; contrato: number }>;
+  totalesPorActividad: Map<string, { total: number; contrato: number }>;
+  totalGeneral: { total: number; contrato: number; empleados: number };
+}
+
 const ReportesView: React.FC<ReportesViewProps> = ({
   tareas,
   empleados,
+  contratistas,
   tiposTareas,
 }) => {
   const [loading, setLoading] = useState(true);
@@ -118,7 +129,8 @@ const ReportesView: React.FC<ReportesViewProps> = ({
   const [costosPorLote, setCostosPorLote] = useState<CostoPorLote[]>([]); // ✨ NUEVO
   const [tendenciaCostos, setTendenciaCostos] = useState<TendenciaCostos[]>([]);
   const [registrosTrabajo, setRegistrosTrabajo] = useState<any[]>([]);
-  
+  const [matrizLoteActividad, setMatrizLoteActividad] = useState<MatrizLoteActividad | null>(null);
+
   // ✨ NUEVO: Estado del toggle Jornales/Costos
   const [vistaGrafico, setVistaGrafico] = useState<'costos' | 'jornales'>('costos');
 
@@ -127,18 +139,26 @@ const ReportesView: React.FC<ReportesViewProps> = ({
     cargarDatosReportes();
   }, [fechaInicio, fechaFin]);
 
+  // Re-procesar matriz cuando cambia el toggle de vista
+  useEffect(() => {
+    if (registrosTrabajo.length > 0) {
+      procesarMatrizLoteActividad(registrosTrabajo);
+    }
+  }, [vistaGrafico]);
+
   const cargarDatosReportes = async () => {
     try {
       setLoading(true);
       const supabase = getSupabase();
 
-      // Cargar registros de trabajo en el rango de fechas
+      // Cargar registros de trabajo en el rango de fechas (empleados y contratistas)
       const { data: registros, error: errorRegistros } = await supabase
         .from('registros_trabajo')
         .select(`
           *,
           tareas!inner(codigo_tarea, nombre, tipo_tarea_id),
-          empleados!inner(nombre, cargo, salario),
+          empleados(nombre, cargo, salario),
+          contratistas(nombre, tipo_contrato, tarifa_jornal),
           lote:lotes!lote_id(nombre)
         `)
         .gte('fecha_trabajo', fechaInicio)
@@ -159,14 +179,19 @@ const ReportesView: React.FC<ReportesViewProps> = ({
     // Estadísticas generales
     const totalCostos = registros.reduce((sum, r) => sum + (Number(r.costo_jornal) || 0), 0);
     const totalJornales = registros.reduce((sum, r) => sum + (Number(r.fraccion_jornal) || 0), 0);
-    const empleadosUnicos = new Set(registros.map(r => r.empleado_id)).size;
+
+    // Count unique workers (both employees and contractors)
+    const trabajadoresUnicos = new Set([
+      ...registros.filter(r => r.empleado_id).map(r => `emp_${r.empleado_id}`),
+      ...registros.filter(r => r.contratista_id).map(r => `con_${r.contratista_id}`)
+    ]).size;
 
     // Tareas únicas completadas en el período
     const tareasUnicas = new Set(registros.map(r => r.tarea_id)).size;
 
     // Calcular indicador de eficiencia: % de utilización de capacidad instalada
     const diasPeriodo = Math.max(1, Math.ceil((new Date(fechaFin).getTime() - new Date(fechaInicio).getTime()) / (1000 * 60 * 60 * 24)));
-    const capacidadInstalada = empleadosUnicos * diasPeriodo; // Empleados × días × 1 jornal/día
+    const capacidadInstalada = trabajadoresUnicos * diasPeriodo; // Trabajadores × días × 1 jornal/día
     const indicadorEficiencia = capacidadInstalada > 0 ? Number(((totalJornales / capacidadInstalada) * 100).toFixed(1)) : 0;
 
     setEstadisticasGenerales({
@@ -176,7 +201,7 @@ const ReportesView: React.FC<ReportesViewProps> = ({
       totalCostos,
       totalJornales,
       indicadorEficiencia,
-      empleadosActivos: empleadosUnicos,
+      empleadosActivos: trabajadoresUnicos,
     });
 
     // Costos por tipo de tarea
@@ -206,17 +231,18 @@ const ReportesView: React.FC<ReportesViewProps> = ({
 
     setCostosPorTipo(costosTipoArray);
 
-    // Costos por empleado
+    // Costos por trabajador (empleados y contratistas)
     const costosEmpleadoMap = new Map<string, { costo: number; jornales: number; tareas: Set<string> }>();
 
     registros.forEach(registro => {
-      const empleadoNombre = registro.empleados?.nombre || 'Sin nombre';
+      const trabajadorNombre = registro.empleados?.nombre ||
+                              (registro.contratistas ? `${registro.contratistas.nombre} (${registro.contratistas.tipo_contrato})` : 'Sin nombre');
 
-      if (!costosEmpleadoMap.has(empleadoNombre)) {
-        costosEmpleadoMap.set(empleadoNombre, { costo: 0, jornales: 0, tareas: new Set() });
+      if (!costosEmpleadoMap.has(trabajadorNombre)) {
+        costosEmpleadoMap.set(trabajadorNombre, { costo: 0, jornales: 0, tareas: new Set() });
       }
 
-      const data = costosEmpleadoMap.get(empleadoNombre)!;
+      const data = costosEmpleadoMap.get(trabajadorNombre)!;
       data.costo += Number(registro.costo_jornal) || 0;
       data.jornales += Number(registro.fraccion_jornal) || 0;
       data.tareas.add(registro.tarea_id);
@@ -279,6 +305,86 @@ const ReportesView: React.FC<ReportesViewProps> = ({
       .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
 
     setTendenciaCostos(tendenciaArray);
+
+    // Procesar matriz de lotes × actividades
+    procesarMatrizLoteActividad(registros);
+  };
+
+  const procesarMatrizLoteActividad = (registros: any[]) => {
+    const matrizDatos = new Map<string, Map<string, { total: number; contrato: number }>>();
+    const lotesSet = new Set<string>();
+    const actividadesSet = new Set<string>();
+    const totalesPorLote = new Map<string, { total: number; contrato: number }>();
+    const totalesPorActividad = new Map<string, { total: number; contrato: number }>();
+
+    let totalGeneral = 0;
+    let totalContrato = 0;
+    let totalEmpleados = 0;
+
+    registros.forEach(registro => {
+      const loteNombre = registro.lote?.nombre || 'Sin lote';
+      const tipoNombre = registro.tareas?.tipo_tarea_id
+        ? tiposTareas.find(t => t.id === registro.tareas.tipo_tarea_id)?.nombre || 'Sin tipo'
+        : 'Sin tipo';
+
+      const valor = vistaGrafico === 'costos'
+        ? (Number(registro.costo_jornal) || 0)
+        : (Number(registro.fraccion_jornal) || 0);
+
+      const esContrato = !!registro.contratista_id;
+
+      lotesSet.add(loteNombre);
+      actividadesSet.add(tipoNombre);
+
+      // Inicializar mapas si no existen
+      if (!matrizDatos.has(tipoNombre)) {
+        matrizDatos.set(tipoNombre, new Map());
+      }
+      if (!matrizDatos.get(tipoNombre)!.has(loteNombre)) {
+        matrizDatos.get(tipoNombre)!.set(loteNombre, { total: 0, contrato: 0 });
+      }
+      if (!totalesPorLote.has(loteNombre)) {
+        totalesPorLote.set(loteNombre, { total: 0, contrato: 0 });
+      }
+      if (!totalesPorActividad.has(tipoNombre)) {
+        totalesPorActividad.set(tipoNombre, { total: 0, contrato: 0 });
+      }
+
+      // Acumular valores
+      const celda = matrizDatos.get(tipoNombre)!.get(loteNombre)!;
+      celda.total += valor;
+      if (esContrato) {
+        celda.contrato += valor;
+      }
+
+      const totalLote = totalesPorLote.get(loteNombre)!;
+      totalLote.total += valor;
+      if (esContrato) {
+        totalLote.contrato += valor;
+      }
+
+      const totalActividad = totalesPorActividad.get(tipoNombre)!;
+      totalActividad.total += valor;
+      if (esContrato) {
+        totalActividad.contrato += valor;
+      }
+
+      totalGeneral += valor;
+      if (esContrato) {
+        totalContrato += valor;
+      } else {
+        totalEmpleados += valor;
+      }
+    });
+
+    setMatrizLoteActividad({
+      lotes: Array.from(lotesSet).sort(),
+      actividades: Array.from(actividadesSet).sort(),
+      datos: matrizDatos,
+      totalesPorLote,
+      totalesPorActividad,
+      totalGeneral: { total: totalGeneral, contrato: totalContrato, empleados: totalEmpleados }
+    });
   };
 
   const COLORS = ['#73991C', '#E74C3C', '#3498DB', '#F39C12', '#9B59B6', '#1ABC9C', '#34495E', '#E67E22'];
@@ -435,6 +541,172 @@ const ReportesView: React.FC<ReportesViewProps> = ({
             </button>
           </div>
         </div>
+      )}
+
+      {/* ✨ NUEVO: Matriz de Lotes × Actividades */}
+      {matrizLoteActividad && matrizLoteActividad.lotes.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Matriz de {vistaGrafico === 'costos' ? 'Costos' : 'Jornales'} por Lote y Actividad
+            </CardTitle>
+            <CardDescription>
+              Vista consolidada de {vistaGrafico === 'costos' ? 'costos' : 'jornales'} por lote y tipo de actividad.
+              Los valores entre paréntesis representan trabajo realizado por contratistas.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Summary Totals */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+              <div className="text-center">
+                <div className="text-sm text-gray-600 mb-1">Total General</div>
+                <div className="text-2xl font-bold text-gray-900">
+                  {vistaGrafico === 'costos'
+                    ? formatCurrency(matrizLoteActividad.totalGeneral.total)
+                    : formatNumber(matrizLoteActividad.totalGeneral.total)
+                  }
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm text-gray-600 mb-1">Contratistas</div>
+                <div className="text-2xl font-bold text-blue-700">
+                  {vistaGrafico === 'costos'
+                    ? formatCurrency(matrizLoteActividad.totalGeneral.contrato)
+                    : formatNumber(matrizLoteActividad.totalGeneral.contrato)
+                  }
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm text-gray-600 mb-1">Empleados</div>
+                <div className="text-2xl font-bold text-[#73991C]">
+                  {vistaGrafico === 'costos'
+                    ? formatCurrency(matrizLoteActividad.totalGeneral.empleados)
+                    : formatNumber(matrizLoteActividad.totalGeneral.empleados)
+                  }
+                </div>
+              </div>
+            </div>
+
+            {/* Matrix Table */}
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="font-bold bg-gray-50 sticky left-0 z-10">Actividad</TableHead>
+                    {matrizLoteActividad.lotes.map((lote, index) => (
+                      <TableHead key={index} className="text-center bg-gray-50 min-w-[120px]">
+                        {lote}
+                      </TableHead>
+                    ))}
+                    <TableHead className="text-center font-bold bg-[#73991C] text-white">Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {matrizLoteActividad.actividades.map((actividad, rowIndex) => (
+                    <TableRow key={rowIndex}>
+                      <TableCell className="font-medium bg-gray-50 sticky left-0">
+                        {actividad}
+                      </TableCell>
+                      {matrizLoteActividad.lotes.map((lote, colIndex) => {
+                        const celda = matrizLoteActividad.datos.get(actividad)?.get(lote);
+                        const total = celda?.total || 0;
+                        const contrato = celda?.contrato || 0;
+
+                        return (
+                          <TableCell key={colIndex} className="text-center">
+                            {total > 0 ? (
+                              <div className="flex flex-col">
+                                <span className="font-medium">
+                                  {vistaGrafico === 'costos' ? formatCurrency(total) : formatNumber(total)}
+                                </span>
+                                {contrato > 0 && (
+                                  <span className="text-xs text-blue-600">
+                                    ({vistaGrafico === 'costos' ? formatCurrency(contrato) : formatNumber(contrato)})
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-gray-300">-</span>
+                            )}
+                          </TableCell>
+                        );
+                      })}
+                      <TableCell className="text-center font-bold bg-gray-100">
+                        {(() => {
+                          const totalActividad = matrizLoteActividad.totalesPorActividad.get(actividad);
+                          return (
+                            <div className="flex flex-col">
+                              <span>
+                                {vistaGrafico === 'costos'
+                                  ? formatCurrency(totalActividad?.total || 0)
+                                  : formatNumber(totalActividad?.total || 0)
+                                }
+                              </span>
+                              {(totalActividad?.contrato || 0) > 0 && (
+                                <span className="text-xs text-blue-600">
+                                  ({vistaGrafico === 'costos'
+                                    ? formatCurrency(totalActividad?.contrato || 0)
+                                    : formatNumber(totalActividad?.contrato || 0)
+                                  })
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {/* Row Totals */}
+                  <TableRow className="bg-[#73991C] text-white font-bold">
+                    <TableCell className="sticky left-0 bg-[#73991C]">Total</TableCell>
+                    {matrizLoteActividad.lotes.map((lote, index) => {
+                      const totalLote = matrizLoteActividad.totalesPorLote.get(lote);
+                      return (
+                        <TableCell key={index} className="text-center">
+                          <div className="flex flex-col">
+                            <span>
+                              {vistaGrafico === 'costos'
+                                ? formatCurrency(totalLote?.total || 0)
+                                : formatNumber(totalLote?.total || 0)
+                              }
+                            </span>
+                            {(totalLote?.contrato || 0) > 0 && (
+                              <span className="text-xs text-blue-200">
+                                ({vistaGrafico === 'costos'
+                                  ? formatCurrency(totalLote?.contrato || 0)
+                                  : formatNumber(totalLote?.contrato || 0)
+                                })
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                      );
+                    })}
+                    <TableCell className="text-center">
+                      <div className="flex flex-col">
+                        <span>
+                          {vistaGrafico === 'costos'
+                            ? formatCurrency(matrizLoteActividad.totalGeneral.total)
+                            : formatNumber(matrizLoteActividad.totalGeneral.total)
+                          }
+                        </span>
+                        {matrizLoteActividad.totalGeneral.contrato > 0 && (
+                          <span className="text-xs text-blue-200">
+                            ({vistaGrafico === 'costos'
+                              ? formatCurrency(matrizLoteActividad.totalGeneral.contrato)
+                              : formatNumber(matrizLoteActividad.totalGeneral.contrato)
+                            })
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Gráficos */}
@@ -662,7 +934,16 @@ const ReportesView: React.FC<ReportesViewProps> = ({
                     <TableCell>
                       {formatearFecha(registro.fecha_trabajo)}
                     </TableCell>
-                    <TableCell>{registro.empleados?.nombre || 'N/A'}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span>{registro.empleados?.nombre || registro.contratistas?.nombre || 'N/A'}</span>
+                        {registro.contratistas && (
+                          <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                            {registro.contratistas.tipo_contrato}
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>{registro.tareas?.codigo_tarea || 'N/A'}</TableCell>
                     <TableCell>
                       {registro.tareas?.tipo_tarea_id

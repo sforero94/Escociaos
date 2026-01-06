@@ -11,18 +11,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogBody,
-} from '../ui/dialog';
+import { StandardDialog } from '../ui/standard-dialog';
 import { Badge } from '../ui/badge';
 import { Switch } from '../ui/switch';
-import { X } from 'lucide-react';
+import { X, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -78,7 +70,7 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
         tipo_tarea_id: tarea.tipo_tarea_id || '',
         descripcion: tarea.descripcion || '',
         lote_id: tarea.lote_id || '', // Backward compatibility
-        lote_ids: tarea.lotes?.map(l => l.id) || [], // Multiple lotes
+        lote_ids: tarea.lote_ids || [], // Use lote_ids directly from database
         estado: tarea.estado || 'Banco',
         prioridad: tarea.prioridad || 'Media',
         fecha_estimada_inicio: tarea.fecha_estimada_inicio || '',
@@ -173,26 +165,55 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
 
   const isEditing = !!tarea?.id;
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl flex flex-col overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>
-            {isEditing ? 'Editar Tarea' : 'Nueva Tarea'}
-          </DialogTitle>
-          <DialogDescription>
-            {isEditing
-              ? 'Modifica los detalles de la tarea seleccionada.'
-              : 'Crea una nueva tarea para el sistema de gestión de labores.'
-            }
-          </DialogDescription>
-        </DialogHeader>
+  const footerButtons = (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => onOpenChange(false)}
+        disabled={loading}
+      >
+        Cancelar
+      </Button>
+      <Button
+        type="submit"
+        form="tarea-form"
+        disabled={loading || !formData.nombre.trim()}
+        className="bg-[#73991C] hover:bg-[#5a7716]"
+      >
+        {loading ? 'Guardando...' : (isEditing ? 'Actualizar Tarea' : 'Crear Tarea')}
+      </Button>
+    </>
+  );
 
-        <form onSubmit={handleSubmit} className="contents">
-          <DialogBody>
-          <div className="space-y-6">
+  return (
+    <StandardDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={isEditing ? 'Editar Tarea' : 'Nueva Tarea'}
+      description={isEditing
+        ? 'Modifica los detalles de la tarea seleccionada.'
+        : 'Crea una nueva tarea para el sistema de gestión de labores.'
+      }
+      size="lg"
+      footer={footerButtons}
+    >
+      <form id="tarea-form" onSubmit={handleSubmit} className="space-y-3">
+          {/* Warning banner for auto-generated tareas */}
+          {tarea?.observaciones?.includes('Auto-generada desde aplicación') && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex gap-2">
+              <AlertTriangle className="w-4 h-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-yellow-800 text-xs font-medium">Tarea vinculada a aplicación</p>
+                <p className="text-yellow-700 text-xs mt-0.5">
+                  Esta tarea fue creada automáticamente desde una aplicación. Los cambios aquí NO se sincronizarán de vuelta a la aplicación.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Información Básica */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="codigo_tarea">Código de Tarea</Label>
               <Input
@@ -240,7 +261,7 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="tipo_tarea">Tipo de Tarea</Label>
               <Select
@@ -292,15 +313,15 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
               value={formData.descripcion}
               onChange={(e) => handleInputChange('descripcion', e.target.value)}
               placeholder="Describe detalladamente la tarea a realizar..."
-              rows={3}
+              rows={2}
               disabled={loading}
             />
           </div>
 
           {/* Ubicación */}
-          <div className="border-t pt-4">
-            <h3 className="text-lg font-semibold mb-4">Ubicación</h3>
-            <div className="space-y-3">
+          <div className="border-t pt-3">
+            <h3 className="text-sm font-semibold mb-2">Ubicación</h3>
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>Lotes a incluir en la tarea</Label>
                 {formData.lote_ids.length > 0 && (
@@ -316,9 +337,9 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
                 )}
               </div>
 
-              <div className="border rounded-lg p-3 max-h-64 overflow-y-auto space-y-2 bg-gray-50">
+              <div className="border rounded-lg p-2 space-y-1 bg-gray-50 max-h-[150px] overflow-y-auto">
                 {lotes.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-4">
+                  <p className="text-xs text-gray-500 text-center py-3">
                     No hay lotes disponibles
                   </p>
                 ) : (
@@ -327,20 +348,20 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
                     return (
                       <div
                         key={lote.id}
-                        className="flex items-center justify-between p-2 hover:bg-gray-100 rounded-md transition-colors"
+                        className="flex items-center justify-between p-1.5 hover:bg-gray-100 rounded-md transition-colors"
                       >
                         <div className="flex-1">
                           <Label
                             htmlFor={`lote-${lote.id}`}
-                            className="text-sm font-medium cursor-pointer"
+                            className="text-xs font-medium cursor-pointer"
                           >
                             {lote.nombre}
+                            {lote.area_hectareas && (
+                              <span className="text-[10px] text-gray-500 ml-2">
+                                {lote.area_hectareas} ha
+                              </span>
+                            )}
                           </Label>
-                          {lote.area_hectareas && (
-                            <p className="text-xs text-gray-500 mt-0.5">
-                              {lote.area_hectareas} hectáreas
-                            </p>
-                          )}
                         </div>
                         <Switch
                           id={`lote-${lote.id}`}
@@ -362,15 +383,15 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
               </div>
 
               {formData.lote_ids.length > 0 && (
-                <div className="space-y-2">
-                  <Label className="text-sm text-gray-600">
+                <div className="bg-white border-t pt-2 mt-2">
+                  <Label className="text-xs text-gray-600">
                     Lotes seleccionados ({formData.lote_ids.length})
                   </Label>
-                  <div className="flex flex-wrap gap-1">
+                  <div className="flex flex-wrap gap-1 mt-1">
                     {formData.lote_ids.map((loteId) => {
                       const lote = lotes.find(l => l.id === loteId);
                       return lote ? (
-                        <Badge key={loteId} variant="secondary" className="text-xs">
+                        <Badge key={loteId} variant="secondary" className="text-[10px]">
                           {lote.nombre}
                           <button
                             type="button"
@@ -380,7 +401,7 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
                             }))}
                             className="ml-1 hover:bg-gray-300 rounded-full p-0.5"
                           >
-                            <X className="h-3 w-3" />
+                            <X className="h-2.5 w-2.5" />
                           </button>
                         </Badge>
                       ) : null;
@@ -392,9 +413,9 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
           </div>
 
           {/* Fechas y Estimaciones */}
-          <div className="border-t pt-4">
-            <h3 className="text-lg font-semibold mb-4">Planificación</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="border-t pt-3">
+            <h3 className="text-sm font-semibold mb-2">Planificación</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="fecha_inicio">Fecha Estimada Inicio</Label>
                 <Input
@@ -434,8 +455,8 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
           </div>
 
           {/* Responsable */}
-          <div className="border-t pt-4">
-            <h3 className="text-lg font-semibold mb-4">Asignación</h3>
+          <div className="border-t pt-3">
+            <h3 className="text-sm font-semibold mb-2">Asignación</h3>
             <div className="space-y-2">
               <Label htmlFor="responsable">Responsable</Label>
               <Select
@@ -476,29 +497,8 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
               disabled={loading}
             />
           </div>
-          </div>
-          </DialogBody>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={loading}
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              disabled={loading || !formData.nombre.trim()}
-              className="bg-[#73991C] hover:bg-[#5a7716]"
-            >
-              {loading ? 'Guardando...' : (isEditing ? 'Actualizar Tarea' : 'Crear Tarea')}
-            </Button>
-          </DialogFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+    </StandardDialog>
   );
 };
 

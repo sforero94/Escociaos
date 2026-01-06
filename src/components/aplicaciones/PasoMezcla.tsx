@@ -6,11 +6,11 @@ import {
   calcularFumigacion,
   calcularFertilizacion,
   calcularTotalesProductos,
-  formatearNumero,
   validarLoteFumigacion,
   validarProductoFumigacion,
   validarProductoFertilizacion,
 } from '../../utils/calculosAplicaciones';
+import { formatearNumero } from '../../utils/format';
 import type {
   ConfiguracionAplicacion,
   Mezcla,
@@ -361,19 +361,31 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
       });
     });
 
-    // Calcular totales por producto
-    const productosConTotales = calcularTotalesProductos(nuevosCalculos, mezclasParaCalcular);
+    // Calcular totales por producto PER MEZCLA (solo para lotes asignados a cada mezcla)
+    const mezclasActualizadas = mezclasParaCalcular.map((mezcla) => {
+      // Filtrar cálculos solo para los lotes asignados a ESTA mezcla
+      const calculosDeEstaMezcla = nuevosCalculos.filter(calculo =>
+        mezcla.lotes_asignados?.includes(calculo.lote_id)
+      );
 
-    // Actualizar mezclas con cantidades totales
-    const mezclasActualizadas = mezclasParaCalcular.map((mezcla) => ({
-      ...mezcla,
-      productos: mezcla.productos.map((p) => {
-        const productoTotal = productosConTotales.find((pt) => pt.producto_id === p.producto_id);
-        return productoTotal
-          ? { ...p, cantidad_total_necesaria: productoTotal.cantidad_total_necesaria }
-          : p;
-      }),
-    }));
+      return {
+        ...mezcla,
+        productos: mezcla.productos.map((productoEnMezcla) => {
+          // Sumar cantidad solo de los lotes asignados a ESTA mezcla
+          const cantidadTotal = calculosDeEstaMezcla.reduce((sum, calculo) => {
+            const productoEnCalculo = calculo.productos.find(
+              p => p.producto_id === productoEnMezcla.producto_id
+            );
+            return sum + (productoEnCalculo?.cantidad_necesaria || 0);
+          }, 0);
+
+          return {
+            ...productoEnMezcla,
+            cantidad_total_necesaria: Math.ceil(cantidadTotal * 100) / 100
+          };
+        })
+      };
+    });
 
     setCalculos(nuevosCalculos);
     setErrores(nuevosErrores);

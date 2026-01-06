@@ -4,36 +4,52 @@ import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGri
 import { formatNumber } from '../../../utils/format';
 import type { DistribucionData, FiltrosFinanzas } from '../../../types/finanzas';
 
-interface GraficoDistribucionIngresosProps {
+type ChartType = 'gastos' | 'ingresos';
+
+interface DistributionChartProps {
   data: DistribucionData[];
   loading?: boolean;
   filtrosActivos?: FiltrosFinanzas;
+  type: ChartType;
 }
 
+// Color palettes
+const COLORS_GASTOS = [
+  '#EF4444', '#F59E0B', '#F97316', '#EC4899', '#8B5CF6',
+  '#3B82F6', '#06B6D4', '#14B8A6', '#10B981', '#84CC16',
+  '#22C55E', '#6366F1', '#A855F7', '#F43F5E', '#EAB308',
+];
+
+const COLORS_INGRESOS = [
+  '#10B981', '#22C55E', '#84CC16', '#34D399', '#059669',
+  '#16A34A', '#65A30D', '#4ADE80', '#86EFAC', '#047857',
+  '#15803D', '#3F6212', '#6EE7B7', '#14532D', '#A7F3D0',
+];
+
+const CONFIG = {
+  gastos: {
+    title: 'Distribución de Gastos por Categoría',
+    colors: COLORS_GASTOS,
+    navPath: '/finanzas/gastos',
+    tooltipLabel: 'gastos',
+    summaryLabel: 'gastos',
+  },
+  ingresos: {
+    title: 'Distribución de Ingresos por Categoría',
+    colors: COLORS_INGRESOS,
+    navPath: '/finanzas/ingresos',
+    tooltipLabel: 'ingresos',
+    summaryLabel: 'ingresos',
+  },
+};
+
 /**
- * Componente de gráfico de barras para distribución de ingresos por categoría
+ * Generic distribution chart component for gastos and ingresos
  */
-export function GraficoDistribucionIngresos({ data, loading = false, filtrosActivos }: GraficoDistribucionIngresosProps) {
+export function DistributionChart({ data, loading = false, filtrosActivos, type }: DistributionChartProps) {
   const navigate = useNavigate();
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  // Colores verdes para las categorías de ingresos
-  const COLORS = [
-    '#10B981', // Verde esmeralda
-    '#22C55E', // Verde
-    '#84CC16', // Verde lima
-    '#34D399', // Verde menta
-    '#059669', // Verde oscuro
-    '#16A34A', // Verde medio
-    '#65A30D', // Verde oliva
-    '#4ADE80', // Verde claro
-    '#86EFAC', // Verde pastel
-    '#047857', // Verde bosque
-    '#15803D', // Verde pino
-    '#3F6212', // Verde musgo
-    '#6EE7B7', // Verde agua
-    '#14532D', // Verde profundo
-    '#A7F3D0', // Verde menta claro
-  ];
+  const config = CONFIG[type];
 
   if (loading) {
     return (
@@ -50,7 +66,7 @@ export function GraficoDistribucionIngresos({ data, loading = false, filtrosActi
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          Distribución de Ingresos por Categoría
+          {config.title}
         </h3>
         <div className="h-64 flex items-center justify-center text-gray-500">
           <div className="text-center">
@@ -64,15 +80,15 @@ export function GraficoDistribucionIngresos({ data, loading = false, filtrosActi
     );
   }
 
-  // Ordenar datos de mayor a menor y asignar colores
+  // Sort data and assign colors
   const chartData = [...data]
     .sort((a, b) => b.valor - a.valor)
     .map((item, index) => ({
       ...item,
-      fill: COLORS[index % COLORS.length]
+      fill: config.colors[index % config.colors.length]
     }));
 
-  // Tooltip personalizado
+  // Custom tooltip
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
@@ -86,7 +102,7 @@ export function GraficoDistribucionIngresos({ data, loading = false, filtrosActi
             Porcentaje: <span className="font-semibold">{data.porcentaje}%</span>
           </p>
           <p className="text-xs text-gray-500 mt-1 italic">
-            Click para ver ingresos de esta categoría
+            Click para ver {config.tooltipLabel} de esta categoría
           </p>
         </div>
       );
@@ -94,10 +110,10 @@ export function GraficoDistribucionIngresos({ data, loading = false, filtrosActi
     return null;
   };
 
-  // Navegar a ingresos con todos los filtros activos + categoría
+  // Navigate with filters
   const handleBarClick = (data: any) => {
     if (data && data.categoria_id) {
-      navigate('/finanzas/ingresos', {
+      navigate(config.navPath, {
         state: {
           categoria: data.categoria_id,
           periodo: filtrosActivos?.periodo,
@@ -113,7 +129,7 @@ export function GraficoDistribucionIngresos({ data, loading = false, filtrosActi
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">
       <h3 className="text-lg font-semibold text-gray-900 mb-6">
-        Distribución de Ingresos por Categoría
+        {config.title}
       </h3>
 
       <div className="h-96">
@@ -121,12 +137,7 @@ export function GraficoDistribucionIngresos({ data, loading = false, filtrosActi
           <BarChart
             data={chartData}
             layout="vertical"
-            margin={{
-              top: 5,
-              right: 30,
-              left: 20,
-              bottom: 5,
-            }}
+            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
             <XAxis
@@ -159,7 +170,7 @@ export function GraficoDistribucionIngresos({ data, loading = false, filtrosActi
         </ResponsiveContainer>
       </div>
 
-      {/* Resumen */}
+      {/* Summary */}
       <div className="mt-6 pt-4 border-t border-gray-200">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           <div className="text-center">
@@ -177,11 +188,20 @@ export function GraficoDistribucionIngresos({ data, loading = false, filtrosActi
               {chartData.length}
             </p>
             <p className="text-sm text-gray-500">
-              Categorías con ingresos
+              Categorías con {config.summaryLabel}
             </p>
           </div>
         </div>
       </div>
     </div>
   );
+}
+
+// Backward-compatible exports
+export function GraficoDistribucion(props: Omit<DistributionChartProps, 'type'>) {
+  return <DistributionChart {...props} type="gastos" />;
+}
+
+export function GraficoDistribucionIngresos(props: Omit<DistributionChartProps, 'type'>) {
+  return <DistributionChart {...props} type="ingresos" />;
 }

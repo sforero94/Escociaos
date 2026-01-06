@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { X, Package, Search, AlertCircle, CheckCircle } from 'lucide-react';
+import { Package, Search, AlertCircle, CheckCircle } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { StandardDialog } from '../ui/standard-dialog';
 
 interface Product {
   id: number;
@@ -170,36 +171,62 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
     onClose();
   };
 
-  if (!isOpen) return null;
+  const footerButtons = (
+    <>
+      <Button
+        type="button"
+        onClick={handleClose}
+        variant="outline"
+        className="flex-1 border-gray-300 hover:bg-gray-50"
+        disabled={loading}
+      >
+        Cancelar
+      </Button>
+      <Button
+        type="submit"
+        form="movimiento-form"
+        className="flex-1 bg-[#73991C] hover:bg-[#5f7d17] text-white"
+        disabled={loading || !selectedProduct || !cantidad}
+      >
+        {loading ? (
+          <>
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+            Registrando...
+          </>
+        ) : (
+          <>
+            <Package className="w-4 h-4 mr-2" />
+            Registrar Movimiento
+          </>
+        )}
+      </Button>
+    </>
+  );
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="sticky top-0 bg-gradient-to-r from-[#73991C] to-[#5f7d17] text-white p-6 rounded-t-2xl flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Package className="w-6 h-6" />
-            <h2 className="text-2xl">Registrar Movimiento Manual</h2>
-          </div>
-          <button
-            onClick={handleClose}
-            className="text-white/80 hover:text-white transition-colors"
-            disabled={loading}
-          >
-            <X className="w-6 h-6" />
-          </button>
+    <StandardDialog
+      open={isOpen}
+      onOpenChange={(open) => !open && handleClose()}
+      title={
+        <span className="flex items-center gap-2">
+          <Package className="w-5 h-5" />
+          Registrar Movimiento Manual
+        </span>
+      }
+      description="Complete la información del movimiento de inventario"
+      size="md"
+      footer={footerButtons}
+    >
+      {/* Success Message */}
+      {success && (
+        <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3">
+          <CheckCircle className="w-5 h-5 text-green-600" />
+          <p className="text-green-800">Movimiento registrado exitosamente</p>
         </div>
+      )}
 
-        {/* Success Message */}
-        {success && (
-          <div className="m-6 p-4 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3">
-            <CheckCircle className="w-5 h-5 text-green-600" />
-            <p className="text-green-800">Movimiento registrado exitosamente</p>
-          </div>
-        )}
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+      {/* Form */}
+      <form id="movimiento-form" onSubmit={handleSubmit} className="space-y-6">
           {/* Buscador de Producto */}
           <div className="relative">
             <label className="block text-sm text-gray-700 mb-2">
@@ -392,38 +419,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
               <p className="text-red-800 text-sm">{error}</p>
             </div>
           )}
-
-          {/* Actions */}
-          <div className="flex gap-3 pt-4 border-t border-gray-200">
-            <Button
-              type="button"
-              onClick={handleClose}
-              variant="outline"
-              className="flex-1 rounded-xl border-gray-300 hover:bg-gray-50"
-              disabled={loading}
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              className="flex-1 bg-[#73991C] hover:bg-[#5f7d17] text-white rounded-xl"
-              disabled={loading || !selectedProduct || !cantidad}
-            >
-              {loading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                  Registrando...
-                </>
-              ) : (
-                <>
-                  <Package className="w-4 h-4 mr-2" />
-                  Registrar Movimiento
-                </>
-              )}
-            </Button>
-          </div>
         </form>
-      </div>
-    </div>
+    </StandardDialog>
   );
 }

@@ -158,7 +158,10 @@ export interface Aplicacion {
   // Estado y responsable
   estado: EstadoAplicacion; // ✅ Campo de BD
   agronomo_responsable?: string; // ✅ Campo de BD
-  
+
+  // Integración con labores
+  tarea_id?: string; // ✅ NUEVO: Linked tarea UUID (auto-created labor task)
+
   // Costos
   jornales_utilizados?: number; // ✅ Campo de BD
   valor_jornal?: number; // ✅ Campo de BD
@@ -253,6 +256,19 @@ export interface MovimientoDiarioProducto {
   producto_categoria: string;
   cantidad_utilizada: number;
   unidad: 'cc' | 'L' | 'g' | 'Kg'; // Siempre se guarda en unidades base (cc/L/g/Kg)
+  created_at?: string;
+}
+
+export interface MovimientoDiarioTrabajador {
+  id?: string;
+  movimiento_diario_id: string;
+  empleado_id?: string | null;      // NULL if contractor
+  contratista_id?: string | null;   // NULL if employee
+  lote_id: string;
+  fraccion_jornal: number;
+  observaciones?: string;
+  valor_jornal_trabajador?: number; // Worker daily wage (salary or tarifa_jornal)
+  costo_jornal?: number;            // Calculated cost for this fraction
   created_at?: string;
 }
 

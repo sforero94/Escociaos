@@ -14,12 +14,11 @@ import {
 import { getSupabase } from '../../utils/supabase/client';
 import { useSafeMode } from '../../contexts/SafeModeContext';
 import { generarPDFListaCompras } from '../../utils/generarPDFListaCompras';
-import { 
-  formatearMoneda, 
-  formatearNumero, 
-  calcularTotalesProductos, 
-  generarListaCompras 
+import {
+  calcularTotalesGlobalesProductos,
+  generarListaCompras
 } from '../../utils/calculosAplicaciones';
+import { formatearMoneda, formatearNumero } from '../../utils/format';
 import type {
   ConfiguracionAplicacion,
   Mezcla,
@@ -77,8 +76,8 @@ export function PasoListaCompras({
   const generarLista = async () => {
     setCargando(true);
     try {
-      // Obtener IDs de productos necesarios
-      const productosNecesarios = calcularTotalesProductos(calculos, mezclas);
+      // Obtener IDs de productos necesarios (usando totales desde mezclas)
+      const productosNecesarios = calcularTotalesGlobalesProductos(mezclas);
       const productosIds = productosNecesarios.map((p) => p.producto_id);
 
       // Cargar inventario actual de esos productos
