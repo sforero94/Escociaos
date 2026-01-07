@@ -676,7 +676,10 @@ export function CalculadoraAplicaciones() {
       // =============================================================
       // PASO 3: INSERTAR MEZCLAS Y PRODUCTOS
       // =============================================================
-      
+
+      // Map to store lote_id → mezcla_id relationship
+      const loteToMezclaMap: Record<string, string> = {};
+
       for (const mezcla of state.mezclas) {
         // Insertar mezcla
         const mezclaData = {
@@ -696,13 +699,19 @@ export function CalculadoraAplicaciones() {
           throw errorMezcla;
         }
 
+        // Store lote → mezcla mapping for each assigned lote
+        if (mezcla.lotes_asignados) {
+          mezcla.lotes_asignados.forEach((loteId: string) => {
+            loteToMezclaMap[loteId] = mezclaInsertada.id;
+          });
+        }
 
         // Insertar productos de la mezcla
         const productosData = mezcla.productos.map((producto) => ({
           mezcla_id: mezclaInsertada.id,
           producto_id: producto.producto_id,
-          dosis_por_caneca: state.configuracion?.tipo === 'fumigacion' 
-            ? producto.dosis_por_caneca 
+          dosis_por_caneca: state.configuracion?.tipo === 'fumigacion'
+            ? producto.dosis_por_caneca
             : null,
           unidad_dosis: state.configuracion?.tipo === 'fumigacion'
             ? producto.unidad_dosis
@@ -752,6 +761,8 @@ export function CalculadoraAplicaciones() {
           lote_nombre: calculo.lote_nombre,
           area_hectareas: loteConfig?.area_hectareas || null,
           total_arboles: calculo.total_arboles,
+          // Link to mezcla
+          mezcla_id: loteToMezclaMap[calculo.lote_id] || null,
           // Fumigación y Drench
           litros_mezcla: ((state.configuracion as any)?.tipo === 'fumigacion' || (state.configuracion as any)?.tipo === 'drench')
             ? calculo.litros_mezcla

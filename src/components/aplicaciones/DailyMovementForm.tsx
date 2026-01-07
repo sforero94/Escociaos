@@ -10,7 +10,8 @@ import type {
   MovimientoDiarioProducto,
   LoteSeleccionado,
   ProductoEnMezcla,
-  UnidadMedida // 🚨 NUEVO: Importar el tipo ENUM
+  UnidadMedida, // 🚨 NUEVO: Importar el tipo ENUM
+  FraccionJornal
 } from '../../types/aplicaciones';
 import type {
   Empleado,
@@ -68,6 +69,8 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
   const [productosDisponibles, setProductosDisponibles] = useState<any[]>([]);
   const [canecasPorLote, setCanecasPorLote] = useState<Record<string, number>>({});
   const [bultosPorLote, setBultosPorLote] = useState<Record<string, number>>({});
+  const [loteToMezclaMap, setLoteToMezclaMap] = useState<Record<string, string>>({});
+  const [productosPorMezcla, setProductosPorMezcla] = useState<Record<string, any[]>>({});
 
   // Worker tracking (employees + contractors)
   const [empleadosDisponibles, setEmpleadosDisponibles] = useState<Empleado[]>([]);
@@ -76,12 +79,31 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
   const [workMatrix, setWorkMatrix] = useState<WorkMatrix>({});
   const [observacionesMatrix, setObservacionesMatrix] = useState<ObservacionesMatrix>({});
 
+  // 🔧 Productos filtrados según el lote seleccionado
+  // Si hay un lote seleccionado, mostrar solo productos de su mezcla
+  // Si no hay lote seleccionado, mostrar todos
+  const productosParaMostrar = (() => {
+    if (!loteId || !loteToMezclaMap[loteId]) {
+      return productosDisponibles; // Mostrar todos si no hay lote seleccionado
+    }
+
+    const mezclaId = loteToMezclaMap[loteId];
+    return productosPorMezcla[mezclaId] || [];
+  })();
+
   // Cargar datos al montar
   useEffect(() => {
     cargarDatosAplicacion();
     cargarUsuarioActual();
     cargarTrabajadores();
   }, [aplicacion.id]);
+
+  // 🔧 Precargar productos cuando se selecciona un lote
+  useEffect(() => {
+    if (loteId && productosParaMostrar.length > 0) {
+      precargarProductos(productosParaMostrar);
+    }
+  }, [loteId, productosParaMostrar]);
 
   const cargarDatosAplicacion = async () => {
     try {
@@ -108,13 +130,26 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
 
       setLotes(lotesFormateados);
 
-      // Cargar cálculos por lote según tipo de aplicación
+      // Cargar cálculos por lote según tipo de aplicación (incluyendo mezcla_id)
       const { data: calculosData, error: errorCalculos } = await supabase
         .from('aplicaciones_calculos')
-        .select('lote_id, numero_canecas, numero_bultos')
+        .select('lote_id, numero_canecas, numero_bultos, mezcla_id')
         .eq('aplicacion_id', aplicacion.id);
 
+      // Map lote_id → mezcla_id
+      const loteToMezclaMapTemp: Record<string, string> = {};
+
       if (!errorCalculos && calculosData) {
+        // Build lote → mezcla mapping (with type assertion)
+        (calculosData as any[]).forEach((calc: any) => {
+          if (calc.mezcla_id) {
+            loteToMezclaMapTemp[calc.lote_id] = calc.mezcla_id;
+          }
+        });
+
+        // Store in state
+        setLoteToMezclaMap(loteToMezclaMapTemp);
+
         if (aplicacion.tipo_aplicacion === 'Fumigación' || aplicacion.tipo_aplicacion === 'Drench') {
           // Cargar canecas planeadas por lote
           const canecasMap: Record<string, number> = {};
@@ -145,11 +180,12 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       if (errorMezclas) throw errorMezclas;
 
       if (mezclasData && mezclasData.length > 0) {
-        const mezclaIds = mezclasData.map(m => m.id);
+        const mezclaIds = (mezclasData as any[]).map((m: any) => m.id);
 
         const { data: productosData, error: errorProductos } = await supabase
           .from('aplicaciones_productos')
           .select(`
+            mezcla_id,
             producto_id,
             producto_nombre,
             producto_categoria,
@@ -160,25 +196,41 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
 
         if (errorProductos) throw errorProductos;
 
-        // Eliminar duplicados por producto_id
+        // Organizar productos por mezcla
+        const productosPorMezclaTemp: Record<string, any[]> = {};
+        (productosData || []).forEach((p: any) => {
+          if (!productosPorMezclaTemp[p.mezcla_id]) {
+            productosPorMezclaTemp[p.mezcla_id] = [];
+          }
+          productosPorMezclaTemp[p.mezcla_id].push({
+            producto_id: p.producto_id,
+            producto_nombre: p.producto_nombre,
+            producto_categoria: p.producto_categoria,
+            producto_unidad: p.producto_unidad,
+            cantidad_total_necesaria: p.cantidad_total_necesaria,
+            mezcla_id: p.mezcla_id
+          });
+        });
+
+        setProductosPorMezcla(productosPorMezclaTemp);
+
+        // Para compatibilidad, mantener la lista completa de productos disponibles
         const productosUnicos = new Map<string, any>();
-        (productosData || []).forEach(p => {
+        (productosData || []).forEach((p: any) => {
           if (!productosUnicos.has(p.producto_id)) {
             productosUnicos.set(p.producto_id, {
               producto_id: p.producto_id,
               producto_nombre: p.producto_nombre,
               producto_categoria: p.producto_categoria,
               producto_unidad: p.producto_unidad,
-              cantidad_total_necesaria: p.cantidad_total_necesaria
+              cantidad_total_necesaria: p.cantidad_total_necesaria,
+              mezcla_id: p.mezcla_id
             });
           }
         });
 
         const productosArray = Array.from(productosUnicos.values());
         setProductosDisponibles(productosArray);
-
-        // 🆕 PRECARGAR TODOS LOS PRODUCTOS AUTOMÁTICAMENTE
-        await precargarProductos(productosArray);
       }
     } catch (err: any) {
       setError('Error al cargar los datos de la aplicación');
@@ -372,23 +424,6 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       }
     }
 
-    // Validar que la suma de productos no exceda el total
-    const totalProductos = productosAgregados.reduce((sum, p) => sum + parseFloat(p.cantidad_utilizada), 0);
-    
-    if (aplicacion.tipo_aplicacion === 'Fertilización') {
-      const totalBultos = parseFloat(numeroBultos);
-      if (totalProductos > totalBultos) {
-        setError(`La suma de bultos por producto (${totalProductos}) excede el total de bultos (${totalBultos})`);
-        return false;
-      }
-    } else if (aplicacion.tipo_aplicacion === 'Fumigación' || aplicacion.tipo_aplicacion === 'Drench') {
-      const totalCanecas = parseFloat(numeroCanecas);
-      if (totalProductos > totalCanecas) {
-        setError(`La suma de canecas por producto (${totalProductos}) excede el total de canecas (${totalCanecas})`);
-        return false;
-      }
-    }
-
     return true;
   };
 
@@ -518,7 +553,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
               empleado_id: trabajador.type === 'empleado' ? trabajador.data.id : null,
               contratista_id: trabajador.type === 'contratista' ? trabajador.data.id : null,
               lote_id: loteId,
-              fraccion_jornal: parseFloat(fraccion),
+              fraccion_jornal: fraccion as FraccionJornal,
               observaciones: observacionesMatrix[trabajadorId]?.[loteId] || null,
               valor_jornal_trabajador: valorJornal,
               costo_jornal: costoJornal,
@@ -805,7 +840,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
             <Package className="w-4 h-4 text-[#73991C]" />
             {aplicacion.tipo_aplicacion === 'Fertilización'
               ? 'Bultos Usados de cada Producto'
-              : 'Canecas Aplicadas de cada Producto'
+              : 'Cantidad aplicada de cada producto'
             }
             <span className="text-red-500">*</span>
           </h4>

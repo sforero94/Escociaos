@@ -259,13 +259,15 @@ export interface MovimientoDiarioProducto {
   created_at?: string;
 }
 
+export type FraccionJornal = '0.0' | '0.25' | '0.5' | '0.75' | '1.0';
+
 export interface MovimientoDiarioTrabajador {
   id?: string;
   movimiento_diario_id: string;
   empleado_id?: string | null;      // NULL if contractor
   contratista_id?: string | null;   // NULL if employee
   lote_id: string;
-  fraccion_jornal: number;
+  fraccion_jornal: FraccionJornal;  // ENUM type in PostgreSQL
   observaciones?: string;
   valor_jornal_trabajador?: number; // Worker daily wage (salary or tarifa_jornal)
   costo_jornal?: number;            // Calculated cost for this fraction
