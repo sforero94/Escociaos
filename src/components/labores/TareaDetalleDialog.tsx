@@ -40,7 +40,7 @@ import {
 } from 'lucide-react';
 
 // Import types from main component
-import type { Tarea, RegistroTrabajo, Empleado } from './Labores';
+import type { Tarea, RegistroTrabajo, Empleado, Lote } from './Labores';
 
 // Import cost calculation utilities
 import { calculateTaskEstimatedCost } from '../../utils/laborCosts';
@@ -58,6 +58,7 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
 }) => {
   const [registrosTrabajo, setRegistrosTrabajo] = useState<RegistroTrabajo[]>([]);
   const [empleados, setEmpleados] = useState<Empleado[]>([]);
+  const [lotes, setLotes] = useState<Lote[]>([]);
   const [loading, setLoading] = useState(false);
 
   // Load work records and employees when dialog opens
@@ -89,6 +90,10 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
             nombre,
             tipo_contrato,
             tarifa_jornal
+          ),
+          lotes:lote_id (
+            id,
+            nombre
           )
         `)
         .eq('tarea_id', tarea.id)
@@ -106,6 +111,19 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
 
       if (errorEmpleados) throw errorEmpleados;
       setEmpleados(empleadosData || []);
+
+      // Load lotes assigned to this task from lote_ids array
+      if (tarea.lote_ids && tarea.lote_ids.length > 0) {
+        const { data: lotesData, error: errorLotes } = await getSupabase()
+          .from('lotes')
+          .select('id, nombre, area_hectareas')
+          .in('id', tarea.lote_ids);
+
+        if (errorLotes) throw errorLotes;
+        setLotes(lotesData || []);
+      } else {
+        setLotes([]);
+      }
 
     } catch (error: any) {
     } finally {
@@ -202,7 +220,7 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[90vw] sm:max-w-none h-[96vh] p-0 gap-0 overflow-hidden flex flex-col bg-white">
+      <DialogContent className="h-[96vh] p-0 gap-0 overflow-hidden flex flex-col bg-white" style={{ width: '90vw', maxWidth: '90vw' }}>
         {/* Header */}
         <DialogHeader className="px-6 md:px-8 py-5 border-b bg-gray-50/80 flex-shrink-0 backdrop-blur-sm">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 pr-8">
@@ -319,11 +337,11 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
                   </div>
                   <div className="space-y-1 min-w-0">
                     <p className="text-sm font-medium text-gray-500">
-                      {tarea.lotes && tarea.lotes.length > 1 ? 'Lotes' : 'Lote'}
+                      {lotes && lotes.length > 1 ? 'Lotes' : 'Lote'}
                     </p>
-                    {tarea.lotes && tarea.lotes.length > 0 ? (
+                    {lotes && lotes.length > 0 ? (
                       <div className="flex flex-wrap gap-1.5">
-                        {tarea.lotes.map((lote, idx) => (
+                        {lotes.map((lote: Lote, idx: number) => (
                           <Badge key={idx} variant="secondary" className="text-xs">
                             {lote.nombre}
                           </Badge>
@@ -409,7 +427,7 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
                 </Badge>
               </div>
 
-              <div className="flex-1 overflow-hidden max-h-[400px]">
+              <div className="flex-1 overflow-y-auto max-h-[400px]">
                 {registrosTrabajo.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-gray-400 p-8">
                     <div className="p-4 bg-gray-50 rounded-full mb-3">
@@ -419,7 +437,7 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
                     <p className="text-xs mt-1">Los registros aparecerán aquí cuando se reporten labores</p>
                   </div>
                 ) : (
-                  <div className="overflow-y-auto px-6 pb-4">
+                  <div className="px-6 pb-4">
                     <Accordion type="multiple" className="w-full">
                       {registrosPorDia.map((diaData, idx) => (
                         <AccordionItem key={diaData.fecha} value={diaData.fecha}>
@@ -452,7 +470,8 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
                             <Table>
                               <TableHeader>
                                 <TableRow className="hover:bg-transparent bg-gray-50/30">
-                                  <TableHead className="min-w-[250px]">Empleado</TableHead>
+                                  <TableHead className="min-w-[200px]">Empleado</TableHead>
+                                  <TableHead className="w-[140px]">Lote</TableHead>
                                   <TableHead className="text-right w-[100px]">Jornal</TableHead>
                                   <TableHead className="text-right w-[120px]">Costo</TableHead>
                                 </TableRow>
@@ -478,6 +497,11 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
                                           </span>
                                         )}
                                       </div>
+                                    </TableCell>
+                                    <TableCell>
+                                      <span className="text-sm text-gray-700">
+                                        {(registro as any).lotes?.nombre || '-'}
+                                      </span>
                                     </TableCell>
                                     <TableCell className="text-right">
                                       <Badge variant="outline" className="font-mono font-normal">
