@@ -23,9 +23,12 @@ import { formatearFechaCorta } from '../../utils/fechas';
 // ============================================
 
 interface TendenciaData {
-  fecha: string;
-  semana: number;
-  [key: string]: number | string; // Permite propiedades dinámicas para cada plaga
+  fecha?: string;                // LEGACY: Mantener para compatibilidad
+  semana?: number;               // LEGACY: Mantener para compatibilidad
+  ocurrencia?: string;           // NUEVO: "Ocurrencia 1", "Ocurrencia 2", etc.
+  fechaInicio?: string;          // NUEVO: Fecha más temprana de la ocurrencia
+  fechaFin?: string;             // NUEVO: Fecha más tardía de la ocurrencia
+  [key: string]: number | string | undefined; // Permite propiedades dinámicas para cada plaga
 }
 
 interface Plaga {
@@ -79,13 +82,16 @@ export function GraficoTendencias({
     fin: fechaFin || new Date()
   });
 
+  // NUEVO: Estado para modo de visualización por ocurrencias
+  const [modoVisualizacion, setModoVisualizacion] = useState<'ultimo' | 'ultimos3' | 'ultimos6'>('ultimo');
+
   // ============================================
   // CARGAR DATOS
   // ============================================
 
   useEffect(() => {
     cargarTendencias();
-  }, [loteId, subloteId, plagaId, rangoFechas]);
+  }, [loteId, subloteId, plagaId, rangoFechas, modoVisualizacion]);
 
   const cargarTendencias = async () => {
     try {
@@ -148,46 +154,68 @@ export function GraficoTendencias({
   };
 
   // ============================================
-  // PROCESAR DATOS PARA RECHARTS
+  // PROCESAR DATOS PARA RECHARTS - POR OCURRENCIAS
   // ============================================
 
   const procesarDatos = (monitoreos: any[]) => {
-    // Agrupar por fecha y plaga
-    const datosPorFecha: { [fecha: string]: { [plaga: string]: number[] } } = {};
     const plagasUnicas = new Set<string>();
 
-    monitoreos.forEach((m) => {
-      const fecha = m.fecha_monitoreo;
-      const plagaNombre = m.plagas_enfermedades_catalogo.nombre;
-      const incidencia = parseFloat(m.incidencia) || 0;
-
-      plagasUnicas.add(plagaNombre);
-
-      if (!datosPorFecha[fecha]) {
-        datosPorFecha[fecha] = {};
-      }
-      if (!datosPorFecha[fecha][plagaNombre]) {
-        datosPorFecha[fecha][plagaNombre] = [];
-      }
-      datosPorFecha[fecha][plagaNombre].push(incidencia);
+    // PASO 1: Identificar todas las fechas únicas de monitoreo
+    const fechasUnicasSet = new Set<string>();
+    monitoreos.forEach(m => {
+      fechasUnicasSet.add(m.fecha_monitoreo);
+      plagasUnicas.add(m.plagas_enfermedades_catalogo.nombre);
     });
 
-    // Calcular promedios y formatear para Recharts
-    const datosFormateados: TendenciaData[] = Object.entries(datosPorFecha)
-      .map(([fecha, plagas]) => {
-        const punto: TendenciaData = {
-          fecha: formatearFechaCorta(fecha),
-          semana: obtenerNumeroSemana(new Date(fecha)),
-        };
+    // PASO 2: Ordenar fechas cronológicamente (más antigua a más reciente)
+    const fechasOrdenadas = Array.from(fechasUnicasSet).sort((a, b) =>
+      new Date(a).getTime() - new Date(b).getTime()
+    );
 
-        Object.entries(plagas).forEach(([plaga, incidencias]) => {
-          const promedio = incidencias.reduce((a, b) => a + b, 0) / incidencias.length;
-          punto[plaga] = Math.round(promedio * 10) / 10; // Redondear a 1 decimal
-        });
+    // PASO 3: Tomar las últimas N fechas según el modo
+    const numOcurrencias = modoVisualizacion === 'ultimo' ? 1 :
+                          modoVisualizacion === 'ultimos3' ? 3 : 6;
+    const fechasSeleccionadas = fechasOrdenadas.slice(-numOcurrencias);
 
-        return punto;
-      })
-      .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+    // PASO 4: Para cada fecha (ocurrencia), agrupar y calcular promedios
+    const datosFormateados: TendenciaData[] = fechasSeleccionadas.map((fecha, index) => {
+      // Filtrar monitoreos de esta fecha
+      const monitoreosDeEstaFecha = monitoreos.filter(m => m.fecha_monitoreo === fecha);
+
+      // Agrupar por plaga y calcular promedio
+      const promediosPorPlaga: { [plaga: string]: number } = {};
+
+      monitoreosDeEstaFecha.forEach(m => {
+        const plagaNombre = m.plagas_enfermedades_catalogo.nombre;
+        const incidencia = parseFloat(m.incidencia) || 0;
+
+        if (!promediosPorPlaga[plagaNombre]) {
+          promediosPorPlaga[plagaNombre] = 0;
+        }
+        promediosPorPlaga[plagaNombre] += incidencia;
+      });
+
+      // Calcular promedios finales
+      const conteosPorPlaga: { [plaga: string]: number } = {};
+      monitoreosDeEstaFecha.forEach(m => {
+        const plagaNombre = m.plagas_enfermedades_catalogo.nombre;
+        conteosPorPlaga[plagaNombre] = (conteosPorPlaga[plagaNombre] || 0) + 1;
+      });
+
+      Object.keys(promediosPorPlaga).forEach(plaga => {
+        promediosPorPlaga[plaga] = Math.round((promediosPorPlaga[plaga] / conteosPorPlaga[plaga]) * 10) / 10;
+      });
+
+      // Crear punto de datos
+      const punto: TendenciaData = {
+        ocurrencia: `Ocurrencia ${index + 1}`,
+        fechaInicio: fecha,
+        fechaFin: fecha, // En este caso, es la misma fecha
+        ...promediosPorPlaga
+      };
+
+      return punto;
+    });
 
     // Configurar plagas visibles con colores
     const plagasConColor: Plaga[] = Array.from(plagasUnicas).map((nombre, index) => ({
@@ -236,6 +264,30 @@ export function GraficoTendencias({
   };
 
   // ============================================
+  // CUSTOM AXIS TICK - Mostrar ocurrencia + fecha
+  // ============================================
+
+  const CustomAxisTick = ({ x, y, payload }: any) => {
+    const punto = tendencias.find(t => t.ocurrencia === payload.value);
+    if (!punto) return null;
+
+    const fechaTexto = punto.fechaInicio === punto.fechaFin
+      ? formatearFechaCorta(punto.fechaInicio || '')
+      : `${formatearFechaCorta(punto.fechaInicio || '')} - ${formatearFechaCorta(punto.fechaFin || '')}`;
+
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text x={0} y={0} dy={16} textAnchor="middle" className="text-xs fill-[#4D240F]">
+          {payload.value}
+        </text>
+        <text x={0} y={16} dy={16} textAnchor="middle" className="text-[10px] fill-gray-500">
+          {fechaTexto}
+        </text>
+      </g>
+    );
+  };
+
+  // ============================================
   // CUSTOM TOOLTIP
   // ============================================
 
@@ -281,50 +333,94 @@ export function GraficoTendencias({
     );
   }
 
+  // Calcular rango de fechas para subtítulo
+  const fechaMasAntigua = tendencias.length > 0 ? tendencias[0].fechaInicio : null;
+  const fechaMasReciente = tendencias.length > 0 ? tendencias[tendencias.length - 1].fechaFin : null;
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       {/* HEADER */}
-      <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-[#73991C]/10 rounded-lg flex items-center justify-center">
-            <TrendingUp className="w-5 h-5 text-[#73991C]" />
+      <div className="px-6 py-4 border-b border-gray-200">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-[#73991C]/10 rounded-lg flex items-center justify-center">
+              <TrendingUp className="w-5 h-5 text-[#73991C]" />
+            </div>
+            <div>
+              <h3 className="text-[#172E08] font-semibold">
+                Tendencias de Incidencia
+              </h3>
+              {fechaMasAntigua && fechaMasReciente && (
+                <p className="text-[#4D240F]/60 text-sm">
+                  Datos de: {formatearFechaCorta(fechaMasAntigua)} a: {formatearFechaCorta(fechaMasReciente)}
+                </p>
+              )}
+            </div>
           </div>
-          <div>
-            <h3 className="text-[#172E08]">
-              Tendencias de Incidencia
-            </h3>
-            <p className="text-[#4D240F]/60">
-              {formatearFechaCorta(rangoFechas.inicio ? rangoFechas.inicio.toISOString().split('T')[0] : '1900-01-01')} - {formatearFechaCorta(rangoFechas.fin.toISOString().split('T')[0])}
-            </p>
-          </div>
+
+          <button
+            onClick={exportarCSV}
+            className="flex items-center gap-2 px-4 py-2 bg-[#73991C] text-white rounded-lg hover:bg-[#5C7A16] transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            <span className="hidden sm:inline">Exportar CSV</span>
+          </button>
         </div>
-        
-        <button
-          onClick={exportarCSV}
-          className="flex items-center gap-2 px-4 py-2 bg-[#73991C] text-white rounded-lg hover:bg-[#5C7A16] transition-colors"
-        >
-          <Download className="w-4 h-4" />
-          <span className="hidden sm:inline">Exportar CSV</span>
-        </button>
+
+        {/* SELECTOR DE MODO DE VISUALIZACIÓN */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setModoVisualizacion('ultimo')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              modoVisualizacion === 'ultimo'
+                ? 'bg-[#73991C] text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Último monitoreo
+          </button>
+          <button
+            onClick={() => setModoVisualizacion('ultimos3')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              modoVisualizacion === 'ultimos3'
+                ? 'bg-[#73991C] text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Últimos 3 monitoreos
+          </button>
+          <button
+            onClick={() => setModoVisualizacion('ultimos6')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              modoVisualizacion === 'ultimos6'
+                ? 'bg-[#73991C] text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Últimos 6 monitoreos
+          </button>
+        </div>
       </div>
 
       {/* GRÁFICO */}
       <div className="p-6">
-        <ResponsiveContainer width="100%" height={400}>
-          <LineChart data={tendencias}>
+        <ResponsiveContainer width="100%" height={450}>
+          <LineChart data={tendencias} margin={{ bottom: 40 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#E7EDDD" />
-            <XAxis 
-              dataKey="fecha" 
+            <XAxis
+              dataKey="ocurrencia"
               stroke="#4D240F"
               style={{ fontSize: '12px' }}
+              tick={<CustomAxisTick />}
+              height={80}
             />
-            <YAxis 
+            <YAxis
               stroke="#4D240F"
               style={{ fontSize: '12px' }}
               label={{ value: 'Incidencia (%)', angle: -90, position: 'insideLeft' }}
             />
             <Tooltip content={<CustomTooltip />} />
-            <Legend 
+            <Legend
               wrapperStyle={{ paddingTop: '20px' }}
               iconType="line"
             />

@@ -137,6 +137,11 @@ export interface CeldaMapaCalor {
   incidenciaPromedio: number;
   numeroMonitoreos: number;
   monitoreos: MonitoreoConRelaciones[];
+  // NUEVO: Para modo múltiples ocurrencias
+  ocurrencias?: Array<{
+    fecha: string;
+    incidencia: number;
+  }>;
 }
 
 export interface FilaMapaCalor {

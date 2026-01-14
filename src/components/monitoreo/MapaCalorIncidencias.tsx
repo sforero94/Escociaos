@@ -27,6 +27,7 @@ import { formatearFecha } from '../../utils/fechas';
 interface MapaCalorIncidenciasProps {
   monitoreos: MonitoreoConRelaciones[];
   rangoSeleccionado: 'semana' | 'mes' | 'trimestre' | 'todo';
+  modoVisualizacion: 'ultimo' | 'ultimos3' | 'ultimos6';
 }
 
 // ============================================
@@ -124,12 +125,101 @@ function Celda({ celda, onClick }: CeldaProps) {
 }
 
 // ============================================
+// COMPONENTE: CELDA MÚLTIPLE (para mostrar varias ocurrencias)
+// ============================================
+
+interface CeldaMultipleProps {
+  celda: CeldaMapaCalor | null;
+  numeroOcurrencias: 1 | 3 | 6;
+  onClick: () => void;
+}
+
+function CeldaMultiple({ celda, numeroOcurrencias, onClick }: CeldaMultipleProps) {
+  if (!celda) {
+    // Celda vacía (sin datos)
+    return (
+      <td className="p-2 border border-gray-200">
+        <div className="rounded-lg p-2 min-w-[80px] h-[60px] bg-gray-50 border border-gray-200" />
+      </td>
+    );
+  }
+
+  const ocurrencias = celda.ocurrencias || [];
+
+  // Completar con nulls si faltan datos (agregar al inicio = menos reciente)
+  const ocurrenciasCompletas: Array<{ fecha: string; incidencia: number } | null> = [...ocurrencias];
+  while (ocurrenciasCompletas.length < numeroOcurrencias) {
+    ocurrenciasCompletas.unshift(null);
+  }
+
+  // Layout: 3 columnas
+  // Para 3 ocurrencias: 3×1 grid (1 fila, 3 columnas)
+  // Para 6 ocurrencias: 3×2 grid (2 filas, 3 columnas)
+  const gridClass = numeroOcurrencias === 3 ? 'grid-cols-3 grid-rows-1' : 'grid-cols-3 grid-rows-2';
+
+  return (
+    <td className="p-2 border border-gray-200">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={onClick}
+            className="rounded-lg p-1 min-w-[80px] h-[60px] hover:opacity-80 transition-opacity cursor-pointer border border-gray-300 w-full"
+          >
+            <div className={`grid ${gridClass} gap-0.5 h-full`}>
+              {ocurrenciasCompletas.map((ocurrencia, index) => {
+                if (!ocurrencia) {
+                  return (
+                    <div
+                      key={index}
+                      className="bg-gray-100 border border-gray-200 rounded flex items-center justify-center"
+                    >
+                      <span className="text-[8px] text-gray-400">-</span>
+                    </div>
+                  );
+                }
+
+                const colores = obtenerColorIncidencia(ocurrencia.incidencia);
+                return (
+                  <div
+                    key={index}
+                    className={`${colores.bg} ${colores.border} border rounded flex items-center justify-center`}
+                  >
+                    <span className={`text-[9px] font-semibold ${colores.text}`}>
+                      {Math.round(ocurrencia.incidencia)}%
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </button>
+        </TooltipTrigger>
+        <TooltipContent className="!bg-gray-900 !text-white p-3 rounded-lg shadow-lg max-w-xs border border-gray-700">
+          <div className="space-y-1">
+            <p className="font-bold">{celda.plagaNombre} - {celda.loteNombre}</p>
+            <p className="text-xs">
+              Mostrando {ocurrencias.length} de {numeroOcurrencias} ocurrencias
+            </p>
+            {ocurrencias.map((oc, i) => (
+              <p key={i} className="text-xs">
+                {formatearFecha(oc.fecha)}: {Math.round(oc.incidencia)}%
+              </p>
+            ))}
+            <p className="text-xs opacity-75 mt-2">Click para ver detalles</p>
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </td>
+  );
+}
+
+// ============================================
 // COMPONENTE PRINCIPAL
 // ============================================
 
 export function MapaCalorIncidencias({
   monitoreos,
-  rangoSeleccionado
+  rangoSeleccionado,
+  modoVisualizacion
 }: MapaCalorIncidenciasProps) {
   const [celdaSeleccionada, setCeldaSeleccionada] = useState<CeldaMapaCalor | null>(null);
   const [modalAbierto, setModalAbierto] = useState(false);
@@ -167,13 +257,43 @@ export function MapaCalorIncidencias({
       celda.numeroMonitoreos++;
     });
 
-    // 2. Calcular incidencia promedio para cada celda
+    // 2. Calcular incidencia promedio Y ocurrencias según modo
     mapaAgrupado.forEach(celda => {
       const sumaIncidencias = celda.monitoreos.reduce(
         (suma, m) => suma + parseFloat(String(m.incidencia)),
         0
       );
       celda.incidenciaPromedio = sumaIncidencias / celda.numeroMonitoreos;
+
+      // Calcular array de ocurrencias según el modo
+      const numOcurrencias = modoVisualizacion === 'ultimo' ? 1 :
+                            modoVisualizacion === 'ultimos3' ? 3 : 6;
+
+      // Agrupar por fecha y calcular promedio
+      const monitoreoPorFecha = new Map<string, number[]>();
+      celda.monitoreos.forEach(m => {
+        const fecha = typeof m.fecha_monitoreo === 'string'
+          ? m.fecha_monitoreo
+          : m.fecha_monitoreo.toISOString().split('T')[0];
+        if (!monitoreoPorFecha.has(fecha)) {
+          monitoreoPorFecha.set(fecha, []);
+        }
+        monitoreoPorFecha.get(fecha)!.push(parseFloat(String(m.incidencia)));
+      });
+
+      // Ordenar fechas y tomar las últimas N
+      const fechasOrdenadas = Array.from(monitoreoPorFecha.keys()).sort();
+      const fechasSeleccionadas = fechasOrdenadas.slice(-numOcurrencias);
+
+      // Crear array de ocurrencias
+      celda.ocurrencias = fechasSeleccionadas.map(fecha => {
+        const incidencias = monitoreoPorFecha.get(fecha)!;
+        const promedio = incidencias.reduce((a, b) => a + b, 0) / incidencias.length;
+        return {
+          fecha,
+          incidencia: promedio
+        };
+      });
     });
 
     // 3. Agrupar por plaga (filas)
@@ -242,7 +362,7 @@ export function MapaCalorIncidencias({
       filas: filasOrdenadas,
       columnas: columnasOrdenadas
     };
-  }, [monitoreos]);
+  }, [monitoreos, modoVisualizacion]);
 
   // ============================================
   // HANDLERS
@@ -333,10 +453,16 @@ export function MapaCalorIncidencias({
                 </th>
                 {datosMapaCalor.columnas.map(columna => {
                   const celda = fila.celdas.get(columna.loteId) || null;
+
+                  // Siempre renderizar CeldaMultiple con número de ocurrencias según el modo
+                  const numOcurrencias = modoVisualizacion === 'ultimo' ? 1 :
+                                        modoVisualizacion === 'ultimos3' ? 3 : 6;
+
                   return (
-                    <Celda
+                    <CeldaMultiple
                       key={`${fila.plagaId}-${columna.loteId}`}
                       celda={celda}
+                      numeroOcurrencias={numOcurrencias as 1 | 3 | 6}
                       onClick={() => celda && handleCeldaClick(celda)}
                     />
                   );

@@ -48,8 +48,11 @@ interface UltimoMonitoreo {
 }
 
 interface TendenciaData {
-  semana: string;
-  [plagaNombre: string]: number | string;
+  semana?: string;               // LEGACY: Mantener para compatibilidad
+  ocurrencia?: string;           // NUEVO: "Ocurrencia 1", "Ocurrencia 2", etc.
+  fechaInicio?: string;          // NUEVO: Fecha más temprana de la ocurrencia
+  fechaFin?: string;             // NUEVO: Fecha más tardía de la ocurrencia
+  [plagaNombre: string]: number | string | undefined;
 }
 
 interface Insight {
@@ -110,6 +113,7 @@ export function MonitoreoDashboardV2() {
   const [filtroPlaga, setFiltroPlaga] = useState<FiltroPlaga>('interes');
   const [plagasSeleccionadas, setPlagasSeleccionadas] = useState<string[]>([]);
   const [catalogoPlagas, setCatalogoPlagas] = useState<{ id: string; nombre: string }[]>([]);
+  const [modoVisualizacion, setModoVisualizacion] = useState<'ultimo' | 'ultimos3' | 'ultimos6'>('ultimo');
   
   // UI
   const [plagasExpandidas, setPlagasExpandidas] = useState<Set<string>>(new Set());
@@ -126,15 +130,25 @@ export function MonitoreoDashboardV2() {
   // CARGAR DATOS INICIALES
   // ============================================
 
+  // Cargar todos los datos al montar el componente
   useEffect(() => {
     cargarDatos();
+  }, []);
+
+  // Recargar insights y plagas críticas cuando cambia el período de comparación
+  useEffect(() => {
+    if (!isLoading) {
+      cargarInsights();
+      cargarPlagasCriticas();
+    }
   }, [rangoSeleccionado]);
 
+  // Recargar tendencias cuando cambian los filtros de plagas o modo de visualización
   useEffect(() => {
     if (filtroPlaga === 'todos' || filtroPlaga === 'interes' || filtroPlaga === 'cuarentenarias') {
       cargarTendencias();
     }
-  }, [filtroPlaga, plagasSeleccionadas]);
+  }, [filtroPlaga, plagasSeleccionadas, modoVisualizacion]);
 
   async function cargarDatos() {
     setIsLoading(true);
@@ -321,24 +335,9 @@ export function MonitoreoDashboardV2() {
   async function cargarTendencias() {
     try {
 
-      // Calcular fechas según período seleccionado
+      // Cargar TODOS los monitoreos disponibles (sin límite de período)
       const fechaFin = new Date();
-      let fechaInicio = new Date();
-
-      switch (rangoSeleccionado) {
-        case 'semana':
-          fechaInicio.setDate(fechaFin.getDate() - 7);
-          break;
-        case 'mes':
-          fechaInicio.setDate(fechaFin.getDate() - 30);
-          break;
-        case 'trimestre':
-          fechaInicio.setDate(fechaFin.getDate() - 90);
-          break;
-        case 'todo':
-          fechaInicio = new Date('1900-01-01');
-          break;
-      }
+      const fechaInicio = new Date('1900-01-01'); // Sin límite de fecha inicial
 
       // Determinar qué plagas filtrar
       let plagasAFiltrar: string[] = [];
@@ -401,49 +400,55 @@ export function MonitoreoDashboardV2() {
       // Guardar monitoreos para el mapa de calor
       setMonitoreosCargados(allData);
 
-
-      // Agrupar por semana y plaga
-      const datosPorSemana: { [semana: string]: { [plaga: string]: { sum: number; count: number; ultimaFecha: string } } } = {};
-
+      // PASO 1: Identificar todas las fechas únicas de monitoreo
+      const fechasUnicasSet = new Set<string>();
       allData.forEach(m => {
-        const fecha = new Date(m.fecha_monitoreo);
-        const semana = getNumeroSemana(fecha);
-        const año = fecha.getFullYear();
-        const semanaKey = `S${semana} ${año}`;
-        const plagaNombre = (m.plagas_enfermedades_catalogo as any).nombre;
-
-        if (!datosPorSemana[semanaKey]) {
-          datosPorSemana[semanaKey] = {};
-        }
-        if (!datosPorSemana[semanaKey][plagaNombre]) {
-          datosPorSemana[semanaKey][plagaNombre] = { sum: 0, count: 0, ultimaFecha: m.fecha_monitoreo };
-        }
-
-        // Tomar el último dato de la semana
-        if (m.fecha_monitoreo > datosPorSemana[semanaKey][plagaNombre].ultimaFecha) {
-          datosPorSemana[semanaKey][plagaNombre] = {
-            sum: m.incidencia || 0,
-            count: 1,
-            ultimaFecha: m.fecha_monitoreo
-          };
-        }
+        fechasUnicasSet.add(m.fecha_monitoreo);
       });
 
-      // Formatear para Recharts
-      const datosFormateados: TendenciaData[] = Object.entries(datosPorSemana)
-        .map(([semana, plagas]) => {
-          const punto: TendenciaData = { semana };
-          Object.entries(plagas).forEach(([plaga, data]) => {
-            punto[plaga] = Math.round(data.sum * 10) / 10;
-          });
-          return punto;
-        })
-        .sort((a, b) => {
-          const [sA, añoA] = a.semana.split(' ');
-          const [sB, añoB] = b.semana.split(' ');
-          if (añoA !== añoB) return parseInt(añoA) - parseInt(añoB);
-          return parseInt(sA.substring(1)) - parseInt(sB.substring(1));
+      // PASO 2: Ordenar fechas cronológicamente (más antigua a más reciente)
+      const fechasOrdenadas = Array.from(fechasUnicasSet).sort((a, b) =>
+        new Date(a).getTime() - new Date(b).getTime()
+      );
+
+      // PASO 3: Tomar las últimas N fechas según el modo
+      const numOcurrencias = modoVisualizacion === 'ultimo' ? 1 :
+                            modoVisualizacion === 'ultimos3' ? 3 : 6;
+      const fechasSeleccionadas = fechasOrdenadas.slice(-numOcurrencias);
+
+      // PASO 4: Para cada fecha (ocurrencia), agrupar y calcular promedios
+      const datosFormateados: TendenciaData[] = fechasSeleccionadas.map((fecha, index) => {
+        const monitoreosDeEstaFecha = allData.filter(m => m.fecha_monitoreo === fecha);
+
+        // Agrupar por plaga y calcular promedio
+        const promediosPorPlaga: { [plaga: string]: number } = {};
+        const conteosPorPlaga: { [plaga: string]: number } = {};
+
+        monitoreosDeEstaFecha.forEach(m => {
+          const plagaNombre = (m.plagas_enfermedades_catalogo as any).nombre;
+          const incidencia = parseFloat(m.incidencia) || 0;
+
+          if (!promediosPorPlaga[plagaNombre]) {
+            promediosPorPlaga[plagaNombre] = 0;
+            conteosPorPlaga[plagaNombre] = 0;
+          }
+
+          promediosPorPlaga[plagaNombre] += incidencia;
+          conteosPorPlaga[plagaNombre] += 1;
         });
+
+        // Calcular promedios finales
+        Object.keys(promediosPorPlaga).forEach(plaga => {
+          promediosPorPlaga[plaga] = Math.round((promediosPorPlaga[plaga] / conteosPorPlaga[plaga]) * 10) / 10;
+        });
+
+        return {
+          ocurrencia: `Ocurrencia ${index + 1}`,
+          fechaInicio: fecha,
+          fechaFin: fecha,
+          ...promediosPorPlaga
+        };
+      });
 
       setTendencias(datosFormateados);
     } catch (error) {
@@ -762,8 +767,29 @@ export function MonitoreoDashboardV2() {
 
   // Obtener plagas únicas del gráfico para la leyenda
   const plagasEnGrafico = tendencias.length > 0
-    ? Object.keys(tendencias[0]).filter(k => k !== 'semana')
+    ? Object.keys(tendencias[0]).filter(k => k !== 'semana' && k !== 'ocurrencia' && k !== 'fechaInicio' && k !== 'fechaFin')
     : [];
+
+  // Custom tick component for X-axis
+  const CustomAxisTick = ({ x, y, payload }: any) => {
+    const punto = tendencias.find(t => t.ocurrencia === payload.value);
+    if (!punto) return null;
+
+    const fechaTexto = punto.fechaInicio === punto.fechaFin
+      ? formatearFechaCorta(punto.fechaInicio || '')
+      : `${formatearFechaCorta(punto.fechaInicio || '')} - ${formatearFechaCorta(punto.fechaFin || '')}`;
+
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text x={0} y={0} dy={16} textAnchor="middle" className="text-xs fill-[#4D240F]">
+          {payload.value}
+        </text>
+        <text x={0} y={16} dy={16} textAnchor="middle" className="text-[10px] fill-gray-500">
+          {fechaTexto}
+        </text>
+      </g>
+    );
+  };
 
   const COLORES_PLAGAS = [
     '#73991C', // Verde aguacate
@@ -825,112 +851,85 @@ export function MonitoreoDashboardV2() {
       {!mostrarTablaCompleta && !mostrarCatalogo && (
         <>
           {/* ============================================ */}
-          {/* 3. SELECTOR DE PERÍODO */}
-          {/* ============================================ */}
-          
-          <Card className="p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm text-[#4D240F]/70 mb-1">Período de Análisis</h3>
-                <p className="text-xs text-[#4D240F]/50">Selecciona el rango temporal</p>
-              </div>
-              <div className="flex gap-2">
-                {(['semana', 'mes', 'trimestre', 'todo'] as RangoPeriodo[]).map(rango => (
-                  <Button
-                    key={rango}
-                    onClick={() => setRangoSeleccionado(rango)}
-                    variant={rangoSeleccionado === rango ? 'default' : 'outline'}
-                    size="sm"
-                    className={rangoSeleccionado === rango ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
-                  >
-                    {rango.charAt(0).toUpperCase() + rango.slice(1)}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          </Card>
-
-          {/* ============================================ */}
-          {/* 4. VISUALIZACIONES CON PESTAÑAS */}
+          {/* FILTROS GLOBALES */}
           {/* ============================================ */}
 
           <Card className="p-6">
-            <Tabs value={tabActiva} onValueChange={(value) => setTabActiva(value as 'general' | 'mapa-calor')} className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-6">
-                <TabsTrigger value="general" className="flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4" />
-                  Tendencias Generales
-                </TabsTrigger>
-                <TabsTrigger value="mapa-calor" className="flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4" />
-                  Mapa de Calor por Lote
-                </TabsTrigger>
-              </TabsList>
+            <h3 className="text-sm font-medium text-[#172E08] mb-4">Filtros de Visualización</h3>
 
-              <TabsContent value="general">
-                {/* GRÁFICA DE TENDENCIAS */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-lg text-[#172E08] mb-1">Tendencias de Incidencia</h3>
-                  <p className="text-sm text-[#4D240F]/60">
-                    Evolución por semana • {tendencias.length} semanas registradas
-                  </p>
-                </div>
-                
-                <div className="flex gap-3 items-center">
-                  {/* Filtro de plagas */}
-                  <div className="flex gap-2">
-                    <Button
-                      onClick={() => setFiltroPlaga('interes')}
-                      variant={filtroPlaga === 'interes' ? 'default' : 'outline'}
-                      size="sm"
-                      className={filtroPlaga === 'interes' ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
-                    >
-                      Plagas de Interés
-                    </Button>
-                    <Button
-                      onClick={() => setFiltroPlaga('cuarentenarias')}
-                      variant={filtroPlaga === 'cuarentenarias' ? 'default' : 'outline'}
-                      size="sm"
-                      className={filtroPlaga === 'cuarentenarias' ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
-                    >
-                      Plagas Cuarentenarias
-                    </Button>
-                    <Button
-                      onClick={() => setFiltroPlaga('todos')}
-                      variant={filtroPlaga === 'todos' ? 'default' : 'outline'}
-                      size="sm"
-                      className={filtroPlaga === 'todos' ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
-                    >
-                      Todas
-                    </Button>
-                    <Button
-                      onClick={() => setFiltroPlaga('personalizar')}
-                      variant={filtroPlaga === 'personalizar' ? 'default' : 'outline'}
-                      size="sm"
-                      className={filtroPlaga === 'personalizar' ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
-                    >
-                      <Filter className="w-4 h-4 mr-1" />
-                      Personalizar
-                    </Button>
-                  </div>
+            {/* Fila 1: Modo de Ocurrencias */}
+            <div className="mb-4">
+              <Label className="text-xs text-[#4D240F]/70 mb-2 block">Rango de Monitoreos</Label>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => setModoVisualizacion('ultimo')}
+                  variant={modoVisualizacion === 'ultimo' ? 'default' : 'outline'}
+                  size="sm"
+                  className={modoVisualizacion === 'ultimo' ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
+                >
+                  Último monitoreo
+                </Button>
+                <Button
+                  onClick={() => setModoVisualizacion('ultimos3')}
+                  variant={modoVisualizacion === 'ultimos3' ? 'default' : 'outline'}
+                  size="sm"
+                  className={modoVisualizacion === 'ultimos3' ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
+                >
+                  Últimos 3 monitoreos
+                </Button>
+                <Button
+                  onClick={() => setModoVisualizacion('ultimos6')}
+                  variant={modoVisualizacion === 'ultimos6' ? 'default' : 'outline'}
+                  size="sm"
+                  className={modoVisualizacion === 'ultimos6' ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
+                >
+                  Últimos 6 monitoreos
+                </Button>
+              </div>
+            </div>
 
-                  {/* Exportar */}
-                  <Button
-                    onClick={exportarGrafico}
-                    variant="outline"
-                    size="sm"
-                  >
-                    <Camera className="w-4 h-4 mr-2" />
-                    Exportar Gráfico
-                  </Button>
-                </div>
+            {/* Fila 2: Filtro de Plagas */}
+            <div>
+              <Label className="text-xs text-[#4D240F]/70 mb-2 block">Plagas a Visualizar</Label>
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  onClick={() => setFiltroPlaga('interes')}
+                  variant={filtroPlaga === 'interes' ? 'default' : 'outline'}
+                  size="sm"
+                  className={filtroPlaga === 'interes' ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
+                >
+                  Plagas de Interés
+                </Button>
+                <Button
+                  onClick={() => setFiltroPlaga('cuarentenarias')}
+                  variant={filtroPlaga === 'cuarentenarias' ? 'default' : 'outline'}
+                  size="sm"
+                  className={filtroPlaga === 'cuarentenarias' ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
+                >
+                  Plagas Cuarentenarias
+                </Button>
+                <Button
+                  onClick={() => setFiltroPlaga('todos')}
+                  variant={filtroPlaga === 'todos' ? 'default' : 'outline'}
+                  size="sm"
+                  className={filtroPlaga === 'todos' ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
+                >
+                  Todas
+                </Button>
+                <Button
+                  onClick={() => setFiltroPlaga('personalizar')}
+                  variant={filtroPlaga === 'personalizar' ? 'default' : 'outline'}
+                  size="sm"
+                  className={filtroPlaga === 'personalizar' ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
+                >
+                  <Filter className="w-4 h-4 mr-1" />
+                  Personalizar
+                </Button>
               </div>
 
               {/* Selector personalizado de plagas */}
               {filtroPlaga === 'personalizar' && (
-                <div className="mb-4 p-4 bg-[#F8FAF5] rounded-lg">
+                <div className="mt-4 p-4 bg-[#F8FAF5] rounded-lg">
                   <Label className="mb-2 block">Seleccionar plagas:</Label>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                     {catalogoPlagas.map(plaga => (
@@ -961,6 +960,49 @@ export function MonitoreoDashboardV2() {
                 </div>
               )}
             </div>
+          </Card>
+
+          {/* ============================================ */}
+          {/* VISUALIZACIONES CON PESTAÑAS */}
+          {/* ============================================ */}
+
+          <Card className="p-6">
+            <Tabs value={tabActiva} onValueChange={(value) => setTabActiva(value as 'general' | 'mapa-calor')} className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-6">
+                <TabsTrigger value="general" className="flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4" />
+                  Tendencias Generales
+                </TabsTrigger>
+                <TabsTrigger value="mapa-calor" className="flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4" />
+                  Mapa de Calor por Lote
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="general">
+                {/* GRÁFICA DE TENDENCIAS */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg text-[#172E08] mb-1">Tendencias de Incidencia</h3>
+                  <p className="text-sm text-[#4D240F]/60">
+                    {tendencias.length > 0 && tendencias[0].fechaInicio && tendencias[tendencias.length - 1].fechaFin && (
+                      <>Datos de: {formatearFechaCorta(tendencias[0].fechaInicio)} a: {formatearFechaCorta(tendencias[tendencias.length - 1].fechaFin)} • </>
+                    )}
+                    {tendencias.length} ocurrencia{tendencias.length !== 1 ? 's' : ''} registrada{tendencias.length !== 1 ? 's' : ''}
+                  </p>
+                </div>
+
+                <Button
+                  onClick={exportarGrafico}
+                  variant="outline"
+                  size="sm"
+                >
+                  <Camera className="w-4 h-4 mr-2" />
+                  Exportar Gráfico
+                </Button>
+              </div>
+            </div>
 
             {/* Gráfico */}
             <div ref={graficoRef} className="bg-white p-4 rounded-lg">
@@ -969,13 +1011,14 @@ export function MonitoreoDashboardV2() {
               </h4>
               
               {tendencias.length > 0 ? (
-                <ResponsiveContainer width="100%" height={400}>
-                  <LineChart data={tendencias} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                <ResponsiveContainer width="100%" height={450}>
+                  <LineChart data={tendencias} margin={{ top: 5, right: 30, left: 20, bottom: 40 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                    <XAxis 
-                      dataKey="semana" 
-                      tick={{ fill: '#4D240F', fontSize: 12 }}
+                    <XAxis
+                      dataKey="ocurrencia"
+                      tick={<CustomAxisTick />}
                       stroke="#9CA3AF"
+                      height={80}
                     />
                     <YAxis 
                       label={{ value: 'Incidencia (%)', angle: -90, position: 'insideLeft', fill: '#4D240F' }}
@@ -1009,7 +1052,7 @@ export function MonitoreoDashboardV2() {
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-[400px] flex items-center justify-center text-[#4D240F]/60">
+                <div className="h-[450px] flex items-center justify-center text-[#4D240F]/60">
                   <div className="text-center">
                     <Bug className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                     <p>No hay datos para el período seleccionado</p>
@@ -1023,6 +1066,7 @@ export function MonitoreoDashboardV2() {
                 <MapaCalorIncidencias
                   monitoreos={monitoreosCargados}
                   rangoSeleccionado={rangoSeleccionado}
+                  modoVisualizacion={modoVisualizacion}
                 />
               </TabsContent>
             </Tabs>
