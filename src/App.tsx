@@ -35,6 +35,7 @@ import { GastosView } from './components/finanzas/GastosView';
 import { IngresosView } from './components/finanzas/IngresosView';
 import { ReportesView } from './components/finanzas/ReportesView';
 import { ConfiguracionFinanzas } from './components/finanzas/ConfiguracionFinanzas';
+import { ProduccionDashboard } from './components/produccion/ProduccionDashboard';
 
 /**
  * Dashboard component - no wrapper needed
@@ -116,10 +117,7 @@ function LayoutRoutes() {
         </Route>
 
         {/* Producción */}
-        <Route
-          path="produccion"
-          element={<ComingSoon moduleName="Producción y Cosechas" />}
-        />
+        <Route path="produccion" element={<ProduccionDashboard />} />
 
         {/* Ventas */}
         <Route path="ventas" element={<ComingSoon moduleName="Ventas y Despachos" />} />
