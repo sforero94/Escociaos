@@ -452,7 +452,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         fecha_movimiento: fechaMovimiento,
         lote_id: loteId,
         lote_nombre: lote.nombre,
-        numero_canecas: (aplicacion.tipo_aplicacion === 'Fumigación' || aplicacion.tipo_aplicacion === 'Drench') ? parseInt(numeroCanecas, 10) : undefined,
+        numero_canecas: (aplicacion.tipo_aplicacion === 'Fumigación' || aplicacion.tipo_aplicacion === 'Drench') ? parseFloat(numeroCanecas) : undefined,
         numero_bultos: aplicacion.tipo_aplicacion === 'Fertilización' ? parseInt(numeroBultos, 10) : undefined,
         equipo_aplicacion: equipoAplicacion.trim() || undefined, // 🆕 NUEVO CAMPO
         personal: personal.trim() || undefined, //  NUEVO CAMPO
@@ -782,7 +782,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
                 value={numeroCanecas}
                 onChange={(e) => setNumeroCanecas(e.target.value)}
                 placeholder="0"
-                step="1"
+                step="any"
                 min="0"
                 disabled={loading}
                 className="flex-1 bg-white border-[#73991C]/20 focus:border-[#73991C] disabled:opacity-50 disabled:cursor-not-allowed"
