@@ -406,3 +406,47 @@ export interface ResumenCierre {
   productos_con_desviacion_alta: number; // > 20%
   alertas: string[];
 }
+
+// ============================================================================
+// CIERRE UNIFICADO - Registros de trabajo para revisión en cierre
+// ============================================================================
+
+export interface RegistroTrabajoCierre {
+  id?: string;
+  tarea_id: string;
+  empleado_id?: string;
+  contratista_id?: string;
+  trabajador_nombre: string;
+  trabajador_tipo: 'empleado' | 'contratista';
+  lote_id: string;
+  lote_nombre: string;
+  fecha_trabajo: string;
+  fraccion_jornal: number;
+  costo_jornal: number;
+  observaciones?: string;
+  // Datos del trabajador para recálculos
+  salario?: number;
+  prestaciones?: number;
+  auxilios?: number;
+  horas_semanales?: number;
+  tarifa_jornal?: number;
+  // Flags de edición durante cierre
+  _isNew?: boolean;
+  _deleted?: boolean;
+  _modified?: boolean;
+}
+
+export interface ResumenLaboresCierre {
+  tarea_id: string;
+  registros: RegistroTrabajoCierre[];
+  porLote: {
+    lote_id: string;
+    lote_nombre: string;
+    total_jornales: number;
+    total_costo: number;
+  }[];
+  totalJornales: number;
+  totalCosto: number;
+  diasTrabajados: number;
+  trabajadoresUnicos: number;
+}
