@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { X, Edit, PlayCircle, CheckCircle, Calendar, Droplet, Package, MapPin, Target, TrendingUp, ShoppingCart } from 'lucide-react';
+import { X, Edit, PlayCircle, CheckCircle, Calendar, Droplet, Package, MapPin, Target, TrendingUp, ShoppingCart, FileText, DollarSign, Users, Loader2 } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { Button } from '../ui/button';
 import { generarPDFListaCompras } from '../../utils/generarPDFListaCompras';
+import { generarPDFReporteCierre } from '../../utils/generarPDFReporteCierre';
+import { fetchDatosReporteCierre } from '../../utils/fetchDatosReporteCierre';
 import type { Aplicacion, ListaCompras } from '../../types/aplicaciones';
 
 interface DetalleAplicacionProps {
@@ -38,6 +40,8 @@ export function DetalleAplicacion({
   const [blancoBiologico, setBlancoBiologico] = useState<string>('');
   const [fechaFinEstimada, setFechaFinEstimada] = useState<string>('');
   const [descargandoPDF, setDescargandoPDF] = useState(false);
+  const [generandoReporte, setGenerandoReporte] = useState(false);
+  const [datosCompletos, setDatosCompletos] = useState<any>(null);
 
   useEffect(() => {
     cargarDatos();
@@ -66,6 +70,9 @@ export function DetalleAplicacion({
       if (appError) {
       }
 
+
+      // Store full app data for closure summary
+      setDatosCompletos(appData);
 
       // Extraer lotes con IDs
       const lotesConId = appData?.aplicaciones_lotes?.map(
@@ -344,8 +351,28 @@ export function DetalleAplicacion({
     }
   };
 
+  const descargarReporteCierre = async () => {
+    setGenerandoReporte(true);
+    try {
+      const datos = await fetchDatosReporteCierre(aplicacion.id);
+      generarPDFReporteCierre(datos);
+    } catch (error: any) {
+      alert('Error al generar el reporte de cierre: ' + (error?.message || 'Error desconocido'));
+    } finally {
+      setGenerandoReporte(false);
+    }
+  };
+
+  const formatearMonedaLocal = (valor: number) => {
+    return new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+      minimumFractionDigits: 0,
+    }).format(valor);
+  };
+
   return (
-    <div 
+    <div
       className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
       onClick={onClose}
     >
@@ -604,6 +631,76 @@ export function DetalleAplicacion({
                   </table>
                 </div>
               </div>
+
+              {/* Card de Resumen de Cierre (solo para apps cerradas) */}
+              {aplicacion.estado === 'Cerrada' && datosCompletos && (
+                <div className="bg-white rounded-2xl border border-[#73991C]/10 shadow-[0_2px_12px_rgba(115,153,28,0.06)] overflow-hidden">
+                  <div className="px-5 py-3 bg-gradient-to-r from-[#73991C]/5 to-transparent border-b border-[#73991C]/10">
+                    <h3 className="text-sm text-[#172E08] flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-[#73991C]" />
+                      Resumen de Cierre
+                    </h3>
+                  </div>
+                  <div className="p-5">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="text-center p-3 bg-blue-50 rounded-xl">
+                        <p className="text-xs text-blue-700 mb-1">Insumos</p>
+                        <p className="text-lg text-blue-900 font-semibold">
+                          {formatearMonedaLocal(datosCompletos.costo_total_insumos || 0)}
+                        </p>
+                      </div>
+                      <div className="text-center p-3 bg-purple-50 rounded-xl">
+                        <p className="text-xs text-purple-700 mb-1">Mano de Obra</p>
+                        <p className="text-lg text-purple-900 font-semibold">
+                          {formatearMonedaLocal(datosCompletos.costo_total_mano_obra || 0)}
+                        </p>
+                      </div>
+                      <div className="text-center p-3 bg-[#73991C]/10 rounded-xl">
+                        <p className="text-xs text-[#73991C] mb-1">Costo Total</p>
+                        <p className="text-lg text-[#172E08] font-bold">
+                          {formatearMonedaLocal(datosCompletos.costo_total || 0)}
+                        </p>
+                      </div>
+                      <div className="text-center p-3 bg-orange-50 rounded-xl">
+                        <p className="text-xs text-orange-700 mb-1">Costo / Árbol</p>
+                        <p className="text-lg text-orange-900 font-semibold">
+                          {formatearMonedaLocal(datosCompletos.costo_por_arbol || 0)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Labor info */}
+                    {(datosCompletos.jornales_utilizados > 0 || datosCompletos.valor_jornal > 0) && (
+                      <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-4">
+                        {datosCompletos.jornales_utilizados > 0 && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <Users className="w-4 h-4 text-[#73991C]" />
+                            <span className="text-[#4D240F]/60">Jornales:</span>
+                            <span className="text-[#172E08] font-medium">{datosCompletos.jornales_utilizados}</span>
+                          </div>
+                        )}
+                        {datosCompletos.valor_jornal > 0 && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <DollarSign className="w-4 h-4 text-[#73991C]" />
+                            <span className="text-[#4D240F]/60">Valor jornal:</span>
+                            <span className="text-[#172E08] font-medium">{formatearMonedaLocal(datosCompletos.valor_jornal)}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Observations */}
+                    {datosCompletos.observaciones_cierre && (
+                      <div className="mt-4 pt-4 border-t border-gray-100">
+                        <p className="text-xs text-[#4D240F]/60 mb-1">Observaciones de cierre</p>
+                        <p className="text-sm text-[#172E08] bg-[#F8FAF5] rounded-lg p-3 italic">
+                          {datosCompletos.observaciones_cierre}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -624,33 +721,55 @@ export function DetalleAplicacion({
 
             {/* Botones de acción a la derecha */}
             <div className="flex flex-wrap items-center gap-3">
-              <Button
-                onClick={onEditar}
-                disabled={aplicacion.estado !== 'Calculada'}
-                variant="outline"
-                className="border-[#73991C]/30 text-[#73991C] hover:bg-[#73991C]/10 hover:border-[#73991C]"
-              >
-                <Edit className="w-4 h-4 mr-2" />
-                Editar
-              </Button>
+              {aplicacion.estado === 'Cerrada' ? (
+                <Button
+                  onClick={descargarReporteCierre}
+                  disabled={generandoReporte}
+                  className="bg-[#73991C] hover:bg-[#5f7d17] text-white"
+                >
+                  {generandoReporte ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Generando...
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="w-4 h-4 mr-2" />
+                      Ver Reporte de Cierre
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    onClick={onEditar}
+                    disabled={aplicacion.estado !== 'Calculada'}
+                    variant="outline"
+                    className="border-[#73991C]/30 text-[#73991C] hover:bg-[#73991C]/10 hover:border-[#73991C]"
+                  >
+                    <Edit className="w-4 h-4 mr-2" />
+                    Editar
+                  </Button>
 
-              <Button
-                onClick={onRegistrarMovimientos}
-                disabled={aplicacion.estado === 'Cerrada'}
-                className="bg-[#4D240F] hover:bg-[#3d1c0c] text-white"
-              >
-                <PlayCircle className="w-4 h-4 mr-2" />
-                Registrar Movimientos
-              </Button>
+                  <Button
+                    onClick={onRegistrarMovimientos}
+                    disabled={aplicacion.estado === 'Cerrada'}
+                    className="bg-[#4D240F] hover:bg-[#3d1c0c] text-white"
+                  >
+                    <PlayCircle className="w-4 h-4 mr-2" />
+                    Registrar Movimientos
+                  </Button>
 
-              <Button
-                onClick={onCerrarAplicacion}
-                disabled={aplicacion.estado !== 'En ejecución'}
-                className="bg-[#73991C] hover:bg-[#5f7d17] text-white"
-              >
-                <CheckCircle className="w-4 h-4 mr-2" />
-                Cerrar Aplicación
-              </Button>
+                  <Button
+                    onClick={onCerrarAplicacion}
+                    disabled={aplicacion.estado !== 'En ejecución'}
+                    className="bg-[#73991C] hover:bg-[#5f7d17] text-white"
+                  >
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Cerrar Aplicación
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>

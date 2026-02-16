@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { X, ChevronRight, Check, Users, Calendar, Trash2, Edit3, Plus, AlertTriangle, ChevronDown } from 'lucide-react';
+import { X, ChevronRight, Check, Users, Calendar, Trash2, Edit3, Plus, AlertTriangle, ChevronDown, Download } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { formatearFecha, obtenerFechaHoy } from '../../utils/fechas';
 import { fetchRegistrosTrabajoParaCierre, recalcularCostoJornal } from '../../utils/laborCosts';
+import { generarPDFReporteCierre } from '../../utils/generarPDFReporteCierre';
 import type { Aplicacion, RegistroTrabajoCierre, ResumenLaboresCierre } from '../../types/aplicaciones';
 
 interface CierreAplicacionProps {
@@ -1335,6 +1336,68 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                       se marcará la tarea de labor como completada y no se podrán realizar más modificaciones.
                     </p>
                   </div>
+
+                  {/* Botón Descargar Reporte */}
+                  <button
+                    onClick={() => {
+                      const fechaInicio = new Date(datosFinales.fechaInicioReal);
+                      const fechaFin = new Date(datosFinales.fechaFinReal);
+                      const diasCalc = Math.ceil((fechaFin.getTime() - fechaInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                      const valorJornalProm = totalJornales > 0 ? costoManoObra / totalJornales : 0;
+                      const arbolesJornal = totalJornales > 0 ? totalArboles / totalJornales : 0;
+
+                      // Build per-product cost from movimientos
+                      const costosPorProducto = new Map<string, number>();
+                      movimientos.forEach((mov) => {
+                        const prev = costosPorProducto.get(mov.producto_id) || 0;
+                        costosPorProducto.set(mov.producto_id, prev + mov.cantidad_utilizada * mov.costo_unitario);
+                      });
+
+                      generarPDFReporteCierre({
+                        nombre: aplicacion.nombre || aplicacion.nombre_aplicacion || '',
+                        tipo_aplicacion: aplicacion.tipo_aplicacion || '',
+                        proposito: aplicacion.proposito,
+                        fecha_inicio_planeada: aplicacion.fecha_inicio_planeada,
+                        fecha_inicio_ejecucion: datosFinales.fechaInicioReal,
+                        fecha_cierre: datosFinales.fechaFinReal,
+                        dias_aplicacion: diasCalc,
+                        lotes: lotes.map((l) => ({ nombre: l.nombre, arboles: l.arboles })),
+                        total_arboles: totalArboles,
+                        costo_total_insumos: costoInsumos,
+                        costo_total_mano_obra: costoManoObra,
+                        costo_total: costoTotal,
+                        costo_por_arbol: costoPorArbol,
+                        jornales_utilizados: totalJornales,
+                        valor_jornal: Math.round(valorJornalProm),
+                        arboles_por_jornal: arbolesJornal,
+                        comparacion_productos: resumenInsumos.map((i) => {
+                          const diferencia = i.aplicado - i.planeado;
+                          const porcentajeDesviacion = i.planeado > 0 ? (diferencia / i.planeado) * 100 : 0;
+                          // Find product cost from movimientos
+                          let costoProducto = 0;
+                          movimientos.forEach((mov) => {
+                            if (mov.producto_nombre === i.nombre) {
+                              costoProducto += mov.cantidad_utilizada * mov.costo_unitario;
+                            }
+                          });
+                          return {
+                            producto_nombre: i.nombre,
+                            producto_unidad: i.unidad,
+                            cantidad_planeada: i.planeado,
+                            cantidad_real: i.aplicado,
+                            diferencia,
+                            porcentaje_desviacion: porcentajeDesviacion,
+                            costo_total: costoProducto,
+                          };
+                        }),
+                        observaciones_cierre: datosFinales.observaciones || undefined,
+                      });
+                    }}
+                    className="w-full px-6 py-3 border-2 border-[#73991C] text-[#73991C] rounded-lg hover:bg-[#73991C]/5 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Download className="w-5 h-5" />
+                    Descargar Reporte de Cierre (PDF)
+                  </button>
                 </div>
               )}
             </>
