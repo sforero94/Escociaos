@@ -99,10 +99,13 @@ export function DetalleAplicacion({
         setBlancoBiologico('No especificado');
       }
 
-      // 2. Cargar canecas planeadas (filtrar por lote si está seleccionado)
+      // 2. Cargar canecas/bultos planeados (filtrar por lote si está seleccionado)
+      const esFertilizacion = aplicacion.tipo === 'fertilizacion';
+      const campoUnidad = esFertilizacion ? 'numero_bultos' : 'numero_canecas';
+
       let calculosQuery = supabase
         .from('aplicaciones_calculos')
-        .select('numero_canecas, lote_id')
+        .select(`${campoUnidad}, lote_id`)
         .eq('aplicacion_id', aplicacion.id);
 
       if (selectedLote) {
@@ -112,19 +115,19 @@ export function DetalleAplicacion({
       const { data: calculos, error: errorCalculos } = await calculosQuery;
 
       if (errorCalculos) {
-        console.error('Error loading canecas planeadas:', errorCalculos);
+        console.error('Error loading planeadas:', errorCalculos);
       }
 
       const totalCanecasPlaneadas = calculos?.reduce(
-        (sum, calc) => sum + (calc.numero_canecas || 0),
+        (sum: number, calc: any) => sum + (calc[campoUnidad] || 0),
         0
       ) || 0;
       setCanecasPlaneadas(totalCanecasPlaneadas);
 
-      // 3. Cargar canecas aplicadas (filtrar por lote si está seleccionado)
+      // 3. Cargar canecas/bultos aplicados (filtrar por lote si está seleccionado)
       let movimientosQuery = supabase
         .from('movimientos_diarios')
-        .select('numero_canecas, lote_id')
+        .select(`${campoUnidad}, lote_id`)
         .eq('aplicacion_id', aplicacion.id);
 
       if (selectedLote) {
@@ -134,11 +137,11 @@ export function DetalleAplicacion({
       const { data: movimientosDiarios, error: errorMovimientos } = await movimientosQuery;
 
       if (errorMovimientos) {
-        console.error('Error loading canecas aplicadas:', errorMovimientos);
+        console.error('Error loading aplicadas:', errorMovimientos);
       }
 
       const totalCanecasAplicadas = movimientosDiarios?.reduce(
-        (sum, mov) => sum + (mov.numero_canecas || 0),
+        (sum: number, mov: any) => sum + (mov[campoUnidad] || 0),
         0
       ) || 0;
       setCanecasAplicadas(totalCanecasAplicadas);
@@ -463,12 +466,16 @@ export function DetalleAplicacion({
                 </div>
               </div>
 
-              {/* Card de Resumen de Canecas */}
+              {/* Card de Resumen de Canecas/Bultos */}
               <div className="bg-white rounded-2xl border border-[#73991C]/10 shadow-[0_2px_12px_rgba(115,153,28,0.06)] overflow-hidden">
                 <div className="px-5 py-3 bg-gradient-to-r from-[#73991C]/5 to-transparent border-b border-[#73991C]/10">
                   <h3 className="text-sm text-[#172E08] flex items-center gap-2">
-                    <Droplet className="w-4 h-4 text-[#73991C]" />
-                    Resumen de Canecas
+                    {aplicacion.tipo === 'fertilizacion' ? (
+                      <Package className="w-4 h-4 text-[#73991C]" />
+                    ) : (
+                      <Droplet className="w-4 h-4 text-[#73991C]" />
+                    )}
+                    {aplicacion.tipo === 'fertilizacion' ? 'Resumen de Bultos' : 'Resumen de Canecas'}
                   </h3>
                 </div>
                 <div className="p-5">
