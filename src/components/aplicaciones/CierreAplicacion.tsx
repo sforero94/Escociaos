@@ -493,19 +493,19 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
         }
       }
 
-      // 1. CREAR REGISTRO EN aplicaciones_cierre
+      // 1. CREAR/ACTUALIZAR REGISTRO EN aplicaciones_cierre (upsert para evitar duplicados)
       const { error: errorCierre } = await supabase
         .from('aplicaciones_cierre')
-        .insert([
-          {
-            aplicacion_id: aplicacion.id,
-            fecha_cierre: datosFinales.fechaFinReal,
-            dias_aplicacion: diasAplicacion,
-            valor_jornal: Math.round(valorJornalPromedio),
-            observaciones_generales: datosFinales.observaciones || null,
-            cerrado_por: user?.email || null,
-          },
-        ])
+        .upsert({
+          aplicacion_id: aplicacion.id,
+          fecha_cierre: datosFinales.fechaFinReal,
+          dias_aplicacion: diasAplicacion,
+          valor_jornal: Math.round(valorJornalPromedio),
+          observaciones_generales: datosFinales.observaciones || null,
+          cerrado_por: user?.email || null,
+        }, {
+          onConflict: 'aplicacion_id'
+        })
         .select()
         .single();
 
