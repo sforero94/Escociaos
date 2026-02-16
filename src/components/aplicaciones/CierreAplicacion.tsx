@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { X, ChevronRight, Check, FileText, Users, Calendar } from 'lucide-react';
+import { X, ChevronRight, Check, Users, Calendar, Trash2, Edit3, Plus, AlertTriangle, ChevronDown } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { formatearFecha, obtenerFechaHoy } from '../../utils/fechas';
-import type { Aplicacion } from '../../types/aplicaciones';
+import { fetchRegistrosTrabajoParaCierre, recalcularCostoJornal } from '../../utils/laborCosts';
+import type { Aplicacion, RegistroTrabajoCierre, ResumenLaboresCierre } from '../../types/aplicaciones';
 
 interface CierreAplicacionProps {
   aplicacion: Aplicacion;
@@ -32,21 +33,14 @@ interface LoteConArboles {
   arboles: number;
 }
 
-// Nueva estructura para jornales por lote y actividad
-interface JornalPorLote {
-  lote_id: string;
-  preparacion: number;
-  aplicacion: number;
-  transporte: number;
-}
-
 interface DatosFinales {
-  jornalesPorLote: JornalPorLote[];
-  valorJornal: number;
   fechaInicioReal: string;
   fechaFinReal: string;
   observaciones: string;
 }
+
+// Fraction options for inline editing
+const FRACCION_OPTIONS = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0];
 
 type Paso = 'revision' | 'datos-finales' | 'confirmacion';
 
@@ -57,21 +51,40 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
   const [error, setError] = useState<string | null>(null);
   const [procesando, setProcesando] = useState(false);
 
-  // Datos cargados
+  // Datos cargados - insumos
   const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
   const [resumenInsumos, setResumenInsumos] = useState<ResumenInsumo[]>([]);
   const [canecasPlaneadas, setCanecasPlaneadas] = useState(0);
   const [canecasAplicadas, setCanecasAplicadas] = useState(0);
   const [lotes, setLotes] = useState<LoteConArboles[]>([]);
   const [blancoBiologico, setBlancoBiologico] = useState<string>('');
-  const [fechaInicioPlaneada, setFechaInicioPlaneada] = useState<string>('');
-  const [fechaFinPlaneada, setFechaFinPlaneada] = useState<string>('');
 
-  // Datos finales del usuario - nueva estructura con matriz
+  // Datos de labores (desde registros_trabajo)
+  const [resumenLabores, setResumenLabores] = useState<ResumenLaboresCierre | null>(null);
+  const [registrosEditados, setRegistrosEditados] = useState<RegistroTrabajoCierre[]>([]);
+  const [tieneTarea, setTieneTarea] = useState(false);
+
+  // UI state for labor editing
+  const [editandoRegistro, setEditandoRegistro] = useState<string | null>(null);
+  const [loteExpandido, setLoteExpandido] = useState<string | null>(null);
+  const [mostrarAgregarRegistro, setMostrarAgregarRegistro] = useState(false);
+  const [trabajadoresDisponibles, setTrabajadoresDisponibles] = useState<Array<{
+    id: string; nombre: string; tipo: 'empleado' | 'contratista';
+    salario?: number; prestaciones?: number; auxilios?: number; horas_semanales?: number; tarifa_jornal?: number;
+  }>>([]);
+
+  // Nuevo registro temporal
+  const [nuevoRegistro, setNuevoRegistro] = useState({
+    trabajador_id: '',
+    trabajador_tipo: 'empleado' as 'empleado' | 'contratista',
+    lote_id: '',
+    fecha_trabajo: obtenerFechaHoy(),
+    fraccion_jornal: 1.0,
+  });
+
+  // Datos finales del usuario
   const [datosFinales, setDatosFinales] = useState<DatosFinales>({
-    jornalesPorLote: [],
-    valorJornal: 50000, // Valor por defecto
-    fechaInicioReal: aplicacion.fecha_inicio || '',
+    fechaInicioReal: aplicacion.fecha_inicio_ejecucion || aplicacion.fecha_inicio_planeada || '',
     fechaFinReal: obtenerFechaHoy(),
     observaciones: '',
   });
@@ -109,22 +122,8 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
         nombre: al.lotes?.nombre || 'Sin nombre',
         arboles: al.lotes?.total_arboles || 0,
       })) || [];
-      
+
       setLotes(lotesData);
-
-      // Inicializar matriz de jornales con los lotes cargados
-      const jornalesIniciales: JornalPorLote[] = lotesData.map(lote => ({
-        lote_id: lote.lote_id,
-        preparacion: 0,
-        aplicacion: 0,
-        transporte: 0,
-      }));
-      setDatosFinales(prev => ({ ...prev, jornalesPorLote: jornalesIniciales }));
-
-
-      // Extraer fechas planeadas
-      setFechaInicioPlaneada(appData?.fecha_inicio_planeada || '');
-      setFechaFinPlaneada(appData?.fecha_fin_planeada || '');
 
       // Extraer blanco biológico
       if (appData?.blanco_biologico) {
@@ -181,7 +180,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
 
         // Cargar productos de los movimientos diarios
         const movimientosIds = movimientosDiarios.map(m => m.id);
-        
+
         const { data: productosMovimientos, error: errorProductosMovimientos } = await supabase
           .from('movimientos_diarios_productos')
           .select('movimiento_diario_id, producto_id, producto_nombre, cantidad_utilizada, unidad')
@@ -240,7 +239,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
             const productosDeMov = productosMovimientos.filter(
               p => p.movimiento_diario_id === mov.id
             );
-            
+
             productosDeMov.forEach(prod => {
               // Convertir unidades a unidad base si es necesario
               let cantidadEnUnidadBase = prod.cantidad_utilizada;
@@ -249,7 +248,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
               } else if (prod.unidad === 'g') {
                 cantidadEnUnidadBase = prod.cantidad_utilizada / 1000;
               }
-              
+
               movimientosConsolidados.push({
                 fecha: mov.fecha_movimiento,
                 producto_id: prod.producto_id,
@@ -324,6 +323,31 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
 
       setResumenInsumos(Array.from(insumosMap.values()));
 
+      // 6. Cargar registros de trabajo desde la tarea vinculada
+      if (appData?.tarea_id) {
+        setTieneTarea(true);
+        try {
+          const resumen = await fetchRegistrosTrabajoParaCierre(supabase, appData.tarea_id);
+          setResumenLabores(resumen);
+          setRegistrosEditados(resumen.registros.map(r => ({ ...r })));
+
+          // Auto-derive dates from registros if available
+          if (resumen.registros.length > 0) {
+            const fechas = resumen.registros.map(r => r.fecha_trabajo).sort();
+            setDatosFinales(prev => ({
+              ...prev,
+              fechaInicioReal: prev.fechaInicioReal || fechas[0],
+              fechaFinReal: fechas[fechas.length - 1] || prev.fechaFinReal,
+            }));
+          }
+        } catch (err: any) {
+          console.error('Error cargando registros de trabajo:', err);
+          // Non-blocking: labor data is optional
+        }
+      } else {
+        setTieneTarea(false);
+      }
+
     } catch (err: any) {
       setError('Error al cargar los datos: ' + err.message);
     } finally {
@@ -332,15 +356,86 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
   };
 
   /**
-   * ACTUALIZAR JORNAL DE UN LOTE EN UNA ACTIVIDAD ESPECÍFICA
+   * Cargar trabajadores disponibles para agregar registros
    */
-  const actualizarJornal = (loteId: string, actividad: 'preparacion' | 'aplicacion' | 'transporte', valor: number) => {
-    setDatosFinales(prev => ({
-      ...prev,
-      jornalesPorLote: prev.jornalesPorLote.map(j =>
-        j.lote_id === loteId ? { ...j, [actividad]: valor } : j
-      ),
+  const cargarTrabajadores = async () => {
+    if (trabajadoresDisponibles.length > 0) return;
+    const [empRes, contRes] = await Promise.all([
+      supabase.from('empleados').select('id, nombre, salario, prestaciones_sociales, auxilios_no_salariales, horas_semanales').eq('activo', true),
+      supabase.from('contratistas').select('id, nombre, tarifa_jornal').eq('activo', true),
+    ]);
+    const trabajadores: typeof trabajadoresDisponibles = [];
+    (empRes.data || []).forEach((e: any) => trabajadores.push({
+      id: e.id, nombre: e.nombre, tipo: 'empleado',
+      salario: e.salario, prestaciones: e.prestaciones_sociales,
+      auxilios: e.auxilios_no_salariales, horas_semanales: e.horas_semanales,
     }));
+    (contRes.data || []).forEach((c: any) => trabajadores.push({
+      id: c.id, nombre: c.nombre, tipo: 'contratista', tarifa_jornal: c.tarifa_jornal,
+    }));
+    setTrabajadoresDisponibles(trabajadores);
+  };
+
+  /**
+   * Editar fracción de un registro
+   */
+  const editarFraccion = (registroId: string, nuevaFraccion: number) => {
+    setRegistrosEditados(prev => prev.map(r => {
+      if ((r.id || r._isNew) && (r.id === registroId || `new-${registrosEditados.indexOf(r)}` === registroId)) {
+        const nuevoCosto = recalcularCostoJornal(r, nuevaFraccion);
+        return { ...r, fraccion_jornal: nuevaFraccion, costo_jornal: nuevoCosto, _modified: true };
+      }
+      return r;
+    }));
+    setEditandoRegistro(null);
+  };
+
+  /**
+   * Marcar registro para eliminar
+   */
+  const eliminarRegistro = (index: number) => {
+    setRegistrosEditados(prev => prev.map((r, i) =>
+      i === index ? { ...r, _deleted: true } : r
+    ));
+  };
+
+  /**
+   * Agregar nuevo registro de trabajo
+   */
+  const agregarRegistro = () => {
+    const trabajador = trabajadoresDisponibles.find(t => t.id === nuevoRegistro.trabajador_id);
+    if (!trabajador || !nuevoRegistro.lote_id) return;
+
+    const lote = lotes.find(l => l.lote_id === nuevoRegistro.lote_id);
+
+    const nuevoReg: RegistroTrabajoCierre = {
+      tarea_id: resumenLabores?.tarea_id || aplicacion.tarea_id || '',
+      trabajador_nombre: trabajador.nombre,
+      trabajador_tipo: trabajador.tipo,
+      lote_id: nuevoRegistro.lote_id,
+      lote_nombre: lote?.nombre || '',
+      fecha_trabajo: nuevoRegistro.fecha_trabajo,
+      fraccion_jornal: nuevoRegistro.fraccion_jornal,
+      costo_jornal: 0,
+      salario: trabajador.salario,
+      prestaciones: trabajador.prestaciones,
+      auxilios: trabajador.auxilios,
+      horas_semanales: trabajador.horas_semanales,
+      tarifa_jornal: trabajador.tarifa_jornal,
+      _isNew: true,
+    };
+
+    if (trabajador.tipo === 'empleado') {
+      nuevoReg.empleado_id = trabajador.id;
+    } else {
+      nuevoReg.contratista_id = trabajador.id;
+    }
+
+    nuevoReg.costo_jornal = recalcularCostoJornal(nuevoReg, nuevoRegistro.fraccion_jornal);
+
+    setRegistrosEditados(prev => [...prev, nuevoReg]);
+    setMostrarAgregarRegistro(false);
+    setNuevoRegistro({ trabajador_id: '', trabajador_tipo: 'empleado', lote_id: '', fecha_trabajo: obtenerFechaHoy(), fraccion_jornal: 1.0 });
   };
 
   /**
@@ -350,21 +445,21 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
     try {
       setProcesando(true);
 
-      // Calcular total de jornales
-      const totalJornales = datosFinales.jornalesPorLote.reduce(
-        (sum, j) => sum + j.preparacion + j.aplicacion + j.transporte,
-        0
-      );
+      const registrosActivos = registrosEditados.filter(r => !r._deleted);
 
-      // Calcular costos
-      const totalArboles = lotes.reduce((sum, lote) => sum + lote.arboles, 0);
-      const costoInsumos = movimientos.reduce(
+      // Calcular costos desde registros de trabajo
+      const totalJornalesLabor = registrosActivos.reduce((s, r) => s + r.fraccion_jornal, 0);
+      const costoManoObraReal = registrosActivos.reduce((s, r) => s + r.costo_jornal, 0);
+      const valorJornalPromedio = totalJornalesLabor > 0 ? costoManoObraReal / totalJornalesLabor : 0;
+
+      // Calcular costos de insumos
+      const totalArbolesCalc = lotes.reduce((sum, lote) => sum + lote.arboles, 0);
+      const costoInsumosCalc = movimientos.reduce(
         (sum, mov) => sum + mov.cantidad_utilizada * mov.costo_unitario,
         0
       );
-      const costoManoObra = totalJornales * datosFinales.valorJornal;
-      const costoTotal = costoInsumos + costoManoObra;
-      const costoPorArbol = totalArboles > 0 ? costoTotal / totalArboles : 0;
+      const costoTotalCalc = costoInsumosCalc + costoManoObraReal;
+      const costoPorArbolCalc = totalArbolesCalc > 0 ? costoTotalCalc / totalArbolesCalc : 0;
 
       // Calcular días de aplicación
       const fechaInicio = new Date(datosFinales.fechaInicioReal);
@@ -374,15 +469,39 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
       // Obtener usuario actual
       const { data: { user } } = await supabase.auth.getUser();
 
-      // 1️⃣ CREAR REGISTRO EN aplicaciones_cierre
-      const { data: cierreData, error: errorCierre } = await supabase
+      // 0. Persistir ediciones de registros_trabajo
+      for (const reg of registrosEditados) {
+        if (reg._deleted && reg.id) {
+          await supabase.from('registros_trabajo').delete().eq('id', reg.id);
+        } else if (reg._isNew && !reg._deleted) {
+          await supabase.from('registros_trabajo').insert({
+            tarea_id: reg.tarea_id,
+            empleado_id: reg.empleado_id || null,
+            contratista_id: reg.contratista_id || null,
+            lote_id: reg.lote_id,
+            fecha_trabajo: reg.fecha_trabajo,
+            fraccion_jornal: reg.fraccion_jornal.toString(),
+            costo_jornal: reg.costo_jornal,
+            valor_jornal_empleado: reg.tarifa_jornal || (reg.salario ? Math.round((reg.salario + (reg.prestaciones || 0) + (reg.auxilios || 0)) / ((reg.horas_semanales || 48) * 4.33) * 8) : 0),
+            observaciones: reg.observaciones || null,
+          });
+        } else if (reg._modified && reg.id && !reg._deleted) {
+          await supabase.from('registros_trabajo').update({
+            fraccion_jornal: reg.fraccion_jornal.toString(),
+            costo_jornal: reg.costo_jornal,
+          }).eq('id', reg.id);
+        }
+      }
+
+      // 1. CREAR REGISTRO EN aplicaciones_cierre
+      const { error: errorCierre } = await supabase
         .from('aplicaciones_cierre')
         .insert([
           {
             aplicacion_id: aplicacion.id,
             fecha_cierre: datosFinales.fechaFinReal,
             dias_aplicacion: diasAplicacion,
-            valor_jornal: datosFinales.valorJornal,
+            valor_jornal: Math.round(valorJornalPromedio),
             observaciones_generales: datosFinales.observaciones || null,
             cerrado_por: user?.email || null,
           },
@@ -394,8 +513,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
         throw new Error('Error al crear registro de cierre: ' + errorCierre.message);
       }
 
-
-      // 2️⃣ ACTUALIZAR TABLA aplicaciones (simplificado)
+      // 2. ACTUALIZAR TABLA aplicaciones
       const { error: errorUpdate } = await supabase
         .from('aplicaciones')
         .update({
@@ -403,14 +521,13 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
           fecha_cierre: datosFinales.fechaFinReal,
           fecha_inicio_ejecucion: datosFinales.fechaInicioReal,
           fecha_fin_ejecucion: datosFinales.fechaFinReal,
-          jornales_utilizados: totalJornales,
-          valor_jornal: datosFinales.valorJornal,
+          jornales_utilizados: totalJornalesLabor,
+          valor_jornal: Math.round(valorJornalPromedio),
           observaciones_cierre: datosFinales.observaciones,
-          // 💰 CAMPOS DE COSTOS - Ahora se guardan correctamente
-          costo_total_insumos: costoInsumos,
-          costo_total_mano_obra: costoManoObra,
-          costo_total: costoTotal,
-          costo_por_arbol: costoPorArbol,
+          costo_total_insumos: costoInsumosCalc,
+          costo_total_mano_obra: costoManoObraReal,
+          costo_total: costoTotalCalc,
+          costo_por_arbol: costoPorArbolCalc,
         })
         .eq('id', aplicacion.id);
 
@@ -418,8 +535,15 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
         throw new Error('Error al actualizar la aplicación: ' + errorUpdate.message);
       }
 
+      // 3. Marcar tarea como Completada
+      if (aplicacion.tarea_id) {
+        await supabase
+          .from('tareas')
+          .update({ estado: 'Completada', fecha_fin_real: datosFinales.fechaFinReal })
+          .eq('id', aplicacion.tarea_id);
+      }
 
-      // 3️⃣ CONSOLIDAR INVENTARIO DE PRODUCTOS APLICADOS
+      // 4. CONSOLIDAR INVENTARIO DE PRODUCTOS APLICADOS
       if (movimientos.length > 0) {
 
         // Agrupar movimientos por producto
@@ -455,12 +579,12 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
           const saldoNuevo = saldoAnterior - cantidad;
 
           // b) Actualizar inventario
-          const { error: errorUpdate } = await supabase
+          const { error: errorUpdateInv } = await supabase
             .from('productos')
             .update({ cantidad_actual: saldoNuevo })
             .eq('id', productoId);
 
-          if (errorUpdate) {
+          if (errorUpdateInv) {
             throw new Error(`Error actualizando inventario de ${nombre}`);
           }
 
@@ -507,19 +631,28 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
     }).format(valor);
   };
 
-  // Cálculos
+  // Cálculos derivados
   const totalArboles = lotes.reduce((sum, lote) => sum + lote.arboles, 0);
   const costoInsumos = movimientos.reduce(
     (sum, mov) => sum + mov.cantidad_utilizada * mov.costo_unitario,
     0
   );
-  const totalJornales = datosFinales.jornalesPorLote.reduce(
-    (sum, j) => sum + j.preparacion + j.aplicacion + j.transporte,
-    0
-  );
-  const costoManoObra = totalJornales * datosFinales.valorJornal;
+  const registrosActivos = registrosEditados.filter(r => !r._deleted);
+  const totalJornales = registrosActivos.reduce((s, r) => s + r.fraccion_jornal, 0);
+  const costoManoObra = registrosActivos.reduce((s, r) => s + r.costo_jornal, 0);
   const costoTotal = costoInsumos + costoManoObra;
   const costoPorArbol = totalArboles > 0 ? costoTotal / totalArboles : 0;
+
+  // Agrupar registros activos por lote para display
+  const registrosPorLote = new Map<string, { lote_nombre: string; registros: (RegistroTrabajoCierre & { _index: number })[] }>();
+  registrosEditados.forEach((r, index) => {
+    if (r._deleted) return;
+    const key = r.lote_id;
+    if (!registrosPorLote.has(key)) {
+      registrosPorLote.set(key, { lote_nombre: r.lote_nombre, registros: [] });
+    }
+    registrosPorLote.get(key)!.registros.push({ ...r, _index: index });
+  });
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
@@ -545,20 +678,20 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
               <div className={`w-8 h-8 rounded-full flex items-center justify-center ${paso === 'revision' ? 'bg-[#73991C] text-white' : 'bg-gray-200'}`}>
                 1
               </div>
-              <span className="text-sm hidden sm:inline">Revisión</span>
+              <span className="text-sm hidden sm:inline">Insumos</span>
             </div>
-            
+
             <ChevronRight className="w-4 h-4 text-gray-400" />
-            
+
             <div className={`flex items-center gap-2 ${paso === 'datos-finales' ? 'text-[#73991C]' : 'text-gray-400'}`}>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center ${paso === 'datos-finales' ? 'bg-[#73991C] text-white' : 'bg-gray-200'}`}>
                 2
               </div>
-              <span className="text-sm hidden sm:inline">Jornales</span>
+              <span className="text-sm hidden sm:inline">Labores</span>
             </div>
-            
+
             <ChevronRight className="w-4 h-4 text-gray-400" />
-            
+
             <div className={`flex items-center gap-2 ${paso === 'confirmacion' ? 'text-[#73991C]' : 'text-gray-400'}`}>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center ${paso === 'confirmacion' ? 'bg-[#73991C] text-white' : 'bg-gray-200'}`}>
                 3
@@ -576,26 +709,26 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
             </div>
           ) : error ? (
             <div className="bg-red-50 border-2 border-red-200 text-red-700 px-6 py-4 rounded-xl">
-              <p className="font-medium">⚠️ Error</p>
+              <p className="font-medium">Error</p>
               <p className="text-sm mt-1">{error}</p>
             </div>
           ) : (
             <>
               {/* ========================================= */}
-              {/* PASO 1: REVISIÓN - TABLA MEJORADA */}
+              {/* PASO 1: REVISIÓN DE INSUMOS */}
               {/* ========================================= */}
               {paso === 'revision' && (
                 <div className="space-y-6">
                   <div>
                     <h3 className="text-lg text-[#172E08] mb-4">Resumen de la Aplicación</h3>
-                    
+
                     {/* Información General */}
                     <div className="bg-gradient-to-br from-[#73991C]/5 to-[#BFD97D]/5 border border-[#73991C]/20 rounded-xl p-5 mb-4">
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
                           <p className="text-xs text-[#4D240F]/70 mb-1">Tipo</p>
                           <p className="text-sm text-[#172E08] font-medium">
-                            {aplicacion.tipo_aplicacion === 'Fumigación' ? 'Fumigación' : 
+                            {aplicacion.tipo_aplicacion === 'Fumigación' ? 'Fumigación' :
                              aplicacion.tipo_aplicacion === 'Fertilización' ? 'Fertilización' : 'Drench'}
                           </p>
                         </div>
@@ -614,12 +747,12 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                       </div>
                     </div>
 
-                    {/* Tabla de Insumos - Mejorada */}
+                    {/* Tabla de Insumos */}
                     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
                       <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
                         <h4 className="text-sm text-[#172E08] font-medium">Insumos Utilizados</h4>
                       </div>
-                      
+
                       {resumenInsumos.length === 0 ? (
                         <div className="p-8 text-center">
                           <p className="text-sm text-[#4D240F]/70">No hay insumos registrados</p>
@@ -639,10 +772,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                             <tbody className="divide-y divide-gray-100">
                               {resumenInsumos.map((insumo, index) => {
                                 const diferencia = insumo.aplicado - insumo.planeado;
-                                const porcentaje = insumo.planeado > 0 
-                                  ? ((insumo.aplicado / insumo.planeado) * 100)
-                                  : 0;
-                                const esCritico = Math.abs(diferencia / insumo.planeado) > 0.15;
+                                const esCritico = insumo.planeado > 0 && Math.abs(diferencia / insumo.planeado) > 0.15;
 
                                 return (
                                   <tr key={index} className="hover:bg-gray-50 transition-colors">
@@ -662,11 +792,11 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                                     </td>
                                     <td className="px-4 py-3 text-center">
                                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs ${
-                                        esCritico 
+                                        esCritico
                                           ? 'bg-red-100 text-red-700'
                                           : 'bg-green-100 text-green-700'
                                       }`}>
-                                        {esCritico ? '⚠️ Desviado' : '✓ OK'}
+                                        {esCritico ? 'Desviado' : 'OK'}
                                       </span>
                                     </td>
                                   </tr>
@@ -697,7 +827,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                             <div className="text-center">
                               <p className="text-xs text-[#4D240F]/70 mb-1">Diferencia</p>
                               <p className={`text-2xl font-semibold ${
-                                canecasAplicadas - canecasPlaneadas > 0 ? 'text-orange-600' : 
+                                canecasAplicadas - canecasPlaneadas > 0 ? 'text-orange-600' :
                                 canecasAplicadas - canecasPlaneadas < 0 ? 'text-blue-600' : 'text-gray-600'
                               }`}>
                                 {canecasAplicadas - canecasPlaneadas > 0 ? '+' : ''}
@@ -713,150 +843,294 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
               )}
 
               {/* ========================================= */}
-              {/* PASO 2: DATOS FINALES - MATRIZ DE JORNALES */}
+              {/* PASO 2: REVISIÓN DE LABORES */}
               {/* ========================================= */}
               {paso === 'datos-finales' && (
                 <div className="space-y-6">
                   <div>
-                    <h3 className="text-lg text-[#172E08] mb-2">Registro de Jornales</h3>
+                    <h3 className="text-lg text-[#172E08] mb-2">Revisión de Labores</h3>
                     <p className="text-sm text-[#4D240F]/70 mb-4">
-                      Registra los jornales utilizados por lote y tipo de actividad
+                      Revisa los jornales registrados durante la ejecución. Puedes editar o agregar registros faltantes.
                     </p>
 
-                    {/* Matriz de Jornales */}
-                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-6">
-                      <div className="overflow-x-auto">
-                        <table className="w-full">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-4 py-3 text-left text-sm text-[#172E08]">Lote</th>
-                              <th className="px-4 py-3 text-center text-sm text-[#4D240F]/70">
-                                <div className="flex items-center justify-center gap-2">
-                                  <Users className="w-4 h-4" />
-                                  Preparación
-                                </div>
-                              </th>
-                              <th className="px-4 py-3 text-center text-sm text-[#4D240F]/70">
-                                <div className="flex items-center justify-center gap-2">
-                                  <Users className="w-4 h-4" />
-                                  Aplicación
-                                </div>
-                              </th>
-                              <th className="px-4 py-3 text-center text-sm text-[#4D240F]/70">
-                                <div className="flex items-center justify-center gap-2">
-                                  <Users className="w-4 h-4" />
-                                  Transporte
-                                </div>
-                              </th>
-                              <th className="px-4 py-3 text-center text-sm text-[#172E08] font-medium bg-gray-100">
-                                Total
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100">
-                            {lotes.map((lote, index) => {
-                              const jornal = datosFinales.jornalesPorLote.find(j => j.lote_id === lote.lote_id) || {
-                                lote_id: lote.lote_id,
-                                preparacion: 0,
-                                aplicacion: 0,
-                                transporte: 0,
-                              };
-                              const totalLote = jornal.preparacion + jornal.aplicacion + jornal.transporte;
-
-                              return (
-                                <tr key={lote.lote_id} className="hover:bg-gray-50 transition-colors">
-                                  <td className="px-4 py-3">
-                                    <div>
-                                      <p className="text-sm text-[#172E08] font-medium">{lote.nombre}</p>
-                                      <p className="text-xs text-[#4D240F]/60">{lote.arboles.toLocaleString()} árboles</p>
-                                    </div>
-                                  </td>
-                                  <td className="px-4 py-3 text-center">
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      step="0.5"
-                                      value={jornal.preparacion || ''}
-                                      onChange={(e) => actualizarJornal(lote.lote_id, 'preparacion', parseFloat(e.target.value) || 0)}
-                                      className="w-20 px-2 py-1.5 text-center border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C] text-sm"
-                                      placeholder="0"
-                                    />
-                                  </td>
-                                  <td className="px-4 py-3 text-center">
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      step="0.5"
-                                      value={jornal.aplicacion || ''}
-                                      onChange={(e) => actualizarJornal(lote.lote_id, 'aplicacion', parseFloat(e.target.value) || 0)}
-                                      className="w-20 px-2 py-1.5 text-center border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C] text-sm"
-                                      placeholder="0"
-                                    />
-                                  </td>
-                                  <td className="px-4 py-3 text-center">
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      step="0.5"
-                                      value={jornal.transporte || ''}
-                                      onChange={(e) => actualizarJornal(lote.lote_id, 'transporte', parseFloat(e.target.value) || 0)}
-                                      className="w-20 px-2 py-1.5 text-center border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C] text-sm"
-                                      placeholder="0"
-                                    />
-                                  </td>
-                                  <td className="px-4 py-3 text-center bg-gray-50">
-                                    <span className="text-sm text-[#172E08] font-semibold">
-                                      {totalLote.toFixed(1)}
-                                    </span>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                          <tfoot className="bg-[#73991C]/10">
-                            <tr>
-                              <td className="px-4 py-3 text-sm text-[#172E08] font-semibold">
-                                Total General
-                              </td>
-                              <td className="px-4 py-3 text-center text-sm text-[#172E08] font-medium">
-                                {datosFinales.jornalesPorLote.reduce((sum, j) => sum + j.preparacion, 0).toFixed(1)}
-                              </td>
-                              <td className="px-4 py-3 text-center text-sm text-[#172E08] font-medium">
-                                {datosFinales.jornalesPorLote.reduce((sum, j) => sum + j.aplicacion, 0).toFixed(1)}
-                              </td>
-                              <td className="px-4 py-3 text-center text-sm text-[#172E08] font-medium">
-                                {datosFinales.jornalesPorLote.reduce((sum, j) => sum + j.transporte, 0).toFixed(1)}
-                              </td>
-                              <td className="px-4 py-3 text-center text-lg text-[#73991C] font-bold bg-[#73991C]/20">
-                                {totalJornales.toFixed(1)}
-                              </td>
-                            </tr>
-                          </tfoot>
-                        </table>
+                    {/* Tarjetas resumen */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                      <div className="bg-[#73991C]/5 border border-[#73991C]/20 rounded-xl p-4 text-center">
+                        <Users className="w-5 h-5 text-[#73991C] mx-auto mb-1" />
+                        <p className="text-2xl text-[#172E08] font-bold">{totalJornales.toFixed(1)}</p>
+                        <p className="text-xs text-[#4D240F]/70">Jornales</p>
+                      </div>
+                      <div className="bg-[#73991C]/5 border border-[#73991C]/20 rounded-xl p-4 text-center">
+                        <p className="text-2xl text-[#172E08] font-bold">{formatearMoneda(costoManoObra)}</p>
+                        <p className="text-xs text-[#4D240F]/70">Costo Mano de Obra</p>
+                      </div>
+                      <div className="bg-[#73991C]/5 border border-[#73991C]/20 rounded-xl p-4 text-center">
+                        <p className="text-2xl text-[#172E08] font-bold">
+                          {new Set(registrosActivos.map(r => r.empleado_id || r.contratista_id)).size}
+                        </p>
+                        <p className="text-xs text-[#4D240F]/70">Trabajadores</p>
+                      </div>
+                      <div className="bg-[#73991C]/5 border border-[#73991C]/20 rounded-xl p-4 text-center">
+                        <Calendar className="w-5 h-5 text-[#73991C] mx-auto mb-1" />
+                        <p className="text-2xl text-[#172E08] font-bold">
+                          {new Set(registrosActivos.map(r => r.fecha_trabajo)).size}
+                        </p>
+                        <p className="text-xs text-[#4D240F]/70">Días trabajados</p>
                       </div>
                     </div>
 
-                    {/* Valor del Jornal y Fechas */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                      <div>
-                        <label className="block text-sm text-[#4D240F]/70 mb-2">
-                          Valor del Jornal (COP)
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="1000"
-                          value={datosFinales.valorJornal}
-                          onChange={(e) =>
-                            setDatosFinales({
-                              ...datosFinales,
-                              valorJornal: parseFloat(e.target.value) || 0,
-                            })
-                          }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
-                        />
+                    {/* Warning si no hay tarea vinculada */}
+                    {!tieneTarea && (
+                      <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4 mb-4">
+                        <div className="flex items-start gap-3">
+                          <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5" />
+                          <div>
+                            <p className="text-sm text-yellow-800 font-medium">
+                              Esta aplicación no tiene tarea de labor vinculada
+                            </p>
+                            <p className="text-xs text-yellow-700 mt-1">
+                              Los jornales se registraron antes de implementar la vinculación automática.
+                              Puedes agregar registros manualmente usando el botón de abajo.
+                            </p>
+                          </div>
+                        </div>
                       </div>
+                    )}
 
+                    {/* Warning si no hay registros */}
+                    {tieneTarea && registrosActivos.length === 0 && (
+                      <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4 mb-4">
+                        <div className="flex items-start gap-3">
+                          <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5" />
+                          <div>
+                            <p className="text-sm text-yellow-800 font-medium">
+                              No hay jornales registrados para esta aplicación
+                            </p>
+                            <p className="text-xs text-yellow-700 mt-1">
+                              Puedes agregar registros de trabajo manualmente o volver al módulo de Labores para registrarlos antes de cerrar.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Tabla de registros por lote */}
+                    {registrosPorLote.size > 0 && (
+                      <div className="space-y-3 mb-6">
+                        {Array.from(registrosPorLote.entries()).map(([loteId, { lote_nombre, registros: regsLote }]) => {
+                          const totalLote = regsLote.reduce((s, r) => s + r.fraccion_jornal, 0);
+                          const costoLote = regsLote.reduce((s, r) => s + r.costo_jornal, 0);
+                          const isExpanded = loteExpandido === loteId || registrosPorLote.size === 1;
+
+                          return (
+                            <div key={loteId} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                              {/* Lote header */}
+                              <button
+                                onClick={() => setLoteExpandido(isExpanded && registrosPorLote.size > 1 ? null : loteId)}
+                                className="w-full px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between hover:bg-gray-100 transition-colors"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                  <span className="text-sm text-[#172E08] font-medium">{lote_nombre}</span>
+                                  <span className="text-xs text-[#4D240F]/60">
+                                    {lotes.find(l => l.lote_id === loteId)?.arboles.toLocaleString()} árboles
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                  <span className="text-sm text-[#172E08] font-medium">{totalLote.toFixed(1)} jornales</span>
+                                  <span className="text-sm text-[#73991C] font-semibold">{formatearMoneda(costoLote)}</span>
+                                </div>
+                              </button>
+
+                              {/* Registros del lote */}
+                              {isExpanded && (
+                                <div className="overflow-x-auto">
+                                  <table className="w-full">
+                                    <thead className="bg-gray-50/50">
+                                      <tr>
+                                        <th className="px-4 py-2 text-left text-xs text-[#4D240F]/70">Fecha</th>
+                                        <th className="px-4 py-2 text-left text-xs text-[#4D240F]/70">Trabajador</th>
+                                        <th className="px-4 py-2 text-center text-xs text-[#4D240F]/70">Tipo</th>
+                                        <th className="px-4 py-2 text-center text-xs text-[#4D240F]/70">Fracción</th>
+                                        <th className="px-4 py-2 text-right text-xs text-[#4D240F]/70">Costo</th>
+                                        <th className="px-4 py-2 text-center text-xs text-[#4D240F]/70 w-20">Acciones</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                      {regsLote.map((reg) => {
+                                        const regKey = reg.id || `new-${reg._index}`;
+                                        return (
+                                          <tr key={regKey} className={`hover:bg-gray-50 transition-colors ${reg._isNew ? 'bg-green-50/30' : ''}`}>
+                                            <td className="px-4 py-2 text-sm text-[#172E08]">
+                                              {formatearFecha(reg.fecha_trabajo)}
+                                            </td>
+                                            <td className="px-4 py-2 text-sm text-[#172E08]">
+                                              {reg.trabajador_nombre}
+                                            </td>
+                                            <td className="px-4 py-2 text-center">
+                                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs ${
+                                                reg.trabajador_tipo === 'empleado'
+                                                  ? 'bg-blue-100 text-blue-700'
+                                                  : 'bg-purple-100 text-purple-700'
+                                              }`}>
+                                                {reg.trabajador_tipo === 'empleado' ? 'Emp' : 'Cont'}
+                                              </span>
+                                            </td>
+                                            <td className="px-4 py-2 text-center">
+                                              {editandoRegistro === regKey ? (
+                                                <select
+                                                  autoFocus
+                                                  value={reg.fraccion_jornal}
+                                                  onChange={(e) => editarFraccion(regKey, parseFloat(e.target.value))}
+                                                  onBlur={() => setEditandoRegistro(null)}
+                                                  className="w-20 px-1 py-0.5 text-center border border-[#73991C] rounded text-sm"
+                                                >
+                                                  {FRACCION_OPTIONS.map(f => (
+                                                    <option key={f} value={f}>{f}</option>
+                                                  ))}
+                                                </select>
+                                              ) : (
+                                                <button
+                                                  onClick={() => setEditandoRegistro(regKey)}
+                                                  className="text-sm text-[#172E08] font-medium hover:text-[#73991C] transition-colors cursor-pointer"
+                                                  title="Clic para editar"
+                                                >
+                                                  {reg.fraccion_jornal}
+                                                </button>
+                                              )}
+                                            </td>
+                                            <td className="px-4 py-2 text-sm text-right text-[#172E08]">
+                                              {formatearMoneda(reg.costo_jornal)}
+                                              {reg.costo_jornal === 0 && (
+                                                <AlertTriangle className="w-3 h-3 text-yellow-500 inline ml-1" />
+                                              )}
+                                            </td>
+                                            <td className="px-4 py-2 text-center">
+                                              <div className="flex items-center justify-center gap-1">
+                                                <button
+                                                  onClick={() => setEditandoRegistro(regKey)}
+                                                  className="p-1 text-gray-400 hover:text-[#73991C] transition-colors"
+                                                  title="Editar fracción"
+                                                >
+                                                  <Edit3 className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                  onClick={() => eliminarRegistro(reg._index)}
+                                                  className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                                                  title="Eliminar"
+                                                >
+                                                  <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                              </div>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Botón agregar registro */}
+                    {!mostrarAgregarRegistro ? (
+                      <button
+                        onClick={() => { setMostrarAgregarRegistro(true); cargarTrabajadores(); }}
+                        className="w-full py-3 border-2 border-dashed border-[#73991C]/30 text-[#73991C] rounded-xl hover:bg-[#73991C]/5 transition-colors flex items-center justify-center gap-2 text-sm"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Agregar registro de trabajo faltante
+                      </button>
+                    ) : (
+                      <div className="bg-white border-2 border-[#73991C]/30 rounded-xl p-4">
+                        <h4 className="text-sm text-[#172E08] font-medium mb-3">Nuevo Registro de Trabajo</h4>
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                          <div>
+                            <label className="block text-xs text-[#4D240F]/70 mb-1">Trabajador</label>
+                            <select
+                              value={nuevoRegistro.trabajador_id}
+                              onChange={(e) => {
+                                const t = trabajadoresDisponibles.find(t => t.id === e.target.value);
+                                setNuevoRegistro(prev => ({
+                                  ...prev,
+                                  trabajador_id: e.target.value,
+                                  trabajador_tipo: t?.tipo || 'empleado',
+                                }));
+                              }}
+                              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+                            >
+                              <option value="">Seleccionar...</option>
+                              <optgroup label="Empleados">
+                                {trabajadoresDisponibles.filter(t => t.tipo === 'empleado').map(t => (
+                                  <option key={t.id} value={t.id}>{t.nombre}</option>
+                                ))}
+                              </optgroup>
+                              <optgroup label="Contratistas">
+                                {trabajadoresDisponibles.filter(t => t.tipo === 'contratista').map(t => (
+                                  <option key={t.id} value={t.id}>{t.nombre}</option>
+                                ))}
+                              </optgroup>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs text-[#4D240F]/70 mb-1">Lote</label>
+                            <select
+                              value={nuevoRegistro.lote_id}
+                              onChange={(e) => setNuevoRegistro(prev => ({ ...prev, lote_id: e.target.value }))}
+                              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+                            >
+                              <option value="">Seleccionar...</option>
+                              {lotes.map(l => (
+                                <option key={l.lote_id} value={l.lote_id}>{l.nombre}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs text-[#4D240F]/70 mb-1">Fecha</label>
+                            <input
+                              type="date"
+                              value={nuevoRegistro.fecha_trabajo}
+                              onChange={(e) => setNuevoRegistro(prev => ({ ...prev, fecha_trabajo: e.target.value }))}
+                              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-[#4D240F]/70 mb-1">Fracción</label>
+                            <select
+                              value={nuevoRegistro.fraccion_jornal}
+                              onChange={(e) => setNuevoRegistro(prev => ({ ...prev, fraccion_jornal: parseFloat(e.target.value) }))}
+                              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+                            >
+                              {FRACCION_OPTIONS.map(f => (
+                                <option key={f} value={f}>{f}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex items-end gap-2">
+                            <button
+                              onClick={agregarRegistro}
+                              disabled={!nuevoRegistro.trabajador_id || !nuevoRegistro.lote_id}
+                              className="px-4 py-1.5 bg-[#73991C] text-white rounded-lg text-sm hover:bg-[#5f7d17] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                              Agregar
+                            </button>
+                            <button
+                              onClick={() => setMostrarAgregarRegistro(false)}
+                              className="px-3 py-1.5 text-[#4D240F]/70 rounded-lg text-sm hover:bg-gray-100 transition-colors"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Fechas y Observaciones */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
                       <div>
                         <label className="block text-sm text-[#4D240F]/70 mb-2">
                           Fecha Inicio Real
@@ -886,13 +1160,12 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                       </div>
                     </div>
 
-                    {/* Observaciones */}
-                    <div>
+                    <div className="mt-4">
                       <label className="block text-sm text-[#4D240F]/70 mb-2">
                         Observaciones de Cierre
                       </label>
                       <textarea
-                        rows={4}
+                        rows={3}
                         value={datosFinales.observaciones}
                         onChange={(e) =>
                           setDatosFinales({ ...datosFinales, observaciones: e.target.value })
@@ -967,7 +1240,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                           <div className="flex justify-between">
                             <span className="text-[#4D240F]/70">Tipo:</span>
                             <span className="text-[#172E08]">
-                              {aplicacion.tipo_aplicacion === 'Fumigación' ? 'Fumigación' : 
+                              {aplicacion.tipo_aplicacion === 'Fumigación' ? 'Fumigación' :
                                aplicacion.tipo_aplicacion === 'Fertilización' ? 'Fertilización' : 'Drench'}
                             </span>
                           </div>
@@ -982,7 +1255,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                         </div>
                       </div>
 
-                      {/* Fechas y Jornales */}
+                      {/* Ejecución */}
                       <div>
                         <h4 className="text-sm text-[#172E08] font-medium mb-3">Ejecución</h4>
                         <div className="space-y-2 text-sm">
@@ -995,12 +1268,20 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                             <span className="text-[#172E08]">{formatearFecha(datosFinales.fechaFinReal)}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-[#4D240F]/70">Jornales:</span>
+                            <span className="text-[#4D240F]/70">Jornales registrados:</span>
                             <span className="text-[#172E08] font-medium">{totalJornales.toFixed(1)}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-[#4D240F]/70">Valor Jornal:</span>
-                            <span className="text-[#172E08]">{formatearMoneda(datosFinales.valorJornal)}</span>
+                            <span className="text-[#4D240F]/70">Trabajadores:</span>
+                            <span className="text-[#172E08]">
+                              {new Set(registrosActivos.map(r => r.empleado_id || r.contratista_id)).size}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-[#4D240F]/70">Días trabajados:</span>
+                            <span className="text-[#172E08]">
+                              {new Set(registrosActivos.map(r => r.fecha_trabajo)).size}
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -1041,7 +1322,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                       <div className="mt-6 pt-6 border-t-2 border-[#73991C]/20">
                         <h4 className="text-sm text-[#172E08] font-medium mb-2">Observaciones</h4>
                         <p className="text-sm text-[#4D240F]/70 italic">
-                          "{datosFinales.observaciones}"
+                          &ldquo;{datosFinales.observaciones}&rdquo;
                         </p>
                       </div>
                     )}
@@ -1050,8 +1331,8 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                   {/* Advertencia */}
                   <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
                     <p className="text-sm text-yellow-800">
-                      ⚠️ <strong>Importante:</strong> Al cerrar esta aplicación se descontarán los insumos del inventario
-                      y no se podrán realizar más modificaciones.
+                      <strong>Importante:</strong> Al cerrar esta aplicación se descontarán los insumos del inventario,
+                      se marcará la tarea de labor como completada y no se podrán realizar más modificaciones.
                     </p>
                   </div>
                 </div>
@@ -1072,7 +1353,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                   }}
                   className="px-4 py-2 text-[#4D240F]/70 hover:text-[#172E08] transition-colors"
                 >
-                  ← Anterior
+                  Anterior
                 </button>
               )}
             </div>

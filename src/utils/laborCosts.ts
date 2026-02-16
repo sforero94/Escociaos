@@ -3,6 +3,9 @@
  * Provides consistent cost calculations across the application
  */
 
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { RegistroTrabajoCierre, ResumenLaboresCierre } from '../types/aplicaciones';
+
 export interface CostCalculationParams {
   salary: number;
   benefits: number;
@@ -143,5 +146,142 @@ export function calculateContractorCost(
     hourlyRate: Math.round(hourlyRate * 100) / 100,
     dailyCost: Math.round(dailyCost * 100) / 100,
     totalCost: Math.round(totalCost * 100) / 100,
+  };
+}
+
+/**
+ * Recalculate costo_jornal for a RegistroTrabajoCierre when fraction changes.
+ * Uses the worker's stored salary/tarifa data.
+ */
+export function recalcularCostoJornal(registro: RegistroTrabajoCierre, nuevaFraccion: number): number {
+  if (registro.trabajador_tipo === 'contratista' && registro.tarifa_jornal != null) {
+    return calculateContractorCost(registro.tarifa_jornal, nuevaFraccion).totalCost;
+  }
+  if (registro.trabajador_tipo === 'empleado' && registro.salario != null) {
+    return calculateLaborCost({
+      salary: registro.salario,
+      benefits: registro.prestaciones || 0,
+      allowances: registro.auxilios || 0,
+      weeklyHours: registro.horas_semanales || 48,
+      fractionWorked: nuevaFraccion,
+    }).totalCost;
+  }
+  // Fallback: proportional recalculation from existing cost
+  if (registro.fraccion_jornal > 0) {
+    const costPerUnit = registro.costo_jornal / registro.fraccion_jornal;
+    return Math.round(costPerUnit * nuevaFraccion * 100) / 100;
+  }
+  return 0;
+}
+
+/**
+ * Fetch registros_trabajo for a given tarea and aggregate for closure review.
+ */
+export async function fetchRegistrosTrabajoParaCierre(
+  supabase: SupabaseClient,
+  tareaId: string
+): Promise<ResumenLaboresCierre> {
+  // Query registros_trabajo with worker and lote info
+  const { data: registros, error } = await supabase
+    .from('registros_trabajo')
+    .select(`
+      id,
+      tarea_id,
+      empleado_id,
+      contratista_id,
+      lote_id,
+      fecha_trabajo,
+      fraccion_jornal,
+      costo_jornal,
+      valor_jornal_empleado,
+      observaciones
+    `)
+    .eq('tarea_id', tareaId)
+    .order('fecha_trabajo', { ascending: true });
+
+  if (error) throw new Error(`Error cargando registros de trabajo: ${error.message}`);
+
+  const rows = registros || [];
+
+  // Collect unique IDs for batch lookups
+  const empleadoIds = [...new Set(rows.filter(r => r.empleado_id).map(r => r.empleado_id!))];
+  const contratistaIds = [...new Set(rows.filter(r => r.contratista_id).map(r => r.contratista_id!))];
+  const loteIds = [...new Set(rows.map(r => r.lote_id).filter(Boolean))];
+
+  // Parallel fetch of worker and lote names
+  const [empleadosRes, contratistasRes, lotesRes] = await Promise.all([
+    empleadoIds.length > 0
+      ? supabase.from('empleados').select('id, nombre, salario, prestaciones_sociales, auxilios_no_salariales, horas_semanales').in('id', empleadoIds)
+      : { data: [] },
+    contratistaIds.length > 0
+      ? supabase.from('contratistas').select('id, nombre, tarifa_jornal').in('id', contratistaIds)
+      : { data: [] },
+    loteIds.length > 0
+      ? supabase.from('lotes').select('id, nombre').in('id', loteIds)
+      : { data: [] },
+  ]);
+
+  const empleadosMap = new Map((empleadosRes.data || []).map((e: any) => [e.id, e]));
+  const contratistasMap = new Map((contratistasRes.data || []).map((c: any) => [c.id, c]));
+  const lotesMap = new Map((lotesRes.data || []).map((l: any) => [l.id, l.nombre]));
+
+  // Build enriched registros
+  const registrosCierre: RegistroTrabajoCierre[] = rows.map(r => {
+    const esEmpleado = !!r.empleado_id;
+    const empleado = esEmpleado ? empleadosMap.get(r.empleado_id!) : null;
+    const contratista = !esEmpleado ? contratistasMap.get(r.contratista_id!) : null;
+
+    return {
+      id: r.id,
+      tarea_id: r.tarea_id,
+      empleado_id: r.empleado_id || undefined,
+      contratista_id: r.contratista_id || undefined,
+      trabajador_nombre: empleado?.nombre || contratista?.nombre || 'Desconocido',
+      trabajador_tipo: esEmpleado ? 'empleado' as const : 'contratista' as const,
+      lote_id: r.lote_id,
+      lote_nombre: lotesMap.get(r.lote_id) || 'Sin lote',
+      fecha_trabajo: r.fecha_trabajo,
+      fraccion_jornal: parseFloat(r.fraccion_jornal) || 0,
+      costo_jornal: r.costo_jornal || 0,
+      observaciones: r.observaciones || undefined,
+      // Worker data for recalculations
+      salario: empleado?.salario,
+      prestaciones: empleado?.prestaciones_sociales,
+      auxilios: empleado?.auxilios_no_salariales,
+      horas_semanales: empleado?.horas_semanales,
+      tarifa_jornal: contratista?.tarifa_jornal,
+    };
+  });
+
+  // Aggregate by lote
+  const porLoteMap = new Map<string, { lote_id: string; lote_nombre: string; total_jornales: number; total_costo: number }>();
+  for (const reg of registrosCierre) {
+    const existing = porLoteMap.get(reg.lote_id);
+    if (existing) {
+      existing.total_jornales += reg.fraccion_jornal;
+      existing.total_costo += reg.costo_jornal;
+    } else {
+      porLoteMap.set(reg.lote_id, {
+        lote_id: reg.lote_id,
+        lote_nombre: reg.lote_nombre,
+        total_jornales: reg.fraccion_jornal,
+        total_costo: reg.costo_jornal,
+      });
+    }
+  }
+
+  const fechasUnicas = new Set(registrosCierre.map(r => r.fecha_trabajo));
+  const trabajadoresUnicos = new Set(
+    registrosCierre.map(r => r.empleado_id || r.contratista_id || '')
+  );
+
+  return {
+    tarea_id: tareaId,
+    registros: registrosCierre,
+    porLote: Array.from(porLoteMap.values()),
+    totalJornales: registrosCierre.reduce((s, r) => s + r.fraccion_jornal, 0),
+    totalCosto: registrosCierre.reduce((s, r) => s + r.costo_jornal, 0),
+    diasTrabajados: fechasUnicas.size,
+    trabajadoresUnicos: trabajadoresUnicos.size,
   };
 }
