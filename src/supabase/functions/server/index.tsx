@@ -5,6 +5,7 @@ import * as kv from "./kv_store.tsx";
 import { procesarCSV } from "./importar-productos.tsx";
 import { crearUsuario, editarUsuario, eliminarUsuario } from "./usuarios.tsx";
 import { toggleProductoActivo } from "./productos.tsx";
+import { generarReporteSemanal } from "./generar-reporte-semanal.tsx";
 
 const app = new Hono();
 
@@ -103,6 +104,26 @@ app.post("/make-server-1ccce916/inventario/toggle-producto-activo", async (c) =>
     return c.json({ 
       success: false, 
       error: error.message || 'Error al procesar la solicitud' 
+    }, 500);
+  }
+});
+
+// Ruta para generar reporte semanal con Gemini
+app.post("/make-server-1ccce916/reportes/generar-semanal", async (c) => {
+  try {
+    const body = await c.req.json();
+    const resultado = await generarReporteSemanal(body);
+
+    if (!resultado.success) {
+      return c.json(resultado, 400);
+    }
+
+    return c.json(resultado);
+  } catch (error: any) {
+    console.error('Error en endpoint de reporte semanal:', error);
+    return c.json({
+      success: false,
+      error: error.message || 'Error al generar el reporte semanal'
     }, 500);
   }
 });

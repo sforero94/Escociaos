@@ -37,6 +37,8 @@ import { IngresosView } from './components/finanzas/IngresosView';
 import { ReportesView } from './components/finanzas/ReportesView';
 import { ConfiguracionFinanzas } from './components/finanzas/ConfiguracionFinanzas';
 import { ProduccionDashboard } from './components/produccion/ProduccionDashboard';
+import { ReportesDashboard } from './components/reportes/ReportesDashboard';
+import { ReporteSemanalWizard } from './components/reportes/ReporteSemanalWizard';
 
 /**
  * Dashboard component - no wrapper needed
@@ -116,6 +118,12 @@ function LayoutRoutes() {
           <Route path="ingresos" element={<IngresosView />} />
           <Route path="reportes" element={<ReportesView />} />
           <Route path="configuracion" element={<ConfiguracionFinanzas />} />
+        </Route>
+
+        {/* Reportes */}
+        <Route path="reportes">
+          <Route index element={<ReportesDashboard />} />
+          <Route path="generar" element={<ReporteSemanalWizard />} />
         </Route>
 
         {/* Producción */}

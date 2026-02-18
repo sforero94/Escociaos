@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, Sprout, Package, Briefcase, TrendingUp, TrendingDown } from 'lucide-react';
+import { Eye, Sprout, Package, Briefcase, TrendingUp, TrendingDown, FileText } from 'lucide-react';
 import { getSupabase } from '../utils/supabase/client';
 import { formatNumber } from '../utils/format';
 import { formatearFechaCorta } from '../utils/fechas';
@@ -1173,6 +1173,24 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           onClick={() => navigate('/inventario/dashboard')} 
         />
         <LaboresCard onClick={() => navigate('/labores')} />
+      </div>
+
+      {/* Acción rápida: Reporte Semanal */}
+      <div
+        onClick={() => navigate('/reportes/generar')}
+        className="bg-gradient-to-r from-[#73991C] to-[#5a7a16] rounded-2xl p-6 text-white cursor-pointer hover:shadow-xl transition-all group"
+      >
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+            <FileText className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold">Generar Reporte Semanal</h3>
+            <p className="text-white/80 text-sm">
+              Personal, jornales, aplicaciones, monitoreo y más
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Alertas */}
