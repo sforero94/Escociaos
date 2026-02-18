@@ -59,10 +59,10 @@ export function Login({ onLoginSuccess }: LoginProps) {
               />
             </div>
             <h1 className="text-3xl text-[#172E08] mb-2">
-              Sistema de Gestión Agrícola
+              Escocia Hass
             </h1>
             <p className="text-[#4D240F]/70">
-              Bienvenido a Escocia Hass
+              Sistema de gestión agrícola
             </p>
           </div>
 
@@ -80,7 +80,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={isLoading}
-                className="h-12 bg-white border-[#73991C]/20 focus:border-[#73991C] rounded-xl"
+                className="h-12 bg-white border-[#73991C]/20 focus:border-[#73991C] rounded-[20px]"
               />
             </div>
 
@@ -96,7 +96,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={isLoading}
-                className="h-12 bg-white border-[#73991C]/20 focus:border-[#73991C] rounded-xl"
+                className="h-12 bg-white border-[#73991C]/20 focus:border-[#73991C] rounded-[20px]"
               />
             </div>
 
@@ -109,7 +109,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
             <Button
               type="submit"
               disabled={isLoading}
-              className="w-full h-12 bg-gradient-to-r from-[#73991C] to-[#BFD97D] hover:shadow-lg hover:shadow-[#73991C]/30 text-white rounded-xl transition-all duration-200 hover:-translate-y-0.5"
+              className="w-full h-12 bg-gradient-to-b from-[#73991C] to-[#BFD97D] hover:shadow-lg hover:shadow-[#73991C]/30 text-white rounded-[20px] transition-all duration-200 hover:-translate-y-0.5"
             >
               {isLoading ? (
                 <>
