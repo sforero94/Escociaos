@@ -184,3 +184,44 @@ export async function fetchDatosReporteCierre(aplicacionId: string): Promise<Dat
     cerrado_por: cierre?.cerrado_por || undefined,
   };
 }
+
+// ============================================================================
+// Comparable applications for comparison feature
+// ============================================================================
+
+export interface AplicacionComparable {
+  id: string;
+  nombre: string;
+  tipo_aplicacion: string;
+  fecha_cierre: string;
+  costo_total: number | null;
+}
+
+export async function fetchAplicacionesComparables(
+  aplicacionId: string,
+  tipoAplicacion: string
+): Promise<AplicacionComparable[]> {
+  const supabase = getSupabase();
+
+  const { data, error } = await supabase
+    .from('aplicaciones')
+    .select('id, nombre_aplicacion, tipo_aplicacion, fecha_cierre, costo_total')
+    .eq('estado', 'Cerrada')
+    .eq('tipo_aplicacion', tipoAplicacion)
+    .neq('id', aplicacionId)
+    .order('fecha_cierre', { ascending: false })
+    .limit(20);
+
+  if (error) {
+    console.error('Error fetching comparable apps:', error);
+    return [];
+  }
+
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    nombre: row.nombre_aplicacion || 'Sin nombre',
+    tipo_aplicacion: row.tipo_aplicacion,
+    fecha_cierre: row.fecha_cierre || '',
+    costo_total: row.costo_total,
+  }));
+}

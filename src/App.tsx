@@ -12,6 +12,7 @@ import { AplicacionesList } from './components/aplicaciones/AplicacionesList';
 import { CalculadoraAplicaciones } from './components/aplicaciones/CalculadoraAplicaciones';
 import { DailyMovementsDashboardWrapper } from './components/aplicaciones/DailyMovementsDashboardWrapper';
 import { CierreAplicacionWrapper } from './components/aplicaciones/CierreAplicacionWrapper';
+import { ReporteAplicacionWrapper } from './components/aplicaciones/ReporteAplicacionWrapper';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SafeModeProvider } from './contexts/SafeModeContext';
@@ -78,6 +79,7 @@ function LayoutRoutes() {
           <Route path="calculadora" element={<CalculadoraAplicaciones />} />
           <Route path=":id/movimientos" element={<DailyMovementsDashboardWrapper />} />
           <Route path=":id/cierre" element={<CierreAplicacionWrapper />} />
+          <Route path=":id/reporte" element={<ReporteAplicacionWrapper />} />
         </Route>
 
         {/* Monitoreo */}

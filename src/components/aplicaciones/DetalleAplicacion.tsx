@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { X, Edit, PlayCircle, CheckCircle, Calendar, Droplet, Package, MapPin, Target, TrendingUp, ShoppingCart, FileText, DollarSign, Users, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { X, Edit, PlayCircle, CheckCircle, Calendar, Droplet, Package, MapPin, Target, TrendingUp, ShoppingCart, FileText, DollarSign, Users, Loader2, BarChart2 } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { Button } from '../ui/button';
 import { generarPDFListaCompras } from '../../utils/generarPDFListaCompras';
@@ -29,6 +30,7 @@ export function DetalleAplicacion({
   onRegistrarMovimientos,
   onCerrarAplicacion,
 }: DetalleAplicacionProps) {
+  const navigate = useNavigate();
   const supabase = getSupabase();
   const [loading, setLoading] = useState(true);
   const [resumenInsumos, setResumenInsumos] = useState<ResumenInsumo[]>([]);
@@ -722,23 +724,37 @@ export function DetalleAplicacion({
             {/* Botones de acción a la derecha */}
             <div className="flex flex-wrap items-center gap-3">
               {aplicacion.estado === 'Cerrada' ? (
-                <Button
-                  onClick={descargarReporteCierre}
-                  disabled={generandoReporte}
-                  className="bg-[#73991C] hover:bg-[#5f7d17] text-white"
-                >
-                  {generandoReporte ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Generando...
-                    </>
-                  ) : (
-                    <>
-                      <FileText className="w-4 h-4 mr-2" />
-                      Ver Reporte de Cierre
-                    </>
-                  )}
-                </Button>
+                <>
+                  <Button
+                    onClick={() => {
+                      onClose();
+                      navigate(`/aplicaciones/${aplicacion.id}/reporte`);
+                    }}
+                    variant="outline"
+                    className="border-[#73991C]/30 text-[#73991C] hover:bg-[#73991C]/10 hover:border-[#73991C]"
+                  >
+                    <BarChart2 className="w-4 h-4 mr-2" />
+                    Ver Reporte Completo
+                  </Button>
+
+                  <Button
+                    onClick={descargarReporteCierre}
+                    disabled={generandoReporte}
+                    className="bg-[#73991C] hover:bg-[#5f7d17] text-white"
+                  >
+                    {generandoReporte ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Generando...
+                      </>
+                    ) : (
+                      <>
+                        <FileText className="w-4 h-4 mr-2" />
+                        Exportar PDF
+                      </>
+                    )}
+                  </Button>
+                </>
               ) : (
                 <>
                   <Button
