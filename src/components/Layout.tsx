@@ -14,6 +14,7 @@ import {
   Users,
   Wrench,
   DollarSign,
+  FileText,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { useAuth } from '../contexts/AuthContext';
@@ -97,6 +98,13 @@ export function Layout({ onNavigate, children }: LayoutProps) {
       label: 'Producción',
       icon: TrendingUp,
       path: '/produccion',
+    },
+    {
+      type: 'item' as const,
+      id: 'reportes',
+      label: 'Reportes',
+      icon: FileText,
+      path: '/reportes',
     },
     {
       type: 'item' as const,
