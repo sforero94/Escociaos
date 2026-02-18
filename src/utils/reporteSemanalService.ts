@@ -3,6 +3,7 @@
 // Flujo: Frontend → Edge Function (Gemini) → HTML → PDF → Supabase Storage
 
 import { getSupabase, getCurrentUser } from './supabase/client';
+import { projectId, publicAnonKey } from './supabase/info.tsx';
 import type {
   DatosReporteSemanal,
   GenerateReportResponse,
@@ -13,8 +14,8 @@ import type {
 // CONFIGURACIÓN
 // ============================================================================
 
-// URL base del Edge Function server
-const EDGE_FUNCTION_BASE = import.meta.env.VITE_SUPABASE_URL + '/functions/v1/server';
+// URL base del Edge Function (matches pattern used by all other working endpoints)
+const EDGE_FUNCTION_BASE = `https://${projectId}.supabase.co/functions/v1`;
 
 // ============================================================================
 // LLAMADA AL EDGE FUNCTION
@@ -27,20 +28,13 @@ export async function generarHTMLReporte(
   datos: DatosReporteSemanal,
   instrucciones?: string
 ): Promise<GenerateReportResponse> {
-  const supabase = getSupabase();
-  const { data: { session } } = await supabase.auth.getSession();
-
-  if (!session?.access_token) {
-    throw new Error('No hay sesión activa. Por favor inicia sesión.');
-  }
-
   const response = await fetch(
     `${EDGE_FUNCTION_BASE}/make-server-1ccce916/reportes/generar-semanal`,
     {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`,
+        'Authorization': `Bearer ${publicAnonKey}`,
       },
       body: JSON.stringify({ datos, instrucciones }),
     }
