@@ -1,0 +1,274 @@
+// utils/reporteSemanalService.ts
+// Servicio para generar y almacenar reportes semanales
+// Flujo: Frontend → Edge Function (Gemini) → HTML → PDF → Supabase Storage
+
+import { getSupabase, getCurrentUser } from './supabase/client';
+import type {
+  DatosReporteSemanal,
+  GenerateReportResponse,
+  ReporteSemanalMetadata,
+} from '../types/reporteSemanal';
+
+// ============================================================================
+// CONFIGURACIÓN
+// ============================================================================
+
+// URL base del Edge Function server
+const EDGE_FUNCTION_BASE = import.meta.env.VITE_SUPABASE_URL + '/functions/v1/server';
+
+// ============================================================================
+// LLAMADA AL EDGE FUNCTION
+// ============================================================================
+
+/**
+ * Llama al Edge Function para generar el HTML del reporte via Gemini
+ */
+export async function generarHTMLReporte(
+  datos: DatosReporteSemanal,
+  instrucciones?: string
+): Promise<GenerateReportResponse> {
+  const supabase = getSupabase();
+  const { data: { session } } = await supabase.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new Error('No hay sesión activa. Por favor inicia sesión.');
+  }
+
+  const response = await fetch(
+    `${EDGE_FUNCTION_BASE}/make-server-1ccce916/reportes/generar-semanal`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ datos, instrucciones }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `Error del servidor: ${response.status}`);
+  }
+
+  const result = await response.json();
+
+  if (!result.success) {
+    throw new Error(result.error || 'Error al generar el reporte');
+  }
+
+  return {
+    html: result.html,
+    tokens_usados: result.tokens_usados,
+  };
+}
+
+// ============================================================================
+// CONVERSIÓN HTML → PDF
+// ============================================================================
+
+/**
+ * Convierte HTML a PDF usando html2pdf.js (cargado dinámicamente)
+ * Retorna un Blob con el PDF generado
+ */
+export async function convertirHTMLaPDF(html: string): Promise<Blob> {
+  // Importar html2pdf.js dinámicamente
+  const html2pdf = (await import('html2pdf.js')).default;
+
+  // Crear un contenedor temporal invisible para renderizar el HTML
+  const container = document.createElement('div');
+  container.innerHTML = html;
+  container.style.position = 'absolute';
+  container.style.left = '-9999px';
+  container.style.top = '0';
+  document.body.appendChild(container);
+
+  try {
+    const pdfBlob = await html2pdf()
+      .set({
+        margin: [10, 10, 10, 10], // mm
+        filename: 'reporte-semanal.pdf',
+        image: { type: 'jpeg', quality: 0.95 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          letterRendering: true,
+        },
+        jsPDF: {
+          unit: 'mm',
+          format: 'a4',
+          orientation: 'portrait',
+        },
+        pagebreak: {
+          mode: ['avoid-all', 'css', 'legacy'],
+        },
+      })
+      .from(container)
+      .outputPdf('blob');
+
+    return pdfBlob;
+  } finally {
+    document.body.removeChild(container);
+  }
+}
+
+// ============================================================================
+// ALMACENAMIENTO EN SUPABASE STORAGE
+// ============================================================================
+
+/**
+ * Sube el PDF a Supabase Storage y guarda los metadatos en la tabla
+ */
+export async function guardarReportePDF(
+  pdfBlob: Blob,
+  datos: DatosReporteSemanal
+): Promise<ReporteSemanalMetadata> {
+  const supabase = getSupabase();
+  const user = await getCurrentUser();
+
+  if (!user) {
+    throw new Error('No hay usuario autenticado');
+  }
+
+  const { semana } = datos;
+  const fileName = `reporte-semana-${semana.ano}-S${String(semana.numero).padStart(2, '0')}.pdf`;
+  const storagePath = `${semana.ano}/${fileName}`;
+
+  // Subir PDF a Storage
+  const { error: uploadError } = await supabase.storage
+    .from('reportes-semanales')
+    .upload(storagePath, pdfBlob, {
+      contentType: 'application/pdf',
+      upsert: true, // Sobrescribir si ya existe (regeneración)
+    });
+
+  if (uploadError) {
+    throw new Error(`Error al subir PDF: ${uploadError.message}`);
+  }
+
+  // Guardar metadatos en la tabla
+  const { data: metadata, error: dbError } = await supabase
+    .from('reportes_semanales')
+    .upsert(
+      {
+        fecha_inicio: semana.inicio,
+        fecha_fin: semana.fin,
+        numero_semana: semana.numero,
+        ano: semana.ano,
+        generado_por: user.id,
+        url_storage: storagePath,
+        datos_entrada: datos,
+      },
+      { onConflict: 'ano,numero_semana' }
+    )
+    .select()
+    .single();
+
+  if (dbError) {
+    throw new Error(`Error al guardar metadatos: ${dbError.message}`);
+  }
+
+  return metadata;
+}
+
+/**
+ * Descarga un PDF desde Supabase Storage
+ */
+export async function descargarReportePDF(storagePath: string): Promise<Blob> {
+  const supabase = getSupabase();
+
+  const { data, error } = await supabase.storage
+    .from('reportes-semanales')
+    .download(storagePath);
+
+  if (error) {
+    throw new Error(`Error al descargar PDF: ${error.message}`);
+  }
+
+  return data;
+}
+
+/**
+ * Obtiene la lista de reportes generados previamente
+ */
+export async function fetchHistorialReportes(): Promise<ReporteSemanalMetadata[]> {
+  const supabase = getSupabase();
+
+  const { data, error } = await supabase
+    .from('reportes_semanales')
+    .select(`
+      id,
+      fecha_inicio,
+      fecha_fin,
+      numero_semana,
+      ano,
+      generado_por,
+      url_storage,
+      created_at,
+      usuarios(nombre)
+    `)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  if (error) {
+    throw new Error(`Error al cargar historial: ${error.message}`);
+  }
+
+  return (data || []).map((r: any) => ({
+    ...r,
+    generado_por_nombre: r.usuarios?.nombre || 'Desconocido',
+  }));
+}
+
+// ============================================================================
+// FLUJO COMPLETO
+// ============================================================================
+
+export interface GenerarReporteCompletoResult {
+  html: string;
+  pdfBlob: Blob;
+  metadata: ReporteSemanalMetadata;
+  tokensUsados: number;
+}
+
+/**
+ * Flujo completo: datos → Gemini HTML → PDF → Storage → metadata
+ */
+export async function generarReporteCompleto(
+  datos: DatosReporteSemanal,
+  instrucciones?: string,
+  onProgress?: (step: string) => void
+): Promise<GenerarReporteCompletoResult> {
+  // Paso 1: Generar HTML con Gemini
+  onProgress?.('Generando diseño del reporte con IA...');
+  const { html, tokens_usados } = await generarHTMLReporte(datos, instrucciones);
+
+  // Paso 2: Convertir HTML a PDF
+  onProgress?.('Convirtiendo a PDF...');
+  const pdfBlob = await convertirHTMLaPDF(html);
+
+  // Paso 3: Guardar en Storage y BD
+  onProgress?.('Guardando reporte...');
+  const metadata = await guardarReportePDF(pdfBlob, datos);
+
+  return {
+    html,
+    pdfBlob,
+    metadata,
+    tokensUsados: tokens_usados || 0,
+  };
+}
+
+/**
+ * Trigger de descarga de un Blob como archivo
+ */
+export function descargarBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
