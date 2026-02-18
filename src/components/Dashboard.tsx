@@ -4,7 +4,7 @@ import { Eye, Sprout, Package, Briefcase, TrendingUp, TrendingDown } from 'lucid
 import { getSupabase } from '../utils/supabase/client';
 import { formatNumber } from '../utils/format';
 import { formatearFechaCorta } from '../utils/fechas';
-import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
+import { LineChart, Line, BarChart, Bar, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 import {
   AlertList,
   AlertListHeader,
@@ -513,25 +513,225 @@ function InventarioCard({
   );
 }
 
+interface LaboresActividadSemana {
+  actividad: string;
+  jornales: number;
+}
+
+interface LaboresStats {
+  actividadesSemana: LaboresActividadSemana[];
+  jornaletYtd: number;
+  personalActivo: number;
+}
+
 /**
- * Tarjeta de Labores - Now functional
+ * Tarjeta de Labores - Datos propios (patrón MonitoreoCard)
  */
 function LaboresCard({ onClick }: { onClick: () => void }) {
+  const [stats, setStats] = useState<LaboresStats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    cargarLaboresStats();
+  }, []);
+
+  const cargarLaboresStats = async () => {
+    try {
+      const supabase = getSupabase();
+      const hoy = new Date();
+
+      // Week bounds: Monday → today
+      const diaSemana = hoy.getDay();
+      const diasDesdeLunes = diaSemana === 0 ? 6 : diaSemana - 1;
+      const lunes = new Date(hoy);
+      lunes.setDate(hoy.getDate() - diasDesdeLunes);
+      lunes.setHours(0, 0, 0, 0);
+      const fechaLunes = lunes.toISOString().split('T')[0];
+      const fechaHoy   = hoy.toISOString().split('T')[0];
+
+      // YTD start
+      const inicioAnio = `${hoy.getFullYear()}-01-01`;
+
+      // Query 1: weekly registros → nested join to get tipo_tarea nombre
+      const { data: registrosSemana, error: errorSemana } = await supabase
+        .from('registros_trabajo')
+        .select(`
+          fraccion_jornal,
+          tareas!inner(
+            tipo_tarea_id,
+            tipos_tareas(nombre)
+          )
+        `)
+        .gte('fecha_trabajo', fechaLunes)
+        .lte('fecha_trabajo', fechaHoy);
+
+      if (errorSemana) throw errorSemana;
+
+      // Query 2: YTD totals + unique workers
+      const { data: registrosYtd, error: errorYtd } = await supabase
+        .from('registros_trabajo')
+        .select('fraccion_jornal, empleado_id, contratista_id')
+        .gte('fecha_trabajo', inicioAnio)
+        .lte('fecha_trabajo', fechaHoy);
+
+      if (errorYtd) throw errorYtd;
+
+      // Aggregate weekly data by activity type
+      const actividadMap = new Map<string, number>();
+      (registrosSemana || []).forEach((r: any) => {
+        const nombre: string = r.tareas?.tipos_tareas?.nombre || 'Sin tipo';
+        const jornal = Number(r.fraccion_jornal) || 0;
+        actividadMap.set(nombre, (actividadMap.get(nombre) || 0) + jornal);
+      });
+
+      const actividadesSemana: LaboresActividadSemana[] = Array.from(actividadMap.entries())
+        .map(([actividad, jornales]) => ({ actividad, jornales }))
+        .sort((a, b) => b.jornales - a.jornales);
+
+      // YTD aggregations
+      const ytdRegistros = registrosYtd || [];
+      const jornaletYtd = ytdRegistros.reduce(
+        (sum: number, r: any) => sum + (Number(r.fraccion_jornal) || 0),
+        0
+      );
+
+      const trabajadoresUnicos = new Set<string>();
+      ytdRegistros.forEach((r: any) => {
+        if (r.empleado_id)    trabajadoresUnicos.add(`e_${r.empleado_id}`);
+        if (r.contratista_id) trabajadoresUnicos.add(`c_${r.contratista_id}`);
+      });
+
+      setStats({
+        actividadesSemana,
+        jornaletYtd: Math.round(jornaletYtd * 100) / 100,
+        personalActivo: trabajadoresUnicos.size,
+      });
+    } catch {
+      setStats({ actividadesSemana: [], jornaletYtd: 0, personalActivo: 0 });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const COLORES_ACTIVIDADES = [
+    '#73991C', '#BFD97D', '#4D8C0A', '#A3C959', '#D4ED8A', '#5C7A10',
+  ];
+
   return (
     <div
       onClick={onClick}
       className="bg-white rounded-2xl p-6 border border-gray-200 hover:border-[#73991C]/40 transition-all cursor-pointer group shadow-sm hover:shadow-md"
     >
-      <div className="flex items-start gap-4">
+      {/* Header */}
+      <div className="flex items-start gap-4 mb-4">
         <div className="w-12 h-12 bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
           <Briefcase className="w-6 h-6 text-[#73991C]" />
         </div>
         <div className="flex-1">
           <p className="text-xs text-[#4D240F]/60 mb-1 tracking-wide uppercase">Labores</p>
-          <h3 className="text-[#172E08] mb-1">Gestión Activa</h3>
-          <p className="text-sm text-[#4D240F]/70">
-            Control de tareas y registro de trabajo diario
-          </p>
+          <h3 className="text-[#172E08] mb-1">Actividades esta semana</h3>
+          <p className="text-xs text-[#4D240F]/60">Jornales por tipo de tarea</p>
+        </div>
+      </div>
+
+      {/* Chart / skeleton / empty state */}
+      {isLoading ? (
+        <div className="space-y-2 mb-4">
+          {[80, 60, 45, 30].map((w, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <div className="h-3 bg-gray-200 rounded animate-pulse" style={{ width: '70px' }} />
+              <div className="h-5 bg-gray-200 rounded animate-pulse" style={{ width: `${w}%` }} />
+            </div>
+          ))}
+        </div>
+      ) : stats && stats.actividadesSemana.length > 0 ? (
+        <div className="h-32 -mx-2 mb-2">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={stats.actividadesSemana}
+              layout="vertical"
+              margin={{ top: 2, right: 30, left: 4, bottom: 2 }}
+            >
+              <XAxis
+                type="number"
+                tick={{ fill: '#4D240F', fontSize: 10 }}
+                stroke="#E5E7EB"
+                tickLine={false}
+                tickFormatter={(v: number) => v % 1 === 0 ? `${v}` : v.toFixed(1)}
+              />
+              <YAxis
+                type="category"
+                dataKey="actividad"
+                width={90}
+                tick={{ fill: '#4D240F', fontSize: 10 }}
+                stroke="#E5E7EB"
+                tickLine={false}
+                tickFormatter={(v: string) => v.length > 14 ? `${v.slice(0, 12)}…` : v}
+              />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'white',
+                  border: '1px solid #E5E7EB',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  padding: '6px 10px',
+                }}
+                formatter={(value: number) => [
+                  value % 1 === 0 ? `${value} jornales` : `${value.toFixed(2)} jornales`,
+                  'Esta semana',
+                ]}
+              />
+              <Bar dataKey="jornales" radius={[0, 6, 6, 0]}>
+                {stats.actividadesSemana.map((_, i) => (
+                  <Cell key={`cell-${i}`} fill={COLORES_ACTIVIDADES[i % COLORES_ACTIVIDADES.length]} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <div className="h-32 flex flex-col items-center justify-center text-[#4D240F]/50 mb-2">
+          <Briefcase className="w-8 h-8 mb-2 opacity-30" />
+          <p className="text-xs">Sin registros esta semana</p>
+        </div>
+      )}
+
+      {/* Metric boxes */}
+      <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-2 gap-3">
+        <div className="bg-[#73991C]/5 rounded-xl px-3 py-2">
+          {isLoading ? (
+            <div className="space-y-1">
+              <div className="h-3 bg-gray-200 rounded animate-pulse w-full" />
+              <div className="h-5 bg-gray-200 rounded animate-pulse w-12" />
+            </div>
+          ) : (
+            <>
+              <p className="text-xs text-[#4D240F]/60 leading-tight mb-0.5">
+                Jornales totales<br />a la fecha
+              </p>
+              <p className="text-lg font-semibold text-[#172E08]">
+                {formatNumber(stats?.jornaletYtd ?? 0)}
+              </p>
+            </>
+          )}
+        </div>
+
+        <div className="bg-[#73991C]/5 rounded-xl px-3 py-2">
+          {isLoading ? (
+            <div className="space-y-1">
+              <div className="h-3 bg-gray-200 rounded animate-pulse w-full" />
+              <div className="h-5 bg-gray-200 rounded animate-pulse w-8" />
+            </div>
+          ) : (
+            <>
+              <p className="text-xs text-[#4D240F]/60 leading-tight mb-0.5">
+                Personal activo<br />a la fecha
+              </p>
+              <p className="text-lg font-semibold text-[#172E08]">
+                {stats?.personalActivo ?? 0}
+              </p>
+            </>
+          )}
         </div>
       </div>
     </div>
