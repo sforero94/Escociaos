@@ -22,8 +22,6 @@ import {
 import { getSupabase } from '../../utils/supabase/client';
 import { IniciarEjecucionModal } from './IniciarEjecucionModal';
 import { DetalleAplicacion } from './DetalleAplicacion';
-import { generarPDFReporteCierre } from '../../utils/generarPDFReporteCierre';
-import { fetchDatosReporteCierre } from '../../utils/fetchDatosReporteCierre';
 import type { Aplicacion, TipoAplicacion, EstadoAplicacion } from '../../types/aplicaciones';
 
 const TIPOS_LABELS: Record<TipoAplicacion, string> = {
@@ -64,20 +62,6 @@ export function AplicacionesList() {
   const [eliminando, setEliminando] = useState<string | null>(null);
   const [iniciarEjecucionId, setIniciarEjecucionId] = useState<string | null>(null);
   const [aplicacionDetalle, setAplicacionDetalle] = useState<Aplicacion | null>(null);
-  const [generandoReporteId, setGenerandoReporteId] = useState<string | null>(null);
-
-  const handleDescargarReporte = async (aplicacionId: string) => {
-    setGenerandoReporteId(aplicacionId);
-    try {
-      const datos = await fetchDatosReporteCierre(aplicacionId);
-      generarPDFReporteCierre(datos);
-    } catch (error: any) {
-      alert('Error al generar el reporte: ' + (error?.message || 'Error desconocido'));
-    } finally {
-      setGenerandoReporteId(null);
-    }
-  };
-
   useEffect(() => {
     loadAplicaciones();
   }, []);
@@ -590,22 +574,12 @@ export function AplicacionesList() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleDescargarReporte(aplicacion.id);
+                            navigate(`/aplicaciones/${aplicacion.id}/reporte`);
                           }}
-                          disabled={generandoReporteId === aplicacion.id}
-                          className="px-4 py-2 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-lg hover:from-[#5f7d17] hover:to-[#9db86d] transition-all flex items-center gap-2 disabled:opacity-50"
+                          className="px-4 py-2 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-lg hover:from-[#5f7d17] hover:to-[#9db86d] transition-all flex items-center gap-2"
                         >
-                          {generandoReporteId === aplicacion.id ? (
-                            <>
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              <span>Generando...</span>
-                            </>
-                          ) : (
-                            <>
-                              <FileText className="w-4 h-4" />
-                              <span>Ver Reporte</span>
-                            </>
-                          )}
+                          <FileText className="w-4 h-4" />
+                          <span>Ver Reporte</span>
                         </button>
                       )}
 
