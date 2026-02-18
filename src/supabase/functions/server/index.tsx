@@ -12,12 +12,21 @@ const app = new Hono();
 // Enable logger
 app.use('*', logger(console.log));
 
+// CORS headers shared between Hono middleware and preflight handler
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey, x-client-info",
+  "Access-Control-Expose-Headers": "Content-Length",
+  "Access-Control-Max-Age": "600",
+};
+
 // Enable CORS for all routes and methods
 app.use(
   "/*",
   cors({
     origin: "*",
-    allowHeaders: ["Content-Type", "Authorization"],
+    allowHeaders: ["Content-Type", "Authorization", "apikey", "x-client-info"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     exposeHeaders: ["Content-Length"],
     maxAge: 600,
@@ -128,4 +137,11 @@ app.post("/make-server-1ccce916/reportes/generar-semanal", async (c) => {
   }
 });
 
-Deno.serve(app.fetch);
+// Handle preflight OPTIONS at Deno.serve level to ensure CORS works
+// even if Supabase's API gateway doesn't forward OPTIONS to Hono
+Deno.serve((req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+  return app.fetch(req);
+});
