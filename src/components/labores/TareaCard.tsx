@@ -31,6 +31,11 @@ function getLoteNames(tarea: Tarea): string[] {
   return [];
 }
 
+/** Prevent pointer + click events from reaching the card's onClick. */
+function stopAll(e: React.SyntheticEvent) {
+  e.stopPropagation();
+}
+
 // Soft pastel pill — rounded-lg like Figma, not rounded-full
 const PRIORITY_STYLE: Record<string, string> = {
   Alta:  'bg-red-50    text-red-600    border border-red-200',
@@ -64,34 +69,37 @@ const TareaCard: React.FC<TareaCardProps> = ({ tarea, estado, actions, isArchive
             <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg ${priorityClasses}`}>
               {tarea.prioridad}
             </span>
-            {/* Three-dot menu: Edit & Delete only */}
+            {/* Three-dot menu: Edit & Delete only.
+                Wrapped in a div that blocks BOTH onPointerDown and onClick
+                so the card's onClick never fires when interacting with the menu. */}
             {!isArchiveColumn && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-gray-400 hover:text-gray-600"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-44" onClick={(e) => e.stopPropagation()}>
-                  <DropdownMenuItem onClick={() => actions.onEditar(tarea)}>
-                    <Pencil className="h-4 w-4" />
-                    Editar
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onClick={() => actions.onEliminar(tarea)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Eliminar
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <div onPointerDown={stopAll} onClick={stopAll}>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-gray-400 hover:text-gray-600"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44">
+                    <DropdownMenuItem onClick={() => actions.onEditar(tarea)}>
+                      <Pencil className="h-4 w-4" />
+                      Editar
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={() => actions.onEliminar(tarea)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Eliminar
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             )}
           </div>
         </div>
@@ -123,8 +131,11 @@ const TareaCard: React.FC<TareaCardProps> = ({ tarea, estado, actions, isArchive
         </div>
 
         {/* ── Row 4: Task type (left) + Primary action (right) ── */}
-        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
-        <div className="flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="flex items-center justify-between gap-2"
+          onPointerDown={stopAll}
+          onClick={stopAll}
+        >
           {/* Task type with gray dot */}
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="h-2 w-2 rounded-full bg-gray-400 flex-shrink-0" />
