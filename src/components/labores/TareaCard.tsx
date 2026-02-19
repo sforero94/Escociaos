@@ -46,9 +46,10 @@ const TareaCard: React.FC<TareaCardProps> = ({ tarea, estado, actions, isArchive
 
   return (
     <div
+      onClick={() => actions.onVerDetalles(tarea)}
       className={`
         bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden
-        hover:shadow-md transition-shadow duration-150
+        hover:shadow-md transition-shadow duration-150 cursor-pointer
         ${isArchived ? 'opacity-75' : ''}
       `}
     >
@@ -63,38 +64,35 @@ const TareaCard: React.FC<TareaCardProps> = ({ tarea, estado, actions, isArchive
             <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg ${priorityClasses}`}>
               {tarea.prioridad}
             </span>
-            {/* Three-dot menu */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-400 hover:text-gray-600">
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuItem onClick={() => actions.onVerDetalles(tarea)}>
-                  <Eye className="h-4 w-4" />
-                  Ver Detalles
-                </DropdownMenuItem>
-                {!isArchiveColumn && (
+            {/* Three-dot menu: Edit & Delete only */}
+            {!isArchiveColumn && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-gray-400 hover:text-gray-600"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44" onClick={(e) => e.stopPropagation()}>
                   <DropdownMenuItem onClick={() => actions.onEditar(tarea)}>
                     <Pencil className="h-4 w-4" />
                     Editar
                   </DropdownMenuItem>
-                )}
-                {!isArchiveColumn && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      variant="destructive"
-                      onClick={() => actions.onEliminar(tarea)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Eliminar
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() => actions.onEliminar(tarea)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Eliminar
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
 
@@ -105,27 +103,28 @@ const TareaCard: React.FC<TareaCardProps> = ({ tarea, estado, actions, isArchive
           </p>
         )}
 
-        {/* ── Row 3: Lotes — pin icon + stacked pills ── */}
+        {/* ── Row 3: Lotes — pin icon + horizontal wrapping pills ── */}
         <div className="flex items-start gap-2">
           <MapPin className="h-4 w-4 text-gray-400 flex-shrink-0 mt-0.5" />
           {loteNames.length > 0 ? (
-            <div className="flex flex-col gap-1.5">
-              {loteNames.map((name, idx) => (
+            <div className="flex flex-wrap gap-1.5">
+              {loteNames.map((name) => (
                 <span
                   key={name}
-                  className="inline-block text-sm text-gray-600 border border-gray-200 rounded-md px-2.5 py-0.5 bg-white w-fit"
+                  className="inline-block text-xs text-gray-600 border border-gray-200 rounded-md px-2 py-0.5 bg-white"
                 >
-                  {idx + 1}. {name}
+                  {name}
                 </span>
               ))}
             </div>
           ) : (
-            <span className="text-sm text-gray-400">Sin lote</span>
+            <span className="text-xs text-gray-400">Sin lote</span>
           )}
         </div>
 
         {/* ── Row 4: Task type (left) + Primary action (right) ── */}
-        <div className="flex items-center justify-between gap-2">
+        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+        <div className="flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
           {/* Task type with gray dot */}
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="h-2 w-2 rounded-full bg-gray-400 flex-shrink-0" />
