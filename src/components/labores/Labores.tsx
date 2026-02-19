@@ -171,16 +171,16 @@ const Labores: React.FC = () => {
       
       // PRIMERO: Cargar recursos base (lotes, tipos, empleados, contratistas) en paralelo
       // Estos son independientes entre sí
-      await Promise.all([
+      const [,,,lotesData] = await Promise.all([
         cargarTiposTareas(),
         cargarEmpleados(),
         cargarContratistas(),
         cargarLotes(),
       ]);
-      
+
       // DESPUÉS: Cargar tareas que dependen de lotes estar cargados
-      // para poder mapear lote_ids a objetos Lote correctamente
-      await cargarTareas();
+      // Pasar lotesData directamente para evitar stale closure de React state
+      await cargarTareas(lotesData);
       
     } catch (error: any) {
       showAlert('error', `Error al cargar datos: ${error.message}`);
@@ -190,7 +190,9 @@ const Labores: React.FC = () => {
   };
 
   // Cargar tareas desde la vista resumen
-  const cargarTareas = async () => {
+  // lotesData param avoids stale closure - React state may not be updated yet
+  const cargarTareas = async (lotesData?: Lote[]) => {
+    const lotesRef = lotesData || lotes;
     const { data, error } = await getSupabase()
       .from('vista_tareas_resumen')
       .select('*')
@@ -203,9 +205,9 @@ const Labores: React.FC = () => {
       // Convert lote_ids array to lote objects
       const taskLotes: Lote[] = [];
       if (t.lote_ids && Array.isArray(t.lote_ids)) {
-        // Find matching lote objects from the lotes state
+        // Find matching lote objects using fresh lotesRef (not stale state)
         t.lote_ids.forEach((loteId: string) => {
-          const lote = lotes.find(l => l.id === loteId);
+          const lote = lotesRef.find(l => l.id === loteId);
           if (lote) taskLotes.push(lote);
         });
       }
@@ -264,8 +266,8 @@ const Labores: React.FC = () => {
     setContratistas(data || []);
   };
 
-  // Cargar lotes
-  const cargarLotes = async () => {
+  // Cargar lotes (returns data to avoid stale closure when passed to cargarTareas)
+  const cargarLotes = async (): Promise<Lote[]> => {
     const { data, error } = await getSupabase()
       .from('lotes')
       .select('id, nombre, area_hectareas')
@@ -273,7 +275,9 @@ const Labores: React.FC = () => {
       .order('nombre', { ascending: true });
 
     if (error) throw error;
-    setLotes(data || []);
+    const result = data || [];
+    setLotes(result);
+    return result;
   };
 
 
