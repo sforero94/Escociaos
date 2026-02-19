@@ -1,13 +1,6 @@
 import React from 'react';
-import { MoreVertical, Pencil, ClipboardList, ArrowRight, Trash2, Calendar as CalendarIcon, Eye, MapPin } from 'lucide-react';
+import { ClipboardList, ArrowRight, Calendar as CalendarIcon, Eye, MapPin } from 'lucide-react';
 import { Button } from '../ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '../ui/dropdown-menu';
 import type { Tarea } from './Labores';
 import type { ColumnActions } from './kanban-types';
 
@@ -29,11 +22,6 @@ function getLoteNames(tarea: Tarea): string[] {
     return [tarea.lote.nombre];
   }
   return [];
-}
-
-/** Prevent pointer + click events from reaching the card's onClick. */
-function stopAll(e: React.SyntheticEvent) {
-  e.stopPropagation();
 }
 
 // Soft pastel pill — rounded-lg like Figma, not rounded-full
@@ -60,7 +48,7 @@ const TareaCard: React.FC<TareaCardProps> = ({ tarea, estado, actions, isArchive
     >
       <div className="p-4 flex flex-col gap-3">
 
-        {/* ── Row 1: Title + Priority pill + three-dot ── */}
+        {/* ── Row 1: Title + Priority pill ── */}
         <div className="flex items-start justify-between gap-2">
           <h4 className="font-bold text-base text-gray-900 line-clamp-2 flex-1 min-w-0 leading-snug">
             {tarea.nombre}
@@ -69,38 +57,6 @@ const TareaCard: React.FC<TareaCardProps> = ({ tarea, estado, actions, isArchive
             <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg ${priorityClasses}`}>
               {tarea.prioridad}
             </span>
-            {/* Three-dot menu: Edit & Delete only.
-                Wrapped in a div that blocks BOTH onPointerDown and onClick
-                so the card's onClick never fires when interacting with the menu. */}
-            {!isArchiveColumn && (
-              <div onPointerDown={stopAll} onClick={stopAll}>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 text-gray-400 hover:text-gray-600"
-                    >
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-44">
-                    <DropdownMenuItem onClick={() => actions.onEditar(tarea)}>
-                      <Pencil className="h-4 w-4" />
-                      Editar
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      variant="destructive"
-                      onClick={() => actions.onEliminar(tarea)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Eliminar
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            )}
           </div>
         </div>
 
@@ -131,11 +87,8 @@ const TareaCard: React.FC<TareaCardProps> = ({ tarea, estado, actions, isArchive
         </div>
 
         {/* ── Row 4: Task type (left) + Primary action (right) ── */}
-        <div
-          className="flex items-center justify-between gap-2"
-          onPointerDown={stopAll}
-          onClick={stopAll}
-        >
+        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+        <div className="flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
           {/* Task type with gray dot */}
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="h-2 w-2 rounded-full bg-gray-400 flex-shrink-0" />
