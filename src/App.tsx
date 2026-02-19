@@ -39,6 +39,7 @@ import { ConfiguracionFinanzas } from './components/finanzas/ConfiguracionFinanz
 import { ProduccionDashboard } from './components/produccion/ProduccionDashboard';
 import { ReportesDashboard } from './components/reportes/ReportesDashboard';
 import { ReporteSemanalWizard } from './components/reportes/ReporteSemanalWizard';
+import { Toaster } from './components/ui/sonner';
 
 /**
  * Dashboard component - no wrapper needed
@@ -190,6 +191,7 @@ function App() {
       <AuthProvider>
         <SafeModeProvider>
           <AppContent />
+          <Toaster />
         </SafeModeProvider>
       </AuthProvider>
     </BrowserRouter>

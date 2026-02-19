@@ -91,6 +91,7 @@ export function ReporteSemanalWizard() {
   // Paso 4: Resultado
   const [htmlGenerado, setHtmlGenerado] = useState('');
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
+  const [errorGeneracion, setErrorGeneracion] = useState('');
 
   // ============================================================================
   // NAVEGACIÓN ENTRE PASOS
@@ -145,6 +146,7 @@ export function ReporteSemanalWizard() {
     setGenerando(true);
     setHtmlGenerado('');
     setPdfBlob(null);
+    setErrorGeneracion('');
 
     try {
       // Actualizar datos con temas adicionales finales
@@ -163,7 +165,10 @@ export function ReporteSemanalWizard() {
       setPdfBlob(resultado.pdfBlob);
       toast.success(`Reporte generado (${resultado.tokensUsados} tokens)`);
     } catch (error: any) {
-      toast.error(error.message || 'Error al generar el reporte');
+      console.error('[ReporteSemanal] Error en handleGenerar:', error);
+      const errorMsg = error.message || 'Error desconocido al generar el reporte';
+      setErrorGeneracion(errorMsg);
+      toast.error(errorMsg, { duration: 10000 });
     } finally {
       setGenerando(false);
       setProgresoMensaje('');
@@ -750,6 +755,30 @@ export function ReporteSemanalWizard() {
                 </Button>
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Error banner */}
+      {errorGeneracion && !generando && (
+        <Card className="border-red-300 bg-red-50">
+          <CardContent className="py-6">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-6 h-6 text-red-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <h4 className="font-medium text-red-800 mb-1">Error al generar el reporte</h4>
+                <p className="text-sm text-red-700">{errorGeneracion}</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-3 border-red-300 text-red-700 hover:bg-red-100"
+                  onClick={handleGenerar}
+                >
+                  <RefreshCw className="w-4 h-4 mr-1" />
+                  Reintentar
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}

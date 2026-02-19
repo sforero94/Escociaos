@@ -28,33 +28,67 @@ export async function generarHTMLReporte(
   datos: DatosReporteSemanal,
   instrucciones?: string
 ): Promise<GenerateReportResponse> {
-  const response = await fetch(
-    `${EDGE_FUNCTION_BASE}/make-server-1ccce916/reportes/generar-semanal`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${publicAnonKey}`,
-      },
-      body: JSON.stringify({ datos, instrucciones }),
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 90_000);
+
+  console.log('[ReporteSemanal] Iniciando generación HTML via Edge Function...');
+
+  try {
+    const response = await fetch(
+      `${EDGE_FUNCTION_BASE}/make-server-1ccce916/reportes/generar-semanal`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${publicAnonKey}`,
+        },
+        body: JSON.stringify({ datos, instrucciones }),
+        signal: controller.signal,
+      }
+    );
+
+    clearTimeout(timeoutId);
+    console.log('[ReporteSemanal] Response status:', response.status);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const message = errorData.error || `Error del servidor: ${response.status}`;
+      console.error('[ReporteSemanal] Error response:', message);
+
+      if (response.status === 504 || response.status === 502) {
+        throw new Error(
+          'El servidor tardó demasiado en responder. La generación del reporte excedió el tiempo límite. Intenta de nuevo.'
+        );
+      }
+      throw new Error(message);
     }
-  );
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `Error del servidor: ${response.status}`);
+    const result = await response.json();
+    console.log('[ReporteSemanal] Result success:', result.success, 'HTML length:', result.html?.length || 0);
+
+    if (!result.success) {
+      throw new Error(result.error || 'Error al generar el reporte');
+    }
+
+    if (!result.html || result.html.trim().length === 0) {
+      throw new Error('El servidor devolvió un reporte vacío. Intenta generar de nuevo.');
+    }
+
+    return {
+      html: result.html,
+      tokens_usados: result.tokens_usados,
+    };
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+
+    if (error.name === 'AbortError') {
+      console.error('[ReporteSemanal] Request timed out after 90s');
+      throw new Error(
+        'La generación del reporte tardó demasiado (más de 90 segundos). Intenta de nuevo.'
+      );
+    }
+    throw error;
   }
-
-  const result = await response.json();
-
-  if (!result.success) {
-    throw new Error(result.error || 'Error al generar el reporte');
-  }
-
-  return {
-    html: result.html,
-    tokens_usados: result.tokens_usados,
-  };
 }
 
 // ============================================================================
@@ -233,18 +267,27 @@ export async function generarReporteCompleto(
   instrucciones?: string,
   onProgress?: (step: string) => void
 ): Promise<GenerarReporteCompletoResult> {
+  console.log('[ReporteSemanal] === Inicio flujo completo ===');
+
   // Paso 1: Generar HTML con Gemini
   onProgress?.('Generando diseño del reporte con IA...');
+  console.log('[ReporteSemanal] Paso 1: Llamando a Gemini...');
   const { html, tokens_usados } = await generarHTMLReporte(datos, instrucciones);
+  console.log('[ReporteSemanal] Paso 1 completado. HTML:', html.length, 'chars, Tokens:', tokens_usados);
 
   // Paso 2: Convertir HTML a PDF
   onProgress?.('Convirtiendo a PDF...');
+  console.log('[ReporteSemanal] Paso 2: Convirtiendo HTML a PDF...');
   const pdfBlob = await convertirHTMLaPDF(html);
+  console.log('[ReporteSemanal] Paso 2 completado. PDF:', pdfBlob.size, 'bytes');
 
   // Paso 3: Guardar en Storage y BD
   onProgress?.('Guardando reporte...');
+  console.log('[ReporteSemanal] Paso 3: Guardando en Supabase...');
   const metadata = await guardarReportePDF(pdfBlob, datos);
+  console.log('[ReporteSemanal] Paso 3 completado. ID:', metadata.id);
 
+  console.log('[ReporteSemanal] === Flujo completo exitoso ===');
   return {
     html,
     pdfBlob,
