@@ -36,8 +36,11 @@ import {
   User,
   MapPin,
   Tag,
-  AlertTriangle
+  AlertTriangle,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
+import { Button } from '../ui/button';
 
 // Import types from main component
 import type { Tarea, RegistroTrabajo, Empleado, Lote } from './Labores';
@@ -49,12 +52,16 @@ interface TareaDetalleDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tarea: Tarea | null;
+  onEditar?: (tarea: Tarea) => void;
+  onEliminar?: (tarea: Tarea) => void;
 }
 
 const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
   open,
   onOpenChange,
   tarea,
+  onEditar,
+  onEliminar,
 }) => {
   const [registrosTrabajo, setRegistrosTrabajo] = useState<RegistroTrabajo[]>([]);
   const [empleados, setEmpleados] = useState<Empleado[]>([]);
@@ -525,6 +532,26 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
             </div>
           </div>
         </DialogBody>
+
+        {/* Footer with Edit / Delete actions (hidden for archived tasks) */}
+        {tarea.estado !== 'Completada' && tarea.estado !== 'Cancelada' && onEditar && onEliminar && (
+          <div className="px-6 md:px-8 py-4 border-t bg-white flex-shrink-0 flex items-center justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => { onEditar(tarea); onOpenChange(false); }}
+            >
+              <Pencil className="h-4 w-4 mr-2" />
+              Editar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => { onEliminar(tarea); onOpenChange(false); }}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Eliminar
+            </Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

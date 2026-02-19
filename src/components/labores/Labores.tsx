@@ -498,6 +498,8 @@ const Labores: React.FC = () => {
         open={showDetalleDialog}
         onOpenChange={setShowDetalleDialog}
         tarea={tareaSeleccionada}
+        onEditar={handleEditarTarea}
+        onEliminar={handleEliminarTarea}
       />
     </div>
   );
