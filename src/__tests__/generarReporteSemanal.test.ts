@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // ============================================================================
 // TEST: Edge Function - Generación de reporte semanal con Gemini
-// Nota: Este test verifica la lógica de formateo de datos y manejo de responses.
+// Nota: Este test verifica la lógica de formateo de datos, parseo de JSON
+// de Gemini, y construcción determinística del HTML.
 // No llama a la API real de Gemini.
 // ============================================================================
 
@@ -141,20 +142,32 @@ const MOCK_DATOS_COMPLETOS = {
   ],
 };
 
+// Gemini now returns JSON analysis, not HTML
+const MOCK_GEMINI_ANALYSIS = {
+  resumen_ejecutivo: 'Semana 7 con 10.5 jornales totales por un costo de $547,500 COP. Se registra una alerta urgente por Monalonion en Lote PP con incidencia en aumento.',
+  conclusiones: [
+    { icono: '🔴', texto: 'Priorizar tratamiento contra Monalonion en Lote PP - incidencia en 27.1% y en ascenso', prioridad: 'alta' },
+    { icono: '⚠️', texto: 'Evaluar cobertura de fertilización foliar en Lote ST (53.3% de avance vs 75% en Lote PP)', prioridad: 'media' },
+    { icono: '✅', texto: 'Continuar monitoreo semanal de plagas para detectar cambios tempranos', prioridad: 'baja' },
+  ],
+  interpretacion_monitoreo: 'La incidencia de Monalonion muestra una tendencia ascendente sostenida: 12.5% → 18.3% → 27.1% en las últimas 3 semanas. Se requiere intervención inmediata.',
+};
+
 const MOCK_GEMINI_RESPONSE = {
   candidates: [
     {
       content: {
         parts: [
           {
-            text: '<!DOCTYPE html><html><head><style>body{font-family:Arial;}</style></head><body><h1>Reporte Semanal - Semana 7</h1><p>Contenido del reporte...</p></body></html>',
+            text: JSON.stringify(MOCK_GEMINI_ANALYSIS),
           },
         ],
       },
+      finishReason: 'STOP',
     },
   ],
   usageMetadata: {
-    totalTokenCount: 4521,
+    totalTokenCount: 450,
   },
 };
 
@@ -164,13 +177,14 @@ const MOCK_GEMINI_RESPONSE_WITH_MARKDOWN = {
       content: {
         parts: [
           {
-            text: '```html\n<!DOCTYPE html><html><head><style>body{font-family:Arial;color:#4D240F;}</style></head><body><h1 style="color:#73991C;">Reporte Semanal - Semana 7 de 2026</h1><p>Este es el contenido del reporte generado por Gemini con suficiente texto para pasar la validación de longitud mínima.</p></body></html>\n```',
+            text: '```json\n' + JSON.stringify(MOCK_GEMINI_ANALYSIS) + '\n```',
           },
         ],
       },
+      finishReason: 'STOP',
     },
   ],
-  usageMetadata: { totalTokenCount: 1000 },
+  usageMetadata: { totalTokenCount: 460 },
 };
 
 // ============================================================================
@@ -209,7 +223,7 @@ describe('Edge Function: generarReporteSemanal', () => {
       const [url, options] = mockFetch.mock.calls[0];
 
       // Verifica URL con modelo y API key
-      expect(url).toContain('gemini-2.0-flash');
+      expect(url).toContain('gemini-3-flash-preview');
       expect(url).toContain('key=test-api-key-12345');
       expect(options.method).toBe('POST');
       expect(options.headers['Content-Type']).toBe('application/json');
@@ -234,7 +248,7 @@ describe('Edge Function: generarReporteSemanal', () => {
       // El primer part debe ser el system prompt
       const systemPrompt = body.contents[0].parts[0].text;
       expect(systemPrompt).toContain('Escocia Hass');
-      expect(systemPrompt).toContain('#73991C');
+      expect(systemPrompt).toContain('JSON');
 
       // El segundo part debe contener los datos formateados
       const datosFormateados = body.contents[0].parts[1].text;
@@ -275,10 +289,25 @@ describe('Edge Function: generarReporteSemanal', () => {
 
       expect(body.generationConfig.temperature).toBe(0.3);
     });
+
+    it('solicita respuesta en formato JSON', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(MOCK_GEMINI_RESPONSE),
+      });
+
+      await generarReporteSemanal({ datos: MOCK_DATOS_COMPLETOS });
+
+      const [, options] = mockFetch.mock.calls[0];
+      const body = JSON.parse(options.body);
+
+      expect(body.generationConfig.responseMimeType).toBe('application/json');
+      expect(body.generationConfig.maxOutputTokens).toBe(2048);
+    });
   });
 
-  describe('Procesamiento de respuesta', () => {
-    it('retorna HTML limpio del response de Gemini', async () => {
+  describe('Procesamiento de respuesta — HTML determinístico', () => {
+    it('retorna HTML determinístico con todas las secciones', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(MOCK_GEMINI_RESPONSE),
@@ -288,10 +317,96 @@ describe('Edge Function: generarReporteSemanal', () => {
 
       expect(resultado.success).toBe(true);
       expect(resultado.html).toContain('<!DOCTYPE html>');
+      expect(resultado.html).toContain('ESCOCIA HASS');
       expect(resultado.html).toContain('Reporte Semanal');
+      expect(resultado.html).toContain('Semana 7 / 2026');
     });
 
-    it('limpia bloques de código markdown del HTML', async () => {
+    it('incluye KPI cards con datos correctos', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(MOCK_GEMINI_RESPONSE),
+      });
+
+      const resultado = await generarReporteSemanal({ datos: MOCK_DATOS_COMPLETOS });
+
+      expect(resultado.html).toContain('Total Jornales');
+      expect(resultado.html).toContain('Costo Total');
+      expect(resultado.html).toContain('Trabajadores');
+      expect(resultado.html).toContain('Aplicaciones');
+      expect(resultado.html).toContain('Alertas Fito');
+    });
+
+    it('incluye heatmap de jornales con actividades y lotes', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(MOCK_GEMINI_RESPONSE),
+      });
+
+      const resultado = await generarReporteSemanal({ datos: MOCK_DATOS_COMPLETOS });
+
+      expect(resultado.html).toContain('Distribución de Jornales');
+      expect(resultado.html).toContain('Fumigación');
+      expect(resultado.html).toContain('Fertilización');
+      expect(resultado.html).toContain('Poda');
+      expect(resultado.html).toContain('Lote PP');
+      expect(resultado.html).toContain('Lote ST');
+      expect(resultado.html).toContain('Lote AU');
+    });
+
+    it('incluye aplicaciones con barras de progreso', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(MOCK_GEMINI_RESPONSE),
+      });
+
+      const resultado = await generarReporteSemanal({ datos: MOCK_DATOS_COMPLETOS });
+
+      expect(resultado.html).toContain('Fertilización foliar');
+      expect(resultado.html).toContain('65.7%');
+      expect(resultado.html).toContain('23/35');
+    });
+
+    it('incluye monitoreo con badges de gravedad', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(MOCK_GEMINI_RESPONSE),
+      });
+
+      const resultado = await generarReporteSemanal({ datos: MOCK_DATOS_COMPLETOS });
+
+      expect(resultado.html).toContain('Monitoreo Fitosanitario');
+      expect(resultado.html).toContain('Monalonion');
+      expect(resultado.html).toContain('Media');
+      expect(resultado.html).toContain('Alta');
+    });
+
+    it('incluye conclusiones del análisis de Gemini', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(MOCK_GEMINI_RESPONSE),
+      });
+
+      const resultado = await generarReporteSemanal({ datos: MOCK_DATOS_COMPLETOS });
+
+      expect(resultado.html).toContain('Conclusiones y Recomendaciones');
+      expect(resultado.html).toContain('Priorizar tratamiento contra Monalonion');
+      expect(resultado.html).toContain('incidencia de Monalonion muestra una tendencia ascendente');
+    });
+
+    it('incluye resumen ejecutivo del análisis de Gemini', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(MOCK_GEMINI_RESPONSE),
+      });
+
+      const resultado = await generarReporteSemanal({ datos: MOCK_DATOS_COMPLETOS });
+
+      expect(resultado.html).toContain('RESUMEN EJECUTIVO');
+      expect(resultado.html).toContain('10.5 jornales totales');
+    });
+
+    it('parsea JSON de Gemini envuelto en markdown fences', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve(MOCK_GEMINI_RESPONSE_WITH_MARKDOWN),
@@ -300,9 +415,25 @@ describe('Edge Function: generarReporteSemanal', () => {
       const resultado = await generarReporteSemanal({ datos: MOCK_DATOS_COMPLETOS });
 
       expect(resultado.success).toBe(true);
-      expect(resultado.html).not.toContain('```html');
-      expect(resultado.html).not.toContain('```');
-      expect(resultado.html).toContain('<!DOCTYPE html>');
+      expect(resultado.html).toContain('ESCOCIA HASS');
+      expect(resultado.html).toContain('Priorizar tratamiento contra Monalonion');
+    });
+
+    it('usa análisis fallback cuando Gemini retorna JSON inválido', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          candidates: [{ content: { parts: [{ text: 'not valid json at all' }] }, finishReason: 'STOP' }],
+          usageMetadata: { totalTokenCount: 100 },
+        }),
+      });
+
+      const resultado = await generarReporteSemanal({ datos: MOCK_DATOS_COMPLETOS });
+
+      // Should succeed with fallback analysis
+      expect(resultado.success).toBe(true);
+      expect(resultado.html).toContain('ESCOCIA HASS');
+      expect(resultado.html).toContain('Semana operativa procesada');
     });
 
     it('incluye conteo de tokens usados', async () => {
@@ -313,22 +444,20 @@ describe('Edge Function: generarReporteSemanal', () => {
 
       const resultado = await generarReporteSemanal({ datos: MOCK_DATOS_COMPLETOS });
 
-      expect(resultado.tokens_usados).toBe(4521);
+      expect(resultado.tokens_usados).toBe(450);
     });
 
-    it('falla cuando Gemini retorna HTML muy corto (< 100 chars)', async () => {
+    it('incluye temas adicionales cuando están presentes', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({
-          candidates: [{ content: { parts: [{ text: '<html></html>' }] } }],
-          usageMetadata: { totalTokenCount: 10 },
-        }),
+        json: () => Promise.resolve(MOCK_GEMINI_RESPONSE),
       });
 
       const resultado = await generarReporteSemanal({ datos: MOCK_DATOS_COMPLETOS });
 
-      expect(resultado.success).toBe(false);
-      expect(resultado.error).toContain('no generó un HTML válido');
+      expect(resultado.html).toContain('Temas Adicionales');
+      expect(resultado.html).toContain('Notas del agrónomo');
+      expect(resultado.html).toContain('alta humedad');
     });
   });
 
@@ -368,6 +497,21 @@ describe('Edge Function: generarReporteSemanal', () => {
 
       // Restore
       (globalThis as any).Deno.env.get = originalGet;
+    });
+
+    it('maneja respuesta de seguridad de Gemini', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'SAFETY' }],
+          usageMetadata: { totalTokenCount: 0 },
+        }),
+      });
+
+      const resultado = await generarReporteSemanal({ datos: MOCK_DATOS_COMPLETOS });
+
+      expect(resultado.success).toBe(false);
+      expect(resultado.error).toContain('filtros de seguridad');
     });
   });
 
