@@ -1,7 +1,7 @@
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
-import { toast } from 'sonner@2.0.3';
+import { toast } from 'sonner';
 import { CatalogoPlagas } from './CatalogoPlagas';
 import { CargaCSV } from './CargaCSV';
 import { TablaMonitoreos } from './TablaMonitoreos';

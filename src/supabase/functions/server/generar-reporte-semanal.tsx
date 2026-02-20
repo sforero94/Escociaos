@@ -234,26 +234,67 @@ async function llamarGemini(datosFormateados: string, instruccionesAdicionales?:
     ],
     generationConfig: {
       temperature: 0.3,
-      maxOutputTokens: 16384,
+      maxOutputTokens: 8192,
       topP: 0.8,
     }
   };
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 50_000);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error('La API de Gemini no respondió en 50 segundos. Intenta de nuevo.');
+    }
+    throw error;
+  }
 
   if (!response.ok) {
     const errorText = await response.text();
+    console.error('Gemini API error:', response.status, errorText.slice(0, 500));
     throw new Error(`Error de Gemini API (${response.status}): ${errorText}`);
   }
 
   const result = await response.json();
 
+  // Validar estructura de respuesta
+  const candidate = result.candidates?.[0];
+  if (!candidate) {
+    console.error('Gemini response has no candidates:', JSON.stringify(result).slice(0, 500));
+    throw new Error('Gemini no retornó candidatos. Posible error de contenido o límite.');
+  }
+
+  const finishReason = candidate.finishReason;
+  console.log('Gemini finishReason:', finishReason);
+
+  if (finishReason === 'SAFETY') {
+    console.error('Gemini blocked response due to safety filters');
+    throw new Error(
+      'Gemini bloqueó la respuesta por filtros de seguridad. Intenta ajustar los datos del reporte.'
+    );
+  }
+
+  if (finishReason === 'RECITATION') {
+    throw new Error('Gemini bloqueó la respuesta por detección de recitación.');
+  }
+
   // Extraer el HTML del response
-  const text = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const text = candidate.content?.parts?.[0]?.text || '';
+
+  if (!text) {
+    console.error('Gemini candidate has no text. finishReason:', finishReason);
+    throw new Error('Gemini no generó contenido de texto en la respuesta.');
+  }
 
   // Gemini puede envolver el HTML en bloques de código markdown
   let html = text;
@@ -267,7 +308,14 @@ async function llamarGemini(datosFormateados: string, instruccionesAdicionales?:
   }
   html = html.trim();
 
+  // Si fue truncado, cerrar HTML gracefully
+  if (finishReason === 'MAX_TOKENS' && !html.endsWith('</html>')) {
+    console.warn('Truncated HTML detected, appending closing tags');
+    html += '</body></html>';
+  }
+
   const tokens = result.usageMetadata?.totalTokenCount || 0;
+  console.log('Gemini response: HTML length:', html.length, 'tokens:', tokens);
 
   return { html, tokens };
 }
@@ -277,30 +325,42 @@ async function llamarGemini(datosFormateados: string, instruccionesAdicionales?:
 // ============================================================================
 
 export async function generarReporteSemanal(body: GenerateReportRequest): Promise<GenerateReportResponse> {
+  const startTime = Date.now();
+  console.log('=== generarReporteSemanal START ===');
+
   try {
     const { datos, instrucciones } = body;
 
     if (!datos || !datos.semana) {
+      console.log('Validation failed: datos or semana missing');
       return { success: false, error: 'Datos del reporte no proporcionados o incompletos' };
     }
 
+    console.log(`Semana ${datos.semana.numero}/${datos.semana.ano}`);
+
     // Formatear datos para el prompt
     const datosFormateados = formatearDatosParaPrompt(datos);
+    console.log('Datos formateados:', datosFormateados.length, 'chars');
 
     // Llamar a Gemini
+    console.log('Calling Gemini API...');
+    const geminiStart = Date.now();
     const { html, tokens } = await llamarGemini(datosFormateados, instrucciones);
+    console.log(`Gemini completed in ${Date.now() - geminiStart}ms`);
 
     if (!html || html.length < 100) {
-      return { success: false, error: 'Gemini no generó un HTML válido' };
+      console.error('HTML too short:', html.length, 'chars');
+      return { success: false, error: 'Gemini no generó un HTML válido (respuesta demasiado corta)' };
     }
 
+    console.log(`=== generarReporteSemanal SUCCESS in ${Date.now() - startTime}ms ===`);
     return {
       success: true,
       html,
       tokens_usados: tokens,
     };
   } catch (error: any) {
-    console.error('Error generando reporte semanal:', error);
+    console.error(`=== generarReporteSemanal ERROR in ${Date.now() - startTime}ms ===`, error.message);
     return {
       success: false,
       error: error.message || 'Error interno al generar el reporte',
