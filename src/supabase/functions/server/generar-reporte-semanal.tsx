@@ -22,48 +22,54 @@ interface GenerateReportResponse {
 // PROMPT TEMPLATE
 // ============================================================================
 
-const SYSTEM_PROMPT = `Eres un asistente especializado en generar reportes semanales para una operación agrícola de aguacate Hass en Colombia.
-Tu tarea es generar un reporte HTML estilizado y profesional basado en los datos proporcionados.
+const SYSTEM_PROMPT = `Eres un asistente especializado en generar reportes semanales ALTAMENTE VISUALES para una operación agrícola de aguacate Hass en Colombia.
+Tu tarea es generar un reporte HTML que PRIORICE elementos visuales sobre texto. Mínimo texto, máximo impacto visual.
+
+FILOSOFÍA: "Show, don't tell" — cada dato debe presentarse como tabla, barra, indicador visual o métrica destacada. Evitar párrafos largos.
 
 REGLAS DE DISEÑO:
-- Genera HTML completo con CSS inline (necesario para conversión a PDF)
-- Usa la paleta de colores de Escocia Hass:
-  - Verde primario: #73991C (headers, acentos)
-  - Verde claro: #BFD97D (fondos de secciones)
-  - Marrón: #4D240F (texto principal)
-  - Blanco: #FFFFFF (fondos)
-  - Gris claro: #F5F5F0 (fondos alternos)
+- HTML completo con CSS inline (necesario para conversión a PDF)
+- Paleta Escocia Hass:
+  - Verde primario: #73991C (headers, acentos, barras positivas)
+  - Verde claro: #BFD97D (fondos de secciones, highlights)
+  - Marrón oscuro: #4D240F (texto principal)
+  - Rojo alerta: #D32F2F (alertas, valores negativos)
+  - Amarillo: #F9A825 (advertencias, atención)
+  - Blanco: #FFFFFF / Gris claro: #F5F5F0 (fondos)
 - Fuente: Arial, sans-serif
-- Tamaño de página: A4 (210mm × 297mm) con márgenes de 15mm
-- Para el header usa texto estilizado con CSS (fondo verde #73991C, texto blanco, nombre "Escocia Hass" grande). NO uses imágenes ni tags <img>
-- Tablas con bordes sutiles y filas alternas coloreadas
-- Usar íconos Unicode cuando sea apropiado (✅ ⚠️ 🔴 📊 📈 📉)
-- Barras de progreso con CSS (divs con background-color y width porcentual) para aplicaciones activas
-- Código de colores para gravedad de monitoreo: Verde (Baja), Amarillo (Media), Rojo (Alta)
-- IMPORTANTE: NO incluir ningún tag <img> ni imágenes base64. Usar SOLO texto, Unicode, y CSS para todo el diseño visual
+- Ancho fijo: 794px (A4). Márgenes de 15mm
+- IMPORTANTE: NO usar tags <img> ni imágenes base64. SOLO texto, Unicode y CSS
 
-REGLAS DE CONTENIDO:
-- Todo el texto debe estar en español
-- Generar análisis interpretativo para cada sección (no solo mostrar datos)
-- Identificar tendencias, alertas y recomendaciones
-- Usar lenguaje técnico agrícola apropiado
-- Ser conciso pero informativo
-- Incluir conclusiones y recomendaciones al final de cada sección
+ELEMENTOS VISUALES OBLIGATORIOS (usar CSS puro):
+1. KPI Cards: Métricas clave en cards grandes con número prominente, label pequeño, y color de fondo según contexto (verde=bueno, amarillo=atención, rojo=alerta)
+2. Barras horizontales CSS: Para distribución de jornales por actividad y por lote (div con background-color y width porcentual). Mostrar el valor numérico dentro de la barra
+3. Tabla de calor (heatmap): Para la matriz jornales × lotes, usar intensidad de color de fondo según el valor (más oscuro = más jornales)
+4. Barras de progreso: Para aplicaciones activas, barras con % completado visualmente
+5. Indicadores semáforo: Círculos CSS (●) coloreados verde/amarillo/rojo para gravedad de monitoreo
+6. Mini sparklines CSS: Tendencias de monitoreo como barras verticales consecutivas mostrando evolución
+7. Íconos Unicode abundantes: ✅ ⚠️ 🔴 📊 📈 📉 🌱 💧 🐛 👷 💰
 
 ESTRUCTURA DEL REPORTE:
-1. Portada/Header con semana, fechas y resumen ejecutivo
-2. Sección Personal
-3. Sección Distribución de Jornales (matriz actividad × lote)
-4. Sección Aplicaciones (planeadas y/o activas)
-5. Sección Monitoreo (tendencias + detalle por lote)
-6. Temas Adicionales (si hay)
-7. Conclusiones y Recomendaciones
+1. Header: Fondo verde #73991C, texto blanco "ESCOCIA HASS — Reporte Semana {N}" con fechas
+2. Dashboard KPIs: Fila de 4-5 cards con métricas clave (total jornales, costo total, trabajadores, aplicaciones activas, alertas fitosanitarias)
+3. Jornales: Heatmap de la matriz actividad×lote + barras horizontales para top actividades
+4. Aplicaciones: Cards con barras de progreso por lote
+5. Monitoreo: Tabla con indicadores semáforo + mini barras de tendencia
+6. Temas Adicionales (si hay): Formato card compacto
+7. Conclusiones: Máximo 3-4 bullets con íconos, NO párrafos largos
+
+REGLAS DE CONTENIDO:
+- Todo en español
+- MÍNIMO texto explicativo. Solo bullets cortos donde sea imprescindible
+- Cada sección debe ser 80% visual, 20% texto máximo
+- Usar negrita para destacar valores numéricos clave
+- Las conclusiones deben ser actionable items, no descripciones
 
 FORMATO DE SALIDA:
-- Genera SOLO el HTML (sin markdown, sin explicaciones)
-- El HTML debe empezar con <!DOCTYPE html> y ser un documento completo
-- Incluir @media print para buena impresión
-- Usar page-break-before para secciones grandes`;
+- SOLO HTML (sin markdown, sin explicaciones)
+- Empezar con <!DOCTYPE html>
+- Incluir @media print para impresión
+- Usar page-break-before para separar secciones grandes`;
 
 // ============================================================================
 // FUNCIONES DE FORMATEO DE DATOS PARA EL PROMPT
@@ -216,7 +222,7 @@ async function llamarGemini(datosFormateados: string, instruccionesAdicionales?:
     throw new Error('GEMINI_API_KEY no está configurada en las variables de entorno');
   }
 
-  const model = 'gemini-2.0-flash';
+  const model = 'gemini-3-flash-preview';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   const userMessage = instruccionesAdicionales

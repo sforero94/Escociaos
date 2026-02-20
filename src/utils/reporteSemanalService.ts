@@ -103,16 +103,24 @@ export async function convertirHTMLaPDF(html: string): Promise<Blob> {
   // Importar html2pdf.js dinámicamente
   const html2pdf = (await import('html2pdf.js')).default;
 
-  // Crear un contenedor temporal invisible para renderizar el HTML
+  // Crear un contenedor temporal para renderizar el HTML
+  // Debe tener ancho fijo (A4 = 210mm ≈ 794px) para que html2canvas lo renderice
   const container = document.createElement('div');
   container.innerHTML = html;
-  container.style.position = 'absolute';
-  container.style.left = '-9999px';
+  container.style.position = 'fixed';
+  container.style.left = '0';
   container.style.top = '0';
+  container.style.width = '794px';
+  container.style.zIndex = '-9999';
+  container.style.opacity = '0';
+  container.style.pointerEvents = 'none';
   document.body.appendChild(container);
 
   try {
-    const pdfBlob = await html2pdf()
+    // Dar tiempo al browser para renderizar el contenido
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    const worker = html2pdf()
       .set({
         margin: [10, 10, 10, 10], // mm
         filename: 'reporte-semanal.pdf',
@@ -121,6 +129,8 @@ export async function convertirHTMLaPDF(html: string): Promise<Blob> {
           scale: 2,
           useCORS: true,
           letterRendering: true,
+          width: 794,
+          windowWidth: 794,
         },
         jsPDF: {
           unit: 'mm',
@@ -128,12 +138,16 @@ export async function convertirHTMLaPDF(html: string): Promise<Blob> {
           orientation: 'portrait',
         },
         pagebreak: {
-          mode: ['avoid-all', 'css', 'legacy'],
+          mode: ['css', 'legacy'],
+          avoid: ['tr', 'td', '.avoid-break'],
         },
       })
-      .from(container)
-      .outputPdf('blob');
+      .from(container);
 
+    // Usar toPdf().output('blob') que retorna un Blob real
+    const pdfBlob: Blob = await worker.toPdf().output('blob');
+
+    console.log('[ReporteSemanal] PDF generado:', pdfBlob.size, 'bytes, type:', pdfBlob.type);
     return pdfBlob;
   } finally {
     document.body.removeChild(container);

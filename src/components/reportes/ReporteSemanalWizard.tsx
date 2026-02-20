@@ -810,7 +810,8 @@ export function ReporteSemanalWizard() {
           <div className="border rounded-xl overflow-hidden shadow-lg bg-white">
             <iframe
               srcDoc={htmlGenerado}
-              className="w-full h-[800px] border-0"
+              className="w-full border-0"
+              style={{ height: 'calc(100vh - 200px)', minHeight: '900px' }}
               title="Vista previa del reporte"
             />
           </div>
