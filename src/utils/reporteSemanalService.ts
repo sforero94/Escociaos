@@ -255,7 +255,7 @@ export async function fetchHistorialReportes(): Promise<ReporteSemanalMetadata[]
 export interface GenerarReporteCompletoResult {
   html: string;
   pdfBlob: Blob;
-  metadata: ReporteSemanalMetadata;
+  metadata: ReporteSemanalMetadata | null;
   tokensUsados: number;
 }
 
@@ -281,11 +281,17 @@ export async function generarReporteCompleto(
   const pdfBlob = await convertirHTMLaPDF(html);
   console.log('[ReporteSemanal] Paso 2 completado. PDF:', pdfBlob.size, 'bytes');
 
-  // Paso 3: Guardar en Storage y BD
-  onProgress?.('Guardando reporte...');
-  console.log('[ReporteSemanal] Paso 3: Guardando en Supabase...');
-  const metadata = await guardarReportePDF(pdfBlob, datos);
-  console.log('[ReporteSemanal] Paso 3 completado. ID:', metadata.id);
+  // Paso 3: Guardar en Storage y BD (no bloquea si falla)
+  let metadata: ReporteSemanalMetadata | null = null;
+  try {
+    onProgress?.('Guardando reporte...');
+    console.log('[ReporteSemanal] Paso 3: Guardando en Supabase...');
+    metadata = await guardarReportePDF(pdfBlob, datos);
+    console.log('[ReporteSemanal] Paso 3 completado. ID:', metadata.id);
+  } catch (storageError: any) {
+    console.warn('[ReporteSemanal] Paso 3 falló (no crítico):', storageError.message);
+    // El reporte se generó correctamente, solo falló el almacenamiento
+  }
 
   console.log('[ReporteSemanal] === Flujo completo exitoso ===');
   return {

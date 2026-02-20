@@ -35,11 +35,12 @@ REGLAS DE DISEÑO:
   - Gris claro: #F5F5F0 (fondos alternos)
 - Fuente: Arial, sans-serif
 - Tamaño de página: A4 (210mm × 297mm) con márgenes de 15mm
-- Incluir header con logo placeholder y nombre "Escocia Hass" en cada sección
+- Para el header usa texto estilizado con CSS (fondo verde #73991C, texto blanco, nombre "Escocia Hass" grande). NO uses imágenes ni tags <img>
 - Tablas con bordes sutiles y filas alternas coloreadas
 - Usar íconos Unicode cuando sea apropiado (✅ ⚠️ 🔴 📊 📈 📉)
-- Barras de progreso con CSS para aplicaciones activas
+- Barras de progreso con CSS (divs con background-color y width porcentual) para aplicaciones activas
 - Código de colores para gravedad de monitoreo: Verde (Baja), Amarillo (Media), Rojo (Alta)
+- IMPORTANTE: NO incluir ningún tag <img> ni imágenes base64. Usar SOLO texto, Unicode, y CSS para todo el diseño visual
 
 REGLAS DE CONTENIDO:
 - Todo el texto debe estar en español
