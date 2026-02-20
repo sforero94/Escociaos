@@ -105,20 +105,29 @@ export async function convertirHTMLaPDF(html: string): Promise<Blob> {
 
   // Crear un contenedor temporal para renderizar el HTML
   // Debe tener ancho fijo (A4 = 210mm ≈ 794px) para que html2canvas lo renderice
+  // Nota: opacity debe ser 1 (no 0) para que html2canvas pueda capturar el contenido
   const container = document.createElement('div');
   container.innerHTML = html;
-  container.style.position = 'fixed';
-  container.style.left = '0';
+  container.style.position = 'absolute';
+  container.style.left = '-9999px';
   container.style.top = '0';
   container.style.width = '794px';
   container.style.zIndex = '-9999';
-  container.style.opacity = '0';
+  container.style.opacity = '1';
   container.style.pointerEvents = 'none';
+  container.style.overflow = 'visible';
   document.body.appendChild(container);
 
   try {
     // Dar tiempo al browser para renderizar el contenido
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    // Verificar que el contenedor tiene dimensiones válidas
+    const rect = container.getBoundingClientRect();
+    if (rect.height < 10) {
+      console.warn('[ReporteSemanal] Container height near zero, waiting more...');
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
 
     const worker = html2pdf()
       .set({
@@ -271,6 +280,7 @@ export interface GenerarReporteCompletoResult {
   pdfBlob: Blob;
   metadata: ReporteSemanalMetadata | null;
   tokensUsados: number;
+  storageWarning?: string;
 }
 
 /**
@@ -297,14 +307,15 @@ export async function generarReporteCompleto(
 
   // Paso 3: Guardar en Storage y BD (no bloquea si falla)
   let metadata: ReporteSemanalMetadata | null = null;
+  let storageWarning: string | undefined;
   try {
     onProgress?.('Guardando reporte...');
     console.log('[ReporteSemanal] Paso 3: Guardando en Supabase...');
     metadata = await guardarReportePDF(pdfBlob, datos);
     console.log('[ReporteSemanal] Paso 3 completado. ID:', metadata.id);
   } catch (storageError: any) {
-    console.warn('[ReporteSemanal] Paso 3 falló (no crítico):', storageError.message);
-    // El reporte se generó correctamente, solo falló el almacenamiento
+    console.warn('[ReporteSemanal] Paso 3 falló:', storageError.message);
+    storageWarning = `No se pudo guardar en almacenamiento: ${storageError.message}`;
   }
 
   console.log('[ReporteSemanal] === Flujo completo exitoso ===');
@@ -313,6 +324,7 @@ export async function generarReporteCompleto(
     pdfBlob,
     metadata,
     tokensUsados: tokens_usados || 0,
+    storageWarning,
   };
 }
 

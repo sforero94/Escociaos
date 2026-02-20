@@ -164,9 +164,11 @@ export function ReporteSemanalWizard() {
       setHtmlGenerado(resultado.html);
       setPdfBlob(resultado.pdfBlob);
       if (resultado.metadata) {
-        toast.success(`Reporte generado y guardado (${resultado.tokensUsados} tokens)`);
+        toast.success('Reporte generado y guardado');
+      } else if (resultado.storageWarning) {
+        toast.warning(resultado.storageWarning, { duration: 8000 });
       } else {
-        toast.success(`Reporte generado (${resultado.tokensUsados} tokens). No se pudo guardar en almacenamiento.`);
+        toast.warning('Reporte generado pero no se pudo guardar en almacenamiento.', { duration: 8000 });
       }
     } catch (error: any) {
       console.error('[ReporteSemanal] Error en handleGenerar:', error);
