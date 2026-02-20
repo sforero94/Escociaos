@@ -163,7 +163,11 @@ export function ReporteSemanalWizard() {
 
       setHtmlGenerado(resultado.html);
       setPdfBlob(resultado.pdfBlob);
-      toast.success(`Reporte generado (${resultado.tokensUsados} tokens)`);
+      if (resultado.metadata) {
+        toast.success(`Reporte generado y guardado (${resultado.tokensUsados} tokens)`);
+      } else {
+        toast.success(`Reporte generado (${resultado.tokensUsados} tokens). No se pudo guardar en almacenamiento.`);
+      }
     } catch (error: any) {
       console.error('[ReporteSemanal] Error en handleGenerar:', error);
       const errorMsg = error.message || 'Error desconocido al generar el reporte';
