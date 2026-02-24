@@ -66,7 +66,7 @@ function LayoutRoutes() {
           />
           <Route path="movimientos" element={<InventoryMovements />} />
           <Route path="importar" element={<ImportarProductosPage />} />
-          
+
           {/* Verificaciones - Rutas anidadas */}
           <Route path="verificaciones">
             <Route index element={<VerificacionesList />} />
@@ -80,6 +80,7 @@ function LayoutRoutes() {
         <Route path="aplicaciones">
           <Route index element={<AplicacionesList />} />
           <Route path="calculadora" element={<CalculadoraAplicaciones />} />
+          <Route path="calculadora/:id" element={<CalculadoraAplicaciones />} />
           <Route path=":id/movimientos" element={<DailyMovementsDashboardWrapper />} />
           <Route path=":id/cierre" element={<CierreAplicacionWrapper />} />
           <Route path=":id/reporte" element={<ReporteAplicacionWrapper />} />
@@ -164,7 +165,7 @@ function AppContent() {
           isAuthenticated ? (
             <Navigate to="/" replace />
           ) : (
-            <Login onLoginSuccess={() => {}} />
+            <Login onLoginSuccess={() => { }} />
           )
         }
       />
