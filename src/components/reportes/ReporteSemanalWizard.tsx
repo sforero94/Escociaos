@@ -321,7 +321,7 @@ export function ReporteSemanalWizard() {
   // ============================================================================
 
   const renderPasos = () => (
-    <div className="flex items-center justify-between mb-8 bg-white rounded-2xl p-4 border border-gray-200 shadow-sm overflow-x-auto">
+    <div className="flex items-center justify-between mb-8 bg-white rounded-2xl p-4 border border-gray-200 shadow-sm">
       {PASOS.map((paso, i) => {
         const Icon = paso.icono;
         const esActual = paso.numero === pasoActual;
@@ -359,9 +359,9 @@ export function ReporteSemanalWizard() {
   const renderPaso1 = () => (
     <div className="space-y-6">
       {/* Selector de semana */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-foreground">
+      <Card className="rounded-xl">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-foreground text-lg">
             <Calendar className="w-5 h-5 text-primary" />
             Semana del Reporte
           </CardTitle>
@@ -385,9 +385,9 @@ export function ReporteSemanalWizard() {
       </Card>
 
       {/* Personal */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-foreground">
+      <Card className="rounded-xl">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-foreground text-lg">
             <Users className="w-5 h-5 text-primary" />
             Personal
           </CardTitle>
@@ -590,65 +590,95 @@ export function ReporteSemanalWizard() {
 
     return (
       <div className="space-y-6">
-        {/* Personal summary */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-foreground">Personal</CardTitle>
+        {/* Personal summary - Redesigned with clear hierarchy */}
+        <Card className="rounded-xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-foreground text-lg">Personal</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-              {[
-                { label: 'Trabajadores', value: datosReporte.personal.totalTrabajadores },
-                { label: 'Empleados', value: datosReporte.personal.empleados },
-                { label: 'Contratistas', value: datosReporte.personal.contratistas },
-                { label: 'Fallas', value: datosReporte.personal.fallas },
-                { label: 'Permisos', value: datosReporte.personal.permisos },
-                { label: 'Ingresos', value: datosReporte.personal.ingresos },
-                { label: 'Retiros', value: datosReporte.personal.retiros },
-              ].map(item => (
-                <div key={item.label} className="text-center p-3 bg-background rounded-lg">
-                  <p className="text-2xl font-bold text-foreground">{item.value}</p>
-                  <p className="text-xs text-gray-500">{item.label}</p>
+          <CardContent className="space-y-4">
+            {/* Primary metric: Total trabajadores */}
+            <div className="flex items-center justify-between p-4 bg-primary/5 rounded-xl border border-primary/10">
+              <div>
+                <p className="text-sm text-gray-500 font-medium">Total Trabajadores</p>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <p className="text-4xl font-bold text-foreground">{datosReporte.personal.totalTrabajadores}</p>
+                  <span className="text-sm text-gray-400">
+                    ({datosReporte.personal.empleados} emp + {datosReporte.personal.contratistas} cont)
+                  </span>
                 </div>
-              ))}
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-gray-500">Eficiencia</p>
+                <p className="text-3xl font-bold text-primary">{datosReporte.personal.eficienciaOperativa}%</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {datosReporte.personal.jornalesTrabajados.toFixed(1)} / {datosReporte.personal.jornalesPosibles} jornales
+                </p>
+              </div>
             </div>
-            <div className="mt-3 p-3 bg-primary/5 rounded-lg">
-              <p className="text-sm text-gray-600">
-                <span className="font-medium text-primary">{datosReporte.personal.eficienciaOperativa}%</span> eficiencia operativa
-                &nbsp;({datosReporte.personal.jornalesTrabajados.toFixed(1)} / {datosReporte.personal.jornalesPosibles} jornales posibles)
-              </p>
+
+            {/* Secondary metrics grid */}
+            <div className="grid grid-cols-2 gap-3">
+              {/* Asistencia */}
+              <div className="p-3 bg-yellow-50 rounded-xl border border-yellow-100">
+                <p className="text-xs text-yellow-600 font-medium uppercase tracking-wide mb-2">Asistencia</p>
+                <div className="flex justify-between items-center">
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-yellow-700">{datosReporte.personal.fallas}</p>
+                    <p className="text-xs text-yellow-600">Fallas</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-yellow-700">{datosReporte.personal.permisos}</p>
+                    <p className="text-xs text-yellow-600">Permisos</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Movimientos */}
+              <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
+                <p className="text-xs text-blue-600 font-medium uppercase tracking-wide mb-2">Movimientos</p>
+                <div className="flex justify-between items-center">
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-blue-700">{datosReporte.personal.ingresos}</p>
+                    <p className="text-xs text-blue-600">Ingresos</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-blue-700">{datosReporte.personal.retiros}</p>
+                    <p className="text-xs text-blue-600">Retiros</p>
+                  </div>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Labores programadas */}
         {datosReporte.labores.programadas.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-foreground">
+          <Card className="rounded-xl">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-foreground text-lg">
                 Labores Programadas
                 <Badge variant="secondary" className="ml-2">{datosReporte.labores.programadas.length}</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto rounded-lg border border-gray-200">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Tarea</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Estado</TableHead>
-                      <TableHead>Inicio</TableHead>
-                      <TableHead>Fin</TableHead>
-                      <TableHead>Lotes</TableHead>
+                    <TableRow className="bg-gray-50">
+                      <TableHead className="text-left px-4 py-3">Tarea</TableHead>
+                      <TableHead className="px-4 py-3">Tipo</TableHead>
+                      <TableHead className="px-4 py-3">Estado</TableHead>
+                      <TableHead className="px-4 py-3">Inicio</TableHead>
+                      <TableHead className="px-4 py-3">Fin</TableHead>
+                      <TableHead className="px-4 py-3">Lotes</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {datosReporte.labores.programadas.map(labor => (
-                      <TableRow key={labor.id}>
-                        <TableCell className="font-medium">{labor.nombre}</TableCell>
-                        <TableCell className="text-sm text-gray-500">{labor.tipoTarea}</TableCell>
-                        <TableCell>
+                    {datosReporte.labores.programadas.map((labor, idx) => (
+                      <TableRow key={labor.id} className={idx % 2 === 1 ? 'bg-gray-50/50' : ''}>
+                        <TableCell className="font-medium px-4 py-3">{labor.nombre}</TableCell>
+                        <TableCell className="text-sm text-gray-500 px-4 py-3">{labor.tipoTarea}</TableCell>
+                        <TableCell className="px-4 py-3">
                           <Badge variant={
                             labor.estado === 'Terminada' ? 'default' :
                             labor.estado === 'En proceso' ? 'secondary' : 'outline'
@@ -656,9 +686,9 @@ export function ReporteSemanalWizard() {
                             {labor.estado}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-sm">{formatFecha(labor.fechaInicio)}</TableCell>
-                        <TableCell className="text-sm">{labor.fechaFin ? formatFecha(labor.fechaFin) : '—'}</TableCell>
-                        <TableCell className="text-xs text-gray-500">{labor.lotes.join(', ') || '—'}</TableCell>
+                        <TableCell className="text-sm px-4 py-3">{formatFecha(labor.fechaInicio)}</TableCell>
+                        <TableCell className="text-sm px-4 py-3">{labor.fechaFin ? formatFecha(labor.fechaFin) : '—'}</TableCell>
+                        <TableCell className="text-xs text-gray-500 px-4 py-3">{labor.lotes.join(', ') || '—'}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -669,9 +699,9 @@ export function ReporteSemanalWizard() {
         )}
 
         {/* Jornales matrix */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-foreground">
+        <Card className="rounded-xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-foreground text-lg">
               Distribución de Jornales
               <Badge variant="secondary" className="ml-2">
                 {datosReporte.labores.matrizJornales.totalGeneral.jornales.toFixed(2)} jornales
@@ -682,42 +712,42 @@ export function ReporteSemanalWizard() {
             {datosReporte.labores.matrizJornales.actividades.length === 0 ? (
               <p className="text-gray-400 text-center py-4">No hay registros de trabajo en esta semana</p>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto rounded-lg border border-gray-200">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead className="font-semibold">Actividad</TableHead>
+                    <TableRow className="bg-gray-50">
+                      <TableHead className="font-semibold text-left px-4 py-3">Actividad</TableHead>
                       {datosReporte.labores.matrizJornales.lotes.map(lote => (
-                        <TableHead key={lote} className="text-center">{lote}</TableHead>
+                        <TableHead key={lote} className="text-center px-3 py-3 font-medium">{lote}</TableHead>
                       ))}
-                      <TableHead className="text-center font-bold bg-background">Total</TableHead>
+                      <TableHead className="text-center font-bold px-4 py-3 bg-primary/5">Total</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {datosReporte.labores.matrizJornales.actividades.map(actividad => (
-                      <TableRow key={actividad}>
-                        <TableCell className="font-medium">{actividad}</TableCell>
+                    {datosReporte.labores.matrizJornales.actividades.map((actividad, idx) => (
+                      <TableRow key={actividad} className={idx % 2 === 1 ? 'bg-gray-50/50' : ''}>
+                        <TableCell className="font-medium px-4 py-3">{actividad}</TableCell>
                         {datosReporte.labores.matrizJornales.lotes.map(lote => {
                           const celda = datosReporte.labores.matrizJornales.datos[actividad]?.[lote];
                           return (
-                            <TableCell key={lote} className="text-center">
+                            <TableCell key={lote} className="text-center px-3 py-3 text-sm">
                               {celda ? celda.jornales.toFixed(2) : '-'}
                             </TableCell>
                           );
                         })}
-                        <TableCell className="text-center font-bold bg-background">
+                        <TableCell className="text-center font-semibold px-4 py-3 bg-primary/5">
                           {(datosReporte.labores.matrizJornales.totalesPorActividad[actividad]?.jornales || 0).toFixed(2)}
                         </TableCell>
                       </TableRow>
                     ))}
-                    <TableRow className="bg-background font-bold">
-                      <TableCell>Total</TableCell>
+                    <TableRow className="bg-primary/10 font-bold border-t-2 border-primary/20">
+                      <TableCell className="px-4 py-3">Total</TableCell>
                       {datosReporte.labores.matrizJornales.lotes.map(lote => (
-                        <TableCell key={lote} className="text-center">
+                        <TableCell key={lote} className="text-center px-3 py-3">
                           {(datosReporte.labores.matrizJornales.totalesPorLote[lote]?.jornales || 0).toFixed(2)}
                         </TableCell>
                       ))}
-                      <TableCell className="text-center bg-primary/10">
+                      <TableCell className="text-center px-4 py-3 bg-primary/20">
                         {datosReporte.labores.matrizJornales.totalGeneral.jornales.toFixed(2)}
                       </TableCell>
                     </TableRow>

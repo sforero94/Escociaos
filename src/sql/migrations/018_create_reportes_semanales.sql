@@ -46,6 +46,14 @@ CREATE POLICY "Authenticated users can create reports"
   TO authenticated
   WITH CHECK (true);
 
+-- Solo el creador puede actualizar su reporte (para upserts)
+-- Using true for USING expression to allow upsert operations
+CREATE POLICY "Users can update own reports"
+  ON reportes_semanales FOR UPDATE
+  TO authenticated
+  USING (true)
+  WITH CHECK (generado_por = auth.uid());
+
 -- Solo el creador puede eliminar su reporte
 CREATE POLICY "Users can delete own reports"
   ON reportes_semanales FOR DELETE

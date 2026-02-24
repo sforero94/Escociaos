@@ -338,6 +338,13 @@ export async function fetchAplicacionesPlaneadas(): Promise<AplicacionPlaneada[]
         costo_estimado,
         inventario_actual,
         cantidad_faltante
+      ),
+      aplicaciones_lotes(
+        lotes(total_arboles)
+      ),
+      aplicaciones_calculos(
+        litros_mezcla,
+        kilos_totales
       )
     `)
     .eq('estado', 'Calculada')
@@ -423,7 +430,29 @@ export async function fetchAplicacionesPlaneadas(): Promise<AplicacionPlaneada[]
       cantidadAComprar: Number(c.cantidad_faltante) || 0,
     }));
 
-    const costoTotal = listaCompras.reduce((sum, item) => sum + item.costoEstimado, 0);
+    // Calculate costs: Total = Costo Pedido + Valor Inventario a usar
+    // Costo Pedido: cost of products that need to be purchased
+    // Valor Inventario: value of inventory that will be consumed (need to estimate from precio_promedio)
+    const costoPedido = listaCompras
+      .filter(item => item.cantidadAComprar > 0)
+      .reduce((sum, item) => sum + item.costoEstimado, 0);
+
+    // For inventory value, we need to estimate based on average price
+    // Since costo_estimado is for the purchase quantity, we derive unit cost
+    const valorInventarioUsado = listaCompras
+      .filter(item => item.inventarioDisponible > 0 && item.cantidadNecesaria > 0)
+      .reduce((sum, item) => {
+        // Estimate unit cost from costo_estimado / cantidad_faltante if available
+        // Otherwise use a default calculation
+        const unitCost = item.costoEstimado > 0 && item.cantidadAComprar > 0
+          ? item.costoEstimado / item.cantidadAComprar
+          : 0;
+        // Value of inventory that will be used (up to needed quantity)
+        const inventarioAUsar = Math.min(item.inventarioDisponible, item.cantidadNecesaria);
+        return sum + (unitCost * inventarioAUsar);
+      }, 0);
+
+    const costoTotal = costoPedido + valorInventarioUsado;
     const inventarioTotal = listaCompras.reduce((sum, item) => sum + (item.inventarioDisponible || 0), 0);
     const totalPedido = listaCompras.reduce((sum, item) => sum + (item.cantidadAComprar || 0), 0);
 
@@ -434,6 +463,25 @@ export async function fetchAplicacionesPlaneadas(): Promise<AplicacionPlaneada[]
         : [app.blanco_biologico];
       blancos = (ids as string[]).map((id: string) => plagasMap.get(id) || '').filter(Boolean);
     }
+
+    // Extraer totales de los cálculos
+    let totalArboles = 0;
+    let totalLitrosKg = 0;
+    
+    ((app as any).aplicaciones_lotes || []).forEach((al: any) => {
+      totalArboles += Number(al.lotes?.total_arboles) || 0;
+    });
+    
+    ((app as any).aplicaciones_calculos || []).forEach((ac: any) => {
+      if (app.tipo_aplicacion === 'Fumigación') {
+        totalLitrosKg += Number(ac.litros_mezcla) || 0;
+      } else {
+        totalLitrosKg += Number(ac.kilos_totales) || 0;
+      }
+    });
+
+    const costoPorLitroKg = totalLitrosKg > 0 ? costoTotal / totalLitrosKg : undefined;
+    const costoPorArbol = totalArboles > 0 ? costoTotal / totalArboles : undefined;
 
     resultado.push({
       id: app.id,
@@ -448,6 +496,8 @@ export async function fetchAplicacionesPlaneadas(): Promise<AplicacionPlaneada[]
       costoTotalEstimado: costoTotal,
       inventarioTotalDisponible: inventarioTotal,
       totalPedido,
+      costoPorLitroKg,
+      costoPorArbol,
     });
   }
 
@@ -570,6 +620,7 @@ export async function fetchAplicacionesCerradas(
         .from('aplicaciones')
         .select(`
           id,
+          tarea_id,
           nombre_aplicacion,
           tipo_aplicacion,
           proposito,
@@ -615,6 +666,48 @@ export async function fetchAplicacionesCerradas(
       const calcMap = new Map<string, any>();
       (calculos || []).forEach((c: any) => calcMap.set(c.lote_id, c));
 
+      // Fetch planned purchases to get total planned insumos cost
+      const { data: compras } = await supabase
+        .from('aplicaciones_compras')
+        .select('costo_estimado')
+        .eq('aplicacion_id', appId);
+      const costoInsumosPlaneadoTotal = (compras || []).reduce((s, c) => s + (Number(c.costo_estimado) || 0), 0);
+
+      // Fetch previous app of same type for comparison
+      const { data: prevApp } = await supabase
+        .from('aplicaciones')
+        .select(`
+          id,
+          costo_total,
+          costo_total_insumos,
+          costo_total_mano_obra,
+          tarea_id,
+          movimientos_diarios(numero_canecas, numero_bultos)
+        `)
+        .eq('estado', 'Cerrada')
+        .eq('tipo_aplicacion', app.tipo_aplicacion)
+        .lt('fecha_cierre', app.fecha_cierre || new Date().toISOString())
+        .order('fecha_cierre', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      const costoAnterior = prevApp?.costo_total ? Number(prevApp.costo_total) : undefined;
+      let totalCanecasAnt = 0;
+      if (prevApp && prevApp.movimientos_diarios) {
+        prevApp.movimientos_diarios.forEach((m: any) => {
+          totalCanecasAnt += Number(esFumigacion ? m.numero_canecas : m.numero_bultos) || 0;
+        });
+      }
+      
+      let prevJornalesTotal = 0;
+      if (prevApp?.tarea_id) {
+        const { data: prevRegs } = await supabase
+          .from('registros_trabajo')
+          .select('fraccion_jornal')
+          .eq('tarea_id', prevApp.tarea_id);
+        (prevRegs || []).forEach((r: any) => { prevJornalesTotal += Number(r.fraccion_jornal) || 0; });
+      }
+
       // Fetch actual movimientos per lote
       const { data: movimientos } = await supabase
         .from('movimientos_diarios')
@@ -631,10 +724,14 @@ export async function fetchAplicacionesCerradas(
       });
 
       // Fetch jornales from registros_trabajo via tarea_id
-      const { data: registros } = await supabase
-        .from('registros_trabajo')
-        .select('lote_id, fraccion_jornal, costo_jornal, tareas!inner(aplicacion_id)')
-        .eq('tareas.aplicacion_id', appId);
+      let registros: any[] = [];
+      if (app.tarea_id) {
+        const { data } = await supabase
+          .from('registros_trabajo')
+          .select('lote_id, fraccion_jornal, costo_jornal')
+          .eq('tarea_id', app.tarea_id);
+        registros = data || [];
+      }
 
       const jornalesMap = new Map<string, { jornales: number; costo: number }>();
       (registros || []).forEach((r: any) => {
@@ -657,6 +754,8 @@ export async function fetchAplicacionesCerradas(
 
       let totalCanecasPlan = 0;
       let totalCanecasReal = 0;
+      let totalJornalesPlan = 0;
+      let totalJornalesReal = 0;
 
       lotesMap.forEach((loteInfo, loteId) => {
         const calc = calcMap.get(loteId) || {};
@@ -679,9 +778,22 @@ export async function fetchAplicacionesCerradas(
         const insumosDesv = insumosPlaneados > 0
           ? ((insumosReales - insumosPlaneados) / insumosPlaneados) * 100 : 0;
 
-        const jornalesPlan = 0; // Not stored at this granularity in current schema
+        const jornalesPlan = canecasPlan * (esFumigacion ? 1 : 0.5); // Theoretical plan
         const jornalesReal = jornales.jornales;
-        const jornalesDesv = 0;
+        const jornalesDesv = jornalesPlan > 0 ? ((jornalesReal - jornalesPlan) / jornalesPlan) * 100 : 0;
+        
+        totalJornalesPlan += jornalesPlan;
+        totalJornalesReal += jornalesReal;
+
+        const arbolesPorJornalPlan = jornalesPlan > 0 ? arboles / jornalesPlan : undefined;
+        const arbolesPorJornalReal = jornalesReal > 0 ? arboles / jornalesReal : undefined;
+        const arbolesPorJornalDesv = (arbolesPorJornalPlan && arbolesPorJornalReal && arbolesPorJornalPlan > 0)
+          ? ((arbolesPorJornalReal - arbolesPorJornalPlan) / arbolesPorJornalPlan) * 100 : undefined;
+
+        const litrosKgPorArbolPlan = arboles > 0 ? insumosPlaneados / arboles : undefined;
+        const litrosKgPorArbolReal = arboles > 0 ? insumosReales / arboles : undefined;
+        const litrosKgPorArbolDesv = (litrosKgPorArbolPlan && litrosKgPorArbolReal && litrosKgPorArbolPlan > 0)
+          ? ((litrosKgPorArbolReal - litrosKgPorArbolPlan) / litrosKgPorArbolPlan) * 100 : undefined;
 
         kpiPorLote.push({
           loteNombre: loteInfo.nombre,
@@ -692,46 +804,130 @@ export async function fetchAplicacionesCerradas(
           insumosReales: insumosReales || undefined,
           insumosDesviacion: Math.round(insumosDesv * 10) / 10,
           insumosUnidad: esFumigacion ? 'L' : 'Kg',
-          jornalesPlaneados: jornalesPlan || undefined,
+          jornalesPlaneados: Math.round(jornalesPlan * 10) / 10 || undefined,
           jornalesReales: jornalesReal || undefined,
           jornalesDesviacion: Math.round(jornalesDesv * 10) / 10,
           arbolesTratados: arboles,
-          arbolesPorJornal: jornalesReal > 0 ? Math.round(arboles / jornalesReal * 10) / 10 : undefined,
-          litrosKgPorArbol: arboles > 0 ? Math.round((insumosReales / arboles) * 100) / 100 : undefined,
+          arbolesPorJornalPlaneado: arbolesPorJornalPlan ? Math.round(arbolesPorJornalPlan * 10) / 10 : undefined,
+          arbolesPorJornal: arbolesPorJornalReal ? Math.round(arbolesPorJornalReal * 10) / 10 : undefined,
+          arbolesPorJornalDesviacion: arbolesPorJornalDesv ? Math.round(arbolesPorJornalDesv * 10) / 10 : undefined,
+          litrosKgPorArbolPlaneado: litrosKgPorArbolPlan ? Math.round(litrosKgPorArbolPlan * 100) / 100 : undefined,
+          litrosKgPorArbol: litrosKgPorArbolReal ? Math.round(litrosKgPorArbolReal * 100) / 100 : undefined,
+          litrosKgPorArbolDesviacion: litrosKgPorArbolDesv ? Math.round(litrosKgPorArbolDesv * 10) / 10 : undefined,
         });
 
         // Financial (cost distributed proportionally by lote arboles weight)
         const weight = arboles / Math.max(1, Array.from(lotesMap.values()).reduce((s, l) => s + l.arboles, 0));
-        const costoLoteInsumos = costoInsumosTotal * weight;
-        const costoLoteManoObra = jornales.costo;
-        const costoLoteTotal = costoLoteInsumos + costoLoteManoObra;
-        const costoLotePlan = costoLoteTotal; // no historical planned per lote
+        
+        const costoLoteInsumosPlan = costoInsumosPlaneadoTotal * weight;
+        const costoLoteInsumosReal = costoInsumosTotal * weight;
+        const costoInsumosDesv = costoLoteInsumosPlan > 0
+          ? ((costoLoteInsumosReal - costoLoteInsumosPlan) / costoLoteInsumosPlan) * 100 : 0;
+        const costoInsumosAnt = (Number(prevApp?.costo_total_insumos) || 0) * weight;
+        const costoInsumosVar = costoInsumosAnt > 0 ? ((costoLoteInsumosReal - costoInsumosAnt) / costoInsumosAnt) * 100 : undefined;
+        
+        const costoLoteManoObraReal = jornales.costo;
+        // FIXED: Calculate planned MO cost from planned jornales * average cost per jornal
+        const avgCostoJornal = totalJornalesReal > 0 ? costoManoObraTotal / totalJornalesReal : 50000;
+        const costoLoteManoObraPlan = jornalesPlan * avgCostoJornal;
+        const costoManoObraDesv = costoLoteManoObraPlan > 0
+          ? ((costoLoteManoObraReal - costoLoteManoObraPlan) / costoLoteManoObraPlan) * 100 : 0;
+        const costoManoObraAnt = (Number(prevApp?.costo_total_mano_obra) || 0) * weight;
+        const costoManoObraVar = costoManoObraAnt > 0 ? ((costoLoteManoObraReal - costoManoObraAnt) / costoManoObraAnt) * 100 : undefined;
+        
+        const costoLoteTotalPlan = costoLoteInsumosPlan + costoLoteManoObraPlan;
+        const costoLoteTotalReal = costoLoteInsumosReal + costoLoteManoObraReal;
+        const costoTotalDesv = costoLoteTotalPlan > 0
+          ? ((costoLoteTotalReal - costoLoteTotalPlan) / costoLoteTotalPlan) * 100 : 0;
+        const costoTotalAnt = (Number(prevApp?.costo_total) || 0) * weight;
+        const costoTotalVar = costoTotalAnt > 0 ? ((costoLoteTotalReal - costoTotalAnt) / costoTotalAnt) * 100 : undefined;
 
         financieroPorLote.push({
           loteNombre: loteInfo.nombre,
-          costoTotalPlaneado: Math.round(costoLotePlan),
-          costoTotalReal: Math.round(costoLoteTotal),
-          costoTotalDesviacion: 0,
-          costoInsumosPlaneado: Math.round(costoLoteInsumos),
-          costoInsumosReal: Math.round(costoLoteInsumos),
-          costoInsumosDesviacion: 0,
-          costoManoObraPlaneado: Math.round(costoLoteManoObra),
-          costoManoObraReal: Math.round(costoLoteManoObra),
-          costoManoObraDesviacion: 0,
+          costoTotalPlaneado: Math.round(costoLoteTotalPlan),
+          costoTotalReal: Math.round(costoLoteTotalReal),
+          costoTotalDesviacion: Math.round(costoTotalDesv * 10) / 10,
+          costoTotalAnterior: costoTotalAnt > 0 ? Math.round(costoTotalAnt) : undefined,
+          costoTotalVariacion: costoTotalVar !== undefined ? Math.round(costoTotalVar * 10) / 10 : undefined,
+          costoInsumosPlaneado: Math.round(costoLoteInsumosPlan),
+          costoInsumosReal: Math.round(costoLoteInsumosReal),
+          costoInsumosDesviacion: Math.round(costoInsumosDesv * 10) / 10,
+          costoInsumosAnterior: costoInsumosAnt > 0 ? Math.round(costoInsumosAnt) : undefined,
+          costoInsumosVariacion: costoInsumosVar !== undefined ? Math.round(costoInsumosVar * 10) / 10 : undefined,
+          costoManoObraPlaneado: Math.round(costoLoteManoObraPlan),
+          costoManoObraReal: Math.round(costoLoteManoObraReal),
+          costoManoObraDesviacion: Math.round(costoManoObraDesv * 10) / 10,
+          costoManoObraAnterior: costoManoObraAnt > 0 ? Math.round(costoManoObraAnt) : undefined,
+          costoManoObraVariacion: costoManoObraVar !== undefined ? Math.round(costoManoObraVar * 10) / 10 : undefined,
         });
       });
 
+      // Add grand total row for KPI table
       const totalCanecasDesv = totalCanecasPlan > 0
         ? ((totalCanecasReal - totalCanecasPlan) / totalCanecasPlan) * 100 : 0;
+      const totalJornalesDesv = totalJornalesPlan > 0
+        ? ((totalJornalesReal - totalJornalesPlan) / totalJornalesPlan) * 100 : 0;
+
+      kpiPorLote.push({
+        loteNombre: 'TOTAL',
+        canecasPlaneadas: totalCanecasPlan,
+        canecasReales: totalCanecasReal,
+        canecasDesviacion: Math.round(totalCanecasDesv * 10) / 10,
+        jornalesPlaneados: Math.round(totalJornalesPlan * 10) / 10,
+        jornalesReales: totalJornalesReal,
+        jornalesDesviacion: Math.round(totalJornalesDesv * 10) / 10,
+        arbolesTratados: totalArbolesApp,
+      });
+
+      // Add grand total row for Financial table
+      const totalArbolesLotes = Array.from(lotesMap.values()).reduce((s, l) => s + l.arboles, 0);
+      const avgCostoJornal = totalJornalesReal > 0 ? costoManoObraTotal / totalJornalesReal : 50000;
+
+      financieroPorLote.push({
+        loteNombre: 'TOTAL',
+        costoTotalPlaneado: Math.round(costoInsumosPlaneadoTotal + (totalJornalesPlan * avgCostoJornal)),
+        costoTotalReal: Math.round(costoTotal),
+        costoTotalDesviacion: Math.round((costoInsumosPlaneadoTotal + (totalJornalesPlan * avgCostoJornal)) > 0
+          ? ((costoTotal - (costoInsumosPlaneadoTotal + (totalJornalesPlan * avgCostoJornal))) / (costoInsumosPlaneadoTotal + (totalJornalesPlan * avgCostoJornal))) * 100 : 0),
+        costoTotalAnterior: costoAnterior ? Math.round(costoAnterior) : undefined,
+        costoTotalVariacion: costoAnterior ? Math.round(((costoTotal - costoAnterior) / costoAnterior) * 1000) / 10 : undefined,
+        costoInsumosPlaneado: Math.round(costoInsumosPlaneadoTotal),
+        costoInsumosReal: Math.round(costoInsumosTotal),
+        costoInsumosDesviacion: Math.round(costoInsumosPlaneadoTotal > 0
+          ? ((costoInsumosTotal - costoInsumosPlaneadoTotal) / costoInsumosPlaneadoTotal) * 100 : 0),
+        costoInsumosAnterior: prevApp?.costo_total_insumos ? Math.round(prevApp.costo_total_insumos) : undefined,
+        costoInsumosVariacion: prevApp?.costo_total_insumos ? Math.round(((costoInsumosTotal - prevApp.costo_total_insumos) / prevApp.costo_total_insumos) * 1000) / 10 : undefined,
+        costoManoObraPlaneado: Math.round(totalJornalesPlan * avgCostoJornal),
+        costoManoObraReal: Math.round(costoManoObraTotal),
+        costoManoObraDesviacion: Math.round((totalJornalesPlan * avgCostoJornal) > 0
+          ? ((costoManoObraTotal - (totalJornalesPlan * avgCostoJornal)) / (totalJornalesPlan * avgCostoJornal)) * 100 : 0),
+        costoManoObraAnterior: prevApp?.costo_total_mano_obra ? Math.round(prevApp.costo_total_mano_obra) : undefined,
+        costoManoObraVariacion: prevApp?.costo_total_mano_obra ? Math.round(((costoManoObraTotal - prevApp.costo_total_mano_obra) / prevApp.costo_total_mano_obra) * 1000) / 10 : undefined,
+      });
+
+      const totalCanecasVar = totalCanecasAnt > 0
+        ? ((totalCanecasReal - totalCanecasAnt) / totalCanecasAnt) * 100 : undefined;
+
+      // Calculate planned total with proper MO cost calculation (not just copying real)
+      const costoTotalPlaneadoApp = costoInsumosPlaneadoTotal + (totalJornalesPlan * avgCostoJornal);
+      const costoTotalDesvApp = costoTotalPlaneadoApp > 0
+        ? ((costoTotal - costoTotalPlaneadoApp) / costoTotalPlaneadoApp) * 100 : 0;
+      
+      const costoVariacionApp = costoAnterior
+        ? ((costoTotal - costoAnterior) / costoAnterior) * 100 : undefined;
 
       const general: AplicacionCierreGeneral = {
         canecasBultosPlaneados: totalCanecasPlan,
         canecasBultosReales: totalCanecasReal,
         canecasBultosDesviacion: Math.round(totalCanecasDesv * 10) / 10,
+        canecasAnterior: totalCanecasAnt > 0 ? totalCanecasAnt : undefined,
+        canecasVariacion: totalCanecasVar !== undefined ? Math.round(totalCanecasVar * 10) / 10 : undefined,
         unidad,
-        costoPlaneado: costoTotal,
-        costoReal: costoTotal,
-        costoDesviacion: 0,
+        costoPlaneado: Math.round(costoTotalPlaneadoApp),
+        costoReal: Math.round(costoTotal),
+        costoDesviacion: Math.round(costoTotalDesvApp * 10) / 10,
+        costoAnterior: costoAnterior ? Math.round(costoAnterior) : undefined,
+        costoVariacion: costoVariacionApp !== undefined ? Math.round(costoVariacionApp * 10) / 10 : undefined,
       };
 
       resultado.push({
@@ -788,16 +984,18 @@ export async function fetchListaAplicacionesCerradas(): Promise<{ id: string; no
 export async function fetchDatosMonitoreo(): Promise<DatosMonitoreo> {
   const supabase = getSupabase();
 
-  // Get all unique monitoring dates, descending
+  // Get all unique monitoring dates, ascending (oldest first)
+  // Then take the last 3 (most recent) which will be in chronological order
   const { data: fechasRaw, error: errorFechas } = await supabase
     .from('monitoreos')
     .select('fecha_monitoreo')
-    .order('fecha_monitoreo', { ascending: false });
+    .order('fecha_monitoreo', { ascending: true });
 
   if (errorFechas) throw new Error(`Error al cargar fechas de monitoreo: ${errorFechas.message}`);
 
   const fechasUnicas = [...new Set((fechasRaw || []).map(r => r.fecha_monitoreo))];
-  const ultimas3Fechas = fechasUnicas.slice(0, 3);
+  // Take last 3 (most recent) - now in chronological order (oldest→newest)
+  const ultimas3Fechas = fechasUnicas.slice(-3);
 
   if (ultimas3Fechas.length === 0) {
     return {

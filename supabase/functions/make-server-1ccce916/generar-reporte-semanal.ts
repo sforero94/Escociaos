@@ -633,32 +633,48 @@ function construirSlideCierreGeneral(app: any, semana: any): string {
   const canecasPlan = general.canecasBultosPlaneados ?? 0;
   const canecasReal = general.canecasBultosReales ?? 0;
   const canecasDesv = general.canecasBultosDesviacion ?? 0;
+  const canecasAnt = general.canecasAnterior;
+  const canecasVar = general.canecasVariacion;
+  
   const costoPlan = general.costoPlaneado || 0;
   const costoReal = general.costoReal || 0;
   const costoDesv = general.costoDesviacion || 0;
+  const costoAnt = general.costoAnterior;
+  const costoVar = general.costoVariacion;
+  
   const unidadCan = general.unidad || 'und';
   const dias = app.diasEjecucion || '—';
   const tipoLabel = app.tipo || '—';
   const tipoStyle = 'background:#E8F4FD;color:#1565C0;';
 
-  const kpiBlock = (label: string, plan: any, real: any, desv: number, fmt: (v: any) => string, unit: string) => {
+  const kpiBlock = (label: string, plan: any, real: any, desv: number, ant: any, varPct: number | undefined, fmt: (v: any) => string, unit: string) => {
     const dc = getDesvColor(desv);
+    const vc = varPct !== undefined ? getDesvColor(varPct) : '#FAFAFA';
     return `<div style="flex:1;background:#FFFFFF;border-radius:10px;border:1px solid #E8E8E8;padding:18px 16px;box-shadow:0 2px 6px rgba(0,0,0,0.06);">
       <div style="font-size:12px;font-weight:700;color:#888;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px;">${label}</div>
       <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
         <div style="text-align:center;">
           <div style="font-size:10px;color:#888;margin-bottom:2px;">Plan</div>
-          <div style="font-size:20px;font-weight:800;color:#4D240F;">${fmt(plan)}</div>
+          <div style="font-size:18px;font-weight:800;color:#4D240F;">${fmt(plan)}</div>
           <div style="font-size:10px;color:#888;">${unit}</div>
         </div>
         <div style="text-align:center;">
           <div style="font-size:10px;color:#888;margin-bottom:2px;">Real</div>
-          <div style="font-size:20px;font-weight:800;color:#1976D2;">${fmt(real)}</div>
+          <div style="font-size:18px;font-weight:800;color:#1976D2;">${fmt(real)}</div>
           <div style="font-size:10px;color:#888;">${unit}</div>
         </div>
         <div style="text-align:center;">
-          <div style="font-size:10px;color:#888;margin-bottom:2px;">Desviación</div>
-          <div style="font-size:20px;font-weight:800;background:${dc};color:#4D240F;border-radius:6px;padding:2px 10px;">${desv > 0 ? '+' : ''}${formatNum(desv, 1)}%</div>
+          <div style="font-size:10px;color:#888;margin-bottom:2px;">Anterior</div>
+          <div style="font-size:18px;font-weight:800;color:#555;">${ant !== undefined ? fmt(ant) : '—'}</div>
+          <div style="font-size:10px;color:#888;">${unit}</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:10px;color:#888;margin-bottom:2px;">Desv (Plan)</div>
+          <div style="font-size:16px;font-weight:800;background:${dc};color:#4D240F;border-radius:6px;padding:2px 8px;">${desv > 0 ? '+' : ''}${formatNum(desv, 1)}%</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:10px;color:#888;margin-bottom:2px;">Var (Ant)</div>
+          <div style="font-size:16px;font-weight:800;background:${vc};color:#4D240F;border-radius:6px;padding:2px 8px;">${varPct !== undefined ? (varPct > 0 ? '+' : '') + formatNum(varPct, 1) + '%' : '—'}</div>
         </div>
       </div>
     </div>`;
@@ -687,8 +703,8 @@ function construirSlideCierreGeneral(app: any, semana: any): string {
       ${app.proposito ? `<span style="font-size:12px;color:#555;font-style:italic;">"${app.proposito}"</span>` : ''}
     </div>
     <div style="display:flex;gap:16px;margin-bottom:16px;">
-      ${kpiBlock('Canecas / Bultos', canecasPlan, canecasReal, canecasDesv, (v) => String(v), unidadCan)}
-      ${kpiBlock('Costo', costoPlan, costoReal, costoDesv, formatCOP, 'COP')}
+      ${kpiBlock('Canecas / Bultos', canecasPlan, canecasReal, canecasDesv, canecasAnt, canecasVar, (v) => String(v), unidadCan)}
+      ${kpiBlock('Costo Total', costoPlan, costoReal, costoDesv, costoAnt, costoVar, formatCOP, 'COP')}
     </div>
     ${summaryRows ? `<table style="width:100%;border-collapse:collapse;">
       <thead><tr style="background:#73991C;">
@@ -709,26 +725,54 @@ function construirSlideCierreGeneral(app: any, semana: any): string {
 function construirSlideCierreTecnico(app: any, semana: any): string {
   const lotesRows = (app.kpiPorLote || []).map((lote: any) => {
     const cols = [
-      { v: lote.loteNombre, style: 'font-weight:600;' },
-      { v: String(lote.hectareas || '—'), style: 'text-align:center;' },
-      { v: String(lote.canecasPlaneadas ?? '—'), style: 'text-align:center;' },
-      { v: String(lote.canecasReales ?? '—'), style: 'text-align:center;' },
-      { v: `${lote.canecasDesviacion ?? '—'}%`, style: `text-align:center;background:${getDesvColor(lote.canecasDesviacion ?? 0)};` },
-      { v: String(lote.arbolesTratados ?? '—'), style: 'text-align:center;' },
-      { v: String(lote.litrosKgPorArbol || '—'), style: 'text-align:center;' },
-      { v: String(lote.arbolesPorJornal || '—'), style: 'text-align:center;' },
-      { v: String(lote.jornalesReales || '—'), style: 'text-align:center;' },
+      { v: lote.loteNombre, style: 'font-weight:600;text-align:left;' },
+      
+      // Canecas/Bultos
+      { v: lote.canecasPlaneadas ?? '—', style: 'text-align:center;' },
+      { v: lote.canecasReales ?? '—', style: 'text-align:center;' },
+      { v: lote.canecasDesviacion !== undefined ? `${lote.canecasDesviacion}%` : '—', style: `text-align:center;background:${getDesvColor(lote.canecasDesviacion ?? 0)};` },
+      
+      // Insumos
+      { v: lote.insumosPlaneados ?? '—', style: 'text-align:center;' },
+      { v: lote.insumosReales ?? '—', style: 'text-align:center;' },
+      { v: lote.insumosDesviacion !== undefined ? `${lote.insumosDesviacion}%` : '—', style: `text-align:center;background:${getDesvColor(lote.insumosDesviacion ?? 0)};` },
+      
+      // Jornales
+      { v: lote.jornalesPlaneados ?? '—', style: 'text-align:center;' },
+      { v: lote.jornalesReales ?? '—', style: 'text-align:center;' },
+      { v: lote.jornalesDesviacion !== undefined ? `${lote.jornalesDesviacion}%` : '—', style: `text-align:center;background:${getDesvColor(lote.jornalesDesviacion ?? 0)};` },
+      { v: lote.jornalesVariacion !== undefined ? `${lote.jornalesVariacion}%` : '—', style: `text-align:center;font-weight:700;background:${lote.jornalesVariacion !== undefined ? getDesvColor(lote.jornalesVariacion) : '#FAFAFA'};` },
+      
+      // Dosis
+      { v: lote.litrosKgPorArbolPlaneado ?? '—', style: 'text-align:center;' },
+      { v: lote.litrosKgPorArbol ?? '—', style: 'text-align:center;' },
+      { v: lote.litrosKgPorArbolDesviacion !== undefined ? `${lote.litrosKgPorArbolDesviacion}%` : '—', style: `text-align:center;background:${getDesvColor(lote.litrosKgPorArbolDesviacion ?? 0)};` },
+      
+      // Rendimiento
+      { v: lote.arbolesPorJornalPlaneado ?? '—', style: 'text-align:center;' },
+      { v: lote.arbolesPorJornal ?? '—', style: 'text-align:center;' },
+      { v: lote.arbolesPorJornalDesviacion !== undefined ? `${lote.arbolesPorJornalDesviacion}%` : '—', style: `text-align:center;background:${getDesvColor(lote.arbolesPorJornalDesviacion ?? 0)};` },
     ];
-    return `<tr style="border-bottom:1px solid #F0F0F0;">${cols.map(c => `<td style="padding:7px 9px;font-size:11px;color:#4D240F;${c.style}">${c.v}</td>`).join('')}</tr>`;
+    return `<tr style="border-bottom:1px solid #F0F0F0;">${cols.map(c => `<td style="padding:5px 6px;font-size:10px;color:#4D240F;${c.style}">${c.v}</td>`).join('')}</tr>`;
   }).join('');
-
-  const headers = ['Lote', 'Ha', 'Plan', 'Real', 'Desv%', 'Árboles', 'Dosis', 'Operarios', 'Jornales'];
 
   return `<div class="slide page-break">
   ${slideHeader('CIERRE', `Resultado Técnico — ${app.nombre}`, semana)}
   <div style="padding:16px 22px 0;">
     <table style="width:100%;border-collapse:collapse;">
-      <thead><tr style="background:#73991C;">${headers.map(h => `<th style="padding:8px 9px;font-size:10px;font-weight:700;color:#FFFFFF;text-align:${h === 'Lote' ? 'left' : 'center'};">${h}</th>`).join('')}</tr></thead>
+      <thead>
+        <tr style="background:#73991C;">
+          <th rowspan="2" style="padding:6px 6px;font-size:10px;font-weight:700;color:#FFFFFF;text-align:left;border:1px solid #5A7A15;">Lote</th>
+          <th colspan="3" style="padding:6px 6px;font-size:10px;font-weight:700;color:#FFFFFF;text-align:center;border:1px solid #5A7A15;">Canecas / Bultos</th>
+          <th colspan="3" style="padding:6px 6px;font-size:10px;font-weight:700;color:#FFFFFF;text-align:center;border:1px solid #5A7A15;">Insumos (Kg/L)</th>
+          <th colspan="4" style="padding:6px 6px;font-size:10px;font-weight:700;color:#FFFFFF;text-align:center;border:1px solid #5A7A15;">Jornales</th>
+          <th colspan="3" style="padding:6px 6px;font-size:10px;font-weight:700;color:#FFFFFF;text-align:center;border:1px solid #5A7A15;">Dosis (L o Kg/planta)</th>
+          <th colspan="3" style="padding:6px 6px;font-size:10px;font-weight:700;color:#FFFFFF;text-align:center;border:1px solid #5A7A15;">Rend. (Árboles/Jor)</th>
+        </tr>
+        <tr style="background:#8DB440;">
+          ${['Plan', 'Real', 'Desv%', 'Plan', 'Real', 'Desv%', 'Plan', 'Real', 'Desv%', 'Var Ant%', 'Plan', 'Real', 'Desv%', 'Plan', 'Real', 'Desv%'].map(h => `<th style="padding:4px 6px;font-size:9px;font-weight:600;color:#FFFFFF;text-align:center;border:1px solid #5A7A15;">${h}</th>`).join('')}
+        </tr>
+      </thead>
       <tbody>${lotesRows}</tbody>
     </table>
     ${app.observaciones ? `<div style="margin-top:14px;background:#F5F9EE;border-left:4px solid #73991C;padding:10px 14px;border-radius:0 6px 6px 0;font-size:12px;color:#4D240F;line-height:1.5;">${app.observaciones}</div>` : ''}
@@ -739,21 +783,31 @@ function construirSlideCierreTecnico(app: any, semana: any): string {
 function construirSlideCierreFinanciero(app: any, semana: any): string {
   const lotesRows = (app.financieroPorLote || []).map((lote: any) => {
     const cols = [
-      { v: lote.loteNombre, style: 'font-weight:600;' },
+      { v: lote.loteNombre, style: 'font-weight:600;text-align:left;' },
+      
+      // Costo Insumos
       { v: formatCOP(lote.costoInsumosPlaneado || 0), style: 'text-align:right;' },
       { v: formatCOP(lote.costoInsumosReal || 0), style: 'text-align:right;' },
       { v: `${lote.costoInsumosDesviacion ?? '—'}%`, style: `text-align:center;background:${getDesvColor(lote.costoInsumosDesviacion ?? 0)};` },
+      { v: lote.costoInsumosAnterior !== undefined ? formatCOP(lote.costoInsumosAnterior) : '—', style: 'text-align:right;' },
+      { v: lote.costoInsumosVariacion !== undefined ? `${lote.costoInsumosVariacion}%` : '—', style: `text-align:center;background:${lote.costoInsumosVariacion !== undefined ? getDesvColor(lote.costoInsumosVariacion) : '#FAFAFA'};` },
+      
+      // Costo Mano Obra
       { v: formatCOP(lote.costoManoObraPlaneado || 0), style: 'text-align:right;' },
       { v: formatCOP(lote.costoManoObraReal || 0), style: 'text-align:right;' },
       { v: `${lote.costoManoObraDesviacion ?? '—'}%`, style: `text-align:center;background:${getDesvColor(lote.costoManoObraDesviacion ?? 0)};` },
+      { v: lote.costoManoObraAnterior !== undefined ? formatCOP(lote.costoManoObraAnterior) : '—', style: 'text-align:right;' },
+      { v: lote.costoManoObraVariacion !== undefined ? `${lote.costoManoObraVariacion}%` : '—', style: `text-align:center;background:${lote.costoManoObraVariacion !== undefined ? getDesvColor(lote.costoManoObraVariacion) : '#FAFAFA'};` },
+      
+      // Costo Total
       { v: formatCOP(lote.costoTotalPlaneado || 0), style: 'text-align:right;font-weight:600;' },
       { v: formatCOP(lote.costoTotalReal || 0), style: 'text-align:right;font-weight:600;' },
       { v: `${lote.costoTotalDesviacion ?? '—'}%`, style: `text-align:center;font-weight:700;background:${getDesvColor(lote.costoTotalDesviacion ?? 0)};` },
+      { v: lote.costoTotalAnterior !== undefined ? formatCOP(lote.costoTotalAnterior) : '—', style: 'text-align:right;font-weight:600;' },
+      { v: lote.costoTotalVariacion !== undefined ? `${lote.costoTotalVariacion}%` : '—', style: `text-align:center;font-weight:700;background:${lote.costoTotalVariacion !== undefined ? getDesvColor(lote.costoTotalVariacion) : '#FAFAFA'};` },
     ];
-    return `<tr style="border-bottom:1px solid #F0F0F0;">${cols.map(c => `<td style="padding:7px 9px;font-size:11px;color:#4D240F;${c.style}">${c.v}</td>`).join('')}</tr>`;
+    return `<tr style="border-bottom:1px solid #F0F0F0;">${cols.map(c => `<td style="padding:5px 6px;font-size:10px;color:#4D240F;${c.style}">${c.v}</td>`).join('')}</tr>`;
   }).join('');
-
-  const headers = ['Lote', 'Insum. Plan', 'Insum. Real', 'Desv%', 'MO Plan', 'MO Real', 'Desv%', 'Total Plan', 'Total Real', 'Desv%'];
 
   const costoTotal = (app.financieroPorLote || []).reduce((s: number, l: any) => s + (l.costoTotalReal || 0), 0);
 
@@ -761,7 +815,17 @@ function construirSlideCierreFinanciero(app: any, semana: any): string {
   ${slideHeader('CIERRE', `Resultado Financiero — ${app.nombre}`, semana)}
   <div style="padding:16px 22px 0;">
     <table style="width:100%;border-collapse:collapse;">
-      <thead><tr style="background:#1565C0;">${headers.map(h => `<th style="padding:8px 9px;font-size:10px;font-weight:700;color:#FFFFFF;text-align:${h === 'Lote' ? 'left' : 'center'};">${h}</th>`).join('')}</tr></thead>
+      <thead>
+        <tr style="background:#1565C0;">
+          <th rowspan="2" style="padding:6px 6px;font-size:10px;font-weight:700;color:#FFFFFF;text-align:left;border:1px solid #0D47A1;">Lote</th>
+          <th colspan="5" style="padding:6px 6px;font-size:10px;font-weight:700;color:#FFFFFF;text-align:center;border:1px solid #0D47A1;">Costo Insumos</th>
+          <th colspan="5" style="padding:6px 6px;font-size:10px;font-weight:700;color:#FFFFFF;text-align:center;border:1px solid #0D47A1;">Costo Mano de Obra</th>
+          <th colspan="5" style="padding:6px 6px;font-size:10px;font-weight:700;color:#FFFFFF;text-align:center;border:1px solid #0D47A1;">Costo Total</th>
+        </tr>
+        <tr style="background:#1976D2;">
+          ${['Plan', 'Real', 'Desv%', 'Ant', 'Var%', 'Plan', 'Real', 'Desv%', 'Ant', 'Var%', 'Plan', 'Real', 'Desv%', 'Ant', 'Var%'].map(h => `<th style="padding:4px 6px;font-size:9px;font-weight:600;color:#FFFFFF;text-align:center;border:1px solid #0D47A1;">${h}</th>`).join('')}
+        </tr>
+      </thead>
       <tbody>${lotesRows}</tbody>
     </table>
     <div style="margin-top:14px;display:flex;gap:16px;">
@@ -869,7 +933,18 @@ function construirSlideAplicacionPlaneada(app: any, semana: any): string {
         </tr></thead>
         <tbody>${comprasRows}</tbody>
       </table>
-      <div style="text-align:right;margin-top:10px;font-size:14px;font-weight:700;color:#4D240F;">Total estimado: <span style="color:#73991C;">${formatCOP(costoTotal)}</span></div>
+      <div style="text-align:right;margin-top:10px;font-size:14px;font-weight:700;color:#4D240F;margin-bottom:20px;">Total estimado: <span style="color:#73991C;">${formatCOP(costoTotal)}</span></div>
+      
+      <div style="display:flex;gap:12px;">
+        <div style="flex:1;background:#F5F9EE;border-radius:8px;padding:12px 16px;text-align:center;border:1px solid #E8F0D0;">
+          <div style="font-size:10px;color:#73991C;font-weight:700;margin-bottom:4px;">COSTO POR ${app.tipo === 'Fumigación' ? 'LITRO' : 'KG'}</div>
+          <div style="font-size:18px;font-weight:800;color:#4D240F;">${app.costoPorLitroKg ? formatCOP(app.costoPorLitroKg) : '—'}</div>
+        </div>
+        <div style="flex:1;background:#F5F9EE;border-radius:8px;padding:12px 16px;text-align:center;border:1px solid #E8F0D0;">
+          <div style="font-size:10px;color:#73991C;font-weight:700;margin-bottom:4px;">COSTO POR ÁRBOL</div>
+          <div style="font-size:18px;font-weight:800;color:#4D240F;">${app.costoPorArbol ? formatCOP(app.costoPorArbol) : '—'}</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>`;

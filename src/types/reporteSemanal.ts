@@ -142,10 +142,16 @@ export interface AplicacionCierreKPILote {
   // Jornales
   jornalesPlaneados?: number;
   jornalesReales?: number;
+  jornalesAnterior?: number;
   jornalesDesviacion?: number;  // %
+  jornalesVariacion?: number;   // %
   // Eficiencias
-  litrosKgPorArbol?: number;
-  arbolesPorJornal?: number;
+  litrosKgPorArbolPlaneado?: number;
+  litrosKgPorArbol?: number; // Real
+  litrosKgPorArbolDesviacion?: number;
+  arbolesPorJornalPlaneado?: number;
+  arbolesPorJornal?: number; // Real
+  arbolesPorJornalDesviacion?: number;
   arbolesTratados?: number;
 }
 
@@ -169,6 +175,8 @@ export interface AplicacionCierreGeneral {
   canecasBultosPlaneados: number;
   canecasBultosReales: number;
   canecasBultosDesviacion: number;  // %
+  canecasAnterior?: number;
+  canecasVariacion?: number; // %
   unidad: 'canecas' | 'bultos';
   // Costos totales
   costoPlaneado: number;

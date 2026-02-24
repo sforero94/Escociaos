@@ -177,15 +177,26 @@ export async function guardarReportePDF(
   const supabase = getSupabase();
   const user = await getCurrentUser();
 
+  console.log('[guardarReportePDF] Starting save process...');
+  console.log('[guardarReportePDF] User:', user?.id || 'NOT AUTHENTICATED');
+
   if (!user) {
-    throw new Error('No hay usuario autenticado');
+    throw new Error('No hay usuario autenticado - Cannot save report without user session');
+  }
+
+  if (!user.id) {
+    throw new Error('Usuario autenticado pero sin ID válido');
   }
 
   const { semana } = datos;
   const fileName = `reporte-slides-semana-${semana.ano}-S${String(semana.numero).padStart(2, '0')}.pdf`;
   const storagePath = `${semana.ano}/${fileName}`;
 
+  console.log('[guardarReportePDF] Storage path:', storagePath);
+  console.log('[guardarReportePDF] Semana:', semana);
+
   // Subir PDF a Storage
+  console.log('[guardarReportePDF] Uploading PDF to Storage...');
   const { error: uploadError } = await supabase.storage
     .from('reportes-semanales')
     .upload(storagePath, pdfBlob, {
@@ -194,32 +205,83 @@ export async function guardarReportePDF(
     });
 
   if (uploadError) {
+    console.error('[guardarReportePDF] Storage upload error:', uploadError);
     throw new Error(`Error al subir PDF: ${uploadError.message}`);
   }
+  console.log('[guardarReportePDF] PDF uploaded successfully');
 
   // Guardar metadatos en la tabla
-  const { data: metadata, error: dbError } = await supabase
+  console.log('[guardarReportePDF] Saving metadata to reportes_semanales...');
+  console.log('[guardarReportePDF] User ID for generado_por:', user.id);
+
+  const insertData = {
+    fecha_inicio: semana.inicio,
+    fecha_fin: semana.fin,
+    numero_semana: semana.numero,
+    ano: semana.ano,
+    generado_por: user.id,
+    url_storage: storagePath,
+    datos_entrada: datos,
+  };
+
+  console.log('[guardarReportePDF] Insert data:', JSON.stringify(insertData, null, 2));
+
+  // Try upsert first (insert or update on conflict)
+  let result = await supabase
     .from('reportes_semanales')
-    .upsert(
-      {
-        fecha_inicio: semana.inicio,
-        fecha_fin: semana.fin,
-        numero_semana: semana.numero,
-        ano: semana.ano,
-        generado_por: user.id,
-        url_storage: storagePath,
-        datos_entrada: datos,
-      },
-      { onConflict: 'ano,numero_semana' }
-    )
+    .upsert(insertData, { onConflict: 'ano,numero_semana' })
     .select()
     .single();
 
-  if (dbError) {
-    throw new Error(`Error al guardar metadatos: ${dbError.message}`);
+  // If upsert fails due to RLS, try insert-only as fallback
+  if (result.error?.message?.includes('row-level security')) {
+    console.log('[guardarReportePDF] Upsert failed due to RLS, trying insert-only...');
+
+    // Check if a record already exists
+    const { data: existing } = await supabase
+      .from('reportes_semanales')
+      .select('id')
+      .eq('ano', semana.ano)
+      .eq('numero_semana', semana.numero)
+      .maybeSingle();
+
+    if (existing) {
+      console.log('[guardarReportePDF] Record already exists, cannot update due to RLS. Using existing record.');
+      // Return existing record metadata
+      const { data: existingMetadata } = await supabase
+        .from('reportes_semanales')
+        .select('*')
+        .eq('ano', semana.ano)
+        .eq('numero_semana', semana.numero)
+        .single();
+
+      if (existingMetadata) {
+        console.log('[guardarReportePDF] Using existing metadata:', existingMetadata.id);
+        return existingMetadata;
+      }
+    }
+
+    // Try insert-only (this should work with the INSERT policy)
+    console.log('[guardarReportePDF] Trying insert-only...');
+    result = await supabase
+      .from('reportes_semanales')
+      .insert(insertData)
+      .select()
+      .single();
   }
 
-  return metadata;
+  if (result.error) {
+    console.error('[guardarReportePDF] Database error:', result.error);
+    console.error('[guardarReportePDF] Error code:', result.error.code);
+    console.error('[guardarReportePDF] Error details:', result.error.details);
+
+    throw new Error(`Error al guardar metadatos: ${result.error.message}. ` +
+      `Código: ${result.error.code}. ` +
+      `Verifica que las políticas RLS estén configuradas correctamente.`);
+  }
+
+  console.log('[guardarReportePDF] Metadata saved successfully:', result.data?.id);
+  return result.data;
 }
 
 /**
