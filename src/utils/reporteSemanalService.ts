@@ -104,14 +104,14 @@ export async function convertirHTMLaPDF(html: string): Promise<Blob> {
   const html2pdf = (await import('html2pdf.js')).default;
 
   // Crear un contenedor temporal para renderizar el HTML
-  // Debe tener ancho fijo (A4 = 210mm ≈ 794px) para que html2canvas lo renderice
+  // Landscape slides: 1280px wide (16:9 at 72dpi)
   // Nota: opacity debe ser 1 (no 0) para que html2canvas pueda capturar el contenido
   const container = document.createElement('div');
   container.innerHTML = html;
   container.style.position = 'absolute';
   container.style.left = '-9999px';
   container.style.top = '0';
-  container.style.width = '794px';
+  container.style.width = '1280px';
   container.style.zIndex = '-9999';
   container.style.opacity = '1';
   container.style.pointerEvents = 'none';
@@ -131,24 +131,24 @@ export async function convertirHTMLaPDF(html: string): Promise<Blob> {
 
     const worker = html2pdf()
       .set({
-        margin: [10, 10, 10, 10], // mm
-        filename: 'reporte-semanal.pdf',
+        margin: [0, 0, 0, 0], // no margins — slides fill the page
+        filename: 'reporte-slides-semanal.pdf',
         image: { type: 'jpeg', quality: 0.95 },
         html2canvas: {
-          scale: 2,
+          scale: 1.5,
           useCORS: true,
           letterRendering: true,
-          width: 794,
-          windowWidth: 794,
+          width: 1280,
+          windowWidth: 1280,
         },
         jsPDF: {
-          unit: 'mm',
-          format: 'a4',
-          orientation: 'portrait',
+          unit: 'px',
+          format: [1280, 720],
+          orientation: 'landscape',
         },
         pagebreak: {
-          mode: ['css', 'legacy'],
-          avoid: ['tr', 'td', '.avoid-break'],
+          mode: ['css'],
+          before: ['.slide'],
         },
       })
       .from(container);
@@ -182,7 +182,7 @@ export async function guardarReportePDF(
   }
 
   const { semana } = datos;
-  const fileName = `reporte-semana-${semana.ano}-S${String(semana.numero).padStart(2, '0')}.pdf`;
+  const fileName = `reporte-slides-semana-${semana.ano}-S${String(semana.numero).padStart(2, '0')}.pdf`;
   const storagePath = `${semana.ano}/${fileName}`;
 
   // Subir PDF a Storage
