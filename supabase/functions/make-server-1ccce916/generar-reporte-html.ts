@@ -707,7 +707,8 @@ function renderJornales(datos: any, analisis: AnalisisGemini): string {
 function renderAplicaciones(datos: any, analisis: AnalisisGemini): string {
   const planeadas = datos.aplicaciones?.planeadas || [];
   const activas = datos.aplicaciones?.activas || [];
-  if (planeadas.length === 0 && activas.length === 0) return '';
+  const cerradas = datos.aplicaciones?.cerradas || [];
+  if (planeadas.length === 0 && activas.length === 0 && cerradas.length === 0) return '';
 
   let content = '';
 
@@ -787,6 +788,40 @@ function renderAplicaciones(datos: any, analisis: AnalisisGemini): string {
       </div>`;
     }).join('');
     content += `<h3 style="margin-bottom:2mm;margin-top:4mm;color:var(--text-muted);font-size:8.5pt;text-transform:uppercase;letter-spacing:0.4px;">Planeadas</h3>${cards}`;
+  }
+
+  // Closed applications — summary cards
+  if (cerradas.length > 0) {
+    const cards = cerradas.map((app: any) => {
+      const g = app.general || {};
+      return `
+      <div class="app-card">
+        <div class="app-card__header">
+          <div class="app-card__name">${escapeHtml(app.nombre)}</div>
+          <span class="badge badge--muted">${escapeHtml(app.tipo)}</span>
+          <span class="badge badge--ok">Cerrada</span>
+        </div>
+        <div class="app-card__meta">
+          Período: ${formatDate(app.fechaInicio)} — ${formatDate(app.fechaFin)} (${app.diasEjecucion} días) ·
+          Costo: ${formatCOP(g.costoReal || 0)}
+        </div>
+        <div style="display:flex;gap:3mm;margin-top:2mm">
+          <div class="stat-box" style="flex:1;padding:2mm">
+            <div class="stat-box__value" style="font-size:14pt">${g.canecasBultosPlaneados || 0}</div>
+            <div class="stat-box__label">Planeado (${g.unidad || ''})</div>
+          </div>
+          <div class="stat-box" style="flex:1;padding:2mm">
+            <div class="stat-box__value" style="font-size:14pt">${g.canecasBultosReales || 0}</div>
+            <div class="stat-box__label">Ejecutado</div>
+          </div>
+          <div class="stat-box" style="flex:1;padding:2mm">
+            <div class="stat-box__value ${Math.abs(g.canecasBultosDesviacion || 0) > 10 ? 'stat-box__value--warn' : ''}" style="font-size:14pt">${g.canecasBultosDesviacion > 0 ? '+' : ''}${g.canecasBultosDesviacion || 0}%</div>
+            <div class="stat-box__label">Desviación</div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    content += `<h3 style="margin-bottom:2mm;margin-top:4mm;color:var(--text-muted);font-size:8.5pt;text-transform:uppercase;letter-spacing:0.4px;">Cerradas Recientemente</h3>${cards}`;
   }
 
   const analysisBlock = analisis.analisis_aplicaciones
@@ -953,6 +988,135 @@ function renderFooter(datos: any): string {
  * Genera el HTML completo del reporte semanal usando el diseño Escocia OS.
  * Toma datos estructurados + el análisis de Gemini y produce HTML imprimible.
  */
+/**
+ * Render full Closed Application report: General, KPI per lote, Financial per lote.
+ */
+function renderCerradas(datos: any): string {
+  const cerradas = datos.aplicaciones?.cerradas || [];
+  if (cerradas.length === 0) return '';
+
+  let sections = '';
+  for (const app of cerradas) {
+    const g = app.general || {};
+
+    // ---- GENERAL ----
+    sections += `
+    <div class="section page-break">
+      <div class="section-header">
+        <div class="section-number">✓</div>
+        <h2>Cierre: ${escapeHtml(app.nombre)}</h2>
+        <span class="badge badge--ok">${escapeHtml(app.tipo)}</span>
+      </div>
+
+      <div class="app-card">
+        <h3 style="margin-bottom:2mm">Resumen General</h3>
+        <div class="app-card__meta">
+          Período: ${formatDate(app.fechaInicio)} — ${formatDate(app.fechaFin)} (${app.diasEjecucion} días) ·
+          Propósito: ${escapeHtml(app.proposito || '')}
+        </div>
+        <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-top:3mm">
+          <div class="stat-box">
+            <div class="stat-box__value">${g.canecasBultosPlaneados ?? 0}</div>
+            <div class="stat-box__label">Planeado (${g.unidad || ''})</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-box__value">${g.canecasBultosReales ?? 0}</div>
+            <div class="stat-box__label">Ejecutado</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-box__value ${Math.abs(g.canecasBultosDesviacion || 0) > 10 ? 'stat-box__value--warn' : ''}">${g.canecasBultosDesviacion > 0 ? '+' : ''}${g.canecasBultosDesviacion ?? 0}%</div>
+            <div class="stat-box__label">Desviación</div>
+          </div>
+        </div>
+        <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-top:2mm">
+          <div class="stat-box">
+            <div class="stat-box__value" style="font-size:12pt">${formatCOP(g.costoPlaneado || 0)}</div>
+            <div class="stat-box__label">Costo Planeado</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-box__value" style="font-size:12pt">${formatCOP(g.costoReal || 0)}</div>
+            <div class="stat-box__label">Costo Real</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-box__value ${Math.abs(g.costoDesviacion || 0) > 10 ? 'stat-box__value--warn' : ''}" style="font-size:12pt">${g.costoDesviacion > 0 ? '+' : ''}${g.costoDesviacion ?? 0}%</div>
+            <div class="stat-box__label">Desviación Costo</div>
+          </div>
+        </div>
+      </div>`;
+
+    // ---- KPI POR LOTE ----
+    const kpiPorLote = app.kpiPorLote || [];
+    if (kpiPorLote.length > 0) {
+      const kpiRows = kpiPorLote.map((lote: any) => `
+        <tr>
+          <td class="td-name">${escapeHtml(lote.loteNombre)}</td>
+          <td>${lote.canecasPlaneadas ?? '—'}</td>
+          <td>${lote.canecasReales ?? '—'}</td>
+          <td class="${Math.abs(lote.canecasDesviacion || 0) > 10 ? 'sev-media' : ''}">${lote.canecasDesviacion > 0 ? '+' : ''}${lote.canecasDesviacion ?? 0}%</td>
+          <td>${formatNum(lote.jornalesReales ?? 0)}</td>
+          <td>${lote.arbolesTratados ?? '—'}</td>
+          <td>${lote.arbolesPorJornal ?? '—'}</td>
+        </tr>`).join('');
+
+      sections += `
+      <div class="app-card" style="margin-top:3mm">
+        <h3 style="margin-bottom:2mm">KPIs Técnicos por Lote</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Lote</th>
+                <th>Plan.</th>
+                <th>Real</th>
+                <th>Desv.</th>
+                <th>Jornales</th>
+                <th>Árboles</th>
+                <th>Árb/Jornal</th>
+              </tr>
+            </thead>
+            <tbody>${kpiRows}</tbody>
+          </table>
+        </div>
+      </div>`;
+    }
+
+    // ---- FINANCIERO POR LOTE ----
+    const finPorLote = app.financieroPorLote || [];
+    if (finPorLote.length > 0) {
+      const finRows = finPorLote.map((lote: any) => `
+        <tr>
+          <td class="td-name">${escapeHtml(lote.loteNombre)}</td>
+          <td>${formatCOP(lote.costoInsumosReal ?? 0)}</td>
+          <td>${formatCOP(lote.costoManoObraReal ?? 0)}</td>
+          <td><strong>${formatCOP(lote.costoTotalReal ?? 0)}</strong></td>
+        </tr>`).join('');
+
+      sections += `
+      <div class="app-card" style="margin-top:3mm">
+        <h3 style="margin-bottom:2mm">Desglose Financiero por Lote</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Lote</th>
+                <th>Insumos</th>
+                <th>Mano de Obra</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>${finRows}</tbody>
+          </table>
+        </div>
+      </div>`;
+    }
+
+    sections += `
+    </div>`; // close .section
+  }
+
+  return sections;
+}
+
 export function generarHTMLReporte(datos: any, analisis: AnalisisGemini): string {
   const header = renderHeader(datos);
   const cover = renderCover(datos, analisis);
@@ -960,6 +1124,7 @@ export function generarHTMLReporte(datos: any, analisis: AnalisisGemini): string
   const personal = renderPersonal(datos, analisis);
   const jornales = renderJornales(datos, analisis);
   const aplicaciones = renderAplicaciones(datos, analisis);
+  const cerradas = renderCerradas(datos);
   const monitoreo = renderMonitoreo(datos, analisis);
   const temasAdicionales = renderTemasAdicionales(datos);
   const recomendaciones = renderRecomendaciones(analisis);
@@ -981,6 +1146,7 @@ export function generarHTMLReporte(datos: any, analisis: AnalisisGemini): string
     ${personal}
     ${jornales}
     ${aplicaciones}
+    ${cerradas}
     ${monitoreo}
     ${temasAdicionales}
     ${recomendaciones}

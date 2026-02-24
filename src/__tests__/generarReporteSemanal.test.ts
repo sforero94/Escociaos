@@ -142,15 +142,37 @@ const MOCK_DATOS_COMPLETOS = {
   ],
 };
 
-// Gemini now returns JSON analysis, not HTML
+// Gemini now returns full JSON analysis
 const MOCK_GEMINI_ANALYSIS = {
   resumen_ejecutivo: 'Semana 7 con 10.5 jornales totales por un costo de $547,500 COP. Se registra una alerta urgente por Monalonion en Lote PP con incidencia en aumento.',
+  highlights: [
+    '10.5 jornales totales',
+    'Monalonion en aumento',
+    'Fertilización foliar al 65.7%',
+  ],
+  alertas: [
+    {
+      nivel: 'urgente',
+      titulo: 'Monalonion crítica en Lote PP',
+      descripcion: 'Incidencia promedio de 27.1% y en ascenso sostenido',
+      accion: 'Evaluar aplicación de tratamiento urgente',
+    },
+  ],
   conclusiones: [
     { icono: '🔴', texto: 'Priorizar tratamiento contra Monalonion en Lote PP - incidencia en 27.1% y en ascenso', prioridad: 'alta' },
     { icono: '⚠️', texto: 'Evaluar cobertura de fertilización foliar en Lote ST (53.3% de avance vs 75% en Lote PP)', prioridad: 'media' },
     { icono: '✅', texto: 'Continuar monitoreo semanal de plagas para detectar cambios tempranos', prioridad: 'baja' },
   ],
+  analisis_jornales: 'Se registraron 10.5 jornales con costo total de $547,500 COP. Fumigación concentra el mayor esfuerzo con 5.5 jornales.',
+  analisis_aplicaciones: 'La fertilización foliar avanza al 65.7% con buen ritmo en Lote PP (75%) pero rezago en Lote ST (53.3%).',
+  analisis_monitoreo: 'Tendencia ascendente sostenida de Monalonion: 12.5% → 18.3% → 27.1% en 3 semanas.',
   interpretacion_monitoreo: 'La incidencia de Monalonion muestra una tendencia ascendente sostenida: 12.5% → 18.3% → 27.1% en las últimas 3 semanas. Se requiere intervención inmediata.',
+  recomendaciones: [
+    'Programar fumigación contra Monalonion en Lote PP esta semana',
+    'Reforzar fertilización foliar en Lote ST para alcanzar mínimo 70%',
+    'Continuar monitoreo fitosanitario semanal',
+  ],
+  narrativa_semana: 'La semana 7 se caracterizó por una operación de 10.5 jornales enfocada principalmente en fumigación y fertilización. El principal reto es el incremento sostenido de Monalonion en Lote PP, que requiere intervención urgente.',
 };
 
 const MOCK_GEMINI_RESPONSE = {
@@ -223,7 +245,7 @@ describe('Edge Function: generarReporteSemanal', () => {
       const [url, options] = mockFetch.mock.calls[0];
 
       // Verifica URL con modelo y API key
-      expect(url).toContain('gemini-3-pro-preview');
+      expect(url).toContain('gemini-2.5-flash-preview-05-20');
       expect(url).toContain('key=test-api-key-12345');
       expect(options.method).toBe('POST');
       expect(options.headers['Content-Type']).toBe('application/json');
@@ -302,7 +324,7 @@ describe('Edge Function: generarReporteSemanal', () => {
       const body = JSON.parse(options.body);
 
       expect(body.generationConfig.responseMimeType).toBe('application/json');
-      expect(body.generationConfig.maxOutputTokens).toBe(2048);
+      expect(body.generationConfig.maxOutputTokens).toBe(4096);
     });
   });
 
