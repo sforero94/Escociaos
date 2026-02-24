@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 function createChainableMock(resolvedData: any = { data: [], error: null }) {
   const chain: any = {};
   const methods = ['select', 'insert', 'update', 'upsert', 'delete', 'eq', 'neq',
-    'gte', 'lte', 'in', 'order', 'limit', 'single', 'maybeSingle'];
+    'gte', 'lte', 'in', 'or', 'order', 'limit', 'single', 'maybeSingle'];
 
   methods.forEach(method => {
     chain[method] = vi.fn(() => chain);

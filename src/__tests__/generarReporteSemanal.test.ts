@@ -245,7 +245,7 @@ describe('Edge Function: generarReporteSemanal', () => {
       const [url, options] = mockFetch.mock.calls[0];
 
       // Verifica URL con modelo y API key
-      expect(url).toContain('gemini-2.5-flash-preview-05-20');
+      expect(url).toContain('gemini-3-pro-preview');
       expect(url).toContain('key=test-api-key-12345');
       expect(options.method).toBe('POST');
       expect(options.headers['Content-Type']).toBe('application/json');
@@ -339,9 +339,9 @@ describe('Edge Function: generarReporteSemanal', () => {
 
       expect(resultado.success).toBe(true);
       expect(resultado.html).toContain('<!DOCTYPE html>');
-      expect(resultado.html).toContain('ESCOCIA HASS');
+      expect(resultado.html).toContain('Escocia OS');
       expect(resultado.html).toContain('Reporte Semanal');
-      expect(resultado.html).toContain('Semana 7 / 2026');
+      expect(resultado.html).toContain('S7/2026');
     });
 
     it('incluye KPI cards con datos correctos', async () => {
@@ -437,7 +437,7 @@ describe('Edge Function: generarReporteSemanal', () => {
       const resultado = await generarReporteSemanal({ datos: MOCK_DATOS_COMPLETOS });
 
       expect(resultado.success).toBe(true);
-      expect(resultado.html).toContain('ESCOCIA HASS');
+      expect(resultado.html).toContain('Escocia OS');
       expect(resultado.html).toContain('Priorizar tratamiento contra Monalonion');
     });
 
@@ -454,7 +454,7 @@ describe('Edge Function: generarReporteSemanal', () => {
 
       // Should succeed with fallback analysis
       expect(resultado.success).toBe(true);
-      expect(resultado.html).toContain('ESCOCIA HASS');
+      expect(resultado.html).toContain('Escocia OS');
       expect(resultado.html).toContain('Semana operativa procesada');
     });
 
