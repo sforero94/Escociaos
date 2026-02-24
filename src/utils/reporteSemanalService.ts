@@ -104,14 +104,14 @@ export async function convertirHTMLaPDF(html: string): Promise<Blob> {
   const html2pdf = (await import('html2pdf.js')).default;
 
   // Crear un contenedor temporal para renderizar el HTML
-  // Landscape slides: 1280px wide (16:9 at 72dpi)
+  // Formato A4: 794px width (a 96dpi)
   // Nota: opacity debe ser 1 (no 0) para que html2canvas pueda capturar el contenido
   const container = document.createElement('div');
   container.innerHTML = html;
   container.style.position = 'absolute';
   container.style.left = '-9999px';
   container.style.top = '0';
-  container.style.width = '1280px';
+  container.style.width = '794px';
   container.style.zIndex = '-9999';
   container.style.opacity = '1';
   container.style.pointerEvents = 'none';
@@ -131,24 +131,24 @@ export async function convertirHTMLaPDF(html: string): Promise<Blob> {
 
     const worker = html2pdf()
       .set({
-        margin: [0, 0, 0, 0], // no margins — slides fill the page
-        filename: 'reporte-slides-semanal.pdf',
-        image: { type: 'jpeg', quality: 0.95 },
+        margin: [5, 0, 5, 0], // slight top/bottom margin
+        filename: 'reporte-semanal.pdf',
+        image: { type: 'jpeg', quality: 0.98 },
         html2canvas: {
-          scale: 1.5,
+          scale: 2,
           useCORS: true,
           letterRendering: true,
-          width: 1280,
-          windowWidth: 1280,
+          width: 794,
+          windowWidth: 794,
         },
         jsPDF: {
-          unit: 'px',
-          format: [1280, 720],
-          orientation: 'landscape',
+          unit: 'mm',
+          format: 'a4',
+          orientation: 'portrait',
         },
         pagebreak: {
           mode: ['css'],
-          before: ['.slide'],
+          before: ['.page-break'],
         },
       })
       .from(container);

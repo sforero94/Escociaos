@@ -571,12 +571,24 @@ function construirSeccionJornales(jornales: any, maxJornalCelda: number): string
 function construirSeccionAplicaciones(aplicaciones: any): string {
   const planeadas = aplicaciones?.planeadas || [];
   const activas = aplicaciones?.activas || [];
+  const cerradas = aplicaciones?.cerradas || [];
 
-  if (planeadas.length === 0 && activas.length === 0) {
+  if (planeadas.length === 0 && activas.length === 0 && cerradas.length === 0) {
     return `
     <div style="padding:20px 20px 0;">
       <div style="font-size:15px;font-weight:700;color:#4D240F;margin-bottom:12px;border-left:4px solid #F57C00;padding-left:10px;">🧪 Aplicaciones</div>
       <div style="padding:16px;background:#F5F5F0;border-radius:8px;font-size:12px;color:#888;text-align:center;">Sin aplicaciones planeadas ni en ejecución esta semana</div>
+    </div>`;
+  }
+
+  let cerradasHTML = '';
+  for (const app of cerradas) {
+    cerradasHTML += `
+    <div style="background:#F5F9EE;border-radius:8px;border:1px solid #BFD97D;padding:12px;margin-bottom:8px;">
+      <div style="font-size:13px;font-weight:700;color:#4D240F;">${app.nombre} <span style="font-size:10px;color:#73991C;">(${app.tipo} - Cerrada)</span></div>
+      <div style="font-size:11px;color:#888;margin:4px 0;">📅 ${app.fechaInicio} — ${app.fechaFin} (${app.diasEjecucion} días) | 💰 Costo Real: ${formatCOP(app.general?.costoReal || 0)}</div>
+      <div style="font-size:11px;color:#555;margin-top:4px;">${app.proposito || ''}</div>
+      <div style="font-size:11px;color:#555;margin-top:4px;"><strong>Ejecución (${app.general?.unidad || ''}):</strong> Planeado: ${app.general?.canecasBultosPlaneados || 0}, Real: ${app.general?.canecasBultosReales || 0} (${app.general?.canecasBultosDesviacion > 0 ? '+' : ''}${app.general?.canecasBultosDesviacion || 0}%)</div>
     </div>`;
   }
 
@@ -637,8 +649,12 @@ function construirSeccionAplicaciones(aplicaciones: any): string {
   <div style="padding:20px 20px 0;">
     <div style="font-size:15px;font-weight:700;color:#4D240F;margin-bottom:12px;border-left:4px solid #F57C00;padding-left:10px;">🧪 Aplicaciones</div>
 
+    ${cerradas.length > 0 ? `
+    <div style="font-size:12px;font-weight:600;color:#4D240F;margin-bottom:8px;">Cerradas Recientemente (${cerradas.length})</div>
+    ${cerradasHTML}` : ''}
+
     ${activas.length > 0 ? `
-    <div style="font-size:12px;font-weight:600;color:#4D240F;margin-bottom:8px;">En Ejecución (${activas.length})</div>
+    <div style="font-size:12px;font-weight:600;color:#4D240F;margin-bottom:8px;margin-top:12px;">En Ejecución (${activas.length})</div>
     ${activasHTML}` : ''}
 
     ${planeadas.length > 0 ? `
