@@ -6,7 +6,6 @@ import { procesarCSV } from "./importar-productos.ts";
 import { crearUsuario, editarUsuario, eliminarUsuario } from "./usuarios.ts";
 import { toggleProductoActivo } from "./productos.ts";
 import { generarReporteSemanal } from "./generar-reporte-semanal.ts";
-import { generarHTMLReporte } from "./generar-reporte-html.ts";
 import { fetchDatosReporteSemanalServidor, calcularSemanaAnterior } from "./fetch-datos-reporte.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -124,7 +123,7 @@ app.post("/make-server-1ccce916/inventario/toggle-producto-activo", async (c) =>
 app.post("/make-server-1ccce916/reportes/generar-semanal", async (c) => {
   try {
     const body = await c.req.json();
-    const resultado = await generarReporteSemanal(body, generarHTMLReporte);
+    const resultado = await generarReporteSemanal(body);
 
     if (!resultado.success) {
       return c.json(resultado, 400);
@@ -176,7 +175,7 @@ app.post("/make-server-1ccce916/reportes/generar-semanal-rapido", async (c) => {
     const datos = await fetchDatosReporteSemanalServidor(semana);
 
     // Generar análisis (Gemini) + HTML (template)
-    const resultado = await generarReporteSemanal({ datos }, generarHTMLReporte);
+    const resultado = await generarReporteSemanal({ datos } as any);
 
     if (!resultado.success || !resultado.html) {
       return c.json({ success: false, error: resultado.error || 'No se generó HTML' }, 500);

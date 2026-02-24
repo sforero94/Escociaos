@@ -324,7 +324,7 @@ describe('Edge Function: generarReporteSemanal', () => {
       const body = JSON.parse(options.body);
 
       expect(body.generationConfig.responseMimeType).toBe('application/json');
-      expect(body.generationConfig.maxOutputTokens).toBe(4096);
+      expect(body.generationConfig.maxOutputTokens).toBe(2048);
     });
   });
 
@@ -339,8 +339,8 @@ describe('Edge Function: generarReporteSemanal', () => {
 
       expect(resultado.success).toBe(true);
       expect(resultado.html).toContain('<!DOCTYPE html>');
-      expect(resultado.html).toContain('Escocia OS');
-      expect(resultado.html).toContain('Reporte Semanal');
+      expect(resultado.html).toContain('ESCOCIA HASS');
+      expect(resultado.html).toContain('Informe Semanal');
       expect(resultado.html).toContain('S7/2026');
     });
 
@@ -352,11 +352,11 @@ describe('Edge Function: generarReporteSemanal', () => {
 
       const resultado = await generarReporteSemanal({ datos: MOCK_DATOS_COMPLETOS });
 
-      expect(resultado.html).toContain('Total Jornales');
+      expect(resultado.html).toContain('Jornales');
       expect(resultado.html).toContain('Costo Total');
-      expect(resultado.html).toContain('Trabajadores');
-      expect(resultado.html).toContain('Aplicaciones');
-      expect(resultado.html).toContain('Alertas Fito');
+      expect(resultado.html).toContain('Personal');
+      expect(resultado.html).toContain('Ejecución');
+      expect(resultado.html).toContain('Alertas');
     });
 
     it('incluye heatmap de jornales con actividades y lotes', async () => {
@@ -397,7 +397,7 @@ describe('Edge Function: generarReporteSemanal', () => {
 
       const resultado = await generarReporteSemanal({ datos: MOCK_DATOS_COMPLETOS });
 
-      expect(resultado.html).toContain('Monitoreo Fitosanitario');
+      expect(resultado.html).toContain('Análisis de Tendencias Fitosanitarias');
       expect(resultado.html).toContain('Monalonion');
       expect(resultado.html).toContain('Media');
       expect(resultado.html).toContain('Alta');
@@ -437,7 +437,7 @@ describe('Edge Function: generarReporteSemanal', () => {
       const resultado = await generarReporteSemanal({ datos: MOCK_DATOS_COMPLETOS });
 
       expect(resultado.success).toBe(true);
-      expect(resultado.html).toContain('Escocia OS');
+      expect(resultado.html).toContain('ESCOCIA HASS');
       expect(resultado.html).toContain('Priorizar tratamiento contra Monalonion');
     });
 
@@ -454,7 +454,7 @@ describe('Edge Function: generarReporteSemanal', () => {
 
       // Should succeed with fallback analysis
       expect(resultado.success).toBe(true);
-      expect(resultado.html).toContain('Escocia OS');
+      expect(resultado.html).toContain('ESCOCIA HASS');
       expect(resultado.html).toContain('Semana operativa procesada');
     });
 
@@ -477,7 +477,7 @@ describe('Edge Function: generarReporteSemanal', () => {
 
       const resultado = await generarReporteSemanal({ datos: MOCK_DATOS_COMPLETOS });
 
-      expect(resultado.html).toContain('Temas Adicionales');
+      expect(resultado.html).toContain('ADICIONALES');
       expect(resultado.html).toContain('Notas del agrónomo');
       expect(resultado.html).toContain('alta humedad');
     });

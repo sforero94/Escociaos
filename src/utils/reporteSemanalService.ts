@@ -104,14 +104,14 @@ export async function convertirHTMLaPDF(html: string): Promise<Blob> {
   const html2pdf = (await import('html2pdf.js')).default;
 
   // Crear un contenedor temporal para renderizar el HTML
-  // Formato A4: 794px width (a 96dpi)
+  // Formato Slides 16:9: 1280px width
   // Nota: opacity debe ser 1 (no 0) para que html2canvas pueda capturar el contenido
   const container = document.createElement('div');
   container.innerHTML = html;
   container.style.position = 'absolute';
   container.style.left = '-9999px';
   container.style.top = '0';
-  container.style.width = '794px';
+  container.style.width = '1280px';
   container.style.zIndex = '-9999';
   container.style.opacity = '1';
   container.style.pointerEvents = 'none';
@@ -131,26 +131,26 @@ export async function convertirHTMLaPDF(html: string): Promise<Blob> {
 
     const worker = html2pdf()
       .set({
-        margin: [5, 0, 5, 0], // slight top/bottom margin
-        filename: 'reporte-semanal.pdf',
+        margin: 0, // No margins for strict 16:9 slides
+        filename: 'reporte-semanal-slides.pdf',
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: {
           scale: 2,
           useCORS: true,
           letterRendering: true,
-          width: 794,
-          windowWidth: 794,
+          width: 1280,
+          windowWidth: 1280,
         },
         jsPDF: {
-          unit: 'mm',
-          format: 'a4',
-          orientation: 'portrait',
+          unit: 'px',
+          format: [1280, 720],
+          orientation: 'landscape',
         },
         pagebreak: {
           mode: ['css'],
           before: ['.page-break'],
         },
-      })
+      } as any)
       .from(container);
 
     // Usar toPdf().output('blob') que retorna un Blob real
