@@ -1,13 +1,12 @@
 // generar-reporte-semanal.tsx
-// Módulo de Edge Function para generar reportes semanales
-// Flujo: datos → Gemini (solo análisis JSON) → plantilla HTML determinística → PDF
+// Edge Function: datos → Gemini (análisis JSON) → HTML de slides landscape 16:9 → PDF
 
 // ============================================================================
 // TIPOS
 // ============================================================================
 
 interface GenerateReportRequest {
-  datos: any; // DatosReporteSemanal del frontend
+  datos: any;
   instrucciones?: string;
 }
 
@@ -26,10 +25,11 @@ interface AnalisisGemini {
     prioridad: 'alta' | 'media' | 'baja';
   }>;
   interpretacion_monitoreo: string;
+  interpretacion_tendencias_monitoreo: string;
 }
 
 // ============================================================================
-// PROMPT TEMPLATE — Solo pide análisis JSON, NO HTML
+// PROMPT TEMPLATE
 // ============================================================================
 
 const SYSTEM_PROMPT = `Eres un asistente agrícola experto para la finca de aguacate Hass "Escocia Hass" en Colombia.
@@ -37,818 +37,1147 @@ Tu tarea es analizar datos operativos semanales y producir un análisis breve, c
 
 RESPONDE EXCLUSIVAMENTE en formato JSON con esta estructura exacta:
 {
-  "resumen_ejecutivo": "2-3 oraciones resumiendo lo más importante de la semana operativa. Menciona cifras clave.",
+  "resumen_ejecutivo": "2-3 oraciones resumiendo lo más importante de la semana. Menciona cifras clave.",
   "conclusiones": [
     { "icono": "⚠️", "texto": "Recomendación concreta y accionable con verbo de acción", "prioridad": "alta" }
   ],
-  "interpretacion_monitoreo": "Interpretación breve de las tendencias fitosanitarias. Indica si suben, bajan o están estables."
+  "interpretacion_monitoreo": "Interpretación breve de las tendencias fitosanitarias generales.",
+  "interpretacion_tendencias_monitoreo": "Análisis detallado por plaga: para cada plaga importante (Monalonion, Ácaro, Huevos de Ácaro, Ácaro Cristalino, Cucarrón marceño, Trips) indica su tendencia (subiendo/bajando/estable) y qué lotes presentan mayor incidencia. Prioriza plagas de interés fitosanitario."
 }
 
 REGLAS:
 - Todo en español
 - Mínimo 3 conclusiones, máximo 5
-- Las conclusiones DEBEN ser actionable items que empiecen con verbos de acción (Evaluar, Priorizar, Continuar, Revisar, Programar, etc.)
-- El resumen ejecutivo debe mencionar las cifras más relevantes (total jornales, costo, alertas)
-- La interpretación del monitoreo debe mencionar si las tendencias van subiendo, bajando o están estables, y qué plagas requieren atención
-- Usa estos íconos según prioridad: 🔴 (alta/urgente), ⚠️ (media/atención), ✅ (baja/bueno), 📊 (informativo)
+- Las conclusiones DEBEN empezar con verbos de acción (Evaluar, Priorizar, Continuar, Revisar, Programar, Aplicar, etc.)
+- El resumen ejecutivo debe mencionar las cifras más relevantes (total jornales, eficiencia operativa, alertas fitosanitarias)
+- interpretacion_tendencias_monitoreo: analiza plaga por plaga, menciona lotes con mayor incidencia, indica si requiere intervención urgente
+- Usa estos íconos: 🔴 (alta/urgente), ⚠️ (media/atención), ✅ (baja/bueno), 📊 (informativo)
 - NO incluir HTML, markdown, ni código. SOLO el objeto JSON.
 - NO envolver el JSON en bloques de código (\`\`\`).`;
 
 // ============================================================================
-// FUNCIONES DE FORMATEO DE DATOS PARA EL PROMPT
+// FORMATEO DE DATOS PARA PROMPT
 // ============================================================================
 
 function formatearDatosParaPrompt(datos: any): string {
   const partes: string[] = [];
 
-  // Semana
-  partes.push(`## PERÍODO DEL REPORTE
-- Semana ${datos.semana.numero} del ${datos.semana.ano}
-- Desde: ${datos.semana.inicio}
-- Hasta: ${datos.semana.fin}`);
+  partes.push(`## PERÍODO
+- Semana ${datos.semana?.numero} del ${datos.semana?.ano}
+- Desde: ${datos.semana?.inicio} hasta: ${datos.semana?.fin}`);
 
-  // Personal
+  const p = datos.personal || {};
   partes.push(`## PERSONAL
-- Total trabajadores: ${datos.personal.totalTrabajadores}
-  - Empleados: ${datos.personal.empleados}
-  - Contratistas: ${datos.personal.contratistas}
-- Fallas: ${datos.personal.fallas}
-- Permisos: ${datos.personal.permisos}`);
+- Total: ${p.totalTrabajadores} (${p.empleados} empleados, ${p.contratistas} contratistas)
+- Fallas: ${p.fallas} | Permisos: ${p.permisos} | Ingresos: ${p.ingresos || 0} | Retiros: ${p.retiros || 0}
+- Jornales posibles: ${p.jornalesPosibles || 'N/A'} | Trabajados: ${p.jornalesTrabajados || 'N/A'}
+- Eficiencia operativa: ${p.eficienciaOperativa || 'N/A'}%`);
 
-  // Jornales
-  if (datos.jornales) {
-    const { actividades, lotes, datos: matrizDatos, totalesPorActividad, totalesPorLote, totalGeneral } = datos.jornales;
-
-    partes.push(`## DISTRIBUCIÓN DE JORNALES
-Total general: ${totalGeneral.jornales.toFixed(2)} jornales ($${Math.round(totalGeneral.costo).toLocaleString('es-CO')} COP)
-
-### Matriz Actividades × Lotes (valores = jornales)
-Lotes: ${lotes.join(', ')}
-Actividades: ${actividades.join(', ')}
-
-Datos de la matriz:`);
-
-    actividades.forEach((act: string) => {
-      const fila = lotes.map((lote: string) => {
-        const celda = matrizDatos[act]?.[lote];
-        return celda ? celda.jornales.toFixed(2) : '0';
-      });
-      const totalAct = totalesPorActividad[act]?.jornales || 0;
-      partes.push(`  ${act}: [${fila.join(', ')}] Total: ${totalAct.toFixed(2)}`);
-    });
-
-    const totalesLote = lotes.map((lote: string) =>
-      (totalesPorLote[lote]?.jornales || 0).toFixed(2)
-    );
-    partes.push(`  TOTALES POR LOTE: [${totalesLote.join(', ')}]`);
+  const mat = datos.labores?.matrizJornales || datos.jornales;
+  if (mat) {
+    partes.push(`## JORNALES
+- Total general: ${mat.totalGeneral?.jornales || 0} jornales, costo $${mat.totalGeneral?.costo || 0}
+- Actividades: ${(mat.actividades || []).join(', ')}
+- Lotes: ${(mat.lotes || []).join(', ')}`);
   }
 
-  // Aplicaciones planeadas
-  if (datos.aplicaciones.planeadas?.length > 0) {
-    partes.push(`## APLICACIONES PLANEADAS`);
-    datos.aplicaciones.planeadas.forEach((app: any) => {
-      partes.push(`### ${app.nombre} (${app.tipo})
-- Propósito: ${app.proposito}
-- Blancos biológicos: ${app.blancosBiologicos.join(', ')}
-- Fecha planeada: ${app.fechaInicioPlaneada}
-- Costo total estimado: $${Math.round(app.costoTotalEstimado).toLocaleString('es-CO')} COP
-- Lista de compras:`);
-      app.listaCompras.forEach((item: any) => {
-        partes.push(`  - ${item.productoNombre}: ${item.cantidadNecesaria} ${item.unidad} (~$${Math.round(item.costoEstimado).toLocaleString('es-CO')})`);
-      });
-    });
+  const labProg = datos.labores?.programadas || [];
+  if (labProg.length > 0) {
+    partes.push(`## LABORES PROGRAMADAS (${labProg.length} tareas)
+${labProg.slice(0, 8).map((l: any) => `- [${l.estado}] ${l.nombre} (${l.tipoTarea}) — lotes: ${(l.lotes || []).join(', ')}`).join('\n')}`);
   }
 
-  // Aplicaciones activas
-  if (datos.aplicaciones.activas?.length > 0) {
-    partes.push(`## APLICACIONES EN EJECUCIÓN`);
-    datos.aplicaciones.activas.forEach((app: any) => {
-      partes.push(`### ${app.nombre} (${app.tipo})
-- Propósito: ${app.proposito}
-- Fecha inicio: ${app.fechaInicio}
-- Progreso global: ${app.totalEjecutado}/${app.totalPlaneado} ${app.unidad} (${app.porcentajeGlobal}%)
-- Detalle por lote:`);
-      app.progresoPorLote.forEach((lote: any) => {
-        partes.push(`  - ${lote.loteNombre}: ${lote.ejecutado}/${lote.planeado} ${lote.unidad} (${lote.porcentaje}%)`);
-      });
-    });
+  const aps = datos.aplicaciones || {};
+  if ((aps.planeadas || []).length > 0) {
+    partes.push(`## APLICACIONES PLANEADAS
+${(aps.planeadas || []).map((a: any) => `- ${a.nombre} (${a.tipo}): propósito ${a.proposito}, costo estimado $${a.costoTotalEstimado}`).join('\n')}`);
+  }
+  if ((aps.activas || []).length > 0) {
+    partes.push(`## APLICACIONES ACTIVAS
+${(aps.activas || []).map((a: any) => `- ${a.nombre}: ${a.porcentajeGlobal}% completado (${a.totalEjecutado}/${a.totalPlaneado} ${a.unidad})`).join('\n')}`);
+  }
+  if ((aps.cerradas || []).length > 0) {
+    partes.push(`## APLICACIONES CERRADAS
+${(aps.cerradas || []).map((c: any) => `- ${c.nombre}: desviación costo ${c.general?.costoDesviacion}%, ejecutado en ${c.diasEjecucion} días`).join('\n')}`);
   }
 
-  // Monitoreo
-  if (datos.monitoreo) {
+  const mon = datos.monitoreo || {};
+  if ((mon.tendencias || []).length > 0) {
     partes.push(`## MONITOREO FITOSANITARIO
-Fechas de monitoreo analizadas: ${datos.monitoreo.fechasMonitoreo.join(', ')}`);
-
-    // Tendencias
-    if (datos.monitoreo.tendencias.length > 0) {
-      partes.push(`### Tendencias (últimos 3 monitoreos)`);
-
-      // Agrupar por plaga
-      const porPlaga = new Map<string, any[]>();
-      datos.monitoreo.tendencias.forEach((t: any) => {
-        if (!porPlaga.has(t.plagaNombre)) porPlaga.set(t.plagaNombre, []);
-        porPlaga.get(t.plagaNombre)!.push(t);
-      });
-
-      porPlaga.forEach((tendencias, plaga) => {
-        const valores = tendencias
-          .sort((a: any, b: any) => a.fecha.localeCompare(b.fecha))
-          .map((t: any) => `${t.fecha}: ${t.incidenciaPromedio}%`);
-        partes.push(`  - ${plaga}: ${valores.join(' → ')}`);
-      });
-    }
-
-    // Detalle por lote
-    if (datos.monitoreo.detallePorLote.length > 0) {
-      partes.push(`### Detalle por lote (monitoreo más reciente)`);
-      datos.monitoreo.detallePorLote.forEach((lote: any) => {
-        partes.push(`  ${lote.loteNombre}:`);
-        lote.sublotes.forEach((s: any) => {
-          partes.push(`    - ${s.subloteNombre} | ${s.plagaNombre}: ${s.incidencia}% (${s.gravedad}) [${s.arboresAfectados}/${s.arboresMonitoreados} árboles]`);
-        });
-      });
-    }
-
-    // Insights
-    if (datos.monitoreo.insights.length > 0) {
-      partes.push(`### Alertas e insights automáticos`);
-      datos.monitoreo.insights.forEach((insight: any) => {
-        const icono = insight.tipo === 'urgente' ? '🔴' : insight.tipo === 'atencion' ? '⚠️' : '✅';
-        partes.push(`  ${icono} [${insight.tipo.toUpperCase()}] ${insight.titulo}: ${insight.descripcion}`);
-        if (insight.accion) partes.push(`    → Acción: ${insight.accion}`);
-      });
-    }
-  }
-
-  // Temas adicionales
-  if (datos.temasAdicionales?.length > 0) {
-    partes.push(`## TEMAS ADICIONALES`);
-    datos.temasAdicionales.forEach((bloque: any, i: number) => {
-      if (bloque.tipo === 'texto') {
-        partes.push(`### ${bloque.titulo || `Tema ${i + 1}`}\n${bloque.contenido}`);
-      } else if (bloque.tipo === 'imagen_con_texto') {
-        partes.push(`### ${bloque.titulo || `Imagen ${i + 1}`}\n[IMAGEN incluida en base64]\nDescripción: ${bloque.descripcion}`);
-      }
-    });
+- Fechas: ${(mon.fechasMonitoreo || []).join(', ')}
+${(mon.tendencias || []).map((t: any) => `- ${t.plagaNombre}: incidencia promedio ${t.incidenciaPromedio}%`).join('\n')}
+- Plagas de interés: Monalonion, Ácaro, Huevos de Ácaro, Ácaro Cristalino, Cucarrón marceño, Trips`);
   }
 
   return partes.join('\n\n');
 }
 
 // ============================================================================
-// LLAMADA A GEMINI — Retorna análisis JSON, no HTML
+// LLAMADA A GEMINI
 // ============================================================================
 
-async function llamarGemini(datosFormateados: string, instruccionesAdicionales?: string): Promise<{ analisis: AnalisisGemini; tokens: number }> {
+async function llamarGemini(datos: any, instrucciones?: string): Promise<{ analisis: AnalisisGemini; tokens: number }> {
   const apiKey = Deno.env.get('GEMINI_API_KEY');
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY no está configurada en las variables de entorno');
-  }
+  if (!apiKey) throw new Error('GEMINI_API_KEY no configurada');
 
-  const model = 'gemini-3-flash-preview';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-  const userMessage = instruccionesAdicionales
-    ? `${datosFormateados}\n\n## INSTRUCCIONES ADICIONALES DEL USUARIO\n${instruccionesAdicionales}`
+  const datosFormateados = formatearDatosParaPrompt(datos);
+  const userContent = instrucciones
+    ? `${datosFormateados}\n\n## INSTRUCCIONES ADICIONALES\n${instrucciones}`
     : datosFormateados;
 
-  const body = {
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          { text: SYSTEM_PROMPT },
-          { text: `Analiza estos datos operativos semanales y genera el JSON de análisis:\n\n${userMessage}` }
-        ]
-      }
-    ],
-    generationConfig: {
-      temperature: 0.3,
-      maxOutputTokens: 2048,
-      topP: 0.8,
-      responseMimeType: 'application/json',
-    }
-  };
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 50_000);
-
-  let response: Response;
-  try {
-    response = await fetch(url, {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+    {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-  } catch (error: any) {
-    clearTimeout(timeoutId);
-    if (error.name === 'AbortError') {
-      throw new Error('La API de Gemini no respondió en 50 segundos. Intenta de nuevo.');
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        contents: [{ role: 'user', parts: [{ text: userContent }] }],
+        generationConfig: { temperature: 0.3, maxOutputTokens: 2048 },
+      }),
     }
-    throw error;
-  }
+  );
 
   if (!response.ok) {
-    const errorText = await response.text();
-    console.error('Gemini API error:', response.status, errorText.slice(0, 500));
-    throw new Error(`Error de Gemini API (${response.status}): ${errorText}`);
+    const err = await response.text();
+    throw new Error(`Gemini error ${response.status}: ${err}`);
   }
 
   const result = await response.json();
-
-  // Validar estructura de respuesta
-  const candidate = result.candidates?.[0];
-  if (!candidate) {
-    console.error('Gemini response has no candidates:', JSON.stringify(result).slice(0, 500));
-    throw new Error('Gemini no retornó candidatos. Posible error de contenido o límite.');
-  }
-
-  const finishReason = candidate.finishReason;
-  console.log('Gemini finishReason:', finishReason);
-
-  if (finishReason === 'SAFETY') {
-    console.error('Gemini blocked response due to safety filters');
-    throw new Error(
-      'Gemini bloqueó la respuesta por filtros de seguridad. Intenta ajustar los datos del reporte.'
-    );
-  }
-
-  if (finishReason === 'RECITATION') {
-    throw new Error('Gemini bloqueó la respuesta por detección de recitación.');
-  }
-
-  const text = candidate.content?.parts?.[0]?.text || '';
-
-  if (!text) {
-    console.error('Gemini candidate has no text. finishReason:', finishReason);
-    throw new Error('Gemini no generó contenido de texto en la respuesta.');
-  }
-
-  // Parsear JSON — limpiar posibles fences markdown
-  let jsonText = text.trim();
-  if (jsonText.startsWith('```json')) {
-    jsonText = jsonText.slice(7);
-  } else if (jsonText.startsWith('```')) {
-    jsonText = jsonText.slice(3);
-  }
-  if (jsonText.endsWith('```')) {
-    jsonText = jsonText.slice(0, -3);
-  }
-  jsonText = jsonText.trim();
+  const text = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const tokens = result.usageMetadata?.totalTokenCount || 0;
 
   let analisis: AnalisisGemini;
   try {
-    analisis = JSON.parse(jsonText);
+    const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    analisis = JSON.parse(cleaned);
   } catch {
-    console.error('Failed to parse Gemini JSON:', jsonText.slice(0, 300));
-    // Fallback: análisis genérico
     analisis = {
-      resumen_ejecutivo: 'Semana operativa procesada. Consulte los datos del reporte para detalles específicos.',
-      conclusiones: [
-        { icono: '📊', texto: 'Revisar los indicadores detallados en las secciones del reporte', prioridad: 'media' },
-        { icono: '📋', texto: 'Verificar el avance de las aplicaciones en curso', prioridad: 'media' },
-        { icono: '🌱', texto: 'Monitorear la evolución fitosanitaria en la próxima semana', prioridad: 'media' },
-      ],
-      interpretacion_monitoreo: 'Consulte la sección de monitoreo para detalles sobre las tendencias fitosanitarias.',
+      resumen_ejecutivo: text.slice(0, 300),
+      conclusiones: [{ icono: '📊', texto: 'Ver datos del reporte para detalles.', prioridad: 'baja' }],
+      interpretacion_monitoreo: '',
+      interpretacion_tendencias_monitoreo: '',
     };
-    console.warn('Using fallback analysis due to JSON parse failure');
   }
-
-  // Validar estructura mínima
-  if (!analisis.resumen_ejecutivo) {
-    analisis.resumen_ejecutivo = 'Semana operativa procesada.';
-  }
-  if (!Array.isArray(analisis.conclusiones) || analisis.conclusiones.length === 0) {
-    analisis.conclusiones = [
-      { icono: '📊', texto: 'Revisar los indicadores del reporte', prioridad: 'media' },
-    ];
-  }
-  if (!analisis.interpretacion_monitoreo) {
-    analisis.interpretacion_monitoreo = '';
-  }
-
-  const tokens = result.usageMetadata?.totalTokenCount || 0;
-  console.log('Gemini response: analysis parsed, tokens:', tokens);
 
   return { analisis, tokens };
 }
 
 // ============================================================================
-// HELPERS PARA HTML
+// HELPERS HTML / CSS
 // ============================================================================
 
-function formatCOP(n: number): string {
-  return '$' + Math.round(n).toLocaleString('es-CO');
+function formatCOP(value: number): string {
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;
+  return `$${value.toFixed(0)}`;
 }
 
-function formatNum(n: number, decimals = 2): string {
-  return n.toFixed(decimals).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+function formatNum(value: number, decimals = 1): string {
+  return value.toFixed(decimals);
 }
 
-function getHeatmapColor(value: number, maxValue: number): string {
-  if (value === 0 || maxValue === 0) return '#FFFFFF';
-  const intensity = Math.min(value / maxValue, 1);
-  const r = Math.round(245 - intensity * (245 - 115));
-  const g = Math.round(248 - intensity * (248 - 153));
-  const b = Math.round(230 - intensity * (230 - 28));
+function getHeatmapColor(value: number, max: number): string {
+  if (max <= 0) return '#f8f9fa';
+  const ratio = Math.min(value / max, 1);
+  const r = Math.round(115 + (255 - 115) * (1 - ratio));
+  const g = Math.round(153 + (255 - 153) * (1 - ratio));
+  const b = Math.round(28 + (255 - 28) * (1 - ratio));
+  if (ratio < 0.05) return '#f8f9fa';
   return `rgb(${r},${g},${b})`;
 }
 
-function getTextColorForHeatmap(value: number, maxValue: number): string {
-  if (maxValue === 0) return '#4D240F';
-  const intensity = value / maxValue;
-  return intensity > 0.6 ? '#FFFFFF' : '#4D240F';
+function getTextColorForHeatmap(value: number, max: number): string {
+  if (max <= 0) return '#333';
+  const ratio = Math.min(value / max, 1);
+  return ratio > 0.5 ? '#fff' : '#333';
 }
 
-function getBadgeHTML(texto: string, tipo: string): string {
-  const colors: Record<string, { bg: string; text: string }> = {
-    'Alta': { bg: '#FFCDD2', text: '#C62828' },
-    'Media': { bg: '#FFF9C4', text: '#F57F17' },
-    'Baja': { bg: '#C8E6C9', text: '#2E7D32' },
-  };
-  const c = colors[tipo] || colors['Baja'];
-  return `<span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:600;background:${c.bg};color:${c.text};">${texto}</span>`;
+function getDesvColor(desv: number): string {
+  const abs = Math.abs(desv);
+  if (abs <= 10) return '#16a34a';
+  if (abs <= 20) return '#d97706';
+  return '#dc2626';
 }
 
-function getInsightStyles(tipo: string): { border: string; bg: string; icon: string } {
-  if (tipo === 'urgente') return { border: '#D32F2F', bg: '#FFF5F5', icon: '🔴' };
-  if (tipo === 'atencion') return { border: '#F9A825', bg: '#FFFDF0', icon: '⚠️' };
-  return { border: '#73991C', bg: '#F5F9EE', icon: '✅' };
+function getDesvBadge(desv: number): string {
+  const color = getDesvColor(desv);
+  const sign = desv >= 0 ? '+' : '';
+  return `<span style="color:${color};font-weight:600">${sign}${formatNum(desv)}%</span>`;
+}
+
+function getIncidenciaColor(inc: number): string {
+  if (inc <= 5) return '#16a34a';
+  if (inc <= 20) return '#d97706';
+  return '#dc2626';
+}
+
+function slideHeader(seccion: string, titulo: string, semana: any): string {
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;
+      background:linear-gradient(135deg,#73991C,#5a7a14);
+      color:white;padding:12px 28px;flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:14px">
+        <span style="font-size:11px;opacity:0.85;letter-spacing:1px;text-transform:uppercase">${seccion}</span>
+        <span style="width:1px;height:16px;background:rgba(255,255,255,0.4)"></span>
+        <span style="font-size:18px;font-weight:700">${titulo}</span>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:11px;opacity:0.85">Escocia Hass</div>
+        <div style="font-size:11px;opacity:0.75">Semana ${semana?.numero || ''} · ${semana?.ano || ''}</div>
+      </div>
+    </div>`;
+}
+
+function slideWrap(content: string): string {
+  return `<div class="slide">${content}</div>`;
 }
 
 // ============================================================================
-// PLANTILLA HTML DETERMINÍSTICA
+// SLIDE 1: PORTADA
+// ============================================================================
+
+function construirSlideTitulo(datos: any): string {
+  const { semana } = datos;
+  const fechaInicio = new Date(semana.inicio + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'long' });
+  const fechaFin = new Date(semana.fin + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  return slideWrap(`
+    <div style="width:100%;height:100%;background:linear-gradient(135deg,#1a2a06 0%,#2d4a0e 40%,#4D240F 100%);
+      display:flex;flex-direction:column;align-items:center;justify-content:center;color:white;text-align:center">
+      <div style="font-size:13px;letter-spacing:3px;text-transform:uppercase;opacity:0.7;margin-bottom:16px">Escocia Hass · Informe Operativo</div>
+      <div style="font-size:72px;font-weight:900;line-height:1;margin-bottom:8px">S${String(semana.numero).padStart(2,'0')}</div>
+      <div style="font-size:28px;font-weight:300;opacity:0.9;margin-bottom:24px">Semana ${semana.numero} · ${semana.ano}</div>
+      <div style="width:60px;height:3px;background:#73991C;margin:0 auto 24px"></div>
+      <div style="font-size:18px;opacity:0.8">${fechaInicio} — ${fechaFin}</div>
+    </div>`);
+}
+
+// ============================================================================
+// SLIDE 2: PERSONAL
+// ============================================================================
+
+function construirSlidePersonal(datos: any): string {
+  const p = datos.personal || {};
+  const semana = datos.semana;
+  const eficiencia = p.eficienciaOperativa || 0;
+  const efColor = eficiencia >= 90 ? '#16a34a' : eficiencia >= 75 ? '#d97706' : '#dc2626';
+
+  const detallesFallas = (p.detalleFallas || []).slice(0, 6);
+  const detallesPermisos = (p.detallePermisos || []).slice(0, 6);
+
+  const filaPersona = (d: any) => `
+    <div style="padding:3px 0;font-size:12px;border-bottom:1px solid #f0f0f0;display:flex;gap:6px">
+      <span style="font-weight:600;color:#4D240F">${d.empleado}</span>
+      ${d.razon ? `<span style="color:#666">— ${d.razon}</span>` : ''}
+    </div>`;
+
+  return slideWrap(`
+    ${slideHeader('Personal', 'Resumen de Equipo', semana)}
+    <div style="padding:16px 28px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;flex:1">
+      <!-- KPIs principales -->
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div style="background:#f8fdf0;border:2px solid #73991C;border-radius:10px;padding:14px;text-align:center">
+          <div style="font-size:36px;font-weight:900;color:#73991C">${p.totalTrabajadores || 0}</div>
+          <div style="font-size:12px;color:#666;margin-top:2px">Total Trabajadores</div>
+          <div style="display:flex;justify-content:center;gap:16px;margin-top:8px">
+            <div style="text-align:center">
+              <div style="font-size:20px;font-weight:700;color:#4D240F">${p.empleados || 0}</div>
+              <div style="font-size:10px;color:#888">Empleados</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:20px;font-weight:700;color:#4D240F">${p.contratistas || 0}</div>
+              <div style="font-size:10px;color:#888">Contratistas</div>
+            </div>
+          </div>
+        </div>
+        <div style="background:#f8fdf0;border:2px solid ${efColor};border-radius:10px;padding:14px;text-align:center">
+          <div style="font-size:36px;font-weight:900;color:${efColor}">${formatNum(eficiencia, 1)}%</div>
+          <div style="font-size:12px;color:#666;margin-top:2px">Eficiencia Operativa</div>
+          <div style="margin-top:8px;display:flex;justify-content:center;gap:12px">
+            <div style="text-align:center">
+              <div style="font-size:16px;font-weight:700">${p.jornalesTrabajados || 0}</div>
+              <div style="font-size:10px;color:#888">Trabajados</div>
+            </div>
+            <div style="text-align:center;opacity:0.6">/</div>
+            <div style="text-align:center">
+              <div style="font-size:16px;font-weight:700">${p.jornalesPosibles || 0}</div>
+              <div style="font-size:10px;color:#888">Posibles</div>
+            </div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div style="background:#fff3f3;border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:24px;font-weight:800;color:#dc2626">${p.fallas || 0}</div>
+            <div style="font-size:10px;color:#666">Fallas</div>
+          </div>
+          <div style="background:#fffbf0;border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:24px;font-weight:800;color:#d97706">${p.permisos || 0}</div>
+            <div style="font-size:10px;color:#666">Permisos</div>
+          </div>
+          <div style="background:#f0fff4;border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:24px;font-weight:800;color:#16a34a">${p.ingresos || 0}</div>
+            <div style="font-size:10px;color:#666">Ingresos</div>
+          </div>
+          <div style="background:#f5f5f5;border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:24px;font-weight:800;color:#6b7280">${p.retiros || 0}</div>
+            <div style="font-size:10px;color:#666">Retiros</div>
+          </div>
+        </div>
+      </div>
+      <!-- Detalle fallas -->
+      <div style="background:white;border-radius:10px;border:1px solid #f0f0f0;padding:14px;overflow:hidden">
+        <div style="font-size:13px;font-weight:700;color:#dc2626;margin-bottom:10px;display:flex;align-items:center;gap:6px">
+          <span>🔴</span> Fallas (${p.fallas || 0})
+        </div>
+        ${detallesFallas.length > 0
+          ? detallesFallas.map((d: any) => filaPersona(d)).join('')
+          : '<div style="font-size:12px;color:#aaa;font-style:italic">Sin fallas registradas</div>'}
+      </div>
+      <!-- Detalle permisos -->
+      <div style="background:white;border-radius:10px;border:1px solid #f0f0f0;padding:14px;overflow:hidden">
+        <div style="font-size:13px;font-weight:700;color:#d97706;margin-bottom:10px;display:flex;align-items:center;gap:6px">
+          <span>⚠️</span> Permisos (${p.permisos || 0})
+        </div>
+        ${detallesPermisos.length > 0
+          ? detallesPermisos.map((d: any) => filaPersona(d)).join('')
+          : '<div style="font-size:12px;color:#aaa;font-style:italic">Sin permisos registrados</div>'}
+      </div>
+    </div>`);
+}
+
+// ============================================================================
+// SLIDE 3: LABORES PROGRAMADAS
+// ============================================================================
+
+function construirSlideLaboresProgramadas(datos: any): string {
+  const labores: any[] = datos.labores?.programadas || [];
+  if (labores.length === 0) return '';
+
+  const estadoColor: Record<string, string> = {
+    'Por iniciar': '#6b7280',
+    'En proceso': '#d97706',
+    'Terminada': '#16a34a',
+  };
+  const estadoBg: Record<string, string> = {
+    'Por iniciar': '#f5f5f5',
+    'En proceso': '#fffbf0',
+    'Terminada': '#f0fff4',
+  };
+
+  const filaLabor = (l: any, i: number) => {
+    const color = estadoColor[l.estado] || '#333';
+    const bg = estadoBg[l.estado] || '#fff';
+    return `
+      <tr style="background:${i % 2 === 0 ? 'white' : '#fafafa'}">
+        <td style="padding:7px 10px;font-size:12px;color:#4D240F;max-width:220px">${l.nombre}</td>
+        <td style="padding:7px 10px;font-size:11px;color:#666">${l.tipoTarea}</td>
+        <td style="padding:7px 10px">
+          <span style="background:${bg};color:${color};border:1px solid ${color};border-radius:12px;
+            padding:2px 10px;font-size:11px;font-weight:600;white-space:nowrap">${l.estado}</span>
+        </td>
+        <td style="padding:7px 10px;font-size:11px;color:#666">${l.fechaInicio ? new Date(l.fechaInicio + 'T12:00:00').toLocaleDateString('es-CO', {day:'numeric',month:'short'}) : ''}</td>
+        <td style="padding:7px 10px;font-size:11px;color:#888">${(l.lotes || []).slice(0,3).join(', ')}</td>
+      </tr>`;
+  };
+
+  const resumen = {
+    'Por iniciar': labores.filter((l: any) => l.estado === 'Por iniciar').length,
+    'En proceso': labores.filter((l: any) => l.estado === 'En proceso').length,
+    'Terminada': labores.filter((l: any) => l.estado === 'Terminada').length,
+  };
+
+  return slideWrap(`
+    ${slideHeader('Labores', 'Tareas Programadas', datos.semana)}
+    <div style="padding:16px 28px;display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:start;flex:1">
+      <div style="display:flex;flex-direction:column;gap:10px;min-width:160px">
+        <div style="text-align:center;font-size:36px;font-weight:900;color:#73991C">${labores.length}</div>
+        <div style="text-align:center;font-size:12px;color:#666">Tareas totales</div>
+        ${Object.entries(resumen).map(([estado, count]) => `
+          <div style="display:flex;justify-content:space-between;align-items:center;
+            background:${estadoBg[estado]};border-radius:8px;padding:8px 12px;border:1px solid ${estadoColor[estado]}33">
+            <span style="font-size:12px;color:${estadoColor[estado]};font-weight:600">${estado}</span>
+            <span style="font-size:18px;font-weight:800;color:${estadoColor[estado]}">${count}</span>
+          </div>`).join('')}
+      </div>
+      <div style="overflow:hidden;max-height:580px">
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr style="background:#73991C;color:white">
+              <th style="padding:8px 10px;font-size:12px;text-align:left;font-weight:600">Tarea</th>
+              <th style="padding:8px 10px;font-size:12px;text-align:left;font-weight:600">Tipo</th>
+              <th style="padding:8px 10px;font-size:12px;text-align:left;font-weight:600">Estado</th>
+              <th style="padding:8px 10px;font-size:12px;text-align:left;font-weight:600">Inicio</th>
+              <th style="padding:8px 10px;font-size:12px;text-align:left;font-weight:600">Lotes</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${labores.slice(0, 14).map((l: any, i: number) => filaLabor(l, i)).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`);
+}
+
+// ============================================================================
+// SLIDE 4: MATRIZ DE JORNALES
+// ============================================================================
+
+function construirSlideLaboresMatriz(datos: any): string {
+  const mat = datos.labores?.matrizJornales || datos.jornales;
+  if (!mat) return '';
+
+  const { actividades = [], lotes = [], datos: matDatos = {}, totalesPorActividad = {}, totalesPorLote = {}, totalGeneral = {} } = mat;
+  if (actividades.length === 0 || lotes.length === 0) return '';
+
+  const maxVal = totalGeneral.jornales || 1;
+
+  const thStyle = 'padding:5px 8px;font-size:10px;font-weight:600;text-align:center;color:white;background:#73991C';
+  const thLStyle = 'padding:5px 8px;font-size:10px;font-weight:600;text-align:left;color:white;background:#73991C';
+
+  const lotesDisplay = lotes.slice(0, 10);
+
+  return slideWrap(`
+    ${slideHeader('Labores', 'Matriz de Jornales', datos.semana)}
+    <div style="padding:14px 24px;overflow:auto;flex:1">
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead>
+          <tr>
+            <th style="${thLStyle};min-width:120px">Actividad</th>
+            ${lotesDisplay.map((l: string) => `<th style="${thStyle};min-width:70px">${l}</th>`).join('')}
+            <th style="${thStyle};background:#4D240F;min-width:70px">TOTAL</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${actividades.map((act: string) => {
+            const totAct = totalesPorActividad[act] || { jornales: 0 };
+            const bg = getHeatmapColor(totAct.jornales, maxVal);
+            const txtColor = getTextColorForHeatmap(totAct.jornales, maxVal);
+            return `
+              <tr>
+                <td style="padding:5px 8px;font-size:11px;font-weight:600;color:#4D240F;border-bottom:1px solid #e5e7eb">${act}</td>
+                ${lotesDisplay.map((l: string) => {
+                  const cell = (matDatos[act] || {})[l] || { jornales: 0 };
+                  if (cell.jornales === 0) return `<td style="padding:5px 8px;text-align:center;color:#ccc;border-bottom:1px solid #e5e7eb">—</td>`;
+                  const cellBg = getHeatmapColor(cell.jornales, maxVal);
+                  const cellTxt = getTextColorForHeatmap(cell.jornales, maxVal);
+                  return `<td style="padding:5px 8px;text-align:center;background:${cellBg};color:${cellTxt};font-weight:600;border-bottom:1px solid #e5e7eb">${formatNum(cell.jornales)}</td>`;
+                }).join('')}
+                <td style="padding:5px 8px;text-align:center;background:${bg};color:${txtColor};font-weight:700;border-bottom:1px solid #e5e7eb">${formatNum(totAct.jornales)}</td>
+              </tr>`;
+          }).join('')}
+        </tbody>
+        <tfoot>
+          <tr style="background:#f8fdf0">
+            <td style="padding:6px 8px;font-weight:700;font-size:11px;color:#4D240F;border-top:2px solid #73991C">TOTAL LOTE</td>
+            ${lotesDisplay.map((l: string) => {
+              const totL = totalesPorLote[l] || { jornales: 0 };
+              return `<td style="padding:6px 8px;text-align:center;font-weight:700;color:#4D240F;border-top:2px solid #73991C">${formatNum(totL.jornales)}</td>`;
+            }).join('')}
+            <td style="padding:6px 8px;text-align:center;font-weight:900;color:white;background:#4D240F;font-size:13px">${formatNum(totalGeneral.jornales || 0)}</td>
+          </tr>
+          <tr style="background:#fdf8f0">
+            <td style="padding:4px 8px;font-size:10px;color:#666">Costo total</td>
+            ${lotesDisplay.map((l: string) => {
+              const totL = totalesPorLote[l] || { costo: 0 };
+              return `<td style="padding:4px 8px;text-align:center;font-size:10px;color:#666">${formatCOP(totL.costo)}</td>`;
+            }).join('')}
+            <td style="padding:4px 8px;text-align:center;font-weight:700;font-size:11px;color:#4D240F">${formatCOP(totalGeneral.costo || 0)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>`);
+}
+
+// ============================================================================
+// SLIDE 5: GRÁFICOS JORNALES (barras horizontales)
+// ============================================================================
+
+function construirSlideLaboresGraficos(datos: any): string {
+  const mat = datos.labores?.matrizJornales || datos.jornales;
+  if (!mat) return '';
+
+  const { actividades = [], lotes = [], totalesPorActividad = {}, totalesPorLote = {} } = mat;
+  if (actividades.length === 0) return '';
+
+  const maxAct = Math.max(...actividades.map((a: string) => totalesPorActividad[a]?.jornales || 0), 1);
+  const maxLot = Math.max(...lotes.map((l: string) => totalesPorLote[l]?.jornales || 0), 1);
+
+  const barraHoriz = (label: string, value: number, max: number, color: string) => {
+    const pct = Math.min((value / max) * 100, 100);
+    return `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+        <div style="width:130px;font-size:11px;color:#4D240F;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${label}</div>
+        <div style="flex:1;background:#f0f0f0;border-radius:3px;height:18px;position:relative">
+          <div style="height:100%;width:${pct}%;background:${color};border-radius:3px;transition:width 0.3s"></div>
+          <span style="position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:700;color:#333">${formatNum(value)}</span>
+        </div>
+      </div>`;
+  };
+
+  return slideWrap(`
+    ${slideHeader('Labores', 'Distribución de Jornales', datos.semana)}
+    <div style="padding:16px 28px;display:grid;grid-template-columns:1fr 1fr;gap:24px;flex:1">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#4D240F;margin-bottom:14px">Por Tipo de Actividad</div>
+        ${actividades.map((a: string) => barraHoriz(a, totalesPorActividad[a]?.jornales || 0, maxAct, '#73991C')).join('')}
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#4D240F;margin-bottom:14px">Por Lote</div>
+        ${lotes.map((l: string) => barraHoriz(l, totalesPorLote[l]?.jornales || 0, maxLot, '#4D240F')).join('')}
+      </div>
+    </div>`);
+}
+
+// ============================================================================
+// SLIDES 6-8: CIERRE DE APLICACIÓN (General, Técnico, Financiero)
+// ============================================================================
+
+function construirSlideCierreGeneral(cerrada: any, semana: any): string {
+  const g = cerrada.general || {};
+  const desvCosto = g.costoDesviacion || 0;
+  const desvCanecas = g.canecasBultosDesviacion || 0;
+
+  return slideWrap(`
+    ${slideHeader('Cierre Aplicación', cerrada.nombre, semana)}
+    <div style="padding:16px 28px;display:grid;grid-template-columns:1fr 1fr;gap:20px;flex:1">
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div style="background:#f8fdf0;border:1px solid #73991C;border-radius:10px;padding:14px">
+          <div style="font-size:12px;color:#666;margin-bottom:6px">Tipo: ${cerrada.tipo} · Propósito: ${cerrada.proposito}</div>
+          <div style="display:flex;gap:16px">
+            <div><span style="font-size:11px;color:#888">Inicio:</span> <span style="font-size:12px;font-weight:600">${cerrada.fechaInicio}</span></div>
+            <div><span style="font-size:11px;color:#888">Fin:</span> <span style="font-size:12px;font-weight:600">${cerrada.fechaFin}</span></div>
+            <div><span style="font-size:11px;color:#888">Días:</span> <span style="font-size:12px;font-weight:600">${cerrada.diasEjecucion}</span></div>
+          </div>
+        </div>
+        <div style="background:white;border:1px solid #e5e7eb;border-radius:10px;padding:14px">
+          <div style="font-size:13px;font-weight:700;color:#4D240F;margin-bottom:12px">Operativo — ${g.unidad || 'Canecas'}</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <div style="text-align:center">
+              <div style="font-size:11px;color:#888">Planeado</div>
+              <div style="font-size:22px;font-weight:800;color:#6b7280">${formatNum(g.canecasBultosPlaneados || 0)}</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:11px;color:#888">Real</div>
+              <div style="font-size:22px;font-weight:800;color:#4D240F">${formatNum(g.canecasBultosReales || 0)}</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-size:11px;color:#888">Desviación</div>
+              <div style="font-size:22px;font-weight:800;color:${getDesvColor(desvCanecas)}">${desvCanecas >= 0 ? '+' : ''}${formatNum(desvCanecas)}%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="background:white;border:1px solid #e5e7eb;border-radius:10px;padding:14px">
+        <div style="font-size:13px;font-weight:700;color:#4D240F;margin-bottom:12px">Resultado Financiero</div>
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:#73991C;color:white">
+            <th style="padding:7px 10px;font-size:11px;text-align:left">Concepto</th>
+            <th style="padding:7px 10px;font-size:11px;text-align:right">Planeado</th>
+            <th style="padding:7px 10px;font-size:11px;text-align:right">Real</th>
+            <th style="padding:7px 10px;font-size:11px;text-align:right">Desv.</th>
+          </tr></thead>
+          <tbody>
+            <tr style="border-bottom:1px solid #e5e7eb">
+              <td style="padding:7px 10px;font-size:12px">Costo Total</td>
+              <td style="padding:7px 10px;font-size:12px;text-align:right">${formatCOP(g.costoPlaneado || 0)}</td>
+              <td style="padding:7px 10px;font-size:12px;text-align:right;font-weight:700">${formatCOP(g.costoReal || 0)}</td>
+              <td style="padding:7px 10px;text-align:right">${getDesvBadge(desvCosto)}</td>
+            </tr>
+            ${g.costoAnterior ? `<tr>
+              <td style="padding:7px 10px;font-size:11px;color:#888">Vs aplicación anterior</td>
+              <td style="padding:7px 10px;font-size:11px;text-align:right;color:#888">${formatCOP(g.costoAnterior)}</td>
+              <td style="padding:7px 10px"></td>
+              <td style="padding:7px 10px;text-align:right">${getDesvBadge(g.costoVariacion || 0)}</td>
+            </tr>` : ''}
+          </tbody>
+        </table>
+      </div>
+    </div>`);
+}
+
+function construirSlideCierreTecnico(cerrada: any, semana: any): string {
+  const kpis: any[] = cerrada.kpiPorLote || [];
+  if (kpis.length === 0) return '';
+
+  const thS = 'padding:6px 8px;font-size:10px;font-weight:600;text-align:center;color:white;background:#73991C';
+  const thL = 'padding:6px 8px;font-size:10px;font-weight:600;text-align:left;color:white;background:#73991C';
+
+  return slideWrap(`
+    ${slideHeader('Cierre Técnico', cerrada.nombre, semana)}
+    <div style="padding:14px 24px;overflow:auto;flex:1">
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr>
+            <th style="${thL}">Lote</th>
+            <th style="${thS}">Plan can.</th>
+            <th style="${thS}">Real can.</th>
+            <th style="${thS}">Desv.</th>
+            <th style="${thS}">Plan ins.</th>
+            <th style="${thS}">Real ins.</th>
+            <th style="${thS}">Desv.</th>
+            <th style="${thS}">L/árbol</th>
+            <th style="${thS}">Árboles/J</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${kpis.map((k: any, i: number) => `
+            <tr style="background:${i % 2 === 0 ? 'white' : '#f9f9f9'}">
+              <td style="padding:6px 8px;font-size:11px;font-weight:600;color:#4D240F;border-bottom:1px solid #e5e7eb">${k.loteNombre}</td>
+              <td style="padding:6px 8px;text-align:center;font-size:11px;border-bottom:1px solid #e5e7eb">${k.canecasPlaneadas != null ? formatNum(k.canecasPlaneadas) : '—'}</td>
+              <td style="padding:6px 8px;text-align:center;font-size:11px;font-weight:600;border-bottom:1px solid #e5e7eb">${k.canecasReales != null ? formatNum(k.canecasReales) : '—'}</td>
+              <td style="padding:6px 8px;text-align:center;border-bottom:1px solid #e5e7eb">${k.canecasDesviacion != null ? getDesvBadge(k.canecasDesviacion) : '—'}</td>
+              <td style="padding:6px 8px;text-align:center;font-size:11px;border-bottom:1px solid #e5e7eb">${k.insumosPlaneados != null ? formatNum(k.insumosPlaneados) : '—'}</td>
+              <td style="padding:6px 8px;text-align:center;font-size:11px;font-weight:600;border-bottom:1px solid #e5e7eb">${k.insumosReales != null ? formatNum(k.insumosReales) : '—'}</td>
+              <td style="padding:6px 8px;text-align:center;border-bottom:1px solid #e5e7eb">${k.insumosDesviacion != null ? getDesvBadge(k.insumosDesviacion) : '—'}</td>
+              <td style="padding:6px 8px;text-align:center;font-size:11px;border-bottom:1px solid #e5e7eb">${k.litrosKgPorArbol != null ? formatNum(k.litrosKgPorArbol, 2) : '—'}</td>
+              <td style="padding:6px 8px;text-align:center;font-size:11px;border-bottom:1px solid #e5e7eb">${k.arbolesPorJornal != null ? formatNum(k.arbolesPorJornal, 1) : '—'}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`);
+}
+
+function construirSlideCierreFinanciero(cerrada: any, semana: any): string {
+  const financiero: any[] = cerrada.financieroPorLote || [];
+  if (financiero.length === 0) return '';
+
+  const thS = 'padding:6px 8px;font-size:10px;font-weight:600;text-align:center;color:white;background:#4D240F';
+  const thL = 'padding:6px 8px;font-size:10px;font-weight:600;text-align:left;color:white;background:#4D240F';
+
+  return slideWrap(`
+    ${slideHeader('Cierre Financiero', cerrada.nombre, semana)}
+    <div style="padding:14px 24px;overflow:auto;flex:1">
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr>
+            <th style="${thL}">Lote</th>
+            <th style="${thS}">Costo Plan</th>
+            <th style="${thS}">Costo Real</th>
+            <th style="${thS}">Desv. Total</th>
+            <th style="${thS}">Insumos Plan</th>
+            <th style="${thS}">Insumos Real</th>
+            <th style="${thS}">Desv. Ins.</th>
+            <th style="${thS}">M.O. Plan</th>
+            <th style="${thS}">M.O. Real</th>
+            <th style="${thS}">Desv. M.O.</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${financiero.map((f: any, i: number) => `
+            <tr style="background:${i % 2 === 0 ? 'white' : '#fdf8f4'}">
+              <td style="padding:6px 8px;font-size:11px;font-weight:600;color:#4D240F;border-bottom:1px solid #e5e7eb">${f.loteNombre}</td>
+              <td style="padding:6px 8px;text-align:right;font-size:11px;border-bottom:1px solid #e5e7eb">${formatCOP(f.costoTotalPlaneado)}</td>
+              <td style="padding:6px 8px;text-align:right;font-size:11px;font-weight:700;border-bottom:1px solid #e5e7eb">${formatCOP(f.costoTotalReal)}</td>
+              <td style="padding:6px 8px;text-align:center;border-bottom:1px solid #e5e7eb">${getDesvBadge(f.costoTotalDesviacion)}</td>
+              <td style="padding:6px 8px;text-align:right;font-size:11px;border-bottom:1px solid #e5e7eb">${formatCOP(f.costoInsumosPlaneado)}</td>
+              <td style="padding:6px 8px;text-align:right;font-size:11px;font-weight:700;border-bottom:1px solid #e5e7eb">${formatCOP(f.costoInsumosReal)}</td>
+              <td style="padding:6px 8px;text-align:center;border-bottom:1px solid #e5e7eb">${getDesvBadge(f.costoInsumosDesviacion)}</td>
+              <td style="padding:6px 8px;text-align:right;font-size:11px;border-bottom:1px solid #e5e7eb">${formatCOP(f.costoManoObraPlaneado)}</td>
+              <td style="padding:6px 8px;text-align:right;font-size:11px;font-weight:700;border-bottom:1px solid #e5e7eb">${formatCOP(f.costoManoObraReal)}</td>
+              <td style="padding:6px 8px;text-align:center;border-bottom:1px solid #e5e7eb">${getDesvBadge(f.costoManoObraDesviacion)}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`);
+}
+
+// ============================================================================
+// SLIDE 9: APLICACIONES ACTIVAS
+// ============================================================================
+
+function construirSlideAplicacionesActivas(datos: any): string {
+  const activas: any[] = datos.aplicaciones?.activas || [];
+  if (activas.length === 0) return '';
+
+  const barProgreso = (val: number, max: number, color: string) => {
+    const pct = max > 0 ? Math.min((val / max) * 100, 100) : 0;
+    return `<div style="background:#e5e7eb;border-radius:4px;height:12px;overflow:hidden">
+      <div style="height:100%;width:${pct}%;background:${color};border-radius:4px"></div>
+    </div>`;
+  };
+
+  return slideWrap(`
+    ${slideHeader('Aplicaciones', 'En Ejecución', datos.semana)}
+    <div style="padding:16px 28px;display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px;flex:1;overflow:auto">
+      ${activas.map((a: any) => {
+        const pct = a.porcentajeGlobal || 0;
+        const pctColor = pct >= 80 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626';
+        return `
+          <div style="background:white;border:1px solid #e5e7eb;border-radius:10px;padding:14px;overflow:hidden">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <div style="font-size:13px;font-weight:700;color:#4D240F">${a.nombre}</div>
+              <div style="font-size:18px;font-weight:900;color:${pctColor}">${formatNum(pct)}%</div>
+            </div>
+            <div style="font-size:11px;color:#888;margin-bottom:8px">${a.tipo} · ${a.proposito}</div>
+            ${barProgreso(a.totalEjecutado, a.totalPlaneado, pctColor)}
+            <div style="display:flex;justify-content:space-between;font-size:10px;color:#888;margin-top:4px">
+              <span>0</span>
+              <span>${formatNum(a.totalEjecutado)} / ${formatNum(a.totalPlaneado)} ${a.unidad}</span>
+            </div>
+            ${(a.progresoPorLote || []).slice(0, 4).map((l: any) => `
+              <div style="margin-top:6px;display:flex;align-items:center;gap:8px">
+                <div style="width:80px;font-size:10px;color:#555;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.loteNombre}</div>
+                ${barProgreso(l.ejecutado, l.planeado, '#73991C')}
+                <div style="width:34px;font-size:10px;text-align:right;font-weight:600;color:#4D240F">${formatNum(l.porcentaje)}%</div>
+              </div>`).join('')}
+          </div>`;
+      }).join('')}
+    </div>`);
+}
+
+// ============================================================================
+// SLIDE 10: PLAN DE APLICACIÓN (one per planned app)
+// ============================================================================
+
+function construirSlideAplicacionPlaneada(ap: any, semana: any): string {
+  const listaCompras: any[] = ap.listaCompras || [];
+  const mezclas: any[] = ap.mezclas || [];
+
+  return slideWrap(`
+    ${slideHeader('Aplicaciones', `Plan: ${ap.nombre}`, semana)}
+    <div style="padding:16px 28px;display:grid;grid-template-columns:1fr 1fr;gap:20px;flex:1">
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div style="background:#f8fdf0;border:1px solid #73991C;border-radius:10px;padding:12px">
+          <div style="font-size:11px;color:#888">Tipo: ${ap.tipo} · Propósito: ${ap.proposito}</div>
+          <div style="font-size:11px;color:#888;margin-top:4px">
+            Fecha inicio: ${ap.fechaInicioPlaneada}
+            ${ap.fechaFinPlaneada ? ` · Fin: ${ap.fechaFinPlaneada}` : ''}
+          </div>
+          ${ap.blancosBiologicos?.length > 0 ? `<div style="font-size:11px;color:#888;margin-top:4px">Blancos: ${ap.blancosBiologicos.join(', ')}</div>` : ''}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:18px;font-weight:800;color:#4D240F">${formatCOP(ap.costoTotalEstimado || 0)}</div>
+            <div style="font-size:10px;color:#888">Costo estimado</div>
+          </div>
+          <div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:18px;font-weight:800;color:#73991C">${formatCOP(ap.inventarioTotalDisponible || 0)}</div>
+            <div style="font-size:10px;color:#888">Inventario disp.</div>
+          </div>
+          ${ap.costoPorArbol != null ? `<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:18px;font-weight:800;color:#4D240F">${formatCOP(ap.costoPorArbol)}</div>
+            <div style="font-size:10px;color:#888">Costo/árbol</div>
+          </div>` : ''}
+          ${ap.costoPorLitroKg != null ? `<div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:18px;font-weight:800;color:#4D240F">${formatCOP(ap.costoPorLitroKg)}</div>
+            <div style="font-size:10px;color:#888">Costo/L·Kg</div>
+          </div>` : ''}
+        </div>
+        ${mezclas.length > 0 ? `
+          <div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:10px">
+            <div style="font-size:12px;font-weight:700;color:#4D240F;margin-bottom:8px">Mezclas</div>
+            ${mezclas.map((m: any) => `
+              <div style="margin-bottom:6px">
+                <div style="font-size:11px;font-weight:600;color:#73991C">${m.nombre}</div>
+                <div style="font-size:10px;color:#666">${(m.productos || []).map((pr: any) => `${pr.nombre} (${pr.dosis})`).join(' + ')}</div>
+              </div>`).join('')}
+          </div>` : ''}
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:700;color:#4D240F;margin-bottom:8px">Lista de Compras</div>
+        ${listaCompras.length > 0 ? `
+          <table style="width:100%;border-collapse:collapse;font-size:11px">
+            <thead><tr style="background:#73991C;color:white">
+              <th style="padding:5px 8px;text-align:left">Producto</th>
+              <th style="padding:5px 8px;text-align:center">Necesario</th>
+              <th style="padding:5px 8px;text-align:center">Disponible</th>
+              <th style="padding:5px 8px;text-align:center">A comprar</th>
+              <th style="padding:5px 8px;text-align:right">Costo est.</th>
+            </tr></thead>
+            <tbody>
+              ${listaCompras.map((c: any, i: number) => `
+                <tr style="background:${i % 2 === 0 ? 'white' : '#f9f9f9'}">
+                  <td style="padding:5px 8px;font-weight:600;color:#4D240F">${c.productoNombre}</td>
+                  <td style="padding:5px 8px;text-align:center">${formatNum(c.cantidadNecesaria)} ${c.unidad}</td>
+                  <td style="padding:5px 8px;text-align:center">${c.inventarioDisponible != null ? formatNum(c.inventarioDisponible) : '—'}</td>
+                  <td style="padding:5px 8px;text-align:center;font-weight:700;color:${(c.cantidadAComprar || 0) > 0 ? '#dc2626' : '#16a34a'}">${c.cantidadAComprar != null ? formatNum(c.cantidadAComprar) : '—'}</td>
+                  <td style="padding:5px 8px;text-align:right">${formatCOP(c.costoEstimado)}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>` : '<div style="font-size:12px;color:#aaa;font-style:italic">No hay lista de compras</div>'}
+      </div>
+    </div>`);
+}
+
+// ============================================================================
+// SLIDE 11: MONITOREO — TENDENCIAS (AI)
+// ============================================================================
+
+function construirSlideMonitoreoTendencias(datos: any, analisis: AnalisisGemini): string {
+  const mon = datos.monitoreo || {};
+  const tendencias: any[] = mon.tendencias || [];
+  const fechas: string[] = mon.fechasMonitoreo || [];
+  if (tendencias.length === 0) return '';
+
+  const texto = analisis.interpretacion_tendencias_monitoreo || analisis.interpretacion_monitoreo || '';
+
+  return slideWrap(`
+    ${slideHeader('Monitoreo', 'Tendencias Fitosanitarias', datos.semana)}
+    <div style="padding:16px 28px;display:grid;grid-template-columns:1fr 1.2fr;gap:20px;flex:1">
+      <div>
+        <div style="font-size:12px;color:#888;margin-bottom:10px">Fechas analizadas: ${fechas.join(' · ')}</div>
+        <div style="display:flex;flex-direction:column;gap:6px;max-height:560px;overflow:hidden">
+          ${tendencias.map((t: any) => {
+            const color = getIncidenciaColor(t.incidenciaPromedio);
+            const barPct = Math.min(t.incidenciaPromedio * 2, 100);
+            return `
+              <div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:10px;display:flex;align-items:center;gap:10px">
+                <div style="flex:1">
+                  <div style="font-size:12px;font-weight:600;color:#4D240F">${t.plagaNombre}</div>
+                  <div style="background:#f0f0f0;border-radius:3px;height:8px;margin-top:4px">
+                    <div style="height:100%;width:${barPct}%;background:${color};border-radius:3px"></div>
+                  </div>
+                </div>
+                <div style="font-size:18px;font-weight:800;color:${color};min-width:48px;text-align:right">${formatNum(t.incidenciaPromedio)}%</div>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>
+      <div style="background:#f8fdf0;border:1px solid #73991C;border-radius:10px;padding:16px;overflow:hidden">
+        <div style="font-size:13px;font-weight:700;color:#4D240F;margin-bottom:10px;display:flex;align-items:center;gap:6px">
+          <span>🌿</span> Análisis de Tendencias
+        </div>
+        <div style="font-size:12px;color:#333;line-height:1.7;white-space:pre-wrap">${texto}</div>
+      </div>
+    </div>`);
+}
+
+// ============================================================================
+// SLIDE 12: MONITOREO — POR LOTE (tabla con 3 observaciones)
+// ============================================================================
+
+function construirSlideMonitoreoPorLote(datos: any): string {
+  const mon = datos.monitoreo || {};
+  const vistas: any[] = mon.vistasPorLote || [];
+  if (vistas.length === 0) return '';
+
+  const fechas: string[] = mon.fechasMonitoreo || [];
+  const fechasShort = fechas.map((f: string) => new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }));
+
+  return slideWrap(`
+    ${slideHeader('Monitoreo', 'Resumen por Lote', datos.semana)}
+    <div style="padding:12px 24px;overflow:auto;flex:1">
+      ${vistas.slice(0, 4).map((v: any) => `
+        <div style="margin-bottom:14px">
+          <div style="font-size:12px;font-weight:700;color:#73991C;margin-bottom:4px">${v.loteNombre}</div>
+          <table style="width:100%;border-collapse:collapse;font-size:10px">
+            <thead><tr style="background:#73991C;color:white">
+              <th style="padding:4px 8px;text-align:left">Plaga</th>
+              ${fechasShort.map((f: string) => `<th style="padding:4px 8px;text-align:center">${f}</th>`).join('')}
+            </tr></thead>
+            <tbody>
+              ${(v.plagasRows || []).map((row: any, i: number) => {
+                const bgRow = i % 2 === 0 ? 'white' : '#f9f9f9';
+                const textWeight = row.esPlaga_interes ? '700' : '400';
+                return `<tr style="background:${bgRow}">
+                  <td style="padding:4px 8px;font-weight:${textWeight};color:#4D240F">${row.plagaNombre}</td>
+                  ${(row.observaciones || []).map((obs: any) => {
+                    if (obs.incidencia == null) return `<td style="padding:4px 8px;text-align:center;color:#ccc">—</td>`;
+                    const color = getIncidenciaColor(obs.incidencia);
+                    return `<td style="padding:4px 8px;text-align:center;font-weight:600;color:${color}">${formatNum(obs.incidencia)}%</td>`;
+                  }).join('')}
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>`).join('')}
+    </div>`);
+}
+
+// ============================================================================
+// SLIDE 13+: MONITOREO — POR SUBLOTE (one per lote)
+// ============================================================================
+
+function construirSlidesMonitoreoPorSublote(datos: any): string {
+  const mon = datos.monitoreo || {};
+  const vistas: any[] = mon.vistasPorSublote || [];
+  if (vistas.length === 0) return '';
+
+  return vistas.map((v: any) => {
+    const sublotes: string[] = v.sublotes || [];
+    const plagas: string[] = v.plagas || [];
+    const celdas: Record<string, Record<string, any[]>> = v.celdas || {};
+    const fechas: string[] = mon.fechasMonitoreo || [];
+    const fechasShort = fechas.map((f: string) => new Date(f + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }));
+
+    if (sublotes.length === 0 || plagas.length === 0) return '';
+
+    const thS = 'padding:4px 6px;font-size:9px;font-weight:600;text-align:center;color:white;background:#73991C;white-space:nowrap';
+    const thL = 'padding:4px 8px;font-size:9px;font-weight:600;text-align:left;color:white;background:#73991C';
+
+    return slideWrap(`
+      ${slideHeader('Monitoreo Sublotes', v.loteNombre, datos.semana)}
+      <div style="padding:12px 20px;overflow:auto;flex:1">
+        <table style="width:100%;border-collapse:collapse;font-size:9px">
+          <thead>
+            <tr>
+              <th style="${thL}" rowspan="2">Plaga</th>
+              ${sublotes.map((s: string) => `<th style="${thS};background:#4D240F" colspan="${fechas.length || 1}">${s}</th>`).join('')}
+            </tr>
+            <tr>
+              ${sublotes.flatMap(() => (fechasShort.length > 0 ? fechasShort : ['—']).map((f: string) => `<th style="${thS};background:#5a7a14;font-weight:400">${f}</th>`)).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${plagas.map((plaga: string, i: number) => `
+              <tr style="background:${i % 2 === 0 ? 'white' : '#f9f9f9'}">
+                <td style="padding:4px 8px;font-size:10px;font-weight:600;color:#4D240F;border-bottom:1px solid #e5e7eb">${plaga}</td>
+                ${sublotes.flatMap((sub: string) => {
+                  const obs: any[] = (celdas[plaga] || {})[sub] || [];
+                  const fechasCount = fechas.length || 1;
+                  const cells = [];
+                  for (let j = 0; j < fechasCount; j++) {
+                    const o = obs[j];
+                    if (!o || o.incidencia == null) {
+                      cells.push(`<td style="padding:4px 6px;text-align:center;color:#ccc;border-bottom:1px solid #e5e7eb">—</td>`);
+                    } else {
+                      const color = getIncidenciaColor(o.incidencia);
+                      cells.push(`<td style="padding:4px 6px;text-align:center;font-weight:600;color:${color};border-bottom:1px solid #e5e7eb">${formatNum(o.incidencia)}%</td>`);
+                    }
+                  }
+                  return cells;
+                }).join('')}
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`);
+  }).join('');
+}
+
+// ============================================================================
+// SLIDE ADICIONALES
+// ============================================================================
+
+function construirSlideAdicional(bloque: any, semana: any): string {
+  if (bloque.tipo === 'texto') {
+    return slideWrap(`
+      ${slideHeader('Temas Adicionales', bloque.titulo || 'Información Adicional', semana)}
+      <div style="padding:24px 40px;flex:1;overflow:hidden">
+        <div style="font-size:14px;line-height:1.8;color:#333;white-space:pre-wrap">${bloque.contenido}</div>
+      </div>`);
+  }
+
+  if (bloque.tipo === 'imagen_con_texto') {
+    const imgs: string[] = bloque.imagenesBase64?.length > 0
+      ? bloque.imagenesBase64
+      : bloque.imagenBase64
+        ? [bloque.imagenBase64]
+        : [];
+    const hasImgs = imgs.length > 0;
+
+    return slideWrap(`
+      ${slideHeader('Temas Adicionales', bloque.titulo || 'Registro Fotográfico', semana)}
+      <div style="padding:16px 28px;display:grid;grid-template-columns:${hasImgs ? '1fr 1fr' : '1fr'};gap:20px;flex:1">
+        ${hasImgs ? `
+          <div style="display:flex;${imgs.length > 1 ? 'flex-direction:column;gap:12px' : ''}">
+            ${imgs.map((src: string) => `
+              <img src="${src}" style="width:100%;${imgs.length > 1 ? 'height:50%' : 'height:100%'};object-fit:cover;border-radius:8px" />`).join('')}
+          </div>` : ''}
+        <div style="display:flex;align-items:center">
+          <div style="font-size:14px;line-height:1.8;color:#333">${bloque.descripcion}</div>
+        </div>
+      </div>`);
+  }
+
+  return '';
+}
+
+// ============================================================================
+// SLIDE CONCLUSIONES
+// ============================================================================
+
+function construirSlideConclusiones(analisis: AnalisisGemini, semana: any): string {
+  return slideWrap(`
+    ${slideHeader('Conclusiones', 'Resumen y Recomendaciones', semana)}
+    <div style="padding:20px 40px;display:grid;grid-template-columns:1fr 1fr;gap:24px;flex:1">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#4D240F;margin-bottom:12px">Resumen Ejecutivo</div>
+        <div style="font-size:14px;line-height:1.8;color:#333;background:#f8fdf0;border-left:4px solid #73991C;
+          padding:14px 16px;border-radius:0 8px 8px 0">${analisis.resumen_ejecutivo}</div>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#4D240F;margin-bottom:12px">Acciones Recomendadas</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          ${(analisis.conclusiones || []).map((c: any) => {
+            const priColors: Record<string, string> = { alta: '#dc2626', media: '#d97706', baja: '#16a34a' };
+            const prioBg: Record<string, string> = { alta: '#fff5f5', media: '#fffbf0', baja: '#f0fff4' };
+            const color = priColors[c.prioridad] || '#333';
+            const bg = prioBg[c.prioridad] || '#f9f9f9';
+            return `
+              <div style="background:${bg};border:1px solid ${color}33;border-left:4px solid ${color};
+                border-radius:0 8px 8px 0;padding:10px 14px;display:flex;gap:10px;align-items:flex-start">
+                <span style="font-size:16px">${c.icono}</span>
+                <span style="font-size:13px;color:#333;line-height:1.5">${c.texto}</span>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>`);
+}
+
+// ============================================================================
+// ENSAMBLADOR PRINCIPAL
 // ============================================================================
 
 function construirHTMLReporte(datos: any, analisis: AnalisisGemini): string {
-  const { semana, personal, jornales, aplicaciones, monitoreo, temasAdicionales } = datos;
+  const slides: string[] = [];
 
-  // Calcular KPIs
-  const totalJornales = jornales?.totalGeneral?.jornales || 0;
-  const costoTotal = jornales?.totalGeneral?.costo || 0;
-  const trabajadoresActivos = personal?.totalTrabajadores || 0;
-  const aplicacionesActivas = aplicaciones?.activas?.length || 0;
-  const alertasFito = monitoreo?.insights?.filter((i: any) => i.tipo === 'urgente' || i.tipo === 'atencion')?.length || 0;
+  // Slide 1: Portada
+  slides.push(construirSlideTitulo(datos));
 
-  // Encontrar el valor máximo en la matriz para heatmap
-  let maxJornalCelda = 0;
-  if (jornales?.datos) {
-    for (const act of jornales.actividades || []) {
-      for (const lote of jornales.lotes || []) {
-        const val = jornales.datos[act]?.[lote]?.jornales || 0;
-        if (val > maxJornalCelda) maxJornalCelda = val;
-      }
-    }
+  // Slide 2: Personal
+  slides.push(construirSlidePersonal(datos));
+
+  // Slide 3: Labores programadas
+  const slabores = construirSlideLaboresProgramadas(datos);
+  if (slabores) slides.push(slabores);
+
+  // Slide 4: Matriz jornales
+  const smatriz = construirSlideLaboresMatriz(datos);
+  if (smatriz) slides.push(smatriz);
+
+  // Slide 5: Gráficos jornales
+  const sgraficos = construirSlideLaboresGraficos(datos);
+  if (sgraficos) slides.push(sgraficos);
+
+  // Slides 6-8: Cierre por aplicación
+  for (const cerrada of (datos.aplicaciones?.cerradas || [])) {
+    const sg = construirSlideCierreGeneral(cerrada, datos.semana);
+    if (sg) slides.push(sg);
+    const st = construirSlideCierreTecnico(cerrada, datos.semana);
+    if (st) slides.push(st);
+    const sf = construirSlideCierreFinanciero(cerrada, datos.semana);
+    if (sf) slides.push(sf);
   }
 
-  const html = `<!DOCTYPE html>
+  // Slide 9: Aplicaciones activas
+  const sactivas = construirSlideAplicacionesActivas(datos);
+  if (sactivas) slides.push(sactivas);
+
+  // Slide 10: Plan por aplicación planeada
+  for (const ap of (datos.aplicaciones?.planeadas || [])) {
+    const sp = construirSlideAplicacionPlaneada(ap, datos.semana);
+    if (sp) slides.push(sp);
+  }
+
+  // Slide 11: Monitoreo tendencias
+  const smtend = construirSlideMonitoreoTendencias(datos, analisis);
+  if (smtend) slides.push(smtend);
+
+  // Slide 12: Monitoreo por lote
+  const smlote = construirSlideMonitoreoPorLote(datos);
+  if (smlote) slides.push(smlote);
+
+  // Slides 13+: Monitoreo por sublote
+  const smsublote = construirSlidesMonitoreoPorSublote(datos);
+  if (smsublote) slides.push(smsublote);
+
+  // Slides adicionales
+  for (const bloque of (datos.temasAdicionales || [])) {
+    const sa = construirSlideAdicional(bloque, datos.semana);
+    if (sa) slides.push(sa);
+  }
+
+  // Slide final: Conclusiones
+  slides.push(construirSlideConclusiones(analisis, datos.semana));
+
+  const css = `
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #e5e7eb;
+      width: 1280px;
+    }
+    .slide {
+      width: 1280px;
+      height: 720px;
+      overflow: hidden;
+      background: white;
+      display: flex;
+      flex-direction: column;
+      page-break-after: always;
+      break-after: page;
+      margin-bottom: 0;
+      position: relative;
+    }
+    @media print {
+      body { background: white; }
+      .slide {
+        page-break-after: always;
+        break-after: page;
+        margin: 0;
+      }
+    }
+  `;
+
+  return `<!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: Arial, sans-serif; width: 794px; margin: 0 auto; color: #4D240F; background: #FFFFFF; font-size: 13px; line-height: 1.5; }
-  @media print {
-    .page-break { page-break-before: always; }
-    body { margin: 0; width: 100%; }
-  }
-  table { border-collapse: collapse; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1280">
+  <title>Reporte Semanal Escocia Hass</title>
+  <style>${css}</style>
 </head>
 <body>
-
-<!-- ========== HEADER ========== -->
-<div style="background:#73991C;padding:20px 28px;display:flex;justify-content:space-between;align-items:center;">
-  <div>
-    <div style="font-size:24px;font-weight:800;color:#FFFFFF;letter-spacing:1px;">ESCOCIA HASS</div>
-    <div style="font-size:12px;color:#E8F0D0;margin-top:2px;">Finca Aguacate Hass</div>
-  </div>
-  <div style="text-align:right;">
-    <div style="font-size:16px;font-weight:600;color:#FFFFFF;">Reporte Semanal</div>
-    <div style="font-size:20px;font-weight:700;color:#FFFFFF;">Semana ${semana.numero} / ${semana.ano}</div>
-    <div style="font-size:11px;color:#E8F0D0;margin-top:2px;">${semana.inicio} — ${semana.fin}</div>
-  </div>
-</div>
-
-<!-- ========== RESUMEN EJECUTIVO ========== -->
-<div style="background:#F5F5F0;padding:14px 20px;margin:16px 20px 0;border-radius:8px;border-left:4px solid #73991C;">
-  <div style="font-size:12px;font-weight:700;color:#73991C;margin-bottom:6px;">📋 RESUMEN EJECUTIVO</div>
-  <div style="font-size:13px;color:#4D240F;line-height:1.6;">${analisis.resumen_ejecutivo}</div>
-</div>
-
-<!-- ========== KPI CARDS ========== -->
-<div style="display:flex;gap:12px;padding:16px 20px 0;justify-content:space-between;">
-  ${construirKPICard('Total Jornales', formatNum(totalJornales), 'jornales registrados', '#73991C')}
-  ${construirKPICard('Costo Total', formatCOP(costoTotal), 'pesos colombianos', '#1976D2')}
-  ${construirKPICard('Trabajadores', String(trabajadoresActivos), `${personal?.empleados || 0} emp. / ${personal?.contratistas || 0} cont.`, '#00897B')}
-  ${construirKPICard('Aplicaciones', String(aplicacionesActivas), 'en ejecución', '#F57C00')}
-  ${construirKPICard('Alertas Fito', String(alertasFito), 'requieren atención', '#D32F2F')}
-</div>
-
-<!-- ========== PERSONAL RÁPIDO ========== -->
-${(personal?.fallas > 0 || personal?.permisos > 0) ? `
-<div style="display:flex;gap:12px;padding:8px 20px 0;">
-  ${personal.fallas > 0 ? `<div style="font-size:11px;color:#F57C00;">⚠️ Fallas: <strong>${personal.fallas}</strong></div>` : ''}
-  ${personal.permisos > 0 ? `<div style="font-size:11px;color:#1976D2;">📋 Permisos: <strong>${personal.permisos}</strong></div>` : ''}
-</div>` : ''}
-
-<!-- ========== DISTRIBUCIÓN DE JORNALES ========== -->
-${jornales ? construirSeccionJornales(jornales, maxJornalCelda) : ''}
-
-<!-- ========== PAGE BREAK ========== -->
-<div class="page-break"></div>
-
-<!-- ========== APLICACIONES ========== -->
-${construirSeccionAplicaciones(aplicaciones)}
-
-<!-- ========== MONITOREO FITOSANITARIO ========== -->
-${monitoreo ? construirSeccionMonitoreo(monitoreo, analisis.interpretacion_monitoreo) : ''}
-
-<!-- ========== PAGE BREAK ========== -->
-<div class="page-break"></div>
-
-<!-- ========== TEMAS ADICIONALES ========== -->
-${(temasAdicionales && temasAdicionales.length > 0) ? construirSeccionTemasAdicionales(temasAdicionales) : ''}
-
-<!-- ========== CONCLUSIONES ========== -->
-${construirSeccionConclusiones(analisis.conclusiones)}
-
-<!-- ========== FOOTER ========== -->
-<div style="text-align:center;padding:20px;margin-top:20px;border-top:1px solid #E0E0E0;">
-  <div style="font-size:10px;color:#999;">Generado automáticamente — Escocia Hass — ${new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
-</div>
-
+${slides.join('\n')}
 </body>
 </html>`;
-
-  return html;
-}
-
-// ============================================================================
-// SUB-CONSTRUCTORES DE SECCIONES
-// ============================================================================
-
-function construirKPICard(label: string, value: string, subtitle: string, color: string): string {
-  return `<div style="flex:1;background:#FFFFFF;border-radius:8px;border-top:4px solid ${color};padding:14px 10px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-    <div style="font-size:24px;font-weight:800;color:${color};">${value}</div>
-    <div style="font-size:11px;font-weight:600;color:#4D240F;margin-top:2px;">${label}</div>
-    <div style="font-size:10px;color:#888;margin-top:1px;">${subtitle}</div>
-  </div>`;
-}
-
-function construirSeccionJornales(jornales: any, maxJornalCelda: number): string {
-  const { actividades, lotes, datos, totalesPorActividad, totalesPorLote, totalGeneral } = jornales;
-
-  // Heatmap table
-  let tableRows = '';
-  for (const act of actividades) {
-    let cells = '';
-    for (const lote of lotes) {
-      const val = datos[act]?.[lote]?.jornales || 0;
-      const bg = getHeatmapColor(val, maxJornalCelda);
-      const textColor = getTextColorForHeatmap(val, maxJornalCelda);
-      cells += `<td style="padding:8px 10px;text-align:center;font-size:12px;font-weight:600;background:${bg};color:${textColor};border:1px solid #E8E8E8;">${val > 0 ? val.toFixed(2) : '-'}</td>`;
-    }
-    const actTotal = totalesPorActividad[act]?.jornales || 0;
-    cells += `<td style="padding:8px 10px;text-align:center;font-size:12px;font-weight:700;background:#F5F5F0;color:#4D240F;border:1px solid #E8E8E8;">${actTotal.toFixed(2)}</td>`;
-    tableRows += `<tr><td style="padding:8px 12px;font-size:12px;font-weight:600;color:#4D240F;border:1px solid #E8E8E8;background:#FAFAFA;">${act}</td>${cells}</tr>`;
-  }
-
-  // Fila de totales
-  let totalCells = '';
-  for (const lote of lotes) {
-    const val = totalesPorLote[lote]?.jornales || 0;
-    totalCells += `<td style="padding:8px 10px;text-align:center;font-size:12px;font-weight:700;background:#E8F0D0;color:#4D240F;border:1px solid #E8E8E8;">${val.toFixed(2)}</td>`;
-  }
-  totalCells += `<td style="padding:8px 10px;text-align:center;font-size:13px;font-weight:800;background:#73991C;color:#FFFFFF;border:1px solid #E8E8E8;">${totalGeneral.jornales.toFixed(2)}</td>`;
-  tableRows += `<tr><td style="padding:8px 12px;font-size:12px;font-weight:700;color:#4D240F;border:1px solid #E8E8E8;background:#E8F0D0;">TOTAL</td>${totalCells}</tr>`;
-
-  // Header de tabla
-  let tableHeaders = '<th style="padding:8px 12px;font-size:11px;font-weight:700;color:#FFFFFF;background:#73991C;border:1px solid #5A7A15;text-align:left;">Actividad</th>';
-  for (const lote of lotes) {
-    tableHeaders += `<th style="padding:8px 10px;font-size:11px;font-weight:700;color:#FFFFFF;background:#73991C;border:1px solid #5A7A15;text-align:center;">${lote}</th>`;
-  }
-  tableHeaders += '<th style="padding:8px 10px;font-size:11px;font-weight:700;color:#FFFFFF;background:#73991C;border:1px solid #5A7A15;text-align:center;">Total</th>';
-
-  // Barras horizontales por actividad
-  const actividadesOrdenadas = [...actividades].sort((a: string, b: string) => {
-    return (totalesPorActividad[b]?.jornales || 0) - (totalesPorActividad[a]?.jornales || 0);
-  });
-
-  let barrasHTML = '';
-  for (const act of actividadesOrdenadas) {
-    const val = totalesPorActividad[act]?.jornales || 0;
-    const pct = totalGeneral.jornales > 0 ? (val / totalGeneral.jornales * 100) : 0;
-    const costo = totalesPorActividad[act]?.costo || 0;
-    barrasHTML += `
-    <div style="display:flex;align-items:center;margin-bottom:6px;">
-      <div style="width:120px;font-size:11px;font-weight:600;color:#4D240F;text-align:right;padding-right:10px;flex-shrink:0;">${act}</div>
-      <div style="flex:1;background:#E8E8E8;border-radius:4px;height:22px;position:relative;overflow:hidden;">
-        <div style="background:#73991C;height:100%;border-radius:4px;width:${Math.max(pct, 2)}%;transition:width 0.3s;"></div>
-        <span style="position:absolute;left:8px;top:3px;font-size:11px;font-weight:600;color:${pct > 30 ? '#FFFFFF' : '#4D240F'};">${val.toFixed(1)} jorn. (${pct.toFixed(0)}%)</span>
-      </div>
-      <div style="width:90px;font-size:10px;color:#888;text-align:right;padding-left:8px;flex-shrink:0;">${formatCOP(costo)}</div>
-    </div>`;
-  }
-
-  return `
-  <div style="padding:20px 20px 0;">
-    <div style="font-size:15px;font-weight:700;color:#4D240F;margin-bottom:12px;border-left:4px solid #73991C;padding-left:10px;">📊 Distribución de Jornales</div>
-
-    <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
-      <thead><tr>${tableHeaders}</tr></thead>
-      <tbody>${tableRows}</tbody>
-    </table>
-
-    <div style="font-size:12px;font-weight:600;color:#4D240F;margin-bottom:8px;">Distribución por Actividad</div>
-    ${barrasHTML}
-  </div>`;
-}
-
-function construirSeccionAplicaciones(aplicaciones: any): string {
-  const planeadas = aplicaciones?.planeadas || [];
-  const activas = aplicaciones?.activas || [];
-
-  if (planeadas.length === 0 && activas.length === 0) {
-    return `
-    <div style="padding:20px 20px 0;">
-      <div style="font-size:15px;font-weight:700;color:#4D240F;margin-bottom:12px;border-left:4px solid #F57C00;padding-left:10px;">🧪 Aplicaciones</div>
-      <div style="padding:16px;background:#F5F5F0;border-radius:8px;font-size:12px;color:#888;text-align:center;">Sin aplicaciones planeadas ni en ejecución esta semana</div>
-    </div>`;
-  }
-
-  let activasHTML = '';
-  for (const app of activas) {
-    let lotesHTML = '';
-    for (const lote of app.progresoPorLote || []) {
-      lotesHTML += `
-      <div style="margin-bottom:6px;">
-        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px;">
-          <span style="font-weight:600;">${lote.loteNombre}</span>
-          <span style="color:#888;">${lote.ejecutado}/${lote.planeado} ${lote.unidad} (${lote.porcentaje}%)</span>
-        </div>
-        <div style="background:#E0E0E0;border-radius:4px;height:16px;overflow:hidden;">
-          <div style="background:${lote.porcentaje >= 100 ? '#73991C' : lote.porcentaje >= 50 ? '#8DB440' : '#BFD97D'};height:100%;border-radius:4px;width:${Math.min(lote.porcentaje, 100)}%;"></div>
-        </div>
-      </div>`;
-    }
-
-    // Barra global
-    const globalPct = app.porcentajeGlobal || 0;
-    activasHTML += `
-    <div style="background:#FFFFFF;border-radius:8px;border:1px solid #E8E8E8;padding:16px;margin-bottom:12px;box-shadow:0 1px 2px rgba(0,0,0,0.05);">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-        <div>
-          <span style="font-size:14px;font-weight:700;color:#4D240F;">${app.nombre}</span>
-          <span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;background:#FFF3E0;color:#F57C00;margin-left:8px;">${app.tipo}</span>
-        </div>
-        <div style="font-size:20px;font-weight:800;color:${globalPct >= 80 ? '#73991C' : globalPct >= 40 ? '#F57C00' : '#D32F2F'};">${globalPct}%</div>
-      </div>
-      <div style="font-size:11px;color:#888;margin-bottom:10px;">${app.proposito || ''}</div>
-
-      <div style="background:#E0E0E0;border-radius:6px;height:22px;overflow:hidden;margin-bottom:12px;position:relative;">
-        <div style="background:#73991C;height:100%;border-radius:6px;width:${Math.min(globalPct, 100)}%;"></div>
-        <span style="position:absolute;left:50%;top:3px;transform:translateX(-50%);font-size:11px;font-weight:700;color:${globalPct > 45 ? '#FFFFFF' : '#4D240F'};">Global: ${app.totalEjecutado}/${app.totalPlaneado} ${app.unidad}</span>
-      </div>
-
-      ${lotesHTML}
-    </div>`;
-  }
-
-  let planeadasHTML = '';
-  for (const app of planeadas) {
-    const comprasItems = (app.listaCompras || []).map((item: any) =>
-      `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;background:#F0F0F0;color:#555;margin:2px;">${item.productoNombre}: ${item.cantidadNecesaria} ${item.unidad}</span>`
-    ).join(' ');
-
-    planeadasHTML += `
-    <div style="background:#FFFDF0;border-radius:8px;border:1px solid #F9E4A0;padding:12px;margin-bottom:8px;">
-      <div style="font-size:13px;font-weight:700;color:#4D240F;">${app.nombre} <span style="font-size:10px;color:#F57C00;">(${app.tipo})</span></div>
-      <div style="font-size:11px;color:#888;margin:4px 0;">📅 Planeada: ${app.fechaInicioPlaneada} | 💰 Estimado: ${formatCOP(app.costoTotalEstimado)}</div>
-      <div style="font-size:11px;color:#555;margin-top:4px;">${app.proposito}</div>
-      ${comprasItems ? `<div style="margin-top:6px;">${comprasItems}</div>` : ''}
-    </div>`;
-  }
-
-  return `
-  <div style="padding:20px 20px 0;">
-    <div style="font-size:15px;font-weight:700;color:#4D240F;margin-bottom:12px;border-left:4px solid #F57C00;padding-left:10px;">🧪 Aplicaciones</div>
-
-    ${activas.length > 0 ? `
-    <div style="font-size:12px;font-weight:600;color:#4D240F;margin-bottom:8px;">En Ejecución (${activas.length})</div>
-    ${activasHTML}` : ''}
-
-    ${planeadas.length > 0 ? `
-    <div style="font-size:12px;font-weight:600;color:#4D240F;margin-bottom:8px;margin-top:12px;">Planeadas (${planeadas.length})</div>
-    ${planeadasHTML}` : ''}
-  </div>`;
-}
-
-function construirSeccionMonitoreo(monitoreo: any, interpretacion: string): string {
-  const { detallePorLote, insights, tendencias, fechasMonitoreo } = monitoreo;
-
-  if ((!detallePorLote || detallePorLote.length === 0) && (!insights || insights.length === 0)) {
-    return `
-    <div style="padding:20px 20px 0;">
-      <div style="font-size:15px;font-weight:700;color:#4D240F;margin-bottom:12px;border-left:4px solid #D32F2F;padding-left:10px;">🐛 Monitoreo Fitosanitario</div>
-      <div style="padding:16px;background:#F5F5F0;border-radius:8px;font-size:12px;color:#888;text-align:center;">Sin datos de monitoreo esta semana</div>
-    </div>`;
-  }
-
-  // Construir mapa de tendencias por plaga para mini barras
-  const tendenciasPorPlaga = new Map<string, number[]>();
-  if (tendencias && tendencias.length > 0) {
-    for (const t of tendencias) {
-      if (!tendenciasPorPlaga.has(t.plagaNombre)) tendenciasPorPlaga.set(t.plagaNombre, []);
-      tendenciasPorPlaga.get(t.plagaNombre)!.push(t.incidenciaPromedio);
-    }
-  }
-
-  // Tabla de detalle
-  let tableRows = '';
-  for (const lote of detallePorLote || []) {
-    for (let i = 0; i < lote.sublotes.length; i++) {
-      const s = lote.sublotes[i];
-      const showLote = i === 0;
-
-      // Mini barras de tendencia
-      const plagaTendencia = tendenciasPorPlaga.get(s.plagaNombre) || [];
-      let miniBarrasHTML = '';
-      if (plagaTendencia.length > 0) {
-        const maxTend = Math.max(...plagaTendencia, 1);
-        miniBarrasHTML = plagaTendencia.map((val: number) => {
-          const h = Math.max((val / maxTend) * 24, 3);
-          const barColor = val > 20 ? '#D32F2F' : val > 10 ? '#F9A825' : '#73991C';
-          return `<div style="display:inline-block;width:10px;height:${h}px;background:${barColor};border-radius:2px;margin-right:3px;vertical-align:bottom;"></div>`;
-        }).join('');
-        miniBarrasHTML = `<div style="display:flex;align-items:flex-end;height:28px;">${miniBarrasHTML}</div>`;
-      } else {
-        miniBarrasHTML = '<span style="font-size:10px;color:#CCC;">—</span>';
-      }
-
-      tableRows += `<tr style="border-bottom:1px solid #F0F0F0;">
-        ${showLote ? `<td rowspan="${lote.sublotes.length}" style="padding:8px 10px;font-size:12px;font-weight:600;color:#4D240F;border-right:1px solid #E8E8E8;vertical-align:top;background:#FAFAFA;">${lote.loteNombre}</td>` : ''}
-        <td style="padding:6px 10px;font-size:11px;color:#555;">${s.subloteNombre}</td>
-        <td style="padding:6px 10px;font-size:11px;font-weight:600;color:#4D240F;">${s.plagaNombre}</td>
-        <td style="padding:6px 10px;font-size:12px;font-weight:700;text-align:center;color:${s.incidencia > 20 ? '#D32F2F' : s.incidencia > 10 ? '#F57C00' : '#4D240F'};">${s.incidencia}%</td>
-        <td style="padding:6px 10px;text-align:center;">${getBadgeHTML(s.gravedad, s.gravedad)}</td>
-        <td style="padding:6px 10px;font-size:11px;text-align:center;color:#555;">${s.arboresAfectados}/${s.arboresMonitoreados}</td>
-        <td style="padding:6px 10px;text-align:center;">${miniBarrasHTML}</td>
-      </tr>`;
-    }
-  }
-
-  // Insights cards
-  let insightsHTML = '';
-  if (insights && insights.length > 0) {
-    for (const insight of insights) {
-      const styles = getInsightStyles(insight.tipo);
-      insightsHTML += `
-      <div style="border-left:4px solid ${styles.border};background:${styles.bg};padding:10px 14px;border-radius:0 6px 6px 0;margin-bottom:8px;">
-        <div style="font-size:12px;font-weight:700;color:#4D240F;">${styles.icon} ${insight.titulo}</div>
-        <div style="font-size:11px;color:#555;margin-top:3px;">${insight.descripcion}</div>
-        ${insight.accion ? `<div style="font-size:11px;color:${styles.border};font-weight:600;margin-top:4px;">→ ${insight.accion}</div>` : ''}
-      </div>`;
-    }
-  }
-
-  return `
-  <div style="padding:20px 20px 0;">
-    <div style="font-size:15px;font-weight:700;color:#4D240F;margin-bottom:4px;border-left:4px solid #D32F2F;padding-left:10px;">🐛 Monitoreo Fitosanitario</div>
-    ${fechasMonitoreo?.length > 0 ? `<div style="font-size:10px;color:#999;margin-bottom:12px;padding-left:14px;">Monitoreos: ${fechasMonitoreo.join(', ')}</div>` : ''}
-
-    ${detallePorLote && detallePorLote.length > 0 ? `
-    <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
-      <thead>
-        <tr style="background:#F5F5F0;">
-          <th style="padding:8px 10px;font-size:10px;font-weight:700;color:#555;text-align:left;border-bottom:2px solid #E0E0E0;">Lote</th>
-          <th style="padding:8px 10px;font-size:10px;font-weight:700;color:#555;text-align:left;border-bottom:2px solid #E0E0E0;">Sublote</th>
-          <th style="padding:8px 10px;font-size:10px;font-weight:700;color:#555;text-align:left;border-bottom:2px solid #E0E0E0;">Plaga</th>
-          <th style="padding:8px 10px;font-size:10px;font-weight:700;color:#555;text-align:center;border-bottom:2px solid #E0E0E0;">Incid. %</th>
-          <th style="padding:8px 10px;font-size:10px;font-weight:700;color:#555;text-align:center;border-bottom:2px solid #E0E0E0;">Gravedad</th>
-          <th style="padding:8px 10px;font-size:10px;font-weight:700;color:#555;text-align:center;border-bottom:2px solid #E0E0E0;">Árboles</th>
-          <th style="padding:8px 10px;font-size:10px;font-weight:700;color:#555;text-align:center;border-bottom:2px solid #E0E0E0;">Tendencia</th>
-        </tr>
-      </thead>
-      <tbody>${tableRows}</tbody>
-    </table>` : ''}
-
-    ${insightsHTML ? `
-    <div style="font-size:12px;font-weight:600;color:#4D240F;margin-bottom:8px;">Alertas e Insights</div>
-    ${insightsHTML}` : ''}
-
-    ${interpretacion ? `
-    <div style="background:#F0F7E8;padding:12px 16px;border-radius:8px;margin-top:12px;">
-      <div style="font-size:11px;font-weight:700;color:#73991C;margin-bottom:4px;">🔬 Interpretación de Tendencias</div>
-      <div style="font-size:12px;color:#4D240F;line-height:1.5;">${interpretacion}</div>
-    </div>` : ''}
-  </div>`;
-}
-
-function construirSeccionTemasAdicionales(temas: any[]): string {
-  let contenidoHTML = '';
-  for (const bloque of temas) {
-    if (bloque.tipo === 'texto') {
-      contenidoHTML += `
-      <div style="background:#FFFFFF;border:1px solid #E8E8E8;border-radius:8px;padding:14px;margin-bottom:8px;">
-        ${bloque.titulo ? `<div style="font-size:13px;font-weight:700;color:#4D240F;margin-bottom:6px;">${bloque.titulo}</div>` : ''}
-        <div style="font-size:12px;color:#555;line-height:1.6;">${(bloque.contenido || '').replace(/\n/g, '<br>')}</div>
-      </div>`;
-    } else if (bloque.tipo === 'imagen_con_texto') {
-      contenidoHTML += `
-      <div style="background:#FFFFFF;border:1px solid #E8E8E8;border-radius:8px;padding:14px;margin-bottom:8px;">
-        ${bloque.titulo ? `<div style="font-size:13px;font-weight:700;color:#4D240F;margin-bottom:6px;">📷 ${bloque.titulo}</div>` : ''}
-        <div style="font-size:12px;color:#555;line-height:1.6;">${bloque.descripcion || ''}</div>
-      </div>`;
-    }
-  }
-
-  return `
-  <div style="padding:20px 20px 0;">
-    <div style="font-size:15px;font-weight:700;color:#4D240F;margin-bottom:12px;border-left:4px solid #1976D2;padding-left:10px;">📝 Temas Adicionales</div>
-    ${contenidoHTML}
-  </div>`;
-}
-
-function construirSeccionConclusiones(conclusiones: AnalisisGemini['conclusiones']): string {
-  const prioridadColor: Record<string, { bg: string; dot: string }> = {
-    alta: { bg: '#FFF5F5', dot: '#D32F2F' },
-    media: { bg: '#FFFDF0', dot: '#F9A825' },
-    baja: { bg: '#F5F9EE', dot: '#73991C' },
-  };
-
-  let items = '';
-  for (const c of conclusiones) {
-    const colors = prioridadColor[c.prioridad] || prioridadColor.media;
-    items += `
-    <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;background:${colors.bg};border-radius:6px;margin-bottom:6px;">
-      <div style="font-size:18px;flex-shrink:0;line-height:1;">${c.icono}</div>
-      <div style="flex:1;">
-        <div style="font-size:12px;color:#4D240F;line-height:1.5;">${c.texto}</div>
-      </div>
-      <div style="width:8px;height:8px;border-radius:50%;background:${colors.dot};flex-shrink:0;margin-top:5px;"></div>
-    </div>`;
-  }
-
-  return `
-  <div style="padding:20px 20px 0;">
-    <div style="font-size:15px;font-weight:700;color:#4D240F;margin-bottom:12px;border-left:4px solid #73991C;padding-left:10px;">🎯 Conclusiones y Recomendaciones</div>
-    ${items}
-  </div>`;
 }
 
 // ============================================================================
 // HANDLER PRINCIPAL
 // ============================================================================
 
-export async function generarReporteSemanal(body: GenerateReportRequest): Promise<GenerateReportResponse> {
-  const startTime = Date.now();
-  console.log('=== generarReporteSemanal START ===');
+export async function generarReporteSemanal(req: Request): Promise<Response> {
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ success: false, error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  let body: GenerateReportRequest;
+  try {
+    body = await req.json();
+  } catch {
+    return new Response(JSON.stringify({ success: false, error: 'Invalid JSON body' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const { datos, instrucciones } = body;
+  if (!datos) {
+    return new Response(JSON.stringify({ success: false, error: 'Missing datos' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 
   try {
-    const { datos, instrucciones } = body;
+    console.log('[generarReporteSemanal] Llamando a Gemini...');
+    const { analisis, tokens } = await llamarGemini(datos, instrucciones);
+    console.log('[generarReporteSemanal] Gemini OK. Tokens:', tokens);
 
-    if (!datos || !datos.semana) {
-      console.log('Validation failed: datos or semana missing');
-      return { success: false, error: 'Datos del reporte no proporcionados o incompletos' };
-    }
-
-    console.log(`Semana ${datos.semana.numero}/${datos.semana.ano}`);
-
-    // Paso 1: Formatear datos para el prompt
-    const datosFormateados = formatearDatosParaPrompt(datos);
-    console.log('Datos formateados:', datosFormateados.length, 'chars');
-
-    // Paso 2: Llamar a Gemini para análisis (solo JSON)
-    console.log('Calling Gemini API for analysis...');
-    const geminiStart = Date.now();
-    const { analisis, tokens } = await llamarGemini(datosFormateados, instrucciones);
-    console.log(`Gemini completed in ${Date.now() - geminiStart}ms`);
-
-    // Paso 3: Construir HTML determinístico
-    console.log('Building deterministic HTML template...');
     const html = construirHTMLReporte(datos, analisis);
-    console.log('HTML built:', html.length, 'chars');
+    console.log('[generarReporteSemanal] HTML generado:', html.length, 'chars');
 
-    if (!html || html.length < 500) {
-      console.error('HTML too short:', html.length, 'chars');
-      return { success: false, error: 'Error interno al construir el HTML del reporte' };
-    }
-
-    console.log(`=== generarReporteSemanal SUCCESS in ${Date.now() - startTime}ms ===`);
-    return {
+    const response: GenerateReportResponse = {
       success: true,
       html,
       tokens_usados: tokens,
     };
+
+    return new Response(JSON.stringify(response), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (error: any) {
-    console.error(`=== generarReporteSemanal ERROR in ${Date.now() - startTime}ms ===`, error.message);
-    return {
-      success: false,
-      error: error.message || 'Error interno al generar el reporte',
-    };
+    console.error('[generarReporteSemanal] Error:', error);
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || 'Error interno' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
   }
 }

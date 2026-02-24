@@ -18,17 +18,40 @@ export interface RangoSemana {
 // SECCIÓN 1: PERSONAL
 // ============================================================================
 
+export interface DetalleFallaPermiso {
+  empleado: string;   // Nombre del trabajador
+  razon?: string;     // Razón (opcional, ingreso manual)
+}
+
 export interface DatosPersonal {
   totalTrabajadores: number;    // Auto-calculado de registros_trabajo
   empleados: number;            // Empleados que trabajaron
   contratistas: number;         // Contratistas que trabajaron
   fallas: number;               // Ingreso manual
   permisos: number;             // Ingreso manual
+  ingresos: number;             // Nuevos ingresos en la semana (manual)
+  retiros: number;              // Retiros en la semana (manual)
+  detalleFallas: DetalleFallaPermiso[];    // Detalle de fallas (manual)
+  detallePermisos: DetalleFallaPermiso[];  // Detalle de permisos (manual)
+  jornalesPosibles: number;     // Días hábiles × total trabajadores
+  jornalesTrabajados: number;   // Total jornales registrados
+  eficienciaOperativa: number;  // % = jornalesTrabajados / jornalesPosibles × 100
 }
 
 // ============================================================================
-// SECCIÓN 2: DISTRIBUCIÓN DE JORNALES
+// SECCIÓN 2: LABORES
 // ============================================================================
+
+export interface LaborSemanal {
+  id: string;
+  codigoTarea?: string;
+  nombre: string;
+  tipoTarea: string;
+  estado: 'Por iniciar' | 'En proceso' | 'Terminada';
+  fechaInicio: string;
+  fechaFin?: string;
+  lotes: string[];        // Nombres de lotes asociados
+}
 
 export interface CeldaMatrizJornales {
   jornales: number;  // SUM(fraccion_jornal)
@@ -54,6 +77,13 @@ export interface ItemCompraResumen {
   cantidadNecesaria: number;
   unidad: string;
   costoEstimado: number;
+  inventarioDisponible?: number;
+  cantidadAComprar?: number;
+}
+
+export interface MezclaResumen {
+  nombre: string;
+  productos: { nombre: string; dosis: string }[];
 }
 
 export interface AplicacionPlaneada {
@@ -63,8 +93,14 @@ export interface AplicacionPlaneada {
   proposito: string;
   blancosBiologicos: string[];
   fechaInicioPlaneada: string;
+  fechaFinPlaneada?: string;
+  mezclas: MezclaResumen[];
   listaCompras: ItemCompraResumen[];
   costoTotalEstimado: number;
+  inventarioTotalDisponible: number;
+  totalPedido: number;
+  costoPorLitroKg?: number;
+  costoPorArbol?: number;
 }
 
 export interface ProgresoLote {
@@ -91,6 +127,70 @@ export interface AplicacionActiva {
   progresoPorLote: ProgresoLote[];
 }
 
+// Cierre de aplicación para reporte
+export interface AplicacionCierreKPILote {
+  loteNombre: string;
+  // Canecas/bultos
+  canecasPlaneadas?: number;
+  canecasReales?: number;
+  canecasDesviacion?: number;  // %
+  // Insumos (Kg o L)
+  insumosPlaneados?: number;
+  insumosReales?: number;
+  insumosDesviacion?: number;  // %
+  insumosUnidad?: string;
+  // Jornales
+  jornalesPlaneados?: number;
+  jornalesReales?: number;
+  jornalesDesviacion?: number;  // %
+  // Eficiencias
+  litrosKgPorArbol?: number;
+  arbolesPorJornal?: number;
+  arbolesTratados?: number;
+}
+
+export interface AplicacionCierreFinancieroLote {
+  loteNombre: string;
+  costoTotalPlaneado: number;
+  costoTotalReal: number;
+  costoTotalAnterior?: number;
+  costoTotalDesviacion: number;  // %
+  costoTotalVariacion?: number;  // % vs anterior
+  costoInsumosPlaneado: number;
+  costoInsumosReal: number;
+  costoInsumosDesviacion: number;  // %
+  costoManoObraPlaneado: number;
+  costoManoObraReal: number;
+  costoManoObraDesviacion: number;  // %
+}
+
+export interface AplicacionCierreGeneral {
+  // Totales operativos
+  canecasBultosPlaneados: number;
+  canecasBultosReales: number;
+  canecasBultosDesviacion: number;  // %
+  unidad: 'canecas' | 'bultos';
+  // Costos totales
+  costoPlaneado: number;
+  costoReal: number;
+  costoDesviacion: number;   // %
+  costoAnterior?: number;    // Costo de aplicación anterior comparable
+  costoVariacion?: number;   // % cambio vs anterior
+}
+
+export interface AplicacionCerrada {
+  id: string;
+  nombre: string;
+  tipo: string;
+  proposito: string;
+  fechaInicio: string;
+  fechaFin: string;
+  diasEjecucion: number;
+  general: AplicacionCierreGeneral;
+  kpiPorLote: AplicacionCierreKPILote[];
+  financieroPorLote: AplicacionCierreFinancieroLote[];
+}
+
 // ============================================================================
 // SECCIÓN 4: MONITOREO
 // ============================================================================
@@ -115,11 +215,51 @@ export interface MonitoreoPorLote {
   sublotes: MonitoreoSublote[];
 }
 
+// Para la vista por lote con 3 observaciones
+export interface ObservacionFecha {
+  fecha: string;
+  incidencia: number | null;
+  gravedad?: 'Baja' | 'Media' | 'Alta' | null;
+}
+
+export interface VistaLotePlaga {
+  plagaNombre: string;
+  esPlaga_interes: boolean;
+  observaciones: ObservacionFecha[]; // hasta 3 fechas
+}
+
+export interface VistaMonitoreoLote {
+  loteId: string;
+  loteNombre: string;
+  plagasRows: VistaLotePlaga[];
+}
+
+// Para la vista por sublote (1 slide por lote)
+export interface ObservacionSublotePlaga {
+  fechas: ObservacionFecha[]; // hasta 3
+}
+
+export interface VistaSubLotePlagaCell {
+  subloteNombre: string;
+  plagaNombre: string;
+  observaciones: ObservacionFecha[]; // hasta 3
+}
+
+export interface VistaMonitoreoSublote {
+  loteId: string;
+  loteNombre: string;
+  sublotes: string[];    // nombres de sublotes (columnas)
+  plagas: string[];      // nombres de plagas (filas)
+  celdas: Record<string, Record<string, ObservacionFecha[]>>; // plaga → sublote → [obs]
+}
+
 export interface DatosMonitoreo {
   tendencias: TendenciaMonitoreo[];  // Últimos 3 monitoreos agrupados
   detallePorLote: MonitoreoPorLote[];
   insights: Insight[];
   fechasMonitoreo: string[];         // Las 3 fechas de monitoreo usadas
+  vistasPorLote: VistaMonitoreoLote[];      // Vista tabla por lote con 3 obs.
+  vistasPorSublote: VistaMonitoreoSublote[]; // Vista por sublote (1 per lote)
 }
 
 // ============================================================================
@@ -137,8 +277,10 @@ export interface BloqueTexto {
 export interface BloqueImagenConTexto {
   tipo: 'imagen_con_texto';
   titulo?: string;
-  imagenBase64: string;  // Data URL (data:image/jpeg;base64,...)
+  imagenesBase64: string[];  // Array of Data URLs — hasta 2 imágenes
   descripcion: string;
+  // Backwards-compat: single image via imagenBase64 still accepted
+  imagenBase64?: string;
 }
 
 export type BloqueAdicional = BloqueTexto | BloqueImagenConTexto;
@@ -150,10 +292,16 @@ export type BloqueAdicional = BloqueTexto | BloqueImagenConTexto;
 export interface DatosReporteSemanal {
   semana: RangoSemana;
   personal: DatosPersonal;
+  labores: {
+    programadas: LaborSemanal[];
+    matrizJornales: MatrizJornales;
+  };
+  // Legacy top-level jornales (kept for backward compatibility)
   jornales: MatrizJornales;
   aplicaciones: {
     planeadas: AplicacionPlaneada[];
     activas: AplicacionActiva[];
+    cerradas: AplicacionCerrada[];
   };
   monitoreo: DatosMonitoreo;
   temasAdicionales: BloqueAdicional[];
