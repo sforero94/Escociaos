@@ -4,6 +4,7 @@ import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import { getSupabase } from '../../utils/supabase/client';
@@ -35,6 +36,8 @@ export function UsuariosConfig() {
   const [rol, setRol] = useState<'Administrador' | 'Verificador' | 'Gerencia'>('Administrador');
   const [clave, setClave] = useState('');
   const [activo, setActivo] = useState(true);
+  const [confirmEliminarOpen, setConfirmEliminarOpen] = useState(false);
+  const [usuarioParaEliminar, setUsuarioParaEliminar] = useState<Usuario | null>(null);
 
   // Verificar que solo Gerencia puede acceder
   useEffect(() => {
@@ -149,21 +152,23 @@ export function UsuariosConfig() {
     }
   };
 
-  const eliminarUsuario = async (usuario: Usuario) => {
-    if (!confirm(`¿Estás seguro de eliminar al usuario ${usuario.nombre_completo || usuario.email}?`)) {
-      return;
-    }
+  const eliminarUsuario = (usuario: Usuario) => {
+    setUsuarioParaEliminar(usuario);
+    setConfirmEliminarOpen(true);
+  };
 
+  const confirmarEliminarUsuario = async () => {
+    if (!usuarioParaEliminar) return;
     try {
       const url = `https://${projectId}.supabase.co/functions/v1/make-server-1ccce916/usuarios/eliminar`;
-      
+
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${publicAnonKey}`,
         },
-        body: JSON.stringify({ id: usuario.id }),
+        body: JSON.stringify({ id: usuarioParaEliminar.id }),
       });
 
       const result = await response.json();
@@ -176,6 +181,8 @@ export function UsuariosConfig() {
       cargarUsuarios();
     } catch (error: any) {
       toast.error(error.message);
+    } finally {
+      setUsuarioParaEliminar(null);
     }
   };
 
@@ -195,9 +202,9 @@ export function UsuariosConfig() {
   if (profile?.rol !== 'Gerencia') {
     return (
       <Card className="p-8 text-center">
-        <Shield className="w-16 h-16 mx-auto text-[#BFD97D] mb-4" />
-        <h3 className="text-[#172E08] mb-2">Acceso Restringido</h3>
-        <p className="text-[#4D240F]/70">
+        <Shield className="w-16 h-16 mx-auto text-secondary mb-4" />
+        <h3 className="text-foreground mb-2">Acceso Restringido</h3>
+        <p className="text-brand-brown/70">
           Solo usuarios con rol de Gerencia pueden acceder a esta sección
         </p>
       </Card>
@@ -209,14 +216,14 @@ export function UsuariosConfig() {
       {/* Header con botón Agregar */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl text-[#172E08]">Gestión de Usuarios</h2>
-          <p className="text-sm text-[#4D240F]/70 mt-1">
+          <h2 className="text-2xl text-foreground">Gestión de Usuarios</h2>
+          <p className="text-sm text-brand-brown/70 mt-1">
             Administra los usuarios del sistema Escosia Hass
           </p>
         </div>
         <Button
           onClick={abrirModalCrear}
-          className="bg-gradient-to-br from-[#73991C] to-[#5c7a16] hover:from-[#5c7a16] hover:to-[#73991C] text-white shadow-md hover:shadow-lg transition-all"
+          className="bg-gradient-to-br from-primary to-primary-dark hover:from-primary-dark hover:to-primary text-white shadow-md hover:shadow-lg transition-all"
         >
           <Plus className="w-4 h-4 mr-2" />
           Nuevo Usuario
@@ -224,58 +231,58 @@ export function UsuariosConfig() {
       </div>
 
       {/* Tabla de usuarios */}
-      <Card className="overflow-hidden border border-[#BFD97D]/30 shadow-md">
+      <Card className="overflow-hidden border border-secondary/30 shadow-md">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gradient-to-r from-[#73991C]/10 to-[#BFD97D]/10 border-b border-[#BFD97D]/30">
+            <thead className="bg-gradient-to-r from-primary/10 to-secondary/10 border-b border-secondary/30">
               <tr>
-                <th className="px-6 py-3 text-left text-xs uppercase tracking-wider text-[#172E08]">
+                <th className="px-6 py-3 text-left text-xs uppercase tracking-wider text-foreground">
                   Usuario
                 </th>
-                <th className="px-6 py-3 text-left text-xs uppercase tracking-wider text-[#172E08]">
+                <th className="px-6 py-3 text-left text-xs uppercase tracking-wider text-foreground">
                   Email
                 </th>
-                <th className="px-6 py-3 text-left text-xs uppercase tracking-wider text-[#172E08]">
+                <th className="px-6 py-3 text-left text-xs uppercase tracking-wider text-foreground">
                   Rol
                 </th>
-                <th className="px-6 py-3 text-left text-xs uppercase tracking-wider text-[#172E08]">
+                <th className="px-6 py-3 text-left text-xs uppercase tracking-wider text-foreground">
                   Estado
                 </th>
-                <th className="px-6 py-3 text-right text-xs uppercase tracking-wider text-[#172E08]">
+                <th className="px-6 py-3 text-right text-xs uppercase tracking-wider text-foreground">
                   Acciones
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-[#BFD97D]/20">
+            <tbody className="bg-white divide-y divide-secondary/20">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-[#4D240F]/70">
+                  <td colSpan={5} className="px-6 py-8 text-center text-brand-brown/70">
                     Cargando usuarios...
                   </td>
                 </tr>
               ) : usuarios.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-[#4D240F]/70">
-                    <Users className="w-12 h-12 mx-auto mb-2 text-[#BFD97D]" />
+                  <td colSpan={5} className="px-6 py-8 text-center text-brand-brown/70">
+                    <Users className="w-12 h-12 mx-auto mb-2 text-secondary" />
                     No hay usuarios registrados
                   </td>
                 </tr>
               ) : (
                 usuarios.map((usuario) => (
-                  <tr key={usuario.id} className="hover:bg-[#F8FAF5] transition-colors">
+                  <tr key={usuario.id} className="hover:bg-background transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#73991C] to-[#BFD97D] flex items-center justify-center text-white">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white">
                           {usuario.nombre_completo?.charAt(0).toUpperCase() || usuario.email.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <div className="text-[#172E08]">
+                          <div className="text-foreground">
                             {usuario.nombre_completo || 'Sin nombre'}
                           </div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-[#4D240F]/70">
+                    <td className="px-6 py-4 text-brand-brown/70">
                       {usuario.email}
                     </td>
                     <td className="px-6 py-4">
@@ -302,7 +309,7 @@ export function UsuariosConfig() {
                           variant="outline"
                           size="sm"
                           onClick={() => abrirModalEditar(usuario)}
-                          className="text-[#73991C] hover:bg-[#73991C]/10"
+                          className="text-primary hover:bg-primary/10"
                         >
                           <Edit className="w-4 h-4" />
                         </Button>
@@ -324,14 +331,24 @@ export function UsuariosConfig() {
         </div>
       </Card>
 
+      <ConfirmDialog
+        open={confirmEliminarOpen}
+        onOpenChange={setConfirmEliminarOpen}
+        title={`¿Eliminar al usuario ${usuarioParaEliminar?.nombre_completo || usuarioParaEliminar?.email}?`}
+        description="Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={confirmarEliminarUsuario}
+        destructive
+      />
+
       {/* Modal Crear/Editar Usuario */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle className="text-[#172E08]">
+            <DialogTitle className="text-foreground">
               {modalMode === 'crear' ? 'Nuevo Usuario' : 'Editar Usuario'}
             </DialogTitle>
-            <DialogDescription className="text-[#4D240F]/70">
+            <DialogDescription className="text-brand-brown/70">
               {modalMode === 'crear' 
                 ? 'Completa los datos para crear un nuevo usuario' 
                 : 'Modifica los datos del usuario'
@@ -342,7 +359,7 @@ export function UsuariosConfig() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Nombre Completo */}
             <div>
-              <Label htmlFor="nombre" className="text-[#172E08]">
+              <Label htmlFor="nombre" className="text-foreground">
                 Nombre Completo *
               </Label>
               <Input
@@ -351,13 +368,13 @@ export function UsuariosConfig() {
                 onChange={(e) => setNombreCompleto(e.target.value)}
                 placeholder="Ej: Juan Pérez García"
                 required
-                className="border-[#BFD97D]/30 focus:border-[#73991C]"
+                className="border-secondary/30 focus:border-primary"
               />
             </div>
 
             {/* Email */}
             <div>
-              <Label htmlFor="email" className="text-[#172E08]">
+              <Label htmlFor="email" className="text-foreground">
                 Email *
               </Label>
               <Input
@@ -368,10 +385,10 @@ export function UsuariosConfig() {
                 placeholder="usuario@ejemplo.com"
                 required
                 disabled={modalMode === 'editar'}
-                className="border-[#BFD97D]/30 focus:border-[#73991C] disabled:opacity-50"
+                className="border-secondary/30 focus:border-primary disabled:opacity-50"
               />
               {modalMode === 'editar' && (
-                <p className="text-xs text-[#4D240F]/60 mt-1">
+                <p className="text-xs text-brand-brown/60 mt-1">
                   El email no se puede modificar
                 </p>
               )}
@@ -379,14 +396,14 @@ export function UsuariosConfig() {
 
             {/* Rol */}
             <div>
-              <Label htmlFor="rol" className="text-[#172E08]">
+              <Label htmlFor="rol" className="text-foreground">
                 Rol *
               </Label>
               <select
                 id="rol"
                 value={rol}
                 onChange={(e) => setRol(e.target.value as any)}
-                className="w-full px-3 py-2 border border-[#BFD97D]/30 rounded-md focus:outline-none focus:ring-2 focus:ring-[#73991C]/50 focus:border-[#73991C]"
+                className="w-full px-3 py-2 border border-secondary/30 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
                 required
               >
                 <option value="Administrador">Administrador</option>
@@ -397,7 +414,7 @@ export function UsuariosConfig() {
 
             {/* Clave */}
             <div>
-              <Label htmlFor="clave" className="text-[#172E08]">
+              <Label htmlFor="clave" className="text-foreground">
                 Clave {modalMode === 'crear' ? '*' : '(dejar vacío para no cambiar)'}
               </Label>
               <div className="relative">
@@ -408,12 +425,12 @@ export function UsuariosConfig() {
                   onChange={(e) => setClave(e.target.value)}
                   placeholder={modalMode === 'crear' ? 'Mínimo 6 caracteres' : 'Nueva clave (opcional)'}
                   required={modalMode === 'crear'}
-                  className="border-[#BFD97D]/30 focus:border-[#73991C] pr-10"
+                  className="border-secondary/30 focus:border-primary pr-10"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#4D240F]/50 hover:text-[#4D240F]"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-brown/50 hover:text-brand-brown"
                 >
                   {showPassword ? (
                     <EyeOff className="w-4 h-4" />
@@ -431,9 +448,9 @@ export function UsuariosConfig() {
                 id="activo"
                 checked={activo}
                 onChange={(e) => setActivo(e.target.checked)}
-                className="w-4 h-4 text-[#73991C] border-[#BFD97D]/30 rounded focus:ring-[#73991C]"
+                className="w-4 h-4 text-primary border-secondary/30 rounded focus:ring-primary"
               />
-              <Label htmlFor="activo" className="text-[#172E08] cursor-pointer">
+              <Label htmlFor="activo" className="text-foreground cursor-pointer">
                 Usuario activo
               </Label>
             </div>
@@ -450,7 +467,7 @@ export function UsuariosConfig() {
               </Button>
               <Button
                 type="submit"
-                className="flex-1 bg-gradient-to-br from-[#73991C] to-[#5c7a16] hover:from-[#5c7a16] hover:to-[#73991C] text-white"
+                className="flex-1 bg-gradient-to-br from-primary to-primary-dark hover:from-primary-dark hover:to-primary text-white"
               >
                 {modalMode === 'crear' ? 'Crear Usuario' : 'Guardar Cambios'}
               </Button>

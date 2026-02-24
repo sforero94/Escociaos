@@ -573,7 +573,7 @@ export function CargaMasivaIngresos({
       <DialogContent className="max-w-3xl flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FileSpreadsheet className="w-5 h-5 text-[#73991C]" />
+            <FileSpreadsheet className="w-5 h-5 text-primary" />
             Carga Masiva de Ingresos
           </DialogTitle>
           <DialogDescription>
@@ -586,7 +586,7 @@ export function CargaMasivaIngresos({
           {/* Step 1: Download Template */}
           <div className="border border-gray-200 rounded-lg p-4">
             <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 w-8 h-8 bg-[#73991C] text-white rounded-full flex items-center justify-center font-semibold">
+              <div className="flex-shrink-0 w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center font-semibold">
                 1
               </div>
               <div className="flex-1">
@@ -596,7 +596,7 @@ export function CargaMasivaIngresos({
                 </p>
                 <Button
                   onClick={descargarPlantilla}
-                  className="bg-[#73991C] hover:bg-[#5a7716] text-white"
+                  className="bg-primary hover:bg-primary-dark text-white"
                   disabled={loading}
                 >
                   <Download className="w-4 h-4 mr-2" />
@@ -609,7 +609,7 @@ export function CargaMasivaIngresos({
           {/* Step 2: Upload File */}
           <div className="border border-gray-200 rounded-lg p-4">
             <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 w-8 h-8 bg-[#73991C] text-white rounded-full flex items-center justify-center font-semibold">
+              <div className="flex-shrink-0 w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center font-semibold">
                 2
               </div>
               <div className="flex-1">

@@ -22,7 +22,7 @@ export function VistaRapidaCard({
   return (
     <button
       onClick={onClick}
-      className="bg-white rounded-xl border border-gray-200 p-4 hover:border-[#73991C] hover:shadow-md transition-all text-left w-full group"
+      className="bg-white rounded-xl border border-gray-200 p-4 hover:border-primary hover:shadow-md transition-all text-left w-full group"
     >
       <div className="flex items-start justify-between mb-2">
         <div className="text-2xl">{icono}</div>
@@ -31,12 +31,12 @@ export function VistaRapidaCard({
         )}
       </div>
       
-      <h3 className="text-[#172E08] mb-1 flex items-center gap-2">
+      <h3 className="text-foreground mb-1 flex items-center gap-2">
         {titulo}
-        <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-[#73991C] transition-colors" />
+        <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-primary transition-colors" />
       </h3>
       
-      <p className="text-[#4D240F]/70">
+      <p className="text-brand-brown/70">
         {descripcion}
       </p>
     </button>
@@ -48,11 +48,11 @@ export function NuevaVistaCard({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 rounded-xl border-2 border-dashed border-[#73991C]/30 p-4 hover:border-[#73991C] hover:shadow-md transition-all text-left w-full group min-h-[120px] flex flex-col items-center justify-center"
+      className="bg-gradient-to-br from-primary/10 to-secondary/10 rounded-xl border-2 border-dashed border-primary/30 p-4 hover:border-primary hover:shadow-md transition-all text-left w-full group min-h-[120px] flex flex-col items-center justify-center"
     >
       <div className="text-3xl mb-2 group-hover:scale-110 transition-transform">➕</div>
-      <p className="text-[#172E08]">Crear nueva vista</p>
-      <p className="text-[#4D240F]/70 mt-1">Personaliza tus filtros</p>
+      <p className="text-foreground">Crear nueva vista</p>
+      <p className="text-brand-brown/70 mt-1">Personaliza tus filtros</p>
     </button>
   );
 }

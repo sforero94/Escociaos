@@ -20,14 +20,14 @@ export function RegistrosMonitoreo() {
       {/* Header con botón Agregar */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl text-[#172E08]">Registros de Monitoreo</h2>
-          <p className="text-sm text-[#4D240F]/70 mt-1">
+          <h2 className="text-2xl text-foreground">Registros de Monitoreo</h2>
+          <p className="text-sm text-brand-brown/70 mt-1">
             Todos los registros agrupados por semana
           </p>
         </div>
         <Button
           onClick={() => setMostrarRegistroMonitoreo(true)}
-          className="bg-gradient-to-br from-[#73991C] to-[#5c7a16] hover:from-[#5c7a16] hover:to-[#73991C] text-white shadow-md hover:shadow-lg transition-all"
+          className="bg-gradient-to-br from-primary to-primary-dark hover:from-primary-dark hover:to-primary text-white shadow-md hover:shadow-lg transition-all"
         >
           <Plus className="w-4 h-4 mr-2" />
           Agregar registro

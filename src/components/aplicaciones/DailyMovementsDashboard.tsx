@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { 
-  AlertTriangle, 
-  TrendingUp, 
-  Package, 
-  Calendar, 
-  User, 
+import {
+  AlertTriangle,
+  TrendingUp,
+  Package,
+  Calendar,
+  User,
   Trash2,
   Plus,
   X,
@@ -13,6 +13,8 @@ import {
   Download,
   Droplet
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 import { getSupabase } from '../../utils/supabase/client';
 import { DailyMovementForm } from './DailyMovementForm';
 import { Button } from '../ui/button';
@@ -45,52 +47,7 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
     movimientos: true
   });
 
-  // Auto-cerrar si la aplicación se cierra mientras estamos aquí
-  useEffect(() => {
-    if (aplicacion.estado === 'Cerrada' && onClose) {
-      // Cerrar inmediatamente sin mostrar modal
-      onClose();
-    }
-  }, [aplicacion.estado, onClose]);
-
-  // Validar que la aplicación esté en ejecución SOLO si estamos en modo modal
-  // Si NO hay onClose (página dedicada), permitir visualización en cualquier estado
-  // IMPORTANTE: No mostrar este modal si la aplicación está "Cerrada" porque ya se cerró arriba
-  if (aplicacion.estado !== 'En ejecución' && aplicacion.estado !== 'Cerrada' && onClose) {
-    return (
-      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
-              <AlertTriangle className="w-6 h-6 text-yellow-600" />
-            </div>
-            <div>
-              <h3 className="text-lg text-[#172E08]">Aplicación No Iniciada</h3>
-              <p className="text-sm text-[#4D240F]/70">No se pueden registrar movimientos</p>
-            </div>
-          </div>
-
-          <p className="text-sm text-[#4D240F]/70 mb-6">
-            Esta aplicación está en estado <span className="font-medium text-[#172E08]">"{aplicacion.estado}"</span>. 
-            {' '}Debes iniciar la ejecución antes de poder registrar movimientos diarios.
-          </p>
-
-          <div className="flex gap-3">
-            {onClose && (
-              <button
-                onClick={onClose}
-                className="flex-1 px-4 py-2 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-lg hover:from-[#5f7d17] hover:to-[#9db86d] transition-all"
-              >
-                Entendido
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Datos
+  // Datos — declared before any conditional return to satisfy Rules of Hooks
   const [movimientos, setMovimientos] = useState<MovimientoConProductos[]>([]);
   const [productosPlanificados, setProductosPlanificados] = useState<ProductoEnMezcla[]>([]);
   const [resumen, setResumen] = useState<ResumenMovimientoDiario[]>([]);
@@ -100,6 +57,14 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
     utilizadas: number;
     porcentaje: number;
   }>({ planeadas: 0, utilizadas: 0, porcentaje: 0 });
+  const [confirmEliminarMovimientoId, setConfirmEliminarMovimientoId] = useState<string | null>(null);
+
+  // Auto-cerrar si la aplicación se cierra mientras estamos aquí
+  useEffect(() => {
+    if (aplicacion.estado === 'Cerrada' && onClose) {
+      onClose();
+    }
+  }, [aplicacion.estado, onClose]);
 
   useEffect(() => {
     loadData();
@@ -110,6 +75,42 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
     calcularCanecasTotales();
   }, [movimientos, productosPlanificados]);
 
+  // Validar que la aplicación esté en ejecución SOLO si estamos en modo modal
+  // Si NO hay onClose (página dedicada), permitir visualización en cualquier estado
+  if (aplicacion.estado !== 'En ejecución' && aplicacion.estado !== 'Cerrada' && onClose) {
+    return (
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
+              <AlertTriangle className="w-6 h-6 text-yellow-600" />
+            </div>
+            <div>
+              <h3 className="text-lg text-foreground">Aplicación No Iniciada</h3>
+              <p className="text-sm text-brand-brown/70">No se pueden registrar movimientos</p>
+            </div>
+          </div>
+
+          <p className="text-sm text-brand-brown/70 mb-6">
+            Esta aplicación está en estado <span className="font-medium text-foreground">"{aplicacion.estado}"</span>.
+            {' '}Debes iniciar la ejecución antes de poder registrar movimientos diarios.
+          </p>
+
+          <div className="flex gap-3">
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="flex-1 px-4 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:from-primary-dark hover:to-secondary-dark transition-all"
+              >
+                Entendido
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const loadData = async () => {
     try {
       setLoading(true);
@@ -118,7 +119,8 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
         loadProductosPlanificados(),
         loadCanecasPlaneadas()
       ]);
-    } catch (error) {
+    } catch {
+      // individual loaders handle their own errors
     } finally {
       setLoading(false);
     }
@@ -150,7 +152,7 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
       if (errorProductos) throw errorProductos;
 
       // 3. Para fertilización, cargar presentacion_kg_l de cada producto
-      let presentacionMap = new Map<string, number>();
+      const presentacionMap = new Map<string, number>();
       if (aplicacion.tipo_aplicacion === 'Fertilización') {
         const productosIds = Array.from(new Set((productosData || []).map(p => p.producto_id)));
         if (productosIds.length > 0) {
@@ -188,7 +190,8 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
       });
 
       setMovimientos(movimientosConProductos);
-    } catch (err: any) {
+    } catch {
+      // error logged by caller
     }
   };
 
@@ -231,7 +234,8 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
 
         setProductosPlanificados(Array.from(productosMap.values()));
       }
-    } catch (err: any) {
+    } catch {
+      // error logged by caller
     }
   };
 
@@ -355,12 +359,19 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
         utilizadas: totalUtilizadas,
         porcentaje
       });
-    } catch (err) {
+    } catch {
+      // error logged by caller
     }
   };
 
-  const handleEliminarMovimiento = async (movimientoId: string) => {
-    if (!confirm('¿Estás seguro de eliminar este movimiento y todos sus productos?')) return;
+  const handleEliminarMovimiento = (movimientoId: string) => {
+    setConfirmEliminarMovimientoId(movimientoId);
+  };
+
+  const confirmarEliminarMovimiento = async () => {
+    if (!confirmEliminarMovimientoId) return;
+    const movimientoId = confirmEliminarMovimientoId;
+    setConfirmEliminarMovimientoId(null);
 
     try {
       // Al eliminar el movimiento, los productos se eliminarán en cascada
@@ -373,7 +384,7 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
 
       await loadMovimientos();
     } catch (err: any) {
-      alert('Error al eliminar el movimiento');
+      toast.error('Error al eliminar el movimiento');
     }
   };
 
@@ -399,7 +410,7 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `movimientos_diarios_${aplicacion.nombre}_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `movimientos_diarios_${aplicacion.nombre_aplicacion}_${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -410,8 +421,8 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-[#73991C]/20 border-t-[#73991C] rounded-full animate-spin mx-auto"></div>
-          <p className="text-sm text-[#4D240F]/60 mt-4">Cargando movimientos...</p>
+          <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto"></div>
+          <p className="text-sm text-brand-brown/60 mt-4">Cargando movimientos...</p>
         </div>
       </div>
     );
@@ -435,15 +446,15 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl text-[#172E08]">Movimientos Diarios</h2>
-          <p className="text-sm text-[#4D240F]/60 mt-1">
-            {aplicacion.nombre} • {movimientos.length} {movimientos.length === 1 ? 'registro' : 'registros'}
+          <h2 className="text-2xl text-foreground">Movimientos Diarios</h2>
+          <p className="text-sm text-brand-brown/60 mt-1">
+            {aplicacion.nombre_aplicacion} • {movimientos.length} {movimientos.length === 1 ? 'registro' : 'registros'}
           </p>
         </div>
         <div className="flex items-center gap-3">
           <Button
             onClick={() => setShowForm(true)}
-            className="bg-[#73991C] hover:bg-[#5f7d17] text-white"
+            className="bg-primary hover:bg-primary-dark text-white"
           >
             <Plus className="w-4 h-4 mr-2" />
             Nuevo Movimiento
@@ -452,7 +463,7 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
             <Button
               onClick={onClose}
               variant="outline"
-              className="border-[#73991C]/20"
+              className="border-primary/20"
             >
               <X className="w-4 h-4 mr-2" />
               Cerrar
@@ -462,23 +473,23 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
       </div>
 
       {/* Resumen de Canecas/Bultos Totales */}
-      {aplicacion.tipo === 'fumigacion' && canecasTotales && (
-        <div className="bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 rounded-2xl border border-[#73991C]/20 p-6">
+      {aplicacion.tipo_aplicacion === 'Fumigación' && canecasTotales && (
+        <div className="bg-gradient-to-br from-primary/10 to-secondary/10 rounded-2xl border border-primary/20 p-6">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-[#73991C]/20 rounded-xl flex items-center justify-center">
-              <Droplet className="w-7 h-7 text-[#73991C]" />
+            <div className="w-14 h-14 bg-primary/20 rounded-xl flex items-center justify-center">
+              <Droplet className="w-7 h-7 text-primary" />
             </div>
             <div className="flex-1">
-              <h3 className="text-sm text-[#4D240F]/70 mb-1">Progreso de Canecas</h3>
+              <h3 className="text-sm text-brand-brown/70 mb-1">Progreso de Canecas</h3>
               <div className="flex items-baseline gap-2">
-                <span className="text-2xl text-[#172E08]">{canecasTotales.utilizadas.toFixed(1)}</span>
-                <span className="text-sm text-[#4D240F]/60">/ {canecasTotales.planeadas.toFixed(1)} canecas</span>
+                <span className="text-2xl text-foreground">{canecasTotales.utilizadas.toFixed(1)}</span>
+                <span className="text-sm text-brand-brown/60">/ {canecasTotales.planeadas.toFixed(1)} canecas</span>
                 <span className={`ml-2 text-sm px-2 py-1 rounded-lg ${
                   canecasTotales.porcentaje > 100 
                     ? 'bg-red-100 text-red-700' 
                     : canecasTotales.porcentaje >= 90 
                     ? 'bg-amber-100 text-amber-700' 
-                    : 'bg-[#73991C]/10 text-[#73991C]'
+                    : 'bg-primary/10 text-primary'
                 }`}>
                   {canecasTotales.porcentaje.toFixed(0)}%
                 </span>
@@ -490,7 +501,7 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
                       ? 'bg-red-500'
                       : canecasTotales.porcentaje >= 90
                       ? 'bg-amber-500'
-                      : 'bg-[#73991C]'
+                      : 'bg-primary'
                   }`}
                   style={{ width: `${Math.min(canecasTotales.porcentaje, 100)}%` }}
                 />
@@ -502,21 +513,21 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
 
       {/* Alertas */}
       {alertas.length > 0 && (
-        <div className="bg-white rounded-2xl border border-[#73991C]/10 shadow-[0_4px_24px_rgba(115,153,28,0.08)] overflow-hidden">
+        <div className="bg-white rounded-2xl border border-primary/10 shadow-[0_4px_24px_rgba(115,153,28,0.08)] overflow-hidden">
           <button
             onClick={() => toggleSection('alertas')}
-            className="w-full px-6 py-4 flex items-center justify-between hover:bg-[#73991C]/5 transition-colors"
+            className="w-full px-6 py-4 flex items-center justify-between hover:bg-primary/5 transition-colors"
           >
             <div className="flex items-center gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-600" />
-              <h3 className="text-lg text-[#172E08]">
+              <h3 className="text-lg text-foreground">
                 Alertas ({alertas.length})
               </h3>
             </div>
             {expandedSections.alertas ? (
-              <ChevronUp className="w-5 h-5 text-[#4D240F]/40" />
+              <ChevronUp className="w-5 h-5 text-brand-brown/40" />
             ) : (
-              <ChevronDown className="w-5 h-5 text-[#4D240F]/40" />
+              <ChevronDown className="w-5 h-5 text-brand-brown/40" />
             )}
           </button>
 
@@ -543,8 +554,8 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
                     }`}
                   />
                   <div className="flex-1">
-                    <p className="text-sm text-[#172E08]">{alerta.producto_nombre}</p>
-                    <p className="text-xs text-[#4D240F]/70 mt-1">
+                    <p className="text-sm text-foreground">{alerta.producto_nombre}</p>
+                    <p className="text-xs text-brand-brown/70 mt-1">
                       {alerta.mensaje}
                     </p>
                   </div>
@@ -556,36 +567,36 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
       )}
 
       {/* Resumen de Productos */}
-      <div className="bg-white rounded-2xl border border-[#73991C]/10 shadow-[0_4px_24px_rgba(115,153,28,0.08)] overflow-hidden">
+      <div className="bg-white rounded-2xl border border-primary/10 shadow-[0_4px_24px_rgba(115,153,28,0.08)] overflow-hidden">
         <button
           onClick={() => toggleSection('resumen')}
-          className="w-full px-6 py-4 flex items-center justify-between hover:bg-[#73991C]/5 transition-colors"
+          className="w-full px-6 py-4 flex items-center justify-between hover:bg-primary/5 transition-colors"
         >
           <div className="flex items-center gap-3">
-            <Package className="w-5 h-5 text-[#73991C]" />
-            <h3 className="text-lg text-[#172E08]">Resumen de Productos</h3>
+            <Package className="w-5 h-5 text-primary" />
+            <h3 className="text-lg text-foreground">Resumen de Productos</h3>
           </div>
           {expandedSections.resumen ? (
-            <ChevronUp className="w-5 h-5 text-[#4D240F]/40" />
+            <ChevronUp className="w-5 h-5 text-brand-brown/40" />
           ) : (
-            <ChevronDown className="w-5 h-5 text-[#4D240F]/40" />
+            <ChevronDown className="w-5 h-5 text-brand-brown/40" />
           )}
         </button>
 
         {expandedSections.resumen && (
           <div className="px-6 pb-4">
             {resumen.length === 0 ? (
-              <p className="text-sm text-[#4D240F]/60 text-center py-8">
+              <p className="text-sm text-brand-brown/60 text-center py-8">
                 No hay productos planificados
               </p>
             ) : (
               <div className="space-y-4">
                 {resumen.map(item => (
-                  <div key={item.producto_id} className="border-b border-[#73991C]/10 pb-4 last:border-0">
+                  <div key={item.producto_id} className="border-b border-primary/10 pb-4 last:border-0">
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex-1">
-                        <p className="text-sm text-[#172E08]">{item.producto_nombre}</p>
-                        <p className="text-xs text-[#4D240F]/60 mt-1">
+                        <p className="text-sm text-foreground">{item.producto_nombre}</p>
+                        <p className="text-xs text-brand-brown/60 mt-1">
                           {item.total_utilizado.toFixed(2)} / {item.cantidad_planeada.toFixed(2)} {item.producto_unidad}
                         </p>
                       </div>
@@ -595,7 +606,7 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
                             +{Math.abs(item.diferencia).toFixed(2)}
                           </span>
                         ) : (
-                          <span className="inline-block px-2 py-1 bg-[#73991C]/10 text-[#73991C] rounded-lg text-xs">
+                          <span className="inline-block px-2 py-1 bg-primary/10 text-primary rounded-lg text-xs">
                             {item.porcentaje_usado.toFixed(0)}%
                           </span>
                         )}
@@ -610,7 +621,7 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
                             ? 'bg-red-500'
                             : item.porcentaje_usado >= 90
                             ? 'bg-amber-500'
-                            : 'bg-[#73991C]'
+                            : 'bg-primary'
                         }`}
                         style={{ width: `${Math.min(item.porcentaje_usado, 100)}%` }}
                       />
@@ -624,21 +635,21 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
       </div>
 
       {/* Lista de Movimientos */}
-      <div className="bg-white rounded-2xl border border-[#73991C]/10 shadow-[0_4px_24px_rgba(115,153,28,0.08)] overflow-hidden">
+      <div className="bg-white rounded-2xl border border-primary/10 shadow-[0_4px_24px_rgba(115,153,28,0.08)] overflow-hidden">
         <button
           onClick={() => toggleSection('movimientos')}
-          className="w-full px-6 py-4 flex items-center justify-between hover:bg-[#73991C]/5 transition-colors"
+          className="w-full px-6 py-4 flex items-center justify-between hover:bg-primary/5 transition-colors"
         >
           <div className="flex items-center gap-3">
-            <TrendingUp className="w-5 h-5 text-[#73991C]" />
-            <h3 className="text-lg text-[#172E08]">
+            <TrendingUp className="w-5 h-5 text-primary" />
+            <h3 className="text-lg text-foreground">
               Movimientos Registrados ({movimientos.length})
             </h3>
           </div>
           {expandedSections.movimientos ? (
-            <ChevronUp className="w-5 h-5 text-[#4D240F]/40" />
+            <ChevronUp className="w-5 h-5 text-brand-brown/40" />
           ) : (
-            <ChevronDown className="w-5 h-5 text-[#4D240F]/40" />
+            <ChevronDown className="w-5 h-5 text-brand-brown/40" />
           )}
         </button>
 
@@ -646,11 +657,11 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
           <div className="px-6 pb-4">
             {movimientos.length === 0 ? (
               <div className="text-center py-8">
-                <Package className="w-12 h-12 text-[#73991C]/20 mx-auto mb-3" />
-                <p className="text-sm text-[#4D240F]/60">
+                <Package className="w-12 h-12 text-primary/20 mx-auto mb-3" />
+                <p className="text-sm text-brand-brown/60">
                   No hay movimientos registrados
                 </p>
-                <p className="text-xs text-[#4D240F]/40 mt-1">
+                <p className="text-xs text-brand-brown/40 mt-1">
                   Registra el primer movimiento diario
                 </p>
               </div>
@@ -659,14 +670,14 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
                 {movimientos.map(mov => (
                   <div
                     key={mov.id}
-                    className="bg-[#F8FAF5] border border-[#73991C]/20 rounded-xl p-4 hover:border-[#73991C]/40 transition-colors"
+                    className="bg-background border border-primary/20 rounded-xl p-4 hover:border-primary/40 transition-colors"
                   >
                     {/* Header del movimiento */}
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
-                          <div className="flex items-center gap-2 text-sm text-[#172E08]">
-                            <Calendar className="w-4 h-4 text-[#73991C]" />
+                          <div className="flex items-center gap-2 text-sm text-foreground">
+                            <Calendar className="w-4 h-4 text-primary" />
                             {/* 🚨 FIX: Parsear fecha sin conversión de timezone */}
                             {(() => {
                               const [year, month, day] = mov.fecha_movimiento.split('-');
@@ -681,24 +692,24 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
                           
                           {/* Mostrar canecas o bultos según el tipo de aplicación */}
                           {mov.numero_canecas !== undefined && mov.numero_canecas !== null && (
-                            <div className="flex items-center gap-2 px-3 py-1 bg-[#73991C]/10 rounded-lg">
-                              <Droplet className="w-4 h-4 text-[#73991C]" />
-                              <span className="text-sm text-[#172E08]">
+                            <div className="flex items-center gap-2 px-3 py-1 bg-primary/10 rounded-lg">
+                              <Droplet className="w-4 h-4 text-primary" />
+                              <span className="text-sm text-foreground">
                                 {mov.numero_canecas} caneca{mov.numero_canecas !== 1 ? 's' : ''}
                               </span>
                             </div>
                           )}
                           
                           {mov.numero_bultos !== undefined && mov.numero_bultos !== null && (
-                            <div className="flex items-center gap-2 px-3 py-1 bg-[#73991C]/10 rounded-lg">
-                              <Package className="w-4 h-4 text-[#73991C]" />
-                              <span className="text-sm text-[#172E08]">
+                            <div className="flex items-center gap-2 px-3 py-1 bg-primary/10 rounded-lg">
+                              <Package className="w-4 h-4 text-primary" />
+                              <span className="text-sm text-foreground">
                                 {mov.numero_bultos} bulto{mov.numero_bultos !== 1 ? 's' : ''}
                               </span>
                             </div>
                           )}
                         </div>
-                        <p className="text-xs text-[#4D240F]/70">{mov.lote_nombre}</p>
+                        <p className="text-xs text-brand-brown/70">{mov.lote_nombre}</p>
                       </div>
                       <button
                         onClick={() => handleEliminarMovimiento(mov.id!)}
@@ -714,17 +725,17 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
                       {mov.productos.map((producto, idx) => (
                         <div
                           key={idx}
-                          className="flex items-center justify-between bg-white rounded-lg p-3 border border-[#73991C]/10"
+                          className="flex items-center justify-between bg-white rounded-lg p-3 border border-primary/10"
                         >
                           <div className="flex items-center gap-3">
-                            <Package className="w-4 h-4 text-[#73991C]" />
+                            <Package className="w-4 h-4 text-primary" />
                             <div>
-                              <p className="text-sm text-[#172E08]">{producto.producto_nombre}</p>
-                              <p className="text-xs text-[#4D240F]/60">{producto.producto_categoria}</p>
+                              <p className="text-sm text-foreground">{producto.producto_nombre}</p>
+                              <p className="text-xs text-brand-brown/60">{producto.producto_categoria}</p>
                             </div>
                           </div>
                           <div className="text-right">
-                            <p className="text-sm text-[#172E08]">
+                            <p className="text-sm text-foreground">
                               {/* 🚨 FIX: Mapear unidades abreviadas a nombres amigables */}
                               {producto.cantidad_utilizada} {(() => {
                                 const unidadMap: Record<string, string> = {
@@ -744,13 +755,13 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
                     </div>
 
                     {/* Footer del movimiento */}
-                    <div className="flex items-center justify-between pt-3 border-t border-[#73991C]/10">
-                      <div className="flex items-center gap-2 text-xs text-[#4D240F]/70">
+                    <div className="flex items-center justify-between pt-3 border-t border-primary/10">
+                      <div className="flex items-center gap-2 text-xs text-brand-brown/70">
                         <User className="w-3 h-3" />
                         {mov.responsable}
                       </div>
                       {mov.notas && (
-                        <p className="text-xs text-[#4D240F]/60 italic max-w-xs truncate">
+                        <p className="text-xs text-brand-brown/60 italic max-w-xs truncate">
                           "{mov.notas}"
                         </p>
                       )}
@@ -763,12 +774,23 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
         )}
       </div>
 
+      {/* CONFIRM DIALOG — ELIMINAR MOVIMIENTO */}
+      <ConfirmDialog
+        open={confirmEliminarMovimientoId !== null}
+        onOpenChange={(open) => { if (!open) setConfirmEliminarMovimientoId(null); }}
+        title="¿Estás seguro de eliminar este movimiento y todos sus productos?"
+        description="Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={confirmarEliminarMovimiento}
+        destructive
+      />
+
       {/* Botón para exportar */}
       {movimientos.length > 0 && (
         <div className="text-right">
           <Button
             onClick={exportarACSV}
-            className="bg-[#73991C] hover:bg-[#5f7d17] text-white"
+            className="bg-primary hover:bg-primary-dark text-white"
           >
             <Download className="w-4 h-4 mr-2" />
             Exportar a CSV

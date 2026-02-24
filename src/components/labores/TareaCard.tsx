@@ -114,7 +114,7 @@ const TareaCard: React.FC<TareaCardProps> = ({ tarea, estado, actions, isArchive
             <Button
               size="sm"
               onClick={() => actions.onRegistrarTrabajo(tarea)}
-              className="h-8 px-4 text-sm font-semibold bg-[#73991C] hover:bg-[#5a7716] text-white flex-shrink-0 rounded-lg"
+              className="h-8 px-4 text-sm font-semibold bg-primary hover:bg-primary-dark text-white flex-shrink-0 rounded-lg"
             >
               Registrar
             </Button>
@@ -125,7 +125,7 @@ const TareaCard: React.FC<TareaCardProps> = ({ tarea, estado, actions, isArchive
               <Button
                 size="sm"
                 onClick={() => actions.onRegistrarTrabajo(tarea)}
-                className="h-8 px-3 text-sm font-semibold bg-[#73991C] hover:bg-[#5a7716] text-white rounded-lg"
+                className="h-8 px-3 text-sm font-semibold bg-primary hover:bg-primary-dark text-white rounded-lg"
               >
                 <ClipboardList className="h-3.5 w-3.5 mr-1.5" />
                 Registrar

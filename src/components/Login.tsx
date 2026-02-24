@@ -41,13 +41,13 @@ export function Login({ onLoginSuccess }: LoginProps) {
     <div className="min-h-screen bg-[#DEE5CC] flex items-center justify-center p-4 relative overflow-hidden">
       {/* Decorative background elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 -left-20 w-72 h-72 bg-[#73991C]/5 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-20 -right-20 w-96 h-96 bg-[#BFD97D]/10 rounded-full blur-3xl"></div>
+        <div className="absolute top-20 -left-20 w-72 h-72 bg-primary/5 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-20 -right-20 w-96 h-96 bg-secondary/10 rounded-full blur-3xl"></div>
       </div>
 
       <div className="w-full max-w-md relative z-10">
         {/* Card con color de fondo de la imagen */}
-        <div className="bg-[#E7EDDE] rounded-3xl shadow-[0_8px_32px_rgba(115,153,28,0.15)] p-8 border border-[#73991C]/10">
+        <div className="bg-muted rounded-3xl shadow-[0_8px_32px_rgba(115,153,28,0.15)] p-8 border border-primary/10">
           
           {/* Imagen del logo */}
           <div className="text-center mb-8">
@@ -58,10 +58,10 @@ export function Login({ onLoginSuccess }: LoginProps) {
                 className="w-full max-w-sm mx-auto rounded-2xl"
               />
             </div>
-            <h1 className="text-3xl text-[#172E08] mb-2">
+            <h1 className="text-3xl text-foreground mb-2">
               Escocia Hass
             </h1>
-            <p className="text-[#4D240F]/70">
+            <p className="text-brand-brown/70">
               Sistema de gestión agrícola
             </p>
           </div>
@@ -69,7 +69,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
           {/* Formulario */}
           <form onSubmit={handleLogin} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-[#172E08]">
+              <Label htmlFor="email" className="text-foreground">
                 Correo Electrónico
               </Label>
               <Input
@@ -80,12 +80,12 @@ export function Login({ onLoginSuccess }: LoginProps) {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={isLoading}
-                className="h-12 bg-white border-[#73991C]/20 focus:border-[#73991C] rounded-[20px]"
+                className="h-12 bg-white border-primary/20 focus:border-primary rounded-[20px]"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-[#172E08]">
+              <Label htmlFor="password" className="text-foreground">
                 Contraseña
               </Label>
               <Input
@@ -96,12 +96,12 @@ export function Login({ onLoginSuccess }: LoginProps) {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={isLoading}
-                className="h-12 bg-white border-[#73991C]/20 focus:border-[#73991C] rounded-[20px]"
+                className="h-12 bg-white border-primary/20 focus:border-primary rounded-[20px]"
               />
             </div>
 
             {error && (
-              <div className="bg-[#DC3545]/10 border border-[#DC3545]/20 text-[#DC3545] px-4 py-3 rounded-xl text-sm">
+              <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-xl text-sm">
                 {error}
               </div>
             )}
@@ -109,7 +109,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
             <Button
               type="submit"
               disabled={isLoading}
-              className="w-full h-12 bg-gradient-to-b from-[#73991C] to-[#BFD97D] hover:shadow-lg hover:shadow-[#73991C]/30 text-white rounded-[20px] transition-all duration-200 hover:-translate-y-0.5"
+              className="w-full h-12 bg-gradient-to-b from-primary to-secondary hover:shadow-lg hover:shadow-primary/30 text-white rounded-[20px] transition-all duration-200 hover:-translate-y-0.5"
             >
               {isLoading ? (
                 <>
@@ -123,7 +123,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
           </form>
 
           {/* Footer */}
-          <div className="text-center text-sm text-[#4D240F]/50">
+          <div className="text-center text-sm text-brand-brown/50">
             <p>© {new Date().getFullYear()} Creado por think SID con ❤️.</p>
           </div>
         </div>

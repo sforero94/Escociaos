@@ -185,7 +185,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
       <Button
         type="submit"
         form="movimiento-form"
-        className="flex-1 bg-[#73991C] hover:bg-[#5f7d17] text-white"
+        className="flex-1 bg-primary hover:bg-primary-dark text-white"
         disabled={loading || !selectedProduct || !cantidad}
       >
         {loading ? (
@@ -244,28 +244,28 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
                   }
                 }}
                 placeholder="Buscar producto por nombre..."
-                className="pl-10 pr-4 py-3 rounded-xl border-[#73991C]/20 focus:ring-[#73991C] focus:border-[#73991C]"
+                className="pl-10 pr-4 py-3 rounded-xl border-primary/20 focus:ring-primary focus:border-primary"
                 disabled={loading}
               />
               {searching && (
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <div className="w-5 h-5 border-2 border-[#73991C] border-t-transparent rounded-full animate-spin"></div>
+                  <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
                 </div>
               )}
             </div>
 
             {/* Resultados de búsqueda */}
             {products.length > 0 && !selectedProduct && (
-              <div className="absolute z-10 w-full mt-2 bg-white border border-[#73991C]/20 rounded-xl shadow-lg max-h-64 overflow-y-auto">
+              <div className="absolute z-10 w-full mt-2 bg-white border border-primary/20 rounded-xl shadow-lg max-h-64 overflow-y-auto">
                 {products.map((product) => (
                   <button
                     key={product.id}
                     type="button"
                     onClick={() => handleSelectProduct(product)}
-                    className="w-full px-4 py-3 text-left hover:bg-[#F8FAF5] transition-colors border-b border-gray-100 last:border-b-0"
+                    className="w-full px-4 py-3 text-left hover:bg-background transition-colors border-b border-gray-100 last:border-b-0"
                   >
-                    <p className="text-[#172E08] font-medium">{product.nombre}</p>
-                    <p className="text-sm text-[#4D240F]/70">
+                    <p className="text-foreground font-medium">{product.nombre}</p>
+                    <p className="text-sm text-brand-brown/70">
                       Stock actual: {product.cantidad_actual} {product.unidad_medida}
                     </p>
                   </button>
@@ -275,12 +275,12 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
 
             {/* Producto seleccionado */}
             {selectedProduct && (
-              <div className="mt-3 p-4 bg-[#F8FAF5] rounded-xl border border-[#73991C]/20">
+              <div className="mt-3 p-4 bg-background rounded-xl border border-primary/20">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-[#172E08] font-medium">{selectedProduct.nombre}</p>
-                    <p className="text-sm text-[#4D240F]/70">
-                      Stock actual: <span className="font-medium text-[#73991C]">
+                    <p className="text-foreground font-medium">{selectedProduct.nombre}</p>
+                    <p className="text-sm text-brand-brown/70">
+                      Stock actual: <span className="font-medium text-primary">
                         {selectedProduct.cantidad_actual} {selectedProduct.unidad_medida}
                       </span>
                     </p>
@@ -291,7 +291,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
                       setSelectedProduct(null);
                       setSearchTerm('');
                     }}
-                    className="text-[#4D240F]/70 hover:text-[#DC3545] transition-colors"
+                    className="text-brand-brown/70 hover:text-destructive transition-colors"
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -314,8 +314,8 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
                   disabled={loading}
                   className={`px-4 py-3 rounded-xl border-2 transition-all duration-200 capitalize ${
                     tipoMovimiento === tipo
-                      ? 'border-[#73991C] bg-[#73991C] text-white shadow-md'
-                      : 'border-gray-200 bg-white text-gray-700 hover:border-[#73991C]/40'
+                      ? 'border-primary bg-primary text-white shadow-md'
+                      : 'border-gray-200 bg-white text-gray-700 hover:border-primary/40'
                   }`}
                 >
                   {tipo}
@@ -346,11 +346,11 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
                 placeholder="0.00"
                 step="0.01"
                 min="0"
-                className="flex-1 rounded-xl border-[#73991C]/20 focus:ring-[#73991C] focus:border-[#73991C]"
+                className="flex-1 rounded-xl border-primary/20 focus:ring-primary focus:border-primary"
                 disabled={loading || !selectedProduct}
               />
               {selectedProduct && (
-                <span className="text-[#4D240F]/70 font-medium whitespace-nowrap">
+                <span className="text-brand-brown/70 font-medium whitespace-nowrap">
                   {selectedProduct.unidad_medida}
                 </span>
               )}
@@ -384,7 +384,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
                 </div>
                 <div className="flex items-center justify-between text-sm mt-2 pt-2 border-t border-gray-300">
                   <span className="font-medium text-gray-900">Nuevo saldo:</span>
-                  <span className="font-bold text-[#73991C]">
+                  <span className="font-bold text-primary">
                     {tipoMovimiento === 'Entrada' 
                       ? selectedProduct.cantidad_actual + parseFloat(cantidad)
                       : tipoMovimiento === 'Salida Otros'
@@ -407,7 +407,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
               onChange={(e) => setObservaciones(e.target.value)}
               placeholder="Ej: Pérdida por daño, ajuste por inventario físico, etc."
               rows={3}
-              className="w-full px-4 py-3 rounded-xl border border-[#73991C]/20 focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent resize-none"
+              className="w-full px-4 py-3 rounded-xl border border-primary/20 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
               disabled={loading}
             />
           </div>

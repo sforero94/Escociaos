@@ -248,15 +248,15 @@ export function ImportarProductosCSV() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-[#172E08]">Importar Productos en Masa</h2>
-          <p className="text-[#4D240F]/60 mt-1">
+          <h2 className="text-foreground">Importar Productos en Masa</h2>
+          <p className="text-brand-brown/60 mt-1">
             Carga múltiples productos desde un archivo CSV
           </p>
         </div>
         <Button
           onClick={descargarPlantilla}
           variant="outline"
-          className="gap-2 border-[#73991C] text-[#73991C] hover:bg-[#73991C]/10"
+          className="gap-2 border-primary text-primary hover:bg-primary/10"
         >
           <Download className="w-4 h-4" />
           Descargar Plantilla
@@ -264,7 +264,7 @@ export function ImportarProductosCSV() {
       </div>
 
       {/* Área de carga */}
-      <Card className="p-8 bg-white/60 backdrop-blur-sm border-[#BFD97D]/30">
+      <Card className="p-8 bg-white/60 backdrop-blur-sm border-secondary/30">
         <div
           onDragEnter={handleDrag}
           onDragLeave={handleDrag}
@@ -273,18 +273,18 @@ export function ImportarProductosCSV() {
           className={`
             border-2 border-dashed rounded-xl p-12 text-center transition-all
             ${dragActive 
-              ? 'border-[#73991C] bg-[#73991C]/5' 
-              : 'border-[#BFD97D] hover:border-[#73991C] hover:bg-[#F8FAF5]'
+              ? 'border-primary bg-primary/5' 
+              : 'border-secondary hover:border-primary hover:bg-background'
             }
           `}
         >
           {!archivo ? (
             <>
-              <Upload className="w-16 h-16 mx-auto mb-4 text-[#73991C]/40" />
-              <h3 className="text-[#172E08] mb-2">
+              <Upload className="w-16 h-16 mx-auto mb-4 text-primary/40" />
+              <h3 className="text-foreground mb-2">
                 Arrastra tu archivo CSV aquí
               </h3>
-              <p className="text-[#4D240F]/60 mb-4">
+              <p className="text-brand-brown/60 mb-4">
                 o haz clic para seleccionar
               </p>
               <input
@@ -295,7 +295,7 @@ export function ImportarProductosCSV() {
                 id="csv-upload"
               />
               <label htmlFor="csv-upload">
-                <Button asChild variant="outline" className="border-[#73991C] text-[#73991C]">
+                <Button asChild variant="outline" className="border-primary text-primary">
                   <span className="cursor-pointer">
                     Seleccionar archivo
                   </span>
@@ -304,16 +304,16 @@ export function ImportarProductosCSV() {
             </>
           ) : (
             <>
-              <FileText className="w-16 h-16 mx-auto mb-4 text-[#73991C]" />
-              <h3 className="text-[#172E08] mb-2">{archivo.name}</h3>
-              <p className="text-[#4D240F]/60 mb-4">
+              <FileText className="w-16 h-16 mx-auto mb-4 text-primary" />
+              <h3 className="text-foreground mb-2">{archivo.name}</h3>
+              <p className="text-brand-brown/60 mb-4">
                 {(archivo.size / 1024).toFixed(2)} KB
               </p>
               <div className="flex gap-3 justify-center">
                 <Button
                   onClick={procesarCSV}
                   disabled={cargando}
-                  className="bg-[#73991C] hover:bg-[#73991C]/90 text-white"
+                  className="bg-primary hover:bg-primary/90 text-white"
                 >
                   {cargando ? 'Procesando...' : 'Importar Productos'}
                 </Button>
@@ -338,14 +338,14 @@ export function ImportarProductosCSV() {
         <Alert
           className={`
             ${resultado.success 
-              ? 'bg-[#73991C]/10 border-[#73991C] text-[#172E08]' 
+              ? 'bg-primary/10 border-primary text-foreground' 
               : 'bg-red-50 border-red-500 text-red-900'
             }
           `}
         >
           <div className="flex items-start gap-3">
             {resultado.success ? (
-              <CheckCircle2 className="w-5 h-5 text-[#73991C] mt-0.5" />
+              <CheckCircle2 className="w-5 h-5 text-primary mt-0.5" />
             ) : (
               <XCircle className="w-5 h-5 text-red-500 mt-0.5" />
             )}
@@ -379,12 +379,12 @@ export function ImportarProductosCSV() {
       )}
 
       {/* Instrucciones */}
-      <Card className="p-6 bg-gradient-to-br from-[#F8FAF5] to-white/80 backdrop-blur-sm border-[#BFD97D]/30">
+      <Card className="p-6 bg-gradient-to-br from-background to-white/80 backdrop-blur-sm border-secondary/30">
         <div className="flex gap-3">
-          <AlertCircle className="w-5 h-5 text-[#73991C] mt-0.5 flex-shrink-0" />
+          <AlertCircle className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
           <div className="space-y-3">
-            <h4 className="text-[#172E08] font-medium">Instrucciones de uso:</h4>
-            <ol className="text-sm text-[#4D240F]/80 space-y-2 list-decimal ml-4">
+            <h4 className="text-foreground font-medium">Instrucciones de uso:</h4>
+            <ol className="text-sm text-brand-brown/80 space-y-2 list-decimal ml-4">
               <li>Descarga la plantilla CSV haciendo clic en el botón "Descargar Plantilla"</li>
               <li>Abre el archivo con Excel, Google Sheets o cualquier editor de hojas de cálculo</li>
               <li>Lee atentamente las notas al inicio del archivo (líneas que empiezan con #)</li>
@@ -393,8 +393,8 @@ export function ImportarProductosCSV() {
               <li>Arrastra el archivo aquí o haz clic para seleccionarlo</li>
               <li>Haz clic en "Importar Productos" y espera la confirmación</li>
             </ol>
-            <div className="pt-2 border-t border-[#BFD97D]/30">
-              <p className="text-sm text-[#4D240F]/60">
+            <div className="pt-2 border-t border-secondary/30">
+              <p className="text-sm text-brand-brown/60">
                 <strong>Nota:</strong> Los productos con nombres duplicados no serán importados. 
                 El sistema validará todos los campos antes de guardar.
               </p>

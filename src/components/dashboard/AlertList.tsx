@@ -116,9 +116,9 @@ export function AlertList({
   if (alertasVisibles.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-8 px-4 bg-green-50/30 rounded-2xl border border-green-200/30">
-        <CheckCircle2 className="w-12 h-12 text-[#73991C] mb-3" />
-        <p className="text-[#172E08]">Todo en orden</p>
-        <p className="text-sm text-[#4D240F]/70 mt-1">
+        <CheckCircle2 className="w-12 h-12 text-primary mb-3" />
+        <p className="text-foreground">Todo en orden</p>
+        <p className="text-sm text-brand-brown/70 mt-1">
           No hay alertas pendientes en este momento
         </p>
       </div>
@@ -260,7 +260,7 @@ export function AlertListHeader({
 }) {
   return (
     <div className="flex items-center justify-between mb-4">
-      <h2 className="text-[#172E08]">{titulo}</h2>
+      <h2 className="text-foreground">{titulo}</h2>
       {count !== undefined && count > 0 && (
         <span className="inline-flex items-center justify-center w-6 h-6 text-xs bg-red-100 text-red-700 rounded-full">
           {count > 9 ? '9+' : count}
@@ -275,9 +275,9 @@ export function AlertListHeader({
  */
 export function AlertListContainer({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)] border border-[#73991C]/5">
+    <div className="relative bg-white/60 backdrop-blur-sm rounded-2xl p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)] border border-primary/5">
       {/* Gradient decorativo */}
-      <div className="absolute -top-4 -right-4 w-32 h-32 bg-[#BFD97D]/10 rounded-full blur-2xl pointer-events-none"></div>
+      <div className="absolute -top-4 -right-4 w-32 h-32 bg-secondary/10 rounded-full blur-2xl pointer-events-none"></div>
       
       {/* Contenido */}
       <div className="relative z-10">{children}</div>
@@ -299,9 +299,9 @@ export function AlertEmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center py-8 px-4 bg-green-50/30 rounded-2xl border border-green-200/30">
-      {icono || <CheckCircle2 className="w-12 h-12 text-[#73991C] mb-3" />}
-      <p className="text-[#172E08]">{titulo}</p>
-      <p className="text-sm text-[#4D240F]/70 mt-1 text-center">{descripcion}</p>
+      {icono || <CheckCircle2 className="w-12 h-12 text-primary mb-3" />}
+      <p className="text-foreground">{titulo}</p>
+      <p className="text-sm text-brand-brown/70 mt-1 text-center">{descripcion}</p>
     </div>
   );
 }

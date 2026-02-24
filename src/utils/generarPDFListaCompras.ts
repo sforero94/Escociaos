@@ -95,9 +95,9 @@ export function generarPDFListaCompras(
   doc.setFont('helvetica', 'bold');
   
   // Tipo de aplicación
-  const tipoTexto = configuracion.tipo === 'fumigacion' 
-    ? 'Fumigación' 
-    : configuracion.tipo === 'fertilizacion'
+  const tipoTexto = configuracion.tipo_aplicacion === 'Fumigación'
+    ? 'Fumigación'
+    : configuracion.tipo_aplicacion === 'Fertilización'
     ? 'Fertilización'
     : 'Drench';
   

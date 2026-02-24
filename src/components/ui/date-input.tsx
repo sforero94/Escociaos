@@ -176,17 +176,17 @@ export function DateInput({
           className={`
             w-full px-4 py-3 pr-10
             border rounded-xl
-            bg-white text-[#172E08]
-            placeholder:text-[#4D240F]/40
-            focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent
+            bg-white text-foreground
+            placeholder:text-brand-brown/40
+            focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent
             disabled:opacity-50 disabled:cursor-not-allowed
-            ${error ? 'border-red-500' : 'border-[#73991C]/20'}
-            ${isFocused ? 'ring-2 ring-[#73991C]' : ''}
+            ${error ? 'border-red-500' : 'border-primary/20'}
+            ${isFocused ? 'ring-2 ring-primary' : ''}
             ${className}
           `}
         />
         <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-          <Calendar className="w-5 h-5 text-[#4D240F]/40" />
+          <Calendar className="w-5 h-5 text-brand-brown/40" />
         </div>
       </div>
       
@@ -195,7 +195,7 @@ export function DateInput({
       )}
       
       {!error && !isFocused && displayValue && displayValue.length === 10 && (
-        <p className="text-xs text-[#73991C] mt-1 ml-1">✓ Fecha válida</p>
+        <p className="text-xs text-primary mt-1 ml-1">✓ Fecha válida</p>
       )}
     </div>
   );

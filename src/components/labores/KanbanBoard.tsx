@@ -38,7 +38,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
   if (loading) {
     return (
       <div className="flex justify-center items-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#73991C]"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -70,7 +70,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
           <Button
             size="sm"
             onClick={() => onNuevaTarea()}
-            className="flex items-center gap-2 bg-[#73991C] hover:bg-[#5a7716]"
+            className="flex items-center gap-2 bg-primary hover:bg-primary-dark"
           >
             <Plus className="h-4 w-4" />
             <span className="hidden md:inline">Nueva Tarea</span>

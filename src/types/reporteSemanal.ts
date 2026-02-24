@@ -168,9 +168,12 @@ export interface ReporteSemanalMetadata {
   fecha_inicio: string;
   fecha_fin: string;
   numero_semana: number;
+  ano?: number;
   generado_por: string;
   generado_por_nombre?: string;
   url_storage: string;
+  html_storage?: string;              // Ruta del HTML para reportes de generación rápida
+  generado_automaticamente?: boolean; // TRUE = creado por el botón Generar Rápido
   created_at: string;
 }
 

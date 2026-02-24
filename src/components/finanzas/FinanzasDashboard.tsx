@@ -134,10 +134,10 @@ export function FinanzasDashboard() {
 
         {/* Header */}
         <div className="relative">
-          <div className="absolute -top-4 -left-4 w-32 h-32 bg-[#73991C]/5 rounded-full blur-2xl"></div>
+          <div className="absolute -top-4 -left-4 w-32 h-32 bg-primary/5 rounded-full blur-2xl"></div>
           <div className="relative">
-            <h1 className="text-[#172E08] mb-2">Finanzas</h1>
-            <p className="text-[#4D240F]/70">
+            <h1 className="text-foreground mb-2">Finanzas</h1>
+            <p className="text-brand-brown/70">
               Gestión financiera de Escocia Hass - Control de ingresos y gastos
             </p>
           </div>

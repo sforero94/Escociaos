@@ -34,6 +34,7 @@ import type {
   Proveedor,
   MedioPago
 } from '../../../types/finanzas';
+import { toast } from 'sonner';
 
 interface GastoFormProps {
   open: boolean;
@@ -188,31 +189,31 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
 
     // Validation
     if (!formData.nombre.trim()) {
-      alert('El nombre del gasto es obligatorio');
+      toast.error('El nombre del gasto es obligatorio');
       return;
     }
     if (!formData.negocio_id) {
-      alert('Debe seleccionar un negocio');
+      toast.error('Debe seleccionar un negocio');
       return;
     }
     if (!formData.region_id) {
-      alert('Debe seleccionar una región');
+      toast.error('Debe seleccionar una región');
       return;
     }
     if (!formData.categoria_id) {
-      alert('Debe seleccionar una categoría');
+      toast.error('Debe seleccionar una categoría');
       return;
     }
     if (!formData.concepto_id) {
-      alert('Debe seleccionar un concepto');
+      toast.error('Debe seleccionar un concepto');
       return;
     }
     if (formData.valor <= 0) {
-      alert('El valor debe ser mayor a cero');
+      toast.error('El valor debe ser mayor a cero');
       return;
     }
     if (!formData.medio_pago_id) {
-      alert('Debe seleccionar un medio de pago');
+      toast.error('Debe seleccionar un medio de pago');
       return;
     }
 
@@ -249,7 +250,7 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
 
       onSuccess();
     } catch (error: any) {
-      alert('Error al guardar gasto: ' + error.message);
+      toast.error('Error al guardar gasto: ' + error.message);
     } finally {
       setSaving(false);
     }
@@ -278,7 +279,7 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
           <Button
             type="submit"
             disabled={saving}
-            className="bg-[#73991C] hover:bg-[#5a7716]"
+            className="bg-primary hover:bg-primary-dark"
             onClick={handleSubmit}
           >
             {saving ? 'Guardando...' : (isEditing ? 'Actualizar Gasto' : 'Crear Gasto')}
@@ -434,7 +435,7 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
                         {proveedor.nombre}
                       </SelectItem>
                     ))}
-                    <SelectItem value="CREATE_NEW" className="text-[#73991C] font-medium border-t mt-1 pt-1">
+                    <SelectItem value="CREATE_NEW" className="text-primary font-medium border-t mt-1 pt-1">
                       + Crear nuevo proveedor
                     </SelectItem>
                   </SelectContent>
@@ -494,7 +495,7 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
       open={showProveedorDialog}
       onOpenChange={setShowProveedorDialog}
       onSuccess={handleProveedorCreated}
-      onError={(message) => alert(message)}
+      onError={(message) => toast.error(message)}
     />
     </>
   );

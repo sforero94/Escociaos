@@ -3,6 +3,8 @@
 // Propósito: Administración del catálogo maestro de plagas para el sistema de monitoreo
 
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 import {
   Bug,
   Plus,
@@ -57,6 +59,8 @@ export function CatalogoPlagas() {
   });
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [confirmEliminarOpen, setConfirmEliminarOpen] = useState(false);
+  const [plagaParaEliminar, setPlagaParaEliminar] = useState<Plaga | null>(null);
 
   // ============================================
   // CARGAR PLAGAS
@@ -247,30 +251,34 @@ export function CatalogoPlagas() {
     }
   };
 
-  const handleEliminar = async (plaga: Plaga) => {
+  const handleEliminar = (plaga: Plaga) => {
     if (plaga.usos && plaga.usos > 0) {
-      alert(
+      toast.error(
         `No puedes eliminar "${plaga.nombre}" porque tiene ${plaga.usos} registros de monitoreo asociados. Desactívala en su lugar.`
       );
       return;
     }
 
-    if (!confirm(`¿Seguro que quieres eliminar "${plaga.nombre}"?`)) {
-      return;
-    }
+    setPlagaParaEliminar(plaga);
+    setConfirmEliminarOpen(true);
+  };
 
+  const confirmarEliminarPlaga = async () => {
+    if (!plagaParaEliminar) return;
     try {
       const supabase = getSupabase();
       const { error } = await supabase
         .from('plagas_enfermedades_catalogo')
         .delete()
-        .eq('id', plaga.id);
+        .eq('id', plagaParaEliminar.id);
 
       if (error) throw error;
 
       await cargarPlagas();
     } catch (error) {
-      alert('Error al eliminar la plaga');
+      toast.error('Error al eliminar la plaga');
+    } finally {
+      setPlagaParaEliminar(null);
     }
   };
 
@@ -286,7 +294,7 @@ export function CatalogoPlagas() {
 
       await cargarPlagas();
     } catch (error) {
-      alert('Error al cambiar el estado');
+      toast.error('Error al cambiar el estado');
     }
   };
 
@@ -299,14 +307,14 @@ export function CatalogoPlagas() {
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-[#73991C]/10 rounded-xl flex items-center justify-center">
-            <Bug className="w-6 h-6 text-[#73991C]" />
+          <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
+            <Bug className="w-6 h-6 text-primary" />
           </div>
           <div>
-            <h2 className="text-[#172E08]">
+            <h2 className="text-foreground">
               Catálogo de Plagas y Enfermedades
             </h2>
-            <p className="text-[#4D240F]/60 mt-1">
+            <p className="text-brand-brown/60 mt-1">
               {plagasFiltradas.length} de {plagas.length} plagas
             </p>
           </div>
@@ -314,7 +322,7 @@ export function CatalogoPlagas() {
 
         <button
           onClick={abrirModalNuevo}
-          className="flex items-center gap-2 px-4 py-2 bg-[#73991C] text-white rounded-lg hover:bg-[#5C7A16] transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
         >
           <Plus className="w-4 h-4" />
           Nueva Plaga
@@ -332,7 +340,7 @@ export function CatalogoPlagas() {
               placeholder="Buscar por nombre, tipo o descripción..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
             />
           </div>
 
@@ -344,7 +352,7 @@ export function CatalogoPlagas() {
                 onClick={() => setFiltroActivo(filtro)}
                 className={`px-4 py-2 rounded-lg transition-colors ${
                   filtroActivo === filtro
-                    ? 'bg-[#73991C] text-white'
+                    ? 'bg-primary text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
@@ -359,12 +367,12 @@ export function CatalogoPlagas() {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
-            <div className="w-8 h-8 border-4 border-[#73991C]/30 border-t-[#73991C] rounded-full animate-spin" />
+            <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
           </div>
         ) : plagasFiltradas.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-gray-500">
             <Bug className="w-16 h-16 mb-4 opacity-30" />
-            <p className="text-[#172E08]">No se encontraron plagas</p>
+            <p className="text-foreground">No se encontraron plagas</p>
             <p className="mt-2">Intenta cambiar los filtros de búsqueda</p>
           </div>
         ) : (
@@ -397,9 +405,9 @@ export function CatalogoPlagas() {
                   <tr key={plaga.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4">
                       <div>
-                        <div className="text-[#172E08]">{plaga.nombre}</div>
+                        <div className="text-foreground">{plaga.nombre}</div>
                         {plaga.descripcion && (
-                          <div className="text-[#4D240F]/60 mt-1">
+                          <div className="text-brand-brown/60 mt-1">
                             {plaga.descripcion.substring(0, 60)}
                             {plaga.descripcion.length > 60 && '...'}
                           </div>
@@ -414,11 +422,11 @@ export function CatalogoPlagas() {
                       )}
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <span className="text-[#172E08]">
+                      <span className="text-foreground">
                         {plaga.usos || 0}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-center text-[#4D240F]/60">
+                    <td className="px-6 py-4 text-center text-brand-brown/60">
                       {plaga.ultima_vez
                         ? formatearFecha(plaga.ultima_vez)
                         : '-'}
@@ -460,7 +468,7 @@ export function CatalogoPlagas() {
                         )}
                         <button
                           onClick={() => abrirModalEditar(plaga)}
-                          className="p-2 text-[#73991C] hover:bg-[#73991C]/10 rounded-lg transition-colors"
+                          className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors"
                           title="Editar"
                         >
                           <Edit className="w-4 h-4" />
@@ -482,13 +490,23 @@ export function CatalogoPlagas() {
         )}
       </div>
 
+      <ConfirmDialog
+        open={confirmEliminarOpen}
+        onOpenChange={setConfirmEliminarOpen}
+        title={`¿Eliminar "${plagaParaEliminar?.nombre}"?`}
+        description="Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={confirmarEliminarPlaga}
+        destructive
+      />
+
       {/* MODAL CREAR/EDITAR */}
       {modalAbierto && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
             {/* Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h3 className="text-[#172E08]">
+              <h3 className="text-foreground">
                 {plagaEditando ? 'Editar Plaga' : 'Nueva Plaga'}
               </h3>
               <button
@@ -509,53 +527,53 @@ export function CatalogoPlagas() {
               )}
 
               <div>
-                <label className="block text-[#172E08] mb-2">
+                <label className="block text-foreground mb-2">
                   Nombre de la Plaga *
                 </label>
                 <input
                   type="text"
                   value={formData.nombre}
                   onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   placeholder="Ej: Monalonion"
                 />
               </div>
 
               <div>
-                <label className="block text-[#172E08] mb-2">
+                <label className="block text-foreground mb-2">
                   Tipo
                 </label>
                 <input
                   type="text"
                   value={formData.tipo}
                   onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   placeholder="Ej: Plaga, Hongo, Bacteria, Virus"
                 />
               </div>
 
               <div>
-                <label className="block text-[#172E08] mb-2">
+                <label className="block text-foreground mb-2">
                   Descripción
                 </label>
                 <textarea
                   value={formData.descripcion}
                   onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
                   rows={3}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   placeholder="Descripción breve"
                 />
               </div>
 
               <div>
-                <label className="block text-[#172E08] mb-2">
+                <label className="block text-foreground mb-2">
                   Link de Información
                 </label>
                 <input
                   type="url"
                   value={formData.link_info}
                   onChange={(e) => setFormData({ ...formData, link_info: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   placeholder="https://..."
                 />
               </div>
@@ -566,9 +584,9 @@ export function CatalogoPlagas() {
                   id="activo"
                   checked={formData.activo}
                   onChange={(e) => setFormData({ ...formData, activo: e.target.checked })}
-                  className="w-4 h-4 text-[#73991C] border-gray-300 rounded focus:ring-[#73991C]"
+                  className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
                 />
-                <label htmlFor="activo" className="text-[#172E08]">
+                <label htmlFor="activo" className="text-foreground">
                   Plaga activa (visible en formularios)
                 </label>
               </div>
@@ -586,7 +604,7 @@ export function CatalogoPlagas() {
               <button
                 onClick={handleGuardar}
                 disabled={guardando}
-                className="flex items-center gap-2 px-4 py-2 bg-[#73991C] text-white rounded-lg hover:bg-[#5C7A16] transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors disabled:opacity-50"
               >
                 {guardando ? (
                   <>

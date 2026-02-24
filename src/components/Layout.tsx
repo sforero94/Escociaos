@@ -140,20 +140,20 @@ export function Layout({ onNavigate, children }: LayoutProps) {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAF5]">
+    <div className="min-h-screen bg-background">
       {/* Mobile Header */}
-      <div className="lg:hidden bg-white/80 backdrop-blur-xl border-b border-[#73991C]/10 px-4 py-3 flex items-center justify-between sticky top-0 z-50 shadow-sm">
+      <div className="lg:hidden bg-white/80 backdrop-blur-xl border-b border-primary/10 px-4 py-3 flex items-center justify-between sticky top-0 z-50 shadow-sm">
         <div className="flex items-center gap-2">
-          <div className="w-9 h-9 bg-gradient-to-br from-[#73991C] to-[#BFD97D] rounded-xl flex items-center justify-center shadow-sm">
+          <div className="w-9 h-9 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center shadow-sm">
             <Leaf className="w-5 h-5 text-white" />
           </div>
-          <span className="text-[#172E08]">Escocia Hass</span>
+          <span className="text-foreground">Escocia Hass</span>
         </div>
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="hover:bg-[#E7EDDD]/50 rounded-xl"
+          className="hover:bg-muted/50 rounded-xl"
         >
           {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
         </Button>
@@ -162,7 +162,7 @@ export function Layout({ onNavigate, children }: LayoutProps) {
       {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
         <div
-          className="lg:hidden fixed inset-0 bg-[#172E08]/20 backdrop-blur-sm z-40"
+          className="lg:hidden fixed inset-0 bg-foreground/20 backdrop-blur-sm z-40"
           onClick={() => setMobileMenuOpen(false)}
         />
       )}
@@ -186,10 +186,10 @@ export function Layout({ onNavigate, children }: LayoutProps) {
                   disabled={disabled}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
                     disabled
-                      ? 'opacity-50 cursor-not-allowed text-[#172E08]'
+                      ? 'opacity-50 cursor-not-allowed text-foreground'
                       : active
-                      ? 'bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white shadow-lg shadow-[#73991C]/20'
-                      : 'text-[#172E08] hover:bg-[#E7EDDD]/50'
+                      ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/20'
+                      : 'text-foreground hover:bg-muted/50'
                   }`}
                 >
                   <Icon className="w-5 h-5" />
@@ -203,15 +203,15 @@ export function Layout({ onNavigate, children }: LayoutProps) {
         </nav>
 
         {/* User Info - Mobile */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-[#73991C]/10 bg-white/80 backdrop-blur-xl">
+        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-primary/10 bg-white/80 backdrop-blur-xl">
           <div className="mb-3 px-4">
-            <p className="text-sm text-[#172E08]">{profile?.nombre || 'Usuario'}</p>
-            <p className="text-xs text-[#4D240F]/60">{profile?.rol || 'Sin rol'}</p>
+            <p className="text-sm text-foreground">{profile?.nombre || 'Usuario'}</p>
+            <p className="text-xs text-brand-brown/60">{profile?.rol || 'Sin rol'}</p>
           </div>
           <Button
             onClick={handleLogout}
             variant="outline"
-            className="w-full border-[#DC3545]/20 text-[#DC3545] hover:bg-[#DC3545]/5 rounded-xl"
+            className="w-full border-destructive/20 text-destructive hover:bg-destructive/5 rounded-xl"
           >
             <LogOut className="w-4 h-4 mr-2" />
             Cerrar Sesión
@@ -220,11 +220,11 @@ export function Layout({ onNavigate, children }: LayoutProps) {
       </div>
 
       {/* Desktop Sidebar */}
-      <div className="hidden lg:block fixed left-0 top-0 bottom-0 w-64 bg-white/80 backdrop-blur-xl border-r border-[#73991C]/10 shadow-[4px_0_24px_rgba(115,153,28,0.04)]">
+      <div className="hidden lg:block fixed left-0 top-0 bottom-0 w-64 bg-white/80 backdrop-blur-xl border-r border-primary/10 shadow-[4px_0_24px_rgba(115,153,28,0.04)]">
         {/* Logo */}
-        <div className="p-6 border-b border-[#73991C]/10">
+        <div className="p-6 border-b border-primary/10">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-[#73991C]/20 overflow-hidden">
+            <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-primary/20 overflow-hidden">
               <ImageWithFallback 
                 src="https://ywhtjwawnkeqlwxbvgup.supabase.co/storage/v1/object/sign/photos/ehlogo.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV80N2U5N2FlMi1lMDc1LTRiNzEtODI0Ny1mMzgwOGYzYzM0ODIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwaG90b3MvZWhsb2dvLnBuZyIsImlhdCI6MTc2NDAzMzkwNSwiZXhwIjoyMDc5MzkzOTA1fQ.T74UbHfbH9pZ9Xqj35Ljb3dPmIP7f6YpSJPFRoN-83o"
                 alt="Escocia Hass Logo"
@@ -232,8 +232,8 @@ export function Layout({ onNavigate, children }: LayoutProps) {
               />
             </div>
             <div>
-              <h2 className="text-[#172E08]">Escocia Hass</h2>
-              <p className="text-xs text-[#4D240F]/60">Sistema de Gestión</p>
+              <h2 className="text-foreground">Escocia Hass</h2>
+              <p className="text-xs text-brand-brown/60">Sistema de Gestión</p>
             </div>
           </div>
         </div>
@@ -252,10 +252,10 @@ export function Layout({ onNavigate, children }: LayoutProps) {
                   disabled={disabled}
                   className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
                     disabled
-                      ? 'opacity-50 cursor-not-allowed text-[#172E08]'
+                      ? 'opacity-50 cursor-not-allowed text-foreground'
                       : active
-                      ? 'bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white shadow-lg shadow-[#73991C]/20'
-                      : 'text-[#172E08] hover:bg-[#E7EDDD]/50'
+                      ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/20'
+                      : 'text-foreground hover:bg-muted/50'
                   }`}
                 >
                   <Icon className="w-5 h-5" />
@@ -269,15 +269,15 @@ export function Layout({ onNavigate, children }: LayoutProps) {
         </nav>
 
         {/* User Info - Desktop */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-[#73991C]/10 bg-white/80 backdrop-blur-xl">
+        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-primary/10 bg-white/80 backdrop-blur-xl">
           <div className="mb-3 px-4">
-            <p className="text-sm text-[#172E08]">{profile?.nombre || 'Usuario'}</p>
-            <p className="text-xs text-[#4D240F]/60">{profile?.rol || 'Sin rol'}</p>
+            <p className="text-sm text-foreground">{profile?.nombre || 'Usuario'}</p>
+            <p className="text-xs text-brand-brown/60">{profile?.rol || 'Sin rol'}</p>
           </div>
           <Button
             onClick={handleLogout}
             variant="outline"
-            className="w-full border-[#DC3545]/20 text-[#DC3545] hover:bg-[#DC3545]/5 rounded-xl"
+            className="w-full border-destructive/20 text-destructive hover:bg-destructive/5 rounded-xl"
           >
             <LogOut className="w-4 h-4 mr-2" />
             Cerrar Sesión

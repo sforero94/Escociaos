@@ -758,8 +758,8 @@ export function MonitoreoDashboardV2() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-[#73991C] border-r-transparent mb-4"></div>
-          <p className="text-[#4D240F]/70">Cargando dashboard...</p>
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent mb-4"></div>
+          <p className="text-brand-brown/70">Cargando dashboard...</p>
         </div>
       </div>
     );
@@ -781,7 +781,7 @@ export function MonitoreoDashboardV2() {
 
     return (
       <g transform={`translate(${x},${y})`}>
-        <text x={0} y={0} dy={16} textAnchor="middle" className="text-xs fill-[#4D240F]">
+        <text x={0} y={0} dy={16} textAnchor="middle" className="text-xs fill-brand-brown">
           {payload.value}
         </text>
         <text x={0} y={16} dy={16} textAnchor="middle" className="text-[10px] fill-gray-500">
@@ -811,8 +811,8 @@ export function MonitoreoDashboardV2() {
       
       {/* Header del Tablero */}
       <div>
-        <h2 className="text-2xl text-[#172E08] mb-2">Tablero de Monitoreo</h2>
-        <p className="text-sm text-[#4D240F]/70">
+        <h2 className="text-2xl text-foreground mb-2">Tablero de Monitoreo</h2>
+        <p className="text-sm text-brand-brown/70">
           Análisis de tendencias e insights automáticos
         </p>
       </div>
@@ -855,17 +855,17 @@ export function MonitoreoDashboardV2() {
           {/* ============================================ */}
 
           <Card className="p-6">
-            <h3 className="text-sm font-medium text-[#172E08] mb-4">Filtros de Visualización</h3>
+            <h3 className="text-sm font-medium text-foreground mb-4">Filtros de Visualización</h3>
 
             {/* Fila 1: Modo de Ocurrencias */}
             <div className="mb-4">
-              <Label className="text-xs text-[#4D240F]/70 mb-2 block">Rango de Monitoreos</Label>
+              <Label className="text-xs text-brand-brown/70 mb-2 block">Rango de Monitoreos</Label>
               <div className="flex gap-2">
                 <Button
                   onClick={() => setModoVisualizacion('ultimo')}
                   variant={modoVisualizacion === 'ultimo' ? 'default' : 'outline'}
                   size="sm"
-                  className={modoVisualizacion === 'ultimo' ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
+                  className={modoVisualizacion === 'ultimo' ? 'bg-primary hover:bg-primary-dark' : ''}
                 >
                   Último monitoreo
                 </Button>
@@ -873,7 +873,7 @@ export function MonitoreoDashboardV2() {
                   onClick={() => setModoVisualizacion('ultimos3')}
                   variant={modoVisualizacion === 'ultimos3' ? 'default' : 'outline'}
                   size="sm"
-                  className={modoVisualizacion === 'ultimos3' ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
+                  className={modoVisualizacion === 'ultimos3' ? 'bg-primary hover:bg-primary-dark' : ''}
                 >
                   Últimos 3 monitoreos
                 </Button>
@@ -881,7 +881,7 @@ export function MonitoreoDashboardV2() {
                   onClick={() => setModoVisualizacion('ultimos6')}
                   variant={modoVisualizacion === 'ultimos6' ? 'default' : 'outline'}
                   size="sm"
-                  className={modoVisualizacion === 'ultimos6' ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
+                  className={modoVisualizacion === 'ultimos6' ? 'bg-primary hover:bg-primary-dark' : ''}
                 >
                   Últimos 6 monitoreos
                 </Button>
@@ -890,13 +890,13 @@ export function MonitoreoDashboardV2() {
 
             {/* Fila 2: Filtro de Plagas */}
             <div>
-              <Label className="text-xs text-[#4D240F]/70 mb-2 block">Plagas a Visualizar</Label>
+              <Label className="text-xs text-brand-brown/70 mb-2 block">Plagas a Visualizar</Label>
               <div className="flex gap-2 flex-wrap">
                 <Button
                   onClick={() => setFiltroPlaga('interes')}
                   variant={filtroPlaga === 'interes' ? 'default' : 'outline'}
                   size="sm"
-                  className={filtroPlaga === 'interes' ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
+                  className={filtroPlaga === 'interes' ? 'bg-primary hover:bg-primary-dark' : ''}
                 >
                   Plagas de Interés
                 </Button>
@@ -904,7 +904,7 @@ export function MonitoreoDashboardV2() {
                   onClick={() => setFiltroPlaga('cuarentenarias')}
                   variant={filtroPlaga === 'cuarentenarias' ? 'default' : 'outline'}
                   size="sm"
-                  className={filtroPlaga === 'cuarentenarias' ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
+                  className={filtroPlaga === 'cuarentenarias' ? 'bg-primary hover:bg-primary-dark' : ''}
                 >
                   Plagas Cuarentenarias
                 </Button>
@@ -912,7 +912,7 @@ export function MonitoreoDashboardV2() {
                   onClick={() => setFiltroPlaga('todos')}
                   variant={filtroPlaga === 'todos' ? 'default' : 'outline'}
                   size="sm"
-                  className={filtroPlaga === 'todos' ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
+                  className={filtroPlaga === 'todos' ? 'bg-primary hover:bg-primary-dark' : ''}
                 >
                   Todas
                 </Button>
@@ -920,7 +920,7 @@ export function MonitoreoDashboardV2() {
                   onClick={() => setFiltroPlaga('personalizar')}
                   variant={filtroPlaga === 'personalizar' ? 'default' : 'outline'}
                   size="sm"
-                  className={filtroPlaga === 'personalizar' ? 'bg-[#73991C] hover:bg-[#5C7A16]' : ''}
+                  className={filtroPlaga === 'personalizar' ? 'bg-primary hover:bg-primary-dark' : ''}
                 >
                   <Filter className="w-4 h-4 mr-1" />
                   Personalizar
@@ -929,7 +929,7 @@ export function MonitoreoDashboardV2() {
 
               {/* Selector personalizado de plagas */}
               {filtroPlaga === 'personalizar' && (
-                <div className="mt-4 p-4 bg-[#F8FAF5] rounded-lg">
+                <div className="mt-4 p-4 bg-background rounded-lg">
                   <Label className="mb-2 block">Seleccionar plagas:</Label>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                     {catalogoPlagas.map(plaga => (
@@ -946,13 +946,13 @@ export function MonitoreoDashboardV2() {
                           }}
                           className="rounded border-gray-300"
                         />
-                        <span className="text-[#172E08]">{plaga.nombre}</span>
+                        <span className="text-foreground">{plaga.nombre}</span>
                       </label>
                     ))}
                   </div>
                   <Button
                     onClick={cargarTendencias}
-                    className="mt-3 bg-[#73991C] hover:bg-[#5C7A16]"
+                    className="mt-3 bg-primary hover:bg-primary-dark"
                     size="sm"
                   >
                     Aplicar Filtro
@@ -984,8 +984,8 @@ export function MonitoreoDashboardV2() {
             <div className="mb-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-lg text-[#172E08] mb-1">Tendencias de Incidencia</h3>
-                  <p className="text-sm text-[#4D240F]/60">
+                  <h3 className="text-lg text-foreground mb-1">Tendencias de Incidencia</h3>
+                  <p className="text-sm text-brand-brown/60">
                     {tendencias.length > 0 && tendencias[0].fechaInicio && tendencias[tendencias.length - 1].fechaFin && (
                       <>Datos de: {formatearFechaCorta(tendencias[0].fechaInicio)} a: {formatearFechaCorta(tendencias[tendencias.length - 1].fechaFin)} • </>
                     )}
@@ -1006,7 +1006,7 @@ export function MonitoreoDashboardV2() {
 
             {/* Gráfico */}
             <div ref={graficoRef} className="bg-white p-4 rounded-lg">
-              <h4 className="text-center text-[#172E08] mb-4">
+              <h4 className="text-center text-foreground mb-4">
                 Tendencias de Incidencia - {rangoSeleccionado.charAt(0).toUpperCase() + rangoSeleccionado.slice(1)}
               </h4>
               
@@ -1052,7 +1052,7 @@ export function MonitoreoDashboardV2() {
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-[450px] flex items-center justify-center text-[#4D240F]/60">
+                <div className="h-[450px] flex items-center justify-center text-brand-brown/60">
                   <div className="text-center">
                     <Bug className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                     <p>No hay datos para el período seleccionado</p>
@@ -1077,7 +1077,7 @@ export function MonitoreoDashboardV2() {
           {/* ============================================ */}
           
           <Card className="p-6">
-            <h3 className="text-lg text-[#172E08] mb-4">Insights Automáticos</h3>
+            <h3 className="text-lg text-foreground mb-4">Insights Automáticos</h3>
             
             {insights.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1111,8 +1111,8 @@ export function MonitoreoDashboardV2() {
                             <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
                           )}
                           <div className="flex-1">
-                            <h4 className="font-semibold text-[#172E08]">{plaga}</h4>
-                            <p className="text-xs text-[#4D240F]/60 mt-0.5">
+                            <h4 className="font-semibold text-foreground">{plaga}</h4>
+                            <p className="text-xs text-brand-brown/60 mt-0.5">
                               {insightsPlaga.length} lote{insightsPlaga.length !== 1 ? 's' : ''} con cambios
                             </p>
                           </div>
@@ -1122,7 +1122,7 @@ export function MonitoreoDashboardV2() {
                         <div className="space-y-2">
                           {insightsPlaga.map((insight, index) => (
                             <div key={index} className="pl-2">
-                              <h5 className="text-sm text-[#172E08] font-medium mb-1">
+                              <h5 className="text-sm text-foreground font-medium mb-1">
                                 {insight.lote}
                               </h5>
                               <p className={`text-sm ${insight.tipo === 'alerta' ? 'text-red-700' : 'text-green-700'}`}>
@@ -1140,7 +1140,7 @@ export function MonitoreoDashboardV2() {
                 })()}
               </div>
             ) : (
-              <div className="text-center py-8 text-[#4D240F]/60">
+              <div className="text-center py-8 text-brand-brown/60">
                 <p>No hay cambios significativos en el período seleccionado</p>
                 <p className="text-sm mt-1">Los insights se generan comparando con el período anterior</p>
               </div>
@@ -1152,10 +1152,10 @@ export function MonitoreoDashboardV2() {
           {/* ============================================ */}
           
           <Card className="p-6">
-            <h3 className="text-lg text-[#172E08] mb-4">
+            <h3 className="text-lg text-foreground mb-4">
               Plagas Críticas ({plagasCriticas.length})
             </h3>
-            <p className="text-sm text-[#4D240F]/60 mb-6">
+            <p className="text-sm text-brand-brown/60 mb-6">
               Plagas con incidencia {'>'} 30% en uno o más lotes
             </p>
 
@@ -1182,8 +1182,8 @@ export function MonitoreoDashboardV2() {
                           </div>
                           <Bug className="w-5 h-5 text-red-600" />
                           <div>
-                            <h4 className="text-[#172E08]">{pc.plaga}</h4>
-                            <p className="text-sm text-[#4D240F]/60">
+                            <h4 className="text-foreground">{pc.plaga}</h4>
+                            <p className="text-sm text-brand-brown/60">
                               {pc.lotes.length} lote{pc.lotes.length !== 1 ? 's' : ''} afectado{pc.lotes.length !== 1 ? 's' : ''}
                             </p>
                           </div>
@@ -1192,7 +1192,7 @@ export function MonitoreoDashboardV2() {
                           <span className="px-3 py-1 bg-red-500 text-white rounded-full text-sm">
                             Máx: {maxIncidencia}%
                           </span>
-                          <span className="text-xs text-[#4D240F]/40">
+                          <span className="text-xs text-brand-brown/40">
                             {isExpanded ? 'Clic para colapsar' : 'Clic para expandir'}
                           </span>
                         </div>
@@ -1204,12 +1204,12 @@ export function MonitoreoDashboardV2() {
                           {pc.lotes.map((lote, index) => (
                             <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                               <div className="flex-1">
-                                <h5 className="text-sm text-[#172E08] font-medium">{lote.lote}</h5>
+                                <h5 className="text-sm text-foreground font-medium">{lote.lote}</h5>
                                 <div className="flex items-center gap-4 mt-1">
-                                  <span className="text-xs text-[#4D240F]/60">
+                                  <span className="text-xs text-brand-brown/60">
                                     Actual: <span className="font-medium text-red-600">{lote.incidenciaActual}%</span>
                                   </span>
-                                  <span className="text-xs text-[#4D240F]/60">
+                                  <span className="text-xs text-brand-brown/60">
                                     Anterior: <span className="font-medium">{lote.incidenciaAnterior}%</span>
                                   </span>
                                 </div>
@@ -1242,7 +1242,7 @@ export function MonitoreoDashboardV2() {
                 })}
               </div>
             ) : (
-              <div className="text-center py-8 text-[#4D240F]/60">
+              <div className="text-center py-8 text-brand-brown/60">
                 <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-green-500" />
                 <p className="text-green-600">¡Excelente! No hay plagas críticas en el período seleccionado</p>
               </div>
@@ -1259,7 +1259,7 @@ export function MonitoreoDashboardV2() {
         {/* Botón: Nuevo Monitoreo */}
         <Button
           onClick={() => setMostrarRegistroMonitoreo(true)}
-          className="h-14 px-6 bg-[#73991C] hover:bg-[#5f7d17] text-white shadow-2xl hover:shadow-[#73991C]/30 rounded-2xl transition-all duration-300 hover:scale-105"
+          className="h-14 px-6 bg-primary hover:bg-primary-dark text-white shadow-2xl hover:shadow-primary/30 rounded-2xl transition-all duration-300 hover:scale-105"
         >
           <Plus className="w-5 h-5 mr-2" />
           Nuevo Monitoreo
@@ -1269,7 +1269,7 @@ export function MonitoreoDashboardV2() {
         <Button
           onClick={() => navigate('/monitoreo/carga-masiva')}
           variant="outline"
-          className="h-12 px-5 bg-white hover:bg-[#F8FAF5] border-2 border-[#73991C] text-[#73991C] shadow-lg hover:shadow-xl rounded-xl transition-all duration-300 hover:scale-105"
+          className="h-12 px-5 bg-white hover:bg-background border-2 border-primary text-primary shadow-lg hover:shadow-xl rounded-xl transition-all duration-300 hover:scale-105"
         >
           <Upload className="w-4 h-4 mr-2" />
           Carga Masiva

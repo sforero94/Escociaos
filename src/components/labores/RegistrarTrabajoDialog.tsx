@@ -281,7 +281,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
               (currentStep === 1 && !fechaTrabajo) ||
               (currentStep === 2 && selectedTrabajadores.length === 0)
             }
-            className="bg-[#73991C] hover:bg-[#5a7716]"
+            className="bg-primary hover:bg-primary-dark"
           >
             Siguiente
           </Button>
@@ -290,7 +290,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
             type="button"
             onClick={handleSubmit}
             disabled={loading}
-            className="bg-[#73991C] hover:bg-[#5a7716]"
+            className="bg-primary hover:bg-primary-dark"
           >
             {loading ? 'Registrando...' : 'Registrar Trabajo'}
           </Button>
@@ -322,20 +322,20 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
                 <div
                   className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                     step <= currentStep
-                      ? 'bg-[#73991C] text-white'
+                      ? 'bg-primary text-white'
                       : 'bg-gray-200 text-gray-600'
                   }`}
                 >
                   {step}
                 </div>
                 <span className={`ml-2 text-sm ${
-                  step <= currentStep ? 'text-[#73991C] font-medium' : 'text-gray-500'
+                  step <= currentStep ? 'text-primary font-medium' : 'text-gray-500'
                 }`}>
                   {step === 1 ? 'Fecha' : step === 2 ? 'Empleados' : 'Matriz'}
                 </span>
                 {step < 3 && (
                   <div className={`w-12 h-0.5 mx-4 ${
-                    step < currentStep ? 'bg-[#73991C]' : 'bg-gray-200'
+                    step < currentStep ? 'bg-primary' : 'bg-gray-200'
                   }`} />
                 )}
               </div>
@@ -347,7 +347,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
           {currentStep === 1 && (
             <div className="space-y-6">
               <div className="text-center">
-                <CalendarIcon className="h-16 w-16 text-[#73991C] mx-auto mb-4" />
+                <CalendarIcon className="h-16 w-16 text-primary mx-auto mb-4" />
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
                   Seleccionar Fecha del Trabajo
                 </h3>
@@ -379,7 +379,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
           {currentStep === 2 && (
             <div className="space-y-6">
               <div className="text-center">
-                <div className="h-16 w-16 bg-[#73991C]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl">👥</span>
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
@@ -404,7 +404,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
           {currentStep === 3 && (
             <div className="space-y-6">
               <div className="text-center">
-                <div className="h-16 w-16 bg-[#73991C]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <div className="h-16 w-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl">📊</span>
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">

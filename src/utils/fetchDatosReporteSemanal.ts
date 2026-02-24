@@ -230,7 +230,7 @@ export async function fetchMatrizJornales(
 export async function fetchAplicacionesPlaneadas(): Promise<AplicacionPlaneada[]> {
   const supabase = getSupabase();
 
-  // Aplicaciones en estado Calculada
+  // Aplicaciones en estado Calculada — join aplicaciones_compras to avoid N+1
   const { data: aplicaciones, error } = await supabase
     .from('aplicaciones')
     .select(`
@@ -239,48 +239,58 @@ export async function fetchAplicacionesPlaneadas(): Promise<AplicacionPlaneada[]
       tipo_aplicacion,
       proposito,
       blanco_biologico,
-      fecha_inicio_planeada
+      fecha_inicio_planeada,
+      aplicaciones_compras(
+        producto_nombre,
+        producto_categoria,
+        cantidad_necesaria,
+        unidad,
+        costo_estimado
+      )
     `)
     .eq('estado', 'Calculada')
     .order('fecha_inicio_planeada', { ascending: true });
 
   if (error) throw new Error(`Error al cargar aplicaciones planeadas: ${error.message}`);
 
-  const resultado: AplicacionPlaneada[] = [];
-
+  // Collect all unique pest IDs across all applications for a single batch lookup
+  const allBlancoIds = new Set<string>();
   for (const app of aplicaciones || []) {
-    // Obtener lista de compras para cada aplicación
-    const { data: compras } = await supabase
-      .from('aplicaciones_compras')
-      .select(`
-        producto_nombre,
-        producto_categoria,
-        cantidad_necesaria,
-        unidad,
-        costo_estimado
-      `)
-      .eq('aplicacion_id', app.id);
-
-    // Obtener blancos biológicos
-    let blancos: string[] = [];
     if (app.blanco_biologico) {
       const ids = Array.isArray(app.blanco_biologico)
         ? app.blanco_biologico
         : [app.blanco_biologico];
-      const { data: plagas } = await supabase
-        .from('plagas_enfermedades_catalogo')
-        .select('nombre')
-        .in('id', ids);
-      blancos = (plagas || []).map(p => p.nombre);
+      (ids as string[]).forEach((id: string) => allBlancoIds.add(id));
     }
+  }
 
-    const listaCompras: ItemCompraResumen[] = (compras || []).map(c => ({
+  const plagasMap = new Map<string, string>();
+  if (allBlancoIds.size > 0) {
+    const { data: plagas } = await supabase
+      .from('plagas_enfermedades_catalogo')
+      .select('id, nombre')
+      .in('id', Array.from(allBlancoIds));
+    (plagas || []).forEach((p: any) => plagasMap.set(p.id, p.nombre));
+  }
+
+  const resultado: AplicacionPlaneada[] = [];
+
+  for (const app of aplicaciones || []) {
+    const listaCompras: ItemCompraResumen[] = ((app as any).aplicaciones_compras || []).map((c: any) => ({
       productoNombre: c.producto_nombre,
       categoria: c.producto_categoria || '',
       cantidadNecesaria: Number(c.cantidad_necesaria) || 0,
       unidad: c.unidad || '',
       costoEstimado: Number(c.costo_estimado) || 0,
     }));
+
+    let blancos: string[] = [];
+    if (app.blanco_biologico) {
+      const ids = Array.isArray(app.blanco_biologico)
+        ? app.blanco_biologico
+        : [app.blanco_biologico];
+      blancos = (ids as string[]).map((id: string) => plagasMap.get(id) || '').filter(Boolean);
+    }
 
     resultado.push({
       id: app.id,
@@ -321,6 +331,11 @@ export async function fetchAplicacionesActivas(): Promise<AplicacionActiva[]> {
         numero_canecas,
         numero_bultos,
         lotes(nombre)
+      ),
+      movimientos_diarios(
+        lote_id,
+        numero_canecas,
+        numero_bultos
       )
     `)
     .eq('estado', 'En ejecución');
@@ -333,11 +348,7 @@ export async function fetchAplicacionesActivas(): Promise<AplicacionActiva[]> {
     const esFumigacion = app.tipo_aplicacion === 'Fumigación';
     const unidad: 'canecas' | 'bultos' = esFumigacion ? 'canecas' : 'bultos';
 
-    // Obtener movimientos diarios para calcular progreso
-    const { data: movimientos } = await supabase
-      .from('movimientos_diarios')
-      .select('lote_id, numero_canecas, numero_bultos')
-      .eq('aplicacion_id', app.id);
+    const movimientos = (app as any).movimientos_diarios || [];
 
     // Calcular planeado por lote (de aplicaciones_calculos)
     const planeadoPorLote = new Map<string, { nombre: string; planeado: number }>();
@@ -351,7 +362,7 @@ export async function fetchAplicacionesActivas(): Promise<AplicacionActiva[]> {
 
     // Calcular ejecutado por lote (de movimientos_diarios)
     const ejecutadoPorLote = new Map<string, number>();
-    (movimientos || []).forEach((mov: any) => {
+    movimientos.forEach((mov: any) => {
       const ejecutado = esFumigacion
         ? (Number(mov.numero_canecas) || 0)
         : (Number(mov.numero_bultos) || 0);

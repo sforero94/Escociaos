@@ -32,6 +32,7 @@ import type {
   Comprador,
   MedioPago
 } from '../../../types/finanzas';
+import { toast } from 'sonner';
 
 interface IngresoFormProps {
   open: boolean;
@@ -175,7 +176,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
 
   const handleCreateComprador = async () => {
     if (!newCompradorData.nombre.trim()) {
-      alert('El nombre del comprador es obligatorio');
+      toast.error('El nombre del comprador es obligatorio');
       return;
     }
 
@@ -203,7 +204,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
       setNewCompradorData({ nombre: '', telefono: '', email: '' });
       setShowNewComprador(false);
     } catch (error: any) {
-      alert('Error al crear comprador: ' + error.message);
+      toast.error('Error al crear comprador: ' + error.message);
     }
   };
 
@@ -212,27 +213,27 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
 
     // Validation
     if (!formData.nombre.trim()) {
-      alert('El nombre del ingreso es obligatorio');
+      toast.error('El nombre del ingreso es obligatorio');
       return;
     }
     if (!formData.negocio_id) {
-      alert('Debe seleccionar un negocio');
+      toast.error('Debe seleccionar un negocio');
       return;
     }
     if (!formData.region_id) {
-      alert('Debe seleccionar una región');
+      toast.error('Debe seleccionar una región');
       return;
     }
     if (!formData.categoria_id) {
-      alert('Debe seleccionar una categoría');
+      toast.error('Debe seleccionar una categoría');
       return;
     }
     if (formData.valor <= 0) {
-      alert('El valor debe ser mayor a cero');
+      toast.error('El valor debe ser mayor a cero');
       return;
     }
     if (!formData.medio_pago_id) {
-      alert('Debe seleccionar un medio de pago');
+      toast.error('Debe seleccionar un medio de pago');
       return;
     }
 
@@ -266,7 +267,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
 
       onSuccess();
     } catch (error: any) {
-      alert('Error al guardar ingreso: ' + error.message);
+      toast.error('Error al guardar ingreso: ' + error.message);
     } finally {
       setSaving(false);
     }
@@ -295,7 +296,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
           <Button
             type="submit"
             disabled={saving}
-            className="bg-[#73991C] hover:bg-[#5a7716]"
+            className="bg-primary hover:bg-primary-dark"
             onClick={handleSubmit}
           >
             {saving ? 'Guardando...' : (isEditing ? 'Actualizar Ingreso' : 'Crear Ingreso')}
@@ -542,7 +543,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
             </Button>
             <Button
               onClick={handleCreateComprador}
-              className="bg-[#73991C] hover:bg-[#5a7716]"
+              className="bg-primary hover:bg-primary-dark"
             >
               Crear Comprador
             </Button>

@@ -80,8 +80,8 @@ export function PasoCierreDatos({
     <div className="space-y-6">
       {/* TÍTULO */}
       <div>
-        <h3 className="text-xl text-[#172E08] mb-2">Datos del Cierre</h3>
-        <p className="text-[#4D240F]/70">
+        <h3 className="text-xl text-foreground mb-2">Datos del Cierre</h3>
+        <p className="text-brand-brown/70">
           Completa la información necesaria para formalizar el cierre de la aplicación.
         </p>
       </div>
@@ -89,27 +89,27 @@ export function PasoCierreDatos({
       {/* SECCIÓN 1: FECHAS */}
       <div className="bg-white border border-gray-200 rounded-xl p-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="p-2 bg-[#73991C]/10 rounded-lg">
-            <Calendar className="w-5 h-5 text-[#73991C]" />
+          <div className="p-2 bg-primary/10 rounded-lg">
+            <Calendar className="w-5 h-5 text-primary" />
           </div>
-          <h4 className="text-[#172E08]">Fechas de Ejecución</h4>
+          <h4 className="text-foreground">Fechas de Ejecución</h4>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Fecha Inicio (readonly) */}
           <div>
-            <label className="block text-sm text-[#4D240F]/70 mb-2">Fecha de Inicio</label>
+            <label className="block text-sm text-brand-brown/70 mb-2">Fecha de Inicio</label>
             <input
               type="date"
               value={aplicacion.fecha_inicio}
               disabled
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-[#172E08] cursor-not-allowed"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-foreground cursor-not-allowed"
             />
           </div>
 
           {/* Fecha Final */}
           <div>
-            <label className="block text-sm text-[#4D240F]/70 mb-2">
+            <label className="block text-sm text-brand-brown/70 mb-2">
               Fecha de Finalización <span className="text-red-500">*</span>
             </label>
             <input
@@ -118,9 +118,9 @@ export function PasoCierreDatos({
               onChange={(e) => onFechaFinalChange(e.target.value)}
               min={fechaMinimaFinal}
               max={fechaMaximaFinal}
-              className={`w-full px-4 py-2 border rounded-lg text-[#172E08] focus:outline-none focus:ring-2 transition-all ${
+              className={`w-full px-4 py-2 border rounded-lg text-foreground focus:outline-none focus:ring-2 transition-all ${
                 esFechaValida
-                  ? 'border-gray-300 focus:ring-[#73991C]/20 focus:border-[#73991C]'
+                  ? 'border-gray-300 focus:ring-primary/20 focus:border-primary'
                   : 'border-red-300 focus:ring-red-200 focus:border-red-500'
               }`}
             />
@@ -133,12 +133,12 @@ export function PasoCierreDatos({
 
           {/* Días de Aplicación (calculado) */}
           <div>
-            <label className="block text-sm text-[#4D240F]/70 mb-2">Días de Aplicación</label>
-            <div className="px-4 py-2 bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 border border-[#73991C]/20 rounded-lg">
-              <div className="text-2xl text-[#172E08]">
+            <label className="block text-sm text-brand-brown/70 mb-2">Días de Aplicación</label>
+            <div className="px-4 py-2 bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20 rounded-lg">
+              <div className="text-2xl text-foreground">
                 {esFechaValida ? calcularDiasAplicacion() : '-'}
               </div>
-              <div className="text-xs text-[#4D240F]/70">días</div>
+              <div className="text-xs text-brand-brown/70">días</div>
             </div>
           </div>
         </div>
@@ -150,24 +150,24 @@ export function PasoCierreDatos({
           <div className="p-2 bg-blue-100 rounded-lg">
             <Users className="w-5 h-5 text-blue-600" />
           </div>
-          <h4 className="text-[#172E08]">Mano de Obra y Jornales</h4>
+          <h4 className="text-foreground">Mano de Obra y Jornales</h4>
         </div>
 
         <div className="space-y-4">
           {/* Valor del Jornal */}
           <div>
-            <label className="block text-sm text-[#4D240F]/70 mb-2">
+            <label className="block text-sm text-brand-brown/70 mb-2">
               Valor del Jornal (COP) <span className="text-red-500">*</span>
             </label>
             <div className="relative">
-              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#4D240F]/40" />
+              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-brand-brown/40" />
               <input
                 type="number"
                 value={valorJornal}
                 onChange={(e) => onValorJornalChange(Number(e.target.value))}
                 min="0"
                 step="1000"
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C] transition-all"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                 placeholder="Ej: 60000"
               />
             </div>
@@ -175,15 +175,15 @@ export function PasoCierreDatos({
 
           {/* Distribución de Jornales */}
           <div>
-            <label className="block text-sm text-[#4D240F]/70 mb-3">
+            <label className="block text-sm text-brand-brown/70 mb-3">
               Distribución de Jornales por Actividad <span className="text-red-500">*</span>
             </label>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Aplicación */}
               <div className="border border-gray-200 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <Droplets className="w-4 h-4 text-[#73991C]" />
-                  <label className="text-sm text-[#172E08]">Aplicación</label>
+                  <Droplets className="w-4 h-4 text-primary" />
+                  <label className="text-sm text-foreground">Aplicación</label>
                 </div>
                 <input
                   type="number"
@@ -192,7 +192,7 @@ export function PasoCierreDatos({
                     onJornalesChange({ ...jornales, aplicacion: Number(e.target.value) })
                   }
                   min="0"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C] transition-all"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                   placeholder="0"
                 />
               </div>
@@ -201,7 +201,7 @@ export function PasoCierreDatos({
               <div className="border border-gray-200 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <Wrench className="w-4 h-4 text-blue-600" />
-                  <label className="text-sm text-[#172E08]">Mezcla</label>
+                  <label className="text-sm text-foreground">Mezcla</label>
                 </div>
                 <input
                   type="number"
@@ -210,7 +210,7 @@ export function PasoCierreDatos({
                     onJornalesChange({ ...jornales, mezcla: Number(e.target.value) })
                   }
                   min="0"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-[#172E08] focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500 transition-all"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500 transition-all"
                   placeholder="0"
                 />
               </div>
@@ -219,7 +219,7 @@ export function PasoCierreDatos({
               <div className="border border-gray-200 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <Truck className="w-4 h-4 text-purple-600" />
-                  <label className="text-sm text-[#172E08]">Transporte</label>
+                  <label className="text-sm text-foreground">Transporte</label>
                 </div>
                 <input
                   type="number"
@@ -228,7 +228,7 @@ export function PasoCierreDatos({
                     onJornalesChange({ ...jornales, transporte: Number(e.target.value) })
                   }
                   min="0"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-[#172E08] focus:outline-none focus:ring-2 focus:ring-purple-200 focus:border-purple-500 transition-all"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-purple-200 focus:border-purple-500 transition-all"
                   placeholder="0"
                 />
               </div>
@@ -237,7 +237,7 @@ export function PasoCierreDatos({
               <div className="border border-gray-200 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <Users className="w-4 h-4 text-orange-600" />
-                  <label className="text-sm text-[#172E08]">Otros</label>
+                  <label className="text-sm text-foreground">Otros</label>
                 </div>
                 <input
                   type="number"
@@ -246,7 +246,7 @@ export function PasoCierreDatos({
                     onJornalesChange({ ...jornales, otros: Number(e.target.value) })
                   }
                   min="0"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-[#172E08] focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-500 transition-all"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-500 transition-all"
                   placeholder="0"
                 />
               </div>
@@ -254,19 +254,19 @@ export function PasoCierreDatos({
           </div>
 
           {/* Resumen de Costos */}
-          <div className="bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 border border-[#73991C]/20 rounded-xl p-4">
+          <div className="bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20 rounded-xl p-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <div className="text-xs text-[#4D240F]/70 mb-1">Total Jornales</div>
-                <div className="text-xl text-[#172E08]">{totalJornales}</div>
+                <div className="text-xs text-brand-brown/70 mb-1">Total Jornales</div>
+                <div className="text-xl text-foreground">{totalJornales}</div>
               </div>
               <div>
-                <div className="text-xs text-[#4D240F]/70 mb-1">Valor por Jornal</div>
-                <div className="text-xl text-[#172E08]">{formatearMoneda(valorJornal)}</div>
+                <div className="text-xs text-brand-brown/70 mb-1">Valor por Jornal</div>
+                <div className="text-xl text-foreground">{formatearMoneda(valorJornal)}</div>
               </div>
               <div>
-                <div className="text-xs text-[#4D240F]/70 mb-1">Costo Mano de Obra</div>
-                <div className="text-2xl text-[#73991C]">
+                <div className="text-xs text-brand-brown/70 mb-1">Costo Mano de Obra</div>
+                <div className="text-2xl text-primary">
                   {formatearMoneda(costoManoObraTotal)}
                 </div>
               </div>
@@ -278,7 +278,7 @@ export function PasoCierreDatos({
             <button
               type="button"
               onClick={() => setMostrarJornalesPorLote(!mostrarJornalesPorLote)}
-              className="flex items-center gap-2 text-sm text-[#73991C] hover:text-[#172E08] transition-colors font-medium"
+              className="flex items-center gap-2 text-sm text-primary hover:text-foreground transition-colors font-medium"
             >
               {mostrarJornalesPorLote ? (
                 <ChevronUp className="w-4 h-4" />
@@ -287,7 +287,7 @@ export function PasoCierreDatos({
               )}
               Distribuir jornales por lote (opcional)
             </button>
-            <p className="text-xs text-[#4D240F]/60 mt-1 ml-6">
+            <p className="text-xs text-brand-brown/60 mt-1 ml-6">
               Si deseas un control más detallado, puedes especificar los jornales utilizados en cada lote
             </p>
 
@@ -308,10 +308,10 @@ export function PasoCierreDatos({
                       className="bg-gray-50 border border-gray-200 rounded-lg p-4"
                     >
                       <div className="flex items-center justify-between mb-3">
-                        <h5 className="text-sm text-[#172E08] font-medium">
+                        <h5 className="text-sm text-foreground font-medium">
                           {lote.nombre || `Lote ${loteId}`}
                         </h5>
-                        <span className="text-xs text-[#4D240F]/60">
+                        <span className="text-xs text-brand-brown/60">
                           {lote.conteo_arboles?.total || 0} árboles
                         </span>
                       </div>
@@ -319,7 +319,7 @@ export function PasoCierreDatos({
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                         {/* Aplicación */}
                         <div>
-                          <label className="block text-xs text-[#4D240F]/70 mb-1">
+                          <label className="block text-xs text-brand-brown/70 mb-1">
                             Aplicación
                           </label>
                           <input
@@ -336,14 +336,14 @@ export function PasoCierreDatos({
                               onJornalesPorLoteChange(updated);
                             }}
                             min="0"
-                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                             placeholder="0"
                           />
                         </div>
 
                         {/* Mezcla */}
                         <div>
-                          <label className="block text-xs text-[#4D240F]/70 mb-1">
+                          <label className="block text-xs text-brand-brown/70 mb-1">
                             Mezcla
                           </label>
                           <input
@@ -360,14 +360,14 @@ export function PasoCierreDatos({
                               onJornalesPorLoteChange(updated);
                             }}
                             min="0"
-                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg text-[#172E08] focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500"
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500"
                             placeholder="0"
                           />
                         </div>
 
                         {/* Transporte */}
                         <div>
-                          <label className="block text-xs text-[#4D240F]/70 mb-1">
+                          <label className="block text-xs text-brand-brown/70 mb-1">
                             Transporte
                           </label>
                           <input
@@ -384,14 +384,14 @@ export function PasoCierreDatos({
                               onJornalesPorLoteChange(updated);
                             }}
                             min="0"
-                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg text-[#172E08] focus:outline-none focus:ring-2 focus:ring-purple-200 focus:border-purple-500"
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-purple-200 focus:border-purple-500"
                             placeholder="0"
                           />
                         </div>
 
                         {/* Otros */}
                         <div>
-                          <label className="block text-xs text-[#4D240F]/70 mb-1">
+                          <label className="block text-xs text-brand-brown/70 mb-1">
                             Otros
                           </label>
                           <input
@@ -408,7 +408,7 @@ export function PasoCierreDatos({
                               onJornalesPorLoteChange(updated);
                             }}
                             min="0"
-                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg text-[#172E08] focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-500"
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-500"
                             placeholder="0"
                           />
                         </div>
@@ -416,8 +416,8 @@ export function PasoCierreDatos({
 
                       {/* Subtotal de este lote */}
                       <div className="mt-2 pt-2 border-t border-gray-300 flex justify-between items-center">
-                        <span className="text-xs text-[#4D240F]/70">Total lote:</span>
-                        <span className="text-sm text-[#172E08] font-medium">
+                        <span className="text-xs text-brand-brown/70">Total lote:</span>
+                        <span className="text-sm text-foreground font-medium">
                           {jornalesLote.aplicacion +
                             jornalesLote.mezcla +
                             jornalesLote.transporte +
@@ -440,13 +440,13 @@ export function PasoCierreDatos({
           <div className="p-2 bg-purple-100 rounded-lg">
             <FileText className="w-5 h-5 text-purple-600" />
           </div>
-          <h4 className="text-[#172E08]">Observaciones y Notas de Campo</h4>
+          <h4 className="text-foreground">Observaciones y Notas de Campo</h4>
         </div>
 
         <div className="space-y-4">
           {/* Observaciones Generales */}
           <div>
-            <label className="block text-sm text-[#4D240F]/70 mb-2">
+            <label className="block text-sm text-brand-brown/70 mb-2">
               Observaciones Generales
             </label>
             <textarea
@@ -455,14 +455,14 @@ export function PasoCierreDatos({
                 onObservacionesChange({ ...observaciones, generales: e.target.value })
               }
               rows={3}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C] transition-all resize-none"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all resize-none"
               placeholder="Notas generales sobre la aplicación..."
             />
           </div>
 
           {/* Condiciones Meteorológicas */}
           <div>
-            <label className="block text-sm text-[#4D240F]/70 mb-2 flex items-center gap-2">
+            <label className="block text-sm text-brand-brown/70 mb-2 flex items-center gap-2">
               <Cloud className="w-4 h-4" />
               Condiciones Meteorológicas
             </label>
@@ -472,7 +472,7 @@ export function PasoCierreDatos({
                 onObservacionesChange({ ...observaciones, meteorologicas: e.target.value })
               }
               rows={2}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C] transition-all resize-none"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all resize-none"
               placeholder="Ej: Días soleados, temperatura promedio 22°C, sin lluvias..."
             />
           </div>
@@ -480,7 +480,7 @@ export function PasoCierreDatos({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Problemas Encontrados */}
             <div>
-              <label className="block text-sm text-[#4D240F]/70 mb-2 flex items-center gap-2">
+              <label className="block text-sm text-brand-brown/70 mb-2 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4" />
                 Problemas Encontrados
               </label>
@@ -490,14 +490,14 @@ export function PasoCierreDatos({
                   onObservacionesChange({ ...observaciones, problemas: e.target.value })
                 }
                 rows={3}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C] transition-all resize-none"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all resize-none"
                 placeholder="Ej: Obstrucción en boquilla del equipo..."
               />
             </div>
 
             {/* Ajustes Realizados */}
             <div>
-              <label className="block text-sm text-[#4D240F]/70 mb-2 flex items-center gap-2">
+              <label className="block text-sm text-brand-brown/70 mb-2 flex items-center gap-2">
                 <CheckCircle className="w-4 h-4" />
                 Ajustes Realizados
               </label>
@@ -507,7 +507,7 @@ export function PasoCierreDatos({
                   onObservacionesChange({ ...observaciones, ajustes: e.target.value })
                 }
                 rows={3}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C] transition-all resize-none"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all resize-none"
                 placeholder="Ej: Se aumentó la dosis en lote 5 por alta incidencia..."
               />
             </div>

@@ -159,17 +159,17 @@ function MonitoreoCard({ onClick }: { onClick: () => void }) {
   return (
     <div
       onClick={onClick}
-      className="bg-white rounded-2xl p-6 border border-gray-200 hover:border-[#73991C]/40 transition-all cursor-pointer group shadow-sm hover:shadow-md"
+      className="bg-white rounded-2xl p-6 border border-gray-200 hover:border-primary/40 transition-all cursor-pointer group shadow-sm hover:shadow-md"
     >
       {/* Header */}
       <div className="flex items-start gap-4 mb-4">
-        <div className="w-12 h-12 bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-          <Eye className="w-6 h-6 text-[#73991C]" />
+        <div className="w-12 h-12 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+          <Eye className="w-6 h-6 text-primary" />
         </div>
         <div className="flex-1">
-          <p className="text-xs text-[#4D240F]/60 mb-1 tracking-wide uppercase">Monitoreo</p>
-          <h3 className="text-[#172E08] mb-1">Plagas de Interés</h3>
-          <p className="text-xs text-[#4D240F]/60">
+          <p className="text-xs text-brand-brown/60 mb-1 tracking-wide uppercase">Monitoreo</p>
+          <h3 className="text-foreground mb-1">Plagas de Interés</h3>
+          <p className="text-xs text-brand-brown/60">
             Tendencias últimas 4 semanas
           </p>
         </div>
@@ -178,7 +178,7 @@ function MonitoreoCard({ onClick }: { onClick: () => void }) {
       {/* Mini Gráfica */}
       {isLoading ? (
         <div className="h-32 flex items-center justify-center">
-          <div className="w-6 h-6 border-3 border-[#73991C]/30 border-t-[#73991C] rounded-full animate-spin"></div>
+          <div className="w-6 h-6 border-3 border-primary/30 border-t-primary rounded-full animate-spin"></div>
         </div>
       ) : tendencias.length > 0 ? (
         <>
@@ -230,16 +230,16 @@ function MonitoreoCard({ onClick }: { onClick: () => void }) {
                   className="w-2 h-2 rounded-full" 
                   style={{ backgroundColor: COLORES_PLAGAS[index % COLORES_PLAGAS.length] }}
                 ></div>
-                <span className="text-xs text-[#4D240F]/70">{plaga}</span>
+                <span className="text-xs text-brand-brown/70">{plaga}</span>
               </div>
             ))}
             {plagasEnGrafico.length > 3 && (
-              <span className="text-xs text-[#4D240F]/50">+{plagasEnGrafico.length - 3} más</span>
+              <span className="text-xs text-brand-brown/50">+{plagasEnGrafico.length - 3} más</span>
             )}
           </div>
         </>
       ) : (
-        <div className="h-32 flex flex-col items-center justify-center text-[#4D240F]/50">
+        <div className="h-32 flex flex-col items-center justify-center text-brand-brown/50">
           <Eye className="w-8 h-8 mb-2 opacity-30" />
           <p className="text-xs">Sin datos de las últimas 4 semanas</p>
         </div>
@@ -301,26 +301,26 @@ function AplicacionesCard({
   return (
     <div
       onClick={onClick}
-      className="bg-white rounded-2xl p-6 border border-gray-200 hover:border-[#73991C]/40 transition-all cursor-pointer group shadow-sm hover:shadow-md"
+      className="bg-white rounded-2xl p-6 border border-gray-200 hover:border-primary/40 transition-all cursor-pointer group shadow-sm hover:shadow-md"
     >
       {/* Header */}
       <div className="flex items-start gap-4 mb-4">
-        <div className="w-12 h-12 bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-          <Sprout className="w-6 h-6 text-[#73991C]" />
+        <div className="w-12 h-12 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+          <Sprout className="w-6 h-6 text-primary" />
         </div>
         <div className="flex-1">
-          <p className="text-xs text-[#4D240F]/60 mb-1 tracking-wide uppercase">Aplicaciones</p>
-          <h3 className="text-2xl text-[#172E08]">{stats?.activas || 0} Activas</h3>
+          <p className="text-xs text-brand-brown/60 mb-1 tracking-wide uppercase">Aplicaciones</p>
+          <h3 className="text-2xl text-foreground">{stats?.activas || 0} Activas</h3>
         </div>
       </div>
 
       {/* Indicadores sutiles de estado */}
       <div className="flex items-center gap-4 mb-4 pb-4 border-b border-gray-100">
-        <div className="text-xs text-[#4D240F]/60">
+        <div className="text-xs text-brand-brown/60">
           <span className="inline-block w-2 h-2 bg-blue-400 rounded-full mr-1.5"></span>
           {stats?.planeadas || 0} Planeadas
         </div>
-        <div className="text-xs text-[#4D240F]/60">
+        <div className="text-xs text-brand-brown/60">
           <span className="inline-block w-2 h-2 bg-green-500 rounded-full mr-1.5"></span>
           {stats?.completadas || 0} Completadas
         </div>
@@ -332,22 +332,22 @@ function AplicacionesCard({
           stats.aplicacionesEnProgreso.slice(0, 2).map((app) => (
             <div key={app.id} className="space-y-1.5">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-[#172E08] truncate">{app.nombre}</span>
-                <span className="text-[#73991C] font-medium ml-2">{app.porcentaje}%</span>
+                <span className="text-foreground truncate">{app.nombre}</span>
+                <span className="text-primary font-medium ml-2">{app.porcentaje}%</span>
               </div>
               <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-[#73991C] to-[#BFD97D] rounded-full transition-all duration-500"
+                  className="h-full bg-gradient-to-r from-primary to-secondary rounded-full transition-all duration-500"
                   style={{ width: `${app.porcentaje}%` }}
                 ></div>
               </div>
-              <p className="text-xs text-[#4D240F]/60">
+              <p className="text-xs text-brand-brown/60">
                 {app.aplicado} / {app.total} {app.unidad}
               </p>
             </div>
           ))
         ) : (
-          <p className="text-sm text-[#4D240F]/50 text-center py-4">
+          <p className="text-sm text-brand-brown/50 text-center py-4">
             No hay aplicaciones activas
           </p>
         )}
@@ -356,19 +356,19 @@ function AplicacionesCard({
       {/* Aplicaciones planeadas */}
       {stats?.aplicacionesPlaneadas && stats.aplicacionesPlaneadas.length > 0 && (
         <div className="pt-4 border-t border-gray-100 space-y-2">
-          <p className="text-xs text-[#4D240F]/60 mb-3 uppercase tracking-wide">Planificadas</p>
+          <p className="text-xs text-brand-brown/60 mb-3 uppercase tracking-wide">Planificadas</p>
           {stats.aplicacionesPlaneadas.map((app) => (
             <div 
               key={app.id} 
               className="bg-blue-50/50 border border-blue-100 rounded-xl p-3"
             >
               <div className="flex items-start justify-between mb-2">
-                <h4 className="text-sm text-[#172E08] flex-1 pr-2 line-clamp-2">{app.nombre}</h4>
+                <h4 className="text-sm text-foreground flex-1 pr-2 line-clamp-2">{app.nombre}</h4>
                 <span className="text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">
                   {app.num_lotes} {app.num_lotes === 1 ? 'lote' : 'lotes'}
                 </span>
               </div>
-              <div className="flex items-center gap-2 text-xs text-[#4D240F]/60">
+              <div className="flex items-center gap-2 text-xs text-brand-brown/60">
                 {app.fecha_inicio && app.fecha_fin ? (
                   <>
                     <span>{formatearFechaCorta(app.fecha_inicio)}</span>
@@ -437,21 +437,21 @@ function InventarioCard({
   return (
     <div
       onClick={onClick}
-      className="bg-white rounded-2xl p-6 border border-gray-200 hover:border-[#73991C]/40 transition-all cursor-pointer group shadow-sm hover:shadow-md"
+      className="bg-white rounded-2xl p-6 border border-gray-200 hover:border-primary/40 transition-all cursor-pointer group shadow-sm hover:shadow-md"
     >
       {/* Header */}
       <div className="flex items-start gap-4 mb-4">
-        <div className="w-12 h-12 bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-          <Package className="w-6 h-6 text-[#73991C]" />
+        <div className="w-12 h-12 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+          <Package className="w-6 h-6 text-primary" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-xs text-[#4D240F]/60 mb-1 tracking-wide uppercase">Inventario</p>
+          <p className="text-xs text-brand-brown/60 mb-1 tracking-wide uppercase">Inventario</p>
           
           {/* Dos columnas: Valor e Indicador */}
           <div className="flex items-start justify-between gap-4">
             {/* Columna izquierda: Solo el valor */}
             <div>
-              <h3 className="text-2xl text-[#172E08]">{valorFormateado}</h3>
+              <h3 className="text-2xl text-foreground">{valorFormateado}</h3>
             </div>
 
             {/* Columna derecha: Indicador de tendencia CON texto descriptivo */}
@@ -469,7 +469,7 @@ function InventarioCard({
                     {Math.abs(porcentajeCambio).toFixed(1)}%
                   </span>
                 </div>
-                <p className="text-xs text-[#4D240F]/50 text-right">
+                <p className="text-xs text-brand-brown/50 text-right">
                   vs. promedio 3 últimos meses
                 </p>
               </div>
@@ -483,30 +483,30 @@ function InventarioCard({
         <div className="flex items-center justify-between text-sm">
           <div className="flex items-center gap-2">
             <span className="inline-block w-2 h-2 bg-green-500 rounded-full"></span>
-            <span className="text-[#4D240F]/70">OK</span>
+            <span className="text-brand-brown/70">OK</span>
           </div>
-          <span className="text-[#172E08] font-medium">{stats?.porEstado.ok || 0}</span>
+          <span className="text-foreground font-medium">{stats?.porEstado.ok || 0}</span>
         </div>
         <div className="flex items-center justify-between text-sm">
           <div className="flex items-center gap-2">
             <span className="inline-block w-2 h-2 bg-red-500 rounded-full"></span>
-            <span className="text-[#4D240F]/70">Sin existencias</span>
+            <span className="text-brand-brown/70">Sin existencias</span>
           </div>
-          <span className="text-[#172E08] font-medium">{stats?.porEstado.sinExistencias || 0}</span>
+          <span className="text-foreground font-medium">{stats?.porEstado.sinExistencias || 0}</span>
         </div>
         <div className="flex items-center justify-between text-sm">
           <div className="flex items-center gap-2">
             <span className="inline-block w-2 h-2 bg-gray-400 rounded-full"></span>
-            <span className="text-[#4D240F]/70">Perdido</span>
+            <span className="text-brand-brown/70">Perdido</span>
           </div>
-          <span className="text-[#172E08] font-medium">{stats?.porEstado.perdido || 0}</span>
+          <span className="text-foreground font-medium">{stats?.porEstado.perdido || 0}</span>
         </div>
         <div className="flex items-center justify-between text-sm">
           <div className="flex items-center gap-2">
             <span className="inline-block w-2 h-2 bg-orange-500 rounded-full"></span>
-            <span className="text-[#4D240F]/70">Vencido</span>
+            <span className="text-brand-brown/70">Vencido</span>
           </div>
-          <span className="text-[#172E08] font-medium">{stats?.porEstado.vencido || 0}</span>
+          <span className="text-foreground font-medium">{stats?.porEstado.vencido || 0}</span>
         </div>
       </div>
     </div>
@@ -620,17 +620,17 @@ function LaboresCard({ onClick }: { onClick: () => void }) {
   return (
     <div
       onClick={onClick}
-      className="bg-white rounded-2xl p-6 border border-gray-200 hover:border-[#73991C]/40 transition-all cursor-pointer group shadow-sm hover:shadow-md"
+      className="bg-white rounded-2xl p-6 border border-gray-200 hover:border-primary/40 transition-all cursor-pointer group shadow-sm hover:shadow-md"
     >
       {/* Header */}
       <div className="flex items-start gap-4 mb-4">
-        <div className="w-12 h-12 bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-          <Briefcase className="w-6 h-6 text-[#73991C]" />
+        <div className="w-12 h-12 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+          <Briefcase className="w-6 h-6 text-primary" />
         </div>
         <div className="flex-1">
-          <p className="text-xs text-[#4D240F]/60 mb-1 tracking-wide uppercase">Labores</p>
-          <h3 className="text-[#172E08] mb-1">Actividades esta semana</h3>
-          <p className="text-xs text-[#4D240F]/60">Jornales por tipo de tarea</p>
+          <p className="text-xs text-brand-brown/60 mb-1 tracking-wide uppercase">Labores</p>
+          <h3 className="text-foreground mb-1">Actividades esta semana</h3>
+          <p className="text-xs text-brand-brown/60">Jornales por tipo de tarea</p>
         </div>
       </div>
 
@@ -690,7 +690,7 @@ function LaboresCard({ onClick }: { onClick: () => void }) {
           </ResponsiveContainer>
         </div>
       ) : (
-        <div className="h-32 flex flex-col items-center justify-center text-[#4D240F]/50 mb-2">
+        <div className="h-32 flex flex-col items-center justify-center text-brand-brown/50 mb-2">
           <Briefcase className="w-8 h-8 mb-2 opacity-30" />
           <p className="text-xs">Sin registros esta semana</p>
         </div>
@@ -698,7 +698,7 @@ function LaboresCard({ onClick }: { onClick: () => void }) {
 
       {/* Metric boxes */}
       <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-2 gap-3">
-        <div className="bg-[#73991C]/5 rounded-xl px-3 py-2">
+        <div className="bg-primary/5 rounded-xl px-3 py-2">
           {isLoading ? (
             <div className="space-y-1">
               <div className="h-3 bg-gray-200 rounded animate-pulse w-full" />
@@ -706,17 +706,17 @@ function LaboresCard({ onClick }: { onClick: () => void }) {
             </div>
           ) : (
             <>
-              <p className="text-xs text-[#4D240F]/60 leading-tight mb-0.5">
+              <p className="text-xs text-brand-brown/60 leading-tight mb-0.5">
                 Jornales totales<br />a la fecha
               </p>
-              <p className="text-lg font-semibold text-[#172E08]">
+              <p className="text-lg font-semibold text-foreground">
                 {formatNumber(stats?.jornaletYtd ?? 0)}
               </p>
             </>
           )}
         </div>
 
-        <div className="bg-[#73991C]/5 rounded-xl px-3 py-2">
+        <div className="bg-primary/5 rounded-xl px-3 py-2">
           {isLoading ? (
             <div className="space-y-1">
               <div className="h-3 bg-gray-200 rounded animate-pulse w-full" />
@@ -724,10 +724,10 @@ function LaboresCard({ onClick }: { onClick: () => void }) {
             </div>
           ) : (
             <>
-              <p className="text-xs text-[#4D240F]/60 leading-tight mb-0.5">
+              <p className="text-xs text-brand-brown/60 leading-tight mb-0.5">
                 Personal activo<br />a la fecha
               </p>
-              <p className="text-lg font-semibold text-[#172E08]">
+              <p className="text-lg font-semibold text-foreground">
                 {stats?.personalActivo ?? 0}
               </p>
             </>
@@ -776,10 +776,28 @@ export function Dashboard({ onNavigate }: DashboardProps) {
    */
   const loadAplicacionesStats = async (supabase: any) => {
     try {
-      // 1. Contar por estado
+      // 1. Contar por estado + prefetch all nested data to avoid N+1
       const { data: aplicaciones, error } = await supabase
         .from('aplicaciones')
-        .select('id, nombre_aplicacion, tipo_aplicacion, estado');
+        .select(`
+          id,
+          nombre_aplicacion,
+          tipo_aplicacion,
+          estado,
+          fecha_inicio_planeada,
+          fecha_fin_planeada,
+          aplicaciones_lotes(lote_id),
+          movimientos_diarios(
+            id,
+            numero_canecas,
+            movimientos_diarios_productos(cantidad_utilizada, unidad)
+          ),
+          aplicaciones_calculos(numero_canecas),
+          aplicaciones_mezclas(
+            id,
+            aplicaciones_productos(cantidad_total_necesaria, producto_unidad)
+          )
+        `);
 
       if (error) throw error;
 
@@ -797,87 +815,31 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         let unidad = '';
 
         if (app.tipo_aplicacion === 'Fumigación' || app.tipo_aplicacion === 'Drench') {
-          // Para fumigación/drench: canecas
-          
-          // Obtener canecas aplicadas de movimientos_diarios
-          const { data: movimientos, error: errorMov } = await supabase
-            .from('movimientos_diarios')
-            .select('numero_canecas')
-            .eq('aplicacion_id', app.id);
+          const movimientos: any[] = (app as any).movimientos_diarios || [];
+          aplicado = movimientos.reduce((sum: number, m: any) => sum + (m.numero_canecas || 0), 0);
 
-          if (errorMov) {
-            continue;
-          }
-
-          aplicado = movimientos?.reduce((sum: number, m: any) => sum + (m.numero_canecas || 0), 0) || 0;
-
-          // Obtener canecas planificadas de aplicaciones_calculos
-          const { data: calculos, error: errorCalc } = await supabase
-            .from('aplicaciones_calculos')
-            .select('numero_canecas')
-            .eq('aplicacion_id', app.id);
-
-          if (!errorCalc && calculos) {
-            total = calculos.reduce((sum: number, c: any) => sum + (c.numero_canecas || 0), 0);
-          }
+          const calculos: any[] = (app as any).aplicaciones_calculos || [];
+          total = calculos.reduce((sum: number, c: any) => sum + (c.numero_canecas || 0), 0);
 
           unidad = 'canecas';
         } else if (app.tipo_aplicacion === 'Fertilización') {
-          // Para fertilización: bultos (calculados de productos)
-          
-          // Obtener IDs de movimientos
-          const { data: movimientos, error: errorMov } = await supabase
-            .from('movimientos_diarios')
-            .select('id')
-            .eq('aplicacion_id', app.id);
+          const movimientos: any[] = (app as any).movimientos_diarios || [];
+          aplicado = movimientos.reduce((sum: number, m: any) => {
+            const productos: any[] = m.movimientos_diarios_productos || [];
+            return sum + productos.reduce((s: number, p: any) => {
+              const cantidad = parseFloat(p.cantidad_utilizada || 0);
+              return s + (p.unidad === 'g' ? cantidad / 1000 : cantidad);
+            }, 0);
+          }, 0);
 
-          if (errorMov) {
-            continue;
-          }
-
-          const movimientoIds = movimientos?.map((m: any) => m.id) || [];
-
-          // Obtener productos aplicados
-          if (movimientoIds.length > 0) {
-            const { data: productos, error: errorProd } = await supabase
-              .from('movimientos_diarios_productos')
-              .select('cantidad_utilizada, unidad')
-              .in('movimiento_diario_id', movimientoIds);
-
-            if (!errorProd && productos) {
-              // Convertir a kg y sumar
-              aplicado = productos.reduce((sum: number, p: any) => {
-                const cantidad = parseFloat(p.cantidad_utilizada || 0);
-                // Convertir a kg si está en gramos
-                const cantidadKg = p.unidad === 'g' ? cantidad / 1000 : cantidad;
-                return sum + cantidadKg;
-              }, 0);
-            }
-          }
-
-          // Obtener total planificado de aplicaciones_productos
-          const { data: mezclas, error: errorMezclas } = await supabase
-            .from('aplicaciones_mezclas')
-            .select('id')
-            .eq('aplicacion_id', app.id);
-
-          if (!errorMezclas && mezclas && mezclas.length > 0) {
-            const mezclasIds = mezclas.map((m: any) => m.id);
-            
-            const { data: productos, error: errorProd } = await supabase
-              .from('aplicaciones_productos')
-              .select('cantidad_total_necesaria, producto_unidad')
-              .in('mezcla_id', mezclasIds);
-
-            if (!errorProd && productos) {
-              total = productos.reduce((sum: number, p: any) => {
-                const cantidad = parseFloat(p.cantidad_total_necesaria || 0);
-                // Convertir a kg si está en gramos
-                const cantidadKg = p.producto_unidad === 'gramos' ? cantidad / 1000 : cantidad;
-                return sum + cantidadKg;
-              }, 0);
-            }
-          }
+          const mezclas: any[] = (app as any).aplicaciones_mezclas || [];
+          total = mezclas.reduce((sum: number, m: any) => {
+            const productos: any[] = m.aplicaciones_productos || [];
+            return sum + productos.reduce((s: number, p: any) => {
+              const cantidad = parseFloat(p.cantidad_total_necesaria || 0);
+              return s + (p.producto_unidad === 'gramos' ? cantidad / 1000 : cantidad);
+            }, 0);
+          }, 0);
 
           unidad = 'kg';
         }
@@ -900,29 +862,13 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       const aplicacionesPlaneadasConLotes: AplicacionPlaneada[] = [];
 
       for (const app of aplicacionesPlaneadasRaw.slice(0, 3)) {
-        // Contar número de lotes
-        const { data: lotes, error: errorLotes } = await supabase
-          .from('aplicaciones_lotes')
-          .select('lote_id')
-          .eq('aplicacion_id', app.id);
-
-        if (errorLotes) {
-          continue;
-        }
-
-        // Obtener fechas planeadas
-        const { data: appCompleta, error: errorApp } = await supabase
-          .from('aplicaciones')
-          .select('fecha_inicio_planeada, fecha_fin_planeada')
-          .eq('id', app.id)
-          .single();
-
+        const lotes: any[] = (app as any).aplicaciones_lotes || [];
         aplicacionesPlaneadasConLotes.push({
           id: app.id,
           nombre: app.nombre_aplicacion,
-          num_lotes: lotes?.length || 0,
-          fecha_inicio: appCompleta?.fecha_inicio_planeada || null,
-          fecha_fin: appCompleta?.fecha_fin_planeada || null,
+          num_lotes: lotes.length,
+          fecha_inicio: (app as any).fecha_inicio_planeada || null,
+          fecha_fin: (app as any).fecha_fin_planeada || null,
         });
       }
 
@@ -1150,10 +1096,10 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     <div className="space-y-8">
       {/* Header */}
       <div className="relative">
-        <div className="absolute -top-4 -left-4 w-32 h-32 bg-[#73991C]/5 rounded-full blur-2xl"></div>
+        <div className="absolute -top-4 -left-4 w-32 h-32 bg-primary/5 rounded-full blur-2xl"></div>
         <div className="relative">
-          <h1 className="text-[#172E08] mb-2">Dashboard</h1>
-          <p className="text-[#4D240F]/70">
+          <h1 className="text-foreground mb-2">Dashboard</h1>
+          <p className="text-brand-brown/70">
             Vista general del cultivo Escocia Hass - 52 hectáreas
           </p>
         </div>
@@ -1178,7 +1124,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       {/* Acción rápida: Reporte Semanal */}
       <div
         onClick={() => navigate('/reportes/generar')}
-        className="bg-gradient-to-r from-[#73991C] to-[#5a7a16] rounded-2xl p-6 text-white cursor-pointer hover:shadow-xl transition-all group"
+        className="bg-gradient-to-r from-primary to-primary-dark rounded-2xl p-6 text-white cursor-pointer hover:shadow-xl transition-all group"
       >
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">

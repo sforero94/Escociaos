@@ -179,7 +179,7 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
         type="submit"
         form="tarea-form"
         disabled={loading || !formData.nombre.trim()}
-        className="bg-[#73991C] hover:bg-[#5a7716]"
+        className="bg-primary hover:bg-primary-dark"
       >
         {loading ? 'Guardando...' : (isEditing ? 'Actualizar Tarea' : 'Crear Tarea')}
       </Button>

@@ -13,6 +13,13 @@ export function Toast({ message, type, duration = 5000, onClose }: ToastProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
 
+  const handleClose = () => {
+    setIsExiting(true);
+    setTimeout(() => {
+      onClose();
+    }, 300); // Duración de la animación de salida
+  };
+
   useEffect(() => {
     // Animación de entrada
     setIsVisible(true);
@@ -24,13 +31,6 @@ export function Toast({ message, type, duration = 5000, onClose }: ToastProps) {
 
     return () => clearTimeout(timer);
   }, [duration]);
-
-  const handleClose = () => {
-    setIsExiting(true);
-    setTimeout(() => {
-      onClose();
-    }, 300); // Duración de la animación de salida
-  };
 
   const getIcon = () => {
     switch (type) {

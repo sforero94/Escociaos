@@ -10,6 +10,7 @@ import type {
   TipoAplicacion,
   BlancoBiologico,
 } from '../../types/aplicaciones';
+import { toast } from 'sonner';
 
 interface PasoConfiguracionProps {
   configuracion: ConfiguracionAplicacion | null;
@@ -202,7 +203,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
 
     // Verificar que no esté ya agregado
     if (formData.lotes_seleccionados?.some((l) => l.lote_id === lote.id)) {
-      alert('Este lote ya está agregado');
+      toast('Este lote ya está agregado');
       return;
     }
 
@@ -337,12 +338,12 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
     <div className="space-y-6">
       {/* INFORMACIÓN GENERAL */}
       <div>
-        <h2 className="text-lg text-[#172E08] mb-4">Información General</h2>
+        <h2 className="text-lg text-foreground mb-4">Información General</h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Nombre */}
           <div>
-            <label className="block text-sm text-[#4D240F] mb-1">
+            <label className="block text-sm text-brand-brown mb-1">
               Nombre de la Aplicación *
             </label>
             <input
@@ -353,7 +354,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
               className={`
                 w-full px-3 py-2 border rounded-lg
                 ${errores.nombre ? 'border-red-300' : 'border-gray-300'}
-                focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]
+                focus:ring-2 focus:ring-primary/20 focus:border-primary
               `}
             />
             {errores.nombre && (
@@ -366,7 +367,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
 
           {/* Tipo */}
           <div>
-            <label className="block text-sm text-[#4D240F] mb-1">
+            <label className="block text-sm text-brand-brown mb-1">
               Tipo de Aplicación *
             </label>
             <select
@@ -377,7 +378,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
                   tipo: e.target.value as TipoAplicacion,
                 }))
               }
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
             >
               <option value="fumigacion">Fumigación</option>
               <option value="fertilizacion">Fertilización</option>
@@ -387,7 +388,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
 
           {/* Fecha Inicio Planeada */}
           <div>
-            <label className="block text-sm text-[#4D240F] mb-1">
+            <label className="block text-sm text-brand-brown mb-1">
               Fecha Inicio Planeada *
             </label>
             <DateInput
@@ -407,7 +408,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
 
           {/* Fecha Fin Planeada */}
           <div>
-            <label className="block text-sm text-[#4D240F] mb-1">
+            <label className="block text-sm text-brand-brown mb-1">
               Fecha Fin Planeada
             </label>
             <DateInput
@@ -420,7 +421,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
 
           {/* Fecha de Recomendación */}
           <div>
-            <label className="block text-sm text-[#4D240F] mb-1">
+            <label className="block text-sm text-brand-brown mb-1">
               Fecha de Recomendación
             </label>
             <DateInput
@@ -433,7 +434,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
 
           {/* Agrónomo */}
           <div>
-            <label className="block text-sm text-[#4D240F] mb-1">
+            <label className="block text-sm text-brand-brown mb-1">
               Agrónomo Responsable
             </label>
             <input
@@ -443,13 +444,13 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
                 setFormData((prev) => ({ ...prev, agronomo_responsable: e.target.value }))
               }
               placeholder="Nombre del agrónomo"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
             />
           </div>
 
           {/* Propósito */}
           <div className="md:col-span-2">
-            <label className="block text-sm text-[#4D240F] mb-1">
+            <label className="block text-sm text-brand-brown mb-1">
               Propósito / Observaciones
             </label>
             <textarea
@@ -457,20 +458,20 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
               onChange={(e) => setFormData((prev) => ({ ...prev, proposito: e.target.value }))}
               placeholder="Describe el objetivo de esta aplicación..."
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
             />
           </div>
 
           {/* Blancos Biológicos - Solo para fumigación */}
           {formData.tipo === 'fumigacion' && (
             <div className="md:col-span-2">
-              <label className="block text-sm text-[#4D240F] mb-2">
+              <label className="block text-sm text-brand-brown mb-2">
                 Blancos Biológicos (Plagas/Enfermedades) *
               </label>
               
               {cargandoBlancos ? (
                 <div className="p-4 bg-gray-50 rounded-lg text-center">
-                  <p className="text-sm text-[#4D240F]/70">Cargando blancos biológicos...</p>
+                  <p className="text-sm text-brand-brown/70">Cargando blancos biológicos...</p>
                 </div>
               ) : blancosBiologicos.length === 0 ? (
                 <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -492,9 +493,9 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
                         }}
                         onFocus={() => setMostrarSugerencias(true)}
                         placeholder="Buscar plaga o enfermedad... (ej: trips, phytophthora)"
-                        className="w-full px-4 py-2.5 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C] transition-all"
+                        className="w-full px-4 py-2.5 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                       />
-                      <Bug className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#4D240F]/50" />
+                      <Bug className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-brand-brown/50" />
                     </div>
 
                     {/* Sugerencias desplegables */}
@@ -505,26 +506,26 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
                             key={blanco.id}
                             type="button"
                             onClick={() => agregarBlanco(blanco.id)}
-                            className="w-full text-left px-4 py-3 hover:bg-[#73991C]/5 transition-colors border-b border-gray-100 last:border-b-0"
+                            className="w-full text-left px-4 py-3 hover:bg-primary/5 transition-colors border-b border-gray-100 last:border-b-0"
                           >
                             <div className="flex items-center gap-2">
                               <span className="text-lg">
                                 {blanco.tipo === 'plaga' ? '🐛' : '🍄'}
                               </span>
                               <div className="flex-1 min-w-0">
-                                <div className="text-sm text-[#172E08] font-medium">
+                                <div className="text-sm text-foreground font-medium">
                                   {blanco.nombre}
                                 </div>
                                 {blanco.descripcion && (
-                                  <div className="text-xs text-[#4D240F]/60 truncate">
+                                  <div className="text-xs text-brand-brown/60 truncate">
                                     {blanco.descripcion}
                                   </div>
                                 )}
-                                <div className="text-xs text-[#73991C] capitalize mt-0.5">
+                                <div className="text-xs text-primary capitalize mt-0.5">
                                   {blanco.tipo}
                                 </div>
                               </div>
-                              <Plus className="w-4 h-4 text-[#73991C]" />
+                              <Plus className="w-4 h-4 text-primary" />
                             </div>
                           </button>
                         ))}
@@ -534,22 +535,22 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
 
                   {/* Blancos seleccionados (chips/tags) */}
                   {blancosSeleccionados.length > 0 && (
-                    <div className="border border-[#73991C]/30 bg-[#73991C]/5 rounded-lg p-4">
-                      <div className="text-xs text-[#4D240F]/70 mb-2">
+                    <div className="border border-primary/30 bg-primary/5 rounded-lg p-4">
+                      <div className="text-xs text-brand-brown/70 mb-2">
                         Seleccionados ({blancosSeleccionados.length}):
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {blancosSeleccionados.map((blanco) => (
                           <div
                             key={blanco.id}
-                            className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border-2 border-[#73991C] rounded-full text-sm"
+                            className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border-2 border-primary rounded-full text-sm"
                           >
                             <span>{blanco.tipo === 'plaga' ? '🐛' : '🍄'}</span>
-                            <span className="text-[#172E08]">{blanco.nombre}</span>
+                            <span className="text-foreground">{blanco.nombre}</span>
                             <button
                               type="button"
                               onClick={() => quitarBlanco(blanco.id)}
-                              className="ml-1 text-[#4D240F]/70 hover:text-red-600 transition-colors"
+                              className="ml-1 text-brand-brown/70 hover:text-red-600 transition-colors"
                             >
                               <X className="w-4 h-4" />
                             </button>
@@ -573,13 +574,13 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
           {/* Blancos Biológicos - Para drench (OPCIONAL) */}
           {formData.tipo === 'drench' && (
             <div className="md:col-span-2">
-              <label className="block text-sm text-[#4D240F] mb-2">
+              <label className="block text-sm text-brand-brown mb-2">
                 Blancos Biológicos (Plagas/Enfermedades) <span className="text-gray-400 text-xs">(Opcional)</span>
               </label>
               
               {cargandoBlancos ? (
                 <div className="p-4 bg-gray-50 rounded-lg text-center">
-                  <p className="text-sm text-[#4D240F]/70">Cargando blancos biológicos...</p>
+                  <p className="text-sm text-brand-brown/70">Cargando blancos biológicos...</p>
                 </div>
               ) : blancosBiologicos.length === 0 ? (
                 <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -601,9 +602,9 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
                         }}
                         onFocus={() => setMostrarSugerencias(true)}
                         placeholder="Buscar plaga o enfermedad... (ej: trips, phytophthora)"
-                        className="w-full px-4 py-2.5 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C] transition-all"
+                        className="w-full px-4 py-2.5 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
                       />
-                      <Bug className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#4D240F]/50" />
+                      <Bug className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-brand-brown/50" />
                     </div>
 
                     {/* Sugerencias desplegables */}
@@ -614,26 +615,26 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
                             key={blanco.id}
                             type="button"
                             onClick={() => agregarBlanco(blanco.id)}
-                            className="w-full text-left px-4 py-3 hover:bg-[#73991C]/5 transition-colors border-b border-gray-100 last:border-b-0"
+                            className="w-full text-left px-4 py-3 hover:bg-primary/5 transition-colors border-b border-gray-100 last:border-b-0"
                           >
                             <div className="flex items-center gap-2">
                               <span className="text-lg">
                                 {blanco.tipo === 'plaga' ? '🐛' : '🍄'}
                               </span>
                               <div className="flex-1 min-w-0">
-                                <div className="text-sm text-[#172E08] font-medium">
+                                <div className="text-sm text-foreground font-medium">
                                   {blanco.nombre}
                                 </div>
                                 {blanco.descripcion && (
-                                  <div className="text-xs text-[#4D240F]/60 truncate">
+                                  <div className="text-xs text-brand-brown/60 truncate">
                                     {blanco.descripcion}
                                   </div>
                                 )}
-                                <div className="text-xs text-[#73991C] capitalize mt-0.5">
+                                <div className="text-xs text-primary capitalize mt-0.5">
                                   {blanco.tipo}
                                 </div>
                               </div>
-                              <Plus className="w-4 h-4 text-[#73991C]" />
+                              <Plus className="w-4 h-4 text-primary" />
                             </div>
                           </button>
                         ))}
@@ -643,22 +644,22 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
 
                   {/* Blancos seleccionados (chips/tags) */}
                   {blancosSeleccionados.length > 0 && (
-                    <div className="border border-[#73991C]/30 bg-[#73991C]/5 rounded-lg p-4">
-                      <div className="text-xs text-[#4D240F]/70 mb-2">
+                    <div className="border border-primary/30 bg-primary/5 rounded-lg p-4">
+                      <div className="text-xs text-brand-brown/70 mb-2">
                         Seleccionados ({blancosSeleccionados.length}):
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {blancosSeleccionados.map((blanco) => (
                           <div
                             key={blanco.id}
-                            className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border-2 border-[#73991C] rounded-full text-sm"
+                            className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border-2 border-primary rounded-full text-sm"
                           >
                             <span>{blanco.tipo === 'plaga' ? '🐛' : '🍄'}</span>
-                            <span className="text-[#172E08]">{blanco.nombre}</span>
+                            <span className="text-foreground">{blanco.nombre}</span>
                             <button
                               type="button"
                               onClick={() => quitarBlanco(blanco.id)}
-                              className="ml-1 text-[#4D240F]/70 hover:text-red-600 transition-colors"
+                              className="ml-1 text-brand-brown/70 hover:text-red-600 transition-colors"
                             >
                               <X className="w-4 h-4" />
                             </button>
@@ -676,7 +677,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
 
       {/* SELECCIÓN DE LOTES */}
       <div>
-        <h2 className="text-lg text-[#172E08] mb-4">Lotes a Aplicar</h2>
+        <h2 className="text-lg text-foreground mb-4">Lotes a Aplicar</h2>
 
         {/* Barra de búsqueda de lotes */}
         <div className="mb-4">
@@ -685,7 +686,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
             value={busquedaLote}
             onChange={(e) => setBusquedaLote(e.target.value)}
             placeholder="Buscar lote por nombre..."
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
             disabled={cargandoLotes}
           />
         </div>
@@ -693,7 +694,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
         {/* Grid de lotes disponibles con checkboxes */}
         {cargandoLotes ? (
           <div className="p-8 bg-gray-50 rounded-lg text-center">
-            <p className="text-sm text-[#4D240F]/70">Cargando lotes...</p>
+            <p className="text-sm text-brand-brown/70">Cargando lotes...</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
@@ -732,20 +733,20 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
                     className={`
                       p-4 rounded-xl border-2 text-left transition-all
                       ${yaSeleccionado
-                        ? 'border-[#73991C] bg-[#73991C]/5'
+                        ? 'border-primary bg-primary/5'
                         : 'border-gray-200 hover:border-gray-300'
                       }
                     `}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <p className="text-[#172E08] mb-1">{lote.nombre}</p>
-                        <p className="text-xs text-[#4D240F]/70">
+                        <p className="text-foreground mb-1">{lote.nombre}</p>
+                        <p className="text-xs text-brand-brown/70">
                           {lote.area_hectareas}ha • {lote.conteo_arboles.total} árboles
                         </p>
                       </div>
                       {yaSeleccionado && (
-                        <div className="w-6 h-6 bg-[#73991C] rounded-full flex items-center justify-center text-white flex-shrink-0">
+                        <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center text-white flex-shrink-0">
                           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                             <polyline points="20 6 9 17 4 12"></polyline>
                           </svg>
@@ -770,15 +771,15 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
           {formData.lotes_seleccionados?.map((lote) => (
             <div
               key={lote.lote_id}
-              className="border border-gray-200 rounded-xl p-4 bg-gradient-to-br from-[#73991C]/5 to-[#BFD97D]/5"
+              className="border border-gray-200 rounded-xl p-4 bg-gradient-to-br from-primary/5 to-secondary/5"
             >
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <h3 className="text-[#172E08] flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-[#73991C]" />
+                  <h3 className="text-foreground flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-primary" />
                     {lote.nombre}
                   </h3>
-                  <p className="text-sm text-[#4D240F]/70">
+                  <p className="text-sm text-brand-brown/70">
                     {lote.area_hectareas} ha • {lote.conteo_arboles.total} árboles
                   </p>
                 </div>
@@ -794,20 +795,20 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
               {/* Desglose de árboles */}
               <div className="grid grid-cols-4 gap-2 mb-3">
                 <div className="text-center p-2 bg-white rounded-lg">
-                  <div className="text-xs text-[#4D240F]/70">Grandes</div>
-                  <div className="text-[#172E08]">{lote.conteo_arboles.grandes}</div>
+                  <div className="text-xs text-brand-brown/70">Grandes</div>
+                  <div className="text-foreground">{lote.conteo_arboles.grandes}</div>
                 </div>
                 <div className="text-center p-2 bg-white rounded-lg">
-                  <div className="text-xs text-[#4D240F]/70">Medianos</div>
-                  <div className="text-[#172E08]">{lote.conteo_arboles.medianos}</div>
+                  <div className="text-xs text-brand-brown/70">Medianos</div>
+                  <div className="text-foreground">{lote.conteo_arboles.medianos}</div>
                 </div>
                 <div className="text-center p-2 bg-white rounded-lg">
-                  <div className="text-xs text-[#4D240F]/70">Pequeños</div>
-                  <div className="text-[#172E08]">{lote.conteo_arboles.pequenos}</div>
+                  <div className="text-xs text-brand-brown/70">Pequeños</div>
+                  <div className="text-foreground">{lote.conteo_arboles.pequenos}</div>
                 </div>
                 <div className="text-center p-2 bg-white rounded-lg">
-                  <div className="text-xs text-[#4D240F]/70">Clonales</div>
-                  <div className="text-[#172E08]">{lote.conteo_arboles.clonales}</div>
+                  <div className="text-xs text-brand-brown/70">Clonales</div>
+                  <div className="text-foreground">{lote.conteo_arboles.clonales}</div>
                 </div>
               </div>
 
@@ -815,7 +816,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
               {formData.tipo === 'fumigacion' && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-[#4D240F] mb-1">
+                    <label className="block text-xs text-brand-brown mb-1">
                       Calibración (L/árbol)
                     </label>
                     <input
@@ -829,11 +830,11 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
                           parseFloat(e.target.value)
                         )
                       }
-                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary/20 focus:border-primary"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-[#4D240F] mb-1">
+                    <label className="block text-xs text-brand-brown mb-1">
                       Tamaño Caneca (L)
                     </label>
                     <select
@@ -841,7 +842,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
                       onChange={(e) =>
                         actualizarLote(lote.lote_id, 'tamano_caneca', parseInt(e.target.value))
                       }
-                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary/20 focus:border-primary"
                     >
                       <option value={20}>20L</option>
                       <option value={200}>200L</option>
@@ -856,7 +857,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
               {formData.tipo === 'drench' && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-[#4D240F] mb-1">
+                    <label className="block text-xs text-brand-brown mb-1">
                       Calibración (L/árbol)
                     </label>
                     <input
@@ -870,11 +871,11 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
                           parseFloat(e.target.value)
                         )
                       }
-                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary/20 focus:border-primary"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs text-[#4D240F] mb-1">
+                    <label className="block text-xs text-brand-brown mb-1">
                       Tamaño Caneca (L)
                     </label>
                     <select
@@ -882,7 +883,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
                       onChange={(e) =>
                         actualizarLote(lote.lote_id, 'tamano_caneca', parseInt(e.target.value))
                       }
-                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary/20 focus:border-primary"
                     >
                       <option value={20}>20L</option>
                       <option value={200}>200L</option>
@@ -906,22 +907,22 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
 
       {/* RESUMEN TOTALES */}
       {formData.lotes_seleccionados && formData.lotes_seleccionados.length > 0 && (
-        <div className="bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 border border-[#73991C]/20 rounded-xl p-6">
-          <h3 className="text-[#172E08] mb-4">Resumen Total</h3>
+        <div className="bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20 rounded-xl p-6">
+          <h3 className="text-foreground mb-4">Resumen Total</h3>
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
-              <div className="text-sm text-[#4D240F]/70">Lotes</div>
-              <div className="text-2xl text-[#172E08]">
+              <div className="text-sm text-brand-brown/70">Lotes</div>
+              <div className="text-2xl text-foreground">
                 {formData.lotes_seleccionados.length}
               </div>
             </div>
             <div>
-              <div className="text-sm text-[#4D240F]/70">Área Total</div>
-              <div className="text-2xl text-[#172E08]">{totales.area.toFixed(1)} ha</div>
+              <div className="text-sm text-brand-brown/70">Área Total</div>
+              <div className="text-2xl text-foreground">{totales.area.toFixed(1)} ha</div>
             </div>
             <div>
-              <div className="text-sm text-[#4D240F]/70">Árboles</div>
-              <div className="text-2xl text-[#172E08]">{totales.arboles.toLocaleString()}</div>
+              <div className="text-sm text-brand-brown/70">Árboles</div>
+              <div className="text-2xl text-foreground">{totales.arboles.toLocaleString()}</div>
             </div>
           </div>
         </div>

@@ -26,7 +26,7 @@ export function VerificacionesNav() {
   };
 
   return (
-    <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-2 shadow-[0_4px_24px_rgba(115,153,28,0.08)] mb-6">
+    <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-2 shadow-[0_4px_24px_rgba(115,153,28,0.08)] mb-6">
       <nav className="flex flex-wrap gap-2">
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -38,8 +38,8 @@ export function VerificacionesNav() {
               to={item.path}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all duration-200 font-medium ${
                 active
-                  ? 'bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white shadow-lg'
-                  : 'text-[#172E08] hover:bg-[#E7EDDD]/50'
+                  ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg'
+                  : 'text-foreground hover:bg-muted/50'
               }`}
             >
               <Icon className="w-4 h-4" />

@@ -131,7 +131,7 @@ export function NuevaVerificacion() {
       <div className="space-y-6">
         <VerificacionesNav />
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 text-[#73991C] animate-spin" />
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
       </div>
     );
@@ -144,11 +144,11 @@ export function NuevaVerificacion() {
         <VerificacionesNav />
         
         <div className="mb-6">
-          <h1 className="text-[#172E08] mb-2 flex items-center gap-3">
-            <ClipboardCheck className="w-8 h-8 text-[#73991C]" />
+          <h1 className="text-foreground mb-2 flex items-center gap-3">
+            <ClipboardCheck className="w-8 h-8 text-primary" />
             Nueva Verificación Física
           </h1>
-          <p className="text-[#4D240F]/70">
+          <p className="text-brand-brown/70">
             Iniciar verificación mensual de inventario
           </p>
         </div>
@@ -164,18 +164,18 @@ export function NuevaVerificacion() {
         )}
 
         <div className="text-center py-12">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 rounded-2xl mb-4">
-            <Package className="w-10 h-10 text-[#73991C]/50" />
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-2xl mb-4">
+            <Package className="w-10 h-10 text-primary/50" />
           </div>
-          <h2 className="text-2xl text-[#172E08] mb-2">
+          <h2 className="text-2xl text-foreground mb-2">
             No hay productos para verificar
           </h2>
-          <p className="text-[#4D240F]/70 mb-4">
+          <p className="text-brand-brown/70 mb-4">
             No se encontraron productos activos en el inventario
           </p>
           <button
             onClick={() => navigate('/inventario/nueva-compra')}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-xl hover:from-[#5f7d17] hover:to-[#9db86d] transition-all"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:from-primary-dark hover:to-secondary-dark transition-all"
           >
             <Package className="w-5 h-5" />
             Agregar Productos
@@ -192,11 +192,11 @@ export function NuevaVerificacion() {
 
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-[#172E08] mb-2 flex items-center gap-3">
-          <ClipboardCheck className="w-8 h-8 text-[#73991C]" />
+        <h1 className="text-foreground mb-2 flex items-center gap-3">
+          <ClipboardCheck className="w-8 h-8 text-primary" />
           Nueva Verificación Física
         </h1>
-        <p className="text-[#4D240F]/70">
+        <p className="text-brand-brown/70">
           Iniciar verificación mensual de inventario
         </p>
       </div>
@@ -217,11 +217,11 @@ export function NuevaVerificacion() {
         <div className="lg:col-span-2 space-y-6">
           {/* Instrucciones */}
           <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 border border-blue-200 rounded-2xl p-6">
-            <h3 className="text-lg text-[#172E08] mb-3 flex items-center gap-2">
+            <h3 className="text-lg text-foreground mb-3 flex items-center gap-2">
               <ClipboardCheck className="w-5 h-5 text-blue-600" />
               ¿Cómo funciona la verificación?
             </h3>
-            <ol className="space-y-2 text-sm text-[#4D240F]/80">
+            <ol className="space-y-2 text-sm text-brand-brown/80">
               <li className="flex gap-2">
                 <span className="flex-shrink-0 text-blue-600">1.</span>
                 <span>El sistema cargará todos los productos activos con sus cantidades teóricas actuales</span>
@@ -242,53 +242,53 @@ export function NuevaVerificacion() {
           </div>
 
           {/* Observaciones Iniciales */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
-            <label className="block text-sm text-[#172E08] mb-2">
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+            <label className="block text-sm text-foreground mb-2">
               Observaciones Iniciales (Opcional)
             </label>
             <textarea
               value={observaciones}
               onChange={(e) => setObservaciones(e.target.value)}
               placeholder="Ej: Verificación mensual de noviembre, realizada por..."
-              className="w-full px-4 py-3 border border-[#73991C]/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent resize-none"
+              className="w-full px-4 py-3 border border-primary/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
               rows={4}
             />
           </div>
 
           {/* Lista de Productos a Verificar */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 overflow-hidden shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
-            <div className="bg-gradient-to-r from-[#E7EDDD]/50 to-[#E7EDDD]/30 px-6 py-4 border-b border-[#73991C]/10">
-              <h3 className="text-lg text-[#172E08] flex items-center gap-2">
-                <Package className="w-5 h-5 text-[#73991C]" />
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 overflow-hidden shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+            <div className="bg-gradient-to-r from-muted/50 to-muted/30 px-6 py-4 border-b border-primary/10">
+              <h3 className="text-lg text-foreground flex items-center gap-2">
+                <Package className="w-5 h-5 text-primary" />
                 Productos a Verificar ({productos.length})
               </h3>
             </div>
             <div className="max-h-[400px] overflow-y-auto">
               <table className="w-full">
-                <thead className="bg-[#E7EDDD]/30 sticky top-0">
+                <thead className="bg-muted/30 sticky top-0">
                   <tr>
-                    <th className="text-left px-6 py-3 text-sm text-[#4D240F]/70">Producto</th>
-                    <th className="text-left px-6 py-3 text-sm text-[#4D240F]/70">Categoría</th>
-                    <th className="text-right px-6 py-3 text-sm text-[#4D240F]/70">Cantidad Actual</th>
-                    <th className="text-right px-6 py-3 text-sm text-[#4D240F]/70">Valor</th>
+                    <th className="text-left px-6 py-3 text-sm text-brand-brown/70">Producto</th>
+                    <th className="text-left px-6 py-3 text-sm text-brand-brown/70">Categoría</th>
+                    <th className="text-right px-6 py-3 text-sm text-brand-brown/70">Cantidad Actual</th>
+                    <th className="text-right px-6 py-3 text-sm text-brand-brown/70">Valor</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#73991C]/5">
+                <tbody className="divide-y divide-primary/5">
                   {productos.map((producto) => (
                     <tr
                       key={producto.id}
-                      className="hover:bg-[#E7EDDD]/20 transition-colors"
+                      className="hover:bg-muted/20 transition-colors"
                     >
-                      <td className="px-6 py-4 text-sm text-[#172E08]">
+                      <td className="px-6 py-4 text-sm text-foreground">
                         {producto.nombre}
                       </td>
-                      <td className="px-6 py-4 text-sm text-[#4D240F]/70">
+                      <td className="px-6 py-4 text-sm text-brand-brown/70">
                         {producto.categoria}
                       </td>
-                      <td className="px-6 py-4 text-sm text-right text-[#172E08]">
+                      <td className="px-6 py-4 text-sm text-right text-foreground">
                         {(producto.cantidad_actual || 0).toFixed(2)} {producto.unidad_medida}
                       </td>
-                      <td className="px-6 py-4 text-sm text-right text-[#172E08]">
+                      <td className="px-6 py-4 text-sm text-right text-foreground">
                         {formatCurrency((producto.cantidad_actual || 0) * (producto.precio_unitario || 0))}
                       </td>
                     </tr>
@@ -302,32 +302,32 @@ export function NuevaVerificacion() {
         {/* Panel Lateral - Resumen */}
         <div className="space-y-6">
           {/* Resumen */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)] sticky top-6">
-            <h3 className="text-lg text-[#172E08] mb-4">Resumen</h3>
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)] sticky top-6">
+            <h3 className="text-lg text-foreground mb-4">Resumen</h3>
 
             <div className="space-y-4 mb-6">
               <div>
-                <p className="text-sm text-[#4D240F]/60 mb-1">Total Productos</p>
-                <p className="text-[#73991C]">{productos.length}</p>
+                <p className="text-sm text-brand-brown/60 mb-1">Total Productos</p>
+                <p className="text-primary">{productos.length}</p>
               </div>
 
-              <div className="pt-4 border-t border-[#73991C]/10">
-                <p className="text-sm text-[#4D240F]/60 mb-1">Valor Total Teórico</p>
-                <p className="text-2xl text-[#172E08]">
+              <div className="pt-4 border-t border-primary/10">
+                <p className="text-sm text-brand-brown/60 mb-1">Valor Total Teórico</p>
+                <p className="text-2xl text-foreground">
                   {formatCurrency(calcularValorTotal())}
                 </p>
               </div>
 
-              <div className="pt-4 border-t border-[#73991C]/10">
-                <p className="text-sm text-[#4D240F]/60 mb-1">Verificador</p>
-                <p className="text-sm text-[#172E08]">
+              <div className="pt-4 border-t border-primary/10">
+                <p className="text-sm text-brand-brown/60 mb-1">Verificador</p>
+                <p className="text-sm text-foreground">
                   {profile?.nombre || profile?.email || 'Usuario actual'}
                 </p>
               </div>
 
-              <div className="pt-4 border-t border-[#73991C]/10">
-                <p className="text-sm text-[#4D240F]/60 mb-1">Fecha de Inicio</p>
-                <p className="text-sm text-[#172E08]">
+              <div className="pt-4 border-t border-primary/10">
+                <p className="text-sm text-brand-brown/60 mb-1">Fecha de Inicio</p>
+                <p className="text-sm text-foreground">
                   {formatearFecha(new Date().toISOString().split('T')[0])}
                 </p>
               </div>
@@ -337,7 +337,7 @@ export function NuevaVerificacion() {
             <button
               onClick={handleCrearVerificacion}
               disabled={isCreating || productos.length === 0}
-              className="w-full px-6 py-4 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white hover:from-[#5f7d17] hover:to-[#9db86d] rounded-xl transition-all duration-200 font-medium shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="w-full px-6 py-4 bg-gradient-to-r from-primary to-secondary text-white hover:from-primary-dark hover:to-secondary-dark rounded-xl transition-all duration-200 font-medium shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isCreating ? (
                 <>
@@ -352,7 +352,7 @@ export function NuevaVerificacion() {
               )}
             </button>
 
-            <p className="text-xs text-center text-[#4D240F]/60 mt-4">
+            <p className="text-xs text-center text-brand-brown/60 mt-4">
               Al iniciar, podrás comenzar el conteo físico de productos
             </p>
           </div>

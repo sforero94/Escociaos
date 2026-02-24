@@ -896,11 +896,11 @@ export function CalculadoraAplicaciones() {
   // Mostrar loading mientras se cargan datos en modo edición
   if (cargandoDatos) {
     return (
-      <div className="min-h-screen bg-[#F8FAF5] flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-12 text-center max-w-md">
-          <Loader2 className="w-12 h-12 text-[#73991C] animate-spin mx-auto mb-4" />
-          <h2 className="text-xl text-[#172E08] mb-2">Cargando aplicación...</h2>
-          <p className="text-sm text-[#4D240F]/70">
+          <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto mb-4" />
+          <h2 className="text-xl text-foreground mb-2">Cargando aplicación...</h2>
+          <p className="text-sm text-brand-brown/70">
             Estamos recuperando los datos de la aplicación
           </p>
         </div>
@@ -909,16 +909,16 @@ export function CalculadoraAplicaciones() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAF5] py-8 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-background py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-[1200px] mx-auto">
         {/* Header con Stepper */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 mb-8">
           {/* Título */}
           <div className="mb-8">
-            <h1 className="text-[#172E08] mb-2">
+            <h1 className="text-foreground mb-2">
               {modoEdicion ? 'Editar Aplicación' : 'Nueva Aplicación'}
             </h1>
-            <p className="text-[#4D240F]/70">
+            <p className="text-brand-brown/70">
               Calcula productos, dosis y genera lista de compras automáticamente
             </p>
           </div>
@@ -967,9 +967,9 @@ export function CalculadoraAplicaciones() {
                             w-16 h-16 rounded-2xl flex items-center justify-center mb-3 transition-all duration-300
                             ${
                               isActive
-                                ? 'bg-gradient-to-br from-[#73991C] to-[#BFD97D] text-white shadow-lg scale-110'
+                                ? 'bg-gradient-to-br from-primary to-secondary text-white shadow-lg scale-110'
                                 : isCompleted
-                                ? 'bg-[#73991C] text-white'
+                                ? 'bg-primary text-white'
                                 : 'bg-gray-100 text-gray-400'
                             }
                           `}
@@ -986,13 +986,13 @@ export function CalculadoraAplicaciones() {
                           <p
                             className={`text-sm mb-1 transition-colors ${
                               isActive || isCompleted
-                                ? 'text-[#172E08]'
+                                ? 'text-foreground'
                                 : 'text-gray-400'
                             }`}
                           >
                             {paso.titulo}
                           </p>
-                          <p className="text-xs text-[#4D240F]/50 max-w-[140px]">
+                          <p className="text-xs text-brand-brown/50 max-w-[140px]">
                             {paso.descripcion}
                           </p>
                         </div>
@@ -1003,7 +1003,7 @@ export function CalculadoraAplicaciones() {
                         <div className="flex-1 h-1 mx-4 -mt-12">
                           <div
                             className={`h-full rounded-full transition-all duration-300 ${
-                              isCompleted ? 'bg-[#73991C]' : 'bg-gray-200'
+                              isCompleted ? 'bg-primary' : 'bg-gray-200'
                             }`}
                           />
                         </div>
@@ -1028,7 +1028,7 @@ export function CalculadoraAplicaciones() {
                         h-2 flex-1 rounded-full transition-all duration-300
                         ${
                           isActive || isCompleted
-                            ? 'bg-[#73991C]'
+                            ? 'bg-primary'
                             : 'bg-gray-200'
                         }
                       `}
@@ -1039,10 +1039,10 @@ export function CalculadoraAplicaciones() {
 
               {/* Paso actual en móvil */}
               <div className="text-center">
-                <p className="text-lg text-[#172E08] mb-1">
+                <p className="text-lg text-foreground mb-1">
                   {PASOS[state.paso_actual - 1].titulo}
                 </p>
-                <p className="text-sm text-[#4D240F]/70">
+                <p className="text-sm text-brand-brown/70">
                   Paso {state.paso_actual} de {PASOS.length}
                 </p>
               </div>
@@ -1107,7 +1107,7 @@ export function CalculadoraAplicaciones() {
           <button
             onClick={handleCancelar}
             disabled={state.guardando}
-            className="px-6 py-3 text-[#4D240F] hover:bg-gray-100 rounded-xl transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-6 py-3 text-brand-brown hover:bg-gray-100 rounded-xl transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <X className="w-5 h-5" />
             <span className="hidden sm:inline">Cancelar</span>
@@ -1118,7 +1118,7 @@ export function CalculadoraAplicaciones() {
             <button
               onClick={handleAnterior}
               disabled={state.paso_actual === 1 || state.guardando}
-              className="px-6 py-3 bg-gray-100 text-[#172E08] rounded-xl hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+              className="px-6 py-3 bg-gray-100 text-foreground rounded-xl hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
             >
               <ChevronLeft className="w-5 h-5" />
               <span className="hidden sm:inline">Anterior</span>
@@ -1129,7 +1129,7 @@ export function CalculadoraAplicaciones() {
               <button
                 onClick={handleSiguiente}
                 disabled={state.guardando}
-                className="px-6 py-3 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-xl hover:from-[#5f7d17] hover:to-[#9db86d] transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:from-primary-dark hover:to-secondary-dark transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span>Siguiente</span>
                 <ChevronRight className="w-5 h-5" />
@@ -1138,7 +1138,7 @@ export function CalculadoraAplicaciones() {
               <button
                 onClick={handleGuardarYFinalizar}
                 disabled={state.guardando}
-                className="px-6 py-3 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-xl hover:from-[#5f7d17] hover:to-[#9db86d] transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:from-primary-dark hover:to-secondary-dark transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {state.guardando ? (
                   <>
@@ -1166,10 +1166,10 @@ export function CalculadoraAplicaciones() {
                 <AlertTriangle className="w-6 h-6 text-red-600" />
               </div>
               <div>
-                <h3 className="text-lg text-[#172E08] mb-2">
+                <h3 className="text-lg text-foreground mb-2">
                   ¿Cancelar aplicación?
                 </h3>
-                <p className="text-sm text-[#4D240F]/70">
+                <p className="text-sm text-brand-brown/70">
                   Se perderán todos los datos ingresados. Esta acción no se puede deshacer.
                 </p>
               </div>
@@ -1178,7 +1178,7 @@ export function CalculadoraAplicaciones() {
             <div className="flex items-center gap-3 justify-end">
               <button
                 onClick={() => setShowCancelDialog(false)}
-                className="px-4 py-2 text-[#4D240F] hover:bg-gray-100 rounded-lg transition-all"
+                className="px-4 py-2 text-brand-brown hover:bg-gray-100 rounded-lg transition-all"
               >
                 Continuar editando
               </button>

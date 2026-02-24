@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Download, Loader2, FileText, Calendar } from 'lucide-react';
+import { Download, Loader2, FileText, Bot } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import {
@@ -14,19 +14,20 @@ import { toast } from 'sonner';
 import {
   fetchHistorialReportes,
   descargarReportePDF,
+  descargarReporteDesdeHTML,
   descargarBlob,
 } from '../../utils/reporteSemanalService';
 import type { ReporteSemanalMetadata } from '../../types/reporteSemanal';
 import { formatearFechaCorta, formatearFechaHora } from '../../utils/fechas';
 
-export function HistorialReportes() {
+export function HistorialReportes({ refreshKey }: { refreshKey?: number }) {
   const [reportes, setReportes] = useState<ReporteSemanalMetadata[]>([]);
   const [loading, setLoading] = useState(true);
   const [descargando, setDescargando] = useState<string | null>(null);
 
   useEffect(() => {
     cargarHistorial();
-  }, []);
+  }, [refreshKey]);
 
   const cargarHistorial = async () => {
     try {
@@ -43,9 +44,15 @@ export function HistorialReportes() {
   const handleDescargar = async (reporte: ReporteSemanalMetadata) => {
     try {
       setDescargando(reporte.id);
-      const blob = await descargarReportePDF(reporte.url_storage);
       const filename = `reporte-semana-${reporte.ano || ''}-S${String(reporte.numero_semana).padStart(2, '0')}.pdf`;
-      descargarBlob(blob, filename);
+      if (reporte.html_storage) {
+        // Quick-generated report: convert HTML → PDF in browser
+        await descargarReporteDesdeHTML(reporte.html_storage, filename);
+      } else {
+        // Wizard-generated report: download stored PDF
+        const blob = await descargarReportePDF(reporte.url_storage);
+        descargarBlob(blob, filename);
+      }
       toast.success('PDF descargado');
     } catch (error: any) {
       toast.error('Error al descargar el reporte');
@@ -57,7 +64,7 @@ export function HistorialReportes() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-6 h-6 text-[#73991C] animate-spin" />
+        <Loader2 className="w-6 h-6 text-primary animate-spin" />
       </div>
     );
   }
@@ -94,7 +101,13 @@ export function HistorialReportes() {
               <TableCell className="text-sm text-gray-600">
                 {formatearFechaCorta(reporte.fecha_inicio)} — {formatearFechaCorta(reporte.fecha_fin)}
               </TableCell>
-              <TableCell className="text-sm">{reporte.generado_por_nombre || '-'}</TableCell>
+              <TableCell className="text-sm">
+                {reporte.generado_automaticamente ? (
+                  <Badge variant="outline" className="border-primary/40 text-primary bg-primary/5 text-xs gap-1">
+                    <Bot className="w-3 h-3" />Auto
+                  </Badge>
+                ) : (reporte.generado_por_nombre || '-')}
+              </TableCell>
               <TableCell className="text-sm text-gray-500">
                 {formatearFechaHora(reporte.created_at)}
               </TableCell>

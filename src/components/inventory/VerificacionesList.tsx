@@ -77,7 +77,7 @@ export function VerificacionesList() {
       case 'En proceso':
         return <Clock className="w-5 h-5 text-blue-500" />;
       case 'Completada':
-        return <CheckCircle2 className="w-5 h-5 text-[#73991C]" />;
+        return <CheckCircle2 className="w-5 h-5 text-primary" />;
       case 'Pendiente Aprobación':
         return <AlertTriangle className="w-5 h-5 text-amber-500" />;
       case 'Aprobada':
@@ -97,7 +97,7 @@ export function VerificacionesList() {
       case 'En proceso':
         return 'bg-blue-100 text-blue-700 border-blue-200';
       case 'Completada':
-        return 'bg-[#E7EDDD] text-[#73991C] border-[#73991C]/20';
+        return 'bg-muted text-primary border-primary/20';
       case 'Pendiente Aprobación':
         return 'bg-amber-100 text-amber-700 border-amber-200';
       case 'Aprobada':
@@ -159,7 +159,7 @@ export function VerificacionesList() {
     return (
       <Link
         to={`/inventario/verificaciones/${verificacion.id}`}
-        className="inline-flex items-center gap-2 px-4 py-2 border-2 border-[#73991C] text-[#73991C] hover:bg-[#F8FAF5] rounded-xl transition-all duration-200 font-medium"
+        className="inline-flex items-center gap-2 px-4 py-2 border-2 border-primary text-primary hover:bg-background rounded-xl transition-all duration-200 font-medium"
       >
         <Eye className="w-4 h-4" />
         Ver Detalle
@@ -172,7 +172,7 @@ export function VerificacionesList() {
       <div className="space-y-6">
         <InventorySubNav />
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 text-[#73991C] animate-spin" />
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
       </div>
     );
@@ -186,17 +186,17 @@ export function VerificacionesList() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-[#172E08] mb-2 flex items-center gap-3">
-            <ClipboardCheck className="w-8 h-8 text-[#73991C]" />
+          <h1 className="text-foreground mb-2 flex items-center gap-3">
+            <ClipboardCheck className="w-8 h-8 text-primary" />
             Verificaciones de Inventario
           </h1>
-          <p className="text-[#4D240F]/70">
+          <p className="text-brand-brown/70">
             {verificaciones.length} verificaciones registradas
           </p>
         </div>
         <Link
           to="/inventario/verificaciones/nueva"
-          className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white hover:from-[#5f7d17] hover:to-[#9db86d] rounded-xl transition-all duration-200 font-medium shadow-lg"
+          className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white hover:from-primary-dark hover:to-secondary-dark rounded-xl transition-all duration-200 font-medium shadow-lg"
         >
           <Plus className="w-5 h-5" />
           Nueva Verificación
@@ -204,14 +204,14 @@ export function VerificacionesList() {
       </div>
 
       {/* Filtros */}
-      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-4 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-4 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
         <div className="flex flex-wrap gap-3">
           <button
             onClick={() => setEstadoFilter('todas')}
             className={`px-4 py-2 rounded-xl font-medium transition-all duration-200 ${
               estadoFilter === 'todas'
-                ? 'bg-[#73991C] text-white'
-                : 'bg-white text-[#172E08] border border-[#73991C]/20 hover:bg-[#E7EDDD]/50'
+                ? 'bg-primary text-white'
+                : 'bg-white text-foreground border border-primary/20 hover:bg-muted/50'
             }`}
           >
             Todas ({verificaciones.length})
@@ -221,7 +221,7 @@ export function VerificacionesList() {
             className={`px-4 py-2 rounded-xl font-medium transition-all duration-200 ${
               estadoFilter === 'En proceso'
                 ? 'bg-blue-500 text-white'
-                : 'bg-white text-[#172E08] border border-blue-200 hover:bg-blue-50'
+                : 'bg-white text-foreground border border-blue-200 hover:bg-blue-50'
             }`}
           >
             En Proceso ({verificaciones.filter(v => v.estado === 'En proceso').length})
@@ -231,7 +231,7 @@ export function VerificacionesList() {
             className={`px-4 py-2 rounded-xl font-medium transition-all duration-200 ${
               estadoFilter === 'Pendiente Aprobación'
                 ? 'bg-amber-500 text-white'
-                : 'bg-white text-[#172E08] border border-amber-200 hover:bg-amber-50'
+                : 'bg-white text-foreground border border-amber-200 hover:bg-amber-50'
             }`}
           >
             Pendientes ({verificaciones.filter(v => v.estado === 'Pendiente Aprobación').length})
@@ -241,7 +241,7 @@ export function VerificacionesList() {
             className={`px-4 py-2 rounded-xl font-medium transition-all duration-200 ${
               estadoFilter === 'Aprobada'
                 ? 'bg-green-600 text-white'
-                : 'bg-white text-[#172E08] border border-green-200 hover:bg-green-50'
+                : 'bg-white text-foreground border border-green-200 hover:bg-green-50'
             }`}
           >
             Aprobadas ({verificaciones.filter(v => v.estado === 'Aprobada').length})
@@ -251,12 +251,12 @@ export function VerificacionesList() {
 
       {/* Lista de Verificaciones */}
       {verificacionesFiltradas.length === 0 ? (
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-12 text-center shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
-          <ClipboardCheck className="w-16 h-16 text-[#4D240F]/40 mx-auto mb-4" />
-          <h3 className="text-xl text-[#172E08] mb-2">
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-12 text-center shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+          <ClipboardCheck className="w-16 h-16 text-brand-brown/40 mx-auto mb-4" />
+          <h3 className="text-xl text-foreground mb-2">
             No hay verificaciones
           </h3>
-          <p className="text-[#4D240F]/60 mb-6">
+          <p className="text-brand-brown/60 mb-6">
             {estadoFilter === 'todas'
               ? 'Aún no hay verificaciones registradas'
               : `No hay verificaciones con estado "${estadoFilter}"`}
@@ -264,7 +264,7 @@ export function VerificacionesList() {
           {estadoFilter === 'todas' && (
             <Link
               to="/inventario/verificaciones/nueva"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white hover:from-[#5f7d17] hover:to-[#9db86d] rounded-xl transition-all duration-200 font-medium"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white hover:from-primary-dark hover:to-secondary-dark rounded-xl transition-all duration-200 font-medium"
             >
               <Plus className="w-5 h-5" />
               Iniciar Primera Verificación
@@ -276,17 +276,17 @@ export function VerificacionesList() {
           {verificacionesFiltradas.map((verificacion) => (
             <div
               key={verificacion.id}
-              className="bg-white/80 backdrop-blur-sm rounded-2xl border-2 border-[#73991C]/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)] hover:shadow-[0_6px_28px_rgba(115,153,28,0.12)] transition-all duration-200"
+              className="bg-white/80 backdrop-blur-sm rounded-2xl border-2 border-primary/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)] hover:shadow-[0_6px_28px_rgba(115,153,28,0.12)] transition-all duration-200"
             >
               {/* Header de la Card */}
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
                   {getEstadoIcon(verificacion.estado)}
                   <div>
-                    <h3 className="text-lg text-[#172E08]">
+                    <h3 className="text-lg text-foreground">
                       Verificación {formatearFechaCorta(verificacion.fecha_inicio)}
                     </h3>
-                    <p className="text-sm text-[#4D240F]/60">
+                    <p className="text-sm text-brand-brown/60">
                       ID: {verificacion.id.substring(0, 8)}...
                     </p>
                   </div>
@@ -301,7 +301,7 @@ export function VerificacionesList() {
               </div>
 
               {/* Información del Usuario */}
-              <div className="flex items-center gap-2 text-sm text-[#4D240F]/70 mb-4">
+              <div className="flex items-center gap-2 text-sm text-brand-brown/70 mb-4">
                 <User className="w-4 h-4" />
                 <span>
                   Verificador: {verificacion.usuario_verificador || 'No asignado'}
@@ -311,14 +311,14 @@ export function VerificacionesList() {
               {/* Progreso */}
               <div className="mb-4">
                 <div className="flex items-center justify-between text-sm mb-2">
-                  <span className="text-[#4D240F]/70">Progreso del Conteo</span>
-                  <span className="font-medium text-[#172E08]">
+                  <span className="text-brand-brown/70">Progreso del Conteo</span>
+                  <span className="font-medium text-foreground">
                     {verificacion.productos_contados || 0}/{verificacion.total_productos || 0} productos
                   </span>
                 </div>
-                <div className="w-full bg-[#E7EDDD]/50 rounded-full h-2">
+                <div className="w-full bg-muted/50 rounded-full h-2">
                   <div
-                    className="bg-gradient-to-r from-[#73991C] to-[#BFD97D] h-2 rounded-full transition-all duration-300"
+                    className="bg-gradient-to-r from-primary to-secondary h-2 rounded-full transition-all duration-300"
                     style={{
                       width: `${verificacion.porcentaje_completado || 0}%`,
                     }}
@@ -328,20 +328,20 @@ export function VerificacionesList() {
 
               {/* Estadísticas */}
               <div className="grid grid-cols-3 gap-3 mb-4">
-                <div className="bg-[#E7EDDD]/30 rounded-lg p-3 text-center">
-                  <p className="text-xs text-[#4D240F]/60 mb-1">OK</p>
-                  <p className="text-lg text-[#73991C]">
+                <div className="bg-muted/30 rounded-lg p-3 text-center">
+                  <p className="text-xs text-brand-brown/60 mb-1">OK</p>
+                  <p className="text-lg text-primary">
                     {verificacion.productos_ok || 0}
                   </p>
                 </div>
                 <div className="bg-amber-50 rounded-lg p-3 text-center">
-                  <p className="text-xs text-[#4D240F]/60 mb-1">Diferencias</p>
+                  <p className="text-xs text-brand-brown/60 mb-1">Diferencias</p>
                   <p className="text-lg text-amber-600">
                     {verificacion.productos_diferencia || 0}
                   </p>
                 </div>
                 <div className="bg-red-50 rounded-lg p-3 text-center">
-                  <p className="text-xs text-[#4D240F]/60 mb-1">Valor Dif.</p>
+                  <p className="text-xs text-brand-brown/60 mb-1">Valor Dif.</p>
                   <p className="text-sm text-red-600">
                     {formatCurrency(verificacion.valor_total_diferencias)}
                   </p>
@@ -350,21 +350,21 @@ export function VerificacionesList() {
 
               {/* Fechas adicionales */}
               {verificacion.fecha_completada && (
-                <div className="flex items-center gap-2 text-xs text-[#4D240F]/60 mb-3">
+                <div className="flex items-center gap-2 text-xs text-brand-brown/60 mb-3">
                   <Calendar className="w-3 h-3" />
                   Completada: {formatearFechaCorta(verificacion.fecha_completada)}
                 </div>
               )}
 
               {verificacion.fecha_revision && (
-                <div className="flex items-center gap-2 text-xs text-[#4D240F]/60 mb-3">
+                <div className="flex items-center gap-2 text-xs text-brand-brown/60 mb-3">
                   <User className="w-3 h-3" />
                   Revisada por {verificacion.revisada_por} el {formatearFechaCorta(verificacion.fecha_revision)}
                 </div>
               )}
 
               {/* Acción principal */}
-              <div className="pt-4 border-t border-[#73991C]/10">
+              <div className="pt-4 border-t border-primary/10">
                 {getAccionButton(verificacion)}
               </div>
             </div>

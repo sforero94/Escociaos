@@ -68,49 +68,49 @@ export function ProductMovements({ productId, productName, unidadMedida }: Produ
   const getMovementIcon = (type: string) => {
     const isEntrada = type?.toLowerCase()?.trim() === 'entrada';
     return isEntrada
-      ? <ArrowUpCircle className="w-6 h-6 text-[#28A745]" />
-      : <ArrowDownCircle className="w-6 h-6 text-[#DC3545]" />;
+      ? <ArrowUpCircle className="w-6 h-6 text-success-alt" />
+      : <ArrowDownCircle className="w-6 h-6 text-destructive" />;
   };
 
   const getMovementBorderColor = (type: string) => {
     const isEntrada = type?.toLowerCase()?.trim() === 'entrada';
     return isEntrada
-      ? 'border-l-[#28A745] bg-[#28A745]/5'
-      : 'border-l-[#DC3545] bg-[#DC3545]/5';
+      ? 'border-l-success-alt bg-success-alt/5'
+      : 'border-l-destructive bg-destructive/5';
   };
 
   const getMovementBadgeColor = (type: string) => {
     const isEntrada = type?.toLowerCase()?.trim() === 'entrada';
     return isEntrada
-      ? 'bg-[#28A745]/10 text-[#28A745]'
-      : 'bg-[#DC3545]/10 text-[#DC3545]';
+      ? 'bg-success-alt/10 text-success-alt'
+      : 'bg-destructive/10 text-destructive';
   };
 
   if (loading) {
     return (
-      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
         <div className="flex items-center justify-center py-8">
-          <RefreshCw className="w-8 h-8 text-[#73991C] animate-spin" />
+          <RefreshCw className="w-8 h-8 text-primary animate-spin" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+    <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h3 className="text-xl text-[#172E08] flex items-center gap-2">
-            <Package className="w-5 h-5 text-[#73991C]" />
+          <h3 className="text-xl text-foreground flex items-center gap-2">
+            <Package className="w-5 h-5 text-primary" />
             Historial de Movimientos
           </h3>
-          <p className="text-sm text-[#4D240F]/60 mt-1">{productName}</p>
+          <p className="text-sm text-brand-brown/60 mt-1">{productName}</p>
         </div>
         <Button
           onClick={loadMovements}
           variant="ghost"
           size="sm"
-          className="text-[#73991C] hover:bg-[#73991C]/5"
+          className="text-primary hover:bg-primary/5"
         >
           <RefreshCw className="w-4 h-4" />
         </Button>
@@ -118,8 +118,8 @@ export function ProductMovements({ productId, productName, unidadMedida }: Produ
 
       {movements.length === 0 ? (
         <div className="text-center py-12">
-          <Package className="w-16 h-16 text-[#4D240F]/40 mx-auto mb-4" />
-          <p className="text-[#4D240F]/60">No hay movimientos registrados para este producto</p>
+          <Package className="w-16 h-16 text-brand-brown/40 mx-auto mb-4" />
+          <p className="text-brand-brown/60">No hay movimientos registrados para este producto</p>
         </div>
       ) : (
         <>
@@ -143,7 +143,7 @@ export function ProductMovements({ productId, productName, unidadMedida }: Produ
                             {movement.tipo_movimiento}
                           </span>
                         </div>
-                        <p className="text-lg text-[#172E08]">
+                        <p className="text-lg text-foreground">
                           {movement.tipo_movimiento?.toLowerCase()?.trim() === 'entrada' ? '+' : '-'}
                           {formatNumber(Math.abs(movement.cantidad), 2)} {unidadMedida}
                         </p>
@@ -153,14 +153,14 @@ export function ProductMovements({ productId, productName, unidadMedida }: Produ
                     {/* Stock antes/después */}
                     <div className="grid grid-cols-2 gap-4 mb-3">
                       <div className="bg-white/50 rounded-lg p-2">
-                        <p className="text-xs text-[#4D240F]/60 mb-0.5 uppercase tracking-wide">Antes</p>
-                        <p className="text-sm text-[#172E08]">
+                        <p className="text-xs text-brand-brown/60 mb-0.5 uppercase tracking-wide">Antes</p>
+                        <p className="text-sm text-foreground">
                           {formatNumber(movement.saldo_anterior, 2)} {unidadMedida}
                         </p>
                       </div>
                       <div className="bg-white/50 rounded-lg p-2">
-                        <p className="text-xs text-[#4D240F]/60 mb-0.5 uppercase tracking-wide">Después</p>
-                        <p className="text-sm text-[#172E08]">
+                        <p className="text-xs text-brand-brown/60 mb-0.5 uppercase tracking-wide">Después</p>
+                        <p className="text-sm text-foreground">
                           {formatNumber(movement.saldo_nuevo, 2)} {unidadMedida}
                         </p>
                       </div>
@@ -169,24 +169,24 @@ export function ProductMovements({ productId, productName, unidadMedida }: Produ
                     {/* Referencia y Notas */}
                     <div className="space-y-1">
                       {movement.tipo_referencia && (
-                        <p className="text-sm text-[#4D240F]/70 flex items-center gap-1">
-                          <span className="text-[#73991C]">●</span>
+                        <p className="text-sm text-brand-brown/70 flex items-center gap-1">
+                          <span className="text-primary">●</span>
                           <span>Referencia:</span>{' '}
-                          <span className="text-[#172E08]">{formatReferencia(movement.tipo_referencia, movement.referencia_id)}</span>
+                          <span className="text-foreground">{formatReferencia(movement.tipo_referencia, movement.referencia_id)}</span>
                         </p>
                       )}
                       {movement.notas && (
-                        <p className="text-sm text-[#4D240F]/70 flex items-start gap-1">
-                          <span className="text-[#73991C] mt-0.5">●</span>
+                        <p className="text-sm text-brand-brown/70 flex items-start gap-1">
+                          <span className="text-primary mt-0.5">●</span>
                           <span>Nota:</span>{' '}
-                          <span className="text-[#172E08]">{movement.notas}</span>
+                          <span className="text-foreground">{movement.notas}</span>
                         </p>
                       )}
                     </div>
                   </div>
 
                   {/* Fecha */}
-                  <div className="text-right text-xs text-[#4D240F]/60 whitespace-nowrap">
+                  <div className="text-right text-xs text-brand-brown/60 whitespace-nowrap">
                     {formatearFechaHora(movement.created_at)}
                   </div>
                 </div>
@@ -200,7 +200,7 @@ export function ProductMovements({ productId, productName, unidadMedida }: Produ
               <Button
                 onClick={() => setLimit(prev => prev + 10)}
                 variant="outline"
-                className="border-[#73991C]/20 text-[#73991C] hover:bg-[#73991C]/5 hover:border-[#73991C]/40 rounded-xl"
+                className="border-primary/20 text-primary hover:bg-primary/5 hover:border-primary/40 rounded-xl"
               >
                 Ver más movimientos
                 <ChevronDown className="w-4 h-4 ml-2" />
@@ -209,23 +209,23 @@ export function ProductMovements({ productId, productName, unidadMedida }: Produ
           )}
 
           {/* Resumen */}
-          <div className="grid grid-cols-2 gap-4 pt-6 border-t border-[#73991C]/10">
-            <div className="bg-gradient-to-br from-[#28A745]/5 to-[#28A745]/10 rounded-xl border border-[#28A745]/20 p-4 hover:shadow-md transition-all duration-200">
+          <div className="grid grid-cols-2 gap-4 pt-6 border-t border-primary/10">
+            <div className="bg-gradient-to-br from-success-alt/5 to-success-alt/10 rounded-xl border border-success-alt/20 p-4 hover:shadow-md transition-all duration-200">
               <div className="flex items-center gap-2 mb-1">
-                <ArrowUpCircle className="w-5 h-5 text-[#28A745]" />
-                <p className="text-sm text-[#28A745]/70 uppercase tracking-wide">Entradas</p>
+                <ArrowUpCircle className="w-5 h-5 text-success-alt" />
+                <p className="text-sm text-success-alt/70 uppercase tracking-wide">Entradas</p>
               </div>
-              <p className="text-2xl text-[#28A745]">
+              <p className="text-2xl text-success-alt">
                 {movements.filter(m => m.tipo_movimiento?.toLowerCase()?.trim() === 'entrada').length}
               </p>
             </div>
             
-            <div className="bg-gradient-to-br from-[#DC3545]/5 to-[#DC3545]/10 rounded-xl border border-[#DC3545]/20 p-4 hover:shadow-md transition-all duration-200">
+            <div className="bg-gradient-to-br from-destructive/5 to-destructive/10 rounded-xl border border-destructive/20 p-4 hover:shadow-md transition-all duration-200">
               <div className="flex items-center gap-2 mb-1">
-                <ArrowDownCircle className="w-5 h-5 text-[#DC3545]" />
-                <p className="text-sm text-[#DC3545]/70 uppercase tracking-wide">Salidas</p>
+                <ArrowDownCircle className="w-5 h-5 text-destructive" />
+                <p className="text-sm text-destructive/70 uppercase tracking-wide">Salidas</p>
               </div>
-              <p className="text-2xl text-[#DC3545]">
+              <p className="text-2xl text-destructive">
                 {movements.filter(m => m.tipo_movimiento?.toLowerCase()?.trim() === 'salida').length}
               </p>
             </div>

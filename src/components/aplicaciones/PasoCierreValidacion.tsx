@@ -40,10 +40,6 @@ export function PasoCierreValidacion({
   const [comparacionProductos, setComparacionProductos] = useState<ComparacionProducto[]>([]);
   const [desviacionMaxima, setDesviacionMaxima] = useState<number>(0);
 
-  useEffect(() => {
-    calcularDetalles();
-  }, [movimientos, valorJornal, jornales]);
-
   const calcularDetalles = () => {
     try {
       // Validar que existan los datos necesarios
@@ -71,6 +67,10 @@ export function PasoCierreValidacion({
       setDetallesLotes([]);
     }
   };
+
+  useEffect(() => {
+    calcularDetalles();
+  }, [movimientos, valorJornal, jornales]);
 
   const calcularSoloProductos = () => {
     // 1. CALCULAR COMPARACIÓN DE PRODUCTOS
@@ -327,8 +327,8 @@ export function PasoCierreValidacion({
     <div className="space-y-6">
       {/* TÍTULO */}
       <div>
-        <h3 className="text-xl text-[#172E08] mb-2">Validación y Cálculos Automáticos</h3>
-        <p className="text-[#4D240F]/70">
+        <h3 className="text-xl text-foreground mb-2">Validación y Cálculos Automáticos</h3>
+        <p className="text-brand-brown/70">
           Revisión de desviaciones, costos y eficiencias calculados automáticamente.
         </p>
       </div>
@@ -358,10 +358,10 @@ export function PasoCierreValidacion({
 
       {/* COMPARACIÓN DE PRODUCTOS */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="bg-gradient-to-r from-[#73991C]/10 to-[#BFD97D]/10 border-b border-[#73991C]/20 p-4">
+        <div className="bg-gradient-to-r from-primary/10 to-secondary/10 border-b border-primary/20 p-4">
           <div className="flex items-center gap-3">
-            <Package className="w-5 h-5 text-[#73991C]" />
-            <h4 className="text-[#172E08]">Comparación Planeado vs. Real por Producto</h4>
+            <Package className="w-5 h-5 text-primary" />
+            <h4 className="text-foreground">Comparación Planeado vs. Real por Producto</h4>
           </div>
         </div>
 
@@ -369,22 +369,22 @@ export function PasoCierreValidacion({
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-3 text-left text-xs text-[#4D240F] uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs text-brand-brown uppercase tracking-wider">
                   Producto
                 </th>
-                <th className="px-4 py-3 text-right text-xs text-[#4D240F] uppercase tracking-wider">
+                <th className="px-4 py-3 text-right text-xs text-brand-brown uppercase tracking-wider">
                   Planeado
                 </th>
-                <th className="px-4 py-3 text-right text-xs text-[#4D240F] uppercase tracking-wider">
+                <th className="px-4 py-3 text-right text-xs text-brand-brown uppercase tracking-wider">
                   Real
                 </th>
-                <th className="px-4 py-3 text-right text-xs text-[#4D240F] uppercase tracking-wider">
+                <th className="px-4 py-3 text-right text-xs text-brand-brown uppercase tracking-wider">
                   Diferencia
                 </th>
-                <th className="px-4 py-3 text-center text-xs text-[#4D240F] uppercase tracking-wider">
+                <th className="px-4 py-3 text-center text-xs text-brand-brown uppercase tracking-wider">
                   Desviación
                 </th>
-                <th className="px-4 py-3 text-center text-xs text-[#4D240F] uppercase tracking-wider">
+                <th className="px-4 py-3 text-center text-xs text-brand-brown uppercase tracking-wider">
                   Estado
                 </th>
               </tr>
@@ -398,13 +398,13 @@ export function PasoCierreValidacion({
                 return (
                   <tr key={producto.producto_id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3">
-                      <div className="text-[#172E08]">{producto.producto_nombre}</div>
-                      <div className="text-xs text-[#4D240F]/50">{producto.producto_unidad}</div>
+                      <div className="text-foreground">{producto.producto_nombre}</div>
+                      <div className="text-xs text-brand-brown/50">{producto.producto_unidad}</div>
                     </td>
-                    <td className="px-4 py-3 text-right text-sm text-[#4D240F]/70">
+                    <td className="px-4 py-3 text-right text-sm text-brand-brown/70">
                       {formatearNumero(producto.cantidad_planeada)}
                     </td>
-                    <td className="px-4 py-3 text-right text-sm text-[#172E08]">
+                    <td className="px-4 py-3 text-right text-sm text-foreground">
                       {formatearNumero(producto.cantidad_real)}
                     </td>
                     <td className="px-4 py-3 text-right text-sm">
@@ -446,7 +446,7 @@ export function PasoCierreValidacion({
         <div className="bg-gradient-to-r from-blue-500/10 to-blue-400/10 border-b border-blue-200 p-4">
           <div className="flex items-center gap-3">
             <BarChart3 className="w-5 h-5 text-blue-600" />
-            <h4 className="text-[#172E08]">Detalles por Lote: Costos y Eficiencias</h4>
+            <h4 className="text-foreground">Detalles por Lote: Costos y Eficiencias</h4>
           </div>
         </div>
 
@@ -458,22 +458,22 @@ export function PasoCierreValidacion({
             >
               {/* Header del lote */}
               <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                <h5 className="text-[#172E08]">{lote.lote_nombre}</h5>
+                <h5 className="text-foreground">{lote.lote_nombre}</h5>
               </div>
 
               {/* Contenido del lote */}
               <div className="p-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   {/* Costos */}
-                  <div className="bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 border border-[#73991C]/20 rounded-lg p-3">
+                  <div className="bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20 rounded-lg p-3">
                     <div className="flex items-center gap-2 mb-2">
-                      <DollarSign className="w-4 h-4 text-[#73991C]" />
-                      <div className="text-xs text-[#4D240F]/70">Costo Total</div>
+                      <DollarSign className="w-4 h-4 text-primary" />
+                      <div className="text-xs text-brand-brown/70">Costo Total</div>
                     </div>
-                    <div className="text-lg text-[#172E08]">
+                    <div className="text-lg text-foreground">
                       {formatearMoneda(lote.costo_total)}
                     </div>
-                    <div className="text-xs text-[#4D240F]/50 mt-1">
+                    <div className="text-xs text-brand-brown/50 mt-1">
                       {formatearMoneda(lote.costo_por_arbol)} / árbol
                     </div>
                   </div>
@@ -496,7 +496,7 @@ export function PasoCierreValidacion({
                   </div>
 
                   {/* Desviación Litros/Kilos */}
-                  {aplicacion.tipo === 'fumigacion' && lote.litros_reales && (
+                  {aplicacion.tipo_aplicacion === 'Fumigación' && lote.litros_reales && (
                     <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
                       <div className="flex items-center gap-2 mb-2">
                         <TrendingUp className="w-4 h-4 text-purple-600" />
@@ -514,7 +514,7 @@ export function PasoCierreValidacion({
                     </div>
                   )}
 
-                  {aplicacion.tipo === 'fertilizacion' && lote.kilos_reales && (
+                  {aplicacion.tipo_aplicacion === 'Fertilización' && lote.kilos_reales && (
                     <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
                       <div className="flex items-center gap-2 mb-2">
                         <Package className="w-4 h-4 text-purple-600" />

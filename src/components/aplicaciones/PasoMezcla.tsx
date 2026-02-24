@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, X, Calculator, AlertTriangle, Package, Beaker, Check, Edit2, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 import { getSupabase } from '../../utils/supabase/client';
 import { useSafeMode } from '../../contexts/SafeModeContext';
 import {
@@ -43,6 +45,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
   const [mostrarResultados, setMostrarResultados] = useState<boolean>(false);
   const [calculos, setCalculos] = useState<CalculosPorLote[]>(calculosIniciales);
   const [errores, setErrores] = useState<string[]>([]);
+  const [confirmEliminarId, setConfirmEliminarId] = useState<string | null>(null);
 
   /**
    * CARGAR PRODUCTOS DEL CATÁLOGO
@@ -192,7 +195,13 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
    * ELIMINAR MEZCLA
    */
   const eliminarMezcla = (mezclaId: string) => {
-    if (!confirm('¿Estás seguro de eliminar esta mezcla?')) return;
+    setConfirmEliminarId(mezclaId);
+  };
+
+  const confirmarEliminarMezcla = () => {
+    if (!confirmEliminarId) return;
+    const mezclaId = confirmEliminarId;
+    setConfirmEliminarId(null);
 
     const nuevasMezclas = mezclas_guardadas.filter((m) => m.id !== mezclaId);
     
@@ -235,7 +244,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
 
     // Verificar que no esté ya agregado
     if (mezcla_en_edicion.productos.some((p) => p.producto_id === producto.id)) {
-      alert('Este producto ya está en la mezcla');
+      toast('Este producto ya está en la mezcla');
       return;
     }
 
@@ -399,8 +408,8 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
       {/* HEADER */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg text-[#172E08]">Definición de Mezclas</h2>
-          <p className="text-sm text-[#4D240F]/70 mt-1">
+          <h2 className="text-lg text-foreground">Definición de Mezclas</h2>
+          <p className="text-sm text-brand-brown/70 mt-1">
             Crea mezclas, asigna lotes y define productos con sus dosis
           </p>
         </div>
@@ -408,7 +417,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
         {!mezcla_en_edicion && (
           <button
             onClick={crearNuevaMezcla}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-xl hover:from-[#5f7d17] hover:to-[#9db86d] transition-all"
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:from-primary-dark hover:to-secondary-dark transition-all"
           >
             <Plus className="w-5 h-5" />
             <span>Nueva Mezcla</span>
@@ -436,7 +445,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
       {/* MEZCLAS GUARDADAS */}
       {!mezcla_en_edicion && mezclas_guardadas.length > 0 && (
         <div className="space-y-4">
-          <h3 className="text-sm text-[#172E08]">Mezclas Creadas ({mezclas_guardadas.length})</h3>
+          <h3 className="text-sm text-foreground">Mezclas Creadas ({mezclas_guardadas.length})</h3>
           
           {mezclas_guardadas.map((mezcla) => {
             const lotesAsignados = mezcla.lotes_asignados || [];
@@ -450,16 +459,16 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
             return (
               <div
                 key={mezcla.id}
-                className="border border-gray-200 rounded-xl p-4 hover:border-[#73991C] transition-colors"
+                className="border border-gray-200 rounded-xl p-4 hover:border-primary transition-colors"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-[#73991C] to-[#BFD97D] rounded-xl flex items-center justify-center text-white">
+                    <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center text-white">
                       <Beaker className="w-5 h-5" />
                     </div>
                     <div>
-                      <h4 className="text-[#172E08]">{mezcla.nombre}</h4>
-                      <p className="text-sm text-[#4D240F]/70">
+                      <h4 className="text-foreground">{mezcla.nombre}</h4>
+                      <p className="text-sm text-brand-brown/70">
                         {mezcla.productos.length} productos • {lotesAsignados.length} lotes
                       </p>
                     </div>
@@ -468,7 +477,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => editarMezcla(mezcla)}
-                      className="p-2 text-[#73991C] hover:bg-[#73991C]/10 rounded-lg transition-colors"
+                      className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors"
                       title="Editar"
                     >
                       <Edit2 className="w-4 h-4" />
@@ -485,9 +494,9 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
 
                 {/* Lotes asignados */}
                 {lotesAsignados.length > 0 && (
-                  <div className="mb-3 p-3 bg-[#F8FAF5] rounded-lg">
-                    <p className="text-xs text-[#4D240F]/70 mb-1">Lotes asignados:</p>
-                    <p className="text-sm text-[#172E08]">{nombreLotes}</p>
+                  <div className="mb-3 p-3 bg-background rounded-lg">
+                    <p className="text-xs text-brand-brown/70 mb-1">Lotes asignados:</p>
+                    <p className="text-sm text-foreground">{nombreLotes}</p>
                   </div>
                 )}
 
@@ -499,22 +508,22 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                       className="flex items-center justify-between text-sm p-2 bg-white rounded-lg"
                     >
                       <div className="flex-1">
-                        <p className={`${productosCatalogo.find(p => p.id === producto.producto_id)?.permitido_gerencia === false ? 'text-red-600 font-bold' : 'text-[#172E08]'}`}>
+                        <p className={`${productosCatalogo.find(p => p.id === producto.producto_id)?.permitido_gerencia === false ? 'text-red-600 font-bold' : 'text-foreground'}`}>
                           {producto.producto_nombre}
                         </p>
-                        <p className="text-xs text-[#4D240F]/70">{producto.producto_categoria}</p>
+                        <p className="text-xs text-brand-brown/70">{producto.producto_categoria}</p>
                       </div>
                       <div className="text-right">
                         {(configuracion.tipo === 'fumigacion' || configuracion.tipo === 'drench') ? (
-                          <p className="text-[#73991C]">
+                          <p className="text-primary">
                             {producto.dosis_por_caneca} {producto.unidad_dosis}/caneca
                           </p>
                         ) : (
-                          <p className="text-[#73991C] text-xs">
+                          <p className="text-primary text-xs">
                             G:{producto.dosis_grandes} M:{producto.dosis_medianos} P:{producto.dosis_pequenos} C:{producto.dosis_clonales} kg/árbol
                           </p>
                         )}
-                        <p className="text-xs text-[#4D240F]/70">
+                        <p className="text-xs text-brand-brown/70">
                           Total: {formatearNumero(producto.cantidad_total_necesaria)} {producto.producto_unidad}
                         </p>
                       </div>
@@ -529,17 +538,17 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
 
       {/* FORMULARIO DE CREACIÓN/EDICIÓN */}
       {mezcla_en_edicion && (
-        <div className="border-2 border-[#73991C] rounded-2xl p-6 bg-white">
+        <div className="border-2 border-primary rounded-2xl p-6 bg-white">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-[#73991C] to-[#BFD97D] rounded-xl flex items-center justify-center text-white">
+              <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center text-white">
                 <Beaker className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-lg text-[#172E08]">
+                <h3 className="text-lg text-foreground">
                   {modo_edicion === 'crear' ? 'Crear' : 'Editar'} {mezcla_en_edicion.nombre}
                 </h3>
-                <p className="text-sm text-[#4D240F]/70">
+                <p className="text-sm text-brand-brown/70">
                   Asigna lotes y productos a esta mezcla
                 </p>
               </div>
@@ -548,7 +557,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
 
           {/* ASIGNAR LOTES */}
           <div className="mb-6">
-            <label className="block text-sm text-[#172E08] mb-3">
+            <label className="block text-sm text-foreground mb-3">
               1. Asignar Lotes a esta Mezcla *
             </label>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -563,20 +572,20 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                       p-4 rounded-xl border-2 text-left transition-all
                       ${
                         yaAsignado
-                          ? 'border-[#73991C] bg-[#73991C]/5'
+                          ? 'border-primary bg-primary/5'
                           : 'border-gray-200 hover:border-gray-300'
                       }
                     `}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <p className="text-[#172E08] mb-1">{lote.nombre}</p>
-                        <p className="text-xs text-[#4D240F]/70">
+                        <p className="text-foreground mb-1">{lote.nombre}</p>
+                        <p className="text-xs text-brand-brown/70">
                           {lote.conteo_arboles.total} árboles
                         </p>
                       </div>
                       {yaAsignado && (
-                        <div className="w-6 h-6 bg-[#73991C] rounded-full flex items-center justify-center text-white flex-shrink-0">
+                        <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center text-white flex-shrink-0">
                           <Check className="w-4 h-4" />
                         </div>
                       )}
@@ -589,7 +598,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
 
           {/* AGREGAR PRODUCTOS */}
           <div className="mb-6">
-            <label className="block text-sm text-[#172E08] mb-3">
+            <label className="block text-sm text-foreground mb-3">
               2. Agregar Productos *
             </label>
 
@@ -598,7 +607,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                 type="text"
                 value={busquedaProducto}
                 onChange={(e) => setBusquedaProducto(e.target.value)}
-                className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                 placeholder="Buscar producto..."
                 disabled={cargandoProductos}
               />
@@ -606,7 +615,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
               <select
                 value={productoSeleccionado}
                 onChange={(e) => setProductoSeleccionado(e.target.value)}
-                className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                 disabled={cargandoProductos}
               >
                 <option value="">
@@ -626,7 +635,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
               <button
                 onClick={agregarProducto}
                 disabled={!productoSeleccionado}
-                className="px-6 py-3 bg-[#73991C] text-white rounded-xl hover:bg-[#5f7d17] transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-6 py-3 bg-primary text-white rounded-xl hover:bg-primary-dark transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Plus className="w-5 h-5" />
                 <span>Agregar</span>
@@ -643,10 +652,10 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1">
-                        <h4 className={`mb-1 ${productosCatalogo.find(p => p.id === producto.producto_id)?.permitido_gerencia === false ? 'text-red-600 font-bold' : 'text-[#172E08]'}`}>
+                        <h4 className={`mb-1 ${productosCatalogo.find(p => p.id === producto.producto_id)?.permitido_gerencia === false ? 'text-red-600 font-bold' : 'text-foreground'}`}>
                           {producto.producto_nombre}
                         </h4>
-                        <p className="text-xs text-[#4D240F]/70">
+                        <p className="text-xs text-brand-brown/70">
                           {producto.producto_categoria} • Stock: {formatearNumero(producto.inventario_disponible)} {producto.producto_unidad}
                         </p>
                       </div>
@@ -663,7 +672,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                     {configuracion.tipo === 'fumigacion' && (
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-xs text-[#4D240F]/70 mb-1">
+                          <label className="block text-xs text-brand-brown/70 mb-1">
                             Dosis por caneca *
                           </label>
                           <input
@@ -676,7 +685,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                                 parseFloat(e.target.value) || 0
                               )
                             }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                             placeholder="0"
                             step="0.01"
                             min="0"
@@ -684,8 +693,8 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                         </div>
 
                         <div>
-                          <label className="block text-xs text-[#4D240F]/70 mb-1">Unidad</label>
-                          <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-[#172E08]">
+                          <label className="block text-xs text-brand-brown/70 mb-1">Unidad</label>
+                          <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-foreground">
                             {producto.unidad_dosis === 'cc' ? 'cc (líquido)' : 'gramos (sólido)'}
                           </div>
                         </div>
@@ -696,7 +705,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                     {configuracion.tipo === 'drench' && (
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-xs text-[#4D240F]/70 mb-1">
+                          <label className="block text-xs text-brand-brown/70 mb-1">
                             Dosis por caneca *
                           </label>
                           <input
@@ -709,7 +718,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                                 parseFloat(e.target.value) || 0
                               )
                             }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                             placeholder="0"
                             step="0.01"
                             min="0"
@@ -717,8 +726,8 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                         </div>
 
                         <div>
-                          <label className="block text-xs text-[#4D240F]/70 mb-1">Unidad</label>
-                          <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-[#172E08]">
+                          <label className="block text-xs text-brand-brown/70 mb-1">Unidad</label>
+                          <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-foreground">
                             {producto.unidad_dosis === 'cc' ? 'cc (líquido)' : 'gramos (sólido)'}
                           </div>
                         </div>
@@ -729,7 +738,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                     {configuracion.tipo === 'fertilizacion' && (
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         <div>
-                          <label className="block text-xs text-[#4D240F]/70 mb-1">
+                          <label className="block text-xs text-brand-brown/70 mb-1">
                             Grandes (kg)
                           </label>
                           <input
@@ -742,7 +751,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                                 parseFloat(e.target.value) || 0
                               )
                             }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                             placeholder="0"
                             step="0.01"
                             min="0"
@@ -750,7 +759,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                         </div>
 
                         <div>
-                          <label className="block text-xs text-[#4D240F]/70 mb-1">
+                          <label className="block text-xs text-brand-brown/70 mb-1">
                             Medianos (kg)
                           </label>
                           <input
@@ -763,7 +772,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                                 parseFloat(e.target.value) || 0
                               )
                             }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                             placeholder="0"
                             step="0.01"
                             min="0"
@@ -771,7 +780,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                         </div>
 
                         <div>
-                          <label className="block text-xs text-[#4D240F]/70 mb-1">
+                          <label className="block text-xs text-brand-brown/70 mb-1">
                             Pequeños (kg)
                           </label>
                           <input
@@ -784,7 +793,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                                 parseFloat(e.target.value) || 0
                               )
                             }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                             placeholder="0"
                             step="0.01"
                             min="0"
@@ -792,7 +801,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                         </div>
 
                         <div>
-                          <label className="block text-xs text-[#4D240F]/70 mb-1">
+                          <label className="block text-xs text-brand-brown/70 mb-1">
                             Clonales (kg)
                           </label>
                           <input
@@ -805,7 +814,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                                 parseFloat(e.target.value) || 0
                               )
                             }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                             placeholder="0"
                             step="0.01"
                             min="0"
@@ -823,14 +832,14 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200">
             <button
               onClick={cancelarEdicion}
-              className="px-6 py-3 text-[#4D240F] hover:bg-gray-100 rounded-xl transition-all"
+              className="px-6 py-3 text-brand-brown hover:bg-gray-100 rounded-xl transition-all"
             >
               Cancelar
             </button>
 
             <button
               onClick={confirmarMezcla}
-              className="px-6 py-3 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-xl hover:from-[#5f7d17] hover:to-[#9db86d] transition-all flex items-center gap-2"
+              className="px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:from-primary-dark hover:to-secondary-dark transition-all flex items-center gap-2"
             >
               <Check className="w-5 h-5" />
               <span>{modo_edicion === 'crear' ? 'Confirmar Mezcla' : 'Guardar Cambios'}</span>
@@ -841,17 +850,17 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
 
       {/* MENSAJE INICIAL */}
       {!mezcla_en_edicion && mezclas_guardadas.length === 0 && (
-        <div className="text-center py-12 bg-[#F8FAF5] rounded-2xl border-2 border-dashed border-gray-300">
-          <div className="w-16 h-16 bg-gradient-to-br from-[#73991C] to-[#BFD97D] rounded-2xl flex items-center justify-center text-white mx-auto mb-4">
+        <div className="text-center py-12 bg-background rounded-2xl border-2 border-dashed border-gray-300">
+          <div className="w-16 h-16 bg-gradient-to-br from-primary to-secondary rounded-2xl flex items-center justify-center text-white mx-auto mb-4">
             <Beaker className="w-8 h-8" />
           </div>
-          <h3 className="text-lg text-[#172E08] mb-2">No hay mezclas creadas</h3>
-          <p className="text-[#4D240F]/70 mb-6">
+          <h3 className="text-lg text-foreground mb-2">No hay mezclas creadas</h3>
+          <p className="text-brand-brown/70 mb-6">
             Crea tu primera mezcla para comenzar
           </p>
           <button
             onClick={crearNuevaMezcla}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-xl hover:from-[#5f7d17] hover:to-[#9db86d] transition-all"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:from-primary-dark hover:to-secondary-dark transition-all"
           >
             <Plus className="w-5 h-5" />
             <span>Crear Primera Mezcla</span>
@@ -859,16 +868,27 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
         </div>
       )}
 
+      {/* CONFIRM DIALOG — ELIMINAR MEZCLA */}
+      <ConfirmDialog
+        open={confirmEliminarId !== null}
+        onOpenChange={(open) => { if (!open) setConfirmEliminarId(null); }}
+        title="¿Estás seguro de eliminar esta mezcla?"
+        description="Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={confirmarEliminarMezcla}
+        destructive
+      />
+
       {/* RESUMEN DE CÁLCULOS */}
       {mezclas_guardadas.length > 0 && calculos.length > 0 && !mezcla_en_edicion && (
-        <div className="bg-[#F8FAF5] rounded-2xl p-6 border border-gray-200">
+        <div className="bg-background rounded-2xl p-6 border border-gray-200">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-gradient-to-br from-[#73991C] to-[#BFD97D] rounded-xl flex items-center justify-center text-white">
+            <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center text-white">
               <Calculator className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-[#172E08]">Resumen de Cálculos</h3>
-              <p className="text-sm text-[#4D240F]/70">
+              <h3 className="text-foreground">Resumen de Cálculos</h3>
+              <p className="text-sm text-brand-brown/70">
                 {calculos.length} lotes calculados
               </p>
             </div>
@@ -880,23 +900,23 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                 key={`${calculo.lote_id}-${calculo.lote_nombre}`}
                 className="bg-white rounded-xl p-4 border border-gray-200"
               >
-                <h4 className="text-[#172E08] mb-3">{calculo.lote_nombre}</h4>
+                <h4 className="text-foreground mb-3">{calculo.lote_nombre}</h4>
                 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                   <div>
-                    <p className="text-[#4D240F]/70 text-xs mb-1">Total Árboles</p>
-                    <p className="text-[#172E08]">{formatearNumero(calculo.total_arboles)}</p>
+                    <p className="text-brand-brown/70 text-xs mb-1">Total Árboles</p>
+                    <p className="text-foreground">{formatearNumero(calculo.total_arboles)}</p>
                   </div>
 
                   {(configuracion.tipo === 'fumigacion' || configuracion.tipo === 'drench') && (
                     <>
                       <div>
-                        <p className="text-[#4D240F]/70 text-xs mb-1">Litros Mezcla</p>
-                        <p className="text-[#73991C]">{formatearNumero(calculo.litros_mezcla)} L</p>
+                        <p className="text-brand-brown/70 text-xs mb-1">Litros Mezcla</p>
+                        <p className="text-primary">{formatearNumero(calculo.litros_mezcla)} L</p>
                       </div>
                       <div>
-                        <p className="text-[#4D240F]/70 text-xs mb-1">Canecas</p>
-                        <p className="text-[#73991C]">{formatearNumero(calculo.numero_canecas)}</p>
+                        <p className="text-brand-brown/70 text-xs mb-1">Canecas</p>
+                        <p className="text-primary">{formatearNumero(calculo.numero_canecas)}</p>
                       </div>
                     </>
                   )}
@@ -904,12 +924,12 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                   {configuracion.tipo === 'fertilizacion' && (
                     <>
                       <div>
-                        <p className="text-[#4D240F]/70 text-xs mb-1">Kilos Totales</p>
-                        <p className="text-[#73991C]">{formatearNumero(calculo.kilos_totales)} kg</p>
+                        <p className="text-brand-brown/70 text-xs mb-1">Kilos Totales</p>
+                        <p className="text-primary">{formatearNumero(calculo.kilos_totales)} kg</p>
                       </div>
                       <div>
-                        <p className="text-[#4D240F]/70 text-xs mb-1">Bultos (25kg)</p>
-                        <p className="text-[#73991C]">{calculo.numero_bultos}</p>
+                        <p className="text-brand-brown/70 text-xs mb-1">Bultos (25kg)</p>
+                        <p className="text-primary">{calculo.numero_bultos}</p>
                       </div>
                     </>
                   )}

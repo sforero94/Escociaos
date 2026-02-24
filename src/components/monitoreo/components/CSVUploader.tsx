@@ -70,8 +70,8 @@ export function CSVUploader({ onFileSelect, isProcessing = false }: CSVUploaderP
         onDragLeave={handleDragOut}
         className={`
           relative border-2 border-dashed rounded-xl p-12 text-center transition-all
-          ${isDragOver ? 'border-[#73991C] bg-[#73991C]/5' : 'border-gray-300 bg-gray-50'}
-          ${isProcessing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-[#73991C] hover:bg-[#73991C]/5'}
+          ${isDragOver ? 'border-primary bg-primary/5' : 'border-gray-300 bg-gray-50'}
+          ${isProcessing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-primary hover:bg-primary/5'}
         `}
       >
         <input
@@ -84,21 +84,21 @@ export function CSVUploader({ onFileSelect, isProcessing = false }: CSVUploaderP
 
         <div className="flex flex-col items-center gap-4">
           {isProcessing ? (
-            <div className="w-16 h-16 border-4 border-[#73991C]/30 border-t-[#73991C] rounded-full animate-spin" />
+            <div className="w-16 h-16 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
           ) : (
-            <Upload className="w-16 h-16 text-[#73991C]" />
+            <Upload className="w-16 h-16 text-primary" />
           )}
 
           <div>
-            <p className="text-[#172E08] mb-2">
+            <p className="text-foreground mb-2">
               {isProcessing ? 'Procesando archivo...' : 'Arrastra tu CSV aquí'}
             </p>
-            <p className="text-[#4D240F]/70">
+            <p className="text-brand-brown/70">
               o haz click para seleccionar
             </p>
           </div>
 
-          <div className="flex items-center gap-2 text-[#4D240F]/60">
+          <div className="flex items-center gap-2 text-brand-brown/60">
             <FileText className="w-4 h-4" />
             <span>Formato: Planilla_PLAGAS_Y_ENFERMEDADES.csv</span>
           </div>

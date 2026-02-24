@@ -262,7 +262,7 @@ export function PyGReport({ filtros, onReporteGenerated }: PyGReportProps) {
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-8">
         <div className="flex items-center justify-center">
-          <Loader2 className="w-8 h-8 text-[#73991C] animate-spin mr-2" />
+          <Loader2 className="w-8 h-8 text-primary animate-spin mr-2" />
           <span>Cargando reporte P&L...</span>
         </div>
       </div>

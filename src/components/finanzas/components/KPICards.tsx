@@ -34,13 +34,6 @@ function KPICard({ titulo, valor, icono: Icono, color, tendencia, formato = 'mon
     return tendencia >= 0 ? 'text-green-600' : 'text-red-600';
   };
 
-  const getIconoTendencia = (tendencia?: number) => {
-    if (!tendencia) return null;
-    return tendencia >= 0 ? TrendingUp : TrendingDown;
-  };
-
-  const IconoTendencia = getIconoTendencia(tendencia);
-
   return (
     <div className="bg-white rounded-2xl p-6 border border-gray-200 hover:border-gray-300 transition-all">
       {/* Header */}
@@ -48,9 +41,12 @@ function KPICard({ titulo, valor, icono: Icono, color, tendencia, formato = 'mon
         <div className={`w-12 h-12 bg-gradient-to-br ${color} rounded-xl flex items-center justify-center`}>
           <Icono className="w-6 h-6 text-white" />
         </div>
-        {tendencia !== undefined && IconoTendencia && (
+        {tendencia !== undefined && tendencia !== 0 && (
           <div className={`flex items-center gap-1 text-sm ${getColorTendencia(tendencia)}`}>
-            <IconoTendencia className="w-4 h-4" />
+            {tendencia >= 0
+              ? <TrendingUp className="w-4 h-4" />
+              : <TrendingDown className="w-4 h-4" />
+            }
             <span>{Math.abs(tendencia)}%</span>
           </div>
         )}

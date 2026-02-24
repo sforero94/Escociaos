@@ -149,11 +149,11 @@ export function InventoryMovements() {
     const typeNormalized = type?.toLowerCase()?.trim();
     
     if (typeNormalized === 'entrada') {
-      return <ArrowUpCircle className="w-5 h-5 text-[#28A745]" />;
+      return <ArrowUpCircle className="w-5 h-5 text-success-alt" />;
     } else if (typeNormalized === 'ajuste') {
       return <RotateCcw className="w-5 h-5 text-[#F59E0B]" />;
     } else {
-      return <ArrowDownCircle className="w-5 h-5 text-[#DC3545]" />;
+      return <ArrowDownCircle className="w-5 h-5 text-destructive" />;
     }
   };
 
@@ -161,11 +161,11 @@ export function InventoryMovements() {
     const typeNormalized = type?.toLowerCase()?.trim();
     
     if (typeNormalized === 'entrada') {
-      return 'border-[#28A745]/20 hover:border-[#28A745]/40';
+      return 'border-success-alt/20 hover:border-success-alt/40';
     } else if (typeNormalized === 'ajuste') {
       return 'border-[#F59E0B]/20 hover:border-[#F59E0B]/40';
     } else {
-      return 'border-[#DC3545]/20 hover:border-[#DC3545]/40';
+      return 'border-destructive/20 hover:border-destructive/40';
     }
   };
 
@@ -173,11 +173,11 @@ export function InventoryMovements() {
     const typeNormalized = type?.toLowerCase()?.trim();
     
     if (typeNormalized === 'entrada') {
-      return 'bg-[#28A745]/10 text-[#28A745]';
+      return 'bg-success-alt/10 text-success-alt';
     } else if (typeNormalized === 'ajuste') {
       return 'bg-[#F59E0B]/10 text-[#F59E0B]';
     } else {
-      return 'bg-[#DC3545]/10 text-[#DC3545]';
+      return 'bg-destructive/10 text-destructive';
     }
   };
 
@@ -213,7 +213,7 @@ export function InventoryMovements() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 text-[#73991C] animate-spin" />
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
       </div>
     );
@@ -227,20 +227,20 @@ export function InventoryMovements() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-[#172E08] mb-2">Movimientos de Inventario</h1>
-          <p className="text-[#4D240F]/70">Historial completo de entradas y salidas de productos</p>
+          <h1 className="text-foreground mb-2">Movimientos de Inventario</h1>
+          <p className="text-brand-brown/70">Historial completo de entradas y salidas de productos</p>
         </div>
         <div className="flex gap-3">
           <Button
             onClick={() => setIsModalOpen(true)}
-            className="bg-[#73991C] hover:bg-[#5f7d17] text-white rounded-xl transition-all duration-200"
+            className="bg-primary hover:bg-primary-dark text-white rounded-xl transition-all duration-200"
           >
             <Plus className="w-4 h-4 mr-2" />
             Nuevo Movimiento
           </Button>
           <Button
             onClick={loadMovements}
-            className="bg-[#73991C] hover:bg-[#5f7d17] text-white rounded-xl transition-all duration-200"
+            className="bg-primary hover:bg-primary-dark text-white rounded-xl transition-all duration-200"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
             Actualizar
@@ -249,17 +249,17 @@ export function InventoryMovements() {
       </div>
 
       {/* Filtros */}
-      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-[#172E08] flex items-center gap-2">
-            <Filter className="w-5 h-5 text-[#73991C]" />
+          <h2 className="text-foreground flex items-center gap-2">
+            <Filter className="w-5 h-5 text-primary" />
             Filtros
           </h2>
           {hasActiveFilters && (
             <Button
               onClick={clearFilters}
               variant="ghost"
-              className="text-[#4D240F]/70 hover:text-[#73991C] text-sm"
+              className="text-brand-brown/70 hover:text-primary text-sm"
             >
               <X className="w-4 h-4 mr-1" />
               Limpiar
@@ -276,7 +276,7 @@ export function InventoryMovements() {
             <select
               value={selectedProduct}
               onChange={(e) => setSelectedProduct(e.target.value)}
-              className="w-full px-4 py-2 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+              className="w-full px-4 py-2 border border-primary/20 rounded-xl bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
             >
               <option value="">Todos los productos</option>
               {products.map(product => (
@@ -295,7 +295,7 @@ export function InventoryMovements() {
             <select
               value={selectedType}
               onChange={(e) => setSelectedType(e.target.value)}
-              className="w-full px-4 py-2 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+              className="w-full px-4 py-2 border border-primary/20 rounded-xl bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
             >
               <option value="">Todos</option>
               <option value="entrada">Entradas</option>
@@ -313,7 +313,7 @@ export function InventoryMovements() {
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="w-full px-4 py-2 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+              className="w-full px-4 py-2 border border-primary/20 rounded-xl bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
             />
           </div>
 
@@ -327,7 +327,7 @@ export function InventoryMovements() {
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="w-full px-4 py-2 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+              className="w-full px-4 py-2 border border-primary/20 rounded-xl bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
             />
           </div>
         </div>
@@ -335,28 +335,28 @@ export function InventoryMovements() {
         {/* Búsqueda */}
         <div className="mt-4">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#4D240F]/50" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-brand-brown/50" />
             <Input
               type="text"
               placeholder="Buscar por producto, notas o referencia..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 bg-[#E7EDDD]/30 border-[#73991C]/20 focus:border-[#73991C] rounded-xl"
+              className="pl-10 bg-muted/30 border-primary/20 focus:border-primary rounded-xl"
             />
           </div>
         </div>
 
         {/* Contador de resultados */}
-        <div className="mt-4 text-sm text-[#4D240F]/70">
-          Mostrando <span className="text-[#73991C]">{filteredMovements.length}</span> movimiento{filteredMovements.length !== 1 ? 's' : ''}
+        <div className="mt-4 text-sm text-brand-brown/70">
+          Mostrando <span className="text-primary">{filteredMovements.length}</span> movimiento{filteredMovements.length !== 1 ? 's' : ''}
         </div>
       </div>
 
       {/* Resumen de filtros activos */}
       {hasActiveFilters && (
-        <div className="bg-[#73991C]/5 border border-[#73991C]/20 rounded-xl p-4">
-          <p className="text-sm text-[#172E08]">
-            <span className="text-[#73991C]">Filtros activos:</span>{' '}
+        <div className="bg-primary/5 border border-primary/20 rounded-xl p-4">
+          <p className="text-sm text-foreground">
+            <span className="text-primary">Filtros activos:</span>{' '}
             {selectedProduct && `Producto: ${products.find(p => p.id === parseInt(selectedProduct))?.nombre} `}
             {selectedType && `| Tipo: ${selectedType === 'entrada' ? 'Entradas' : 'Salidas'} `}
             {startDate && `| Desde: ${new Date(startDate).toLocaleDateString('es-CO')} `}
@@ -374,12 +374,12 @@ export function InventoryMovements() {
 
       {/* Lista de Movimientos */}
       {paginatedMovements.length === 0 ? (
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-12 text-center shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
-          <Package className="w-16 h-16 text-[#4D240F]/40 mx-auto mb-4" />
-          <h3 className="text-xl text-[#172E08] mb-2">
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-12 text-center shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+          <Package className="w-16 h-16 text-brand-brown/40 mx-auto mb-4" />
+          <h3 className="text-xl text-foreground mb-2">
             No hay movimientos
           </h3>
-          <p className="text-[#4D240F]/60">
+          <p className="text-brand-brown/60">
             {hasActiveFilters
               ? 'No se encontraron movimientos con los filtros seleccionados'
               : 'Aún no hay movimientos de inventario registrados'}
@@ -401,7 +401,7 @@ export function InventoryMovements() {
                   
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <h3 className="text-sm text-[#172E08] truncate">
+                      <h3 className="text-sm text-foreground truncate">
                         {movement.producto?.nombre || 'Producto eliminado'}
                       </h3>
                       <span className={`px-2 py-0.5 rounded text-xs uppercase tracking-wide flex-shrink-0 ${getMovementBadgeColor(movement.tipo_movimiento)}`}>
@@ -410,7 +410,7 @@ export function InventoryMovements() {
                     </div>
                     
                     {/* Info secundaria en una sola línea */}
-                    <div className="flex items-center gap-3 text-xs text-[#4D240F]/60">
+                    <div className="flex items-center gap-3 text-xs text-brand-brown/60">
                       {movement.aplicacion_id && (
                         <span>Apl: #{movement.aplicacion_id.substring(0, 6)}</span>
                       )}
@@ -426,8 +426,8 @@ export function InventoryMovements() {
 
                 {/* Cantidad */}
                 <div className="text-center flex-shrink-0">
-                  <p className="text-xs text-[#4D240F]/50 uppercase tracking-wide mb-0.5">Cantidad</p>
-                  <p className="text-sm text-[#172E08]">
+                  <p className="text-xs text-brand-brown/50 uppercase tracking-wide mb-0.5">Cantidad</p>
+                  <p className="text-sm text-foreground">
                     {movement.tipo_movimiento?.toLowerCase()?.trim() === 'entrada' ? '+' : ''}
                     {movement.tipo_movimiento?.toLowerCase()?.trim() === 'salida otros' ? '-' : ''}
                     {formatNumber(Math.abs(movement.cantidad), 2)} {movement.producto?.unidad_medida}
@@ -436,23 +436,23 @@ export function InventoryMovements() {
 
                 {/* Stock Anterior */}
                 <div className="text-center flex-shrink-0 hidden sm:block">
-                  <p className="text-xs text-[#4D240F]/50 uppercase tracking-wide mb-0.5">Stock Anterior</p>
-                  <p className="text-sm text-[#4D240F]/70">
+                  <p className="text-xs text-brand-brown/50 uppercase tracking-wide mb-0.5">Stock Anterior</p>
+                  <p className="text-sm text-brand-brown/70">
                     {formatNumber(movement.saldo_anterior, 2)} {movement.producto?.unidad_medida}
                   </p>
                 </div>
 
                 {/* Stock Nuevo */}
                 <div className="text-center flex-shrink-0">
-                  <p className="text-xs text-[#4D240F]/50 uppercase tracking-wide mb-0.5">Stock Nuevo</p>
-                  <p className="text-sm text-[#172E08]">
+                  <p className="text-xs text-brand-brown/50 uppercase tracking-wide mb-0.5">Stock Nuevo</p>
+                  <p className="text-sm text-foreground">
                     {formatNumber(movement.saldo_nuevo, 2)} {movement.producto?.unidad_medida}
                   </p>
                 </div>
 
                 {/* Fecha */}
                 <div className="text-right flex-shrink-0 hidden md:block">
-                  <p className="text-xs text-[#4D240F]/60 whitespace-nowrap">
+                  <p className="text-xs text-brand-brown/60 whitespace-nowrap">
                     {formatearFechaHora(movement.created_at)}
                   </p>
                 </div>
@@ -469,7 +469,7 @@ export function InventoryMovements() {
             onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
             disabled={currentPage === 1}
             variant="outline"
-            className="border-[#73991C]/20 hover:bg-[#73991C]/5 disabled:opacity-50 rounded-xl"
+            className="border-primary/20 hover:bg-primary/5 disabled:opacity-50 rounded-xl"
           >
             ← Anterior
           </Button>
@@ -494,8 +494,8 @@ export function InventoryMovements() {
                   onClick={() => setCurrentPage(page)}
                   className={`rounded-xl min-w-[2.5rem] ${
                     currentPage === page
-                      ? 'bg-[#73991C] text-white hover:bg-[#5f7d17]'
-                      : 'bg-white border border-[#73991C]/20 text-[#172E08] hover:bg-[#73991C]/5'
+                      ? 'bg-primary text-white hover:bg-primary-dark'
+                      : 'bg-white border border-primary/20 text-foreground hover:bg-primary/5'
                   }`}
                 >
                   {page}
@@ -508,7 +508,7 @@ export function InventoryMovements() {
             onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
             disabled={currentPage === totalPages}
             variant="outline"
-            className="border-[#73991C]/20 hover:bg-[#73991C]/5 disabled:opacity-50 rounded-xl"
+            className="border-primary/20 hover:bg-primary/5 disabled:opacity-50 rounded-xl"
           >
             Siguiente →
           </Button>
@@ -518,32 +518,32 @@ export function InventoryMovements() {
       {/* Stats resumen */}
       {filteredMovements.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-gradient-to-br from-[#28A745]/5 to-[#28A745]/10 rounded-2xl border border-[#28A745]/20 p-6 shadow-[0_4px_24px_rgba(40,167,69,0.08)] hover:shadow-[0_6px_28px_rgba(40,167,69,0.12)] transition-all duration-200">
+          <div className="bg-gradient-to-br from-success-alt/5 to-success-alt/10 rounded-2xl border border-success-alt/20 p-6 shadow-[0_4px_24px_rgba(40,167,69,0.08)] hover:shadow-[0_6px_28px_rgba(40,167,69,0.12)] transition-all duration-200">
             <div className="flex items-center gap-3 mb-2">
-              <ArrowUpCircle className="w-6 h-6 text-[#28A745]" />
-              <p className="text-sm text-[#28A745]/70 uppercase tracking-wide">Total Entradas</p>
+              <ArrowUpCircle className="w-6 h-6 text-success-alt" />
+              <p className="text-sm text-success-alt/70 uppercase tracking-wide">Total Entradas</p>
             </div>
-            <p className="text-3xl text-[#28A745]">
+            <p className="text-3xl text-success-alt">
               {filteredMovements.filter(m => m.tipo_movimiento?.toLowerCase()?.trim() === 'entrada').length}
             </p>
           </div>
           
-          <div className="bg-gradient-to-br from-[#DC3545]/5 to-[#DC3545]/10 rounded-2xl border border-[#DC3545]/20 p-6 shadow-[0_4px_24px_rgba(220,53,69,0.08)] hover:shadow-[0_6px_28px_rgba(220,53,69,0.12)] transition-all duration-200">
+          <div className="bg-gradient-to-br from-destructive/5 to-destructive/10 rounded-2xl border border-destructive/20 p-6 shadow-[0_4px_24px_rgba(220,53,69,0.08)] hover:shadow-[0_6px_28px_rgba(220,53,69,0.12)] transition-all duration-200">
             <div className="flex items-center gap-3 mb-2">
-              <ArrowDownCircle className="w-6 h-6 text-[#DC3545]" />
-              <p className="text-sm text-[#DC3545]/70 uppercase tracking-wide">Total Salidas</p>
+              <ArrowDownCircle className="w-6 h-6 text-destructive" />
+              <p className="text-sm text-destructive/70 uppercase tracking-wide">Total Salidas</p>
             </div>
-            <p className="text-3xl text-[#DC3545]">
+            <p className="text-3xl text-destructive">
               {filteredMovements.filter(m => m.tipo_movimiento?.toLowerCase()?.trim() === 'salida').length}
             </p>
           </div>
           
-          <div className="bg-gradient-to-br from-[#F8FAF5] to-[#BFD97D]/20 rounded-2xl border border-[#BFD97D] p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)] hover:shadow-[0_6px_28px_rgba(115,153,28,0.12)] transition-all duration-200">
+          <div className="bg-gradient-to-br from-background to-secondary/20 rounded-2xl border border-secondary p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)] hover:shadow-[0_6px_28px_rgba(115,153,28,0.12)] transition-all duration-200">
             <div className="flex items-center gap-3 mb-2">
-              <Package className="w-6 h-6 text-[#73991C]" />
-              <p className="text-sm text-[#4D240F]/70 uppercase tracking-wide">Total Movimientos</p>
+              <Package className="w-6 h-6 text-primary" />
+              <p className="text-sm text-brand-brown/70 uppercase tracking-wide">Total Movimientos</p>
             </div>
-            <p className="text-3xl text-[#73991C]">
+            <p className="text-3xl text-primary">
               {filteredMovements.length}
             </p>
           </div>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 import { Alert, AlertDescription } from '../ui/alert';
 import {
   Tabs,
@@ -23,6 +24,8 @@ import TareaDetalleDialog from './TareaDetalleDialog';
 import ReportesView from './ReportesView';
 import KanbanBoard from './KanbanBoard';
 import type { ColumnActions } from './kanban-types';
+import type { Empleado, Contratista, Lote, Sublote, Trabajador } from '../../types/shared';
+export type { Empleado, Contratista, Lote, Sublote, Trabajador };
 
 // Tipos
 export interface TipoTarea {
@@ -31,44 +34,6 @@ export interface TipoTarea {
   categoria: string;
   descripcion?: string;
   activo: boolean;
-}
-
-export interface Empleado {
-  id: string;
-  nombre: string;
-  cargo?: string;
-  estado: 'Activo' | 'Inactivo';
-  salario?: number;
-  prestaciones_sociales?: number;
-  auxilios_no_salariales?: number;
-  horas_semanales?: number;
-}
-
-export interface Contratista {
-  id: string;
-  nombre: string;
-  tipo_contrato: 'Jornal' | 'Contrato';
-  tarifa_jornal: number;
-  cedula?: string;
-  telefono?: string;
-  estado: 'Activo' | 'Inactivo';
-  fecha_inicio?: string;
-  fecha_fin?: string;
-  observaciones?: string;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export interface Lote {
-  id: string;
-  nombre: string;
-  area_hectareas?: number;
-}
-
-export interface Sublote {
-  id: string;
-  lote_id: string;
-  nombre: string;
 }
 
 export interface Tarea {
@@ -119,11 +84,6 @@ export interface RegistroTrabajo {
   costo_jornal?: number;
 }
 
-// Union type for workers (employees or contractors)
-export type Trabajador =
-  | { type: 'empleado'; data: Empleado }
-  | { type: 'contratista'; data: Contratista };
-
 // Componente principal
 const Labores: React.FC = () => {
   // Estados principales
@@ -147,6 +107,10 @@ const Labores: React.FC = () => {
     type: 'success' | 'error' | 'info';
     message: string;
   } | null>(null);
+
+  // Confirm dialog state
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleteTargetTarea, setDeleteTargetTarea] = useState<Tarea | null>(null);
 
   // Tab activo
   const [tabActivo, setTabActivo] = useState('kanban');
@@ -347,9 +311,17 @@ const Labores: React.FC = () => {
     }
   };
 
-  // Manejar eliminación de tarea
-  const handleEliminarTarea = async (tarea: Tarea) => {
-    if (!window.confirm(`¿Está seguro de eliminar la tarea "${tarea.nombre}"?`)) return;
+  // Abrir confirmación de eliminación de tarea
+  const handleEliminarTarea = (tarea: Tarea) => {
+    setDeleteTargetTarea(tarea);
+    setConfirmDeleteOpen(true);
+  };
+
+  // Ejecutar eliminación después de confirmar
+  const executeEliminarTarea = async () => {
+    if (!deleteTargetTarea) return;
+    const tarea = deleteTargetTarea;
+    setDeleteTargetTarea(null);
 
     try {
       const { error } = await getSupabase()
@@ -451,6 +423,17 @@ const Labores: React.FC = () => {
           />
         </TabsContent>
       </Tabs>
+
+      {/* Confirm dialog para eliminar tarea */}
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        title={`¿Está seguro de eliminar la tarea "${deleteTargetTarea?.nombre}"?`}
+        description="Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={executeEliminarTarea}
+        destructive
+      />
 
       {/* Diálogos */}
       <CrearEditarTareaDialog

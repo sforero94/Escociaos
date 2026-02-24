@@ -48,15 +48,15 @@ export function IngresosView() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-[#172E08] mb-2">Ingresos</h1>
-            <p className="text-[#4D240F]/70">
+            <h1 className="text-foreground mb-2">Ingresos</h1>
+            <p className="text-brand-brown/70">
               Gestión y registro de ingresos operativos
             </p>
           </div>
 
           <Button
             onClick={handleNewIngreso}
-            className="bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white hover:from-[#5f7d17] hover:to-[#9db86d] shadow-sm"
+            className="bg-gradient-to-r from-primary to-secondary text-white hover:from-primary-dark hover:to-secondary-dark shadow-sm"
           >
             <Plus className="w-4 h-4 mr-2" />
             Nuevo Ingreso

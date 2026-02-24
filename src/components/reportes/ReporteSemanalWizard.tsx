@@ -266,14 +266,14 @@ export function ReporteSemanalWizard() {
           <div key={paso.numero} className="flex items-center flex-1">
             <div className="flex items-center gap-3">
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
-                esActual ? 'bg-[#73991C] text-white shadow-md' :
-                esCompletado ? 'bg-[#BFD97D] text-[#172E08]' :
+                esActual ? 'bg-primary text-white shadow-md' :
+                esCompletado ? 'bg-secondary text-foreground' :
                 'bg-gray-100 text-gray-400'
               }`}>
                 <Icon className="w-5 h-5" />
               </div>
               <div className="hidden md:block">
-                <p className={`text-sm font-medium ${esActual ? 'text-[#172E08]' : 'text-gray-500'}`}>
+                <p className={`text-sm font-medium ${esActual ? 'text-foreground' : 'text-gray-500'}`}>
                   {paso.titulo}
                 </p>
                 <p className="text-xs text-gray-400">{paso.descripcion}</p>
@@ -281,7 +281,7 @@ export function ReporteSemanalWizard() {
             </div>
             {i < PASOS.length - 1 && (
               <div className={`flex-1 h-0.5 mx-4 ${
-                esCompletado ? 'bg-[#BFD97D]' : 'bg-gray-200'
+                esCompletado ? 'bg-secondary' : 'bg-gray-200'
               }`} />
             )}
           </div>
@@ -299,8 +299,8 @@ export function ReporteSemanalWizard() {
       {/* Selector de semana */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-[#172E08]">
-            <Calendar className="w-5 h-5 text-[#73991C]" />
+          <CardTitle className="flex items-center gap-2 text-foreground">
+            <Calendar className="w-5 h-5 text-primary" />
             Semana del Reporte
           </CardTitle>
         </CardHeader>
@@ -310,7 +310,7 @@ export function ReporteSemanalWizard() {
               <ArrowLeft className="w-4 h-4" />
             </Button>
             <div className="flex-1 text-center">
-              <p className="text-2xl font-bold text-[#172E08]">
+              <p className="text-2xl font-bold text-foreground">
                 Semana {semana.numero}
               </p>
               <p className="text-sm text-gray-500">
@@ -327,8 +327,8 @@ export function ReporteSemanalWizard() {
       {/* Personal */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-[#172E08]">
-            <Users className="w-5 h-5 text-[#73991C]" />
+          <CardTitle className="flex items-center gap-2 text-foreground">
+            <Users className="w-5 h-5 text-primary" />
             Personal
           </CardTitle>
         </CardHeader>
@@ -338,7 +338,7 @@ export function ReporteSemanalWizard() {
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-[#4D240F] mb-1">
+              <label className="block text-sm font-medium text-brand-brown mb-1">
                 Fallas (ausencias no justificadas)
               </label>
               <input
@@ -346,11 +346,11 @@ export function ReporteSemanalWizard() {
                 min="0"
                 value={fallas}
                 onChange={(e) => setFallas(Math.max(0, parseInt(e.target.value) || 0))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-[#73991C] outline-none"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-[#4D240F] mb-1">
+              <label className="block text-sm font-medium text-brand-brown mb-1">
                 Permisos otorgados
               </label>
               <input
@@ -358,7 +358,7 @@ export function ReporteSemanalWizard() {
                 min="0"
                 value={permisos}
                 onChange={(e) => setPermisos(Math.max(0, parseInt(e.target.value) || 0))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-[#73991C] outline-none"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none"
               />
             </div>
           </div>
@@ -375,7 +375,7 @@ export function ReporteSemanalWizard() {
     if (loading) {
       return (
         <div className="flex flex-col items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 text-[#73991C] animate-spin mb-4" />
+          <Loader2 className="w-8 h-8 text-primary animate-spin mb-4" />
           <p className="text-gray-500">Cargando datos de la semana...</p>
         </div>
       );
@@ -398,7 +398,7 @@ export function ReporteSemanalWizard() {
         {/* Resumen de Personal */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-[#172E08]">Personal</CardTitle>
+            <CardTitle className="text-foreground">Personal</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -409,8 +409,8 @@ export function ReporteSemanalWizard() {
                 { label: 'Fallas', value: datosReporte.personal.fallas },
                 { label: 'Permisos', value: datosReporte.personal.permisos },
               ].map(item => (
-                <div key={item.label} className="text-center p-3 bg-[#F8FAF5] rounded-lg">
-                  <p className="text-2xl font-bold text-[#172E08]">{item.value}</p>
+                <div key={item.label} className="text-center p-3 bg-background rounded-lg">
+                  <p className="text-2xl font-bold text-foreground">{item.value}</p>
                   <p className="text-xs text-gray-500">{item.label}</p>
                 </div>
               ))}
@@ -421,7 +421,7 @@ export function ReporteSemanalWizard() {
         {/* Matriz de Jornales */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-[#172E08]">
+            <CardTitle className="text-foreground">
               Distribución de Jornales
               <Badge variant="secondary" className="ml-2">
                 {datosReporte.jornales.totalGeneral.jornales.toFixed(2)} jornales
@@ -440,7 +440,7 @@ export function ReporteSemanalWizard() {
                       {datosReporte.jornales.lotes.map(lote => (
                         <TableHead key={lote} className="text-center">{lote}</TableHead>
                       ))}
-                      <TableHead className="text-center font-bold bg-[#F8FAF5]">Total</TableHead>
+                      <TableHead className="text-center font-bold bg-background">Total</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -455,20 +455,20 @@ export function ReporteSemanalWizard() {
                             </TableCell>
                           );
                         })}
-                        <TableCell className="text-center font-bold bg-[#F8FAF5]">
+                        <TableCell className="text-center font-bold bg-background">
                           {(datosReporte.jornales.totalesPorActividad[actividad]?.jornales || 0).toFixed(2)}
                         </TableCell>
                       </TableRow>
                     ))}
                     {/* Fila de totales */}
-                    <TableRow className="bg-[#F8FAF5] font-bold">
+                    <TableRow className="bg-background font-bold">
                       <TableCell>Total</TableCell>
                       {datosReporte.jornales.lotes.map(lote => (
                         <TableCell key={lote} className="text-center">
                           {(datosReporte.jornales.totalesPorLote[lote]?.jornales || 0).toFixed(2)}
                         </TableCell>
                       ))}
-                      <TableCell className="text-center bg-[#73991C]/10">
+                      <TableCell className="text-center bg-primary/10">
                         {datosReporte.jornales.totalGeneral.jornales.toFixed(2)}
                       </TableCell>
                     </TableRow>
@@ -483,20 +483,20 @@ export function ReporteSemanalWizard() {
         {datosReporte.aplicaciones.planeadas.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-[#172E08]">
+              <CardTitle className="text-foreground">
                 Aplicaciones Planeadas
                 <Badge className="ml-2">{datosReporte.aplicaciones.planeadas.length}</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {datosReporte.aplicaciones.planeadas.map(app => (
-                <div key={app.id} className="p-4 bg-[#F8FAF5] rounded-lg border border-[#BFD97D]/30">
+                <div key={app.id} className="p-4 bg-background rounded-lg border border-secondary/30">
                   <div className="flex items-center gap-2 mb-2">
                     <Badge variant="outline">{app.tipo}</Badge>
-                    <span className="font-medium text-[#172E08]">{app.nombre}</span>
+                    <span className="font-medium text-foreground">{app.nombre}</span>
                   </div>
                   <p className="text-sm text-gray-600 mb-2">{app.proposito}</p>
-                  <p className="text-sm font-medium text-[#73991C]">
+                  <p className="text-sm font-medium text-primary">
                     Costo estimado: ${formatNumber(app.costoTotalEstimado)} COP
                   </p>
                   <p className="text-xs text-gray-400 mt-1">
@@ -512,9 +512,9 @@ export function ReporteSemanalWizard() {
         {datosReporte.aplicaciones.activas.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-[#172E08]">
+              <CardTitle className="text-foreground">
                 Aplicaciones en Ejecución
-                <Badge className="ml-2 bg-[#73991C]">{datosReporte.aplicaciones.activas.length}</Badge>
+                <Badge className="ml-2 bg-primary">{datosReporte.aplicaciones.activas.length}</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -523,14 +523,14 @@ export function ReporteSemanalWizard() {
                   <div className="flex items-center justify-between mb-3">
                     <div>
                       <Badge variant="outline">{app.tipo}</Badge>
-                      <span className="ml-2 font-medium text-[#172E08]">{app.nombre}</span>
+                      <span className="ml-2 font-medium text-foreground">{app.nombre}</span>
                     </div>
-                    <span className="text-lg font-bold text-[#73991C]">{app.porcentajeGlobal}%</span>
+                    <span className="text-lg font-bold text-primary">{app.porcentajeGlobal}%</span>
                   </div>
                   {/* Barra de progreso global */}
                   <div className="w-full bg-gray-200 rounded-full h-2 mb-3">
                     <div
-                      className="bg-[#73991C] h-2 rounded-full transition-all"
+                      className="bg-primary h-2 rounded-full transition-all"
                       style={{ width: `${Math.min(100, app.porcentajeGlobal)}%` }}
                     />
                   </div>
@@ -558,7 +558,7 @@ export function ReporteSemanalWizard() {
         {datosReporte.monitoreo.fechasMonitoreo.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-[#172E08]">
+              <CardTitle className="text-foreground">
                 Monitoreo Fitosanitario
                 <Badge variant="secondary" className="ml-2">
                   {datosReporte.monitoreo.fechasMonitoreo.length} monitoreos
@@ -587,7 +587,7 @@ export function ReporteSemanalWizard() {
               {/* Detalle por lote */}
               {datosReporte.monitoreo.detallePorLote.map(lote => (
                 <div key={lote.loteNombre} className="border rounded-lg p-3">
-                  <p className="font-medium text-[#172E08] mb-2">{lote.loteNombre}</p>
+                  <p className="font-medium text-foreground mb-2">{lote.loteNombre}</p>
                   <div className="space-y-1">
                     {lote.sublotes.map((s, i) => (
                       <div key={i} className="flex items-center justify-between text-sm">
@@ -618,7 +618,7 @@ export function ReporteSemanalWizard() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center justify-between text-[#172E08]">
+          <CardTitle className="flex items-center justify-between text-foreground">
             <span>Temas Adicionales</span>
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={agregarBloqueTexto}>
@@ -664,7 +664,7 @@ export function ReporteSemanalWizard() {
                     placeholder="Título (opcional)"
                     value={bloque.titulo || ''}
                     onChange={(e) => actualizarBloque(index, { titulo: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-3 focus:ring-2 focus:ring-[#73991C] focus:border-[#73991C] outline-none text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-3 focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm"
                   />
 
                   {bloque.tipo === 'texto' ? (
@@ -673,13 +673,13 @@ export function ReporteSemanalWizard() {
                       value={(bloque as BloqueTexto).contenido}
                       onChange={(e) => actualizarBloque(index, { contenido: e.target.value })}
                       rows={4}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-[#73991C] outline-none text-sm resize-y"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm resize-y"
                     />
                   ) : (
                     <>
                       {/* Upload de imagen */}
                       {!(bloque as BloqueImagenConTexto).imagenBase64 ? (
-                        <label className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:border-[#73991C] transition-colors">
+                        <label className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:border-primary transition-colors">
                           <Upload className="w-8 h-8 text-gray-400 mb-2" />
                           <p className="text-sm text-gray-500">Arrastra o haz clic para subir imagen</p>
                           <p className="text-xs text-gray-400">Máximo 500KB</p>
@@ -715,7 +715,7 @@ export function ReporteSemanalWizard() {
                         value={(bloque as BloqueImagenConTexto).descripcion}
                         onChange={(e) => actualizarBloque(index, { descripcion: e.target.value })}
                         rows={2}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-[#73991C] outline-none text-sm resize-y mt-3"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none text-sm resize-y mt-3"
                       />
                     </>
                   )}
@@ -740,20 +740,20 @@ export function ReporteSemanalWizard() {
           <CardContent className="py-12 text-center">
             {generando ? (
               <div>
-                <Loader2 className="w-12 h-12 text-[#73991C] animate-spin mx-auto mb-4" />
-                <p className="text-lg font-medium text-[#172E08]">{progresoMensaje || 'Generando reporte...'}</p>
+                <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto mb-4" />
+                <p className="text-lg font-medium text-foreground">{progresoMensaje || 'Generando reporte...'}</p>
                 <p className="text-sm text-gray-400 mt-2">Esto puede tomar 10-30 segundos</p>
               </div>
             ) : (
               <div>
-                <FileText className="w-16 h-16 text-[#73991C] mx-auto mb-4 opacity-70" />
-                <h3 className="text-xl font-bold text-[#172E08] mb-2">Listo para generar</h3>
+                <FileText className="w-16 h-16 text-primary mx-auto mb-4 opacity-70" />
+                <h3 className="text-xl font-bold text-foreground mb-2">Listo para generar</h3>
                 <p className="text-gray-500 mb-6">
                   El reporte será diseñado por IA con los datos de la semana {semana.numero}
                 </p>
                 <Button
                   size="lg"
-                  className="bg-[#73991C] hover:bg-[#5a7a16] text-white px-8"
+                  className="bg-primary hover:bg-primary-dark text-white px-8"
                   onClick={handleGenerar}
                 >
                   <FileText className="w-5 h-5 mr-2" />
@@ -793,14 +793,14 @@ export function ReporteSemanalWizard() {
       {htmlGenerado && (
         <>
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-[#172E08]">Vista Previa</h3>
+            <h3 className="text-lg font-bold text-foreground">Vista Previa</h3>
             <div className="flex gap-2">
               <Button variant="outline" onClick={handleGenerar} disabled={generando}>
                 <RefreshCw className={`w-4 h-4 mr-1 ${generando ? 'animate-spin' : ''}`} />
                 Regenerar
               </Button>
               <Button
-                className="bg-[#73991C] hover:bg-[#5a7a16] text-white"
+                className="bg-primary hover:bg-primary-dark text-white"
                 onClick={handleDescargar}
                 disabled={!pdfBlob}
               >
@@ -839,7 +839,7 @@ export function ReporteSemanalWizard() {
           >
             <ArrowLeft className="w-4 h-4 mr-1" /> Volver a Reportes
           </Button>
-          <h1 className="text-2xl font-bold text-[#172E08]">Generar Reporte Semanal</h1>
+          <h1 className="text-2xl font-bold text-foreground">Generar Reporte Semanal</h1>
         </div>
       </div>
 
@@ -863,7 +863,7 @@ export function ReporteSemanalWizard() {
         </Button>
         {pasoActual < 4 ? (
           <Button
-            className="bg-[#73991C] hover:bg-[#5a7a16] text-white"
+            className="bg-primary hover:bg-primary-dark text-white"
             onClick={handleSiguiente}
             disabled={loading}
           >

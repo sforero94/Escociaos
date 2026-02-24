@@ -283,7 +283,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white px-6 py-4">
+        <div className="bg-gradient-to-r from-primary to-secondary text-white px-6 py-4">
           <h2 className="text-2xl">
             {productId ? 'Editar Producto' : 'Crear Nuevo Producto'}
           </h2>
@@ -295,26 +295,26 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
         {/* Progress Indicator */}
         <div className="bg-gray-100 px-6 py-3">
           <div className="flex items-center justify-between max-w-2xl mx-auto">
-            <div className={`flex items-center ${currentSection >= 1 ? 'text-[#73991C]' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentSection >= 1 ? 'bg-[#73991C] text-white' : 'bg-gray-300'}`}>
+            <div className={`flex items-center ${currentSection >= 1 ? 'text-primary' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentSection >= 1 ? 'bg-primary text-white' : 'bg-gray-300'}`}>
                 1
               </div>
               <span className="ml-2 text-sm">Básico</span>
             </div>
             <div className="flex-1 h-1 bg-gray-300 mx-4">
-              <div className={`h-full ${currentSection >= 2 ? 'bg-[#73991C]' : 'bg-gray-300'}`} style={{ width: currentSection >= 2 ? '100%' : '0%', transition: 'width 0.3s' }}></div>
+              <div className={`h-full ${currentSection >= 2 ? 'bg-primary' : 'bg-gray-300'}`} style={{ width: currentSection >= 2 ? '100%' : '0%', transition: 'width 0.3s' }}></div>
             </div>
-            <div className={`flex items-center ${currentSection >= 2 ? 'text-[#73991C]' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentSection >= 2 ? 'bg-[#73991C] text-white' : 'bg-gray-300'}`}>
+            <div className={`flex items-center ${currentSection >= 2 ? 'text-primary' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentSection >= 2 ? 'bg-primary text-white' : 'bg-gray-300'}`}>
                 2
               </div>
               <span className="ml-2 text-sm">Técnico</span>
             </div>
             <div className="flex-1 h-1 bg-gray-300 mx-4">
-              <div className={`h-full ${currentSection >= 3 ? 'bg-[#73991C]' : 'bg-gray-300'}`} style={{ width: currentSection >= 3 ? '100%' : '0%', transition: 'width 0.3s' }}></div>
+              <div className={`h-full ${currentSection >= 3 ? 'bg-primary' : 'bg-gray-300'}`} style={{ width: currentSection >= 3 ? '100%' : '0%', transition: 'width 0.3s' }}></div>
             </div>
-            <div className={`flex items-center ${currentSection >= 3 ? 'text-[#73991C]' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentSection >= 3 ? 'bg-[#73991C] text-white' : 'bg-gray-300'}`}>
+            <div className={`flex items-center ${currentSection >= 3 ? 'text-primary' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentSection >= 3 ? 'bg-primary text-white' : 'bg-gray-300'}`}>
                 3
               </div>
               <span className="ml-2 text-sm">Seguridad</span>
@@ -342,7 +342,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                       name="nombre"
                       value={formData.nombre}
                       onChange={handleChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                       required
                     />
                   </div>
@@ -356,7 +356,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                       name="grupo"
                       value={formData.grupo}
                       onChange={handleChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                       required
                     >
                       <option value="">Seleccionar...</option>
@@ -378,7 +378,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                       name="categoria"
                       value={formData.categoria}
                       onChange={handleChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                       required
                     >
                       <option value="">Seleccionar...</option>
@@ -407,7 +407,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                       name="unidad_medida"
                       value={formData.unidad_medida}
                       onChange={handleChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                       required
                     >
                       <option value="">Seleccionar...</option>
@@ -429,7 +429,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                       name="estado"
                       value={formData.estado}
                       onChange={handleChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                     >
                       <option value="OK">OK</option>
                       <option value="Sin existencias">Sin existencias</option>
@@ -453,7 +453,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                       onChange={handleChange}
                       step="0.01"
                       min="0"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                       placeholder="Ej: 1, 5, 10"
                     />
                   </div>
@@ -470,7 +470,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                       onChange={handleChange}
                       step="0.01"
                       min="0"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                       placeholder="Precio del bulto/tarro"
                     />
                   </div>
@@ -478,7 +478,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                   {/* Precio Unitario */}
                   <div>
                     <label className="block text-sm text-gray-700 mb-1">
-                      Precio Unitario ($/L o $/Kg) <span className="text-xs text-[#73991C]">✓ Calculado</span>
+                      Precio Unitario ($/L o $/Kg) <span className="text-xs text-primary">✓ Calculado</span>
                     </label>
                     <input
                       type="number"
@@ -505,7 +505,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                       onChange={handleChange}
                       step="0.01"
                       min="0"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                       placeholder="Cantidad en inventario"
                     />
                   </div>
@@ -522,7 +522,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                       onChange={handleChange}
                       step="0.01"
                       min="0"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                       placeholder="Nivel mínimo deseado"
                     />
                   </div>
@@ -550,7 +550,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                           name="registro_ica"
                           value={formData.registro_ica}
                           onChange={handleChange}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                           placeholder="Número de registro"
                         />
                       </div>
@@ -565,7 +565,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                           name="blanco_biologico"
                           value={formData.blanco_biologico}
                           onChange={handleChange}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                           placeholder="Plaga/enfermedad objetivo"
                         />
                       </div>
@@ -584,7 +584,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                           name="ingrediente_activo_1"
                           value={formData.ingrediente_activo_1}
                           onChange={handleChange}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                           placeholder="Nombre del ingrediente"
                         />
                       </div>
@@ -599,7 +599,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                           onChange={handleChange}
                           step="0.01"
                           min="0"
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                           placeholder="Ej: 480"
                         />
                       </div>
@@ -616,7 +616,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                           name="ingrediente_activo_2"
                           value={formData.ingrediente_activo_2}
                           onChange={handleChange}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                           placeholder="Opcional"
                         />
                       </div>
@@ -631,7 +631,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                           onChange={handleChange}
                           step="0.01"
                           min="0"
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                           placeholder="Opcional"
                         />
                       </div>
@@ -648,7 +648,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                           name="ingrediente_activo_3"
                           value={formData.ingrediente_activo_3}
                           onChange={handleChange}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                           placeholder="Opcional"
                         />
                       </div>
@@ -663,7 +663,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                           onChange={handleChange}
                           step="0.01"
                           min="0"
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                           placeholder="Opcional"
                         />
                       </div>
@@ -680,7 +680,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                           name="tipo_aplicacion"
                           value={formData.tipo_aplicacion}
                           onChange={handleChange}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                         >
                           <option value="">Seleccionar...</option>
                           <option value="Foliar">Foliar</option>
@@ -698,7 +698,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                           name="estado_fisico"
                           value={formData.estado_fisico}
                           onChange={handleChange}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                         >
                           <option value="">Seleccionar...</option>
                           <option value="Líquido">Líquido</option>
@@ -718,7 +718,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                           value={formData.periodo_reingreso_horas}
                           onChange={handleChange}
                           min="0"
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                           placeholder="Ej: 24"
                         />
                       </div>
@@ -734,7 +734,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                           value={formData.periodo_carencia_dias}
                           onChange={handleChange}
                           min="0"
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                           placeholder="Ej: 7"
                         />
                       </div>
@@ -752,7 +752,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                               value="si"
                               checked={formData.permitido_gerencia === true}
                               onChange={() => setFormData(prev => ({ ...prev, permitido_gerencia: true }))}
-                              className="w-4 h-4 text-[#73991C] border-gray-300 focus:ring-[#73991C]"
+                              className="w-4 h-4 text-primary border-gray-300 focus:ring-primary"
                             />
                             <span className="ml-2 text-sm text-gray-700">Sí</span>
                           </label>
@@ -763,7 +763,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                               value="no"
                               checked={formData.permitido_gerencia === false}
                               onChange={() => setFormData(prev => ({ ...prev, permitido_gerencia: false }))}
-                              className="w-4 h-4 text-[#73991C] border-gray-300 focus:ring-[#73991C]"
+                              className="w-4 h-4 text-primary border-gray-300 focus:ring-primary"
                             />
                             <span className="ml-2 text-sm text-gray-700">No</span>
                           </label>
@@ -782,27 +782,27 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Nitrógeno (N)</label>
-                        <input type="number" name="nitrogeno" value={formData.nitrogeno} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]" placeholder="%" />
+                        <input type="number" name="nitrogeno" value={formData.nitrogeno} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Fósforo (P)</label>
-                        <input type="number" name="fosforo" value={formData.fosforo} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]" placeholder="%" />
+                        <input type="number" name="fosforo" value={formData.fosforo} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Potasio (K)</label>
-                        <input type="number" name="potasio" value={formData.potasio} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]" placeholder="%" />
+                        <input type="number" name="potasio" value={formData.potasio} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Calcio (Ca)</label>
-                        <input type="number" name="calcio" value={formData.calcio} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]" placeholder="%" />
+                        <input type="number" name="calcio" value={formData.calcio} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Magnesio (Mg)</label>
-                        <input type="number" name="magnesio" value={formData.magnesio} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]" placeholder="%" />
+                        <input type="number" name="magnesio" value={formData.magnesio} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Azufre (S)</label>
-                        <input type="number" name="azufre" value={formData.azufre} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]" placeholder="%" />
+                        <input type="number" name="azufre" value={formData.azufre} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
                       </div>
                     </div>
 
@@ -810,27 +810,27 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Hierro (Fe)</label>
-                        <input type="number" name="hierro" value={formData.hierro} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]" placeholder="ppm" />
+                        <input type="number" name="hierro" value={formData.hierro} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="ppm" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Manganeso (Mn)</label>
-                        <input type="number" name="manganeso" value={formData.manganeso} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]" placeholder="ppm" />
+                        <input type="number" name="manganeso" value={formData.manganeso} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="ppm" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Zinc (Zn)</label>
-                        <input type="number" name="zinc" value={formData.zinc} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]" placeholder="ppm" />
+                        <input type="number" name="zinc" value={formData.zinc} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="ppm" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Cobre (Cu)</label>
-                        <input type="number" name="cobre" value={formData.cobre} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]" placeholder="ppm" />
+                        <input type="number" name="cobre" value={formData.cobre} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="ppm" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Boro (B)</label>
-                        <input type="number" name="boro" value={formData.boro} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]" placeholder="ppm" />
+                        <input type="number" name="boro" value={formData.boro} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="ppm" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Molibdeno (Mo)</label>
-                        <input type="number" name="molibdeno" value={formData.molibdeno} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]" placeholder="ppm" />
+                        <input type="number" name="molibdeno" value={formData.molibdeno} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="ppm" />
                       </div>
                     </div>
 
@@ -838,15 +838,15 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Carbono Orgánico (%)</label>
-                        <input type="number" name="carbono_organico" value={formData.carbono_organico} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]" placeholder="%" />
+                        <input type="number" name="carbono_organico" value={formData.carbono_organico} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Silicio (Si)</label>
-                        <input type="number" name="silicio" value={formData.silicio} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]" placeholder="%" />
+                        <input type="number" name="silicio" value={formData.silicio} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Sodio (Na)</label>
-                        <input type="number" name="sodio" value={formData.sodio} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]" placeholder="%" />
+                        <input type="number" name="sodio" value={formData.sodio} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
                       </div>
                     </div>
                   </>
@@ -878,7 +878,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                           name="epp_alto_nivel"
                           checked={formData.epp_alto_nivel}
                           onChange={handleChange}
-                          className="w-4 h-4 text-[#73991C] border-gray-300 rounded focus:ring-[#73991C]"
+                          className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
                         />
                         <label className="ml-2 text-sm text-gray-700">
                           Requiere EPP de Alto Nivel
@@ -890,7 +890,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                           name="riesgo_acuatico"
                           checked={formData.riesgo_acuatico}
                           onChange={handleChange}
-                          className="w-4 h-4 text-[#73991C] border-gray-300 rounded focus:ring-[#73991C]"
+                          className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
                         />
                         <label className="ml-2 text-sm text-gray-700">
                           Riesgo para Ambientes Acuáticos
@@ -902,7 +902,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                           name="riesgo_vida_silvestre"
                           checked={formData.riesgo_vida_silvestre}
                           onChange={handleChange}
-                          className="w-4 h-4 text-[#73991C] border-gray-300 rounded focus:ring-[#73991C]"
+                          className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
                         />
                         <label className="ml-2 text-sm text-gray-700">
                           Riesgo para Vida Silvestre
@@ -914,7 +914,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                           name="riesgo_polinizador"
                           checked={formData.riesgo_polinizador}
                           onChange={handleChange}
-                          className="w-4 h-4 text-[#73991C] border-gray-300 rounded focus:ring-[#73991C]"
+                          className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
                         />
                         <label className="ml-2 text-sm text-gray-700">
                           Riesgo para Polinizadores
@@ -926,7 +926,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                           name="riesgo_transeunte"
                           checked={formData.riesgo_transeunte}
                           onChange={handleChange}
-                          className="w-4 h-4 text-[#73991C] border-gray-300 rounded focus:ring-[#73991C]"
+                          className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
                         />
                         <label className="ml-2 text-sm text-gray-700">
                           Riesgo para Transeúntes
@@ -947,7 +947,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                       name="link_ficha_tecnica"
                       value={formData.link_ficha_tecnica}
                       onChange={handleChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                       placeholder="https://..."
                     />
                   </div>
@@ -960,7 +960,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                       name="link_hoja_seguridad"
                       value={formData.link_hoja_seguridad}
                       onChange={handleChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                       placeholder="https://..."
                     />
                   </div>
@@ -1017,7 +1017,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                 <button
                   type="button"
                   onClick={() => setCurrentSection(prev => prev + 1)}
-                  className="px-6 py-2 bg-[#73991C] text-white rounded-lg hover:bg-[#5f7d17]"
+                  className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark"
                 >
                   Siguiente →
                 </button>
@@ -1025,7 +1025,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                 <button
                   type="submit"
                   disabled={loading}
-                  className="px-6 py-2 bg-[#73991C] text-white rounded-lg hover:bg-[#5f7d17] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? 'Guardando...' : (productId ? 'Actualizar Producto' : 'Crear Producto')}
                 </button>

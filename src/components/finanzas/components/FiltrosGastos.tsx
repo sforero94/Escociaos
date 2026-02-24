@@ -226,7 +226,7 @@ export function FiltrosGastos({ filtros, onFiltrosChange, onAplicarFiltros }: Fi
         <div className="flex items-end">
           <Button
             onClick={onAplicarFiltros}
-            className="w-full bg-[#73991C] hover:bg-[#5a7716]"
+            className="w-full bg-primary hover:bg-primary-dark"
             disabled={loading}
           >
             <Filter className="w-4 h-4 mr-2" />

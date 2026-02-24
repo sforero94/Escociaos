@@ -23,6 +23,7 @@ import { getSupabase } from '../../utils/supabase/client';
 import { IniciarEjecucionModal } from './IniciarEjecucionModal';
 import { DetalleAplicacion } from './DetalleAplicacion';
 import type { Aplicacion, TipoAplicacion, EstadoAplicacion } from '../../types/aplicaciones';
+import { toast } from 'sonner';
 
 const TIPOS_LABELS: Record<TipoAplicacion, string> = {
   'Fumigación': 'Fumigación',
@@ -166,13 +167,6 @@ export function AplicacionesList() {
             agronomo_responsable: row.agronomo_responsable,
             created_at: row.created_at,
             updated_at: row.updated_at,
-            // Campos legacy para compatibilidad con UI vieja
-            nombre: row.nombre_aplicacion || 'Sin nombre',
-            tipo: row.tipo_aplicacion === 'Fumigación' 
-              ? 'fumigacion' 
-              : row.tipo_aplicacion === 'Fertilización'
-              ? 'fertilizacion'
-              : 'drench',
             fecha_inicio: row.fecha_recomendacion || row.created_at,
             configuracion: {
               nombre: row.nombre_aplicacion || 'Sin nombre',
@@ -211,7 +205,7 @@ export function AplicacionesList() {
   const aplicacionesFiltradas = aplicaciones.filter((app) => {
     const matchSearch =
       searchQuery === '' ||
-      app.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      app.nombre_aplicacion?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       app.proposito?.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchTipo = filtroTipo === 'todos' || app.tipo_aplicacion === filtroTipo;
@@ -343,9 +337,9 @@ export function AplicacionesList() {
       setAplicaciones(aplicaciones.filter(a => a.id !== aplicacionId));
       setEliminando(null);
       
-      alert('Aplicación eliminada exitosamente');
+      toast.success('Aplicación eliminada exitosamente');
     } catch (error) {
-      alert('Error al eliminar la aplicación. Por favor intenta nuevamente.');
+      toast.error('Error al eliminar la aplicación. Por favor intenta nuevamente.');
     }
   };
 
@@ -354,15 +348,15 @@ export function AplicacionesList() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-[#172E08] mb-2">Aplicaciones Fitosanitarias</h1>
-          <p className="text-[#4D240F]/70">
+          <h1 className="text-foreground mb-2">Aplicaciones Fitosanitarias</h1>
+          <p className="text-brand-brown/70">
             Gestiona fumigaciones, fertilizaciones y aplicaciones del cultivo
           </p>
         </div>
 
         <button
           onClick={() => navigate('/aplicaciones/calculadora')}
-          className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-xl hover:from-[#5f7d17] hover:to-[#9db86d] transition-all shadow-sm"
+          className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:from-primary-dark hover:to-secondary-dark transition-all shadow-sm"
         >
           <Plus className="w-5 h-5" />
           <span>Nueva Aplicación</span>
@@ -373,42 +367,42 @@ export function AplicacionesList() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm text-[#4D240F]/70">Total</p>
-            <div className="w-10 h-10 bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 rounded-lg flex items-center justify-center">
-              <Calendar className="w-5 h-5 text-[#73991C]" />
+            <p className="text-sm text-brand-brown/70">Total</p>
+            <div className="w-10 h-10 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-lg flex items-center justify-center">
+              <Calendar className="w-5 h-5 text-primary" />
             </div>
           </div>
-          <p className="text-2xl text-[#172E08]">{stats.total}</p>
+          <p className="text-2xl text-foreground">{stats.total}</p>
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm text-[#4D240F]/70">Planificadas</p>
+            <p className="text-sm text-brand-brown/70">Planificadas</p>
             <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
               <Clock className="w-5 h-5 text-blue-600" />
             </div>
           </div>
-          <p className="text-2xl text-[#172E08]">{stats.planificadas}</p>
+          <p className="text-2xl text-foreground">{stats.planificadas}</p>
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm text-[#4D240F]/70">En Ejecución</p>
+            <p className="text-sm text-brand-brown/70">En Ejecución</p>
             <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
               <Play className="w-5 h-5 text-green-600" />
             </div>
           </div>
-          <p className="text-2xl text-[#172E08]">{stats.en_ejecucion}</p>
+          <p className="text-2xl text-foreground">{stats.en_ejecucion}</p>
         </div>
 
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm text-[#4D240F]/70">Cerradas</p>
+            <p className="text-sm text-brand-brown/70">Cerradas</p>
             <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
               <CheckCircle2 className="w-5 h-5 text-gray-600" />
             </div>
           </div>
-          <p className="text-2xl text-[#172E08]">{stats.cerradas}</p>
+          <p className="text-2xl text-foreground">{stats.cerradas}</p>
         </div>
       </div>
 
@@ -417,13 +411,13 @@ export function AplicacionesList() {
         <div className="flex flex-col sm:flex-row gap-4">
           {/* Búsqueda */}
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#4D240F]/40" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-brand-brown/40" />
             <input
               type="text"
               placeholder="Buscar aplicación..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
             />
           </div>
 
@@ -431,7 +425,7 @@ export function AplicacionesList() {
           <select
             value={filtroTipo}
             onChange={(e) => setFiltroTipo(e.target.value as TipoAplicacion | 'todos')}
-            className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+            className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
           >
             <option value="todos">Todos los tipos</option>
             <option value="fumigacion">Fumigación</option>
@@ -443,7 +437,7 @@ export function AplicacionesList() {
           <select
             value={filtroEstado}
             onChange={(e) => setFiltroEstado(e.target.value as EstadoAplicacion | 'todos')}
-            className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+            className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
           >
             <option value="todos">Todos los estados</option>
             <option value="Calculada">Planificada</option>
@@ -457,19 +451,19 @@ export function AplicacionesList() {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 text-[#73991C] animate-spin" />
+            <Loader2 className="w-8 h-8 text-primary animate-spin" />
           </div>
         ) : aplicacionesFiltradas.length === 0 ? (
           <div className="text-center py-12">
-            <div className="w-16 h-16 bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 rounded-2xl mx-auto mb-4 flex items-center justify-center">
-              <Droplet className="w-8 h-8 text-[#73991C]" />
+            <div className="w-16 h-16 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-2xl mx-auto mb-4 flex items-center justify-center">
+              <Droplet className="w-8 h-8 text-primary" />
             </div>
-            <h3 className="text-lg text-[#172E08] mb-2">
+            <h3 className="text-lg text-foreground mb-2">
               {searchQuery || filtroTipo !== 'todos' || filtroEstado !== 'todos'
                 ? 'No se encontraron aplicaciones'
                 : 'No hay aplicaciones registradas'}
             </h3>
-            <p className="text-sm text-[#4D240F]/70 mb-6">
+            <p className="text-sm text-brand-brown/70 mb-6">
               {searchQuery || filtroTipo !== 'todos' || filtroEstado !== 'todos'
                 ? 'Intenta ajustar los filtros de búsqueda'
                 : 'Comienza creando tu primera aplicación'}
@@ -477,7 +471,7 @@ export function AplicacionesList() {
             {!searchQuery && filtroTipo === 'todos' && filtroEstado === 'todos' && (
               <button
                 onClick={() => navigate('/aplicaciones/calculadora')}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-xl hover:from-[#5f7d17] hover:to-[#9db86d] transition-all"
+                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:from-primary-dark hover:to-secondary-dark transition-all"
               >
                 <Plus className="w-5 h-5" />
                 <span>Nueva Aplicación</span>
@@ -499,15 +493,15 @@ export function AplicacionesList() {
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex items-start gap-4 flex-1">
                       {/* Icono */}
-                      <div className="w-12 h-12 bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 rounded-xl flex items-center justify-center flex-shrink-0">
-                        <TipoIcon className="w-6 h-6 text-[#73991C]" />
+                      <div className="w-12 h-12 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-xl flex items-center justify-center flex-shrink-0">
+                        <TipoIcon className="w-6 h-6 text-primary" />
                       </div>
 
                       {/* Información */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <h3 className="text-[#172E08] truncate">
-                            {aplicacion.nombre}
+                          <h3 className="text-foreground truncate">
+                            {aplicacion.nombre_aplicacion}
                           </h3>
                           <span
                             className={`px-2 py-1 text-xs rounded-lg border ${
@@ -518,7 +512,7 @@ export function AplicacionesList() {
                           </span>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-4 text-sm text-[#4D240F]/70">
+                        <div className="flex flex-wrap items-center gap-4 text-sm text-brand-brown/70">
                           <span className="flex items-center gap-1">
                             <TipoIcon className="w-4 h-4" />
                             {TIPOS_LABELS[aplicacion.tipo_aplicacion]}
@@ -534,7 +528,7 @@ export function AplicacionesList() {
                         </div>
 
                         {aplicacion.proposito && (
-                          <p className="text-sm text-[#4D240F]/70 mt-2 line-clamp-1">
+                          <p className="text-sm text-brand-brown/70 mt-2 line-clamp-1">
                             {aplicacion.proposito}
                           </p>
                         )}
@@ -563,7 +557,7 @@ export function AplicacionesList() {
                             e.stopPropagation();
                             navigate(`/aplicaciones/${aplicacion.id}/movimientos`);
                           }}
-                          className="px-4 py-2 bg-gradient-to-r from-[#4D240F] to-[#4D240F]/80 text-white rounded-lg hover:from-[#3d1c0c] hover:to-[#3d1c0c]/80 transition-all flex items-center gap-2"
+                          className="px-4 py-2 bg-gradient-to-r from-brand-brown to-brand-brown/80 text-white rounded-lg hover:from-brand-brown hover:to-brand-brown/80 transition-all flex items-center gap-2"
                         >
                           <ClipboardList className="w-4 h-4" />
                           <span>Registrar Movimientos</span>
@@ -576,7 +570,7 @@ export function AplicacionesList() {
                             e.stopPropagation();
                             navigate(`/aplicaciones/${aplicacion.id}/reporte`);
                           }}
-                          className="px-4 py-2 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-lg hover:from-[#5f7d17] hover:to-[#9db86d] transition-all flex items-center gap-2"
+                          className="px-4 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:from-primary-dark hover:to-secondary-dark transition-all flex items-center gap-2"
                         >
                           <FileText className="w-4 h-4" />
                           <span>Ver Reporte</span>
@@ -599,7 +593,7 @@ export function AplicacionesList() {
                           }}
                           className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
                         >
-                          <MoreVertical className="w-5 h-5 text-[#4D240F]/70" />
+                          <MoreVertical className="w-5 h-5 text-brand-brown/70" />
                         </button>
 
                         {/* Dropdown menu - solo Editar y Eliminar */}
@@ -617,7 +611,7 @@ export function AplicacionesList() {
                                 navigate(`/aplicaciones/calculadora/${aplicacion.id}`);
                                 setMenuAbiertoId(null);
                               }}
-                              className="w-full px-4 py-2 text-left text-sm text-[#172E08] hover:bg-gray-50 flex items-center gap-2 transition-colors"
+                              className="w-full px-4 py-2 text-left text-sm text-foreground hover:bg-gray-50 flex items-center gap-2 transition-colors"
                             >
                               <Edit2 className="w-4 h-4 text-gray-500" />
                               Editar
@@ -655,12 +649,12 @@ export function AplicacionesList() {
                 <Trash2 className="w-6 h-6 text-red-600" />
               </div>
               <div>
-                <h3 className="text-lg text-[#172E08]">Eliminar Aplicación</h3>
-                <p className="text-sm text-[#4D240F]/70">Esta acción no se puede deshacer</p>
+                <h3 className="text-lg text-foreground">Eliminar Aplicación</h3>
+                <p className="text-sm text-brand-brown/70">Esta acción no se puede deshacer</p>
               </div>
             </div>
 
-            <p className="text-sm text-[#4D240F]/70 mb-6">
+            <p className="text-sm text-brand-brown/70 mb-6">
               ¿Estás seguro de que deseas eliminar esta aplicación? Se eliminarán todos los
               datos asociados incluyendo mezclas, cálculos y relaciones con lotes.
             </p>
@@ -668,7 +662,7 @@ export function AplicacionesList() {
             <div className="flex gap-3">
               <button
                 onClick={() => setEliminando(null)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-[#4D240F] rounded-lg hover:bg-gray-50 transition-all"
+                className="flex-1 px-4 py-2 border border-gray-300 text-brand-brown rounded-lg hover:bg-gray-50 transition-all"
               >
                 Cancelar
               </button>

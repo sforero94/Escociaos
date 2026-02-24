@@ -128,23 +128,23 @@ const MOCK_APLICACIONES_PLANEADAS = [
     proposito: 'Control de Monalonion',
     blanco_biologico: ['plaga-1'],
     fecha_inicio_planeada: '2026-02-20',
-  },
-];
-
-const MOCK_COMPRAS = [
-  {
-    producto_nombre: 'Imidacloprid',
-    producto_categoria: 'Insecticida',
-    cantidad_necesaria: 5,
-    unidad: 'Litros',
-    costo_estimado: 250000,
-  },
-  {
-    producto_nombre: 'Clorpirifós',
-    producto_categoria: 'Insecticida',
-    cantidad_necesaria: 3,
-    unidad: 'Litros',
-    costo_estimado: 180000,
+    // aplicaciones_compras joined in the same query (Task #4 N+1 fix)
+    aplicaciones_compras: [
+      {
+        producto_nombre: 'Imidacloprid',
+        producto_categoria: 'Insecticida',
+        cantidad_necesaria: 5,
+        unidad: 'Litros',
+        costo_estimado: 250000,
+      },
+      {
+        producto_nombre: 'Clorpirifós',
+        producto_categoria: 'Insecticida',
+        cantidad_necesaria: 3,
+        unidad: 'Litros',
+        costo_estimado: 180000,
+      },
+    ],
   },
 ];
 
@@ -164,13 +164,13 @@ const MOCK_APLICACIONES_ACTIVAS = [
       { lote_id: 'lote-1', numero_canecas: null, numero_bultos: 20, lotes: { nombre: 'Lote PP' } },
       { lote_id: 'lote-2', numero_canecas: null, numero_bultos: 15, lotes: { nombre: 'Lote ST' } },
     ],
+    // movimientos_diarios joined in the same query (Task #4 N+1 fix)
+    movimientos_diarios: [
+      { lote_id: 'lote-1', numero_canecas: null, numero_bultos: 12 },
+      { lote_id: 'lote-1', numero_canecas: null, numero_bultos: 3 },
+      { lote_id: 'lote-2', numero_canecas: null, numero_bultos: 8 },
+    ],
   },
-];
-
-const MOCK_MOVIMIENTOS_ACTIVOS = [
-  { lote_id: 'lote-1', numero_canecas: null, numero_bultos: 12 },
-  { lote_id: 'lote-1', numero_canecas: null, numero_bultos: 3 },
-  { lote_id: 'lote-2', numero_canecas: null, numero_bultos: 8 },
 ];
 
 const MOCK_MONITOREOS_FECHAS = [
@@ -555,17 +555,13 @@ describe('fetchAplicacionesPlaneadas', () => {
   });
 
   it('obtiene aplicaciones planeadas con lista de compras', async () => {
-    // Mock para aplicaciones
+    // aplicaciones query includes aplicaciones_compras as a join (no separate query)
     const appChain = createChainableMock({ data: MOCK_APLICACIONES_PLANEADAS, error: null });
-    // Mock para compras
-    const comprasChain = createChainableMock({ data: MOCK_COMPRAS, error: null });
-    // Mock para plagas
-    const plagasChain = createChainableMock({ data: [{ nombre: 'Monalonion' }], error: null });
+    // plagas batch lookup: must include id field for the Map lookup
+    const plagasChain = createChainableMock({ data: [{ id: 'plaga-1', nombre: 'Monalonion' }], error: null });
 
-    let callIndex = 0;
     mockFrom.mockImplementation((table: string) => {
       if (table === 'aplicaciones') return appChain;
-      if (table === 'aplicaciones_compras') return comprasChain;
       if (table === 'plagas_enfermedades_catalogo') return plagasChain;
       return createChainableMock();
     });
@@ -600,12 +596,11 @@ describe('fetchAplicacionesActivas', () => {
   });
 
   it('calcula progreso correctamente para fertilización (bultos)', async () => {
+    // movimientos_diarios is now joined in the aplicaciones query (no separate query)
     const appChain = createChainableMock({ data: MOCK_APLICACIONES_ACTIVAS, error: null });
-    const movChain = createChainableMock({ data: MOCK_MOVIMIENTOS_ACTIVOS, error: null });
 
     mockFrom.mockImplementation((table: string) => {
       if (table === 'aplicaciones') return appChain;
-      if (table === 'movimientos_diarios') return movChain;
       return createChainableMock();
     });
 

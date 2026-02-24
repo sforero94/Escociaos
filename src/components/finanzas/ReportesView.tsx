@@ -8,6 +8,7 @@ import { Button } from '../ui/button';
 import { Download, FileText, FileSpreadsheet, TrendingUp } from 'lucide-react';
 import { generarPDFPyG } from '../../utils/generarPDFPyG';
 import type { FiltrosFinanzas, ReportePyG } from '../../types/finanzas';
+import { toast } from 'sonner';
 
 /**
  * Vista de Reportes Financieros
@@ -22,7 +23,7 @@ export function ReportesView() {
 
   const handleExportPDF = () => {
     if (!reporteData) {
-      alert('No hay datos para exportar. Genere un reporte primero.');
+      toast.error('No hay datos para exportar. Genere un reporte primero.');
       return;
     }
 
@@ -34,13 +35,13 @@ export function ReportesView() {
         empresa: 'Escocia Hass'
       });
     } catch (error) {
-      alert('Error al generar el PDF. Intente nuevamente.');
+      toast.error('Error al generar el PDF. Intente nuevamente.');
     }
   };
 
   const handleExportExcel = () => {
     // TODO: Implement Excel export
-    alert('Exportación a Excel próximamente disponible');
+    toast('Exportación a Excel próximamente disponible');
   };
 
   const handleReporteGenerated = (reporte: ReportePyG) => {
@@ -56,8 +57,8 @@ export function ReportesView() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-[#172E08] mb-2">Reportes Financieros</h1>
-            <p className="text-[#4D240F]/70">P&L y análisis financiero detallado</p>
+            <h1 className="text-foreground mb-2">Reportes Financieros</h1>
+            <p className="text-brand-brown/70">P&L y análisis financiero detallado</p>
           </div>
 
           {/* Export buttons */}
@@ -112,8 +113,8 @@ export function ReportesView() {
               <div className="w-16 h-16 bg-blue-100 rounded-2xl mx-auto mb-4 flex items-center justify-center">
                 <Download className="w-8 h-8 text-blue-600" />
               </div>
-              <h3 className="text-lg text-[#172E08] mb-2">Flujo de Caja</h3>
-              <p className="text-[#4D240F]/70">
+              <h3 className="text-lg text-foreground mb-2">Flujo de Caja</h3>
+              <p className="text-brand-brown/70">
                 Reporte de flujo de caja próximamente disponible
               </p>
             </div>

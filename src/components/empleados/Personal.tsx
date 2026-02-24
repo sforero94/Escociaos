@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -54,29 +55,7 @@ import {
   UserX,
 } from 'lucide-react';
 
-// Tipos
-interface Empleado {
-  id?: string;
-  nombre: string;
-  cedula?: string;
-  telefono?: string;
-  email?: string;
-  estado: 'Activo' | 'Inactivo';
-  cargo?: string;
-  tipo_contrato?: string;
-  fecha_inicio_contrato?: string;
-  fecha_fin_contrato?: string;
-  horas_semanales?: number;
-  periodicidad_pago?: string;
-  salario?: number;
-  prestaciones_sociales?: number;
-  auxilios_no_salariales?: number;
-  medio_pago?: string;
-  banco?: string;
-  numero_cuenta?: string;
-  created_at?: string;
-  updated_at?: string;
-}
+import type { Empleado } from '../../types/shared';
 
 // Valores por defecto para nuevo empleado
 const EMPLEADO_INICIAL: Empleado = {
@@ -101,6 +80,11 @@ const Personal: React.FC = () => {
   } | null>(null);
   const [csvData, setCsvData] = useState<Empleado[]>([]);
   const [csvPreview, setCsvPreview] = useState(false);
+
+  // Confirm dialog state
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmTitle, setConfirmTitle] = useState('');
+  const [confirmAction, setConfirmAction] = useState<() => Promise<void>>(() => async () => {});
 
   // Cargar empleados al montar el componente
   useEffect(() => {
@@ -212,26 +196,34 @@ const Personal: React.FC = () => {
         if (tieneRegistros) detalles.push(`${(registrosTrabajo as any).count} registro(s) de trabajo`);
         if (tieneTareas) detalles.push(`${(tareasResponsable as any).count} tarea(s) asignada(s)`);
 
-        const mensaje = `No se puede eliminar este empleado porque tiene:\n\n${detalles.join('\n')}\n\n¿Desea desactivarlo en su lugar?`;
-
-        if (window.confirm(mensaje)) {
-          // Desactivar en lugar de eliminar
+        setConfirmTitle(`No se puede eliminar: tiene ${detalles.join(' y ')}. ¿Desea desactivarlo en su lugar?`);
+        setConfirmAction(() => async () => {
           await handleToggleEstado(id, 'Inactivo');
-        }
+        });
+        setConfirmOpen(true);
+        setLoading(false);
         return;
       }
 
       // Si no tiene dependencias, confirmar eliminación
-      if (!window.confirm('¿Está seguro de eliminar este empleado? Esta acción no se puede deshacer.')) return;
-
-      const { error } = await supabase.from('empleados').delete().eq('id', id);
-
-      if (error) throw error;
-      showAlert('success', 'Empleado eliminado exitosamente');
-      await fetchEmpleados();
+      setConfirmTitle('¿Está seguro de eliminar este empleado?');
+      setConfirmAction(() => async () => {
+        try {
+          setLoading(true);
+          const { error } = await supabase.from('empleados').delete().eq('id', id);
+          if (error) throw error;
+          showAlert('success', 'Empleado eliminado exitosamente');
+          await fetchEmpleados();
+        } catch (error: any) {
+          showAlert('error', `Error al eliminar: ${error.message}`);
+        } finally {
+          setLoading(false);
+        }
+      });
+      setConfirmOpen(true);
+      setLoading(false);
     } catch (error: any) {
       showAlert('error', `Error al eliminar: ${error.message}`);
-    } finally {
       setLoading(false);
     }
   };
@@ -716,7 +708,7 @@ María García,9876543210,3109876543,maria@example.com,Activo,Jefe de Cosecha,In
                     <Button
                       onClick={handleSaveCsvData}
                       disabled={csvData.length === 0 || loading}
-                      className="bg-[#73991C] hover:bg-[#5a7716]"
+                      className="bg-primary hover:bg-primary-dark"
                     >
                       {loading ? 'Importando...' : 'Importar Empleados'}
                     </Button>
@@ -726,7 +718,7 @@ María García,9876543210,3109876543,maria@example.com,Activo,Jefe de Cosecha,In
 
               <Button
                 onClick={handleNewEmpleado}
-                className="flex items-center gap-2 bg-[#73991C] hover:bg-[#5a7716]"
+                className="flex items-center gap-2 bg-primary hover:bg-primary-dark"
               >
                 <UserPlus className="h-4 w-4" />
                 <span className="hidden md:inline">Nuevo Empleado</span>
@@ -746,7 +738,7 @@ María García,9876543210,3109876543,maria@example.com,Activo,Jefe de Cosecha,In
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-3">
-              <Users className="h-8 w-8 text-[#73991C]" />
+              <Users className="h-8 w-8 text-primary" />
               <p className="text-3xl font-bold">{empleados.length}</p>
             </div>
           </CardContent>
@@ -794,7 +786,7 @@ María García,9876543210,3109876543,maria@example.com,Activo,Jefe de Cosecha,In
         <CardContent>
           {loading ? (
             <div className="flex justify-center items-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#73991C]"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
           ) : empleadosFiltrados.length === 0 ? (
             <div className="text-center py-12">
@@ -879,6 +871,20 @@ María García,9876543210,3109876543,maria@example.com,Activo,Jefe de Cosecha,In
           )}
         </CardContent>
       </Card>
+
+      {/* Confirm dialog for delete / deactivate */}
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={confirmTitle}
+        description="Esta acción no se puede deshacer."
+        confirmLabel="Confirmar"
+        onConfirm={() => {
+          setConfirmOpen(false);
+          confirmAction();
+        }}
+        destructive
+      />
 
       {/* Dialog de formulario de empleado */}
       <Dialog open={showFormDialog} onOpenChange={setShowFormDialog}>
@@ -1191,7 +1197,7 @@ María García,9876543210,3109876543,maria@example.com,Activo,Jefe de Cosecha,In
             <Button
               onClick={handleSaveEmpleado}
               disabled={loading || !formData.nombre.trim()}
-              className="bg-[#73991C] hover:bg-[#5a7716]"
+              className="bg-primary hover:bg-primary-dark"
             >
               {loading
                 ? 'Guardando...'

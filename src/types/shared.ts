@@ -6,14 +6,28 @@
 // ============================================================================
 
 export interface Empleado {
-  id: string;
+  id?: string;
   nombre: string;
   cargo?: string;
   estado: 'Activo' | 'Inactivo';
+  // Identity & contact
+  cedula?: string;
+  telefono?: string;
+  email?: string;
+  // Contract details
+  tipo_contrato?: string;
+  fecha_inicio_contrato?: string;
+  fecha_fin_contrato?: string;
+  periodicidad_pago?: string;
+  // Compensation
   salario?: number;
   prestaciones_sociales?: number;
   auxilios_no_salariales?: number;
   horas_semanales?: number;
+  // Payment info
+  medio_pago?: string;
+  banco?: string;
+  numero_cuenta?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -23,7 +37,7 @@ export interface Empleado {
 // ============================================================================
 
 export interface Contratista {
-  id: string;
+  id?: string;
   nombre: string;
   tipo_contrato: 'Jornal' | 'Contrato';
   tarifa_jornal: number;           // Daily rate
@@ -57,7 +71,7 @@ export function isContratista(trabajador: Trabajador): trabajador is { type: 'co
 }
 
 // Helper to get worker ID
-export function getTrabajadorId(trabajador: Trabajador): string {
+export function getTrabajadorId(trabajador: Trabajador): string | undefined {
   return trabajador.data.id;
 }
 
@@ -73,7 +87,15 @@ export function getTrabajadorNombre(trabajador: Trabajador): string {
 export interface Lote {
   id: string;
   nombre: string;
-  area_hectareas?: number;
+  area_hectareas?: number | null;
+  // Agronomic fields (used by configuracion/LotesConfig)
+  numero_orden?: number | null;
+  arboles_grandes?: number | null;
+  arboles_medianos?: number | null;
+  arboles_pequenos?: number | null;
+  arboles_clonales?: number | null;
+  total_arboles?: number | null;
+  activo?: boolean | null;
   sublotes?: Sublote[];
   created_at?: string;
   updated_at?: string;
@@ -84,6 +106,13 @@ export interface Sublote {
   lote_id: string;
   nombre: string;
   area_hectareas?: number;
+  // Agronomic fields (used by configuracion/SublotesConfig)
+  numero_sublote?: number | null;
+  arboles_grandes?: number | null;
+  arboles_medianos?: number | null;
+  arboles_pequenos?: number | null;
+  arboles_clonales?: number | null;
+  total_arboles?: number | null;
   created_at?: string;
 }
 

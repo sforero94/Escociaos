@@ -81,6 +81,33 @@ export function useFormPersistence<T>({
   // Track if this is the initial mount (don't save on first render)
   const isInitialMountRef = useRef(true);
 
+  // Clear old form data (keep only last N days) — declared before effects that reference it
+  const clearOldFormData = () => {
+    try {
+      const cutoffTime = Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+      Object.keys(localStorage).forEach(k => {
+        if (k.startsWith('form_autosave_')) {
+          try {
+            const item = localStorage.getItem(k);
+            if (item) {
+              const parsed: StoredFormData<unknown> = JSON.parse(item);
+              const savedTime = new Date(parsed.timestamp).getTime();
+
+              if (savedTime < cutoffTime) {
+                localStorage.removeItem(k);
+              }
+            }
+          } catch (e) {
+            localStorage.removeItem(k);
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Failed to clear old form data', error);
+    }
+  };
+
   // Save to localStorage with debouncing
   useEffect(() => {
     if (!enabled) return;
@@ -183,35 +210,6 @@ export function useFormPersistence<T>({
     }
   };
 
-  // Clear old form data (keep only last N days)
-  const clearOldFormData = () => {
-    try {
-      const cutoffTime = Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
-
-      Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('form_autosave_')) {
-          try {
-            const item = localStorage.getItem(key);
-            if (item) {
-              const parsed: StoredFormData<unknown> = JSON.parse(item);
-              const savedTime = new Date(parsed.timestamp).getTime();
-
-              if (savedTime < cutoffTime) {
-                localStorage.removeItem(key);
-                console.log(`🗑️ Removed old form data: ${key}`);
-              }
-            }
-          } catch (e) {
-            // Remove corrupted data
-            localStorage.removeItem(key);
-            console.log(`🗑️ Removed corrupted form data: ${key}`);
-          }
-        }
-      });
-    } catch (error) {
-      console.error('Failed to clear old form data', error);
-    }
-  };
 
   return [state, setState, clearFormData];
 }

@@ -69,6 +69,10 @@
   --switch-background: #BFD97D;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
+  --brand-brown: #4D240F;
+  --primary-dark: #5f7d17;
+  --secondary-dark: #9db86d;
+  --success-alt: #28A745;
   --ring: #73991C;
   --chart-1: #73991C;
   --chart-2: #BFD97D;
@@ -148,6 +152,10 @@
   --color-input: var(--input);
   --color-input-background: var(--input-background);
   --color-switch-background: var(--switch-background);
+  --color-brand-brown: var(--brand-brown);
+  --color-primary-dark: var(--primary-dark);
+  --color-secondary-dark: var(--secondary-dark);
+  --color-success-alt: var(--success-alt);
   --color-ring: var(--ring);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);

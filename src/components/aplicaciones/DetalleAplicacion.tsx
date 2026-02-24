@@ -7,6 +7,7 @@ import { generarPDFListaCompras } from '../../utils/generarPDFListaCompras';
 import { generarPDFReporteCierre } from '../../utils/generarPDFReporteCierre';
 import { fetchDatosReporteCierre } from '../../utils/fetchDatosReporteCierre';
 import type { Aplicacion, ListaCompras } from '../../types/aplicaciones';
+import { toast } from 'sonner';
 
 interface DetalleAplicacionProps {
   aplicacion: Aplicacion;
@@ -109,7 +110,7 @@ export function DetalleAplicacion({
       }
 
       // 2. Cargar canecas/bultos planeados (filtrar por lote si está seleccionado)
-      const esFertilizacion = aplicacion.tipo === 'fertilizacion';
+      const esFertilizacion = aplicacion.tipo_aplicacion === 'Fertilización';
       const campoUnidad = esFertilizacion ? 'numero_bultos' : 'numero_canecas';
 
       let calculosQuery = supabase
@@ -281,14 +282,14 @@ export function DetalleAplicacion({
   };
 
   const getTipoIcon = () => {
-    if (aplicacion.tipo === 'fumigacion') return <Droplet className="w-5 h-5" />;
-    if (aplicacion.tipo === 'fertilizacion') return <Package className="w-5 h-5" />;
+    if (aplicacion.tipo_aplicacion === 'Fumigación') return <Droplet className="w-5 h-5" />;
+    if (aplicacion.tipo_aplicacion === 'Fertilización') return <Package className="w-5 h-5" />;
     return <Target className="w-5 h-5" />;
   };
 
   const getTipoNombre = () => {
-    if (aplicacion.tipo === 'fumigacion') return 'Fumigación';
-    if (aplicacion.tipo === 'fertilizacion') return 'Fertilización';
+    if (aplicacion.tipo_aplicacion === 'Fumigación') return 'Fumigación';
+    if (aplicacion.tipo_aplicacion === 'Fertilización') return 'Fertilización';
     return 'Drench';
   };
 
@@ -307,7 +308,7 @@ export function DetalleAplicacion({
       if (error) throw error;
 
       if (!compras || compras.length === 0) {
-        alert('No hay lista de compras para exportar');
+        toast.error('No hay lista de compras para exportar');
         return;
       }
 
@@ -331,8 +332,8 @@ export function DetalleAplicacion({
 
       // ESTO ES LO MISMO QUE exportarPDF() de PasoListaCompras
       const configuracion = {
-        nombre_aplicacion: aplicacion.nombre,
-        tipo_aplicacion: aplicacion.tipo,
+        nombre: aplicacion.nombre_aplicacion,
+        tipo_aplicacion: aplicacion.tipo_aplicacion,
         fecha_inicio: aplicacion.fecha_inicio,
       };
 
@@ -347,7 +348,7 @@ export function DetalleAplicacion({
       generarPDFListaCompras(lista, configuracion, datosEmpresa);
 
     } catch (error: any) {
-      alert('Error al generar el PDF');
+      toast.error('Error al generar el PDF');
     } finally {
       setDescargandoPDF(false);
     }
@@ -359,7 +360,7 @@ export function DetalleAplicacion({
       const datos = await fetchDatosReporteCierre(aplicacion.id);
       generarPDFReporteCierre(datos);
     } catch (error: any) {
-      alert('Error al generar el reporte de cierre: ' + (error?.message || 'Error desconocido'));
+      toast.error('Error al generar el reporte de cierre: ' + (error?.message || 'Error desconocido'));
     } finally {
       setGenerandoReporte(false);
     }
@@ -379,11 +380,11 @@ export function DetalleAplicacion({
       onClick={onClose}
     >
       <div 
-        className="bg-[#F8FAF5] rounded-3xl shadow-[0_8px_48px_rgba(115,153,28,0.15)] max-w-5xl w-full max-h-[92vh] overflow-hidden flex flex-col"
+        className="bg-background rounded-3xl shadow-[0_8px_48px_rgba(115,153,28,0.15)] max-w-5xl w-full max-h-[92vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* HEADER con diseño mejorado */}
-        <div className="relative bg-gradient-to-r from-[#73991C] to-[#5f7d17] px-6 py-5">
+        <div className="relative bg-gradient-to-r from-primary to-primary-dark px-6 py-5">
           <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48cGF0dGVybiBpZD0iZ3JpZCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBwYXR0ZXJuVW5pdHM9InVzZXJTcGFjZU9uVXNlIj48cGF0aCBkPSJNIDQwIDAgTCAwIDAgMCA0MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLW9wYWNpdHk9IjAuMSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9wYXR0ZXJuPjwvZGVmcz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI2dyaWQpIi8+PC9zdmc+')] opacity-30"></div>
           
           <div className="relative flex items-center justify-between">
@@ -392,7 +393,7 @@ export function DetalleAplicacion({
                 {getTipoIcon()}
               </div>
               <div>
-                <h2 className="text-xl text-white">{aplicacion.nombre}</h2>
+                <h2 className="text-xl text-white">{aplicacion.nombre_aplicacion}</h2>
                 <p className="text-sm text-white/80 mt-0.5">{getTipoNombre()}</p>
               </div>
             </div>
@@ -415,62 +416,62 @@ export function DetalleAplicacion({
         <div className="flex-1 overflow-y-auto p-6">
           {loading ? (
             <div className="flex items-center justify-center h-64">
-              <div className="w-10 h-10 border-4 border-[#73991C]/20 border-t-[#73991C] rounded-full animate-spin" />
+              <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
             </div>
           ) : (
             <div className="space-y-5">
               {/* Card de Información General */}
-              <div className="bg-white rounded-2xl border border-[#73991C]/10 shadow-[0_2px_12px_rgba(115,153,28,0.06)] overflow-hidden">
-                <div className="px-5 py-3 bg-gradient-to-r from-[#73991C]/5 to-transparent border-b border-[#73991C]/10">
-                  <h3 className="text-sm text-[#172E08] flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-[#73991C]" />
+              <div className="bg-white rounded-2xl border border-primary/10 shadow-[0_2px_12px_rgba(115,153,28,0.06)] overflow-hidden">
+                <div className="px-5 py-3 bg-gradient-to-r from-primary/5 to-transparent border-b border-primary/10">
+                  <h3 className="text-sm text-foreground flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-primary" />
                     Información General
                   </h3>
                 </div>
                 <div className="p-5">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <p className="text-xs text-[#4D240F]/60">Fecha Inicio (Planeada)</p>
-                      <p className="text-sm text-[#172E08]">{formatearFecha(aplicacion.fecha_inicio_planeada)}</p>
+                      <p className="text-xs text-brand-brown/60">Fecha Inicio (Planeada)</p>
+                      <p className="text-sm text-foreground">{formatearFecha(aplicacion.fecha_inicio_planeada)}</p>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs text-[#4D240F]/60">Fecha Fin (Planeada)</p>
-                      <p className="text-sm text-[#172E08]">{formatearFecha(fechaFinEstimada)}</p>
+                      <p className="text-xs text-brand-brown/60">Fecha Fin (Planeada)</p>
+                      <p className="text-sm text-foreground">{formatearFecha(fechaFinEstimada)}</p>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs text-[#4D240F]/60">Fecha Inicio (Real)</p>
-                      <p className="text-sm text-[#172E08]">{formatearFecha(aplicacion.fecha_inicio_ejecucion)}</p>
+                      <p className="text-xs text-brand-brown/60">Fecha Inicio (Real)</p>
+                      <p className="text-sm text-foreground">{formatearFecha(aplicacion.fecha_inicio_ejecucion)}</p>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs text-[#4D240F]/60">Fecha Fin (Real)</p>
-                      <p className="text-sm text-[#172E08]">
+                      <p className="text-xs text-brand-brown/60">Fecha Fin (Real)</p>
+                      <p className="text-sm text-foreground">
                         {aplicacion.fecha_cierre ? formatearFecha(aplicacion.fecha_cierre) : (
                           <span className="text-amber-600">En progreso</span>
                         )}
                       </p>
                     </div>
                     <div className="space-y-1 col-span-2">
-                      <p className="text-xs text-[#4D240F]/60">Propósito</p>
-                      <p className="text-sm text-[#172E08]">{aplicacion.proposito || 'No especificado'}</p>
+                      <p className="text-xs text-brand-brown/60">Propósito</p>
+                      <p className="text-sm text-foreground">{aplicacion.proposito || 'No especificado'}</p>
                     </div>
                     <div className="space-y-1 col-span-2">
-                      <p className="text-xs text-[#4D240F]/60 flex items-center gap-1">
+                      <p className="text-xs text-brand-brown/60 flex items-center gap-1">
                         <Target className="w-3 h-3" />
                         Blanco Biológico
                       </p>
-                      <p className="text-sm text-[#172E08]">{blancoBiologico}</p>
+                      <p className="text-sm text-foreground">{blancoBiologico}</p>
                     </div>
                     <div className="space-y-1 col-span-2">
-                      <p className="text-xs text-[#4D240F]/60 flex items-center gap-1">
+                      <p className="text-xs text-brand-brown/60 flex items-center gap-1">
                         <MapPin className="w-3 h-3" />
-                        Lotes {selectedLote && <span className="text-[#73991C] font-medium">(filtrado)</span>}
+                        Lotes {selectedLote && <span className="text-primary font-medium">(filtrado)</span>}
                       </p>
                       <div className="flex flex-wrap gap-2">
                         <button
                           onClick={() => setSelectedLote(null)}
                           className={`px-2 py-1 rounded-lg text-xs transition-all ${
                             !selectedLote
-                              ? 'bg-[#73991C] text-white shadow-sm'
+                              ? 'bg-primary text-white shadow-sm'
                               : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                           }`}
                         >
@@ -482,8 +483,8 @@ export function DetalleAplicacion({
                             onClick={() => setSelectedLote(lote.id)}
                             className={`px-2 py-1 rounded-lg text-xs transition-all ${
                               selectedLote === lote.id
-                                ? 'bg-[#73991C] text-white shadow-sm'
-                                : 'bg-[#73991C]/10 text-[#73991C] hover:bg-[#73991C]/20'
+                                ? 'bg-primary text-white shadow-sm'
+                                : 'bg-primary/10 text-primary hover:bg-primary/20'
                             }`}
                           >
                             {lote.nombre}
@@ -496,32 +497,32 @@ export function DetalleAplicacion({
               </div>
 
               {/* Card de Resumen de Canecas/Bultos */}
-              <div className="bg-white rounded-2xl border border-[#73991C]/10 shadow-[0_2px_12px_rgba(115,153,28,0.06)] overflow-hidden">
-                <div className="px-5 py-3 bg-gradient-to-r from-[#73991C]/5 to-transparent border-b border-[#73991C]/10">
-                  <h3 className="text-sm text-[#172E08] flex items-center gap-2">
-                    {aplicacion.tipo === 'fertilizacion' ? (
-                      <Package className="w-4 h-4 text-[#73991C]" />
+              <div className="bg-white rounded-2xl border border-primary/10 shadow-[0_2px_12px_rgba(115,153,28,0.06)] overflow-hidden">
+                <div className="px-5 py-3 bg-gradient-to-r from-primary/5 to-transparent border-b border-primary/10">
+                  <h3 className="text-sm text-foreground flex items-center gap-2">
+                    {aplicacion.tipo_aplicacion === 'Fertilización' ? (
+                      <Package className="w-4 h-4 text-primary" />
                     ) : (
-                      <Droplet className="w-4 h-4 text-[#73991C]" />
+                      <Droplet className="w-4 h-4 text-primary" />
                     )}
-                    {aplicacion.tipo === 'fertilizacion' ? 'Resumen de Bultos' : 'Resumen de Canecas'}
+                    {aplicacion.tipo_aplicacion === 'Fertilización' ? 'Resumen de Bultos' : 'Resumen de Canecas'}
                   </h3>
                 </div>
                 <div className="p-5">
                   <div className="grid grid-cols-3 gap-4">
-                    <div className="text-center p-4 bg-[#F8FAF5] rounded-xl">
-                      <p className="text-xs text-[#4D240F]/60 mb-1">Planeado</p>
-                      <p className="text-2xl text-[#172E08]">{canecasPlaneadas.toFixed(1)}</p>
+                    <div className="text-center p-4 bg-background rounded-xl">
+                      <p className="text-xs text-brand-brown/60 mb-1">Planeado</p>
+                      <p className="text-2xl text-foreground">{canecasPlaneadas.toFixed(1)}</p>
                     </div>
-                    <div className="text-center p-4 bg-[#73991C]/5 rounded-xl">
-                      <p className="text-xs text-[#4D240F]/60 mb-1">Aplicado</p>
-                      <p className="text-2xl text-[#73991C]">{canecasAplicadas.toFixed(1)}</p>
-                      <p className="text-xs text-[#4D240F]/60 mt-1">
+                    <div className="text-center p-4 bg-primary/5 rounded-xl">
+                      <p className="text-xs text-brand-brown/60 mb-1">Aplicado</p>
+                      <p className="text-2xl text-primary">{canecasAplicadas.toFixed(1)}</p>
+                      <p className="text-xs text-brand-brown/60 mt-1">
                         ({canecasPlaneadas > 0 ? ((canecasAplicadas / canecasPlaneadas) * 100).toFixed(0) : 0}%)
                       </p>
                     </div>
-                    <div className="text-center p-4 bg-[#F8FAF5] rounded-xl">
-                      <p className="text-xs text-[#4D240F]/60 mb-1">Diferencia</p>
+                    <div className="text-center p-4 bg-background rounded-xl">
+                      <p className="text-xs text-brand-brown/60 mb-1">Diferencia</p>
                       <p className={`text-2xl ${
                         canecasAplicadas > canecasPlaneadas
                           ? 'text-red-600'
@@ -532,7 +533,7 @@ export function DetalleAplicacion({
                         {canecasAplicadas > canecasPlaneadas ? '+' : ''}
                         {(canecasAplicadas - canecasPlaneadas).toFixed(1)}
                       </p>
-                      <p className="text-xs text-[#4D240F]/60 mt-1">
+                      <p className="text-xs text-brand-brown/60 mt-1">
                         ({canecasPlaneadas > 0 ? (((canecasAplicadas - canecasPlaneadas) / canecasPlaneadas) * 100).toFixed(0) : 0}%)
                       </p>
                     </div>
@@ -541,8 +542,8 @@ export function DetalleAplicacion({
                   {/* Barra de progreso */}
                   <div className="mt-4">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-[#4D240F]/60">Progreso</span>
-                      <span className="text-xs text-[#172E08]">
+                      <span className="text-xs text-brand-brown/60">Progreso</span>
+                      <span className="text-xs text-foreground">
                         {canecasPlaneadas > 0 ? ((canecasAplicadas / canecasPlaneadas) * 100).toFixed(0) : 0}%
                       </span>
                     </div>
@@ -553,7 +554,7 @@ export function DetalleAplicacion({
                             ? 'bg-red-500'
                             : canecasAplicadas >= canecasPlaneadas * 0.9
                             ? 'bg-amber-500'
-                            : 'bg-[#73991C]'
+                            : 'bg-primary'
                         }`}
                         style={{ 
                           width: `${canecasPlaneadas > 0 ? Math.min((canecasAplicadas / canecasPlaneadas) * 100, 100) : 0}%` 
@@ -565,29 +566,29 @@ export function DetalleAplicacion({
               </div>
 
               {/* Card de Resumen de Insumos */}
-              <div className="bg-white rounded-2xl border border-[#73991C]/10 shadow-[0_2px_12px_rgba(115,153,28,0.06)] overflow-hidden">
-                <div className="px-5 py-3 bg-gradient-to-r from-[#73991C]/5 to-transparent border-b border-[#73991C]/10">
-                  <h3 className="text-sm text-[#172E08] flex items-center gap-2">
-                    <Package className="w-4 h-4 text-[#73991C]" />
+              <div className="bg-white rounded-2xl border border-primary/10 shadow-[0_2px_12px_rgba(115,153,28,0.06)] overflow-hidden">
+                <div className="px-5 py-3 bg-gradient-to-r from-primary/5 to-transparent border-b border-primary/10">
+                  <h3 className="text-sm text-foreground flex items-center gap-2">
+                    <Package className="w-4 h-4 text-primary" />
                     Resumen de Productos
                   </h3>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full">
-                    <thead className="bg-[#F8FAF5]">
+                    <thead className="bg-background">
                       <tr>
-                        <th className="text-left py-3 px-5 text-xs text-[#4D240F]/70">Producto</th>
-                        <th className="text-right py-3 px-4 text-xs text-[#4D240F]/70">Planeado</th>
-                        <th className="text-right py-3 px-4 text-xs text-[#4D240F]/70">Aplicado</th>
-                        <th className="text-right py-3 px-4 text-xs text-[#4D240F]/70">Diferencia</th>
+                        <th className="text-left py-3 px-5 text-xs text-brand-brown/70">Producto</th>
+                        <th className="text-right py-3 px-4 text-xs text-brand-brown/70">Planeado</th>
+                        <th className="text-right py-3 px-4 text-xs text-brand-brown/70">Aplicado</th>
+                        <th className="text-right py-3 px-4 text-xs text-brand-brown/70">Diferencia</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#73991C]/5">
+                    <tbody className="divide-y divide-primary/5">
                       {resumenInsumos.length === 0 ? (
                         <tr>
                           <td colSpan={4} className="py-8 text-center">
-                            <Package className="w-10 h-10 text-[#73991C]/20 mx-auto mb-2" />
-                            <p className="text-sm text-[#4D240F]/50">No hay productos registrados</p>
+                            <Package className="w-10 h-10 text-primary/20 mx-auto mb-2" />
+                            <p className="text-sm text-brand-brown/50">No hay productos registrados</p>
                           </td>
                         </tr>
                       ) : (
@@ -596,19 +597,19 @@ export function DetalleAplicacion({
                           const porcentaje = insumo.planeado > 0 ? (insumo.aplicado / insumo.planeado) * 100 : 0;
                           
                           return (
-                            <tr key={index} className="hover:bg-[#F8FAF5] transition-colors">
+                            <tr key={index} className="hover:bg-background transition-colors">
                               <td className="py-3 px-5">
-                                <div className="text-sm text-[#172E08]">{insumo.nombre}</div>
-                                <div className="text-xs text-[#4D240F]/50 mt-0.5">{insumo.unidad}</div>
+                                <div className="text-sm text-foreground">{insumo.nombre}</div>
+                                <div className="text-xs text-brand-brown/50 mt-0.5">{insumo.unidad}</div>
                               </td>
-                              <td className="py-3 px-4 text-right text-sm text-[#172E08]">
+                              <td className="py-3 px-4 text-right text-sm text-foreground">
                                 {insumo.planeado.toFixed(2)}
                               </td>
                               <td className="py-3 px-4 text-right">
-                                <div className="text-sm text-[#73991C]">
+                                <div className="text-sm text-primary">
                                   {insumo.aplicado.toFixed(2)}
                                 </div>
-                                <div className="text-xs text-[#4D240F]/50 mt-0.5">
+                                <div className="text-xs text-brand-brown/50 mt-0.5">
                                   {porcentaje.toFixed(0)}%
                                 </div>
                               </td>
@@ -636,10 +637,10 @@ export function DetalleAplicacion({
 
               {/* Card de Resumen de Cierre (solo para apps cerradas) */}
               {aplicacion.estado === 'Cerrada' && datosCompletos && (
-                <div className="bg-white rounded-2xl border border-[#73991C]/10 shadow-[0_2px_12px_rgba(115,153,28,0.06)] overflow-hidden">
-                  <div className="px-5 py-3 bg-gradient-to-r from-[#73991C]/5 to-transparent border-b border-[#73991C]/10">
-                    <h3 className="text-sm text-[#172E08] flex items-center gap-2">
-                      <DollarSign className="w-4 h-4 text-[#73991C]" />
+                <div className="bg-white rounded-2xl border border-primary/10 shadow-[0_2px_12px_rgba(115,153,28,0.06)] overflow-hidden">
+                  <div className="px-5 py-3 bg-gradient-to-r from-primary/5 to-transparent border-b border-primary/10">
+                    <h3 className="text-sm text-foreground flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-primary" />
                       Resumen de Cierre
                     </h3>
                   </div>
@@ -657,9 +658,9 @@ export function DetalleAplicacion({
                           {formatearMonedaLocal(datosCompletos.costo_total_mano_obra || 0)}
                         </p>
                       </div>
-                      <div className="text-center p-3 bg-[#73991C]/10 rounded-xl">
-                        <p className="text-xs text-[#73991C] mb-1">Costo Total</p>
-                        <p className="text-lg text-[#172E08] font-bold">
+                      <div className="text-center p-3 bg-primary/10 rounded-xl">
+                        <p className="text-xs text-primary mb-1">Costo Total</p>
+                        <p className="text-lg text-foreground font-bold">
                           {formatearMonedaLocal(datosCompletos.costo_total || 0)}
                         </p>
                       </div>
@@ -676,16 +677,16 @@ export function DetalleAplicacion({
                       <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-4">
                         {datosCompletos.jornales_utilizados > 0 && (
                           <div className="flex items-center gap-2 text-sm">
-                            <Users className="w-4 h-4 text-[#73991C]" />
-                            <span className="text-[#4D240F]/60">Jornales:</span>
-                            <span className="text-[#172E08] font-medium">{datosCompletos.jornales_utilizados}</span>
+                            <Users className="w-4 h-4 text-primary" />
+                            <span className="text-brand-brown/60">Jornales:</span>
+                            <span className="text-foreground font-medium">{datosCompletos.jornales_utilizados}</span>
                           </div>
                         )}
                         {datosCompletos.valor_jornal > 0 && (
                           <div className="flex items-center gap-2 text-sm">
-                            <DollarSign className="w-4 h-4 text-[#73991C]" />
-                            <span className="text-[#4D240F]/60">Valor jornal:</span>
-                            <span className="text-[#172E08] font-medium">{formatearMonedaLocal(datosCompletos.valor_jornal)}</span>
+                            <DollarSign className="w-4 h-4 text-primary" />
+                            <span className="text-brand-brown/60">Valor jornal:</span>
+                            <span className="text-foreground font-medium">{formatearMonedaLocal(datosCompletos.valor_jornal)}</span>
                           </div>
                         )}
                       </div>
@@ -694,8 +695,8 @@ export function DetalleAplicacion({
                     {/* Observations */}
                     {datosCompletos.observaciones_cierre && (
                       <div className="mt-4 pt-4 border-t border-gray-100">
-                        <p className="text-xs text-[#4D240F]/60 mb-1">Observaciones de cierre</p>
-                        <p className="text-sm text-[#172E08] bg-[#F8FAF5] rounded-lg p-3 italic">
+                        <p className="text-xs text-brand-brown/60 mb-1">Observaciones de cierre</p>
+                        <p className="text-sm text-foreground bg-background rounded-lg p-3 italic">
                           {datosCompletos.observaciones_cierre}
                         </p>
                       </div>
@@ -708,13 +709,13 @@ export function DetalleAplicacion({
         </div>
 
         {/* FOOTER con botones mejorados */}
-        <div className="border-t border-[#73991C]/10 p-5 bg-white/50 backdrop-blur-sm">
+        <div className="border-t border-primary/10 p-5 bg-white/50 backdrop-blur-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             {/* Botón de lista de compras a la izquierda */}
             <Button
               onClick={descargarListaCompras}
               variant="outline"
-              className="border-[#4D240F]/30 text-[#4D240F] hover:bg-[#4D240F]/10 hover:border-[#4D240F]"
+              className="border-brand-brown/30 text-brand-brown hover:bg-brand-brown/10 hover:border-brand-brown"
               disabled={descargandoPDF}
             >
               <ShoppingCart className="w-4 h-4 mr-2" />
@@ -731,7 +732,7 @@ export function DetalleAplicacion({
                       navigate(`/aplicaciones/${aplicacion.id}/reporte`);
                     }}
                     variant="outline"
-                    className="border-[#73991C]/30 text-[#73991C] hover:bg-[#73991C]/10 hover:border-[#73991C]"
+                    className="border-primary/30 text-primary hover:bg-primary/10 hover:border-primary"
                   >
                     <BarChart2 className="w-4 h-4 mr-2" />
                     Ver Reporte Completo
@@ -740,7 +741,7 @@ export function DetalleAplicacion({
                   <Button
                     onClick={descargarReporteCierre}
                     disabled={generandoReporte}
-                    className="bg-[#73991C] hover:bg-[#5f7d17] text-white"
+                    className="bg-primary hover:bg-primary-dark text-white"
                   >
                     {generandoReporte ? (
                       <>
@@ -761,7 +762,7 @@ export function DetalleAplicacion({
                     onClick={onEditar}
                     disabled={aplicacion.estado !== 'Calculada'}
                     variant="outline"
-                    className="border-[#73991C]/30 text-[#73991C] hover:bg-[#73991C]/10 hover:border-[#73991C]"
+                    className="border-primary/30 text-primary hover:bg-primary/10 hover:border-primary"
                   >
                     <Edit className="w-4 h-4 mr-2" />
                     Editar
@@ -770,7 +771,7 @@ export function DetalleAplicacion({
                   <Button
                     onClick={onRegistrarMovimientos}
                     disabled={aplicacion.estado === 'Cerrada'}
-                    className="bg-[#4D240F] hover:bg-[#3d1c0c] text-white"
+                    className="bg-brand-brown hover:bg-brand-brown text-white"
                   >
                     <PlayCircle className="w-4 h-4 mr-2" />
                     Registrar Movimientos
@@ -779,7 +780,7 @@ export function DetalleAplicacion({
                   <Button
                     onClick={onCerrarAplicacion}
                     disabled={aplicacion.estado !== 'En ejecución'}
-                    className="bg-[#73991C] hover:bg-[#5f7d17] text-white"
+                    className="bg-primary hover:bg-primary-dark text-white"
                   >
                     <CheckCircle className="w-4 h-4 mr-2" />
                     Cerrar Aplicación

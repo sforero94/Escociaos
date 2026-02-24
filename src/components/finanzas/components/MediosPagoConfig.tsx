@@ -23,6 +23,8 @@ import {
 } from '../../ui/dialog';
 import { Label } from '../../ui/label';
 import type { MedioPago } from '../../../types/finanzas';
+import { toast } from 'sonner';
+import { ConfirmDialog } from '../../ui/confirm-dialog';
 
 export function MediosPagoConfig() {
   const [mediosPago, setMediosPago] = useState<MedioPago[]>([]);
@@ -33,6 +35,8 @@ export function MediosPagoConfig() {
   const [saving, setSaving] = useState(false);
   const [menuAbiertoId, setMenuAbiertoId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -86,23 +90,25 @@ export function MediosPagoConfig() {
     setShowForm(true);
   };
 
-  const handleDeleteMedioPago = async (medioPagoId: string) => {
-    if (!confirm('¿Estás seguro de que deseas eliminar este medio de pago?')) {
-      return;
-    }
+  const handleDeleteMedioPago = (medioPagoId: string) => {
+    setDeleteTargetId(medioPagoId);
+    setConfirmDeleteOpen(true);
+  };
 
+  const confirmDeleteMedioPago = async () => {
+    if (!deleteTargetId) return;
     try {
       const { error } = await getSupabase()
         .from('fin_medios_pago')
         .delete()
-        .eq('id', medioPagoId);
-
+        .eq('id', deleteTargetId);
       if (error) throw error;
-
-      setMediosPago(mediosPago.filter(m => m.id !== medioPagoId));
-      alert('Medio de pago eliminado exitosamente');
+      setMediosPago(mediosPago.filter(m => m.id !== deleteTargetId));
+      toast.success('Medio de pago eliminado exitosamente');
     } catch (error: any) {
-      alert('Error al eliminar medio de pago: ' + error.message);
+      toast.error('Error al eliminar medio de pago: ' + error.message);
+    } finally {
+      setDeleteTargetId(null);
     }
   };
 
@@ -119,7 +125,7 @@ export function MediosPagoConfig() {
         m.id === medioPago.id ? { ...m, activo: !m.activo } : m
       ));
     } catch (error: any) {
-      alert('Error al actualizar medio de pago: ' + error.message);
+      toast.error('Error al actualizar medio de pago: ' + error.message);
     }
   };
 
@@ -127,7 +133,7 @@ export function MediosPagoConfig() {
     e.preventDefault();
 
     if (!formData.nombre.trim()) {
-      alert('El nombre del medio de pago es obligatorio');
+      toast.error('El nombre del medio de pago es obligatorio');
       return;
     }
 
@@ -168,7 +174,7 @@ export function MediosPagoConfig() {
       setShowForm(false);
       setEditingMedioPago(null);
     } catch (error: any) {
-      alert('Error al guardar medio de pago: ' + error.message);
+      toast.error('Error al guardar medio de pago: ' + error.message);
     } finally {
       setSaving(false);
     }
@@ -187,7 +193,7 @@ export function MediosPagoConfig() {
 
         <Button
           onClick={handleNewMedioPago}
-          className="bg-[#73991C] hover:bg-[#5a7716]"
+          className="bg-primary hover:bg-primary-dark"
         >
           <Plus className="w-4 h-4 mr-2" />
           Nuevo Medio de Pago
@@ -214,7 +220,7 @@ export function MediosPagoConfig() {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 text-[#73991C] animate-spin" />
+            <Loader2 className="w-8 h-8 text-primary animate-spin" />
           </div>
         ) : filteredMediosPago.length === 0 ? (
           <div className="text-center py-12">
@@ -233,7 +239,7 @@ export function MediosPagoConfig() {
             {!searchQuery && (
               <Button
                 onClick={handleNewMedioPago}
-                className="bg-[#73991C] hover:bg-[#5a7716]"
+                className="bg-primary hover:bg-primary-dark"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Nuevo Medio de Pago
@@ -409,7 +415,7 @@ export function MediosPagoConfig() {
               <Button
                 type="submit"
                 disabled={saving}
-                className="bg-[#73991C] hover:bg-[#5a7716]"
+                className="bg-primary hover:bg-primary-dark"
               >
                 {saving ? 'Guardando...' : (editingMedioPago ? 'Actualizar' : 'Crear')}
               </Button>
@@ -417,6 +423,16 @@ export function MediosPagoConfig() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        title="¿Eliminar medio de pago?"
+        description="Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={confirmDeleteMedioPago}
+        destructive
+      />
     </div>
   );
 }

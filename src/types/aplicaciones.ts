@@ -176,9 +176,6 @@ export interface Aplicacion {
   created_at?: string; // ✅ Campo de BD
   updated_at?: string; // ✅ Campo de BD
   
-  // CAMPOS LEGACY (pueden existir en memoria pero no en BD directamente)
-  nombre?: string; // Alias de nombre_aplicacion
-  tipo?: TipoAplicacion; // Alias de tipo_aplicacion (para compatibilidad)
 }
 
 // Producto del catálogo (para selección)

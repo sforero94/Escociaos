@@ -277,7 +277,7 @@ export function GraficoTendencias({
 
     return (
       <g transform={`translate(${x},${y})`}>
-        <text x={0} y={0} dy={16} textAnchor="middle" className="text-xs fill-[#4D240F]">
+        <text x={0} y={0} dy={16} textAnchor="middle" className="text-xs fill-brand-brown">
           {payload.value}
         </text>
         <text x={0} y={16} dy={16} textAnchor="middle" className="text-[10px] fill-gray-500">
@@ -295,7 +295,7 @@ export function GraficoTendencias({
     if (active && payload && payload.length) {
       return (
         <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-200">
-          <p className="text-[#172E08] mb-2">{label}</p>
+          <p className="text-foreground mb-2">{label}</p>
           {payload.map((entry: any, index: number) => (
             <p key={index} style={{ color: entry.color }}>
               {entry.name}: <span>{entry.value}%</span>
@@ -315,7 +315,7 @@ export function GraficoTendencias({
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <div className="flex items-center justify-center h-64">
-          <div className="w-8 h-8 border-4 border-[#73991C]/30 border-t-[#73991C] rounded-full animate-spin" />
+          <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
         </div>
       </div>
     );
@@ -326,7 +326,7 @@ export function GraficoTendencias({
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <div className="flex flex-col items-center justify-center h-64 text-gray-500">
           <TrendingUp className="w-16 h-16 mb-4 opacity-30" />
-          <p className="text-[#172E08]">No hay datos para el rango seleccionado</p>
+          <p className="text-foreground">No hay datos para el rango seleccionado</p>
           <p className="mt-2">Intenta cambiar los filtros</p>
         </div>
       </div>
@@ -343,15 +343,15 @@ export function GraficoTendencias({
       <div className="px-6 py-4 border-b border-gray-200">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#73991C]/10 rounded-lg flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-[#73991C]" />
+            <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+              <TrendingUp className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h3 className="text-[#172E08] font-semibold">
+              <h3 className="text-foreground font-semibold">
                 Tendencias de Incidencia
               </h3>
               {fechaMasAntigua && fechaMasReciente && (
-                <p className="text-[#4D240F]/60 text-sm">
+                <p className="text-brand-brown/60 text-sm">
                   Datos de: {formatearFechaCorta(fechaMasAntigua)} a: {formatearFechaCorta(fechaMasReciente)}
                 </p>
               )}
@@ -360,7 +360,7 @@ export function GraficoTendencias({
 
           <button
             onClick={exportarCSV}
-            className="flex items-center gap-2 px-4 py-2 bg-[#73991C] text-white rounded-lg hover:bg-[#5C7A16] transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
           >
             <Download className="w-4 h-4" />
             <span className="hidden sm:inline">Exportar CSV</span>
@@ -373,7 +373,7 @@ export function GraficoTendencias({
             onClick={() => setModoVisualizacion('ultimo')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               modoVisualizacion === 'ultimo'
-                ? 'bg-[#73991C] text-white'
+                ? 'bg-primary text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
@@ -383,7 +383,7 @@ export function GraficoTendencias({
             onClick={() => setModoVisualizacion('ultimos3')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               modoVisualizacion === 'ultimos3'
-                ? 'bg-[#73991C] text-white'
+                ? 'bg-primary text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
@@ -393,7 +393,7 @@ export function GraficoTendencias({
             onClick={() => setModoVisualizacion('ultimos6')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               modoVisualizacion === 'ultimos6'
-                ? 'bg-[#73991C] text-white'
+                ? 'bg-primary text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
@@ -442,7 +442,7 @@ export function GraficoTendencias({
 
       {/* LEYENDA ADICIONAL */}
       <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
-        <div className="flex items-center gap-2 text-[#4D240F]/60">
+        <div className="flex items-center gap-2 text-brand-brown/60">
           <Calendar className="w-4 h-4" />
           <span>
             Mostrando {tendencias.length} puntos de datos • 

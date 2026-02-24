@@ -122,9 +122,9 @@ export function ProductDetail() {
     if (value === null || value === undefined || value === '') return null;
     
     return (
-      <div className="flex flex-col sm:flex-row sm:items-center gap-2 py-3 border-b border-[#73991C]/10 last:border-0">
-        <span className="text-sm text-[#4D240F]/70 sm:w-1/3">{label}:</span>
-        <span className="text-sm text-[#172E08] sm:w-2/3">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 py-3 border-b border-primary/10 last:border-0">
+        <span className="text-sm text-brand-brown/70 sm:w-1/3">{label}:</span>
+        <span className="text-sm text-foreground sm:w-2/3">
           {typeof value === 'boolean' ? (value ? 'Sí' : 'No') : `${value}${unit}`}
         </span>
       </div>
@@ -132,12 +132,12 @@ export function ProductDetail() {
   };
 
   const Section = ({ title, icon: Icon, children }: { title: string; icon: any; children: React.ReactNode }) => (
-    <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
-      <div className="flex items-center gap-3 mb-4 pb-4 border-b border-[#73991C]/10">
-        <div className="w-10 h-10 bg-gradient-to-br from-[#73991C] to-[#BFD97D] rounded-xl flex items-center justify-center shadow-lg shadow-[#73991C]/20">
+    <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+      <div className="flex items-center gap-3 mb-4 pb-4 border-b border-primary/10">
+        <div className="w-10 h-10 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
           <Icon className="w-5 h-5 text-white" />
         </div>
-        <h2 className="text-lg text-[#172E08]">{title}</h2>
+        <h2 className="text-lg text-foreground">{title}</h2>
       </div>
       <div className="space-y-1">
         {children}
@@ -150,7 +150,7 @@ export function ProductDetail() {
       <div className="space-y-6">
         <InventorySubNav />
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 text-[#73991C] animate-spin" />
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
       </div>
     );
@@ -162,13 +162,13 @@ export function ProductDetail() {
       <div className="space-y-6">
         <InventorySubNav />
         <div className="text-center py-12">
-          <Package className="w-16 h-16 text-[#4D240F]/40 mx-auto mb-4" />
-          <p className="text-[#4D240F]/70">
+          <Package className="w-16 h-16 text-brand-brown/40 mx-auto mb-4" />
+          <p className="text-brand-brown/70">
             {!product ? 'Producto no encontrado' : 'Este producto no está disponible en modo seguro'}
           </p>
           <Button
             onClick={() => navigate('/inventario')}
-            className="mt-4 bg-[#73991C] hover:bg-[#5f7d17] text-white rounded-xl"
+            className="mt-4 bg-primary hover:bg-primary-dark text-white rounded-xl"
           >
             Volver a la lista
           </Button>
@@ -189,18 +189,18 @@ export function ProductDetail() {
               onClick={() => navigate('/inventario')}
               variant="outline"
               size="sm"
-              className="border-[#73991C]/30 text-[#73991C] hover:bg-[#73991C]/5 rounded-xl"
+              className="border-primary/30 text-primary hover:bg-primary/5 rounded-xl"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
               Volver
             </Button>
           </div>
-          <h1 className={`mb-2 ${!product.permitido_gerencia ? 'text-red-600 font-bold' : 'text-[#172E08]'}`}>{product.nombre}</h1>
+          <h1 className={`mb-2 ${!product.permitido_gerencia ? 'text-red-600 font-bold' : 'text-foreground'}`}>{product.nombre}</h1>
           <div className="flex flex-wrap gap-2">
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-[#73991C]/10 text-[#73991C]">
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-primary/10 text-primary">
               {product.categoria}
             </span>
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-[#BFD97D]/30 text-[#4D240F]">
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs bg-secondary/30 text-brand-brown">
               {product.grupo}
             </span>
             <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs ${
@@ -292,13 +292,13 @@ export function ProductDetail() {
       {(product.link_ficha_tecnica || product.link_hoja_seguridad) && (
         <Section title="Documentación" icon={FileText}>
           {product.link_ficha_tecnica && (
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 py-3 border-b border-[#73991C]/10">
-              <span className="text-sm text-[#4D240F]/70 sm:w-1/3">Ficha Técnica:</span>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 py-3 border-b border-primary/10">
+              <span className="text-sm text-brand-brown/70 sm:w-1/3">Ficha Técnica:</span>
               <a 
                 href={product.link_ficha_tecnica} 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-sm text-[#73991C] hover:text-[#5f7d17] hover:underline sm:w-2/3"
+                className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary-dark hover:underline sm:w-2/3"
               >
                 Ficha técnica
                 <ExternalLink className="w-4 h-4" />
@@ -307,12 +307,12 @@ export function ProductDetail() {
           )}
           {product.link_hoja_seguridad && (
             <div className="flex flex-col sm:flex-row sm:items-center gap-2 py-3">
-              <span className="text-sm text-[#4D240F]/70 sm:w-1/3">Hoja de Seguridad:</span>
+              <span className="text-sm text-brand-brown/70 sm:w-1/3">Hoja de Seguridad:</span>
               <a 
                 href={product.link_hoja_seguridad} 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-sm text-[#73991C] hover:text-[#5f7d17] hover:underline sm:w-2/3"
+                className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary-dark hover:underline sm:w-2/3"
               >
                 Hoja de seguridad
                 <ExternalLink className="w-4 h-4" />

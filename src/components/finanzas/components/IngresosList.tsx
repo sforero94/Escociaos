@@ -16,6 +16,8 @@ import { Input } from '../../ui/input';
 import { FiltrosIngresos } from './FiltrosIngresos';
 import { CargaMasivaIngresos } from './CargaMasivaIngresos';
 import type { Ingreso } from '../../../types/finanzas';
+import { toast } from 'sonner';
+import { ConfirmDialog } from '../../ui/confirm-dialog';
 
 interface IngresosListProps {
   onEdit?: (ingreso: Ingreso) => void;
@@ -61,6 +63,8 @@ export function IngresosList({ onEdit }: IngresosListProps) {
   const [menuAbiertoId, setMenuAbiertoId] = useState<string | null>(null);
   const [eliminando, setEliminando] = useState<string | null>(null);
   const [showCargaMasiva, setShowCargaMasiva] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   // Rastrear la clave de navegación para evitar aplicar filtros múltiples veces
   const aplicadoKey = useRef<string | null>(location.key);
@@ -179,28 +183,30 @@ export function IngresosList({ onEdit }: IngresosListProps) {
     loadIngresos();
   }, [searchQuery]);
 
-  const handleEliminar = async (ingresoId: string) => {
-    if (!confirm('¿Estás seguro de que deseas eliminar este ingreso?')) {
-      return;
-    }
+  const handleEliminar = (ingresoId: string) => {
+    setDeleteTargetId(ingresoId);
+    setConfirmDeleteOpen(true);
+  };
 
+  const confirmEliminar = async () => {
+    if (!deleteTargetId) return;
     try {
-      setEliminando(ingresoId);
+      setEliminando(deleteTargetId);
 
       const { error } = await getSupabase()
         .from('fin_ingresos')
         .delete()
-        .eq('id', ingresoId);
+        .eq('id', deleteTargetId);
 
       if (error) throw error;
 
-      // Actualizar lista local
-      setIngresos(ingresos.filter(i => i.id !== ingresoId));
-      alert('Ingreso eliminado exitosamente');
+      setIngresos(ingresos.filter(i => i.id !== deleteTargetId));
+      toast.success('Ingreso eliminado exitosamente');
     } catch (error: any) {
-      alert('Error al eliminar el ingreso: ' + error.message);
+      toast.error('Error al eliminar el ingreso: ' + error.message);
     } finally {
       setEliminando(null);
+      setDeleteTargetId(null);
     }
   };
 
@@ -264,7 +270,7 @@ export function IngresosList({ onEdit }: IngresosListProps) {
           <Button
             onClick={() => setShowCargaMasiva(true)}
             variant="outline"
-            className="border-[#73991C] text-[#73991C] hover:bg-[#73991C]/10"
+            className="border-primary text-primary hover:bg-primary/10"
           >
             <FileSpreadsheet className="w-4 h-4 mr-2" />
             Carga Masiva
@@ -276,7 +282,7 @@ export function IngresosList({ onEdit }: IngresosListProps) {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 text-[#73991C] animate-spin" />
+            <Loader2 className="w-8 h-8 text-primary animate-spin" />
           </div>
         ) : ingresos.length === 0 ? (
           <div className="text-center py-12">
@@ -407,55 +413,27 @@ export function IngresosList({ onEdit }: IngresosListProps) {
         )}
       </div>
 
-      {/* Modal de confirmación de eliminación */}
-      {eliminando && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                <Trash2 className="w-6 h-6 text-red-600" />
-              </div>
-              <div>
-                <h3 className="text-lg text-gray-900">Eliminar Ingreso</h3>
-                <p className="text-sm text-gray-600">Esta acción no se puede deshacer</p>
-              </div>
-            </div>
-
-            <p className="text-sm text-gray-600 mb-6">
-              ¿Estás seguro de que deseas eliminar este ingreso? Esta acción no se puede deshacer.
-            </p>
-
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setEliminando(null)}
-                className="flex-1"
-              >
-                Cancelar
-              </Button>
-              <Button
-                onClick={() => handleEliminar(eliminando)}
-                className="flex-1 bg-red-600 hover:bg-red-700"
-                disabled={!eliminando}
-              >
-                {eliminando ? 'Eliminando...' : 'Eliminar'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Carga Masiva Dialog */}
       <CargaMasivaIngresos
         open={showCargaMasiva}
         onOpenChange={setShowCargaMasiva}
         onSuccess={(count) => {
           loadIngresos(); // Refresh the list
-          alert(`¡Éxito! Se cargaron ${count} ingresos correctamente`);
+          toast.success(`¡Éxito! Se cargaron ${count} ingresos correctamente`);
         }}
         onError={(message) => {
-          alert(`Error: ${message}`);
+          toast.error(`Error: ${message}`);
         }}
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        title="¿Eliminar ingreso?"
+        description="Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={confirmEliminar}
+        destructive
       />
     </div>
   );

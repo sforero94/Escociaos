@@ -348,10 +348,18 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
     try {
       // Para cada producto, registrar la compra
       for (const item of productosCompra) {
-        const productoData = productosDisponibles.find((p) => p.id === item.producto_id);
-        if (!productoData) continue;
+        // Fetch live quantity from DB to avoid stale in-memory state across loop iterations
+        const { data: productoLive, error: fetchError } = await getSupabase()
+          .from('productos')
+          .select('cantidad_actual, activo')
+          .eq('id', item.producto_id)
+          .single();
 
-        const cantidadAnterior = productoData.cantidad_actual || 0;
+        if (fetchError || !productoLive) {
+          throw new Error(`No se pudo obtener el producto con id ${item.producto_id}`);
+        }
+
+        const cantidadAnterior = productoLive.cantidad_actual || 0;
         const cantidadNueva = cantidadAnterior + item.cantidad_total;
 
         // Get vendor name for backward compatibility
@@ -385,7 +393,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
             cantidad_actual: cantidadNueva,
             precio_unitario: item.precio_unitario_real,
             // REGLA DE NEGOCIO: Si el producto está inactivo y ahora tiene cantidad > 0, activarlo automáticamente
-            activo: cantidadNueva > 0 ? true : productoData.activo,
+            activo: cantidadNueva > 0 ? true : productoLive.activo,
             updated_at: new Date().toISOString(),
           })
           .eq('id', item.producto_id);
@@ -460,11 +468,11 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
       <div className="space-y-6">
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="text-center">
-            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/20 rounded-2xl mb-4 shadow-lg">
-              <CheckCircle className="w-10 h-10 text-[#73991C]" />
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-primary/10 to-secondary/20 rounded-2xl mb-4 shadow-lg">
+              <CheckCircle className="w-10 h-10 text-primary" />
             </div>
-            <h2 className="text-[#172E08] mb-2">¡Compra registrada con éxito!</h2>
-            <p className="text-[#4D240F]/70">
+            <h2 className="text-foreground mb-2">¡Compra registrada con éxito!</h2>
+            <p className="text-brand-brown/70">
               Se han registrado {productosCompra.length} producto(s) correctamente
             </p>
           </div>
@@ -487,20 +495,20 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
           <div className="lg:col-span-2 space-y-6">
             {/* Header */}
             <div>
-              <h1 className="text-[#172E08] mb-2">Nueva Compra</h1>
-              <p className="text-[#4D240F]/70">Registra una nueva compra de productos</p>
+              <h1 className="text-foreground mb-2">Nueva Compra</h1>
+              <p className="text-brand-brown/70">Registra una nueva compra de productos</p>
             </div>
 
             {/* SECCIÓN 1: Información General */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-[#73991C]/10 shadow-sm">
-              <h3 className="text-[#172E08] mb-4 flex items-center gap-2">
-                <Package className="w-5 h-5 text-[#73991C]" />
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-primary/10 shadow-sm">
+              <h3 className="text-foreground mb-4 flex items-center gap-2">
+                <Package className="w-5 h-5 text-primary" />
                 Información General
               </h3>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <Label htmlFor="fecha" className="text-[#172E08] mb-2">
+                  <Label htmlFor="fecha" className="text-foreground mb-2">
                     Fecha
                   </Label>
                   <Input
@@ -508,13 +516,13 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
                     type="date"
                     value={datosCompra.fecha}
                     onChange={(e) => setDatosCompra({ ...datosCompra, fecha: e.target.value })}
-                    className="border-[#73991C]/20 focus:border-[#73991C] rounded-xl h-12"
+                    className="border-primary/20 focus:border-primary rounded-xl h-12"
                     required
                   />
                 </div>
 
                 <div>
-                  <Label htmlFor="proveedor" className="text-[#172E08] mb-2">
+                  <Label htmlFor="proveedor" className="text-foreground mb-2">
                     Proveedor *
                   </Label>
                   <Select
@@ -528,7 +536,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
                     }}
                     required
                   >
-                    <SelectTrigger className="border-[#73991C]/20 focus:border-[#73991C] rounded-xl h-12">
+                    <SelectTrigger className="border-primary/20 focus:border-primary rounded-xl h-12">
                       <SelectValue placeholder="Seleccionar proveedor" />
                     </SelectTrigger>
                     <SelectContent>
@@ -537,7 +545,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
                           {proveedor.nombre}
                         </SelectItem>
                       ))}
-                      <SelectItem value="CREATE_NEW" className="text-[#73991C] font-medium border-t mt-1 pt-1">
+                      <SelectItem value="CREATE_NEW" className="text-primary font-medium border-t mt-1 pt-1">
                         + Crear nuevo proveedor
                       </SelectItem>
                     </SelectContent>
@@ -545,7 +553,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
                 </div>
 
                 <div>
-                  <Label htmlFor="numero_factura" className="text-[#172E08] mb-2">
+                  <Label htmlFor="numero_factura" className="text-foreground mb-2">
                     Número de Factura *
                   </Label>
                   <Input
@@ -556,7 +564,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
                     onChange={(e) =>
                       setDatosCompra({ ...datosCompra, numero_factura: e.target.value })
                     }
-                    className="border-[#73991C]/20 focus:border-[#73991C] rounded-xl h-12"
+                    className="border-primary/20 focus:border-primary rounded-xl h-12"
                     required
                   />
                 </div>
@@ -575,10 +583,10 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
             </div>
 
             {/* SECCIÓN 2: Búsqueda y Selección de Productos */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-[#73991C]/10 shadow-sm">
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-primary/10 shadow-sm">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-[#172E08] flex items-center gap-2">
-                  <Package className="w-5 h-5 text-[#73991C]" />
+                <h3 className="text-foreground flex items-center gap-2">
+                  <Package className="w-5 h-5 text-primary" />
                   Productos ({productosCompra.length})
                 </h3>
               </div>
@@ -586,14 +594,14 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
               {/* Lista de productos en la compra */}
               <div className="space-y-4">
                 {productosCompra.length === 0 ? (
-                  <div className="text-center py-8 text-[#4D240F]/60">
+                  <div className="text-center py-8 text-brand-brown/60">
                     <Package className="w-12 h-12 mx-auto mb-2 opacity-30" />
                     <p>No hay productos agregados</p>
                     <p className="text-sm mb-4">Haz clic en "Agregar Producto" para comenzar</p>
                     <Button
                       type="button"
                       onClick={agregarProductoVacio}
-                      className="bg-[#73991C] hover:bg-[#5a7516] text-white"
+                      className="bg-primary hover:bg-primary-dark text-white"
                     >
                       <Plus className="w-4 h-4 mr-2" />
                       Agregar Producto
@@ -619,7 +627,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
                       <Button
                         type="button"
                         onClick={agregarProductoVacio}
-                        className="bg-[#73991C] hover:bg-[#5a7516] text-white"
+                        className="bg-primary hover:bg-primary-dark text-white"
                       >
                         <Plus className="w-4 h-4 mr-2" />
                         Agregar Producto
@@ -636,7 +644,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
                 type="button"
                 variant="outline"
                 onClick={() => navigate('/inventario')}
-                className="border-[#73991C]/20"
+                className="border-primary/20"
               >
                 Cancelar
               </Button>
@@ -644,7 +652,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
                 type="button"
                 onClick={guardarCompra}
                 disabled={guardando || productosCompra.length === 0}
-                className="bg-[#4D240F] hover:bg-[#4D240F]/90 text-white"
+                className="bg-brand-brown hover:bg-brand-brown/90 text-white"
               >
                 {guardando ? 'Guardando...' : 'Registrar Compra'}
               </Button>
@@ -653,30 +661,30 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
 
           {/* COLUMNA LATERAL - Panel de Resumen */}
           <div className="lg:col-span-1">
-            <div className="sticky top-6 bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-[#73991C]/10 shadow-sm">
-              <h3 className="text-[#172E08] mb-4 font-semibold">💰 Resumen de Compra</h3>
+            <div className="sticky top-6 bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-primary/10 shadow-sm">
+              <h3 className="text-foreground mb-4 font-semibold">💰 Resumen de Compra</h3>
 
               <div className="space-y-4">
                 {/* Info general */}
                 {datosCompra.proveedor && (
                   <div>
-                    <p className="text-xs text-[#4D240F]/60">Proveedor</p>
-                    <p className="font-medium text-[#172E08]">{datosCompra.proveedor}</p>
+                    <p className="text-xs text-brand-brown/60">Proveedor</p>
+                    <p className="font-medium text-foreground">{datosCompra.proveedor}</p>
                   </div>
                 )}
 
                 {datosCompra.numero_factura && (
                   <div>
-                    <p className="text-xs text-[#4D240F]/60">Factura</p>
-                    <p className="font-medium text-[#172E08]">{datosCompra.numero_factura}</p>
+                    <p className="text-xs text-brand-brown/60">Factura</p>
+                    <p className="font-medium text-foreground">{datosCompra.numero_factura}</p>
                   </div>
                 )}
 
                 {/* Total */}
-                <div className="pt-4 border-t border-[#73991C]/20">
-                  <div className="bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/20 rounded-xl p-4">
-                    <p className="text-sm text-[#172E08]/70 mb-1">Total General</p>
-                    <p className="text-2xl font-bold text-[#73991C]">
+                <div className="pt-4 border-t border-primary/20">
+                  <div className="bg-gradient-to-br from-primary/10 to-secondary/20 rounded-xl p-4">
+                    <p className="text-sm text-foreground/70 mb-1">Total General</p>
+                    <p className="text-2xl font-bold text-primary">
                       {formatearPesos(calcularTotalGeneral())}
                     </p>
                   </div>
@@ -685,7 +693,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
                 {/* Lista de productos */}
                 {productosCompra.length > 0 && (
                   <div>
-                    <p className="text-sm font-medium text-[#172E08] mb-2">
+                    <p className="text-sm font-medium text-foreground mb-2">
                       Productos ({productosCompra.length})
                     </p>
                     <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -694,11 +702,11 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
                           key={item.id}
                           className="text-sm bg-[#F5F5DC]/50 rounded-lg p-2"
                         >
-                          <p className="font-medium text-[#172E08]">
+                          <p className="font-medium text-foreground">
                             {item.producto_nombre || `Producto ${idx + 1}`}
                           </p>
                           {item.cantidad_total > 0 && (
-                            <p className="text-xs text-[#4D240F]/70">
+                            <p className="text-xs text-brand-brown/70">
                               {item.cantidad_total.toFixed(2)} {item.presentacion_unidad} •{' '}
                               {formatearPesos(item.costo_total)}
                             </p>
@@ -753,7 +761,7 @@ const TarjetaProducto: React.FC<TarjetaProductoProps> = ({
   formatearPesos,
 }) => {
   return (
-    <div className="relative bg-white border-2 border-[#73991C]/10 rounded-2xl p-4 md:p-6 shadow-sm hover:shadow-md transition-shadow">
+    <div className="relative bg-white border-2 border-primary/10 rounded-2xl p-4 md:p-6 shadow-sm hover:shadow-md transition-shadow">
       {/* Botón eliminar */}
       <Button
         type="button"
@@ -768,20 +776,20 @@ const TarjetaProducto: React.FC<TarjetaProductoProps> = ({
       <div className="space-y-4 pr-8">
         {/* Número de producto */}
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-[#73991C]/10 flex items-center justify-center text-xs font-bold text-[#73991C]">
+          <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
             {index + 1}
           </div>
-          <span className="text-sm text-[#4D240F]/60">Producto #{index + 1}</span>
+          <span className="text-sm text-brand-brown/60">Producto #{index + 1}</span>
         </div>
 
         {/* FILA 1: Selector de Producto */}
         <div>
-          <Label className="text-sm text-[#172E08] mb-2">Producto *</Label>
+          <Label className="text-sm text-foreground mb-2">Producto *</Label>
           <Select
             value={item.producto_id}
             onValueChange={(value) => onSeleccionarProducto(item.id, value)}
           >
-            <SelectTrigger className="h-12 border-[#73991C]/20">
+            <SelectTrigger className="h-12 border-primary/20">
               <SelectValue placeholder="Seleccionar producto..." />
             </SelectTrigger>
             <SelectContent>
@@ -789,7 +797,7 @@ const TarjetaProducto: React.FC<TarjetaProductoProps> = ({
                 <SelectItem key={producto.id} value={producto.id}>
                   {producto.nombre}
                   {producto.presentacion_kg_l && (
-                    <span className="text-[#4D240F]/60 ml-2">
+                    <span className="text-brand-brown/60 ml-2">
                       ({producto.presentacion_kg_l} {producto.unidad_medida})
                     </span>
                   )}
@@ -801,7 +809,7 @@ const TarjetaProducto: React.FC<TarjetaProductoProps> = ({
 
         {/* FILA 2: Presentación Comercial EDITABLE */}
         <div>
-          <Label className="text-sm text-[#172E08] mb-2">
+          <Label className="text-sm text-foreground mb-2">
             Presentación de esta compra
           </Label>
           <div className="grid grid-cols-2 gap-2">
@@ -814,13 +822,13 @@ const TarjetaProducto: React.FC<TarjetaProductoProps> = ({
               onChange={(e) =>
                 onActualizarCampo(item.id, 'presentacion_cantidad', parseFloat(e.target.value) || 0)
               }
-              className="h-12 text-lg border-[#73991C]/20"
+              className="h-12 text-lg border-primary/20"
             />
             <Select
               value={item.presentacion_unidad}
               onValueChange={(value) => onActualizarCampo(item.id, 'presentacion_unidad', value)}
             >
-              <SelectTrigger className="h-12 border-[#73991C]/20">
+              <SelectTrigger className="h-12 border-primary/20">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -830,14 +838,14 @@ const TarjetaProducto: React.FC<TarjetaProductoProps> = ({
               </SelectContent>
             </Select>
           </div>
-          <p className="text-xs text-[#4D240F]/60 mt-1">
+          <p className="text-xs text-brand-brown/60 mt-1">
             Si la presentación cambió, edítala aquí
           </p>
         </div>
 
         {/* FILA 3: ¿Cuántos bultos? */}
         <div>
-          <Label className="text-sm text-[#172E08] font-medium mb-2">
+          <Label className="text-sm text-foreground font-medium mb-2">
             ¿Cuántos bultos/tarros compraste? *
           </Label>
           <Input
@@ -848,18 +856,18 @@ const TarjetaProducto: React.FC<TarjetaProductoProps> = ({
             onChange={(e) =>
               onActualizarCampo(item.id, 'cantidad_bultos', parseInt(e.target.value) || 0)
             }
-            className="h-14 text-xl font-semibold border-2 border-[#73991C]/30 focus:border-[#73991C]"
+            className="h-14 text-xl font-semibold border-2 border-primary/30 focus:border-primary"
             required
           />
         </div>
 
         {/* FILA 4: Precio por bulto */}
         <div>
-          <Label className="text-sm text-[#172E08] font-medium mb-2">
+          <Label className="text-sm text-foreground font-medium mb-2">
             Precio por bulto/tarro *
           </Label>
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#172E08] text-lg font-medium">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground text-lg font-medium">
               $
             </span>
             <Input
@@ -870,7 +878,7 @@ const TarjetaProducto: React.FC<TarjetaProductoProps> = ({
               onChange={(e) =>
                 onActualizarCampo(item.id, 'precio_por_bulto', parseFloat(e.target.value) || 0)
               }
-              className="h-14 text-xl font-semibold pl-8 border-2 border-[#73991C]/30 focus:border-[#73991C]"
+              className="h-14 text-xl font-semibold pl-8 border-2 border-primary/30 focus:border-primary"
               required
             />
           </div>
@@ -878,10 +886,10 @@ const TarjetaProducto: React.FC<TarjetaProductoProps> = ({
 
         {/* FILA 5: Cálculos Automáticos */}
         {item.cantidad_total > 0 && (
-          <div className="bg-[#F5F5DC] rounded-xl p-4 space-y-3 border border-[#73991C]/20">
+          <div className="bg-[#F5F5DC] rounded-xl p-4 space-y-3 border border-primary/20">
             <div className="flex items-center gap-2 mb-2">
-              <Calculator className="w-4 h-4 text-[#73991C]" />
-              <span className="text-xs font-medium text-[#172E08]/70 uppercase tracking-wide">
+              <Calculator className="w-4 h-4 text-primary" />
+              <span className="text-xs font-medium text-foreground/70 uppercase tracking-wide">
                 Cálculo Automático
               </span>
             </div>
@@ -889,26 +897,26 @@ const TarjetaProducto: React.FC<TarjetaProductoProps> = ({
             <div className="space-y-2">
               {/* Total kg/L */}
               <div className="flex justify-between items-center">
-                <span className="text-sm text-[#172E08]">
+                <span className="text-sm text-foreground">
                   Total {item.presentacion_unidad}:
                 </span>
-                <span className="text-lg font-bold text-[#73991C]">
+                <span className="text-lg font-bold text-primary">
                   {item.cantidad_total.toFixed(2)} {item.presentacion_unidad}
                 </span>
               </div>
 
               {/* Costo Total */}
               <div className="flex justify-between items-center">
-                <span className="text-sm text-[#172E08]">Costo Total:</span>
-                <span className="text-xl font-bold text-[#172E08]">
+                <span className="text-sm text-foreground">Costo Total:</span>
+                <span className="text-xl font-bold text-foreground">
                   {formatearPesos(item.costo_total)}
                 </span>
               </div>
 
               {/* Precio Unitario Real */}
-              <div className="flex justify-between items-center pt-2 border-t border-[#73991C]/20">
-                <span className="text-xs text-[#4D240F]/70">Precio unitario real:</span>
-                <span className="text-sm font-medium text-[#4D240F]/70">
+              <div className="flex justify-between items-center pt-2 border-t border-primary/20">
+                <span className="text-xs text-brand-brown/70">Precio unitario real:</span>
+                <span className="text-sm font-medium text-brand-brown/70">
                   {formatearPesos(item.precio_unitario_real)}/{item.presentacion_unidad}
                 </span>
               </div>
@@ -917,38 +925,38 @@ const TarjetaProducto: React.FC<TarjetaProductoProps> = ({
         )}
 
         {/* FILA 6: Trazabilidad - SIEMPRE VISIBLES */}
-        <div className="space-y-3 pt-3 border-t border-[#73991C]/10">
-          <h4 className="text-sm font-medium text-[#172E08] flex items-center gap-2">
-            <Package className="w-4 h-4 text-[#73991C]" />
+        <div className="space-y-3 pt-3 border-t border-primary/10">
+          <h4 className="text-sm font-medium text-foreground flex items-center gap-2">
+            <Package className="w-4 h-4 text-primary" />
             Trazabilidad
           </h4>
           
           {/* Número de Lote */}
           <div>
-            <Label className="text-sm text-[#172E08]">Número de Lote</Label>
+            <Label className="text-sm text-foreground">Número de Lote</Label>
             <Input
               type="text"
               placeholder="Ej: L-2025-001"
               value={item.numero_lote}
               onChange={(e) => onActualizarCampo(item.id, 'numero_lote', e.target.value)}
-              className="h-10 border-[#73991C]/20"
+              className="h-10 border-primary/20"
             />
           </div>
 
           {/* Fecha de Vencimiento */}
           <div>
-            <Label className="text-sm text-[#172E08]">Fecha de Vencimiento</Label>
+            <Label className="text-sm text-foreground">Fecha de Vencimiento</Label>
             <Input
               type="date"
               value={item.fecha_vencimiento}
               onChange={(e) => onActualizarCampo(item.id, 'fecha_vencimiento', e.target.value)}
-              className="h-10 border-[#73991C]/20"
+              className="h-10 border-primary/20"
             />
           </div>
 
           {/* Permitido por Gerencia */}
           <div className="space-y-2">
-            <Label className="text-sm text-[#172E08] font-medium">
+            <Label className="text-sm text-foreground font-medium">
               Permitido por Gerencia *
             </Label>
             <RadioGroup

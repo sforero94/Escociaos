@@ -21,16 +21,7 @@ import { toast } from 'sonner';
 import { getSupabase } from '../../utils/supabase/client';
 import { calcularIncidencia, clasificarGravedad } from '../../utils/calculosMonitoreo';
 
-interface Lote {
-  id: string;
-  nombre: string;
-}
-
-interface Sublote {
-  id: string;
-  nombre: string;
-  lote_id: string;
-}
+import type { Lote, Sublote } from '../../types/shared';
 
 interface Plaga {
   id: string;
@@ -354,7 +345,7 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
                   {monitores.map(monitor => (
                     <div
                       key={monitor}
-                      className="inline-flex items-center gap-1 px-3 py-1 bg-[#73991C] text-white rounded-full text-sm"
+                      className="inline-flex items-center gap-1 px-3 py-1 bg-primary text-white rounded-full text-sm"
                     >
                       {monitor}
                       <button
@@ -385,13 +376,13 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
                     {MONITORES_DISPONIBLES.map(monitor => (
                       <label
                         key={monitor}
-                        className="flex items-center gap-2 cursor-pointer hover:bg-[#F8FAF5] p-2 rounded"
+                        className="flex items-center gap-2 cursor-pointer hover:bg-background p-2 rounded"
                       >
                         <input
                           type="checkbox"
                           checked={monitores.includes(monitor)}
                           onChange={() => toggleMonitor(monitor)}
-                          className="w-4 h-4 text-[#73991C] rounded"
+                          className="w-4 h-4 text-primary rounded"
                         />
                         <span>{monitor}</span>
                       </label>
@@ -454,8 +445,8 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
           </div>
 
           {/* SEPARADOR */}
-          <div className="border-t border-[#BFD97D]/30 pt-4">
-            <h3 className="font-semibold text-[#172E08] mb-3">🐛 Plagas Detectadas *</h3>
+          <div className="border-t border-secondary/30 pt-4">
+            <h3 className="font-semibold text-foreground mb-3">🐛 Plagas Detectadas *</h3>
 
             {/* Selector de plagas */}
             <div className="flex gap-2 mb-4">
@@ -478,7 +469,7 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
                 type="button"
                 onClick={agregarPlaga}
                 disabled={!plagaSeleccionada}
-                className="bg-[#73991C] hover:bg-[#5C7A16]"
+                className="bg-primary hover:bg-primary-dark"
               >
                 <Plus className="w-4 h-4 mr-1" />
                 Agregar
@@ -488,7 +479,7 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
             {/* Lista de plagas detectadas */}
             <div className="space-y-3">
               {plagasDetectadas.length === 0 ? (
-                <div className="text-center py-6 text-[#4D240F]/50 text-sm">
+                <div className="text-center py-6 text-brand-brown/50 text-sm">
                   💡 Si no detectaste plagas, cierra sin guardar
                 </div>
               ) : (
@@ -497,9 +488,9 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
                   const gravedad = clasificarGravedad(incidencia);
                   
                   return (
-                    <Card key={index} className="p-4 bg-gradient-to-br from-white to-[#F8FAF5]">
+                    <Card key={index} className="p-4 bg-gradient-to-br from-white to-background">
                       <div className="flex items-start justify-between mb-3">
-                        <h4 className="font-medium text-[#172E08]">🐛 {plaga.plaga_nombre}</h4>
+                        <h4 className="font-medium text-foreground">🐛 {plaga.plaga_nombre}</h4>
                         <Button
                           type="button"
                           variant="ghost"
@@ -537,7 +528,7 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
 
                       {/* Preview de cálculos */}
                       {plaga.arboles_afectados > 0 && (
-                        <div className="text-xs text-[#4D240F]/70 mt-2">
+                        <div className="text-xs text-brand-brown/70 mt-2">
                           📊 Incidencia: {incidencia.toFixed(1)}% • Gravedad: <span className={`font-semibold ${
                             gravedad.texto === 'Alta' ? 'text-red-600' :
                             gravedad.texto === 'Media' ? 'text-orange-600' :
@@ -560,7 +551,7 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
               value={observaciones}
               onChange={(e) => setObservaciones(e.target.value)}
               rows={3}
-              className="mt-1 w-full px-3 py-2 border border-[#BFD97D]/30 rounded-md focus:outline-none focus:ring-2 focus:ring-[#73991C] resize-none"
+              className="mt-1 w-full px-3 py-2 border border-secondary/30 rounded-md focus:outline-none focus:ring-2 focus:ring-primary resize-none"
               placeholder="Notas adicionales..."
             />
           </div>
@@ -589,7 +580,7 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
               type="button"
               onClick={() => guardar(true)}
               disabled={loading}
-              className="flex-1 bg-[#73991C] hover:bg-[#5C7A16]"
+              className="flex-1 bg-primary hover:bg-primary-dark"
             >
               {loading ? 'Guardando...' : 'Siguiente sublote'}
               <ChevronRight className="w-4 h-4 ml-1" />

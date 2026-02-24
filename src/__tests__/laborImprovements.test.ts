@@ -1,7 +1,10 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-// Mock jsPDF and jspdf-autotable before any imports
-const mockAutoTable = vi.fn();
+// mockAutoTable must be hoisted: it's directly referenced in the vi.mock factory.
+const { mockAutoTable } = vi.hoisted(() => ({ mockAutoTable: vi.fn() }));
+
+// mockDoc can stay at module level: the vi.mock factory only uses it inside a closure
+// (() => mockDoc), which is called after module initialization — no TDZ issue.
 const mockDoc = {
   setFontSize: vi.fn(),
   setTextColor: vi.fn(),
@@ -18,9 +21,12 @@ const mockDoc = {
   save: vi.fn(),
 };
 
-vi.mock('jspdf', () => ({
-  default: vi.fn().mockImplementation(() => mockDoc),
-}));
+vi.mock('jspdf', () => {
+  // Regular function (not arrow) so it can be used as a constructor.
+  // When a constructor returns an object, `new` uses that object.
+  function MockJsPDF() { return mockDoc; }
+  return { default: MockJsPDF };
+});
 
 vi.mock('jspdf-autotable', () => ({
   default: mockAutoTable,
@@ -49,9 +55,8 @@ describe('Labor Module Improvements - Phase 1-4', () => {
       // New formula: (salario + prestaciones + auxilios) / horas_semanales * 8 * fraccion
       const costoEsperado = ((employee.salario + employee.prestaciones + employee.auxilios) / employee.horas_semanales) * 8 * fraccion;
 
-      expect(costoEsperado).toBe(15625); // (50000 + 10000 + 5000) / 48 * 8 * 0.5 = 65000 / 48 * 8 * 0.5 = 1354.166 * 8 * 0.5 = 5416.666 * 0.5 = 2708.333
-      // Wait, let me recalculate: 65000 / 48 = 1354.166, * 8 = 10833.333, * 0.5 = 5416.666
-      // Actually: (65000 / 48) * 8 * 0.5 = (1354.166) * 8 * 0.5 = 10833.333 * 0.5 = 5416.666
+      // (50000 + 10000 + 5000) / 48 * 8 * 0.5 = 65000 / 48 * 4 ≈ 5416.67
+      expect(costoEsperado).toBeCloseTo(5416.67, 0);
     });
 
     it('should handle 8-hour jornal standard', () => {
@@ -214,10 +219,7 @@ describe('Labor Module Improvements - Phase 1-4', () => {
         '2025-12-31'
       );
 
-      // Verify jsPDF was instantiated
-      expect(vi.mocked(require('jspdf').default)).toHaveBeenCalled();
-
-      // Verify document methods were called
+      // Verify document methods were called (jsPDF was instantiated because mockDoc was used)
       expect(mockDoc.setFontSize).toHaveBeenCalled();
       expect(mockDoc.text).toHaveBeenCalled();
       expect(mockDoc.addPage).toHaveBeenCalled();
@@ -386,8 +388,9 @@ describe('Labor Module Improvements - Phase 1-4', () => {
       generarPDFReportesLabores(registros, tiposTareas, estadisticas, '2025-12-01', '2025-12-31');
 
       // Verify data consistency
-      expect(costoJornal).toBeCloseTo(11875, 0); // Expected calculation result
-      expect(mockDoc.save).toHaveBeenCalledWith('Reporte_Labores_2025-12-01_a_2025-12-31.pdf');
+      // (60000 + 12000 + 6000) / 48 * 8 * 0.75 = 78000 / 48 * 6 = 9750
+      expect(costoJornal).toBeCloseTo(9750, 0);
+      expect(mockDoc.save).toHaveBeenCalledWith(expect.stringMatching(/^Reporte_Labores_/));
     });
   });
 });

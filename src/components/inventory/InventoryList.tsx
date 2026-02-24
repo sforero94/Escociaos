@@ -9,6 +9,7 @@ import { ProductMovements } from './ProductMovements';
 import { InventorySubNav } from './InventorySubNav';
 import { useNavigate } from 'react-router-dom';
 import { useSafeMode } from '../../contexts/SafeModeContext';
+import { toast } from 'sonner';
 
 interface InventoryListProps {
   onNavigate?: (view: string, productId?: number) => void;
@@ -191,10 +192,10 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
         // Recargar productos para reflejar el cambio
         await loadProducts();
       } else {
-        alert(`Error: ${resultado.error}`);
+        toast.error(`Error: ${resultado.error}`);
       }
     } catch (error) {
-      alert('Error al cambiar el estado del producto');
+      toast.error('Error al cambiar el estado del producto');
     }
   };
 
@@ -238,14 +239,14 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-[#172E08] mb-2">Inventario</h1>
-          <p className="text-[#4D240F]/70">{products.length} productos registrados</p>
+          <h1 className="text-foreground mb-2">Inventario</h1>
+          <p className="text-brand-brown/70">{products.length} productos registrados</p>
         </div>
         <div className="flex flex-wrap gap-3">
           <Button
             onClick={() => navigate('/inventario/importar')}
             variant="outline"
-            className="border-[#73991C] text-[#73991C] hover:bg-[#73991C]/10 rounded-xl transition-all duration-200"
+            className="border-primary text-primary hover:bg-primary/10 rounded-xl transition-all duration-200"
           >
             <Upload className="w-4 h-4 mr-2" />
             Importar CSV
@@ -255,7 +256,7 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
               setEditingProductId(null);
               setIsProductFormOpen(true);
             }}
-            className="bg-[#73991C] hover:bg-[#5f7d17] text-white rounded-xl transition-all duration-200"
+            className="bg-primary hover:bg-primary-dark text-white rounded-xl transition-all duration-200"
           >
             <Plus className="w-4 h-4 mr-2" />
             Nuevo Producto
@@ -264,22 +265,22 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
       </div>
 
       {/* Search and Filters */}
-      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-4 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-4 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#4D240F]/50" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-brand-brown/50" />
             <Input
               type="text"
               placeholder="Buscar productos..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 bg-[#E7EDDD]/30 border-[#73991C]/20 focus:border-[#73991C] rounded-xl"
+              className="pl-10 bg-muted/30 border-primary/20 focus:border-primary rounded-xl"
             />
           </div>
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-4 py-2 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+            className="px-4 py-2 border border-primary/20 rounded-xl bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
           >
             <option value="todas">Todas las categorías</option>
             {getCategories().map((cat) => (
@@ -291,7 +292,7 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
           <select
             value={columnFilters.estado}
             onChange={(e) => setColumnFilters({ ...columnFilters, estado: e.target.value })}
-            className="px-4 py-2 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+            className="px-4 py-2 border border-primary/20 rounded-xl bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
           >
             <option value="todos">Todos los estados</option>
             {getStates().map((state) => (
@@ -303,7 +304,7 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
           <select
             value={columnFilters.unidad_medida}
             onChange={(e) => setColumnFilters({ ...columnFilters, unidad_medida: e.target.value })}
-            className="px-4 py-2 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+            className="px-4 py-2 border border-primary/20 rounded-xl bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
           >
             <option value="todas">Todas las unidades</option>
             {getUnits().map((unit) => (
@@ -316,14 +317,14 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
       </div>
 
       {/* Products Table */}
-      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 overflow-hidden shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 overflow-hidden shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gradient-to-r from-[#E7EDDD]/50 to-[#E7EDDD]/30 border-b border-[#73991C]/10">
+            <thead className="bg-gradient-to-r from-muted/50 to-muted/30 border-b border-primary/10">
               <tr>
                 <th 
                   onClick={() => handleSort('nombre')}
-                  className="text-left px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase cursor-pointer hover:bg-[#E7EDDD]/50 transition-colors"
+                  className="text-left px-6 py-4 text-sm text-brand-brown/70 tracking-wide uppercase cursor-pointer hover:bg-muted/50 transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     Producto
@@ -332,7 +333,7 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
                 </th>
                 <th 
                   onClick={() => handleSort('categoria')}
-                  className="text-left px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase cursor-pointer hover:bg-[#E7EDDD]/50 transition-colors"
+                  className="text-left px-6 py-4 text-sm text-brand-brown/70 tracking-wide uppercase cursor-pointer hover:bg-muted/50 transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     Categoría
@@ -341,7 +342,7 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
                 </th>
                 <th 
                   onClick={() => handleSort('estado')}
-                  className="text-left px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase cursor-pointer hover:bg-[#E7EDDD]/50 transition-colors"
+                  className="text-left px-6 py-4 text-sm text-brand-brown/70 tracking-wide uppercase cursor-pointer hover:bg-muted/50 transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     Estado
@@ -350,7 +351,7 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
                 </th>
                 <th 
                   onClick={() => handleSort('cantidad_actual')}
-                  className="text-right px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase cursor-pointer hover:bg-[#E7EDDD]/50 transition-colors"
+                  className="text-right px-6 py-4 text-sm text-brand-brown/70 tracking-wide uppercase cursor-pointer hover:bg-muted/50 transition-colors"
                 >
                   <div className="flex items-center justify-end gap-2">
                     Cantidad Actual
@@ -358,42 +359,42 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
                   </div>
                 </th>
                 <th 
-                  className="text-right px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase"
+                  className="text-right px-6 py-4 text-sm text-brand-brown/70 tracking-wide uppercase"
                 >
                   Valor Total
                 </th>
                 <th 
-                  className="text-center px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase"
+                  className="text-center px-6 py-4 text-sm text-brand-brown/70 tracking-wide uppercase"
                 >
                   Activo
                 </th>
-                <th className="text-center px-6 py-4 text-sm text-[#4D240F]/70 tracking-wide uppercase">
+                <th className="text-center px-6 py-4 text-sm text-brand-brown/70 tracking-wide uppercase">
                   Acciones
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#73991C]/5">
+            <tbody className="divide-y divide-primary/5">
               {filteredProducts.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-6 py-12 text-center">
-                    <Package className="w-12 h-12 text-[#4D240F]/40 mx-auto mb-3" />
-                    <p className="text-[#4D240F]/60">No se encontraron productos</p>
+                    <Package className="w-12 h-12 text-brand-brown/40 mx-auto mb-3" />
+                    <p className="text-brand-brown/60">No se encontraron productos</p>
                   </td>
                 </tr>
               ) : (
                 filteredProducts.map((product) => (
                   <tr
                     key={product.id}
-                    className="hover:bg-[#E7EDDD]/20 cursor-pointer transition-all duration-200"
+                    className="hover:bg-muted/20 cursor-pointer transition-all duration-200"
                     onClick={() => onNavigate && onNavigate('inventory-detail', product.id)}
                   >
                     <td className="px-6 py-4">
-                      <p className={`${!product.permitido_gerencia ? 'text-red-600 font-bold' : 'text-[#172E08]'}`}>
+                      <p className={`${!product.permitido_gerencia ? 'text-red-600 font-bold' : 'text-foreground'}`}>
                         {product.nombre}
                       </p>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-[#73991C]/10 text-[#73991C] text-xs">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-primary/10 text-primary text-xs">
                         {product.categoria}
                       </span>
                     </td>
@@ -401,24 +402,24 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
                       <span
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs ${
                           product.estado === 'Disponible'
-                            ? 'bg-[#28A745]/10 text-[#28A745]'
-                            : 'bg-[#FFC107]/10 text-[#FFC107]'
+                            ? 'bg-success-alt/10 text-success-alt'
+                            : 'bg-warning/10 text-warning'
                         }`}
                       >
                         {product.estado || 'Disponible'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-right text-[#172E08]">
+                    <td className="px-6 py-4 text-right text-foreground">
                       {product.cantidad_actual} {product.unidad_medida}
                     </td>
-                    <td className="px-6 py-4 text-right text-[#172E08]">
+                    <td className="px-6 py-4 text-right text-foreground">
                       {formatCurrency(product.cantidad_actual * (product.precio_unitario || 0))}
                     </td>
                     <td className="px-6 py-4 text-center">
                       <button
                         onClick={(e) => handleToggleActivo(product.id, product.activo, e)}
-                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:ring-offset-2 ${
-                          product.activo ? 'bg-[#73991C]' : 'bg-[#4D240F]/20'
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
+                          product.activo ? 'bg-primary' : 'bg-brand-brown/20'
                         }`}
                         title={product.activo ? 'Desactivar producto' : 'Activar producto'}
                       >
@@ -438,7 +439,7 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
                           }}
                           size="sm"
                           variant="outline"
-                          className="border-[#73991C]/20 text-[#73991C] hover:bg-[#73991C]/5 rounded-xl transition-all duration-200"
+                          className="border-primary/20 text-primary hover:bg-primary/5 rounded-xl transition-all duration-200"
                           title="Ver detalles"
                         >
                           <Eye className="w-4 h-4" />
@@ -449,7 +450,7 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
                             handleEditProduct(product.id);
                           }}
                           size="sm"
-                          className="bg-[#73991C] hover:bg-[#5f7d17] text-white rounded-xl transition-all duration-200"
+                          className="bg-primary hover:bg-primary-dark text-white rounded-xl transition-all duration-200"
                           title="Editar"
                         >
                           <Edit className="w-4 h-4" />
@@ -462,7 +463,7 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
                           }}
                           size="sm"
                           variant="outline"
-                          className="border-[#73991C]/20 text-[#73991C] hover:bg-[#73991C]/5 rounded-xl transition-all duration-200"
+                          className="border-primary/20 text-primary hover:bg-primary/5 rounded-xl transition-all duration-200"
                           title="Ver movimientos"
                         >
                           <History className="w-4 h-4" />
@@ -479,19 +480,19 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
 
       {/* Summary */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-5 shadow-[0_4px_24px_rgba(115,153,28,0.08)] hover:shadow-[0_6px_28px_rgba(115,153,28,0.12)] transition-all duration-200">
-          <p className="text-sm text-[#4D240F]/60 mb-1 uppercase tracking-wide">Total Productos</p>
-          <p className="text-2xl text-[#172E08]">{filteredProducts.length}</p>
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-5 shadow-[0_4px_24px_rgba(115,153,28,0.08)] hover:shadow-[0_6px_28px_rgba(115,153,28,0.12)] transition-all duration-200">
+          <p className="text-sm text-brand-brown/60 mb-1 uppercase tracking-wide">Total Productos</p>
+          <p className="text-2xl text-foreground">{filteredProducts.length}</p>
         </div>
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-5 shadow-[0_4px_24px_rgba(115,153,28,0.08)] hover:shadow-[0_6px_28px_rgba(115,153,28,0.12)] transition-all duration-200">
-          <p className="text-sm text-[#4D240F]/60 mb-1 uppercase tracking-wide">Con Stock Bajo</p>
-          <p className="text-2xl text-[#FFC107]">
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-5 shadow-[0_4px_24px_rgba(115,153,28,0.08)] hover:shadow-[0_6px_28px_rgba(115,153,28,0.12)] transition-all duration-200">
+          <p className="text-sm text-brand-brown/60 mb-1 uppercase tracking-wide">Con Stock Bajo</p>
+          <p className="text-2xl text-warning">
             {filteredProducts.filter(hasLowStock).length}
           </p>
         </div>
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-5 shadow-[0_4px_24px_rgba(115,153,28,0.08)] hover:shadow-[0_6px_28px_rgba(115,153,28,0.12)] transition-all duration-200">
-          <p className="text-sm text-[#4D240F]/60 mb-1 uppercase tracking-wide">Valor Total</p>
-          <p className="text-2xl text-[#172E08]">
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-5 shadow-[0_4px_24px_rgba(115,153,28,0.08)] hover:shadow-[0_6px_28px_rgba(115,153,28,0.12)] transition-all duration-200">
+          <p className="text-sm text-brand-brown/60 mb-1 uppercase tracking-wide">Valor Total</p>
+          <p className="text-2xl text-foreground">
             {formatCurrency(
               filteredProducts.reduce(
                 (sum, p) => sum + p.cantidad_actual * (p.precio_unitario || 0),
@@ -517,10 +518,10 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
 
       {/* Modal de Movimientos del Producto */}
       {showMovementsModal && selectedProductForMovements && (
-        <div className="fixed inset-0 bg-[#172E08]/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-foreground/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden shadow-[0_8px_32px_rgba(115,153,28,0.2)] animate-in fade-in zoom-in duration-200">
             {/* Header del Modal */}
-            <div className="bg-gradient-to-r from-[#73991C] to-[#BFD97D] px-6 py-4 flex items-center justify-between border-b border-[#73991C]/10">
+            <div className="bg-gradient-to-r from-primary to-secondary px-6 py-4 flex items-center justify-between border-b border-primary/10">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
                   <History className="w-5 h-5 text-white" />
@@ -541,7 +542,7 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
             </div>
 
             {/* Contenido del Modal */}
-            <div className="overflow-y-auto p-6 bg-[#F8FAF5]" style={{ maxHeight: 'calc(90vh - 80px)' }}>
+            <div className="overflow-y-auto p-6 bg-background" style={{ maxHeight: 'calc(90vh - 80px)' }}>
               <ProductMovements
                 productId={selectedProductForMovements.id}
                 productName={selectedProductForMovements.nombre}

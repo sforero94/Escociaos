@@ -277,8 +277,8 @@ export function TablaMonitoreos() {
       return <ArrowUpDown className="w-3 h-3 opacity-30" />;
     }
     return direccionOrden === 'asc' 
-      ? <ArrowUp className="w-3 h-3 text-[#73991C]" />
-      : <ArrowDown className="w-3 h-3 text-[#73991C]" />;
+      ? <ArrowUp className="w-3 h-3 text-primary" />
+      : <ArrowDown className="w-3 h-3 text-primary" />;
   };
 
   // Paginación (ahora con datos ordenados)
@@ -312,8 +312,8 @@ export function TablaMonitoreos() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-[#73991C] border-r-transparent mb-4"></div>
-          <p className="text-[#4D240F]/70">Cargando monitoreos...</p>
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent mb-4"></div>
+          <p className="text-brand-brown/70">Cargando monitoreos...</p>
         </div>
       </div>
     );
@@ -325,10 +325,10 @@ export function TablaMonitoreos() {
       <Card className="p-4 bg-white">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-[#172E08]">
+            <h3 className="text-foreground">
               Todos los Registros de Monitoreo
             </h3>
-            <p className="text-sm text-[#4D240F]/60 mt-1">
+            <p className="text-sm text-brand-brown/60 mt-1">
               {monitoreosFiltrados.length} registro{monitoreosFiltrados.length !== 1 ? 's' : ''} encontrado{monitoreosFiltrados.length !== 1 ? 's' : ''}
             </p>
           </div>
@@ -344,7 +344,7 @@ export function TablaMonitoreos() {
 
         {/* Filtros */}
         {mostrarFiltros && (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-[#F8FAF5] rounded-lg">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-background rounded-lg">
             <div>
               <Label htmlFor="filtro-lote">Lote</Label>
               <div className="relative">
@@ -411,7 +411,7 @@ export function TablaMonitoreos() {
       <Card className="overflow-hidden">
         {/* Botones de Expandir/Colapsar Todo */}
         <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-          <p className="text-sm text-[#4D240F]/70">
+          <p className="text-sm text-brand-brown/70">
             Agrupado por semanas • {gruposSemanas.length} semana{gruposSemanas.length !== 1 ? 's' : ''}
           </p>
           <div className="flex gap-2">
@@ -419,7 +419,7 @@ export function TablaMonitoreos() {
               onClick={expandirTodas}
               variant="ghost"
               size="sm"
-              className="text-[#73991C] hover:text-[#5C7A16] hover:bg-[#73991C]/10"
+              className="text-primary hover:text-primary-dark hover:bg-primary/10"
             >
               <ChevronDown className="w-4 h-4 mr-1" />
               Expandir Todo
@@ -428,7 +428,7 @@ export function TablaMonitoreos() {
               onClick={colapsarTodas}
               variant="ghost"
               size="sm"
-              className="text-[#4D240F]/70 hover:text-[#4D240F] hover:bg-gray-100"
+              className="text-brand-brown/70 hover:text-brand-brown hover:bg-gray-100"
             >
               <ChevronUp className="w-4 h-4 mr-1" />
               Colapsar Todo
@@ -438,10 +438,10 @@ export function TablaMonitoreos() {
 
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gradient-to-r from-[#73991C]/10 to-[#BFD97D]/10">
+            <thead className="bg-gradient-to-r from-primary/10 to-secondary/10">
               <tr>
                 <th 
-                  className="px-4 py-3 text-left text-[#172E08] cursor-pointer hover:bg-[#73991C]/10 transition-colors"
+                  className="px-4 py-3 text-left text-foreground cursor-pointer hover:bg-primary/10 transition-colors"
                   onClick={() => handleOrdenar('fecha_monitoreo')}
                 >
                   <div className="flex items-center gap-2">
@@ -451,7 +451,7 @@ export function TablaMonitoreos() {
                   </div>
                 </th>
                 <th 
-                  className="px-4 py-3 text-left text-[#172E08] cursor-pointer hover:bg-[#73991C]/10 transition-colors"
+                  className="px-4 py-3 text-left text-foreground cursor-pointer hover:bg-primary/10 transition-colors"
                   onClick={() => handleOrdenar('lote_nombre')}
                 >
                   <div className="flex items-center gap-2">
@@ -461,7 +461,7 @@ export function TablaMonitoreos() {
                   </div>
                 </th>
                 <th 
-                  className="px-4 py-3 text-left text-[#172E08] cursor-pointer hover:bg-[#73991C]/10 transition-colors"
+                  className="px-4 py-3 text-left text-foreground cursor-pointer hover:bg-primary/10 transition-colors"
                   onClick={() => handleOrdenar('sublote_nombre')}
                 >
                   <div className="flex items-center gap-2">
@@ -470,7 +470,7 @@ export function TablaMonitoreos() {
                   </div>
                 </th>
                 <th 
-                  className="px-4 py-3 text-left text-[#172E08] cursor-pointer hover:bg-[#73991C]/10 transition-colors"
+                  className="px-4 py-3 text-left text-foreground cursor-pointer hover:bg-primary/10 transition-colors"
                   onClick={() => handleOrdenar('plaga_nombre')}
                 >
                   <div className="flex items-center gap-2">
@@ -480,7 +480,7 @@ export function TablaMonitoreos() {
                   </div>
                 </th>
                 <th 
-                  className="px-4 py-3 text-center text-[#172E08] text-xs cursor-pointer hover:bg-[#73991C]/10 transition-colors"
+                  className="px-4 py-3 text-center text-foreground text-xs cursor-pointer hover:bg-primary/10 transition-colors"
                   onClick={() => handleOrdenar('arboles_monitoreados')}
                 >
                   <div className="flex items-center justify-center gap-1">
@@ -489,7 +489,7 @@ export function TablaMonitoreos() {
                   </div>
                 </th>
                 <th 
-                  className="px-4 py-3 text-center text-[#172E08] text-xs cursor-pointer hover:bg-[#73991C]/10 transition-colors"
+                  className="px-4 py-3 text-center text-foreground text-xs cursor-pointer hover:bg-primary/10 transition-colors"
                   onClick={() => handleOrdenar('arboles_afectados')}
                 >
                   <div className="flex items-center justify-center gap-1">
@@ -498,7 +498,7 @@ export function TablaMonitoreos() {
                   </div>
                 </th>
                 <th 
-                  className="px-4 py-3 text-center text-[#172E08] text-xs cursor-pointer hover:bg-[#73991C]/10 transition-colors"
+                  className="px-4 py-3 text-center text-foreground text-xs cursor-pointer hover:bg-primary/10 transition-colors"
                   onClick={() => handleOrdenar('individuos_encontrados')}
                 >
                   <div className="flex items-center justify-center gap-1">
@@ -507,7 +507,7 @@ export function TablaMonitoreos() {
                   </div>
                 </th>
                 <th 
-                  className="px-4 py-3 text-center text-[#172E08] cursor-pointer hover:bg-[#73991C]/10 transition-colors"
+                  className="px-4 py-3 text-center text-foreground cursor-pointer hover:bg-primary/10 transition-colors"
                   onClick={() => handleOrdenar('incidencia')}
                 >
                   <div className="flex items-center justify-center gap-1">
@@ -516,7 +516,7 @@ export function TablaMonitoreos() {
                   </div>
                 </th>
                 <th 
-                  className="px-4 py-3 text-center text-[#172E08] cursor-pointer hover:bg-[#73991C]/10 transition-colors"
+                  className="px-4 py-3 text-center text-foreground cursor-pointer hover:bg-primary/10 transition-colors"
                   onClick={() => handleOrdenar('severidad')}
                 >
                   <div className="flex items-center justify-center gap-1">
@@ -525,7 +525,7 @@ export function TablaMonitoreos() {
                   </div>
                 </th>
                 <th 
-                  className="px-4 py-3 text-center text-[#172E08] cursor-pointer hover:bg-[#73991C]/10 transition-colors"
+                  className="px-4 py-3 text-center text-foreground cursor-pointer hover:bg-primary/10 transition-colors"
                   onClick={() => handleOrdenar('gravedad_numerica')}
                 >
                   <div className="flex items-center justify-center gap-1">
@@ -534,7 +534,7 @@ export function TablaMonitoreos() {
                   </div>
                 </th>
                 <th 
-                  className="px-4 py-3 text-left text-[#172E08] cursor-pointer hover:bg-[#73991C]/10 transition-colors"
+                  className="px-4 py-3 text-left text-foreground cursor-pointer hover:bg-primary/10 transition-colors"
                   onClick={() => handleOrdenar('monitor')}
                 >
                   <div className="flex items-center gap-2">
@@ -542,7 +542,7 @@ export function TablaMonitoreos() {
                     {renderIconoOrden('monitor')}
                   </div>
                 </th>
-                <th className="px-4 py-3 text-left text-[#172E08]">
+                <th className="px-4 py-3 text-left text-foreground">
                   Observaciones
                 </th>
               </tr>
@@ -550,7 +550,7 @@ export function TablaMonitoreos() {
             <tbody className="divide-y divide-gray-200">
               {gruposSemanas.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-4 py-8 text-center text-[#4D240F]/60">
+                  <td colSpan={12} className="px-4 py-8 text-center text-brand-brown/60">
                     {monitoreos.length === 0 ? (
                       <>
                         <Bug className="w-12 h-12 mx-auto mb-3 text-gray-300" />
@@ -572,28 +572,28 @@ export function TablaMonitoreos() {
                       {/* HEADER DE SEMANA - Clickeable */}
                       <tr
                         key={`header-${key}`}
-                        className="bg-gradient-to-r from-[#73991C]/5 to-[#BFD97D]/5 hover:from-[#73991C]/10 hover:to-[#BFD97D]/10 cursor-pointer transition-colors border-y-2 border-[#73991C]/20"
+                        className="bg-gradient-to-r from-primary/5 to-secondary/5 hover:from-primary/10 hover:to-secondary/10 cursor-pointer transition-colors border-y-2 border-primary/20"
                         onClick={() => toggleSemana(key)}
                       >
                         <td colSpan={12} className="px-4 py-4">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-4">
                               {/* Icono de expandir/colapsar */}
-                              <div className="w-6 h-6 flex items-center justify-center rounded-full bg-[#73991C]/10">
+                              <div className="w-6 h-6 flex items-center justify-center rounded-full bg-primary/10">
                                 {isExpanded ? (
-                                  <ChevronUp className="w-4 h-4 text-[#73991C]" />
+                                  <ChevronUp className="w-4 h-4 text-primary" />
                                 ) : (
-                                  <ChevronDown className="w-4 h-4 text-[#73991C]" />
+                                  <ChevronDown className="w-4 h-4 text-primary" />
                                 )}
                               </div>
 
                               {/* Info de la semana */}
                               <div>
-                                <h4 className="text-[#172E08] flex items-center gap-2">
-                                  <Calendar className="w-4 h-4 text-[#73991C]" />
+                                <h4 className="text-foreground flex items-center gap-2">
+                                  <Calendar className="w-4 h-4 text-primary" />
                                   <span>Semana {grupo.semana} • {grupo.año}</span>
                                 </h4>
-                                <p className="text-sm text-[#4D240F]/60 mt-0.5">
+                                <p className="text-sm text-brand-brown/60 mt-0.5">
                                   {formatearFechaCorta(grupo.fechaInicio)}
                                   {' - '}
                                   {formatearFecha(grupo.fechaFin)}
@@ -603,10 +603,10 @@ export function TablaMonitoreos() {
 
                             {/* Badge con cantidad de registros */}
                             <div className="flex items-center gap-3">
-                              <span className="px-3 py-1 bg-[#73991C] text-white rounded-full text-sm">
+                              <span className="px-3 py-1 bg-primary text-white rounded-full text-sm">
                                 {grupo.totalRegistros} registro{grupo.totalRegistros !== 1 ? 's' : ''}
                               </span>
-                              <span className="text-xs text-[#4D240F]/40">
+                              <span className="text-xs text-brand-brown/40">
                                 {isExpanded ? 'Clic para colapsar' : 'Clic para expandir'}
                               </span>
                             </div>
@@ -616,17 +616,17 @@ export function TablaMonitoreos() {
 
                       {/* FILAS DE DATOS - Colapsables */}
                       {isExpanded && grupo.registros.map((m) => (
-                        <tr key={m.id} className="hover:bg-[#F8FAF5]/50 transition-colors">
+                        <tr key={m.id} className="hover:bg-background/50 transition-colors">
                           <td className="px-4 py-3 text-sm pl-16">
                             {formatearFecha(m.fecha_monitoreo)}
                           </td>
-                          <td className="px-4 py-3 text-sm text-[#172E08]">
+                          <td className="px-4 py-3 text-sm text-foreground">
                             {m.lote_nombre}
                           </td>
-                          <td className="px-4 py-3 text-sm text-[#4D240F]/70">
+                          <td className="px-4 py-3 text-sm text-brand-brown/70">
                             {m.sublote_nombre}
                           </td>
-                          <td className="px-4 py-3 text-sm text-[#172E08]">
+                          <td className="px-4 py-3 text-sm text-foreground">
                             {m.plaga_nombre}
                           </td>
                           <td className="px-4 py-3 text-center text-sm">
@@ -649,10 +649,10 @@ export function TablaMonitoreos() {
                               {m.gravedad_texto || 'N/A'}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-sm text-[#4D240F]/70 max-w-xs truncate">
+                          <td className="px-4 py-3 text-sm text-brand-brown/70 max-w-xs truncate">
                             {m.monitor || '-'}
                           </td>
-                          <td className="px-4 py-3 text-sm text-[#4D240F]/70 max-w-xs truncate">
+                          <td className="px-4 py-3 text-sm text-brand-brown/70 max-w-xs truncate">
                             {m.observaciones || '-'}
                           </td>
                         </tr>
@@ -669,7 +669,7 @@ export function TablaMonitoreos() {
       {/* Paginación */}
       {totalPaginas > 1 && (
         <div className="flex items-center justify-between">
-          <p className="text-sm text-[#4D240F]/60">
+          <p className="text-sm text-brand-brown/60">
             Mostrando {indiceInicio + 1} - {Math.min(indiceFin, monitoreosFiltrados.length)} de {monitoreosFiltrados.length}
           </p>
           <div className="flex gap-2">
@@ -682,7 +682,7 @@ export function TablaMonitoreos() {
               Anterior
             </Button>
             <div className="flex items-center gap-2 px-4">
-              <span className="text-sm text-[#4D240F]/60">
+              <span className="text-sm text-brand-brown/60">
                 Página {paginaActual} de {totalPaginas}
               </span>
             </div>

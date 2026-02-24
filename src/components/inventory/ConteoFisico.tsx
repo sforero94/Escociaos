@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { VerificacionesNav } from './VerificacionesNav';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 
 interface DetalleVerificacion {
   id: string;
@@ -62,6 +63,12 @@ export function ConteoFisico() {
   const [cantidadFisica, setCantidadFisica] = useState('');
   const [observaciones, setObservaciones] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Dialogs de confirmación
+  const [confirmSaveOpen, setConfirmSaveOpen] = useState(false);
+  const [pendingNextIndex, setPendingNextIndex] = useState<number | null>(null);
+  const [confirmCompletarOpen, setConfirmCompletarOpen] = useState(false);
+  const [productosNoContadosCount, setProductosNoContadosCount] = useState(0);
 
   useEffect(() => {
     if (id) {
@@ -188,20 +195,29 @@ export function ConteoFisico() {
       // Si hay cambios sin guardar, preguntar
       const detalle = detalles[currentIndex];
       const cantidadActual = cantidadFisica ? parseFloat(cantidadFisica) : null;
-      
+
       if (cantidadActual !== detalle.cantidad_fisica) {
-        if (
-          !window.confirm(
-            '¿Deseas guardar los cambios antes de continuar?'
-          )
-        ) {
-          setCurrentIndex(currentIndex + 1);
-          return;
-        }
-        await handleGuardarProducto();
+        setPendingNextIndex(currentIndex + 1);
+        setConfirmSaveOpen(true);
+        return;
       }
 
       setCurrentIndex(currentIndex + 1);
+    }
+  };
+
+  const handleGuardarYContinuar = async () => {
+    await handleGuardarProducto();
+    if (pendingNextIndex !== null) {
+      setCurrentIndex(pendingNextIndex);
+      setPendingNextIndex(null);
+    }
+  };
+
+  const handleDescartarYContinuar = () => {
+    if (pendingNextIndex !== null) {
+      setCurrentIndex(pendingNextIndex);
+      setPendingNextIndex(null);
     }
   };
 
@@ -215,15 +231,15 @@ export function ConteoFisico() {
     const productosNoContados = detalles.filter((d) => !d.contado).length;
 
     if (productosNoContados > 0) {
-      if (
-        !window.confirm(
-          `Hay ${productosNoContados} productos sin contar. ¿Estás seguro de completar la verificación?`
-        )
-      ) {
-        return;
-      }
+      setProductosNoContadosCount(productosNoContados);
+      setConfirmCompletarOpen(true);
+      return;
     }
 
+    await ejecutarCompletarVerificacion();
+  };
+
+  const ejecutarCompletarVerificacion = async () => {
     try {
       setIsCompleting(true);
       setError('');
@@ -266,7 +282,7 @@ export function ConteoFisico() {
       <div className="space-y-6">
         <VerificacionesNav />
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 text-[#73991C] animate-spin" />
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
       </div>
     );
@@ -293,9 +309,9 @@ export function ConteoFisico() {
     return (
       <div className="space-y-6">
         <VerificacionesNav />
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-12 text-center">
-          <Package className="w-16 h-16 text-[#4D240F]/40 mx-auto mb-4" />
-          <h3 className="text-xl text-[#172E08] mb-2">
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-12 text-center">
+          <Package className="w-16 h-16 text-brand-brown/40 mx-auto mb-4" />
+          <h3 className="text-xl text-foreground mb-2">
             No hay productos para verificar
           </h3>
         </div>
@@ -313,27 +329,27 @@ export function ConteoFisico() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-[#172E08] mb-2 flex items-center gap-3">
-            <ClipboardCheck className="w-8 h-8 text-[#73991C]" />
+          <h1 className="text-foreground mb-2 flex items-center gap-3">
+            <ClipboardCheck className="w-8 h-8 text-primary" />
             Conteo Físico
           </h1>
-          <p className="text-[#4D240F]/70">
+          <p className="text-brand-brown/70">
             Verificación: {verificacion?.fecha_inicio}
           </p>
         </div>
       </div>
 
       {/* Barra de Progreso */}
-      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm text-[#4D240F]/70">Progreso</span>
-          <span className="text-sm text-[#172E08]">
+          <span className="text-sm text-brand-brown/70">Progreso</span>
+          <span className="text-sm text-foreground">
             {productosContados} / {detalles.length} productos contados
           </span>
         </div>
-        <div className="w-full bg-[#E7EDDD]/50 rounded-full h-3">
+        <div className="w-full bg-muted/50 rounded-full h-3">
           <div
-            className="bg-gradient-to-r from-[#73991C] to-[#BFD97D] h-3 rounded-full transition-all duration-300"
+            className="bg-gradient-to-r from-primary to-secondary h-3 rounded-full transition-all duration-300"
             style={{ width: `${porcentajeProgreso}%` }}
           />
         </div>
@@ -357,20 +373,20 @@ export function ConteoFisico() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Panel Principal - Producto Actual */}
         <div className="lg:col-span-2">
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl border-2 border-[#73991C]/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl border-2 border-primary/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
             {/* Navegación de Producto */}
-            <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#73991C]/10">
+            <div className="flex items-center justify-between mb-6 pb-4 border-b border-primary/10">
               <button
                 onClick={handleAnterior}
                 disabled={currentIndex === 0}
-                className="p-2 hover:bg-[#E7EDDD]/50 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="p-2 hover:bg-muted/50 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
-                <ChevronLeft className="w-6 h-6 text-[#172E08]" />
+                <ChevronLeft className="w-6 h-6 text-foreground" />
               </button>
 
               <div className="text-center">
-                <p className="text-sm text-[#4D240F]/60">Producto</p>
-                <p className="text-lg text-[#73991C]">
+                <p className="text-sm text-brand-brown/60">Producto</p>
+                <p className="text-lg text-primary">
                   {currentIndex + 1} de {detalles.length}
                 </p>
               </div>
@@ -378,19 +394,19 @@ export function ConteoFisico() {
               <button
                 onClick={handleSiguiente}
                 disabled={currentIndex === detalles.length - 1}
-                className="p-2 hover:bg-[#E7EDDD]/50 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                className="p-2 hover:bg-muted/50 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
-                <ChevronRight className="w-6 h-6 text-[#172E08]" />
+                <ChevronRight className="w-6 h-6 text-foreground" />
               </button>
             </div>
 
             {/* Información del Producto */}
             <div className="mb-6">
-              <h2 className="text-2xl text-[#172E08] mb-2">
+              <h2 className="text-2xl text-foreground mb-2">
                 {detalleActual.producto.nombre}
               </h2>
               <div className="flex flex-wrap gap-2">
-                <span className="px-3 py-1 bg-[#E7EDDD]/50 text-[#4D240F]/70 rounded-lg text-sm">
+                <span className="px-3 py-1 bg-muted/50 text-brand-brown/70 rounded-lg text-sm">
                   {detalleActual.producto.categoria}
                 </span>
                 {detalleActual.contado && (
@@ -403,16 +419,16 @@ export function ConteoFisico() {
             </div>
 
             {/* Cantidad Teórica */}
-            <div className="bg-[#E7EDDD]/30 rounded-xl p-4 mb-6">
-              <p className="text-sm text-[#4D240F]/60 mb-1">Cantidad en Sistema</p>
-              <p className="text-[#172E08]">
+            <div className="bg-muted/30 rounded-xl p-4 mb-6">
+              <p className="text-sm text-brand-brown/60 mb-1">Cantidad en Sistema</p>
+              <p className="text-foreground">
                 {detalleActual.cantidad_teorica.toFixed(2)} {detalleActual.producto.unidad_medida}
               </p>
             </div>
 
             {/* Input Cantidad Física */}
             <div className="mb-6">
-              <label className="block text-sm text-[#172E08] mb-2">
+              <label className="block text-sm text-foreground mb-2">
                 Cantidad Física Contada *
               </label>
               <div className="flex gap-3">
@@ -423,10 +439,10 @@ export function ConteoFisico() {
                   step="0.01"
                   min="0"
                   placeholder="0.00"
-                  className="flex-1 px-4 py-3 text-2xl border-2 border-[#73991C]/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                  className="flex-1 px-4 py-3 text-2xl border-2 border-primary/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
-                <div className="flex items-center px-4 bg-[#E7EDDD]/30 rounded-xl">
-                  <span className="text-lg text-[#4D240F]/70">
+                <div className="flex items-center px-4 bg-muted/30 rounded-xl">
+                  <span className="text-lg text-brand-brown/70">
                     {detalleActual.producto.unidad_medida}
                   </span>
                 </div>
@@ -435,14 +451,14 @@ export function ConteoFisico() {
 
             {/* Observaciones */}
             <div className="mb-6">
-              <label className="block text-sm text-[#172E08] mb-2">
+              <label className="block text-sm text-foreground mb-2">
                 Observaciones (Opcional)
               </label>
               <textarea
                 value={observaciones}
                 onChange={(e) => setObservaciones(e.target.value)}
                 placeholder="Ej: Bolsa rota, producto derramado..."
-                className="w-full px-4 py-3 border border-[#73991C]/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent resize-none"
+                className="w-full px-4 py-3 border border-primary/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
                 rows={3}
               />
             </div>
@@ -452,7 +468,7 @@ export function ConteoFisico() {
               <button
                 onClick={handleGuardarProducto}
                 disabled={isSaving || !cantidadFisica}
-                className="flex-1 px-6 py-4 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white hover:from-[#5f7d17] hover:to-[#9db86d] rounded-xl transition-all duration-200 font-medium shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="flex-1 px-6 py-4 bg-gradient-to-r from-primary to-secondary text-white hover:from-primary-dark hover:to-secondary-dark rounded-xl transition-all duration-200 font-medium shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {isSaving ? (
                   <>
@@ -470,7 +486,7 @@ export function ConteoFisico() {
               {currentIndex < detalles.length - 1 && (
                 <button
                   onClick={handleSiguiente}
-                  className="flex-1 px-6 py-4 bg-white border-2 border-[#73991C] text-[#73991C] hover:bg-[#F8FAF5] rounded-xl transition-all duration-200 font-medium flex items-center justify-center gap-2"
+                  className="flex-1 px-6 py-4 bg-white border-2 border-primary text-primary hover:bg-background rounded-xl transition-all duration-200 font-medium flex items-center justify-center gap-2"
                 >
                   Siguiente
                   <ChevronRight className="w-5 h-5" />
@@ -490,14 +506,14 @@ export function ConteoFisico() {
                 </p>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <p className="text-[#4D240F]/60">Diferencia</p>
+                    <p className="text-brand-brown/60">Diferencia</p>
                     <p>
                       {detalleActual.diferencia > 0 ? '+' : ''}
                       {detalleActual.diferencia.toFixed(2)} {detalleActual.producto.unidad_medida}
                     </p>
                   </div>
                   <div>
-                    <p className="text-[#4D240F]/60">Porcentaje</p>
+                    <p className="text-brand-brown/60">Porcentaje</p>
                     <p>
                       {detalleActual.porcentaje_diferencia?.toFixed(2)}%
                     </p>
@@ -511,23 +527,23 @@ export function ConteoFisico() {
         {/* Panel Lateral - Lista Rápida */}
         <div className="space-y-6">
           {/* Búsqueda */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-4 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-4 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#4D240F]/40" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-brand-brown/40" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Buscar producto..."
-                className="w-full pl-10 pr-4 py-2 border border-[#73991C]/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2 border border-primary/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
               />
             </div>
           </div>
 
           {/* Lista de Productos */}
-          <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 overflow-hidden shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
-            <div className="bg-gradient-to-r from-[#E7EDDD]/50 to-[#E7EDDD]/30 px-4 py-3 border-b border-[#73991C]/10">
-              <h3 className="text-sm text-[#172E08]">
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 overflow-hidden shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+            <div className="bg-gradient-to-r from-muted/50 to-muted/30 px-4 py-3 border-b border-primary/10">
+              <h3 className="text-sm text-foreground">
                 Todos los Productos
               </h3>
             </div>
@@ -536,18 +552,18 @@ export function ConteoFisico() {
                 <button
                   key={detalle.id}
                   onClick={() => handleSaltarAProducto(detalles.indexOf(detalle))}
-                  className={`w-full text-left px-4 py-3 border-b border-[#73991C]/5 hover:bg-[#E7EDDD]/30 transition-colors ${
+                  className={`w-full text-left px-4 py-3 border-b border-primary/5 hover:bg-muted/30 transition-colors ${
                     detalles.indexOf(detalle) === currentIndex
-                      ? 'bg-[#E7EDDD]/50'
+                      ? 'bg-muted/50'
                       : ''
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-[#172E08] truncate">
+                      <p className="text-sm text-foreground truncate">
                         {detalle.producto.nombre}
                       </p>
-                      <p className="text-xs text-[#4D240F]/60">
+                      <p className="text-xs text-brand-brown/60">
                         {detalle.cantidad_teorica.toFixed(2)} {detalle.producto.unidad_medida}
                       </p>
                     </div>
@@ -578,11 +594,31 @@ export function ConteoFisico() {
               </>
             )}
           </button>
-          <p className="text-xs text-center text-[#4D240F]/60">
+          <p className="text-xs text-center text-brand-brown/60">
             Al completar, Gerencia recibirá notificación para aprobar ajustes
           </p>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmSaveOpen}
+        onOpenChange={setConfirmSaveOpen}
+        title="¿Guardar cambios?"
+        description="Tienes cambios sin guardar en este producto."
+        confirmLabel="Guardar y continuar"
+        cancelLabel="Continuar sin guardar"
+        onConfirm={handleGuardarYContinuar}
+        onCancel={handleDescartarYContinuar}
+      />
+
+      <ConfirmDialog
+        open={confirmCompletarOpen}
+        onOpenChange={setConfirmCompletarOpen}
+        title="Productos sin contar"
+        description={`Hay ${productosNoContadosCount} producto(s) sin contar. ¿Estás seguro de completar la verificación?`}
+        confirmLabel="Completar de todos modos"
+        onConfirm={() => { setConfirmCompletarOpen(false); ejecutarCompletarVerificacion(); }}
+      />
     </div>
   );
 }

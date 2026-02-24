@@ -15,22 +15,22 @@ export function ConfiguracionDashboard() {
   const isGerencia = profile?.rol === 'Gerencia';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#F8FAF5] via-white to-[#BFD97D]/10 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-background via-white to-secondary/10 p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-[#172E08] mb-2">Configuración</h1>
-          <p className="text-[#4D240F]/70">
+          <h1 className="text-foreground mb-2">Configuración</h1>
+          <p className="text-brand-brown/70">
             Gestiona la configuración del sistema Escosia Hass
           </p>
         </div>
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="bg-white/80 backdrop-blur-sm border border-[#BFD97D]/30 p-1">
+          <TabsList className="bg-white/80 backdrop-blur-sm border border-secondary/30 p-1">
             <TabsTrigger
               value="general"
-              className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-[#73991C] data-[state=active]:to-[#5c7a16] data-[state=active]:text-white"
+              className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary-dark data-[state=active]:text-white"
             >
               <Settings className="w-4 h-4 mr-2" />
               General
@@ -39,7 +39,7 @@ export function ConfiguracionDashboard() {
             {isGerencia && (
               <TabsTrigger
                 value="usuarios"
-                className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-[#73991C] data-[state=active]:to-[#5c7a16] data-[state=active]:text-white"
+                className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary-dark data-[state=active]:text-white"
               >
                 <Users className="w-4 h-4 mr-2" />
                 Usuarios
@@ -48,14 +48,14 @@ export function ConfiguracionDashboard() {
             
             <TabsTrigger
               value="lotes"
-              className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-[#73991C] data-[state=active]:to-[#5c7a16] data-[state=active]:text-white"
+              className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary-dark data-[state=active]:text-white"
             >
               <MapPin className="w-4 h-4 mr-2" />
               Lotes
             </TabsTrigger>
             <TabsTrigger
               value="sublotes"
-              className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-[#73991C] data-[state=active]:to-[#5c7a16] data-[state=active]:text-white"
+              className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary-dark data-[state=active]:text-white"
             >
               <Sprout className="w-4 h-4 mr-2" />
               Sublotes
@@ -64,14 +64,14 @@ export function ConfiguracionDashboard() {
 
           <TabsContent value="general" className="space-y-6">
             {/* Modo Seguro */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
               <div className="flex items-start gap-4">
                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${isSafeModeEnabled ? 'bg-green-500' : 'bg-orange-500'}`}>
                   <Shield className="w-6 h-6 text-white" />
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-lg text-[#172E08]">Modo Seguro</h3>
+                    <h3 className="text-lg text-foreground">Modo Seguro</h3>
                     <button
                       onClick={toggleSafeMode}
                       className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
@@ -85,7 +85,7 @@ export function ConfiguracionDashboard() {
                       />
                     </button>
                   </div>
-                  <p className="text-sm text-[#4D240F]/70 mb-4">
+                  <p className="text-sm text-brand-brown/70 mb-4">
                     {isSafeModeEnabled
                       ? 'El modo seguro está activado. Los productos no permitidos por gerencia están ocultos en toda la aplicación.'
                       : 'El modo seguro está desactivado. Todos los productos son visibles en la aplicación.'}

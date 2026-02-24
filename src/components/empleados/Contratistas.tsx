@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -49,21 +50,7 @@ import {
 } from 'lucide-react';
 import { formatCost } from '../../utils/laborCosts';
 
-// Tipos
-interface Contratista {
-  id?: string;
-  nombre: string;
-  tipo_contrato: 'Jornal' | 'Contrato';
-  tarifa_jornal: number;
-  cedula?: string;
-  telefono?: string;
-  estado: 'Activo' | 'Inactivo';
-  fecha_inicio?: string;
-  fecha_fin?: string;
-  observaciones?: string;
-  created_at?: string;
-  updated_at?: string;
-}
+import type { Contratista } from '../../types/shared';
 
 // Valores por defecto para nuevo contratista
 const CONTRATISTA_INICIAL: Contratista = {
@@ -88,6 +75,10 @@ const Contratistas: React.FC = () => {
     type: 'success' | 'error' | 'info';
     message: string;
   } | null>(null);
+
+  // Confirm dialog state
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   // Cargar contratistas al montar el componente
   useEffect(() => {
@@ -174,11 +165,17 @@ const Contratistas: React.FC = () => {
     }
   };
 
-  // Función para eliminar/inactivar contratista
-  const handleDeleteContratista = async (id: string) => {
-    if (!window.confirm('¿Está seguro de que desea eliminar este contratista?')) {
-      return;
-    }
+  // Abrir confirmación de eliminación
+  const handleDeleteContratista = (id: string) => {
+    setDeleteTargetId(id);
+    setConfirmDeleteOpen(true);
+  };
+
+  // Ejecutar eliminación después de confirmar
+  const executeDeleteContratista = async () => {
+    if (!deleteTargetId) return;
+    const id = deleteTargetId;
+    setDeleteTargetId(null);
 
     try {
       setLoading(true);
@@ -273,7 +270,7 @@ const Contratistas: React.FC = () => {
             Gestión de contratistas externos (Jornal y Contrato)
           </p>
         </div>
-        <Button onClick={handleNewContratista} className="bg-[#73991C] hover:bg-[#5a7716]">
+        <Button onClick={handleNewContratista} className="bg-primary hover:bg-primary-dark">
           <UserPlus className="w-4 h-4 mr-2" />
           Nuevo Contratista
         </Button>
@@ -475,6 +472,17 @@ const Contratistas: React.FC = () => {
         </CardContent>
       </Card>
 
+      {/* Confirm dialog para eliminar contratista */}
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        title="¿Está seguro de que desea eliminar este contratista?"
+        description="Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={executeDeleteContratista}
+        destructive
+      />
+
       {/* Dialog de formulario */}
       <Dialog open={showFormDialog} onOpenChange={setShowFormDialog}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -621,7 +629,7 @@ const Contratistas: React.FC = () => {
             <Button
               onClick={handleSaveContratista}
               disabled={loading}
-              className="bg-[#73991C] hover:bg-[#5a7716]"
+              className="bg-primary hover:bg-primary-dark"
             >
               {loading ? 'Guardando...' : editingContratista ? 'Actualizar' : 'Crear'}
             </Button>

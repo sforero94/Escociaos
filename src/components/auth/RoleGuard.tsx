@@ -40,11 +40,11 @@ export function RoleGuard({
     return (
       <div className="min-h-[60vh] flex items-center justify-center p-4">
         <div className="text-center max-w-md">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-[#FFC107]/10 rounded-2xl mb-4 shadow-lg">
-            <AlertTriangle className="w-10 h-10 text-[#FFC107]" />
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-warning/10 rounded-2xl mb-4 shadow-lg">
+            <AlertTriangle className="w-10 h-10 text-warning" />
           </div>
-          <h2 className="text-2xl text-[#172E08] mb-2">Acceso Restringido</h2>
-          <p className="text-[#4D240F]/70 mb-6">
+          <h2 className="text-2xl text-foreground mb-2">Acceso Restringido</h2>
+          <p className="text-brand-brown/70 mb-6">
             No tienes permisos para acceder a esta sección.
             <br />
             <span className="text-sm">Rol actual: <strong>{profile?.rol || 'Sin rol'}</strong></span>
@@ -53,7 +53,7 @@ export function RoleGuard({
           </p>
           <Button
             onClick={() => window.history.back()}
-            className="bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-xl"
+            className="bg-gradient-to-r from-primary to-secondary text-white rounded-xl"
           >
             Volver
           </Button>

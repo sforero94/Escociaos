@@ -162,7 +162,7 @@ export async function fetchDatosReporteCierre(aplicacionId: string): Promise<Dat
   }
 
   return {
-    nombre: app.nombre_aplicacion || app.nombre || '',
+    nombre: app.nombre_aplicacion || '',
     tipo_aplicacion: app.tipo_aplicacion || '',
     proposito: app.proposito || undefined,
     fecha_inicio_planeada: app.fecha_inicio_planeada || undefined,

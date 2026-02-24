@@ -130,7 +130,7 @@ export function TrabajadorMultiSelect({
           disabled={disabled}
           className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
             workerTab === 'empleados'
-              ? 'border-[#73991C] text-[#73991C]'
+              ? 'border-primary text-primary'
               : 'border-transparent text-gray-500 hover:text-gray-700'
           } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
@@ -145,7 +145,7 @@ export function TrabajadorMultiSelect({
           disabled={disabled}
           className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
             workerTab === 'contratistas'
-              ? 'border-[#73991C] text-[#73991C]'
+              ? 'border-primary text-primary'
               : 'border-transparent text-gray-500 hover:text-gray-700'
           } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
@@ -245,12 +245,12 @@ export function TrabajadorMultiSelect({
                   disabled={disabled}
                   className={`relative p-2 rounded-lg border-2 transition-all text-left hover:shadow-md ${
                     isSelected
-                      ? 'border-[#73991C] bg-[#73991C]/5 shadow-sm'
+                      ? 'border-primary bg-primary/5 shadow-sm'
                       : 'border-gray-200 hover:border-gray-300 bg-white'
                   } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   {isSelected && (
-                    <div className="absolute top-1 right-1 w-4 h-4 bg-[#73991C] rounded-full flex items-center justify-center">
+                    <div className="absolute top-1 right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center">
                       <svg
                         className="w-2.5 h-2.5 text-white"
                         fill="none"
@@ -313,12 +313,12 @@ export function TrabajadorMultiSelect({
                 disabled={disabled}
                 className={`relative p-2 rounded-lg border-2 transition-all text-left hover:shadow-md ${
                   isSelected
-                    ? 'border-[#73991C] bg-[#73991C]/5 shadow-sm'
+                    ? 'border-primary bg-primary/5 shadow-sm'
                     : 'border-gray-200 hover:border-gray-300 bg-white'
                 } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 {isSelected && (
-                  <div className="absolute top-1 right-1 w-4 h-4 bg-[#73991C] rounded-full flex items-center justify-center">
+                  <div className="absolute top-1 right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center">
                     <svg
                       className="w-2.5 h-2.5 text-white"
                       fill="none"
@@ -351,8 +351,8 @@ export function TrabajadorMultiSelect({
 
       {/* Selection summary */}
       {totalSelected > 0 && (
-        <div className="bg-[#73991C]/5 border border-[#73991C]/20 rounded-lg p-3">
-          <p className="text-sm text-[#172E08] text-center">
+        <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
+          <p className="text-sm text-foreground text-center">
             <span className="font-semibold">{totalSelected}</span>{' '}
             {totalSelected === 1 ? 'trabajador seleccionado' : 'trabajadores seleccionados'}
             {selectedCount.empleados > 0 && selectedCount.contratistas > 0 && (

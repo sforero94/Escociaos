@@ -408,7 +408,7 @@ const ReportesView: React.FC<ReportesViewProps> = ({
   if (loading) {
     return (
       <div className="flex justify-center items-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#73991C]"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -450,7 +450,7 @@ const ReportesView: React.FC<ReportesViewProps> = ({
             variant="default"
             size="sm"
             disabled={!estadisticasGenerales || registrosTrabajo.length === 0}
-            className="bg-[#73991C] hover:bg-[#5a7a15]"
+            className="bg-primary hover:bg-primary-dark"
           >
             <Download className="h-4 w-4 mr-2" />
             Exportar PDF
@@ -523,7 +523,7 @@ const ReportesView: React.FC<ReportesViewProps> = ({
               onClick={() => setVistaGrafico('costos')}
               className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
                 vistaGrafico === 'costos'
-                  ? 'bg-[#73991C] text-white shadow-sm'
+                  ? 'bg-primary text-white shadow-sm'
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
@@ -533,7 +533,7 @@ const ReportesView: React.FC<ReportesViewProps> = ({
               onClick={() => setVistaGrafico('jornales')}
               className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
                 vistaGrafico === 'jornales'
-                  ? 'bg-[#73991C] text-white shadow-sm'
+                  ? 'bg-primary text-white shadow-sm'
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
@@ -579,7 +579,7 @@ const ReportesView: React.FC<ReportesViewProps> = ({
               </div>
               <div className="text-center">
                 <div className="text-sm text-gray-600 mb-1">Empleados</div>
-                <div className="text-2xl font-bold text-[#73991C]">
+                <div className="text-2xl font-bold text-primary">
                   {vistaGrafico === 'costos'
                     ? formatCurrency(matrizLoteActividad.totalGeneral.empleados)
                     : formatNumber(matrizLoteActividad.totalGeneral.empleados)
@@ -599,7 +599,7 @@ const ReportesView: React.FC<ReportesViewProps> = ({
                         {lote}
                       </TableHead>
                     ))}
-                    <TableHead className="text-center font-bold bg-[#73991C] text-white">Total</TableHead>
+                    <TableHead className="text-center font-bold bg-primary text-white">Total</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -658,8 +658,8 @@ const ReportesView: React.FC<ReportesViewProps> = ({
                     </TableRow>
                   ))}
                   {/* Row Totals */}
-                  <TableRow className="bg-[#73991C] text-white font-bold">
-                    <TableCell className="sticky left-0 bg-[#73991C]">Total</TableCell>
+                  <TableRow className="bg-primary text-white font-bold">
+                    <TableCell className="sticky left-0 bg-primary">Total</TableCell>
                     {matrizLoteActividad.lotes.map((lote, index) => {
                       const totalLote = matrizLoteActividad.totalesPorLote.get(lote);
                       return (

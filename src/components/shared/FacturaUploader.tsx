@@ -3,6 +3,7 @@ import { getSupabase } from '../../utils/supabase/client';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Upload, X, FileText, Image as ImageIcon, Loader2, Eye } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface FacturaUploaderProps {
   /**
@@ -73,14 +74,14 @@ export function FacturaUploader({
     // Validate file type
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'application/pdf'];
     if (!validTypes.includes(file.type)) {
-      alert('Solo se permiten archivos de imagen (JPG, PNG, GIF) o PDF');
+      toast.error('Solo se permiten archivos de imagen (JPG, PNG, GIF) o PDF');
       return;
     }
 
     // Validate file size (max 5MB)
     const maxSize = 5 * 1024 * 1024; // 5MB
     if (file.size > maxSize) {
-      alert('El archivo es muy grande. El tamaño máximo es 5MB');
+      toast.error('El archivo es muy grande. El tamaño máximo es 5MB');
       return;
     }
 
@@ -123,9 +124,9 @@ export function FacturaUploader({
       // Call success callback with storage path (not URL)
       onUploadSuccess(storagePath);
 
-      alert('Factura subida exitosamente');
+      toast.success('Factura subida exitosamente');
     } catch (error: any) {
-      alert('Error al subir la factura: ' + error.message);
+      toast.error('Error al subir la factura: ' + error.message);
     } finally {
       setUploading(false);
       // Reset file input
@@ -159,7 +160,7 @@ export function FacturaUploader({
         window.open(data.signedUrl, '_blank');
       }
     } catch (error: any) {
-      alert('Error al abrir la factura: ' + error.message);
+      toast.error('Error al abrir la factura: ' + error.message);
     }
   };
 

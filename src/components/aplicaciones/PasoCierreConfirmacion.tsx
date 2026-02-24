@@ -86,53 +86,53 @@ export function PasoCierreConfirmacion({
     <div className="space-y-6">
       {/* TÍTULO */}
       <div>
-        <h3 className="text-xl text-[#172E08] mb-2">Confirmación de Cierre</h3>
-        <p className="text-[#4D240F]/70">
+        <h3 className="text-xl text-foreground mb-2">Confirmación de Cierre</h3>
+        <p className="text-brand-brown/70">
           Revisa el resumen completo antes de finalizar el cierre de la aplicación.
         </p>
       </div>
 
       {/* SECCIÓN 1: INFORMACIÓN GENERAL */}
-      <div className="bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 border border-[#73991C]/20 rounded-xl p-6">
+      <div className="bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20 rounded-xl p-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="p-2 bg-[#73991C]/10 rounded-lg">
-            <Calendar className="w-5 h-5 text-[#73991C]" />
+          <div className="p-2 bg-primary/10 rounded-lg">
+            <Calendar className="w-5 h-5 text-primary" />
           </div>
-          <h4 className="text-[#172E08]">Información General</h4>
+          <h4 className="text-foreground">Información General</h4>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
-            <div className="text-xs text-[#4D240F]/70 mb-1">Nombre</div>
-            <div className="text-sm text-[#172E08]">{aplicacion.nombre}</div>
+            <div className="text-xs text-brand-brown/70 mb-1">Nombre</div>
+            <div className="text-sm text-foreground">{aplicacion.nombre_aplicacion}</div>
           </div>
           <div>
-            <div className="text-xs text-[#4D240F]/70 mb-1">Tipo</div>
-            <div className="text-sm text-[#172E08] capitalize">{aplicacion.tipo}</div>
+            <div className="text-xs text-brand-brown/70 mb-1">Tipo</div>
+            <div className="text-sm text-foreground">{aplicacion.tipo_aplicacion}</div>
           </div>
           <div>
-            <div className="text-xs text-[#4D240F]/70 mb-1">Fecha Inicio</div>
-            <div className="text-sm text-[#172E08]">{formatearFecha(fechaInicio)}</div>
+            <div className="text-xs text-brand-brown/70 mb-1">Fecha Inicio</div>
+            <div className="text-sm text-foreground">{formatearFecha(fechaInicio)}</div>
           </div>
           <div>
-            <div className="text-xs text-[#4D240F]/70 mb-1">Fecha Final</div>
-            <div className="text-sm text-[#172E08]">{formatearFecha(fechaFinal)}</div>
+            <div className="text-xs text-brand-brown/70 mb-1">Fecha Final</div>
+            <div className="text-sm text-foreground">{formatearFecha(fechaFinal)}</div>
           </div>
         </div>
 
-        <div className="mt-4 pt-4 border-t border-[#73991C]/20">
+        <div className="mt-4 pt-4 border-t border-primary/20">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <div className="text-xs text-[#4D240F]/70 mb-1">Días de Ejecución</div>
-              <div className="text-2xl text-[#73991C]">{diasAplicacion}</div>
+              <div className="text-xs text-brand-brown/70 mb-1">Días de Ejecución</div>
+              <div className="text-2xl text-primary">{diasAplicacion}</div>
             </div>
             <div>
-              <div className="text-xs text-[#4D240F]/70 mb-1">Lotes Tratados</div>
-              <div className="text-2xl text-[#73991C]">{detallesLotes.length}</div>
+              <div className="text-xs text-brand-brown/70 mb-1">Lotes Tratados</div>
+              <div className="text-2xl text-primary">{detallesLotes.length}</div>
             </div>
             <div>
-              <div className="text-xs text-[#4D240F]/70 mb-1">Árboles Tratados</div>
-              <div className="text-2xl text-[#73991C]">{totalArboles.toLocaleString('es-CO')}</div>
+              <div className="text-xs text-brand-brown/70 mb-1">Árboles Tratados</div>
+              <div className="text-2xl text-primary">{totalArboles.toLocaleString('es-CO')}</div>
             </div>
           </div>
         </div>
@@ -143,7 +143,7 @@ export function PasoCierreConfirmacion({
         <div className="bg-blue-50 border-b border-blue-200 px-6 py-4">
           <div className="flex items-center gap-3">
             <DollarSign className="w-5 h-5 text-blue-600" />
-            <h4 className="text-[#172E08]">Resumen de Costos</h4>
+            <h4 className="text-foreground">Resumen de Costos</h4>
           </div>
         </div>
 
@@ -152,22 +152,22 @@ export function PasoCierreConfirmacion({
             {/* Costos Detallados */}
             <div className="space-y-3">
               <div className="flex items-center justify-between py-2 border-b border-gray-200">
-                <span className="text-sm text-[#4D240F]/70">Costo de Insumos</span>
-                <span className="text-sm text-[#172E08]">
+                <span className="text-sm text-brand-brown/70">Costo de Insumos</span>
+                <span className="text-sm text-foreground">
                   {formatearMoneda(costoInsumosTotal)}
                 </span>
               </div>
               <div className="flex items-center justify-between py-2 border-b border-gray-200">
-                <span className="text-sm text-[#4D240F]/70">
+                <span className="text-sm text-brand-brown/70">
                   Mano de Obra ({totalJornales} jornales × {formatearMoneda(valorJornal)})
                 </span>
-                <span className="text-sm text-[#172E08]">
+                <span className="text-sm text-foreground">
                   {formatearMoneda(costoManoObraTotal)}
                 </span>
               </div>
-              <div className="flex items-center justify-between py-3 bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 px-4 rounded-lg">
-                <span className="text-[#172E08]">Costo Total</span>
-                <span className="text-xl text-[#73991C]">{formatearMoneda(costoTotal)}</span>
+              <div className="flex items-center justify-between py-3 bg-gradient-to-br from-primary/10 to-secondary/10 px-4 rounded-lg">
+                <span className="text-foreground">Costo Total</span>
+                <span className="text-xl text-primary">{formatearMoneda(costoTotal)}</span>
               </div>
             </div>
 
@@ -186,23 +186,23 @@ export function PasoCierreConfirmacion({
 
           {/* Distribución de Jornales */}
           <div className="mt-6 pt-6 border-t border-gray-200">
-            <h5 className="text-sm text-[#4D240F]/70 mb-3">Distribución de Jornales</h5>
+            <h5 className="text-sm text-brand-brown/70 mb-3">Distribución de Jornales</h5>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="text-center p-3 bg-gray-50 rounded-lg">
-                <div className="text-xs text-[#4D240F]/70 mb-1">Aplicación</div>
-                <div className="text-lg text-[#172E08]">{jornales.aplicacion}</div>
+                <div className="text-xs text-brand-brown/70 mb-1">Aplicación</div>
+                <div className="text-lg text-foreground">{jornales.aplicacion}</div>
               </div>
               <div className="text-center p-3 bg-gray-50 rounded-lg">
-                <div className="text-xs text-[#4D240F]/70 mb-1">Mezcla</div>
-                <div className="text-lg text-[#172E08]">{jornales.mezcla}</div>
+                <div className="text-xs text-brand-brown/70 mb-1">Mezcla</div>
+                <div className="text-lg text-foreground">{jornales.mezcla}</div>
               </div>
               <div className="text-center p-3 bg-gray-50 rounded-lg">
-                <div className="text-xs text-[#4D240F]/70 mb-1">Transporte</div>
-                <div className="text-lg text-[#172E08]">{jornales.transporte}</div>
+                <div className="text-xs text-brand-brown/70 mb-1">Transporte</div>
+                <div className="text-lg text-foreground">{jornales.transporte}</div>
               </div>
               <div className="text-center p-3 bg-gray-50 rounded-lg">
-                <div className="text-xs text-[#4D240F]/70 mb-1">Otros</div>
-                <div className="text-lg text-[#172E08]">{jornales.otros || 0}</div>
+                <div className="text-xs text-brand-brown/70 mb-1">Otros</div>
+                <div className="text-lg text-foreground">{jornales.otros || 0}</div>
               </div>
             </div>
           </div>
@@ -212,10 +212,10 @@ export function PasoCierreConfirmacion({
       {/* SECCIÓN 3: DETALLE POR LOTE */}
       {detallesLotes.length > 0 && (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-          <div className="bg-[#73991C]/10 border-b border-[#73991C]/20 px-6 py-4">
+          <div className="bg-primary/10 border-b border-primary/20 px-6 py-4">
             <div className="flex items-center gap-3">
-              <Package className="w-5 h-5 text-[#73991C]" />
-              <h4 className="text-[#172E08]">Detalle por Lote</h4>
+              <Package className="w-5 h-5 text-primary" />
+              <h4 className="text-foreground">Detalle por Lote</h4>
             </div>
           </div>
 
@@ -226,36 +226,36 @@ export function PasoCierreConfirmacion({
                   key={lote.lote_id}
                   className="border border-gray-200 rounded-lg p-4 bg-gradient-to-br from-white to-gray-50"
                 >
-                  <h5 className="text-sm text-[#172E08] font-medium mb-3">
+                  <h5 className="text-sm text-foreground font-medium mb-3">
                     {lote.lote_nombre}
                   </h5>
 
                   <div className="space-y-2">
                     {/* Canecas/Bultos según el tipo de aplicación */}
-                    {aplicacion.tipo === 'fumigacion' && lote.canecas_planeadas !== undefined && (
+                    {aplicacion.tipo_aplicacion === 'Fumigación' && lote.canecas_planeadas !== undefined && (
                       <div className="flex justify-between items-center text-sm">
-                        <span className="text-[#4D240F]/70">Canecas:</span>
+                        <span className="text-brand-brown/70">Canecas:</span>
                         <div className="flex items-center gap-2">
-                          <span className="text-[#172E08]">
+                          <span className="text-foreground">
                             {formatearNumero(lote.canecas_planeadas || 0, 1)} planeadas
                           </span>
-                          <span className="text-[#4D240F]/40">→</span>
-                          <span className="text-[#73991C] font-medium">
+                          <span className="text-brand-brown/40">→</span>
+                          <span className="text-primary font-medium">
                             {formatearNumero(lote.canecas_reales || 0, 1)} reales
                           </span>
                         </div>
                       </div>
                     )}
 
-                    {aplicacion.tipo === 'fertilizacion' && lote.kilos_planeados !== undefined && (
+                    {aplicacion.tipo_aplicacion === 'Fertilización' && lote.kilos_planeados !== undefined && (
                       <div className="flex justify-between items-center text-sm">
-                        <span className="text-[#4D240F]/70">Bultos (kg):</span>
+                        <span className="text-brand-brown/70">Bultos (kg):</span>
                         <div className="flex items-center gap-2">
-                          <span className="text-[#172E08]">
+                          <span className="text-foreground">
                             {formatearNumero(lote.kilos_planeados || 0, 1)} planeados
                           </span>
-                          <span className="text-[#4D240F]/40">→</span>
-                          <span className="text-[#73991C] font-medium">
+                          <span className="text-brand-brown/40">→</span>
+                          <span className="text-primary font-medium">
                             {formatearNumero(lote.kilos_reales || 0, 1)} reales
                           </span>
                         </div>
@@ -265,13 +265,13 @@ export function PasoCierreConfirmacion({
                     {/* Litros */}
                     {lote.litros_planeados !== undefined && (
                       <div className="flex justify-between items-center text-sm">
-                        <span className="text-[#4D240F]/70">Litros:</span>
+                        <span className="text-brand-brown/70">Litros:</span>
                         <div className="flex items-center gap-2">
-                          <span className="text-[#172E08]">
+                          <span className="text-foreground">
                             {formatearNumero(lote.litros_planeados || 0, 1)} planeados
                           </span>
-                          <span className="text-[#4D240F]/40">→</span>
-                          <span className="text-[#73991C] font-medium">
+                          <span className="text-brand-brown/40">→</span>
+                          <span className="text-primary font-medium">
                             {formatearNumero(lote.litros_reales || 0, 1)} reales
                           </span>
                         </div>
@@ -281,36 +281,36 @@ export function PasoCierreConfirmacion({
                     {/* Jornales si existen */}
                     {lote.jornales && (
                       <div className="mt-3 pt-3 border-t border-gray-200">
-                        <div className="text-xs text-[#4D240F]/70 mb-2">Jornales utilizados:</div>
+                        <div className="text-xs text-brand-brown/70 mb-2">Jornales utilizados:</div>
                         <div className="grid grid-cols-2 gap-2 text-xs">
                           {lote.jornales.aplicacion > 0 && (
                             <div className="flex justify-between">
-                              <span className="text-[#4D240F]/60">Aplicación:</span>
-                              <span className="text-[#172E08] font-medium">
+                              <span className="text-brand-brown/60">Aplicación:</span>
+                              <span className="text-foreground font-medium">
                                 {lote.jornales.aplicacion}
                               </span>
                             </div>
                           )}
                           {lote.jornales.mezcla > 0 && (
                             <div className="flex justify-between">
-                              <span className="text-[#4D240F]/60">Mezcla:</span>
-                              <span className="text-[#172E08] font-medium">
+                              <span className="text-brand-brown/60">Mezcla:</span>
+                              <span className="text-foreground font-medium">
                                 {lote.jornales.mezcla}
                               </span>
                             </div>
                           )}
                           {lote.jornales.transporte > 0 && (
                             <div className="flex justify-between">
-                              <span className="text-[#4D240F]/60">Transporte:</span>
-                              <span className="text-[#172E08] font-medium">
+                              <span className="text-brand-brown/60">Transporte:</span>
+                              <span className="text-foreground font-medium">
                                 {lote.jornales.transporte}
                               </span>
                             </div>
                           )}
                           {(lote.jornales.otros || 0) > 0 && (
                             <div className="flex justify-between">
-                              <span className="text-[#4D240F]/60">Otros:</span>
-                              <span className="text-[#172E08] font-medium">
+                              <span className="text-brand-brown/60">Otros:</span>
+                              <span className="text-foreground font-medium">
                                 {lote.jornales.otros}
                               </span>
                             </div>
@@ -321,8 +321,8 @@ export function PasoCierreConfirmacion({
 
                     {/* Costo por árbol */}
                     <div className="mt-3 pt-3 border-t border-gray-200 flex justify-between items-center">
-                      <span className="text-xs text-[#4D240F]/70">Costo por árbol:</span>
-                      <span className="text-sm text-[#73991C] font-medium">
+                      <span className="text-xs text-brand-brown/70">Costo por árbol:</span>
+                      <span className="text-sm text-primary font-medium">
                         {formatearMoneda(lote.costo_por_arbol || 0)}
                       </span>
                     </div>
@@ -350,8 +350,8 @@ export function PasoCierreConfirmacion({
                     className="bg-white border border-red-200 rounded-lg p-3 flex items-center justify-between"
                   >
                     <div>
-                      <div className="text-sm text-[#172E08]">{producto.producto_nombre}</div>
-                      <div className="text-xs text-[#4D240F]/70">
+                      <div className="text-sm text-foreground">{producto.producto_nombre}</div>
+                      <div className="text-xs text-brand-brown/70">
                         Planeado: {formatearNumero(producto.cantidad_planeada)}{' '}
                         {producto.producto_unidad} → Real:{' '}
                         {formatearNumero(producto.cantidad_real)} {producto.producto_unidad}
@@ -380,15 +380,15 @@ export function PasoCierreConfirmacion({
           <div className="bg-purple-50 border-b border-purple-200 px-6 py-4">
             <div className="flex items-center gap-3">
               <FileText className="w-5 h-5 text-purple-600" />
-              <h4 className="text-[#172E08]">Observaciones</h4>
+              <h4 className="text-foreground">Observaciones</h4>
             </div>
           </div>
 
           <div className="p-6 space-y-4">
             {observaciones.generales && (
               <div>
-                <div className="text-xs text-[#4D240F]/70 mb-1">Observaciones Generales</div>
-                <div className="text-sm text-[#172E08] bg-gray-50 rounded-lg p-3">
+                <div className="text-xs text-brand-brown/70 mb-1">Observaciones Generales</div>
+                <div className="text-sm text-foreground bg-gray-50 rounded-lg p-3">
                   {observaciones.generales}
                 </div>
               </div>
@@ -396,8 +396,8 @@ export function PasoCierreConfirmacion({
 
             {observaciones.meteorologicas && (
               <div>
-                <div className="text-xs text-[#4D240F]/70 mb-1">Condiciones Meteorológicas</div>
-                <div className="text-sm text-[#172E08] bg-gray-50 rounded-lg p-3">
+                <div className="text-xs text-brand-brown/70 mb-1">Condiciones Meteorológicas</div>
+                <div className="text-sm text-foreground bg-gray-50 rounded-lg p-3">
                   {observaciones.meteorologicas}
                 </div>
               </div>
@@ -406,8 +406,8 @@ export function PasoCierreConfirmacion({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {observaciones.problemas && (
                 <div>
-                  <div className="text-xs text-[#4D240F]/70 mb-1">Problemas Encontrados</div>
-                  <div className="text-sm text-[#172E08] bg-red-50 border border-red-200 rounded-lg p-3">
+                  <div className="text-xs text-brand-brown/70 mb-1">Problemas Encontrados</div>
+                  <div className="text-sm text-foreground bg-red-50 border border-red-200 rounded-lg p-3">
                     {observaciones.problemas}
                   </div>
                 </div>
@@ -415,8 +415,8 @@ export function PasoCierreConfirmacion({
 
               {observaciones.ajustes && (
                 <div>
-                  <div className="text-xs text-[#4D240F]/70 mb-1">Ajustes Realizados</div>
-                  <div className="text-sm text-[#172E08] bg-green-50 border border-green-200 rounded-lg p-3">
+                  <div className="text-xs text-brand-brown/70 mb-1">Ajustes Realizados</div>
+                  <div className="text-sm text-foreground bg-green-50 border border-green-200 rounded-lg p-3">
                     {observaciones.ajustes}
                   </div>
                 </div>
@@ -470,7 +470,7 @@ export function PasoCierreConfirmacion({
       <div className="border-t border-gray-200 pt-4">
         <button
           disabled
-          className="w-full px-6 py-3 border-2 border-dashed border-gray-300 text-[#4D240F]/50 rounded-lg hover:bg-gray-50 transition-all flex items-center justify-center gap-2 cursor-not-allowed"
+          className="w-full px-6 py-3 border-2 border-dashed border-gray-300 text-brand-brown/50 rounded-lg hover:bg-gray-50 transition-all flex items-center justify-center gap-2 cursor-not-allowed"
         >
           <Download className="w-5 h-5" />
           Exportar Reporte de Cierre (Próximamente)

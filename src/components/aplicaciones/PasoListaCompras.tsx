@@ -19,6 +19,7 @@ import {
   generarListaCompras
 } from '../../utils/calculosAplicaciones';
 import { formatearMoneda, formatearNumero } from '../../utils/format';
+import { toast } from 'sonner';
 import type {
   ConfiguracionAplicacion,
   Mezcla,
@@ -117,7 +118,7 @@ export function PasoListaCompras({
       setLista(nuevaLista);
       onUpdate(nuevaLista);
     } catch (error) {
-      alert('Error al generar lista de compras');
+      toast.error('Error al generar lista de compras');
     } finally {
       setCargando(false);
     }
@@ -139,7 +140,7 @@ export function PasoListaCompras({
 
       generarPDFListaCompras(lista, configuracion, datosEmpresa);
     } else {
-      alert('No hay lista de compras para exportar');
+      toast.error('No hay lista de compras para exportar');
     }
   };
 
@@ -269,8 +270,8 @@ export function PasoListaCompras({
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#73991C]/20 border-t-[#73991C] mx-auto mb-4"></div>
-          <p className="text-[#4D240F]/70">Generando lista de compras...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary/20 border-t-primary mx-auto mb-4"></div>
+          <p className="text-brand-brown/70">Generando lista de compras...</p>
         </div>
       </div>
     );
@@ -279,11 +280,11 @@ export function PasoListaCompras({
   if (!lista) {
     return (
       <div className="text-center py-12">
-        <Package className="w-16 h-16 text-[#73991C]/50 mx-auto mb-4" />
-        <p className="text-[#4D240F]/70 mb-4">No se pudo generar la lista de compras</p>
+        <Package className="w-16 h-16 text-primary/50 mx-auto mb-4" />
+        <p className="text-brand-brown/70 mb-4">No se pudo generar la lista de compras</p>
         <button
           onClick={generarLista}
-          className="px-4 py-2 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-lg hover:from-[#5f7d17] hover:to-[#9db86d] transition-all"
+          className="px-4 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:from-primary-dark hover:to-secondary-dark transition-all"
         >
           Reintentar
         </button>
@@ -309,8 +310,8 @@ export function PasoListaCompras({
       {/* HEADER */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg text-[#172E08]">Lista de Compras</h2>
-          <p className="text-sm text-[#4D240F]/70 mt-1">Comparación con inventario disponible</p>
+          <h2 className="text-lg text-foreground">Lista de Compras</h2>
+          <p className="text-sm text-brand-brown/70 mt-1">Comparación con inventario disponible</p>
         </div>
 
         <div className="flex gap-2">
@@ -318,7 +319,7 @@ export function PasoListaCompras({
           {!modoEdicion ? (
             <button
               onClick={activarEdicion}
-              className="px-4 py-2 border border-gray-300 text-[#4D240F] rounded-lg hover:bg-gray-50 transition-all flex items-center gap-2"
+              className="px-4 py-2 border border-gray-300 text-brand-brown rounded-lg hover:bg-gray-50 transition-all flex items-center gap-2"
             >
               <Edit2 className="w-4 h-4" />
               <span className="hidden sm:inline">Editar Cantidades</span>
@@ -327,7 +328,7 @@ export function PasoListaCompras({
             <>
               <button
                 onClick={cancelarEdicion}
-                className="px-4 py-2 border border-gray-300 text-[#4D240F] rounded-lg hover:bg-gray-50 transition-all flex items-center gap-2"
+                className="px-4 py-2 border border-gray-300 text-brand-brown rounded-lg hover:bg-gray-50 transition-all flex items-center gap-2"
               >
                 <XIcon className="w-4 h-4" />
                 <span className="hidden sm:inline">Cancelar</span>
@@ -346,7 +347,7 @@ export function PasoListaCompras({
           <button
             onClick={exportarPDF}
             disabled={modoEdicion}
-            className="px-4 py-2 border border-gray-300 text-[#4D240F] rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+            className="px-4 py-2 border border-gray-300 text-brand-brown rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
           >
             <Download className="w-4 h-4" />
             <span className="hidden sm:inline">Exportar PDF</span>
@@ -380,14 +381,14 @@ export function PasoListaCompras({
           <div className="text-2xl text-red-900">{productosAComprar.length}</div>
         </div>
 
-        <div className="bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 border border-[#73991C]/20 rounded-xl p-4">
+        <div className="bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20 rounded-xl p-4">
           <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-[#73991C]/10 rounded-lg">
-              <CheckCircle className="w-5 h-5 text-[#73991C]" />
+            <div className="p-2 bg-primary/10 rounded-lg">
+              <CheckCircle className="w-5 h-5 text-primary" />
             </div>
-            <div className="text-sm text-[#4D240F]/70">Disponibles en Stock</div>
+            <div className="text-sm text-brand-brown/70">Disponibles en Stock</div>
           </div>
-          <div className="text-2xl text-[#172E08]">{productosDisponibles.length}</div>
+          <div className="text-2xl text-foreground">{productosDisponibles.length}</div>
         </div>
 
         <div className="bg-gradient-to-br from-yellow-50 to-yellow-100/50 border border-yellow-200 rounded-xl p-4">
@@ -447,7 +448,7 @@ export function PasoListaCompras({
       {/* PRODUCTOS A COMPRAR */}
       {productosAComprar.length > 0 && (
         <div>
-          <h3 className="text-[#172E08] mb-3 flex items-center gap-2">
+          <h3 className="text-foreground mb-3 flex items-center gap-2">
             <ShoppingCart className="w-5 h-5 text-red-600" />
             Productos a Comprar ({productosAComprar.length})
           </h3>
@@ -457,25 +458,25 @@ export function PasoListaCompras({
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs text-[#4D240F] uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left text-xs text-brand-brown uppercase tracking-wider">
                       Producto
                     </th>
-                    <th className="px-4 py-3 text-right text-xs text-[#4D240F] uppercase tracking-wider">
+                    <th className="px-4 py-3 text-right text-xs text-brand-brown uppercase tracking-wider">
                       En Stock
                     </th>
-                    <th className="px-4 py-3 text-right text-xs text-[#4D240F] uppercase tracking-wider">
+                    <th className="px-4 py-3 text-right text-xs text-brand-brown uppercase tracking-wider">
                       Necesario
                     </th>
-                    <th className="px-4 py-3 text-right text-xs text-[#4D240F] uppercase tracking-wider">
+                    <th className="px-4 py-3 text-right text-xs text-brand-brown uppercase tracking-wider">
                       Faltante
                     </th>
-                    <th className="px-4 py-3 text-center text-xs text-[#4D240F] uppercase tracking-wider">
+                    <th className="px-4 py-3 text-center text-xs text-brand-brown uppercase tracking-wider">
                       A Comprar
                     </th>
-                    <th className="px-4 py-3 text-right text-xs text-[#4D240F] uppercase tracking-wider">
+                    <th className="px-4 py-3 text-right text-xs text-brand-brown uppercase tracking-wider">
                       Precio Unit.
                     </th>
-                    <th className="px-4 py-3 text-right text-xs text-[#4D240F] uppercase tracking-wider">
+                    <th className="px-4 py-3 text-right text-xs text-brand-brown uppercase tracking-wider">
                       Costo Est.
                     </th>
                   </tr>
@@ -485,16 +486,16 @@ export function PasoListaCompras({
                     <tr key={item.producto_id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3">
                         <div>
-                          <div className={`${item.permitido_gerencia === false ? 'text-red-600 font-bold' : 'text-[#172E08]'}`}>{item.producto_nombre}</div>
-                          <div className="text-sm text-[#4D240F]/70">{item.producto_categoria}</div>
+                          <div className={`${item.permitido_gerencia === false ? 'text-red-600 font-bold' : 'text-foreground'}`}>{item.producto_nombre}</div>
+                          <div className="text-sm text-brand-brown/70">{item.producto_categoria}</div>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right text-sm">
-                        <span className="text-[#4D240F]/70">
+                        <span className="text-brand-brown/70">
                           {formatearNumero(item.inventario_actual)} {item.unidad}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right text-sm text-[#172E08]">
+                      <td className="px-4 py-3 text-right text-sm text-foreground">
                         {formatearNumero(item.cantidad_necesaria)} {item.unidad}
                       </td>
                       <td className="px-4 py-3 text-right text-sm">
@@ -534,8 +535,8 @@ export function PasoListaCompras({
                               }
                               className="w-16 px-2 py-1 text-sm text-center border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
                             />
-                            <span className="text-xs text-[#4D240F]/70">×</span>
-                            <span className="text-xs text-[#4D240F]/70">{item.presentacion_comercial}</span>
+                            <span className="text-xs text-brand-brown/70">×</span>
+                            <span className="text-xs text-brand-brown/70">{item.presentacion_comercial}</span>
                           </div>
                         ) : (
                           <div className="flex flex-col items-center gap-1">
@@ -555,7 +556,7 @@ export function PasoListaCompras({
                       <td className="px-4 py-3 text-right text-sm">
                         {modoEdicion ? (
                           <div className="flex items-center justify-end gap-1">
-                            <span className="text-xs text-[#4D240F]/70">$</span>
+                            <span className="text-xs text-brand-brown/70">$</span>
                             <input
                               type="number"
                               step="1000"
@@ -574,7 +575,7 @@ export function PasoListaCompras({
                         ) : item.alerta === 'sin_precio' ? (
                           <span className="text-yellow-600">Sin precio</span>
                         ) : (
-                          <span className="text-[#172E08]">
+                          <span className="text-foreground">
                             {formatearMoneda(item.precio_presentacion || 0)}
                           </span>
                         )}
@@ -583,7 +584,7 @@ export function PasoListaCompras({
                         {item.alerta === 'sin_precio' ? (
                           <span className="text-yellow-600">Sin precio</span>
                         ) : (
-                          <span className="text-[#172E08]">
+                          <span className="text-foreground">
                             {formatearMoneda(item.costo_estimado || 0)}
                           </span>
                         )}
@@ -593,10 +594,10 @@ export function PasoListaCompras({
                 </tbody>
                 <tfoot className="bg-gray-50">
                   <tr>
-                    <td colSpan={6} className="px-4 py-3 text-right text-[#172E08]">
+                    <td colSpan={6} className="px-4 py-3 text-right text-foreground">
                       TOTAL A COMPRAR:
                     </td>
-                    <td className="px-4 py-3 text-right text-[#172E08]">
+                    <td className="px-4 py-3 text-right text-foreground">
                       {formatearMoneda(
                         productosAComprar.reduce((sum, item) => sum + (item.costo_estimado || 0), 0)
                       )}
@@ -612,8 +613,8 @@ export function PasoListaCompras({
       {/* PRODUCTOS DISPONIBLES */}
       {productosDisponibles.length > 0 && (
         <div>
-          <h3 className="text-[#172E08] mb-3 flex items-center gap-2">
-            <CheckCircle className="w-5 h-5 text-[#73991C]" />
+          <h3 className="text-foreground mb-3 flex items-center gap-2">
+            <CheckCircle className="w-5 h-5 text-primary" />
             Productos Disponibles en Stock ({productosDisponibles.length})
           </h3>
 
@@ -622,16 +623,16 @@ export function PasoListaCompras({
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs text-[#4D240F] uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left text-xs text-brand-brown uppercase tracking-wider">
                       Producto
                     </th>
-                    <th className="px-4 py-3 text-right text-xs text-[#4D240F] uppercase tracking-wider">
+                    <th className="px-4 py-3 text-right text-xs text-brand-brown uppercase tracking-wider">
                       En Stock
                     </th>
-                    <th className="px-4 py-3 text-right text-xs text-[#4D240F] uppercase tracking-wider">
+                    <th className="px-4 py-3 text-right text-xs text-brand-brown uppercase tracking-wider">
                       Necesario
                     </th>
-                    <th className="px-4 py-3 text-right text-xs text-[#4D240F] uppercase tracking-wider">
+                    <th className="px-4 py-3 text-right text-xs text-brand-brown uppercase tracking-wider">
                       Sobrante
                     </th>
                   </tr>
@@ -643,19 +644,19 @@ export function PasoListaCompras({
                       <tr key={item.producto_id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-3">
                           <div>
-                            <div className={`${item.permitido_gerencia === false ? 'text-red-600 font-bold' : 'text-[#172E08]'}`}>{item.producto_nombre}</div>
-                            <div className="text-sm text-[#4D240F]/70">
+                            <div className={`${item.permitido_gerencia === false ? 'text-red-600 font-bold' : 'text-foreground'}`}>{item.producto_nombre}</div>
+                            <div className="text-sm text-brand-brown/70">
                               {item.producto_categoria}
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-right text-sm text-[#73991C]">
+                        <td className="px-4 py-3 text-right text-sm text-primary">
                           {formatearNumero(item.inventario_actual)} {item.unidad}
                         </td>
-                        <td className="px-4 py-3 text-right text-sm text-[#172E08]">
+                        <td className="px-4 py-3 text-right text-sm text-foreground">
                           {formatearNumero(item.cantidad_necesaria)} {item.unidad}
                         </td>
-                        <td className="px-4 py-3 text-right text-sm text-[#73991C]">
+                        <td className="px-4 py-3 text-right text-sm text-primary">
                           +{formatearNumero(sobrante)} {item.unidad}
                         </td>
                       </tr>
@@ -669,26 +670,26 @@ export function PasoListaCompras({
       )}
 
       {/* RESUMEN FINAL */}
-      <div className="bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 border border-[#73991C]/20 rounded-xl p-6">
-        <h3 className="text-[#172E08] mb-4 flex items-center gap-2">
-          <TrendingUp className="w-5 h-5 text-[#73991C]" />
+      <div className="bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20 rounded-xl p-6">
+        <h3 className="text-foreground mb-4 flex items-center gap-2">
+          <TrendingUp className="w-5 h-5 text-primary" />
           Resumen de la Aplicación
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           <div>
-            <div className="text-[#4D240F]/70 mb-1">Nombre:</div>
-            <div className="text-[#172E08]">{configuracion.nombre}</div>
+            <div className="text-brand-brown/70 mb-1">Nombre:</div>
+            <div className="text-foreground">{configuracion.nombre}</div>
           </div>
 
           <div>
-            <div className="text-[#4D240F]/70 mb-1">Tipo:</div>
-            <div className="text-[#172E08] capitalize">{configuracion.tipo}</div>
+            <div className="text-brand-brown/70 mb-1">Tipo:</div>
+            <div className="text-foreground capitalize">{configuracion.tipo}</div>
           </div>
 
           <div>
-            <div className="text-[#4D240F]/70 mb-1">Fecha Inicio:</div>
-            <div className="text-[#172E08]">
+            <div className="text-brand-brown/70 mb-1">Fecha Inicio:</div>
+            <div className="text-foreground">
               {new Date(configuracion.fecha_inicio).toLocaleDateString('es-CO', {
                 year: 'numeric',
                 month: 'long',
@@ -698,20 +699,20 @@ export function PasoListaCompras({
           </div>
 
           <div>
-            <div className="text-[#4D240F]/70 mb-1">Lotes:</div>
-            <div className="text-[#172E08]">
+            <div className="text-brand-brown/70 mb-1">Lotes:</div>
+            <div className="text-foreground">
               {configuracion.lotes_seleccionados.length} lotes seleccionados
             </div>
           </div>
 
           <div>
-            <div className="text-[#4D240F]/70 mb-1">Productos en Mezcla:</div>
-            <div className="text-[#172E08]">{mezclas[0]?.productos.length || 0} productos</div>
+            <div className="text-brand-brown/70 mb-1">Productos en Mezcla:</div>
+            <div className="text-foreground">{mezclas[0]?.productos.length || 0} productos</div>
           </div>
 
           <div>
-            <div className="text-[#4D240F]/70 mb-1">Inversión Estimada:</div>
-            <div className="text-[#172E08] text-lg">
+            <div className="text-brand-brown/70 mb-1">Inversión Estimada:</div>
+            <div className="text-foreground text-lg">
               {formatearMoneda(costoTotalActual)}
             </div>
           </div>
@@ -720,10 +721,10 @@ export function PasoListaCompras({
 
       {/* MENSAJE DE ÉXITO */}
       {productosAComprar.length === 0 && (
-        <div className="bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 border border-[#73991C]/20 rounded-xl p-6 text-center">
-          <CheckCircle className="w-12 h-12 text-[#73991C] mx-auto mb-3" />
-          <h4 className="text-lg text-[#172E08] mb-2">¡Todos los productos están disponibles!</h4>
-          <p className="text-sm text-[#4D240F]/70">
+        <div className="bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20 rounded-xl p-6 text-center">
+          <CheckCircle className="w-12 h-12 text-primary mx-auto mb-3" />
+          <h4 className="text-lg text-foreground mb-2">¡Todos los productos están disponibles!</h4>
+          <p className="text-sm text-brand-brown/70">
             No necesitas comprar nada. Tienes suficiente stock para realizar la aplicación.
           </p>
         </div>

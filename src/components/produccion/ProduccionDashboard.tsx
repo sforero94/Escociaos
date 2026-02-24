@@ -49,16 +49,6 @@ export function ProduccionDashboard() {
     getLotes,
   } = useProduccionData();
 
-  // Cargar lotes al inicio
-  useEffect(() => {
-    cargarLotes();
-  }, []);
-
-  // Cargar datos cuando cambien los filtros
-  useEffect(() => {
-    cargarDatos();
-  }, [filtros]);
-
   const cargarLotes = async () => {
     try {
       const lotesData = await getLotes();
@@ -89,6 +79,16 @@ export function ProduccionDashboard() {
     }
   };
 
+  // Cargar lotes al inicio
+  useEffect(() => {
+    cargarLotes();
+  }, []);
+
+  // Cargar datos cuando cambien los filtros
+  useEffect(() => {
+    cargarDatos();
+  }, [filtros]);
+
   const handleFiltrosChange = (nuevosFiltros: FiltrosType) => {
     setFiltros(nuevosFiltros);
   };
@@ -118,17 +118,17 @@ export function ProduccionDashboard() {
       <div className="space-y-6">
         {/* Header */}
         <div className="relative">
-          <div className="absolute -top-4 -left-4 w-32 h-32 bg-[#73991C]/5 rounded-full blur-2xl"></div>
+          <div className="absolute -top-4 -left-4 w-32 h-32 bg-primary/5 rounded-full blur-2xl"></div>
           <div className="relative flex items-start justify-between">
             <div>
-              <h1 className="text-[#172E08] mb-2">Produccion</h1>
-              <p className="text-[#4D240F]/70">
+              <h1 className="text-foreground mb-2">Produccion</h1>
+              <p className="text-brand-brown/70">
                 Historico de cosechas y rendimiento - Escocia Hass
               </p>
             </div>
             <Button
               onClick={() => setDialogOpen(true)}
-              className="bg-gradient-to-br from-[#73991C] to-[#5c7a16] hover:from-[#5c7a16] hover:to-[#4a6112]"
+              className="bg-gradient-to-br from-primary to-primary-dark hover:from-primary-dark hover:to-primary-dark"
             >
               <Plus className="w-4 h-4 mr-2" />
               Registrar Cosecha
@@ -151,21 +151,21 @@ export function ProduccionDashboard() {
           <TabsList className="bg-white border border-gray-200 p-1 rounded-lg">
             <TabsTrigger
               value="historico"
-              className="flex items-center gap-2 data-[state=active]:bg-[#73991C]/10 data-[state=active]:text-[#73991C]"
+              className="flex items-center gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
             >
               <TrendingUp className="w-4 h-4" />
               Historico
             </TabsTrigger>
             <TabsTrigger
               value="sublotes"
-              className="flex items-center gap-2 data-[state=active]:bg-[#73991C]/10 data-[state=active]:text-[#73991C]"
+              className="flex items-center gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
             >
               <Grid3X3 className="w-4 h-4" />
               Sublotes
             </TabsTrigger>
             <TabsTrigger
               value="edad"
-              className="flex items-center gap-2 data-[state=active]:bg-[#73991C]/10 data-[state=active]:text-[#73991C]"
+              className="flex items-center gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
             >
               <Calendar className="w-4 h-4" />
               Edad vs Rendimiento

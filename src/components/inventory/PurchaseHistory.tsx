@@ -21,6 +21,7 @@ import {
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { formatearFecha, formatearFechaHora } from '../../utils/fechas';
+import { toast } from 'sonner';
 
 interface Purchase {
   id: string;
@@ -61,10 +62,10 @@ function PurchaseDetailModal({ purchase, onClose }: { purchase: Purchase; onClos
   // Removed - now using formatearFecha from utils/fechas
 
   return (
-    <div className="fixed inset-0 bg-[#172E08]/20 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-foreground/20 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="sticky top-0 bg-gradient-to-r from-[#73991C] to-[#BFD97D] px-6 py-4 flex items-center justify-between rounded-t-2xl">
+        <div className="sticky top-0 bg-gradient-to-r from-primary to-secondary px-6 py-4 flex items-center justify-between rounded-t-2xl">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
               <ShoppingCart className="w-5 h-5 text-white" />
@@ -89,63 +90,63 @@ function PurchaseDetailModal({ purchase, onClose }: { purchase: Purchase; onClos
         <div className="p-6 space-y-6">
           {/* Información General */}
           <div>
-            <h3 className="text-sm uppercase tracking-wide text-[#4D240F]/60 mb-3">
+            <h3 className="text-sm uppercase tracking-wide text-brand-brown/60 mb-3">
               Información General
             </h3>
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-[#F8FAF5] rounded-xl p-4 border border-[#73991C]/10">
+              <div className="bg-background rounded-xl p-4 border border-primary/10">
                 <div className="flex items-center gap-2 mb-2">
-                  <Calendar className="w-4 h-4 text-[#73991C]" />
-                  <p className="text-xs text-[#4D240F]/60">Fecha de Compra</p>
+                  <Calendar className="w-4 h-4 text-primary" />
+                  <p className="text-xs text-brand-brown/60">Fecha de Compra</p>
                 </div>
-                <p className="text-[#172E08]">{formatearFecha(purchase.fecha_compra)}</p>
+                <p className="text-foreground">{formatearFecha(purchase.fecha_compra)}</p>
               </div>
 
-              <div className="bg-[#F8FAF5] rounded-xl p-4 border border-[#73991C]/10">
+              <div className="bg-background rounded-xl p-4 border border-primary/10">
                 <div className="flex items-center gap-2 mb-2">
-                  <User className="w-4 h-4 text-[#73991C]" />
-                  <p className="text-xs text-[#4D240F]/60">Proveedor</p>
+                  <User className="w-4 h-4 text-primary" />
+                  <p className="text-xs text-brand-brown/60">Proveedor</p>
                 </div>
-                <p className="text-[#172E08]">{purchase.proveedor}</p>
+                <p className="text-foreground">{purchase.proveedor}</p>
               </div>
 
-              <div className="bg-[#F8FAF5] rounded-xl p-4 border border-[#73991C]/10">
+              <div className="bg-background rounded-xl p-4 border border-primary/10">
                 <div className="flex items-center gap-2 mb-2">
-                  <FileText className="w-4 h-4 text-[#73991C]" />
-                  <p className="text-xs text-[#4D240F]/60">Número de Factura</p>
+                  <FileText className="w-4 h-4 text-primary" />
+                  <p className="text-xs text-brand-brown/60">Número de Factura</p>
                 </div>
-                <p className="text-[#172E08]">{purchase.numero_factura || '-'}</p>
+                <p className="text-foreground">{purchase.numero_factura || '-'}</p>
               </div>
 
-              <div className="bg-[#F8FAF5] rounded-xl p-4 border border-[#73991C]/10">
+              <div className="bg-background rounded-xl p-4 border border-primary/10">
                 <div className="flex items-center gap-2 mb-2">
-                  <User className="w-4 h-4 text-[#73991C]" />
-                  <p className="text-xs text-[#4D240F]/60">Registrado por</p>
+                  <User className="w-4 h-4 text-primary" />
+                  <p className="text-xs text-brand-brown/60">Registrado por</p>
                 </div>
-                <p className="text-[#172E08]">{purchase.usuario_registro || '-'}</p>
+                <p className="text-foreground">{purchase.usuario_registro || '-'}</p>
               </div>
             </div>
           </div>
 
           {/* Producto */}
           <div>
-            <h3 className="text-sm uppercase tracking-wide text-[#4D240F]/60 mb-3">
+            <h3 className="text-sm uppercase tracking-wide text-brand-brown/60 mb-3">
               Producto
             </h3>
-            <div className="bg-gradient-to-br from-[#73991C]/5 to-[#BFD97D]/10 rounded-xl p-4 border border-[#73991C]/20">
+            <div className="bg-gradient-to-br from-primary/5 to-secondary/10 rounded-xl p-4 border border-primary/20">
               <div className="flex items-start gap-3">
-                <div className="w-12 h-12 bg-[#73991C] rounded-xl flex items-center justify-center flex-shrink-0">
+                <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center flex-shrink-0">
                   <Package className="w-6 h-6 text-white" />
                 </div>
                 <div className="flex-1">
-                  <h4 className={`mb-1 ${purchase.producto?.permitido_gerencia === false ? 'text-red-600 font-bold' : 'text-[#172E08]'}`}>
+                  <h4 className={`mb-1 ${purchase.producto?.permitido_gerencia === false ? 'text-red-600 font-bold' : 'text-foreground'}`}>
                     {purchase.producto?.nombre || 'Producto no disponible'}
                   </h4>
-                  <p className="text-sm text-[#4D240F]/70">
+                  <p className="text-sm text-brand-brown/70">
                     Categoría: {purchase.producto?.categoria || '-'}
                   </p>
                   {purchase.numero_lote_producto && (
-                    <p className="text-sm text-[#4D240F]/70 mt-1">
+                    <p className="text-sm text-brand-brown/70 mt-1">
                       Lote: {purchase.numero_lote_producto}
                     </p>
                   )}
@@ -156,29 +157,29 @@ function PurchaseDetailModal({ purchase, onClose }: { purchase: Purchase; onClos
 
           {/* Cantidad y Costos */}
           <div>
-            <h3 className="text-sm uppercase tracking-wide text-[#4D240F]/60 mb-3">
+            <h3 className="text-sm uppercase tracking-wide text-brand-brown/60 mb-3">
               Cantidad y Costos
             </h3>
             <div className="grid grid-cols-3 gap-4">
-              <div className="bg-[#F8FAF5] rounded-xl p-4 border border-[#73991C]/10">
-                <p className="text-xs text-[#4D240F]/60 mb-2">Cantidad</p>
-                <p className="text-2xl text-[#73991C]">
+              <div className="bg-background rounded-xl p-4 border border-primary/10">
+                <p className="text-xs text-brand-brown/60 mb-2">Cantidad</p>
+                <p className="text-2xl text-primary">
                   {purchase.cantidad.toLocaleString('es-CO')}
                 </p>
-                <p className="text-xs text-[#4D240F]/70 mt-1">{purchase.unidad}</p>
+                <p className="text-xs text-brand-brown/70 mt-1">{purchase.unidad}</p>
               </div>
 
-              <div className="bg-[#F8FAF5] rounded-xl p-4 border border-[#73991C]/10">
-                <p className="text-xs text-[#4D240F]/60 mb-2">Costo Unitario</p>
-                <p className="text-lg text-[#172E08]">
+              <div className="bg-background rounded-xl p-4 border border-primary/10">
+                <p className="text-xs text-brand-brown/60 mb-2">Costo Unitario</p>
+                <p className="text-lg text-foreground">
                   {formatCurrency(purchase.costo_unitario)}
                 </p>
-                <p className="text-xs text-[#4D240F]/70 mt-1">por {purchase.unidad}</p>
+                <p className="text-xs text-brand-brown/70 mt-1">por {purchase.unidad}</p>
               </div>
 
-              <div className="bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/20 rounded-xl p-4 border border-[#73991C]/30">
-                <p className="text-xs text-[#4D240F]/60 mb-2">Costo Total</p>
-                <p className="text-2xl text-[#73991C]">
+              <div className="bg-gradient-to-br from-primary/10 to-secondary/20 rounded-xl p-4 border border-primary/30">
+                <p className="text-xs text-brand-brown/60 mb-2">Costo Total</p>
+                <p className="text-2xl text-primary">
                   {formatCurrency(purchase.costo_total)}
                 </p>
               </div>
@@ -188,15 +189,15 @@ function PurchaseDetailModal({ purchase, onClose }: { purchase: Purchase; onClos
           {/* Fecha de Vencimiento */}
           {purchase.fecha_vencimiento && (
             <div>
-              <h3 className="text-sm uppercase tracking-wide text-[#4D240F]/60 mb-3">
+              <h3 className="text-sm uppercase tracking-wide text-brand-brown/60 mb-3">
                 Información Adicional
               </h3>
-              <div className="bg-[#F8FAF5] rounded-xl p-4 border border-[#73991C]/10">
+              <div className="bg-background rounded-xl p-4 border border-primary/10">
                 <div className="flex items-center gap-2 mb-2">
-                  <Calendar className="w-4 h-4 text-[#73991C]" />
-                  <p className="text-xs text-[#4D240F]/60">Fecha de Vencimiento</p>
+                  <Calendar className="w-4 h-4 text-primary" />
+                  <p className="text-xs text-brand-brown/60">Fecha de Vencimiento</p>
                 </div>
-                <p className="text-[#172E08]">{purchase.fecha_vencimiento ? formatearFecha(purchase.fecha_vencimiento) : '-'}</p>
+                <p className="text-foreground">{purchase.fecha_vencimiento ? formatearFecha(purchase.fecha_vencimiento) : '-'}</p>
               </div>
             </div>
           )}
@@ -208,7 +209,7 @@ function PurchaseDetailModal({ purchase, onClose }: { purchase: Purchase; onClos
                 href={purchase.link_factura}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 text-[#73991C] hover:text-[#5f7d17] transition-colors"
+                className="flex items-center gap-2 text-primary hover:text-primary-dark transition-colors"
               >
                 <ExternalLink className="w-4 h-4" />
                 Ver factura digital
@@ -217,8 +218,8 @@ function PurchaseDetailModal({ purchase, onClose }: { purchase: Purchase; onClos
           )}
 
           {/* Metadata */}
-          <div className="pt-4 border-t border-[#73991C]/10">
-            <p className="text-xs text-[#4D240F]/50">
+          <div className="pt-4 border-t border-primary/10">
+            <p className="text-xs text-brand-brown/50">
               Registrado el{' '}
               {new Date(purchase.created_at).toLocaleDateString('es-CO', {
                 year: 'numeric',
@@ -332,7 +333,7 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
       const nuevaCantidad = currentProduct.cantidad_actual - purchaseToDelete.cantidad;
 
       if (nuevaCantidad < 0) {
-        alert('No se puede eliminar la compra porque resultaría en inventario negativo');
+        toast.error('No se puede eliminar la compra porque resultaría en inventario negativo');
         return;
       }
 
@@ -413,9 +414,9 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
       await loadPurchases();
       setPurchaseToDelete(null);
 
-      alert('Compra eliminada exitosamente');
+      toast.success('Compra eliminada exitosamente');
     } catch (error: unknown) {
-      alert(error instanceof Error ? error.message : 'Error al eliminar la compra. Intenta de nuevo.');
+      toast.error(error instanceof Error ? error.message : 'Error al eliminar la compra. Intenta de nuevo.');
     } finally {
       setDeleting(false);
     }
@@ -428,7 +429,7 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
       <div className="space-y-6">
         <InventorySubNav />
         <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 text-[#73991C] animate-spin" />
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
       </div>
     );
@@ -441,117 +442,117 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-[#172E08] mb-2">Historial de Compras</h1>
-          <p className="text-[#4D240F]/70">
+          <h1 className="text-foreground mb-2">Historial de Compras</h1>
+          <p className="text-brand-brown/70">
             Registro completo de todas las compras de productos
           </p>
         </div>
       </div>
 
       {/* Búsqueda */}
-      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-4 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-4 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#4D240F]/50" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-brand-brown/50" />
           <Input
             type="text"
             placeholder="Buscar por proveedor, factura, producto o lote..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 bg-[#E7EDDD]/30 border-[#73991C]/20 focus:border-[#73991C] rounded-xl"
+            className="pl-10 bg-muted/30 border-primary/20 focus:border-primary rounded-xl"
           />
         </div>
-        <p className="text-xs text-[#4D240F]/60 mt-2">
+        <p className="text-xs text-brand-brown/60 mt-2">
           Mostrando {filteredPurchases.length} de {purchases.length} compras
         </p>
       </div>
 
       {/* Lista de Compras */}
       {filteredPurchases.length === 0 ? (
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-12 text-center shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
-          <ShoppingCart className="w-16 h-16 text-[#4D240F]/40 mx-auto mb-4" />
-          <h3 className="text-xl text-[#172E08] mb-2">No hay compras registradas</h3>
-          <p className="text-[#4D240F]/60">
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-12 text-center shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+          <ShoppingCart className="w-16 h-16 text-brand-brown/40 mx-auto mb-4" />
+          <h3 className="text-xl text-foreground mb-2">No hay compras registradas</h3>
+          <p className="text-brand-brown/60">
             {searchQuery
               ? 'No se encontraron compras con los criterios de búsqueda'
               : 'Aún no hay compras en el sistema'}
           </p>
         </div>
       ) : (
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 overflow-hidden shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 overflow-hidden shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
           {/* Desktop Table */}
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gradient-to-r from-[#73991C]/5 to-[#BFD97D]/10 border-b border-[#73991C]/10">
+              <thead className="bg-gradient-to-r from-primary/5 to-secondary/10 border-b border-primary/10">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs uppercase tracking-wide text-[#4D240F]/70">
+                  <th className="px-6 py-4 text-left text-xs uppercase tracking-wide text-brand-brown/70">
                     Fecha
                   </th>
-                  <th className="px-6 py-4 text-left text-xs uppercase tracking-wide text-[#4D240F]/70">
+                  <th className="px-6 py-4 text-left text-xs uppercase tracking-wide text-brand-brown/70">
                     Producto
                   </th>
-                  <th className="px-6 py-4 text-left text-xs uppercase tracking-wide text-[#4D240F]/70">
+                  <th className="px-6 py-4 text-left text-xs uppercase tracking-wide text-brand-brown/70">
                     Proveedor
                   </th>
-                  <th className="px-6 py-4 text-left text-xs uppercase tracking-wide text-[#4D240F]/70">
+                  <th className="px-6 py-4 text-left text-xs uppercase tracking-wide text-brand-brown/70">
                     Factura
                   </th>
-                  <th className="px-6 py-4 text-right text-xs uppercase tracking-wide text-[#4D240F]/70">
+                  <th className="px-6 py-4 text-right text-xs uppercase tracking-wide text-brand-brown/70">
                     Cantidad
                   </th>
-                  <th className="px-6 py-4 text-right text-xs uppercase tracking-wide text-[#4D240F]/70">
+                  <th className="px-6 py-4 text-right text-xs uppercase tracking-wide text-brand-brown/70">
                     Costo Total
                   </th>
-                  <th className="px-6 py-4 text-center text-xs uppercase tracking-wide text-[#4D240F]/70">
+                  <th className="px-6 py-4 text-center text-xs uppercase tracking-wide text-brand-brown/70">
                     Acciones
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#73991C]/10">
+              <tbody className="divide-y divide-primary/10">
                 {filteredPurchases.map((purchase) => (
                   <tr
                     key={purchase.id}
-                    className="hover:bg-[#E7EDDD]/30 transition-colors"
+                    className="hover:bg-muted/30 transition-colors"
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-[#73991C]" />
-                        <span className="text-sm text-[#172E08]">
+                        <Calendar className="w-4 h-4 text-primary" />
+                        <span className="text-sm text-foreground">
                           {formatearFecha(purchase.fecha_compra)}
                         </span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <div>
-                        <p className={`text-sm ${purchase.producto?.permitido_gerencia === false ? 'text-red-600 font-bold' : 'text-[#172E08]'}`}>
+                        <p className={`text-sm ${purchase.producto?.permitido_gerencia === false ? 'text-red-600 font-bold' : 'text-foreground'}`}>
                           {purchase.producto?.nombre || 'Sin nombre'}
                         </p>
-                        <p className="text-xs text-[#4D240F]/60">
+                        <p className="text-xs text-brand-brown/60">
                           {purchase.producto?.categoria || '-'}
                         </p>
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-sm text-[#172E08]">
+                      <span className="text-sm text-foreground">
                         {purchase.proveedor}
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-sm text-[#4D240F]/70">
+                      <span className="text-sm text-brand-brown/70">
                         {purchase.numero_factura || '-'}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div>
-                        <p className="text-sm text-[#172E08]">
+                        <p className="text-sm text-foreground">
                           {purchase.cantidad.toLocaleString('es-CO')}
                         </p>
-                        <p className="text-xs text-[#4D240F]/60">
+                        <p className="text-xs text-brand-brown/60">
                           {purchase.unidad}
                         </p>
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <span className="text-sm text-[#73991C]">
+                      <span className="text-sm text-primary">
                         {formatCurrency(purchase.costo_total)}
                       </span>
                     </td>
@@ -560,7 +561,7 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
                         <Button
                           onClick={() => setSelectedPurchase(purchase)}
                           variant="ghost"
-                          className="text-[#73991C] hover:bg-[#73991C]/10 rounded-xl"
+                          className="text-primary hover:bg-primary/10 rounded-xl"
                           title="Ver detalles"
                         >
                           <Eye className="w-4 h-4" />
@@ -582,18 +583,18 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
           </div>
 
           {/* Mobile Cards */}
-          <div className="md:hidden divide-y divide-[#73991C]/10">
+          <div className="md:hidden divide-y divide-primary/10">
             {filteredPurchases.map((purchase) => (
               <div
                 key={purchase.id}
-                className="p-4 hover:bg-[#E7EDDD]/30 transition-colors"
+                className="p-4 hover:bg-muted/30 transition-colors"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
-                    <h3 className={`text-sm mb-1 ${purchase.producto?.permitido_gerencia === false ? 'text-red-600 font-bold' : 'text-[#172E08]'}`}>
+                    <h3 className={`text-sm mb-1 ${purchase.producto?.permitido_gerencia === false ? 'text-red-600 font-bold' : 'text-foreground'}`}>
                       {purchase.producto?.nombre || 'Sin nombre'}
                     </h3>
-                    <p className="text-xs text-[#4D240F]/60">
+                    <p className="text-xs text-brand-brown/60">
                       {purchase.proveedor}
                     </p>
                   </div>
@@ -601,7 +602,7 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
                     <Button
                       onClick={() => setSelectedPurchase(purchase)}
                       variant="ghost"
-                      className="text-[#73991C] hover:bg-[#73991C]/10 rounded-xl"
+                      className="text-primary hover:bg-primary/10 rounded-xl"
                       title="Ver detalles"
                     >
                       <Eye className="w-4 h-4" />
@@ -619,20 +620,20 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <p className="text-xs text-[#4D240F]/60">Fecha</p>
-                    <p className="text-sm text-[#172E08]">
+                    <p className="text-xs text-brand-brown/60">Fecha</p>
+                    <p className="text-sm text-foreground">
                       {formatearFecha(purchase.fecha_compra)}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-[#4D240F]/60">Cantidad</p>
-                    <p className="text-sm text-[#172E08]">
+                    <p className="text-xs text-brand-brown/60">Cantidad</p>
+                    <p className="text-sm text-foreground">
                       {purchase.cantidad.toLocaleString('es-CO')} {purchase.unidad}
                     </p>
                   </div>
                   <div className="col-span-2">
-                    <p className="text-xs text-[#4D240F]/60">Costo Total</p>
-                    <p className="text-lg text-[#73991C]">
+                    <p className="text-xs text-brand-brown/60">Costo Total</p>
+                    <p className="text-lg text-primary">
                       {formatCurrency(purchase.costo_total)}
                     </p>
                   </div>
@@ -646,38 +647,38 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
       {/* Stats */}
       {filteredPurchases.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/20 rounded-2xl border border-[#73991C]/20 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+          <div className="bg-gradient-to-br from-primary/10 to-secondary/20 rounded-2xl border border-primary/20 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
             <div className="flex items-center gap-3 mb-2">
-              <ShoppingCart className="w-6 h-6 text-[#73991C]" />
-              <p className="text-sm text-[#4D240F]/70 uppercase tracking-wide">
+              <ShoppingCart className="w-6 h-6 text-primary" />
+              <p className="text-sm text-brand-brown/70 uppercase tracking-wide">
                 Total Compras
               </p>
             </div>
-            <p className="text-3xl text-[#73991C]">{filteredPurchases.length}</p>
+            <p className="text-3xl text-primary">{filteredPurchases.length}</p>
           </div>
 
-          <div className="bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/20 rounded-2xl border border-[#73991C]/20 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+          <div className="bg-gradient-to-br from-primary/10 to-secondary/20 rounded-2xl border border-primary/20 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
             <div className="flex items-center gap-3 mb-2">
-              <DollarSign className="w-6 h-6 text-[#73991C]" />
-              <p className="text-sm text-[#4D240F]/70 uppercase tracking-wide">
+              <DollarSign className="w-6 h-6 text-primary" />
+              <p className="text-sm text-brand-brown/70 uppercase tracking-wide">
                 Inversión Total
               </p>
             </div>
-            <p className="text-3xl text-[#73991C]">
+            <p className="text-3xl text-primary">
               {formatCurrency(
                 filteredPurchases.reduce((sum, p) => sum + p.costo_total, 0)
               )}
             </p>
           </div>
 
-          <div className="bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/20 rounded-2xl border border-[#73991C]/20 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+          <div className="bg-gradient-to-br from-primary/10 to-secondary/20 rounded-2xl border border-primary/20 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
             <div className="flex items-center gap-3 mb-2">
-              <Package className="w-6 h-6 text-[#73991C]" />
-              <p className="text-sm text-[#4D240F]/70 uppercase tracking-wide">
+              <Package className="w-6 h-6 text-primary" />
+              <p className="text-sm text-brand-brown/70 uppercase tracking-wide">
                 Productos Únicos
               </p>
             </div>
-            <p className="text-3xl text-[#73991C]">
+            <p className="text-3xl text-primary">
               {new Set(filteredPurchases.map((p) => p.producto_id)).size}
             </p>
           </div>
@@ -694,7 +695,7 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
 
       {/* Modal de Confirmación de Eliminación */}
       {purchaseToDelete && (
-        <div className="fixed inset-0 bg-[#172E08]/20 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-foreground/20 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
             {/* Header */}
             <div className="bg-gradient-to-r from-red-500 to-red-600 px-6 py-4 flex items-center gap-3 rounded-t-2xl">
@@ -706,21 +707,21 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
 
             {/* Content */}
             <div className="p-6 space-y-4">
-              <p className="text-[#172E08]">
+              <p className="text-foreground">
                 ¿Estás seguro de que deseas eliminar esta compra?
               </p>
 
               <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-2">
-                <p className="text-sm text-[#172E08]">
+                <p className="text-sm text-foreground">
                   <strong>Producto:</strong> {purchaseToDelete.producto?.nombre || 'Sin nombre'}
                 </p>
-                <p className="text-sm text-[#172E08]">
+                <p className="text-sm text-foreground">
                   <strong>Cantidad:</strong> {purchaseToDelete.cantidad} {purchaseToDelete.unidad}
                 </p>
-                <p className="text-sm text-[#172E08]">
+                <p className="text-sm text-foreground">
                   <strong>Proveedor:</strong> {purchaseToDelete.proveedor}
                 </p>
-                <p className="text-sm text-[#172E08]">
+                <p className="text-sm text-foreground">
                   <strong>Factura:</strong> {purchaseToDelete.numero_factura || 'Sin factura'}
                 </p>
               </div>
@@ -745,7 +746,7 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
                 <Button
                   onClick={() => setPurchaseToDelete(null)}
                   variant="outline"
-                  className="flex-1 border-[#73991C]/30 text-[#73991C] hover:bg-[#73991C]/5 rounded-xl"
+                  className="flex-1 border-primary/30 text-primary hover:bg-primary/5 rounded-xl"
                   disabled={deleting}
                 >
                   Cancelar

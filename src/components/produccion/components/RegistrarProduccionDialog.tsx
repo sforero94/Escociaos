@@ -325,7 +325,7 @@ export function RegistrarProduccionDialog({
             <Button
               type="submit"
               disabled={submitting}
-              className="bg-[#73991C] hover:bg-[#5c7a16]"
+              className="bg-primary hover:bg-primary-dark"
             >
               {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {submitting ? 'Guardando...' : 'Guardar Registro'}

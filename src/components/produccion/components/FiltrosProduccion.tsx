@@ -89,10 +89,10 @@ export function FiltrosProduccion({
       {/* Header con toggle */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <Filter className="w-5 h-5 text-[#73991C]" />
+          <Filter className="w-5 h-5 text-primary" />
           <h3 className="font-semibold text-gray-900">Filtros</h3>
           {hayFiltrosActivos && (
-            <span className="bg-[#73991C]/10 text-[#73991C] text-xs px-2 py-1 rounded-full">
+            <span className="bg-primary/10 text-primary text-xs px-2 py-1 rounded-full">
               Activos
             </span>
           )}
@@ -131,8 +131,8 @@ export function FiltrosProduccion({
                 onClick={() => toggleAno(ano)}
                 className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                   filtros.anos.includes(ano)
-                    ? 'bg-[#73991C] text-white border-[#73991C]'
-                    : 'bg-white text-gray-600 border-gray-200 hover:border-[#73991C]/50'
+                    ? 'bg-primary text-white border-primary'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-primary/50'
                 }`}
               >
                 {ano}
@@ -170,7 +170,7 @@ export function FiltrosProduccion({
                   onClick={() => handleMetricaChange(metrica)}
                   className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
                     filtros.metrica === metrica
-                      ? 'bg-[#73991C] text-white'
+                      ? 'bg-primary text-white'
                       : 'bg-white text-gray-600 hover:bg-gray-50'
                   }`}
                 >

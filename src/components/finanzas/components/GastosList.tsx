@@ -21,6 +21,8 @@ import { FiltrosGastos } from './FiltrosGastos';
 import { CompletarGastoDialog } from './CompletarGastoDialog';
 import { CargaMasivaGastos } from './CargaMasivaGastos';
 import type { Gasto } from '../../../types/finanzas';
+import { toast } from 'sonner';
+import { ConfirmDialog } from '../../ui/confirm-dialog';
 
 interface GastosListProps {
   onEdit?: (gasto: Gasto) => void;
@@ -69,6 +71,8 @@ export function GastosList({ onEdit }: GastosListProps) {
   const [eliminando, setEliminando] = useState<string | null>(null);
   const [completandoGasto, setCompletandoGasto] = useState<Gasto | null>(null);
   const [showCargaMasiva, setShowCargaMasiva] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   // Rastrear la clave de navegación para evitar aplicar filtros múltiples veces
   const aplicadoKey = useRef<string | null>(location.key);
@@ -198,28 +202,27 @@ export function GastosList({ onEdit }: GastosListProps) {
     loadGastos();
   }, [searchQuery]);
 
-  const handleEliminar = async (gastoId: string) => {
-    if (!confirm('¿Estás seguro de que deseas eliminar este gasto?')) {
-      return;
-    }
+  const handleEliminar = (gastoId: string) => {
+    setDeleteTargetId(gastoId);
+    setConfirmDeleteOpen(true);
+  };
 
+  const confirmEliminar = async () => {
+    if (!deleteTargetId) return;
     try {
-      setEliminando(gastoId);
-
+      setEliminando(deleteTargetId);
       const { error } = await getSupabase()
         .from('fin_gastos')
         .delete()
-        .eq('id', gastoId);
-
+        .eq('id', deleteTargetId);
       if (error) throw error;
-
-      // Actualizar lista local
-      setGastos(gastos.filter(g => g.id !== gastoId));
-      alert('Gasto eliminado exitosamente');
+      setGastos(gastos.filter(g => g.id !== deleteTargetId));
+      toast.success('Gasto eliminado exitosamente');
     } catch (error: any) {
-      alert('Error al eliminar el gasto: ' + error.message);
+      toast.error('Error al eliminar el gasto: ' + error.message);
     } finally {
       setEliminando(null);
+      setDeleteTargetId(null);
     }
   };
 
@@ -323,7 +326,7 @@ export function GastosList({ onEdit }: GastosListProps) {
           <select
             value={filtroEstado}
             onChange={(e) => setFiltroEstado(e.target.value as 'todos' | 'Confirmado' | 'Pendiente')}
-            className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C] text-sm"
+            className="px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
           >
             <option value="todos">Todos los estados</option>
             <option value="Confirmado">Confirmados</option>
@@ -334,7 +337,7 @@ export function GastosList({ onEdit }: GastosListProps) {
           <Button
             onClick={() => setShowCargaMasiva(true)}
             variant="outline"
-            className="border-[#73991C] text-[#73991C] hover:bg-[#73991C]/10"
+            className="border-primary text-primary hover:bg-primary/10"
           >
             <FileSpreadsheet className="w-4 h-4 mr-2" />
             Carga Masiva
@@ -346,7 +349,7 @@ export function GastosList({ onEdit }: GastosListProps) {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 text-[#73991C] animate-spin" />
+            <Loader2 className="w-8 h-8 text-primary animate-spin" />
           </div>
         ) : gastos.length === 0 ? (
           <div className="text-center py-12">
@@ -514,44 +517,6 @@ export function GastosList({ onEdit }: GastosListProps) {
         )}
       </div>
 
-      {/* Modal de confirmación de eliminación */}
-      {eliminando && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                <Trash2 className="w-6 h-6 text-red-600" />
-              </div>
-              <div>
-                <h3 className="text-lg text-gray-900">Eliminar Gasto</h3>
-                <p className="text-sm text-gray-600">Esta acción no se puede deshacer</p>
-              </div>
-            </div>
-
-            <p className="text-sm text-gray-600 mb-6">
-              ¿Estás seguro de que deseas eliminar este gasto? Esta acción no se puede deshacer.
-            </p>
-
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setEliminando(null)}
-                className="flex-1"
-              >
-                Cancelar
-              </Button>
-              <Button
-                onClick={() => handleEliminar(eliminando)}
-                className="flex-1 bg-red-600 hover:bg-red-700"
-                disabled={!eliminando}
-              >
-                {eliminando ? 'Eliminando...' : 'Eliminar'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Completar Gasto Dialog */}
       {completandoGasto && (
         <CompletarGastoDialog
@@ -564,9 +529,7 @@ export function GastosList({ onEdit }: GastosListProps) {
             setCompletandoGasto(null);
             loadGastos(); // Refresh the list
           }}
-          onError={(message) => {
-            alert(message);
-          }}
+          onError={(message) => toast.error(message)}
         />
       )}
 
@@ -576,11 +539,19 @@ export function GastosList({ onEdit }: GastosListProps) {
         onOpenChange={setShowCargaMasiva}
         onSuccess={(count) => {
           loadGastos(); // Refresh the list
-          alert(`¡Éxito! Se cargaron ${count} gastos correctamente`);
+          toast.success(`¡Éxito! Se cargaron ${count} gastos correctamente`);
         }}
-        onError={(message) => {
-          alert(message);
-        }}
+        onError={(message) => toast.error(message)}
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        title="¿Eliminar gasto?"
+        description="Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={confirmEliminar}
+        destructive
       />
     </div>
   );

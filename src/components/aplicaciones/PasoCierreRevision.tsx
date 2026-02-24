@@ -134,11 +134,7 @@ export function PasoCierreRevision({
       (sum, calculo) => sum + (calculo.numero_canecas || 0),
       0
     );
-    
-      lote: c.lote_nombre,
-      canecas: c.numero_canecas,
-    })));
-    
+
     return total;
   }, [aplicacion.calculos]);
 
@@ -179,20 +175,20 @@ export function PasoCierreRevision({
     <div className="space-y-6">
       {/* TÍTULO */}
       <div>
-        <h3 className="text-xl text-[#172E08] mb-2">Revisión de Movimientos</h3>
-        <p className="text-[#4D240F]/70">
+        <h3 className="text-xl text-foreground mb-2">Revisión de Movimientos</h3>
+        <p className="text-brand-brown/70">
           Revisa las cantidades utilizadas por día antes de proceder con el cierre.
         </p>
       </div>
 
       {/* ESTADÍSTICAS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 border border-[#73991C]/20 rounded-xl p-4">
+        <div className="bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20 rounded-xl p-4">
           <div className="flex items-center gap-3 mb-2">
-            <Calendar className="w-5 h-5 text-[#73991C]" />
-            <div className="text-xs text-[#4D240F]/70">Días de Aplicación</div>
+            <Calendar className="w-5 h-5 text-primary" />
+            <div className="text-xs text-brand-brown/70">Días de Aplicación</div>
           </div>
-          <div className="text-3xl text-[#73991C]">{fechasUnicas.length}</div>
+          <div className="text-3xl text-primary">{fechasUnicas.length}</div>
         </div>
 
         <div className="bg-gradient-to-br from-blue-500/10 to-blue-400/10 border border-blue-200 rounded-xl p-4">
@@ -215,7 +211,7 @@ export function PasoCierreRevision({
       {/* MATRIZ 1: CANECAS POR DÍA */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="bg-gradient-to-r from-purple-500/10 to-purple-400/10 border-b border-purple-200 p-4">
-          <h4 className="text-[#172E08]">Canecas Utilizadas por Día</h4>
+          <h4 className="text-foreground">Canecas Utilizadas por Día</h4>
         </div>
 
         {fechasUnicas.length > 0 ? (
@@ -223,24 +219,24 @@ export function PasoCierreRevision({
             <table className="min-w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs text-[#4D240F] uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left text-xs text-brand-brown uppercase tracking-wider">
                     Concepto
                   </th>
-                  <th className="px-4 py-3 text-center text-xs text-[#4D240F] uppercase tracking-wider">
+                  <th className="px-4 py-3 text-center text-xs text-brand-brown uppercase tracking-wider">
                     Planeado
                   </th>
                   {fechasUnicas.map((fecha) => (
                     <th
                       key={fecha}
-                      className="px-4 py-3 text-center text-xs text-[#4D240F] uppercase tracking-wider"
+                      className="px-4 py-3 text-center text-xs text-brand-brown uppercase tracking-wider"
                     >
                       {formatearFecha(fecha)}
                     </th>
                   ))}
-                  <th className="px-4 py-3 text-center text-xs text-[#4D240F] uppercase tracking-wider bg-purple-50">
+                  <th className="px-4 py-3 text-center text-xs text-brand-brown uppercase tracking-wider bg-purple-50">
                     Total Real
                   </th>
-                  <th className="px-4 py-3 text-center text-xs text-[#4D240F] uppercase tracking-wider bg-blue-50">
+                  <th className="px-4 py-3 text-center text-xs text-brand-brown uppercase tracking-wider bg-blue-50">
                     Desviación
                   </th>
                 </tr>
@@ -248,7 +244,7 @@ export function PasoCierreRevision({
               <tbody className="bg-white divide-y divide-gray-200">
                 <tr className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3">
-                    <div className="text-sm text-[#172E08]">Canecas</div>
+                    <div className="text-sm text-foreground">Canecas</div>
                   </td>
                   <td className="px-4 py-3 text-center text-sm text-blue-600">
                     {canecasPlaneadas > 0 ? formatearNumero(canecasPlaneadas, 1) : '-'}
@@ -259,7 +255,7 @@ export function PasoCierreRevision({
                     </td>
                   ))}
                   <td className="px-4 py-3 text-center bg-purple-50">
-                    <div className="text-sm text-[#172E08]">{totalCanecas}</div>
+                    <div className="text-sm text-foreground">{totalCanecas}</div>
                   </td>
                   <td className="px-4 py-3 text-center bg-blue-50">
                     {canecasPlaneadas > 0 ? (
@@ -280,17 +276,17 @@ export function PasoCierreRevision({
         ) : (
           <div className="p-8 text-center">
             <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-            <p className="text-[#4D240F]/70">No hay movimientos registrados</p>
+            <p className="text-brand-brown/70">No hay movimientos registrados</p>
           </div>
         )}
       </div>
 
       {/* MATRIZ 2: PRODUCTOS POR DÍA */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-        <div className="bg-gradient-to-r from-[#73991C]/10 to-[#BFD97D]/10 border-b border-[#73991C]/20 p-4">
+        <div className="bg-gradient-to-r from-primary/10 to-secondary/10 border-b border-primary/20 p-4">
           <div className="flex items-center justify-between">
-            <h4 className="text-[#172E08]">Insumos Utilizados por Día</h4>
-            <div className="text-xs text-[#4D240F]/70">
+            <h4 className="text-foreground">Insumos Utilizados por Día</h4>
+            <div className="text-xs text-brand-brown/70">
               Planeado vs Real - {productosUnicos.length} productos
             </div>
           </div>
@@ -301,24 +297,24 @@ export function PasoCierreRevision({
             <table className="min-w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs text-[#4D240F] uppercase tracking-wider sticky left-0 bg-gray-50 z-10">
+                  <th className="px-4 py-3 text-left text-xs text-brand-brown uppercase tracking-wider sticky left-0 bg-gray-50 z-10">
                     Producto
                   </th>
-                  <th className="px-4 py-3 text-center text-xs text-[#4D240F] uppercase tracking-wider">
+                  <th className="px-4 py-3 text-center text-xs text-brand-brown uppercase tracking-wider">
                     Planeado
                   </th>
                   {fechasUnicas.map((fecha) => (
                     <th
                       key={fecha}
-                      className="px-4 py-3 text-center text-xs text-[#4D240F] uppercase tracking-wider"
+                      className="px-4 py-3 text-center text-xs text-brand-brown uppercase tracking-wider"
                     >
                       {formatearFecha(fecha)}
                     </th>
                   ))}
-                  <th className="px-4 py-3 text-center text-xs text-[#4D240F] uppercase tracking-wider bg-[#73991C]/10">
+                  <th className="px-4 py-3 text-center text-xs text-brand-brown uppercase tracking-wider bg-primary/10">
                     Total Real
                   </th>
-                  <th className="px-4 py-3 text-center text-xs text-[#4D240F] uppercase tracking-wider bg-blue-50">
+                  <th className="px-4 py-3 text-center text-xs text-brand-brown uppercase tracking-wider bg-blue-50">
                     Desviación
                   </th>
                 </tr>
@@ -331,8 +327,8 @@ export function PasoCierreRevision({
                   return (
                     <tr key={producto.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 sticky left-0 bg-white hover:bg-gray-50 z-10">
-                        <div className="text-sm text-[#172E08]">{producto.nombre}</div>
-                        <div className="text-xs text-[#4D240F]/50">{producto.unidad}</div>
+                        <div className="text-sm text-foreground">{producto.nombre}</div>
+                        <div className="text-xs text-brand-brown/50">{producto.unidad}</div>
                       </td>
                       <td className="px-4 py-3 text-center text-sm text-blue-600">
                         {planeado ? formatearNumero(planeado) : '-'}
@@ -345,8 +341,8 @@ export function PasoCierreRevision({
                           </td>
                         );
                       })}
-                      <td className="px-4 py-3 text-center bg-[#73991C]/10">
-                        <div className="text-sm text-[#172E08]">
+                      <td className="px-4 py-3 text-center bg-primary/10">
+                        <div className="text-sm text-foreground">
                           {formatearNumero(producto.totalUtilizado)}
                         </div>
                       </td>
@@ -369,7 +365,7 @@ export function PasoCierreRevision({
         ) : (
           <div className="p-8 text-center">
             <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-            <p className="text-[#4D240F]/70">No hay productos registrados</p>
+            <p className="text-brand-brown/70">No hay productos registrados</p>
           </div>
         )}
       </div>

@@ -255,6 +255,8 @@ export async function fetchHistorialReportes(): Promise<ReporteSemanalMetadata[]
       ano,
       generado_por,
       url_storage,
+      html_storage,
+      generado_automaticamente,
       created_at,
       usuarios(nombre)
     `)
@@ -267,8 +269,86 @@ export async function fetchHistorialReportes(): Promise<ReporteSemanalMetadata[]
 
   return (data || []).map((r: any) => ({
     ...r,
-    generado_por_nombre: r.usuarios?.nombre || 'Desconocido',
+    generado_por_nombre: r.usuarios?.nombre || 'Sistema',
   }));
+}
+
+// ============================================================================
+// GENERACIÓN RÁPIDA (sin wizard)
+// ============================================================================
+
+export interface GenerarRapidoResult {
+  html_storage: string;
+  reporte_id: string;
+  ya_existia: boolean;
+  semana: { numero: number; ano: number; inicio: string; fin: string };
+  tokens_usados?: number;
+}
+
+/**
+ * Llama al endpoint de generación rápida.
+ * El edge function obtiene sus propios datos de la BD + genera el HTML.
+ * Retorna la ruta del HTML almacenado en Storage.
+ */
+export async function generarReporteRapido(
+  semana?: { numero: number; ano: number; inicio: string; fin: string },
+  onProgress?: (step: string) => void
+): Promise<GenerarRapidoResult> {
+  onProgress?.('Generando reporte con IA...');
+
+  const response = await fetch(
+    `${EDGE_FUNCTION_BASE}/make-server-1ccce916/reportes/generar-semanal-rapido`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${publicAnonKey}`,
+      },
+      body: JSON.stringify(semana ? { semana } : {}),
+    }
+  );
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `Error del servidor: ${response.status}`);
+  }
+
+  const result = await response.json();
+
+  if (!result.success) {
+    throw new Error(result.error || 'Error al generar el reporte rápido');
+  }
+
+  return {
+    html_storage: result.html_storage,
+    reporte_id: result.reporte_id,
+    ya_existia: result.ya_existia || false,
+    semana: result.semana,
+    tokens_usados: result.tokens_usados,
+  };
+}
+
+/**
+ * Descarga el HTML de un reporte rápido, lo convierte a PDF y lanza la descarga.
+ * Usa el mismo html2pdf.js que el wizard.
+ */
+export async function descargarReporteDesdeHTML(
+  htmlStoragePath: string,
+  filename: string
+): Promise<void> {
+  const supabase = getSupabase();
+
+  const { data: htmlBlob, error } = await supabase.storage
+    .from('reportes-semanales')
+    .download(htmlStoragePath);
+
+  if (error) {
+    throw new Error(`Error al descargar HTML: ${error.message}`);
+  }
+
+  const html = await htmlBlob.text();
+  const pdfBlob = await convertirHTMLaPDF(html);
+  descargarBlob(pdfBlob, filename);
 }
 
 // ============================================================================

@@ -137,27 +137,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(currentUser);
       setSession(currentSession);
 
-      // Intentar recuperar perfil guardado de localStorage PRIMERO
-      let temporalProfile;
-      try {
-        const savedProfile = localStorage.getItem('userProfile');
-        if (savedProfile) {
-          temporalProfile = JSON.parse(savedProfile);
-          console.log('✅ Perfil recuperado de localStorage:', temporalProfile);
-        }
-      } catch (e) {
-        console.log('ℹ️ No se pudo recuperar perfil de localStorage');
-      }
-
-      // Si no hay perfil guardado, crear uno temporal por defecto
-      if (!temporalProfile) {
-        temporalProfile = {
-          id: currentUser.id,
-          nombre: currentUser.email?.split('@')[0] || 'Usuario',
-          email: currentUser.email || '',
-          rol: 'Administrador',
-        };
-      }
+      // Perfil temporal sin rol hasta confirmar con la base de datos
+      const temporalProfile = {
+        id: currentUser.id,
+        nombre: currentUser.email?.split('@')[0] || 'Usuario',
+        email: currentUser.email || '',
+        rol: '',
+      };
 
       // Establecer perfil temporal PRIMERO para que la app funcione de inmediato
       setProfile(temporalProfile);
@@ -179,13 +165,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (userProfile) {
           console.log('✅ Perfil real encontrado, actualizando:', userProfile.nombre);
           setProfile(userProfile);
-          // Guardar en localStorage para futuras sesiones
-          try {
-            localStorage.setItem('userProfile', JSON.stringify(userProfile));
-            console.log('💾 Perfil guardado en localStorage');
-          } catch (e) {
-            console.log('⚠️ No se pudo guardar perfil en localStorage');
-          }
         } else {
           console.log('ℹ️ Sin perfil en tabla, usando temporal (esto es normal)');
         }
@@ -201,28 +180,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('❌ Error cargando datos del usuario:', error);
 
-      // Intentar recuperar de localStorage primero
-      let basicProfile;
-      try {
-        const savedProfile = localStorage.getItem('userProfile');
-        if (savedProfile) {
-          basicProfile = JSON.parse(savedProfile);
-          console.log('✅ Perfil de emergencia recuperado de localStorage:', basicProfile);
-        }
-      } catch (e) {
-        console.log('ℹ️ No se pudo recuperar perfil de localStorage en catch');
-      }
-
-      // Si no hay perfil guardado, crear uno básico
-      if (!basicProfile) {
-        basicProfile = {
-          id: currentSession.user.id,
-          nombre: currentSession.user.email?.split('@')[0] || 'Usuario',
-          email: currentSession.user.email || '',
-          rol: 'Administrador',
-        };
-        console.log('📝 Perfil de emergencia creado desde cero:', basicProfile);
-      }
+      const basicProfile = {
+        id: currentSession.user.id,
+        nombre: currentSession.user.email?.split('@')[0] || 'Usuario',
+        email: currentSession.user.email || '',
+        rol: '',
+      };
 
       setUser(currentSession.user);
       setProfile(basicProfile);
@@ -239,13 +202,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userProfile = await getUserProfile(user.id);
       if (userProfile) {
         setProfile(userProfile);
-        // Actualizar localStorage
-        try {
-          localStorage.setItem('userProfile', JSON.stringify(userProfile));
-          console.log('💾 Perfil actualizado en localStorage');
-        } catch (e) {
-          console.log('⚠️ No se pudo actualizar perfil en localStorage');
-        }
       }
     }
   };
@@ -258,13 +214,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(null);
       setSession(null);
       profileLoadedRef.current = false;
-      // Limpiar localStorage
-      try {
-        localStorage.removeItem('userProfile');
-        console.log('🗑️ Perfil eliminado de localStorage');
-      } catch (e) {
-        console.log('⚠️ No se pudo eliminar perfil de localStorage');
-      }
     } catch (error) {
       console.error('Error al cerrar sesión:', error);
     }
@@ -326,18 +275,7 @@ export function useRequireAuth() {
 // Hook para requerir roles específicos
 export function useRequireRole(allowedRoles: string[]) {
   const auth = useRequireAuth();
-  const [hasPermission, setHasPermission] = useState(false);
-
-  useEffect(() => {
-    if (!auth.isLoading) {
-      const permission = auth.hasRole(allowedRoles);
-      setHasPermission(permission);
-      
-      if (!permission && auth.isAuthenticated) {
-        console.warn('Usuario no tiene los permisos necesarios:', allowedRoles);
-      }
-    }
-  }, [auth.isLoading, auth.profile, allowedRoles]);
+  const hasPermission = !auth.isLoading && auth.hasRole(allowedRoles);
 
   return { ...auth, hasPermission };
 }

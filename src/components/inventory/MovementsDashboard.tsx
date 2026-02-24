@@ -367,7 +367,7 @@ export function MovementsDashboard() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-12 h-12 text-[#73991C] animate-spin" />
+        <RefreshCw className="w-12 h-12 text-primary animate-spin" />
       </div>
     );
   }
@@ -379,23 +379,23 @@ export function MovementsDashboard() {
       
       {/* Header - SIN BOTÓN */}
       <div>
-        <h1 className="text-[#172E08] mb-2">Tablero de Inventario</h1>
-        <p className="text-[#4D240F]/70">Vista general de la actividad y evolución del inventario</p>
+        <h1 className="text-foreground mb-2">Tablero de Inventario</h1>
+        <p className="text-brand-brown/70">Vista general de la actividad y evolución del inventario</p>
       </div>
 
       {/* 🔝 GRÁFICO DE EVOLUCIÓN - ÚLTIMOS 6 MESES (PRIORIDAD #1) */}
-      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
         <div className="flex items-center gap-2 mb-6">
-          <BarChart3 className="w-5 h-5 text-[#73991C]" />
-          <h2 className="text-xl text-[#172E08]">
+          <BarChart3 className="w-5 h-5 text-primary" />
+          <h2 className="text-xl text-foreground">
             Evolución del Inventario - Últimos 6 Meses
           </h2>
         </div>
         
         {monthlyData.length === 0 ? (
           <div className="text-center py-12">
-            <BarChart3 className="w-16 h-16 text-[#4D240F]/40 mx-auto mb-4" />
-            <p className="text-[#4D240F]/60">No hay datos suficientes para mostrar</p>
+            <BarChart3 className="w-16 h-16 text-brand-brown/40 mx-auto mb-4" />
+            <p className="text-brand-brown/60">No hay datos suficientes para mostrar</p>
           </div>
         ) : (
           <>
@@ -494,19 +494,19 @@ export function MovementsDashboard() {
 
             {/* Cards de explicación debajo del gráfico */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 pt-6 border-t border-gray-200">
-              <div className="flex items-start gap-3 p-4 bg-[#28A745]/5 rounded-xl border border-[#28A745]/20">
-                <div className="w-3 h-3 bg-[#28A745] rounded-sm mt-1 flex-shrink-0"></div>
+              <div className="flex items-start gap-3 p-4 bg-success-alt/5 rounded-xl border border-success-alt/20">
+                <div className="w-3 h-3 bg-success-alt rounded-sm mt-1 flex-shrink-0"></div>
                 <div>
-                  <p className="text-sm text-[#28A745]">Entradas</p>
-                  <p className="text-xs text-[#4D240F]/70 mt-1">Valor de productos que ingresan</p>
+                  <p className="text-sm text-success-alt">Entradas</p>
+                  <p className="text-xs text-brand-brown/70 mt-1">Valor de productos que ingresan</p>
                 </div>
               </div>
               
-              <div className="flex items-start gap-3 p-4 bg-[#DC3545]/5 rounded-xl border border-[#DC3545]/20">
-                <div className="w-3 h-3 bg-[#DC3545] rounded-sm mt-1 flex-shrink-0"></div>
+              <div className="flex items-start gap-3 p-4 bg-destructive/5 rounded-xl border border-destructive/20">
+                <div className="w-3 h-3 bg-destructive rounded-sm mt-1 flex-shrink-0"></div>
                 <div>
-                  <p className="text-sm text-[#DC3545]">Salidas</p>
-                  <p className="text-xs text-[#4D240F]/70 mt-1">Valor de productos que salen</p>
+                  <p className="text-sm text-destructive">Salidas</p>
+                  <p className="text-xs text-brand-brown/70 mt-1">Valor de productos que salen</p>
                 </div>
               </div>
               
@@ -514,7 +514,7 @@ export function MovementsDashboard() {
                 <div className="w-3 h-3 bg-[#3B82F6] rounded-sm mt-1 flex-shrink-0"></div>
                 <div>
                   <p className="text-sm text-[#3B82F6]">Valor Inventario</p>
-                  <p className="text-xs text-[#4D240F]/70 mt-1">Valoración total al final del mes</p>
+                  <p className="text-xs text-brand-brown/70 mt-1">Valoración total al final del mes</p>
                 </div>
               </div>
             </div>
@@ -523,7 +523,7 @@ export function MovementsDashboard() {
       </div>
 
       {/* ⚡ ACCIONES RÁPIDAS (POSICIÓN #2) */}
-      <div className="bg-gradient-to-br from-[#73991C] to-[#5f7d17] rounded-2xl shadow-[0_8px_32px_rgba(115,153,28,0.2)] p-6 text-white">
+      <div className="bg-gradient-to-br from-primary to-primary-dark rounded-2xl shadow-[0_8px_32px_rgba(115,153,28,0.2)] p-6 text-white">
         <h2 className="text-xl mb-4 flex items-center gap-2">
           <Package className="w-5 h-5" />
           Acciones Rápidas
@@ -563,9 +563,9 @@ export function MovementsDashboard() {
       </div>
 
       {/* Selector de rango de tiempo */}
-      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-4 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-4 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-          <span className="text-sm text-[#4D240F]/70">Período para métricas:</span>
+          <span className="text-sm text-brand-brown/70">Período para métricas:</span>
           <div className="flex gap-2">
             {(['7', '30', '90'] as const).map((days) => (
               <button
@@ -573,8 +573,8 @@ export function MovementsDashboard() {
                 onClick={() => setTimeRange(days)}
                 className={`px-4 py-2 rounded-xl text-sm transition-all duration-200 ${
                   timeRange === days
-                    ? 'bg-[#73991C] text-white shadow-md'
-                    : 'bg-[#F8FAF5] text-[#4D240F]/70 hover:bg-[#BFD97D]/20'
+                    ? 'bg-primary text-white shadow-md'
+                    : 'bg-background text-brand-brown/70 hover:bg-secondary/20'
                 }`}
               >
                 {days === '7' ? 'Última semana' : days === '30' ? 'Último mes' : 'Últimos 3 meses'}
@@ -587,49 +587,49 @@ export function MovementsDashboard() {
       {/* Stats Cards - Métricas Financieras */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Valoración Total del Inventario */}
-        <div className="bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/20 rounded-2xl border border-[#73991C] p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)] hover:shadow-[0_6px_28px_rgba(115,153,28,0.12)] transition-all duration-200">
+        <div className="bg-gradient-to-br from-primary/10 to-secondary/20 rounded-2xl border border-primary p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)] hover:shadow-[0_6px_28px_rgba(115,153,28,0.12)] transition-all duration-200">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm text-[#4D240F]/70 uppercase tracking-wide">Valoración Total</p>
-            <Wallet className="w-5 h-5 text-[#73991C]" />
+            <p className="text-sm text-brand-brown/70 uppercase tracking-wide">Valoración Total</p>
+            <Wallet className="w-5 h-5 text-primary" />
           </div>
-          <p className="text-2xl text-[#73991C]">{formatCurrency(stats.valoracionTotal)}</p>
-          <p className="text-xs text-[#4D240F]/60 mt-1">
+          <p className="text-2xl text-primary">{formatCurrency(stats.valoracionTotal)}</p>
+          <p className="text-xs text-brand-brown/60 mt-1">
             Inventario actual
           </p>
         </div>
 
         {/* Total de Entradas (COP) */}
-        <div className="bg-gradient-to-br from-[#28A745]/5 to-[#28A745]/10 rounded-2xl border border-[#28A745]/20 p-6 shadow-[0_4px_24px_rgba(40,167,69,0.08)] hover:shadow-[0_6px_28px_rgba(40,167,69,0.12)] transition-all duration-200">
+        <div className="bg-gradient-to-br from-success-alt/5 to-success-alt/10 rounded-2xl border border-success-alt/20 p-6 shadow-[0_4px_24px_rgba(40,167,69,0.08)] hover:shadow-[0_6px_28px_rgba(40,167,69,0.12)] transition-all duration-200">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm text-[#28A745]/70 uppercase tracking-wide">Entradas</p>
-            <ArrowUpCircle className="w-5 h-5 text-[#28A745]" />
+            <p className="text-sm text-success-alt/70 uppercase tracking-wide">Entradas</p>
+            <ArrowUpCircle className="w-5 h-5 text-success-alt" />
           </div>
-          <p className="text-2xl text-[#28A745]">{formatCurrency(stats.valorEntradas)}</p>
-          <p className="text-xs text-[#28A745]/70 mt-1">
+          <p className="text-2xl text-success-alt">{formatCurrency(stats.valorEntradas)}</p>
+          <p className="text-xs text-success-alt/70 mt-1">
             {stats.totalEntradas} movimiento{stats.totalEntradas !== 1 ? 's' : ''}
           </p>
         </div>
 
         {/* Total de Salidas (COP) */}
-        <div className="bg-gradient-to-br from-[#DC3545]/5 to-[#DC3545]/10 rounded-2xl border border-[#DC3545]/20 p-6 shadow-[0_4px_24px_rgba(220,53,69,0.08)] hover:shadow-[0_6px_28px_rgba(220,53,69,0.12)] transition-all duration-200">
+        <div className="bg-gradient-to-br from-destructive/5 to-destructive/10 rounded-2xl border border-destructive/20 p-6 shadow-[0_4px_24px_rgba(220,53,69,0.08)] hover:shadow-[0_6px_28px_rgba(220,53,69,0.12)] transition-all duration-200">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm text-[#DC3545]/70 uppercase tracking-wide">Salidas</p>
-            <ArrowDownCircle className="w-5 h-5 text-[#DC3545]" />
+            <p className="text-sm text-destructive/70 uppercase tracking-wide">Salidas</p>
+            <ArrowDownCircle className="w-5 h-5 text-destructive" />
           </div>
-          <p className="text-2xl text-[#DC3545]">{formatCurrency(stats.valorSalidas)}</p>
-          <p className="text-xs text-[#DC3545]/70 mt-1">
+          <p className="text-2xl text-destructive">{formatCurrency(stats.valorSalidas)}</p>
+          <p className="text-xs text-destructive/70 mt-1">
             {stats.totalSalidas} movimiento{stats.totalSalidas !== 1 ? 's' : ''}
           </p>
         </div>
 
         {/* Promedio Mensual (COP) */}
-        <div className="bg-gradient-to-br from-[#BFD97D]/20 to-[#BFD97D]/40 rounded-2xl border border-[#BFD97D] p-6 shadow-[0_4px_24px_rgba(191,217,125,0.08)] hover:shadow-[0_6px_28px_rgba(191,217,125,0.12)] transition-all duration-200">
+        <div className="bg-gradient-to-br from-secondary/20 to-secondary/40 rounded-2xl border border-secondary p-6 shadow-[0_4px_24px_rgba(191,217,125,0.08)] hover:shadow-[0_6px_28px_rgba(191,217,125,0.12)] transition-all duration-200">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm text-[#73991C]/70 uppercase tracking-wide">Promedio Mensual</p>
-            <TrendingUp className="w-5 h-5 text-[#73991C]" />
+            <p className="text-sm text-primary/70 uppercase tracking-wide">Promedio Mensual</p>
+            <TrendingUp className="w-5 h-5 text-primary" />
           </div>
-          <p className="text-2xl text-[#73991C]">{formatCurrency(stats.promedioMensual)}</p>
-          <p className="text-xs text-[#4D240F]/60 mt-1">
+          <p className="text-2xl text-primary">{formatCurrency(stats.promedioMensual)}</p>
+          <p className="text-xs text-brand-brown/60 mt-1">
             Movimientos/mes
           </p>
         </div>
@@ -638,17 +638,17 @@ export function MovementsDashboard() {
       {/* Grid de 2 columnas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Movimientos Recientes */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-2">
-              <Clock className="w-5 h-5 text-[#73991C]" />
-              <h2 className="text-xl text-[#172E08]">
+              <Clock className="w-5 h-5 text-primary" />
+              <h2 className="text-xl text-foreground">
                 Movimientos Recientes
               </h2>
             </div>
             <Link
               to="/inventario/movimientos"
-              className="text-[#73991C] hover:text-[#5f7d17] text-sm flex items-center gap-1 transition-colors"
+              className="text-primary hover:text-primary-dark text-sm flex items-center gap-1 transition-colors"
             >
               Ver todos
               <ExternalLink className="w-3 h-3" />
@@ -657,8 +657,8 @@ export function MovementsDashboard() {
 
           {recentMovements.length === 0 ? (
             <div className="text-center py-12">
-              <Package className="w-16 h-16 text-[#4D240F]/40 mx-auto mb-4" />
-              <p className="text-[#4D240F]/60">No hay movimientos recientes</p>
+              <Package className="w-16 h-16 text-brand-brown/40 mx-auto mb-4" />
+              <p className="text-brand-brown/60">No hay movimientos recientes</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -669,28 +669,28 @@ export function MovementsDashboard() {
                     key={movement.id}
                     className={`flex items-center justify-between p-3 rounded-lg border-l-4 transition-all duration-200 hover:shadow-md ${
                       isEntrada
-                        ? 'bg-[#28A745]/5 border-[#28A745]'
-                        : 'bg-[#DC3545]/5 border-[#DC3545]'
+                        ? 'bg-success-alt/5 border-success-alt'
+                        : 'bg-destructive/5 border-destructive'
                     }`}
                   >
                     <div className="flex items-center gap-3 flex-1">
                       {isEntrada ? (
-                        <ArrowUpCircle className="w-5 h-5 text-[#28A745] flex-shrink-0" />
+                        <ArrowUpCircle className="w-5 h-5 text-success-alt flex-shrink-0" />
                       ) : (
-                        <ArrowDownCircle className="w-5 h-5 text-[#DC3545] flex-shrink-0" />
+                        <ArrowDownCircle className="w-5 h-5 text-destructive flex-shrink-0" />
                       )}
                       <div className="min-w-0">
-                        <p className="text-[#172E08] truncate">
+                        <p className="text-foreground truncate">
                           {movement.producto?.nombre || 'Desconocido'}
                         </p>
-                        <p className="text-sm text-[#4D240F]/70">
+                        <p className="text-sm text-brand-brown/70">
                           {isEntrada ? '+' : '-'}
                           {formatNumber(Math.abs(movement.cantidad), 2)} {movement.producto?.unidad_medida}
                         </p>
                       </div>
                     </div>
                     <div className="text-right ml-2">
-                      <p className="text-xs text-[#4D240F]/60 whitespace-nowrap">
+                      <p className="text-xs text-brand-brown/60 whitespace-nowrap">
                         {formatDate(movement.created_at)}
                       </p>
                     </div>
@@ -702,38 +702,38 @@ export function MovementsDashboard() {
         </div>
 
         {/* Productos Más Activos */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-[#73991C]" />
-              <h2 className="text-xl text-[#172E08]">
+              <TrendingUp className="w-5 h-5 text-primary" />
+              <h2 className="text-xl text-foreground">
                 Productos Más Activos
               </h2>
             </div>
-            <span className="text-sm text-[#4D240F]/60 bg-[#73991C]/10 px-3 py-1 rounded-lg">
+            <span className="text-sm text-brand-brown/60 bg-primary/10 px-3 py-1 rounded-lg">
               Top 5
             </span>
           </div>
 
           {topProducts.length === 0 ? (
             <div className="text-center py-12">
-              <BarChart3 className="w-16 h-16 text-[#4D240F]/40 mx-auto mb-4" />
-              <p className="text-[#4D240F]/60">No hay datos para mostrar</p>
+              <BarChart3 className="w-16 h-16 text-brand-brown/40 mx-auto mb-4" />
+              <p className="text-brand-brown/60">No hay datos para mostrar</p>
             </div>
           ) : (
             <div className="space-y-4">
               {topProducts.map((product, index) => (
                 <div 
                   key={product.producto_id} 
-                  className="border-l-4 border-[#73991C] bg-gradient-to-r from-[#73991C]/5 to-transparent rounded-r-xl p-4 hover:from-[#73991C]/10 transition-all duration-200"
+                  className="border-l-4 border-primary bg-gradient-to-r from-primary/5 to-transparent rounded-r-xl p-4 hover:from-primary/10 transition-all duration-200"
                 >
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="w-8 h-8 rounded-full bg-[#73991C] text-white flex items-center justify-center flex-shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center flex-shrink-0">
                       {index + 1}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[#172E08] truncate">{product.nombre}</p>
-                      <p className="text-sm text-[#4D240F]/60">
+                      <p className="text-foreground truncate">{product.nombre}</p>
+                      <p className="text-sm text-brand-brown/60">
                         {product.total_movimientos} movimiento{product.total_movimientos !== 1 ? 's' : ''}
                       </p>
                     </div>
@@ -741,14 +741,14 @@ export function MovementsDashboard() {
                   
                   <div className="flex gap-4 ml-11">
                     <div className="flex items-center gap-2">
-                      <ArrowUpCircle className="w-4 h-4 text-[#28A745]" />
-                      <span className="text-sm text-[#4D240F]/70">
+                      <ArrowUpCircle className="w-4 h-4 text-success-alt" />
+                      <span className="text-sm text-brand-brown/70">
                         {product.total_entradas} {product.total_entradas === 1 ? 'entrada' : 'entradas'}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <ArrowDownCircle className="w-4 h-4 text-[#DC3545]" />
-                      <span className="text-sm text-[#4D240F]/70">
+                      <ArrowDownCircle className="w-4 h-4 text-destructive" />
+                      <span className="text-sm text-brand-brown/70">
                         {product.total_salidas} {product.total_salidas === 1 ? 'salida' : 'salidas'}
                       </span>
                     </div>
@@ -761,10 +761,10 @@ export function MovementsDashboard() {
       </div>
 
       {/* Balance de Movimientos */}
-      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-[#73991C]/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
         <div className="flex items-center gap-2 mb-6">
-          <BarChart3 className="w-5 h-5 text-[#73991C]" />
-          <h2 className="text-xl text-[#172E08]">
+          <BarChart3 className="w-5 h-5 text-primary" />
+          <h2 className="text-xl text-foreground">
             Balance de Movimientos
           </h2>
         </div>
@@ -774,14 +774,14 @@ export function MovementsDashboard() {
           <div>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <ArrowUpCircle className="w-4 h-4 text-[#28A745]" />
-                <span className="text-sm text-[#28A745]/70 uppercase tracking-wide">Entradas</span>
+                <ArrowUpCircle className="w-4 h-4 text-success-alt" />
+                <span className="text-sm text-success-alt/70 uppercase tracking-wide">Entradas</span>
               </div>
-              <span className="text-sm text-[#28A745]">{stats.totalEntradas}</span>
+              <span className="text-sm text-success-alt">{stats.totalEntradas}</span>
             </div>
-            <div className="w-full bg-[#F8FAF5] rounded-full h-6 overflow-hidden border border-[#28A745]/20">
+            <div className="w-full bg-background rounded-full h-6 overflow-hidden border border-success-alt/20">
               <div
-                className="bg-gradient-to-r from-[#28A745] to-[#20c997] h-full rounded-full flex items-center justify-end pr-3 text-white text-xs transition-all duration-500"
+                className="bg-gradient-to-r from-success-alt to-[#20c997] h-full rounded-full flex items-center justify-end pr-3 text-white text-xs transition-all duration-500"
                 style={{
                   width: stats.totalMovimientos > 0 
                     ? `${(stats.totalEntradas / stats.totalMovimientos) * 100}%`
@@ -799,14 +799,14 @@ export function MovementsDashboard() {
           <div>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <ArrowDownCircle className="w-4 h-4 text-[#DC3545]" />
-                <span className="text-sm text-[#DC3545]/70 uppercase tracking-wide">Salidas</span>
+                <ArrowDownCircle className="w-4 h-4 text-destructive" />
+                <span className="text-sm text-destructive/70 uppercase tracking-wide">Salidas</span>
               </div>
-              <span className="text-sm text-[#DC3545]">{stats.totalSalidas}</span>
+              <span className="text-sm text-destructive">{stats.totalSalidas}</span>
             </div>
-            <div className="w-full bg-[#F8FAF5] rounded-full h-6 overflow-hidden border border-[#DC3545]/20">
+            <div className="w-full bg-background rounded-full h-6 overflow-hidden border border-destructive/20">
               <div
-                className="bg-gradient-to-r from-[#DC3545] to-[#e74c3c] h-full rounded-full flex items-center justify-end pr-3 text-white text-xs transition-all duration-500"
+                className="bg-gradient-to-r from-destructive to-[#e74c3c] h-full rounded-full flex items-center justify-end pr-3 text-white text-xs transition-all duration-500"
                 style={{
                   width: stats.totalMovimientos > 0 
                     ? `${(stats.totalSalidas / stats.totalMovimientos) * 100}%`
@@ -822,21 +822,21 @@ export function MovementsDashboard() {
         </div>
 
         {/* Balance Neto */}
-        <div className="mt-6 p-4 bg-gradient-to-br from-[#F8FAF5] to-[#BFD97D]/20 rounded-xl border border-[#73991C]/20">
+        <div className="mt-6 p-4 bg-gradient-to-br from-background to-secondary/20 rounded-xl border border-primary/20">
           <div className="flex items-center justify-between">
-            <span className="text-[#4D240F]/70">Balance Neto</span>
+            <span className="text-brand-brown/70">Balance Neto</span>
             <span className={`text-2xl ${
               stats.totalEntradas > stats.totalSalidas 
-                ? 'text-[#28A745]' 
+                ? 'text-success-alt' 
                 : stats.totalSalidas > stats.totalEntradas
-                ? 'text-[#DC3545]'
-                : 'text-[#73991C]'
+                ? 'text-destructive'
+                : 'text-primary'
             }`}>
               {stats.totalEntradas > stats.totalSalidas ? '+' : ''}
               {stats.totalEntradas - stats.totalSalidas}
             </span>
           </div>
-          <p className="text-sm text-[#4D240F]/60 mt-2">
+          <p className="text-sm text-brand-brown/60 mt-2">
             {stats.totalEntradas > stats.totalSalidas 
               ? 'Más entradas que salidas (inventario en crecimiento)'
               : stats.totalSalidas > stats.totalEntradas

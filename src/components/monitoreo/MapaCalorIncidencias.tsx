@@ -382,7 +382,7 @@ export function MapaCalorIncidencias({
       <div className="p-12">
         <div className="flex flex-col items-center justify-center text-gray-500">
           <AlertCircle className="w-16 h-16 mb-4 opacity-30" />
-          <p className="text-lg text-[#172E08]">No hay datos disponibles</p>
+          <p className="text-lg text-foreground">No hay datos disponibles</p>
           <p className="text-sm mt-2">No se encontraron monitoreos para el período seleccionado</p>
         </div>
       </div>
@@ -394,8 +394,8 @@ export function MapaCalorIncidencias({
       {/* LEYENDA DE COLORES */}
       <div className="mb-6 bg-gray-50 rounded-lg p-4 border border-gray-200">
         <div className="flex items-center gap-2 mb-3">
-          <Info className="w-4 h-4 text-[#73991C]" />
-          <span className="font-medium text-[#172E08]">Leyenda de Incidencia</span>
+          <Info className="w-4 h-4 text-primary" />
+          <span className="font-medium text-foreground">Leyenda de Incidencia</span>
         </div>
         <div className="flex flex-wrap gap-4">
           <div className="flex items-center gap-2">
@@ -426,15 +426,15 @@ export function MapaCalorIncidencias({
         <table className="w-full border-collapse">
           <thead>
             <tr>
-              <th className="p-3 bg-[#73991C]/10 border border-gray-300 text-left sticky left-0 z-10">
-                <div className="font-bold text-[#172E08]">Plaga / Lote</div>
+              <th className="p-3 bg-primary/10 border border-gray-300 text-left sticky left-0 z-10">
+                <div className="font-bold text-foreground">Plaga / Lote</div>
               </th>
               {datosMapaCalor.columnas.map(columna => (
                 <th
                   key={columna.loteId}
-                  className="p-3 bg-[#73991C]/10 border border-gray-300 text-center min-w-[100px]"
+                  className="p-3 bg-primary/10 border border-gray-300 text-center min-w-[100px]"
                 >
-                  <div className="font-bold text-[#172E08]">{columna.loteNombre}</div>
+                  <div className="font-bold text-foreground">{columna.loteNombre}</div>
                   <div className="text-xs text-gray-600 mt-1">
                     Prom: {Math.round(columna.incidenciaPromedio)}%
                   </div>
@@ -446,7 +446,7 @@ export function MapaCalorIncidencias({
             {datosMapaCalor.filas.map(fila => (
               <tr key={fila.plagaId}>
                 <th className="p-3 bg-gray-50 border border-gray-300 text-left font-medium sticky left-0 z-10">
-                  <div className="text-[#172E08]">{fila.plagaNombre}</div>
+                  <div className="text-foreground">{fila.plagaNombre}</div>
                   <div className="text-xs text-gray-600 mt-1">
                     Prom: {Math.round(fila.incidenciaPromedioTotal)}%
                   </div>
@@ -489,7 +489,7 @@ export function MapaCalorIncidencias({
               </DialogHeader>
 
               <div className="mt-4">
-                <h4 className="font-medium text-[#172E08] mb-3">Detalle de Monitoreos</h4>
+                <h4 className="font-medium text-foreground mb-3">Detalle de Monitoreos</h4>
                 <div className="space-y-2 max-h-[400px] overflow-y-auto">
                   {celdaSeleccionada.monitoreos.map((m, index) => (
                     <div
@@ -499,19 +499,19 @@ export function MapaCalorIncidencias({
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                         <div>
                           <span className="text-gray-600">Fecha:</span>
-                          <p className="font-medium text-[#172E08]">
+                          <p className="font-medium text-foreground">
                             {formatearFecha(m.fecha_monitoreo)}
                           </p>
                         </div>
                         <div>
                           <span className="text-gray-600">Sublote:</span>
-                          <p className="font-medium text-[#172E08]">
+                          <p className="font-medium text-foreground">
                             {m.sublotes?.nombre || 'N/A'}
                           </p>
                         </div>
                         <div>
                           <span className="text-gray-600">Incidencia:</span>
-                          <p className="font-medium text-[#172E08]">
+                          <p className="font-medium text-foreground">
                             {Math.round(parseFloat(String(m.incidencia)))}%
                           </p>
                         </div>

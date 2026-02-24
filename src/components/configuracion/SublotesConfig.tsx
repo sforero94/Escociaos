@@ -24,23 +24,7 @@ import {
   SelectValue,
 } from '../ui/select';
 
-interface Lote {
-  id: string;
-  nombre: string;
-  numero_orden: number | null;
-}
-
-interface Sublote {
-  id: string;
-  lote_id: string;
-  nombre: string;
-  numero_sublote: number | null;
-  arboles_grandes: number | null;
-  arboles_medianos: number | null;
-  arboles_pequenos: number | null;
-  arboles_clonales: number | null;
-  total_arboles: number | null;
-}
+import type { Lote, Sublote } from '../../types/shared';
 
 interface SubloteConLote extends Sublote {
   lote_nombre: string;
@@ -302,8 +286,8 @@ export function SublotesConfig() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-[#73991C] border-r-transparent mb-4"></div>
-          <p className="text-[#4D240F]/70">Cargando sublotes...</p>
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent mb-4"></div>
+          <p className="text-brand-brown/70">Cargando sublotes...</p>
         </div>
       </div>
     );
@@ -312,10 +296,10 @@ export function SublotesConfig() {
   if (lotes.length === 0) {
     return (
       <div className="text-center py-12">
-        <p className="text-[#4D240F]/70 mb-4">
+        <p className="text-brand-brown/70 mb-4">
           No hay lotes registrados. Primero debes crear lotes.
         </p>
-        <p className="text-sm text-[#4D240F]/50">
+        <p className="text-sm text-brand-brown/50">
           Ve a la pestaña "Lotes" para crear lotes.
         </p>
       </div>
@@ -327,14 +311,14 @@ export function SublotesConfig() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-[#172E08]">Gestión de Sublotes</h2>
-          <p className="text-[#4D240F]/70">
+          <h2 className="text-foreground">Gestión de Sublotes</h2>
+          <p className="text-brand-brown/70">
             Administra los {sublotes.length} sublotes del cultivo
           </p>
         </div>
         <Button
           onClick={iniciarCreacion}
-          className="bg-gradient-to-br from-[#73991C] to-[#5c7a16] hover:from-[#5c7a16] hover:to-[#4a6112]"
+          className="bg-gradient-to-br from-primary to-primary-dark hover:from-primary-dark hover:to-primary-dark"
           disabled={isCreating || editingId !== null}
         >
           <Plus className="w-4 h-4 mr-2" />
@@ -344,15 +328,15 @@ export function SublotesConfig() {
 
       {/* Formulario de creación */}
       {isCreating && (
-        <Card className="p-6 bg-gradient-to-br from-white/90 to-[#F8FAF5]/90 backdrop-blur-sm shadow-xl border-[#BFD97D]/30">
+        <Card className="p-6 bg-gradient-to-br from-white/90 to-background/90 backdrop-blur-sm shadow-xl border-secondary/30">
           <div className="space-y-4">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-[#172E08]">Crear Nuevo Sublote</h3>
+              <h3 className="text-foreground">Crear Nuevo Sublote</h3>
               <div className="flex gap-2">
                 <Button
                   onClick={guardarSublote}
                   size="sm"
-                  className="bg-gradient-to-br from-[#73991C] to-[#5c7a16]"
+                  className="bg-gradient-to-br from-primary to-primary-dark"
                 >
                   <Save className="w-4 h-4 mr-2" />
                   Guardar
@@ -475,16 +459,16 @@ export function SublotesConfig() {
               {/* Header del lote */}
               <button
                 onClick={() => toggleLoteExpansion(lote.id)}
-                className="w-full flex items-center justify-between p-4 bg-gradient-to-br from-[#73991C]/10 to-[#BFD97D]/10 rounded-lg hover:from-[#73991C]/20 hover:to-[#BFD97D]/20 transition-all"
+                className="w-full flex items-center justify-between p-4 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-lg hover:from-primary/20 hover:to-secondary/20 transition-all"
               >
                 <div className="flex items-center gap-3">
                   {isExpanded ? (
-                    <ChevronDownIcon className="w-5 h-5 text-[#73991C]" />
+                    <ChevronDownIcon className="w-5 h-5 text-primary" />
                   ) : (
-                    <ChevronRight className="w-5 h-5 text-[#73991C]" />
+                    <ChevronRight className="w-5 h-5 text-primary" />
                   )}
-                  <h3 className="text-[#172E08]">{lote.nombre}</h3>
-                  <span className="px-2 py-1 text-xs rounded-full bg-[#73991C]/20 text-[#172E08]">
+                  <h3 className="text-foreground">{lote.nombre}</h3>
+                  <span className="px-2 py-1 text-xs rounded-full bg-primary/20 text-foreground">
                     {sublotesDelLote.length} sublote{sublotesDelLote.length !== 1 ? 's' : ''}
                   </span>
                 </div>
@@ -494,25 +478,25 @@ export function SublotesConfig() {
               {isExpanded && (
                 <div className="space-y-2 ml-4">
                   {sublotesDelLote.length === 0 ? (
-                    <div className="p-4 text-center text-[#4D240F]/50 text-sm bg-white/50 rounded-lg">
+                    <div className="p-4 text-center text-brand-brown/50 text-sm bg-white/50 rounded-lg">
                       No hay sublotes en este lote
                     </div>
                   ) : (
                     sublotesDelLote.map((sublote, index) => (
                       <Card
                         key={sublote.id}
-                        className="p-4 bg-gradient-to-br from-white/80 to-[#F8FAF5]/80 backdrop-blur-sm hover:shadow-lg transition-all border-[#BFD97D]/20"
+                        className="p-4 bg-gradient-to-br from-white/80 to-background/80 backdrop-blur-sm hover:shadow-lg transition-all border-secondary/20"
                       >
                         {editingId === sublote.id ? (
                           // Modo edición
                           <div className="space-y-4">
                             <div className="flex items-center justify-between mb-4">
-                              <h4 className="text-[#172E08]">Editando: {sublote.nombre}</h4>
+                              <h4 className="text-foreground">Editando: {sublote.nombre}</h4>
                               <div className="flex gap-2">
                                 <Button
                                   onClick={guardarSublote}
                                   size="sm"
-                                  className="bg-gradient-to-br from-[#73991C] to-[#5c7a16]"
+                                  className="bg-gradient-to-br from-primary to-primary-dark"
                                 >
                                   <Save className="w-4 h-4 mr-2" />
                                   Guardar
@@ -612,28 +596,28 @@ export function SublotesConfig() {
                           // Modo vista
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
-                              <h4 className="text-[#172E08] mb-2">{sublote.nombre}</h4>
+                              <h4 className="text-foreground mb-2">{sublote.nombre}</h4>
 
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                                 <div>
-                                  <span className="text-[#4D240F]/60">Grandes:</span>
-                                  <span className="ml-2 text-[#172E08]">{sublote.arboles_grandes || 0}</span>
+                                  <span className="text-brand-brown/60">Grandes:</span>
+                                  <span className="ml-2 text-foreground">{sublote.arboles_grandes || 0}</span>
                                 </div>
                                 <div>
-                                  <span className="text-[#4D240F]/60">Medianos:</span>
-                                  <span className="ml-2 text-[#172E08]">{sublote.arboles_medianos || 0}</span>
+                                  <span className="text-brand-brown/60">Medianos:</span>
+                                  <span className="ml-2 text-foreground">{sublote.arboles_medianos || 0}</span>
                                 </div>
                                 <div>
-                                  <span className="text-[#4D240F]/60">Pequeños:</span>
-                                  <span className="ml-2 text-[#172E08]">{sublote.arboles_pequenos || 0}</span>
+                                  <span className="text-brand-brown/60">Pequeños:</span>
+                                  <span className="ml-2 text-foreground">{sublote.arboles_pequenos || 0}</span>
                                 </div>
                                 <div>
-                                  <span className="text-[#4D240F]/60">Clonales:</span>
-                                  <span className="ml-2 text-[#172E08]">{sublote.arboles_clonales || 0}</span>
+                                  <span className="text-brand-brown/60">Clonales:</span>
+                                  <span className="ml-2 text-foreground">{sublote.arboles_clonales || 0}</span>
                                 </div>
                                 <div className="md:col-span-4">
-                                  <span className="text-[#4D240F]/60">Total:</span>
-                                  <span className="ml-2 text-[#172E08]">{sublote.total_arboles || 0} árboles</span>
+                                  <span className="text-brand-brown/60">Total:</span>
+                                  <span className="ml-2 text-foreground">{sublote.total_arboles || 0} árboles</span>
                                 </div>
                               </div>
                             </div>

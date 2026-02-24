@@ -60,8 +60,8 @@ export function ReporteAplicacionWrapper() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <div className="inline-block w-12 h-12 border-4 border-[#73991C]/20 border-t-[#73991C] rounded-full animate-spin mb-4"></div>
-          <p className="text-[#4D240F]/70">Cargando reporte...</p>
+          <div className="inline-block w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin mb-4"></div>
+          <p className="text-brand-brown/70">Cargando reporte...</p>
         </div>
       </div>
     );
@@ -73,13 +73,13 @@ export function ReporteAplicacionWrapper() {
         <div className="inline-flex items-center justify-center w-20 h-20 bg-red-100 rounded-2xl mb-4">
           <span className="text-3xl">⚠️</span>
         </div>
-        <h2 className="text-2xl text-[#172E08] mb-2">Error</h2>
-        <p className="text-[#4D240F]/70 mb-4">
+        <h2 className="text-2xl text-foreground mb-2">Error</h2>
+        <p className="text-brand-brown/70 mb-4">
           {error || 'No se pudo cargar la aplicación'}
         </p>
         <button
           onClick={handleClose}
-          className="px-6 py-2 bg-[#73991C] hover:bg-[#5f7a17] text-white rounded-xl transition-colors"
+          className="px-6 py-2 bg-primary hover:bg-primary-dark text-white rounded-xl transition-colors"
         >
           Volver a Aplicaciones
         </button>

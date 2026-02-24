@@ -600,15 +600,15 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-[#73991C]/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+    <div className="bg-white rounded-2xl border border-primary/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-[#73991C]/10 rounded-xl flex items-center justify-center">
-            <Plus className="w-6 h-6 text-[#73991C]" />
+          <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
+            <Plus className="w-6 h-6 text-primary" />
           </div>
           <div>
-            <h3 className="text-lg text-[#172E08]">Nuevo Movimiento Diario</h3>
-            <p className="text-sm text-[#4D240F]/60">
+            <h3 className="text-lg text-foreground">Nuevo Movimiento Diario</h3>
+            <p className="text-sm text-brand-brown/60">
               {aplicacion.tipo_aplicacion === 'Fertilización'
                 ? 'Registra bultos totales y bultos aplicados de cada producto'
                 : 'Registra canecas totales y canecas aplicadas de cada producto'
@@ -632,8 +632,8 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Fecha */}
         <div>
-          <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-[#73991C]" />
+          <label className="block text-sm text-foreground mb-2 flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-primary" />
             Fecha del Movimiento
             <span className="text-red-500">*</span>
           </label>
@@ -643,14 +643,14 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
             onChange={(e) => setFechaMovimiento(e.target.value)}
             max={obtenerFechaHoy()}
             disabled={loading}
-            className="w-full px-4 py-3 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-4 py-3 border border-primary/20 rounded-xl bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
           />
         </div>
 
         {/* Lote */}
         <div>
-          <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
-            <Package className="w-4 h-4 text-[#73991C]" />
+          <label className="block text-sm text-foreground mb-2 flex items-center gap-2">
+            <Package className="w-4 h-4 text-primary" />
             Lote Aplicado
             <span className="text-red-500">*</span>
           </label>
@@ -658,7 +658,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
             value={loteId}
             onChange={(e) => setLoteId(e.target.value)}
             disabled={loading}
-            className="w-full px-4 py-3 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-4 py-3 border border-primary/20 rounded-xl bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <option value="">Selecciona un lote</option>
             {lotes.map(lote => (
@@ -671,15 +671,15 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
 
         {/* 🆕 NUEVO: Equipo de Aplicación */}
         <div>
-          <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
-            <Droplet className="w-4 h-4 text-[#73991C]" />
+          <label className="block text-sm text-foreground mb-2 flex items-center gap-2">
+            <Droplet className="w-4 h-4 text-primary" />
             Equipo de Aplicación
           </label>
           <select
             value={equipoAplicacion}
             onChange={(e) => setEquipoAplicacion(e.target.value)}
             disabled={loading}
-            className="w-full px-4 py-3 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-4 py-3 border border-primary/20 rounded-xl bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <option value="">Selecciona el equipo (opcional)</option>
             <option value="Bomba espalda">🎒 Bomba espalda</option>
@@ -689,9 +689,9 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         </div>
 
         {/* Worker Selection (Employees + Contractors) */}
-        <div className="border-t border-[#73991C]/10 pt-6">
-          <h4 className="text-sm text-[#172E08] mb-4 flex items-center gap-2">
-            <User className="w-4 h-4 text-[#73991C]" />
+        <div className="border-t border-primary/10 pt-6">
+          <h4 className="text-sm text-foreground mb-4 flex items-center gap-2">
+            <User className="w-4 h-4 text-primary" />
             Selección de Personal
           </h4>
 
@@ -741,8 +741,8 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         {/* 🆕 NUEVO: Horario de Trabajo */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-[#73991C]" />
+            <label className="block text-sm text-foreground mb-2 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-primary" />
               Hora de Inicio
             </label>
             <input
@@ -750,12 +750,12 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
               value={horaInicio}
               onChange={(e) => setHoraInicio(e.target.value)}
               disabled={loading}
-              className="w-full px-4 py-3 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-4 py-3 border border-primary/20 rounded-xl bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
             />
           </div>
           <div>
-            <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-[#73991C]" />
+            <label className="block text-sm text-foreground mb-2 flex items-center gap-2">
+              <Clock className="w-4 h-4 text-primary" />
               Hora de Fin
             </label>
             <input
@@ -763,7 +763,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
               value={horaFin}
               onChange={(e) => setHoraFin(e.target.value)}
               disabled={loading}
-              className="w-full px-4 py-3 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-4 py-3 border border-primary/20 rounded-xl bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
             />
           </div>
         </div>
@@ -771,8 +771,8 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         {/* Número de Canecas - PARA FUMIGACIÓN Y DRENCH */}
         {(aplicacion.tipo_aplicacion === 'Fumigación' || aplicacion.tipo_aplicacion === 'Drench') && (
           <div>
-            <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
-              <Droplet className="w-4 h-4 text-[#73991C]" />
+            <label className="block text-sm text-foreground mb-2 flex items-center gap-2">
+              <Droplet className="w-4 h-4 text-primary" />
               Número TOTAL de Canecas Aplicadas
               <span className="text-red-500">*</span>
             </label>
@@ -785,15 +785,15 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
                 step="any"
                 min="0"
                 disabled={loading}
-                className="flex-1 bg-white border-[#73991C]/20 focus:border-[#73991C] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 bg-white border-primary/20 focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
               />
-              <div className="px-4 py-3 bg-[#E7EDDD] border border-[#73991C]/20 rounded-xl text-[#172E08] min-w-[120px] flex items-center justify-center">
+              <div className="px-4 py-3 bg-muted border border-primary/20 rounded-xl text-foreground min-w-[120px] flex items-center justify-center">
                 canecas
               </div>
             </div>
             {loteId && canecasPorLote[loteId] && (
-              <div className="mt-2 p-3 bg-[#73991C]/5 border border-[#73991C]/20 rounded-lg">
-                <p className="text-xs text-[#4D240F]/70">
+              <div className="mt-2 p-3 bg-primary/5 border border-primary/20 rounded-lg">
+                <p className="text-xs text-brand-brown/70">
                   📊 <strong>Planeado:</strong> {canecasPorLote[loteId]} canecas para este lote
                 </p>
               </div>
@@ -804,8 +804,8 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         {/* Número de Bultos - SOLO PARA FERTILIZACIÓN */}
         {aplicacion.tipo_aplicacion === 'Fertilización' && (
           <div>
-            <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
-              <Package className="w-4 h-4 text-[#73991C]" />
+            <label className="block text-sm text-foreground mb-2 flex items-center gap-2">
+              <Package className="w-4 h-4 text-primary" />
               Número TOTAL de Bultos Usados
               <span className="text-red-500">*</span>
             </label>
@@ -818,15 +818,15 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
                 step="1"
                 min="0"
                 disabled={loading}
-                className="flex-1 bg-white border-[#73991C]/20 focus:border-[#73991C] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 bg-white border-primary/20 focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
               />
-              <div className="px-4 py-3 bg-[#E7EDDD] border border-[#73991C]/20 rounded-xl text-[#172E08] min-w-[120px] flex items-center justify-center">
+              <div className="px-4 py-3 bg-muted border border-primary/20 rounded-xl text-foreground min-w-[120px] flex items-center justify-center">
                 bultos
               </div>
             </div>
             {loteId && bultosPorLote[loteId] && (
-              <div className="mt-2 p-3 bg-[#73991C]/5 border border-[#73991C]/20 rounded-lg">
-                <p className="text-xs text-[#4D240F]/70">
+              <div className="mt-2 p-3 bg-primary/5 border border-primary/20 rounded-lg">
+                <p className="text-xs text-brand-brown/70">
                   📊 <strong>Planeado:</strong> {bultosPorLote[loteId]} bultos para este lote
                 </p>
               </div>
@@ -835,9 +835,9 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         )}
 
         {/* Productos Utilizados */}
-        <div className="border-t border-[#73991C]/10 pt-6">
-          <h4 className="text-sm text-[#172E08] mb-4 flex items-center gap-2">
-            <Package className="w-4 h-4 text-[#73991C]" />
+        <div className="border-t border-primary/10 pt-6">
+          <h4 className="text-sm text-foreground mb-4 flex items-center gap-2">
+            <Package className="w-4 h-4 text-primary" />
             {aplicacion.tipo_aplicacion === 'Fertilización'
               ? 'Bultos Usados de cada Producto'
               : 'Cantidad aplicada de cada producto'
@@ -851,13 +851,13 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
               {productosAgregados.map((producto, index) => (
                 <div
                   key={index}
-                  className="bg-[#F8FAF5] border border-[#73991C]/20 rounded-xl p-4 flex items-center gap-4"
+                  className="bg-background border border-primary/20 rounded-xl p-4 flex items-center gap-4"
                 >
                   <div className="flex-1">
-                    <p className="text-sm text-[#172E08] mb-1">
+                    <p className="text-sm text-foreground mb-1">
                       {producto.producto_nombre}
                     </p>
-                    <p className="text-xs text-[#4D240F]/60">
+                    <p className="text-xs text-brand-brown/60">
                       {producto.producto_categoria}
                     </p>
                   </div>
@@ -871,16 +871,16 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
                       step="0.01"
                       min="0"
                       disabled={loading}
-                      className="w-32 bg-white border-[#73991C]/20 focus:border-[#73991C] disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-32 bg-white border-primary/20 focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                     
                     {/* Unidad estática desde BD (no editable) */}
                     {aplicacion.tipo_aplicacion === 'Fertilización' ? (
-                      <div className="px-4 py-2 bg-[#E7EDDD] border border-[#73991C]/20 rounded-lg text-[#172E08] text-sm min-w-[80px] flex items-center justify-center">
+                      <div className="px-4 py-2 bg-muted border border-primary/20 rounded-lg text-foreground text-sm min-w-[80px] flex items-center justify-center">
                         bultos
                       </div>
                     ) : (
-                      <div className="px-4 py-2 bg-[#E7EDDD] border border-[#73991C]/20 rounded-lg text-[#172E08] text-sm min-w-[80px] flex items-center justify-center">
+                      <div className="px-4 py-2 bg-muted border border-primary/20 rounded-lg text-foreground text-sm min-w-[80px] flex items-center justify-center">
                         {producto.unidad_producto}
                       </div>
                     )}
@@ -900,9 +900,9 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
               ))}
             </div>
           ) : (
-            <div className="p-8 text-center border-2 border-dashed border-[#73991C]/20 rounded-xl">
-              <Package className="w-12 h-12 text-[#73991C]/30 mx-auto mb-3" />
-              <p className="text-sm text-[#4D240F]/50">
+            <div className="p-8 text-center border-2 border-dashed border-primary/20 rounded-xl">
+              <Package className="w-12 h-12 text-primary/30 mx-auto mb-3" />
+              <p className="text-sm text-brand-brown/50">
                 Cargando productos...
               </p>
             </div>
@@ -911,8 +911,8 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
 
         {/* Responsable */}
         <div>
-          <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
-            <User className="w-4 h-4 text-[#73991C]" />
+          <label className="block text-sm text-foreground mb-2 flex items-center gap-2">
+            <User className="w-4 h-4 text-primary" />
             Responsable
             <span className="text-red-500">*</span>
           </label>
@@ -922,21 +922,21 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
             onChange={(e) => setResponsable(e.target.value)}
             placeholder="Nombre del responsable"
             disabled={loading}
-            className="bg-white border-[#73991C]/20 focus:border-[#73991C] disabled:opacity-50 disabled:cursor-not-allowed"
+            className="bg-white border-primary/20 focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
           />
         </div>
 
         {/* Condiciones Meteorológicas */}
         <div>
-          <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
-            <Cloud className="w-4 h-4 text-[#73991C]" />
+          <label className="block text-sm text-foreground mb-2 flex items-center gap-2">
+            <Cloud className="w-4 h-4 text-primary" />
             Condiciones Meteorológicas
           </label>
           <select
             value={condicionesMeteorologicas}
             onChange={(e) => setCondicionesMeteorologicas(e.target.value)}
             disabled={loading}
-            className="w-full px-4 py-3 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-4 py-3 border border-primary/20 rounded-xl bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <option value="">Selecciona las condiciones (opcional)</option>
             <option value="soleadas">☀️ Soleadas</option>
@@ -948,8 +948,8 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
 
         {/* Notas */}
         <div>
-          <label className="block text-sm text-[#172E08] mb-2 flex items-center gap-2">
-            <FileText className="w-4 h-4 text-[#73991C]" />
+          <label className="block text-sm text-foreground mb-2 flex items-center gap-2">
+            <FileText className="w-4 h-4 text-primary" />
             Notas (Opcional)
           </label>
           <textarea
@@ -958,18 +958,18 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
             placeholder="Observaciones adicionales..."
             rows={3}
             disabled={loading}
-            className="w-full px-4 py-3 border border-[#73991C]/20 rounded-xl bg-white text-[#172E08] focus:outline-none focus:ring-2 focus:ring-[#73991C] focus:border-transparent resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-4 py-3 border border-primary/20 rounded-xl bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none disabled:opacity-50 disabled:cursor-not-allowed"
           />
         </div>
 
         {/* Botones */}
-        <div className="flex items-center gap-3 pt-4 border-t border-[#73991C]/10">
+        <div className="flex items-center gap-3 pt-4 border-t border-primary/10">
           <Button
             type="button"
             onClick={onCancel}
             disabled={loading}
             variant="outline"
-            className="flex-1 border-[#73991C]/20 hover:bg-[#73991C]/5 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 border-primary/20 hover:bg-primary/5 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <X className="w-4 h-4 mr-2" />
             Cancelar
@@ -977,7 +977,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
           <Button
             type="submit"
             disabled={loading}
-            className="flex-1 bg-[#73991C] hover:bg-[#5f7d17] text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 bg-primary hover:bg-primary-dark text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? (
               <>
@@ -995,9 +995,9 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       </form>
 
       {/* Info de movimiento provisional */}
-      <div className="mt-6 p-4 bg-[#73991C]/5 border border-[#73991C]/20 rounded-xl">
-        <p className="text-xs text-[#4D240F]/70 flex items-start gap-2">
-          <span className="text-[#73991C] mt-0.5">ℹ️</span>
+      <div className="mt-6 p-4 bg-primary/5 border border-primary/20 rounded-xl">
+        <p className="text-xs text-brand-brown/70 flex items-start gap-2">
+          <span className="text-primary mt-0.5">ℹ️</span>
           <span>
             Este es un movimiento <strong>provisional</strong> que no afecta el inventario inmediatamente.
             {aplicacion.tipo_aplicacion === 'Fertilización' 

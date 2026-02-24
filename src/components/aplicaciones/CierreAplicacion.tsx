@@ -604,7 +604,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
               saldo_nuevo: saldoNuevo,
               valor_movimiento: cantidad * (producto.precio_unitario || 0),
               responsable: user?.email,
-              observaciones: `Cierre de aplicación: ${aplicacion.nombre}`,
+              observaciones: `Cierre de aplicación: ${aplicacion.nombre_aplicacion}`,
               provisional: false
             });
 
@@ -659,10 +659,10 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* HEADER */}
-        <div className="bg-gradient-to-r from-[#73991C] to-[#BFD97D] px-6 py-4 text-white flex items-center justify-between">
+        <div className="bg-gradient-to-r from-primary to-secondary px-6 py-4 text-white flex items-center justify-between">
           <div>
             <h2 className="text-xl">Cerrar Aplicación</h2>
-            <p className="text-sm text-white/90 mt-1">{aplicacion.nombre}</p>
+            <p className="text-sm text-white/90 mt-1">{aplicacion.nombre_aplicacion}</p>
           </div>
           <button
             onClick={onClose}
@@ -675,8 +675,8 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
         {/* STEPPER */}
         <div className="bg-gray-50 px-6 py-3 border-b border-gray-200">
           <div className="flex items-center justify-center gap-2">
-            <div className={`flex items-center gap-2 ${paso === 'revision' ? 'text-[#73991C]' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${paso === 'revision' ? 'bg-[#73991C] text-white' : 'bg-gray-200'}`}>
+            <div className={`flex items-center gap-2 ${paso === 'revision' ? 'text-primary' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${paso === 'revision' ? 'bg-primary text-white' : 'bg-gray-200'}`}>
                 1
               </div>
               <span className="text-sm hidden sm:inline">Insumos</span>
@@ -684,8 +684,8 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
 
             <ChevronRight className="w-4 h-4 text-gray-400" />
 
-            <div className={`flex items-center gap-2 ${paso === 'datos-finales' ? 'text-[#73991C]' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${paso === 'datos-finales' ? 'bg-[#73991C] text-white' : 'bg-gray-200'}`}>
+            <div className={`flex items-center gap-2 ${paso === 'datos-finales' ? 'text-primary' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${paso === 'datos-finales' ? 'bg-primary text-white' : 'bg-gray-200'}`}>
                 2
               </div>
               <span className="text-sm hidden sm:inline">Labores</span>
@@ -693,8 +693,8 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
 
             <ChevronRight className="w-4 h-4 text-gray-400" />
 
-            <div className={`flex items-center gap-2 ${paso === 'confirmacion' ? 'text-[#73991C]' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${paso === 'confirmacion' ? 'bg-[#73991C] text-white' : 'bg-gray-200'}`}>
+            <div className={`flex items-center gap-2 ${paso === 'confirmacion' ? 'text-primary' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${paso === 'confirmacion' ? 'bg-primary text-white' : 'bg-gray-200'}`}>
                 3
               </div>
               <span className="text-sm hidden sm:inline">Confirmación</span>
@@ -706,7 +706,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
         <div className="flex-1 overflow-y-auto p-6">
           {loading ? (
             <div className="flex items-center justify-center h-64">
-              <div className="w-12 h-12 border-4 border-[#73991C]/30 border-t-[#73991C] rounded-full animate-spin" />
+              <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
             </div>
           ) : error ? (
             <div className="bg-red-50 border-2 border-red-200 text-red-700 px-6 py-4 rounded-xl">
@@ -721,29 +721,29 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
               {paso === 'revision' && (
                 <div className="space-y-6">
                   <div>
-                    <h3 className="text-lg text-[#172E08] mb-4">Resumen de la Aplicación</h3>
+                    <h3 className="text-lg text-foreground mb-4">Resumen de la Aplicación</h3>
 
                     {/* Información General */}
-                    <div className="bg-gradient-to-br from-[#73991C]/5 to-[#BFD97D]/5 border border-[#73991C]/20 rounded-xl p-5 mb-4">
+                    <div className="bg-gradient-to-br from-primary/5 to-secondary/5 border border-primary/20 rounded-xl p-5 mb-4">
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
-                          <p className="text-xs text-[#4D240F]/70 mb-1">Tipo</p>
-                          <p className="text-sm text-[#172E08] font-medium">
+                          <p className="text-xs text-brand-brown/70 mb-1">Tipo</p>
+                          <p className="text-sm text-foreground font-medium">
                             {aplicacion.tipo_aplicacion === 'Fumigación' ? 'Fumigación' :
                              aplicacion.tipo_aplicacion === 'Fertilización' ? 'Fertilización' : 'Drench'}
                           </p>
                         </div>
                         <div>
-                          <p className="text-xs text-[#4D240F]/70 mb-1">Lotes</p>
-                          <p className="text-sm text-[#172E08] font-medium">{lotes.length} lotes</p>
+                          <p className="text-xs text-brand-brown/70 mb-1">Lotes</p>
+                          <p className="text-sm text-foreground font-medium">{lotes.length} lotes</p>
                         </div>
                         <div>
-                          <p className="text-xs text-[#4D240F]/70 mb-1">Total Árboles</p>
-                          <p className="text-sm text-[#172E08] font-medium">{totalArboles.toLocaleString()}</p>
+                          <p className="text-xs text-brand-brown/70 mb-1">Total Árboles</p>
+                          <p className="text-sm text-foreground font-medium">{totalArboles.toLocaleString()}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-[#4D240F]/70 mb-1">Propósito</p>
-                          <p className="text-sm text-[#172E08] font-medium truncate">{aplicacion.proposito || 'No especificado'}</p>
+                          <p className="text-xs text-brand-brown/70 mb-1">Propósito</p>
+                          <p className="text-sm text-foreground font-medium truncate">{aplicacion.proposito || 'No especificado'}</p>
                         </div>
                       </div>
                     </div>
@@ -751,23 +751,23 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                     {/* Tabla de Insumos */}
                     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
                       <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                        <h4 className="text-sm text-[#172E08] font-medium">Insumos Utilizados</h4>
+                        <h4 className="text-sm text-foreground font-medium">Insumos Utilizados</h4>
                       </div>
 
                       {resumenInsumos.length === 0 ? (
                         <div className="p-8 text-center">
-                          <p className="text-sm text-[#4D240F]/70">No hay insumos registrados</p>
+                          <p className="text-sm text-brand-brown/70">No hay insumos registrados</p>
                         </div>
                       ) : (
                         <div className="overflow-x-auto">
                           <table className="w-full">
                             <thead className="bg-gray-50">
                               <tr>
-                                <th className="px-4 py-3 text-left text-xs text-[#4D240F]/70">Producto</th>
-                                <th className="px-4 py-3 text-right text-xs text-[#4D240F]/70">Planeado</th>
-                                <th className="px-4 py-3 text-right text-xs text-[#4D240F]/70">Aplicado</th>
-                                <th className="px-4 py-3 text-right text-xs text-[#4D240F]/70">Diferencia</th>
-                                <th className="px-4 py-3 text-center text-xs text-[#4D240F]/70">Estado</th>
+                                <th className="px-4 py-3 text-left text-xs text-brand-brown/70">Producto</th>
+                                <th className="px-4 py-3 text-right text-xs text-brand-brown/70">Planeado</th>
+                                <th className="px-4 py-3 text-right text-xs text-brand-brown/70">Aplicado</th>
+                                <th className="px-4 py-3 text-right text-xs text-brand-brown/70">Diferencia</th>
+                                <th className="px-4 py-3 text-center text-xs text-brand-brown/70">Estado</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -777,13 +777,13 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
 
                                 return (
                                   <tr key={index} className="hover:bg-gray-50 transition-colors">
-                                    <td className="px-4 py-3 text-sm text-[#172E08]">
+                                    <td className="px-4 py-3 text-sm text-foreground">
                                       {insumo.nombre}
                                     </td>
-                                    <td className="px-4 py-3 text-sm text-[#4D240F]/70 text-right">
+                                    <td className="px-4 py-3 text-sm text-brand-brown/70 text-right">
                                       {insumo.planeado.toFixed(2)} {insumo.unidad}
                                     </td>
-                                    <td className="px-4 py-3 text-sm text-[#172E08] font-medium text-right">
+                                    <td className="px-4 py-3 text-sm text-foreground font-medium text-right">
                                       {insumo.aplicado.toFixed(2)} {insumo.unidad}
                                     </td>
                                     <td className={`px-4 py-3 text-sm text-right ${
@@ -813,20 +813,20 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                     {aplicacion.tipo_aplicacion === 'Fumigación' && (
                       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mt-4">
                         <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                          <h4 className="text-sm text-[#172E08] font-medium">Control de Canecas</h4>
+                          <h4 className="text-sm text-foreground font-medium">Control de Canecas</h4>
                         </div>
                         <div className="p-4">
                           <div className="grid grid-cols-3 gap-4">
                             <div className="text-center">
-                              <p className="text-xs text-[#4D240F]/70 mb-1">Planeadas</p>
-                              <p className="text-2xl text-[#172E08] font-semibold">{canecasPlaneadas}</p>
+                              <p className="text-xs text-brand-brown/70 mb-1">Planeadas</p>
+                              <p className="text-2xl text-foreground font-semibold">{canecasPlaneadas}</p>
                             </div>
                             <div className="text-center">
-                              <p className="text-xs text-[#4D240F]/70 mb-1">Aplicadas</p>
-                              <p className="text-2xl text-[#73991C] font-semibold">{canecasAplicadas}</p>
+                              <p className="text-xs text-brand-brown/70 mb-1">Aplicadas</p>
+                              <p className="text-2xl text-primary font-semibold">{canecasAplicadas}</p>
                             </div>
                             <div className="text-center">
-                              <p className="text-xs text-[#4D240F]/70 mb-1">Diferencia</p>
+                              <p className="text-xs text-brand-brown/70 mb-1">Diferencia</p>
                               <p className={`text-2xl font-semibold ${
                                 canecasAplicadas - canecasPlaneadas > 0 ? 'text-orange-600' :
                                 canecasAplicadas - canecasPlaneadas < 0 ? 'text-blue-600' : 'text-gray-600'
@@ -849,34 +849,34 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
               {paso === 'datos-finales' && (
                 <div className="space-y-6">
                   <div>
-                    <h3 className="text-lg text-[#172E08] mb-2">Revisión de Labores</h3>
-                    <p className="text-sm text-[#4D240F]/70 mb-4">
+                    <h3 className="text-lg text-foreground mb-2">Revisión de Labores</h3>
+                    <p className="text-sm text-brand-brown/70 mb-4">
                       Revisa los jornales registrados durante la ejecución. Puedes editar o agregar registros faltantes.
                     </p>
 
                     {/* Tarjetas resumen */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                      <div className="bg-[#73991C]/5 border border-[#73991C]/20 rounded-xl p-4 text-center">
-                        <Users className="w-5 h-5 text-[#73991C] mx-auto mb-1" />
-                        <p className="text-2xl text-[#172E08] font-bold">{totalJornales.toFixed(1)}</p>
-                        <p className="text-xs text-[#4D240F]/70">Jornales</p>
+                      <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-center">
+                        <Users className="w-5 h-5 text-primary mx-auto mb-1" />
+                        <p className="text-2xl text-foreground font-bold">{totalJornales.toFixed(1)}</p>
+                        <p className="text-xs text-brand-brown/70">Jornales</p>
                       </div>
-                      <div className="bg-[#73991C]/5 border border-[#73991C]/20 rounded-xl p-4 text-center">
-                        <p className="text-2xl text-[#172E08] font-bold">{formatearMoneda(costoManoObra)}</p>
-                        <p className="text-xs text-[#4D240F]/70">Costo Mano de Obra</p>
+                      <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-center">
+                        <p className="text-2xl text-foreground font-bold">{formatearMoneda(costoManoObra)}</p>
+                        <p className="text-xs text-brand-brown/70">Costo Mano de Obra</p>
                       </div>
-                      <div className="bg-[#73991C]/5 border border-[#73991C]/20 rounded-xl p-4 text-center">
-                        <p className="text-2xl text-[#172E08] font-bold">
+                      <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-center">
+                        <p className="text-2xl text-foreground font-bold">
                           {new Set(registrosActivos.map(r => r.empleado_id || r.contratista_id)).size}
                         </p>
-                        <p className="text-xs text-[#4D240F]/70">Trabajadores</p>
+                        <p className="text-xs text-brand-brown/70">Trabajadores</p>
                       </div>
-                      <div className="bg-[#73991C]/5 border border-[#73991C]/20 rounded-xl p-4 text-center">
-                        <Calendar className="w-5 h-5 text-[#73991C] mx-auto mb-1" />
-                        <p className="text-2xl text-[#172E08] font-bold">
+                      <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-center">
+                        <Calendar className="w-5 h-5 text-primary mx-auto mb-1" />
+                        <p className="text-2xl text-foreground font-bold">
                           {new Set(registrosActivos.map(r => r.fecha_trabajo)).size}
                         </p>
-                        <p className="text-xs text-[#4D240F]/70">Días trabajados</p>
+                        <p className="text-xs text-brand-brown/70">Días trabajados</p>
                       </div>
                     </div>
 
@@ -932,14 +932,14 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                               >
                                 <div className="flex items-center gap-3">
                                   <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                                  <span className="text-sm text-[#172E08] font-medium">{lote_nombre}</span>
-                                  <span className="text-xs text-[#4D240F]/60">
+                                  <span className="text-sm text-foreground font-medium">{lote_nombre}</span>
+                                  <span className="text-xs text-brand-brown/60">
                                     {lotes.find(l => l.lote_id === loteId)?.arboles.toLocaleString()} árboles
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-4">
-                                  <span className="text-sm text-[#172E08] font-medium">{totalLote.toFixed(1)} jornales</span>
-                                  <span className="text-sm text-[#73991C] font-semibold">{formatearMoneda(costoLote)}</span>
+                                  <span className="text-sm text-foreground font-medium">{totalLote.toFixed(1)} jornales</span>
+                                  <span className="text-sm text-primary font-semibold">{formatearMoneda(costoLote)}</span>
                                 </div>
                               </button>
 
@@ -949,12 +949,12 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                                   <table className="w-full">
                                     <thead className="bg-gray-50/50">
                                       <tr>
-                                        <th className="px-4 py-2 text-left text-xs text-[#4D240F]/70">Fecha</th>
-                                        <th className="px-4 py-2 text-left text-xs text-[#4D240F]/70">Trabajador</th>
-                                        <th className="px-4 py-2 text-center text-xs text-[#4D240F]/70">Tipo</th>
-                                        <th className="px-4 py-2 text-center text-xs text-[#4D240F]/70">Fracción</th>
-                                        <th className="px-4 py-2 text-right text-xs text-[#4D240F]/70">Costo</th>
-                                        <th className="px-4 py-2 text-center text-xs text-[#4D240F]/70 w-20">Acciones</th>
+                                        <th className="px-4 py-2 text-left text-xs text-brand-brown/70">Fecha</th>
+                                        <th className="px-4 py-2 text-left text-xs text-brand-brown/70">Trabajador</th>
+                                        <th className="px-4 py-2 text-center text-xs text-brand-brown/70">Tipo</th>
+                                        <th className="px-4 py-2 text-center text-xs text-brand-brown/70">Fracción</th>
+                                        <th className="px-4 py-2 text-right text-xs text-brand-brown/70">Costo</th>
+                                        <th className="px-4 py-2 text-center text-xs text-brand-brown/70 w-20">Acciones</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100">
@@ -962,10 +962,10 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                                         const regKey = reg.id || `new-${reg._index}`;
                                         return (
                                           <tr key={regKey} className={`hover:bg-gray-50 transition-colors ${reg._isNew ? 'bg-green-50/30' : ''}`}>
-                                            <td className="px-4 py-2 text-sm text-[#172E08]">
+                                            <td className="px-4 py-2 text-sm text-foreground">
                                               {formatearFecha(reg.fecha_trabajo)}
                                             </td>
-                                            <td className="px-4 py-2 text-sm text-[#172E08]">
+                                            <td className="px-4 py-2 text-sm text-foreground">
                                               {reg.trabajador_nombre}
                                             </td>
                                             <td className="px-4 py-2 text-center">
@@ -984,7 +984,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                                                   value={reg.fraccion_jornal}
                                                   onChange={(e) => editarFraccion(regKey, parseFloat(e.target.value))}
                                                   onBlur={() => setEditandoRegistro(null)}
-                                                  className="w-20 px-1 py-0.5 text-center border border-[#73991C] rounded text-sm"
+                                                  className="w-20 px-1 py-0.5 text-center border border-primary rounded text-sm"
                                                 >
                                                   {FRACCION_OPTIONS.map(f => (
                                                     <option key={f} value={f}>{f}</option>
@@ -993,14 +993,14 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                                               ) : (
                                                 <button
                                                   onClick={() => setEditandoRegistro(regKey)}
-                                                  className="text-sm text-[#172E08] font-medium hover:text-[#73991C] transition-colors cursor-pointer"
+                                                  className="text-sm text-foreground font-medium hover:text-primary transition-colors cursor-pointer"
                                                   title="Clic para editar"
                                                 >
                                                   {reg.fraccion_jornal}
                                                 </button>
                                               )}
                                             </td>
-                                            <td className="px-4 py-2 text-sm text-right text-[#172E08]">
+                                            <td className="px-4 py-2 text-sm text-right text-foreground">
                                               {formatearMoneda(reg.costo_jornal)}
                                               {reg.costo_jornal === 0 && (
                                                 <AlertTriangle className="w-3 h-3 text-yellow-500 inline ml-1" />
@@ -1010,7 +1010,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                                               <div className="flex items-center justify-center gap-1">
                                                 <button
                                                   onClick={() => setEditandoRegistro(regKey)}
-                                                  className="p-1 text-gray-400 hover:text-[#73991C] transition-colors"
+                                                  className="p-1 text-gray-400 hover:text-primary transition-colors"
                                                   title="Editar fracción"
                                                 >
                                                   <Edit3 className="w-3.5 h-3.5" />
@@ -1041,17 +1041,17 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                     {!mostrarAgregarRegistro ? (
                       <button
                         onClick={() => { setMostrarAgregarRegistro(true); cargarTrabajadores(); }}
-                        className="w-full py-3 border-2 border-dashed border-[#73991C]/30 text-[#73991C] rounded-xl hover:bg-[#73991C]/5 transition-colors flex items-center justify-center gap-2 text-sm"
+                        className="w-full py-3 border-2 border-dashed border-primary/30 text-primary rounded-xl hover:bg-primary/5 transition-colors flex items-center justify-center gap-2 text-sm"
                       >
                         <Plus className="w-4 h-4" />
                         Agregar registro de trabajo faltante
                       </button>
                     ) : (
-                      <div className="bg-white border-2 border-[#73991C]/30 rounded-xl p-4">
-                        <h4 className="text-sm text-[#172E08] font-medium mb-3">Nuevo Registro de Trabajo</h4>
+                      <div className="bg-white border-2 border-primary/30 rounded-xl p-4">
+                        <h4 className="text-sm text-foreground font-medium mb-3">Nuevo Registro de Trabajo</h4>
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                           <div>
-                            <label className="block text-xs text-[#4D240F]/70 mb-1">Trabajador</label>
+                            <label className="block text-xs text-brand-brown/70 mb-1">Trabajador</label>
                             <select
                               value={nuevoRegistro.trabajador_id}
                               onChange={(e) => {
@@ -1062,7 +1062,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                                   trabajador_tipo: t?.tipo || 'empleado',
                                 }));
                               }}
-                              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+                              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
                             >
                               <option value="">Seleccionar...</option>
                               <optgroup label="Empleados">
@@ -1078,11 +1078,11 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                             </select>
                           </div>
                           <div>
-                            <label className="block text-xs text-[#4D240F]/70 mb-1">Lote</label>
+                            <label className="block text-xs text-brand-brown/70 mb-1">Lote</label>
                             <select
                               value={nuevoRegistro.lote_id}
                               onChange={(e) => setNuevoRegistro(prev => ({ ...prev, lote_id: e.target.value }))}
-                              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+                              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
                             >
                               <option value="">Seleccionar...</option>
                               {lotes.map(l => (
@@ -1091,20 +1091,20 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                             </select>
                           </div>
                           <div>
-                            <label className="block text-xs text-[#4D240F]/70 mb-1">Fecha</label>
+                            <label className="block text-xs text-brand-brown/70 mb-1">Fecha</label>
                             <input
                               type="date"
                               value={nuevoRegistro.fecha_trabajo}
                               onChange={(e) => setNuevoRegistro(prev => ({ ...prev, fecha_trabajo: e.target.value }))}
-                              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+                              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
                             />
                           </div>
                           <div>
-                            <label className="block text-xs text-[#4D240F]/70 mb-1">Fracción</label>
+                            <label className="block text-xs text-brand-brown/70 mb-1">Fracción</label>
                             <select
                               value={nuevoRegistro.fraccion_jornal}
                               onChange={(e) => setNuevoRegistro(prev => ({ ...prev, fraccion_jornal: parseFloat(e.target.value) }))}
-                              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+                              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
                             >
                               {FRACCION_OPTIONS.map(f => (
                                 <option key={f} value={f}>{f}</option>
@@ -1115,13 +1115,13 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                             <button
                               onClick={agregarRegistro}
                               disabled={!nuevoRegistro.trabajador_id || !nuevoRegistro.lote_id}
-                              className="px-4 py-1.5 bg-[#73991C] text-white rounded-lg text-sm hover:bg-[#5f7d17] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                              className="px-4 py-1.5 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                             >
                               Agregar
                             </button>
                             <button
                               onClick={() => setMostrarAgregarRegistro(false)}
-                              className="px-3 py-1.5 text-[#4D240F]/70 rounded-lg text-sm hover:bg-gray-100 transition-colors"
+                              className="px-3 py-1.5 text-brand-brown/70 rounded-lg text-sm hover:bg-gray-100 transition-colors"
                             >
                               Cancelar
                             </button>
@@ -1133,7 +1133,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                     {/* Fechas y Observaciones */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
                       <div>
-                        <label className="block text-sm text-[#4D240F]/70 mb-2">
+                        <label className="block text-sm text-brand-brown/70 mb-2">
                           Fecha Inicio Real
                         </label>
                         <input
@@ -1142,12 +1142,12 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                           onChange={(e) =>
                             setDatosFinales({ ...datosFinales, fechaInicioReal: e.target.value })
                           }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
                         />
                       </div>
 
                       <div>
-                        <label className="block text-sm text-[#4D240F]/70 mb-2">
+                        <label className="block text-sm text-brand-brown/70 mb-2">
                           Fecha Fin Real
                         </label>
                         <input
@@ -1156,13 +1156,13 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                           onChange={(e) =>
                             setDatosFinales({ ...datosFinales, fechaFinReal: e.target.value })
                           }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
                         />
                       </div>
                     </div>
 
                     <div className="mt-4">
-                      <label className="block text-sm text-[#4D240F]/70 mb-2">
+                      <label className="block text-sm text-brand-brown/70 mb-2">
                         Observaciones de Cierre
                       </label>
                       <textarea
@@ -1171,36 +1171,36 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                         onChange={(e) =>
                           setDatosFinales({ ...datosFinales, observaciones: e.target.value })
                         }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#73991C]/20 focus:border-[#73991C]"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
                         placeholder="Describe cualquier incidencia, clima, rendimiento del personal, etc..."
                       />
                     </div>
 
                     {/* Resumen de Costos */}
-                    <div className="bg-gradient-to-br from-[#73991C]/5 to-[#BFD97D]/5 border border-[#73991C]/20 rounded-xl p-5 mt-6">
-                      <h4 className="text-sm text-[#172E08] font-medium mb-3">Resumen de Costos</h4>
+                    <div className="bg-gradient-to-br from-primary/5 to-secondary/5 border border-primary/20 rounded-xl p-5 mt-6">
+                      <h4 className="text-sm text-foreground font-medium mb-3">Resumen de Costos</h4>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
-                          <p className="text-xs text-[#4D240F]/70 mb-1">Insumos</p>
-                          <p className="text-lg text-[#172E08] font-semibold">
+                          <p className="text-xs text-brand-brown/70 mb-1">Insumos</p>
+                          <p className="text-lg text-foreground font-semibold">
                             {formatearMoneda(costoInsumos)}
                           </p>
                         </div>
                         <div>
-                          <p className="text-xs text-[#4D240F]/70 mb-1">Mano de Obra</p>
-                          <p className="text-lg text-[#172E08] font-semibold">
+                          <p className="text-xs text-brand-brown/70 mb-1">Mano de Obra</p>
+                          <p className="text-lg text-foreground font-semibold">
                             {formatearMoneda(costoManoObra)}
                           </p>
                         </div>
                         <div>
-                          <p className="text-xs text-[#4D240F]/70 mb-1">Total</p>
-                          <p className="text-lg text-[#73991C] font-bold">
+                          <p className="text-xs text-brand-brown/70 mb-1">Total</p>
+                          <p className="text-lg text-primary font-bold">
                             {formatearMoneda(costoTotal)}
                           </p>
                         </div>
                         <div>
-                          <p className="text-xs text-[#4D240F]/70 mb-1">Costo/Árbol</p>
-                          <p className="text-lg text-[#172E08] font-semibold">
+                          <p className="text-xs text-brand-brown/70 mb-1">Costo/Árbol</p>
+                          <p className="text-lg text-foreground font-semibold">
                             {formatearMoneda(costoPorArbol)}
                           </p>
                         </div>
@@ -1215,14 +1215,14 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
               {/* ========================================= */}
               {paso === 'confirmacion' && (
                 <div className="space-y-6">
-                  <div className="bg-gradient-to-br from-[#73991C]/5 to-[#BFD97D]/5 border-2 border-[#73991C]/30 rounded-xl p-6">
+                  <div className="bg-gradient-to-br from-primary/5 to-secondary/5 border-2 border-primary/30 rounded-xl p-6">
                     <div className="flex items-center gap-3 mb-4">
-                      <div className="w-12 h-12 bg-[#73991C] rounded-full flex items-center justify-center">
+                      <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center">
                         <Check className="w-6 h-6 text-white" />
                       </div>
                       <div>
-                        <h3 className="text-lg text-[#172E08]">Confirmar Cierre</h3>
-                        <p className="text-sm text-[#4D240F]/70">
+                        <h3 className="text-lg text-foreground">Confirmar Cierre</h3>
+                        <p className="text-sm text-brand-brown/70">
                           Revisa los datos antes de cerrar la aplicación
                         </p>
                       </div>
@@ -1232,55 +1232,55 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {/* Información General */}
                       <div>
-                        <h4 className="text-sm text-[#172E08] font-medium mb-3">Información General</h4>
+                        <h4 className="text-sm text-foreground font-medium mb-3">Información General</h4>
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between">
-                            <span className="text-[#4D240F]/70">Aplicación:</span>
-                            <span className="text-[#172E08] font-medium">{aplicacion.nombre}</span>
+                            <span className="text-brand-brown/70">Aplicación:</span>
+                            <span className="text-foreground font-medium">{aplicacion.nombre_aplicacion}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-[#4D240F]/70">Tipo:</span>
-                            <span className="text-[#172E08]">
+                            <span className="text-brand-brown/70">Tipo:</span>
+                            <span className="text-foreground">
                               {aplicacion.tipo_aplicacion === 'Fumigación' ? 'Fumigación' :
                                aplicacion.tipo_aplicacion === 'Fertilización' ? 'Fertilización' : 'Drench'}
                             </span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-[#4D240F]/70">Lotes:</span>
-                            <span className="text-[#172E08]">{lotes.length} lotes</span>
+                            <span className="text-brand-brown/70">Lotes:</span>
+                            <span className="text-foreground">{lotes.length} lotes</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-[#4D240F]/70">Árboles:</span>
-                            <span className="text-[#172E08]">{totalArboles.toLocaleString()}</span>
+                            <span className="text-brand-brown/70">Árboles:</span>
+                            <span className="text-foreground">{totalArboles.toLocaleString()}</span>
                           </div>
                         </div>
                       </div>
 
                       {/* Ejecución */}
                       <div>
-                        <h4 className="text-sm text-[#172E08] font-medium mb-3">Ejecución</h4>
+                        <h4 className="text-sm text-foreground font-medium mb-3">Ejecución</h4>
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between">
-                            <span className="text-[#4D240F]/70">Inicio:</span>
-                            <span className="text-[#172E08]">{formatearFecha(datosFinales.fechaInicioReal)}</span>
+                            <span className="text-brand-brown/70">Inicio:</span>
+                            <span className="text-foreground">{formatearFecha(datosFinales.fechaInicioReal)}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-[#4D240F]/70">Fin:</span>
-                            <span className="text-[#172E08]">{formatearFecha(datosFinales.fechaFinReal)}</span>
+                            <span className="text-brand-brown/70">Fin:</span>
+                            <span className="text-foreground">{formatearFecha(datosFinales.fechaFinReal)}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-[#4D240F]/70">Jornales registrados:</span>
-                            <span className="text-[#172E08] font-medium">{totalJornales.toFixed(1)}</span>
+                            <span className="text-brand-brown/70">Jornales registrados:</span>
+                            <span className="text-foreground font-medium">{totalJornales.toFixed(1)}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-[#4D240F]/70">Trabajadores:</span>
-                            <span className="text-[#172E08]">
+                            <span className="text-brand-brown/70">Trabajadores:</span>
+                            <span className="text-foreground">
                               {new Set(registrosActivos.map(r => r.empleado_id || r.contratista_id)).size}
                             </span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-[#4D240F]/70">Días trabajados:</span>
-                            <span className="text-[#172E08]">
+                            <span className="text-brand-brown/70">Días trabajados:</span>
+                            <span className="text-foreground">
                               {new Set(registrosActivos.map(r => r.fecha_trabajo)).size}
                             </span>
                           </div>
@@ -1289,29 +1289,29 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                     </div>
 
                     {/* Costos Totales */}
-                    <div className="mt-6 pt-6 border-t-2 border-[#73991C]/20">
+                    <div className="mt-6 pt-6 border-t-2 border-primary/20">
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div className="text-center">
-                          <p className="text-xs text-[#4D240F]/70 mb-1">Insumos</p>
-                          <p className="text-base text-[#172E08] font-semibold">
+                          <p className="text-xs text-brand-brown/70 mb-1">Insumos</p>
+                          <p className="text-base text-foreground font-semibold">
                             {formatearMoneda(costoInsumos)}
                           </p>
                         </div>
                         <div className="text-center">
-                          <p className="text-xs text-[#4D240F]/70 mb-1">Mano de Obra</p>
-                          <p className="text-base text-[#172E08] font-semibold">
+                          <p className="text-xs text-brand-brown/70 mb-1">Mano de Obra</p>
+                          <p className="text-base text-foreground font-semibold">
                             {formatearMoneda(costoManoObra)}
                           </p>
                         </div>
                         <div className="text-center">
-                          <p className="text-xs text-[#4D240F]/70 mb-1">Costo Total</p>
-                          <p className="text-lg text-[#73991C] font-bold">
+                          <p className="text-xs text-brand-brown/70 mb-1">Costo Total</p>
+                          <p className="text-lg text-primary font-bold">
                             {formatearMoneda(costoTotal)}
                           </p>
                         </div>
                         <div className="text-center">
-                          <p className="text-xs text-[#4D240F]/70 mb-1">Costo/Árbol</p>
-                          <p className="text-base text-[#172E08] font-semibold">
+                          <p className="text-xs text-brand-brown/70 mb-1">Costo/Árbol</p>
+                          <p className="text-base text-foreground font-semibold">
                             {formatearMoneda(costoPorArbol)}
                           </p>
                         </div>
@@ -1320,9 +1320,9 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
 
                     {/* Observaciones */}
                     {datosFinales.observaciones && (
-                      <div className="mt-6 pt-6 border-t-2 border-[#73991C]/20">
-                        <h4 className="text-sm text-[#172E08] font-medium mb-2">Observaciones</h4>
-                        <p className="text-sm text-[#4D240F]/70 italic">
+                      <div className="mt-6 pt-6 border-t-2 border-primary/20">
+                        <h4 className="text-sm text-foreground font-medium mb-2">Observaciones</h4>
+                        <p className="text-sm text-brand-brown/70 italic">
                           &ldquo;{datosFinales.observaciones}&rdquo;
                         </p>
                       </div>
@@ -1354,7 +1354,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                       });
 
                       generarPDFReporteCierre({
-                        nombre: aplicacion.nombre || aplicacion.nombre_aplicacion || '',
+                        nombre: aplicacion.nombre_aplicacion || '',
                         tipo_aplicacion: aplicacion.tipo_aplicacion || '',
                         proposito: aplicacion.proposito,
                         fecha_inicio_planeada: aplicacion.fecha_inicio_planeada,
@@ -1393,7 +1393,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                         observaciones_cierre: datosFinales.observaciones || undefined,
                       });
                     }}
-                    className="w-full px-6 py-3 border-2 border-[#73991C] text-[#73991C] rounded-lg hover:bg-[#73991C]/5 transition-all flex items-center justify-center gap-2"
+                    className="w-full px-6 py-3 border-2 border-primary text-primary rounded-lg hover:bg-primary/5 transition-all flex items-center justify-center gap-2"
                   >
                     <Download className="w-5 h-5" />
                     Descargar Reporte de Cierre (PDF)
@@ -1414,7 +1414,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                     if (paso === 'datos-finales') setPaso('revision');
                     if (paso === 'confirmacion') setPaso('datos-finales');
                   }}
-                  className="px-4 py-2 text-[#4D240F]/70 hover:text-[#172E08] transition-colors"
+                  className="px-4 py-2 text-brand-brown/70 hover:text-foreground transition-colors"
                 >
                   Anterior
                 </button>
@@ -1424,7 +1424,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
             <div className="flex items-center gap-3">
               <button
                 onClick={onClose}
-                className="px-4 py-2 border border-gray-300 text-[#4D240F]/70 rounded-lg hover:bg-gray-100 transition-colors"
+                className="px-4 py-2 border border-gray-300 text-brand-brown/70 rounded-lg hover:bg-gray-100 transition-colors"
               >
                 Cancelar
               </button>
@@ -1432,7 +1432,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
               {paso === 'revision' && (
                 <button
                   onClick={() => setPaso('datos-finales')}
-                  className="px-6 py-2 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-lg hover:from-[#5f7d17] hover:to-[#9db86d] transition-all flex items-center gap-2"
+                  className="px-6 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:from-primary-dark hover:to-secondary-dark transition-all flex items-center gap-2"
                 >
                   Continuar
                   <ChevronRight className="w-4 h-4" />
@@ -1442,7 +1442,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
               {paso === 'datos-finales' && (
                 <button
                   onClick={() => setPaso('confirmacion')}
-                  className="px-6 py-2 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-lg hover:from-[#5f7d17] hover:to-[#9db86d] transition-all flex items-center gap-2"
+                  className="px-6 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:from-primary-dark hover:to-secondary-dark transition-all flex items-center gap-2"
                 >
                   Continuar
                   <ChevronRight className="w-4 h-4" />

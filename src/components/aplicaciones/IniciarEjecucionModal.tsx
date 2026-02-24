@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Play, X, Calendar, AlertCircle, Package } from 'lucide-react';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 import { getSupabase } from '../../utils/supabase/client';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -32,6 +33,7 @@ export function IniciarEjecucionModal({
   const [error, setError] = useState<string | null>(null);
   const [productosFaltantes, setProductosFaltantes] = useState<ProductoFaltante[]>([]);
   const [stockValidado, setStockValidado] = useState(false);
+  const [showConfirmStockInsuficiente, setShowConfirmStockInsuficiente] = useState(false);
 
   /**
    * VALIDAR STOCK SUFICIENTE
@@ -139,46 +141,10 @@ export function IniciarEjecucionModal({
     }
   };
 
-  const handleIniciar = async () => {
+  const ejecutarInicio = async () => {
     try {
       setLoading(true);
       setError(null);
-
-      // Validar fecha
-      if (!fechaInicio) {
-        setError('Debes seleccionar una fecha de inicio');
-        return;
-      }
-
-      const fechaInicioDate = new Date(fechaInicio);
-      const hoy = new Date();
-      hoy.setHours(0, 0, 0, 0);
-
-      if (fechaInicioDate > hoy) {
-        setError('La fecha de inicio no puede ser futura');
-        return;
-      }
-
-      // 🆕 VALIDAR STOCK si no se ha validado aún
-      if (!stockValidado) {
-        const stockSuficiente = await validarStockSuficiente();
-        if (!stockSuficiente) {
-          // Si hay faltantes, preguntar al usuario
-          const confirmar = window.confirm(
-            `⚠️ STOCK INSUFICIENTE\n\n` +
-            `${productosFaltantes.length} producto(s) no tienen suficiente inventario:\n\n` +
-            productosFaltantes.map(p => 
-              `• ${p.nombre}: Necesita ${p.necesario.toFixed(2)} ${p.unidad}, Disponible ${p.disponible.toFixed(2)} ${p.unidad}`
-            ).join('\n') +
-            `\n\n¿Desea iniciar de todos modos?`
-          );
-          
-          if (!confirmar) {
-            setLoading(false);
-            return;
-          }
-        }
-      }
 
       // Actualizar aplicación a estado "En ejecución"
       const { error: updateError } = await supabase
@@ -200,23 +166,73 @@ export function IniciarEjecucionModal({
     }
   };
 
+  const handleIniciar = async () => {
+    setError(null);
+
+    // Validar fecha
+    if (!fechaInicio) {
+      setError('Debes seleccionar una fecha de inicio');
+      return;
+    }
+
+    const fechaInicioDate = new Date(fechaInicio);
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+
+    if (fechaInicioDate > hoy) {
+      setError('La fecha de inicio no puede ser futura');
+      return;
+    }
+
+    // 🆕 VALIDAR STOCK si no se ha validado aún
+    if (!stockValidado) {
+      const stockSuficiente = await validarStockSuficiente();
+      if (!stockSuficiente) {
+        // Si hay faltantes, mostrar ConfirmDialog en lugar de window.confirm
+        setShowConfirmStockInsuficiente(true);
+        return;
+      }
+    }
+
+    await ejecutarInicio();
+  };
+
+  // Build a description that lists the products with insufficient stock
+  const confirmStockDescription = productosFaltantes.length > 0
+    ? `${productosFaltantes.length} producto(s) no tienen suficiente inventario:\n` +
+      productosFaltantes.map(
+        (p) => `${p.nombre}: necesita ${p.necesario.toFixed(2)} ${p.unidad}, disponible ${p.disponible.toFixed(2)} ${p.unidad}`
+      ).join(' / ') +
+      '\n\nEsta acción no se puede deshacer.'
+    : 'Esta acción no se puede deshacer.';
+
   return (
+    <>
+    <ConfirmDialog
+      open={showConfirmStockInsuficiente}
+      onOpenChange={(open) => { if (!open) setShowConfirmStockInsuficiente(false); }}
+      title="Stock insuficiente — ¿Iniciar de todos modos?"
+      description={confirmStockDescription}
+      confirmLabel="Iniciar de todos modos"
+      onConfirm={() => { setShowConfirmStockInsuficiente(false); ejecutarInicio(); }}
+      destructive
+    />
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#73991C]/10 rounded-xl flex items-center justify-center">
-              <Play className="w-5 h-5 text-[#73991C]" />
+            <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
+              <Play className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h2 className="text-lg text-[#172E08]">Iniciar Ejecución</h2>
-              <p className="text-sm text-[#4D240F]/60">{aplicacion.nombre}</p>
+              <h2 className="text-lg text-foreground">Iniciar Ejecución</h2>
+              <p className="text-sm text-brand-brown/60">{aplicacion.nombre_aplicacion}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-[#4D240F]/40 hover:text-[#4D240F] transition-colors"
+            className="text-brand-brown/40 hover:text-brand-brown transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -243,7 +259,7 @@ export function IniciarEjecucionModal({
 
           {/* Fecha de inicio */}
           <div>
-            <label className="block text-sm text-[#172E08] mb-2">
+            <label className="block text-sm text-foreground mb-2">
               <Calendar className="w-4 h-4 inline mr-1" />
               Fecha de inicio de ejecución
             </label>
@@ -254,7 +270,7 @@ export function IniciarEjecucionModal({
               max={new Date().toISOString().split('T')[0]}
               className="w-full"
             />
-            <p className="text-xs text-[#4D240F]/60 mt-1">
+            <p className="text-xs text-brand-brown/60 mt-1">
               Fecha en que comenzó la aplicación en campo
             </p>
           </div>
@@ -270,22 +286,22 @@ export function IniciarEjecucionModal({
           )}
 
           {/* Resumen */}
-          <div className="bg-[#F8FAF5] rounded-xl p-4 space-y-2 text-sm">
+          <div className="bg-background rounded-xl p-4 space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-[#4D240F]/70">Estado actual:</span>
-              <span className="text-[#172E08] px-2 py-0.5 bg-yellow-100 rounded">
+              <span className="text-brand-brown/70">Estado actual:</span>
+              <span className="text-foreground px-2 py-0.5 bg-yellow-100 rounded">
                 {aplicacion.estado}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-[#4D240F]/70">Nuevo estado:</span>
-              <span className="text-[#172E08] px-2 py-0.5 bg-blue-100 rounded">
+              <span className="text-brand-brown/70">Nuevo estado:</span>
+              <span className="text-foreground px-2 py-0.5 bg-blue-100 rounded">
                 En ejecución
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-[#4D240F]/70">Tipo:</span>
-              <span className="text-[#172E08] capitalize">{aplicacion.tipo}</span>
+              <span className="text-brand-brown/70">Tipo:</span>
+              <span className="text-foreground">{aplicacion.tipo_aplicacion}</span>
             </div>
           </div>
         </div>
@@ -302,7 +318,7 @@ export function IniciarEjecucionModal({
           </Button>
           <Button
             onClick={handleIniciar}
-            className="flex-1 bg-[#73991C] hover:bg-[#5f7d17] text-white"
+            className="flex-1 bg-primary hover:bg-primary-dark text-white"
             disabled={loading}
           >
             {loading ? (
@@ -320,5 +336,6 @@ export function IniciarEjecucionModal({
         </div>
       </div>
     </div>
+    </>
   );
 }

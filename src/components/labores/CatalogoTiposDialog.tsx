@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '../ui/select';
 import { StandardDialog } from '../ui/standard-dialog';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 import { Badge } from '../ui/badge';
 import {
   Table,
@@ -53,6 +54,8 @@ const CatalogoTiposDialog: React.FC<CatalogoTiposDialogProps> = ({
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingTipo, setEditingTipo] = useState<TipoTarea | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [tipoParaEliminar, setTipoParaEliminar] = useState<TipoTarea | null>(null);
 
   // Estado del formulario
   const [formData, setFormData] = useState({
@@ -192,14 +195,18 @@ const CatalogoTiposDialog: React.FC<CatalogoTiposDialogProps> = ({
     }
   };
 
-  const handleEliminarTipo = async (tipo: TipoTarea) => {
-    if (!window.confirm(`¿Está seguro de eliminar el tipo "${tipo.nombre}"?`)) return;
+  const handleEliminarTipo = (tipo: TipoTarea) => {
+    setTipoParaEliminar(tipo);
+    setConfirmOpen(true);
+  };
 
+  const confirmarEliminarTipo = async () => {
+    if (!tipoParaEliminar) return;
     try {
       const { error } = await getSupabase()
         .from('tipos_tareas')
         .delete()
-        .eq('id', tipo.id);
+        .eq('id', tipoParaEliminar.id);
 
       if (error) throw error;
 
@@ -207,6 +214,8 @@ const CatalogoTiposDialog: React.FC<CatalogoTiposDialogProps> = ({
       onSuccess();
     } catch (error: any) {
       onError(`Error al eliminar tipo de tarea: ${error.message}`);
+    } finally {
+      setTipoParaEliminar(null);
     }
   };
 
@@ -252,7 +261,7 @@ const CatalogoTiposDialog: React.FC<CatalogoTiposDialogProps> = ({
                     {tiposTareas.length} tipos registrados
                   </p>
                 </div>
-                <Button onClick={handleNuevoTipo} className="bg-[#73991C] hover:bg-[#5a7716]">
+                <Button onClick={handleNuevoTipo} className="bg-primary hover:bg-primary-dark">
                   <Plus className="h-4 w-4 mr-2" />
                   Nuevo Tipo
                 </Button>
@@ -260,7 +269,7 @@ const CatalogoTiposDialog: React.FC<CatalogoTiposDialogProps> = ({
 
               {loading ? (
                 <div className="flex justify-center items-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#73991C]"></div>
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                 </div>
               ) : categorias.length === 0 ? (
                 <div className="text-center py-12">
@@ -422,7 +431,7 @@ const CatalogoTiposDialog: React.FC<CatalogoTiposDialogProps> = ({
                 <Button
                   type="submit"
                   disabled={loading || !formData.nombre.trim() || !formData.categoria.trim()}
-                  className="bg-[#73991C] hover:bg-[#5a7716]"
+                  className="bg-primary hover:bg-primary-dark"
                 >
                   {loading ? 'Guardando...' : (editingTipo ? 'Actualizar Tipo' : 'Crear Tipo')}
                 </Button>
@@ -430,6 +439,16 @@ const CatalogoTiposDialog: React.FC<CatalogoTiposDialogProps> = ({
             </form>
           )}
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={`¿Eliminar el tipo "${tipoParaEliminar?.nombre}"?`}
+        description="Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={confirmarEliminarTipo}
+        destructive
+      />
     </StandardDialog>
   );
 };

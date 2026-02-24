@@ -151,7 +151,7 @@ export function CargaCSV() {
         {/* BOTÓN DESCARGAR TEMPLATE */}
         <button
           onClick={() => descargarTemplate()}
-          className="px-6 py-2 bg-white border-2 border-[#73991C] text-[#73991C] rounded-lg hover:bg-[#73991C]/10 transition-all flex items-center gap-2"
+          className="px-6 py-2 bg-white border-2 border-primary text-primary rounded-lg hover:bg-primary/10 transition-all flex items-center gap-2"
         >
           <Download className="w-4 h-4" />
           Descargar Template CSV
@@ -160,7 +160,7 @@ export function CargaCSV() {
         {/* BOTÓN CARGAR CSV */}
         <button
           onClick={abrirModal}
-          className="px-6 py-2 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-lg hover:shadow-lg transition-all flex items-center gap-2"
+          className="px-6 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:shadow-lg transition-all flex items-center gap-2"
         >
           <Upload className="w-4 h-4" />
           Cargar Monitoreos
@@ -171,7 +171,7 @@ export function CargaCSV() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
             {/* HEADER */}
-            <div className="bg-gradient-to-r from-[#73991C] to-[#BFD97D] px-6 py-4 text-white flex items-center justify-between">
+            <div className="bg-gradient-to-r from-primary to-secondary px-6 py-4 text-white flex items-center justify-between">
               <div>
                 <h2 className="text-white">Cargar Monitoreos desde CSV</h2>
                 <p className="text-white/90 mt-1">
@@ -201,8 +201,8 @@ export function CargaCSV() {
               {/* PASO 2: VALIDANDO */}
               {paso === 'validando' && (
                 <div className="flex flex-col items-center justify-center py-12">
-                  <div className="w-16 h-16 border-4 border-[#73991C]/30 border-t-[#73991C] rounded-full animate-spin mb-4" />
-                  <p className="text-[#172E08]">Validando estructura del CSV...</p>
+                  <div className="w-16 h-16 border-4 border-primary/30 border-t-primary rounded-full animate-spin mb-4" />
+                  <p className="text-foreground">Validando estructura del CSV...</p>
                 </div>
               )}
 
@@ -211,9 +211,9 @@ export function CargaCSV() {
                 <div className="space-y-4">
                   {/* Archivo seleccionado */}
                   <div className="bg-gray-50 rounded-lg p-4">
-                    <p className="text-[#4D240F]/70 mb-1">Archivo seleccionado:</p>
-                    <p className="text-[#172E08]">{archivo?.name}</p>
-                    <p className="text-[#4D240F]/70">
+                    <p className="text-brand-brown/70 mb-1">Archivo seleccionado:</p>
+                    <p className="text-foreground">{archivo?.name}</p>
+                    <p className="text-brand-brown/70">
                       {(archivo?.size || 0) / 1024 > 1024 
                         ? `${((archivo?.size || 0) / 1024 / 1024).toFixed(2)} MB`
                         : `${((archivo?.size || 0) / 1024).toFixed(2)} KB`}
@@ -291,16 +291,16 @@ export function CargaCSV() {
                 <div className="py-12">
                   <div className="max-w-md mx-auto">
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-[#172E08]">Cargando datos...</p>
-                      <p className="text-[#4D240F]/70">{progreso}%</p>
+                      <p className="text-foreground">Cargando datos...</p>
+                      <p className="text-brand-brown/70">{progreso}%</p>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                       <div
-                        className="bg-gradient-to-r from-[#73991C] to-[#BFD97D] h-full transition-all duration-300"
+                        className="bg-gradient-to-r from-primary to-secondary h-full transition-all duration-300"
                         style={{ width: `${progreso}%` }}
                       />
                     </div>
-                    <p className="text-[#4D240F]/70 mt-4 text-center">
+                    <p className="text-brand-brown/70 mt-4 text-center">
                       Por favor espera, esto puede tomar unos segundos...
                     </p>
                   </div>
@@ -315,13 +315,13 @@ export function CargaCSV() {
                       <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <CheckCircle className="w-10 h-10 text-green-600" />
                       </div>
-                      <h3 className="text-[#172E08] mb-2">
+                      <h3 className="text-foreground mb-2">
                         ¡Carga completada!
                       </h3>
-                      <p className="text-[#4D240F]/70 mb-4">
+                      <p className="text-brand-brown/70 mb-4">
                         {resultado.insertados} registros cargados exitosamente
                       </p>
-                      <p className="text-[#4D240F]/70">
+                      <p className="text-brand-brown/70">
                         Redirigiendo al dashboard...
                       </p>
                     </div>
@@ -330,10 +330,10 @@ export function CargaCSV() {
                       <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                         <AlertTriangle className="w-10 h-10 text-red-600" />
                       </div>
-                      <h3 className="text-[#172E08] mb-2">
+                      <h3 className="text-foreground mb-2">
                         Error en la carga
                       </h3>
-                      <p className="text-[#4D240F]/70">
+                      <p className="text-brand-brown/70">
                         {resultado.message}
                       </p>
                     </div>
@@ -347,7 +347,7 @@ export function CargaCSV() {
               <button
                 onClick={cerrarModal}
                 disabled={paso === 'cargando'}
-                className="px-4 py-2 text-[#4D240F] hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 text-brand-brown hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancelar
               </button>
@@ -355,7 +355,7 @@ export function CargaCSV() {
               {paso === 'preview' && validacion?.isValid && (
                 <button
                   onClick={handleCargar}
-                  className="px-6 py-2 bg-gradient-to-r from-[#73991C] to-[#BFD97D] text-white rounded-lg hover:shadow-lg transition-all flex items-center gap-2"
+                  className="px-6 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:shadow-lg transition-all flex items-center gap-2"
                 >
                   <Upload className="w-4 h-4" />
                   Cargar {validacion.stats.totalRows} registros

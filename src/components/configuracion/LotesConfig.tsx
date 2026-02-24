@@ -18,18 +18,7 @@ import {
   AlertDialogTitle,
 } from '../ui/alert-dialog';
 
-interface Lote {
-  id: string;
-  nombre: string;
-  numero_orden: number | null;
-  area_hectareas: number | null;
-  arboles_grandes: number | null;
-  arboles_medianos: number | null;
-  arboles_pequenos: number | null;
-  arboles_clonales: number | null;
-  total_arboles: number | null;
-  activo: boolean | null;
-}
+import type { Lote } from '../../types/shared';
 
 export function LotesConfig() {
   const [lotes, setLotes] = useState<Lote[]>([]);
@@ -258,8 +247,8 @@ export function LotesConfig() {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-[#73991C] border-r-transparent mb-4"></div>
-          <p className="text-[#4D240F]/70">Cargando lotes...</p>
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent mb-4"></div>
+          <p className="text-brand-brown/70">Cargando lotes...</p>
         </div>
       </div>
     );
@@ -270,14 +259,14 @@ export function LotesConfig() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-[#172E08]">Gestión de Lotes</h2>
-          <p className="text-[#4D240F]/70">
+          <h2 className="text-foreground">Gestión de Lotes</h2>
+          <p className="text-brand-brown/70">
             Administra los {lotes.length} lotes del cultivo
           </p>
         </div>
         <Button
           onClick={iniciarCreacion}
-          className="bg-gradient-to-br from-[#73991C] to-[#5c7a16] hover:from-[#5c7a16] hover:to-[#4a6112]"
+          className="bg-gradient-to-br from-primary to-primary-dark hover:from-primary-dark hover:to-primary-dark"
           disabled={isCreating || editingId !== null}
         >
           <Plus className="w-4 h-4 mr-2" />
@@ -287,15 +276,15 @@ export function LotesConfig() {
 
       {/* Formulario de creación */}
       {isCreating && (
-        <Card className="p-6 bg-gradient-to-br from-white/90 to-[#F8FAF5]/90 backdrop-blur-sm shadow-xl border-[#BFD97D]/30">
+        <Card className="p-6 bg-gradient-to-br from-white/90 to-background/90 backdrop-blur-sm shadow-xl border-secondary/30">
           <div className="space-y-4">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-[#172E08]">Crear Nuevo Lote</h3>
+              <h3 className="text-foreground">Crear Nuevo Lote</h3>
               <div className="flex gap-2">
                 <Button
                   onClick={guardarLote}
                   size="sm"
-                  className="bg-gradient-to-br from-[#73991C] to-[#5c7a16]"
+                  className="bg-gradient-to-br from-primary to-primary-dark"
                 >
                   <Save className="w-4 h-4 mr-2" />
                   Guardar
@@ -415,18 +404,18 @@ export function LotesConfig() {
         {lotes.map((lote, index) => (
           <Card
             key={lote.id}
-            className="p-4 bg-gradient-to-br from-white/80 to-[#F8FAF5]/80 backdrop-blur-sm hover:shadow-lg transition-all border-[#BFD97D]/20"
+            className="p-4 bg-gradient-to-br from-white/80 to-background/80 backdrop-blur-sm hover:shadow-lg transition-all border-secondary/20"
           >
             {editingId === lote.id ? (
               // Modo edición
               <div className="space-y-4">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-[#172E08]">Editando: {lote.nombre}</h3>
+                  <h3 className="text-foreground">Editando: {lote.nombre}</h3>
                   <div className="flex gap-2">
                     <Button
                       onClick={guardarLote}
                       size="sm"
-                      className="bg-gradient-to-br from-[#73991C] to-[#5c7a16]"
+                      className="bg-gradient-to-br from-primary to-primary-dark"
                     >
                       <Save className="w-4 h-4 mr-2" />
                       Guardar
@@ -528,7 +517,7 @@ export function LotesConfig() {
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-[#172E08]">{lote.nombre}</h3>
+                    <h3 className="text-foreground">{lote.nombre}</h3>
                     {!lote.activo && (
                       <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-700">
                         Inactivo
@@ -539,29 +528,29 @@ export function LotesConfig() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                     {lote.area_hectareas && (
                       <div>
-                        <span className="text-[#4D240F]/60">Área:</span>
-                        <span className="ml-2 text-[#172E08]">{lote.area_hectareas} ha</span>
+                        <span className="text-brand-brown/60">Área:</span>
+                        <span className="ml-2 text-foreground">{lote.area_hectareas} ha</span>
                       </div>
                     )}
                     <div>
-                      <span className="text-[#4D240F]/60">Grandes:</span>
-                      <span className="ml-2 text-[#172E08]">{lote.arboles_grandes || 0}</span>
+                      <span className="text-brand-brown/60">Grandes:</span>
+                      <span className="ml-2 text-foreground">{lote.arboles_grandes || 0}</span>
                     </div>
                     <div>
-                      <span className="text-[#4D240F]/60">Medianos:</span>
-                      <span className="ml-2 text-[#172E08]">{lote.arboles_medianos || 0}</span>
+                      <span className="text-brand-brown/60">Medianos:</span>
+                      <span className="ml-2 text-foreground">{lote.arboles_medianos || 0}</span>
                     </div>
                     <div>
-                      <span className="text-[#4D240F]/60">Pequeños:</span>
-                      <span className="ml-2 text-[#172E08]">{lote.arboles_pequenos || 0}</span>
+                      <span className="text-brand-brown/60">Pequeños:</span>
+                      <span className="ml-2 text-foreground">{lote.arboles_pequenos || 0}</span>
                     </div>
                     <div>
-                      <span className="text-[#4D240F]/60">Clonales:</span>
-                      <span className="ml-2 text-[#172E08]">{lote.arboles_clonales || 0}</span>
+                      <span className="text-brand-brown/60">Clonales:</span>
+                      <span className="ml-2 text-foreground">{lote.arboles_clonales || 0}</span>
                     </div>
                     <div>
-                      <span className="text-[#4D240F]/60">Total:</span>
-                      <span className="ml-2 text-[#172E08]">{lote.total_arboles || 0}</span>
+                      <span className="text-brand-brown/60">Total:</span>
+                      <span className="ml-2 text-foreground">{lote.total_arboles || 0}</span>
                     </div>
                   </div>
                 </div>
@@ -615,10 +604,10 @@ export function LotesConfig() {
 
         {lotes.length === 0 && !isCreating && (
           <div className="text-center py-12">
-            <p className="text-[#4D240F]/70 mb-4">No hay lotes registrados</p>
+            <p className="text-brand-brown/70 mb-4">No hay lotes registrados</p>
             <Button
               onClick={iniciarCreacion}
-              className="bg-gradient-to-br from-[#73991C] to-[#5c7a16]"
+              className="bg-gradient-to-br from-primary to-primary-dark"
             >
               <Plus className="w-4 h-4 mr-2" />
               Crear Primer Lote

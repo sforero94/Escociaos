@@ -26,6 +26,8 @@ import {
 } from '../../ui/dialog';
 import { Label } from '../../ui/label';
 import type { Comprador } from '../../../types/finanzas';
+import { toast } from 'sonner';
+import { ConfirmDialog } from '../../ui/confirm-dialog';
 
 export function CompradoresConfig() {
   const [compradores, setCompradores] = useState<Comprador[]>([]);
@@ -36,6 +38,8 @@ export function CompradoresConfig() {
   const [saving, setSaving] = useState(false);
   const [menuAbiertoId, setMenuAbiertoId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -92,23 +96,25 @@ export function CompradoresConfig() {
     setShowForm(true);
   };
 
-  const handleDeleteComprador = async (compradorId: string) => {
-    if (!confirm('¿Estás seguro de que deseas eliminar este comprador?')) {
-      return;
-    }
+  const handleDeleteComprador = (compradorId: string) => {
+    setDeleteTargetId(compradorId);
+    setConfirmDeleteOpen(true);
+  };
 
+  const confirmDeleteComprador = async () => {
+    if (!deleteTargetId) return;
     try {
       const { error } = await getSupabase()
         .from('fin_compradores')
         .delete()
-        .eq('id', compradorId);
-
+        .eq('id', deleteTargetId);
       if (error) throw error;
-
-      setCompradores(compradores.filter(c => c.id !== compradorId));
-      alert('Comprador eliminado exitosamente');
+      setCompradores(compradores.filter(c => c.id !== deleteTargetId));
+      toast.success('Comprador eliminado exitosamente');
     } catch (error: any) {
-      alert('Error al eliminar comprador: ' + error.message);
+      toast.error('Error al eliminar comprador: ' + error.message);
+    } finally {
+      setDeleteTargetId(null);
     }
   };
 
@@ -125,7 +131,7 @@ export function CompradoresConfig() {
         c.id === comprador.id ? { ...c, activo: !c.activo } : c
       ));
     } catch (error: any) {
-      alert('Error al actualizar comprador: ' + error.message);
+      toast.error('Error al actualizar comprador: ' + error.message);
     }
   };
 
@@ -133,7 +139,7 @@ export function CompradoresConfig() {
     e.preventDefault();
 
     if (!formData.nombre.trim()) {
-      alert('El nombre del comprador es obligatorio');
+      toast.error('El nombre del comprador es obligatorio');
       return;
     }
 
@@ -175,7 +181,7 @@ export function CompradoresConfig() {
       setShowForm(false);
       setEditingComprador(null);
     } catch (error: any) {
-      alert('Error al guardar comprador: ' + error.message);
+      toast.error('Error al guardar comprador: ' + error.message);
     } finally {
       setSaving(false);
     }
@@ -194,7 +200,7 @@ export function CompradoresConfig() {
 
         <Button
           onClick={handleNewComprador}
-          className="bg-[#73991C] hover:bg-[#5a7716]"
+          className="bg-primary hover:bg-primary-dark"
         >
           <Plus className="w-4 h-4 mr-2" />
           Nuevo Comprador
@@ -221,7 +227,7 @@ export function CompradoresConfig() {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 text-[#73991C] animate-spin" />
+            <Loader2 className="w-8 h-8 text-primary animate-spin" />
           </div>
         ) : filteredCompradores.length === 0 ? (
           <div className="text-center py-12">
@@ -240,7 +246,7 @@ export function CompradoresConfig() {
             {!searchQuery && (
               <Button
                 onClick={handleNewComprador}
-                className="bg-[#73991C] hover:bg-[#5a7716]"
+                className="bg-primary hover:bg-primary-dark"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Nuevo Comprador
@@ -436,7 +442,7 @@ export function CompradoresConfig() {
               <Button
                 type="submit"
                 disabled={saving}
-                className="bg-[#73991C] hover:bg-[#5a7716]"
+                className="bg-primary hover:bg-primary-dark"
               >
                 {saving ? 'Guardando...' : (editingComprador ? 'Actualizar' : 'Crear')}
               </Button>
@@ -444,6 +450,16 @@ export function CompradoresConfig() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        title="¿Eliminar comprador?"
+        description="Esta acción no se puede deshacer."
+        confirmLabel="Eliminar"
+        onConfirm={confirmDeleteComprador}
+        destructive
+      />
     </div>
   );
 }

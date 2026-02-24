@@ -129,7 +129,7 @@ export function MultiSelect({
                     <div
                       className={`w-4 h-4 border rounded flex items-center justify-center flex-shrink-0 ${
                         isSelected
-                          ? 'bg-[#73991C] border-[#73991C]'
+                          ? 'bg-primary border-primary'
                           : 'border-gray-300'
                       }`}
                     >

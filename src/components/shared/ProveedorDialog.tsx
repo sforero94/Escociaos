@@ -103,7 +103,7 @@ export function ProveedorDialog({
       <Button
         type="submit"
         disabled={saving || !formData.nombre.trim()}
-        className="bg-[#73991C] hover:bg-[#5a7716] text-white"
+        className="bg-primary hover:bg-primary-dark text-white"
       >
         {saving ? (
           <>
@@ -123,7 +123,7 @@ export function ProveedorDialog({
       onOpenChange={onOpenChange}
       title={
         <span className="flex items-center gap-2">
-          <Building2 className="w-5 h-5 text-[#73991C]" />
+          <Building2 className="w-5 h-5 text-primary" />
           Crear Nuevo Proveedor
         </span>
       }

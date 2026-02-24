@@ -112,10 +112,10 @@ export function JornalFractionMatrix({
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-2xl border border-[#73991C]/10 shadow-[0_2px_12px_rgba(115,153,28,0.06)] overflow-hidden">
+      <div className="bg-white rounded-2xl border border-primary/10 shadow-[0_2px_12px_rgba(115,153,28,0.06)] overflow-hidden">
         {/* Header */}
-        <div className="px-5 py-3 bg-gradient-to-r from-[#73991C]/5 to-transparent border-b border-[#73991C]/10">
-          <h3 className="text-sm text-[#172E08] flex items-center gap-2">
+        <div className="px-5 py-3 bg-gradient-to-r from-primary/5 to-transparent border-b border-primary/10">
+          <h3 className="text-sm text-foreground flex items-center gap-2">
             <span className="text-xl">📋</span>
             Matriz de Asignación Trabajador × Lote
           </h3>
@@ -134,27 +134,27 @@ export function JornalFractionMatrix({
         {/* Table with horizontal scroll */}
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-[#F8FAF5]">
+            <thead className="bg-background">
               <tr>
-                <th className="text-left py-3 px-5 text-xs font-medium text-[#4D240F]/70 sticky left-0 bg-[#F8FAF5] z-10">
+                <th className="text-left py-3 px-5 text-xs font-medium text-brand-brown/70 sticky left-0 bg-background z-10">
                   Trabajador
                 </th>
                 {lotes.map((lote) => (
                   <th
                     key={lote.id}
-                    className={`text-center py-3 px-2 text-xs font-medium text-[#4D240F]/70 ${getColumnWidth(
+                    className={`text-center py-3 px-2 text-xs font-medium text-brand-brown/70 ${getColumnWidth(
                       lotes.length
                     )}`}
                   >
                     {lote.nombre}
                   </th>
                 ))}
-                <th className="text-center py-3 px-4 text-xs font-medium text-[#4D240F]/70 sticky right-0 bg-[#F8FAF5] z-10">
+                <th className="text-center py-3 px-4 text-xs font-medium text-brand-brown/70 sticky right-0 bg-background z-10">
                   Total
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#73991C]/5">
+            <tbody className="divide-y divide-primary/5">
               {trabajadores.map((trabajador) => {
                 const totalFraccion = calculateTotalFraccion(trabajador.data.id);
                 const totalCosto = showCostPreview ? calculateCosto(trabajador, totalFraccion) : 0;
@@ -162,14 +162,14 @@ export function JornalFractionMatrix({
                 return (
                   <tr
                     key={trabajador.data.id}
-                    className="hover:bg-[#F8FAF5] transition-colors"
+                    className="hover:bg-background transition-colors"
                   >
                     {/* Worker name column (sticky left) */}
-                    <td className="py-3 px-5 sticky left-0 bg-white hover:bg-[#F8FAF5] z-10">
+                    <td className="py-3 px-5 sticky left-0 bg-white hover:bg-background z-10">
                       <div className="flex items-center justify-between">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-[#172E08] truncate">
+                            <span className="text-sm font-medium text-foreground truncate">
                               {trabajador.data.nombre}
                             </span>
                             {trabajador.type === 'contratista' && (
@@ -222,7 +222,7 @@ export function JornalFractionMatrix({
                             }
                             disabled={disabled}
                           >
-                            <SelectTrigger className="h-8 text-xs border-[#73991C]/20 hover:border-[#73991C]/40">
+                            <SelectTrigger className="h-8 text-xs border-primary/20 hover:border-primary/40">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -242,7 +242,7 @@ export function JornalFractionMatrix({
                             }
                             placeholder="Notas..."
                             rows={2}
-                            className="text-xs resize-none border-[#73991C]/20 focus:border-[#73991C]/40"
+                            className="text-xs resize-none border-primary/20 focus:border-primary/40"
                             disabled={disabled}
                           />
                         </div>
@@ -250,11 +250,11 @@ export function JornalFractionMatrix({
                     ))}
 
                     {/* Total column (sticky right) */}
-                    <td className="py-3 px-4 text-center sticky right-0 bg-white hover:bg-[#F8FAF5] z-10">
+                    <td className="py-3 px-4 text-center sticky right-0 bg-white hover:bg-background z-10">
                       <span
                         className={`inline-flex items-center justify-center px-3 py-1 rounded-lg text-sm font-semibold ${
                           totalFraccion > 0
-                            ? 'bg-[#73991C]/10 text-[#73991C]'
+                            ? 'bg-primary/10 text-primary'
                             : 'bg-gray-100 text-gray-400'
                         }`}
                       >
@@ -269,7 +269,7 @@ export function JornalFractionMatrix({
         </div>
 
         {/* Summary footer */}
-        <div className="px-5 py-3 bg-[#F8FAF5] border-t border-[#73991C]/10">
+        <div className="px-5 py-3 bg-background border-t border-primary/10">
           <div className="flex justify-between items-center text-sm">
             <span className="text-gray-600">
               {trabajadores.length} trabajador{trabajadores.length !== 1 ? 'es' : ''}
@@ -277,7 +277,7 @@ export function JornalFractionMatrix({
             <span className="text-gray-600">
               {lotes.length} lote{lotes.length !== 1 ? 's' : ''}
             </span>
-            <span className="font-medium text-[#172E08]">
+            <span className="font-medium text-foreground">
               Total registros a crear:{' '}
               {trabajadores.reduce((count, trabajador) => {
                 const workerRecords = lotes.filter(

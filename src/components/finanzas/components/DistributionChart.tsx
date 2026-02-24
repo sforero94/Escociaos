@@ -43,6 +43,27 @@ const CONFIG = {
   },
 };
 
+function CustomTooltip({ active, payload, tooltipLabel }: { active?: boolean; payload?: any[]; tooltipLabel: string }) {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
+        <p className="font-medium text-gray-900">{data.categoria}</p>
+        <p className="text-sm text-gray-600">
+          Valor: <span className="font-semibold">${formatNumber(data.valor)}</span>
+        </p>
+        <p className="text-sm text-gray-600">
+          Porcentaje: <span className="font-semibold">{data.porcentaje}%</span>
+        </p>
+        <p className="text-xs text-gray-500 mt-1 italic">
+          Click para ver {tooltipLabel} de esta categoría
+        </p>
+      </div>
+    );
+  }
+  return null;
+}
+
 /**
  * Generic distribution chart component for gastos and ingresos
  */
@@ -87,28 +108,6 @@ export function DistributionChart({ data, loading = false, filtrosActivos, type 
       ...item,
       fill: config.colors[index % config.colors.length]
     }));
-
-  // Custom tooltip
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
-          <p className="font-medium text-gray-900">{data.categoria}</p>
-          <p className="text-sm text-gray-600">
-            Valor: <span className="font-semibold">${formatNumber(data.valor)}</span>
-          </p>
-          <p className="text-sm text-gray-600">
-            Porcentaje: <span className="font-semibold">{data.porcentaje}%</span>
-          </p>
-          <p className="text-xs text-gray-500 mt-1 italic">
-            Click para ver {config.tooltipLabel} de esta categoría
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
 
   // Navigate with filters
   const handleBarClick = (data: any) => {
@@ -155,7 +154,7 @@ export function DistributionChart({ data, loading = false, filtrosActivos, type 
               tickLine={false}
               width={150}
             />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip tooltipLabel={config.tooltipLabel} />} />
             <Bar
               dataKey="valor"
               radius={[0, 8, 8, 0]}

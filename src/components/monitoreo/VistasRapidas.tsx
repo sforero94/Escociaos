@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { formatearFecha } from '../../utils/fechas';
+import { toast } from 'sonner';
 
 // ============================================
 // INTERFACES
@@ -219,7 +220,7 @@ export function VistasRapidas({ onVistaSeleccionada }: { onVistaSeleccionada: (f
 
   const handleEliminarVista = (vistaId: string) => {
     if (vistaId.startsWith('predefinida-')) {
-      alert('No puedes eliminar vistas predefinidas');
+      toast('No puedes eliminar vistas predefinidas');
       return;
     }
 
@@ -250,7 +251,7 @@ export function VistasRapidas({ onVistaSeleccionada }: { onVistaSeleccionada: (f
       case 'blue':
         return 'bg-blue-50 border-blue-200 text-blue-700';
       case 'green':
-        return 'bg-[#73991C]/10 border-[#73991C]/20 text-[#73991C]';
+        return 'bg-primary/10 border-primary/20 text-primary';
       case 'purple':
         return 'bg-purple-50 border-purple-200 text-purple-700';
       default:
@@ -277,14 +278,14 @@ export function VistasRapidas({ onVistaSeleccionada }: { onVistaSeleccionada: (f
       {/* HEADER */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Bookmark className="w-6 h-6 text-[#73991C]" />
-          <h2 className="text-[#172E08]">
+          <Bookmark className="w-6 h-6 text-primary" />
+          <h2 className="text-foreground">
             Vistas Rápidas
           </h2>
         </div>
         <button
           onClick={() => setVistaPersonalizadaVisible(!vistaPersonalizadaVisible)}
-          className="flex items-center gap-2 px-4 py-2 bg-[#73991C] text-white rounded-lg hover:bg-[#5C7A16] transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
         >
           <Plus className="w-4 h-4" />
           Nueva Vista
@@ -334,23 +335,23 @@ export function VistasRapidas({ onVistaSeleccionada }: { onVistaSeleccionada: (f
               {resumen && (
                 <div className="p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-[#4D240F]/60">Registros</span>
-                    <span className="text-[#172E08]">
+                    <span className="text-brand-brown/60">Registros</span>
+                    <span className="text-foreground">
                       {resumen.totalRegistros}
                     </span>
                   </div>
                   
                   <div className="flex items-center justify-between">
-                    <span className="text-[#4D240F]/60">Incidencia</span>
-                    <span className="text-[#172E08]">
+                    <span className="text-brand-brown/60">Incidencia</span>
+                    <span className="text-foreground">
                       {resumen.incidenciaPromedio}%
                     </span>
                   </div>
 
                   {resumen.plagaMasCritica && (
                     <div className="pt-3 border-t border-gray-100">
-                      <p className="text-[#4D240F]/60">Más frecuente</p>
-                      <p className="text-[#172E08] mt-1">
+                      <p className="text-brand-brown/60">Más frecuente</p>
+                      <p className="text-foreground mt-1">
                         {resumen.plagaMasCritica}
                       </p>
                     </div>
@@ -359,14 +360,14 @@ export function VistasRapidas({ onVistaSeleccionada }: { onVistaSeleccionada: (f
               )}
 
               {/* FOOTER */}
-              <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 flex items-center justify-between text-[#4D240F]/60">
+              <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 flex items-center justify-between text-brand-brown/60">
                 <span>Actualizado: {formatearFecha(vista.ultimaActualizacion.toISOString().split('T')[0])}</span>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     cargarVistas();
                   }}
-                  className="hover:text-[#73991C] transition-colors"
+                  className="hover:text-primary transition-colors"
                 >
                   <RefreshCw className="w-3 h-3" />
                 </button>
@@ -380,7 +381,7 @@ export function VistasRapidas({ onVistaSeleccionada }: { onVistaSeleccionada: (f
       {vistas.length === 0 && (
         <div className="text-center py-12 text-gray-500">
           <Bookmark className="w-16 h-16 mx-auto mb-4 opacity-30" />
-          <p className="text-[#172E08]">No hay vistas guardadas</p>
+          <p className="text-foreground">No hay vistas guardadas</p>
           <p className="mt-2">Crea tu primera vista para acceso rápido</p>
         </div>
       )}
