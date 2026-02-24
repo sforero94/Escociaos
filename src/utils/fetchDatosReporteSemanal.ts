@@ -171,8 +171,9 @@ export async function fetchLaboresSemanales(
 
   // Fetch tasks whose date range overlaps [inicio, fin]
   // Overlap condition: task.inicio <= semana.fin AND task.fin >= semana.inicio
+  // Use vista_tareas_resumen which aggregates lote_nombres from the tareas_lotes junction table
   const { data: tareas, error } = await supabase
-    .from('tareas')
+    .from('vista_tareas_resumen')
     .select(`
       id,
       codigo_tarea,
@@ -183,7 +184,7 @@ export async function fetchLaboresSemanales(
       fecha_inicio_real,
       fecha_fin_real,
       lote_nombres,
-      tipos_tareas!tipo_tarea_id(nombre)
+      tipo_tarea_nombre
     `)
     .in('estado', ['Programada', 'En Proceso', 'Completada'])
     .or(`fecha_estimada_inicio.lte.${fin},fecha_inicio_real.lte.${fin}`)
@@ -223,7 +224,7 @@ export async function fetchLaboresSemanales(
       id: t.id,
       codigoTarea: t.codigo_tarea,
       nombre: t.nombre,
-      tipoTarea: (t as any).tipos_tareas?.nombre || 'Sin tipo',
+      tipoTarea: (t as any).tipo_tarea_nombre || 'Sin tipo',
       estado: estadoMapeado,
       fechaInicio: tareaInicio,
       fechaFin: tareaFin || undefined,
