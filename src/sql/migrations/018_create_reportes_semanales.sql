@@ -34,6 +34,12 @@ CREATE INDEX IF NOT EXISTS idx_reportes_semanales_semana
 
 ALTER TABLE reportes_semanales ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies first (CREATE POLICY is NOT idempotent)
+DROP POLICY IF EXISTS "Authenticated users can view reports" ON reportes_semanales;
+DROP POLICY IF EXISTS "Authenticated users can create reports" ON reportes_semanales;
+DROP POLICY IF EXISTS "Users can update own reports" ON reportes_semanales;
+DROP POLICY IF EXISTS "Users can delete own reports" ON reportes_semanales;
+
 -- Todos los usuarios autenticados pueden ver reportes
 CREATE POLICY "Authenticated users can view reports"
   ON reportes_semanales FOR SELECT
@@ -46,13 +52,13 @@ CREATE POLICY "Authenticated users can create reports"
   TO authenticated
   WITH CHECK (true);
 
--- Solo el creador puede actualizar su reporte (para upserts)
--- Using true for USING expression to allow upsert operations
+-- Allow upsert: USING (true) lets the UPDATE read the existing row,
+-- WITH CHECK (true) allows any authenticated user to update
 CREATE POLICY "Users can update own reports"
   ON reportes_semanales FOR UPDATE
   TO authenticated
   USING (true)
-  WITH CHECK (generado_por = auth.uid());
+  WITH CHECK (true);
 
 -- Solo el creador puede eliminar su reporte
 CREATE POLICY "Users can delete own reports"

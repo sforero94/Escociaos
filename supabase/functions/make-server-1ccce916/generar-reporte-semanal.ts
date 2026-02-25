@@ -73,6 +73,21 @@ function formatearDatosParaPrompt(datos: any): string {
 - Fallas: ${datos.personal.fallas}
 - Permisos: ${datos.personal.permisos}`);
 
+  // Include fallas/permisos details if provided
+  if (datos.personal.detalleFallas?.length > 0) {
+    partes.push(`### DETALLE DE FALLAS`);
+    datos.personal.detalleFallas.forEach((falla: any) => {
+      partes.push(`- ${falla.empleado}${falla.razon ? `: ${falla.razon}` : ''}`);
+    });
+  }
+
+  if (datos.personal.detallePermisos?.length > 0) {
+    partes.push(`### DETALLE DE PERMISOS`);
+    datos.personal.detallePermisos.forEach((permiso: any) => {
+      partes.push(`- ${permiso.empleado}${permiso.razon ? `: ${permiso.razon}` : ''}`);
+    });
+  }
+
   if (datos.jornales) {
     const { actividades, lotes, datos: matrizDatos, totalesPorActividad, totalesPorLote, totalGeneral } = datos.jornales;
 
@@ -104,10 +119,12 @@ Datos de la matriz:`);
   if (datos.labores?.programadas?.length > 0) {
     partes.push(`## LABORES PROGRAMADAS`);
     datos.labores.programadas.forEach((labor: any) => {
-      partes.push(`### ${labor.codigo} — ${labor.nombre} (${labor.tipo})
+      const tipoTarea = labor.tipoTarea || labor.tipo || 'Sin tipo';
+      const lotesStr = (labor.lotes || []).join(', ') || 'Sin lotes';
+      partes.push(`### ${labor.nombre} (${tipoTarea})
 - Estado: ${labor.estado}
 - Fechas: ${labor.fechaInicio} → ${labor.fechaFin}
-- Lotes: ${(labor.lotes || []).join(', ')}`);
+- Lotes: ${lotesStr}`);
     });
   }
 
@@ -127,15 +144,26 @@ Datos de la matriz:`);
   if (datos.aplicaciones?.planeadas?.length > 0) {
     partes.push(`## APLICACIONES PLANEADAS`);
     datos.aplicaciones.planeadas.forEach((app: any) => {
+      const costoTotal = app.costoTotalEstimado || 0;
+      const costoPorLitroKg = app.costoPorLitroKg || 0;
+      const costoPorArbol = app.costoPorArbol || 0;
+
       partes.push(`### ${app.nombre} (${app.tipo})
 - Propósito: ${app.proposito}
-- Blancos biológicos: ${app.blancosBiologicos.join(', ')}
+- Blancos biológicos: ${app.blancosBiologicos?.join(', ') || 'N/A'}
 - Fecha planeada: ${app.fechaInicioPlaneada}
-- Costo total estimado: $${Math.round(app.costoTotalEstimado).toLocaleString('es-CO')} COP
+- Costo total (Pedido + Inventario): $${Math.round(costoTotal).toLocaleString('es-CO')} COP
+- Costo por litro/kg: ${costoPorLitroKg > 0 ? '$' + Math.round(costoPorLitroKg).toLocaleString('es-CO') : '—'}
+- Costo por árbol: ${costoPorArbol > 0 ? '$' + Math.round(costoPorArbol).toLocaleString('es-CO') : '—'}
 - Lista de compras:`);
-      app.listaCompras.forEach((item: any) => {
-        partes.push(`  - ${item.productoNombre}: ${item.cantidadNecesaria} ${item.unidad} (~$${Math.round(item.costoEstimado).toLocaleString('es-CO')})`);
-      });
+
+      if (app.listaCompras?.length > 0) {
+        app.listaCompras.forEach((item: any) => {
+          const costoItem = item.costoEstimado || 0;
+          const invDisplay = item.inventarioDisponible > 0 ? ` (Inv: ${item.inventarioDisponible})` : '';
+          partes.push(`  - ${item.productoNombre}: ${item.cantidadNecesaria} ${item.unidad}${invDisplay}${costoItem > 0 ? ' ~$' + Math.round(costoItem).toLocaleString('es-CO') : ''}`);
+        });
+      }
     });
   }
 
@@ -459,7 +487,7 @@ function construirSlidePersonal(datos: any): string {
           <th style="padding:5px 10px;font-size:10px;font-weight:700;color:#D32F2F;text-align:left;border-bottom:1px solid #FFCDD2;">Empleado</th>
           <th style="padding:5px 10px;font-size:10px;font-weight:700;color:#D32F2F;text-align:left;border-bottom:1px solid #FFCDD2;">Motivo</th>
         </tr></thead>
-        <tbody>${p.detalleFallas.map((f: any) => `<tr><td style="padding:5px 10px;font-size:11px;border-bottom:1px solid #F5F5F5;">${f.nombre}</td><td style="padding:5px 10px;font-size:11px;color:#888;border-bottom:1px solid #F5F5F5;">${f.motivo || '—'}</td></tr>`).join('')}</tbody>
+        <tbody>${p.detalleFallas.map((f: any) => `<tr><td style="padding:5px 10px;font-size:11px;border-bottom:1px solid #F5F5F5;">${f.empleado || f.nombre || '—'}</td><td style="padding:5px 10px;font-size:11px;color:#888;border-bottom:1px solid #F5F5F5;">${f.razon || f.motivo || '—'}</td></tr>`).join('')}</tbody>
       </table>
     </div>`;
   }
@@ -473,7 +501,7 @@ function construirSlidePersonal(datos: any): string {
           <th style="padding:5px 10px;font-size:10px;font-weight:700;color:#F57C00;text-align:left;border-bottom:1px solid #FFE0B2;">Empleado</th>
           <th style="padding:5px 10px;font-size:10px;font-weight:700;color:#F57C00;text-align:left;border-bottom:1px solid #FFE0B2;">Motivo</th>
         </tr></thead>
-        <tbody>${p.detallePermisos.map((f: any) => `<tr><td style="padding:5px 10px;font-size:11px;border-bottom:1px solid #F5F5F5;">${f.nombre}</td><td style="padding:5px 10px;font-size:11px;color:#888;border-bottom:1px solid #F5F5F5;">${f.motivo || '—'}</td></tr>`).join('')}</tbody>
+        <tbody>${p.detallePermisos.map((f: any) => `<tr><td style="padding:5px 10px;font-size:11px;border-bottom:1px solid #F5F5F5;">${f.empleado || f.nombre || '—'}</td><td style="padding:5px 10px;font-size:11px;color:#888;border-bottom:1px solid #F5F5F5;">${f.razon || f.motivo || '—'}</td></tr>`).join('')}</tbody>
       </table>
     </div>`;
   }
@@ -505,9 +533,9 @@ function construirSlideLaboresProgramadas(datos: any): string {
   const rows = programadas.map((l: any) => {
     const est = estadoStyle[l.estado] || 'background:#F5F5F0;color:#4D240F;';
     return `<tr style="border-bottom:1px solid #F0F0F0;">
-      <td style="padding:8px 10px;font-size:12px;font-weight:700;color:#73991C;">${l.codigo || '—'}</td>
+      <td style="padding:8px 10px;font-size:12px;font-weight:700;color:#73991C;">${l.codigoTarea || l.codigo || '—'}</td>
       <td style="padding:8px 10px;font-size:12px;font-weight:600;color:#4D240F;">${l.nombre}</td>
-      <td style="padding:8px 10px;font-size:11px;color:#555;">${l.tipo || '—'}</td>
+      <td style="padding:8px 10px;font-size:11px;color:#555;">${l.tipoTarea || l.tipo || '—'}</td>
       <td style="padding:8px 10px;"><span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600;${est}">${l.estado}</span></td>
       <td style="padding:8px 10px;font-size:11px;color:#555;">${l.fechaInicio || '—'}</td>
       <td style="padding:8px 10px;font-size:11px;color:#555;">${l.fechaFin || '—'}</td>
@@ -893,7 +921,7 @@ function construirSlideAplicacionPlaneada(app: any, semana: any): string {
     <td style="padding:7px 10px;font-size:12px;font-weight:600;color:#4D240F;">${item.productoNombre}</td>
     <td style="padding:7px 10px;font-size:11px;text-align:center;">${item.cantidadNecesaria} ${item.unidad}</td>
     <td style="padding:7px 10px;font-size:11px;text-align:center;">${item.inventarioDisponible ?? '—'}</td>
-    <td style="padding:7px 10px;font-size:11px;text-align:center;font-weight:600;color:${(item.cantidadOrdenar || 0) > 0 ? '#D32F2F' : '#73991C'};">${item.cantidadOrdenar ?? '—'}</td>
+    <td style="padding:7px 10px;font-size:11px;text-align:center;font-weight:600;color:${(item.cantidadAComprar || item.cantidadOrdenar || 0) > 0 ? '#D32F2F' : '#73991C'};">${item.cantidadAComprar ?? item.cantidadOrdenar ?? '—'}</td>
     <td style="padding:7px 10px;font-size:11px;text-align:right;">${formatCOP(item.costoEstimado || 0)}</td>
   </tr>`).join('');
 
@@ -1069,30 +1097,21 @@ function construirSlideMonitoreoPorSublote(loteVista: any, semana: any): string 
   if (!loteVista || !loteVista.sublotes || loteVista.sublotes.length === 0) return '';
   const loteNombre = loteVista.loteNombre || 'Lote';
 
-  // Collect plagas and sublotes
-  const plagasSet = new Set<string>();
-  const sublotesSet = new Set<string>();
-  loteVista.sublotes.forEach((s: any) => {
-    plagasSet.add(s.plagaNombre);
-    sublotesSet.add(s.subloteNombre);
-  });
-  const plagas = Array.from(plagasSet);
-  const sublotes = Array.from(sublotesSet);
+  // VistaMonitoreoSublote structure:
+  // - sublotes: string[] (column names)
+  // - plagas: string[] (row names)
+  // - celdas: Record<plaga, Record<sublote, ObservacionFecha[]>>
+  const sublotes = loteVista.sublotes || [];
+  const plagas = loteVista.plagas || [];
+  const celdas = loteVista.celdas || {};
 
-  // Map: plaga -> sublote -> observations array
-  const obsMap: Record<string, Record<string, any[]>> = {};
-  loteVista.sublotes.forEach((s: any) => {
-    if (!obsMap[s.plagaNombre]) obsMap[s.plagaNombre] = {};
-    if (!obsMap[s.plagaNombre][s.subloteNombre]) obsMap[s.plagaNombre][s.subloteNombre] = [];
-    obsMap[s.plagaNombre][s.subloteNombre].push(s);
-  });
+  const subHeaders = sublotes.map((sl: string) => `<th style="padding:7px 8px;font-size:10px;font-weight:700;color:#FFFFFF;background:#4D6B15;border:1px solid #3A5010;text-align:center;min-width:80px;">${sl}</th>`).join('');
 
-  const subHeaders = sublotes.map(sl => `<th style="padding:7px 8px;font-size:10px;font-weight:700;color:#FFFFFF;background:#4D6B15;border:1px solid #3A5010;text-align:center;min-width:80px;">${sl}</th>`).join('');
-
-  const bodyRows = plagas.map(plaga => {
-    const cells = sublotes.map(sl => {
-      const obs = obsMap[plaga]?.[sl] || [];
+  const bodyRows = plagas.map((plaga: string) => {
+    const cells = sublotes.map((sl: string) => {
+      const obs: any[] = celdas[plaga]?.[sl] || [];
       if (obs.length === 0) return `<td style="padding:6px 8px;text-align:center;background:#F5F5F0;border:1px solid #E8E8E8;font-size:10px;color:#CCC;">—</td>`;
+      // Show up to 3 observations (for the 3 monitoring dates)
       const chips = obs.slice(0, 3).map((o: any) => {
         const bg = getIncidenciaColor(o.incidencia);
         return `<div style="display:inline-block;padding:2px 6px;border-radius:8px;font-size:10px;font-weight:600;background:${bg};color:#4D240F;margin:1px;">${formatNum(o.incidencia, 1)}%</div>`;
@@ -1183,8 +1202,8 @@ function construirHTMLReporte(datos: any, analisis: AnalisisGemini): string {
   const cerradas = aplicaciones?.cerradas || [];
   const planeadas = aplicaciones?.planeadas || [];
 
-  // Build sublote vistas from monitoreo.detallePorLote
-  const vistasPorSublote: any[] = monitoreo?.detallePorLote || [];
+  // Build sublote vistas from monitoreo.vistasPorSublote (NOT detallePorLote — different structure)
+  const vistasPorSublote: any[] = monitoreo?.vistasPorSublote || [];
 
   const temasAd: any[] = temasAdicionales || [];
 

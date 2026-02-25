@@ -863,6 +863,7 @@ export async function fetchAplicacionesCerradas(
       });
 
       // Add grand total row for KPI table
+      const totalArbolesLotes = Array.from(lotesMap.values()).reduce((s, l) => s + l.arboles, 0);
       const totalCanecasDesv = totalCanecasPlan > 0
         ? ((totalCanecasReal - totalCanecasPlan) / totalCanecasPlan) * 100 : 0;
       const totalJornalesDesv = totalJornalesPlan > 0
@@ -876,11 +877,10 @@ export async function fetchAplicacionesCerradas(
         jornalesPlaneados: Math.round(totalJornalesPlan * 10) / 10,
         jornalesReales: totalJornalesReal,
         jornalesDesviacion: Math.round(totalJornalesDesv * 10) / 10,
-        arbolesTratados: totalArbolesApp,
+        arbolesTratados: totalArbolesLotes,
       });
 
       // Add grand total row for Financial table
-      const totalArbolesLotes = Array.from(lotesMap.values()).reduce((s, l) => s + l.arboles, 0);
       const avgCostoJornal = totalJornalesReal > 0 ? costoManoObraTotal / totalJornalesReal : 50000;
 
       financieroPorLote.push({

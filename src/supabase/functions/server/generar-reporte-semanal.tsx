@@ -490,7 +490,7 @@ function construirSlidePersonal(datos: any): string {
           <th style="padding:5px 10px;font-size:10px;font-weight:700;color:#D32F2F;text-align:left;border-bottom:1px solid #FFCDD2;">Empleado</th>
           <th style="padding:5px 10px;font-size:10px;font-weight:700;color:#D32F2F;text-align:left;border-bottom:1px solid #FFCDD2;">Motivo</th>
         </tr></thead>
-        <tbody>${p.detalleFallas.map((f: any) => `<tr><td style="padding:5px 10px;font-size:11px;border-bottom:1px solid #F5F5F5;">${f.nombre}</td><td style="padding:5px 10px;font-size:11px;color:#888;border-bottom:1px solid #F5F5F5;">${f.motivo || '—'}</td></tr>`).join('')}</tbody>
+        <tbody>${p.detalleFallas.map((f: any) => `<tr><td style="padding:5px 10px;font-size:11px;border-bottom:1px solid #F5F5F5;">${f.empleado || f.nombre || '—'}</td><td style="padding:5px 10px;font-size:11px;color:#888;border-bottom:1px solid #F5F5F5;">${f.razon || f.motivo || '—'}</td></tr>`).join('')}</tbody>
       </table>
     </div>`;
   }
@@ -504,7 +504,7 @@ function construirSlidePersonal(datos: any): string {
           <th style="padding:5px 10px;font-size:10px;font-weight:700;color:#F57C00;text-align:left;border-bottom:1px solid #FFE0B2;">Empleado</th>
           <th style="padding:5px 10px;font-size:10px;font-weight:700;color:#F57C00;text-align:left;border-bottom:1px solid #FFE0B2;">Motivo</th>
         </tr></thead>
-        <tbody>${p.detallePermisos.map((f: any) => `<tr><td style="padding:5px 10px;font-size:11px;border-bottom:1px solid #F5F5F5;">${f.nombre}</td><td style="padding:5px 10px;font-size:11px;color:#888;border-bottom:1px solid #F5F5F5;">${f.motivo || '—'}</td></tr>`).join('')}</tbody>
+        <tbody>${p.detallePermisos.map((f: any) => `<tr><td style="padding:5px 10px;font-size:11px;border-bottom:1px solid #F5F5F5;">${f.empleado || f.nombre || '—'}</td><td style="padding:5px 10px;font-size:11px;color:#888;border-bottom:1px solid #F5F5F5;">${f.razon || f.motivo || '—'}</td></tr>`).join('')}</tbody>
       </table>
     </div>`;
   }
@@ -536,9 +536,9 @@ function construirSlideLaboresProgramadas(datos: any): string {
   const rows = programadas.map((l: any) => {
     const est = estadoStyle[l.estado] || 'background:#F5F5F0;color:#4D240F;';
     return `<tr style="border-bottom:1px solid #F0F0F0;">
-      <td style="padding:8px 10px;font-size:12px;font-weight:700;color:#73991C;">${l.codigo || '—'}</td>
+      <td style="padding:8px 10px;font-size:12px;font-weight:700;color:#73991C;">${l.codigoTarea || l.codigo || '—'}</td>
       <td style="padding:8px 10px;font-size:12px;font-weight:600;color:#4D240F;">${l.nombre}</td>
-      <td style="padding:8px 10px;font-size:11px;color:#555;">${l.tipo || '—'}</td>
+      <td style="padding:8px 10px;font-size:11px;color:#555;">${l.tipoTarea || l.tipo || '—'}</td>
       <td style="padding:8px 10px;"><span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600;${est}">${l.estado}</span></td>
       <td style="padding:8px 10px;font-size:11px;color:#555;">${l.fechaInicio || '—'}</td>
       <td style="padding:8px 10px;font-size:11px;color:#555;">${l.fechaFin || '—'}</td>
@@ -924,7 +924,7 @@ function construirSlideAplicacionPlaneada(app: any, semana: any): string {
     <td style="padding:7px 10px;font-size:12px;font-weight:600;color:#4D240F;">${item.productoNombre}</td>
     <td style="padding:7px 10px;font-size:11px;text-align:center;">${item.cantidadNecesaria} ${item.unidad}</td>
     <td style="padding:7px 10px;font-size:11px;text-align:center;">${item.inventarioDisponible ?? '—'}</td>
-    <td style="padding:7px 10px;font-size:11px;text-align:center;font-weight:600;color:${(item.cantidadOrdenar || 0) > 0 ? '#D32F2F' : '#73991C'};">${item.cantidadOrdenar ?? '—'}</td>
+    <td style="padding:7px 10px;font-size:11px;text-align:center;font-weight:600;color:${(item.cantidadAComprar || item.cantidadOrdenar || 0) > 0 ? '#D32F2F' : '#73991C'};">${item.cantidadAComprar ?? item.cantidadOrdenar ?? '—'}</td>
     <td style="padding:7px 10px;font-size:11px;text-align:right;">${formatCOP(item.costoEstimado || 0)}</td>
   </tr>`).join('');
 
@@ -1205,8 +1205,8 @@ function construirHTMLReporte(datos: any, analisis: AnalisisGemini): string {
   const cerradas = aplicaciones?.cerradas || [];
   const planeadas = aplicaciones?.planeadas || [];
 
-  // Build sublote vistas from monitoreo.detallePorLote
-  const vistasPorSublote: any[] = monitoreo?.detallePorLote || [];
+  // Build sublote vistas from monitoreo.vistasPorSublote (NOT detallePorLote — different structure)
+  const vistasPorSublote: any[] = monitoreo?.vistasPorSublote || [];
 
   const temasAd: any[] = temasAdicionales || [];
 
