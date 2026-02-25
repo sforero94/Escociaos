@@ -4,6 +4,7 @@
 
 import { getSupabase, getCurrentUser } from './supabase/client';
 import { projectId, publicAnonKey } from './supabase/info.tsx';
+import html2pdf from 'html2pdf.js';
 import type {
   DatosReporteSemanal,
   GenerateReportResponse,
@@ -100,9 +101,6 @@ export async function generarHTMLReporte(
  * Retorna un Blob con el PDF generado
  */
 export async function convertirHTMLaPDF(html: string): Promise<Blob> {
-  // Importar html2pdf.js dinámicamente
-  const html2pdf = (await import('html2pdf.js')).default;
-
   // Crear un contenedor temporal para renderizar el HTML
   // Formato Slides 16:9: 1280px width
   // Nota: opacity debe ser 1 (no 0) para que html2canvas pueda capturar el contenido
