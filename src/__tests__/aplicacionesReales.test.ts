@@ -104,4 +104,3 @@ describe('aplicacionesReales', () => {
     expect(resultado.get('lote-2')).toEqual({ jornales: 1, costo: 60000 });
   });
 });
-
