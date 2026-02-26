@@ -368,7 +368,8 @@ async function llamarGemini(datosFormateados: string, instruccionesAdicionales?:
 function formatCOP(n: number): string {
   return '$' + Math.round(n).toLocaleString('es-CO');
 }
-function formatNum(n: number, decimals = 2): string {
+function formatNum(n: number | null | undefined, decimals = 2): string {
+  if (n == null || isNaN(n)) return '0';
   return n.toFixed(decimals);
 }
 function getHeatmapColor(value: number, maxValue: number): string {
