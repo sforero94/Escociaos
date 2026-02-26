@@ -2,6 +2,7 @@
 // Fetches all closure data from Supabase for a closed application
 
 import { getSupabase } from './supabase/client';
+import { fetchDatosRealesAplicacion } from './aplicacionesReales';
 import type { DatosReporteCierre } from './generarPDFReporteCierre';
 
 export async function fetchDatosReporteCierre(aplicacionId: string): Promise<DatosReporteCierre> {
@@ -70,39 +71,21 @@ export async function fetchDatosReporteCierre(aplicacionId: string): Promise<Dat
     });
   }
 
-  // 5. Fetch actual products applied (from movimientos_diarios -> movimientos_diarios_productos)
-  const { data: movimientosDiarios } = await supabase
-    .from('movimientos_diarios')
-    .select('id')
-    .eq('aplicacion_id', aplicacionId);
-
   const aplicadosMap = new Map<string, { nombre: string; unidad: string; cantidad: number }>();
-
-  if (movimientosDiarios && movimientosDiarios.length > 0) {
-    const movIds = movimientosDiarios.map((m: any) => m.id);
-    const { data: prodsMov } = await supabase
-      .from('movimientos_diarios_productos')
-      .select('producto_id, producto_nombre, cantidad_utilizada, unidad')
-      .in('movimiento_diario_id', movIds);
-
-    prodsMov?.forEach((prod: any) => {
-      // Convert to base unit (L or Kg)
-      let cantidadBase = prod.cantidad_utilizada;
-      if (prod.unidad === 'cc') cantidadBase = prod.cantidad_utilizada / 1000;
-      else if (prod.unidad === 'g') cantidadBase = prod.cantidad_utilizada / 1000;
-
-      const existing = aplicadosMap.get(prod.producto_id);
-      if (existing) {
-        existing.cantidad += cantidadBase;
-      } else {
-        aplicadosMap.set(prod.producto_id, {
-          nombre: prod.producto_nombre,
-          unidad: prod.unidad === 'cc' || prod.unidad === 'L' ? 'Litros' : 'Kilos',
-          cantidad: cantidadBase,
-        });
-      }
-    });
-  }
+  const datosReales = await fetchDatosRealesAplicacion(aplicacionId);
+  const productosAplicados = Array.from(datosReales.productosPorLote.values()).flat();
+  productosAplicados.forEach((prod) => {
+    const existing = aplicadosMap.get(prod.productoId);
+    if (existing) {
+      existing.cantidad += prod.cantidadBase;
+    } else {
+      aplicadosMap.set(prod.productoId, {
+        nombre: prod.productoNombre,
+        unidad: prod.unidadBase,
+        cantidad: prod.cantidadBase,
+      });
+    }
+  });
 
   // 6. Fetch product prices for cost calculation
   const allProductIds = [...new Set([...planeadosMap.keys(), ...aplicadosMap.keys()])];
