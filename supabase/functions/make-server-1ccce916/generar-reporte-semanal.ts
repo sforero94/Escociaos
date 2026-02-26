@@ -365,8 +365,7 @@ async function llamarGemini(datosFormateados: string, instruccionesAdicionales?:
 function formatCOP(n: number): string {
   return '$' + Math.round(n).toLocaleString('es-CO');
 }
-function formatNum(n: number | null | undefined, decimals = 2): string {
-  if (n === null || n === undefined || isNaN(n)) return '0';
+function formatNum(n: number, decimals = 2): string {
   return n.toFixed(decimals);
 }
 function getHeatmapColor(value: number, maxValue: number): string {
@@ -536,7 +535,7 @@ function construirSlideLaboresProgramadas(datos: any): string {
     return `<tr style="border-bottom:1px solid #F0F0F0;">
       <td style="padding:8px 10px;font-size:12px;font-weight:700;color:#73991C;">${l.codigoTarea || l.codigo || '—'}</td>
       <td style="padding:8px 10px;font-size:12px;font-weight:600;color:#4D240F;">${l.nombre}</td>
-      <td style="padding:8px 10px;font-size:11px;color:#555;">${l.tipoTarea || l.tipo || 'Sin tipo'}</td>
+      <td style="padding:8px 10px;font-size:11px;color:#555;">${l.tipoTarea || l.tipo || '—'}</td>
       <td style="padding:8px 10px;"><span style="display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600;${est}">${l.estado}</span></td>
       <td style="padding:8px 10px;font-size:11px;color:#555;">${l.fechaInicio || '—'}</td>
       <td style="padding:8px 10px;font-size:11px;color:#555;">${l.fechaFin || '—'}</td>
@@ -838,12 +837,7 @@ function construirSlideCierreFinanciero(app: any, semana: any): string {
     return `<tr style="border-bottom:1px solid #F0F0F0;">${cols.map(c => `<td style="padding:5px 6px;font-size:10px;color:#4D240F;${c.style}">${c.v}</td>`).join('')}</tr>`;
   }).join('');
 
-  const totalRow = (app.financieroPorLote || []).find((l: any) => l.loteNombre === 'TOTAL');
-  const costoTotal = totalRow
-    ? (totalRow.costoTotalReal || 0)
-    : (app.financieroPorLote || [])
-      .filter((l: any) => l.loteNombre !== 'TOTAL')
-      .reduce((s: number, l: any) => s + (l.costoTotalReal || 0), 0);
+  const costoTotal = (app.financieroPorLote || []).reduce((s: number, l: any) => s + (l.costoTotalReal || 0), 0);
 
   return `<div class="slide page-break">
   ${slideHeader('CIERRE', `Resultado Financiero — ${app.nombre}`, semana)}

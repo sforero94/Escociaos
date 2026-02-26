@@ -167,3 +167,4 @@ export async function fetchJornalesRealesPorLote(tareaId?: string | null): Promi
 
   return resultado;
 }
+

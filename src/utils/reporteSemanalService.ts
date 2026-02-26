@@ -32,6 +32,8 @@ export async function generarHTMLReporte(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 90_000);
 
+  console.log('[ReporteSemanal] Iniciando generación HTML via Edge Function...');
+
   try {
     const response = await fetch(
       `${EDGE_FUNCTION_BASE}/make-server-1ccce916/reportes/generar-semanal`,
@@ -47,10 +49,12 @@ export async function generarHTMLReporte(
     );
 
     clearTimeout(timeoutId);
+    console.log('[ReporteSemanal] Response status:', response.status);
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       const message = errorData.error || `Error del servidor: ${response.status}`;
+      console.error('[ReporteSemanal] Error response:', message);
 
       if (response.status === 504 || response.status === 502) {
         throw new Error(
@@ -61,6 +65,7 @@ export async function generarHTMLReporte(
     }
 
     const result = await response.json();
+    console.log('[ReporteSemanal] Result success:', result.success, 'HTML length:', result.html?.length || 0);
 
     if (!result.success) {
       throw new Error(result.error || 'Error al generar el reporte');
@@ -92,45 +97,39 @@ export async function generarHTMLReporte(
 // ============================================================================
 
 /**
- * Convierte HTML a PDF usando html2pdf.js con estrategia de iframe
+ * Convierte HTML a PDF usando html2pdf.js (cargado dinámicamente)
  * Retorna un Blob con el PDF generado
  */
 export async function convertirHTMLaPDF(html: string): Promise<Blob> {
-  // Crear un iframe para renderizar el HTML en un contexto limpio
-  const iframe = document.createElement('iframe');
-  iframe.style.position = 'fixed';
-  iframe.style.left = '0';
-  iframe.style.top = '0';
-  iframe.style.width = '1280px';
-  iframe.style.height = '2000px';
-  iframe.style.opacity = '0.01';
-  iframe.style.zIndex = '-1';
-  iframe.style.pointerEvents = 'none';
-  iframe.style.border = 'none';
-
-  document.body.appendChild(iframe);
+  // Crear un contenedor temporal para renderizar el HTML
+  // Formato Slides 16:9: 1280px width
+  // Nota: opacity debe ser 1 (no 0) para que html2canvas pueda capturar el contenido
+  const container = document.createElement('div');
+  container.innerHTML = html;
+  container.style.position = 'absolute';
+  container.style.left = '-9999px';
+  container.style.top = '0';
+  container.style.width = '1280px';
+  container.style.zIndex = '-9999';
+  container.style.opacity = '1';
+  container.style.pointerEvents = 'none';
+  container.style.overflow = 'visible';
+  document.body.appendChild(container);
 
   try {
-    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-    if (!iframeDoc) {
-      throw new Error('No se pudo acceder al documento del iframe');
-    }
+    // Dar tiempo al browser para renderizar el contenido
+    await new Promise(resolve => setTimeout(resolve, 1500));
 
-    iframeDoc.open();
-    iframeDoc.write(html);
-    iframeDoc.close();
-
-    // Esperar a que el contenido se renderice completamente
-    await new Promise(resolve => setTimeout(resolve, 3000));
-
-    const iframeBody = iframeDoc.body;
-    if (!iframeBody) {
-      throw new Error('No se pudo acceder al body del iframe');
+    // Verificar que el contenedor tiene dimensiones válidas
+    const rect = container.getBoundingClientRect();
+    if (rect.height < 10) {
+      console.warn('[ReporteSemanal] Container height near zero, waiting more...');
+      await new Promise(resolve => setTimeout(resolve, 1500));
     }
 
     const worker = html2pdf()
       .set({
-        margin: 0,
+        margin: 0, // No margins for strict 16:9 slides
         filename: 'reporte-semanal-slides.pdf',
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: {
@@ -139,8 +138,6 @@ export async function convertirHTMLaPDF(html: string): Promise<Blob> {
           letterRendering: true,
           width: 1280,
           windowWidth: 1280,
-          allowTaint: true,
-          backgroundColor: '#ffffff',
         },
         jsPDF: {
           unit: 'px',
@@ -152,16 +149,15 @@ export async function convertirHTMLaPDF(html: string): Promise<Blob> {
           before: ['.page-break'],
         },
       } as any)
-      .from(iframeBody);
+      .from(container);
 
+    // Usar toPdf().output('blob') que retorna un Blob real
     const pdfBlob: Blob = await worker.toPdf().output('blob');
 
-    console.log('[ReporteSemanal] PDF generado:', pdfBlob.size, 'bytes');
+    console.log('[ReporteSemanal] PDF generado:', pdfBlob.size, 'bytes, type:', pdfBlob.type);
     return pdfBlob;
   } finally {
-    if (iframe.parentNode) {
-      document.body.removeChild(iframe);
-    }
+    document.body.removeChild(container);
   }
 }
 
@@ -179,9 +175,8 @@ export async function guardarReportePDF(
   const supabase = getSupabase();
   const user = await getCurrentUser();
 
-  if (!pdfBlob || pdfBlob.size === 0) {
-    throw new Error('PDF blob is empty - cannot save');
-  }
+  console.log('[guardarReportePDF] Starting save process...');
+  console.log('[guardarReportePDF] User:', user?.id || 'NOT AUTHENTICATED');
 
   if (!user) {
     throw new Error('No hay usuario autenticado - Cannot save report without user session');
@@ -195,19 +190,28 @@ export async function guardarReportePDF(
   const fileName = `reporte-slides-semana-${semana.ano}-S${String(semana.numero).padStart(2, '0')}.pdf`;
   const storagePath = `${semana.ano}/${fileName}`;
 
+  console.log('[guardarReportePDF] Storage path:', storagePath);
+  console.log('[guardarReportePDF] Semana:', semana);
+
   // Subir PDF a Storage
+  console.log('[guardarReportePDF] Uploading PDF to Storage...');
   const { error: uploadError } = await supabase.storage
     .from('reportes-semanales')
     .upload(storagePath, pdfBlob, {
       contentType: 'application/pdf',
-      upsert: true,
+      upsert: true, // Sobrescribir si ya existe (regeneración)
     });
 
   if (uploadError) {
+    console.error('[guardarReportePDF] Storage upload error:', uploadError);
     throw new Error(`Error al subir PDF: ${uploadError.message}`);
   }
+  console.log('[guardarReportePDF] PDF uploaded successfully');
 
   // Guardar metadatos en la tabla
+  console.log('[guardarReportePDF] Saving metadata to reportes_semanales...');
+  console.log('[guardarReportePDF] User ID for generado_por:', user.id);
+
   const insertData = {
     fecha_inicio: semana.inicio,
     fecha_fin: semana.fin,
@@ -218,6 +222,8 @@ export async function guardarReportePDF(
     datos_entrada: datos,
   };
 
+  console.log('[guardarReportePDF] Insert data:', JSON.stringify(insertData, null, 2));
+
   // Try upsert first (insert or update on conflict)
   let result = await supabase
     .from('reportes_semanales')
@@ -227,6 +233,8 @@ export async function guardarReportePDF(
 
   // If upsert fails due to RLS, try insert-only as fallback
   if (result.error?.message?.includes('row-level security')) {
+    console.log('[guardarReportePDF] Upsert failed due to RLS, trying insert-only...');
+
     // Check if a record already exists
     const { data: existing } = await supabase
       .from('reportes_semanales')
@@ -236,6 +244,7 @@ export async function guardarReportePDF(
       .maybeSingle();
 
     if (existing) {
+      console.log('[guardarReportePDF] Record already exists, cannot update due to RLS. Using existing record.');
       // Return existing record metadata
       const { data: existingMetadata } = await supabase
         .from('reportes_semanales')
@@ -245,11 +254,13 @@ export async function guardarReportePDF(
         .single();
 
       if (existingMetadata) {
+        console.log('[guardarReportePDF] Using existing metadata:', existingMetadata.id);
         return existingMetadata;
       }
     }
 
     // Try insert-only (this should work with the INSERT policy)
+    console.log('[guardarReportePDF] Trying insert-only...');
     result = await supabase
       .from('reportes_semanales')
       .insert(insertData)
@@ -258,11 +269,16 @@ export async function guardarReportePDF(
   }
 
   if (result.error) {
+    console.error('[guardarReportePDF] Database error:', result.error);
+    console.error('[guardarReportePDF] Error code:', result.error.code);
+    console.error('[guardarReportePDF] Error details:', result.error.details);
+
     throw new Error(`Error al guardar metadatos: ${result.error.message}. ` +
       `Código: ${result.error.code}. ` +
       `Verifica que las políticas RLS estén configuradas correctamente.`);
   }
 
+  console.log('[guardarReportePDF] Metadata saved successfully:', result.data?.id);
   return result.data;
 }
 
@@ -415,26 +431,34 @@ export async function generarReporteCompleto(
   instrucciones?: string,
   onProgress?: (step: string) => void
 ): Promise<GenerarReporteCompletoResult> {
+  console.log('[ReporteSemanal] === Inicio flujo completo ===');
+
   // Paso 1: Generar HTML con Gemini
   onProgress?.('Generando diseño del reporte con IA...');
+  console.log('[ReporteSemanal] Paso 1: Llamando a Gemini...');
   const { html, tokens_usados } = await generarHTMLReporte(datos, instrucciones);
+  console.log('[ReporteSemanal] Paso 1 completado. HTML:', html.length, 'chars, Tokens:', tokens_usados);
 
   // Paso 2: Convertir HTML a PDF
   onProgress?.('Convirtiendo a PDF...');
+  console.log('[ReporteSemanal] Paso 2: Convirtiendo HTML a PDF...');
   const pdfBlob = await convertirHTMLaPDF(html);
-  console.log('[ReporteSemanal] PDF generado:', pdfBlob.size, 'bytes');
+  console.log('[ReporteSemanal] Paso 2 completado. PDF:', pdfBlob.size, 'bytes');
 
   // Paso 3: Guardar en Storage y BD (no bloquea si falla)
   let metadata: ReporteSemanalMetadata | null = null;
   let storageWarning: string | undefined;
   try {
     onProgress?.('Guardando reporte...');
+    console.log('[ReporteSemanal] Paso 3: Guardando en Supabase...');
     metadata = await guardarReportePDF(pdfBlob, datos);
+    console.log('[ReporteSemanal] Paso 3 completado. ID:', metadata.id);
   } catch (storageError: any) {
-    console.warn('[ReporteSemanal] No se pudo guardar en Storage:', storageError.message);
+    console.warn('[ReporteSemanal] Paso 3 falló:', storageError.message);
     storageWarning = `No se pudo guardar en almacenamiento: ${storageError.message}`;
   }
 
+  console.log('[ReporteSemanal] === Flujo completo exitoso ===');
   return {
     html,
     pdfBlob,
@@ -448,10 +472,6 @@ export async function generarReporteCompleto(
  * Trigger de descarga de un Blob como archivo
  */
 export function descargarBlob(blob: Blob, filename: string): void {
-  if (!blob || blob.size === 0) {
-    throw new Error('Cannot download: blob is empty');
-  }
-
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

@@ -224,16 +224,7 @@ export function ReporteSemanalWizard() {
   };
 
   const handleDescargar = () => {
-    if (!pdfBlob) {
-      toast.error('No hay PDF disponible para descargar. Genere el reporte primero.');
-      return;
-    }
-
-    if (pdfBlob.size === 0) {
-      toast.error('El PDF generado está vacío. Por favor intente generar nuevamente.');
-      return;
-    }
-
+    if (!pdfBlob) return;
     const filename = `reporte-slides-semana-${semana.ano}-S${String(semana.numero).padStart(2, '0')}.pdf`;
     descargarBlob(pdfBlob, filename);
     toast.success('PDF descargado');

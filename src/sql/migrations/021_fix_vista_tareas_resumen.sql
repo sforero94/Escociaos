@@ -75,3 +75,4 @@ GROUP BY t.id, tt.nombre, tt.categoria, e.nombre;
 -- - lote_nombre: Same as lote_nombres (for backward compatibility)
 -- - num_lotes: Count of lotes assigned to the task
 -- - tipo_tarea_nombre: Name of the task type (no longer shows "—")
+
