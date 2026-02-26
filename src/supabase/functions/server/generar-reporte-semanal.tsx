@@ -841,7 +841,12 @@ function construirSlideCierreFinanciero(app: any, semana: any): string {
     return `<tr style="border-bottom:1px solid #F0F0F0;">${cols.map(c => `<td style="padding:5px 6px;font-size:10px;color:#4D240F;${c.style}">${c.v}</td>`).join('')}</tr>`;
   }).join('');
 
-  const costoTotal = (app.financieroPorLote || []).reduce((s: number, l: any) => s + (l.costoTotalReal || 0), 0);
+  const totalRow = (app.financieroPorLote || []).find((l: any) => l.loteNombre === 'TOTAL');
+  const costoTotal = totalRow
+    ? (totalRow.costoTotalReal || 0)
+    : (app.financieroPorLote || [])
+        .filter((l: any) => l.loteNombre !== 'TOTAL')
+        .reduce((s: number, l: any) => s + (l.costoTotalReal || 0), 0);
 
   return `<div class="slide page-break">
   ${slideHeader('CIERRE', `Resultado Financiero — ${app.nombre}`, semana)}
