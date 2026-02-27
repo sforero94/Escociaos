@@ -225,6 +225,10 @@ export function ReporteSemanalWizard() {
 
   const handleDescargar = () => {
     if (!pdfBlob) return;
+    if (pdfBlob.size < 10_000) {
+      toast.error('El PDF parece vacío. Genera el reporte nuevamente.');
+      return;
+    }
     const filename = `reporte-slides-semana-${semana.ano}-S${String(semana.numero).padStart(2, '0')}.pdf`;
     descargarBlob(pdfBlob, filename);
     toast.success('PDF descargado');

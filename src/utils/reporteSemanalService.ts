@@ -101,7 +101,30 @@ export async function generarHTMLReporte(
  * Retorna un Blob con el PDF generado
  */
 export async function convertirHTMLaPDF(html: string): Promise<Blob> {
-  // Renderizar en un iframe aislado para evitar capturas en blanco.
+  const pdfOptions = {
+    margin: 0,
+    filename: 'reporte-semanal-slides.pdf',
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: {
+      scale: 2,
+      useCORS: true,
+      letterRendering: true,
+      width: 1280,
+      windowWidth: 1280,
+      backgroundColor: '#ffffff',
+    },
+    jsPDF: {
+      unit: 'px',
+      format: [1280, 720],
+      orientation: 'landscape',
+    },
+    pagebreak: {
+      mode: ['css'],
+      before: ['.page-break'],
+    },
+  } as any;
+
+  // Estrategia 1: iframe (más aislada)
   const iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
   iframe.style.left = '0';
@@ -116,55 +139,45 @@ export async function convertirHTMLaPDF(html: string): Promise<Blob> {
 
   try {
     const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-    if (!iframeDoc) {
-      throw new Error('No se pudo acceder al documento del iframe');
-    }
-
+    if (!iframeDoc) throw new Error('No se pudo acceder al documento del iframe');
     iframeDoc.open();
     iframeDoc.write(html);
     iframeDoc.close();
-
-    // Esperar render completo antes de capturar.
     await new Promise(resolve => setTimeout(resolve, 3000));
 
     const iframeBody = iframeDoc.body;
-    if (!iframeBody) {
-      throw new Error('No se pudo acceder al body del iframe');
+    if (!iframeBody) throw new Error('No se pudo acceder al body del iframe');
+
+    let pdfBlob: Blob = await html2pdf().set(pdfOptions).from(iframeBody).toPdf().output('blob');
+
+    // Si sale demasiado pequeño, fallback a contenedor DOM directo.
+    if (pdfBlob.size < 10_000) {
+      const container = document.createElement('div');
+      container.innerHTML = html;
+      container.style.position = 'fixed';
+      container.style.left = '0';
+      container.style.top = '0';
+      container.style.width = '1280px';
+      container.style.opacity = '0.01';
+      container.style.zIndex = '-1';
+      container.style.pointerEvents = 'none';
+      document.body.appendChild(container);
+      try {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        pdfBlob = await html2pdf().set(pdfOptions).from(container).toPdf().output('blob');
+      } finally {
+        if (container.parentNode) document.body.removeChild(container);
+      }
     }
 
-    const worker = html2pdf()
-      .set({
-        margin: 0, // No margins for strict 16:9 slides
-        filename: 'reporte-semanal-slides.pdf',
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          letterRendering: true,
-          width: 1280,
-          windowWidth: 1280,
-        },
-        jsPDF: {
-          unit: 'px',
-          format: [1280, 720],
-          orientation: 'landscape',
-        },
-        pagebreak: {
-          mode: ['css'],
-          before: ['.page-break'],
-        },
-      } as any)
-      .from(iframeBody);
-
-    // Usar toPdf().output('blob') que retorna un Blob real
-    const pdfBlob: Blob = await worker.toPdf().output('blob');
+    if (pdfBlob.size < 10_000) {
+      throw new Error('PDF generado vacío o inválido. Intenta generar nuevamente.');
+    }
 
     console.log('[ReporteSemanal] PDF generado:', pdfBlob.size, 'bytes, type:', pdfBlob.type);
     return pdfBlob;
   } finally {
-    if (iframe.parentNode) {
-      document.body.removeChild(iframe);
-    }
+    if (iframe.parentNode) document.body.removeChild(iframe);
   }
 }
 
