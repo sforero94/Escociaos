@@ -101,30 +101,35 @@ export async function generarHTMLReporte(
  * Retorna un Blob con el PDF generado
  */
 export async function convertirHTMLaPDF(html: string): Promise<Blob> {
-  // Crear un contenedor temporal para renderizar el HTML
-  // Formato Slides 16:9: 1280px width
-  // Nota: opacity debe ser 1 (no 0) para que html2canvas pueda capturar el contenido
-  const container = document.createElement('div');
-  container.innerHTML = html;
-  container.style.position = 'absolute';
-  container.style.left = '-9999px';
-  container.style.top = '0';
-  container.style.width = '1280px';
-  container.style.zIndex = '-9999';
-  container.style.opacity = '1';
-  container.style.pointerEvents = 'none';
-  container.style.overflow = 'visible';
-  document.body.appendChild(container);
+  // Renderizar en un iframe aislado para evitar capturas en blanco.
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.left = '0';
+  iframe.style.top = '0';
+  iframe.style.width = '1280px';
+  iframe.style.height = '2000px';
+  iframe.style.opacity = '0.01';
+  iframe.style.zIndex = '-1';
+  iframe.style.pointerEvents = 'none';
+  iframe.style.border = 'none';
+  document.body.appendChild(iframe);
 
   try {
-    // Dar tiempo al browser para renderizar el contenido
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!iframeDoc) {
+      throw new Error('No se pudo acceder al documento del iframe');
+    }
 
-    // Verificar que el contenedor tiene dimensiones válidas
-    const rect = container.getBoundingClientRect();
-    if (rect.height < 10) {
-      console.warn('[ReporteSemanal] Container height near zero, waiting more...');
-      await new Promise(resolve => setTimeout(resolve, 1500));
+    iframeDoc.open();
+    iframeDoc.write(html);
+    iframeDoc.close();
+
+    // Esperar render completo antes de capturar.
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    const iframeBody = iframeDoc.body;
+    if (!iframeBody) {
+      throw new Error('No se pudo acceder al body del iframe');
     }
 
     const worker = html2pdf()
@@ -149,7 +154,7 @@ export async function convertirHTMLaPDF(html: string): Promise<Blob> {
           before: ['.page-break'],
         },
       } as any)
-      .from(container);
+      .from(iframeBody);
 
     // Usar toPdf().output('blob') que retorna un Blob real
     const pdfBlob: Blob = await worker.toPdf().output('blob');
@@ -157,7 +162,9 @@ export async function convertirHTMLaPDF(html: string): Promise<Blob> {
     console.log('[ReporteSemanal] PDF generado:', pdfBlob.size, 'bytes, type:', pdfBlob.type);
     return pdfBlob;
   } finally {
-    document.body.removeChild(container);
+    if (iframe.parentNode) {
+      document.body.removeChild(iframe);
+    }
   }
 }
 
