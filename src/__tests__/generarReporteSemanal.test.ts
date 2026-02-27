@@ -245,7 +245,7 @@ describe('Edge Function: generarReporteSemanal', () => {
       const [url, options] = mockFetch.mock.calls[0];
 
       // Verifica URL con modelo y API key
-      expect(url).toContain('gemini-3-pro-preview');
+      expect(url).toContain('gemini-3.1-pro-preview');
       expect(url).toContain('key=test-api-key-12345');
       expect(options.method).toBe('POST');
       expect(options.headers['Content-Type']).toBe('application/json');
