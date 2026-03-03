@@ -25,10 +25,12 @@ import type {
   AplicacionCierreGeneral,
   AplicacionCierreKPILote,
   AplicacionCierreFinancieroLote,
-  VistaMonitoreoLote,
-  VistaLotePlaga,
-  VistaMonitoreoSublote,
-  ObservacionFecha,
+  ResumenPlagaGlobal,
+  VistaLoteComparativa,
+  PlagaLoteComparativa,
+  VistaSubloteComparativa,
+  CeldaComparativa,
+  TendenciaDir,
 } from '../types/reporteSemanal';
 import type { Insight } from '../types/monitoreo';
 
@@ -1034,34 +1036,92 @@ export async function fetchListaAplicacionesCerradas(): Promise<{ id: string; no
  * Obtiene datos de monitoreo: tendencias de los últimos 3 eventos,
  * detalle por lote, vistas por lote con 3 fechas, y vistas por sublote.
  */
-export async function fetchDatosMonitoreo(): Promise<DatosMonitoreo> {
+export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMonitoreo> {
   const supabase = getSupabase();
 
-  // Get all unique monitoring dates, ascending (oldest first)
-  // Then take the last 3 (most recent) which will be in chronological order
+  // 1. Load ALL lotes and sublotes from the DB (to guarantee all appear even without data)
+  const [
+    { data: todosLotes, error: errLotes },
+    { data: todosSublotes, error: errSub },
+  ] = await Promise.all([
+    supabase.from('lotes').select('id, nombre').order('nombre'),
+    supabase.from('sublotes').select('id, nombre, lote_id').order('nombre'),
+  ]);
+
+  if (errLotes) throw new Error(`Error al cargar lotes: ${errLotes.message}`);
+  if (errSub) throw new Error(`Error al cargar sublotes: ${errSub.message}`);
+
+  const lotesDB = (todosLotes || []) as Array<{ id: string; nombre: string }>;
+  const sublotesDB = (todosSublotes || []) as Array<{ id: string; nombre: string; lote_id: string }>;
+
+  // 2. Find the 2 most relevant monitoring dates relative to the report week
+  //    - fechaActual: most recent observation within the report week, or up to 2 weeks before
+  //    - fechaAnterior: the observation immediately before fechaActual
+  const limiteInferior = restarDias(semana.inicio, 14); // 2 weeks back from start of report week
+
   const { data: fechasRaw, error: errorFechas } = await supabase
     .from('monitoreos')
     .select('fecha_monitoreo')
-    .order('fecha_monitoreo', { ascending: true });
+    .gte('fecha_monitoreo', limiteInferior)
+    .lte('fecha_monitoreo', semana.fin)
+    .order('fecha_monitoreo', { ascending: false });
 
   if (errorFechas) throw new Error(`Error al cargar fechas de monitoreo: ${errorFechas.message}`);
 
-  const fechasUnicas = [...new Set((fechasRaw || []).map(r => r.fecha_monitoreo))];
-  // Take last 3 (most recent) - now in chronological order (oldest→newest)
-  const ultimas3Fechas = fechasUnicas.slice(-3);
+  const fechasUnicasRecientes = [...new Set((fechasRaw || []).map(r => r.fecha_monitoreo))];
+  // fechasUnicasRecientes is sorted DESC (newest first)
 
-  if (ultimas3Fechas.length === 0) {
+  const fechaActual = fechasUnicasRecientes[0] || null;
+  let fechaAnterior: string | null = null;
+
+  if (fechaActual) {
+    // Look for any monitoring date before fechaActual (not limited to the 2-week window)
+    const { data: anteriorRaw } = await supabase
+      .from('monitoreos')
+      .select('fecha_monitoreo')
+      .lt('fecha_monitoreo', fechaActual)
+      .order('fecha_monitoreo', { ascending: false })
+      .limit(1);
+    fechaAnterior = anteriorRaw?.[0]?.fecha_monitoreo || null;
+  }
+
+  // Build aviso if data is from a previous week
+  let avisoFechaDesactualizada: string | null = null;
+  if (fechaActual && fechaActual < semana.inicio) {
+    avisoFechaDesactualizada = `Datos del monitoreo del ${fechaActual}. No se realizó monitoreo en la semana del reporte.`;
+  }
+
+  // Empty result if no monitoring data at all
+  if (!fechaActual) {
     return {
+      fechaActual: null,
+      fechaAnterior: null,
+      avisoFechaDesactualizada: 'No se encontraron monitoreos en las últimas 2 semanas.',
+      resumenGlobal: [],
+      vistasPorLote: lotesDB.map(l => ({
+        loteId: l.id,
+        loteNombre: l.nombre,
+        sinDatos: true,
+        plagas: [],
+      })),
+      vistasPorSublote: lotesDB.map(l => ({
+        loteId: l.id,
+        loteNombre: l.nombre,
+        sinDatos: true,
+        sublotes: sublotesDB.filter(s => s.lote_id === l.id).map(s => s.nombre).sort(),
+        plagas: [],
+        celdas: {},
+      })),
+      insights: [],
       tendencias: [],
       detallePorLote: [],
-      insights: [],
       fechasMonitoreo: [],
-      vistasPorLote: [],
-      vistasPorSublote: [],
     };
   }
 
-  // Load monitoring data for the last 3 dates
+  // 3. Load monitoring records for the 2 relevant dates
+  const fechasQuery = fechaAnterior ? [fechaActual, fechaAnterior] : [fechaActual];
+
   const { data: monitoreos, error: errorMon } = await supabase
     .from('monitoreos')
     .select(`
@@ -1078,18 +1138,195 @@ export async function fetchDatosMonitoreo(): Promise<DatosMonitoreo> {
       lotes(id, nombre),
       sublotes(id, nombre)
     `)
-    .in('fecha_monitoreo', ultimas3Fechas)
+    .in('fecha_monitoreo', fechasQuery)
     .order('fecha_monitoreo', { ascending: true });
 
   if (errorMon) throw new Error(`Error al cargar monitoreos: ${errorMon.message}`);
 
-  // --- TENDENCIAS: fecha × plaga → avg incidencia ---
-  const tendenciasMap = new Map<string, Map<string, number[]>>();
+  const registros = monitoreos || [];
+  const regActuales = registros.filter((m: any) => m.fecha_monitoreo === fechaActual);
+  const regAnteriores = registros.filter((m: any) => m.fecha_monitoreo === fechaAnterior);
 
-  (monitoreos || []).forEach((m: any) => {
+  // Collect all unique plaga names from both observations
+  const allPlagas = new Set<string>();
+  registros.forEach((m: any) => {
+    allPlagas.add(m.plagas_enfermedades_catalogo?.nombre || 'Desconocida');
+  });
+  const plagasArr = Array.from(allPlagas);
+
+  // Helper: determine trend direction
+  function calcTendencia(actual: number | null, anterior: number | null): TendenciaDir {
+    if (actual === null || anterior === null) return 'sin_referencia';
+    const diff = actual - anterior;
+    if (Math.abs(diff) < 0.5) return 'estable';
+    return diff > 0 ? 'subiendo' : 'bajando';
+  }
+
+  // Helper: check if plaga is de interés
+  function esPlagaInteres(nombre: string): boolean {
+    return PLAGAS_INTERES.some(p => nombre.toLowerCase().includes(p.toLowerCase()));
+  }
+
+  // Helper: avg of incidencias
+  function promedio(vals: number[]): number {
+    if (vals.length === 0) return 0;
+    return Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10;
+  }
+
+  // 4. Build RESUMEN GLOBAL (Slide 1)
+  // For each plaga: avg across all lotes (actual), min-max across lotes, and comparison with anterior
+  const resumenGlobal: ResumenPlagaGlobal[] = plagasArr.map(plaga => {
+    // Current: per-lote averages
+    const lotesActuales = new Map<string, number[]>();
+    regActuales.forEach((m: any) => {
+      if ((m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') !== plaga) return;
+      const loteId = m.lote_id;
+      if (!lotesActuales.has(loteId)) lotesActuales.set(loteId, []);
+      lotesActuales.get(loteId)!.push(Number(m.incidencia) || 0);
+    });
+
+    const promediosPorLote = Array.from(lotesActuales.values()).map(vals => promedio(vals));
+    const promedioActual = promediosPorLote.length > 0
+      ? Math.round((promediosPorLote.reduce((a, b) => a + b, 0) / promediosPorLote.length) * 10) / 10
+      : null;
+    const minLote = promediosPorLote.length > 0 ? Math.min(...promediosPorLote) : null;
+    const maxLote = promediosPorLote.length > 0 ? Math.max(...promediosPorLote) : null;
+
+    // Previous: global average
+    const valsAnterior = regAnteriores
+      .filter((m: any) => (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga)
+      .map((m: any) => Number(m.incidencia) || 0);
+    const promedioAnterior = valsAnterior.length > 0 ? promedio(valsAnterior) : null;
+
+    return {
+      plagaNombre: plaga,
+      esPlaga_interes: esPlagaInteres(plaga),
+      promedioActual,
+      minLote,
+      maxLote,
+      promedioAnterior,
+      tendencia: calcTendencia(promedioActual, promedioAnterior),
+    };
+  });
+
+  // Sort: plagas de interés first, then by incidencia desc
+  resumenGlobal.sort((a, b) => {
+    if (a.esPlaga_interes !== b.esPlaga_interes) return a.esPlaga_interes ? -1 : 1;
+    return (b.promedioActual ?? 0) - (a.promedioActual ?? 0);
+  });
+
+  // 5. Build VISTAS POR LOTE (Slide 2) — ALL lotes, including those without data
+  const vistasPorLote: VistaLoteComparativa[] = lotesDB.map(lote => {
+    const regLoteActual = regActuales.filter((m: any) => m.lote_id === lote.id);
+    const regLoteAnterior = regAnteriores.filter((m: any) => m.lote_id === lote.id);
+
+    if (regLoteActual.length === 0 && regLoteAnterior.length === 0) {
+      return { loteId: lote.id, loteNombre: lote.nombre, sinDatos: true, plagas: [] };
+    }
+
+    // Collect plagas for this lote (from both dates)
+    const plagasLote = new Set<string>();
+    [...regLoteActual, ...regLoteAnterior].forEach((m: any) => {
+      plagasLote.add(m.plagas_enfermedades_catalogo?.nombre || 'Desconocida');
+    });
+
+    const plagas: PlagaLoteComparativa[] = Array.from(plagasLote).map(plaga => {
+      const valsActual = regLoteActual
+        .filter((m: any) => (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga)
+        .map((m: any) => Number(m.incidencia) || 0);
+      const valsAnteriorLote = regLoteAnterior
+        .filter((m: any) => (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga)
+        .map((m: any) => Number(m.incidencia) || 0);
+
+      const actual = valsActual.length > 0 ? promedio(valsActual) : null;
+      const anterior = valsAnteriorLote.length > 0 ? promedio(valsAnteriorLote) : null;
+
+      return {
+        plagaNombre: plaga,
+        esPlaga_interes: esPlagaInteres(plaga),
+        actual,
+        anterior,
+        tendencia: calcTendencia(actual, anterior),
+      };
+    });
+
+    // Sort: plagas de interés first, then by incidencia desc
+    plagas.sort((a, b) => {
+      if (a.esPlaga_interes !== b.esPlaga_interes) return a.esPlaga_interes ? -1 : 1;
+      return (b.actual ?? 0) - (a.actual ?? 0);
+    });
+
+    return { loteId: lote.id, loteNombre: lote.nombre, sinDatos: false, plagas };
+  });
+
+  // 6. Build VISTAS POR SUBLOTE (Slide 3) — ALL lotes/sublotes
+  const vistasPorSublote: VistaSubloteComparativa[] = lotesDB.map(lote => {
+    const sublotesLote = sublotesDB.filter(s => s.lote_id === lote.id).map(s => s.nombre).sort();
+    const regLoteActual = regActuales.filter((m: any) => m.lote_id === lote.id);
+    const regLoteAnterior = regAnteriores.filter((m: any) => m.lote_id === lote.id);
+
+    if (regLoteActual.length === 0 && regLoteAnterior.length === 0) {
+      return {
+        loteId: lote.id, loteNombre: lote.nombre, sinDatos: true,
+        sublotes: sublotesLote, plagas: [], celdas: {},
+      };
+    }
+
+    // Collect plagas for this lote
+    const plagasLoteSet = new Set<string>();
+    [...regLoteActual, ...regLoteAnterior].forEach((m: any) => {
+      plagasLoteSet.add(m.plagas_enfermedades_catalogo?.nombre || 'Desconocida');
+    });
+    const plagasLote = Array.from(plagasLoteSet).sort((a, b) => {
+      const aInt = esPlagaInteres(a);
+      const bInt = esPlagaInteres(b);
+      if (aInt !== bInt) return aInt ? -1 : 1;
+      return a.localeCompare(b);
+    });
+
+    // Build celdas: plaga → sublote → CeldaComparativa
+    const celdas: Record<string, Record<string, CeldaComparativa>> = {};
+    plagasLote.forEach(plaga => {
+      celdas[plaga] = {};
+      sublotesLote.forEach(subloteNombre => {
+        const valsActual = regLoteActual
+          .filter((m: any) =>
+            (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga &&
+            (m.sublotes?.nombre || 'Sin sublote') === subloteNombre
+          )
+          .map((m: any) => Number(m.incidencia) || 0);
+        const valsAnteriorSub = regLoteAnterior
+          .filter((m: any) =>
+            (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga &&
+            (m.sublotes?.nombre || 'Sin sublote') === subloteNombre
+          )
+          .map((m: any) => Number(m.incidencia) || 0);
+
+        const actual = valsActual.length > 0 ? promedio(valsActual) : null;
+        const anterior = valsAnteriorSub.length > 0 ? promedio(valsAnteriorSub) : null;
+
+        celdas[plaga][subloteNombre] = {
+          actual,
+          anterior,
+          tendencia: calcTendencia(actual, anterior),
+        };
+      });
+    });
+
+    return {
+      loteId: lote.id, loteNombre: lote.nombre, sinDatos: false,
+      sublotes: sublotesLote, plagas: plagasLote, celdas,
+    };
+  });
+
+  // 7. INSIGHTS (keep existing logic)
+  const insights: Insight[] = generarInsightsBasicos(registros);
+
+  // 8. LEGACY data for Gemini prompt (tendencias + detallePorLote)
+  const tendenciasMap = new Map<string, Map<string, number[]>>();
+  registros.forEach((m: any) => {
     const fecha = m.fecha_monitoreo;
     const plaga = m.plagas_enfermedades_catalogo?.nombre || 'Desconocida';
-
     if (!tendenciasMap.has(fecha)) tendenciasMap.set(fecha, new Map());
     const fechaMap = tendenciasMap.get(fecha)!;
     if (!fechaMap.has(plaga)) fechaMap.set(plaga, []);
@@ -1099,31 +1336,21 @@ export async function fetchDatosMonitoreo(): Promise<DatosMonitoreo> {
   const tendencias: TendenciaMonitoreo[] = [];
   tendenciasMap.forEach((plagasMap, fecha) => {
     plagasMap.forEach((incidencias, plagaNombre) => {
-      const promedio = incidencias.reduce((a, b) => a + b, 0) / incidencias.length;
       tendencias.push({
         fecha,
         plagaNombre,
-        incidenciaPromedio: Math.round(promedio * 10) / 10,
+        incidenciaPromedio: promedio(incidencias),
       });
     });
   });
 
-  // --- DETALLE POR LOTE: most recent monitoring ---
-  const fechaMasReciente = ultimas3Fechas[0];
-  const monitoreoReciente = (monitoreos || []).filter(
-    (m: any) => m.fecha_monitoreo === fechaMasReciente
-  );
-
   const detalleLoteMap = new Map<string, MonitoreoSublote[]>();
-  monitoreoReciente.forEach((m: any) => {
+  regActuales.forEach((m: any) => {
     const loteNombre = m.lotes?.nombre || 'Sin lote';
-    const subloteNombre = m.sublotes?.nombre || 'Sin sublote';
-    const plagaNombre = m.plagas_enfermedades_catalogo?.nombre || 'Desconocida';
-
     if (!detalleLoteMap.has(loteNombre)) detalleLoteMap.set(loteNombre, []);
     detalleLoteMap.get(loteNombre)!.push({
-      subloteNombre,
-      plagaNombre,
+      subloteNombre: m.sublotes?.nombre || 'Sin sublote',
+      plagaNombre: m.plagas_enfermedades_catalogo?.nombre || 'Desconocida',
       incidencia: Number(m.incidencia) || 0,
       gravedad: m.gravedad_texto || 'Baja',
       arboresAfectados: Number(m.arboles_afectados) || 0,
@@ -1135,156 +1362,25 @@ export async function fetchDatosMonitoreo(): Promise<DatosMonitoreo> {
     .map(([loteNombre, sublotes]) => ({ loteNombre, sublotes }))
     .sort((a, b) => a.loteNombre.localeCompare(b.loteNombre));
 
-  // --- INSIGHTS ---
-  const insights: Insight[] = generarInsightsBasicos(monitoreos || []);
-
-  // --- VISTAS POR LOTE (3 fechas per lote × plaga) ---
-  const vistasPorLote = buildVistasPorLote(monitoreos || [], ultimas3Fechas);
-
-  // --- VISTAS POR SUBLOTE (1 per lote: sublotes × plagas grid with 3 obs) ---
-  const vistasPorSublote = buildVistasPorSublote(monitoreos || [], ultimas3Fechas);
-
   return {
-    tendencias,
-    detallePorLote,
-    insights,
-    fechasMonitoreo: ultimas3Fechas,
+    fechaActual,
+    fechaAnterior,
+    avisoFechaDesactualizada,
+    resumenGlobal,
     vistasPorLote,
     vistasPorSublote,
+    insights,
+    tendencias,
+    detallePorLote,
+    fechasMonitoreo: fechasQuery,
   };
 }
 
-function buildVistasPorLote(monitoreos: any[], fechas: string[]): VistaMonitoreoLote[] {
-  // loteId → plagaNombre → fecha → avg incidencia
-  const loteMap = new Map<string, { id: string; nombre: string; plagas: Map<string, Map<string, number[]>> }>();
-
-  monitoreos.forEach((m: any) => {
-    const loteId = m.lote_id;
-    const loteNombre = m.lotes?.nombre || 'Sin lote';
-    const plaga = m.plagas_enfermedades_catalogo?.nombre || 'Desconocida';
-    const fecha = m.fecha_monitoreo;
-    const incidencia = Number(m.incidencia) || 0;
-
-    if (!loteMap.has(loteId)) {
-      loteMap.set(loteId, { id: loteId, nombre: loteNombre, plagas: new Map() });
-    }
-    const loteEntry = loteMap.get(loteId)!;
-    if (!loteEntry.plagas.has(plaga)) loteEntry.plagas.set(plaga, new Map());
-    const plagaEntry = loteEntry.plagas.get(plaga)!;
-    if (!plagaEntry.has(fecha)) plagaEntry.set(fecha, []);
-    plagaEntry.get(fecha)!.push(incidencia);
-  });
-
-  const result: VistaMonitoreoLote[] = [];
-
-  loteMap.forEach(({ id, nombre, plagas }) => {
-    const plagasRows: VistaLotePlaga[] = [];
-
-    plagas.forEach((fechaMap, plagaNombre) => {
-      const esInteres = PLAGAS_INTERES.some(p =>
-        plagaNombre.toLowerCase().includes(p.toLowerCase())
-      );
-
-      const observaciones: ObservacionFecha[] = fechas.map(fecha => {
-        const vals = fechaMap.get(fecha);
-        if (!vals || vals.length === 0) return { fecha, incidencia: null };
-        const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
-        return { fecha, incidencia: Math.round(avg * 10) / 10 };
-      });
-
-      plagasRows.push({ plagaNombre, esPlaga_interes: esInteres, observaciones });
-    });
-
-    // Sort: plagas de interes first, then by latest incidencia desc
-    plagasRows.sort((a, b) => {
-      if (a.esPlaga_interes !== b.esPlaga_interes) return a.esPlaga_interes ? -1 : 1;
-      const aLast = a.observaciones.find(o => o.incidencia != null)?.incidencia || 0;
-      const bLast = b.observaciones.find(o => o.incidencia != null)?.incidencia || 0;
-      return bLast - aLast;
-    });
-
-    result.push({ loteId: id, loteNombre: nombre, plagasRows });
-  });
-
-  return result.sort((a, b) => a.loteNombre.localeCompare(b.loteNombre));
-}
-
-function buildVistasPorSublote(monitoreos: any[], fechas: string[]): VistaMonitoreoSublote[] {
-  // loteId → { sublotes: Set, plagas: Set, celdas: plaga → sublote → fecha → vals[] }
-  type LoteEntry = {
-    id: string;
-    nombre: string;
-    sublotes: Set<string>;
-    plagas: Set<string>;
-    celdas: Map<string, Map<string, Map<string, number[]>>>;
-  };
-
-  const loteMap = new Map<string, LoteEntry>();
-
-  monitoreos.forEach((m: any) => {
-    const loteId = m.lote_id;
-    const loteNombre = m.lotes?.nombre || 'Sin lote';
-    const subloteNombre = m.sublotes?.nombre || 'Sin sublote';
-    const plaga = m.plagas_enfermedades_catalogo?.nombre || 'Desconocida';
-    const fecha = m.fecha_monitoreo;
-    const incidencia = Number(m.incidencia) || 0;
-
-    if (!loteMap.has(loteId)) {
-      loteMap.set(loteId, {
-        id: loteId, nombre: loteNombre,
-        sublotes: new Set(), plagas: new Set(),
-        celdas: new Map(),
-      });
-    }
-
-    const entry = loteMap.get(loteId)!;
-    entry.sublotes.add(subloteNombre);
-    entry.plagas.add(plaga);
-
-    if (!entry.celdas.has(plaga)) entry.celdas.set(plaga, new Map());
-    const plagaMap = entry.celdas.get(plaga)!;
-    if (!plagaMap.has(subloteNombre)) plagaMap.set(subloteNombre, new Map());
-    const subloteMap = plagaMap.get(subloteNombre)!;
-    if (!subloteMap.has(fecha)) subloteMap.set(fecha, []);
-    subloteMap.get(fecha)!.push(incidencia);
-  });
-
-  const result: VistaMonitoreoSublote[] = [];
-
-  loteMap.forEach(({ id, nombre, sublotes, plagas, celdas }) => {
-    const sublotesArr = Array.from(sublotes).sort();
-    const plagasArr = Array.from(plagas).sort((a, b) => {
-      const aInt = PLAGAS_INTERES.some(p => a.toLowerCase().includes(p.toLowerCase()));
-      const bInt = PLAGAS_INTERES.some(p => b.toLowerCase().includes(p.toLowerCase()));
-      if (aInt !== bInt) return aInt ? -1 : 1;
-      return a.localeCompare(b);
-    });
-
-    const celdasObj: Record<string, Record<string, ObservacionFecha[]>> = {};
-
-    plagasArr.forEach(plaga => {
-      celdasObj[plaga] = {};
-      sublotesArr.forEach(sublote => {
-        const fechaMap = celdas.get(plaga)?.get(sublote);
-        celdasObj[plaga][sublote] = fechas.map(fecha => {
-          const vals = fechaMap?.get(fecha);
-          if (!vals || vals.length === 0) return { fecha, incidencia: null };
-          const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
-          return { fecha, incidencia: Math.round(avg * 10) / 10 };
-        });
-      });
-    });
-
-    result.push({
-      loteId: id,
-      loteNombre: nombre,
-      sublotes: sublotesArr,
-      plagas: plagasArr,
-      celdas: celdasObj,
-    });
-  });
-
-  return result.sort((a, b) => a.loteNombre.localeCompare(b.loteNombre));
+/** Resta N días a una fecha ISO y retorna ISO string */
+function restarDias(fechaISO: string, dias: number): string {
+  const d = new Date(fechaISO);
+  d.setDate(d.getDate() - dias);
+  return d.toISOString().split('T')[0];
 }
 
 /**
@@ -1389,7 +1485,7 @@ export async function fetchDatosReporteSemanal(
     fetchAplicacionesPlaneadas(),
     fetchAplicacionesActivas(),
     fetchAplicacionesCerradas(cerradasIds),
-    fetchDatosMonitoreo(),
+    fetchDatosMonitoreo(semana),
   ]);
 
   const jornalesPosibles = personalBase.totalTrabajadores * diasHabiles;

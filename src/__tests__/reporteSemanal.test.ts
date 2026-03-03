@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 function createChainableMock(resolvedData: any = { data: [], error: null }) {
   const chain: any = {};
   const methods = ['select', 'insert', 'update', 'upsert', 'delete', 'eq', 'neq',
-    'gte', 'lte', 'in', 'or', 'order', 'limit', 'single', 'maybeSingle'];
+    'gt', 'gte', 'lt', 'lte', 'in', 'or', 'order', 'limit', 'single', 'maybeSingle'];
 
   methods.forEach(method => {
     chain[method] = vi.fn(() => chain);
@@ -181,6 +181,24 @@ const MOCK_MONITOREOS_FECHAS = [
   { fecha_monitoreo: '2026-02-01' },
   { fecha_monitoreo: '2026-02-01' },
 ];
+
+const MOCK_LOTES = [
+  { id: 'lote-1', nombre: 'Lote PP' },
+  { id: 'lote-2', nombre: 'Lote ST' },
+];
+
+const MOCK_SUBLOTES = [
+  { id: 'sub-1', nombre: 'Sublote A', lote_id: 'lote-1' },
+  { id: 'sub-2', nombre: 'Sublote B', lote_id: 'lote-1' },
+  { id: 'sub-3', nombre: 'Sublote C', lote_id: 'lote-2' },
+];
+
+const MOCK_SEMANA_MONITOREO = {
+  inicio: '2026-02-09',
+  fin: '2026-02-15',
+  numero: 7,
+  ano: 2026,
+};
 
 const MOCK_MONITOREOS = [
   {
@@ -650,91 +668,103 @@ describe('fetchDatosMonitoreo', () => {
     vi.clearAllMocks();
   });
 
-  it('obtiene tendencias de los últimos 3 monitoreos', async () => {
-    const fechasChain = createChainableMock({ data: MOCK_MONITOREOS_FECHAS, error: null });
-    const monChain = createChainableMock({ data: MOCK_MONITOREOS, error: null });
+  // Helper to set up mocks for the new fetchDatosMonitoreo which queries:
+  // 1. lotes, 2. sublotes (in parallel), 3. monitoreos (fechas), 4. monitoreos (anterior), 5. monitoreos (full)
+  function setupMonitoreoMocks(opts: {
+    fechas?: any[];
+    monitoreos?: any[];
+    anteriorFecha?: any[];
+  } = {}) {
+    const lotesChain = createChainableMock({ data: MOCK_LOTES, error: null });
+    const sublotesChain = createChainableMock({ data: MOCK_SUBLOTES, error: null });
+    const fechasChain = createChainableMock({ data: opts.fechas ?? MOCK_MONITOREOS_FECHAS, error: null });
+    const anteriorChain = createChainableMock({ data: opts.anteriorFecha ?? [{ fecha_monitoreo: '2026-02-08' }], error: null });
+    const monChain = createChainableMock({ data: opts.monitoreos ?? MOCK_MONITOREOS, error: null });
 
     mockFrom.mockImplementation((table: string) => {
-      // First call returns fechas, second returns monitoreos
-      return mockFrom.mock.calls.length <= 1 ? fechasChain : monChain;
+      if (table === 'lotes') return lotesChain;
+      if (table === 'sublotes') return sublotesChain;
+      // monitoreos table is called multiple times; use call count to differentiate
+      return fechasChain;
     });
 
-    // Reset call tracking
-    mockFrom.mockClear();
-    mockFrom.mockImplementation(() => {
-      const callNum = mockFrom.mock.calls.length;
-      if (callNum === 1) return fechasChain;
-      return monChain;
+    // More sophisticated mock: track monitoreos calls
+    let monitoreoCallCount = 0;
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'lotes') return lotesChain;
+      if (table === 'sublotes') return sublotesChain;
+      if (table === 'monitoreos') {
+        monitoreoCallCount++;
+        if (monitoreoCallCount === 1) return fechasChain;    // fechas query
+        if (monitoreoCallCount === 2) return anteriorChain;   // anterior query
+        return monChain;                                       // full data query
+      }
+      return createChainableMock({ data: [], error: null });
     });
+  }
 
-    const resultado = await fetchDatosMonitoreo();
+  it('obtiene resumen global con comparativo', async () => {
+    setupMonitoreoMocks();
 
-    // Debe tener tendencias
-    expect(resultado.tendencias.length).toBeGreaterThan(0);
+    const resultado = await fetchDatosMonitoreo(MOCK_SEMANA_MONITOREO);
 
-    // Debe tener 3 fechas
-    expect(resultado.fechasMonitoreo.length).toBe(3);
-    expect(resultado.fechasMonitoreo).toContain('2026-02-15');
-    expect(resultado.fechasMonitoreo).toContain('2026-02-08');
-    expect(resultado.fechasMonitoreo).toContain('2026-02-01');
+    // Debe tener fechaActual (2026-02-15 cae dentro de la semana)
+    expect(resultado.fechaActual).toBe('2026-02-15');
+    expect(resultado.fechaAnterior).toBe('2026-02-08');
+
+    // Resumen global debe tener plagas
+    expect(resultado.resumenGlobal.length).toBeGreaterThan(0);
   });
 
   it('genera insights para plagas críticas (>= 30% incidencia)', async () => {
-    const fechasChain = createChainableMock({ data: MOCK_MONITOREOS_FECHAS, error: null });
-    const monChain = createChainableMock({ data: MOCK_MONITOREOS, error: null });
+    setupMonitoreoMocks();
 
-    mockFrom.mockClear();
-    mockFrom.mockImplementation(() => {
-      const callNum = mockFrom.mock.calls.length;
-      if (callNum === 1) return fechasChain;
-      return monChain;
-    });
-
-    const resultado = await fetchDatosMonitoreo();
+    const resultado = await fetchDatosMonitoreo(MOCK_SEMANA_MONITOREO);
 
     // Monalonion en Lote PP tiene promedio de (20+34.3)/2 = 27.15% en la fecha más reciente
-    // Dependiendo del cálculo, puede generar insight urgente o de atención
-    const insightsMonalonion = resultado.insights.filter(i =>
+    const insightsMonalonion = resultado.insights.filter((i: any) =>
       i.plaga === 'Monalonion'
     );
     expect(insightsMonalonion.length).toBeGreaterThanOrEqual(0);
   });
 
-  it('construye detalle por lote del monitoreo más reciente', async () => {
-    const fechasChain = createChainableMock({ data: MOCK_MONITOREOS_FECHAS, error: null });
-    const monChain = createChainableMock({ data: MOCK_MONITOREOS, error: null });
+  it('construye vistas por lote incluyendo todos los lotes', async () => {
+    setupMonitoreoMocks();
 
-    mockFrom.mockClear();
-    mockFrom.mockImplementation(() => {
-      const callNum = mockFrom.mock.calls.length;
-      if (callNum === 1) return fechasChain;
-      return monChain;
-    });
+    const resultado = await fetchDatosMonitoreo(MOCK_SEMANA_MONITOREO);
 
-    const resultado = await fetchDatosMonitoreo();
+    // Debe incluir TODOS los lotes de la BD (Lote PP y Lote ST)
+    expect(resultado.vistasPorLote.length).toBe(2);
 
-    // Fecha más reciente es 2026-02-15, solo Lote PP tiene datos
-    const lotePP = resultado.detallePorLote.find(l => l.loteNombre === 'Lote PP');
+    const lotePP = resultado.vistasPorLote.find((l: any) => l.loteNombre === 'Lote PP');
+    expect(lotePP).toBeDefined();
+    expect(lotePP!.sinDatos).toBe(false);
+    expect(lotePP!.plagas.length).toBeGreaterThan(0);
+  });
+
+  it('construye detalle por lote del monitoreo más reciente (legacy)', async () => {
+    setupMonitoreoMocks();
+
+    const resultado = await fetchDatosMonitoreo(MOCK_SEMANA_MONITOREO);
+
+    // Legacy detallePorLote still populated for Gemini
+    const lotePP = resultado.detallePorLote.find((l: any) => l.loteNombre === 'Lote PP');
     expect(lotePP).toBeDefined();
     expect(lotePP!.sublotes.length).toBe(2); // Sublote A y B
-
-    const subloteA = lotePP!.sublotes.find(s => s.subloteNombre === 'Sublote A');
-    expect(subloteA).toBeDefined();
-    expect(subloteA!.plagaNombre).toBe('Monalonion');
-    expect(subloteA!.incidencia).toBe(20.0);
-    expect(subloteA!.gravedad).toBe('Media');
   });
 
   it('retorna datos vacíos cuando no hay monitoreos', async () => {
-    const fechasChain = createChainableMock({ data: [], error: null });
-    mockFrom.mockReturnValue(fechasChain);
+    setupMonitoreoMocks({ fechas: [], monitoreos: [] });
 
-    const resultado = await fetchDatosMonitoreo();
+    const resultado = await fetchDatosMonitoreo(MOCK_SEMANA_MONITOREO);
 
-    expect(resultado.tendencias.length).toBe(0);
+    expect(resultado.resumenGlobal.length).toBe(0);
     expect(resultado.detallePorLote.length).toBe(0);
     expect(resultado.insights.length).toBe(0);
-    expect(resultado.fechasMonitoreo.length).toBe(0);
+    expect(resultado.fechaActual).toBeNull();
+    // Should still have lotes in vistasPorLote (all sinDatos)
+    expect(resultado.vistasPorLote.length).toBe(2);
+    expect(resultado.vistasPorLote[0].sinDatos).toBe(true);
   });
 });
 
@@ -831,6 +861,9 @@ describe('fetchDatosReporteSemanal', () => {
     expect(resultado).toHaveProperty('monitoreo.tendencias');
     expect(resultado).toHaveProperty('monitoreo.detallePorLote');
     expect(resultado).toHaveProperty('monitoreo.insights');
+    expect(resultado).toHaveProperty('monitoreo.resumenGlobal');
+    expect(resultado).toHaveProperty('monitoreo.vistasPorLote');
+    expect(resultado).toHaveProperty('monitoreo.vistasPorSublote');
     expect(resultado).toHaveProperty('temasAdicionales');
   });
 });

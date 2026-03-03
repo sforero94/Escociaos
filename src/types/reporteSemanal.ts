@@ -203,6 +203,8 @@ export interface AplicacionCerrada {
 // SECCIÓN 4: MONITOREO
 // ============================================================================
 
+// --- Legacy types (kept for backward compat, used internally) ---
+
 export interface TendenciaMonitoreo {
   fecha: string;
   plagaNombre: string;
@@ -223,51 +225,82 @@ export interface MonitoreoPorLote {
   sublotes: MonitoreoSublote[];
 }
 
-// Para la vista por lote con 3 observaciones
 export interface ObservacionFecha {
   fecha: string;
   incidencia: number | null;
   gravedad?: 'Baja' | 'Media' | 'Alta' | null;
 }
 
-export interface VistaLotePlaga {
+// --- Nuevos tipos: Comparativo con tendencia ---
+
+/** Dirección de la tendencia entre observación actual y anterior */
+export type TendenciaDir = 'subiendo' | 'bajando' | 'estable' | 'sin_referencia';
+
+/** Celda con valor actual + comparativo respecto a la observación anterior */
+export interface CeldaComparativa {
+  actual: number | null;       // Incidencia del monitoreo más reciente (null = sin datos)
+  anterior: number | null;     // Incidencia del monitoreo de referencia (null = sin ref)
+  tendencia: TendenciaDir;
+}
+
+/** Fila de la tabla resumen general: una plaga con promedio, rango entre lotes, y tendencia */
+export interface ResumenPlagaGlobal {
   plagaNombre: string;
   esPlaga_interes: boolean;
-  observaciones: ObservacionFecha[]; // hasta 3 fechas
+  promedioActual: number | null;
+  minLote: number | null;          // Mínimo entre lotes
+  maxLote: number | null;          // Máximo entre lotes
+  promedioAnterior: number | null; // Promedio de la observación de referencia
+  tendencia: TendenciaDir;
 }
 
-export interface VistaMonitoreoLote {
+/** Vista por lote: cada lote con lista de plagas comparativas */
+export interface VistaLoteComparativa {
   loteId: string;
   loteNombre: string;
-  plagasRows: VistaLotePlaga[];
+  sinDatos: boolean;              // true si no hay monitoreos para este lote
+  plagas: PlagaLoteComparativa[];
 }
 
-// Para la vista por sublote (1 slide por lote)
-export interface ObservacionSublotePlaga {
-  fechas: ObservacionFecha[]; // hasta 3
-}
-
-export interface VistaSubLotePlagaCell {
-  subloteNombre: string;
+export interface PlagaLoteComparativa {
   plagaNombre: string;
-  observaciones: ObservacionFecha[]; // hasta 3
+  esPlaga_interes: boolean;
+  actual: number | null;
+  anterior: number | null;
+  tendencia: TendenciaDir;
 }
 
-export interface VistaMonitoreoSublote {
+/** Vista por sublote: una tabla por lote, cada celda = plaga × sublote con comparativo */
+export interface VistaSubloteComparativa {
   loteId: string;
   loteNombre: string;
-  sublotes: string[];    // nombres de sublotes (columnas)
-  plagas: string[];      // nombres de plagas (filas)
-  celdas: Record<string, Record<string, ObservacionFecha[]>>; // plaga → sublote → [obs]
+  sinDatos: boolean;
+  sublotes: string[];             // Nombres de sublotes (columnas)
+  plagas: string[];               // Nombres de plagas (filas)
+  celdas: Record<string, Record<string, CeldaComparativa>>; // plaga → sublote → celda
 }
 
+/** Contenedor principal de datos de monitoreo para el informe */
 export interface DatosMonitoreo {
-  tendencias: TendenciaMonitoreo[];  // Últimos 3 monitoreos agrupados
-  detallePorLote: MonitoreoPorLote[];
+  // --- Fechas de referencia ---
+  fechaActual: string | null;            // Fecha del monitoreo principal
+  fechaAnterior: string | null;          // Fecha del monitoreo de referencia
+  avisoFechaDesactualizada: string | null; // Aviso si los datos no son de la semana del reporte
+
+  // --- Vistas ---
+  resumenGlobal: ResumenPlagaGlobal[];        // Slide 1: Resumen general
+  vistasPorLote: VistaLoteComparativa[];      // Slide 2: Vista por lote
+  vistasPorSublote: VistaSubloteComparativa[]; // Slide 3: Vista por sublote (1 por lote)
+
+  // --- Análisis ---
   insights: Insight[];
-  fechasMonitoreo: string[];         // Las 3 fechas de monitoreo usadas
-  vistasPorLote: VistaMonitoreoLote[];      // Vista tabla por lote con 3 obs.
-  vistasPorSublote: VistaMonitoreoSublote[]; // Vista por sublote (1 per lote)
+
+  // --- Legacy (backward compat for Gemini prompt) ---
+  tendencias: TendenciaMonitoreo[];
+  detallePorLote: MonitoreoPorLote[];
+  fechasMonitoreo: string[];
+  vistasPorLote_legacy?: unknown[];
+  vistasPorSublote_legacy?: unknown[];
 }
 
 // ============================================================================

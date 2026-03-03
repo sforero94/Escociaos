@@ -106,9 +106,55 @@ const MOCK_DATOS_COMPLETOS = {
     ],
   },
   monitoreo: {
+    // New fields
+    fechaActual: '2026-02-15',
+    fechaAnterior: '2026-02-08',
+    avisoFechaDesactualizada: null,
+    resumenGlobal: [
+      {
+        plagaNombre: 'Monalonion',
+        esPlaga_interes: true,
+        promedioActual: 27.1,
+        minLote: 27.1,
+        maxLote: 27.1,
+        promedioAnterior: 14.3,
+        tendencia: 'subiendo',
+      },
+    ],
+    vistasPorLote: [
+      {
+        loteId: 'lote-1',
+        loteNombre: 'Lote PP',
+        sinDatos: false,
+        plagas: [
+          { plagaNombre: 'Monalonion', esPlaga_interes: true, actual: 27.1, anterior: 14.3, tendencia: 'subiendo' },
+        ],
+      },
+      {
+        loteId: 'lote-2',
+        loteNombre: 'Lote ST',
+        sinDatos: true,
+        plagas: [],
+      },
+    ],
+    vistasPorSublote: [
+      {
+        loteId: 'lote-1',
+        loteNombre: 'Lote PP',
+        sinDatos: false,
+        sublotes: ['Sublote A', 'Sublote B'],
+        plagas: ['Monalonion'],
+        celdas: {
+          'Monalonion': {
+            'Sublote A': { actual: 20, anterior: 14.3, tendencia: 'subiendo' },
+            'Sublote B': { actual: 34.3, anterior: null, tendencia: 'sin_referencia' },
+          },
+        },
+      },
+    ],
+    // Legacy fields (for Gemini prompt)
     tendencias: [
-      { fecha: '2026-02-01', plagaNombre: 'Monalonion', incidenciaPromedio: 12.5 },
-      { fecha: '2026-02-08', plagaNombre: 'Monalonion', incidenciaPromedio: 18.3 },
+      { fecha: '2026-02-08', plagaNombre: 'Monalonion', incidenciaPromedio: 14.3 },
       { fecha: '2026-02-15', plagaNombre: 'Monalonion', incidenciaPromedio: 27.1 },
     ],
     detallePorLote: [
@@ -131,7 +177,7 @@ const MOCK_DATOS_COMPLETOS = {
         accion: 'Evaluar aplicación de tratamiento',
       },
     ],
-    fechasMonitoreo: ['2026-02-15', '2026-02-08', '2026-02-01'],
+    fechasMonitoreo: ['2026-02-15', '2026-02-08'],
   },
   temasAdicionales: [
     {
@@ -397,10 +443,9 @@ describe('Edge Function: generarReporteSemanal', () => {
 
       const resultado = await generarReporteSemanal({ datos: MOCK_DATOS_COMPLETOS });
 
-      expect(resultado.html).toContain('Análisis de Tendencias Fitosanitarias');
+      expect(resultado.html).toContain('Resumen General');
       expect(resultado.html).toContain('Monalonion');
-      expect(resultado.html).toContain('Media');
-      expect(resultado.html).toContain('Alta');
+      expect(resultado.html).toContain('Incidencia Promedio');
     });
 
     it('incluye conclusiones del análisis de Gemini', async () => {
@@ -413,6 +458,7 @@ describe('Edge Function: generarReporteSemanal', () => {
 
       expect(resultado.html).toContain('Conclusiones y Recomendaciones');
       expect(resultado.html).toContain('Priorizar tratamiento contra Monalonion');
+      // Gemini analysis is shown in the monitoring slide's ANÁLISIS section
       expect(resultado.html).toContain('incidencia de Monalonion muestra una tendencia ascendente');
     });
 
@@ -625,7 +671,7 @@ describe('Edge Function: generarReporteSemanal', () => {
 
       expect(texto).toContain('MONITOREO FITOSANITARIO');
       expect(texto).toContain('Monalonion');
-      expect(texto).toContain('Tendencias');
+      expect(texto).toContain('Resumen general');
       expect(texto).toContain('URGENTE');
     });
 

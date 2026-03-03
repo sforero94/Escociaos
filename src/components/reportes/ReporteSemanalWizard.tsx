@@ -862,17 +862,24 @@ export function ReporteSemanalWizard() {
         )}
 
         {/* Monitoreo */}
-        {datosReporte.monitoreo.fechasMonitoreo.length > 0 && (
+        {(datosReporte.monitoreo.fechaActual || datosReporte.monitoreo.avisoFechaDesactualizada) && (
           <Card>
             <CardHeader>
               <CardTitle className="text-foreground">
                 Monitoreo Fitosanitario
-                <Badge variant="secondary" className="ml-2">
-                  {datosReporte.monitoreo.fechasMonitoreo.length} monitoreos
-                </Badge>
+                {datosReporte.monitoreo.fechaActual && (
+                  <Badge variant="secondary" className="ml-2">
+                    {datosReporte.monitoreo.fechaActual}
+                  </Badge>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {datosReporte.monitoreo.avisoFechaDesactualizada && (
+                <div className="p-3 rounded-lg border-l-4 bg-yellow-50 border-yellow-500">
+                  <p className="text-xs text-yellow-700 font-medium">{datosReporte.monitoreo.avisoFechaDesactualizada}</p>
+                </div>
+              )}
               {datosReporte.monitoreo.insights.length > 0 && (
                 <div className="space-y-2">
                   {datosReporte.monitoreo.insights.map((insight, i) => (
@@ -891,11 +898,16 @@ export function ReporteSemanalWizard() {
                 </div>
               )}
               <p className="text-xs text-gray-400">
-                Fechas: {datosReporte.monitoreo.fechasMonitoreo.join(', ')}
+                {datosReporte.monitoreo.fechaAnterior
+                  ? `Observación: ${datosReporte.monitoreo.fechaActual} · Referencia: ${datosReporte.monitoreo.fechaAnterior}`
+                  : datosReporte.monitoreo.fechaActual
+                    ? `Observación: ${datosReporte.monitoreo.fechaActual} · Sin referencia anterior`
+                    : 'Sin monitoreos recientes'}
               </p>
               <p className="text-xs text-gray-400">
+                {datosReporte.monitoreo.resumenGlobal.length} plagas ·{' '}
                 {datosReporte.monitoreo.vistasPorLote.length} lotes ·{' '}
-                {datosReporte.monitoreo.vistasPorSublote.length} vistas por sublote
+                {datosReporte.monitoreo.vistasPorSublote.filter(v => !v.sinDatos).length} lotes con datos de sublote
               </p>
             </CardContent>
           </Card>
