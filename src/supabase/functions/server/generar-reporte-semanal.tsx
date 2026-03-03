@@ -185,39 +185,55 @@ Datos de la matriz:`);
   }
 
   if (datos.monitoreo) {
+    const mon = datos.monitoreo;
+    const fechaInfo = mon.fechaActual
+      ? `Observación principal: ${mon.fechaActual}${mon.fechaAnterior ? ` · Referencia: ${mon.fechaAnterior}` : ''}`
+      : 'Sin monitoreos recientes';
     partes.push(`## MONITOREO FITOSANITARIO
-Fechas de monitoreo analizadas: ${datos.monitoreo.fechasMonitoreo.join(', ')}`);
+${fechaInfo}${mon.avisoFechaDesactualizada ? `\n⚠ ${mon.avisoFechaDesactualizada}` : ''}`);
 
-    if (datos.monitoreo.tendencias.length > 0) {
-      partes.push(`### Tendencias (últimos 3 monitoreos)`);
-
-      const porPlaga = new Map<string, any[]>();
-      datos.monitoreo.tendencias.forEach((t: any) => {
-        if (!porPlaga.has(t.plagaNombre)) porPlaga.set(t.plagaNombre, []);
-        porPlaga.get(t.plagaNombre)!.push(t);
-      });
-
-      porPlaga.forEach((tendencias, plaga) => {
-        const valores = tendencias
-          .sort((a: any, b: any) => a.fecha.localeCompare(b.fecha))
-          .map((t: any) => `${t.fecha}: ${t.incidenciaPromedio}%`);
-        partes.push(`  - ${plaga}: ${valores.join(' → ')}`);
+    // Resumen global
+    if (mon.resumenGlobal && mon.resumenGlobal.length > 0) {
+      partes.push(`### Resumen general de incidencia`);
+      mon.resumenGlobal.forEach((r: any) => {
+        const rango = r.minLote !== null ? `(rango: ${r.minLote}%-${r.maxLote}%)` : '';
+        const tend = r.tendencia !== 'sin_referencia' && r.promedioAnterior !== null
+          ? ` — tendencia: ${r.tendencia} (era ${r.promedioAnterior}%)`
+          : '';
+        partes.push(`  - ${r.plagaNombre}: ${r.promedioActual !== null ? r.promedioActual + '%' : 'Sin datos'} ${rango}${tend}`);
       });
     }
 
-    if (datos.monitoreo.detallePorLote.length > 0) {
-      partes.push(`### Detalle por lote (monitoreo más reciente)`);
-      datos.monitoreo.detallePorLote.forEach((lote: any) => {
+    // Detalle por lote
+    if (mon.vistasPorLote && mon.vistasPorLote.length > 0) {
+      partes.push(`### Detalle por lote`);
+      mon.vistasPorLote.forEach((lote: any) => {
+        if (lote.sinDatos) {
+          partes.push(`  ${lote.loteNombre}: Sin monitoreo`);
+        } else {
+          partes.push(`  ${lote.loteNombre}:`);
+          (lote.plagas || []).forEach((p: any) => {
+            const tend = p.tendencia !== 'sin_referencia' && p.anterior !== null ? ` (${p.tendencia}, era ${p.anterior}%)` : '';
+            partes.push(`    - ${p.plagaNombre}: ${p.actual !== null ? p.actual + '%' : 'Sin datos'}${tend}`);
+          });
+        }
+      });
+    }
+
+    // Legacy detail for compatibility
+    if (mon.detallePorLote && mon.detallePorLote.length > 0) {
+      partes.push(`### Detalle granular por sublote (monitoreo más reciente)`);
+      mon.detallePorLote.forEach((lote: any) => {
         partes.push(`  ${lote.loteNombre}:`);
-        lote.sublotes.forEach((s: any) => {
+        (lote.sublotes || []).forEach((s: any) => {
           partes.push(`    - ${s.subloteNombre} | ${s.plagaNombre}: ${s.incidencia}% (${s.gravedad}) [${s.arboresAfectados}/${s.arboresMonitoreados} árboles]`);
         });
       });
     }
 
-    if (datos.monitoreo.insights.length > 0) {
+    if (mon.insights && mon.insights.length > 0) {
       partes.push(`### Alertas e insights automáticos`);
-      datos.monitoreo.insights.forEach((insight: any) => {
+      mon.insights.forEach((insight: any) => {
         const icono = insight.tipo === 'urgente' ? '🔴' : insight.tipo === 'atencion' ? '⚠️' : '✅';
         partes.push(`  ${icono} [${insight.tipo.toUpperCase()}] ${insight.titulo}: ${insight.descripcion}`);
         if (insight.accion) partes.push(`    → Acción: ${insight.accion}`);
@@ -988,107 +1004,156 @@ function construirSlideAplicacionPlaneada(app: any, semana: any): string {
 }
 
 
+// --- Helpers for trend arrows ---
+function getTendenciaArrow(tendencia: string): string {
+  switch (tendencia) {
+    case 'subiendo': return '↑';
+    case 'bajando': return '↓';
+    case 'estable': return '→';
+    default: return '';
+  }
+}
+
+function getTendenciaColor(tendencia: string): string {
+  switch (tendencia) {
+    case 'subiendo': return '#D32F2F'; // red — increasing is bad
+    case 'bajando': return '#388E3C';  // green — decreasing is good
+    case 'estable': return '#F9A825';  // yellow
+    default: return '#888';
+  }
+}
+
+function formatTendenciaCell(actual: number | null, anterior: number | null, tendencia: string): string {
+  if (actual === null) return '<span style="color:#CCC;">Sin datos</span>';
+  const arrow = getTendenciaArrow(tendencia);
+  const color = getTendenciaColor(tendencia);
+  if (anterior === null || tendencia === 'sin_referencia') {
+    return `<span style="font-weight:700;">${formatNum(actual, 1)}%</span>`;
+  }
+  return `<span style="font-weight:700;">${formatNum(actual, 1)}%</span> <span style="color:${color};font-weight:600;">${arrow}</span><span style="color:#888;font-size:0.85em;">(era ${formatNum(anterior, 1)}%)</span>`;
+}
+
+function monitoreoLeyendaHTML(): string {
+  return `<div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <span style="font-size:10px;color:#888;font-weight:600;">LEYENDA INCIDENCIA:</span>
+    <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#FFFFFF;border:1px solid #CCC;display:inline-block;border-radius:2px;"></span><span style="font-size:10px;color:#555;">0%</span></span>
+    <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#FFF9C4;display:inline-block;border-radius:2px;"></span><span style="font-size:10px;color:#555;">&lt;10%</span></span>
+    <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#FFB74D;display:inline-block;border-radius:2px;"></span><span style="font-size:10px;color:#555;">&lt;20%</span></span>
+    <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#EF9A9A;display:inline-block;border-radius:2px;"></span><span style="font-size:10px;color:#555;">≥20%</span></span>
+    <span style="display:inline-flex;align-items:center;gap:6px;margin-left:12px;"><span style="font-size:10px;color:#888;font-weight:600;">TENDENCIA:</span></span>
+    <span style="display:inline-flex;align-items:center;gap:3px;"><span style="color:#D32F2F;font-weight:700;">↑</span><span style="font-size:10px;color:#555;">Subiendo</span></span>
+    <span style="display:inline-flex;align-items:center;gap:3px;"><span style="color:#388E3C;font-weight:700;">↓</span><span style="font-size:10px;color:#555;">Bajando</span></span>
+    <span style="display:inline-flex;align-items:center;gap:3px;"><span style="color:#F9A825;font-weight:700;">→</span><span style="font-size:10px;color:#555;">Estable</span></span>
+  </div>`;
+}
+
+// ============================================================================
+// SLIDE 1: RESUMEN GENERAL DE PLAGAS
+// ============================================================================
+
 function construirSlideMonitoreoTendencias(datos: any, analisis: AnalisisGemini): string {
   const monitoreo = datos.monitoreo;
-  if (!monitoreo || !monitoreo.tendencias || monitoreo.tendencias.length === 0) return '';
+  if (!monitoreo) return '';
+  const resumen: any[] = monitoreo.resumenGlobal || [];
+  if (resumen.length === 0 && !monitoreo.avisoFechaDesactualizada) return '';
   const { semana } = datos;
-  const { tendencias, fechasMonitoreo } = monitoreo;
 
-  // Build plagas list and dates
-  const plagasSet = new Set<string>();
-  tendencias.forEach((t: any) => plagasSet.add(t.plagaNombre));
-  const plagas = Array.from(plagasSet);
-  const fechas = (fechasMonitoreo || []).slice(-3);
+  // Date info banner
+  const fechaActual = monitoreo.fechaActual;
+  const fechaAnterior = monitoreo.fechaAnterior;
+  const aviso = monitoreo.avisoFechaDesactualizada;
 
-  // Build map: plaga -> fecha -> incidenciaPromedio
-  const tendMap: Record<string, Record<string, number>> = {};
-  tendencias.forEach((t: any) => {
-    if (!tendMap[t.plagaNombre]) tendMap[t.plagaNombre] = {};
-    tendMap[t.plagaNombre][t.fecha] = t.incidenciaPromedio;
-  });
+  let fechaBanner = '';
+  if (aviso) {
+    fechaBanner = `<div style="background:#FFF3E0;border:1px solid #FFB74D;border-radius:6px;padding:8px 14px;margin-bottom:12px;font-size:11px;color:#E65100;font-weight:600;">⚠ ${aviso}</div>`;
+  }
+  if (fechaActual) {
+    const refText = fechaAnterior ? ` · Referencia: ${fechaAnterior}` : ' · Sin observación de referencia';
+    fechaBanner += `<div style="font-size:11px;color:#666;margin-bottom:10px;">Monitoreo: <strong>${fechaActual}</strong>${refText}</div>`;
+  }
 
-  const tendRows = plagas.map(plaga => {
-    const cells = fechas.map((f: string) => {
-      const v = tendMap[plaga]?.[f] ?? null;
-      const bg = getIncidenciaColor(v);
-      return `<td style="padding:8px 12px;text-align:center;font-size:12px;font-weight:700;background:${bg};color:#4D240F;border:1px solid #E8E8E8;">${v !== null ? formatNum(v, 1) + '%' : '—'}</td>`;
-    }).join('');
-    return `<tr><td style="padding:8px 12px;font-size:12px;font-weight:600;color:#4D240F;border:1px solid #E8E8E8;background:#FAFAFA;">${plaga}</td>${cells}</tr>`;
+  // Table rows
+  const rows = resumen.map((r: any) => {
+    const bg = getIncidenciaColor(r.promedioActual);
+    const rangoText = r.minLote !== null && r.maxLote !== null
+      ? `${formatNum(r.minLote, 1)}%–${formatNum(r.maxLote, 1)}%`
+      : '—';
+    const tendenciaHTML = formatTendenciaCell(r.promedioActual, r.promedioAnterior, r.tendencia);
+
+    return `<tr>
+      <td style="padding:8px 12px;font-size:12px;font-weight:600;color:#4D240F;border:1px solid #E8E8E8;background:#FAFAFA;${r.esPlaga_interes ? 'border-left:3px solid #73991C;' : ''}">${r.plagaNombre}</td>
+      <td style="padding:8px 12px;text-align:center;font-size:12px;font-weight:700;background:${bg};color:#4D240F;border:1px solid #E8E8E8;">${r.promedioActual !== null ? formatNum(r.promedioActual, 1) + '%' : '—'}</td>
+      <td style="padding:8px 12px;text-align:center;font-size:11px;color:#4D240F;border:1px solid #E8E8E8;">${rangoText}</td>
+      <td style="padding:8px 12px;font-size:11px;color:#4D240F;border:1px solid #E8E8E8;">${tendenciaHTML}</td>
+    </tr>`;
   }).join('');
 
-  const fechaHeaders = fechas.map((f: string) => `<th style="padding:8px 12px;font-size:11px;font-weight:700;color:#FFFFFF;background:#4D6B15;border:1px solid #3A5010;text-align:center;">${f}</th>`).join('');
+  // Gemini analysis paragraph (reduced to a brief section below the table)
+  let geminiParagraph = '';
+  const geminiText = analisis.interpretacion_monitoreo || analisis.interpretacion_tendencias_monitoreo || '';
+  if (geminiText) {
+    geminiParagraph = `<div style="background:#F5F9EE;border-left:4px solid #73991C;border-radius:0 6px 6px 0;padding:10px 14px;margin-top:14px;">
+      <div style="font-size:10px;font-weight:700;color:#73991C;letter-spacing:0.5px;margin-bottom:4px;">ANÁLISIS</div>
+      <div style="font-size:11px;color:#4D240F;line-height:1.5;">${geminiText}</div>
+    </div>`;
+  }
 
   return `<div class="slide page-break">
-  ${slideHeader('MONITOREO', 'Análisis de Tendencias Fitosanitarias', semana)}
-  <div style="padding:16px 22px 0;display:flex;gap:20px;">
-    <div style="flex:0 0 480px;">
-      <div style="background:#F5F9EE;border-left:5px solid #73991C;border-radius:0 8px 8px 0;padding:14px 16px;margin-bottom:14px;">
-        <div style="font-size:11px;font-weight:800;color:#73991C;letter-spacing:1px;margin-bottom:6px;">ANÁLISIS GEMINI — TENDENCIAS</div>
-        <div style="font-size:12px;color:#4D240F;line-height:1.65;">${analisis.interpretacion_tendencias_monitoreo || 'Sin análisis disponible.'}</div>
-      </div>
-      ${analisis.interpretacion_monitoreo ? `<div style="background:#FFF8F0;border-left:4px solid #F57C00;border-radius:0 8px 8px 0;padding:12px 14px;">
-        <div style="font-size:11px;font-weight:700;color:#F57C00;margin-bottom:4px;">RESUMEN FITOSANITARIO</div>
-        <div style="font-size:12px;color:#4D240F;line-height:1.5;">${analisis.interpretacion_monitoreo}</div>
-      </div>` : ''}
-    </div>
-    <div style="flex:1;">
-      <div style="font-size:12px;font-weight:700;color:#4D240F;margin-bottom:8px;">Incidencia Promedio por Plaga (últimas 3 fechas)</div>
-      <table style="width:100%;border-collapse:collapse;">
-        <thead><tr>
-          <th style="padding:8px 12px;font-size:11px;font-weight:700;color:#FFFFFF;background:#73991C;border:1px solid #5A7A15;text-align:left;">Plaga</th>
-          ${fechaHeaders}
-        </tr></thead>
-        <tbody>${tendRows}</tbody>
-      </table>
-      <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <span style="font-size:10px;color:#888;font-weight:600;">LEYENDA:</span>
-        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#FFFFFF;border:1px solid #CCC;display:inline-block;border-radius:2px;"></span><span style="font-size:10px;color:#555;">0%</span></span>
-        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#FFF9C4;display:inline-block;border-radius:2px;"></span><span style="font-size:10px;color:#555;">&lt;10%</span></span>
-        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#FFB74D;display:inline-block;border-radius:2px;"></span><span style="font-size:10px;color:#555;">&lt;20%</span></span>
-        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#EF9A9A;display:inline-block;border-radius:2px;"></span><span style="font-size:10px;color:#555;">≥20%</span></span>
-      </div>
-    </div>
+  ${slideHeader('MONITOREO', 'Resumen General — Estado Fitosanitario', semana)}
+  <div style="padding:16px 22px 0;">
+    ${fechaBanner}
+    <table style="width:100%;border-collapse:collapse;">
+      <thead><tr>
+        <th style="padding:8px 12px;font-size:11px;font-weight:700;color:#FFFFFF;background:#73991C;border:1px solid #5A7A15;text-align:left;">Plaga</th>
+        <th style="padding:8px 12px;font-size:11px;font-weight:700;color:#FFFFFF;background:#73991C;border:1px solid #5A7A15;text-align:center;">Incidencia Promedio</th>
+        <th style="padding:8px 12px;font-size:11px;font-weight:700;color:#FFFFFF;background:#73991C;border:1px solid #5A7A15;text-align:center;">Rango (Min–Max)</th>
+        <th style="padding:8px 12px;font-size:11px;font-weight:700;color:#FFFFFF;background:#73991C;border:1px solid #5A7A15;text-align:left;">Tendencia</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    ${monitoreoLeyendaHTML()}
+    ${geminiParagraph}
   </div>
 </div>`;
 }
 
+// ============================================================================
+// SLIDE 2: VISTA POR LOTE
+// ============================================================================
+
 function construirSlideMonitoreoPorLote(datos: any): string {
   const monitoreo = datos.monitoreo;
   if (!monitoreo) return '';
-  const vistasPorLote = monitoreo.detallePorLote || [];
-  if (vistasPorLote.length === 0) return '';
+  const vistas: any[] = monitoreo.vistasPorLote || [];
+  if (vistas.length === 0) return '';
   const { semana } = datos;
-  const fechas = (monitoreo.fechasMonitoreo || []).slice(-3);
 
-  // Build tendencias map per lote per plaga per fecha
-  const tendMap: Record<string, Record<string, Record<string, number>>> = {};
-  (monitoreo.tendencias || []).forEach((t: any) => {
-    if (!tendMap[t.plagaNombre]) tendMap[t.plagaNombre] = {};
-    if (!tendMap[t.plagaNombre][t.fecha]) tendMap[t.plagaNombre][t.fecha] = {};
-  });
+  const loteCards = vistas.map((lote: any) => {
+    if (lote.sinDatos) {
+      return `<div style="background:#F5F5F0;border-radius:8px;border:1px solid #E0E0E0;padding:12px;flex:1;min-width:280px;max-width:400px;">
+        <div style="font-size:13px;font-weight:700;color:#999;margin-bottom:8px;border-bottom:2px solid #E0E0E0;padding-bottom:4px;">${lote.loteNombre}</div>
+        <div style="font-size:11px;color:#AAA;text-align:center;padding:16px 0;">No se monitoreó este lote</div>
+      </div>`;
+    }
 
-  const loteCards = vistasPorLote.slice(0, 6).map((loteVista: any) => {
-    const plagasLote = new Set<string>();
-    (loteVista.sublotes || []).forEach((s: any) => plagasLote.add(s.plagaNombre));
-    const plagasArr = Array.from(plagasLote);
-
-    const rows = plagasArr.map(plaga => {
-      const cellsFecha = fechas.map((f: string) => {
-        // Find incidencia for this lote/plaga/fecha in tendencias
-        const tend = (monitoreo.tendencias || []).find((t: any) => t.plagaNombre === plaga && t.fecha === f);
-        const v = tend?.incidenciaPromedio ?? null;
-        const bg = getIncidenciaColor(v);
-        return `<td style="padding:4px 6px;text-align:center;font-size:10px;font-weight:600;background:${bg};border:1px solid #E8E8E8;">${v !== null ? formatNum(v, 1) + '%' : '—'}</td>`;
-      }).join('');
-      return `<tr><td style="padding:4px 6px;font-size:10px;font-weight:600;color:#4D240F;border:1px solid #E8E8E8;background:#FAFAFA;white-space:nowrap;">${plaga}</td>${cellsFecha}</tr>`;
+    const rows = (lote.plagas || []).map((p: any) => {
+      const bg = getIncidenciaColor(p.actual);
+      const tendenciaHTML = formatTendenciaCell(p.actual, p.anterior, p.tendencia);
+      return `<tr>
+        <td style="padding:4px 6px;font-size:10px;font-weight:600;color:#4D240F;border:1px solid #E8E8E8;background:#FAFAFA;white-space:nowrap;${p.esPlaga_interes ? 'border-left:2px solid #73991C;' : ''}">${p.plagaNombre}</td>
+        <td style="padding:4px 6px;text-align:center;font-size:10px;font-weight:700;background:${bg};border:1px solid #E8E8E8;">${p.actual !== null ? formatNum(p.actual, 1) + '%' : '—'}</td>
+        <td style="padding:4px 6px;font-size:10px;border:1px solid #E8E8E8;">${tendenciaHTML}</td>
+      </tr>`;
     }).join('');
 
-    const fecheHds = fechas.map((f: string) => `<th style="padding:4px 6px;font-size:9px;font-weight:700;color:#FFFFFF;background:#73991C;border:1px solid #5A7A15;text-align:center;min-width:60px;">${f}</th>`).join('');
-
     return `<div style="background:#FFFFFF;border-radius:8px;border:1px solid #E8E8E8;padding:12px;flex:1;min-width:280px;max-width:400px;box-shadow:0 1px 4px rgba(0,0,0,0.05);">
-      <div style="font-size:13px;font-weight:700;color:#4D240F;margin-bottom:8px;border-bottom:2px solid #73991C;padding-bottom:4px;">${loteVista.loteNombre}</div>
+      <div style="font-size:13px;font-weight:700;color:#4D240F;margin-bottom:8px;border-bottom:2px solid #73991C;padding-bottom:4px;">${lote.loteNombre}</div>
       <table style="width:100%;border-collapse:collapse;">
-        <thead><tr><th style="padding:4px 6px;font-size:9px;font-weight:700;color:#FFFFFF;background:#4D6B15;border:1px solid #3A5010;text-align:left;">Plaga</th>${fecheHds}</tr></thead>
+        <thead><tr>
+          <th style="padding:4px 6px;font-size:9px;font-weight:700;color:#FFFFFF;background:#4D6B15;border:1px solid #3A5010;text-align:left;">Plaga</th>
+          <th style="padding:4px 6px;font-size:9px;font-weight:700;color:#FFFFFF;background:#73991C;border:1px solid #5A7A15;text-align:center;">Incidencia</th>
+          <th style="padding:4px 6px;font-size:9px;font-weight:700;color:#FFFFFF;background:#73991C;border:1px solid #5A7A15;text-align:left;">Tendencia</th>
+        </tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
@@ -1102,30 +1167,45 @@ function construirSlideMonitoreoPorLote(datos: any): string {
 </div>`;
 }
 
+// ============================================================================
+// SLIDE 3: VISTA POR SUBLOTE (1 slide por lote)
+// ============================================================================
+
 function construirSlideMonitoreoPorSublote(loteVista: any, semana: any): string {
-  if (!loteVista || !loteVista.sublotes || loteVista.sublotes.length === 0) return '';
+  if (!loteVista) return '';
   const loteNombre = loteVista.loteNombre || 'Lote';
 
-  // VistaMonitoreoSublote structure:
-  // - sublotes: string[] (column names)
-  // - plagas: string[] (row names)
-  // - celdas: Record<plaga, Record<sublote, ObservacionFecha[]>>
-  const sublotes = loteVista.sublotes || [];
-  const plagas = loteVista.plagas || [];
+  if (loteVista.sinDatos) {
+    const sublotes = loteVista.sublotes || [];
+    if (sublotes.length === 0) return '';
+    return `<div class="slide page-break">
+    ${slideHeader('MONITOREO', `Sublotes — ${loteNombre}`, semana)}
+    <div style="padding:40px 22px;text-align:center;">
+      <div style="font-size:14px;color:#AAA;font-weight:600;">No se monitoreó este lote</div>
+      <div style="font-size:12px;color:#CCC;margin-top:8px;">Sublotes configurados: ${sublotes.join(', ')}</div>
+    </div>
+  </div>`;
+  }
+
+  const sublotes: string[] = loteVista.sublotes || [];
+  const plagas: string[] = loteVista.plagas || [];
   const celdas = loteVista.celdas || {};
 
-  const subHeaders = sublotes.map((sl: string) => `<th style="padding:7px 8px;font-size:10px;font-weight:700;color:#FFFFFF;background:#4D6B15;border:1px solid #3A5010;text-align:center;min-width:80px;">${sl}</th>`).join('');
+  if (sublotes.length === 0 || plagas.length === 0) return '';
+
+  const subHeaders = sublotes.map((sl: string) =>
+    `<th style="padding:7px 8px;font-size:10px;font-weight:700;color:#FFFFFF;background:#4D6B15;border:1px solid #3A5010;text-align:center;min-width:90px;">${sl}</th>`
+  ).join('');
 
   const bodyRows = plagas.map((plaga: string) => {
     const cells = sublotes.map((sl: string) => {
-      const obs: any[] = celdas[plaga]?.[sl] || [];
-      if (obs.length === 0) return `<td style="padding:6px 8px;text-align:center;background:#F5F5F0;border:1px solid #E8E8E8;font-size:10px;color:#CCC;">—</td>`;
-      // Show up to 3 observations (for the 3 monitoring dates)
-      const chips = obs.slice(0, 3).map((o: any) => {
-        const bg = getIncidenciaColor(o.incidencia);
-        return `<div style="display:inline-block;padding:2px 6px;border-radius:8px;font-size:10px;font-weight:600;background:${bg};color:#4D240F;margin:1px;">${formatNum(o.incidencia, 1)}%</div>`;
-      }).join('');
-      return `<td style="padding:5px 6px;text-align:center;border:1px solid #E8E8E8;">${chips}</td>`;
+      const celda = celdas[plaga]?.[sl];
+      if (!celda || celda.actual === null) {
+        return `<td style="padding:6px 8px;text-align:center;background:#F5F5F0;border:1px solid #E8E8E8;font-size:10px;color:#CCC;">—</td>`;
+      }
+      const bg = getIncidenciaColor(celda.actual);
+      const tendenciaHTML = formatTendenciaCell(celda.actual, celda.anterior, celda.tendencia);
+      return `<td style="padding:5px 6px;text-align:center;border:1px solid #E8E8E8;background:${bg};font-size:10px;">${tendenciaHTML}</td>`;
     }).join('');
     return `<tr><td style="padding:7px 10px;font-size:11px;font-weight:600;color:#4D240F;border:1px solid #E8E8E8;background:#FAFAFA;white-space:nowrap;">${plaga}</td>${cells}</tr>`;
   }).join('');
@@ -1140,13 +1220,7 @@ function construirSlideMonitoreoPorSublote(loteVista: any, semana: any): string 
       </tr></thead>
       <tbody>${bodyRows}</tbody>
     </table>
-    <div style="margin-top:12px;display:flex;gap:8px;align-items:center;">
-      <span style="font-size:10px;color:#888;font-weight:600;">LEYENDA:</span>
-      <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#FFFFFF;border:1px solid #CCC;display:inline-block;border-radius:2px;"></span><span style="font-size:10px;color:#555;">0%</span></span>
-      <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#FFF9C4;display:inline-block;border-radius:2px;"></span><span style="font-size:10px;color:#555;">&lt;10% Baja</span></span>
-      <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#FFB74D;display:inline-block;border-radius:2px;"></span><span style="font-size:10px;color:#555;">&lt;20% Media</span></span>
-      <span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#EF9A9A;display:inline-block;border-radius:2px;"></span><span style="font-size:10px;color:#555;">≥20% Alta</span></span>
-    </div>
+    ${monitoreoLeyendaHTML()}
   </div>
 </div>`;
 }
@@ -1211,8 +1285,10 @@ function construirHTMLReporte(datos: any, analisis: AnalisisGemini): string {
   const cerradas = aplicaciones?.cerradas || [];
   const planeadas = aplicaciones?.planeadas || [];
 
-  // Build sublote vistas from monitoreo.vistasPorSublote (NOT detallePorLote — different structure)
-  const vistasPorSublote: any[] = monitoreo?.vistasPorSublote || [];
+  // Build sublote vistas — filter out lotes with no sublotes configured
+  const vistasPorSublote: any[] = (monitoreo?.vistasPorSublote || []).filter(
+    (v: any) => v.sublotes && v.sublotes.length > 0
+  );
 
   const temasAd: any[] = temasAdicionales || [];
 
