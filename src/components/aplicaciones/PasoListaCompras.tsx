@@ -101,7 +101,7 @@ export function PasoListaCompras({
           ? `${p.presentacion_kg_l} ${p.unidad_medida === 'kilos' ? 'Kg' : p.unidad_medida === 'litros' ? 'L' : p.unidad_medida}`
           : `1 ${p.unidad_medida === 'kilos' ? 'Kg' : p.unidad_medida === 'litros' ? 'L' : p.unidad_medida}`,
         ultimo_precio_unitario: p.precio_unitario || 0,      // Precio por Kg/L
-        precio_presentacion: p.precio_presentacion || 0,     // Precio por bulto/envase
+        precio_presentacion: p.precio_por_presentacion || 0, // Precio por bulto/envase
         cantidad_actual: p.cantidad_actual || 0,
         permitido_gerencia: p.permitido_gerencia,
       }));

@@ -198,7 +198,7 @@ export function generarPDFListaCompras(
       `${formatearNumero(item.cantidad_necesaria)} ${item.unidad}`,
       `${formatearNumero(item.cantidad_faltante)} ${item.unidad}`,
       `${item.unidades_a_comprar} × ${item.presentacion_comercial}`,
-      item.ultimo_precio_unitario 
+      item.precio_presentacion
         ? formatearMoneda(item.costo_estimado || 0)
         : 'Sin precio'
     ]);
