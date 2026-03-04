@@ -985,6 +985,15 @@ export async function fetchAplicacionesCerradas(
         costoVariacion: costoVariacionApp !== undefined ? Math.round(costoVariacionApp * 10) / 10 : undefined,
       };
 
+      const { data: comprasData } = await supabase
+        .from('aplicaciones_compras')
+        .select('producto_nombre, producto_categoria')
+        .eq('aplicacion_id', appId);
+
+      const listaInsumos = (comprasData || [])
+        .filter((c: any) => c.producto_nombre)
+        .map((c: any) => ({ nombre: c.producto_nombre, categoria: c.producto_categoria || '—' }));
+
       resultado.push({
         id: app.id,
         nombre: app.nombre_aplicacion || 'Sin nombre',
@@ -996,6 +1005,7 @@ export async function fetchAplicacionesCerradas(
         general,
         kpiPorLote,
         financieroPorLote,
+        listaInsumos,
       });
     } catch (err) {
       console.warn(`fetchAplicacionesCerradas: skip ${appId}`, err);
@@ -1091,19 +1101,23 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
     avisoFechaDesactualizada = `Datos del monitoreo del ${fechaActual}. No se realizó monitoreo en la semana del reporte.`;
   }
 
-  // Empty result if no monitoring data at all
+  // Empty result if no monitoring data at all in the 2-week window
   if (!fechaActual) {
+    const vistasVacias: VistaLoteComparativa[] = lotesDB.map(l => ({
+      loteId: l.id,
+      loteNombre: l.nombre,
+      sinDatos: true,
+      plagas: [],
+      fechaUltimaObservacion: null,
+      nivelAlerta: 'roja' as const,
+    }));
+    await enrichWithHistorical(vistasVacias);
     return {
       fechaActual: null,
       fechaAnterior: null,
       avisoFechaDesactualizada: 'No se encontraron monitoreos en las últimas 2 semanas.',
       resumenGlobal: [],
-      vistasPorLote: lotesDB.map(l => ({
-        loteId: l.id,
-        loteNombre: l.nombre,
-        sinDatos: true,
-        plagas: [],
-      })),
+      vistasPorLote: vistasVacias,
       vistasPorSublote: lotesDB.map(l => ({
         loteId: l.id,
         loteNombre: l.nombre,
@@ -1111,6 +1125,7 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
         sublotes: sublotesDB.filter(s => s.lote_id === l.id).map(s => s.nombre).sort(),
         plagas: [],
         celdas: {},
+        tieneDatosSemanaActual: false,
       })),
       insights: [],
       tendencias: [],
@@ -1173,6 +1188,92 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
     return Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10;
   }
 
+  function calcNivelAlerta(fecha: string | null): 'ninguna' | 'amarilla' | 'roja' {
+    if (!fecha) return 'roja';
+    if (fecha >= semana.inicio) return 'ninguna';
+    if (fecha >= limiteInferior) return 'amarilla';
+    return 'roja';
+  }
+
+  async function enrichWithHistorical(vistas: VistaLoteComparativa[]): Promise<void> {
+    const sinDatosLotes = lotesDB.filter(l => vistas.find(v => v.loteId === l.id && v.sinDatos));
+    if (sinDatosLotes.length === 0) return;
+
+    const sinDatosIds = sinDatosLotes.map(l => l.id);
+
+    const { data: historicRaw } = await supabase
+      .from('monitoreos')
+      .select('fecha_monitoreo, lote_id, incidencia, plagas_enfermedades_catalogo(nombre)')
+      .in('lote_id', sinDatosIds)
+      .order('fecha_monitoreo', { ascending: false });
+
+    if (!historicRaw || historicRaw.length === 0) return;
+
+    const loteHistMap = new Map<string, { lastDate: string; prevDate: string | null; lastRecs: any[]; prevRecs: any[] }>();
+
+    for (const rec of historicRaw) {
+      const lid = rec.lote_id;
+      if (!loteHistMap.has(lid)) {
+        loteHistMap.set(lid, { lastDate: rec.fecha_monitoreo, prevDate: null, lastRecs: [], prevRecs: [] });
+      }
+      const entry = loteHistMap.get(lid)!;
+      if (rec.fecha_monitoreo === entry.lastDate) {
+        entry.lastRecs.push(rec);
+      } else if (entry.prevDate === null) {
+        entry.prevDate = rec.fecha_monitoreo;
+        entry.prevRecs.push(rec);
+      } else if (rec.fecha_monitoreo === entry.prevDate) {
+        entry.prevRecs.push(rec);
+      }
+    }
+
+    for (const lote of sinDatosLotes) {
+      const hist = loteHistMap.get(lote.id);
+      if (!hist) continue;
+
+      const { lastDate, lastRecs, prevRecs } = hist;
+
+      const plagasSet = new Set<string>();
+      [...lastRecs, ...prevRecs].forEach(m => {
+        plagasSet.add(m.plagas_enfermedades_catalogo?.nombre || 'Desconocida');
+      });
+
+      const plagas: PlagaLoteComparativa[] = Array.from(plagasSet).map(plaga => {
+        const valsActual = lastRecs
+          .filter(m => (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga)
+          .map(m => Number(m.incidencia) || 0);
+        const valsPrev = prevRecs
+          .filter(m => (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga)
+          .map(m => Number(m.incidencia) || 0);
+        const actual = valsActual.length > 0 ? promedio(valsActual) : null;
+        const anterior = valsPrev.length > 0 ? promedio(valsPrev) : null;
+        return {
+          plagaNombre: plaga,
+          esPlaga_interes: esPlagaInteres(plaga),
+          actual,
+          anterior,
+          tendencia: calcTendencia(actual, anterior),
+        };
+      });
+
+      plagas.sort((a, b) => {
+        if (a.esPlaga_interes !== b.esPlaga_interes) return a.esPlaga_interes ? -1 : 1;
+        return (b.actual ?? 0) - (a.actual ?? 0);
+      });
+
+      const idx = vistas.findIndex(v => v.loteId === lote.id);
+      if (idx !== -1) {
+        vistas[idx] = {
+          ...vistas[idx],
+          sinDatos: false,
+          plagas,
+          fechaUltimaObservacion: lastDate,
+          nivelAlerta: calcNivelAlerta(lastDate),
+        };
+      }
+    }
+  }
+
   // 4. Build RESUMEN GLOBAL (Slide 1)
   // For each plaga: avg across all lotes (actual), min-max across lotes, and comparison with anterior
   const resumenGlobal: ResumenPlagaGlobal[] = plagasArr.map(plaga => {
@@ -1221,7 +1322,7 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
     const regLoteAnterior = regAnteriores.filter((m: any) => m.lote_id === lote.id);
 
     if (regLoteActual.length === 0 && regLoteAnterior.length === 0) {
-      return { loteId: lote.id, loteNombre: lote.nombre, sinDatos: true, plagas: [] };
+      return { loteId: lote.id, loteNombre: lote.nombre, sinDatos: true, plagas: [], fechaUltimaObservacion: null, nivelAlerta: 'roja' as const };
     }
 
     // Collect plagas for this lote (from both dates)
@@ -1256,8 +1357,10 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
       return (b.actual ?? 0) - (a.actual ?? 0);
     });
 
-    return { loteId: lote.id, loteNombre: lote.nombre, sinDatos: false, plagas };
+    return { loteId: lote.id, loteNombre: lote.nombre, sinDatos: false, plagas, fechaUltimaObservacion: fechaActual, nivelAlerta: calcNivelAlerta(fechaActual) };
   });
+
+  await enrichWithHistorical(vistasPorLote);
 
   // 6. Build VISTAS POR SUBLOTE (Slide 3) — ALL lotes/sublotes
   const vistasPorSublote: VistaSubloteComparativa[] = lotesDB.map(lote => {
@@ -1269,6 +1372,7 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
       return {
         loteId: lote.id, loteNombre: lote.nombre, sinDatos: true,
         sublotes: sublotesLote, plagas: [], celdas: {},
+        tieneDatosSemanaActual: false,
       };
     }
 
@@ -1316,6 +1420,7 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
     return {
       loteId: lote.id, loteNombre: lote.nombre, sinDatos: false,
       sublotes: sublotesLote, plagas: plagasLote, celdas,
+      tieneDatosSemanaActual: regLoteActual.length > 0 && !!fechaActual && fechaActual >= semana.inicio && fechaActual <= semana.fin,
     };
   });
 

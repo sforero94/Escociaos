@@ -24,6 +24,7 @@ interface AnalisisGemini {
     icono: string;
     texto: string;
     prioridad: 'alta' | 'media' | 'baja';
+    contexto?: string;
   }>;
   interpretacion_monitoreo: string;
   interpretacion_tendencias_monitoreo: string;
@@ -33,32 +34,264 @@ interface AnalisisGemini {
 // PROMPT TEMPLATE — Solo pide análisis JSON, NO HTML
 // ============================================================================
 
-const SYSTEM_PROMPT = `Eres un asistente agrícola experto para la finca de aguacate Hass "Escocia Hass" en Colombia.
-Tu tarea es analizar datos operativos semanales y producir un análisis breve, concreto y accionable.
+const SYSTEM_PROMPT = `Eres un administrador agrícola experto de la finca de aguacate Hass "Escocia Hass" en Colombia.
+Recibirás datos operativos de la semana actual, tendencias de las últimas 4 semanas, y resúmenes de las llamadas recientes con el propietario.
 
 RESPONDE EXCLUSIVAMENTE en formato JSON con esta estructura exacta:
 {
-  "resumen_ejecutivo": "2-3 oraciones resumiendo lo más importante de la semana operativa. Menciona cifras clave.",
+  "resumen_ejecutivo": "...",
   "conclusiones": [
-    { "icono": "⚠️", "texto": "Recomendación concreta y accionable con verbo de acción", "prioridad": "alta" }
+    { "icono": "⚠️", "texto": "...", "prioridad": "alta", "contexto": "..." }
   ],
-  "interpretacion_monitoreo": "Interpretación breve de las tendencias fitosanitarias.",
-  "interpretacion_tendencias_monitoreo": "Análisis detallado por plaga. Menciona Monalonion, Ácaro, Trips, Cucarrón marceño. Indica si cada plaga sube, baja o está estable. Menciona lotes con mayor riesgo."
+  "interpretacion_monitoreo": "...",
+  "interpretacion_tendencias_monitoreo": "..."
 }
 
-REGLAS:
+### resumen_ejecutivo
+Escríbelo como si fuera un administrador de finca en una llamada rápida con el propietario.
+- Tono directo, conversacional, sin tecnicismos
+- Máximo 5 oraciones
+- Menciona lo que pasó (no lo que "se realizó"): qué se fumigó, cuánto personal, qué alerta de plaga hay
+- Empieza por lo más importante de la semana (no por el número de jornales)
+- Incluye cifras clave de forma natural: jornales, lotes pendientes, alertas de plaga
+- Ejemplo de tono: "Esta semana completamos la fumigación en los lotes del sur. Nos faltan Acueducto y Unión que quedaron para la próxima. Tuvimos 11 empleados, 2 fallas, y se trabajaron 48 de 55 jornales posibles. El monitoreo mostró alertas de Monalonion en 4 lotes, lo que hay que atender."
+
+### conclusiones
+Lista de 3 a 6 recomendaciones concretas y priorizadas.
+- Factoriza datos de la semana actual + tendencias de las últimas 4 semanas + compromisos pendientes de las llamadas con el propietario
+- Señala explícitamente si algo fue prometido y no se cumplió, o si una tendencia lleva varias semanas
+- Cada conclusión tiene:
+  - texto: verbo de acción + qué hacer + (opcional) plazo o lote específico
+  - contexto: en 1 oración, por qué se recomienda esto (tendencia, compromiso de llamada, umbral superado)
+  - prioridad: "alta" / "media" / "baja"
+  - icono: 🔴 (alta/urgente), ⚠️ (media/atención), ✅ (baja/bueno), 📊 (informativo)
+- Los verbos de acción deben ser: Ejecutar, Evaluar, Priorizar, Revisar, Programar, Escalar, Confirmar
+
+### interpretacion_monitoreo
+Párrafo breve (2-3 oraciones) del estado fitosanitario general de la semana.
+
+### interpretacion_tendencias_monitoreo
+Análisis por plaga: Monalonion, Ácaro, Trips, Cucarrón marceño. Para cada una: tendencia (sube/baja/estable), lotes con mayor riesgo.
+
+REGLAS GENERALES:
 - Todo en español
-- Mínimo 3 conclusiones, máximo 5
-- Las conclusiones DEBEN empezar con verbos de acción (Evaluar, Priorizar, Continuar, Revisar, Programar)
-- Usa íconos: 🔴 (alta/urgente), ⚠️ (media/atención), ✅ (baja/bueno), 📊 (informativo)
 - NO incluir HTML, markdown, ni código. SOLO el objeto JSON.
 - NO envolver el JSON en bloques de código.`;
+
+// ============================================================================
+// CONTEXTO HISTÓRICO — ÚLTIMAS 4 SEMANAS
+// ============================================================================
+
+async function fetchHistoricoSemanas(inicioSemanaActual: string): Promise<string> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!supabaseUrl || !serviceKey) return '';
+
+  // 4 semanas atrás desde el inicio de la semana actual
+  const inicioDate = new Date(inicioSemanaActual);
+  const inicioHistorico = new Date(inicioDate);
+  inicioHistorico.setDate(inicioHistorico.getDate() - 28);
+  const inicioHistoricoStr = inicioHistorico.toISOString().split('T')[0];
+
+  const headers = {
+    'apikey': serviceKey,
+    'Authorization': `Bearer ${serviceKey}`,
+    'Content-Type': 'application/json',
+  };
+
+  const encode = (s: string) => encodeURIComponent(s);
+
+  try {
+    // Monitoreos: incidencia por plaga por lote por semana
+    const monitoreoRes = await fetch(
+      `${supabaseUrl}/rest/v1/monitoreos?select=fecha_monitoreo,lote_id,plaga_enfermedad_id,incidencia,gravedad_texto,lote:lotes(nombre),plaga:plagas_enfermedades_catalogo(nombre)&fecha_monitoreo=gte.${encode(inicioHistoricoStr)}&fecha_monitoreo=lt.${encode(inicioSemanaActual)}&order=fecha_monitoreo.asc`,
+      { headers }
+    );
+
+    // Aplicaciones pendientes/vencidas en el período
+    const aplicacionesRes = await fetch(
+      `${supabaseUrl}/rest/v1/aplicaciones?select=nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_fin_planeada,fecha_cierre&fecha_inicio_planeada=gte.${encode(inicioHistoricoStr)}&fecha_inicio_planeada=lt.${encode(inicioSemanaActual)}`,
+      { headers }
+    );
+
+    // Ausentismo laboral por semana
+    const ausenciaRes = await fetch(
+      `${supabaseUrl}/rest/v1/registros_trabajo?select=fecha_trabajo,fraccion_jornal&fecha_trabajo=gte.${encode(inicioHistoricoStr)}&fecha_trabajo=lt.${encode(inicioSemanaActual)}`,
+      { headers }
+    );
+
+    const [monitoreos, aplicaciones, registros] = await Promise.all([
+      monitoreoRes.ok ? monitoreoRes.json() : [],
+      aplicacionesRes.ok ? aplicacionesRes.json() : [],
+      ausenciaRes.ok ? ausenciaRes.json() : [],
+    ]);
+
+    const partes: string[] = [];
+    partes.push('## TENDENCIAS OPERATIVAS — ÚLTIMAS 4 SEMANAS');
+
+    // Pest trends grouped by week
+    if (Array.isArray(monitoreos) && monitoreos.length > 0) {
+      partes.push('\n### Monitoreo fitosanitario (evolución semanal)');
+      // Group by plaga × lote × week
+      const trend: Record<string, Record<string, Record<string, number[]>>> = {};
+      for (const m of monitoreos) {
+        const fecha = new Date(m.fecha_monitoreo);
+        const weekStart = new Date(fecha);
+        weekStart.setDate(fecha.getDate() - fecha.getDay());
+        const weekKey = weekStart.toISOString().split('T')[0];
+        const plaga = m.plaga?.nombre || m.plaga_enfermedad_id || 'Desconocida';
+        const lote = m.lote?.nombre || m.lote_id || 'Sin lote';
+        if (!trend[plaga]) trend[plaga] = {};
+        if (!trend[plaga][lote]) trend[plaga][lote] = {};
+        if (!trend[plaga][lote][weekKey]) trend[plaga][lote][weekKey] = [];
+        trend[plaga][lote][weekKey].push(m.incidencia ?? 0);
+      }
+
+      for (const [plaga, lotes] of Object.entries(trend)) {
+        partes.push(`\n**${plaga}**`);
+        for (const [lote, weeks] of Object.entries(lotes)) {
+          const sortedWeeks = Object.entries(weeks).sort(([a], [b]) => a.localeCompare(b));
+          const vals = sortedWeeks.map(([wk, vals]) => {
+            const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
+            return `S(${wk.slice(5)}): ${avg.toFixed(1)}%`;
+          });
+          // Flag rising trends (2+ consecutive weeks)
+          const rising = sortedWeeks.length >= 2 && sortedWeeks.every(([, vs], i) => {
+            if (i === 0) return true;
+            const prev = sortedWeeks[i - 1][1];
+            const avgPrev = prev.reduce((s, v) => s + v, 0) / prev.length;
+            const avgCurr = vs.reduce((s, v) => s + v, 0) / vs.length;
+            return avgCurr >= avgPrev;
+          });
+          partes.push(`  - ${lote}: ${vals.join(' → ')}${rising && sortedWeeks.length >= 2 ? ' ⬆ TENDENCIA ASCENDENTE' : ''}`);
+        }
+      }
+    }
+
+    // Overdue/open applications
+    if (Array.isArray(aplicaciones) && aplicaciones.length > 0) {
+      const pendientes = aplicaciones.filter((a: any) => a.estado !== 'cerrada' && a.estado !== 'cancelada');
+      if (pendientes.length > 0) {
+        partes.push('\n### Aplicaciones pendientes o vencidas');
+        const hoy = new Date(inicioSemanaActual);
+        for (const a of pendientes) {
+          const finDate = a.fecha_fin_planeada ? new Date(a.fecha_fin_planeada) : null;
+          const semanasVencida = finDate ? Math.floor((hoy.getTime() - finDate.getTime()) / (7 * 86400000)) : null;
+          const vencida = semanasVencida !== null && semanasVencida > 0 ? ` — VENCIDA ${semanasVencida} sem.` : '';
+          partes.push(`  - ${a.nombre_aplicacion} (${a.tipo_aplicacion}): ${a.estado}, planeada ${a.fecha_inicio_planeada}${vencida}`);
+        }
+      }
+    }
+
+    // Absence patterns by week
+    if (Array.isArray(registros) && registros.length > 0) {
+      partes.push('\n### Ausentismo laboral (últimas 4 semanas)');
+      const byWeek: Record<string, { fallas: number; jornales: number }> = {};
+      for (const r of registros) {
+        const fecha = new Date(r.fecha_trabajo);
+        const weekStart = new Date(fecha);
+        weekStart.setDate(fecha.getDate() - fecha.getDay());
+        const weekKey = weekStart.toISOString().split('T')[0];
+        if (!byWeek[weekKey]) byWeek[weekKey] = { fallas: 0, jornales: 0 };
+        if ((r.fraccion_jornal ?? 1) === 0) byWeek[weekKey].fallas++;
+        byWeek[weekKey].jornales += r.fraccion_jornal ?? 1;
+      }
+      for (const [wk, d] of Object.entries(byWeek).sort(([a], [b]) => a.localeCompare(b))) {
+        partes.push(`  - Sem ${wk.slice(5)}: ${d.fallas} fallas, ${d.jornales.toFixed(1)} jornales trabajados`);
+      }
+    }
+
+    return partes.join('\n');
+  } catch {
+    return '';
+  }
+}
+
+// ============================================================================
+// CONTEXTO NOTION — ÚLTIMAS 4 LLAMADAS CON PROPIETARIO
+// ============================================================================
+
+async function fetchResumenesNotion(): Promise<string> {
+  const token = Deno.env.get('NOTION_TOKEN');
+  if (!token) return '';
+
+  const DB_ID = '31167755ed688015a5c4f09e04cd65f5';
+  const notionHeaders = {
+    'Authorization': `Bearer ${token}`,
+    'Notion-Version': '2022-06-28',
+    'Content-Type': 'application/json',
+  };
+
+  try {
+    // Query last 4 pages sorted by Date desc
+    const queryRes = await fetch(`https://api.notion.com/v1/databases/${DB_ID}/query`, {
+      method: 'POST',
+      headers: notionHeaders,
+      body: JSON.stringify({
+        sorts: [{ property: 'Date', direction: 'descending' }],
+        page_size: 4,
+      }),
+    });
+    if (!queryRes.ok) return '';
+
+    const queryData = await queryRes.json();
+    const pages: any[] = queryData.results || [];
+    if (pages.length === 0) return '';
+
+    const partes: string[] = [];
+    partes.push('\n---\n\n## LLAMADAS CON PROPIETARIO — ÚLTIMAS 4 SEMANAS');
+
+    for (const page of pages) {
+      const dateRaw = page.properties?.Date?.date?.start || page.properties?.date?.date?.start || '';
+      const titleArr = page.properties?.Name?.title || page.properties?.name?.title || [];
+      const title = titleArr.map((t: any) => t.plain_text).join('') || 'Sin título';
+
+      // Fetch page blocks
+      const blocksRes = await fetch(`https://api.notion.com/v1/blocks/${page.id}/children`, {
+        headers: notionHeaders,
+      });
+      if (!blocksRes.ok) continue;
+
+      const blocksData = await blocksRes.json();
+      const blocks: any[] = blocksData.results || [];
+
+      partes.push(`\n### ${dateRaw} — ${title}`);
+
+      const pendingItems: string[] = [];
+      const summaryLines: string[] = [];
+
+      for (const block of blocks) {
+        if (block.type === 'to_do') {
+          const text = block.to_do?.rich_text?.map((t: any) => t.plain_text).join('') || '';
+          const checked = block.to_do?.checked ?? false;
+          if (!checked && text) pendingItems.push(`- [ ] ${text}`);
+        } else if (['paragraph', 'bulleted_list_item', 'numbered_list_item', 'heading_2', 'heading_3'].includes(block.type)) {
+          const richText = block[block.type]?.rich_text || [];
+          const text = richText.map((t: any) => t.plain_text).join('').trim();
+          if (text) summaryLines.push(text);
+        }
+      }
+
+      if (pendingItems.length > 0) {
+        partes.push('Compromisos pendientes:');
+        partes.push(...pendingItems);
+      }
+      if (summaryLines.length > 0) {
+        partes.push(`Temas discutidos: ${summaryLines.slice(0, 5).join(' / ')}`);
+      }
+    }
+
+    return partes.join('\n');
+  } catch {
+    return '';
+  }
+}
 
 // ============================================================================
 // FUNCIONES DE FORMATEO DE DATOS PARA EL PROMPT
 // ============================================================================
 
-function formatearDatosParaPrompt(datos: any): string {
+function formatearDatosParaPrompt(datos: any, historicoCtx = '', notionCtx = ''): string {
   const partes: string[] = [];
 
   partes.push(`## PERÍODO DEL REPORTE
@@ -249,6 +482,14 @@ ${fechaInfo}${mon.avisoFechaDesactualizada ? `\n⚠ ${mon.avisoFechaDesactualiza
     });
   }
 
+  if (historicoCtx) {
+    partes.push(historicoCtx);
+  }
+
+  if (notionCtx) {
+    partes.push(notionCtx);
+  }
+
   return partes.join('\n\n');
 }
 
@@ -262,7 +503,7 @@ async function llamarGemini(datosFormateados: string, instruccionesAdicionales?:
     throw new Error('GEMINI_API_KEY no está configurada en las variables de entorno');
   }
 
-  const model = 'gemini-3.1-pro-preview';
+  const model = 'gemini-3-flash-preview';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   const userMessage = instruccionesAdicionales
@@ -281,7 +522,7 @@ async function llamarGemini(datosFormateados: string, instruccionesAdicionales?:
     ],
     generationConfig: {
       temperature: 0.3,
-      maxOutputTokens: 2048,
+      maxOutputTokens: 4096,
       topP: 0.8,
       responseMimeType: 'application/json',
     }
@@ -352,9 +593,9 @@ async function llamarGemini(datosFormateados: string, instruccionesAdicionales?:
     analisis = {
       resumen_ejecutivo: 'Semana operativa procesada. Consulte los datos del reporte para detalles específicos.',
       conclusiones: [
-        { icono: '📊', texto: 'Revisar los indicadores detallados en las secciones del reporte', prioridad: 'media' },
-        { icono: '📋', texto: 'Verificar el avance de las aplicaciones en curso', prioridad: 'media' },
-        { icono: '🌱', texto: 'Monitorear la evolución fitosanitaria en la próxima semana', prioridad: 'media' },
+        { icono: '📊', texto: 'Revisar los indicadores detallados en las secciones del reporte', prioridad: 'media' as const, contexto: '' },
+        { icono: '📋', texto: 'Verificar el avance de las aplicaciones en curso', prioridad: 'media' as const, contexto: '' },
+        { icono: '🌱', texto: 'Monitorear la evolución fitosanitaria en la próxima semana', prioridad: 'media' as const, contexto: '' },
       ],
       interpretacion_monitoreo: 'Consulte la sección de monitoreo para detalles sobre las tendencias fitosanitarias.',
       interpretacion_tendencias_monitoreo: 'Sin análisis disponible para esta semana.',
@@ -363,7 +604,7 @@ async function llamarGemini(datosFormateados: string, instruccionesAdicionales?:
 
   if (!analisis.resumen_ejecutivo) analisis.resumen_ejecutivo = 'Semana operativa procesada.';
   if (!Array.isArray(analisis.conclusiones) || analisis.conclusiones.length === 0) {
-    analisis.conclusiones = [{ icono: '📊', texto: 'Revisar los indicadores del reporte', prioridad: 'media' }];
+    analisis.conclusiones = [{ icono: '📊', texto: 'Revisar los indicadores del reporte', prioridad: 'media', contexto: '' }];
   }
   if (!analisis.interpretacion_monitoreo) analisis.interpretacion_monitoreo = '';
   if (!analisis.interpretacion_tendencias_monitoreo) analisis.interpretacion_tendencias_monitoreo = '';
@@ -840,50 +1081,79 @@ function construirSlideCierreGeneral(app: any, semana: any): string {
     </div>`;
   };
 
-  const summaryRows = (app.kpiPorLote || []).slice(0, 6).map((lote: any, i: number) => {
+  const fmt1 = (v: any) => v != null ? formatNum(Number(v), 1) : '—';
+  const summaryRows = (app.kpiPorLote || []).slice(0, 8).map((lote: any, i: number) => {
     const fin = (app.financieroPorLote || [])[i] || {};
     const isTotal = lote.loteNombre === 'TOTAL';
     const rowBg = isTotal ? DS.secondaryLight : (i % 2 === 0 ? DS.card : DS.muted);
     const fontWeight = isTotal ? '700' : '400';
-    
+
     return `<tr style="background:${rowBg};">
-      <td style="padding:clamp(6px, 1vw, 8px) clamp(8px, 1.2vw, 12px);font-size:clamp(10px, 1.1vw, 12px);font-weight:${isTotal ? '800' : '600'};color:${isTotal ? DS.primary : DS.brandBrown};">${lote.loteNombre}</td>
-      <td style="padding:clamp(6px, 1vw, 8px);font-size:clamp(9px, 1vw, 11px);text-align:center;font-weight:${fontWeight};">${lote.canecasPlaneadas ?? '—'}</td>
-      <td style="padding:clamp(6px, 1vw, 8px);font-size:clamp(9px, 1vw, 11px);text-align:center;font-weight:${fontWeight};">${lote.canecasReales ?? '—'}</td>
-      <td style="padding:clamp(6px, 1vw, 8px);font-size:clamp(9px, 1vw, 11px);text-align:center;font-weight:600;background:${getDesvColor(lote.canecasDesviacion ?? 0)};color:${getDesvTextColor(lote.canecasDesviacion ?? 0)};">${lote.canecasDesviacion ?? '—'}%</td>
-      <td style="padding:clamp(6px, 1vw, 8px);font-size:clamp(9px, 1vw, 11px);text-align:right;font-weight:${fontWeight};">${formatCOP(fin.costoTotalPlaneado || 0)}</td>
-      <td style="padding:clamp(6px, 1vw, 8px);font-size:clamp(9px, 1vw, 11px);text-align:right;font-weight:${fontWeight};">${formatCOP(fin.costoTotalReal || 0)}</td>
-      <td style="padding:clamp(6px, 1vw, 8px);font-size:clamp(9px, 1vw, 11px);text-align:center;font-weight:600;background:${getDesvColor(fin.costoTotalDesviacion ?? 0)};color:${getDesvTextColor(fin.costoTotalDesviacion ?? 0)};">${fin.costoTotalDesviacion ?? '—'}%</td>
+      <td style="padding:5px 8px;font-size:11px;font-weight:${isTotal ? '800' : '600'};color:${isTotal ? DS.primary : DS.brandBrown};">${lote.loteNombre}</td>
+      <td style="padding:5px 6px;font-size:10px;text-align:center;font-weight:${fontWeight};">${fmt1(lote.canecasPlaneadas)}</td>
+      <td style="padding:5px 6px;font-size:10px;text-align:center;font-weight:${fontWeight};">${fmt1(lote.canecasReales)}</td>
+      <td style="padding:5px 6px;font-size:10px;text-align:center;font-weight:600;background:${getDesvColor(lote.canecasDesviacion ?? 0)};color:${getDesvTextColor(lote.canecasDesviacion ?? 0)};">${lote.canecasDesviacion ?? '—'}%</td>
+      <td style="padding:5px 6px;font-size:10px;text-align:right;font-weight:${fontWeight};">${formatCOP(fin.costoTotalPlaneado || 0)}</td>
+      <td style="padding:5px 6px;font-size:10px;text-align:right;font-weight:${fontWeight};">${formatCOP(fin.costoTotalReal || 0)}</td>
+      <td style="padding:5px 6px;font-size:10px;text-align:center;font-weight:600;background:${getDesvColor(fin.costoTotalDesviacion ?? 0)};color:${getDesvTextColor(fin.costoTotalDesviacion ?? 0)};">${fin.costoTotalDesviacion ?? '—'}%</td>
     </tr>`;
   }).join('');
 
+  // Insumos sidebar
+  const insumos: any[] = app.listaInsumos || [];
+  const insumosRows = insumos.slice(0, 8).map((ins: any, i: number) =>
+    `<tr style="background:${i % 2 === 0 ? DS.card : DS.muted};">
+      <td style="padding:4px 8px;font-size:10px;color:${DS.brandBrown};font-weight:500;">${ins.nombre}</td>
+      <td style="padding:4px 6px;font-size:9px;color:${DS.mutedForeground};text-align:center;">${ins.categoria}</td>
+    </tr>`
+  ).join('');
+
   return `<div class="slide page-break">
   ${slideHeader('CIERRE', `Resultado General — ${app.nombre}`, semana)}
-  <div style="flex:1;display:flex;flex-direction:column;padding:clamp(12px, 1.8vw, 18px);gap:clamp(10px, 1.5vw, 14px);overflow:hidden;">
-    <div style="display:flex;align-items:center;gap:clamp(8px, 1.2vw, 12px);flex-wrap:wrap;">
-      <span style="display:inline-flex;align-items:center;gap:6px;padding:4px 14px;border-radius:8px;font-size:clamp(10px, 1.2vw, 12px);font-weight:700;background:${DS.secondaryLight};color:${DS.primaryDark};">🌿 ${tipoLabel}</span>
-      <span style="font-size:clamp(10px, 1.2vw, 12px);color:${DS.mutedForeground};">📅 ${app.fechaInicio || '—'} → ${app.fechaFin || '—'}</span>
-      <span style="font-size:clamp(10px, 1.2vw, 12px);color:${DS.mutedForeground};">⏱️ ${dias} días</span>
-      ${app.proposito ? `<span style="font-size:clamp(10px, 1.2vw, 12px);color:${DS.brandBrown};font-style:italic;background:${DS.muted};padding:4px 10px;border-radius:6px;">"${app.proposito}"</span>` : ''}
+  <div style="flex:1;display:flex;flex-direction:column;padding:12px 16px;gap:10px;overflow:hidden;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 12px;border-radius:8px;font-size:11px;font-weight:700;background:${DS.secondaryLight};color:${DS.primaryDark};">🌿 ${tipoLabel}</span>
+      <span style="font-size:11px;color:${DS.mutedForeground};">📅 ${app.fechaInicio || '—'} → ${app.fechaFin || '—'}</span>
+      <span style="font-size:11px;color:${DS.mutedForeground};">⏱️ ${dias} días</span>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:clamp(10px, 1.5vw, 16px);">
-      ${kpiCard('Canecas / Bultos', '📦', canecasPlan, canecasReal, canecasDesv, (v) => String(v), unidadCan)}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      ${kpiCard('Canecas / Bultos', '📦', canecasPlan, canecasReal, canecasDesv, (v) => formatNum(Number(v), 1), unidadCan)}
       ${kpiCard('Costo Total', '💰', costoPlan, costoReal, costoDesv, formatCOP, 'COP')}
     </div>
-    ${summaryRows ? `<div style="flex:1;background:${DS.card};border-radius:10px;border:1px solid ${DS.border};overflow:hidden;display:flex;flex-direction:column;min-height:0;">
-      <table style="width:100%;border-collapse:collapse;">
-        <thead><tr style="background:linear-gradient(135deg, ${DS.primary} 0%, ${DS.primaryDark} 100%);">
-          <th style="padding:clamp(6px, 1vw, 10px);font-size:clamp(8px, 1vw, 10px);font-weight:700;color:#FFFFFF;text-align:left;">Lote</th>
-          <th style="padding:clamp(6px, 1vw, 10px);font-size:clamp(8px, 1vw, 10px);font-weight:700;color:#FFFFFF;text-align:center;">Plan</th>
-          <th style="padding:clamp(6px, 1vw, 10px);font-size:clamp(8px, 1vw, 10px);font-weight:700;color:#FFFFFF;text-align:center;">Real</th>
-          <th style="padding:clamp(6px, 1vw, 10px);font-size:clamp(8px, 1vw, 10px);font-weight:700;color:#FFFFFF;text-align:center;">Desv%</th>
-          <th style="padding:clamp(6px, 1vw, 10px);font-size:clamp(8px, 1vw, 10px);font-weight:700;color:#FFFFFF;text-align:center;">Costo Plan</th>
-          <th style="padding:clamp(6px, 1vw, 10px);font-size:clamp(8px, 1vw, 10px);font-weight:700;color:#FFFFFF;text-align:center;">Costo Real</th>
-          <th style="padding:clamp(6px, 1vw, 10px);font-size:clamp(8px, 1vw, 10px);font-weight:700;color:#FFFFFF;text-align:center;">Desv%</th>
-        </tr></thead>
-        <tbody>${summaryRows}</tbody>
-      </table>
-    </div>` : ''}
+    <div style="display:flex;flex:1;gap:12px;min-height:0;overflow:hidden;">
+      ${summaryRows ? `<div style="flex:1;background:${DS.card};border-radius:10px;border:1px solid ${DS.border};overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr style="background:linear-gradient(135deg, ${DS.primary} 0%, ${DS.primaryDark} 100%);">
+            <th style="padding:6px 8px;font-size:10px;font-weight:700;color:#FFFFFF;text-align:left;">Lote</th>
+            <th style="padding:6px;font-size:10px;font-weight:700;color:#FFFFFF;text-align:center;">Plan</th>
+            <th style="padding:6px;font-size:10px;font-weight:700;color:#FFFFFF;text-align:center;">Real</th>
+            <th style="padding:6px;font-size:10px;font-weight:700;color:#FFFFFF;text-align:center;">Desv%</th>
+            <th style="padding:6px;font-size:10px;font-weight:700;color:#FFFFFF;text-align:center;">Costo Plan</th>
+            <th style="padding:6px;font-size:10px;font-weight:700;color:#FFFFFF;text-align:center;">Costo Real</th>
+            <th style="padding:6px;font-size:10px;font-weight:700;color:#FFFFFF;text-align:center;">Desv%</th>
+          </tr></thead>
+          <tbody>${summaryRows}</tbody>
+        </table>
+      </div>` : ''}
+      <div style="flex:0 0 220px;display:flex;flex-direction:column;gap:8px;overflow:hidden;">
+        ${app.proposito ? `<div style="background:${DS.muted};border-radius:8px;padding:8px 10px;border-left:3px solid ${DS.primary};">
+          <div style="font-size:9px;font-weight:700;color:${DS.primary};text-transform:uppercase;margin-bottom:4px;">🎯 Objetivo</div>
+          <div style="font-size:11px;color:${DS.brandBrown};line-height:1.4;">${app.proposito}</div>
+        </div>` : ''}
+        ${insumosRows ? `<div style="flex:1;background:${DS.card};border-radius:8px;border:1px solid ${DS.border};overflow:hidden;display:flex;flex-direction:column;">
+          <div style="background:${DS.primary};padding:5px 8px;">
+            <span style="font-size:10px;font-weight:700;color:#FFFFFF;">🧪 Insumos utilizados</span>
+          </div>
+          <table style="width:100%;border-collapse:collapse;">
+            <thead><tr style="background:${DS.muted};">
+              <th style="padding:4px 8px;font-size:9px;font-weight:700;color:${DS.mutedForeground};text-align:left;">Producto</th>
+              <th style="padding:4px 6px;font-size:9px;font-weight:700;color:${DS.mutedForeground};text-align:center;">Categoría</th>
+            </tr></thead>
+            <tbody>${insumosRows}</tbody>
+          </table>
+        </div>` : ''}
+      </div>
+    </div>
   </div>
 </div>`;
 }
@@ -901,8 +1171,8 @@ function construirSlideCierreTecnico(app: any, semana: any): string {
     
     return `<tr style="background:${rowBg};">
       <td style="padding:clamp(5px, 0.8vw, 7px) clamp(6px, 1vw, 10px);font-size:clamp(9px, 1vw, 11px);font-weight:${isTotal ? '800' : '600'};color:${isTotal ? DS.primary : DS.brandBrown};">${lote.loteNombre}</td>
-      <td style="padding:clamp(5px, 0.8vw, 7px);font-size:clamp(8px, 0.9vw, 10px);text-align:center;">${lote.canecasPlaneadas ?? '—'}</td>
-      <td style="padding:clamp(5px, 0.8vw, 7px);font-size:clamp(8px, 0.9vw, 10px);text-align:center;">${lote.canecasReales ?? '—'}</td>
+      <td style="padding:clamp(5px, 0.8vw, 7px);font-size:clamp(8px, 0.9vw, 10px);text-align:center;">${lote.canecasPlaneadas != null ? formatNum(Number(lote.canecasPlaneadas), 1) : '—'}</td>
+      <td style="padding:clamp(5px, 0.8vw, 7px);font-size:clamp(8px, 0.9vw, 10px);text-align:center;">${lote.canecasReales != null ? formatNum(Number(lote.canecasReales), 1) : '—'}</td>
       <td style="padding:clamp(5px, 0.8vw, 7px);font-size:clamp(8px, 0.9vw, 10px);text-align:center;font-weight:600;background:${getDesvColor(canDesv)};color:${getDesvTextColor(canDesv)};">${canDesv}%</td>
       <td style="padding:clamp(5px, 0.8vw, 7px);font-size:clamp(8px, 0.9vw, 10px);text-align:center;">${lote.insumosPlaneados ?? '—'}</td>
       <td style="padding:clamp(5px, 0.8vw, 7px);font-size:clamp(8px, 0.9vw, 10px);text-align:center;">${lote.insumosReales ?? '—'}</td>
@@ -1016,33 +1286,34 @@ function construirSlideAplicacionesActivas(datos: any): string {
     const pct = app.porcentajeGlobal || 0;
     const barColor = getProgressColor(pct);
 
-    const loteBars = (app.progresoPorLote || []).slice(0, 5).map((lote: any) => {
-      const lp = lote.porcentaje || 0;
+    const loteBars = (app.progresoPorLote || []).slice(0, 6).map((lote: any) => {
+      const lp = Math.round((lote.porcentaje || 0) * 10) / 10;
       const lpColor = getProgressColor(lp);
-      return `<div style="display:flex;align-items:center;margin-bottom:clamp(3px, 0.5vw, 5px);">
-        <div style="width:clamp(50px, 8vw, 70px);font-size:clamp(8px, 0.9vw, 10px);font-weight:600;color:${DS.brandBrown};text-align:right;padding-right:6px;flex-shrink:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${lote.loteNombre}</div>
-        <div style="flex:1;background:${DS.border};border-radius:4px;height:clamp(12px, 1.8vw, 16px);position:relative;overflow:hidden;">
+      return `<div style="display:flex;align-items:center;margin-bottom:3px;">
+        <div style="width:70px;font-size:10px;font-weight:600;color:${DS.brandBrown};text-align:right;padding-right:6px;flex-shrink:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${lote.loteNombre}</div>
+        <div style="flex:1;background:${DS.border};border-radius:4px;height:14px;position:relative;overflow:hidden;">
           <div style="background:${lpColor};height:100%;border-radius:4px;width:${Math.min(lp, 100)}%;"></div>
-          <span style="position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:clamp(7px, 0.8vw, 9px);font-weight:600;color:${lp > 50 ? '#FFF' : DS.brandBrown};">${lote.ejecutado}/${lote.planeado} (${lp}%)</span>
+          <span style="position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:9px;font-weight:600;color:${lp > 50 ? '#FFF' : DS.brandBrown};">${formatNum(lote.ejecutado, 1)}/${formatNum(lote.planeado, 1)} (${formatNum(lp, 1)}%)</span>
         </div>
       </div>`;
     }).join('');
 
-    return `<div style="background:${DS.card};border-radius:12px;border:1px solid ${DS.border};padding:clamp(12px, 1.8vw, 16px);flex:1;min-width:280px;box-shadow:0 2px 6px rgba(0,0,0,0.04);">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:clamp(8px, 1.2vw, 12px);">
+    const pctDisplay = formatNum(pct, 1);
+    return `<div style="background:${DS.card};border-radius:12px;border:1px solid ${DS.border};padding:clamp(12px, 1.8vw, 16px);flex:1;min-width:280px;box-shadow:0 2px 6px rgba(0,0,0,0.04);overflow:hidden;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
         <div>
           <div style="font-size:clamp(12px, 1.5vw, 14px);font-weight:700;color:${DS.brandBrown};">${app.nombre}</div>
           <span style="display:inline-block;padding:3px 10px;border-radius:6px;font-size:clamp(8px, 0.9vw, 10px);font-weight:600;background:${DS.warningBg};color:${DS.warning};margin-top:4px;">${app.tipo}</span>
         </div>
-        <div style="background:${getProgressBg(pct)};padding:clamp(8px, 1.2vw, 12px);border-radius:10px;text-align:center;">
-          <div style="font-size:clamp(20px, 3vw, 28px);font-weight:900;color:${barColor};line-height:1;">${pct}%</div>
+        <div style="background:${getProgressBg(pct)};padding:10px 14px;border-radius:10px;text-align:center;">
+          <div style="font-size:clamp(20px, 3vw, 28px);font-weight:900;color:${barColor};line-height:1;">${pctDisplay}%</div>
           <div style="font-size:clamp(8px, 0.9vw, 10px);color:${barColor};font-weight:600;">avance</div>
         </div>
       </div>
-      ${app.proposito ? `<div style="font-size:clamp(9px, 1vw, 10px);color:${DS.mutedForeground};margin-bottom:clamp(8px, 1.2vw, 12px);line-height:1.4;">${app.proposito}</div>` : ''}
-      <div style="background:${DS.muted};border-radius:6px;height:clamp(18px, 2.5vw, 24px);overflow:hidden;position:relative;margin-bottom:clamp(10px, 1.5vw, 14px);">
+      ${app.proposito ? `<div style="font-size:10px;color:${DS.mutedForeground};margin-bottom:10px;line-height:1.4;">${app.proposito}</div>` : ''}
+      <div style="background:${DS.muted};border-radius:6px;height:22px;overflow:hidden;position:relative;margin-bottom:10px;">
         <div style="background:${barColor};height:100%;border-radius:6px;width:${Math.min(pct, 100)}%;"></div>
-        <span style="position:absolute;left:50%;top:50%;transform:translate(-50%, -50%);font-size:clamp(9px, 1vw, 11px);font-weight:700;color:${pct > 45 ? '#FFF' : DS.brandBrown};">${app.totalEjecutado}/${app.totalPlaneado} ${app.unidad}</span>
+        <span style="position:absolute;left:50%;top:50%;transform:translate(-50%, -50%);font-size:10px;font-weight:700;color:${pct > 45 ? '#FFF' : DS.brandBrown};">${formatNum(app.totalEjecutado, 1)}/${formatNum(app.totalPlaneado, 1)} ${app.unidad}</span>
       </div>
       ${loteBars}
     </div>`;
@@ -1174,9 +1445,9 @@ function construirSlideMonitoreoTendencias(datos: any, analisis: AnalisisGemini)
 
   return `<div class="slide page-break">
   ${slideHeader('MONITOREO', 'Resumen General — Estado Fitosanitario', semana)}
-  <div style="flex:1;padding:clamp(12px, 1.8vw, 16px) clamp(16px, 2.2vw, 22px) 0;overflow:hidden;">
+  <div style="flex:1;display:flex;flex-direction:column;padding:clamp(12px, 1.8vw, 16px) clamp(16px, 2.2vw, 22px) clamp(8px, 1.2vw, 12px);gap:8px;overflow:hidden;">
     ${fechaBanner}
-    <div style="background:${DS.card};border-radius:10px;border:1px solid ${DS.border};overflow:hidden;">
+    <div style="flex:1;background:${DS.card};border-radius:10px;border:1px solid ${DS.border};overflow:hidden;min-height:0;">
       <table style="width:100%;border-collapse:collapse;">
         <thead><tr style="background:linear-gradient(135deg, ${DS.primary} 0%, ${DS.primaryDark} 100%);">
           <th style="padding:clamp(6px, 1vw, 8px) clamp(8px, 1.2vw, 12px);font-size:clamp(9px, 1.1vw, 11px);font-weight:700;color:#FFFFFF;text-align:left;">Plaga</th>
@@ -1200,41 +1471,88 @@ function construirSlideMonitoreoPorLote(datos: any): string {
   if (vistas.length === 0) return '';
   const { semana } = datos;
 
-  const loteCards = vistas.map((lote: any) => {
-    if (lote.sinDatos) {
-      return `<div style="background:${DS.muted};border-radius:8px;border:1px solid ${DS.border};padding:clamp(10px, 1.5vw, 12px);flex:1;min-width:280px;max-width:400px;">
-        <div style="font-size:clamp(11px, 1.3vw, 13px);font-weight:700;color:${DS.mutedForeground};margin-bottom:clamp(6px, 1vw, 8px);border-bottom:2px solid ${DS.border};padding-bottom:4px;">${lote.loteNombre}</div>
-        <div style="font-size:clamp(9px, 1.1vw, 11px);color:${DS.mutedForeground};text-align:center;padding:clamp(12px, 1.8vw, 16px) 0;">No se monitoreó este lote</div>
-      </div>`;
+  // Collect all unique plagas across all lotes (union), interest ones first
+  const interestSet = new Set<string>();
+  const allPlagasSet = new Set<string>();
+  for (const lote of vistas) {
+    for (const p of (lote.plagas || [])) {
+      allPlagasSet.add(p.plagaNombre);
+      if (p.esPlaga_interes) interestSet.add(p.plagaNombre);
     }
+  }
+  const allPlagas = Array.from(allPlagasSet).sort((a, b) => {
+    const ai = interestSet.has(a), bi = interestSet.has(b);
+    if (ai !== bi) return ai ? -1 : 1;
+    return a.localeCompare(b);
+  });
 
-    const rows = (lote.plagas || []).map((p: any) => {
+  // Alert styling per lote
+  function alertStyle(alerta: string): { bg: string; color: string; icon: string } {
+    if (alerta === 'ninguna') return { bg: DS.successBg, color: DS.success, icon: '✓' };
+    if (alerta === 'amarilla') return { bg: DS.warningBg, color: DS.warning, icon: '⚠' };
+    return { bg: DS.destructiveBg, color: DS.destructive, icon: '!' };
+  }
+
+  // Trend arrow
+  function trendArrow(t: string): string {
+    if (t === 'subiendo') return '↑';
+    if (t === 'bajando') return '↓';
+    if (t === 'estable') return '→';
+    return '';
+  }
+
+  // Column widths: plaga column ~22%, rest split equally
+  const lotePct = Math.floor(78 / Math.max(vistas.length, 1));
+
+  // Header row: lote names
+  const headerCols = vistas.map((lote: any) =>
+    `<th style="padding:4px 5px;font-size:clamp(7px,0.85vw,9px);font-weight:700;color:#fff;background:${DS.primaryDark};border:1px solid ${DS.primaryDark};text-align:center;width:${lotePct}%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${lote.loteNombre}</th>`
+  ).join('');
+
+  // Fecha row
+  const fechaCols = vistas.map((lote: any) => {
+    const alerta = lote.nivelAlerta || 'roja';
+    const st = alertStyle(alerta);
+    const fecha = lote.fechaUltimaObservacion;
+    const display = fecha ? `${st.icon} ${fecha.slice(5).replace('-', '/')}` : `${st.icon} —`;
+    return `<td style="padding:3px 4px;text-align:center;font-size:clamp(7px,0.85vw,9px);font-weight:700;background:${st.bg};color:${st.color};border:1px solid ${DS.border};">${display}</td>`;
+  }).join('');
+
+  // Plaga rows
+  const plagaRows = allPlagas.map((plaga: string) => {
+    const isInterest = interestSet.has(plaga);
+    const cells = vistas.map((lote: any) => {
+      const p = (lote.plagas || []).find((x: any) => x.plagaNombre === plaga);
+      if (!p || p.actual === null) {
+        return `<td style="padding:3px 4px;text-align:center;font-size:clamp(7px,0.9vw,10px);border:1px solid ${DS.border};color:${DS.mutedForeground};">—</td>`;
+      }
       const bg = getIncidenciaColor(p.actual);
-      const tendenciaHTML = formatTendenciaCell(p.actual, p.anterior, p.tendencia);
-      return `<tr>
-        <td style="padding:4px 6px;font-size:clamp(9px, 1vw, 10px);font-weight:600;color:${DS.brandBrown};border:1px solid ${DS.border};background:${DS.muted};white-space:nowrap;${p.esPlaga_interes ? `border-left:2px solid ${DS.primary};` : ''}">${p.plagaNombre}</td>
-        <td style="padding:4px 6px;text-align:center;font-size:clamp(9px, 1vw, 10px);font-weight:700;background:${bg};border:1px solid ${DS.border};">${p.actual !== null ? formatNum(p.actual, 1) + '%' : '—'}</td>
-        <td style="padding:4px 6px;font-size:clamp(9px, 1vw, 10px);border:1px solid ${DS.border};">${tendenciaHTML}</td>
-      </tr>`;
+      const arrow = trendArrow(p.tendencia);
+      const val = `${formatNum(p.actual, 1)}%${arrow ? ` (${arrow})` : ''}`;
+      return `<td style="padding:3px 4px;text-align:center;font-size:clamp(7px,0.9vw,10px);font-weight:600;background:${bg};border:1px solid ${DS.border};">${val}</td>`;
     }).join('');
-
-    return `<div style="background:${DS.card};border-radius:8px;border:1px solid ${DS.border};padding:clamp(10px, 1.5vw, 12px);flex:1;min-width:280px;max-width:400px;box-shadow:0 1px 4px rgba(0,0,0,0.05);">
-      <div style="font-size:clamp(11px, 1.3vw, 13px);font-weight:700;color:${DS.brandBrown};margin-bottom:clamp(6px, 1vw, 8px);border-bottom:2px solid ${DS.primary};padding-bottom:4px;">${lote.loteNombre}</div>
-      <table style="width:100%;border-collapse:collapse;">
-        <thead><tr>
-          <th style="padding:4px 6px;font-size:clamp(8px, 0.9vw, 9px);font-weight:700;color:#FFFFFF;background:${DS.primaryDark};border:1px solid ${DS.primaryDark};text-align:left;">Plaga</th>
-          <th style="padding:4px 6px;font-size:clamp(8px, 0.9vw, 9px);font-weight:700;color:#FFFFFF;background:${DS.primary};border:1px solid ${DS.primaryDark};text-align:center;">Incidencia</th>
-          <th style="padding:4px 6px;font-size:clamp(8px, 0.9vw, 9px);font-weight:700;color:#FFFFFF;background:${DS.primary};border:1px solid ${DS.primaryDark};text-align:left;">Tendencia</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
+    return `<tr>
+      <td style="padding:3px 6px;font-size:clamp(7px,0.9vw,10px);font-weight:${isInterest ? '700' : '500'};color:${DS.brandBrown};background:${DS.muted};border:1px solid ${DS.border};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:0;${isInterest ? `border-left:3px solid ${DS.primary};` : ''}">${plaga}</td>
+      ${cells}
+    </tr>`;
   }).join('');
 
   return `<div class="slide page-break">
   ${slideHeader('MONITOREO', 'Vista por Lote', semana)}
-  <div style="padding:clamp(14px, 2vw, 18px) clamp(16px, 2.2vw, 22px) 0;display:flex;flex-wrap:wrap;gap:clamp(10px, 1.5vw, 14px);">
-    ${loteCards}
+  <div style="flex:1;overflow:hidden;padding:clamp(10px,1.4vw,14px) clamp(12px,1.8vw,18px);">
+    <table style="width:100%;table-layout:fixed;border-collapse:collapse;">
+      <thead>
+        <tr>
+          <th style="padding:4px 6px;font-size:clamp(7px,0.85vw,9px);font-weight:700;color:#fff;background:${DS.primaryDark};border:1px solid ${DS.primaryDark};text-align:left;width:22%;">Plaga</th>
+          ${headerCols}
+        </tr>
+        <tr>
+          <td style="padding:3px 6px;font-size:clamp(7px,0.85vw,9px);font-weight:700;color:${DS.brandBrown};background:${DS.muted};border:1px solid ${DS.border};">Fecha</td>
+          ${fechaCols}
+        </tr>
+      </thead>
+      <tbody>${plagaRows}</tbody>
+    </table>
   </div>
 </div>`;
 }
@@ -1325,23 +1643,27 @@ function construirSlideConclusiones(analisis: AnalisisGemini, semana: any): stri
     baja: { bg: DS.successBg, border: DS.success, icon: '🟢' },
   };
 
-  const items = analisis.conclusiones.slice(0, 5).map((c, i) => {
+  const items = analisis.conclusiones.slice(0, 6).map((c, i) => {
     const config = prioridadConfig[c.prioridad] || prioridadConfig.media;
-    return `<div style="display:flex;align-items:flex-start;gap:clamp(12px, 1.8vw, 16px);padding:clamp(12px, 1.8vw, 16px);background:${config.bg};border-radius:10px;border-left:4px solid ${config.border};animation:fadeIn 0.3s ease ${i * 0.1}s both;">
-      <div style="font-size:clamp(18px, 2.5vw, 24px);flex-shrink:0;line-height:1;">${c.icono}</div>
-      <div style="flex:1;">
-        <div style="font-size:clamp(11px, 1.4vw, 14px);color:${DS.brandBrown};line-height:1.55;">${c.texto}</div>
+    const contextoHtml = c.contexto
+      ? `<div style="font-size:10px;color:#6b7280;margin-top:2px;line-height:1.3;">${c.contexto}</div>`
+      : '';
+    return `<div style="display:flex;align-items:flex-start;gap:12px;padding:10px 12px;background:${config.bg};border-radius:8px;border-left:4px solid ${config.border};">
+      <div style="font-size:20px;flex-shrink:0;line-height:1.2;">${c.icono}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12px;color:${DS.brandBrown};line-height:1.5;">${c.texto}</div>
+        ${contextoHtml}
       </div>
-      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-        <span style="font-size:clamp(8px, 1vw, 10px);color:${config.border};font-weight:600;text-transform:uppercase;">${c.prioridad}</span>
-        <span>${config.icon}</span>
+      <div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">
+        <span style="font-size:9px;color:${config.border};font-weight:700;text-transform:uppercase;">${c.prioridad}</span>
+        <span style="font-size:14px;">${config.icon}</span>
       </div>
     </div>`;
   }).join('');
 
   return `<div class="slide page-break">
   ${slideHeader('CONCLUSIONES', 'Conclusiones y Recomendaciones', semana)}
-  <div style="flex:1;display:flex;flex-direction:column;padding:clamp(14px, 2vw, 20px);gap:clamp(10px, 1.5vw, 14px);overflow:hidden;">
+  <div style="flex:1;display:flex;flex-direction:column;padding:16px 20px;gap:8px;overflow:hidden;">
     ${items}
   </div>
 </div>`;
@@ -1358,7 +1680,7 @@ function construirHTMLReporte(datos: any, analisis: AnalisisGemini): string {
 
   // Build sublote vistas — filter out lotes with no sublotes configured
   const vistasPorSublote: any[] = (monitoreo?.vistasPorSublote || []).filter(
-    (v: any) => v.sublotes && v.sublotes.length > 0
+    (v: any) => v.sublotes && v.sublotes.length > 0 && v.tieneDatosSemanaActual
   );
 
   const temasAd: any[] = temasAdicionales || [];
@@ -1460,7 +1782,16 @@ export async function generarReporteSemanal(body: GenerateReportRequest): Promis
 
     console.log(`Semana ${datos.semana.numero}/${datos.semana.ano}`);
 
-    const datosFormateados = formatearDatosParaPrompt(datos);
+    const inicioSemana: string = datos.semana?.inicio || new Date().toISOString().split('T')[0];
+
+    console.log('Fetching historical context (4 weeks)...');
+    const [historicoCtx, notionCtx] = await Promise.all([
+      fetchHistoricoSemanas(inicioSemana),
+      fetchResumenesNotion(),
+    ]);
+    console.log('Historical context:', historicoCtx.length, 'chars; Notion context:', notionCtx.length, 'chars');
+
+    const datosFormateados = formatearDatosParaPrompt(datos, historicoCtx, notionCtx);
     console.log('Datos formateados:', datosFormateados.length, 'chars');
 
     console.log('Calling Gemini API for analysis...');

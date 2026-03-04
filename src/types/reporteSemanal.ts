@@ -186,6 +186,11 @@ export interface AplicacionCierreGeneral {
   costoVariacion?: number;   // % cambio vs anterior
 }
 
+export interface InsumoUsado {
+  nombre: string;
+  categoria: string;
+}
+
 export interface AplicacionCerrada {
   id: string;
   nombre: string;
@@ -197,6 +202,7 @@ export interface AplicacionCerrada {
   general: AplicacionCierreGeneral;
   kpiPorLote: AplicacionCierreKPILote[];
   financieroPorLote: AplicacionCierreFinancieroLote[];
+  listaInsumos?: InsumoUsado[];
 }
 
 // ============================================================================
@@ -258,8 +264,10 @@ export interface ResumenPlagaGlobal {
 export interface VistaLoteComparativa {
   loteId: string;
   loteNombre: string;
-  sinDatos: boolean;              // true si no hay monitoreos para este lote
+  sinDatos: boolean;              // true si no hay ningún dato histórico para este lote
   plagas: PlagaLoteComparativa[];
+  fechaUltimaObservacion: string | null;
+  nivelAlerta: 'ninguna' | 'amarilla' | 'roja';
 }
 
 export interface PlagaLoteComparativa {
@@ -278,6 +286,7 @@ export interface VistaSubloteComparativa {
   sublotes: string[];             // Nombres de sublotes (columnas)
   plagas: string[];               // Nombres de plagas (filas)
   celdas: Record<string, Record<string, CeldaComparativa>>; // plaga → sublote → celda
+  tieneDatosSemanaActual: boolean; // true si el lote fue monitoreado en la semana del reporte
 }
 
 /** Contenedor principal de datos de monitoreo para el informe */

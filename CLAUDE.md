@@ -268,7 +268,7 @@ PostgreSQL hosted on Supabase with 32+ tables, 7+ custom ENUM types, Row-Level S
 - **Configuration**: `lotes`, `sublotes`, `empleados`, `terceros`, `usuarios`, `productos`
 - **Applications**: `aplicaciones`, `aplicaciones_calculos`, `aplicaciones_mezclas`, `aplicaciones_productos`, `aplicaciones_lotes`, `aplicaciones_lotes_planificado`, `aplicaciones_lotes_compras`, `movimientos_diarios`, `movimientos_diarios_productos`
 - **Inventory**: `movimientos_inventario`, `compras`, `compras_productos`, `verificaciones_inventario`, `verificaciones_detalle`
-- **Monitoring**: `monitoreos`, `plagas_enfermedades_catalogo`, `monitoreos_plagas`
+- **Monitoring**: `monitoreos` (denormalized: one row per pest observation, includes `incidencia`, `lote_id`, FK to `plagas_enfermedades_catalogo`), `sublotes`, `plagas_enfermedades_catalogo`
 - **Labor**: `tareas`, `registros_trabajo`, `empleados_tareas`
 - **Finance**: `fin_gastos`, `fin_ingresos`, `fin_conceptos_gastos`, `fin_proveedores`, `fin_categorias_gastos`, `fin_categorias_ingresos`, `fin_medios_pago`, `fin_regiones`, `fin_negocios`, `fin_compradores`
 - **Production**: `produccion`, `reportes_semanales`
@@ -300,8 +300,16 @@ The edge function server uses **Hono** (via Deno/npm imports) and lives in `src/
 - CSV product import
 - User CRUD
 - Product toggle
-- Weekly report generation
+- Weekly report generation (calls Gemini `gemini-3-flash-preview`, fetches 4-week historical context from DB + Notion)
 - Key-value store (`kv_store.tsx`)
+
+**Required edge function secrets** (set via Supabase Dashboard → Project Settings → Edge Functions):
+- `GEMINI_API_KEY` — Google AI Studio key
+- `NOTION_TOKEN` — Notion integration token (for owner call summaries; optional, graceful fallback if absent)
+- `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` — auto-injected by Supabase
+
+**Deploy command**: `npx supabase functions deploy make-server-1ccce916`
+Note: The local source in `src/supabase/functions/server/` must be kept in sync with `supabase/functions/make-server-1ccce916/` manually — changes to one must be applied to the other.
 
 ---
 
