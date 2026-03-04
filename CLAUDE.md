@@ -18,7 +18,7 @@ The system manages: inventory, phytosanitary applications (fumigation/fertilizat
 | Framework     | React 18.3 (functional components, hooks only)                  |
 | Routing       | React Router DOM 7.10                                            |
 | Build         | Vite 6.3 with SWC plugin                                        |
-| Styling       | Tailwind CSS 4.1 (utility classes, CSS variables for theming)   |
+| Styling       | Tailwind CSS 4.1 (CSS-first config via `globals.css`; no separate `tailwind.config.js`) |
 | Components    | Radix UI (25+ headless primitives) + custom `src/components/ui` |
 | Icons         | Lucide React                                                     |
 | Charts        | Recharts                                                         |
@@ -74,11 +74,26 @@ These are consumed in `src/utils/supabase/client.ts` via `import.meta.env`. The 
 │   │   ├── Dashboard.tsx                 # Main overview dashboard
 │   │   ├── aplicaciones/                 # Phytosanitary applications module
 │   │   ├── inventory/                    # Inventory & purchases module
+│   │   │   ├── InventoryNav.tsx          # Inventory section nav bar
+│   │   │   ├── InventorySubNav.tsx       # Inventory sub-navigation
+│   │   │   └── VerificacionesNav.tsx     # Verificaciones sub-navigation
 │   │   ├── monitoreo/                    # Pest/disease monitoring module
+│   │   │   ├── components/               # Monitoring sub-components
+│   │   │   ├── MonitoreoSubNav.tsx       # Monitoring sub-navigation
+│   │   │   ├── GraficoTendencias.tsx     # Trend charts
+│   │   │   ├── MapaCalorIncidencias.tsx  # Incidence heat map
+│   │   │   └── VistasRapidas.tsx         # Quick-view panels
 │   │   ├── labores/                      # Task/labor management (Kanban)
+│   │   │   ├── ReportesView.tsx          # Labor reports view
+│   │   │   └── kanban-types.ts           # Kanban TypeScript types
 │   │   ├── empleados/                    # Personnel & contractors
+│   │   │   └── EmpleadosSubNav.tsx       # Employees sub-navigation
 │   │   ├── finanzas/                     # Finance (expenses, income, reports)
+│   │   │   ├── components/               # Finance sub-components
+│   │   │   └── hooks/                    # Finance-specific hooks
 │   │   ├── produccion/                   # Production tracking & charts
+│   │   │   ├── components/               # Production sub-components
+│   │   │   └── hooks/                    # Production-specific hooks
 │   │   ├── reportes/                     # Weekly report wizard & history
 │   │   ├── configuracion/                # System configuration (lots, users)
 │   │   ├── auth/                         # ProtectedRoute, RoleGuard
@@ -107,6 +122,7 @@ These are consumed in `src/utils/supabase/client.ts` via `import.meta.env`. The 
 │   │   ├── supabase/
 │   │   │   ├── client.ts                 # Supabase singleton client + auth helpers
 │   │   │   └── info.tsx                  # Supabase connection info component
+│   │   ├── aplicacionesReales.ts        # Applications with real-data handling
 │   │   ├── calculosAplicaciones.ts       # Application dose/cost calculations
 │   │   ├── calculosMonitoreo.ts          # Monitoring metric calculations
 │   │   ├── calculosReporteAplicacion.ts  # Application report calculations
@@ -123,7 +139,7 @@ These are consumed in `src/utils/supabase/client.ts` via `import.meta.env`. The 
 │   │   └── validation.ts               # Data validation utilities
 │   │
 │   ├── sql/                             # SQL scripts & migrations
-│   │   ├── migrations/                  # Sequential numbered migrations (001–020+)
+│   │   ├── migrations/                  # Sequential numbered migrations (001–021+)
 │   │   └── *.sql                        # Standalone SQL scripts
 │   │
 │   ├── styles/
@@ -132,7 +148,8 @@ These are consumed in `src/utils/supabase/client.ts` via `import.meta.env`. The 
 │   ├── supabase/
 │   │   └── functions/server/            # Edge function source (Hono framework)
 │   │
-│   ├── guidelines/                      # Design guidelines (placeholder)
+│   ├── guidelines/
+│   │   └── Guidelines.md                # Design guidelines reference
 │   ├── assets/                          # Static images
 │   └── __tests__/                       # Vitest unit tests
 │
@@ -249,17 +266,32 @@ PostgreSQL hosted on Supabase with 32+ tables, 7+ custom ENUM types, Row-Level S
 ### Key Domains
 
 - **Configuration**: `lotes`, `sublotes`, `empleados`, `terceros`, `usuarios`, `productos`
-- **Applications**: `aplicaciones`, `aplicaciones_calculos`, `mezclas`, `mezclas_productos`, `movimientos_diarios`
-- **Inventory**: `movimientos_inventario`, `compras`, `compras_productos`, `verificaciones_inventario`
+- **Applications**: `aplicaciones`, `aplicaciones_calculos`, `aplicaciones_mezclas`, `aplicaciones_productos`, `aplicaciones_lotes`, `aplicaciones_lotes_planificado`, `aplicaciones_lotes_compras`, `movimientos_diarios`, `movimientos_diarios_productos`
+- **Inventory**: `movimientos_inventario`, `compras`, `compras_productos`, `verificaciones_inventario`, `verificaciones_detalle`
 - **Monitoring**: `monitoreos`, `plagas_enfermedades_catalogo`, `monitoreos_plagas`
 - **Labor**: `tareas`, `registros_trabajo`, `empleados_tareas`
-- **Finance**: `fin_gastos`, `fin_ingresos`, `fin_conceptos_gastos`, `fin_proveedores`
+- **Finance**: `fin_gastos`, `fin_ingresos`, `fin_conceptos_gastos`, `fin_proveedores`, `fin_categorias_gastos`, `fin_categorias_ingresos`, `fin_medios_pago`, `fin_regiones`, `fin_negocios`, `fin_compradores`
 - **Production**: `produccion`, `reportes_semanales`
 - **Audit**: `audit_log`
 
+### Applications Data Architecture
+
+The applications module has two distinct tracking layers — **do not confuse these**:
+
+| Layer | Tables | Purpose |
+|---|---|---|
+| **Planned** | `aplicaciones_lotes_planificado`, `aplicaciones_productos`, `aplicaciones_mezclas` | What was planned before execution (lot targets, product dosis, mixes) |
+| **Real** | `movimientos_diarios`, `movimientos_diarios_productos` | What actually happened per day (canecas, bultos, products used) |
+
+`aplicaciones_lotes_planificado` is the canonical source for planned tree counts and lot assignments. `movimientos_diarios` is the canonical source for real execution data. Never substitute one for the other.
+
+> **Removed tables** (migration 022): `aplicaciones_lotes_real`, `aplicaciones_productos_real`, `aplicaciones_productos_planificado`, `aplicaciones_mezclas_productos` — these were ghost tables from an abandoned design; they were never populated or queried.
+
 ### Migrations
 
-Sequential SQL migrations live in `src/sql/migrations/` (001–020+). See `src/sql/migrations/README_MIGRATION.md` for instructions on running them.
+Sequential SQL migrations live in `src/sql/migrations/` (001–022). See `src/sql/migrations/README_MIGRATION.md` for instructions on running them.
+
+> **Note**: There are two files with the `019_` prefix (`019_auto_reporte_semanal.sql` and `019_storage_policies_reportes.sql`) due to a naming conflict. Check which have been applied before creating new migrations.
 
 ### Supabase Edge Functions
 
@@ -269,18 +301,19 @@ The edge function server uses **Hono** (via Deno/npm imports) and lives in `src/
 - User CRUD
 - Product toggle
 - Weekly report generation
+- Key-value store (`kv_store.tsx`)
 
 ---
 
 ## Styling & Theming
 
-- **Tailwind CSS 4.1** — utility-first, configured via `src/styles/globals.css`
-- **CSS Variables** — theming via `:root` custom properties (green/agricultural palette)
+- **Tailwind CSS 4.1** — utility-first, using the **CSS-first configuration** approach (no `tailwind.config.js` or `postcss.config.js`). Tailwind is not listed as an explicit `package.json` dependency; it is embedded in the build pipeline via Vite.
+- **CSS Variables** — theming via `:root` custom properties (green/agricultural palette) using `@theme inline` in `globals.css`
 - **Primary color**: `#73991C` (olive green)
 - **Font**: Visby CF (loaded from CDN in globals.css)
 - **UI components**: Radix UI primitives wrapped in `src/components/ui/` with Tailwind + `cn()` utility (`clsx` + `tailwind-merge`)
 - **`index.css`** is the compiled Tailwind output — do not edit it manually
-- **`src/styles/globals.css`** is where theme customizations and `@font-face` declarations live
+- **`src/styles/globals.css`** is the source of truth for theme customizations, `@font-face` declarations, and Tailwind directives (`@custom-variant`, `@theme`, `@layer`)
 
 ---
 
@@ -294,6 +327,7 @@ npm run test:watch   # Watch mode
 ```
 
 Current test files:
+- `aplicacionesReales.test.ts` — Real applications data handling
 - `generarReporteSemanal.test.ts` — Report generation logic
 - `laborImprovements.test.ts` — Labor module improvements
 - `laborRegistration.test.ts` — Labor registration & DB trigger shapes
@@ -357,7 +391,7 @@ npm run lint
 
 ### Supabase Migrations (`src/sql/migrations/`)
 - **Do NOT modify existing migration files** — they may have already been applied to production
-- New migrations must use the next sequential number (e.g., `021_description.sql`)
+- New migrations must use the next sequential number (e.g., `023_description.sql`)
 - Always test migrations against a development Supabase instance first
 - RLS policies are critical for data security — review carefully before modifying
 
@@ -387,13 +421,24 @@ See `BUG_REPORT.md` for current tracked bugs. As of the last update, the Reporte
 | Database schema (32+ tables)                | `docs/supabase_tablas.md`    | Complete DB reference            |
 | Setup checklist                             | `docs/CHECKLIST_SETUP.md`    | Environment setup guide          |
 | Full setup instructions                     | `docs/INSTRUCCIONES_SETUP_COMPLETO.md` | Detailed setup walkthrough |
+| Final setup instructions                    | `docs/SETUP_FINAL_INSTRUCCIONES.md` | Latest setup walkthrough   |
 | CSV upload guide                            | `docs/README_CARGA_CSV.md`   | Monitoring CSV bulk import       |
+| CSV index                                   | `docs/INDEX_CARGA_CSV.md`    | CSV upload entry point           |
 | CSV flow diagram                            | `docs/DIAGRAMA_FLUJO_CSV.md` | CSV processing architecture      |
 | Lots/sublots config guide                   | `docs/GUIA_CONFIGURACION_LOTES_SUBLOTES.md` | Lot management      |
 | Contractor tracking implementation          | `docs/CONTRACTOR_TRACKING_IMPLEMENTATION.md` | Contractor feature  |
 | Labor module improvements plan              | `docs/PLAN_MEJORAS_MODULO_LABORES.md` | Labor roadmap           |
+| Labor refactor plan                         | `docs/PLAN_REFACTORIZACION_LABORES.md` | Labor refactoring guide  |
+| Labor phase 1 changelog                     | `docs/CHANGELOG_LABORES_FASE1.md` | Labor changes history       |
+| Monitoring refinement plan                  | `docs/PLAN_REFINAMIENTO_MONITOREO.md` | Monitoring roadmap        |
+| Production module plan                      | `docs/plan_produccion_module.md` | Production module design     |
 | Migration instructions (units)              | `docs/INSTRUCCIONES_MIGRACION_UNIDADES.md` | Unit migration guide |
+| Implemented changes log                     | `docs/CAMBIOS_IMPLEMENTADOS.md` | History of major changes    |
+| NewPurchase technical issue                 | `docs/PROBLEMA_TECNICO_NEWPURCHASE.md` | Known technical issue    |
 | Application ↔ Labor sync architecture       | `src/sql/migrations/README_APLICACIONES_LABORES_SYNC.md` | Trigger sync docs |
+| Design guidelines                           | `src/guidelines/Guidelines.md` | UI/UX design reference        |
+| SQL scripts index                           | `src/sql/README.md`          | SQL scripts overview             |
+| Attributions                                | `docs/Attributions.md`       | Third-party attributions         |
 | Bug report                                  | `BUG_REPORT.md`              | Known issues tracker             |
 
 ---
