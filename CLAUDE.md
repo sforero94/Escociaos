@@ -266,17 +266,30 @@ PostgreSQL hosted on Supabase with 32+ tables, 7+ custom ENUM types, Row-Level S
 ### Key Domains
 
 - **Configuration**: `lotes`, `sublotes`, `empleados`, `terceros`, `usuarios`, `productos`
-- **Applications**: `aplicaciones`, `aplicaciones_calculos`, `mezclas`, `mezclas_productos`, `movimientos_diarios`
-- **Inventory**: `movimientos_inventario`, `compras`, `compras_productos`, `verificaciones_inventario`
+- **Applications**: `aplicaciones`, `aplicaciones_calculos`, `aplicaciones_mezclas`, `aplicaciones_productos`, `aplicaciones_lotes`, `aplicaciones_lotes_planificado`, `aplicaciones_lotes_compras`, `movimientos_diarios`, `movimientos_diarios_productos`
+- **Inventory**: `movimientos_inventario`, `compras`, `compras_productos`, `verificaciones_inventario`, `verificaciones_detalle`
 - **Monitoring**: `monitoreos`, `plagas_enfermedades_catalogo`, `monitoreos_plagas`
 - **Labor**: `tareas`, `registros_trabajo`, `empleados_tareas`
-- **Finance**: `fin_gastos`, `fin_ingresos`, `fin_conceptos_gastos`, `fin_proveedores`
+- **Finance**: `fin_gastos`, `fin_ingresos`, `fin_conceptos_gastos`, `fin_proveedores`, `fin_categorias_gastos`, `fin_categorias_ingresos`, `fin_medios_pago`, `fin_regiones`, `fin_negocios`, `fin_compradores`
 - **Production**: `produccion`, `reportes_semanales`
 - **Audit**: `audit_log`
 
+### Applications Data Architecture
+
+The applications module has two distinct tracking layers — **do not confuse these**:
+
+| Layer | Tables | Purpose |
+|---|---|---|
+| **Planned** | `aplicaciones_lotes_planificado`, `aplicaciones_productos`, `aplicaciones_mezclas` | What was planned before execution (lot targets, product dosis, mixes) |
+| **Real** | `movimientos_diarios`, `movimientos_diarios_productos` | What actually happened per day (canecas, bultos, products used) |
+
+`aplicaciones_lotes_planificado` is the canonical source for planned tree counts and lot assignments. `movimientos_diarios` is the canonical source for real execution data. Never substitute one for the other.
+
+> **Removed tables** (migration 022): `aplicaciones_lotes_real`, `aplicaciones_productos_real`, `aplicaciones_productos_planificado`, `aplicaciones_mezclas_productos` — these were ghost tables from an abandoned design; they were never populated or queried.
+
 ### Migrations
 
-Sequential SQL migrations live in `src/sql/migrations/` (001–021). See `src/sql/migrations/README_MIGRATION.md` for instructions on running them.
+Sequential SQL migrations live in `src/sql/migrations/` (001–022). See `src/sql/migrations/README_MIGRATION.md` for instructions on running them.
 
 > **Note**: There are two files with the `019_` prefix (`019_auto_reporte_semanal.sql` and `019_storage_policies_reportes.sql`) due to a naming conflict. Check which have been applied before creating new migrations.
 
@@ -378,7 +391,7 @@ npm run lint
 
 ### Supabase Migrations (`src/sql/migrations/`)
 - **Do NOT modify existing migration files** — they may have already been applied to production
-- New migrations must use the next sequential number (e.g., `022_description.sql`)
+- New migrations must use the next sequential number (e.g., `023_description.sql`)
 - Always test migrations against a development Supabase instance first
 - RLS policies are critical for data security — review carefully before modifying
 
