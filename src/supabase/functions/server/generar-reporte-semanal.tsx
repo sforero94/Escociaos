@@ -1,6 +1,6 @@
 // generar-reporte-semanal.tsx
 // Módulo de Edge Function para generar reportes semanales en formato slides landscape (1280x720)
-// Flujo: datos → Gemini (solo análisis JSON) → plantilla HTML determinística → PDF
+// Flujo: datos → DeepSeek via OpenRouter (solo análisis JSON) → plantilla HTML determinística → PDF
 
 // ============================================================================
 // TIPOS
@@ -489,35 +489,29 @@ ${fechaInfo}${mon.avisoFechaDesactualizada ? `\n⚠ ${mon.avisoFechaDesactualiza
 // LLAMADA A GEMINI
 // ============================================================================
 
-async function llamarGemini(datosFormateados: string, instruccionesAdicionales?: string): Promise<{ analisis: AnalisisGemini; tokens: number }> {
-  const apiKey = Deno.env.get('GEMINI_API_KEY');
+async function llamarLLM(datosFormateados: string, instruccionesAdicionales?: string): Promise<{ analisis: AnalisisGemini; tokens: number }> {
+  const apiKey = Deno.env.get('OPENROUTER_API_KEY');
   if (!apiKey) {
-    throw new Error('GEMINI_API_KEY no está configurada en las variables de entorno');
+    throw new Error('OPENROUTER_API_KEY no está configurada en las variables de entorno');
   }
 
-  const model = 'gemini-3-flash-preview';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const model = 'deepseek/deepseek-v3.2';
+  const url = 'https://openrouter.ai/api/v1/chat/completions';
 
   const userMessage = instruccionesAdicionales
     ? `${datosFormateados}\n\n## INSTRUCCIONES ADICIONALES DEL USUARIO\n${instruccionesAdicionales}`
     : datosFormateados;
 
   const body = {
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          { text: SYSTEM_PROMPT },
-          { text: `Analiza estos datos operativos semanales y genera el JSON de análisis:\n\n${userMessage}` }
-        ]
-      }
+    model,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: `Analiza estos datos operativos semanales y genera el JSON de análisis:\n\n${userMessage}` },
     ],
-    generationConfig: {
-      temperature: 0.3,
-      maxOutputTokens: 4096,
-      topP: 0.8,
-      responseMimeType: 'application/json',
-    }
+    temperature: 0.3,
+    max_tokens: 4096,
+    top_p: 0.8,
+    response_format: { type: 'json_object' },
   };
 
   const controller = new AbortController();
@@ -527,7 +521,10 @@ async function llamarGemini(datosFormateados: string, instruccionesAdicionales?:
   try {
     response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
       body: JSON.stringify(body),
       signal: controller.signal,
     });
@@ -535,40 +532,36 @@ async function llamarGemini(datosFormateados: string, instruccionesAdicionales?:
   } catch (error: any) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
-      throw new Error('La API de Gemini no respondió en 50 segundos. Intenta de nuevo.');
+      throw new Error('La API no respondió en 50 segundos. Intenta de nuevo.');
     }
     throw error;
   }
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('Gemini API error:', response.status, errorText.slice(0, 500));
-    throw new Error(`Error de Gemini API (${response.status}): ${errorText}`);
+    console.error('OpenRouter API error:', response.status, errorText.slice(0, 500));
+    throw new Error(`Error de OpenRouter API (${response.status}): ${errorText}`);
   }
 
   const result = await response.json();
 
-  const candidate = result.candidates?.[0];
-  if (!candidate) {
-    console.error('Gemini response has no candidates:', JSON.stringify(result).slice(0, 500));
-    throw new Error('Gemini no retornó candidatos. Posible error de contenido o límite.');
+  const choice = result.choices?.[0];
+  if (!choice) {
+    console.error('OpenRouter response has no choices:', JSON.stringify(result).slice(0, 500));
+    throw new Error('La API no retornó respuesta. Posible error de contenido o límite.');
   }
 
-  const finishReason = candidate.finishReason;
-  console.log('Gemini finishReason:', finishReason);
+  const finishReason = choice.finish_reason;
+  console.log('LLM finishReason:', finishReason);
 
-  if (finishReason === 'SAFETY') {
-    throw new Error('Gemini bloqueó la respuesta por filtros de seguridad.');
+  if (finishReason === 'content_filter') {
+    throw new Error('La API bloqueó la respuesta por filtros de contenido.');
   }
 
-  if (finishReason === 'RECITATION') {
-    throw new Error('Gemini bloqueó la respuesta por detección de recitación.');
-  }
-
-  const text = candidate.content?.parts?.[0]?.text || '';
+  const text = choice.message?.content || '';
 
   if (!text) {
-    throw new Error('Gemini no generó contenido de texto en la respuesta.');
+    throw new Error('La API no generó contenido de texto en la respuesta.');
   }
 
   let jsonText = text.trim();
@@ -581,7 +574,7 @@ async function llamarGemini(datosFormateados: string, instruccionesAdicionales?:
   try {
     analisis = JSON.parse(jsonText);
   } catch {
-    console.error('Failed to parse Gemini JSON:', jsonText.slice(0, 300));
+    console.error('Failed to parse LLM JSON:', jsonText.slice(0, 300));
     analisis = {
       resumen_ejecutivo: 'Semana operativa procesada. Consulte los datos del reporte para detalles específicos.',
       conclusiones: [
@@ -601,8 +594,8 @@ async function llamarGemini(datosFormateados: string, instruccionesAdicionales?:
   if (!analisis.interpretacion_monitoreo) analisis.interpretacion_monitoreo = '';
   if (!analisis.interpretacion_tendencias_monitoreo) analisis.interpretacion_tendencias_monitoreo = '';
 
-  const tokens = result.usageMetadata?.totalTokenCount || 0;
-  console.log('Gemini response: analysis parsed, tokens:', tokens);
+  const tokens = result.usage?.total_tokens || 0;
+  console.log('LLM response: analysis parsed, tokens:', tokens);
 
   return { analisis, tokens };
 }
@@ -1670,10 +1663,10 @@ export async function generarReporteSemanal(body: GenerateReportRequest): Promis
     const datosFormateados = formatearDatosParaPrompt(datos, historicoCtx, notionCtx);
     console.log('Datos formateados:', datosFormateados.length, 'chars');
 
-    console.log('Calling Gemini API for analysis...');
-    const geminiStart = Date.now();
-    const { analisis, tokens } = await llamarGemini(datosFormateados, instrucciones);
-    console.log(`Gemini completed in ${Date.now() - geminiStart}ms`);
+    console.log('Calling DeepSeek via OpenRouter for analysis...');
+    const llmStart = Date.now();
+    const { analisis, tokens } = await llamarLLM(datosFormateados, instrucciones);
+    console.log(`LLM completed in ${Date.now() - llmStart}ms`);
 
     console.log('Building deterministic HTML template...');
     const html = construirHTMLReporte(datos, analisis);

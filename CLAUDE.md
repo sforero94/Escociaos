@@ -300,11 +300,11 @@ The edge function server uses **Hono** (via Deno/npm imports) and lives in `src/
 - CSV product import
 - User CRUD
 - Product toggle
-- Weekly report generation (calls Gemini `gemini-3-flash-preview`, fetches 4-week historical context from DB + Notion)
+- Weekly report generation (calls DeepSeek `deepseek-v3.2` via OpenRouter, fetches 4-week historical context from DB + Notion)
 - Key-value store (`kv_store.tsx`)
 
 **Required edge function secrets** (set via Supabase Dashboard → Project Settings → Edge Functions):
-- `GEMINI_API_KEY` — Google AI Studio key
+- `OPENROUTER_API_KEY` — OpenRouter API key (used for DeepSeek via OpenRouter)
 - `NOTION_TOKEN` — Notion integration token (for owner call summaries; optional, graceful fallback if absent)
 - `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` — auto-injected by Supabase
 
