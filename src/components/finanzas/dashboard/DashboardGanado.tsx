@@ -38,9 +38,13 @@ const GASTOS_COLUMNS: ColumnDef[] = [
   { key: 'valor', label: 'Valor', format: 'currency' },
 ];
 
+const fincaSelectClass = 'px-2 py-1.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary min-w-0';
+
 export function DashboardGanado() {
   const [periodo, setPeriodo] = useState<DashboardPeriodo>('ytd');
   const [regionId, setRegionId] = useState('');
+  const [fincaFilter, setFincaFilter] = useState('');
+  const [fincas, setFincas] = useState<string[]>([]);
   const [ganadoNegocioId, setGanadoNegocioId] = useState<string | null>(null);
   const [kpis, setKpis] = useState<{
     ventas: KPIConVariacion; compras: KPIConVariacion;
@@ -56,12 +60,12 @@ export function DashboardGanado() {
   const [detalleGastos, setDetalleGastos] = useState<Record<string, unknown>[]>([]);
   const [dialogCategoria, setDialogCategoria] = useState<string | null>(null);
 
-  const { getKPIsGanado, getTransaccionesPorFinca, getTransaccionesPorTrimestre, getDetalleTransacciones, loading: loadingGanado } = useGanadoData();
+  const { getKPIsGanado, getTransaccionesPorFinca, getTransaccionesPorTrimestre, getDetalleTransacciones, getFincas, loading: loadingGanado } = useGanadoData();
   const { getGastosTrimestralesNegocio, getDistribucionGastosNegocio, getDetalleGastos, loading: loadingDashboard } = useDashboardData();
 
   const filtros: FiltrosFinanzas = { periodo, region_id: regionId || undefined };
 
-  // Resolve Ganado negocio ID
+  // Resolve Ganado negocio ID + load fincas
   useEffect(() => {
     const resolve = async () => {
       const { data } = await (getSupabase()
@@ -73,22 +77,24 @@ export function DashboardGanado() {
       if (data) setGanadoNegocioId((data as any).id);
     };
     resolve();
+    getFincas().then(setFincas);
   }, []);
 
   useEffect(() => {
     if (ganadoNegocioId) loadData();
-  }, [ganadoNegocioId, periodo, regionId]);
+  }, [ganadoNegocioId, periodo, regionId, fincaFilter]);
 
   const loadData = async () => {
     if (!ganadoNegocioId) return;
+    const selectedFinca = fincaFilter || undefined;
     try {
       const [kpiResult, finca, trimestre, gasCat, gasTri, detTx, detGas] = await Promise.all([
-        getKPIsGanado(filtros, ganadoNegocioId),
-        getTransaccionesPorFinca(filtros),
-        getTransaccionesPorTrimestre(filtros),
+        getKPIsGanado(filtros, ganadoNegocioId, selectedFinca),
+        getTransaccionesPorFinca(filtros, selectedFinca),
+        getTransaccionesPorTrimestre(filtros, selectedFinca),
         getDistribucionGastosNegocio(ganadoNegocioId, filtros),
         getGastosTrimestralesNegocio(ganadoNegocioId, filtros),
-        getDetalleTransacciones(filtros),
+        getDetalleTransacciones(filtros, undefined, selectedFinca),
         getDetalleGastos(ganadoNegocioId, filtros),
       ]);
       setKpis(kpiResult);
@@ -129,6 +135,13 @@ export function DashboardGanado() {
       <div className="flex flex-wrap items-center gap-4">
         <PeriodoFilter value={periodo} onChange={(p) => setPeriodo(p)} />
         <RegionFilter value={regionId} onChange={setRegionId} />
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-500">Finca:</span>
+          <select value={fincaFilter} onChange={(e) => setFincaFilter(e.target.value)} className={fincaSelectClass}>
+            <option value="">Todas</option>
+            {fincas.map((f) => <option key={f} value={f}>{f}</option>)}
+          </select>
+        </div>
       </div>
 
       {/* Finca chart + Gastos by category */}

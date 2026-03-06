@@ -294,6 +294,16 @@ Sequential SQL migrations live in `src/sql/migrations/` (001–024). See `src/sq
 - **023**: `create_fin_transacciones_ganado` — cattle buy/sell transactions table with RLS
 - **024**: `alter_fin_ingresos_add_columns` — adds `cantidad`, `precio_unitario`, `cosecha`, `alianza`, `cliente`, `finca` to `fin_ingresos`
 
+### Ganado ↔ Finance Integration
+
+Cattle buy/sell transactions live in `fin_transacciones_ganado` (not in `fin_gastos`/`fin_ingresos`). The Gastos and Ingresos historial views merge ganado records alongside regular records using a `UnifiedFinanceItem` discriminated union. Ganado items display with an amber `[Ganado]` badge and route to `TransaccionGanadoForm` for editing (not `GastoForm`/`IngresoForm`).
+
+Key files:
+- `src/components/finanzas/components/TransaccionGanadoForm.tsx` — create/edit dialog for ganado transactions, with dropdown selectors for finca (from existing transactions), proveedor (`fin_proveedores`), and cliente (`fin_compradores`)
+- `src/types/finanzas.ts` — `UnifiedFinanceItem` type
+- `src/components/finanzas/components/GastosList.tsx` — merges `fin_transacciones_ganado` compras
+- `src/components/finanzas/components/IngresosList.tsx` — merges `fin_transacciones_ganado` ventas
+
 > **Note**: There are two files with the `019_` prefix (`019_auto_reporte_semanal.sql` and `019_storage_policies_reportes.sql`) due to a naming conflict. Check which have been applied before creating new migrations.
 
 ### Supabase Edge Functions

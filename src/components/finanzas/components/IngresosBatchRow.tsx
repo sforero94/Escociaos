@@ -1,0 +1,187 @@
+import { useRef } from 'react';
+import { Upload, CheckCircle, X } from 'lucide-react';
+import type { BatchRowDataIngreso } from '@/types/finanzas';
+import type { IngresosCatalogs } from '../hooks/useIngresosCatalogs';
+
+interface IngresosBatchRowProps {
+  row: BatchRowDataIngreso;
+  index: number;
+  catalogs: IngresosCatalogs;
+  errors: Record<string, string>;
+  onChange: (index: number, field: string, value: string | File | null) => void;
+  onRemove: (index: number) => void;
+  onCreateComprador: () => void;
+}
+
+const cellClass = 'px-3 py-2.5';
+const inputBase =
+  'w-full px-3 py-2 text-sm bg-white border rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
+const inputOk = `${inputBase} border-gray-200`;
+const inputErr = `${inputBase} border-red-400 bg-red-50 focus:ring-red-200 focus:border-red-500`;
+
+export function IngresosBatchRow({ row, index, catalogs, errors, onChange, onRemove, onCreateComprador }: IngresosBatchRowProps) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const categoriasFiltradas = row.negocio_id
+    ? catalogs.getCategoriasPorNegocio(row.negocio_id)
+    : [];
+
+  const cls = (field: string) => (errors[field] ? inputErr : inputOk);
+
+  return (
+    <tr className="border-b border-primary/5 hover:bg-muted/30 transition-colors">
+      <td className={cellClass}>
+        <input
+          type="date"
+          value={row.fecha}
+          onChange={(e) => onChange(index, 'fecha', e.target.value)}
+          className={cls('fecha')}
+          style={{ minWidth: 130 }}
+        />
+      </td>
+      <td className={cellClass}>
+        <input
+          type="text"
+          value={row.nombre}
+          onChange={(e) => onChange(index, 'nombre', e.target.value)}
+          className={cls('nombre')}
+          placeholder="Nombre del ingreso"
+          style={{ minWidth: 160 }}
+        />
+      </td>
+      <td className={cellClass}>
+        <input
+          type="number"
+          value={row.valor}
+          onChange={(e) => onChange(index, 'valor', e.target.value)}
+          className={cls('valor')}
+          placeholder="0"
+          min="0"
+          style={{ minWidth: 110 }}
+        />
+      </td>
+      <td className={cellClass}>
+        <select
+          value={row.negocio_id}
+          onChange={(e) => {
+            onChange(index, 'negocio_id', e.target.value);
+            onChange(index, 'categoria_id', '');
+          }}
+          className={cls('negocio_id')}
+          style={{ minWidth: 130 }}
+        >
+          <option value="">Seleccionar</option>
+          {catalogs.negocios.map((n) => (
+            <option key={n.id} value={n.id}>{n.nombre}</option>
+          ))}
+        </select>
+      </td>
+      <td className={cellClass}>
+        <select
+          value={row.region_id}
+          onChange={(e) => onChange(index, 'region_id', e.target.value)}
+          className={cls('region_id')}
+          style={{ minWidth: 120 }}
+        >
+          <option value="">Seleccionar</option>
+          {catalogs.regiones.map((r) => (
+            <option key={r.id} value={r.id}>{r.nombre}</option>
+          ))}
+        </select>
+      </td>
+      <td className={cellClass}>
+        <select
+          value={row.categoria_id}
+          onChange={(e) => onChange(index, 'categoria_id', e.target.value)}
+          className={cls('categoria_id')}
+          disabled={!row.negocio_id}
+          style={{ minWidth: 130 }}
+        >
+          <option value="">{row.negocio_id ? 'Seleccionar' : 'Elija negocio'}</option>
+          {categoriasFiltradas.map((c) => (
+            <option key={c.id} value={c.id}>{c.nombre}</option>
+          ))}
+        </select>
+      </td>
+      <td className={cellClass}>
+        <div className="flex items-center gap-1">
+          <select
+            value={row.comprador_id}
+            onChange={(e) => {
+              if (e.target.value === '__CREATE__') {
+                onCreateComprador();
+                return;
+              }
+              onChange(index, 'comprador_id', e.target.value);
+            }}
+            className={inputOk}
+            style={{ minWidth: 120 }}
+          >
+            <option value="">Opcional</option>
+            {catalogs.compradores.map((c) => (
+              <option key={c.id} value={c.id}>{c.nombre}</option>
+            ))}
+            <option value="__CREATE__">+ Crear nuevo</option>
+          </select>
+        </div>
+      </td>
+      <td className={cellClass}>
+        <select
+          value={row.medio_pago_id}
+          onChange={(e) => onChange(index, 'medio_pago_id', e.target.value)}
+          className={cls('medio_pago_id')}
+          style={{ minWidth: 120 }}
+        >
+          <option value="">Seleccionar</option>
+          {catalogs.mediosPago.map((m) => (
+            <option key={m.id} value={m.id}>{m.nombre}</option>
+          ))}
+        </select>
+      </td>
+      <td className={cellClass}>
+        <input
+          type="text"
+          value={row.observaciones}
+          onChange={(e) => onChange(index, 'observaciones', e.target.value)}
+          className={inputOk}
+          placeholder="Notas"
+          style={{ minWidth: 140 }}
+        />
+      </td>
+      <td className={`${cellClass} text-center`}>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*,.pdf"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0] || null;
+            onChange(index, 'factura_file', file);
+            if (fileRef.current) fileRef.current.value = '';
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="p-2 rounded-xl hover:bg-muted/50 transition-colors"
+          title={row.factura_file ? row.factura_file.name : 'Subir factura'}
+        >
+          {row.factura_file ? (
+            <CheckCircle className="w-4 h-4 text-green-600" />
+          ) : (
+            <Upload className="w-4 h-4 text-brand-brown/40" />
+          )}
+        </button>
+      </td>
+      <td className={`${cellClass} text-center`}>
+        <button
+          type="button"
+          onClick={() => onRemove(index)}
+          className="p-2 rounded-xl hover:bg-destructive/10 text-brand-brown/40 hover:text-destructive transition-colors"
+          title="Eliminar fila"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </td>
+    </tr>
+  );
+}

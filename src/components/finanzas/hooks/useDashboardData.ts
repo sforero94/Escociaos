@@ -342,13 +342,16 @@ export function useDashboardData() {
     setLoading(true);
     try {
       const year = new Date().getFullYear();
-      const { data: gastos } = await (supabase
+      const regionId = typeof _filtros.region_id === 'string' ? _filtros.region_id : undefined;
+      let q: any = supabase
         .from('fin_gastos')
         .select('fecha, valor')
         .eq('estado', 'Confirmado')
         .eq('negocio_id', negocioId)
         .gte('fecha', `${year - 1}-01-01`)
-        .lte('fecha', `${year}-12-31`) as any);
+        .lte('fecha', `${year}-12-31`);
+      if (regionId) q = q.eq('region_id', regionId);
+      const { data: gastos } = await q;
 
       if (!gastos) return [];
 
@@ -399,12 +402,14 @@ export function useDashboardData() {
     setLoading(true);
     try {
       const { fecha_desde, fecha_hasta } = resolveFechas(_filtros);
+      const regionId = typeof _filtros.region_id === 'string' ? _filtros.region_id : undefined;
       let q: any = supabase
         .from('fin_gastos')
         .select('fecha, nombre, valor, fin_categorias_gastos(nombre), fin_conceptos_gastos(nombre)')
         .eq('estado', 'Confirmado')
         .eq('negocio_id', negocioId)
         .order('fecha', { ascending: false });
+      if (regionId) q = q.eq('region_id', regionId);
       if (fecha_desde) q = q.gte('fecha', fecha_desde);
       if (fecha_hasta) q = q.lte('fecha', fecha_hasta);
 
@@ -453,11 +458,13 @@ export function useDashboardData() {
     setLoading(true);
     try {
       const { fecha_desde, fecha_hasta } = resolveFechas(_filtros);
+      const regionId = typeof _filtros.region_id === 'string' ? _filtros.region_id : undefined;
       let q: any = supabase
         .from('fin_gastos')
         .select('valor, fin_categorias_gastos(nombre)')
         .eq('estado', 'Confirmado')
         .eq('negocio_id', negocioId);
+      if (regionId) q = q.eq('region_id', regionId);
       if (fecha_desde) q = q.gte('fecha', fecha_desde);
       if (fecha_hasta) q = q.lte('fecha', fecha_hasta);
 

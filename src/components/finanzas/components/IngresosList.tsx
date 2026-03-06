@@ -6,98 +6,102 @@ import {
   Edit2,
   Trash2,
   Loader2,
-  FileSpreadsheet,
+  X,
 } from 'lucide-react';
-import { getSupabase } from '../../../utils/supabase/client';
-import { formatNumber } from '../../../utils/format';
-import { formatearFechaCorta, calcularRangoFechasPorPeriodo } from '../../../utils/fechas';
-import { Button } from '../../ui/button';
-import { Input } from '../../ui/input';
-import { FiltrosIngresos } from './FiltrosIngresos';
-import { CargaMasivaIngresos } from './CargaMasivaIngresos';
-import type { Ingreso } from '../../../types/finanzas';
+import { getSupabase } from '@/utils/supabase/client';
+import { formatNumber } from '@/utils/format';
+import { formatearFechaCorta, calcularRangoFechasPorPeriodo } from '@/utils/fechas';
+import { Input } from '@/components/ui/input';
+import type { Ingreso, Negocio, Region, CategoriaIngreso, TransaccionGanado, UnifiedFinanceItem } from '@/types/finanzas';
 import { toast } from 'sonner';
-import { ConfirmDialog } from '../../ui/confirm-dialog';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { TransaccionGanadoForm } from './TransaccionGanadoForm';
 
 interface IngresosListProps {
   onEdit?: (ingreso: Ingreso) => void;
 }
 
-interface FiltrosIngresosExtendidos {
-  periodo?: string;
-  negocio_id?: string;
-  region_id?: string;
-  fecha_desde?: string;
-  fecha_hasta?: string;
-  categoria_id?: string;
+interface FiltrosState {
+  periodo: string;
+  negocio_id: string;
+  region_id: string;
+  categoria_id: string;
+  fecha_desde: string;
+  fecha_hasta: string;
 }
+
+const selectClass = 'px-2 py-1.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary min-w-0';
 
 export function IngresosList({ onEdit }: IngresosListProps) {
   const location = useLocation();
 
-  // Inicializar filtros con datos de navegación si vienen en location.state
-  const filtrosIniciales = (() => {
-    const state = location.state as any;
-    const base: FiltrosIngresosExtendidos = { periodo: 'mes_actual' };
-
-    if (state) {
-      const filtrosDesdeNavegacion: FiltrosIngresosExtendidos = {
-        periodo: state.periodo || base.periodo,
-        negocio_id: state.negocio_id,
-        region_id: state.region_id,
-        categoria_id: state.categoria,
-        fecha_desde: state.fecha_desde,
-        fecha_hasta: state.fecha_hasta
-      };
-
-      return filtrosDesdeNavegacion;
-    }
-
-    return base;
-  })();
-
   const [ingresos, setIngresos] = useState<Ingreso[]>([]);
+  const [ganadoItems, setGanadoItems] = useState<TransaccionGanado[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filtros, setFiltros] = useState<FiltrosIngresosExtendidos>(filtrosIniciales);
+  const [filtros, setFiltros] = useState<FiltrosState>(() => {
+    const state = location.state as any;
+    return {
+      periodo: state?.periodo || 'mes_actual',
+      negocio_id: state?.negocio_id || '',
+      region_id: state?.region_id || '',
+      categoria_id: state?.categoria || '',
+      fecha_desde: state?.fecha_desde || '',
+      fecha_hasta: state?.fecha_hasta || '',
+    };
+  });
   const [menuAbiertoId, setMenuAbiertoId] = useState<string | null>(null);
   const [eliminando, setEliminando] = useState<string | null>(null);
-  const [showCargaMasiva, setShowCargaMasiva] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [deleteTargetSource, setDeleteTargetSource] = useState<'ingreso' | 'ganado'>('ingreso');
+  const [editingGanado, setEditingGanado] = useState<TransaccionGanado | null>(null);
 
-  // Rastrear la clave de navegación para evitar aplicar filtros múltiples veces
+  // Catalogs
+  const [negocios, setNegocios] = useState<Negocio[]>([]);
+  const [regiones, setRegiones] = useState<Region[]>([]);
+  const [categorias, setCategorias] = useState<CategoriaIngreso[]>([]);
+
   const aplicadoKey = useRef<string | null>(location.key);
 
-  // Aplicar filtros cuando cambia la navegación (solo navegaciones subsecuentes)
+  // Load catalogs once
+  useEffect(() => {
+    const supabase = getSupabase();
+    Promise.all([
+      supabase.from('fin_negocios').select('*').eq('activo', true).order('nombre'),
+      supabase.from('fin_regiones').select('*').eq('activo', true).order('nombre'),
+      supabase.from('fin_categorias_ingresos').select('*').eq('activo', true).order('nombre'),
+    ]).then(([neg, reg, cat]) => {
+      if (neg.data) setNegocios(neg.data);
+      if (reg.data) setRegiones(reg.data);
+      if (cat.data) setCategorias(cat.data);
+    });
+  }, []);
+
+  // Apply filters from navigation
   useEffect(() => {
     const state = location.state as any;
-
-    // Solo procesar si es una nueva navegación con datos de filtros
     if (state && aplicadoKey.current !== location.key) {
       aplicadoKey.current = location.key;
-      setFiltros({
+      setFiltros((prev) => ({
+        ...prev,
         periodo: state.periodo || 'mes_actual',
-        negocio_id: state.negocio_id,
-        region_id: state.region_id,
-        categoria_id: state.categoria,
-        fecha_desde: state.fecha_desde,
-        fecha_hasta: state.fecha_hasta
-      });
+        negocio_id: state.negocio_id || '',
+        region_id: state.region_id || '',
+        categoria_id: state.categoria || '',
+        fecha_desde: state.fecha_desde || '',
+        fecha_hasta: state.fecha_hasta || '',
+      }));
     }
   }, [location.state, location.key]);
 
+  // Auto-load on any filter change
   useEffect(() => {
     loadIngresos();
-  }, [filtros]);
+  }, [filtros, searchQuery]);
 
-  // Cerrar menú al hacer clic fuera
   useEffect(() => {
-    const handleClickOutside = () => {
-      if (menuAbiertoId) {
-        setMenuAbiertoId(null);
-      }
-    };
+    const handleClickOutside = () => { if (menuAbiertoId) setMenuAbiertoId(null); };
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
   }, [menuAbiertoId]);
@@ -106,85 +110,69 @@ export function IngresosList({ onEdit }: IngresosListProps) {
     try {
       setIsLoading(true);
 
-      // Calcular fechas reales basadas en el período seleccionado
       let fechaDesde = filtros.fecha_desde;
       let fechaHasta = filtros.fecha_hasta;
 
       if (filtros.periodo && filtros.periodo !== 'rango_personalizado') {
-        const { fecha_desde, fecha_hasta } = calcularRangoFechasPorPeriodo(filtros.periodo);
-        fechaDesde = fecha_desde;
-        fechaHasta = fecha_hasta;
+        const rango = calcularRangoFechasPorPeriodo(filtros.periodo);
+        fechaDesde = rango.fecha_desde;
+        fechaHasta = rango.fecha_hasta;
       }
 
       let query = getSupabase()
         .from('fin_ingresos')
-        .select(`
-          *,
-          fin_negocios (nombre),
-          fin_regiones (nombre),
-          fin_categorias_ingresos (nombre),
-          fin_compradores (nombre),
-          fin_medios_pago (nombre)
-        `);
+        .select(`*, fin_negocios (nombre), fin_regiones (nombre), fin_categorias_ingresos (nombre), fin_compradores (nombre), fin_medios_pago (nombre)`);
 
-      // Aplicar filtros de fecha
       if (fechaDesde) query = query.gte('fecha', fechaDesde);
       if (fechaHasta) query = query.lte('fecha', fechaHasta);
-
-      // Aplicar filtros de negocio y región
-      if (filtros.negocio_id) {
-        if (Array.isArray(filtros.negocio_id)) {
-          query = query.in('negocio_id', filtros.negocio_id);
-        } else {
-          query = query.eq('negocio_id', filtros.negocio_id);
-        }
-      }
-      if (filtros.region_id) {
-        if (Array.isArray(filtros.region_id)) {
-          query = query.in('region_id', filtros.region_id);
-        } else {
-          query = query.eq('region_id', filtros.region_id);
-        }
-      }
-
-      // Aplicar filtro de categoría
-      if (filtros.categoria_id) {
-        query = query.eq('categoria_id', filtros.categoria_id);
-      }
+      if (filtros.negocio_id) query = query.eq('negocio_id', filtros.negocio_id);
+      if (filtros.region_id) query = query.eq('region_id', filtros.region_id);
+      if (filtros.categoria_id) query = query.eq('categoria_id', filtros.categoria_id);
 
       query = query.order('fecha', { ascending: false });
-
       const { data, error } = await query;
-
       if (error) throw error;
 
-      // Aplicar filtros básicos
-      let ingresosFiltrados = data || [];
+      let result = (data || []) as any[];
 
-      // Filtro de búsqueda
+      // Fetch ganado ventas with same date filters
+      let ganadoQuery = getSupabase()
+        .from('fin_transacciones_ganado' as any)
+        .select('*')
+        .eq('tipo', 'venta');
+      if (fechaDesde) ganadoQuery = ganadoQuery.gte('fecha', fechaDesde);
+      if (fechaHasta) ganadoQuery = ganadoQuery.lte('fecha', fechaHasta);
+      ganadoQuery = ganadoQuery.order('fecha', { ascending: false });
+      const { data: ganadoData } = await ganadoQuery;
+
+      let ganadoResult = (ganadoData || []) as TransaccionGanado[];
+
       if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        ingresosFiltrados = ingresosFiltrados.filter(ingreso =>
-          ingreso.nombre?.toLowerCase().includes(query) ||
-          ingreso.fin_categorias_ingresos?.nombre?.toLowerCase().includes(query) ||
-          ingreso.fin_compradores?.nombre?.toLowerCase().includes(query)
+        const q = searchQuery.toLowerCase();
+        result = result.filter((i: any) =>
+          i.nombre?.toLowerCase().includes(q) ||
+          i.fin_categorias_ingresos?.nombre?.toLowerCase().includes(q) ||
+          i.fin_compradores?.nombre?.toLowerCase().includes(q)
+        );
+        ganadoResult = ganadoResult.filter((g) =>
+          g.finca?.toLowerCase().includes(q) ||
+          g.cliente_proveedor?.toLowerCase().includes(q) ||
+          'ganado'.includes(q)
         );
       }
 
-      setIngresos(ingresosFiltrados);
-    } catch (error) {
+      setIngresos(result as Ingreso[]);
+      setGanadoItems(ganadoResult);
+    } catch {
+      // silent
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Filtrar ingresos por búsqueda
-  useEffect(() => {
-    loadIngresos();
-  }, [searchQuery]);
-
-  const handleEliminar = (ingresoId: string) => {
-    setDeleteTargetId(ingresoId);
+  const handleEliminar = (id: string, source: 'ingreso' | 'ganado' = 'ingreso') => {
+    setDeleteTargetId(id);
+    setDeleteTargetSource(source);
     setConfirmDeleteOpen(true);
   };
 
@@ -192,220 +180,237 @@ export function IngresosList({ onEdit }: IngresosListProps) {
     if (!deleteTargetId) return;
     try {
       setEliminando(deleteTargetId);
-
-      const { error } = await getSupabase()
-        .from('fin_ingresos')
-        .delete()
-        .eq('id', deleteTargetId);
-
+      const table = deleteTargetSource === 'ganado' ? 'fin_transacciones_ganado' as any : 'fin_ingresos';
+      const { error } = await getSupabase().from(table).delete().eq('id', deleteTargetId);
       if (error) throw error;
-
-      setIngresos(ingresos.filter(i => i.id !== deleteTargetId));
-      toast.success('Ingreso eliminado exitosamente');
-    } catch (error: any) {
-      toast.error('Error al eliminar el ingreso: ' + error.message);
+      if (deleteTargetSource === 'ganado') {
+        setGanadoItems(ganadoItems.filter((g) => g.id !== deleteTargetId));
+      } else {
+        setIngresos(ingresos.filter((i) => i.id !== deleteTargetId));
+      }
+      toast.success(deleteTargetSource === 'ganado' ? 'Transaccion ganado eliminada' : 'Ingreso eliminado');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      toast.error('Error: ' + message);
     } finally {
       setEliminando(null);
       setDeleteTargetId(null);
     }
   };
 
-  const handleFiltrosChange = (nuevosFiltros: FiltrosIngresosExtendidos) => {
-    setFiltros(nuevosFiltros);
+  const updateFiltro = (field: keyof FiltrosState, value: string) => {
+    setFiltros((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleAplicarFiltros = () => {
-    loadIngresos();
-  };
+  // Filter categorias by selected negocio
+  const categoriasFiltradas = filtros.negocio_id
+    ? categorias.filter((c) => c.negocio_id === filtros.negocio_id)
+    : categorias;
+
+  const tieneFiltrosActivos = filtros.negocio_id || filtros.region_id || filtros.categoria_id;
+  const valorTotalIngresos = ingresos.reduce((sum, i) => sum + (i.valor || 0), 0);
+  const valorTotalGanado = ganadoItems.reduce((sum, g) => sum + (g.valor_total || 0), 0);
+  const valorTotal = valorTotalIngresos + valorTotalGanado;
+
+  // Build unified list sorted by date
+  const unifiedItems: UnifiedFinanceItem[] = [
+    ...ingresos.map((i) => ({
+      source: 'ingreso' as const,
+      id: i.id,
+      fecha: i.fecha,
+      nombre: i.nombre,
+      valor: i.valor,
+      details: [(i as any).fin_negocios?.nombre, (i as any).fin_categorias_ingresos?.nombre, (i as any).fin_compradores?.nombre].filter(Boolean).join(' · '),
+      raw: i,
+    })),
+    ...ganadoItems.map((g) => ({
+      source: 'ganado' as const,
+      id: g.id,
+      fecha: g.fecha,
+      nombre: `Venta Ganado${g.finca ? ` - ${g.finca}` : ''}`,
+      valor: g.valor_total,
+      details: [g.cantidad_cabezas ? `${g.cantidad_cabezas} cabezas` : null, g.kilos_pagados ? `${g.kilos_pagados} kg` : null, g.cliente_proveedor].filter(Boolean).join(' · '),
+      raw: g,
+    })),
+  ].sort((a, b) => b.fecha.localeCompare(a.fecha));
+
+  const totalCount = unifiedItems.length;
 
   return (
-    <div className="space-y-6">
-      {/* Filtros Globales */}
-      <FiltrosIngresos
-        filtros={filtros}
-        onFiltrosChange={handleFiltrosChange}
-        onAplicarFiltros={handleAplicarFiltros}
-      />
-
-      {/* Estadísticas */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-sm text-gray-600">Total Ingresos</p>
-            <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-              <span className="text-green-600 text-sm">💰</span>
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-gray-900">{ingresos.length}</p>
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-sm text-gray-600">Valor Total</p>
-            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-              <span className="text-blue-600 text-sm">$</span>
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-gray-900">
-            ${formatNumber(ingresos.reduce((sum, i) => sum + (i.valor || 0), 0))}
-          </p>
-        </div>
-      </div>
-
-      {/* Búsqueda y Carga Masiva */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+    <div className="space-y-3">
+      {/* Compact filter bar */}
+      <div className="bg-white rounded-xl border border-gray-200 px-3 py-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Search */}
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <Input
               type="text"
-              placeholder="Buscar por nombre, categoría o comprador..."
+              placeholder="Buscar..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
+              className="pl-8 h-8 text-sm"
             />
           </div>
 
-          {/* Botón Carga Masiva */}
-          <Button
-            onClick={() => setShowCargaMasiva(true)}
-            variant="outline"
-            className="border-primary text-primary hover:bg-primary/10"
-          >
-            <FileSpreadsheet className="w-4 h-4 mr-2" />
-            Carga Masiva
-          </Button>
+          {/* Periodo */}
+          <select value={filtros.periodo} onChange={(e) => updateFiltro('periodo', e.target.value)} className={selectClass}>
+            <option value="mes_actual">Mes Actual</option>
+            <option value="trimestre">Trimestre</option>
+            <option value="ytd">YTD</option>
+            <option value="ano_anterior">Ano Anterior</option>
+            <option value="rango_personalizado">Personalizado</option>
+          </select>
+
+          {/* Negocio */}
+          <select value={filtros.negocio_id} onChange={(e) => { updateFiltro('negocio_id', e.target.value); updateFiltro('categoria_id', ''); }} className={selectClass}>
+            <option value="">Negocio</option>
+            {negocios.map((n) => <option key={n.id} value={n.id}>{n.nombre}</option>)}
+          </select>
+
+          {/* Region */}
+          <select value={filtros.region_id} onChange={(e) => updateFiltro('region_id', e.target.value)} className={selectClass}>
+            <option value="">Region</option>
+            {regiones.map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+          </select>
+
+          {/* Categoria */}
+          <select value={filtros.categoria_id} onChange={(e) => updateFiltro('categoria_id', e.target.value)} className={selectClass}>
+            <option value="">Categoria</option>
+            {categoriasFiltradas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+          </select>
+
+          {/* Clear filters */}
+          {tieneFiltrosActivos && (
+            <button
+              onClick={() => setFiltros({ periodo: 'mes_actual', negocio_id: '', region_id: '', categoria_id: '', fecha_desde: '', fecha_hasta: '' })}
+              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+              title="Limpiar filtros"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
+
+        {/* Custom date range */}
+        {filtros.periodo === 'rango_personalizado' && (
+          <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100">
+            <span className="text-xs text-gray-500">Desde</span>
+            <input type="date" value={filtros.fecha_desde} onChange={(e) => updateFiltro('fecha_desde', e.target.value)} className={`${selectClass} flex-1`} />
+            <span className="text-xs text-gray-500">Hasta</span>
+            <input type="date" value={filtros.fecha_hasta} onChange={(e) => updateFiltro('fecha_hasta', e.target.value)} className={`${selectClass} flex-1`} />
+          </div>
+        )}
       </div>
 
-      {/* Lista de ingresos */}
+      {/* Inline stats summary */}
+      <div className="flex items-center gap-4 px-1 text-sm text-gray-500">
+        <span><strong className="text-gray-900">{totalCount}</strong> ingresos</span>
+        <span className="text-gray-300">|</span>
+        <span>Total: <strong className="text-green-700">${formatNumber(valorTotal)}</strong></span>
+        {ganadoItems.length > 0 && (
+          <>
+            <span className="text-gray-300">|</span>
+            <span className="text-amber-700">{ganadoItems.length} ganado</span>
+          </>
+        )}
+      </div>
+
+      {/* Compact income list */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 text-primary animate-spin" />
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 text-primary animate-spin" />
           </div>
-        ) : ingresos.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="w-16 h-16 bg-gray-100 rounded-2xl mx-auto mb-4 flex items-center justify-center">
-              <span className="text-2xl">💰</span>
-            </div>
-            <h3 className="text-lg text-gray-900 mb-2">
-              {searchQuery ? 'No se encontraron ingresos' : 'No hay ingresos registrados'}
-            </h3>
-            <p className="text-sm text-gray-500 mb-6">
-              {searchQuery
-                ? 'Intenta ajustar los filtros de búsqueda'
-                : 'Comienza registrando tu primer ingreso'
-              }
+        ) : totalCount === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-sm text-gray-500">
+              {searchQuery ? 'No se encontraron ingresos' : 'No hay ingresos en este periodo'}
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-200">
-            {ingresos.map((ingreso) => (
-              <div
-                key={ingreso.id}
-                className="p-4 hover:bg-gray-50 transition-colors"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-4 flex-1">
-                    {/* Información */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className="text-gray-900 truncate font-medium">
-                          {ingreso.nombre}
-                        </h3>
-                      </div>
+          <div className="divide-y divide-gray-100">
+            {unifiedItems.map((item) => (
+              <div key={`${item.source}-${item.id}`} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50/50 transition-colors group">
+                {/* Ganado badge or spacer for alignment */}
+                {item.source === 'ganado' && (
+                  <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-md bg-amber-100 text-amber-800 flex-shrink-0">
+                    Ganado
+                  </span>
+                )}
 
-                      <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600 mb-2">
-                        <span className="flex items-center gap-1">
-                          📅 {formatearFechaCorta(ingreso.fecha)}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          🏢 {ingreso.fin_negocios?.nombre || 'Sin negocio'}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          📍 {ingreso.fin_regiones?.nombre || 'Sin región'}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          📂 {ingreso.fin_categorias_ingresos?.nombre || 'Sin categoría'}
-                        </span>
-                      </div>
+                {/* Date */}
+                <span className="text-xs text-gray-400 w-[70px] flex-shrink-0">
+                  {formatearFechaCorta(item.fecha)}
+                </span>
 
-                      <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
-                        {ingreso.fin_compradores?.nombre && (
-                          <span className="flex items-center gap-1">
-                            🛒 {ingreso.fin_compradores.nombre}
-                          </span>
-                        )}
-                        <span className="flex items-center gap-1">
-                          💳 {ingreso.fin_medios_pago?.nombre || 'Sin medio'}
-                        </span>
-                      </div>
+                {/* Name + details */}
+                <div className="flex-1 min-w-0 flex items-center gap-2">
+                  <span className="text-sm font-medium text-gray-900 truncate">
+                    {item.nombre}
+                  </span>
+                  {item.details && (
+                    <span className="hidden sm:inline text-xs text-gray-400 truncate">
+                      {item.details}
+                    </span>
+                  )}
+                </div>
 
-                      {ingreso.observaciones && (
-                        <p className="text-sm text-gray-500 mt-2 line-clamp-1">
-                          {ingreso.observaciones}
-                        </p>
+                {/* Value */}
+                <span className="text-sm font-semibold text-green-700 flex-shrink-0 tabular-nums">
+                  +${formatNumber(item.valor)}
+                </span>
+
+                {/* Actions menu */}
+                <div className="relative flex-shrink-0">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuAbiertoId(menuAbiertoId === `${item.source}-${item.id}` ? null : `${item.source}-${item.id}`);
+                    }}
+                    disabled={eliminando === item.id}
+                    className="p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-gray-100 transition-all text-gray-400"
+                  >
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+
+                  {menuAbiertoId === `${item.source}-${item.id}` && (
+                    <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-xl border border-gray-200 py-1 z-50">
+                      {item.source === 'ganado' ? (
+                        <>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setEditingGanado(item.raw as TransaccionGanado); setMenuAbiertoId(null); }}
+                            className="w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" /> Editar
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleEliminar(item.id, 'ganado'); setMenuAbiertoId(null); }}
+                            disabled={eliminando === item.id}
+                            className="w-full px-3 py-1.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 disabled:opacity-50"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> Eliminar
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); onEdit?.(item.raw as Ingreso); setMenuAbiertoId(null); }}
+                            className="w-full px-3 py-1.5 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" /> Editar
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleEliminar(item.id, 'ingreso'); setMenuAbiertoId(null); }}
+                            disabled={eliminando === item.id}
+                            className="w-full px-3 py-1.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 disabled:opacity-50"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> Eliminar
+                          </button>
+                        </>
                       )}
                     </div>
-                  </div>
-
-                  {/* Valor y acciones */}
-                  <div className="flex items-center gap-4 flex-shrink-0">
-                    <div className="text-right">
-                      <p className="text-lg font-bold text-green-600">
-                        +${formatNumber(ingreso.valor)}
-                      </p>
-                    </div>
-
-                    {/* Menú de acciones */}
-                    <div className="relative">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setMenuAbiertoId(
-                            menuAbiertoId === ingreso.id ? null : ingreso.id
-                          );
-                        }}
-                        disabled={eliminando === ingreso.id}
-                      >
-                        <MoreVertical className="w-4 h-4" />
-                      </Button>
-
-                      {/* Dropdown menu */}
-                      {menuAbiertoId === ingreso.id && (
-                        <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50"
-                        >
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onEdit?.(ingreso);
-                              setMenuAbiertoId(null);
-                            }}
-                            className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors"
-                          >
-                            <Edit2 className="w-4 h-4 text-gray-500" />
-                            Editar
-                          </button>
-
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEliminar(ingreso.id);
-                              setMenuAbiertoId(null);
-                            }}
-                            disabled={eliminando === ingreso.id}
-                            className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors disabled:opacity-50"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            Eliminar
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -413,24 +418,21 @@ export function IngresosList({ onEdit }: IngresosListProps) {
         )}
       </div>
 
-      {/* Carga Masiva Dialog */}
-      <CargaMasivaIngresos
-        open={showCargaMasiva}
-        onOpenChange={setShowCargaMasiva}
-        onSuccess={(count) => {
-          loadIngresos(); // Refresh the list
-          toast.success(`¡Éxito! Se cargaron ${count} ingresos correctamente`);
-        }}
-        onError={(message) => {
-          toast.error(`Error: ${message}`);
-        }}
-      />
+      {editingGanado && (
+        <TransaccionGanadoForm
+          open={!!editingGanado}
+          onOpenChange={(open) => { if (!open) setEditingGanado(null); }}
+          transaccion={editingGanado}
+          defaultTipo="venta"
+          onSuccess={() => { setEditingGanado(null); loadIngresos(); }}
+        />
+      )}
 
       <ConfirmDialog
         open={confirmDeleteOpen}
         onOpenChange={setConfirmDeleteOpen}
-        title="¿Eliminar ingreso?"
-        description="Esta acción no se puede deshacer."
+        title={deleteTargetSource === 'ganado' ? 'Eliminar transaccion ganado?' : 'Eliminar ingreso?'}
+        description="Esta accion no se puede deshacer."
         confirmLabel="Eliminar"
         onConfirm={confirmEliminar}
         destructive

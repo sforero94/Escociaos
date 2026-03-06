@@ -44,17 +44,19 @@ export function useGanadoData() {
   const [loading, setLoading] = useState(false);
   const supabase = getSupabase();
 
-  async function sumTransacciones(desde: string, hasta: string, tipo: 'compra' | 'venta', field: 'valor_total' | 'kilos_pagados' = 'valor_total') {
-    const { data } = await (supabase
+  async function sumTransacciones(desde: string, hasta: string, tipo: 'compra' | 'venta', field: 'valor_total' | 'kilos_pagados' = 'valor_total', finca?: string) {
+    let q: any = supabase
       .from('fin_transacciones_ganado')
       .select(field)
       .eq('tipo', tipo)
       .gte('fecha', desde)
-      .lte('fecha', hasta) as any);
+      .lte('fecha', hasta);
+    if (finca) q = q.ilike('finca', finca);
+    const { data } = await q;
     return (data as any[])?.reduce((s: number, r: any) => s + (r[field] || 0), 0) || 0;
   }
 
-  const getKPIsGanado = async (filtros: FiltrosFinanzas, ganadoNegocioId?: string): Promise<{
+  const getKPIsGanado = async (filtros: FiltrosFinanzas, ganadoNegocioId?: string, finca?: string): Promise<{
     ventas: KPIConVariacion;
     compras: KPIConVariacion;
     kilosVendidos: KPIConVariacion;
@@ -73,21 +75,24 @@ export function useGanadoData() {
       const full2 = getYearRange(year - 2);
 
       const [ventasAct, ventasAnt, comprasAct, comprasAnt, kVendAct, kVendAnt, kCompAct, kCompAnt] = await Promise.all([
-        sumTransacciones(ytd0.desde, ytd0.hasta, 'venta'),
-        sumTransacciones(ytd1.desde, ytd1.hasta, 'venta'),
-        sumTransacciones(ytd0.desde, ytd0.hasta, 'compra'),
-        sumTransacciones(ytd1.desde, ytd1.hasta, 'compra'),
-        sumTransacciones(ytd0.desde, ytd0.hasta, 'venta', 'kilos_pagados'),
-        sumTransacciones(ytd1.desde, ytd1.hasta, 'venta', 'kilos_pagados'),
-        sumTransacciones(ytd0.desde, ytd0.hasta, 'compra', 'kilos_pagados'),
-        sumTransacciones(ytd1.desde, ytd1.hasta, 'compra', 'kilos_pagados'),
+        sumTransacciones(ytd0.desde, ytd0.hasta, 'venta', 'valor_total', finca),
+        sumTransacciones(ytd1.desde, ytd1.hasta, 'venta', 'valor_total', finca),
+        sumTransacciones(ytd0.desde, ytd0.hasta, 'compra', 'valor_total', finca),
+        sumTransacciones(ytd1.desde, ytd1.hasta, 'compra', 'valor_total', finca),
+        sumTransacciones(ytd0.desde, ytd0.hasta, 'venta', 'kilos_pagados', finca),
+        sumTransacciones(ytd1.desde, ytd1.hasta, 'venta', 'kilos_pagados', finca),
+        sumTransacciones(ytd0.desde, ytd0.hasta, 'compra', 'kilos_pagados', finca),
+        sumTransacciones(ytd1.desde, ytd1.hasta, 'compra', 'kilos_pagados', finca),
       ]);
 
       // Gastos for Ganado negocio — 4 periods
+      const regionId = typeof filtros.region_id === 'string' ? filtros.region_id : undefined;
       let gAct = 0, gYtd1 = 0, gFull1 = 0, gFull2 = 0;
       if (ganadoNegocioId) {
         const sumG = async (desde: string, hasta: string) => {
-          const { data }: any = await supabase.from('fin_gastos').select('valor').eq('estado', 'Confirmado').eq('negocio_id', ganadoNegocioId).gte('fecha', desde).lte('fecha', hasta);
+          let q: any = supabase.from('fin_gastos').select('valor').eq('estado', 'Confirmado').eq('negocio_id', ganadoNegocioId).gte('fecha', desde).lte('fecha', hasta);
+          if (regionId) q = q.eq('region_id', regionId);
+          const { data } = await q;
           return (data as any[])?.reduce((s: number, r: any) => s + (r.valor || 0), 0) || 0;
         };
         [gAct, gYtd1, gFull1, gFull2] = await Promise.all([
@@ -113,7 +118,7 @@ export function useGanadoData() {
     }
   };
 
-  const getTransaccionesPorFinca = async (filtros: FiltrosFinanzas): Promise<{
+  const getTransaccionesPorFinca = async (filtros: FiltrosFinanzas, finca?: string): Promise<{
     finca: string;
     compra_dinero: number;
     venta_dinero: number;
@@ -126,6 +131,7 @@ export function useGanadoData() {
       let q: any = supabase.from('fin_transacciones_ganado').select('tipo, finca, valor_total, kilos_pagados');
       if (fecha_desde) q = q.gte('fecha', fecha_desde);
       if (fecha_hasta) q = q.lte('fecha', fecha_hasta);
+      if (finca) q = q.ilike('finca', finca);
 
       const { data } = await q;
       if (!data) return [];
@@ -151,15 +157,17 @@ export function useGanadoData() {
     }
   };
 
-  const getTransaccionesPorTrimestre = async (filtros: FiltrosFinanzas): Promise<{ trimestre: string; compra: number; venta: number }[]> => {
+  const getTransaccionesPorTrimestre = async (filtros: FiltrosFinanzas, finca?: string): Promise<{ trimestre: string; compra: number; venta: number }[]> => {
     setLoading(true);
     try {
       const year = new Date().getFullYear();
-      const { data } = await (supabase
+      let q: any = supabase
         .from('fin_transacciones_ganado')
         .select('fecha, tipo, cantidad_cabezas')
         .gte('fecha', `${year - 1}-01-01`)
-        .lte('fecha', `${year}-12-31`) as any);
+        .lte('fecha', `${year}-12-31`);
+      if (finca) q = q.ilike('finca', finca);
+      const { data } = await q;
 
       if (!data) return [];
 
@@ -180,7 +188,7 @@ export function useGanadoData() {
     }
   };
 
-  const getDetalleTransacciones = async (filtros: FiltrosFinanzas, tipo?: 'compra' | 'venta'): Promise<Record<string, unknown>[]> => {
+  const getDetalleTransacciones = async (filtros: FiltrosFinanzas, tipo?: 'compra' | 'venta', finca?: string): Promise<Record<string, unknown>[]> => {
     setLoading(true);
     try {
       const { fecha_desde, fecha_hasta } = resolveFechas(filtros);
@@ -189,6 +197,7 @@ export function useGanadoData() {
         .select('*')
         .order('fecha', { ascending: false });
       if (tipo) q = q.eq('tipo', tipo);
+      if (finca) q = q.ilike('finca', finca);
       if (fecha_desde) q = q.gte('fecha', fecha_desde);
       if (fecha_hasta) q = q.lte('fecha', fecha_hasta);
 
@@ -208,11 +217,27 @@ export function useGanadoData() {
     }
   };
 
+  const getFincas = async (): Promise<string[]> => {
+    const { data } = await (supabase
+      .from('fin_transacciones_ganado')
+      .select('finca') as any);
+    if (!data) return [];
+    // Deduplicate case-insensitively, keeping the first occurrence
+    const seen = new Map<string, string>();
+    (data as any[]).forEach((r: any) => {
+      if (r.finca && !seen.has(r.finca.toLowerCase())) {
+        seen.set(r.finca.toLowerCase(), r.finca);
+      }
+    });
+    return Array.from(seen.values()).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+  };
+
   return {
     loading,
     getKPIsGanado,
     getTransaccionesPorFinca,
     getTransaccionesPorTrimestre,
     getDetalleTransacciones,
+    getFincas,
   };
 }

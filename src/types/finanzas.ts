@@ -312,3 +312,41 @@ export interface NegocioDashboardConfig {
 }
 
 export type GanadoChartMode = 'dinero' | 'kilos';
+
+export type UnifiedFinanceItem =
+  | { source: 'gasto'; id: string; fecha: string; nombre: string; valor: number; details: string; estado: string; raw: Gasto }
+  | { source: 'ingreso'; id: string; fecha: string; nombre: string; valor: number; details: string; raw: Ingreso }
+  | { source: 'ganado'; id: string; fecha: string; nombre: string; valor: number; details: string; raw: TransaccionGanado };
+
+// Batch registration — Gastos
+export interface BatchRowData {
+  id: string;
+  fecha: string;
+  nombre: string;
+  valor: string;
+  negocio_id: string;
+  region_id: string;
+  categoria_id: string;
+  concepto_id: string;
+  proveedor_id: string;
+  medio_pago_id: string;
+  observaciones: string;
+  factura_file: File | null;
+  factura_uploaded: boolean;
+}
+
+// Batch registration — Ingresos
+export interface BatchRowDataIngreso {
+  id: string;
+  fecha: string;
+  nombre: string;
+  valor: string;
+  negocio_id: string;
+  region_id: string;
+  categoria_id: string;
+  comprador_id: string;
+  medio_pago_id: string;
+  observaciones: string;
+  factura_file: File | null;
+  factura_uploaded: boolean;
+}
