@@ -4,7 +4,8 @@
 
 import { getSupabase, getCurrentUser } from './supabase/client';
 import { projectId, publicAnonKey } from './supabase/info.tsx';
-import html2pdf from 'html2pdf.js';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 import type {
   DatosReporteSemanal,
   GenerateReportResponse,
@@ -97,34 +98,11 @@ export async function generarHTMLReporte(
 // ============================================================================
 
 /**
- * Convierte HTML a PDF usando html2pdf.js (cargado dinámicamente)
- * Retorna un Blob con el PDF generado
+ * Convierte HTML a PDF renderizando cada slide individualmente con html2canvas + jsPDF.
+ * Esto evita el problema de html2pdf.js donde slides se fusionan en una sola página
+ * cuando algún slide no mide exactamente 720px.
  */
 export async function convertirHTMLaPDF(html: string): Promise<Blob> {
-  const pdfOptions = {
-    margin: 0,
-    filename: 'reporte-semanal-slides.pdf',
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: {
-      scale: 2,
-      useCORS: true,
-      letterRendering: true,
-      width: 1280,
-      windowWidth: 1280,
-      backgroundColor: '#ffffff',
-    },
-    jsPDF: {
-      unit: 'px',
-      format: [1280, 720],
-      orientation: 'landscape',
-    },
-    pagebreak: {
-      mode: ['css'],
-      before: ['.page-break'],
-    },
-  } as any;
-
-  // Estrategia 1: iframe (más aislada)
   const iframe = document.createElement('iframe');
   iframe.style.position = 'fixed';
   iframe.style.left = '0';
@@ -143,38 +121,51 @@ export async function convertirHTMLaPDF(html: string): Promise<Blob> {
     iframeDoc.open();
     iframeDoc.write(html);
     iframeDoc.close();
-    await new Promise(resolve => setTimeout(resolve, 3000));
 
-    const iframeBody = iframeDoc.body;
-    if (!iframeBody) throw new Error('No se pudo acceder al body del iframe');
+    // Wait for fonts + rendering
+    await iframeDoc.fonts?.ready;
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
-    let pdfBlob: Blob = await html2pdf().set(pdfOptions).from(iframeBody).toPdf().output('blob');
-
-    // Si sale demasiado pequeño, fallback a contenedor DOM directo.
-    if (pdfBlob.size < 10_000) {
-      const container = document.createElement('div');
-      container.innerHTML = html;
-      container.style.position = 'fixed';
-      container.style.left = '0';
-      container.style.top = '0';
-      container.style.width = '1280px';
-      container.style.opacity = '0.01';
-      container.style.zIndex = '-1';
-      container.style.pointerEvents = 'none';
-      document.body.appendChild(container);
-      try {
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        pdfBlob = await html2pdf().set(pdfOptions).from(container).toPdf().output('blob');
-      } finally {
-        if (container.parentNode) document.body.removeChild(container);
-      }
+    const slides = Array.from(iframeDoc.querySelectorAll('.slide'));
+    if (slides.length === 0) {
+      throw new Error('No se encontraron slides en el HTML generado');
     }
+
+    console.log(`[ReporteSemanal] Renderizando ${slides.length} slides individualmente...`);
+
+    const pdf = new jsPDF({
+      unit: 'px',
+      format: [1280, 720],
+      orientation: 'landscape',
+      hotfixes: ['px_scaling'],
+    });
+
+    for (let i = 0; i < slides.length; i++) {
+      const slide = slides[i] as HTMLElement;
+      const canvas = await html2canvas(slide, {
+        scale: 2,
+        useCORS: true,
+        width: 1280,
+        height: 720,
+        windowWidth: 1280,
+        backgroundColor: '#ffffff',
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.98);
+
+      if (i > 0) {
+        pdf.addPage([1280, 720], 'landscape');
+      }
+      pdf.addImage(imgData, 'JPEG', 0, 0, 1280, 720);
+    }
+
+    const pdfBlob = pdf.output('blob');
 
     if (pdfBlob.size < 10_000) {
       throw new Error('PDF generado vacío o inválido. Intenta generar nuevamente.');
     }
 
-    console.log('[ReporteSemanal] PDF generado:', pdfBlob.size, 'bytes, type:', pdfBlob.type);
+    console.log('[ReporteSemanal] PDF generado:', pdfBlob.size, 'bytes,', slides.length, 'páginas');
     return pdfBlob;
   } finally {
     if (iframe.parentNode) document.body.removeChild(iframe);
@@ -426,7 +417,6 @@ export async function generarReporteRapido(
 
 /**
  * Descarga el HTML de un reporte rápido, lo convierte a PDF y lanza la descarga.
- * Usa el mismo html2pdf.js que el wizard.
  */
 export async function descargarReporteDesdeHTML(
   htmlStoragePath: string,

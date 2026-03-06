@@ -23,7 +23,7 @@ The system manages: inventory, phytosanitary applications (fumigation/fertilizat
 | Icons         | Lucide React                                                     |
 | Charts        | Recharts                                                         |
 | Backend       | Supabase (PostgreSQL + Auth + Storage + Edge Functions)          |
-| PDF           | jsPDF + jspdf-autotable + html2pdf.js                           |
+| PDF           | jsPDF + jspdf-autotable + html2canvas                           |
 | CSV/Excel     | PapaParse (CSV), xlsx (Excel)                                   |
 | Toast/Notif   | Sonner                                                           |
 | Testing       | Vitest 4.0                                                       |
