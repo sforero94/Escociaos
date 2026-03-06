@@ -265,7 +265,7 @@ export function Layout({ onNavigate, children }: LayoutProps) {
         </div>
 
         {/* Main Content — margin only on lg+ where sidebar is visible */}
-        <div id="main-content" className="transition-[margin] duration-300 max-lg:!ml-0" style={{ marginLeft: collapsed ? 72 : 256 }}>
+        <div id="main-content" className={`transition-[margin] duration-300 ml-0 ${collapsed ? 'lg:ml-[72px]' : 'lg:ml-64'}`}>
           <main className="p-4 lg:p-8">{children}</main>
         </div>
       </div>

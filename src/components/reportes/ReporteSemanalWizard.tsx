@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Settings,
@@ -17,6 +17,8 @@ import {
   RefreshCw,
   ChevronUp,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Calendar,
   Users,
   AlertTriangle,
@@ -119,6 +121,8 @@ export function ReporteSemanalWizard() {
   const [htmlGenerado, setHtmlGenerado] = useState('');
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
   const [errorGeneracion, setErrorGeneracion] = useState('');
+  const [slideActual, setSlideActual] = useState(0);
+  const slideContainerRef = useRef<HTMLDivElement>(null);
 
   // Load closed applications list when entering paso 2
   useEffect(() => {
@@ -130,6 +134,38 @@ export function ReporteSemanalWizard() {
         .finally(() => setLoadingCierres(false));
     }
   }, [pasoActual]);
+
+  // Parse individual slides from generated HTML
+  const slidesHtml = useMemo(() => {
+    if (!htmlGenerado) return [];
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlGenerado, 'text/html');
+    const styleContent = Array.from(doc.querySelectorAll('style')).map(s => s.outerHTML).join('\n');
+    const slideEls = doc.querySelectorAll('.slide');
+    return Array.from(slideEls).map(el => styleContent + el.outerHTML);
+  }, [htmlGenerado]);
+
+  // Reset slide index when new HTML is generated
+  useEffect(() => {
+    if (htmlGenerado) setSlideActual(0);
+  }, [htmlGenerado]);
+
+  const totalSlides = slidesHtml.length;
+
+  const irASlide = useCallback((idx: number) => {
+    setSlideActual(Math.max(0, Math.min(idx, totalSlides - 1)));
+  }, [totalSlides]);
+
+  // Keyboard navigation for slides
+  useEffect(() => {
+    if (!htmlGenerado || pasoActual !== 5) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') irASlide(slideActual - 1);
+      else if (e.key === 'ArrowRight') irASlide(slideActual + 1);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [htmlGenerado, pasoActual, slideActual, irASlide]);
 
   // ============================================================================
   // NAVIGATION
@@ -1097,7 +1133,7 @@ export function ReporteSemanalWizard() {
         </Card>
       )}
 
-      {htmlGenerado && (
+      {htmlGenerado && totalSlides > 0 && (
         <>
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-bold text-foreground">Vista Previa</h3>
@@ -1116,13 +1152,43 @@ export function ReporteSemanalWizard() {
               </Button>
             </div>
           </div>
-          <div className="border rounded-xl overflow-hidden shadow-lg bg-white">
-            <iframe
-              srcDoc={htmlGenerado}
-              className="w-full border-0"
-              style={{ height: 'calc(100vh - 200px)', minHeight: '900px' }}
-              title="Vista previa del reporte"
-            />
+
+          {/* Single-slide viewer */}
+          <div className="relative" ref={slideContainerRef}>
+            <div className="border rounded-xl overflow-hidden shadow-lg bg-white">
+              <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+                <iframe
+                  srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;overflow:hidden;}</style></head><body>${slidesHtml[slideActual]}</body></html>`}
+                  className="absolute inset-0 w-full h-full border-0"
+                  title={`Diapositiva ${slideActual + 1} de ${totalSlides}`}
+                />
+              </div>
+            </div>
+
+            {/* Navigation arrows */}
+            <button
+              onClick={() => irASlide(slideActual - 1)}
+              disabled={slideActual === 0}
+              className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 hover:bg-black/70 disabled:opacity-30 disabled:cursor-not-allowed text-white p-2 transition-colors"
+              aria-label="Diapositiva anterior"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => irASlide(slideActual + 1)}
+              disabled={slideActual === totalSlides - 1}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 hover:bg-black/70 disabled:opacity-30 disabled:cursor-not-allowed text-white p-2 transition-colors"
+              aria-label="Diapositiva siguiente"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+
+            {/* Slide counter */}
+            <div className="flex items-center justify-center gap-2 mt-3">
+              <span className="text-sm text-muted-foreground">
+                {slideActual + 1} / {totalSlides}
+              </span>
+            </div>
           </div>
         </>
       )}
