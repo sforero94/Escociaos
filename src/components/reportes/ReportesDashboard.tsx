@@ -35,52 +35,35 @@ export function ReportesDashboard() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-foreground">Reportes</h1>
-        <p className="text-gray-500 mt-1">Genera y consulta reportes semanales de la operación</p>
-      </div>
-
-      {/* Acción principal */}
-      <div
-        onClick={() => navigate('/reportes/generar')}
-        className="mb-8 bg-gradient-to-r from-primary to-primary-dark rounded-2xl p-8 text-white cursor-pointer hover:shadow-xl transition-all group"
-      >
-        <div className="flex items-center gap-6">
-          <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
-            <Plus className="w-8 h-8" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold">Generar Reporte Semanal</h2>
-            <p className="text-white/80 mt-1">
-              Crea un reporte PDF con personal, jornales, aplicaciones, monitoreo y más
-            </p>
-          </div>
+      {/* Header + actions */}
+      <div className="flex items-start justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Reportes</h1>
+          <p className="text-gray-500 mt-1">Genera y consulta reportes semanales de la operación</p>
         </div>
-      </div>
-
-      {/* Generación rápida */}
-      <div className="mb-8 flex items-center gap-4 p-5 bg-background border border-primary/20 rounded-2xl">
-        <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center shrink-0">
-          <Zap className="w-5 h-5 text-primary" />
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleGenerarRapido}
+            disabled={generandoRapido}
+            className="border-primary text-primary hover:bg-primary hover:text-white"
+          >
+            {generandoRapido ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generando...</>
+            ) : (
+              <><Zap className="w-4 h-4 mr-2" />Generación Rápida</>
+            )}
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => navigate('/reportes/generar')}
+            className="bg-primary text-white hover:bg-primary/90"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Nuevo Reporte
+          </Button>
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-foreground">Generación Rápida</p>
-          <p className="text-xs text-gray-500">Sin wizard — genera el reporte de la semana anterior automáticamente</p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleGenerarRapido}
-          disabled={generandoRapido}
-          className="border-primary text-primary hover:bg-primary hover:text-white shrink-0"
-        >
-          {generandoRapido ? (
-            <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generando...</>
-          ) : (
-            <><Zap className="w-4 h-4 mr-2" />Generar</>
-          )}
-        </Button>
       </div>
 
       {/* Historial */}

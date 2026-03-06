@@ -337,8 +337,7 @@ export async function fetchHistorialReportes(): Promise<ReporteSemanalMetadata[]
       url_storage,
       html_storage,
       generado_automaticamente,
-      created_at,
-      usuarios(nombre)
+      created_at
     `)
     .order('created_at', { ascending: false })
     .limit(20);
@@ -347,9 +346,26 @@ export async function fetchHistorialReportes(): Promise<ReporteSemanalMetadata[]
     throw new Error(`Error al cargar historial: ${error.message}`);
   }
 
-  return (data || []).map((r: any) => ({
+  const reportes = data || [];
+  const userIds = [...new Set(reportes.map((r: any) => r.generado_por).filter(Boolean))];
+
+  let userNameMap: Record<string, string> = {};
+  if (userIds.length > 0) {
+    const { data: usuarios } = await supabase
+      .from('usuarios')
+      .select('id, nombre_completo')
+      .in('id', userIds);
+
+    if (usuarios) {
+      userNameMap = Object.fromEntries(
+        usuarios.map((u: any) => [u.id, u.nombre_completo])
+      );
+    }
+  }
+
+  return reportes.map((r: any) => ({
     ...r,
-    generado_por_nombre: r.usuarios?.nombre || 'Sistema',
+    generado_por_nombre: userNameMap[r.generado_por] || 'Sistema',
   }));
 }
 

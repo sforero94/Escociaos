@@ -270,7 +270,7 @@ PostgreSQL hosted on Supabase with 32+ tables, 7+ custom ENUM types, Row-Level S
 - **Inventory**: `movimientos_inventario`, `compras`, `compras_productos`, `verificaciones_inventario`, `verificaciones_detalle`
 - **Monitoring**: `monitoreos` (denormalized: one row per pest observation, includes `incidencia`, `lote_id`, FK to `plagas_enfermedades_catalogo`), `sublotes`, `plagas_enfermedades_catalogo`
 - **Labor**: `tareas`, `registros_trabajo`, `empleados_tareas`
-- **Finance**: `fin_gastos`, `fin_ingresos`, `fin_conceptos_gastos`, `fin_proveedores`, `fin_categorias_gastos`, `fin_categorias_ingresos`, `fin_medios_pago`, `fin_regiones`, `fin_negocios`, `fin_compradores`
+- **Finance**: `fin_gastos`, `fin_ingresos`, `fin_transacciones_ganado`, `fin_conceptos_gastos`, `fin_proveedores`, `fin_categorias_gastos`, `fin_categorias_ingresos`, `fin_medios_pago`, `fin_regiones`, `fin_negocios`, `fin_compradores`
 - **Production**: `produccion`, `reportes_semanales`
 - **Audit**: `audit_log`
 
@@ -289,7 +289,10 @@ The applications module has two distinct tracking layers — **do not confuse th
 
 ### Migrations
 
-Sequential SQL migrations live in `src/sql/migrations/` (001–022). See `src/sql/migrations/README_MIGRATION.md` for instructions on running them.
+Sequential SQL migrations live in `src/sql/migrations/` (001–024). See `src/sql/migrations/README_MIGRATION.md` for instructions on running them.
+
+- **023**: `create_fin_transacciones_ganado` — cattle buy/sell transactions table with RLS
+- **024**: `alter_fin_ingresos_add_columns` — adds `cantidad`, `precio_unitario`, `cosecha`, `alianza`, `cliente`, `finca` to `fin_ingresos`
 
 > **Note**: There are two files with the `019_` prefix (`019_auto_reporte_semanal.sql` and `019_storage_policies_reportes.sql`) due to a naming conflict. Check which have been applied before creating new migrations.
 
@@ -413,6 +416,9 @@ npm run lint
 - Several triggers auto-sync data between tables (e.g., applications ↔ tasks, purchases ↔ expenses)
 - Modifying table schemas may break triggers — check `src/sql/migrations/` for trigger definitions
 - See `src/sql/migrations/README_APLICACIONES_LABORES_SYNC.md` for the sync architecture
+
+### GastosDetalleDialog (`src/components/finanzas/dashboard/components/GastosDetalleDialog.tsx`)
+Uses `createPortal` + manual scroll lock instead of Radix `Dialog`. This is intentional — Radix Dialog's default `grid` layout and class merging via `cn()` conflict with the flex-based scrollable body pattern needed here. Do not refactor to use Radix Dialog.
 
 ---
 

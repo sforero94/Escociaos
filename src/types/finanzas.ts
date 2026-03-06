@@ -126,6 +126,12 @@ export interface Ingreso {
   medio_pago_id: string;
   observaciones?: string;
   url_factura?: string;
+  cantidad?: number;
+  precio_unitario?: number;
+  cosecha?: string;
+  alianza?: string;
+  cliente?: string;
+  finca?: string;
   created_at: string;
   updated_at: string;
   // Relations
@@ -242,3 +248,67 @@ export interface ExportOptions {
   periodo: string;
   incluir_comparativo: boolean;
 }
+
+// Dashboard types
+export type DashboardTab = 'general' | 'aguacate' | 'hato' | 'ganado' | 'caballos' | 'agricola';
+
+export type DashboardPeriodo = 'mes_actual' | 'trimestre' | 'ytd' | 'ano_anterior' | 'rango_personalizado';
+
+export interface KPIConVariacion {
+  valor: number;
+  variacion_porcentaje: number;
+  periodo_label: string;
+}
+
+export interface PivotRow {
+  negocio: string;
+  negocio_id: string;
+  ytd_actual: number;
+  ytd_anterior: number;
+  total_anterior: number;
+  total_n2: number;
+  categorias?: PivotRow[];
+}
+
+export interface DatoTrimestral {
+  trimestre: string;
+  valor: number;
+}
+
+export interface DatoTrimestralMultiSerie {
+  trimestre: string;
+  [negocio: string]: number | string;
+}
+
+export interface TransaccionGanado {
+  id: string;
+  fecha: string;
+  tipo: 'compra' | 'venta';
+  finca?: string;
+  cliente_proveedor?: string;
+  cantidad_cabezas: number;
+  kilos_pagados?: number;
+  precio_kilo?: number;
+  valor_total: number;
+  observaciones?: string;
+  created_at: string;
+  updated_at: string;
+  created_by?: string;
+}
+
+export interface ColumnDef {
+  key: string;
+  label: string;
+  sortable?: boolean;
+  format?: 'currency' | 'number' | 'date' | 'text';
+}
+
+export interface NegocioDashboardConfig {
+  slug: string;
+  nombre: string;
+  negocio_nombre: string;
+  ingresos_columns: ColumnDef[];
+  donut_label: string;
+}
+
+export type GanadoChartMode = 'dinero' | 'kilos';

@@ -195,14 +195,12 @@ export function formatPercentage(value: number, decimals: number = 1): string {
  * @example
  * formatCompact(1500) // "1.5K"
  * formatCompact(2500000) // "2.5M"
- * formatCompact(1500000000) // "1.5B"
+ * formatCompact(1500000000) // "1,500.0M"
  */
 export function formatCompact(value: number): string {
-  if (value >= 1_000_000_000) {
-    return `${(value / 1_000_000_000).toFixed(1)}B`;
-  }
   if (value >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(1)}M`;
+    const millions = value / 1_000_000;
+    return `${millions >= 1000 ? new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(millions) : millions.toFixed(1)}M`;
   }
   if (value >= 1_000) {
     return `${(value / 1_000).toFixed(1)}K`;

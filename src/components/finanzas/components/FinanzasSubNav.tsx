@@ -54,7 +54,7 @@ export function FinanzasSubNav() {
 
   const isActive = (path: string) => {
     if (path === '/finanzas') {
-      return location.pathname === '/finanzas';
+      return location.pathname === '/finanzas' || location.pathname.startsWith('/finanzas/dashboard');
     }
     return location.pathname.startsWith(path);
   };

@@ -116,6 +116,11 @@ function LayoutRoutes() {
         {/* Finanzas */}
         <Route path="finanzas">
           <Route index element={<FinanzasDashboard />} />
+          <Route path="dashboard/aguacate" element={<FinanzasDashboard tab="aguacate" />} />
+          <Route path="dashboard/hato" element={<FinanzasDashboard tab="hato" />} />
+          <Route path="dashboard/ganado" element={<FinanzasDashboard tab="ganado" />} />
+          <Route path="dashboard/caballos" element={<FinanzasDashboard tab="caballos" />} />
+          <Route path="dashboard/agricola" element={<FinanzasDashboard tab="agricola" />} />
           <Route path="gastos" element={<GastosView />} />
           <Route path="ingresos" element={<IngresosView />} />
           <Route path="reportes" element={<ReportesView />} />
