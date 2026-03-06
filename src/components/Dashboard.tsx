@@ -549,11 +549,13 @@ function LaboresCard({ onClick }: { onClick: () => void }) {
       const fechaLunes = lunes.toISOString().split('T')[0];
       const fechaHoy   = hoy.toISOString().split('T')[0];
 
-      // Query 1: weekly registros → nested join to get tipo_tarea nombre
+      // Weekly registros → nested join to get tipo_tarea nombre + worker IDs
       const { data: registrosSemana, error: errorSemana } = await supabase
         .from('registros_trabajo')
         .select(`
           fraccion_jornal,
+          empleado_id,
+          contratista_id,
           tareas!inner(
             tipo_tarea_id,
             tipos_tareas(nombre)
@@ -564,27 +566,24 @@ function LaboresCard({ onClick }: { onClick: () => void }) {
 
       if (errorSemana) throw errorSemana;
 
-      // Query 2: active employees + contractors count
-      const [empleadosResult, contratistasResult] = await Promise.all([
-        supabase.from('empleados').select('id', { count: 'exact', head: true }).eq('estado', 'Activo'),
-        supabase.from('contratistas').select('id', { count: 'exact', head: true }).eq('estado', 'Activo'),
-      ]);
-
-      // Aggregate weekly data by activity type
+      // Aggregate weekly data by activity type + count unique workers
       const actividadMap = new Map<string, number>();
+      const trabajadoresUnicos = new Set<string>();
       let jornalesSemana = 0;
       (registrosSemana || []).forEach((r: any) => {
         const nombre: string = r.tareas?.tipos_tareas?.nombre || 'Sin tipo';
         const jornal = Number(r.fraccion_jornal) || 0;
         actividadMap.set(nombre, (actividadMap.get(nombre) || 0) + jornal);
         jornalesSemana += jornal;
+        if (r.empleado_id) trabajadoresUnicos.add(`e_${r.empleado_id}`);
+        if (r.contratista_id) trabajadoresUnicos.add(`c_${r.contratista_id}`);
       });
 
       const actividadesSemana: LaboresActividadSemana[] = Array.from(actividadMap.entries())
         .map(([actividad, jornales]) => ({ actividad, jornales }))
         .sort((a, b) => b.jornales - a.jornales);
 
-      const personalActivo = (empleadosResult.count || 0) + (contratistasResult.count || 0);
+      const personalActivo = trabajadoresUnicos.size;
 
       setStats({
         actividadesSemana,
@@ -710,7 +709,7 @@ function LaboresCard({ onClick }: { onClick: () => void }) {
           ) : (
             <>
               <p className="text-xs text-brand-brown/60 leading-tight mb-0.5">
-                Personal activo<br />a la fecha
+                Personal activo<br />esta semana
               </p>
               <p className="text-lg font-semibold text-foreground">
                 {stats?.personalActivo ?? 0}
