@@ -22,6 +22,7 @@ import {
   X
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { parsearFechaFlexible } from '../../../utils/fechas';
 import type { Negocio, Region, CategoriaGasto, ConceptoGasto, Proveedor, MedioPago } from '../../../types/finanzas';
 
 interface CargaMasivaGastosProps {
@@ -243,42 +244,9 @@ export function CargaMasivaGastos({
     }
   };
 
-  // Helper function to convert Excel serial number to date
-  const excelSerialToDate = (serial: number): string => {
-    // Excel dates are stored as days since 1900-01-01 (with a known bug for 1900 being a leap year)
-    const excelEpoch = new Date(1899, 11, 30); // December 30, 1899
-    const date = new Date(excelEpoch.getTime() + serial * 86400000);
-
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-
-    return `${year}-${month}-${day}`;
-  };
-
-  // Helper function to parse date from Excel
-  const parseExcelDate = (value: any): string | null => {
-    if (!value) return null;
-
-    // If it's already a string in YYYY-MM-DD format, return it
-    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-      return value;
-    }
-
-    // If it's a number (Excel serial date), convert it
-    if (typeof value === 'number') {
-      return excelSerialToDate(value);
-    }
-
-    // Try to parse as date object
-    if (value instanceof Date) {
-      const year = value.getFullYear();
-      const month = String(value.getMonth() + 1).padStart(2, '0');
-      const day = String(value.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    }
-
-    return null;
+  // Helper function to parse date from Excel — supports multiple formats
+  const parseExcelDate = (value: unknown): string | null => {
+    return parsearFechaFlexible(value);
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -815,7 +783,7 @@ export function CargaMasivaGastos({
             <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
               <li>Los nombres de <strong>Negocio, Región, Categoría y Medio de Pago</strong> deben coincidir exactamente con los del catálogo</li>
               <li><strong>Conceptos y Proveedores</strong> se crearán automáticamente si no existen</li>
-              <li>Las fechas deben estar en formato YYYY-MM-DD (ej: 2025-01-15)</li>
+              <li>Las fechas se aceptan en varios formatos: YYYY-MM-DD, DD/MM/YYYY, MM/DD/YYYY, o fecha de Excel</li>
               <li>Los valores deben ser numéricos sin formato (ej: 50000, no $50.000)</li>
               <li>El campo Proveedor es opcional, los demás son obligatorios</li>
               <li>El Estado puede ser "Pendiente" o "Confirmado"</li>

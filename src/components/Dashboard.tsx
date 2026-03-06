@@ -520,7 +520,7 @@ interface LaboresActividadSemana {
 
 interface LaboresStats {
   actividadesSemana: LaboresActividadSemana[];
-  jornaletYtd: number;
+  jornalesSemana: number;
   personalActivo: number;
 }
 
@@ -549,9 +549,6 @@ function LaboresCard({ onClick }: { onClick: () => void }) {
       const fechaLunes = lunes.toISOString().split('T')[0];
       const fechaHoy   = hoy.toISOString().split('T')[0];
 
-      // YTD start
-      const inicioAnio = `${hoy.getFullYear()}-01-01`;
-
       // Query 1: weekly registros → nested join to get tipo_tarea nombre
       const { data: registrosSemana, error: errorSemana } = await supabase
         .from('registros_trabajo')
@@ -567,47 +564,35 @@ function LaboresCard({ onClick }: { onClick: () => void }) {
 
       if (errorSemana) throw errorSemana;
 
-      // Query 2: YTD totals + unique workers
-      const { data: registrosYtd, error: errorYtd } = await supabase
-        .from('registros_trabajo')
-        .select('fraccion_jornal, empleado_id, contratista_id')
-        .gte('fecha_trabajo', inicioAnio)
-        .lte('fecha_trabajo', fechaHoy);
-
-      if (errorYtd) throw errorYtd;
+      // Query 2: active employees + contractors count
+      const [empleadosResult, contratistasResult] = await Promise.all([
+        supabase.from('empleados').select('id', { count: 'exact', head: true }).eq('estado', 'Activo'),
+        supabase.from('contratistas').select('id', { count: 'exact', head: true }).eq('estado', 'Activo'),
+      ]);
 
       // Aggregate weekly data by activity type
       const actividadMap = new Map<string, number>();
+      let jornalesSemana = 0;
       (registrosSemana || []).forEach((r: any) => {
         const nombre: string = r.tareas?.tipos_tareas?.nombre || 'Sin tipo';
         const jornal = Number(r.fraccion_jornal) || 0;
         actividadMap.set(nombre, (actividadMap.get(nombre) || 0) + jornal);
+        jornalesSemana += jornal;
       });
 
       const actividadesSemana: LaboresActividadSemana[] = Array.from(actividadMap.entries())
         .map(([actividad, jornales]) => ({ actividad, jornales }))
         .sort((a, b) => b.jornales - a.jornales);
 
-      // YTD aggregations
-      const ytdRegistros = registrosYtd || [];
-      const jornaletYtd = ytdRegistros.reduce(
-        (sum: number, r: any) => sum + (Number(r.fraccion_jornal) || 0),
-        0
-      );
-
-      const trabajadoresUnicos = new Set<string>();
-      ytdRegistros.forEach((r: any) => {
-        if (r.empleado_id)    trabajadoresUnicos.add(`e_${r.empleado_id}`);
-        if (r.contratista_id) trabajadoresUnicos.add(`c_${r.contratista_id}`);
-      });
+      const personalActivo = (empleadosResult.count || 0) + (contratistasResult.count || 0);
 
       setStats({
         actividadesSemana,
-        jornaletYtd: Math.round(jornaletYtd * 100) / 100,
-        personalActivo: trabajadoresUnicos.size,
+        jornalesSemana: Math.round(jornalesSemana * 100) / 100,
+        personalActivo,
       });
     } catch {
-      setStats({ actividadesSemana: [], jornaletYtd: 0, personalActivo: 0 });
+      setStats({ actividadesSemana: [], jornalesSemana: 0, personalActivo: 0 });
     } finally {
       setIsLoading(false);
     }
@@ -707,10 +692,10 @@ function LaboresCard({ onClick }: { onClick: () => void }) {
           ) : (
             <>
               <p className="text-xs text-brand-brown/60 leading-tight mb-0.5">
-                Jornales totales<br />a la fecha
+                Jornales totales<br />esta semana
               </p>
               <p className="text-lg font-semibold text-foreground">
-                {formatNumber(stats?.jornaletYtd ?? 0)}
+                {formatNumber(stats?.jornalesSemana ?? 0)}
               </p>
             </>
           )}

@@ -6,6 +6,7 @@
 import Papa from 'papaparse';
 import { CSVRowRaw, ValidationResult, Monitoreo } from '../types/monitoreo';
 import { calcularIncidencia, clasificarGravedad } from './calculosMonitoreo';
+import { parsearFechaFlexible } from './fechas';
 
 // Mapeo de columnas del CSV - maneja múltiples variantes de nombres
 function obtenerValorColumna(row: any, posiblesNombres: string[]): string {
@@ -179,17 +180,10 @@ export function validarEstructuraCSV(data: CSVRowRaw[]): ValidationResult {
 }
 
 function parseFecha(fechaStr: string): Date | null {
-  if (!fechaStr) return null;
-  
-  const parts = fechaStr.split('/');
-  if (parts.length === 3) {
-    const day = parseInt(parts[0]);
-    const month = parseInt(parts[1]) - 1;
-    const year = parseInt(parts[2]);
-    return new Date(year, month, day);
-  }
-  
-  return null;
+  const iso = parsearFechaFlexible(fechaStr);
+  if (!iso) return null;
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d);
 }
 
 function parseNumero(str: string): number {

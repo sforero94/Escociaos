@@ -39,6 +39,7 @@ import { Alert, AlertDescription } from '../ui/alert';
 import { Badge } from '../ui/badge';
 import { Switch } from '../ui/switch';
 import Papa from 'papaparse';
+import { parsearFechaFlexible } from '../../utils/fechas';
 import {
   UserPlus,
   Upload,
@@ -363,11 +364,17 @@ const Personal: React.FC = () => {
             const tipo_contrato = cleanValue(row['Tipo de Contrato'] || row.tipo_contrato);
             if (tipo_contrato) empleado.tipo_contrato = tipo_contrato;
 
-            const fecha_inicio = cleanValue(row['Fecha Inicio'] || row.fecha_inicio_contrato);
-            if (fecha_inicio) empleado.fecha_inicio_contrato = fecha_inicio;
+            const fecha_inicio_raw = cleanValue(row['Fecha Inicio'] || row.fecha_inicio_contrato);
+            if (fecha_inicio_raw) {
+              const fecha_inicio = parsearFechaFlexible(fecha_inicio_raw);
+              if (fecha_inicio) empleado.fecha_inicio_contrato = fecha_inicio;
+            }
 
-            const fecha_fin = cleanValue(row['Fecha Fin'] || row.fecha_fin_contrato);
-            if (fecha_fin) empleado.fecha_fin_contrato = fecha_fin;
+            const fecha_fin_raw = cleanValue(row['Fecha Fin'] || row.fecha_fin_contrato);
+            if (fecha_fin_raw) {
+              const fecha_fin = parsearFechaFlexible(fecha_fin_raw);
+              if (fecha_fin) empleado.fecha_fin_contrato = fecha_fin;
+            }
 
             const horas = parseNumber(row['Horas Semanales'] || row.horas_semanales);
             if (horas !== undefined) empleado.horas_semanales = horas;

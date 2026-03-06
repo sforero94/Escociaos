@@ -33,7 +33,7 @@ export interface DatosPersonal {
   retiros: number;              // Retiros en la semana (manual)
   detalleFallas: DetalleFallaPermiso[];    // Detalle de fallas (manual)
   detallePermisos: DetalleFallaPermiso[];  // Detalle de permisos (manual)
-  jornalesPosibles: number;     // Días hábiles × total trabajadores
+  jornalesPosibles: number;     // 5.5 días hábiles (L-V + sáb medio) × total trabajadores
   jornalesTrabajados: number;   // Total jornales registrados
   eficienciaOperativa: number;  // % = jornalesTrabajados / jornalesPosibles × 100
 }

@@ -1571,8 +1571,8 @@ export async function fetchDatosReporteSemanal(
     temasAdicionales,
   } = params;
 
-  // Days in week = 5 working days (Mon–Fri) by default
-  const diasHabiles = 5;
+  // Days in week = 5.5 (Mon–Fri full + Saturday half day)
+  const diasHabiles = 5.5;
 
   // Execute all queries in parallel
   const [

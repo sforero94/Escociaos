@@ -60,6 +60,9 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
     }
   }, [open]);
 
+  // Virtual "Sin lote" placeholder for tasks without lotes
+  const SIN_LOTE: Lote = { id: '__sin_lote__', nombre: 'Sin lote' } as Lote;
+
   const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, 3));
   const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1));
 
@@ -118,9 +121,10 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
     }
 
     // Get lotes for this task - prioritize lote_ids over lotes array
+    // Use SIN_LOTE placeholder for tasks without lotes
     const tareaLotes = (tarea.lote_ids && tarea.lote_ids.length > 0)
       ? tarea.lote_ids.map(id => lotes.find(l => l.id === id)).filter(Boolean)
-      : (tarea.lotes && tarea.lotes.length > 0 ? tarea.lotes : []);
+      : (tarea.lotes && tarea.lotes.length > 0 ? tarea.lotes : [SIN_LOTE]);
 
     setLoading(true);
 
@@ -135,7 +139,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
             if (parseFloat(fraccion) > 0) {
               const registro: any = {
                 tarea_id: tarea.id,
-                lote_id: lote.id,
+                lote_id: lote.id === '__sin_lote__' ? null : lote.id,
                 fecha_trabajo: fechaTrabajo,
                 fraccion_jornal: fraccion,
                 observaciones: observaciones[trabajador.data.id]?.[lote.id] || null,
@@ -167,7 +171,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
       // Check for duplicate records before inserting
       const empleadoIds = registrosData.filter(r => r.empleado_id).map(r => r.empleado_id);
       const contratistaIds = registrosData.filter(r => r.contratista_id).map(r => r.contratista_id);
-      const loteIds = registrosData.map(r => r.lote_id);
+      const loteIds = registrosData.map(r => r.lote_id).filter(Boolean);
 
       // Build OR conditions only for non-empty arrays
       const orConditions: string[] = [];
@@ -181,14 +185,20 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
       // Only check for duplicates if we have workers to check
       let existingRecords: any[] = [];
       if (orConditions.length > 0) {
-        const { data, error: checkError } = await getSupabase()
+        let query = getSupabase()
           .from('registros_trabajo')
           .select('empleado_id, contratista_id, lote_id, empleados(nombre), contratistas(nombre)')
           .eq('tarea_id', tarea.id)
           .eq('fecha_trabajo', fechaTrabajo)
-          .or(orConditions.join(','))
-          .in('lote_id', loteIds);
+          .or(orConditions.join(','));
 
+        if (loteIds.length > 0) {
+          query = query.in('lote_id', loteIds);
+        } else {
+          query = query.is('lote_id', null);
+        }
+
+        const { data, error: checkError } = await query;
         if (checkError) throw checkError;
         existingRecords = data || [];
       }
@@ -250,7 +260,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
   // Get task lots for Step 3 work matrix
   const tareaLotes = (tarea && tarea.lote_ids && tarea.lote_ids.length > 0)
     ? tarea.lote_ids.map((id: string) => lotes.find((l: Lote) => l.id === id)).filter((l: Lote | undefined): l is Lote => l !== undefined)
-    : (tarea?.lotes && tarea.lotes.length > 0 ? tarea.lotes : []);
+    : (tarea?.lotes && tarea.lotes.length > 0 ? tarea.lotes : [SIN_LOTE]);
 
   const footerButtons = (
     <>
@@ -408,10 +418,12 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
                   <span className="text-2xl">📊</span>
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                  Asignar Trabajo por Lote
+                  Asignar Trabajo{tareaLotes.length > 0 && tareaLotes[0].id !== '__sin_lote__' ? ' por Lote' : ''}
                 </h3>
                 <p className="text-gray-600">
-                  Distribuya las fracciones de jornal entre trabajadores y lotes
+                  {tareaLotes.length > 0 && tareaLotes[0].id !== '__sin_lote__'
+                    ? 'Distribuya las fracciones de jornal entre trabajadores y lotes'
+                    : 'Asigne las fracciones de jornal para cada trabajador'}
                 </p>
               </div>
 

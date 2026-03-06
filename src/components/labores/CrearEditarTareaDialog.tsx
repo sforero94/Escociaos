@@ -382,7 +382,7 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
                 )}
               </div>
 
-              {formData.lote_ids.length > 0 && (
+              {formData.lote_ids.length > 0 ? (
                 <div className="bg-white border-t pt-2 mt-2">
                   <Label className="text-xs text-gray-600">
                     Lotes seleccionados ({formData.lote_ids.length})
@@ -408,6 +408,10 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
                     })}
                   </div>
                 </div>
+              ) : (
+                <p className="text-xs text-gray-500 mt-1">
+                  Sin lote — esta tarea no estará asociada a ningún lote
+                </p>
               )}
             </div>
           </div>

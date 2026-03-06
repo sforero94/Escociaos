@@ -146,6 +146,86 @@ export function esFechaValida(fecha: Date | string | null | undefined): boolean 
 }
 
 /**
+ * Parsea una fecha en múltiples formatos comunes y retorna yyyy-mm-dd.
+ * Formatos soportados: dd/mm/yyyy, yyyy-mm-dd, mm/dd/yyyy, dd-mm-yyyy,
+ * dd.mm.yyyy, Excel serial numbers, Date objects.
+ * Cuando es ambiguo (ej: 01/02/2025), se asume dd/mm/yyyy (convención local).
+ * @param value - String, number (Excel serial), o Date
+ * @returns String yyyy-mm-dd o null si no se puede parsear
+ */
+export function parsearFechaFlexible(value: unknown): string | null {
+  if (!value) return null;
+
+  // Date object
+  if (value instanceof Date) {
+    if (isNaN(value.getTime())) return null;
+    const d = String(value.getDate()).padStart(2, '0');
+    const m = String(value.getMonth() + 1).padStart(2, '0');
+    return `${value.getFullYear()}-${m}-${d}`;
+  }
+
+  // Excel serial number
+  if (typeof value === 'number') {
+    const excelEpoch = new Date(1899, 11, 30);
+    const date = new Date(excelEpoch.getTime() + value * 86400000);
+    if (isNaN(date.getTime())) return null;
+    const d = String(date.getDate()).padStart(2, '0');
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    return `${date.getFullYear()}-${m}-${d}`;
+  }
+
+  if (typeof value !== 'string') return null;
+
+  const str = value.trim();
+  if (!str) return null;
+
+  // yyyy-mm-dd (ISO)
+  if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(str)) {
+    const [y, m, d] = str.split(/[-/]/).map(Number);
+    return validarYFormatear(y, m, d);
+  }
+
+  // dd/mm/yyyy, dd-mm-yyyy, dd.mm.yyyy  OR  mm/dd/yyyy, mm-dd-yyyy
+  const match = str.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);
+  if (match) {
+    const a = parseInt(match[1], 10);
+    const b = parseInt(match[2], 10);
+    const year = parseInt(match[3], 10);
+
+    // Si a > 12, solo puede ser día → dd/mm/yyyy
+    if (a > 12 && b <= 12) {
+      return validarYFormatear(year, b, a);
+    }
+    // Si b > 12, solo puede ser día → mm/dd/yyyy
+    if (b > 12 && a <= 12) {
+      return validarYFormatear(year, a, b);
+    }
+    // Ambiguo: asumir dd/mm/yyyy (convención local colombiana)
+    return validarYFormatear(year, b, a);
+  }
+
+  // Último intento: dejar que Date.parse lo intente
+  const fallback = new Date(str);
+  if (!isNaN(fallback.getTime())) {
+    const d = String(fallback.getDate()).padStart(2, '0');
+    const m = String(fallback.getMonth() + 1).padStart(2, '0');
+    return `${fallback.getFullYear()}-${m}-${d}`;
+  }
+
+  return null;
+}
+
+function validarYFormatear(year: number, month: number, day: number): string | null {
+  if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1900 || year > 2100) return null;
+  const date = new Date(year, month - 1, day);
+  // Verificar que la fecha sea válida (ej: 31/02 se convierte en 03/03)
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+  const d = String(day).padStart(2, '0');
+  const m = String(month).padStart(2, '0');
+  return `${year}-${m}-${d}`;
+}
+
+/**
  * Calcula una fecha X días antes o después de hoy
  * @param dias - Número de días (positivo = futuro, negativo = pasado)
  * @returns String en formato aaaa-mm-dd
