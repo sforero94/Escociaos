@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, Sprout, Package, Briefcase, TrendingUp, TrendingDown } from 'lucide-react';
 import { getSupabase } from '../utils/supabase/client';
-import { formatNumber } from '../utils/format';
+import { formatNumber, formatCompact } from '../utils/format';
 import { formatearFechaCorta } from '../utils/fechas';
 import { LineChart, Line, BarChart, Bar, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 import {
@@ -1001,68 +1001,240 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   };
 
   /**
-   * Cargar alertas del sistema
+   * Cargar alertas cross-module (Pulso de Gestión)
    */
   const loadAlertas = async (supabase: any) => {
     try {
-      const nuevasAlertas: Alerta[] = [];
+      const now = new Date();
 
-      // 1. Stock bajo
-      const { data: stockBajo, error: errorStock } = await supabase
-        .from('productos')
-        .select('nombre, cantidad_actual, stock_minimo, updated_at')
-        .eq('activo', true)
-        .order('updated_at', { ascending: false });
+      // --- Helper 1: Monitoreo — Pest Spikes (last 14 days) ---
+      const loadMonitoreoAlertas = async (): Promise<Alerta[]> => {
+        const hace14Dias = new Date(now);
+        hace14Dias.setDate(hace14Dias.getDate() - 14);
 
-      if (!errorStock && stockBajo) {
-        const productosBajos = stockBajo
-          .filter((p: any) => (p.cantidad_actual || 0) <= (p.stock_minimo || 0))
-          .slice(0, 5);
+        const { data, error } = await supabase
+          .from('monitoreos')
+          .select('incidencia, plagas_enfermedades_catalogo(nombre)')
+          .gte('fecha', hace14Dias.toISOString());
 
-        productosBajos.forEach((p: any) => {
-          nuevasAlertas.push({
-            id: `stock-${p.nombre}`,
-            tipo: 'stock',
-            mensaje: `⚠️ Stock bajo: ${p.nombre} - Solo ${formatNumber(p.cantidad_actual || 0)} unidades`,
-            fecha: p.updated_at || new Date().toISOString(),
-            prioridad: 'alta',
-          });
-        });
-      }
+        if (error || !data) return [];
 
-      // 2. Productos vencidos (basado en campo estado)
-      const { data: productosVencidos, error: errorVencidos } = await supabase
-        .from('productos')
-        .select('nombre, updated_at')
-        .eq('activo', true)
-        .eq('estado', 'Vencido')
-        .order('updated_at', { ascending: false })
-        .limit(2);
+        // Group by pest, calculate avg incidencia
+        const porPlaga: Record<string, { total: number; count: number }> = {};
+        for (const m of data) {
+          const nombre = m.plagas_enfermedades_catalogo?.nombre;
+          if (!nombre || m.incidencia == null) continue;
+          if (!porPlaga[nombre]) porPlaga[nombre] = { total: 0, count: 0 };
+          porPlaga[nombre].total += m.incidencia;
+          porPlaga[nombre].count += 1;
+        }
 
-      if (!errorVencidos && productosVencidos && productosVencidos.length > 0) {
-        productosVencidos.forEach((p: any) => {
-          nuevasAlertas.push({
-            id: `venc-${p.nombre}`,
+        const alertas: Alerta[] = [];
+        for (const [nombre, { total, count }] of Object.entries(porPlaga)) {
+          const avg = total / count;
+          if (avg > 10) {
+            alertas.push({
+              id: `monitoreo-${nombre}`,
+              tipo: 'monitoreo',
+              mensaje: `${nombre} con incidencia promedio del ${Math.round(avg)}% en últimas 2 semanas`,
+              fecha: now.toISOString(),
+              prioridad: avg > 20 ? 'alta' : 'media',
+            });
+          }
+        }
+        return alertas;
+      };
+
+      // --- Helper 2: Aplicaciones — Stuck Operations ---
+      const loadAplicacionesAlertas = async (): Promise<Alerta[]> => {
+        const { data, error } = await supabase
+          .from('aplicaciones')
+          .select('id, nombre, estado, created_at, fecha_inicio_planeada')
+          .in('estado', ['Calculada', 'En ejecución']);
+
+        if (error || !data) return [];
+
+        const alertas: Alerta[] = [];
+        for (const a of data) {
+          const ref = a.estado === 'Calculada' ? a.created_at : a.fecha_inicio_planeada;
+          if (!ref) continue;
+          const diasDesde = Math.floor((now.getTime() - new Date(ref).getTime()) / (1000 * 60 * 60 * 24));
+          const umbral = a.estado === 'Calculada' ? 7 : 14;
+          if (diasDesde > umbral) {
+            alertas.push({
+              id: `aplicacion-${a.id}`,
+              tipo: 'aplicacion',
+              mensaje: `'${a.nombre}' lleva ${diasDesde} días en ${a.estado === 'Calculada' ? 'estado Calculada' : 'ejecución'}`,
+              fecha: ref,
+              prioridad: 'media',
+            });
+          }
+        }
+        return alertas;
+      };
+
+      // --- Helper 3: Gastos — Expense Anomaly ---
+      const loadGastosAlertas = async (): Promise<Alerta[]> => {
+        const hace4Meses = new Date(now);
+        hace4Meses.setMonth(hace4Meses.getMonth() - 4);
+
+        const { data, error } = await supabase
+          .from('fin_gastos')
+          .select('monto, fecha, categoria_id, fin_categorias_gastos(nombre)')
+          .eq('estado', 'Confirmado')
+          .gte('fecha', hace4Meses.toISOString());
+
+        if (error || !data) return [];
+
+        const mesActual = now.getMonth();
+        const anioActual = now.getFullYear();
+
+        // Group by category and month
+        const porCategoria: Record<string, { nombre: string; meses: Record<string, number> }> = {};
+        for (const g of data) {
+          const catId = g.categoria_id;
+          if (!catId) continue;
+          const catNombre = g.fin_categorias_gastos?.nombre || 'Sin categoría';
+          if (!porCategoria[catId]) porCategoria[catId] = { nombre: catNombre, meses: {} };
+          const fecha = new Date(g.fecha);
+          const mesKey = `${fecha.getFullYear()}-${fecha.getMonth()}`;
+          porCategoria[catId].meses[mesKey] = (porCategoria[catId].meses[mesKey] || 0) + (g.monto || 0);
+        }
+
+        const mesActualKey = `${anioActual}-${mesActual}`;
+        const alertas: Alerta[] = [];
+
+        for (const [_catId, { nombre, meses }] of Object.entries(porCategoria)) {
+          const totalActual = meses[mesActualKey] || 0;
+          if (totalActual === 0) continue;
+
+          // 3-month rolling average (excluding current month)
+          const mesesAnteriores: number[] = [];
+          for (let i = 1; i <= 3; i++) {
+            const d = new Date(anioActual, mesActual - i);
+            const key = `${d.getFullYear()}-${d.getMonth()}`;
+            if (meses[key] !== undefined) mesesAnteriores.push(meses[key]);
+          }
+          if (mesesAnteriores.length === 0) continue;
+          const promedio = mesesAnteriores.reduce((s, v) => s + v, 0) / mesesAnteriores.length;
+          if (promedio === 0) continue;
+
+          const porcentajeArriba = ((totalActual - promedio) / promedio) * 100;
+          if (porcentajeArriba > 50) {
+            alertas.push({
+              id: `gasto-${nombre}`,
+              tipo: 'gasto',
+              mensaje: `Gastos en ${nombre} un ${Math.round(porcentajeArriba)}% arriba del promedio trimestral`,
+              fecha: now.toISOString(),
+              prioridad: 'media',
+            });
+          }
+        }
+        return alertas;
+      };
+
+      // --- Helper 4: Inventario — High-Value Expiring Stock ---
+      const loadVencimientoAlertas = async (): Promise<Alerta[]> => {
+        const en30Dias = new Date(now);
+        en30Dias.setDate(en30Dias.getDate() + 30);
+
+        const { data, error } = await supabase
+          .from('compras')
+          .select('cantidad, costo_unitario, fecha_vencimiento, producto_id, productos(nombre)')
+          .gte('fecha_vencimiento', now.toISOString())
+          .lte('fecha_vencimiento', en30Dias.toISOString());
+
+        if (error || !data) return [];
+
+        const alertas: Alerta[] = [];
+        for (const c of data) {
+          const valor = (c.cantidad || 0) * (c.costo_unitario || 0);
+          if (valor < 500000) continue;
+          const diasRestantes = Math.ceil((new Date(c.fecha_vencimiento).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          const nombre = c.productos?.nombre || 'Producto';
+          alertas.push({
+            id: `venc-${c.producto_id}-${c.fecha_vencimiento}`,
             tipo: 'vencimiento',
-            mensaje: `📅 Producto vencido: ${p.nombre}`,
-            fecha: p.updated_at,
+            mensaje: `${nombre} por $${formatCompact(valor)} vence en ${diasRestantes} días`,
+            fecha: c.fecha_vencimiento,
             prioridad: 'alta',
           });
-        });
-      }
+        }
+        return alertas;
+      };
 
-      // Ordenar por prioridad y fecha
+      // --- Helper 5: Labores — Workforce Gap ---
+      const loadLaboresAlertas = async (): Promise<Alerta[]> => {
+        // Only alert past Wednesday (day 3) to avoid false positives
+        if (now.getDay() < 3) return [];
+
+        const hace5Semanas = new Date(now);
+        hace5Semanas.setDate(hace5Semanas.getDate() - 35);
+
+        const { data, error } = await supabase
+          .from('registros_trabajo')
+          .select('fecha, fraccion_jornal')
+          .gte('fecha', hace5Semanas.toISOString());
+
+        if (error || !data) return [];
+
+        // Group by ISO week
+        const porSemana: Record<string, number> = {};
+        for (const r of data) {
+          const fecha = new Date(r.fecha);
+          // Week key: year-weekNumber
+          const startOfYear = new Date(fecha.getFullYear(), 0, 1);
+          const weekNum = Math.ceil(((fecha.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24) + startOfYear.getDay() + 1) / 7);
+          const key = `${fecha.getFullYear()}-W${weekNum}`;
+          porSemana[key] = (porSemana[key] || 0) + (r.fraccion_jornal || 0);
+        }
+
+        const semanas = Object.entries(porSemana).sort(([a], [b]) => a.localeCompare(b));
+        if (semanas.length < 2) return [];
+
+        const semanaActualKey = semanas[semanas.length - 1][0];
+        const totalActual = semanas[semanas.length - 1][1];
+
+        // 4-week average (excluding current)
+        const anteriores = semanas.slice(0, -1).slice(-4);
+        if (anteriores.length === 0) return [];
+        const promedio = anteriores.reduce((s, [, v]) => s + v, 0) / anteriores.length;
+        if (promedio === 0) return [];
+
+        const porcentajeAbajo = ((promedio - totalActual) / promedio) * 100;
+        if (porcentajeAbajo > 50) {
+          return [{
+            id: `labor-${semanaActualKey}`,
+            tipo: 'labor',
+            mensaje: `Jornales registrados esta semana un ${Math.round(porcentajeAbajo)}% por debajo del promedio`,
+            fecha: now.toISOString(),
+            prioridad: 'media',
+          }];
+        }
+        return [];
+      };
+
+      // Run all in parallel
+      const results = await Promise.all([
+        loadMonitoreoAlertas(),
+        loadAplicacionesAlertas(),
+        loadGastosAlertas(),
+        loadVencimientoAlertas(),
+        loadLaboresAlertas(),
+      ]);
+
+      const nuevasAlertas = results.flat();
+
+      // Sort by priority then date
       const alertasOrdenadas = nuevasAlertas
         .sort((a, b) => {
-          // Primero por prioridad
           if (a.prioridad === 'alta' && b.prioridad !== 'alta') return -1;
           if (a.prioridad !== 'alta' && b.prioridad === 'alta') return 1;
-          // Luego por fecha
           if (!a.fecha) return 1;
           if (!b.fecha) return -1;
           return new Date(b.fecha).getTime() - new Date(a.fecha).getTime();
         })
-        .slice(0, 5);
+        .slice(0, 7);
 
       setAlertas(alertasOrdenadas);
     } catch (error) {
@@ -1071,8 +1243,13 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   };
 
   const handleAlertClick = (alerta: Alerta) => {
-    if (alerta.tipo === 'stock' || alerta.tipo === 'vencimiento') {
-      navigate('/inventario');
+    switch (alerta.tipo) {
+      case 'monitoreo': navigate('/monitoreo'); break;
+      case 'aplicacion': navigate('/aplicaciones'); break;
+      case 'gasto': navigate('/finanzas/gastos'); break;
+      case 'stock':
+      case 'vencimiento': navigate('/inventario'); break;
+      case 'labor': navigate('/labores'); break;
     }
   };
 
@@ -1107,7 +1284,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
 
       {/* Alertas */}
       <AlertListContainer>
-        <AlertListHeader titulo="Alertas Recientes" count={alertas.length} />
+        <AlertListHeader titulo="Pulso de Gestión" count={alertas.length} />
         <AlertList alertas={alertas} onAlertClick={handleAlertClick} maxAlertas={5} />
       </AlertListContainer>
     </div>

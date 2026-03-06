@@ -1,4 +1,4 @@
-import { AlertTriangle, Calendar, Bug, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, Calendar, Bug, CheckCircle2, Beaker, DollarSign, Users } from 'lucide-react';
 import { formatRelativeTime } from '../../utils/format';
 
 /**
@@ -8,7 +8,7 @@ export interface Alerta {
   /** ID único de la alerta (opcional, útil para keys) */
   id?: string | number;
   /** Tipo de alerta que determina el icono */
-  tipo: 'stock' | 'vencimiento' | 'monitoreo';
+  tipo: 'stock' | 'vencimiento' | 'monitoreo' | 'aplicacion' | 'gasto' | 'labor';
   /** Mensaje descriptivo de la alerta */
   mensaje: string;
   /** Fecha de la alerta (Date o string ISO) */
@@ -93,10 +93,13 @@ export function AlertList({
 
   // Obtener icono según tipo de alerta
   const getTipoIcon = (tipo: Alerta['tipo'], className: string) => {
-    const icons = {
+    const icons: Record<Alerta['tipo'], React.ReactNode> = {
       stock: <AlertTriangle className={className} />,
       vencimiento: <Calendar className={className} />,
       monitoreo: <Bug className={className} />,
+      aplicacion: <Beaker className={className} />,
+      gasto: <DollarSign className={className} />,
+      labor: <Users className={className} />,
     };
     return icons[tipo];
   };

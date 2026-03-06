@@ -97,7 +97,7 @@ These are consumed in `src/utils/supabase/client.ts` via `import.meta.env`. The 
 │   │   ├── reportes/                     # Weekly report wizard & history
 │   │   ├── configuracion/                # System configuration (lots, users)
 │   │   ├── auth/                         # ProtectedRoute, RoleGuard
-│   │   ├── dashboard/                    # Dashboard sub-components (AlertList)
+│   │   ├── dashboard/                    # Dashboard sub-components (AlertList — "Pulso de Gestión" cross-module alerts)
 │   │   ├── shared/                       # Reusable components (dialogs, uploaders)
 │   │   ├── ui/                           # Radix UI wrappers (button, dialog, etc.)
 │   │   └── figma/                        # Image fallback component
