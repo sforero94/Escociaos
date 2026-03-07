@@ -520,7 +520,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                           </p>
                         ) : (
                           <p className="text-primary text-xs">
-                            G:{producto.dosis_grandes} M:{producto.dosis_medianos} P:{producto.dosis_pequenos} C:{producto.dosis_clonales} kg/árbol
+                            G:{producto.dosis_grandes} M:{producto.dosis_medianos} P:{producto.dosis_pequenos} C:{producto.dosis_clonales} {producto.producto_unidad === 'Litros' ? 'cc' : 'g'}/árbol
                           </p>
                         )}
                         <p className="text-xs text-brand-brown/70">
@@ -734,12 +734,14 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                       </div>
                     )}
 
-                    {/* Dosis - Fertilización */}
-                    {configuracion.tipo === 'fertilizacion' && (
+                    {/* Dosis - Fertilización (g para sólidos, cc para líquidos) */}
+                    {configuracion.tipo === 'fertilizacion' && (() => {
+                      const unidadDosis = producto.producto_unidad === 'Litros' ? 'cc' : 'g';
+                      return (
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         <div>
                           <label className="block text-xs text-brand-brown/70 mb-1">
-                            Grandes (kg)
+                            Grandes ({unidadDosis})
                           </label>
                           <input
                             type="number"
@@ -760,7 +762,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
 
                         <div>
                           <label className="block text-xs text-brand-brown/70 mb-1">
-                            Medianos (kg)
+                            Medianos ({unidadDosis})
                           </label>
                           <input
                             type="number"
@@ -781,7 +783,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
 
                         <div>
                           <label className="block text-xs text-brand-brown/70 mb-1">
-                            Pequeños (kg)
+                            Pequeños ({unidadDosis})
                           </label>
                           <input
                             type="number"
@@ -802,7 +804,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
 
                         <div>
                           <label className="block text-xs text-brand-brown/70 mb-1">
-                            Clonales (kg)
+                            Clonales ({unidadDosis})
                           </label>
                           <input
                             type="number"
@@ -821,7 +823,8 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                           />
                         </div>
                       </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 ))}
               </div>
@@ -928,7 +931,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                         <p className="text-primary">{formatearNumero(calculo.kilos_totales)} kg</p>
                       </div>
                       <div>
-                        <p className="text-brand-brown/70 text-xs mb-1">Bultos (25kg)</p>
+                        <p className="text-brand-brown/70 text-xs mb-1">Bultos (50kg)</p>
                         <p className="text-primary">{calculo.numero_bultos}</p>
                       </div>
                     </>

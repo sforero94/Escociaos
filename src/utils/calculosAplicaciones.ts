@@ -67,16 +67,27 @@ export function calcularFumigacion(
 }
 
 /**
+ * Tamaño estándar del bulto de mezcla de fertilización (en kg).
+ * Las mezclas siempre se preparan en bultos de este peso.
+ * Configurable para cubrir edge cases futuros.
+ */
+const TAMANO_BULTO_MEZCLA_KG = 50;
+
+/**
  * CÁLCULOS PARA FERTILIZACIÓN
  * Fórmulas según documento de diseño:
  * - Kilos por árbol según tamaño (Grande/Mediano/Clonal)
  * - Kilos totales por lote = Σ(árboles de cada tamaño × dosis correspondiente)
- * - Bultos necesarios = Kilos totales / presentacion_kg_l de cada producto
+ * - Bultos de mezcla = Kilos totales / TAMANO_BULTO_MEZCLA_KG (siempre 50kg)
+ *
+ * NOTA: Los bultos de mezcla (50kg) son distintos a las unidades comerciales
+ * de cada insumo (10, 25, 40, 50kg). La lista de compras usa la presentación
+ * comercial; aquí se calcula cuántos bultos de mezcla preparar.
  */
 export function calcularFertilizacion(
   lote: LoteSeleccionado,
   mezcla: Mezcla,
-  productosInfo?: Map<string, { presentacion_kg_l: number }> // 👈 NUEVO PARÁMETRO OPCIONAL
+  _productosInfo?: Map<string, { presentacion_kg_l: number }>
 ): CalculosPorLote {
   // Calcular kilos por cada tipo de árbol para cada producto
   let kilos_grandes_total = 0;
@@ -85,11 +96,17 @@ export function calcularFertilizacion(
   let kilos_clonales_total = 0;
 
   const productos = mezcla.productos.map(producto => {
+    // Dosis se ingresan en g (sólidos) o cc (líquidos) → convertir a kg/L (÷1000)
+    const dosis_grandes_kg = (producto.dosis_grandes || 0) / 1000;
+    const dosis_medianos_kg = (producto.dosis_medianos || 0) / 1000;
+    const dosis_pequenos_kg = (producto.dosis_pequenos || 0) / 1000;
+    const dosis_clonales_kg = (producto.dosis_clonales || 0) / 1000;
+
     // Calcular kilos por cada tipo de árbol
-    const kilos_grandes = lote.conteo_arboles.grandes * (producto.dosis_grandes || 0);
-    const kilos_medianos = lote.conteo_arboles.medianos * (producto.dosis_medianos || 0);
-    const kilos_pequenos = lote.conteo_arboles.pequenos * (producto.dosis_pequenos || 0);
-    const kilos_clonales = lote.conteo_arboles.clonales * (producto.dosis_clonales || 0);
+    const kilos_grandes = lote.conteo_arboles.grandes * dosis_grandes_kg;
+    const kilos_medianos = lote.conteo_arboles.medianos * dosis_medianos_kg;
+    const kilos_pequenos = lote.conteo_arboles.pequenos * dosis_pequenos_kg;
+    const kilos_clonales = lote.conteo_arboles.clonales * dosis_clonales_kg;
 
     // Acumular para totales
     kilos_grandes_total += kilos_grandes;
@@ -109,18 +126,10 @@ export function calcularFertilizacion(
   // Calcular total de kilos de todos los productos
   const kilos_totales = productos.reduce((sum, p) => sum + p.cantidad_necesaria, 0);
 
-  // ✅ SOLUCIÓN: Calcular bultos por producto usando su presentación real
-  const numero_bultos = productos.reduce((total, producto) => {
-    const info = productosInfo?.get(producto.producto_id);
-    const presentacion = info?.presentacion_kg_l || 25; // Fallback a 25kg si no hay info
-    const bultosProducto = Math.ceil(producto.cantidad_necesaria / presentacion);
-
-    if (productosInfo) {
-      console.log(`📦 Producto ${producto.producto_id}: ${producto.cantidad_necesaria} Kg ÷ ${presentacion} Kg/bulto = ${bultosProducto} bultos`);
-    }
-
-    return total + bultosProducto;
-  }, 0);
+  // Bultos de mezcla: siempre se preparan en bultos de TAMANO_BULTO_MEZCLA_KG (50kg)
+  // Redondeo a medios bultos (ej: 20, 20.5, 21)
+  const bultos_exactos = kilos_totales / TAMANO_BULTO_MEZCLA_KG;
+  const numero_bultos = Math.ceil(bultos_exactos * 2) / 2;
 
   return {
     lote_id: lote.lote_id,
