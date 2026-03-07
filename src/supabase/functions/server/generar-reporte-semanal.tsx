@@ -134,25 +134,19 @@ async function fetchHistoricoSemanas(inicioSemanaActual: string): Promise<string
   const encode = (s: string) => encodeURIComponent(s);
 
   try {
-    const monitoreoRes = await fetch(
-      `${supabaseUrl}/rest/v1/monitoreos?select=fecha_monitoreo,lote_id,plaga_enfermedad_id,incidencia,gravedad_texto,lote:lotes(nombre),plaga:plagas_enfermedades_catalogo(nombre)&fecha_monitoreo=gte.${encode(inicioHistoricoStr)}&fecha_monitoreo=lt.${encode(inicioSemanaActual)}&order=fecha_monitoreo.asc`,
-      { headers }
-    );
-
-    const aplicacionesRes = await fetch(
-      `${supabaseUrl}/rest/v1/aplicaciones?select=nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_fin_planeada,fecha_cierre&fecha_inicio_planeada=gte.${encode(inicioHistoricoStr)}&fecha_inicio_planeada=lt.${encode(inicioSemanaActual)}`,
-      { headers }
-    );
-
-    const ausenciaRes = await fetch(
-      `${supabaseUrl}/rest/v1/registros_trabajo?select=fecha_trabajo,fraccion_jornal&fecha_trabajo=gte.${encode(inicioHistoricoStr)}&fecha_trabajo=lt.${encode(inicioSemanaActual)}`,
-      { headers }
-    );
-
     const [monitoreos, aplicaciones, registros] = await Promise.all([
-      monitoreoRes.ok ? monitoreoRes.json() : [],
-      aplicacionesRes.ok ? aplicacionesRes.json() : [],
-      ausenciaRes.ok ? ausenciaRes.json() : [],
+      fetch(
+        `${supabaseUrl}/rest/v1/monitoreos?select=fecha_monitoreo,lote_id,plaga_enfermedad_id,incidencia,gravedad_texto,lote:lotes(nombre),plaga:plagas_enfermedades_catalogo(nombre)&fecha_monitoreo=gte.${encode(inicioHistoricoStr)}&fecha_monitoreo=lt.${encode(inicioSemanaActual)}&order=fecha_monitoreo.asc`,
+        { headers }
+      ).then(r => r.ok ? r.json() : []),
+      fetch(
+        `${supabaseUrl}/rest/v1/aplicaciones?select=nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_fin_planeada,fecha_cierre&fecha_inicio_planeada=gte.${encode(inicioHistoricoStr)}&fecha_inicio_planeada=lt.${encode(inicioSemanaActual)}`,
+        { headers }
+      ).then(r => r.ok ? r.json() : []),
+      fetch(
+        `${supabaseUrl}/rest/v1/registros_trabajo?select=fecha_trabajo,fraccion_jornal&fecha_trabajo=gte.${encode(inicioHistoricoStr)}&fecha_trabajo=lt.${encode(inicioSemanaActual)}`,
+        { headers }
+      ).then(r => r.ok ? r.json() : []),
     ]);
 
     const partes: string[] = [];
@@ -264,43 +258,52 @@ async function fetchResumenesNotion(): Promise<string> {
     const partes: string[] = [];
     partes.push('\n---\n\n## LLAMADAS CON PROPIETARIO — ULTIMAS 4 SEMANAS');
 
-    for (const page of pages) {
-      const dateRaw = page.properties?.Date?.date?.start || page.properties?.date?.date?.start || '';
-      const titleArr = page.properties?.Name?.title || page.properties?.name?.title || [];
-      const title = titleArr.map((t: any) => t.plain_text).join('') || 'Sin titulo';
+    const pageResults = await Promise.all(
+      pages.map(async (page: any) => {
+        const dateRaw = page.properties?.Date?.date?.start || page.properties?.date?.date?.start || '';
+        const titleArr = page.properties?.Name?.title || page.properties?.name?.title || [];
+        const title = titleArr.map((t: any) => t.plain_text).join('') || 'Sin titulo';
 
-      const blocksRes = await fetch(`https://api.notion.com/v1/blocks/${page.id}/children`, {
-        headers: notionHeaders,
-      });
-      if (!blocksRes.ok) continue;
+        const blocksRes = await fetch(`https://api.notion.com/v1/blocks/${page.id}/children`, {
+          headers: notionHeaders,
+        });
+        if (!blocksRes.ok) return null;
 
-      const blocksData = await blocksRes.json();
-      const blocks: any[] = blocksData.results || [];
+        const blocksData = await blocksRes.json();
+        const blocks: any[] = blocksData.results || [];
 
-      partes.push(`\n### ${dateRaw} — ${title}`);
+        const lines: string[] = [];
+        lines.push(`\n### ${dateRaw} — ${title}`);
 
-      const pendingItems: string[] = [];
-      const summaryLines: string[] = [];
+        const pendingItems: string[] = [];
+        const summaryLines: string[] = [];
 
-      for (const block of blocks) {
-        if (block.type === 'to_do') {
-          const text = block.to_do?.rich_text?.map((t: any) => t.plain_text).join('') || '';
-          const checked = block.to_do?.checked ?? false;
-          if (!checked && text) pendingItems.push(`- [ ] ${text}`);
-        } else if (['paragraph', 'bulleted_list_item', 'numbered_list_item', 'heading_2', 'heading_3'].includes(block.type)) {
-          const richText = block[block.type]?.rich_text || [];
-          const text = richText.map((t: any) => t.plain_text).join('').trim();
-          if (text) summaryLines.push(text);
+        for (const block of blocks) {
+          if (block.type === 'to_do') {
+            const text = block.to_do?.rich_text?.map((t: any) => t.plain_text).join('') || '';
+            const checked = block.to_do?.checked ?? false;
+            if (!checked && text) pendingItems.push(`- [ ] ${text}`);
+          } else if (['paragraph', 'bulleted_list_item', 'numbered_list_item', 'heading_2', 'heading_3'].includes(block.type)) {
+            const richText = block[block.type]?.rich_text || [];
+            const text = richText.map((t: any) => t.plain_text).join('').trim();
+            if (text) summaryLines.push(text);
+          }
         }
-      }
 
-      if (pendingItems.length > 0) {
-        partes.push('Compromisos pendientes:');
-        partes.push(...pendingItems);
-      }
-      if (summaryLines.length > 0) {
-        partes.push(`Temas discutidos: ${summaryLines.slice(0, 5).join(' / ')}`);
-      }
+        if (pendingItems.length > 0) {
+          lines.push('Compromisos pendientes:');
+          lines.push(...pendingItems);
+        }
+        if (summaryLines.length > 0) {
+          lines.push(`Temas discutidos: ${summaryLines.slice(0, 5).join(' / ')}`);
+        }
+
+        return lines.join('\n');
+      })
+    );
+
+    for (const result of pageResults) {
+      if (result) partes.push(result);
     }
 
     return partes.join('\n');
@@ -343,30 +346,27 @@ function formatearDatosParaPrompt(datos: any, historicoCtx = '', notionCtx = '')
   }
 
   if (datos.jornales) {
-    const { actividades, lotes, datos: matrizDatos, totalesPorActividad, totalesPorLote, totalGeneral } = datos.jornales;
+    const { actividades, totalesPorActividad, totalesPorLote, totalGeneral } = datos.jornales;
+
+    // Top 5 actividades y lotes por jornales para reducir prompt
+    const topActividades = actividades
+      .map((act: string) => ({ nombre: act, jornales: totalesPorActividad[act]?.jornales || 0 }))
+      .sort((a: any, b: any) => b.jornales - a.jornales)
+      .slice(0, 5);
+
+    const topLotes = Object.entries(totalesPorLote as Record<string, { jornales: number }>)
+      .map(([nombre, v]) => ({ nombre, jornales: v.jornales || 0 }))
+      .sort((a, b) => b.jornales - a.jornales)
+      .slice(0, 5);
 
     partes.push(`## DISTRIBUCION DE JORNALES
 Total general: ${totalGeneral.jornales.toFixed(2)} jornales ($${Math.round(totalGeneral.costo).toLocaleString('es-CO')} COP)
 
-### Matriz Actividades x Lotes (valores = jornales)
-Lotes: ${lotes.join(', ')}
-Actividades: ${actividades.join(', ')}
+### Top actividades por jornales
+${topActividades.map((a: any) => `  - ${a.nombre}: ${a.jornales.toFixed(2)}`).join('\n')}
 
-Datos de la matriz:`);
-
-    actividades.forEach((act: string) => {
-      const fila = lotes.map((lote: string) => {
-        const celda = matrizDatos[act]?.[lote];
-        return celda ? celda.jornales.toFixed(2) : '0';
-      });
-      const totalAct = totalesPorActividad[act]?.jornales || 0;
-      partes.push(`  ${act}: [${fila.join(', ')}] Total: ${totalAct.toFixed(2)}`);
-    });
-
-    const totalesLote = lotes.map((lote: string) =>
-      (totalesPorLote[lote]?.jornales || 0).toFixed(2)
-    );
-    partes.push(`  TOTALES POR LOTE: [${totalesLote.join(', ')}]`);
+### Top lotes por jornales
+${topLotes.map((l: any) => `  - ${l.nombre}: ${l.jornales.toFixed(2)}`).join('\n')}`);
   }
 
   if (datos.labores?.programadas?.length > 0) {
@@ -403,6 +403,7 @@ Datos de la matriz:`);
       const costoPorLitroKg = app.costoPorLitroKg || 0;
       const costoPorArbol = app.costoPorArbol || 0;
 
+      const numProductos = app.listaCompras?.length || 0;
       partes.push(`### ${app.nombre} (${app.tipo})
 - Proposito: ${app.proposito}
 - Blancos biologicos: ${app.blancosBiologicos?.join(', ') || 'N/A'}
@@ -410,15 +411,7 @@ Datos de la matriz:`);
 - Costo total (Pedido + Inventario): $${Math.round(costoTotal).toLocaleString('es-CO')} COP
 - Costo por litro/kg: ${costoPorLitroKg > 0 ? '$' + Math.round(costoPorLitroKg).toLocaleString('es-CO') : '—'}
 - Costo por arbol: ${costoPorArbol > 0 ? '$' + Math.round(costoPorArbol).toLocaleString('es-CO') : '—'}
-- Lista de compras:`);
-
-      if (app.listaCompras?.length > 0) {
-        app.listaCompras.forEach((item: any) => {
-          const costoItem = item.costoEstimado || 0;
-          const invDisplay = item.inventarioDisponible > 0 ? ` (Inv: ${item.inventarioDisponible})` : '';
-          partes.push(`  - ${item.productoNombre}: ${item.cantidadNecesaria} ${item.unidad}${invDisplay}${costoItem > 0 ? ' ~$' + Math.round(costoItem).toLocaleString('es-CO') : ''}`);
-        });
-      }
+- Productos: ${numProductos} items`);
     });
   }
 
@@ -470,15 +463,7 @@ ${fechaInfo}${mon.avisoFechaDesactualizada ? `\n${mon.avisoFechaDesactualizada}`
       });
     }
 
-    if (mon.detallePorLote && mon.detallePorLote.length > 0) {
-      partes.push(`### Detalle granular por sublote (monitoreo mas reciente)`);
-      mon.detallePorLote.forEach((lote: any) => {
-        partes.push(`  ${lote.loteNombre}:`);
-        (lote.sublotes || []).forEach((s: any) => {
-          partes.push(`    - ${s.subloteNombre} | ${s.plagaNombre}: ${s.incidencia}% (${s.gravedad}) [${s.arboresAfectados}/${s.arboresMonitoreados} arboles]`);
-        });
-      });
-    }
+    // Sublote-level detail omitted to reduce prompt size — resumenGlobal + vistasPorLote provide sufficient context
 
     if (mon.insights && mon.insights.length > 0) {
       partes.push(`### Alertas e insights automaticos`);
@@ -522,7 +507,7 @@ async function llamarLLM(datosFormateados: string, instruccionesAdicionales?: st
     throw new Error('OPENROUTER_API_KEY no esta configurada en las variables de entorno');
   }
 
-  const model = 'deepseek/deepseek-v3.2';
+  const model = 'google/gemini-3.1-flash-lite-preview';
   const url = 'https://openrouter.ai/api/v1/chat/completions';
 
   const userMessage = instruccionesAdicionales
@@ -542,7 +527,7 @@ async function llamarLLM(datosFormateados: string, instruccionesAdicionales?: st
   };
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 50_000);
+  const timeoutId = setTimeout(() => controller.abort(), 30_000);
 
   let response: Response;
   try {
@@ -559,7 +544,7 @@ async function llamarLLM(datosFormateados: string, instruccionesAdicionales?: st
   } catch (error: any) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
-      throw new Error('La API no respondio en 50 segundos. Intenta de nuevo.');
+      throw new Error('La API no respondio en 30 segundos. Intenta de nuevo.');
     }
     throw error;
   }

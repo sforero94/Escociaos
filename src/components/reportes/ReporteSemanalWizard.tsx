@@ -122,6 +122,7 @@ export function ReporteSemanalWizard() {
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
   const [errorGeneracion, setErrorGeneracion] = useState('');
   const [slideActual, setSlideActual] = useState(0);
+  const [slideScale, setSlideScale] = useState(1);
   const slideContainerRef = useRef<HTMLDivElement>(null);
 
   // Load closed applications list when entering paso 2
@@ -155,6 +156,20 @@ export function ReporteSemanalWizard() {
   const irASlide = useCallback((idx: number) => {
     setSlideActual(Math.max(0, Math.min(idx, totalSlides - 1)));
   }, [totalSlides]);
+
+  // Calculate slide scale based on container width
+  useEffect(() => {
+    if (!slideContainerRef.current || !htmlGenerado) return;
+    const updateScale = () => {
+      if (slideContainerRef.current) {
+        setSlideScale(slideContainerRef.current.offsetWidth / 1280);
+      }
+    };
+    updateScale();
+    const observer = new ResizeObserver(updateScale);
+    observer.observe(slideContainerRef.current);
+    return () => observer.disconnect();
+  }, [htmlGenerado]);
 
   // Keyboard navigation for slides
   useEffect(() => {
@@ -1156,10 +1171,11 @@ export function ReporteSemanalWizard() {
           {/* Single-slide viewer */}
           <div className="relative" ref={slideContainerRef}>
             <div className="border rounded-xl overflow-hidden shadow-lg bg-white">
-              <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+              <div className="relative w-full" style={{ height: `${720 * slideScale}px` }}>
                 <iframe
-                  srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;overflow:hidden;}</style></head><body>${slidesHtml[slideActual]}</body></html>`}
-                  className="absolute inset-0 w-full h-full border-0"
+                  srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;overflow:hidden;width:1280px;height:720px;}</style></head><body>${slidesHtml[slideActual]}</body></html>`}
+                  className="absolute top-0 left-0 border-0"
+                  style={{ width: '1280px', height: '720px', transformOrigin: 'top left', transform: `scale(${slideScale})` }}
                   title={`Diapositiva ${slideActual + 1} de ${totalSlides}`}
                 />
               </div>
