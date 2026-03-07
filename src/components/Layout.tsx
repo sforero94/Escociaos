@@ -175,9 +175,8 @@ export function Layout({ onNavigate, children }: LayoutProps) {
 
         {/* Desktop Sidebar */}
         <div
-          className={`hidden lg:block fixed left-0 top-0 bottom-0 bg-white/80 backdrop-blur-xl border-r border-primary/10 shadow-[4px_0_24px_rgba(115,153,28,0.04)] transition-[width] duration-300 z-40 ${
-            collapsed ? 'w-[72px]' : 'w-64'
-          }`}
+          className="hidden lg:block fixed left-0 top-0 bottom-0 bg-white/80 backdrop-blur-xl border-r border-primary/10 shadow-[4px_0_24px_rgba(115,153,28,0.04)] transition-[width] duration-300 z-40"
+          style={{ width: collapsed ? '72px' : '16rem' }}
         >
         <div className="flex flex-col h-full">
           {/* Logo + collapse toggle */}
@@ -265,7 +264,12 @@ export function Layout({ onNavigate, children }: LayoutProps) {
         </div>
 
         {/* Main Content — margin only on lg+ where sidebar is visible */}
-        <div id="main-content" className={`transition-[margin] duration-300 ml-0 ${collapsed ? 'lg:ml-[72px]' : 'lg:ml-64'}`}>
+        <style>{`
+          @media (min-width: 1024px) {
+            #main-content { margin-left: ${collapsed ? '72px' : '16rem'}; }
+          }
+        `}</style>
+        <div id="main-content" className="transition-[margin] duration-300">
           <main className="p-4 lg:p-8">{children}</main>
         </div>
       </div>
