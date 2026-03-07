@@ -3,6 +3,7 @@ import { ImportarProductosPage } from './components/inventory/ImportarProductosP
 import { ComingSoon } from './components/shared/ComingSoon';
 import { InventoryMovements } from './components/inventory/InventoryMovements';
 import { MovementsDashboard } from './components/inventory/MovementsDashboard';
+import { InventoryDashboard } from './components/inventory/dashboard/InventoryDashboard';
 import { PurchaseHistory } from './components/inventory/PurchaseHistory';
 import { ComprasIntegrado } from './components/inventory/ComprasIntegrado';
 import { VerificacionesList } from './components/inventory/VerificacionesList';
@@ -58,7 +59,7 @@ function LayoutRoutes() {
         {/* Inventario - Rutas anidadas */}
         <Route path="inventario">
           <Route index element={<InventoryList />} />
-          <Route path="dashboard" element={<MovementsDashboard />} />
+          <Route path="dashboard" element={<InventoryDashboard />} />
           <Route path="compras" element={<ComprasIntegrado />} />
           <Route
             path="producto/:id"
