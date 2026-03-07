@@ -116,11 +116,19 @@ const ReportesView: React.FC<ReportesViewProps> = ({
 }) => {
   const [loading, setLoading] = useState(true);
   const [fechaInicio, setFechaInicio] = useState(() => {
-    const date = new Date();
-    date.setMonth(date.getMonth() - 1);
-    return date.toISOString().split('T')[0];
+    const now = new Date();
+    const day = now.getDay();
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+    return monday.toISOString().split('T')[0];
   });
-  const [fechaFin, setFechaFin] = useState(() => new Date().toISOString().split('T')[0]);
+  const [fechaFin, setFechaFin] = useState(() => {
+    const now = new Date();
+    const day = now.getDay();
+    const sunday = new Date(now);
+    sunday.setDate(now.getDate() + (day === 0 ? 0 : 7 - day));
+    return sunday.toISOString().split('T')[0];
+  });
 
   // Estados de datos
   const [estadisticasGenerales, setEstadisticasGenerales] = useState<EstadisticasGenerales | null>(null);
@@ -132,7 +140,7 @@ const ReportesView: React.FC<ReportesViewProps> = ({
   const [matrizLoteActividad, setMatrizLoteActividad] = useState<MatrizLoteActividad | null>(null);
 
   // ✨ NUEVO: Estado del toggle Jornales/Costos
-  const [vistaGrafico, setVistaGrafico] = useState<'costos' | 'jornales'>('costos');
+  const [vistaGrafico, setVistaGrafico] = useState<'costos' | 'jornales'>('jornales');
 
   // Cargar datos al montar y cuando cambian las fechas
   useEffect(() => {
