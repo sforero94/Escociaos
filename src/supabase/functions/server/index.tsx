@@ -6,6 +6,7 @@ import { procesarCSV } from "./importar-productos.tsx";
 import { crearUsuario, editarUsuario, eliminarUsuario } from "./usuarios.tsx";
 import { toggleProductoActivo } from "./productos.tsx";
 import { generarReporteSemanal } from "./generar-reporte-semanal.tsx";
+import { handleChatMessage } from "./chat.tsx";
 
 const app = new Hono();
 
@@ -135,6 +136,11 @@ app.post("/make-server-1ccce916/reportes/generar-semanal", async (c) => {
       error: error.message || 'Error al generar el reporte semanal'
     }, 500);
   }
+});
+
+// Ruta para chat conversacional "Esco"
+app.post("/make-server-1ccce916/chat/message", async (c) => {
+  return await handleChatMessage(c);
 });
 
 // Handle preflight OPTIONS at Deno.serve level to ensure CORS works

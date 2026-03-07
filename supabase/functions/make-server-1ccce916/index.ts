@@ -6,6 +6,7 @@ import { procesarCSV } from "./importar-productos.ts";
 import { crearUsuario, editarUsuario, eliminarUsuario } from "./usuarios.ts";
 import { toggleProductoActivo } from "./productos.ts";
 import { generarReporteSemanal } from "./generar-reporte-semanal.ts";
+import { handleChatMessage } from "./chat.ts";
 import { fetchDatosReporteSemanalServidor, calcularSemanaAnterior } from "./fetch-datos-reporte.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -236,6 +237,11 @@ app.post("/make-server-1ccce916/reportes/generar-semanal-rapido", async (c) => {
       error: error.message || 'Error al generar el reporte rápido'
     }, 500);
   }
+});
+
+// Ruta para chat conversacional "Esco"
+app.post("/make-server-1ccce916/chat/message", async (c) => {
+  return await handleChatMessage(c);
 });
 
 // Handle preflight OPTIONS at Deno.serve level to ensure CORS works

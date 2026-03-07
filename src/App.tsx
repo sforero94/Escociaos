@@ -41,6 +41,7 @@ import { ProduccionDashboard } from './components/produccion/ProduccionDashboard
 import { ReportesDashboard } from './components/reportes/ReportesDashboard';
 import { ReporteSemanalWizard } from './components/reportes/ReporteSemanalWizard';
 import { Toaster } from './components/ui/sonner';
+import { ChatFAB } from './components/chat/ChatFAB';
 
 /**
  * Dashboard component - no wrapper needed
@@ -198,6 +199,7 @@ function App() {
       <AuthProvider>
         <SafeModeProvider>
           <AppContent />
+          <ChatFAB />
           <Toaster />
         </SafeModeProvider>
       </AuthProvider>

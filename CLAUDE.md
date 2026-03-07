@@ -314,10 +314,23 @@ The edge function server uses **Hono** (via Deno/npm imports) and lives in `src/
 - User CRUD
 - Product toggle
 - Weekly report generation (calls DeepSeek `deepseek-v3.2` via OpenRouter, fetches 4-week historical context from DB + Notion)
+- **Esco chat agent** (`chat.tsx`) — conversational data assistant for farm management. Uses Gemini Flash Lite via OpenRouter with tool-calling loop. 10 tools cover: labor summaries, employee activity, monitoring, applications, inventory, finances, production, harvests, lot info, and weekly overviews.
 - Key-value store (`kv_store.tsx`)
 
+#### Esco Chat Agent (`chat.tsx`)
+
+The chat agent ("Esco") is a non-streaming tool-calling loop that queries farm data via PostgREST, aggregates results, and returns structured JSON to the LLM for natural language response.
+
+Key behaviors:
+- **Gastos**: Only `estado=Confirmado` records are included (matches finance dashboard)
+- **Ingresos**: Includes negocio join, extended columns (`cantidad`, `precio_unitario`, `cosecha`, `cliente`, `finca`), and category aggregation
+- **Ganado**: Aggregates compra/venta totals and per-finca breakdown
+- **Labor costs**: Computed as `(salario + prestaciones_sociales + auxilios_no_salariales) / 22` per jornal for employees; `tarifa_jornal` for contractors
+- **Financial search**: `search_term` parameter filters gastos/ingresos by `nombre` (ilike)
+- **Negocio filter**: Resolves `negocio_name` to IDs and applies to gastos and ingresos queries
+
 **Required edge function secrets** (set via Supabase Dashboard → Project Settings → Edge Functions):
-- `OPENROUTER_API_KEY` — OpenRouter API key (used for DeepSeek via OpenRouter)
+- `OPENROUTER_API_KEY` — OpenRouter API key (used for DeepSeek and Gemini Flash Lite via OpenRouter)
 - `NOTION_TOKEN` — Notion integration token (for owner call summaries; optional, graceful fallback if absent)
 - `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` — auto-injected by Supabase
 
