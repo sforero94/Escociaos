@@ -7,6 +7,7 @@ import { crearUsuario, editarUsuario, eliminarUsuario } from "./usuarios.ts";
 import { toggleProductoActivo } from "./productos.ts";
 import { generarReporteSemanal } from "./generar-reporte-semanal.ts";
 import { handleChatMessage } from "./chat.ts";
+import { handleWebhook } from "./telegram/bot.ts";
 import { fetchDatosReporteSemanalServidor, calcularSemanaAnterior } from "./fetch-datos-reporte.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -242,6 +243,15 @@ app.post("/make-server-1ccce916/reportes/generar-semanal-rapido", async (c) => {
 // Ruta para chat conversacional "Esco"
 app.post("/make-server-1ccce916/chat/message", async (c) => {
   return await handleChatMessage(c);
+});
+
+// Telegram bot webhook
+app.post("/make-server-1ccce916/telegram/webhook", async (c) => {
+  const secret = c.req.header("X-Telegram-Bot-Api-Secret-Token");
+  if (secret !== Deno.env.get("TELEGRAM_WEBHOOK_SECRET")) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+  return handleWebhook(c);
 });
 
 // Handle preflight OPTIONS at Deno.serve level to ensure CORS works

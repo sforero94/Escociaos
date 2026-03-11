@@ -314,7 +314,7 @@ The edge function server uses **Hono** (via Deno/npm imports) and lives in `src/
 - User CRUD
 - Product toggle
 - Weekly report generation (calls DeepSeek `deepseek-v3.2` via OpenRouter, fetches 4-week historical context from DB + Notion)
-- **Esco chat agent** (`chat.tsx`) — conversational data assistant for farm management. Uses Gemini Flash Lite via OpenRouter with tool-calling loop. 10 tools cover: labor summaries, employee activity, monitoring, applications, inventory, finances, production, harvests, lot info, and weekly overviews.
+- **Esco chat agent** (`chat.tsx`) — conversational data assistant for farm management. Uses Gemini 2.5 Flash (`google/gemini-2.5-flash`) via OpenRouter with tool-calling loop (`tool_choice: 'required'` on round 0). Exports `llmToolLoop` and `getSystemPrompt` (used by telegram bot). 10 tools cover: labor summaries, employee activity, monitoring, applications, inventory, finances, production, harvests, lot info, and weekly overviews.
 - Key-value store (`kv_store.tsx`)
 
 #### Esco Chat Agent (`chat.tsx`)
@@ -330,7 +330,7 @@ Key behaviors:
 - **Negocio filter**: Resolves `negocio_name` to IDs and applies to gastos and ingresos queries
 
 **Required edge function secrets** (set via Supabase Dashboard → Project Settings → Edge Functions):
-- `OPENROUTER_API_KEY` — OpenRouter API key (used for DeepSeek and Gemini Flash Lite via OpenRouter)
+- `OPENROUTER_API_KEY` — OpenRouter API key (used for DeepSeek and Gemini 2.5 Flash via OpenRouter)
 - `NOTION_TOKEN` — Notion integration token (for owner call summaries; optional, graceful fallback if absent)
 - `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` — auto-injected by Supabase
 
@@ -505,3 +505,55 @@ When working on this project, prioritize:
 3. **Readability** — clear naming, consistent patterns
 4. **Maintainability** — modular code, reuse existing patterns and components from `src/components/ui/` and `src/components/shared/`
 5. **Security** — respect RLS policies, validate inputs at boundaries
+
+---
+
+## Number Formatting (Colombian Standard)
+
+All monetary and numeric values in the UI **must** follow Colombian formatting:
+
+- **No decimals** on monetary values. Round to integers.
+- **Colombian thousands separator**: use dots (e.g., `1.234.567`).
+- **Abbreviate to millions**: `$95M` not `$95.343.110 COP`. Use `2.000M` format — never use billions (Colombia doesn't use that scale).
+- **No `COP` suffix** in the UI — currency is implicit.
+- **Quantities**: no decimals unless the unit requires it (e.g., kg can have 1 decimal).
+- Formatting utilities live in `src/utils/format.ts` — always use them, never format inline.
+
+---
+
+## Responsive & Layout Rules
+
+- **Never modify desktop layout without verifying mobile**. The sidebar collapses on mobile — body content must not hide behind it.
+- **Number inputs**: must prevent scroll-to-change with `onWheel={(e) => e.currentTarget.blur()}`. This is a critical bug source — users accidentally change values by scrolling.
+- **Modals/popups**: must lock body scroll (`overflow: hidden` on body) and be fixed-position with internal scroll. Use `createPortal` if Radix Dialog doesn't support the layout.
+- **Sidebar collapse**: when collapsed, hover tooltips must have opaque background — never transparent text on transparent background.
+
+---
+
+## Session Wrap-Up Checklist
+
+Before committing at the end of a session:
+
+1. Run `npm run lint` and fix any issues from this session's changes.
+2. Verify the app loads on mobile viewport (sidebar collapsed state).
+3. Update this `CLAUDE.md` if any of these changed: schema, routes, edge functions, env vars, dependencies.
+4. If edge functions were modified, redeploy: `npx supabase functions deploy make-server-1ccce916`.
+
+---
+
+## Edge Function Deployment
+
+After modifying any Supabase edge function source in `src/supabase/functions/server/`:
+
+1. **Always redeploy**: `npx supabase functions deploy make-server-1ccce916`
+2. **Sync source**: keep `src/supabase/functions/server/` and `supabase/functions/make-server-1ccce916/` in sync — changes to one must be applied to the other.
+3. **Verify**: after deploy, confirm the function is live by checking logs or hitting the health endpoint.
+4. Forgetting to redeploy is a common source of "it works locally but not in production" issues.
+
+---
+
+## Language
+
+- The user communicates in both **Spanish and English**. Respond in the language of the prompt.
+- UI text and domain variable names are in **Spanish**.
+- Code comments, config files, and CLAUDE.md are in **English**.

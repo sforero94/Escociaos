@@ -1015,7 +1015,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         const { data, error } = await supabase
           .from('monitoreos')
           .select('incidencia, plagas_enfermedades_catalogo(nombre)')
-          .gte('fecha', hace14Dias.toISOString());
+          .gte('fecha_monitoreo', hace14Dias.toISOString());
 
         if (error || !data) return [];
 
@@ -1049,7 +1049,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       const loadAplicacionesAlertas = async (): Promise<Alerta[]> => {
         const { data, error } = await supabase
           .from('aplicaciones')
-          .select('id, nombre, estado, created_at, fecha_inicio_planeada')
+          .select('id, nombre_aplicacion, estado, created_at, fecha_inicio_planeada')
           .in('estado', ['Calculada', 'En ejecución']);
 
         if (error || !data) return [];
@@ -1064,7 +1064,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             alertas.push({
               id: `aplicacion-${a.id}`,
               tipo: 'aplicacion',
-              mensaje: `'${a.nombre}' lleva ${diasDesde} días en ${a.estado === 'Calculada' ? 'estado Calculada' : 'ejecución'}`,
+              mensaje: `'${a.nombre_aplicacion}' lleva ${diasDesde} días en ${a.estado === 'Calculada' ? 'estado Calculada' : 'ejecución'}`,
               fecha: ref,
               prioridad: 'media',
             });
@@ -1080,7 +1080,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
 
         const { data, error } = await supabase
           .from('fin_gastos')
-          .select('monto, fecha, categoria_id, fin_categorias_gastos(nombre)')
+          .select('valor, fecha, categoria_id, fin_categorias_gastos(nombre)')
           .eq('estado', 'Confirmado')
           .gte('fecha', hace4Meses.toISOString());
 
@@ -1098,7 +1098,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           if (!porCategoria[catId]) porCategoria[catId] = { nombre: catNombre, meses: {} };
           const fecha = new Date(g.fecha);
           const mesKey = `${fecha.getFullYear()}-${fecha.getMonth()}`;
-          porCategoria[catId].meses[mesKey] = (porCategoria[catId].meses[mesKey] || 0) + (g.monto || 0);
+          porCategoria[catId].meses[mesKey] = (porCategoria[catId].meses[mesKey] || 0) + (g.valor || 0);
         }
 
         const mesActualKey = `${anioActual}-${mesActual}`;
@@ -1173,15 +1173,15 @@ export function Dashboard({ onNavigate }: DashboardProps) {
 
         const { data, error } = await supabase
           .from('registros_trabajo')
-          .select('fecha, fraccion_jornal')
-          .gte('fecha', hace5Semanas.toISOString());
+          .select('fecha_trabajo, fraccion_jornal')
+          .gte('fecha_trabajo', hace5Semanas.toISOString());
 
         if (error || !data) return [];
 
         // Group by ISO week
         const porSemana: Record<string, number> = {};
         for (const r of data) {
-          const fecha = new Date(r.fecha);
+          const fecha = new Date(r.fecha_trabajo);
           // Week key: year-weekNumber
           const startOfYear = new Date(fecha.getFullYear(), 0, 1);
           const weekNum = Math.ceil(((fecha.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24) + startOfYear.getDay() + 1) / 7);

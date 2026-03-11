@@ -39,8 +39,9 @@ async function supabaseQuery(table: string, query: string): Promise<unknown[]> {
   const { url, headers } = getAdminHeaders();
   const res = await fetch(`${url}/rest/v1/${table}?${query}`, { headers });
   if (!res.ok) {
-    console.error(`Query error on ${table}:`, res.status, await res.text().catch(() => ''));
-    return [];
+    const errText = await res.text().catch(() => '');
+    console.error(`[Esco] Query error on ${table}:`, res.status, errText);
+    throw new Error(`Query failed on ${table} (${res.status}): ${errText.slice(0, 200)}`);
   }
   return await res.json();
 }
@@ -206,7 +207,7 @@ const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'get_lot_info',
-    description: 'Obtiene informacion de lotes: area, arboles por tamano, sublotes, fecha siembra.',
+    description: 'Obtiene informacion de lotes: area, arboles por tamano, sublotes.',
     parameters: {
       type: 'object',
       properties: {
@@ -332,7 +333,7 @@ async function execEmployeeActivity(args: Record<string, unknown>): Promise<stri
   // Search contractors
   const contratistas = await supabaseQuery('contratistas', `select=id,nombre,tarifa_jornal,tipo_contrato&nombre=ilike.*${e(worker_name)}*&limit=5`);
 
-  let registrosQuery = `select=fecha_trabajo,fraccion_jornal,costo_jornal,tarea:tareas(nombre),lote:lotes(nombre)&order=fecha_trabajo.desc&limit=30`;
+  let registrosQuery = `select=fecha_trabajo,fraccion_jornal,observaciones,tarea:tareas(nombre),lote:lotes(nombre)&order=fecha_trabajo.desc&limit=30`;
   if (date_from) registrosQuery += `&fecha_trabajo=gte.${e(date_from)}`;
   if (date_to) registrosQuery += `&fecha_trabajo=lte.${e(date_to)}`;
 
@@ -358,14 +359,14 @@ async function execMonitoringData(args: Record<string, unknown>): Promise<string
     lote_name?: string; pest_name?: string; date_from?: string; date_to?: string;
   };
 
-  let query = `select=id,fecha_monitoreo,incidencia,severidad,gravedad_texto,arboles_monitoreados,arboles_afectados,individuos_encontrados,notas,lote:lotes(nombre),sublote:sublotes(nombre),plaga:plagas_enfermedades_catalogo(nombre,tipo)&order=fecha_monitoreo.desc`;
+  let query = `select=id,fecha_monitoreo,incidencia,severidad,gravedad_texto,arboles_monitoreados,arboles_afectados,individuos_encontrados,observaciones,lote:lotes(nombre),sublote:sublotes(nombre),plaga:plagas_enfermedades_catalogo(nombre,tipo)&order=fecha_monitoreo.desc&limit=3000`;
 
   if (date_from) query += `&fecha_monitoreo=gte.${e(date_from)}`;
   if (date_to) query += `&fecha_monitoreo=lte.${e(date_to)}`;
 
   const data = await supabaseQuery('monitoreos', query);
+  console.log(`[Esco] Monitoring returned ${data.length} rows`);
 
-  // Filter by name client-side (PostgREST embedded filters are limited)
   let filtered = data as Array<Record<string, unknown>>;
   if (lote_name) {
     const ln = lote_name.toLowerCase();
@@ -378,24 +379,59 @@ async function execMonitoringData(args: Record<string, unknown>): Promise<string
 
   // Summary by pest
   const byPest: Record<string, { count: number; avg_incidencia: number; max_gravedad: string }> = {};
+  // Summary by month
+  const byMonth: Record<string, { count: number; avg_incidencia: number; max_gravedad: string; plagas: Record<string, number>; lotes: Set<string> }> = {};
+
   for (const r of filtered) {
     const plagaName = (r.plaga as Record<string, unknown>)?.nombre as string || 'Desconocida';
+    const loteName = (r.lote as Record<string, unknown>)?.nombre as string || 'Sin lote';
+    const incidencia = (r.incidencia as number) || 0;
+    const grav = r.gravedad_texto as string || 'Baja';
+
+    // By pest
     if (!byPest[plagaName]) byPest[plagaName] = { count: 0, avg_incidencia: 0, max_gravedad: 'Baja' };
     byPest[plagaName].count++;
-    byPest[plagaName].avg_incidencia += (r.incidencia as number) || 0;
-    const grav = r.gravedad_texto as string;
+    byPest[plagaName].avg_incidencia += incidencia;
     if (grav === 'Alta' || (grav === 'Media' && byPest[plagaName].max_gravedad === 'Baja')) {
       byPest[plagaName].max_gravedad = grav;
     }
+
+    // By month
+    const fecha = r.fecha_monitoreo as string || '';
+    const mes = fecha.slice(0, 7); // YYYY-MM
+    if (mes) {
+      if (!byMonth[mes]) byMonth[mes] = { count: 0, avg_incidencia: 0, max_gravedad: 'Baja', plagas: {}, lotes: new Set() };
+      byMonth[mes].count++;
+      byMonth[mes].avg_incidencia += incidencia;
+      byMonth[mes].plagas[plagaName] = (byMonth[mes].plagas[plagaName] || 0) + 1;
+      byMonth[mes].lotes.add(loteName);
+      if (grav === 'Alta' || (grav === 'Media' && byMonth[mes].max_gravedad === 'Baja')) {
+        byMonth[mes].max_gravedad = grav;
+      }
+    }
   }
+
   for (const key of Object.keys(byPest)) {
-    if (byPest[key].count > 0) byPest[key].avg_incidencia /= byPest[key].count;
+    if (byPest[key].count > 0) byPest[key].avg_incidencia = Math.round(byPest[key].avg_incidencia / byPest[key].count * 100) / 100;
+  }
+
+  // Serialize byMonth (convert Sets to arrays, compute averages)
+  const byMonthSerialized: Record<string, unknown> = {};
+  for (const [mes, data] of Object.entries(byMonth)) {
+    byMonthSerialized[mes] = {
+      registros: data.count,
+      incidencia_promedio: Math.round(data.avg_incidencia / data.count * 100) / 100,
+      gravedad_maxima: data.max_gravedad,
+      plagas_encontradas: data.plagas,
+      lotes_monitoreados: [...data.lotes],
+    };
   }
 
   return JSON.stringify({
     total_registros: filtered.length,
+    resumen_por_mes: byMonthSerialized,
     resumen_por_plaga: byPest,
-    detalle: filtered.slice(0, 30),
+    detalle: filtered.slice(0, 20),
   });
 }
 
@@ -404,7 +440,7 @@ async function execApplicationSummary(args: Record<string, unknown>): Promise<st
     application_id?: string; date_from?: string; date_to?: string; type?: string;
   };
 
-  let query = `select=id,nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_fin_planeada,fecha_cierre,blanco_biologico,costo_total,jornales_utilizados,notas&order=fecha_inicio_planeada.desc&limit=30`;
+  let query = `select=id,nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_fin_planeada,fecha_cierre,blanco_biologico,costo_total,jornales_utilizados,observaciones_cierre&order=fecha_inicio_planeada.desc&limit=30`;
 
   if (application_id) query += `&id=eq.${e(application_id)}`;
   if (date_from) query += `&fecha_inicio_planeada=gte.${e(date_from)}`;
@@ -420,15 +456,15 @@ async function execApplicationSummary(args: Record<string, unknown>): Promise<st
       supabaseQuery('aplicaciones_lotes',
         `select=lote:lotes(nombre)&aplicacion_id=eq.${app.id}`),
       supabaseQuery('aplicaciones_lotes_planificado',
-        `select=lote:lotes(nombre),arboles_planificados&aplicacion_id=eq.${app.id}`),
-      supabaseQuery('aplicaciones_productos',
-        `select=producto:productos(nombre),dosis_por_arbol,dosis_total&aplicacion_id=eq.${app.id}`),
+        `select=lote:lotes(nombre),canecas_planificado,litros_mezcla_planificado&aplicacion_id=eq.${app.id}`),
+      supabaseQuery('aplicaciones_mezclas',
+        `select=nombre,aplicaciones_productos(producto:productos(nombre),dosis_por_caneca,cantidad_total_necesaria,unidad_dosis)&aplicacion_id=eq.${app.id}`),
       supabaseQuery('movimientos_diarios',
-        `select=id,fecha,canecas_aplicadas,lote:lotes(nombre)&aplicacion_id=eq.${app.id}&order=fecha.asc`),
+        `select=id,fecha_movimiento,numero_canecas,numero_bultos,lote:lotes(nombre)&aplicacion_id=eq.${app.id}&order=fecha_movimiento.asc`),
     ]);
     enriched.push({
       ...app, lotes_asignados: lotes, lotes_planificados: lotesPlan,
-      productos, movimientos_reales: movimientos,
+      mezclas_productos: productos, movimientos_reales: movimientos,
     });
   }
 
@@ -612,7 +648,7 @@ async function execHarvestShipments(args: Record<string, unknown>): Promise<stri
 async function execLotInfo(args: Record<string, unknown>): Promise<string> {
   const { lote_name } = args as { lote_name?: string };
 
-  let query = `select=id,nombre,area_hectareas,arboles_grandes,arboles_medianos,arboles_pequenos,arboles_clonales,total_arboles,fecha_siembra,sublotes:sublotes(id,nombre)&order=nombre.asc&limit=20`;
+  let query = `select=id,nombre,area_hectareas,arboles_grandes,arboles_medianos,arboles_pequenos,arboles_clonales,total_arboles,sublotes:sublotes(id,nombre)&order=nombre.asc&limit=20`;
   if (lote_name) query += `&nombre=ilike.*${e(lote_name)}*`;
 
   const data = await supabaseQuery('lotes', query);
@@ -651,12 +687,13 @@ async function execWeeklyOverview(args: Record<string, unknown>): Promise<string
 // SYSTEM PROMPT
 // ============================================================================
 
-function getSystemPrompt(): string {
+export function getSystemPrompt(): string {
   const hoy = new Date().toISOString().split('T')[0];
   return `Eres "Esco", el asistente de datos de Escocia Hass, una finca de aguacate Hass en Colombia.
 Tu rol es consultar datos operativos de la finca y responder preguntas del gerente.
 
 REGLAS:
+- SIEMPRE usa las herramientas disponibles para consultar datos antes de responder cualquier pregunta sobre la finca. NUNCA respondas sobre datos sin haber llamado al menos una herramienta primero.
 - Responde en espanol, tono profesional pero conversacional
 - Usa las herramientas para obtener datos reales — nunca inventes datos
 - Si no tienes datos suficientes, dilo claramente
@@ -690,7 +727,7 @@ COSTOS DE MANO DE OBRA:
 // ============================================================================
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const MODEL = 'google/gemini-3.1-flash-lite-preview';
+const MODEL = 'google/gemini-2.5-flash';
 
 function getOpenRouterHeaders(): Record<string, string> {
   const apiKey = Deno.env.get('OPENROUTER_API_KEY');
@@ -714,14 +751,14 @@ function getToolsForAPI() {
 }
 
 // Non-streaming call for tool-calling loop
-async function llmToolLoop(messages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; name?: string }>): Promise<string> {
+export async function llmToolLoop(messages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; name?: string }>): Promise<string> {
   const headers = getOpenRouterHeaders();
   const tools = getToolsForAPI();
   const maxRounds = 3;
 
   for (let round = 0; round < maxRounds; round++) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45_000);
+    const timeoutId = setTimeout(() => controller.abort(), 55_000);
 
     let response: Response;
     try {
@@ -732,7 +769,7 @@ async function llmToolLoop(messages: Array<{ role: string; content: string | nul
           model: MODEL,
           messages,
           tools,
-          tool_choice: 'auto',
+          tool_choice: round === 0 ? 'required' : 'auto',
           temperature: 0.3,
           max_tokens: 4096,
         }),
@@ -758,6 +795,7 @@ async function llmToolLoop(messages: Array<{ role: string; content: string | nul
     if (!choice) throw new Error('Sin respuesta del LLM');
 
     const msg = choice.message;
+    console.log(`[Esco] Round ${round}: tool_calls=${msg.tool_calls?.length || 0}, has_content=${!!msg.content}, finish_reason=${choice.finish_reason}`);
 
     // If the model wants to call tools
     if (msg.tool_calls && msg.tool_calls.length > 0) {
@@ -801,7 +839,7 @@ async function llmToolLoop(messages: Array<{ role: string; content: string | nul
       model: MODEL,
       messages,
       temperature: 0.3,
-      max_tokens: 4096,
+      max_tokens: 8192,
     }),
   });
 
