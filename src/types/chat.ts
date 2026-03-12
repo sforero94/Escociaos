@@ -22,3 +22,15 @@ export interface ChatStreamEvent {
   title?: string;
   message?: string;
 }
+
+export interface ChartSpec {
+  type: 'bar' | 'line' | 'pie' | 'area';
+  title: string;
+  data: Array<Record<string, string | number>>;
+  xKey: string;
+  yKey: string | string[];
+  yFormat?: 'currency' | 'number' | 'percent' | 'kg';
+  color?: string;
+  colors?: string[];
+  stacked?: boolean;
+}

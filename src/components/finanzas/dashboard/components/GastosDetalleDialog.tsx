@@ -106,7 +106,7 @@ export function GastosDetalleDialog({
   return createPortal(
     // Fullscreen overlay — flex centering, above everything
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center"
+      className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden p-8"
     >
       {/* Backdrop */}
       <div
@@ -116,7 +116,8 @@ export function GastosDetalleDialog({
 
       {/* Panel */}
       <div
-        className="relative w-[90%] max-w-3xl max-h-[80vh] flex flex-col overflow-hidden bg-background rounded-xl shadow-2xl border border-border"
+        className="relative w-[90%] max-w-3xl flex flex-col overflow-hidden bg-background rounded-xl shadow-2xl border border-border"
+        style={{ maxHeight: 'min(80vh, calc(100dvh - 4rem))' }}
       >
         {/* Header — never scrolls */}
         <div className="shrink-0 p-6 border-b border-border">

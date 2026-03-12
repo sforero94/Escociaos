@@ -98,3 +98,13 @@ export async function deleteConversation(id: string): Promise<void> {
 
   if (error) throw new Error(error.message);
 }
+
+export async function renameConversation(id: string, title: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from('chat_conversations')
+    .update({ title })
+    .eq('id', id);
+
+  if (error) throw new Error(error.message);
+}

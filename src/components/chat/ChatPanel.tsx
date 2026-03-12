@@ -1,15 +1,19 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Plus, ArrowLeft, Trash2, Loader2, X } from 'lucide-react';
+import { Send, Plus, ArrowLeft, Trash2, Loader2, X, FileDown, Pencil, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { ChatMessageBubble } from './ChatMessage';
+import { ChatMessageBubble, splitChartBlocks } from './ChatMessage';
+import { ExportarInformeDialog } from './ExportarInformeDialog';
+import type { ExportData } from './ExportarInformeDialog';
 import { ChatEmptyState } from './ChatEmptyState';
+import { generarTituloInforme } from '@/utils/generarTituloInforme';
 import {
   sendChatMessage,
   fetchConversations,
   fetchMessages,
   deleteConversation,
+  renameConversation,
 } from '@/utils/chatService';
 import type { ChatConversation, ChatMessage } from '@/types/chat';
 
@@ -26,6 +30,10 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const [showHistory, setShowHistory] = useState(false);
+  const [exportData, setExportData] = useState<ExportData | null>(null);
+  const [exportTitulo, setExportTitulo] = useState('');
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -157,6 +165,50 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
     }
   };
 
+  const handleStartRename = (conv: ChatConversation) => {
+    setRenamingId(conv.id);
+    setRenameValue(conv.title || '');
+  };
+
+  const handleConfirmRename = async () => {
+    if (!renamingId || !renameValue.trim()) {
+      setRenamingId(null);
+      return;
+    }
+    try {
+      await renameConversation(renamingId, renameValue.trim());
+      setConversations((prev) =>
+        prev.map((c) => (c.id === renamingId ? { ...c, title: renameValue.trim() } : c)),
+      );
+    } catch {
+      toast.error('Error al renombrar conversacion');
+    }
+    setRenamingId(null);
+  };
+
+  const handleExport = useCallback(() => {
+    // Find last assistant message
+    const lastAssistantIdx = messages.findLastIndex((m) => m.role === 'assistant');
+    if (lastAssistantIdx === -1) return;
+
+    const assistantMsg = messages[lastAssistantIdx];
+    const bloques = splitChartBlocks(assistantMsg.content);
+
+    // Find the preceding user question
+    const userQuestion = messages
+      .slice(0, lastAssistantIdx)
+      .reverse()
+      .find((m) => m.role === 'user')?.content ?? '';
+
+    // Find the bubble DOM element (last assistant bubble in the scroll container)
+    const bubbles = scrollRef.current?.querySelectorAll<HTMLElement>('[data-role="assistant"]');
+    const bubbleEl = bubbles?.[bubbles.length - 1];
+    if (!bubbleEl) return;
+
+    setExportTitulo(generarTituloInforme(userQuestion));
+    setExportData({ bloques, userQuestion, bubbleElement: bubbleEl });
+  }, [messages]);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -220,6 +272,16 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleNewConversation}>
                   <Plus className="h-4 w-4" />
                 </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={handleExport}
+                  disabled={!messages.some((m) => m.role === 'assistant')}
+                  title="Exportar como informe"
+                >
+                  <FileDown className="h-4 w-4" />
+                </Button>
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onOpenChange(false)}>
                   <X className="h-4 w-4" />
                 </Button>
@@ -240,22 +302,64 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
                   <div
                     key={conv.id}
                     className="group flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-muted cursor-pointer"
-                    onClick={() => handleSelectConversation(conv.id)}
+                    onClick={() => renamingId !== conv.id && handleSelectConversation(conv.id)}
                   >
-                    <span className="flex-1 truncate text-sm">
-                      {conv.title || 'Sin titulo'}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 opacity-0 group-hover:opacity-100"
-                      onClick={(ev: React.MouseEvent) => {
-                        ev.stopPropagation();
-                        handleDeleteConversation(conv.id);
-                      }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                    </Button>
+                    {renamingId === conv.id ? (
+                      <input
+                        autoFocus
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleConfirmRename();
+                          if (e.key === 'Escape') setRenamingId(null);
+                        }}
+                        onBlur={handleConfirmRename}
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex-1 rounded border bg-background px-2 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                    ) : (
+                      <span className="flex-1 truncate text-sm">
+                        {conv.title || 'Sin titulo'}
+                      </span>
+                    )}
+                    {renamingId === conv.id ? (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={(ev: React.MouseEvent) => {
+                          ev.stopPropagation();
+                          handleConfirmRename();
+                        }}
+                      >
+                        <Check className="h-3.5 w-3.5 text-primary" />
+                      </Button>
+                    ) : (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 opacity-0 group-hover:opacity-100"
+                          onClick={(ev: React.MouseEvent) => {
+                            ev.stopPropagation();
+                            handleStartRename(conv);
+                          }}
+                        >
+                          <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 opacity-0 group-hover:opacity-100"
+                          onClick={(ev: React.MouseEvent) => {
+                            ev.stopPropagation();
+                            handleDeleteConversation(conv.id);
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
@@ -269,7 +373,9 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
                 ) : (
                   <div className="flex flex-col gap-4 p-5">
                     {messages.map((msg) => (
-                      <ChatMessageBubble key={msg.id} role={msg.role} content={msg.content} />
+                      <div key={msg.id} data-role={msg.role}>
+                        <ChatMessageBubble role={msg.role} content={msg.content} />
+                      </div>
                     ))}
                     {streamingContent && (
                       <ChatMessageBubble role="assistant" content={streamingContent} />
@@ -312,6 +418,13 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
           )}
         </div>
       </div>
+
+      <ExportarInformeDialog
+        data={exportData}
+        titulo={exportTitulo}
+        onTituloChange={setExportTitulo}
+        onClose={() => setExportData(null)}
+      />
     </>
   );
 }

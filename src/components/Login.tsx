@@ -58,12 +58,9 @@ export function Login({ onLoginSuccess }: LoginProps) {
                 className="w-full max-w-sm mx-auto rounded-2xl"
               />
             </div>
-            <h1 className="text-3xl text-foreground mb-2">
+            <h1 className="text-3xl font-bold text-foreground">
               Escocia Hass
             </h1>
-            <p className="text-brand-brown/70">
-              Sistema de gestión agrícola
-            </p>
           </div>
 
           {/* Formulario */}
@@ -80,7 +77,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={isLoading}
-                className="h-12 bg-white border-primary/20 focus:border-primary rounded-[20px]"
+                className="h-12 bg-white border-primary/20 focus:border-primary rounded-full"
               />
             </div>
 
@@ -96,7 +93,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={isLoading}
-                className="h-12 bg-white border-primary/20 focus:border-primary rounded-[20px]"
+                className="h-12 bg-white border-primary/20 focus:border-primary rounded-full"
               />
             </div>
 
@@ -109,7 +106,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
             <Button
               type="submit"
               disabled={isLoading}
-              className="w-full h-12 bg-gradient-to-b from-primary to-secondary hover:shadow-lg hover:shadow-primary/30 text-white rounded-[20px] transition-all duration-200 hover:-translate-y-0.5"
+              className="w-full h-12 bg-brand-brown hover:bg-brand-brown/90 hover:shadow-lg hover:shadow-brand-brown/30 text-white rounded-full transition-all duration-200 hover:-translate-y-0.5"
             >
               {isLoading ? (
                 <>
@@ -123,7 +120,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
           </form>
 
           {/* Footer */}
-          <div className="text-center text-sm text-brand-brown/50">
+          <div className="mt-8 text-center text-sm text-brand-brown/50">
             <p>© {new Date().getFullYear()} Creado por think SID con ❤️.</p>
           </div>
         </div>
