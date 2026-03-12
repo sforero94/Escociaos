@@ -489,9 +489,14 @@ The app is deployed on **Vercel** with:
   "buildCommand": "npm run build",
   "outputDirectory": "build",
   "installCommand": "npm install",
-  "framework": "vite"
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }
 ```
+
+The `rewrites` rule ensures all routes are served by `index.html`, enabling React Router to handle client-side routing on page refresh.
 
 Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as environment variables in the Vercel dashboard.
 

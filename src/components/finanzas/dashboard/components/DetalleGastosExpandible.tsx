@@ -143,6 +143,25 @@ export function DetalleGastosExpandible({ data, loading }: DetalleGastosExpandib
               </tr>
             </thead>
             <tbody>
+              {(() => {
+                const grandTotal = {
+                  ytd_actual: data.reduce((s, r) => s + r.ytd_actual, 0),
+                  ytd_anterior: data.reduce((s, r) => s + r.ytd_anterior, 0),
+                  total_anterior: data.reduce((s, r) => s + r.total_anterior, 0),
+                  total_n2: data.reduce((s, r) => s + r.total_n2, 0),
+                };
+                return (
+                  <tr className="border-t-2 border-foreground/20 bg-gray-100 font-bold">
+                    <td className="px-3 py-2 text-foreground">TOTAL</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatPivot(grandTotal.ytd_actual)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatPivot(grandTotal.ytd_anterior)}</td>
+                    <td className="px-3 py-2 text-right"><VariacionBadge actual={grandTotal.ytd_actual} anterior={grandTotal.ytd_anterior} /></td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatPivot(grandTotal.total_anterior)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatPivot(grandTotal.total_n2)}</td>
+                    <td className="px-3 py-2 text-right"><VariacionBadge actual={grandTotal.total_anterior} anterior={grandTotal.total_n2} /></td>
+                  </tr>
+                );
+              })()}
               {data.map((row, i) => {
                 const isExpanded = expanded.has(row.negocio_id);
                 const hasCategorias = row.categorias && row.categorias.length > 0;

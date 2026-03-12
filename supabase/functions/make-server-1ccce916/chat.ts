@@ -207,12 +207,49 @@ const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'get_lot_info',
-    description: 'Obtiene informacion de lotes: area, arboles por tamano, sublotes.',
+    description: 'Obtiene informacion de lotes: area, arboles por tamano, sublotes, fecha siembra.',
     parameters: {
       type: 'object',
       properties: {
         lote_name: { type: 'string', description: 'Nombre parcial del lote (opcional)' },
       },
+    },
+  },
+  {
+    name: 'get_purchase_history',
+    description: 'Obtiene historial de compras de productos: ordenes, proveedores, productos, cantidades y costos.',
+    parameters: {
+      type: 'object',
+      properties: {
+        date_from: { type: 'string', description: 'Fecha inicio YYYY-MM-DD (opcional)' },
+        date_to: { type: 'string', description: 'Fecha fin YYYY-MM-DD (opcional)' },
+        product_name: { type: 'string', description: 'Nombre parcial del producto (opcional)' },
+        proveedor: { type: 'string', description: 'Nombre parcial del proveedor (opcional)' },
+      },
+    },
+  },
+  {
+    name: 'get_inventory_movements',
+    description: 'Obtiene movimientos de inventario (entradas/salidas) y resultados de verificaciones fisicas. Permite detectar discrepancias.',
+    parameters: {
+      type: 'object',
+      properties: {
+        product_name: { type: 'string', description: 'Nombre parcial del producto (opcional)' },
+        date_from: { type: 'string', description: 'Fecha inicio YYYY-MM-DD (opcional)' },
+        date_to: { type: 'string', description: 'Fecha fin YYYY-MM-DD (opcional)' },
+        tipo: { type: 'string', description: 'Tipo: Entrada, Salida por Aplicación, Salida Otros, Ajuste (opcional)' },
+      },
+    },
+  },
+  {
+    name: 'get_application_details',
+    description: 'Obtiene datos detallados de una aplicacion especifica: cierre con costos reales, calculos por lote, y focos de plagas detectados.',
+    parameters: {
+      type: 'object',
+      properties: {
+        application_id: { type: 'string', description: 'UUID de la aplicacion (requerido)' },
+      },
+      required: ['application_id'],
     },
   },
   {
@@ -246,6 +283,9 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
       case 'get_production_data': return await execProductionData(args);
       case 'get_harvest_shipments': return await execHarvestShipments(args);
       case 'get_lot_info': return await execLotInfo(args);
+      case 'get_purchase_history': return await execPurchaseHistory(args);
+      case 'get_inventory_movements': return await execInventoryMovements(args);
+      case 'get_application_details': return await execApplicationDetails(args);
       case 'get_weekly_overview': return await execWeeklyOverview(args);
       default: return JSON.stringify({ error: `Tool desconocido: ${name}` });
     }
@@ -260,7 +300,7 @@ async function execLaborSummary(args: Record<string, unknown>): Promise<string> 
     date_from: string; date_to: string; employee_name?: string; lote_name?: string;
   };
 
-  let query = `select=id,fecha_trabajo,fraccion_jornal,observaciones,empleado:empleados(nombre,tipo_contrato,salario,prestaciones_sociales,auxilios_no_salariales),contratista:contratistas(nombre,tarifa_jornal),tarea:tareas(nombre,tipo_tarea:tipos_tareas(nombre)),lote:lotes(nombre)&fecha_trabajo=gte.${e(date_from)}&fecha_trabajo=lte.${e(date_to)}&order=fecha_trabajo.desc`;
+  let query = `select=id,fecha_trabajo,fraccion_jornal,observaciones,empleado:empleados(nombre,tipo_contrato,salario,prestaciones_sociales,auxilios_no_salariales),contratista:contratistas(nombre,tarifa_jornal),tarea:tareas(nombre,tipo_tarea:tipos_tareas(nombre)),lote:lotes(nombre)&fecha_trabajo=gte.${e(date_from)}&fecha_trabajo=lte.${e(date_to)}&order=fecha_trabajo.desc&limit=2000`;
 
   const data = await supabaseQuery('registros_trabajo', query);
 
@@ -285,6 +325,8 @@ async function execLaborSummary(args: Record<string, unknown>): Promise<string> 
   let totalCosto = 0;
   const byLote: Record<string, number> = {};
   const byTarea: Record<string, number> = {};
+  const porMes: Record<string, { jornales: number; costo: number }> = {};
+  const porEmpleado: Record<string, { jornales: number; costo: number }> = {};
 
   for (const r of filtered) {
     const fj = parseFloat(String(r.fraccion_jornal)) || 0;
@@ -292,22 +334,55 @@ async function execLaborSummary(args: Record<string, unknown>): Promise<string> 
 
     const emp = r.empleado as Record<string, unknown> | null;
     const cont = r.contratista as Record<string, unknown> | null;
+    let costoRegistro = 0;
+    let workerName = 'Desconocido';
     if (emp) {
       const salario = (emp.salario as number) || 0;
       const prestaciones = (emp.prestaciones_sociales as number) || 0;
       const auxilios = (emp.auxilios_no_salariales as number) || 0;
       const costoJornal = (salario + prestaciones + auxilios) / DIAS_LABORALES_MES;
-      totalCosto += costoJornal * fj;
+      costoRegistro = costoJornal * fj;
+      workerName = (emp.nombre as string) || 'Desconocido';
     } else if (cont) {
       const tarifa = (cont.tarifa_jornal as number) || 0;
-      totalCosto += tarifa * fj;
+      costoRegistro = tarifa * fj;
+      workerName = (cont.nombre as string) || 'Desconocido';
     }
+    totalCosto += costoRegistro;
 
     const loteName = (r.lote as Record<string, unknown>)?.nombre as string || 'Sin lote';
     const tareaName = (r.tarea as Record<string, unknown>)?.nombre as string || 'Sin tarea';
     byLote[loteName] = (byLote[loteName] || 0) + fj;
     byTarea[tareaName] = (byTarea[tareaName] || 0) + fj;
+
+    // por_mes
+    const fecha = (r.fecha_trabajo as string) || '';
+    const mes = fecha.slice(0, 7);
+    if (mes) {
+      if (!porMes[mes]) porMes[mes] = { jornales: 0, costo: 0 };
+      porMes[mes].jornales += fj;
+      porMes[mes].costo += costoRegistro;
+    }
+
+    // por_empleado
+    if (!porEmpleado[workerName]) porEmpleado[workerName] = { jornales: 0, costo: 0 };
+    porEmpleado[workerName].jornales += fj;
+    porEmpleado[workerName].costo += costoRegistro;
   }
+
+  // Round por_mes costs
+  for (const key of Object.keys(porMes)) {
+    porMes[key].costo = Math.round(porMes[key].costo);
+  }
+
+  // Top 15 employees by jornales
+  const porEmpleadoTop = Object.entries(porEmpleado)
+    .sort((a, b) => b[1].jornales - a[1].jornales)
+    .slice(0, 15)
+    .reduce((acc, [name, data]) => {
+      acc[name] = { jornales: data.jornales, costo: Math.round(data.costo) };
+      return acc;
+    }, {} as Record<string, { jornales: number; costo: number }>);
 
   const costoPromedioJornal = totalJornales > 0 ? Math.round(totalCosto / totalJornales) : 0;
   return JSON.stringify({
@@ -319,8 +394,28 @@ async function execLaborSummary(args: Record<string, unknown>): Promise<string> 
     nota_formula_costo: '(salario + prestaciones + auxilios) / 22 dias laborales por jornal de empleado; tarifa_jornal para contratistas',
     jornales_por_lote: byLote,
     jornales_por_tarea: byTarea,
+    por_mes: porMes,
+    por_empleado: porEmpleadoTop,
     detalle: filtered.slice(0, 20),
   });
+}
+
+function computeWorkerSummary(regs: Array<Record<string, unknown>>) {
+  let totalJornales = 0;
+  let totalCostoJornal = 0;
+  const jornalesPorTarea: Record<string, number> = {};
+  const jornalesPorLote: Record<string, number> = {};
+  for (const r of regs) {
+    const fj = parseFloat(String(r.fraccion_jornal)) || 0;
+    const cj = parseFloat(String(r.costo_jornal)) || 0;
+    totalJornales += fj;
+    totalCostoJornal += cj;
+    const tarea = (r.tarea as Record<string, unknown>)?.nombre as string || 'Sin tarea';
+    const lote = (r.lote as Record<string, unknown>)?.nombre as string || 'Sin lote';
+    jornalesPorTarea[tarea] = (jornalesPorTarea[tarea] || 0) + fj;
+    jornalesPorLote[lote] = (jornalesPorLote[lote] || 0) + fj;
+  }
+  return { total_jornales: totalJornales, total_costo_jornal: Math.round(totalCostoJornal), jornales_por_tarea: jornalesPorTarea, jornales_por_lote: jornalesPorLote };
 }
 
 async function execEmployeeActivity(args: Record<string, unknown>): Promise<string> {
@@ -333,18 +428,20 @@ async function execEmployeeActivity(args: Record<string, unknown>): Promise<stri
   // Search contractors
   const contratistas = await supabaseQuery('contratistas', `select=id,nombre,tarifa_jornal,tipo_contrato&nombre=ilike.*${e(worker_name)}*&limit=5`);
 
-  let registrosQuery = `select=fecha_trabajo,fraccion_jornal,observaciones,tarea:tareas(nombre),lote:lotes(nombre)&order=fecha_trabajo.desc&limit=30`;
+  let registrosQuery = `select=fecha_trabajo,fraccion_jornal,costo_jornal,observaciones,tarea:tareas(nombre),lote:lotes(nombre)&order=fecha_trabajo.desc&limit=30`;
   if (date_from) registrosQuery += `&fecha_trabajo=gte.${e(date_from)}`;
   if (date_to) registrosQuery += `&fecha_trabajo=lte.${e(date_to)}`;
 
   const registros: unknown[] = [];
   for (const emp of empleados as Array<Record<string, unknown>>) {
-    const regs = await supabaseQuery('registros_trabajo', `${registrosQuery}&empleado_id=eq.${emp.id}`);
-    registros.push({ empleado: emp, registros: regs });
+    const regs = await supabaseQuery('registros_trabajo', `${registrosQuery}&empleado_id=eq.${emp.id}`) as Array<Record<string, unknown>>;
+    const resumen = computeWorkerSummary(regs);
+    registros.push({ empleado: emp, resumen, registros: regs });
   }
   for (const cont of contratistas as Array<Record<string, unknown>>) {
-    const regs = await supabaseQuery('registros_trabajo', `${registrosQuery}&contratista_id=eq.${cont.id}`);
-    registros.push({ contratista: cont, registros: regs });
+    const regs = await supabaseQuery('registros_trabajo', `${registrosQuery}&contratista_id=eq.${cont.id}`) as Array<Record<string, unknown>>;
+    const resumen = computeWorkerSummary(regs);
+    registros.push({ contratista: cont, resumen, registros: regs });
   }
 
   return JSON.stringify({
@@ -448,24 +545,46 @@ async function execApplicationSummary(args: Record<string, unknown>): Promise<st
   if (type) query += `&tipo_aplicacion=ilike.*${e(type)}*`;
 
   const apps = await supabaseQuery('aplicaciones', query);
+  const appsList = apps as Array<Record<string, unknown>>;
 
-  // For each app, get lots and products
-  const enriched = [];
-  for (const app of (apps as Array<Record<string, unknown>>).slice(0, 10)) {
-    const [lotes, lotesPlan, productos, movimientos] = await Promise.all([
-      supabaseQuery('aplicaciones_lotes',
-        `select=lote:lotes(nombre)&aplicacion_id=eq.${app.id}`),
-      supabaseQuery('aplicaciones_lotes_planificado',
-        `select=lote:lotes(nombre),canecas_planificado,litros_mezcla_planificado&aplicacion_id=eq.${app.id}`),
-      supabaseQuery('aplicaciones_mezclas',
-        `select=nombre,aplicaciones_productos(producto:productos(nombre),dosis_por_caneca,cantidad_total_necesaria,unidad_dosis)&aplicacion_id=eq.${app.id}`),
-      supabaseQuery('movimientos_diarios',
-        `select=id,fecha_movimiento,numero_canecas,numero_bultos,lote:lotes(nombre)&aplicacion_id=eq.${app.id}&order=fecha_movimiento.asc`),
+  // Batch all sub-queries to avoid N+1
+  const enriched: Array<Record<string, unknown>> = [];
+  const appIds = appsList.map(a => a.id as string).join(',');
+
+  if (appIds) {
+    const [allLotes, allLotesPlan, allMezclas, allMovimientos] = await Promise.all([
+      supabaseQuery('aplicaciones_lotes', `select=aplicacion_id,lote:lotes(nombre)&aplicacion_id=in.(${appIds})&limit=2000`),
+      supabaseQuery('aplicaciones_lotes_planificado', `select=aplicacion_id,lote:lotes(nombre),canecas_planificado,litros_mezcla_planificado&aplicacion_id=in.(${appIds})&limit=2000`),
+      supabaseQuery('aplicaciones_mezclas', `select=aplicacion_id,nombre,aplicaciones_productos(producto:productos(nombre),dosis_por_caneca,cantidad_total_necesaria,unidad_dosis)&aplicacion_id=in.(${appIds})&limit=2000`),
+      supabaseQuery('movimientos_diarios', `select=aplicacion_id,fecha_movimiento,numero_canecas,numero_bultos,lote:lotes(nombre)&aplicacion_id=in.(${appIds})&order=fecha_movimiento.asc&limit=2000`),
     ]);
-    enriched.push({
-      ...app, lotes_asignados: lotes, lotes_planificados: lotesPlan,
-      mezclas_productos: productos, movimientos_reales: movimientos,
-    });
+
+    // Group by aplicacion_id
+    const groupBy = (arr: unknown[], key: string) => {
+      const map: Record<string, unknown[]> = {};
+      for (const item of arr as Array<Record<string, unknown>>) {
+        const id = item[key] as string;
+        if (!map[id]) map[id] = [];
+        map[id].push(item);
+      }
+      return map;
+    };
+
+    const lotesByApp = groupBy(allLotes, 'aplicacion_id');
+    const lotesPlanByApp = groupBy(allLotesPlan, 'aplicacion_id');
+    const mezclasByApp = groupBy(allMezclas, 'aplicacion_id');
+    const movsByApp = groupBy(allMovimientos, 'aplicacion_id');
+
+    for (const app of appsList) {
+      const id = app.id as string;
+      enriched.push({
+        ...app,
+        lotes_asignados: lotesByApp[id] || [],
+        lotes_planificados: lotesPlanByApp[id] || [],
+        mezclas_productos: mezclasByApp[id] || [],
+        movimientos_reales: movsByApp[id] || [],
+      });
+    }
   }
 
   return JSON.stringify({
@@ -520,7 +639,7 @@ async function execFinancialSummary(args: Record<string, unknown>): Promise<stri
   if (negocio_name) result.negocio_filtro = negocio_name;
 
   if (!type || type === 'gastos') {
-    let gastosQuery = `select=id,fecha,valor,nombre,estado,observaciones,categoria:fin_categorias_gastos(nombre),concepto:fin_conceptos_gastos(nombre),proveedor:fin_proveedores(nombre),negocio:fin_negocios(nombre)&estado=eq.Confirmado&fecha=gte.${e(date_from)}&fecha=lte.${e(date_to)}&order=fecha.desc`;
+    let gastosQuery = `select=id,fecha,valor,nombre,estado,observaciones,categoria:fin_categorias_gastos(nombre),concepto:fin_conceptos_gastos(nombre),proveedor:fin_proveedores(nombre),negocio:fin_negocios(nombre)&estado=eq.Confirmado&fecha=gte.${e(date_from)}&fecha=lte.${e(date_to)}&order=fecha.desc&limit=2000`;
     if (negocioIds.length > 0) {
       gastosQuery += `&negocio_id=in.(${negocioIds.join(',')})`;
     }
@@ -531,16 +650,24 @@ async function execFinancialSummary(args: Record<string, unknown>): Promise<stri
 
     let totalGastos = 0;
     const byCategoria: Record<string, number> = {};
+    const gastosPorMes: Record<string, { total: number; registros: number }> = {};
     for (const g of gastos as Array<Record<string, unknown>>) {
-      totalGastos += (g.valor as number) || 0;
+      const val = (g.valor as number) || 0;
+      totalGastos += val;
       const cat = (g.categoria as Record<string, unknown>)?.nombre as string || 'Sin categoria';
-      byCategoria[cat] = (byCategoria[cat] || 0) + ((g.valor as number) || 0);
+      byCategoria[cat] = (byCategoria[cat] || 0) + val;
+      const mes = ((g.fecha as string) || '').slice(0, 7);
+      if (mes) {
+        if (!gastosPorMes[mes]) gastosPorMes[mes] = { total: 0, registros: 0 };
+        gastosPorMes[mes].total += val;
+        gastosPorMes[mes].registros++;
+      }
     }
-    result.gastos = { total: totalGastos, por_categoria: byCategoria, registros: gastos.length, detalle: (gastos as unknown[]).slice(0, 30) };
+    result.gastos = { total: totalGastos, por_categoria: byCategoria, por_mes: gastosPorMes, registros: gastos.length, detalle: (gastos as unknown[]).slice(0, 30) };
   }
 
   if (!type || type === 'ingresos') {
-    let ingresosQuery = `select=id,fecha,valor,nombre,observaciones,cantidad,precio_unitario,cosecha,cliente,finca,categoria:fin_categorias_ingresos(nombre),comprador:fin_compradores(nombre),negocio:fin_negocios(nombre)&fecha=gte.${e(date_from)}&fecha=lte.${e(date_to)}&order=fecha.desc`;
+    let ingresosQuery = `select=id,fecha,valor,nombre,observaciones,cantidad,precio_unitario,cosecha,cliente,finca,categoria:fin_categorias_ingresos(nombre),comprador:fin_compradores(nombre),negocio:fin_negocios(nombre)&fecha=gte.${e(date_from)}&fecha=lte.${e(date_to)}&order=fecha.desc&limit=2000`;
     if (negocioIds.length > 0) {
       ingresosQuery += `&negocio_id=in.(${negocioIds.join(',')})`;
     }
@@ -551,17 +678,25 @@ async function execFinancialSummary(args: Record<string, unknown>): Promise<stri
 
     let totalIngresos = 0;
     const byCategoria: Record<string, number> = {};
+    const ingresosPorMes: Record<string, { total: number; registros: number }> = {};
     for (const i of ingresos as Array<Record<string, unknown>>) {
-      totalIngresos += (i.valor as number) || 0;
+      const val = (i.valor as number) || 0;
+      totalIngresos += val;
       const cat = (i.categoria as Record<string, unknown>)?.nombre as string || 'Sin categoria';
-      byCategoria[cat] = (byCategoria[cat] || 0) + ((i.valor as number) || 0);
+      byCategoria[cat] = (byCategoria[cat] || 0) + val;
+      const mes = ((i.fecha as string) || '').slice(0, 7);
+      if (mes) {
+        if (!ingresosPorMes[mes]) ingresosPorMes[mes] = { total: 0, registros: 0 };
+        ingresosPorMes[mes].total += val;
+        ingresosPorMes[mes].registros++;
+      }
     }
-    result.ingresos = { total: totalIngresos, por_categoria: byCategoria, registros: ingresos.length, detalle: (ingresos as unknown[]).slice(0, 30) };
+    result.ingresos = { total: totalIngresos, por_categoria: byCategoria, por_mes: ingresosPorMes, registros: ingresos.length, detalle: (ingresos as unknown[]).slice(0, 30) };
   }
 
   if (!type || type === 'ganado') {
     const ganado = await supabaseQuery('fin_transacciones_ganado',
-      `select=id,fecha,tipo,cantidad_cabezas,kilos_pagados,precio_kilo,valor_total,finca,cliente_proveedor,observaciones&fecha=gte.${e(date_from)}&fecha=lte.${e(date_to)}&order=fecha.desc`);
+      `select=id,fecha,tipo,cantidad_cabezas,kilos_pagados,precio_kilo,valor_total,finca,cliente_proveedor,observaciones&fecha=gte.${e(date_from)}&fecha=lte.${e(date_to)}&order=fecha.desc&limit=2000`);
 
     let totalCompras = 0, totalVentas = 0;
     const byFinca: Record<string, { compras: number; ventas: number }> = {};
@@ -585,7 +720,7 @@ async function execProductionData(args: Record<string, unknown>): Promise<string
     lote_name?: string; year?: number; cosecha_tipo?: string;
   };
 
-  let query = `select=id,ano,cosecha_tipo,kg_totales,arboles_registrados,kg_por_arbol,lote:lotes(nombre),sublote:sublotes(nombre)&order=ano.desc,kg_totales.desc`;
+  let query = `select=id,ano,cosecha_tipo,kg_totales,arboles_registrados,kg_por_arbol,lote:lotes(nombre),sublote:sublotes(nombre)&order=ano.desc,kg_totales.desc&limit=2000`;
 
   if (year) query += `&ano=eq.${year}`;
   if (cosecha_tipo) query += `&cosecha_tipo=ilike.*${e(cosecha_tipo)}*`;
@@ -599,11 +734,55 @@ async function execProductionData(args: Record<string, unknown>): Promise<string
   }
 
   let totalKg = 0;
-  for (const r of filtered) totalKg += (r.kg_totales as number) || 0;
+  const porAno: Record<number, { total_kg: number; avg_kg_arbol: number; lotes: Set<string>; _sum_kg_arbol: number; _count: number }> = {};
+  const porLote: Record<string, { total_kg: number; _arboles: number; _count: number }> = {};
+
+  for (const r of filtered) {
+    const kg = (r.kg_totales as number) || 0;
+    const kgArbol = (r.kg_por_arbol as number) || 0;
+    const ano = (r.ano as number) || 0;
+    const loteName = (r.lote as Record<string, unknown>)?.nombre as string || 'Sin lote';
+    const arboles = (r.arboles_registrados as number) || 0;
+    totalKg += kg;
+
+    if (ano) {
+      if (!porAno[ano]) porAno[ano] = { total_kg: 0, avg_kg_arbol: 0, lotes: new Set(), _sum_kg_arbol: 0, _count: 0 };
+      porAno[ano].total_kg += kg;
+      porAno[ano]._sum_kg_arbol += kgArbol;
+      porAno[ano]._count++;
+      porAno[ano].lotes.add(loteName);
+    }
+
+    if (!porLote[loteName]) porLote[loteName] = { total_kg: 0, _arboles: 0, _count: 0 };
+    porLote[loteName].total_kg += kg;
+    porLote[loteName]._arboles += arboles;
+    porLote[loteName]._count++;
+  }
+
+  // Serialize por_ano
+  const porAnoSerialized: Record<number, { total_kg: number; avg_kg_arbol: number; lotes: number }> = {};
+  for (const [ano, data] of Object.entries(porAno)) {
+    porAnoSerialized[Number(ano)] = {
+      total_kg: data.total_kg,
+      avg_kg_arbol: data._count > 0 ? Math.round(data._sum_kg_arbol / data._count * 10) / 10 : 0,
+      lotes: data.lotes.size,
+    };
+  }
+
+  // Serialize por_lote
+  const porLoteSerialized: Record<string, { total_kg: number; kg_arbol: number }> = {};
+  for (const [name, data] of Object.entries(porLote)) {
+    porLoteSerialized[name] = {
+      total_kg: data.total_kg,
+      kg_arbol: data._arboles > 0 ? Math.round(data.total_kg / data._arboles * 10) / 10 : 0,
+    };
+  }
 
   return JSON.stringify({
     total_registros: filtered.length,
     total_kg: totalKg,
+    por_ano: porAnoSerialized,
+    por_lote: porLoteSerialized,
     produccion: filtered.slice(0, 30),
   });
 }
@@ -613,11 +792,11 @@ async function execHarvestShipments(args: Record<string, unknown>): Promise<stri
     date_from?: string; date_to?: string; client_name?: string;
   };
 
-  let cosechasQuery = `select=id,fecha_cosecha,kilos_cosechados,numero_canastillas,lote:lotes(nombre),sublote:sublotes(nombre)&order=fecha_cosecha.desc`;
+  let cosechasQuery = `select=id,fecha_cosecha,kilos_cosechados,numero_canastillas,lote:lotes(nombre),sublote:sublotes(nombre)&order=fecha_cosecha.desc&limit=2000`;
   if (date_from) cosechasQuery += `&fecha_cosecha=gte.${e(date_from)}`;
   if (date_to) cosechasQuery += `&fecha_cosecha=lte.${e(date_to)}`;
 
-  let despachosQuery = `select=id,fecha_despacho,kilos_despachados,precio_por_kilo,valor_total,cliente:clientes(nombre)&order=fecha_despacho.desc`;
+  let despachosQuery = `select=id,fecha_despacho,kilos_despachados,precio_por_kilo,valor_total,cliente:clientes(nombre)&order=fecha_despacho.desc&limit=2000`;
   if (date_from) despachosQuery += `&fecha_despacho=gte.${e(date_from)}`;
   if (date_to) despachosQuery += `&fecha_despacho=lte.${e(date_to)}`;
 
@@ -635,24 +814,250 @@ async function execHarvestShipments(args: Record<string, unknown>): Promise<stri
   }
 
   let totalCosechado = 0;
-  for (const c of cosechas as Array<Record<string, unknown>>) totalCosechado += (c.kilos_cosechados as number) || 0;
+  const cosechasPorMes: Record<string, { total_kg: number; registros: number }> = {};
+  const cosechasPorLote: Record<string, { total_kg: number; registros: number }> = {};
+  for (const c of cosechas as Array<Record<string, unknown>>) {
+    const kg = (c.kilos_cosechados as number) || 0;
+    totalCosechado += kg;
+    const mes = ((c.fecha_cosecha as string) || '').slice(0, 7);
+    if (mes) {
+      if (!cosechasPorMes[mes]) cosechasPorMes[mes] = { total_kg: 0, registros: 0 };
+      cosechasPorMes[mes].total_kg += kg;
+      cosechasPorMes[mes].registros++;
+    }
+    const loteName = (c.lote as Record<string, unknown>)?.nombre as string || 'Sin lote';
+    if (!cosechasPorLote[loteName]) cosechasPorLote[loteName] = { total_kg: 0, registros: 0 };
+    cosechasPorLote[loteName].total_kg += kg;
+    cosechasPorLote[loteName].registros++;
+  }
+
   let totalDespachado = 0;
-  for (const d of filteredDespachos) totalDespachado += (d.kilos_despachados as number) || 0;
+  const despachosPorMes: Record<string, { total_kg: number; registros: number }> = {};
+  const despachosPorCliente: Record<string, { total_kg: number; registros: number }> = {};
+  for (const d of filteredDespachos) {
+    const kg = (d.kilos_despachados as number) || 0;
+    totalDespachado += kg;
+    const mes = ((d.fecha_despacho as string) || '').slice(0, 7);
+    if (mes) {
+      if (!despachosPorMes[mes]) despachosPorMes[mes] = { total_kg: 0, registros: 0 };
+      despachosPorMes[mes].total_kg += kg;
+      despachosPorMes[mes].registros++;
+    }
+    const clienteName = (d.cliente as Record<string, unknown>)?.nombre as string || 'Sin cliente';
+    if (!despachosPorCliente[clienteName]) despachosPorCliente[clienteName] = { total_kg: 0, registros: 0 };
+    despachosPorCliente[clienteName].total_kg += kg;
+    despachosPorCliente[clienteName].registros++;
+  }
 
   return JSON.stringify({
-    cosechas: { total_kg: totalCosechado, registros: cosechas.length, detalle: (cosechas as unknown[]).slice(0, 30) },
-    despachos: { total_kg: totalDespachado, registros: filteredDespachos.length, detalle: filteredDespachos.slice(0, 30) },
+    cosechas: { total_kg: totalCosechado, registros: cosechas.length, por_mes: cosechasPorMes, por_lote: cosechasPorLote, detalle: (cosechas as unknown[]).slice(0, 30) },
+    despachos: { total_kg: totalDespachado, registros: filteredDespachos.length, por_mes: despachosPorMes, por_cliente: despachosPorCliente, detalle: filteredDespachos.slice(0, 30) },
   });
 }
 
 async function execLotInfo(args: Record<string, unknown>): Promise<string> {
   const { lote_name } = args as { lote_name?: string };
 
-  let query = `select=id,nombre,area_hectareas,arboles_grandes,arboles_medianos,arboles_pequenos,arboles_clonales,total_arboles,sublotes:sublotes(id,nombre)&order=nombre.asc&limit=20`;
+  let query = `select=id,nombre,area_hectareas,arboles_grandes,arboles_medianos,arboles_pequenos,arboles_clonales,total_arboles,fecha_siembra,activo,sublotes:sublotes(id,nombre)&order=nombre.asc&limit=20`;
   if (lote_name) query += `&nombre=ilike.*${e(lote_name)}*`;
 
   const data = await supabaseQuery('lotes', query);
   return JSON.stringify({ lotes: data });
+}
+
+async function execPurchaseHistory(args: Record<string, unknown>): Promise<string> {
+  const { date_from, date_to, product_name, proveedor } = args as {
+    date_from?: string; date_to?: string; product_name?: string; proveedor?: string;
+  };
+
+  let query = `select=id,fecha_compra,proveedor,numero_factura,cantidad,unidad,costo_unitario,costo_total,producto:productos(nombre,categoria)&order=fecha_compra.desc&limit=2000`;
+  if (date_from) query += `&fecha_compra=gte.${e(date_from)}`;
+  if (date_to) query += `&fecha_compra=lte.${e(date_to)}`;
+
+  const data = await supabaseQuery('compras', query);
+  let filtered = data as Array<Record<string, unknown>>;
+
+  if (product_name) {
+    const pn = product_name.toLowerCase();
+    filtered = filtered.filter((r) => ((r.producto as Record<string, unknown>)?.nombre as string || '').toLowerCase().includes(pn));
+  }
+  if (proveedor) {
+    const pv = proveedor.toLowerCase();
+    filtered = filtered.filter((r) => ((r.proveedor as string) || '').toLowerCase().includes(pv));
+  }
+
+  let totalCompras = 0;
+  const porProveedor: Record<string, { total: number; compras: number }> = {};
+  const porProducto: Record<string, { total: number; cantidad: number }> = {};
+  const porMes: Record<string, { total: number; registros: number }> = {};
+
+  for (const r of filtered) {
+    const costo = (r.costo_total as number) || 0;
+    const cantidad = (r.cantidad as number) || 0;
+    totalCompras += costo;
+
+    const provName = (r.proveedor as string) || 'Sin proveedor';
+    if (!porProveedor[provName]) porProveedor[provName] = { total: 0, compras: 0 };
+    porProveedor[provName].total += costo;
+    porProveedor[provName].compras++;
+
+    const prodName = (r.producto as Record<string, unknown>)?.nombre as string || 'Sin producto';
+    if (!porProducto[prodName]) porProducto[prodName] = { total: 0, cantidad: 0 };
+    porProducto[prodName].total += costo;
+    porProducto[prodName].cantidad += cantidad;
+
+    const mes = ((r.fecha_compra as string) || '').slice(0, 7);
+    if (mes) {
+      if (!porMes[mes]) porMes[mes] = { total: 0, registros: 0 };
+      porMes[mes].total += costo;
+      porMes[mes].registros++;
+    }
+  }
+
+  // Top 10 products by spend
+  const porProductoTop = Object.entries(porProducto)
+    .sort((a, b) => b[1].total - a[1].total)
+    .slice(0, 10)
+    .reduce((acc, [name, data]) => { acc[name] = data; return acc; }, {} as Record<string, { total: number; cantidad: number }>);
+
+  return JSON.stringify({
+    total_registros: filtered.length,
+    total_compras: Math.round(totalCompras),
+    por_proveedor: porProveedor,
+    por_producto: porProductoTop,
+    por_mes: porMes,
+    detalle: filtered.slice(0, 30),
+  });
+}
+
+async function execInventoryMovements(args: Record<string, unknown>): Promise<string> {
+  const { product_name, date_from, date_to, tipo } = args as {
+    product_name?: string; date_from?: string; date_to?: string; tipo?: string;
+  };
+
+  let movQuery = `select=id,fecha_movimiento,tipo_movimiento,cantidad,unidad,saldo_anterior,saldo_nuevo,valor_movimiento,observaciones,producto:productos(nombre,categoria)&order=fecha_movimiento.desc&limit=2000`;
+  if (date_from) movQuery += `&fecha_movimiento=gte.${e(date_from)}`;
+  if (date_to) movQuery += `&fecha_movimiento=lte.${e(date_to)}`;
+  if (tipo) movQuery += `&tipo_movimiento=ilike.*${e(tipo)}*`;
+
+  const [movimientos, verificaciones] = await Promise.all([
+    supabaseQuery('movimientos_inventario', movQuery),
+    supabaseQuery('verificaciones_inventario',
+      `select=id,fecha_inicio,fecha_fin,estado,usuario_verificador,observaciones_generales,verificaciones_detalle(producto:productos(nombre),cantidad_teorica,cantidad_fisica,diferencia,porcentaje_diferencia,valor_diferencia,estado_diferencia)&order=fecha_inicio.desc&limit=10`),
+  ]);
+
+  let filteredMov = movimientos as Array<Record<string, unknown>>;
+  if (product_name) {
+    const pn = product_name.toLowerCase();
+    filteredMov = filteredMov.filter((r) => ((r.producto as Record<string, unknown>)?.nombre as string || '').toLowerCase().includes(pn));
+  }
+
+  let entradasTotal = 0;
+  let salidasTotal = 0;
+  let ajustesTotal = 0;
+  const porProducto: Record<string, { entradas: number; salidas: number; neto: number }> = {};
+
+  for (const m of filteredMov) {
+    const val = (m.valor_movimiento as number) || 0;
+    const cantidad = (m.cantidad as number) || 0;
+    const tipoMov = (m.tipo_movimiento as string) || '';
+    const prodName = (m.producto as Record<string, unknown>)?.nombre as string || 'Sin producto';
+
+    if (tipoMov.toLowerCase().includes('entrada')) {
+      entradasTotal += val;
+      if (!porProducto[prodName]) porProducto[prodName] = { entradas: 0, salidas: 0, neto: 0 };
+      porProducto[prodName].entradas += cantidad;
+      porProducto[prodName].neto += cantidad;
+    } else if (tipoMov.toLowerCase().includes('salida')) {
+      salidasTotal += val;
+      if (!porProducto[prodName]) porProducto[prodName] = { entradas: 0, salidas: 0, neto: 0 };
+      porProducto[prodName].salidas += cantidad;
+      porProducto[prodName].neto -= cantidad;
+    } else {
+      ajustesTotal += val;
+      if (!porProducto[prodName]) porProducto[prodName] = { entradas: 0, salidas: 0, neto: 0 };
+      porProducto[prodName].neto += cantidad;
+    }
+  }
+
+  // Extract discrepancias from verificaciones
+  const discrepancias: unknown[] = [];
+  const verifList = verificaciones as Array<Record<string, unknown>>;
+  for (const v of verifList) {
+    const detalles = (v.verificaciones_detalle as Array<Record<string, unknown>>) || [];
+    for (const d of detalles) {
+      if ((d.diferencia as number) !== 0) {
+        discrepancias.push({ ...d, verificacion_id: v.id, fecha: v.fecha_inicio });
+      }
+    }
+  }
+
+  return JSON.stringify({
+    movimientos: {
+      total: filteredMov.length,
+      entradas_total: Math.round(entradasTotal),
+      salidas_total: Math.round(salidasTotal),
+      ajustes_total: Math.round(ajustesTotal),
+      por_producto: porProducto,
+      detalle: filteredMov.slice(0, 30),
+    },
+    verificaciones: {
+      total: verifList.length,
+      ultima_verificacion: verifList[0] ? { fecha: verifList[0].fecha_inicio, estado: verifList[0].estado } : null,
+      discrepancias,
+    },
+  });
+}
+
+async function execApplicationDetails(args: Record<string, unknown>): Promise<string> {
+  const id = args.application_id as string;
+  if (!id) return JSON.stringify({ error: 'application_id es requerido' });
+
+  const [cierre, calculos, focos] = await Promise.all([
+    supabaseQuery('aplicaciones_cierre', `select=*&aplicacion_id=eq.${e(id)}`),
+    supabaseQuery('aplicaciones_calculos', `select=lote_nombre,area_hectareas,total_arboles,litros_mezcla,numero_canecas,kilos_totales,numero_bultos&aplicacion_id=eq.${e(id)}`),
+    supabaseQuery('focos', `select=fecha_aplicacion,blanco_biologico,numero_focos,numero_bombas_30l,costo_insumos,jornales,costo_mano_obra,costo_total,observaciones,lote:lotes(nombre),sublote:sublotes(nombre),focos_productos(producto:productos(nombre),dosis_por_bomba,costo_producto)&aplicacion_id=eq.${e(id)}`),
+  ]);
+
+  // Cierre summary
+  const cierreData = (cierre as Array<Record<string, unknown>>)[0] || null;
+
+  // Calculos summary by lote
+  const calculosList = calculos as Array<Record<string, unknown>>;
+  let totalLitros = 0;
+  let totalCanecas = 0;
+  let totalArboles = 0;
+  for (const c of calculosList) {
+    totalLitros += (c.litros_mezcla as number) || 0;
+    totalCanecas += (c.numero_canecas as number) || 0;
+    totalArboles += (c.total_arboles as number) || 0;
+  }
+
+  // Focos summary
+  const focosList = focos as Array<Record<string, unknown>>;
+  let totalCostoFocos = 0;
+  let totalFocos = 0;
+  for (const f of focosList) {
+    totalCostoFocos += (f.costo_total as number) || 0;
+    totalFocos += (f.numero_focos as number) || 0;
+  }
+
+  return JSON.stringify({
+    cierre: cierreData,
+    calculos: {
+      total_lotes: calculosList.length,
+      total_arboles: totalArboles,
+      total_litros_mezcla: totalLitros,
+      total_canecas: totalCanecas,
+      detalle: calculosList,
+    },
+    focos: {
+      total_registros: focosList.length,
+      total_focos: totalFocos,
+      costo_total_focos: Math.round(totalCostoFocos),
+      detalle: focosList,
+    },
+  });
 }
 
 async function execWeeklyOverview(args: Record<string, unknown>): Promise<string> {
@@ -719,7 +1124,23 @@ COSTOS DE MANO DE OBRA:
 - El costo real por jornal se calcula como (salario + prestaciones_sociales + auxilios_no_salariales) / 22 dias laborales
 - La herramienta de labores calcula esto automaticamente con los datos de cada empleado
 - Para contratistas se usa la tarifa_jornal directamente
-- Usa siempre los valores de costo_total_mano_obra y costo_promedio_jornal que retorna la herramienta, no inventes costos`;
+- Usa siempre los valores de costo_total_mano_obra y costo_promedio_jornal que retorna la herramienta, no inventes costos
+
+FORMATO DE RESPUESTA (prioridad):
+1. GRAFICOS — cuando hay dimension temporal o comparaciones entre categorias, incluye un grafico.
+2. TABLAS — para datos tabulares detallados, usa tablas markdown.
+3. VIÑETAS — para alertas o hallazgos clave.
+4. TEXTO — solo para explicaciones y contexto narrativo.
+
+COMO CREAR GRAFICOS:
+Usa bloques de codigo con lenguaje "chart" y JSON valido:
+\`\`\`chart
+{"type":"bar","title":"Titulo","data":[{"name":"Cat1","value":100}],"xKey":"name","yKey":"value","yFormat":"currency"}
+\`\`\`
+Tipos: bar (comparar categorias), line (tendencias temporales), pie (distribucion), area (volumenes).
+yFormat: currency (pesos colombianos), number, percent, kg.
+Para multiples series: yKey como array ["serie1","serie2"] con colors array.
+IMPORTANTE: El JSON del grafico debe ser valido y estar en una sola linea o con formato JSON valido. No uses comillas simples ni trailing commas.`;
 }
 
 // ============================================================================
@@ -839,7 +1260,7 @@ export async function llmToolLoop(messages: Array<{ role: string; content: strin
       model: MODEL,
       messages,
       temperature: 0.3,
-      max_tokens: 8192,
+      max_tokens: 12000,
     }),
   });
 
