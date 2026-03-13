@@ -1,17 +1,18 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { Database } from '@/types/database';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 // Singleton Supabase client instance
-let supabaseInstance: ReturnType<typeof createClient> | null = null;
+let supabaseInstance: SupabaseClient<Database> | null = null;
 
 export function getSupabase() {
   if (!supabaseInstance) {
     if (!supabaseUrl || !supabaseAnonKey) {
       throw new Error('Missing Supabase environment variables. Please check your .env.local file.');
     }
-    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
+    supabaseInstance = createClient<Database>(supabaseUrl, supabaseAnonKey);
   }
   return supabaseInstance;
 }

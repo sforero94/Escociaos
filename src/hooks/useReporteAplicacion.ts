@@ -7,16 +7,109 @@ import {
     formatearMoneda,
     formatearNumero,
 } from '../utils/calculosReporteAplicacion';
-import type {
-    ReporteAplicacionCerrada,
-    KPICardData,
-    DatosGraficoBarrasLote,
-    DatosGraficoCostos,
-    CanecasPorLote,
-    JornalesPorLote,
-    FilaComparacion,
-    ResumenAplicacionCerrada,
-} from '../types/aplicaciones';
+// Types defined locally — not available in types/aplicaciones
+interface KPICardData {
+    titulo: string;
+    valor: number;
+    valorFormateado: string;
+    comparacion: string;
+    desviacion: number;
+    esPositivo: boolean;
+}
+
+interface ComparisonField {
+    real: number;
+    planeado: number;
+    desviacion: number;
+}
+
+interface CanecasPorLote {
+    lote_id: string;
+    lote_nombre: string;
+    canecas: ComparisonField;
+    litros_totales: ComparisonField;
+}
+
+interface JornalesPorLote {
+    lote_id: string;
+    lote_nombre: string;
+    jornales_preparacion: ComparisonField;
+    jornales_aplicacion: ComparisonField;
+    jornales_transporte: ComparisonField;
+    jornales_total: ComparisonField;
+    arboles_por_jornal: ComparisonField;
+}
+
+interface DatosGraficoBarrasLote {
+    lote: string;
+    planeado: number;
+    real: number;
+    anterior: number;
+}
+
+interface DatosGraficoCostos {
+    aplicacion: string;
+    fecha: string;
+    costoProductos: number;
+    costoJornales: number;
+    costoTotal: number;
+}
+
+interface FinancieroField {
+    real: number;
+    planeado: number;
+    desviacion: number;
+    cambio: number;
+}
+
+interface ProductoDetalle {
+    producto_id: string;
+    producto_nombre: string;
+    unidad: string;
+    cantidad: ComparisonField;
+    costo: ComparisonField;
+}
+
+interface ReporteAplicacionCerrada {
+    aplicacion_id: string;
+    codigo_aplicacion: string | null;
+    nombre_aplicacion: string | null;
+    tipo_aplicacion: string | null;
+    fecha_inicio: string;
+    fecha_fin: string;
+    dias_aplicacion: number;
+    tamano_caneca: number;
+    aplicacion_anterior_id?: string;
+    aplicacion_anterior_nombre?: string;
+    total_arboles: number;
+    kpis: Record<string, KPICardData>;
+    grafico_costos_historico: DatosGraficoCostos[];
+    grafico_canecas_por_lote: DatosGraficoBarrasLote[];
+    grafico_productos_por_lote: DatosGraficoBarrasLote[];
+    grafico_jornales_por_lote: DatosGraficoBarrasLote[];
+    grafico_eficiencia_por_lote: DatosGraficoBarrasLote[];
+    detalle_canecas: { totales: CanecasPorLote; por_lote: CanecasPorLote[] };
+    detalle_jornales: { totales: JornalesPorLote; por_lote: JornalesPorLote[]; valor_jornal: number };
+    detalle_productos: { totales: ProductoDetalle[]; por_lote: Record<string, ProductoDetalle[]> };
+    alertas: string[];
+    financiero: {
+        costo_productos: FinancieroField;
+        costo_jornales: FinancieroField;
+        costo_total: FinancieroField;
+        costo_por_arbol: FinancieroField;
+    };
+}
+
+interface ResumenAplicacionCerrada {
+    id: string;
+    codigo: string;
+    nombre: string;
+    tipo: string;
+    fecha_cierre: string;
+    costo_total: number;
+    desviacion_costo: number;
+    estado: 'Cerrada';
+}
 
 // ============================================================================
 // TYPES
@@ -228,8 +321,9 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                 sum + (l.total_arboles || l.lotes?.total_arboles || 0), 0) || 0;
 
             // Use 'jornales_utilizados' from app for total labor, defaulting to 0
-            const totalJornalesApp = Number(appData.jornales_utilizados || appData.aplicaciones_cierre?.[0]?.jornales_aplicacion || 0);
-            const valorJornal = Number(appData.valor_jornal || appData.aplicaciones_cierre?.[0]?.valor_jornal || 0);
+            const cierreData = appData.aplicaciones_cierre as unknown as any[] | undefined;
+            const totalJornalesApp = Number(appData.jornales_utilizados || cierreData?.[0]?.jornales_aplicacion || 0);
+            const valorJornal = Number(appData.valor_jornal || cierreData?.[0]?.valor_jornal || 0);
 
             // --- Real Data Processing ---
             const lotesRealMap = new Map();
@@ -559,9 +653,9 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                 codigo_aplicacion: appData.codigo_aplicacion,
                 nombre_aplicacion: appData.nombre_aplicacion,
                 tipo_aplicacion: appData.tipo_aplicacion,
-                fecha_inicio: appData.fecha_inicio_ejecucion || appData.fecha_inicio,
-                fecha_fin: appData.fecha_fin_ejecucion || appData.fecha_fin,
-                dias_aplicacion: appData.aplicaciones_cierre?.[0]?.dias_aplicacion || 1,
+                fecha_inicio: appData.fecha_inicio_ejecucion || (appData as any).fecha_inicio,
+                fecha_fin: appData.fecha_fin_ejecucion || (appData as any).fecha_fin,
+                dias_aplicacion: (cierreData as any)?.[0]?.dias_aplicacion || 1,
                 tamano_caneca: tamanoCaneca,
                 aplicacion_anterior_id: anteriorId || undefined,
                 aplicacion_anterior_nombre: anteriorData?.appData?.nombre_aplicacion || anteriorData?.appData?.codigo_aplicacion || undefined,

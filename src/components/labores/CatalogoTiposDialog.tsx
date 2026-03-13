@@ -100,7 +100,7 @@ const CatalogoTiposDialog: React.FC<CatalogoTiposDialogProps> = ({
         .order('nombre', { ascending: true });
 
       if (error) throw error;
-      setTiposTareas(data || []);
+      setTiposTareas((data || []) as unknown as TipoTarea[]);
     } catch (error: any) {
       onError(`Error al cargar tipos de tareas: ${error.message}`);
     } finally {
@@ -146,7 +146,7 @@ const CatalogoTiposDialog: React.FC<CatalogoTiposDialogProps> = ({
           .from('tipos_tareas')
           .update({
             nombre: formData.nombre.trim(),
-            categoria: formData.categoria.trim(),
+            categoria: formData.categoria.trim() as any,
             descripcion: formData.descripcion.trim() || null,
             activo: formData.activo,
           })
@@ -157,12 +157,12 @@ const CatalogoTiposDialog: React.FC<CatalogoTiposDialogProps> = ({
         // Create new
         const { error } = await getSupabase()
           .from('tipos_tareas')
-          .insert([{
+          .insert({
             nombre: formData.nombre.trim(),
-            categoria: formData.categoria.trim(),
+            categoria: formData.categoria.trim() as any,
             descripcion: formData.descripcion.trim() || null,
             activo: formData.activo,
-          }]);
+          } as any);
 
         if (error) throw error;
       }

@@ -38,6 +38,7 @@ import {
 import { Alert, AlertDescription } from '../ui/alert';
 import { Badge } from '../ui/badge';
 import { Switch } from '../ui/switch';
+// @ts-ignore papaparse may lack type declarations
 import Papa from 'papaparse';
 import { parsearFechaFlexible } from '../../utils/fechas';
 import {
@@ -110,7 +111,7 @@ const Personal: React.FC = () => {
         .order('nombre', { ascending: true });
 
       if (error) throw error;
-      setEmpleados(data || []);
+      setEmpleados((data || []) as Empleado[]);
     } catch (error: any) {
       showAlert('error', `Error al cargar empleados: ${error.message}`);
     } finally {
@@ -144,14 +145,14 @@ const Personal: React.FC = () => {
           .update({
             ...formData,
             updated_at: new Date().toISOString(),
-          })
-          .eq('id', editingEmpleado.id);
+          } as any)
+          .eq('id', editingEmpleado.id!);
 
         if (error) throw error;
         showAlert('success', 'Empleado actualizado exitosamente');
       } else {
         // Crear nuevo empleado
-        const { error } = await getSupabase().from('empleados').insert([formData]);
+        const { error } = await getSupabase().from('empleados').insert([formData] as any);
 
         if (error) throw error;
         showAlert('success', 'Empleado creado exitosamente');
@@ -339,7 +340,7 @@ const Personal: React.FC = () => {
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      complete: (results) => {
+      complete: (results: { data: Record<string, string>[] }) => {
         try {
           // Mapear datos CSV al formato de Empleado
           const mappedData: Empleado[] = results.data.map((row: any) => {
@@ -427,7 +428,7 @@ const Personal: React.FC = () => {
           showAlert('error', `Error al procesar CSV: ${error.message}`);
         }
       },
-      error: (error) => {
+      error: (error: { message: string }) => {
         showAlert('error', `Error al leer archivo: ${error.message}`);
       },
     });
@@ -483,7 +484,7 @@ const Personal: React.FC = () => {
 
         const { error } = await supabase
           .from('empleados')
-          .insert(batch)
+          .insert(batch as any)
           .select();
 
         if (error) {

@@ -4,51 +4,52 @@
 export interface Negocio {
   id: string;
   nombre: string;
-  descripcion?: string;
-  activo: boolean;
-  created_at: string;
-  updated_at: string;
+  descripcion?: string | null;
+  activo: boolean | null;
+  created_at: string | null;
+  updated_at: string | null;
 }
 
 // Regions
 export interface Region {
   id: string;
   nombre: string;
-  descripcion?: string;
-  activo: boolean;
-  created_at: string;
-  updated_at: string;
+  descripcion?: string | null;
+  activo: boolean | null;
+  created_at: string | null;
+  updated_at: string | null;
 }
 
 // Payment Methods
 export interface MedioPago {
   id: string;
   nombre: string;
-  descripcion?: string;
-  activo: boolean;
-  created_at: string;
-  updated_at: string;
+  descripcion?: string | null;
+  activo: boolean | null;
+  created_at: string | null;
+  updated_at: string | null;
 }
 
 // Expense Categories
 export interface CategoriaGasto {
   id: string;
   nombre: string;
-  descripcion?: string;
-  activo: boolean;
-  created_at: string;
-  updated_at: string;
+  descripcion?: string | null;
+  orden?: number | null;
+  activo: boolean | null;
+  created_at: string | null;
+  updated_at: string | null;
 }
 
 // Expense Concepts
 export interface ConceptoGasto {
   id: string;
   nombre: string;
-  descripcion?: string;
+  descripcion?: string | null;
   categoria_id: string;
-  activo: boolean;
-  created_at: string;
-  updated_at: string;
+  activo: boolean | null;
+  created_at: string | null;
+  updated_at: string | null;
   categoria?: CategoriaGasto;
 }
 
@@ -56,12 +57,14 @@ export interface ConceptoGasto {
 export interface Proveedor {
   id: string;
   nombre: string;
-  nit?: string;
-  telefono?: string;
-  email?: string;
-  activo: boolean;
-  created_at: string;
-  updated_at: string;
+  nit?: string | null;
+  telefono?: string | null;
+  email?: string | null;
+  activo: boolean | null;
+  created_at: string | null;
+  updated_at: string | null;
+  created_by?: string | null;
+  updated_by?: string | null;
 }
 
 // Expense
@@ -94,11 +97,11 @@ export interface Gasto {
 export interface CategoriaIngreso {
   id: string;
   nombre: string;
-  descripcion?: string;
+  descripcion?: string | null;
   negocio_id: string;
-  activo: boolean;
-  created_at: string;
-  updated_at: string;
+  activo: boolean | null;
+  created_at: string | null;
+  updated_at: string | null;
   negocio?: Negocio;
 }
 
@@ -106,11 +109,14 @@ export interface CategoriaIngreso {
 export interface Comprador {
   id: string;
   nombre: string;
-  telefono?: string;
-  email?: string;
-  activo: boolean;
-  created_at: string;
-  updated_at: string;
+  nit?: string | null;
+  telefono?: string | null;
+  email?: string | null;
+  activo: boolean | null;
+  created_at: string | null;
+  updated_at: string | null;
+  created_by?: string | null;
+  updated_by?: string | null;
 }
 
 // Income

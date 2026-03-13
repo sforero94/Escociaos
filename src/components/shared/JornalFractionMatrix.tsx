@@ -156,12 +156,12 @@ export function JornalFractionMatrix({
             </thead>
             <tbody className="divide-y divide-primary/5">
               {trabajadores.map((trabajador) => {
-                const totalFraccion = calculateTotalFraccion(trabajador.data.id);
+                const totalFraccion = calculateTotalFraccion(trabajador.data.id!);
                 const totalCosto = showCostPreview ? calculateCosto(trabajador, totalFraccion) : 0;
 
                 return (
                   <tr
-                    key={trabajador.data.id}
+                    key={trabajador.data.id!}
                     className="hover:bg-background transition-colors"
                   >
                     {/* Worker name column (sticky left) */}
@@ -200,7 +200,7 @@ export function JornalFractionMatrix({
                             type="button"
                             variant="ghost"
                             size="sm"
-                            onClick={() => onRemoveTrabajador(trabajador.data.id)}
+                            onClick={() => onRemoveTrabajador(trabajador.data.id!)}
                             disabled={disabled}
                             className="text-red-600 hover:text-red-700 hover:bg-red-50 h-7 w-7 p-0 ml-2 flex-shrink-0"
                           >
@@ -216,9 +216,9 @@ export function JornalFractionMatrix({
                         <div className="space-y-1.5">
                           {/* Fraction selector */}
                           <Select
-                            value={workMatrix[trabajador.data.id]?.[lote.id] || '0.0'}
+                            value={workMatrix[trabajador.data.id!]?.[lote.id] || '0.0'}
                             onValueChange={(value) =>
-                              onFraccionChange(trabajador.data.id, lote.id, value)
+                              onFraccionChange(trabajador.data.id!, lote.id, value)
                             }
                             disabled={disabled}
                           >
@@ -236,9 +236,9 @@ export function JornalFractionMatrix({
 
                           {/* Observations textarea */}
                           <Textarea
-                            value={observaciones[trabajador.data.id]?.[lote.id] || ''}
+                            value={observaciones[trabajador.data.id!]?.[lote.id] || ''}
                             onChange={(e) =>
-                              onObservacionesChange(trabajador.data.id, lote.id, e.target.value)
+                              onObservacionesChange(trabajador.data.id!, lote.id, e.target.value)
                             }
                             placeholder="Notas..."
                             rows={2}
@@ -282,7 +282,7 @@ export function JornalFractionMatrix({
               {trabajadores.reduce((count, trabajador) => {
                 const workerRecords = lotes.filter(
                   (lote) =>
-                    parseFloat(workMatrix[trabajador.data.id]?.[lote.id] || '0.0') > 0
+                    parseFloat(workMatrix[trabajador.data.id!]?.[lote.id] || '0.0') > 0
                 ).length;
                 return count + workerRecords;
               }, 0)}

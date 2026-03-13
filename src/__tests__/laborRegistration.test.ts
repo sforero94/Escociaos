@@ -212,7 +212,7 @@ describe('Integration Tests - Complete Labor Registration Flow', () => {
     const mockInsert = vi.fn().mockResolvedValue({ error: null });
     mockSupabase.from.mockReturnValue({
       insert: mockInsert,
-    });
+    } as any);
 
     // Simulate complete flow:
     // 1. Task starts as "Banco"
@@ -245,7 +245,7 @@ describe('Integration Tests - Complete Labor Registration Flow', () => {
     mockSupabase.from.mockReturnValue({
       update: mockUpdate,
       eq: vi.fn().mockReturnThis(),
-    });
+    } as any);
 
     // Attempt to change task with labor to invalid status
     const taskWithLabor = { id: 'task-123', jornales_reales: 1.5 };

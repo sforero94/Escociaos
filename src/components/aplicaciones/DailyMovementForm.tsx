@@ -253,7 +253,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
             .single();
           
           if (!errorProducto && productoData) {
-            presentacionKgL = productoData.presentacion_kg_l;
+            presentacionKgL = productoData.presentacion_kg_l ?? undefined;
           }
         } catch (err) {
         }
@@ -300,7 +300,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         .order('nombre');
 
       if (!errorEmpleados && empleados) {
-        setEmpleadosDisponibles(empleados);
+        setEmpleadosDisponibles(empleados as Empleado[]);
       }
 
       // Load contractors
@@ -311,7 +311,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         .order('nombre');
 
       if (!errorContratistas && contratistas) {
-        setContratistasDisponibles(contratistas);
+        setContratistasDisponibles(contratistas as Contratista[]);
       }
     } catch (err: any) {
       console.error('Error al cargar trabajadores:', err);
@@ -345,7 +345,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         
         if (errorProducto) {
         } else {
-          presentacionKgL = productoData?.presentacion_kg_l;
+          presentacionKgL = productoData?.presentacion_kg_l ?? undefined;
         }
       } catch (err) {
       }
@@ -447,17 +447,17 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       if (!lote) throw new Error('Lote no encontrado');
 
       // 1. Crear movimiento diario (padre)
-      const nuevoMovimiento: Omit<MovimientoDiario, 'id' | 'created_at'> = {
+      const nuevoMovimiento = {
         aplicacion_id: aplicacion.id,
         fecha_movimiento: fechaMovimiento,
         lote_id: loteId,
         lote_nombre: lote.nombre,
         numero_canecas: (aplicacion.tipo_aplicacion === 'Fumigación' || aplicacion.tipo_aplicacion === 'Drench') ? parseFloat(numeroCanecas) : undefined,
         numero_bultos: aplicacion.tipo_aplicacion === 'Fertilización' ? parseInt(numeroBultos, 10) : undefined,
-        equipo_aplicacion: equipoAplicacion.trim() || undefined, // 🆕 NUEVO CAMPO
-        personal: personal.trim() || undefined, //  NUEVO CAMPO
-        hora_inicio: horaInicio || undefined, // 🆕 NUEVO CAMPO
-        hora_fin: horaFin || undefined, // 🆕 NUEVO CAMPO
+        equipo_aplicacion: equipoAplicacion.trim() || undefined,
+        personal: personal.trim() || undefined,
+        hora_inicio: horaInicio || undefined,
+        hora_fin: horaFin || undefined,
         responsable: responsable.trim(),
         condiciones_meteorologicas: condicionesMeteorologicas.trim() || undefined,
         notas: notas.trim() || undefined,
@@ -466,7 +466,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
 
       const { data: movimientoCreado, error: errorMovimiento } = await supabase
         .from('movimientos_diarios')
-        .insert([nuevoMovimiento])
+        .insert([nuevoMovimiento as any])
         .select()
         .single();
 
@@ -520,7 +520,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       if (selectedTrabajadores.length > 0) {
         const trabajadoresData = selectedTrabajadores
           .flatMap(trabajador => {
-            const trabajadorId = trabajador.data.id;
+            const trabajadorId = trabajador.data.id ?? '';
             const fraccion = workMatrix[trabajadorId]?.[loteId] || '0.0';
             if (parseFloat(fraccion) === 0) return [];
 
@@ -563,7 +563,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         if (trabajadoresData.length > 0) {
           const { error: errorTrabajadores } = await supabase
             .from('movimientos_diarios_trabajadores')
-            .insert(trabajadoresData);
+            .insert(trabajadoresData as any);
 
           if (errorTrabajadores) {
             // If worker save fails, delete the movement and products

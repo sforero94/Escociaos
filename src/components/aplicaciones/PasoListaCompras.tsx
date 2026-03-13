@@ -89,7 +89,7 @@ export function PasoListaCompras({
 
       if (error) throw error;
 
-      let inventarioActual: ProductoCatalogo[] = data.map((p) => ({
+      let inventarioActual = data.map((p) => ({
         id: p.id,
         nombre: p.nombre,
         categoria: p.categoria,
@@ -98,13 +98,13 @@ export function PasoListaCompras({
         estado_fisico: p.estado_fisico,
         // Construir presentación: "50 Kg" o fallback a "1 Kg/L"
         presentacion_comercial: p.presentacion_kg_l && p.presentacion_kg_l > 0
-          ? `${p.presentacion_kg_l} ${p.unidad_medida === 'kilos' ? 'Kg' : p.unidad_medida === 'litros' ? 'L' : p.unidad_medida}`
-          : `1 ${p.unidad_medida === 'kilos' ? 'Kg' : p.unidad_medida === 'litros' ? 'L' : p.unidad_medida}`,
+          ? `${p.presentacion_kg_l} ${(p.unidad_medida as string) === 'kilos' || p.unidad_medida === 'Kilos' ? 'Kg' : (p.unidad_medida as string) === 'litros' || p.unidad_medida === 'Litros' ? 'L' : p.unidad_medida}`
+          : `1 ${(p.unidad_medida as string) === 'kilos' || p.unidad_medida === 'Kilos' ? 'Kg' : (p.unidad_medida as string) === 'litros' || p.unidad_medida === 'Litros' ? 'L' : p.unidad_medida}`,
         ultimo_precio_unitario: p.precio_unitario || 0,      // Precio por Kg/L
         precio_presentacion: p.precio_por_presentacion || 0, // Precio por bulto/envase
         cantidad_actual: p.cantidad_actual || 0,
-        permitido_gerencia: p.permitido_gerencia,
-      }));
+        permitido_gerencia: p.permitido_gerencia ?? undefined,
+      })) as unknown as ProductoCatalogo[];
 
       // Filtrar productos no permitidos si modo seguro está activado
       if (isSafeModeEnabled) {
@@ -690,7 +690,7 @@ export function PasoListaCompras({
           <div>
             <div className="text-brand-brown/70 mb-1">Fecha Inicio:</div>
             <div className="text-foreground">
-              {new Date(configuracion.fecha_inicio).toLocaleDateString('es-CO', {
+              {new Date(configuracion.fecha_inicio ?? configuracion.fecha_inicio_planeada).toLocaleDateString('es-CO', {
                 year: 'numeric',
                 month: 'long',
                 day: 'numeric',

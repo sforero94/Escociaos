@@ -77,7 +77,7 @@ export function PasoCierreValidacion({
     const productosMap = new Map<string, ComparacionProducto>();
 
     // Obtener cantidades planeadas
-    aplicacion.mezclas.forEach((mezcla) => {
+    aplicacion.mezclas!.forEach((mezcla) => {
       mezcla.productos.forEach((producto) => {
         if (!productosMap.has(producto.producto_id)) {
           productosMap.set(producto.producto_id, {
@@ -98,12 +98,12 @@ export function PasoCierreValidacion({
 
     // Sumar cantidades reales de movimientos
     movimientos.forEach((mov) => {
-      const producto = productosMap.get(mov.producto_id);
+      const producto = productosMap.get(mov.producto_id ?? '');
       if (producto) {
-        producto.cantidad_real += mov.cantidad_utilizada;
+        producto.cantidad_real += mov.cantidad_utilizada ?? 0;
         // Actualizar costo unitario si está disponible
-        if (mov.costo_unitario && producto.costo_unitario === 0) {
-          producto.costo_unitario = mov.costo_unitario;
+        if ((mov as any).costo_unitario && producto.costo_unitario === 0) {
+          producto.costo_unitario = (mov as any).costo_unitario;
         }
       }
     });
@@ -136,7 +136,7 @@ export function PasoCierreValidacion({
     const productosMap = new Map<string, ComparacionProducto>();
 
     // Obtener cantidades planeadas
-    aplicacion.mezclas.forEach((mezcla) => {
+    aplicacion.mezclas!.forEach((mezcla) => {
       mezcla.productos.forEach((producto) => {
         if (!productosMap.has(producto.producto_id)) {
           productosMap.set(producto.producto_id, {
@@ -156,12 +156,12 @@ export function PasoCierreValidacion({
 
     // Sumar cantidades reales de movimientos
     movimientos.forEach((mov) => {
-      const producto = productosMap.get(mov.producto_id);
+      const producto = productosMap.get(mov.producto_id ?? '');
       if (producto) {
-        producto.cantidad_real += mov.cantidad_utilizada;
+        producto.cantidad_real += mov.cantidad_utilizada ?? 0;
         // Actualizar costo unitario si está disponible
-        if (mov.costo_unitario && producto.costo_unitario === 0) {
-          producto.costo_unitario = mov.costo_unitario;
+        if ((mov as any).costo_unitario && producto.costo_unitario === 0) {
+          producto.costo_unitario = (mov as any).costo_unitario;
         }
       }
     });
@@ -188,10 +188,10 @@ export function PasoCierreValidacion({
     const totalJornales =
       jornales.aplicacion + jornales.mezcla + jornales.transporte + (jornales.otros || 0);
 
-    const detalles: DetalleCierreLote[] = aplicacion.configuracion.lotes_seleccionados.map(
+    const detalles: DetalleCierreLote[] = aplicacion.configuracion!.lotes_seleccionados.map(
       (lote) => {
         // Buscar cálculos planeados
-        const calculosLote = aplicacion.calculos.find((c) => c.lote_id === lote.lote_id);
+        const calculosLote = aplicacion.calculos!.find((c) => c.lote_id === lote.lote_id);
 
         // Agrupar movimientos por lote
         const movimientosLote = movimientos.filter((m) => m.lote_id === lote.lote_id);
@@ -202,10 +202,10 @@ export function PasoCierreValidacion({
         let canecasReales = 0;
 
         movimientosLote.forEach((mov) => {
-          if (mov.producto_unidad === 'litros') {
-            litrosReales += mov.cantidad_utilizada;
-          } else if (mov.producto_unidad === 'kilos') {
-            kilosReales += mov.cantidad_utilizada;
+          if ((mov.producto_unidad as string) === 'litros' || mov.producto_unidad === 'Litros') {
+            litrosReales += mov.cantidad_utilizada ?? 0;
+          } else if ((mov.producto_unidad as string) === 'kilos' || mov.producto_unidad === 'Kilos') {
+            kilosReales += mov.cantidad_utilizada ?? 0;
           }
 
           if (mov.numero_canecas_utilizadas) {
@@ -217,7 +217,7 @@ export function PasoCierreValidacion({
         // Por ahora, distribuimos jornales proporcionalmente por número de árboles
         const proporcionArboles =
           lote.conteo_arboles.total /
-          aplicacion.configuracion.lotes_seleccionados.reduce(
+          aplicacion.configuracion!.lotes_seleccionados.reduce(
             (sum, l) => sum + l.conteo_arboles.total,
             0
           );
@@ -228,7 +228,7 @@ export function PasoCierreValidacion({
         // Costo de insumos (suma de productos usados en este lote)
         const costoInsumos = movimientosLote.reduce((sum, mov) => {
           const producto = productosArray.find((p) => p.producto_id === mov.producto_id);
-          return sum + (producto?.costo_unitario || 0) * mov.cantidad_utilizada;
+          return sum + (producto?.costo_unitario || 0) * (mov.cantidad_utilizada ?? 0);
         }, 0);
 
         const costoTotal = costoInsumos + costoManoObra;

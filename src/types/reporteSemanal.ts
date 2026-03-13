@@ -165,9 +165,13 @@ export interface AplicacionCierreFinancieroLote {
   costoInsumosPlaneado: number;
   costoInsumosReal: number;
   costoInsumosDesviacion: number;  // %
+  costoInsumosAnterior?: number;
+  costoInsumosVariacion?: number;  // % vs anterior
   costoManoObraPlaneado: number;
   costoManoObraReal: number;
   costoManoObraDesviacion: number;  // %
+  costoManoObraAnterior?: number;
+  costoManoObraVariacion?: number;  // % vs anterior
 }
 
 export interface AplicacionCierreGeneral {

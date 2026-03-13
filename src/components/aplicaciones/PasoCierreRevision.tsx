@@ -43,14 +43,16 @@ export function PasoCierreRevision({
 
       const productos: ResumenDiario['productos'] = {};
       movimientosDia.forEach((mov) => {
-        if (!productos[mov.producto_id]) {
-          productos[mov.producto_id] = {
-            nombre: mov.producto_nombre,
+        const pid = mov.producto_id ?? '';
+        if (!pid) return;
+        if (!productos[pid]) {
+          productos[pid] = {
+            nombre: mov.producto_nombre ?? '',
             cantidad: 0,
-            unidad: mov.producto_unidad,
+            unidad: mov.producto_unidad ?? '',
           };
         }
-        productos[mov.producto_id].cantidad += mov.cantidad_utilizada;
+        productos[pid].cantidad += mov.cantidad_utilizada ?? 0;
       });
 
       return { fecha, canecas, productos };
@@ -65,16 +67,18 @@ export function PasoCierreRevision({
     >();
 
     movimientos.forEach((mov) => {
-      if (!productos.has(mov.producto_id)) {
-        productos.set(mov.producto_id, {
-          id: mov.producto_id,
-          nombre: mov.producto_nombre,
-          unidad: mov.producto_unidad,
+      const pid = mov.producto_id ?? '';
+      if (!pid) return;
+      if (!productos.has(pid)) {
+        productos.set(pid, {
+          id: pid,
+          nombre: mov.producto_nombre ?? '',
+          unidad: mov.producto_unidad ?? '',
           totalUtilizado: 0,
         });
       }
-      const producto = productos.get(mov.producto_id)!;
-      producto.totalUtilizado += mov.cantidad_utilizada;
+      const producto = productos.get(pid)!;
+      producto.totalUtilizado += mov.cantidad_utilizada ?? 0;
     });
 
     return Array.from(productos.values()).sort((a, b) => b.totalUtilizado - a.totalUtilizado);
@@ -90,8 +94,8 @@ export function PasoCierreRevision({
       aplicacion.mezclas.forEach((mezcla, index) => {
         if (mezcla.productos && Array.isArray(mezcla.productos)) {
           mezcla.productos.forEach((producto) => {
-            const productoId = producto.producto_id || producto.id;
-            const cantidad = producto.cantidad_total_necesaria || producto.cantidad || 0;
+            const productoId = producto.producto_id;
+            const cantidad = producto.cantidad_total_necesaria || 0;
             const actual = planeadas.get(productoId) || 0;
             planeadas.set(productoId, actual + cantidad);
           });
@@ -99,10 +103,10 @@ export function PasoCierreRevision({
       });
     }
     // Intentar obtener de lista_compras como alternativa
-    else if (aplicacion.lista_compras && aplicacion.lista_compras.length > 0) {
-      aplicacion.lista_compras.forEach((item) => {
-        const productoId = item.producto_id || item.id;
-        const cantidad = item.cantidad_total || item.cantidad || 0;
+    else if (aplicacion.lista_compras && aplicacion.lista_compras.items.length > 0) {
+      aplicacion.lista_compras.items.forEach((item) => {
+        const productoId = item.producto_id;
+        const cantidad = item.cantidad_necesaria || 0;
         const actual = planeadas.get(productoId) || 0;
         planeadas.set(productoId, actual + cantidad);
       });
@@ -112,8 +116,8 @@ export function PasoCierreRevision({
       aplicacion.calculos.forEach((calculo) => {
         if (calculo.productos && Array.isArray(calculo.productos)) {
           calculo.productos.forEach((producto) => {
-            const productoId = producto.producto_id || producto.id;
-            const cantidad = producto.cantidad_total || producto.cantidad || 0;
+            const productoId = producto.producto_id;
+            const cantidad = producto.cantidad_necesaria || 0;
             const actual = planeadas.get(productoId) || 0;
             planeadas.set(productoId, actual + cantidad);
           });

@@ -110,7 +110,7 @@ export function CalculadoraAplicaciones() {
       const { data: aplicacion, error: errorAplicacion } = await supabase
         .from('aplicaciones')
         .select('*')
-        .eq('id', id)
+        .eq('id', id!)
         .single();
 
       if (errorAplicacion) {
@@ -133,7 +133,7 @@ export function CalculadoraAplicaciones() {
             area_hectareas
           )
         `)
-        .eq('aplicacion_id', id);
+        .eq('aplicacion_id', id!);
 
       if (errorLotes) {
         throw errorLotes;
@@ -144,7 +144,7 @@ export function CalculadoraAplicaciones() {
       const { data: mezclas, error: errorMezclas } = await supabase
         .from('aplicaciones_mezclas')
         .select('*')
-        .eq('aplicacion_id', id)
+        .eq('aplicacion_id', id!)
         .order('numero_mezcla');
 
       if (errorMezclas) {
@@ -190,7 +190,7 @@ export function CalculadoraAplicaciones() {
       const { data: calculos, error: errorCalculos } = await supabase
         .from('aplicaciones_calculos')
         .select('*')
-        .eq('aplicacion_id', id);
+        .eq('aplicacion_id', id!);
 
       if (errorCalculos) {
         throw errorCalculos;
@@ -217,7 +217,7 @@ export function CalculadoraAplicaciones() {
           alerta,
           created_at
         `)
-        .eq('aplicacion_id', id);
+        .eq('aplicacion_id', id!);
 
       if (errorCompras) {
         throw errorCompras;
@@ -252,12 +252,12 @@ export function CalculadoraAplicaciones() {
         fecha_recomendacion: aplicacion.fecha_recomendacion || undefined,
         proposito: aplicacion.proposito || undefined,
         agronomo_responsable: aplicacion.agronomo_responsable || undefined,
-        blanco_biologico: blancoBiologico.length > 0 ? blancoBiologico : undefined,
+        blanco_biologico: blancoBiologico.length > 0 ? blancoBiologico : [],
         lotes_seleccionados: (lotesData || []).map(lote => ({
           lote_id: lote.lote_id,
           nombre: lote.lotes?.nombre || 'Sin nombre',
           sublotes_ids: lote.sublotes_ids || [],
-          area_hectareas: lote.lotes?.area_hectareas || 0,
+          area_hectareas: lote.lotes?.area_hectareas ?? 0,
           conteo_arboles: {
             grandes: lote.arboles_grandes || 0,
             medianos: lote.arboles_medianos || 0,
@@ -266,11 +266,11 @@ export function CalculadoraAplicaciones() {
             total: lote.total_arboles || 0,
           },
           calibracion_litros_arbol: lote.calibracion_litros_arbol || undefined,
-          tamano_caneca: lote.tamano_caneca || undefined,
+          tamano_caneca: (lote.tamano_caneca || undefined) as 20 | 200 | 500 | 1000 | undefined,
         }))
       };
 
-      const calculosData: CalculosPorLote[] = (calculos || []).map(calc => ({
+      const calculosData = (calculos || []).map(calc => ({
         lote_id: calc.lote_id,
         lote_nombre: calc.lote_nombre,
         total_arboles: calc.total_arboles,
@@ -282,22 +282,23 @@ export function CalculadoraAplicaciones() {
         kilos_medianos: calc.kilos_medianos || undefined,
         kilos_pequenos: calc.kilos_pequenos || undefined,
         kilos_clonales: calc.kilos_clonales || undefined,
-      }));
+        productos: [],
+      })) as CalculosPorLote[];
 
       const listaCompras: ListaCompras | null = compras && compras.length > 0 ? {
         items: compras.map(item => ({
           producto_id: item.producto_id,
           producto_nombre: item.producto_nombre,
-          producto_categoria: item.producto_categoria,
+          producto_categoria: item.producto_categoria ?? '',
           unidad: item.unidad,
           inventario_actual: item.inventario_actual,
           cantidad_necesaria: item.cantidad_necesaria,
           cantidad_faltante: item.cantidad_faltante,
-          presentacion_comercial: item.presentacion_comercial || undefined,
+          presentacion_comercial: item.presentacion_comercial || '',
           unidades_a_comprar: item.unidades_a_comprar,
           ultimo_precio_unitario: item.precio_unitario || undefined,
           costo_estimado: item.costo_estimado || undefined,
-          alerta: item.alerta as 'normal' | 'sin_precio' | 'sin_stock' | undefined,
+          alerta: (item.alerta ?? 'normal') as 'normal' | 'sin_precio' | 'sin_stock',
         })),
         costo_total_estimado: compras.reduce((sum, item) => sum + (item.costo_estimado || 0), 0),
         productos_sin_precio: compras.filter(item => !item.precio_unitario).length,
@@ -509,13 +510,13 @@ export function CalculadoraAplicaciones() {
         // Actualizar aplicación base
         const aplicacionData = {
           nombre_aplicacion: state.configuracion.nombre,
-          tipo_aplicacion: state.configuracion.tipo === 'fumigacion' 
-            ? 'Fumigación' 
+          tipo_aplicacion: (state.configuracion.tipo === 'fumigacion'
+            ? 'Fumigación'
             : state.configuracion.tipo === 'fertilizacion'
             ? 'Fertilización'
-            : 'Drench',
+            : 'Drench') as 'Fumigación' | 'Fertilización' | 'Drench',
           proposito: state.configuracion.proposito || null,
-          blanco_biologico: state.configuracion.blanco_biologico 
+          blanco_biologico: state.configuracion.blanco_biologico
             ? JSON.stringify(state.configuracion.blanco_biologico)
             : null,
           fecha_inicio_planeada: state.configuracion.fecha_inicio_planeada,
@@ -541,13 +542,13 @@ export function CalculadoraAplicaciones() {
         await supabase
           .from('aplicaciones_lotes')
           .delete()
-          .eq('aplicacion_id', id);
+          .eq('aplicacion_id', id!);
 
         // Eliminar productos de mezclas
         const { data: mezclasExistentes } = await supabase
           .from('aplicaciones_mezclas')
           .select('id')
-          .eq('aplicacion_id', id);
+          .eq('aplicacion_id', id!);
 
         if (mezclasExistentes && mezclasExistentes.length > 0) {
           const mezclaIds = mezclasExistentes.map(m => m.id);
@@ -562,19 +563,19 @@ export function CalculadoraAplicaciones() {
         await supabase
           .from('aplicaciones_mezclas')
           .delete()
-          .eq('aplicacion_id', id);
+          .eq('aplicacion_id', id!);
 
         // Eliminar cálculos
         await supabase
           .from('aplicaciones_calculos')
           .delete()
-          .eq('aplicacion_id', id);
+          .eq('aplicacion_id', id!);
 
         // Eliminar lista de compras
         await supabase
           .from('aplicaciones_compras')
           .delete()
-          .eq('aplicacion_id', id);
+          .eq('aplicacion_id', id!);
 
 
         aplicacionId = id;
@@ -606,11 +607,11 @@ export function CalculadoraAplicaciones() {
         const aplicacionData = {
           codigo_aplicacion: codigoAplicacion,
           nombre_aplicacion: state.configuracion.nombre,
-          tipo_aplicacion: state.configuracion.tipo === 'fumigacion' 
-            ? 'Fumigación' 
+          tipo_aplicacion: (state.configuracion.tipo === 'fumigacion'
+            ? 'Fumigación'
             : state.configuracion.tipo === 'fertilizacion'
             ? 'Fertilización'
-            : 'Drench',
+            : 'Drench') as 'Fumigación' | 'Fertilización' | 'Drench',
           proposito: state.configuracion.proposito || null,
           blanco_biologico: state.configuracion.blanco_biologico 
             ? JSON.stringify(state.configuracion.blanco_biologico)

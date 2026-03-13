@@ -459,7 +459,7 @@ export function useProduccionData() {
         .order('numero_orden', { ascending: true });
 
       if (queryError) throw queryError;
-      return data || [];
+      return (data || []) as unknown as LoteProduccion[];
     } catch (err: any) {
       setError(err.message);
       throw err;
@@ -480,7 +480,7 @@ export function useProduccionData() {
         .order('numero_sublote', { ascending: true });
 
       if (queryError) throw queryError;
-      return data || [];
+      return (data || []) as unknown as SubloteProduccion[];
     } catch (err: any) {
       setError(err.message);
       throw err;
@@ -514,7 +514,7 @@ export function useProduccionData() {
         .single();
 
       if (insertError) throw insertError;
-      return data;
+      return data as unknown as Produccion;
     } catch (err: any) {
       setError(err.message);
       throw err;
@@ -549,7 +549,7 @@ export function useProduccionData() {
       const { data, error: queryError } = await query;
 
       if (queryError) throw queryError;
-      return data || [];
+      return (data || []) as unknown as Produccion[];
     } catch (err: any) {
       setError(err.message);
       throw err;

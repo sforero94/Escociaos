@@ -13,10 +13,10 @@ export interface Plaga {
 
 export interface Monitoreo {
   id: string;
-  fecha_monitoreo: Date;
-  lote_id: string;
-  sublote_id: string;
-  plaga_enfermedad_id: string;
+  fecha_monitoreo: Date | string;
+  lote_id?: string;
+  sublote_id?: string;
+  plaga_enfermedad_id?: string;
   arboles_monitoreados: number;
   arboles_afectados: number;
   individuos_encontrados: number;
@@ -26,8 +26,11 @@ export interface Monitoreo {
   gravedad_numerica: 1 | 2 | 3;
   observaciones?: string;
   monitor?: string;
-  // Campos calculados que NO existen en la tabla pero se pueden unir desde otras tablas
-  // lote_nombre, sublote_nombre, plaga_nombre se obtienen con joins en las queries
+  // Joined/computed fields populated from related tables or date calculations
+  plaga_nombre?: string;
+  lote_nombre?: string;
+  sublote_nombre?: string;
+  semana?: number; // ISO week number, computed from fecha_monitoreo
 }
 
 export interface CSVRowRaw {

@@ -164,7 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (userProfile) {
           console.log('✅ Perfil real encontrado, actualizando:', userProfile.nombre);
-          setProfile(userProfile);
+          setProfile(userProfile as UserProfile);
         } else {
           console.log('ℹ️ Sin perfil en tabla, usando temporal (esto es normal)');
         }
@@ -201,7 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) {
       const userProfile = await getUserProfile(user.id);
       if (userProfile) {
-        setProfile(userProfile);
+        setProfile(userProfile as UserProfile);
       }
     }
   };

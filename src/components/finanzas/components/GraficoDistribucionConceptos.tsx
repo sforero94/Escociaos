@@ -136,7 +136,7 @@ export function GraficoDistribucionConceptos({
             <div className="w-16 h-16 bg-gray-100 rounded-full mx-auto mb-4 flex items-center justify-center">
               📊
             </div>
-            <p>No hay datos disponibles para {nombreCategoriaSeleccionada.toLowerCase()}</p>
+            <p>No hay datos disponibles para {(nombreCategoriaSeleccionada ?? 'Todas las categorías').toLowerCase()}</p>
           </div>
         </div>
       </div>

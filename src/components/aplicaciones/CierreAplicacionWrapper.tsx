@@ -32,7 +32,7 @@ export function CierreAplicacionWrapper() {
       const { data, error } = await supabase
         .from('aplicaciones')
         .select('*')
-        .eq('id', id)
+        .eq('id', id!)
         .single();
 
       if (error) throw error;
@@ -42,7 +42,7 @@ export function CierreAplicacionWrapper() {
         return;
       }
 
-      setAplicacion(data);
+      setAplicacion(data as Aplicacion);
     } catch (err: any) {
       setError(err.message || 'Error cargando la aplicación');
     } finally {

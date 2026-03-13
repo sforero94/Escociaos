@@ -54,7 +54,7 @@ export function VerificacionesList() {
 
       if (error) throw error;
 
-      setVerificaciones(data || []);
+      setVerificaciones((data || []) as unknown as Verificacion[]);
     } catch (error) {
     } finally {
       setIsLoading(false);

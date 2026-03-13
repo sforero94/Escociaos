@@ -47,7 +47,7 @@ function detectarPlagasCriticas(monitoreos: Monitoreo[]): Insight[] {
       if (registros.length < 2) return;
       
       // Ordenar por semana
-      registros.sort((a, b) => a.semana - b.semana);
+      registros.sort((a, b) => (a.semana ?? 0) - (b.semana ?? 0));
       
       const ultimo = registros[registros.length - 1];
       const penultimo = registros[registros.length - 2];
@@ -103,17 +103,18 @@ function detectarMejoras(monitoreos: Monitoreo[]): Insight[] {
   // Agrupar por plaga
   const porPlaga = new Map<string, Monitoreo[]>();
   monitoreos.forEach(m => {
-    if (!porPlaga.has(m.plaga_nombre)) {
-      porPlaga.set(m.plaga_nombre, []);
+    const nombre = m.plaga_nombre ?? '';
+    if (!porPlaga.has(nombre)) {
+      porPlaga.set(nombre, []);
     }
-    porPlaga.get(m.plaga_nombre)!.push(m);
+    porPlaga.get(nombre)!.push(m);
   });
   
   porPlaga.forEach((registros, plaga) => {
     if (registros.length < 4) return;
-    
+
     // Calcular promedio de últimas 2 semanas vs 2 anteriores
-    registros.sort((a, b) => a.semana - b.semana);
+    registros.sort((a, b) => (a.semana ?? 0) - (b.semana ?? 0));
     
     const ultimas2 = registros.slice(-2);
     const anteriores2 = registros.slice(-4, -2);
@@ -146,10 +147,11 @@ function detectarLotesProblematicos(monitoreos: Monitoreo[]): Insight[] {
   // Agrupar por lote
   const porLote = new Map<string, Monitoreo[]>();
   monitoreos.forEach(m => {
-    if (!porLote.has(m.lote_nombre)) {
-      porLote.set(m.lote_nombre, []);
+    const nombre = m.lote_nombre ?? '';
+    if (!porLote.has(nombre)) {
+      porLote.set(nombre, []);
     }
-    porLote.get(m.lote_nombre)!.push(m);
+    porLote.get(nombre)!.push(m);
   });
   
   porLote.forEach((registros, lote) => {

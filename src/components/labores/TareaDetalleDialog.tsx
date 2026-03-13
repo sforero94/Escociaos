@@ -107,7 +107,7 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
         .order('fecha_trabajo', { ascending: false });
 
       if (errorRegistros) throw errorRegistros;
-      setRegistrosTrabajo(registros || []);
+      setRegistrosTrabajo((registros || []) as unknown as RegistroTrabajo[]);
 
       // Load all employees for reference
       const { data: empleadosData, error: errorEmpleados } = await getSupabase()
@@ -117,7 +117,7 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
         .order('nombre');
 
       if (errorEmpleados) throw errorEmpleados;
-      setEmpleados(empleadosData || []);
+      setEmpleados((empleadosData || []) as unknown as Empleado[]);
 
       // Load lotes assigned to this task from lote_ids array
       if (tarea.lote_ids && tarea.lote_ids.length > 0) {
@@ -147,7 +147,7 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
     const progresoJornales = jornalesEstimados > 0 ? (jornalesRegistrados / jornalesEstimados) * 100 : 0;
 
     // Costo actual viene directamente de registros_trabajo (ya calculado correctamente)
-    const costoActual = registrosTrabajo.reduce((sum, r) => sum + r.costo_jornal, 0);
+    const costoActual = registrosTrabajo.reduce((sum, r) => sum + (r.costo_jornal ?? 0), 0);
     
     // Costo estimado usando el costo por hora del responsable
     const responsable = empleados.find(e => e.id === tarea.responsable_id);

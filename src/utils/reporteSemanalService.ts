@@ -238,7 +238,7 @@ export async function guardarReportePDF(
   // Try upsert first (insert or update on conflict)
   let result = await supabase
     .from('reportes_semanales')
-    .upsert(insertData, { onConflict: 'ano,numero_semana' })
+    .upsert(insertData as any, { onConflict: 'ano,numero_semana' })
     .select()
     .single();
 
@@ -266,7 +266,7 @@ export async function guardarReportePDF(
 
       if (existingMetadata) {
         console.log('[guardarReportePDF] Using existing metadata:', existingMetadata.id);
-        return existingMetadata;
+        return existingMetadata as unknown as ReporteSemanalMetadata;
       }
     }
 
@@ -274,7 +274,7 @@ export async function guardarReportePDF(
     console.log('[guardarReportePDF] Trying insert-only...');
     result = await supabase
       .from('reportes_semanales')
-      .insert(insertData)
+      .insert(insertData as any)
       .select()
       .single();
   }
@@ -290,7 +290,7 @@ export async function guardarReportePDF(
   }
 
   console.log('[guardarReportePDF] Metadata saved successfully:', result.data?.id);
-  return result.data;
+  return result.data as unknown as ReporteSemanalMetadata;
 }
 
 /**

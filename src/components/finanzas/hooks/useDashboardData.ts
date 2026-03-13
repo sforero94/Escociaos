@@ -46,7 +46,7 @@ export function useDashboardData() {
   const [loading, setLoading] = useState(false);
   const supabase = getSupabase();
 
-  const applyFilters = (query: ReturnType<typeof supabase.from>, filtros: FiltrosFinanzas, fechaDesde?: string, fechaHasta?: string) => {
+  const applyFilters = (query: any, filtros: FiltrosFinanzas, fechaDesde?: string, fechaHasta?: string) => {
     const desde = fechaDesde || filtros.fecha_desde;
     const hasta = fechaHasta || filtros.fecha_hasta;
     if (desde) query = query.gte('fecha', desde);
@@ -138,22 +138,26 @@ export function useDashboardData() {
             sumGastos(fullPrev2.desde, fullPrev2.hasta, neg.id),
           ]);
 
-          // Get categories for this negocio
+          // Get categories and conceptos for this negocio
           const { data: catData } = await (supabase
             .from('fin_gastos')
-            .select('categoria_id, valor, fecha, fin_categorias_gastos(nombre)')
+            .select('categoria_id, concepto_id, valor, fecha, fin_categorias_gastos(nombre), fin_conceptos_gastos(nombre)')
             .eq('estado', 'Confirmado')
             .eq('negocio_id', neg.id)
             .gte('fecha', fullPrev2.desde)
             .lte('fecha', ytdCurrent.hasta) as any);
 
-          const catMap = new Map<string, { nombre: string; ytd_actual: number; ytd_anterior: number; total_anterior: number; total_n2: number }>();
+          const catMap = new Map<string, {
+            nombre: string;
+            ytd_actual: number; ytd_anterior: number; total_anterior: number; total_n2: number;
+            conceptos: Map<string, { nombre: string; ytd_actual: number; ytd_anterior: number; total_anterior: number; total_n2: number }>;
+          }>();
 
           catData?.forEach((g: any) => {
             const catId = g.categoria_id || 'sin_cat';
             const catNombre = g.fin_categorias_gastos?.nombre || 'Sin categoria';
             if (!catMap.has(catId)) {
-              catMap.set(catId, { nombre: catNombre, ytd_actual: 0, ytd_anterior: 0, total_anterior: 0, total_n2: 0 });
+              catMap.set(catId, { nombre: catNombre, ytd_actual: 0, ytd_anterior: 0, total_anterior: 0, total_n2: 0, conceptos: new Map() });
             }
             const entry = catMap.get(catId)!;
             const fecha = g.fecha;
@@ -162,6 +166,18 @@ export function useDashboardData() {
             if (fecha >= ytdPrev.desde && fecha <= ytdPrev.hasta) entry.ytd_anterior += val;
             if (fecha >= fullPrev.desde && fecha <= fullPrev.hasta) entry.total_anterior += val;
             if (fecha >= fullPrev2.desde && fecha <= fullPrev2.hasta) entry.total_n2 += val;
+
+            // Aggregate by concepto within category
+            const concId = g.concepto_id || 'sin_concepto';
+            const concNombre = g.fin_conceptos_gastos?.nombre || 'Sin concepto';
+            if (!entry.conceptos.has(concId)) {
+              entry.conceptos.set(concId, { nombre: concNombre, ytd_actual: 0, ytd_anterior: 0, total_anterior: 0, total_n2: 0 });
+            }
+            const concEntry = entry.conceptos.get(concId)!;
+            if (fecha >= ytdCurrent.desde && fecha <= ytdCurrent.hasta) concEntry.ytd_actual += val;
+            if (fecha >= ytdPrev.desde && fecha <= ytdPrev.hasta) concEntry.ytd_anterior += val;
+            if (fecha >= fullPrev.desde && fecha <= fullPrev.hasta) concEntry.total_anterior += val;
+            if (fecha >= fullPrev2.desde && fecha <= fullPrev2.hasta) concEntry.total_n2 += val;
           });
 
           const categorias: PivotRow[] = Array.from(catMap.entries()).map(([catId, c]) => ({
@@ -171,6 +187,14 @@ export function useDashboardData() {
             ytd_anterior: c.ytd_anterior,
             total_anterior: c.total_anterior,
             total_n2: c.total_n2,
+            categorias: Array.from(c.conceptos.entries()).map(([concId, conc]) => ({
+              negocio: conc.nombre,
+              negocio_id: concId,
+              ytd_actual: conc.ytd_actual,
+              ytd_anterior: conc.ytd_anterior,
+              total_anterior: conc.total_anterior,
+              total_n2: conc.total_n2,
+            })).sort((a, b) => b.ytd_actual - a.ytd_actual),
           })).sort((a, b) => b.ytd_actual - a.ytd_actual);
 
           return {

@@ -317,24 +317,26 @@ export function DetalleAplicacion({
         items: compras.map((c) => ({
           producto_id: c.producto_id,
           producto_nombre: c.producto_nombre,
+          producto_categoria: (c as any).producto_categoria ?? '',
           unidad: c.unidad,
           inventario_actual: c.inventario_actual,
           cantidad_necesaria: c.cantidad_necesaria,
           cantidad_faltante: c.cantidad_faltante,
           unidades_a_comprar: c.unidades_a_comprar,
-          presentacion_comercial: c.presentacion_comercial,
-          costo_estimado: c.costo_estimado,
-          alerta: c.alerta,
+          presentacion_comercial: c.presentacion_comercial ?? '',
+          costo_estimado: c.costo_estimado ?? undefined,
+          alerta: (c.alerta as 'sin_precio' | 'sin_stock' | 'normal') ?? undefined,
         })),
         costo_total_estimado: compras.reduce((sum, c) => sum + (c.costo_estimado || 0), 0),
         productos_sin_precio: compras.filter(c => !c.costo_estimado || c.costo_estimado === 0).length,
+        productos_sin_stock: compras.filter(c => c.cantidad_faltante > 0).length,
       };
 
       // ESTO ES LO MISMO QUE exportarPDF() de PasoListaCompras
       const configuracion = {
-        nombre: aplicacion.nombre_aplicacion,
+        nombre: aplicacion.nombre_aplicacion ?? '',
         tipo_aplicacion: aplicacion.tipo_aplicacion,
-        fecha_inicio: aplicacion.fecha_inicio,
+        fecha_inicio: aplicacion.fecha_inicio ?? '',
       };
 
       const datosEmpresa = {
@@ -345,7 +347,7 @@ export function DetalleAplicacion({
         email: 'contacto@escocia-hass.com',
       };
 
-      generarPDFListaCompras(lista, configuracion, datosEmpresa);
+      generarPDFListaCompras(lista, configuracion as any, datosEmpresa);
 
     } catch (error: any) {
       toast.error('Error al generar el PDF');
@@ -399,7 +401,7 @@ export function DetalleAplicacion({
             </div>
             
             <div className="flex items-center gap-3">
-              <span className={`px-3 py-1.5 rounded-lg text-sm border ${getEstadoBadge(aplicacion.estado)}`}>
+              <span className={`px-3 py-1.5 rounded-lg text-sm border ${getEstadoBadge(aplicacion.estado ?? '')}`}>
                 {aplicacion.estado}
               </span>
               <button 
@@ -432,7 +434,7 @@ export function DetalleAplicacion({
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <p className="text-xs text-brand-brown/60">Fecha Inicio (Planeada)</p>
-                      <p className="text-sm text-foreground">{formatearFecha(aplicacion.fecha_inicio_planeada)}</p>
+                      <p className="text-sm text-foreground">{formatearFecha(aplicacion.fecha_inicio_planeada ?? null)}</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs text-brand-brown/60">Fecha Fin (Planeada)</p>
@@ -440,7 +442,7 @@ export function DetalleAplicacion({
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs text-brand-brown/60">Fecha Inicio (Real)</p>
-                      <p className="text-sm text-foreground">{formatearFecha(aplicacion.fecha_inicio_ejecucion)}</p>
+                      <p className="text-sm text-foreground">{formatearFecha(aplicacion.fecha_inicio_ejecucion ?? null)}</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs text-brand-brown/60">Fecha Fin (Real)</p>
@@ -760,7 +762,7 @@ export function DetalleAplicacion({
                 <>
                   <Button
                     onClick={onEditar}
-                    disabled={aplicacion.estado !== 'Calculada'}
+                    disabled={(aplicacion.estado as string) !== 'Calculada'}
                     variant="outline"
                     className="border-primary/30 text-primary hover:bg-primary/10 hover:border-primary"
                   >
@@ -770,7 +772,7 @@ export function DetalleAplicacion({
 
                   <Button
                     onClick={onRegistrarMovimientos}
-                    disabled={aplicacion.estado === 'Cerrada'}
+                    disabled={(aplicacion.estado as string) === 'Cerrada'}
                     className="bg-brand-brown hover:bg-brand-brown text-white"
                   >
                     <PlayCircle className="w-4 h-4 mr-2" />
@@ -779,7 +781,7 @@ export function DetalleAplicacion({
 
                   <Button
                     onClick={onCerrarAplicacion}
-                    disabled={aplicacion.estado !== 'En ejecución'}
+                    disabled={(aplicacion.estado as string) !== 'En ejecución'}
                     className="bg-primary hover:bg-primary-dark text-white"
                   >
                     <CheckCircle className="w-4 h-4 mr-2" />

@@ -61,7 +61,7 @@ export function IngresosBatchTable({ catalogs, onSaved }: IngresosBatchTableProp
   const [saving, setSaving] = useState(false);
   const [draftBanner, setDraftBanner] = useState<number | null>(null);
   const [showCompradorDialog, setShowCompradorDialog] = useState(false);
-  const draftTimer = useRef<ReturnType<typeof setTimeout>>();
+  const draftTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Restore draft on mount
   useEffect(() => {

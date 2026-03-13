@@ -91,7 +91,7 @@ export function CompradoresConfig() {
       nombre: comprador.nombre,
       telefono: comprador.telefono || '',
       email: comprador.email || '',
-      activo: comprador.activo,
+      activo: comprador.activo ?? true,
     });
     setShowForm(true);
   };
@@ -305,7 +305,7 @@ export function CompradoresConfig() {
                         {comprador.activo ? 'Activo' : 'Inactivo'}
                       </span>
                       <Switch
-                        checked={comprador.activo}
+                        checked={comprador.activo ?? true}
                         onCheckedChange={() => handleToggleActive(comprador)}
                       />
                     </div>

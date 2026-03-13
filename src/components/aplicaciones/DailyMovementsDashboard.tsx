@@ -172,7 +172,7 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
       }
 
       // 4. Agrupar productos por movimiento y convertir Kg a bultos si aplica
-      const movimientosConProductos: MovimientoConProductos[] = movimientosData.map(mov => {
+      const movimientosConProductos = movimientosData.map(mov => {
         const productosMovimiento = (productosData || [])
           .filter(p => p.movimiento_diario_id === mov.id)
           .map(p => {
@@ -189,7 +189,7 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
         };
       });
 
-      setMovimientos(movimientosConProductos);
+      setMovimientos(movimientosConProductos as MovimientoConProductos[]);
     } catch {
       // error logged by caller
     }
@@ -282,12 +282,12 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
         // Convertir a unidad base (L o Kg) para comparar con planificado
         let cantidadEnUnidadBase = producto.cantidad_utilizada;
         
-        if (producto.unidad === 'bultos' && (producto as any).presentacion_kg_l) {
+        if ((producto.unidad as string) === 'bultos' && (producto as any).presentacion_kg_l) {
           // Para bultos: convertir de nuevo a Kg usando presentacion_kg_l
           cantidadEnUnidadBase = producto.cantidad_utilizada * (producto as any).presentacion_kg_l;
-        } else if (producto.unidad === 'cc') {
+        } else if ((producto.unidad as string) === 'cc') {
           cantidadEnUnidadBase = producto.cantidad_utilizada / 1000; // cc a L
-        } else if (producto.unidad === 'g') {
+        } else if ((producto.unidad as string) === 'g') {
           cantidadEnUnidadBase = producto.cantidad_utilizada / 1000; // g a Kg
         }
 
@@ -303,7 +303,7 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
           resumenMap.set(producto.producto_id, {
             producto_id: producto.producto_id,
             producto_nombre: producto.producto_nombre,
-            producto_unidad: producto.unidad === 'cc' || producto.unidad === 'L' ? 'Litros' : 'Kilos',
+            producto_unidad: (producto.unidad as string) === 'cc' || (producto.unidad as string) === 'L' || producto.unidad === 'Litros' ? 'Litros' : 'Kilos',
             total_utilizado: cantidadEnUnidadBase,
             cantidad_planeada: 0,
             diferencia: cantidadEnUnidadBase,

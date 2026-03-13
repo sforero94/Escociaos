@@ -62,6 +62,7 @@ interface DialogState {
 
 export function DetalleGastosExpandible({ data, loading }: DetalleGastosExpandibleProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const currentYear = new Date().getFullYear();
 
@@ -72,6 +73,18 @@ export function DetalleGastosExpandible({ data, loading }: DetalleGastosExpandib
         next.delete(negocioId);
       } else {
         next.add(negocioId);
+      }
+      return next;
+    });
+  };
+
+  const toggleExpandCat = (key: string) => {
+    setExpandedCats((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
       }
       return next;
     });
@@ -189,37 +202,68 @@ export function DetalleGastosExpandible({ data, loading }: DetalleGastosExpandib
                       <td className="px-3 py-2 text-right tabular-nums">{formatPivot(row.total_n2)}</td>
                       <td className="px-3 py-2 text-right"><VariacionBadge actual={row.total_anterior} anterior={row.total_n2} /></td>
                     </tr>
-                    {isExpanded && row.categorias?.map((cat) => (
-                      <tr key={cat.negocio_id} className="bg-primary/[0.02] border-t border-primary/5 hover:bg-green-50 transition-colors">
-                        <td className="px-3 py-2 pl-10 text-brand-brown/70 text-sm">{cat.negocio}</td>
-                        <td
-                          className={`px-3 py-2 text-right tabular-nums text-sm ${cellClickable}`}
-                          onClick={(e) => handleCellClick(row, cat.negocio, 'ytd_actual', e)}
-                        >
-                          {formatPivot(cat.ytd_actual)}
-                        </td>
-                        <td
-                          className={`px-3 py-2 text-right tabular-nums text-sm ${cellClickable}`}
-                          onClick={(e) => handleCellClick(row, cat.negocio, 'ytd_anterior', e)}
-                        >
-                          {formatPivot(cat.ytd_anterior)}
-                        </td>
-                        <td className="px-3 py-2 text-right"><VariacionBadge actual={cat.ytd_actual} anterior={cat.ytd_anterior} /></td>
-                        <td
-                          className={`px-3 py-2 text-right tabular-nums text-sm ${cellClickable}`}
-                          onClick={(e) => handleCellClick(row, cat.negocio, 'total_anterior', e)}
-                        >
-                          {formatPivot(cat.total_anterior)}
-                        </td>
-                        <td
-                          className={`px-3 py-2 text-right tabular-nums text-sm ${cellClickable}`}
-                          onClick={(e) => handleCellClick(row, cat.negocio, 'total_n2', e)}
-                        >
-                          {formatPivot(cat.total_n2)}
-                        </td>
-                        <td className="px-3 py-2 text-right"><VariacionBadge actual={cat.total_anterior} anterior={cat.total_n2} /></td>
-                      </tr>
-                    ))}
+                    {isExpanded && row.categorias?.map((cat) => {
+                      const catKey = `${row.negocio_id}::${cat.negocio_id}`;
+                      const isCatExpanded = expandedCats.has(catKey);
+                      const hasConceptos = cat.categorias && cat.categorias.length > 0;
+
+                      return (
+                        <Fragment key={cat.negocio_id}>
+                          <tr
+                            className={`bg-primary/[0.02] border-t border-primary/5 hover:bg-green-50 transition-colors ${hasConceptos ? 'cursor-pointer' : ''}`}
+                            onClick={() => hasConceptos && toggleExpandCat(catKey)}
+                          >
+                            <td className="px-3 py-2 pl-10 text-brand-brown/70 text-sm">
+                              <div className="flex items-center gap-1.5">
+                                {hasConceptos && (
+                                  isCatExpanded
+                                    ? <ChevronDown className="w-3.5 h-3.5 text-brand-brown/40" />
+                                    : <ChevronRight className="w-3.5 h-3.5 text-brand-brown/40" />
+                                )}
+                                {cat.negocio}
+                              </div>
+                            </td>
+                            <td
+                              className={`px-3 py-2 text-right tabular-nums text-sm ${cellClickable}`}
+                              onClick={(e) => handleCellClick(row, cat.negocio, 'ytd_actual', e)}
+                            >
+                              {formatPivot(cat.ytd_actual)}
+                            </td>
+                            <td
+                              className={`px-3 py-2 text-right tabular-nums text-sm ${cellClickable}`}
+                              onClick={(e) => handleCellClick(row, cat.negocio, 'ytd_anterior', e)}
+                            >
+                              {formatPivot(cat.ytd_anterior)}
+                            </td>
+                            <td className="px-3 py-2 text-right"><VariacionBadge actual={cat.ytd_actual} anterior={cat.ytd_anterior} /></td>
+                            <td
+                              className={`px-3 py-2 text-right tabular-nums text-sm ${cellClickable}`}
+                              onClick={(e) => handleCellClick(row, cat.negocio, 'total_anterior', e)}
+                            >
+                              {formatPivot(cat.total_anterior)}
+                            </td>
+                            <td
+                              className={`px-3 py-2 text-right tabular-nums text-sm ${cellClickable}`}
+                              onClick={(e) => handleCellClick(row, cat.negocio, 'total_n2', e)}
+                            >
+                              {formatPivot(cat.total_n2)}
+                            </td>
+                            <td className="px-3 py-2 text-right"><VariacionBadge actual={cat.total_anterior} anterior={cat.total_n2} /></td>
+                          </tr>
+                          {isCatExpanded && cat.categorias?.map((concepto) => (
+                            <tr key={concepto.negocio_id} className="bg-primary/[0.01] border-t border-primary/5 hover:bg-green-50/50 transition-colors">
+                              <td className="px-3 py-1.5 pl-16 text-brand-brown/50 text-xs">{concepto.negocio}</td>
+                              <td className="px-3 py-1.5 text-right tabular-nums text-xs text-brand-brown/60">{formatPivot(concepto.ytd_actual)}</td>
+                              <td className="px-3 py-1.5 text-right tabular-nums text-xs text-brand-brown/60">{formatPivot(concepto.ytd_anterior)}</td>
+                              <td className="px-3 py-1.5 text-right"><VariacionBadge actual={concepto.ytd_actual} anterior={concepto.ytd_anterior} /></td>
+                              <td className="px-3 py-1.5 text-right tabular-nums text-xs text-brand-brown/60">{formatPivot(concepto.total_anterior)}</td>
+                              <td className="px-3 py-1.5 text-right tabular-nums text-xs text-brand-brown/60">{formatPivot(concepto.total_n2)}</td>
+                              <td className="px-3 py-1.5 text-right"><VariacionBadge actual={concepto.total_anterior} anterior={concepto.total_n2} /></td>
+                            </tr>
+                          ))}
+                        </Fragment>
+                      );
+                    })}
                   </Fragment>
                 );
               })}

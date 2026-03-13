@@ -71,7 +71,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
       }
 
 
-      let productosFormateados: ProductoCatalogo[] = (data || []).map((p) => ({
+      let productosFormateados = (data || []).map((p) => ({
         id: p.id,
         nombre: p.nombre,
         categoria: p.categoria,
@@ -82,8 +82,8 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
         ultimo_precio_unitario: p.precio_unitario || 0,
         cantidad_actual: p.cantidad_actual || 0,
         display_nombre: `${p.nombre} (${p.categoria} - ${p.estado_fisico}) - Stock: ${p.cantidad_actual || 0} ${p.unidad_medida}`,
-        permitido_gerencia: p.permitido_gerencia,
-      }));
+        permitido_gerencia: p.permitido_gerencia ?? undefined,
+      })) as unknown as ProductoCatalogo[];
 
       // Filtrar productos no permitidos si modo seguro está activado
       if (isSafeModeEnabled) {
@@ -260,7 +260,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
       ...(configuracion.tipo === 'fumigacion' || configuracion.tipo === 'drench'
         ? {
             dosis_por_caneca: 0,
-            unidad_dosis: (producto.estado_fisico === 'Líquido' ? 'cc' : 'gramos') as const,
+            unidad_dosis: ((producto.estado_fisico as string) === 'Líquido' || producto.estado_fisico === 'liquido' ? 'cc' : 'gramos') as 'cc' | 'gramos',
           }
         : {
             dosis_grandes: 0,
@@ -623,7 +623,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                 </option>
                 {productosCatalogo
                   .filter((producto) =>
-                    producto.display_nombre.toLowerCase().includes(busquedaProducto.toLowerCase())
+                    (producto.display_nombre ?? '').toLowerCase().includes(busquedaProducto.toLowerCase())
                   )
                   .map((producto) => (
                     <option key={producto.id} value={producto.id}>
@@ -656,7 +656,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                           {producto.producto_nombre}
                         </h4>
                         <p className="text-xs text-brand-brown/70">
-                          {producto.producto_categoria} • Stock: {formatearNumero(producto.inventario_disponible)} {producto.producto_unidad}
+                          {producto.producto_categoria} • Stock: {formatearNumero(producto.inventario_disponible ?? 0)} {producto.producto_unidad}
                         </p>
                       </div>
 
@@ -915,11 +915,11 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                     <>
                       <div>
                         <p className="text-brand-brown/70 text-xs mb-1">Litros Mezcla</p>
-                        <p className="text-primary">{formatearNumero(calculo.litros_mezcla)} L</p>
+                        <p className="text-primary">{formatearNumero(calculo.litros_mezcla ?? 0)} L</p>
                       </div>
                       <div>
                         <p className="text-brand-brown/70 text-xs mb-1">Canecas</p>
-                        <p className="text-primary">{formatearNumero(calculo.numero_canecas)}</p>
+                        <p className="text-primary">{formatearNumero(calculo.numero_canecas ?? 0)}</p>
                       </div>
                     </>
                   )}
@@ -928,7 +928,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                     <>
                       <div>
                         <p className="text-brand-brown/70 text-xs mb-1">Kilos Totales</p>
-                        <p className="text-primary">{formatearNumero(calculo.kilos_totales)} kg</p>
+                        <p className="text-primary">{formatearNumero(calculo.kilos_totales ?? 0)} kg</p>
                       </div>
                       <div>
                         <p className="text-brand-brown/70 text-xs mb-1">Bultos (50kg)</p>

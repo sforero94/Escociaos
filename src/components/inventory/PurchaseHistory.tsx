@@ -273,7 +273,7 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
 
       if (error) throw error;
 
-      setPurchases(data || []);
+      setPurchases((data || []) as unknown as Purchase[]);
     } catch (error) {
     } finally {
       setLoading(false);
@@ -330,7 +330,7 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
 
       if (productFetchError) throw new Error('Error al obtener producto: ' + productFetchError.message);
 
-      const nuevaCantidad = currentProduct.cantidad_actual - purchaseToDelete.cantidad;
+      const nuevaCantidad = (currentProduct.cantidad_actual ?? 0) - purchaseToDelete.cantidad;
 
       if (nuevaCantidad < 0) {
         toast.error('No se puede eliminar la compra porque resultaría en inventario negativo');
@@ -381,11 +381,10 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
       // 4b. Crear nuevo movimiento de ajuste que documente la eliminación
       const { error: movementAjusteError } = await supabase
         .from('movimientos_inventario')
-        .insert([
-          {
+        .insert({
             fecha_movimiento: new Date().toISOString().split('T')[0],
             producto_id: purchaseToDelete.producto_id,
-            tipo_movimiento: 'Salida',
+            tipo_movimiento: 'Salida' as any,
             cantidad: purchaseToDelete.cantidad,
             unidad: purchaseToDelete.unidad,
             factura: null,
@@ -395,8 +394,7 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
             responsable: user?.email || null,
             observaciones: `Ajuste por eliminación de compra - Factura: ${purchaseToDelete.numero_factura || 'N/A'} - Proveedor: ${purchaseToDelete.proveedor} - Fecha original: ${purchaseToDelete.fecha_compra}`,
             provisional: false,
-          },
-        ]);
+          } as any);
 
       if (movementAjusteError) {
         // No lanzar error, continuar con la eliminación

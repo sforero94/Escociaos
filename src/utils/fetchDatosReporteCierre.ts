@@ -190,7 +190,7 @@ export async function fetchAplicacionesComparables(
     .from('aplicaciones')
     .select('id, nombre_aplicacion, tipo_aplicacion, fecha_cierre, costo_total')
     .eq('estado', 'Cerrada')
-    .eq('tipo_aplicacion', tipoAplicacion)
+    .eq('tipo_aplicacion', tipoAplicacion as 'Fumigación' | 'Fertilización' | 'Drench' | 'N/A')
     .neq('id', aplicacionId)
     .order('fecha_cierre', { ascending: false })
     .limit(20);

@@ -65,14 +65,20 @@ export function PyGReport({ filtros, onReporteGenerated }: PyGReportProps) {
 
       // Apply business filter if selected
       if (filtros.negocio_id) {
-        ingresosQuery = ingresosQuery.eq('negocio_id', filtros.negocio_id);
-        gastosQuery = gastosQuery.eq('negocio_id', filtros.negocio_id);
+        const negId = Array.isArray(filtros.negocio_id) ? filtros.negocio_id[0] : filtros.negocio_id;
+        if (negId) {
+          ingresosQuery = ingresosQuery.eq('negocio_id', negId);
+          gastosQuery = gastosQuery.eq('negocio_id', negId);
+        }
       }
 
       // Apply region filter if selected
       if (filtros.region_id) {
-        ingresosQuery = ingresosQuery.eq('region_id', filtros.region_id);
-        gastosQuery = gastosQuery.eq('region_id', filtros.region_id);
+        const regId = Array.isArray(filtros.region_id) ? filtros.region_id[0] : filtros.region_id;
+        if (regId) {
+          ingresosQuery = ingresosQuery.eq('region_id', regId);
+          gastosQuery = gastosQuery.eq('region_id', regId);
+        }
       }
 
       // Execute queries
@@ -184,21 +190,35 @@ export function PyGReport({ filtros, onReporteGenerated }: PyGReportProps) {
         }
 
         // Load previous period data
-        const [prevIngresosResult, prevGastosResult] = await Promise.all([
-          supabase
+        let prevIngQuery = supabase
             .from('fin_ingresos')
             .select('valor')
             .gte('fecha', prevFechaDesde)
-            .lte('fecha', prevFechaHasta)
-            .eq(filtros.negocio_id ? 'negocio_id' : '', filtros.negocio_id || '')
-            .eq(filtros.region_id ? 'region_id' : '', filtros.region_id || ''),
-          supabase
+            .lte('fecha', prevFechaHasta);
+        let prevGasQuery = supabase
             .from('fin_gastos')
             .select('valor')
             .gte('fecha', prevFechaDesde)
-            .lte('fecha', prevFechaHasta)
-            .eq(filtros.negocio_id ? 'negocio_id' : '', filtros.negocio_id || '')
-            .eq(filtros.region_id ? 'region_id' : '', filtros.region_id || '')
+            .lte('fecha', prevFechaHasta);
+
+        if (filtros.negocio_id) {
+          const negId = Array.isArray(filtros.negocio_id) ? filtros.negocio_id[0] : filtros.negocio_id;
+          if (negId) {
+            prevIngQuery = prevIngQuery.eq('negocio_id', negId);
+            prevGasQuery = prevGasQuery.eq('negocio_id', negId);
+          }
+        }
+        if (filtros.region_id) {
+          const regId = Array.isArray(filtros.region_id) ? filtros.region_id[0] : filtros.region_id;
+          if (regId) {
+            prevIngQuery = prevIngQuery.eq('region_id', regId);
+            prevGasQuery = prevGasQuery.eq('region_id', regId);
+          }
+        }
+
+        const [prevIngresosResult, prevGastosResult] = await Promise.all([
+          prevIngQuery,
+          prevGasQuery
         ]);
 
         const prevIngresos = prevIngresosResult.data?.reduce((sum, i) => sum + (i.valor || 0), 0) || 0;

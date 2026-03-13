@@ -34,7 +34,29 @@ import {
 import { useReporteAplicacion } from '../../hooks/useReporteAplicacion';
 import { formatearFecha } from '../../utils/fechas';
 import { formatearMoneda, formatearNumero } from '../../utils/calculosReporteAplicacion';
-import type { KPICardData, FilaComparacion, DatosGraficoBarrasLote } from '../../types/aplicaciones';
+// Types matching useReporteAplicacion hook — defined locally
+interface KPICardData {
+    titulo: string;
+    valor: number;
+    valorFormateado: string;
+    comparacion: string;
+    desviacion: number;
+    esPositivo: boolean;
+}
+
+interface ComparisonField {
+    real: number;
+    planeado: number;
+    desviacion: number;
+    anterior?: number;
+}
+
+interface DatosGraficoBarrasLote {
+    lote: string;
+    planeado: number;
+    real: number;
+    anterior: number;
+}
 
 // ============================================================================
 // TYPES
@@ -307,7 +329,7 @@ export function ReporteAplicacionCerrada({ aplicacionId, onClose }: ReporteAplic
                                     porLote={reporte.detalle_canecas.por_lote}
                                     hasAnterior={!!reporte.aplicacion_anterior_id}
                                     tamanoCaneca={reporte.tamano_caneca || 200}
-                                    tipoAplicacion={reporte.tipo_aplicacion}
+                                    tipoAplicacion={reporte.tipo_aplicacion || ''}
                                 />
                             )}
                             {activeTab === 'jornales' && (
@@ -336,7 +358,7 @@ export function ReporteAplicacionCerrada({ aplicacionId, onClose }: ReporteAplic
                             </CardHeader>
                             <CardContent>
                                 <ul className="space-y-1">
-                                    {reporte.alertas.map((alerta, idx) => (
+                                    {reporte.alertas.map((alerta: string, idx: number) => (
                                         <li key={idx} className="text-sm text-amber-700">{alerta}</li>
                                     ))}
                                 </ul>
@@ -431,7 +453,7 @@ function CanecasTable({
     tamanoCaneca: number;
     tipoAplicacion: string;
 }) {
-    const renderComparison = (fila: FilaComparacion<number>) => {
+    const renderComparison = (fila: ComparisonField) => {
         if (!fila) return null;
         return (
             <div className="text-right">
@@ -490,7 +512,7 @@ function JornalesTable({
     porLote: any[];
     hasAnterior: boolean;
 }) {
-    const renderComparison = (fila: FilaComparacion<number>) => {
+    const renderComparison = (fila: ComparisonField) => {
         if (!fila) return null;
         return (
             <div className="text-right">

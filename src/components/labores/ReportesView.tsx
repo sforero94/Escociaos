@@ -829,7 +829,7 @@ const ReportesView: React.FC<ReportesViewProps> = ({
                 <YAxis tickFormatter={vistaGrafico === 'costos' ? formatCurrency : formatNumber} />
                 <Tooltip
                   formatter={(value: any, name: string) => [
-                    vistaGrafico === 'costo' ? formatCurrency(value) : formatNumber(value),
+                    vistaGrafico === 'costos' ? formatCurrency(value) : formatNumber(value),
                     vistaGrafico === 'costos' ? 'Costo' : 'Jornales'
                   ]}
                   labelStyle={{ color: '#000' }}

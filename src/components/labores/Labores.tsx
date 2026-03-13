@@ -203,7 +203,7 @@ const Labores: React.FC = () => {
       .order('nombre', { ascending: true });
 
     if (error) throw error;
-    setTiposTareas(data || []);
+    setTiposTareas((data || []) as unknown as TipoTarea[]);
   };
 
   // Cargar empleados activos
@@ -215,7 +215,7 @@ const Labores: React.FC = () => {
       .order('nombre', { ascending: true });
 
     if (error) throw error;
-    setEmpleados(data || []);
+    setEmpleados((data || []) as unknown as Empleado[]);
   };
 
   // Cargar contratistas activos
@@ -227,7 +227,7 @@ const Labores: React.FC = () => {
       .order('nombre', { ascending: true });
 
     if (error) throw error;
-    setContratistas(data || []);
+    setContratistas((data || []) as unknown as Contratista[]);
   };
 
   // Cargar lotes (returns data to avoid stale closure when passed to cargarTareas)

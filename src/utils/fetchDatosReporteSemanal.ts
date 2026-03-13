@@ -204,6 +204,7 @@ export async function fetchLaboresSemanales(
   const resultado: LaborSemanal[] = [];
 
   for (const t of tareas || []) {
+    if (!t.estado) continue;
     const estadoMapeado = estadoMap[t.estado];
     if (!estadoMapeado) continue;
 
@@ -224,12 +225,12 @@ export async function fetchLaboresSemanales(
       : [];
 
     resultado.push({
-      id: t.id,
-      codigoTarea: t.codigo_tarea,
-      nombre: t.nombre,
+      id: t.id ?? '',
+      codigoTarea: t.codigo_tarea ?? undefined,
+      nombre: t.nombre ?? '',
       tipoTarea: (t as any).tipo_tarea_nombre || 'Sin tipo',
       estado: estadoMapeado,
-      fechaInicio: tareaInicio,
+      fechaInicio: tareaInicio ?? '',
       fechaFin: tareaFin || undefined,
       lotes: lotesNombres,
     });
@@ -414,7 +415,7 @@ export async function fetchAplicacionesPlaneadas(): Promise<AplicacionPlaneada[]
         return { nombre: p.producto_nombre, dosis };
       });
 
-      mezclasMap.get(appId)!.push({ nombre: m.nombre, productos });
+      mezclasMap.get(appId)!.push({ nombre: (m as any).nombre ?? '', productos });
     }
   }
 
@@ -437,21 +438,22 @@ export async function fetchAplicacionesPlaneadas(): Promise<AplicacionPlaneada[]
     // Costo Pedido: cost of products that need to be purchased
     // Valor Inventario: value of inventory that will be consumed (need to estimate from precio_promedio)
     const costoPedido = listaCompras
-      .filter(item => item.cantidadAComprar > 0)
+      .filter(item => (item.cantidadAComprar ?? 0) > 0)
       .reduce((sum, item) => sum + item.costoEstimado, 0);
 
     // For inventory value, we need to estimate based on average price
     // Since costo_estimado is for the purchase quantity, we derive unit cost
     const valorInventarioUsado = listaCompras
-      .filter(item => item.inventarioDisponible > 0 && item.cantidadNecesaria > 0)
+      .filter(item => (item.inventarioDisponible ?? 0) > 0 && item.cantidadNecesaria > 0)
       .reduce((sum, item) => {
         // Estimate unit cost from costo_estimado / cantidad_faltante if available
         // Otherwise use a default calculation
-        const unitCost = item.costoEstimado > 0 && item.cantidadAComprar > 0
-          ? item.costoEstimado / item.cantidadAComprar
+        const cantidadComprar = item.cantidadAComprar ?? 0;
+        const unitCost = item.costoEstimado > 0 && cantidadComprar > 0
+          ? item.costoEstimado / cantidadComprar
           : 0;
         // Value of inventory that will be used (up to needed quantity)
-        const inventarioAUsar = Math.min(item.inventarioDisponible, item.cantidadNecesaria);
+        const inventarioAUsar = Math.min(item.inventarioDisponible ?? 0, item.cantidadNecesaria);
         return sum + (unitCost * inventarioAUsar);
       }, 0);
 
@@ -587,9 +589,9 @@ export async function fetchAplicacionesActivas(): Promise<AplicacionActiva[]> {
     resultado.push({
       id: app.id,
       nombre: app.nombre_aplicacion || 'Sin nombre',
-      tipo: app.tipo_aplicacion,
+      tipo: app.tipo_aplicacion ?? '',
       proposito: app.proposito || '',
-      estado: app.estado,
+      estado: app.estado ?? '',
       fechaInicio: app.fecha_inicio_ejecucion || '',
       totalPlaneado,
       totalEjecutado,

@@ -232,7 +232,7 @@ export async function getWeightedAverageCost(
     let totalCost = 0;
     let totalQuantity = 0;
 
-    data.forEach(purchase => {
+    data.forEach((purchase: { cantidad: number; precio_unitario: number }) => {
       totalCost += purchase.cantidad * purchase.precio_unitario;
       totalQuantity += purchase.cantidad;
     });
@@ -274,7 +274,7 @@ export async function getSuggestedReorderQuantity(
     }
 
     // Calcular consumo total y promedio diario
-    const totalConsumed = movements.reduce((sum, m) => sum + m.cantidad, 0);
+    const totalConsumed = movements.reduce((sum: number, m: { cantidad: number }) => sum + m.cantidad, 0);
     const avgDailyConsumption = totalConsumed / daysToAnalyze;
 
     // Sugerir stock para 60 días (2 meses)

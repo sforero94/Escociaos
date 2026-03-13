@@ -1,17 +1,17 @@
 import { useState, useEffect } from 'react';
-import { Package, Search, AlertCircle, CheckCircle } from 'lucide-react';
+import { Package, Search, AlertCircle, CheckCircle, X } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { StandardDialog } from '../ui/standard-dialog';
 
 interface Product {
-  id: number;
+  id: string;
   nombre: string;
   unidad_medida: string;
-  cantidad_actual: number;
-  precio_unitario: number;
-  activo: boolean;
+  cantidad_actual: number | null;
+  precio_unitario: number | null;
+  activo: boolean | null;
 }
 
 interface NuevoMovimientoModalProps {
@@ -89,7 +89,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
       const supabase = getSupabase();
 
       // Calcular nuevo saldo según tipo de movimiento
-      let saldoAnterior = selectedProduct.cantidad_actual;
+      let saldoAnterior = (selectedProduct.cantidad_actual ?? 0) ?? 0;
       let cantidadMovimiento = 0;
       let nuevoSaldo = 0;
 
@@ -120,7 +120,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
       const { error: movError } = await supabase
         .from('movimientos_inventario')
         .insert({
-          fecha_movimiento: new Date().toISOString().split('T')[0], // Fecha actual en formato YYYY-MM-DD
+          fecha_movimiento: new Date().toISOString().split('T')[0],
           producto_id: selectedProduct.id,
           tipo_movimiento: tipoMovimiento,
           cantidad: cantidadMovimiento,
@@ -129,7 +129,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
           saldo_nuevo: nuevoSaldo,
           observaciones: observaciones || null,
           provisional: false
-        });
+        } as any);
 
       if (movError) throw movError;
 
@@ -281,7 +281,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
                     <p className="text-foreground font-medium">{selectedProduct.nombre}</p>
                     <p className="text-sm text-brand-brown/70">
                       Stock actual: <span className="font-medium text-primary">
-                        {selectedProduct.cantidad_actual} {selectedProduct.unidad_medida}
+                        {(selectedProduct.cantidad_actual ?? 0)} {selectedProduct.unidad_medida}
                       </span>
                     </p>
                   </div>
@@ -361,7 +361,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
               <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-600">Saldo anterior:</span>
-                  <span className="font-medium">{selectedProduct.cantidad_actual} {selectedProduct.unidad_medida}</span>
+                  <span className="font-medium">{(selectedProduct.cantidad_actual ?? 0)} {selectedProduct.unidad_medida}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm mt-1">
                   <span className="text-gray-600">Movimiento:</span>
@@ -369,14 +369,14 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
                     tipoMovimiento === 'Entrada' ? 'text-green-600' : 
                     tipoMovimiento === 'Salida Otros' ? 'text-red-600' : 
                     (() => {
-                      const diff = parseFloat(cantidad) - selectedProduct.cantidad_actual;
+                      const diff = parseFloat(cantidad) - (selectedProduct.cantidad_actual ?? 0);
                       return diff >= 0 ? 'text-green-600' : 'text-red-600';
                     })()
                   }`}>
                     {tipoMovimiento === 'Entrada' && `+${parseFloat(cantidad)} ${selectedProduct.unidad_medida}`}
                     {tipoMovimiento === 'Salida Otros' && `-${parseFloat(cantidad)} ${selectedProduct.unidad_medida}`}
                     {tipoMovimiento === 'Ajuste' && (() => {
-                      const diff = parseFloat(cantidad) - selectedProduct.cantidad_actual;
+                      const diff = parseFloat(cantidad) - (selectedProduct.cantidad_actual ?? 0);
                       const sign = diff >= 0 ? '+' : '';
                       return `${sign}${diff.toFixed(2)} ${selectedProduct.unidad_medida}`;
                     })()}
@@ -386,9 +386,9 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
                   <span className="font-medium text-gray-900">Nuevo saldo:</span>
                   <span className="font-bold text-primary">
                     {tipoMovimiento === 'Entrada' 
-                      ? selectedProduct.cantidad_actual + parseFloat(cantidad)
+                      ? (selectedProduct.cantidad_actual ?? 0) + parseFloat(cantidad)
                       : tipoMovimiento === 'Salida Otros'
-                      ? selectedProduct.cantidad_actual - parseFloat(cantidad)
+                      ? (selectedProduct.cantidad_actual ?? 0) - parseFloat(cantidad)
                       : parseFloat(cantidad)
                     } {selectedProduct.unidad_medida}
                   </span>

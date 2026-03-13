@@ -135,14 +135,15 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
       selectedTrabajadores.forEach((trabajador: Trabajador) => {
         tareaLotes.forEach(lote => {
           if (lote) {
-            const fraccion = workMatrix[trabajador.data.id]?.[lote.id] || '0.0';
+            const trabajadorId = trabajador.data.id!;
+            const fraccion = workMatrix[trabajadorId]?.[lote.id] || '0.0';
             if (parseFloat(fraccion) > 0) {
               const registro: any = {
                 tarea_id: tarea.id,
                 lote_id: lote.id === '__sin_lote__' ? null : lote.id,
                 fecha_trabajo: fechaTrabajo,
                 fraccion_jornal: fraccion,
-                observaciones: observaciones[trabajador.data.id]?.[lote.id] || null,
+                observaciones: observaciones[trabajadorId]?.[lote.id] || null,
                 costo_jornal: calculateCostoJornal(trabajador, fraccion as RegistroTrabajo['fraccion_jornal']),
               };
 
@@ -465,7 +466,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
                     <span className="ml-2 font-medium">
                       {selectedTrabajadores.reduce((total: number, trabajador: Trabajador) => {
                         return total + tareaLotes.filter((lote: Lote) => {
-                          const fraccion = workMatrix[trabajador.data.id]?.[lote.id] || '0.0';
+                          const fraccion = workMatrix[trabajador.data.id!]?.[lote.id] || '0.0';
                           return parseFloat(fraccion) > 0;
                         }).length;
                       }, 0)}

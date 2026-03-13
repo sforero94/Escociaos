@@ -85,7 +85,7 @@ export function MediosPagoConfig() {
     setFormData({
       nombre: medioPago.nombre,
       descripcion: medioPago.descripcion || '',
-      activo: medioPago.activo,
+      activo: medioPago.activo ?? true,
     });
     setShowForm(true);
   };
@@ -289,7 +289,7 @@ export function MediosPagoConfig() {
                         {medioPago.activo ? 'Activo' : 'Inactivo'}
                       </span>
                       <Switch
-                        checked={medioPago.activo}
+                        checked={medioPago.activo ?? true}
                         onCheckedChange={() => handleToggleActive(medioPago)}
                       />
                     </div>

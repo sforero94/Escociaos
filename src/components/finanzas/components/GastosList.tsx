@@ -159,7 +159,7 @@ export function GastosList({ onEdit }: GastosListProps) {
       ganadoQuery = ganadoQuery.order('fecha', { ascending: false });
       const { data: ganadoData } = await ganadoQuery;
 
-      let ganadoResult = (ganadoData || []) as TransaccionGanado[];
+      let ganadoResult = (ganadoData || []) as unknown as TransaccionGanado[];
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();

@@ -92,7 +92,7 @@ export function LotesConfig() {
         // Crear nuevo lote
         const { data, error } = await supabase
           .from('lotes')
-          .insert([dataToSave])
+          .insert([dataToSave as any])
           .select();
 
         if (error) throw error;

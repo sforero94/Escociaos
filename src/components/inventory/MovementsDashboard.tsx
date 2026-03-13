@@ -31,15 +31,15 @@ import { Button } from '../ui/button';
 import { InventorySubNav } from './InventorySubNav';
 
 interface RecentMovement {
-  id: number;
-  producto_id: number;
+  id: string;
+  producto_id: string;
   tipo_movimiento: string;
   cantidad: number;
-  created_at: string;
+  created_at: string | null;
   producto?: {
     nombre: string;
     unidad_medida: string;
-  };
+  } | null;
 }
 
 interface ProductActivity {
@@ -691,7 +691,7 @@ export function MovementsDashboard() {
                     </div>
                     <div className="text-right ml-2">
                       <p className="text-xs text-brand-brown/60 whitespace-nowrap">
-                        {formatDate(movement.created_at)}
+                        {formatDate(movement.created_at ?? '')}
                       </p>
                     </div>
                   </div>

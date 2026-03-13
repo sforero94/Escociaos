@@ -105,7 +105,7 @@ export function generarPDFListaCompras(
   const aplicacionInfo = [
     { label: 'Aplicación:', value: configuracion.nombre },
     { label: 'Tipo:', value: tipoTexto },
-    { label: 'Fecha inicio:', value: new Date(configuracion.fecha_inicio).toLocaleDateString('es-CO') },
+    { label: 'Fecha inicio:', value: new Date(configuracion.fecha_inicio || '').toLocaleDateString('es-CO') },
     { label: 'Lotes:', value: configuracion.lotes_seleccionados.map(l => l.nombre).join(', ') }
   ];
 

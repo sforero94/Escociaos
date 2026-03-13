@@ -25,5 +25,6 @@
     }
   },
   "include": ["src"],
+  "exclude": ["src/supabase", "src/__tests__/generarReporteSemanal.test.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

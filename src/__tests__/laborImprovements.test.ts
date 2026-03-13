@@ -175,11 +175,12 @@ describe('Labor Module Improvements - Phase 1-4', () => {
     });
 
     it('should synchronize all charts with toggle state', () => {
-      const vistaGrafico = 'jornales';
+      let vistaGrafico: 'jornales' | 'costos' = 'jornales';
 
       // All charts should use the same data key based on toggle
-      const dataKey = vistaGrafico === 'costos' ? 'costo' : 'jornales';
-      const formatter = vistaGrafico === 'costos'
+      const vista = vistaGrafico as string;
+      const dataKey = vista === 'costos' ? 'costo' : 'jornales';
+      const formatter = vista === 'costos'
         ? (value: number) => `$${value.toLocaleString('es-CO')}`
         : (value: number) => value.toFixed(2);
 
@@ -212,8 +213,8 @@ describe('Labor Module Improvements - Phase 1-4', () => {
 
       // Call the PDF generation function
       generarPDFReportesLabores(
-        registrosTrabajo,
-        tiposTareas,
+        registrosTrabajo as any,
+        tiposTareas as any,
         estadisticasGenerales,
         '2025-12-01',
         '2025-12-31'
@@ -266,8 +267,8 @@ describe('Labor Module Improvements - Phase 1-4', () => {
       };
 
       generarPDFReportesLabores(
-        registrosTrabajo,
-        tiposTareas,
+        registrosTrabajo as any,
+        tiposTareas as any,
         estadisticasGenerales,
         '2025-12-01',
         '2025-12-31'
@@ -300,8 +301,8 @@ describe('Labor Module Improvements - Phase 1-4', () => {
       // For now, just verify the function can be called without errors
       expect(() => {
         generarPDFReportesLabores(
-          registrosTrabajo,
-          tiposTareas,
+          registrosTrabajo as any,
+          tiposTareas as any,
           { totalCostos: 150000, totalJornales: 3.0 },
           '2025-12-01',
           '2025-12-31'
@@ -310,8 +311,8 @@ describe('Labor Module Improvements - Phase 1-4', () => {
     });
 
     it('should use professional formatting with brand colors', () => {
-      const registrosTrabajo = [];
-      const tiposTareas = [];
+      const registrosTrabajo: any[] = [];
+      const tiposTareas: any[] = [];
       const estadisticasGenerales = { totalCostos: 0, totalJornales: 0 };
 
       generarPDFReportesLabores(
@@ -352,7 +353,7 @@ describe('Labor Module Improvements - Phase 1-4', () => {
       const estadisticas = { totalCostos: costoCalculado, totalJornales: fraccion };
 
       expect(() => {
-        generarPDFReportesLabores(registros, tiposTareas, estadisticas, '2025-12-01', '2025-12-31');
+        generarPDFReportesLabores(registros as any, tiposTareas as any, estadisticas, '2025-12-01', '2025-12-31');
       }).not.toThrow();
 
       // Verify the complete workflow completed successfully
@@ -385,7 +386,7 @@ describe('Labor Module Improvements - Phase 1-4', () => {
       const tiposTareas = [{ id: 'fum', nombre: baseData.tipoTarea }];
       const estadisticas = { totalCostos: costoJornal, totalJornales: baseData.fraccion };
 
-      generarPDFReportesLabores(registros, tiposTareas, estadisticas, '2025-12-01', '2025-12-31');
+      generarPDFReportesLabores(registros as any, tiposTareas as any, estadisticas, '2025-12-01', '2025-12-31');
 
       // Verify data consistency
       // (60000 + 12000 + 6000) / 48 * 8 * 0.75 = 78000 / 48 * 6 = 9750

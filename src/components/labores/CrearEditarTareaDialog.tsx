@@ -472,8 +472,8 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
                   <SelectValue placeholder="Seleccionar responsable" />
                 </SelectTrigger>
                 <SelectContent>
-                  {empleados.map((empleado) => (
-                    <SelectItem key={empleado.id} value={empleado.id}>
+                  {empleados.filter(e => e.id).map((empleado) => (
+                    <SelectItem key={empleado.id} value={empleado.id!}>
                       <div className="flex items-center gap-2">
                         <span>{empleado.nombre}</span>
                         {empleado.cargo && (

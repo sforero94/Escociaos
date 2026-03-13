@@ -94,7 +94,7 @@ export function ProveedoresConfig() {
       nit: proveedor.nit || '',
       telefono: proveedor.telefono || '',
       email: proveedor.email || '',
-      activo: proveedor.activo,
+      activo: proveedor.activo ?? true,
     });
     setShowForm(true);
   };
@@ -314,7 +314,7 @@ export function ProveedoresConfig() {
                         {proveedor.activo ? 'Activo' : 'Inactivo'}
                       </span>
                       <Switch
-                        checked={proveedor.activo}
+                        checked={proveedor.activo ?? true}
                         onCheckedChange={() => handleToggleActive(proveedor)}
                       />
                     </div>

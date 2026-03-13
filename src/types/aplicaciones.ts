@@ -3,6 +3,7 @@
 
 // 🚨 TIPOS CORREGIDOS SEGÚN /supabase_tablas.md
 export type TipoAplicacion = 'Fumigación' | 'Fertilización' | 'Drench'; // ✅ Con mayúscula y tilde
+export type TipoAplicacionLocal = 'fumigacion' | 'fertilizacion' | 'drench'; // Lowercase values used in calculator UI
 export type TamanoCaneca = 20 | 200 | 500 | 1000;
 export type TipoArbol = 'grandes' | 'medianos' | 'pequenos' | 'clonales';
 export type EstadoAplicacion = 'Calculada' | 'En ejecución' | 'Cerrada';
@@ -13,7 +14,9 @@ export type UnidadMedida = 'Litros' | 'Kilos' | 'Unidades';
 // Configuración General (Paso 1)
 export interface ConfiguracionAplicacion {
   nombre: string;
-  tipo_aplicacion: TipoAplicacion; // ✅ Corregido de 'tipo' a 'tipo_aplicacion'
+  tipo?: TipoAplicacionLocal; // Lowercase value used in calculator UI
+  tipo_aplicacion?: TipoAplicacion; // DB enum value (capitalized with accents)
+  fecha_inicio?: string; // Convenience alias used in lista de compras / cierre views
   fecha_inicio_planeada: string;
   fecha_fin_planeada?: string;
   fecha_recomendacion?: string;
@@ -141,41 +144,52 @@ export interface EstadoCalculadora {
 // 🚨 CORREGIDO: Interfaz debe coincidir con tabla 'aplicaciones' en BD
 export interface Aplicacion {
   id: string;
-  codigo_aplicacion?: string; // ✅ Campo de BD
-  nombre_aplicacion?: string; // ✅ Campo de BD  
-  tipo_aplicacion: TipoAplicacion; // ✅ Corregido de 'tipo' a 'tipo_aplicacion'
-  proposito?: string;
-  blanco_biologico?: string | string[];
-  
+  codigo_aplicacion?: string | null;
+  nombre_aplicacion?: string | null;
+  tipo_aplicacion: TipoAplicacion;
+  proposito?: string | null;
+  blanco_biologico?: string | string[] | null;
+
   // Fechas
-  fecha_inicio_planeada?: string; // ✅ Campo de BD
-  fecha_fin_planeada?: string; // ✅ Campo de BD
-  fecha_recomendacion?: string; // ✅ Campo de BD
-  fecha_inicio_ejecucion?: string; // ✅ Campo de BD
-  fecha_fin_ejecucion?: string; // ✅ Campo de BD
-  fecha_cierre?: string; // ✅ Campo de BD (timestamptz)
-  
+  fecha_inicio_planeada?: string | null;
+  fecha_fin_planeada?: string | null;
+  fecha_recomendacion?: string | null;
+  fecha_inicio_ejecucion?: string | null;
+  fecha_fin_ejecucion?: string | null;
+  fecha_cierre?: string | null;
+
   // Estado y responsable
-  estado: EstadoAplicacion; // ✅ Campo de BD
-  agronomo_responsable?: string; // ✅ Campo de BD
+  estado: EstadoAplicacion | null;
+  agronomo_responsable?: string | null;
 
   // Integración con labores
-  tarea_id?: string; // ✅ NUEVO: Linked tarea UUID (auto-created labor task)
+  tarea_id?: string | null;
 
   // Costos
-  jornales_utilizados?: number; // ✅ Campo de BD
-  valor_jornal?: number; // ✅ Campo de BD
-  costo_total_insumos?: number; // ✅ Campo de BD
-  costo_total_mano_obra?: number; // ✅ Campo de BD
-  costo_total?: number; // ✅ Campo de BD
-  costo_por_arbol?: number; // ✅ Campo de BD
-  arboles_jornal?: number; // ✅ Campo de BD
-  observaciones_cierre?: string; // ✅ Campo de BD
-  
+  jornales_utilizados?: number | null;
+  valor_jornal?: number | null;
+  costo_total_insumos?: number | null;
+  costo_total_mano_obra?: number | null;
+  costo_total?: number | null;
+  costo_por_arbol?: number | null;
+  arboles_jornal?: number | null;
+  observaciones_cierre?: string | null;
+
   // Auditoría
-  created_at?: string; // ✅ Campo de BD
-  updated_at?: string; // ✅ Campo de BD
-  
+  created_at?: string | null;
+  updated_at?: string | null;
+
+  // Computed / hydrated fields (populated when loading from BD with joins)
+  fecha_inicio?: string; // Convenience field: fecha_recomendacion || created_at
+  configuracion?: ConfiguracionAplicacion; // Hydrated config with lotes_seleccionados
+  mezclas?: Mezcla[]; // Hydrated mezclas from aplicaciones_mezclas + productos
+  calculos?: CalculosPorLote[]; // Hydrated from aplicaciones_calculos
+  lista_compras?: ListaCompras; // Hydrated from aplicaciones_compras
+
+  // Legacy/convenience aliases
+  creado_en?: string;
+  creado_por?: string;
+  actualizado_en?: string;
 }
 
 // Producto del catálogo (para selección)
@@ -239,10 +253,20 @@ export interface MovimientoDiario {
   responsable: string;
   notas?: string;
   condiciones_meteorologicas?: string;
-  
+
+  // Denormalized product fields (used in flat MovimientoDiario lists for utils/CSV export)
+  producto_id?: string;
+  producto_nombre?: string;
+  producto_categoria?: string;
+  producto_unidad?: UnidadMedida;
+  cantidad_utilizada?: number;
+  numero_canecas_utilizadas?: number;
+  numero_canecas_planeadas?: number;
+
   // Metadata
   created_at?: string;
   created_by?: string;
+  creado_en?: string; // Legacy alias for created_at
 }
 
 export interface MovimientoDiarioProducto {
@@ -252,8 +276,8 @@ export interface MovimientoDiarioProducto {
   producto_nombre: string;
   producto_categoria: string;
   cantidad_utilizada: number;
-  unidad: 'cc' | 'L' | 'g' | 'Kg'; // Siempre se guarda en unidades base (cc/L/g/Kg)
-  created_at?: string;
+  unidad: UnidadMedida; // DB enum: 'Litros' | 'Kilos' | 'Unidades'
+  created_at?: string | null;
 }
 
 export type FraccionJornal = '0.0' | '0.25' | '0.5' | '0.75' | '1.0';

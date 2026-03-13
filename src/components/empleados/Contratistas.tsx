@@ -103,7 +103,7 @@ const Contratistas: React.FC = () => {
         .order('nombre', { ascending: true });
 
       if (error) throw error;
-      setContratistas(data || []);
+      setContratistas((data || []) as Contratista[]);
     } catch (error: any) {
       showAlert('error', `Error al cargar contratistas: ${error.message}`);
     } finally {
@@ -143,7 +143,7 @@ const Contratistas: React.FC = () => {
             ...formData,
             updated_at: new Date().toISOString(),
           })
-          .eq('id', editingContratista.id);
+          .eq('id', editingContratista.id!);
 
         if (error) throw error;
         showAlert('success', 'Contratista actualizado exitosamente');

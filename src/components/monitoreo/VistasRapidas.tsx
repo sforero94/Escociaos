@@ -183,7 +183,7 @@ export function VistasRapidas({ onVistaSeleccionada }: { onVistaSeleccionada: (f
 
         // Calcular resumen
         const totalRegistros = data?.length || 0;
-        const incidencias = data?.map(m => parseFloat(m.incidencia) || 0) || [];
+        const incidencias = data?.map(m => Number(m.incidencia) || 0) || [];
         const incidenciaPromedio = incidencias.length > 0
           ? incidencias.reduce((a, b) => a + b, 0) / incidencias.length
           : 0;

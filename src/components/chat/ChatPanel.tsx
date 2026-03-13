@@ -188,7 +188,7 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
 
   const handleExport = useCallback(() => {
     // Find last assistant message
-    const lastAssistantIdx = messages.findLastIndex((m) => m.role === 'assistant');
+    const lastAssistantIdx = messages.reduce((lastIdx, m, i) => m.role === 'assistant' ? i : lastIdx, -1);
     if (lastAssistantIdx === -1) return;
 
     const assistantMsg = messages[lastAssistantIdx];

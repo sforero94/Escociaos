@@ -86,7 +86,7 @@ export async function fetchMessages(conversationId: string): Promise<ChatMessage
     .order('created_at', { ascending: true });
 
   if (error) throw new Error(error.message);
-  return data || [];
+  return (data || []) as ChatMessage[];
 }
 
 export async function deleteConversation(id: string): Promise<void> {

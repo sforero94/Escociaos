@@ -107,11 +107,11 @@ export function ProductDetail() {
       const { data, error } = await supabase
         .from('productos')
         .select('*')
-        .eq('id', id)
+        .eq('id', id!)
         .single();
 
       if (error) throw error;
-      setProduct(data);
+      setProduct(data as unknown as Product);
     } catch (error) {
     } finally {
       setLoading(false);

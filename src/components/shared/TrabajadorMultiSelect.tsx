@@ -49,7 +49,8 @@ export function TrabajadorMultiSelect({
   }, [contratistas, searchTerm]);
 
   // Check if worker is selected
-  const isTrabajadorSelected = (id: string, type: 'empleado' | 'contratista'): boolean => {
+  const isTrabajadorSelected = (id: string | undefined, type: 'empleado' | 'contratista'): boolean => {
+    if (!id) return false;
     return selectedTrabajadores.some(
       (t) => t.type === type && t.data.id === id
     );
@@ -57,7 +58,7 @@ export function TrabajadorMultiSelect({
 
   // Add worker to selection
   const addTrabajador = (trabajador: Trabajador) => {
-    if (!isTrabajadorSelected(trabajador.data.id, trabajador.type)) {
+    if (!isTrabajadorSelected(trabajador.data.id ?? '', trabajador.type)) {
       onSelectionChange([...selectedTrabajadores, trabajador]);
     }
   };
@@ -66,7 +67,7 @@ export function TrabajadorMultiSelect({
   const removeTrabajador = (id: string, type: 'empleado' | 'contratista') => {
     onSelectionChange(
       selectedTrabajadores.filter(
-        (t) => !(t.type === type && t.data.id === id)
+        (t) => !(t.type === type && (t.data.id ?? '') === id)
       )
     );
   };
@@ -84,7 +85,7 @@ export function TrabajadorMultiSelect({
   const toggleSelectAll = () => {
     const currentList = workerTab === 'empleados' ? filteredEmpleados : filteredContratistas;
     const allSelected = currentList.every((worker) =>
-      isTrabajadorSelected(worker.id, workerTab === 'empleados' ? 'empleado' : 'contratista')
+      isTrabajadorSelected(worker.id ?? '', workerTab === 'empleados' ? 'empleado' : 'contratista')
     );
 
     if (allSelected) {
@@ -100,7 +101,7 @@ export function TrabajadorMultiSelect({
     } else {
       // Select all from current tab
       const toAdd = currentList
-        .filter((worker) => !isTrabajadorSelected(worker.id, workerTab === 'empleados' ? 'empleado' : 'contratista'))
+        .filter((worker) => !isTrabajadorSelected(worker.id ?? '', workerTab === 'empleados' ? 'empleado' : 'contratista'))
         .map((worker) => ({
           type: workerTab === 'empleados' ? 'empleado' : 'contratista',
           data: worker,
@@ -236,12 +237,12 @@ export function TrabajadorMultiSelect({
             </div>
           ) : (
             filteredEmpleados.map((empleado) => {
-              const isSelected = isTrabajadorSelected(empleado.id, 'empleado');
+              const isSelected = isTrabajadorSelected(empleado.id ?? '', 'empleado');
               return (
                 <button
                   key={empleado.id}
                   type="button"
-                  onClick={() => toggleTrabajador(empleado.id, 'empleado', empleado)}
+                  onClick={() => toggleTrabajador(empleado.id ?? '', 'empleado', empleado)}
                   disabled={disabled}
                   className={`relative p-2 rounded-lg border-2 transition-all text-left hover:shadow-md ${
                     isSelected
@@ -302,13 +303,13 @@ export function TrabajadorMultiSelect({
           </div>
         ) : (
           filteredContratistas.map((contratista) => {
-            const isSelected = isTrabajadorSelected(contratista.id, 'contratista');
+            const isSelected = isTrabajadorSelected(contratista.id ?? '', 'contratista');
             return (
               <button
                 key={contratista.id}
                 type="button"
                 onClick={() =>
-                  toggleTrabajador(contratista.id, 'contratista', contratista)
+                  toggleTrabajador(contratista.id ?? '', 'contratista', contratista)
                 }
                 disabled={disabled}
                 className={`relative p-2 rounded-lg border-2 transition-all text-left hover:shadow-md ${

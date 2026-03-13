@@ -12,20 +12,20 @@ import { useSafeMode } from '../../contexts/SafeModeContext';
 import { toast } from 'sonner';
 
 interface InventoryListProps {
-  onNavigate?: (view: string, productId?: number) => void;
+  onNavigate?: (view: string, productId?: string) => void;
 }
 
 interface Product {
-  id: number;
+  id: string;
   nombre: string;
   categoria: string;
-  estado: string;
-  cantidad_actual: number;
+  estado: string | null;
+  cantidad_actual: number | null;
   unidad_medida: string;
-  stock_minimo: number;
-  precio_unitario: number;
-  activo: boolean;
-  permitido_gerencia: boolean;
+  stock_minimo: number | null;
+  precio_unitario: number | null;
+  activo: boolean | null;
+  permitido_gerencia: boolean | null;
 }
 
 export function InventoryList({ onNavigate }: InventoryListProps) {
@@ -52,7 +52,7 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
   
   // Estados para el formulario de productos
   const [isProductFormOpen, setIsProductFormOpen] = useState(false);
-  const [editingProductId, setEditingProductId] = useState<number | null>(null);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
 
   // Estados para el modal de movimientos
   const [showMovementsModal, setShowMovementsModal] = useState(false);
@@ -139,7 +139,7 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
   };
 
   const getStates = () => {
-    const states = new Set(products.map((p) => p.estado));
+    const states = new Set(products.map((p) => p.estado).filter((s): s is string => !!s));
     return Array.from(states).sort();
   };
 
@@ -149,7 +149,7 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
   };
 
   const hasLowStock = (product: Product) => {
-    return product.cantidad_actual < product.stock_minimo;
+    return (product.cantidad_actual ?? 0) < (product.stock_minimo ?? 0);
   };
 
   const formatCurrency = (value: number) => {
@@ -160,12 +160,12 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
     }).format(value);
   };
 
-  const handleEditProduct = (productId: number) => {
+  const handleEditProduct = (productId: string) => {
     setEditingProductId(productId);
     setIsProductFormOpen(true);
   };
 
-  const handleToggleActivo = async (productId: number, activo: boolean, e: React.MouseEvent) => {
+  const handleToggleActivo = async (productId: string, activo: boolean | null, e: React.MouseEvent) => {
     e.stopPropagation();
     
     try {
@@ -413,7 +413,7 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
                       {product.cantidad_actual} {product.unidad_medida}
                     </td>
                     <td className="px-6 py-4 text-right text-foreground">
-                      {formatCurrency(product.cantidad_actual * (product.precio_unitario || 0))}
+                      {formatCurrency((product.cantidad_actual ?? 0) * (product.precio_unitario || 0))}
                     </td>
                     <td className="px-6 py-4 text-center">
                       <button
@@ -495,7 +495,7 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
           <p className="text-2xl text-foreground">
             {formatCurrency(
               filteredProducts.reduce(
-                (sum, p) => sum + p.cantidad_actual * (p.precio_unitario || 0),
+                (sum, p) => sum + (p.cantidad_actual ?? 0) * (p.precio_unitario || 0),
                 0
               )
             )}

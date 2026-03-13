@@ -6,19 +6,19 @@ import { Button } from '../ui/button';
 import { formatearFechaHora } from '../../utils/fechas';
 
 interface Movement {
-  id: number;
+  id: string;
   tipo_movimiento: string;
   cantidad: number;
-  saldo_anterior: number;
-  saldo_nuevo: number;
+  saldo_anterior: number | null;
+  saldo_nuevo: number | null;
   referencia_id: number | null;
   tipo_referencia: string | null;
   notas: string | null;
-  created_at: string;
+  created_at: string | null;
 }
 
 interface ProductMovementsProps {
-  productId: number;
+  productId: string;
   productName: string;
   unidadMedida: string;
 }
@@ -44,7 +44,7 @@ export function ProductMovements({ productId, productName, unidadMedida }: Produ
         .limit(limit);
 
       if (error) throw error;
-      setMovements(data || []);
+      setMovements((data || []) as unknown as Movement[]);
     } catch (err: any) {
     } finally {
       setLoading(false);
@@ -155,13 +155,13 @@ export function ProductMovements({ productId, productName, unidadMedida }: Produ
                       <div className="bg-white/50 rounded-lg p-2">
                         <p className="text-xs text-brand-brown/60 mb-0.5 uppercase tracking-wide">Antes</p>
                         <p className="text-sm text-foreground">
-                          {formatNumber(movement.saldo_anterior, 2)} {unidadMedida}
+                          {formatNumber(movement.saldo_anterior ?? 0, 2)} {unidadMedida}
                         </p>
                       </div>
                       <div className="bg-white/50 rounded-lg p-2">
                         <p className="text-xs text-brand-brown/60 mb-0.5 uppercase tracking-wide">Después</p>
                         <p className="text-sm text-foreground">
-                          {formatNumber(movement.saldo_nuevo, 2)} {unidadMedida}
+                          {formatNumber(movement.saldo_nuevo ?? 0, 2)} {unidadMedida}
                         </p>
                       </div>
                     </div>

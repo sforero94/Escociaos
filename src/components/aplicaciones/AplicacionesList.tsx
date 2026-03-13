@@ -481,7 +481,7 @@ export function AplicacionesList() {
         ) : (
           <div className="divide-y divide-gray-200">
             {aplicacionesFiltradas.map((aplicacion) => {
-              const EstadoIcon = ESTADO_ICONS[aplicacion.estado];
+              const EstadoIcon = ESTADO_ICONS[(aplicacion.estado ?? 'Calculada') as EstadoAplicacion];
               const TipoIcon = aplicacion.tipo_aplicacion === 'Fumigación' ? Droplet : Leaf;
 
               return (
@@ -505,10 +505,10 @@ export function AplicacionesList() {
                           </h3>
                           <span
                             className={`px-2 py-1 text-xs rounded-lg border ${
-                              ESTADO_COLORS[aplicacion.estado]
+                              ESTADO_COLORS[(aplicacion.estado ?? 'Calculada') as EstadoAplicacion]
                             }`}
                           >
-                            {ESTADO_LABELS[aplicacion.estado]}
+                            {ESTADO_LABELS[(aplicacion.estado ?? 'Calculada') as EstadoAplicacion]}
                           </span>
                         </div>
 
@@ -519,11 +519,11 @@ export function AplicacionesList() {
                           </span>
                           <span className="flex items-center gap-1">
                             <Calendar className="w-4 h-4" />
-                            {new Date(aplicacion.fecha_inicio).toLocaleDateString('es-CO')}
+                            {new Date(aplicacion.fecha_inicio ?? aplicacion.fecha_inicio_planeada ?? '').toLocaleDateString('es-CO')}
                           </span>
                           <span className="flex items-center gap-1">
                             <MapPin className="w-4 h-4" />
-                            {aplicacion.configuracion.lotes_seleccionados.length} lotes
+                            {aplicacion.configuracion?.lotes_seleccionados?.length ?? 0} lotes
                           </span>
                         </div>
 

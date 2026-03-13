@@ -257,7 +257,7 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
       // Insertar en batch
       const { error } = await supabase
         .from('monitoreos')
-        .insert(registros);
+        .insert(registros as any);
 
       if (error) throw error;
 

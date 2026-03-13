@@ -244,9 +244,9 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
             productosDeMov.forEach(prod => {
               // Convertir unidades a unidad base si es necesario
               let cantidadEnUnidadBase = prod.cantidad_utilizada;
-              if (prod.unidad === 'cc') {
+              if ((prod.unidad as string) === 'cc') {
                 cantidadEnUnidadBase = prod.cantidad_utilizada / 1000;
-              } else if (prod.unidad === 'g') {
+              } else if ((prod.unidad as string) === 'g') {
                 cantidadEnUnidadBase = prod.cantidad_utilizada / 1000;
               }
 
@@ -255,7 +255,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                 producto_id: prod.producto_id,
                 producto_nombre: prod.producto_nombre,
                 cantidad_utilizada: cantidadEnUnidadBase,
-                numero_canecas_utilizadas: mov.numero_canecas,
+                numero_canecas_utilizadas: mov.numero_canecas ?? 0,
                 costo_unitario: costosMap.get(prod.producto_id) || 0,
               });
             });
@@ -485,10 +485,10 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
             costo_jornal: reg.costo_jornal,
             valor_jornal_empleado: reg.tarifa_jornal || (reg.salario ? Math.round((reg.salario + (reg.prestaciones || 0) + (reg.auxilios || 0)) / ((reg.horas_semanales || 48) * 4.33) * 8) : 0),
             observaciones: reg.observaciones || null,
-          });
+          } as any);
         } else if (reg._modified && reg.id && !reg._deleted) {
           await supabase.from('registros_trabajo').update({
-            fraccion_jornal: reg.fraccion_jornal.toString(),
+            fraccion_jornal: reg.fraccion_jornal.toString() as any,
             costo_jornal: reg.costo_jornal,
           }).eq('id', reg.id);
         }
@@ -1356,8 +1356,8 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                       generarPDFReporteCierre({
                         nombre: aplicacion.nombre_aplicacion || '',
                         tipo_aplicacion: aplicacion.tipo_aplicacion || '',
-                        proposito: aplicacion.proposito,
-                        fecha_inicio_planeada: aplicacion.fecha_inicio_planeada,
+                        proposito: aplicacion.proposito ?? undefined,
+                        fecha_inicio_planeada: aplicacion.fecha_inicio_planeada ?? undefined,
                         fecha_inicio_ejecucion: datosFinales.fechaInicioReal,
                         fecha_cierre: datosFinales.fechaFinReal,
                         dias_aplicacion: diasCalc,

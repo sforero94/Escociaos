@@ -25,19 +25,19 @@ interface DetalleVerificacion {
   valor_diferencia: number | null;
   estado_diferencia: string | null;
   observaciones: string | null;
-  contado: boolean;
+  contado: boolean | null;
   producto: {
     nombre: string;
     categoria: string;
     unidad_medida: string;
-    precio_unitario: number;
+    precio_unitario: number | null;
   };
 }
 
 interface Verificacion {
   id: string;
-  fecha_inicio: string;
-  estado: string;
+  fecha_inicio: string | null;
+  estado: string | null;
   usuario_verificador: string | null;
 }
 
@@ -85,6 +85,7 @@ export function ConteoFisico() {
   }, [currentIndex, detalles]);
 
   const loadVerificacion = async () => {
+    if (!id) return;
     try {
       setIsLoading(true);
       setError('');
@@ -104,7 +105,7 @@ export function ConteoFisico() {
         return;
       }
 
-      setVerificacion(verif);
+      setVerificacion(verif as unknown as Verificacion);
 
       // Cargar detalles con productos
       const { data: dets, error: errorDets } = await supabase
@@ -130,7 +131,7 @@ export function ConteoFisico() {
         return a.contado ? 1 : -1;
       });
 
-      setDetalles(detsSorted);
+      setDetalles(detsSorted as unknown as DetalleVerificacion[]);
 
       // Si hay productos, ir al primero no contado
       if (dets && dets.length > 0) {
@@ -251,7 +252,7 @@ export function ConteoFisico() {
           estado: 'Pendiente Aprobación',
           fecha_completada: new Date().toISOString(),
         })
-        .eq('id', id);
+        .eq('id', id!);
 
       if (errorUpdate) throw errorUpdate;
 

@@ -29,7 +29,7 @@ export function ReporteAplicacionWrapper() {
       const { data, error } = await supabase
         .from('aplicaciones')
         .select('*')
-        .eq('id', id)
+        .eq('id', id!)
         .single();
 
       if (error) throw error;
@@ -39,12 +39,12 @@ export function ReporteAplicacionWrapper() {
         return;
       }
 
-      if (data.estado !== 'Cerrada') {
+      if ((data.estado as string) !== 'Cerrada') {
         setError('Esta aplicación no está cerrada. El reporte solo está disponible para aplicaciones cerradas.');
         return;
       }
 
-      setAplicacion(data);
+      setAplicacion(data as Aplicacion);
     } catch (err: any) {
       setError(err.message || 'Error cargando la aplicación');
     } finally {

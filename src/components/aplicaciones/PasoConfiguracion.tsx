@@ -8,6 +8,7 @@ import type {
   LoteSeleccionado,
   LoteCatalogo,
   TipoAplicacion,
+  TipoAplicacionLocal,
   BlancoBiologico,
 } from '../../types/aplicaciones';
 import { toast } from 'sonner';
@@ -94,7 +95,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
       const lotesFormateados: LoteCatalogo[] = data.map((lote) => ({
         id: lote.id,
         nombre: lote.nombre,
-        area_hectareas: lote.area_hectareas,
+        area_hectareas: lote.area_hectareas ?? 0,
         sublotes: lote.sublotes || [],
         conteo_arboles: {
           grandes: lote.arboles_grandes || 0,
@@ -135,7 +136,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
         throw error;
       }
 
-      setBlancosBiologicos(data || []);
+      setBlancosBiologicos((data || []) as BlancoBiologico[]);
     } catch (error) {
       setBlancosBiologicos([]);
     } finally {
@@ -375,7 +376,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
               onChange={(e) =>
                 setFormData((prev) => ({
                   ...prev,
-                  tipo: e.target.value as TipoAplicacion,
+                  tipo: e.target.value as TipoAplicacionLocal,
                 }))
               }
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"

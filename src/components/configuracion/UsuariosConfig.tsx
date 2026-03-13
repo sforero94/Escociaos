@@ -16,9 +16,9 @@ interface Usuario {
   email: string;
   nombre_completo: string | null;
   rol: 'Administrador' | 'Verificador' | 'Gerencia';
-  activo: boolean;
-  created_at?: string;
-  last_login?: string;
+  activo: boolean | null;
+  created_at?: string | null;
+  last_login?: string | null;
 }
 
 export function UsuariosConfig() {
@@ -84,7 +84,7 @@ export function UsuariosConfig() {
     setEmail(usuario.email);
     setRol(usuario.rol);
     setClave('');
-    setActivo(usuario.activo);
+    setActivo(usuario.activo ?? true);
     setModalOpen(true);
   };
 

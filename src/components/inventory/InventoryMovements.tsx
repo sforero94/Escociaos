@@ -8,25 +8,25 @@ import { InventorySubNav } from './InventorySubNav';
 import { formatearFechaHora } from '../../utils/fechas';
 
 interface Movement {
-  id: number;
-  producto_id: number;
+  id: string;
+  producto_id: string;
   tipo_movimiento: string;
   cantidad: number;
   saldo_anterior: number | null;
   saldo_nuevo: number | null;
   aplicacion_id: string | null;
   observaciones: string | null;
-  created_at: string;
+  created_at: string | null;
   fecha_movimiento: string;
   lote_aplicacion: string | null;
   producto?: {
     nombre: string;
     unidad_medida: string;
-  };
+  } | null;
 }
 
 interface Product {
-  id: number;
+  id: string;
   nombre: string;
   unidad_medida: string;
 }
@@ -95,7 +95,7 @@ export function InventoryMovements() {
       }
 
       if (selectedType) {
-        query = query.eq('tipo_movimiento', selectedType);
+        query = query.eq('tipo_movimiento', selectedType as 'Entrada' | 'Salida por Aplicación' | 'Salida Otros' | 'Ajuste');
       }
 
       if (startDate) {
@@ -357,7 +357,7 @@ export function InventoryMovements() {
         <div className="bg-primary/5 border border-primary/20 rounded-xl p-4">
           <p className="text-sm text-foreground">
             <span className="text-primary">Filtros activos:</span>{' '}
-            {selectedProduct && `Producto: ${products.find(p => p.id === parseInt(selectedProduct))?.nombre} `}
+            {selectedProduct && `Producto: ${products.find(p => p.id === selectedProduct)?.nombre} `}
             {selectedType && `| Tipo: ${selectedType === 'entrada' ? 'Entradas' : 'Salidas'} `}
             {startDate && `| Desde: ${new Date(startDate).toLocaleDateString('es-CO')} `}
             {endDate && `| Hasta: ${new Date(endDate).toLocaleDateString('es-CO')}`}

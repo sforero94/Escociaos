@@ -263,7 +263,7 @@ export async function procesarYGuardarCSV(
         }
         return resultado;
       })
-      .filter(m => m !== null) as Omit<Monitoreo, 'id'>[];
+      .filter(m => m !== null) as Omit<Monitoreo, 'id' | 'incidencia' | 'severidad'>[];
     
     console.log('✅ [procesarYGuardarCSV] Filas transformadas:', monitoreos.length, 'de', csvData.length);
     console.log('🔍 [procesarYGuardarCSV] Primera fila transformada:', monitoreos[0]);
@@ -407,7 +407,7 @@ async function mapearPlagas(csvData: CSVRowRaw[], supabase: any) {
     .from('plagas_enfermedades_catalogo')
     .select('id, nombre');
   
-  const plagasMap = new Map(plagasExistentes?.map((p: any) => [p.nombre, p.id]) || []);
+  const plagasMap = new Map<string, string>(plagasExistentes?.map((p: any) => [p.nombre, p.id]) || []);
   
   const plagasFaltantes = plagasUnicas.filter(p => !plagasMap.has(p));
   
@@ -428,7 +428,7 @@ function transformarFila(
   lotesMap: Map<string, string>,
   sublotesMap: Map<string, any>,
   plagasMap: Map<string, string>
-): Omit<Monitoreo, 'id'> | null {
+): Omit<Monitoreo, 'id' | 'incidencia' | 'severidad'> | null {
   // Usar nombres EXACTOS de columnas del template
   const fechaStr = row['Fecha de monitoreo'];
   const fecha = parseFecha(fechaStr);
@@ -460,10 +460,10 @@ function transformarFila(
     return null;
   }
   
-  // Usar nombres EXACTOS de columnas del template
-  const arbolesMonitoreados = parseEntero(row['Arboles Monitoreados']);
-  const arbolesAfectados = parseEntero(row['Arboles Afectados']);
-  const individuos = parseEntero(row['Individuos Encontrados']);
+  // Use flexible column accessor since CSV headers may include newline suffixes
+  const arbolesMonitoreados = parseEntero(obtenerValorColumnaFlexible(row, 'Arboles Monitoreados'));
+  const arbolesAfectados = parseEntero(obtenerValorColumnaFlexible(row, 'Arboles Afectados'));
+  const individuos = parseEntero(obtenerValorColumnaFlexible(row, 'Individuos Encontrados'));
   
   const incidencia = calcularIncidencia(arbolesAfectados, arbolesMonitoreados);
   const gravedad = clasificarGravedad(incidencia);
@@ -481,9 +481,9 @@ function transformarFila(
     individuos_encontrados: individuos,
     // incidencia: OMITIDO - columna generada por PostgreSQL
     // severidad: OMITIDO - columna generada por PostgreSQL
-    gravedad_texto: gravedad.texto,
-    gravedad_numerica: gravedad.numerica,
-    observaciones: observaciones,
-    monitor: monitorNombre,
+    gravedad_texto: gravedad.texto as 'Baja' | 'Media' | 'Alta',
+    gravedad_numerica: gravedad.numerica as 1 | 2 | 3,
+    observaciones: observaciones ?? undefined,
+    monitor: monitorNombre ?? undefined,
   };
 }

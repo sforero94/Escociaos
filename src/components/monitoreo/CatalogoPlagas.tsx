@@ -107,11 +107,13 @@ export function CatalogoPlagas() {
       });
 
       // Combinar datos
-      const plagasConUsos: Plaga[] = (plagasData || []).map(p => ({
+      const plagasConUsos = (plagasData || []).map(p => ({
         ...p,
+        activo: p.activo ?? true,
+        tipo: p.tipo ?? '',
         usos: conteos[p.id]?.usos || 0,
         ultima_vez: conteos[p.id]?.ultimaVez
-      }));
+      })) as Plaga[];
 
       setPlagas(plagasConUsos);
       aplicarFiltros(plagasConUsos, searchTerm, filtroActivo);

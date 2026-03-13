@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 interface ProductFormProps {
   isOpen: boolean;
   onClose: () => void;
-  productId?: number | null; // Si viene productId, es modo EDITAR
+  productId?: string | null; // Si viene productId, es modo EDITAR
   onSuccess: () => void;
 }
 
@@ -141,6 +141,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
   }, [formData.precio_por_presentacion, formData.presentacion_kg_l]);
 
   const loadProductData = async () => {
+    if (!productId) return;
     try {
       const supabase = getSupabase();
       const { data, error } = await supabase
@@ -153,9 +154,10 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
       if (data) {
         // Convertir nulls a strings vacíos o números vacíos
         const formattedData = { ...initialFormData };
-        Object.keys(data).forEach(key => {
-          if (data[key] !== null) {
-            formattedData[key as keyof ProductData] = data[key];
+        const dataRecord = data as Record<string, unknown>;
+        Object.keys(dataRecord).forEach(key => {
+          if (dataRecord[key] !== null && key in formattedData) {
+            (formattedData as Record<string, unknown>)[key] = dataRecord[key];
           }
         });
         setFormData(formattedData);

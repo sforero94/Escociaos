@@ -52,7 +52,7 @@ export function PasoCierreDatos({
   const [mostrarJornalesPorLote, setMostrarJornalesPorLote] = useState(false);
 
   const calcularDiasAplicacion = (): number => {
-    const fechaInicio = new Date(aplicacion.fecha_inicio);
+    const fechaInicio = new Date(aplicacion.fecha_inicio ?? aplicacion.fecha_inicio_planeada ?? '');
     const fechaFin = new Date(fechaFinal);
     const diferencia = fechaFin.getTime() - fechaInicio.getTime();
     return Math.ceil(diferencia / (1000 * 60 * 60 * 24)) + 1;
@@ -71,7 +71,7 @@ export function PasoCierreDatos({
     }).format(valor);
   };
 
-  const fechaMinimaFinal = aplicacion.fecha_inicio;
+  const fechaMinimaFinal = aplicacion.fecha_inicio ?? aplicacion.fecha_inicio_planeada ?? '';
   const fechaMaximaFinal = new Date().toISOString().split('T')[0];
 
   const esFechaValida = fechaFinal >= fechaMinimaFinal && fechaFinal <= fechaMaximaFinal;
@@ -101,7 +101,7 @@ export function PasoCierreDatos({
             <label className="block text-sm text-brand-brown/70 mb-2">Fecha de Inicio</label>
             <input
               type="date"
-              value={aplicacion.fecha_inicio}
+              value={aplicacion.fecha_inicio ?? aplicacion.fecha_inicio_planeada ?? ''}
               disabled
               className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-foreground cursor-not-allowed"
             />
@@ -126,7 +126,7 @@ export function PasoCierreDatos({
             />
             {!esFechaValida && fechaFinal && (
               <p className="text-xs text-red-600 mt-1">
-                Fecha inválida. Debe ser entre {aplicacion.fecha_inicio} y hoy.
+                Fecha inválida. Debe ser entre {aplicacion.fecha_inicio ?? aplicacion.fecha_inicio_planeada} y hoy.
               </p>
             )}
           </div>
@@ -294,7 +294,7 @@ export function PasoCierreDatos({
             {mostrarJornalesPorLote && (
               <div className="mt-4 space-y-3">
                 {aplicacion.configuracion?.lotes_seleccionados?.map((lote) => {
-                  const loteId = lote.id || lote.lote_id;
+                  const loteId = lote.lote_id;
                   const jornalesLote = jornalesPorLote[loteId] || {
                     aplicacion: 0,
                     mezcla: 0,

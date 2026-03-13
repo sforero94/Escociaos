@@ -346,7 +346,7 @@ export function useFinanzasData() {
 
       if (error) throw error;
 
-      return data || [];
+      return (data || []) as unknown as Gasto[];
 
     } catch (err: any) {
       setError(err.message);
@@ -385,7 +385,7 @@ export function useFinanzasData() {
 
       if (error) throw error;
 
-      return data || [];
+      return (data || []) as unknown as Ingreso[];
 
     } catch (err: any) {
       setError(err.message);

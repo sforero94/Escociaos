@@ -27,7 +27,7 @@ export function validarNuevoMovimiento(
   // Calcular total ya utilizado
   const totalUtilizado = movimientosExistentes
     .filter(m => m.producto_id === productoId)
-    .reduce((sum, m) => sum + m.cantidad_utilizada, 0);
+    .reduce((sum, m) => sum + (m.cantidad_utilizada ?? 0), 0);
 
   // Calcular nuevo total
   const nuevoTotal = totalUtilizado + cantidadNueva;

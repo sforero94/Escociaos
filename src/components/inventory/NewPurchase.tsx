@@ -30,10 +30,10 @@ import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 interface Proveedor {
   id: string;
   nombre: string;
-  nit?: string;
-  telefono?: string;
-  email?: string;
-  activo: boolean;
+  nit?: string | null;
+  telefono?: string | null;
+  email?: string | null;
+  activo: boolean | null;
 }
 
 // ============================================
@@ -47,8 +47,8 @@ interface Producto {
   unidad_medida: string;
   categoria: string;
   precio_unitario: number | null;
-  cantidad_actual: number;
-  activo: boolean;
+  cantidad_actual: number | null;
+  activo: boolean | null;
 }
 
 interface ProductoCompra {
@@ -366,11 +366,10 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
         const proveedorNombre = proveedores.find(p => p.id === datosCompra.proveedor_id)?.nombre || '';
 
         // 1. Insertar en tabla compras
-        const { error: compraError } = await getSupabase().from('compras').insert([
-          {
+        const { error: compraError } = await getSupabase().from('compras').insert({
             fecha_compra: datosCompra.fecha,
-            proveedor: proveedorNombre, // For backward compatibility
-            proveedor_id: datosCompra.proveedor_id, // New FK reference
+            proveedor: proveedorNombre,
+            proveedor_id: datosCompra.proveedor_id,
             numero_factura: datosCompra.numero_factura,
             producto_id: item.producto_id,
             cantidad: item.cantidad_total,
@@ -381,8 +380,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
             costo_total: item.costo_total,
             url_factura: datosCompra.url_factura || null,
             usuario_registro: user?.email || null,
-          },
-        ]);
+          } as any);
 
         if (compraError) throw compraError;
 
@@ -403,11 +401,10 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
         // 3. Crear movimiento de inventario
         const { error: movimientoError } = await getSupabase()
           .from('movimientos_inventario')
-          .insert([
-            {
+          .insert({
               fecha_movimiento: datosCompra.fecha,
               producto_id: item.producto_id,
-              tipo_movimiento: 'Entrada',
+              tipo_movimiento: 'Entrada' as const,
               cantidad: item.cantidad_total,
               unidad: item.presentacion_unidad,
               factura: datosCompra.numero_factura,
@@ -415,10 +412,9 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
               saldo_nuevo: cantidadNueva,
               valor_movimiento: item.costo_total,
               responsable: user?.email || null,
-              observaciones: `Compra - Factura: ${datosCompra.numero_factura} - Proveedor: ${datosCompra.proveedor} - ${item.cantidad_bultos} bultos de ${item.presentacion_cantidad} ${item.presentacion_unidad}`,
+              observaciones: `Compra - Factura: ${datosCompra.numero_factura} - Proveedor: ${proveedorNombre} - ${item.cantidad_bultos} bultos de ${item.presentacion_cantidad} ${item.presentacion_unidad}`,
               provisional: false,
-            },
-          ]);
+            } as any);
 
         if (movimientoError) throw movimientoError;
       }
@@ -666,10 +662,10 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
 
               <div className="space-y-4">
                 {/* Info general */}
-                {datosCompra.proveedor && (
+                {datosCompra.proveedor_id && (
                   <div>
                     <p className="text-xs text-brand-brown/60">Proveedor</p>
-                    <p className="font-medium text-foreground">{datosCompra.proveedor}</p>
+                    <p className="font-medium text-foreground">{proveedores.find(p => p.id === datosCompra.proveedor_id)?.nombre || ''}</p>
                   </div>
                 )}
 

@@ -62,7 +62,7 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
   const [saving, setSaving] = useState(false);
   const [draftBanner, setDraftBanner] = useState<number | null>(null);
   const [showProveedorDialog, setShowProveedorDialog] = useState(false);
-  const draftTimer = useRef<ReturnType<typeof setTimeout>>();
+  const draftTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // Restore draft on mount
   useEffect(() => {
