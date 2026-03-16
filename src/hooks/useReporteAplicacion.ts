@@ -98,6 +98,15 @@ interface ReporteAplicacionCerrada {
         costo_total: FinancieroField;
         costo_por_arbol: FinancieroField;
     };
+    anterior?: {
+        nombre: string;
+        costo_total: number;
+        costo_por_arbol: number;
+        total_arboles: number;
+        canecas: number;
+        jornales: number;
+        arboles_por_jornal: number;
+    };
 }
 
 interface ResumenAplicacionCerrada {
@@ -170,8 +179,8 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                     .select(`
                         *,
                         aplicaciones_cierre(*),
-                        aplicaciones_lotes(*, lotes(nombre, total_arboles)),
-                        aplicaciones_lotes_planificado(*, lotes(nombre, total_arboles)),
+                        aplicaciones_lotes(*, lotes(nombre, total_arboles, arboles_grandes, arboles_medianos, arboles_pequenos, arboles_clonales)),
+                        aplicaciones_lotes_planificado(*, lotes(nombre, total_arboles, arboles_grandes, arboles_medianos, arboles_pequenos, arboles_clonales)),
                         aplicaciones_mezclas(*),
                         aplicaciones_calculos(*)
                     `)
@@ -207,8 +216,8 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                 .select(`
                     *,
                     aplicaciones_cierre(*),
-                    aplicaciones_lotes(*, lotes(nombre, total_arboles)),
-                    aplicaciones_lotes_planificado(*, lotes(nombre, total_arboles)),
+                    aplicaciones_lotes(*, lotes(nombre, total_arboles, arboles_grandes, arboles_medianos, arboles_pequenos, arboles_clonales)),
+                    aplicaciones_lotes_planificado(*, lotes(nombre, total_arboles, arboles_grandes, arboles_medianos, arboles_pequenos, arboles_clonales)),
                     aplicaciones_mezclas(*),
                     aplicaciones_calculos(*)
                 `)
@@ -253,7 +262,7 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
             if (mezclaIds.length > 0) {
                 const { data } = await supabase
                     .from('aplicaciones_productos')
-                    .select('mezcla_id, producto_id, producto_nombre, producto_categoria, producto_unidad, cantidad_total_necesaria')
+                    .select('mezcla_id, producto_id, producto_nombre, producto_categoria, producto_unidad, cantidad_total_necesaria, dosis_grandes, dosis_medianos, dosis_pequenos, dosis_clonales')
                     .in('mezcla_id', mezclaIds);
                 mezclasProductos = data || [];
 
@@ -317,7 +326,11 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
             // ----------------------------------------------------------------
 
             // --- Helper: Totals ---
-            const totalArbolesApp = appData.aplicaciones_lotes_planificado?.reduce((sum: number, l: any) =>
+            // Prefer aplicaciones_lotes_planificado for tree counts; fall back to aplicaciones_lotes
+            const lotesSource = (appData.aplicaciones_lotes_planificado?.length > 0
+                ? appData.aplicaciones_lotes_planificado
+                : appData.aplicaciones_lotes) || [];
+            const totalArbolesApp = lotesSource.reduce((sum: number, l: any) =>
                 sum + (l.total_arboles || l.lotes?.total_arboles || 0), 0) || 0;
 
             // Use 'jornales_utilizados' from app for total labor, defaulting to 0
@@ -367,6 +380,20 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                 } else {
                     entry.canecas_200l += canecas;
                     entry.litros_total += (canecas * 200); // Assume 200L canecas
+                }
+            });
+
+            // Patch tree counts from aplicaciones_lotes when lotesRealMap entries
+            // were created from movements (which don't carry tree counts reliably)
+            const appLotesTreeMap = new Map<string, number>();
+            (appData.aplicaciones_lotes || []).forEach((al: any) => {
+                const trees = al.total_arboles || al.lotes?.total_arboles || 0;
+                if (trees > 0) appLotesTreeMap.set(al.lote_id, trees);
+            });
+            lotesRealMap.forEach((lote) => {
+                const treesFromAppLotes = appLotesTreeMap.get(lote.lote_id);
+                if (treesFromAppLotes && lote.total_arboles === 0) {
+                    lote.total_arboles = treesFromAppLotes;
                 }
             });
 
@@ -440,6 +467,93 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                     });
                 });
             });
+
+            // Fallback A: when lotesPlanMap is empty but mezclas exist,
+            // compute per-lote planned bultos from mezcla product dosis × tree sizes
+            if (lotesPlanMap.size === 0 && mezclasProductos.length > 0) {
+              const esFertilizacion = appData.tipo_aplicacion !== 'Fumigación';
+              // Sum product dosis per mezcla per tree size
+              const dosisPerMezcla = new Map<string, { grandes: number; medianos: number; pequenos: number; clonales: number }>();
+              for (const prod of mezclasProductos) {
+                const mid = prod.mezcla_id;
+                const entry = dosisPerMezcla.get(mid) || { grandes: 0, medianos: 0, pequenos: 0, clonales: 0 };
+                entry.grandes += Number(prod.dosis_grandes) || 0;
+                entry.medianos += Number(prod.dosis_medianos) || 0;
+                entry.pequenos += Number(prod.dosis_pequenos) || 0;
+                entry.clonales += Number(prod.dosis_clonales) || 0;
+                dosisPerMezcla.set(mid, entry);
+              }
+
+              const appLotes = appData.aplicaciones_lotes || [];
+              for (const al of appLotes) {
+                const lote = (al as any).lotes;
+                const loteId = al.lote_id;
+                // Read tree sizes from aplicaciones_lotes row first, then lotes join
+                const grandes = al.arboles_grandes || lote?.arboles_grandes || 0;
+                const medianos = al.arboles_medianos || lote?.arboles_medianos || 0;
+                const pequenos = al.arboles_pequenos || lote?.arboles_pequenos || 0;
+                const clonales = al.arboles_clonales || lote?.arboles_clonales || 0;
+                if (grandes + medianos + pequenos + clonales === 0) continue;
+
+                let totalKg = 0;
+                for (const [, dosis] of dosisPerMezcla) {
+                  totalKg += grandes * dosis.grandes / 1000;
+                  totalKg += medianos * dosis.medianos / 1000;
+                  totalKg += pequenos * dosis.pequenos / 1000;
+                  totalKg += clonales * dosis.clonales / 1000;
+                }
+
+                const bultos = Math.round(totalKg / 50 * 10) / 10;
+                lotesPlanMap.set(loteId, {
+                  lote_id: loteId,
+                  canecas_plan: bultos,
+                  litros_plan: totalKg,
+                  jornales_plan: Math.ceil((al.total_arboles || lote?.total_arboles || 0) / 500),
+                });
+
+                // Compute per-product planned quantity from dosis × trees (not cantidad_total_necesaria)
+                for (const mp of mezclasProductos) {
+                  const key = `${loteId}-${mp.producto_id}`;
+                  const prodKg =
+                    grandes * (Number(mp.dosis_grandes) || 0) / 1000 +
+                    medianos * (Number(mp.dosis_medianos) || 0) / 1000 +
+                    pequenos * (Number(mp.dosis_pequenos) || 0) / 1000 +
+                    clonales * (Number(mp.dosis_clonales) || 0) / 1000;
+                  const precio = Number(mp.precio_unitario || 0);
+                  const costo = prodKg * precio;
+                  costoProductosPlanTotal += costo;
+                  const existing = productosPlanMap.get(key);
+                  if (existing) {
+                    existing.cantidad_plan += prodKg;
+                    existing.costo_plan += costo;
+                  } else {
+                    productosPlanMap.set(key, {
+                      lote_id: loteId,
+                      producto_id: mp.producto_id,
+                      nombre: mp.producto_nombre,
+                      cantidad_plan: prodKg,
+                      costo_plan: costo,
+                    });
+                  }
+                }
+              }
+            }
+
+            // Fallback B: when lotesPlanMap is still empty and no mezclas exist,
+            // populate jornales estimates from aplicaciones_lotes tree counts
+            if (lotesPlanMap.size === 0) {
+              const appLotes = appData.aplicaciones_lotes || [];
+              for (const al of appLotes) {
+                const loteId = al.lote_id;
+                const trees = al.total_arboles || (al as any).lotes?.total_arboles || 0;
+                lotesPlanMap.set(loteId, {
+                  lote_id: loteId,
+                  canecas_plan: 0,
+                  litros_plan: 0,
+                  jornales_plan: Math.ceil(trees / 500),
+                });
+              }
+            }
 
             // 3. BUILD REPORT
             // ----------------------------------------------------------------
@@ -769,13 +883,26 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                         desviacion: calcularDesviacion(costoProductosPlanTotal, totalCostoReal),
                         cambio: 0
                     },
-                    costo_por_arbol: {
-                        real: safeDivide(totalCostoReal, totalArbolesApp),
-                        planeado: 0,
-                        desviacion: 0,
-                        cambio: 0
-                    }
-                }
+                    costo_por_arbol: (() => {
+                        const real = safeDivide(totalCostoReal, totalArbolesApp);
+                        const planeado = safeDivide(costoProductosPlanTotal, totalArbolesApp);
+                        return {
+                            real,
+                            planeado,
+                            desviacion: calcularDesviacion(planeado, real),
+                            cambio: 0
+                        };
+                    })()
+                },
+                anterior: anteriorData ? {
+                    nombre: anteriorData.appData?.nombre_aplicacion || anteriorData.appData?.codigo_aplicacion || '',
+                    costo_total: Number(anteriorData.appData?.costo_total || 0),
+                    costo_por_arbol: Number(anteriorData.appData?.costo_por_arbol || 0),
+                    total_arboles: anteriorData.totalArboles || 0,
+                    canecas: anteriorData.canecasReales || 0,
+                    jornales: anteriorData.totalJornales || 0,
+                    arboles_por_jornal: safeDivide(anteriorData.totalArboles, anteriorData.totalJornales),
+                } : undefined,
             });
 
         } catch (err: any) {
