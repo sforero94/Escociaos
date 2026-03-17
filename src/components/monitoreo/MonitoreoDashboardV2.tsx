@@ -464,8 +464,8 @@ export function MonitoreoDashboardV2() {
 
       // Calcular fechas según período
       const fechaFin = new Date();
-      let fechaInicio = new Date();
-      let fechaInicioAnterior = new Date();
+      const fechaInicio = new Date();
+      const fechaInicioAnterior = new Date();
 
       switch (rangoSeleccionado) {
         case 'semana':

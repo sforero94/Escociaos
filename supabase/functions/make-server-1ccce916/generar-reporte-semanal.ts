@@ -774,7 +774,7 @@ function construirSlidePersonal(datos: any, analisis: AnalisisGemini): string {
   const { semana, personal } = datos;
   const p = personal || {};
   const jT = datos.jornales?.totalGeneral?.jornales || 0;
-  const jP = (p.totalTrabajadores || 0) * 5;
+  const jP = p.jornalesPosibles || ((p.totalTrabajadores || 0) * 5.5);
   const eff = jP > 0 ? Math.round((jT / jP) * 100) : 0;
 
   const row1 = [
@@ -1469,10 +1469,10 @@ function construirSlideAdicional(bloque: any, semana: any): string {
   if (bloque.tipo === 'texto') {
     contenidoHTML = `<div style="font-size:13px;color:#374151;line-height:1.8;">${(bloque.contenido || '').replace(/\n/g, '<br>')}</div>`;
   } else if (bloque.tipo === 'imagen_con_texto') {
-    const imagenes = bloque.imagenes || (bloque.imagen ? [bloque.imagen] : []);
-    const imgsHTML = imagenes.slice(0, 2).map((img: string) => `<img src="${img}" style="max-width:100%;max-height:480px;border-radius:8px;object-fit:contain;" />`).join('');
-    contenidoHTML = `<div style="display:flex;gap:20px;flex:1;">
-      <div style="flex:1;display:flex;gap:12px;justify-content:center;align-items:flex-start;">${imgsHTML}</div>
+    const imagenes = bloque.imagenesBase64 || (bloque.imagenBase64 ? [bloque.imagenBase64] : []) || bloque.imagenes || (bloque.imagen ? [bloque.imagen] : []);
+    const imgsHTML = imagenes.slice(0, 2).map((img: string) => `<img src="${img}" style="max-width:${imagenes.length > 1 ? '48%' : '100%'};max-height:480px;border-radius:8px;object-fit:contain;" />`).join('');
+    contenidoHTML = `<div style="display:flex;gap:20px;flex:1;overflow:hidden;">
+      <div style="flex:1;display:flex;gap:12px;justify-content:center;align-items:flex-start;overflow:hidden;max-width:900px;">${imgsHTML}</div>
       ${bloque.descripcion ? `<div style="flex:0 0 280px;background:#f7f9f2;border-radius:8px;padding:14px 16px;font-size:12px;color:#374151;line-height:1.6;">${bloque.descripcion.replace(/\n/g, '<br>')}</div>` : ''}
     </div>`;
   }

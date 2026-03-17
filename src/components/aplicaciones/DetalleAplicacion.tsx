@@ -60,12 +60,18 @@ export function DetalleAplicacion({
         .select(`
           *,
           aplicaciones_lotes (
+            lote_id,
             lotes (
               id,
               nombre,
-              total_arboles
+              total_arboles,
+              arboles_grandes,
+              arboles_medianos,
+              arboles_pequenos,
+              arboles_clonales
             )
-          )
+          ),
+          aplicaciones_mezclas (id)
         `)
         .eq('id', aplicacion.id)
         .single();
@@ -128,10 +134,52 @@ export function DetalleAplicacion({
         console.error('Error loading planeadas:', errorCalculos);
       }
 
-      const totalCanecasPlaneadas = calculos?.reduce(
+      let totalCanecasPlaneadas = calculos?.reduce(
         (sum: number, calc: any) => sum + (calc[campoUnidad] || 0),
         0
       ) || 0;
+
+      // Fallback: when aplicaciones_calculos is empty, compute from mezcla dosis × tree sizes
+      if (totalCanecasPlaneadas === 0 && (appData?.aplicaciones_mezclas?.length ?? 0) > 0) {
+        const mezIds = (appData?.aplicaciones_mezclas || []).map((m: any) => m.id).filter(Boolean);
+        if (mezIds.length > 0) {
+          const { data: prodsDosis } = await supabase
+            .from('aplicaciones_productos')
+            .select('mezcla_id, dosis_grandes, dosis_medianos, dosis_pequenos, dosis_clonales')
+            .in('mezcla_id', mezIds);
+
+          if (prodsDosis && prodsDosis.length > 0) {
+            const dosisPerMezcla = new Map<string, { grandes: number; medianos: number; pequenos: number; clonales: number }>();
+            for (const p of prodsDosis) {
+              const entry = dosisPerMezcla.get(p.mezcla_id) || { grandes: 0, medianos: 0, pequenos: 0, clonales: 0 };
+              entry.grandes += Number(p.dosis_grandes) || 0;
+              entry.medianos += Number(p.dosis_medianos) || 0;
+              entry.pequenos += Number(p.dosis_pequenos) || 0;
+              entry.clonales += Number(p.dosis_clonales) || 0;
+              dosisPerMezcla.set(p.mezcla_id, entry);
+            }
+
+            const appLotes = (appData?.aplicaciones_lotes || []).filter((al: any) =>
+              !selectedLote || al.lote_id === selectedLote
+            );
+            let totalBultos = 0;
+            for (const al of appLotes) {
+              const lote = (al as any).lotes;
+              if (!lote) continue;
+              let loteKg = 0;
+              for (const [, d] of dosisPerMezcla) {
+                loteKg += (lote.arboles_grandes || 0) * d.grandes / 1000;
+                loteKg += (lote.arboles_medianos || 0) * d.medianos / 1000;
+                loteKg += (lote.arboles_pequenos || 0) * d.pequenos / 1000;
+                loteKg += (lote.arboles_clonales || 0) * d.clonales / 1000;
+              }
+              totalBultos += loteKg / 50;
+            }
+            totalCanecasPlaneadas = Math.round(totalBultos * 10) / 10;
+          }
+        }
+      }
+
       setCanecasPlaneadas(totalCanecasPlaneadas);
 
       // 3. Cargar canecas/bultos aplicados (filtrar por lote si está seleccionado)
@@ -172,10 +220,33 @@ export function DetalleAplicacion({
         
         const result = await supabase
           .from('aplicaciones_productos')
-          .select('producto_id, producto_nombre, producto_unidad, cantidad_total_necesaria')
+          .select('producto_id, producto_nombre, producto_unidad, cantidad_total_necesaria, mezcla_id, dosis_grandes, dosis_medianos, dosis_pequenos, dosis_clonales')
           .in('mezcla_id', mezclasIds);
-        
+
         productosPlaneados = result.data;
+
+        // When aplicaciones_calculos is empty, recompute per-product planned quantities
+        // from dosis × trees (cantidad_total_necesaria may be stale/wrong)
+        if (totalCanecasPlaneadas > 0 && productosPlaneados && productosPlaneados.length > 0) {
+          const appLotes = appData?.aplicaciones_lotes || [];
+          const hasCalcData = calculos && calculos.length > 0;
+          if (!hasCalcData) {
+            // Override cantidad_total_necesaria with dosis × trees calculation
+            const filteredLotes = appLotes.filter((al: any) => !selectedLote || al.lote_id === selectedLote);
+            productosPlaneados = productosPlaneados.map((prod: any) => {
+              let totalKg = 0;
+              for (const al of filteredLotes) {
+                const lote = (al as any).lotes;
+                if (!lote) continue;
+                totalKg += (lote.arboles_grandes || 0) * (Number(prod.dosis_grandes) || 0) / 1000;
+                totalKg += (lote.arboles_medianos || 0) * (Number(prod.dosis_medianos) || 0) / 1000;
+                totalKg += (lote.arboles_pequenos || 0) * (Number(prod.dosis_pequenos) || 0) / 1000;
+                totalKg += (lote.arboles_clonales || 0) * (Number(prod.dosis_clonales) || 0) / 1000;
+              }
+              return { ...prod, cantidad_total_necesaria: Math.round(totalKg * 100) / 100 };
+            });
+          }
+        }
 
         if (result.error) {
         }

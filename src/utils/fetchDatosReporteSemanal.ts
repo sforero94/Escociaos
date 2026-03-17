@@ -640,7 +640,7 @@ export async function fetchAplicacionesCerradas(
           valor_jornal,
           aplicaciones_lotes(
             lote_id,
-            lotes(id, nombre, total_arboles)
+            lotes(id, nombre, total_arboles, arboles_grandes, arboles_medianos, arboles_pequenos, arboles_clonales)
           )
         `)
         .eq('id', appId)
@@ -657,11 +657,15 @@ export async function fetchAplicacionesCerradas(
         ? Math.max(1, Math.round((new Date(fechaFin).getTime() - new Date(fechaInicio).getTime()) / 86400000) + 1)
         : 0;
 
-      // Build lotes map
-      const lotesMap = new Map<string, { nombre: string; arboles: number }>();
+      // Build lotes map with per-size tree counts
+      const lotesMap = new Map<string, { nombre: string; arboles: number; grandes: number; medianos: number; pequenos: number; clonales: number }>();
       ((app as any).aplicaciones_lotes || []).forEach((al: any) => {
         const lote = al.lotes;
-        if (lote) lotesMap.set(lote.id, { nombre: lote.nombre, arboles: lote.total_arboles || 0 });
+        if (lote) lotesMap.set(lote.id, {
+          nombre: lote.nombre, arboles: lote.total_arboles || 0,
+          grandes: lote.arboles_grandes || 0, medianos: lote.arboles_medianos || 0,
+          pequenos: lote.arboles_pequenos || 0, clonales: lote.arboles_clonales || 0,
+        });
       });
 
       // Fetch planned calcs per lote
@@ -685,22 +689,67 @@ export async function fetchAplicacionesCerradas(
       
       let costoInsumosPlaneadoTotal = 0;
       let insumosPlaneadosTotalesApp = 0;
+      let productosPlanAll: any[] = [];
       if (mezclasIds.length > 0) {
         const { data: productosPlan } = await supabase
           .from('aplicaciones_productos')
           .select(`
             producto_id,
             cantidad_total_necesaria,
+            mezcla_id,
+            dosis_grandes,
+            dosis_medianos,
+            dosis_pequenos,
+            dosis_clonales,
             productos!inner(precio_unitario)
           `)
           .in('mezcla_id', mezclasIds);
-        
-        for (const prod of productosPlan || []) {
+
+        productosPlanAll = productosPlan || [];
+        for (const prod of productosPlanAll) {
           const cantidad = Number(prod.cantidad_total_necesaria) || 0;
           const precio = Number((prod.productos as any)?.precio_unitario) || 0;
           insumosPlaneadosTotalesApp += cantidad;
           costoInsumosPlaneadoTotal += cantidad * precio;
         }
+      }
+
+      // When aplicaciones_calculos has no data (calculator never run),
+      // compute per-lote planned bultos from mezcla product dosis × tree sizes
+      if (calcMap.size === 0 && lotesMap.size > 0 && productosPlanAll.length > 0) {
+        // Sum product dosis per mezcla per tree size (grams/tree)
+        const dosisPerMezcla = new Map<string, { grandes: number; medianos: number; pequenos: number; clonales: number }>();
+        for (const prod of productosPlanAll) {
+          const mid = prod.mezcla_id;
+          const entry = dosisPerMezcla.get(mid) || { grandes: 0, medianos: 0, pequenos: 0, clonales: 0 };
+          entry.grandes += Number(prod.dosis_grandes) || 0;
+          entry.medianos += Number(prod.dosis_medianos) || 0;
+          entry.pequenos += Number(prod.dosis_pequenos) || 0;
+          entry.clonales += Number(prod.dosis_clonales) || 0;
+          dosisPerMezcla.set(mid, entry);
+        }
+
+        lotesMap.forEach((loteInfo, loteId) => {
+          let totalKg = 0;
+          for (const [, dosis] of dosisPerMezcla) {
+            totalKg += loteInfo.grandes * dosis.grandes / 1000;
+            totalKg += loteInfo.medianos * dosis.medianos / 1000;
+            totalKg += loteInfo.pequenos * dosis.pequenos / 1000;
+            totalKg += loteInfo.clonales * dosis.clonales / 1000;
+          }
+          calcMap.set(loteId, {
+            lote_id: loteId,
+            numero_bultos: Math.round(totalKg / 50 * 10) / 10,
+            numero_canecas: null,
+            kilos_totales: Math.round(totalKg * 10) / 10,
+            litros_mezcla: null,
+          });
+        });
+
+        // Sync insumosPlaneadosTotalesApp with the fallback-computed totals
+        // so ratio-based distribution of insumos and costs is self-consistent
+        insumosPlaneadosTotalesApp = Array.from(calcMap.values())
+          .reduce((sum, c) => sum + (Number(c.kilos_totales) || 0), 0);
       }
 
       // Fetch previous app of same type for comparison
@@ -1066,40 +1115,71 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
   const lotesDB = (todosLotes || []) as Array<{ id: string; nombre: string }>;
   const sublotesDB = (todosSublotes || []) as Array<{ id: string; nombre: string; lote_id: string }>;
 
-  // 2. Find the 2 most relevant monitoring dates relative to the report week
-  //    - fechaActual: most recent observation within the report week, or up to 2 weeks before
-  //    - fechaAnterior: the observation immediately before fechaActual
+  // 2. Find the 2 most relevant monitoring dates PER LOTE relative to the report week
+  //    Different lotes may be monitored on different dates within the same week.
+  //    For each lote, find its own fechaActual (most recent) and fechaAnterior.
   const limiteInferior = restarDias(semana.inicio, 14); // 2 weeks back from start of report week
 
+  // Get all (lote_id, fecha_monitoreo) pairs within the window
   const { data: fechasRaw, error: errorFechas } = await supabase
     .from('monitoreos')
-    .select('fecha_monitoreo')
+    .select('lote_id, fecha_monitoreo')
     .gte('fecha_monitoreo', limiteInferior)
     .lte('fecha_monitoreo', semana.fin)
     .order('fecha_monitoreo', { ascending: false });
 
   if (errorFechas) throw new Error(`Error al cargar fechas de monitoreo: ${errorFechas.message}`);
 
-  const fechasUnicasRecientes = [...new Set((fechasRaw || []).map(r => r.fecha_monitoreo))];
-  // fechasUnicasRecientes is sorted DESC (newest first)
+  // Build per-lote date pairs: { fechaActual, fechaAnterior }
+  const loteFechasMap = new Map<string, { fechaActual: string; fechaAnterior: string | null }>();
+  const allDatesSet = new Set<string>();
 
-  const fechaActual = fechasUnicasRecientes[0] || null;
-  let fechaAnterior: string | null = null;
-
-  if (fechaActual) {
-    // Look for any monitoring date before fechaActual (not limited to the 2-week window)
-    const { data: anteriorRaw } = await supabase
-      .from('monitoreos')
-      .select('fecha_monitoreo')
-      .lt('fecha_monitoreo', fechaActual)
-      .order('fecha_monitoreo', { ascending: false })
-      .limit(1);
-    fechaAnterior = anteriorRaw?.[0]?.fecha_monitoreo || null;
+  for (const row of (fechasRaw || [])) {
+    const lid = row.lote_id;
+    const fecha = row.fecha_monitoreo;
+    if (!loteFechasMap.has(lid)) {
+      loteFechasMap.set(lid, { fechaActual: fecha, fechaAnterior: null });
+      allDatesSet.add(fecha);
+    } else {
+      const entry = loteFechasMap.get(lid)!;
+      if (fecha !== entry.fechaActual && !entry.fechaAnterior) {
+        entry.fechaAnterior = fecha;
+        allDatesSet.add(fecha);
+      }
+    }
   }
 
-  // Build aviso if data is from a previous week
+  // Also fetch the previous date before the window for lotes that only have 1 date in the window
+  const lotesNeedingAnterior = Array.from(loteFechasMap.entries())
+    .filter(([, v]) => !v.fechaAnterior)
+    .map(([lid]) => lid);
+
+  if (lotesNeedingAnterior.length > 0) {
+    for (const lid of lotesNeedingAnterior) {
+      const entry = loteFechasMap.get(lid)!;
+      const { data: anteriorRaw } = await supabase
+        .from('monitoreos')
+        .select('fecha_monitoreo')
+        .eq('lote_id', lid)
+        .lt('fecha_monitoreo', entry.fechaActual)
+        .order('fecha_monitoreo', { ascending: false })
+        .limit(1);
+      if (anteriorRaw?.[0]) {
+        entry.fechaAnterior = anteriorRaw[0].fecha_monitoreo;
+        allDatesSet.add(anteriorRaw[0].fecha_monitoreo);
+      }
+    }
+  }
+
+  // Global fechaActual = most recent across all lotes (for backward compat / resumen)
+  const allFechasActuales = Array.from(loteFechasMap.values()).map(v => v.fechaActual).sort().reverse();
+  const fechaActual = allFechasActuales[0] || null;
+  const fechaAnterior = allFechasActuales.length > 1 ? allFechasActuales[1] : null;
+
+  // Build aviso if ALL data is from a previous week
   let avisoFechaDesactualizada: string | null = null;
-  if (fechaActual && fechaActual < semana.inicio) {
+  const anyInWeek = Array.from(loteFechasMap.values()).some(v => v.fechaActual >= semana.inicio);
+  if (fechaActual && !anyInWeek) {
     avisoFechaDesactualizada = `Datos del monitoreo del ${fechaActual}. No se realizó monitoreo en la semana del reporte.`;
   }
 
@@ -1136,8 +1216,8 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
     };
   }
 
-  // 3. Load monitoring records for the 2 relevant dates
-  const fechasQuery = fechaAnterior ? [fechaActual, fechaAnterior] : [fechaActual];
+  // 3. Load monitoring records for ALL relevant dates across all lotes
+  const allDatesArray = Array.from(allDatesSet);
 
   const { data: monitoreos, error: errorMon } = await supabase
     .from('monitoreos')
@@ -1155,14 +1235,36 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
       lotes(id, nombre),
       sublotes(id, nombre)
     `)
-    .in('fecha_monitoreo', fechasQuery)
+    .in('fecha_monitoreo', allDatesArray)
     .order('fecha_monitoreo', { ascending: true });
 
   if (errorMon) throw new Error(`Error al cargar monitoreos: ${errorMon.message}`);
 
   const registros = monitoreos || [];
-  const regActuales = registros.filter((m: any) => m.fecha_monitoreo === fechaActual);
-  const regAnteriores = registros.filter((m: any) => m.fecha_monitoreo === fechaAnterior);
+
+  // Per-lote actual/anterior records using per-lote dates
+  function getRegActualesForLote(loteId: string): any[] {
+    const entry = loteFechasMap.get(loteId);
+    if (!entry) return [];
+    return registros.filter((m: any) => m.lote_id === loteId && m.fecha_monitoreo === entry.fechaActual);
+  }
+  function getRegAnterioresForLote(loteId: string): any[] {
+    const entry = loteFechasMap.get(loteId);
+    if (!entry?.fechaAnterior) return [];
+    return registros.filter((m: any) => m.lote_id === loteId && m.fecha_monitoreo === entry.fechaAnterior);
+  }
+
+  // Global regActuales/regAnteriores for resumen global (uses all records from all actual dates)
+  const allActualDates = new Set(Array.from(loteFechasMap.values()).map(v => v.fechaActual));
+  const allAnteriorDates = new Set(Array.from(loteFechasMap.values()).map(v => v.fechaAnterior).filter(Boolean) as string[]);
+  const regActuales = registros.filter((m: any) => {
+    const entry = loteFechasMap.get(m.lote_id);
+    return entry && m.fecha_monitoreo === entry.fechaActual;
+  });
+  const regAnteriores = registros.filter((m: any) => {
+    const entry = loteFechasMap.get(m.lote_id);
+    return entry && m.fecha_monitoreo === entry.fechaAnterior;
+  });
 
   // Collect all unique plaga names from both observations
   const allPlagas = new Set<string>();
@@ -1318,10 +1420,11 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
     return (b.promedioActual ?? 0) - (a.promedioActual ?? 0);
   });
 
-  // 5. Build VISTAS POR LOTE (Slide 2) — ALL lotes, including those without data
+  // 5. Build VISTAS POR LOTE (Slide 2) — ALL lotes, using per-lote dates
   const vistasPorLote: VistaLoteComparativa[] = lotesDB.map(lote => {
-    const regLoteActual = regActuales.filter((m: any) => m.lote_id === lote.id);
-    const regLoteAnterior = regAnteriores.filter((m: any) => m.lote_id === lote.id);
+    const regLoteActual = getRegActualesForLote(lote.id);
+    const regLoteAnterior = getRegAnterioresForLote(lote.id);
+    const loteFechas = loteFechasMap.get(lote.id);
 
     if (regLoteActual.length === 0 && regLoteAnterior.length === 0) {
       return { loteId: lote.id, loteNombre: lote.nombre, sinDatos: true, plagas: [], fechaUltimaObservacion: null, nivelAlerta: 'roja' as const };
@@ -1359,16 +1462,18 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
       return (b.actual ?? 0) - (a.actual ?? 0);
     });
 
-    return { loteId: lote.id, loteNombre: lote.nombre, sinDatos: false, plagas, fechaUltimaObservacion: fechaActual, nivelAlerta: calcNivelAlerta(fechaActual) };
+    const loteFechaActual = loteFechas?.fechaActual || null;
+    return { loteId: lote.id, loteNombre: lote.nombre, sinDatos: false, plagas, fechaUltimaObservacion: loteFechaActual, nivelAlerta: calcNivelAlerta(loteFechaActual) };
   });
 
   await enrichWithHistorical(vistasPorLote);
 
-  // 6. Build VISTAS POR SUBLOTE (Slide 3) — ALL lotes/sublotes
+  // 6. Build VISTAS POR SUBLOTE (Slide 3) — ALL lotes/sublotes, using per-lote dates
   const vistasPorSublote: VistaSubloteComparativa[] = lotesDB.map(lote => {
     const sublotesLote = sublotesDB.filter(s => s.lote_id === lote.id).map(s => s.nombre).sort();
-    const regLoteActual = regActuales.filter((m: any) => m.lote_id === lote.id);
-    const regLoteAnterior = regAnteriores.filter((m: any) => m.lote_id === lote.id);
+    const regLoteActual = getRegActualesForLote(lote.id);
+    const regLoteAnterior = getRegAnterioresForLote(lote.id);
+    const loteFechas = loteFechasMap.get(lote.id);
 
     if (regLoteActual.length === 0 && regLoteAnterior.length === 0) {
       return {
@@ -1419,10 +1524,11 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
       });
     });
 
+    const loteFechaActual = loteFechas?.fechaActual || null;
     return {
       loteId: lote.id, loteNombre: lote.nombre, sinDatos: false,
       sublotes: sublotesLote, plagas: plagasLote, celdas,
-      tieneDatosSemanaActual: regLoteActual.length > 0 && !!fechaActual && fechaActual >= semana.inicio && fechaActual <= semana.fin,
+      tieneDatosSemanaActual: regLoteActual.length > 0 && !!loteFechaActual && loteFechaActual >= semana.inicio && loteFechaActual <= semana.fin,
     };
   });
 
@@ -1479,7 +1585,7 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
     insights,
     tendencias,
     detallePorLote,
-    fechasMonitoreo: fechasQuery,
+    fechasMonitoreo: allDatesArray,
   };
 }
 

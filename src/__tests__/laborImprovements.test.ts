@@ -175,7 +175,7 @@ describe('Labor Module Improvements - Phase 1-4', () => {
     });
 
     it('should synchronize all charts with toggle state', () => {
-      let vistaGrafico: 'jornales' | 'costos' = 'jornales';
+      const vistaGrafico: 'jornales' | 'costos' = 'jornales';
 
       // All charts should use the same data key based on toggle
       const vista = vistaGrafico as string;

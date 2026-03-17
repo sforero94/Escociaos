@@ -89,7 +89,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
       const supabase = getSupabase();
 
       // Calcular nuevo saldo según tipo de movimiento
-      let saldoAnterior = (selectedProduct.cantidad_actual ?? 0) ?? 0;
+      const saldoAnterior = (selectedProduct.cantidad_actual ?? 0) ?? 0;
       let cantidadMovimiento = 0;
       let nuevoSaldo = 0;
 

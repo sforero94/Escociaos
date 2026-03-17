@@ -109,9 +109,14 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
             lotes (
               id,
               nombre,
-              total_arboles
+              total_arboles,
+              arboles_grandes,
+              arboles_medianos,
+              arboles_pequenos,
+              arboles_clonales
             )
-          )
+          ),
+          aplicaciones_calculos (id)
         `)
         .eq('id', aplicacion.id)
         .single();
@@ -169,7 +174,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
 
 
       // Variable para almacenar movimientos consolidados
-      let movimientosConsolidados: Movimiento[] = [];
+      const movimientosConsolidados: Movimiento[] = [];
 
       if (movimientosDiarios && movimientosDiarios.length > 0) {
         // Calcular canecas aplicadas
@@ -282,10 +287,28 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
 
         const result = await supabase
           .from('aplicaciones_productos')
-          .select('producto_id, producto_nombre, producto_unidad, cantidad_total_necesaria')
+          .select('producto_id, producto_nombre, producto_unidad, cantidad_total_necesaria, mezcla_id, dosis_grandes, dosis_medianos, dosis_pequenos, dosis_clonales')
           .in('mezcla_id', mezclasIds);
 
         productosPlaneados = result.data;
+
+        // When aplicaciones_calculos is empty, recompute per-product planned quantities
+        const hasCalcData = appData?.aplicaciones_calculos && appData.aplicaciones_calculos.length > 0;
+        if (!hasCalcData && productosPlaneados && productosPlaneados.length > 0) {
+          const appLotes = appData?.aplicaciones_lotes || [];
+          productosPlaneados = productosPlaneados.map((prod: any) => {
+            let totalKg = 0;
+            for (const al of appLotes) {
+              const lote = (al as any).lotes;
+              if (!lote) continue;
+              totalKg += (lote.arboles_grandes || 0) * (Number(prod.dosis_grandes) || 0) / 1000;
+              totalKg += (lote.arboles_medianos || 0) * (Number(prod.dosis_medianos) || 0) / 1000;
+              totalKg += (lote.arboles_pequenos || 0) * (Number(prod.dosis_pequenos) || 0) / 1000;
+              totalKg += (lote.arboles_clonales || 0) * (Number(prod.dosis_clonales) || 0) / 1000;
+            }
+            return { ...prod, cantidad_total_necesaria: Math.round(totalKg * 100) / 100 };
+          });
+        }
       }
 
 
