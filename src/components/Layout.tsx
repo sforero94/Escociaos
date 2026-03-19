@@ -18,6 +18,7 @@ import {
   FileText,
   PanelLeftClose,
   PanelLeftOpen,
+  Cloud,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { useAuth } from '../contexts/AuthContext';
@@ -38,6 +39,7 @@ const menuStructure = [
   { id: 'finanzas', label: 'Finanzas', icon: DollarSign, path: '/finanzas' },
   { id: 'applications', label: 'Aplicaciones', icon: Sprout, path: '/aplicaciones' },
   { id: 'monitoring', label: 'Monitoreo', icon: Activity, path: '/monitoreo' },
+  { id: 'clima', label: 'Clima', icon: Cloud, path: '/clima' },
   { id: 'production', label: 'Produccion', icon: TrendingUp, path: '/produccion' },
   { id: 'reportes', label: 'Reportes', icon: FileText, path: '/reportes' },
   { id: 'settings', label: 'Configuracion', icon: Settings, path: '/configuracion' },

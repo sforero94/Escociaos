@@ -83,6 +83,11 @@ These are consumed in `src/utils/supabase/client.ts` via `import.meta.env`. The 
 │   │   │   ├── GraficoTendencias.tsx     # Trend charts
 │   │   │   ├── MapaCalorIncidencias.tsx  # Incidence heat map
 │   │   │   └── VistasRapidas.tsx         # Quick-view panels
+│   │   ├── clima/                         # Weather monitoring module
+│   │   │   ├── ClimaDashboard.tsx        # Vista Rápida: KPI cards + period summary
+│   │   │   ├── ClimaHistorico.tsx        # Historical view: 2x2 chart grid + CSV export
+│   │   │   ├── ClimaSubNav.tsx           # Tab navigation
+│   │   │   └── components/               # KPI cards, period table, 4 chart components, wind arrow
 │   │   ├── labores/                      # Task/labor management (Kanban)
 │   │   │   ├── ReportesView.tsx          # Labor reports view
 │   │   │   └── kanban-types.ts           # Kanban TypeScript types
@@ -250,6 +255,8 @@ All routes except `/login` are protected and require authentication.
 | `/reportes`                        | ReportesDashboard            | Reports        |
 | `/reportes/generar`                | ReporteSemanalWizard         | Reports        |
 | `/produccion`                      | ProduccionDashboard          | Production     |
+| `/clima`                           | ClimaDashboard               | Climate        |
+| `/clima/historico`                 | ClimaHistorico               | Climate        |
 | `/configuracion`                   | ConfiguracionDashboard       | Settings       |
 | `/ventas`                          | ComingSoon                   | Not implemented|
 | `/lotes`                           | ComingSoon                   | Not implemented|
@@ -272,6 +279,7 @@ PostgreSQL hosted on Supabase with 32+ tables, 7+ custom ENUM types, Row-Level S
 - **Labor**: `tareas`, `registros_trabajo`, `empleados_tareas`
 - **Finance**: `fin_gastos`, `fin_ingresos`, `fin_transacciones_ganado`, `fin_conceptos_gastos`, `fin_proveedores`, `fin_categorias_gastos`, `fin_categorias_ingresos`, `fin_medios_pago`, `fin_regiones`, `fin_negocios`, `fin_compradores`
 - **Production**: `produccion`, `reportes_semanales`
+- **Climate**: `clima_lecturas` (weather station readings: temp, humidity, wind, rain, radiation, UV — synced from Weather Underground every 5 min via pg_cron)
 - **Audit**: `audit_log`
 
 ### Applications Data Architecture
@@ -293,6 +301,8 @@ Sequential SQL migrations live in `src/sql/migrations/` (001–024). See `src/sq
 
 - **023**: `create_fin_transacciones_ganado` — cattle buy/sell transactions table with RLS
 - **024**: `alter_fin_ingresos_add_columns` — adds `cantidad`, `precio_unitario`, `cosecha`, `alianza`, `cliente`, `finca` to `fin_ingresos`
+- **029**: `create_clima_lecturas` — weather station readings table with UNIQUE(station_id, timestamp), B-tree + BRIN indexes, RLS
+- **030**: `clima_cron_sync` — pg_cron + pg_net schedule to call `/clima/sync` every 5 minutes
 
 ### Ganado ↔ Finance Integration
 
@@ -332,6 +342,7 @@ Key behaviors:
 **Required edge function secrets** (set via Supabase Dashboard → Project Settings → Edge Functions):
 - `OPENROUTER_API_KEY` — OpenRouter API key (used for DeepSeek and Gemini 2.5 Flash via OpenRouter)
 - `NOTION_TOKEN` — Notion integration token (for owner call summaries; optional, graceful fallback if absent)
+- `WU_API_KEY` — Weather Underground API key for climate data sync (station ISANFR102)
 - `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` — auto-injected by Supabase
 
 **Deploy command**: `npx supabase functions deploy make-server-1ccce916`

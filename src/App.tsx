@@ -27,6 +27,8 @@ import { MonitoreoDashboardV2 } from './components/monitoreo/MonitoreoDashboardV
 import { RegistrosMonitoreo } from './components/monitoreo/RegistrosMonitoreo';
 import { CargaMasiva } from './components/monitoreo/CargaMasiva';
 import { CatalogoPlagas } from './components/monitoreo/CatalogoPlagas';
+import { ClimaDashboard } from './components/clima/ClimaDashboard';
+import { ClimaHistorico } from './components/clima/ClimaHistorico';
 import { ConfiguracionDashboard } from './components/configuracion/ConfiguracionDashboard';
 import { Empleados } from './components/empleados/Empleados';
 import Personal from './components/empleados/Personal';
@@ -105,6 +107,10 @@ function LayoutRoutes() {
           path="monitoreo/catalogo"
           element={<CatalogoPlagas />}
         />
+
+        {/* Clima */}
+        <Route path="clima" element={<ClimaDashboard />} />
+        <Route path="clima/historico" element={<ClimaHistorico />} />
 
         {/* Labores */}
         <Route path="labores" element={<Labores />} />
