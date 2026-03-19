@@ -8,6 +8,7 @@ import { toggleProductoActivo } from "./productos.tsx";
 import { generarReporteSemanal } from "./generar-reporte-semanal.tsx";
 import { handleChatMessage } from "./chat.tsx";
 import { handleClimaSync, handleClimaBackfill } from "./clima.tsx";
+import { handleWebhook } from "./telegram/bot.ts";
 
 const app = new Hono();
 
@@ -137,6 +138,11 @@ app.post("/make-server-1ccce916/reportes/generar-semanal", async (c) => {
       error: error.message || 'Error al generar el reporte semanal'
     }, 500);
   }
+});
+
+// Telegram bot webhook
+app.post("/make-server-1ccce916/telegram/webhook", async (c) => {
+  return await handleWebhook(c);
 });
 
 // Ruta para chat conversacional "Esco"

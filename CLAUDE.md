@@ -324,7 +324,8 @@ The edge function server uses **Hono** (via Deno/npm imports) and lives in `src/
 - User CRUD
 - Product toggle
 - Weekly report generation (calls DeepSeek `deepseek-v3.2` via OpenRouter, fetches 4-week historical context from DB + Notion)
-- **Esco chat agent** (`chat.tsx`) — conversational data assistant for farm management. Uses Gemini 2.5 Flash (`google/gemini-2.5-flash`) via OpenRouter with tool-calling loop (`tool_choice: 'required'` on round 0). Exports `llmToolLoop` and `getSystemPrompt` (used by telegram bot). 10 tools cover: labor summaries, employee activity, monitoring, applications, inventory, finances, production, harvests, lot info, and weekly overviews.
+- **Esco chat agent** (`chat.tsx`) — conversational data assistant for farm management. Uses Gemini 2.5 Flash (`google/gemini-2.5-flash`) via OpenRouter with tool-calling loop (`tool_choice: 'required'` on round 0). Exports `llmToolLoop` and `getSystemPrompt` (used by telegram bot). 14 tools cover: labor summaries, employee activity, monitoring, applications, inventory, finances, production, harvests, lot info, purchases, inventory movements, application details, weekly overviews, and climate data.
+- **Telegram bot webhook** — registered at `/make-server-1ccce916/telegram/webhook` in `index.ts`. Uses Grammy with conversations plugin. The `handleWebhook` import in `index.ts` is critical — without it the bot returns 404. Both `index.ts` copies must stay in sync.
 - Key-value store (`kv_store.tsx`)
 
 #### Esco Chat Agent (`chat.tsx`)

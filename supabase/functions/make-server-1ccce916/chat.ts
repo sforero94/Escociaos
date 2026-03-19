@@ -263,6 +263,18 @@ const TOOLS: ToolDefinition[] = [
       },
     },
   },
+  {
+    name: 'get_climate_data',
+    description: 'Obtiene lecturas climaticas de la estacion meteorologica de la finca: temperatura, humedad, viento, lluvia, radiacion solar, indice UV. Los datos se registran cada 5 minutos.',
+    parameters: {
+      type: 'object',
+      properties: {
+        date_from: { type: 'string', description: 'Fecha inicio YYYY-MM-DD (default: hoy)' },
+        date_to: { type: 'string', description: 'Fecha fin YYYY-MM-DD (default: hoy)' },
+        resumen: { type: 'boolean', description: 'Si true, devuelve promedios/min/max por dia en vez de lecturas individuales. Default: true.' },
+      },
+    },
+  },
 ];
 
 // ============================================================================
@@ -287,6 +299,7 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
       case 'get_inventory_movements': return await execInventoryMovements(args);
       case 'get_application_details': return await execApplicationDetails(args);
       case 'get_weekly_overview': return await execWeeklyOverview(args);
+      case 'get_climate_data': return await execClimateData(args);
       default: return JSON.stringify({ error: `Tool desconocido: ${name}` });
     }
   } catch (err: unknown) {
@@ -1088,6 +1101,69 @@ async function execWeeklyOverview(args: Record<string, unknown>): Promise<string
   });
 }
 
+async function execClimateData(args: Record<string, unknown>): Promise<string> {
+  const today = new Date().toISOString().split('T')[0];
+  const dateFrom = (args.date_from as string) || today;
+  const dateTo = (args.date_to as string) || today;
+  const resumen = args.resumen !== false; // default true
+
+  const query = `select=timestamp,temp_c,humedad_pct,viento_kmh,rafaga_kmh,viento_dir,lluvia_tasa_mm_hr,lluvia_diaria_mm,radiacion_wm2,uv_index&timestamp=gte.${e(dateFrom)}T00:00:00&timestamp=lte.${e(dateTo)}T23:59:59&order=timestamp.asc&limit=2000`;
+  const data = await supabaseQuery('clima_lecturas', query) as Array<Record<string, unknown>>;
+
+  if (data.length === 0) {
+    return JSON.stringify({ lecturas: 0, mensaje: 'No hay datos climaticos para el rango solicitado.' });
+  }
+
+  if (!resumen) {
+    return JSON.stringify({ lecturas: data.length, datos: data.slice(0, 100) });
+  }
+
+  // Aggregate by day
+  const porDia: Record<string, {
+    lecturas: number;
+    temp: number[]; humedad: number[]; viento: number[]; rafaga_max: number;
+    lluvia_diaria_max: number; radiacion: number[]; uv_max: number;
+  }> = {};
+
+  for (const r of data) {
+    const dia = ((r.timestamp as string) || '').slice(0, 10);
+    if (!dia) continue;
+    if (!porDia[dia]) {
+      porDia[dia] = { lecturas: 0, temp: [], humedad: [], viento: [], rafaga_max: 0, lluvia_diaria_max: 0, radiacion: [], uv_max: 0 };
+    }
+    const d = porDia[dia];
+    d.lecturas++;
+    if (r.temp_c != null) d.temp.push(Number(r.temp_c));
+    if (r.humedad_pct != null) d.humedad.push(Number(r.humedad_pct));
+    if (r.viento_kmh != null) d.viento.push(Number(r.viento_kmh));
+    if (r.rafaga_kmh != null) d.rafaga_max = Math.max(d.rafaga_max, Number(r.rafaga_kmh));
+    if (r.lluvia_diaria_mm != null) d.lluvia_diaria_max = Math.max(d.lluvia_diaria_max, Number(r.lluvia_diaria_mm));
+    if (r.radiacion_wm2 != null) d.radiacion.push(Number(r.radiacion_wm2));
+    if (r.uv_index != null) d.uv_max = Math.max(d.uv_max, Number(r.uv_index));
+  }
+
+  const avg = (arr: number[]) => arr.length ? +(arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1) : null;
+  const min = (arr: number[]) => arr.length ? +Math.min(...arr).toFixed(1) : null;
+  const max = (arr: number[]) => arr.length ? +Math.max(...arr).toFixed(1) : null;
+
+  const resumenDiario = Object.entries(porDia).map(([dia, d]) => ({
+    fecha: dia,
+    lecturas: d.lecturas,
+    temperatura: { min: min(d.temp), avg: avg(d.temp), max: max(d.temp) },
+    humedad_pct: { min: min(d.humedad), avg: avg(d.humedad), max: max(d.humedad) },
+    viento_kmh: { avg: avg(d.viento), rafaga_max: d.rafaga_max },
+    lluvia_diaria_mm: d.lluvia_diaria_max,
+    radiacion_wm2: { avg: avg(d.radiacion), max: max(d.radiacion) },
+    uv_max: d.uv_max,
+  }));
+
+  return JSON.stringify({
+    total_lecturas: data.length,
+    dias: resumenDiario.length,
+    resumen_diario: resumenDiario,
+  });
+}
+
 // ============================================================================
 // SYSTEM PROMPT
 // ============================================================================
@@ -1119,6 +1195,7 @@ DOMINIOS DE DATOS DISPONIBLES:
 - Produccion: kilos por lote, kg/arbol, cosechas principal/traviesa
 - Cosechas y Despachos: kilos cosechados, preseleccion, despachos a clientes
 - Lotes: configuracion de la finca, arboles por tamano, sublotes
+- Clima: lecturas de la estacion meteorologica cada 5 min (temperatura, humedad, viento, lluvia, radiacion solar, UV)
 
 COSTOS DE MANO DE OBRA:
 - El costo real por jornal se calcula como (salario + prestaciones_sociales + auxilios_no_salariales) / 22 dias laborales
