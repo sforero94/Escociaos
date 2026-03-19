@@ -150,12 +150,12 @@ app.post("/make-server-1ccce916/chat/message", async (c) => {
   return await handleChatMessage(c);
 });
 
-// Ruta para sincronizar datos de clima desde Weather Underground API (pg_cron every 5 min)
+// Ruta para sincronizar datos de clima desde Ecowitt API (pg_cron every 5 min)
 app.post("/make-server-1ccce916/clima/sync", async (c) => {
   return await handleClimaSync(c);
 });
 
-// Backfill historical weather data from WU API
+// Backfill historical weather data from Ecowitt API
 app.post("/make-server-1ccce916/clima/backfill", async (c) => {
   return await handleClimaBackfill(c);
 });

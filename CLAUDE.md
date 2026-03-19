@@ -279,7 +279,7 @@ PostgreSQL hosted on Supabase with 32+ tables, 7+ custom ENUM types, Row-Level S
 - **Labor**: `tareas`, `registros_trabajo`, `empleados_tareas`
 - **Finance**: `fin_gastos`, `fin_ingresos`, `fin_transacciones_ganado`, `fin_conceptos_gastos`, `fin_proveedores`, `fin_categorias_gastos`, `fin_categorias_ingresos`, `fin_medios_pago`, `fin_regiones`, `fin_negocios`, `fin_compradores`
 - **Production**: `produccion`, `reportes_semanales`
-- **Climate**: `clima_lecturas` (weather station readings: temp, humidity, wind, rain, radiation, UV — synced from Weather Underground every 5 min via pg_cron)
+- **Climate**: `clima_lecturas` (weather station readings: temp, humidity, wind, rain, radiation, UV — synced from Ecowitt every 5 min via pg_cron)
 - **Audit**: `audit_log`
 
 ### Applications Data Architecture
@@ -343,7 +343,9 @@ Key behaviors:
 **Required edge function secrets** (set via Supabase Dashboard → Project Settings → Edge Functions):
 - `OPENROUTER_API_KEY` — OpenRouter API key (used for DeepSeek and Gemini 2.5 Flash via OpenRouter)
 - `NOTION_TOKEN` — Notion integration token (for owner call summaries; optional, graceful fallback if absent)
-- `WU_API_KEY` — Weather Underground API key for climate data sync (station ISANFR102)
+- `ECOWITT_APP_KEY` — Ecowitt application key for climate data sync
+- `ECOWITT_API_KEY` — Ecowitt API key
+- `ECOWITT_MAC` — Ecowitt weather station MAC address (84:1F:E8:35:D8:73)
 - `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` — auto-injected by Supabase
 
 **Deploy command**: `npx supabase functions deploy make-server-1ccce916`

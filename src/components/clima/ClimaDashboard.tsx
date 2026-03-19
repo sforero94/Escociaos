@@ -15,10 +15,10 @@ export function ClimaDashboard() {
           <CloudOff className="w-16 h-16 text-gray-300 mb-4" />
           <h2 className="text-xl font-semibold text-gray-700 mb-2">Esperando datos de la estación</h2>
           <p className="text-gray-500 max-w-md mb-2">
-            La estación Weather Underground (ISANFR102) sincroniza datos automáticamente cada 5 minutos.
+            La Estación Escocia sincroniza datos automáticamente cada 5 minutos.
           </p>
           <p className="text-gray-400 text-sm">
-            Si los datos no aparecen, verifica que el secreto <code className="bg-gray-100 px-1 rounded">WU_API_KEY</code> esté configurado en Supabase Dashboard.
+            Si los datos no aparecen, verifica que los secretos <code className="bg-gray-100 px-1 rounded">ECOWITT_APP_KEY</code>, <code className="bg-gray-100 px-1 rounded">ECOWITT_API_KEY</code> y <code className="bg-gray-100 px-1 rounded">ECOWITT_MAC</code> estén configurados en Supabase Dashboard.
           </p>
         </div>
       </div>
