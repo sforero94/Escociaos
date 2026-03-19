@@ -68,7 +68,17 @@ let _bot: Bot<BotContext> | null = null;
 function getBot(): Bot<BotContext> {
   if (_bot) return _bot;
 
-  const bot = new Bot<BotContext>(Deno.env.get("TELEGRAM_BOT_TOKEN")!);
+  const bot = new Bot<BotContext>(Deno.env.get("TELEGRAM_BOT_TOKEN")!, {
+    botInfo: {
+      id: 8759479581,
+      is_bot: true,
+      first_name: "Escocia Bot",
+      username: "escociaos_bot",
+      can_join_groups: true,
+      can_read_all_group_messages: false,
+      supports_inline_queries: false,
+    },
+  });
 
   // --- Session middleware (persisted in `telegram_sessions` table) -----------
 
@@ -337,6 +347,10 @@ function getBot(): Bot<BotContext> {
 
   bot.callbackQuery("start_consulta", async (ctx) => {
     await ctx.answerCallbackQuery();
+    if (!ctx.telegramUser?.modulos_permitidos?.includes("consultas")) {
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
     await ctx.reply(
       "Escríbeme tu pregunta y te responderé con datos de la finca.",
     );
@@ -454,12 +468,12 @@ function splitMessage(text: string, maxLength: number): string[] {
 export async function handleWebhook(c: HonoContext): Promise<Response> {
   try {
     const bot = getBot();
-    await bot.init();
     const update = await c.req.json();
     await bot.handleUpdate(update);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Webhook error";
     console.error("[Telegram] Webhook error:", msg);
+    return c.json({ error: msg }, 500);
   }
   return c.json({ ok: true });
 }

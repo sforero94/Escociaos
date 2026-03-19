@@ -3,9 +3,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { LotesConfig } from './LotesConfig';
 import { SublotesConfig } from './SublotesConfig';
 import { UsuariosConfig } from './UsuariosConfig';
+import { TelegramConfig } from './TelegramConfig';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSafeMode } from '../../contexts/SafeModeContext';
-import { MapPin, Sprout, Settings, Users, Shield, AlertTriangle } from 'lucide-react';
+import { MapPin, Sprout, Settings, Users, Shield, AlertTriangle, Send } from 'lucide-react';
 
 export function ConfiguracionDashboard() {
   const { profile } = useAuth();
@@ -45,7 +46,17 @@ export function ConfiguracionDashboard() {
                 Usuarios
               </TabsTrigger>
             )}
-            
+
+            {isGerencia && (
+              <TabsTrigger
+                value="telegram"
+                className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary-dark data-[state=active]:text-white"
+              >
+                <Send className="w-4 h-4 mr-2" />
+                Telegram Bot
+              </TabsTrigger>
+            )}
+
             <TabsTrigger
               value="lotes"
               className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary-dark data-[state=active]:text-white"
@@ -118,6 +129,12 @@ export function ConfiguracionDashboard() {
           {isGerencia && (
             <TabsContent value="usuarios" className="space-y-6">
               <UsuariosConfig />
+            </TabsContent>
+          )}
+
+          {isGerencia && (
+            <TabsContent value="telegram" className="space-y-6">
+              <TelegramConfig />
             </TabsContent>
           )}
 

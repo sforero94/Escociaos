@@ -1,1 +1,4 @@
 # Minimal config for Edge Function deployment
+
+[functions.make-server-1ccce916]
+verify_jwt = false
