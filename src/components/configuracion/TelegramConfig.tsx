@@ -23,16 +23,17 @@ import {
   type EstadoVinculacion,
 } from '../../utils/telegramUsuarios';
 
-interface EmpleadoOption {
+interface UsuarioOption {
   id: string;
-  nombre: string;
-  cargo: string | null;
+  nombre_completo: string | null;
+  email: string;
+  rol: string;
 }
 
 export function TelegramConfig() {
   const { profile } = useAuth();
   const [usuarios, setUsuarios] = useState<TelegramUsuarioRow[]>([]);
-  const [empleados, setEmpleados] = useState<EmpleadoOption[]>([]);
+  const [usuariosSistema, setUsuariosSistema] = useState<UsuarioOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
 
@@ -48,7 +49,7 @@ export function TelegramConfig() {
   const [nombreDisplay, setNombreDisplay] = useState('');
   const [rolBot, setRolBot] = useState<RolBot>('campo');
   const [modulosPermitidos, setModulosPermitidos] = useState<string[]>(['labores']);
-  const [empleadoId, setEmpleadoId] = useState<string | null>(null);
+  const [usuarioVinculadoId, setUsuarioVinculadoId] = useState<string | null>(null);
 
   useEffect(() => {
     if (profile && profile.rol !== 'Gerencia') {
@@ -56,7 +57,7 @@ export function TelegramConfig() {
       return;
     }
     cargarUsuarios();
-    cargarEmpleados();
+    cargarUsuariosSistema();
   }, [profile]);
 
   const cargarUsuarios = async () => {
@@ -78,20 +79,20 @@ export function TelegramConfig() {
     }
   };
 
-  const cargarEmpleados = async () => {
+  const cargarUsuariosSistema = async () => {
     try {
       const supabase = getSupabase();
       const { data, error } = await supabase
-        .from('empleados')
-        .select('id, nombre, cargo')
-        .eq('estado', 'Activo')
-        .order('nombre', { ascending: true });
+        .from('usuarios')
+        .select('id, nombre_completo, email, rol')
+        .eq('activo', true)
+        .order('nombre_completo', { ascending: true });
 
       if (error) throw error;
-      setEmpleados((data ?? []) as EmpleadoOption[]);
+      setUsuariosSistema((data ?? []) as UsuarioOption[]);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error desconocido';
-      console.error('Error al cargar empleados:', msg);
+      console.error('Error al cargar usuarios del sistema:', msg);
     }
   };
 
@@ -103,7 +104,7 @@ export function TelegramConfig() {
     setNombreDisplay('');
     setRolBot('campo');
     setModulosPermitidos(['labores']);
-    setEmpleadoId(null);
+    setUsuarioVinculadoId(null);
     setModalOpen(true);
   };
 
@@ -113,7 +114,7 @@ export function TelegramConfig() {
     setNombreDisplay(usuario.nombre_display);
     setRolBot(usuario.rol_bot);
     setModulosPermitidos([...(usuario.modulos_permitidos ?? [])]);
-    setEmpleadoId(usuario.empleado_id);
+    setUsuarioVinculadoId(usuario.usuario_id);
     setModalOpen(true);
   };
 
@@ -146,7 +147,7 @@ export function TelegramConfig() {
             nombre_display: nombreDisplay.trim(),
             rol_bot: rolBot,
             modulos_permitidos: modulosPermitidos,
-            empleado_id: empleadoId,
+            usuario_id: usuarioVinculadoId,
             codigo_vinculacion: codigo,
             codigo_expira_at: expira,
             activo: true,
@@ -162,7 +163,7 @@ export function TelegramConfig() {
             nombre_display: nombreDisplay.trim(),
             rol_bot: rolBot,
             modulos_permitidos: modulosPermitidos,
-            empleado_id: empleadoId,
+            usuario_id: usuarioVinculadoId,
           })
           .eq('id', usuarioActual.id);
 
@@ -342,10 +343,10 @@ export function TelegramConfig() {
                   <tr key={usuario.id} className="hover:bg-secondary/5 transition">
                     <td className="px-4 py-3 text-sm font-medium text-foreground">
                       <div>{usuario.nombre_display}</div>
-                      {usuario.empleado_id && (
+                      {usuario.usuario_id && (
                         <div className="flex items-center gap-1 text-xs text-brand-brown/50 mt-0.5">
                           <User className="w-3 h-3" />
-                          {empleados.find((e) => e.id === usuario.empleado_id)?.nombre ?? 'Empleado vinculado'}
+                          {usuariosSistema.find((u) => u.id === usuario.usuario_id)?.nombre_completo ?? 'Usuario vinculado'}
                         </div>
                       )}
                     </td>
@@ -442,31 +443,31 @@ export function TelegramConfig() {
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Empleado vinculado */}
+            {/* Usuario vinculado */}
             <div>
-              <Label htmlFor="empleado">Empleado vinculado</Label>
+              <Label htmlFor="usuario-vinculado">Usuario vinculado</Label>
               <select
-                id="empleado"
-                value={empleadoId ?? ''}
+                id="usuario-vinculado"
+                value={usuarioVinculadoId ?? ''}
                 onChange={(e) => {
                   const id = e.target.value || null;
-                  setEmpleadoId(id);
+                  setUsuarioVinculadoId(id);
                   if (id) {
-                    const emp = empleados.find((emp) => emp.id === id);
-                    if (emp) setNombreDisplay(emp.nombre);
+                    const usr = usuariosSistema.find((u) => u.id === id);
+                    if (usr?.nombre_completo) setNombreDisplay(usr.nombre_completo);
                   }
                 }}
                 className="w-full mt-1 px-3 py-2 border border-secondary/30 rounded-lg bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               >
                 <option value="">— Sin vincular —</option>
-                {empleados.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.nombre}{emp.cargo ? ` (${emp.cargo})` : ''}
+                {usuariosSistema.map((usr) => (
+                  <option key={usr.id} value={usr.id}>
+                    {usr.nombre_completo ?? usr.email} ({usr.rol})
                   </option>
                 ))}
               </select>
               <p className="text-xs text-brand-brown/50 mt-1">
-                Seleccionar un empleado auto-completa el nombre.
+                Seleccionar un usuario auto-completa el nombre.
               </p>
             </div>
 

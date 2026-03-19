@@ -5,7 +5,7 @@
 // Types
 // ---------------------------------------------------------------------------
 
-export type RolBot = 'campo' | 'admin' | 'gerencia';
+export type RolBot = 'campo' | 'admin' | 'gerencia' | 'monitor';
 export type EstadoVinculacion = 'vinculado' | 'pendiente' | 'expirado' | 'sin_codigo';
 
 export interface TelegramModulo {
@@ -58,6 +58,7 @@ export const ROLES_BOT: RolBotOption[] = [
   { key: 'campo', label: 'Campo' },
   { key: 'admin', label: 'Admin' },
   { key: 'gerencia', label: 'Gerencia' },
+  { key: 'monitor', label: 'Monitor' },
 ];
 
 const VALID_ROLES = new Set<string>(ROLES_BOT.map((r) => r.key));

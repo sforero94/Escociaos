@@ -15,7 +15,7 @@ interface Usuario {
   id: string;
   email: string;
   nombre_completo: string | null;
-  rol: 'Administrador' | 'Verificador' | 'Gerencia';
+  rol: 'Administrador' | 'Verificador' | 'Gerencia' | 'Monitor';
   activo: boolean | null;
   created_at?: string | null;
   last_login?: string | null;
@@ -33,7 +33,7 @@ export function UsuariosConfig() {
   // Form fields
   const [nombreCompleto, setNombreCompleto] = useState('');
   const [email, setEmail] = useState('');
-  const [rol, setRol] = useState<'Administrador' | 'Verificador' | 'Gerencia'>('Administrador');
+  const [rol, setRol] = useState<'Administrador' | 'Verificador' | 'Gerencia' | 'Monitor'>('Administrador');
   const [clave, setClave] = useState('');
   const [activo, setActivo] = useState(true);
   const [confirmEliminarOpen, setConfirmEliminarOpen] = useState(false);
@@ -194,6 +194,8 @@ export function UsuariosConfig() {
         return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'Verificador':
         return 'bg-green-100 text-green-800 border-green-200';
+      case 'Monitor':
+        return 'bg-teal-100 text-teal-800 border-teal-200';
       default:
         return 'bg-gray-100 text-gray-800 border-gray-200';
     }
@@ -409,6 +411,7 @@ export function UsuariosConfig() {
                 <option value="Administrador">Administrador</option>
                 <option value="Verificador">Verificador</option>
                 <option value="Gerencia">Gerencia</option>
+                <option value="Monitor">Monitor (solo Telegram)</option>
               </select>
             </div>
 

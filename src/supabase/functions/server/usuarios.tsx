@@ -23,7 +23,7 @@ export async function crearUsuario(body: any) {
     }
 
     // Validar rol
-    const rolesValidos = ['Administrador', 'Verificador', 'Gerencia'];
+    const rolesValidos = ['Administrador', 'Verificador', 'Gerencia', 'Monitor'];
     if (!rolesValidos.includes(rol)) {
       return { 
         success: false, 
@@ -115,7 +115,7 @@ export async function editarUsuario(body: any) {
     }
 
     // Validar rol
-    const rolesValidos = ['Administrador', 'Verificador', 'Gerencia'];
+    const rolesValidos = ['Administrador', 'Verificador', 'Gerencia', 'Monitor'];
     if (!rolesValidos.includes(rol)) {
       return { 
         success: false, 
