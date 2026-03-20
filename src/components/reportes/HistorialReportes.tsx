@@ -85,8 +85,8 @@ export function HistorialReportes({ refreshKey }: { refreshKey?: number }) {
           <TableRow>
             <TableHead>Semana</TableHead>
             <TableHead>Período</TableHead>
-            <TableHead>Generado por</TableHead>
-            <TableHead>Fecha</TableHead>
+            <TableHead className="hidden sm:table-cell">Generado por</TableHead>
+            <TableHead className="hidden sm:table-cell">Fecha</TableHead>
             <TableHead className="text-right">Acciones</TableHead>
           </TableRow>
         </TableHeader>
@@ -98,17 +98,17 @@ export function HistorialReportes({ refreshKey }: { refreshKey?: number }) {
                   S{String(reporte.numero_semana).padStart(2, '0')}
                 </Badge>
               </TableCell>
-              <TableCell className="text-sm text-gray-600">
+              <TableCell className="text-sm text-gray-600 whitespace-nowrap">
                 {formatearFechaCorta(reporte.fecha_inicio)} — {formatearFechaCorta(reporte.fecha_fin)}
               </TableCell>
-              <TableCell className="text-sm">
+              <TableCell className="text-sm hidden sm:table-cell">
                 {reporte.generado_automaticamente ? (
                   <Badge variant="outline" className="border-primary/40 text-primary bg-primary/5 text-xs gap-1">
                     <Bot className="w-3 h-3" />Auto
                   </Badge>
                 ) : (reporte.generado_por_nombre || '-')}
               </TableCell>
-              <TableCell className="text-sm text-gray-500">
+              <TableCell className="text-sm text-gray-500 hidden sm:table-cell">
                 {formatearFechaHora(reporte.created_at)}
               </TableCell>
               <TableCell className="text-right">

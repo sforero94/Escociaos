@@ -854,13 +854,13 @@ export function MonitoreoDashboardV2() {
           {/* FILTROS GLOBALES */}
           {/* ============================================ */}
 
-          <Card className="p-6">
+          <Card className="p-4 lg:p-6">
             <h3 className="text-sm font-medium text-foreground mb-4">Filtros de Visualización</h3>
 
             {/* Fila 1: Modo de Ocurrencias */}
             <div className="mb-4">
               <Label className="text-xs text-brand-brown/70 mb-2 block">Rango de Monitoreos</Label>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Button
                   onClick={() => setModoVisualizacion('ultimo')}
                   variant={modoVisualizacion === 'ultimo' ? 'default' : 'outline'}

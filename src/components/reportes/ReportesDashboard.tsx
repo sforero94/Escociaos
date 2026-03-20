@@ -36,32 +36,32 @@ export function ReportesDashboard() {
   return (
     <div className="max-w-6xl mx-auto">
       {/* Header + actions */}
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Reportes</h1>
           <p className="text-gray-500 mt-1">Genera y consulta reportes semanales de la operación</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <Button
             variant="outline"
             size="sm"
             onClick={handleGenerarRapido}
             disabled={generandoRapido}
-            className="border-primary text-primary hover:bg-primary hover:text-white"
+            className="border-primary text-primary hover:bg-primary hover:text-white flex-1 sm:flex-none"
           >
             {generandoRapido ? (
               <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generando...</>
             ) : (
-              <><Zap className="w-4 h-4 mr-2" />Generación Rápida</>
+              <><Zap className="w-4 h-4 mr-1.5" /><span className="hidden sm:inline">Generación </span>Rápida</>
             )}
           </Button>
           <Button
             size="sm"
             onClick={() => navigate('/reportes/generar')}
-            className="bg-primary text-white hover:bg-primary/90"
+            className="bg-primary text-white hover:bg-primary/90 flex-1 sm:flex-none"
           >
-            <Plus className="w-4 h-4 mr-2" />
-            Nuevo Reporte
+            <Plus className="w-4 h-4 mr-1.5" />
+            Nuevo<span className="hidden sm:inline"> Reporte</span>
           </Button>
         </div>
       </div>

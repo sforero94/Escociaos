@@ -16,8 +16,8 @@ export function ConfiguracionDashboard() {
   const isGerencia = profile?.rol === 'Gerencia';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-white to-secondary/10 p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen min-h-[100dvh] bg-gradient-to-br from-background via-white to-secondary/10 p-4 lg:p-6">
+      <div className="max-w-7xl mx-auto w-full overflow-x-hidden">
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-foreground mb-2">Configuración</h1>
@@ -28,21 +28,21 @@ export function ConfiguracionDashboard() {
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="bg-white/80 backdrop-blur-sm border border-secondary/30 p-1">
+          <TabsList className="bg-white/80 backdrop-blur-sm border border-secondary/30 p-1 flex-wrap h-auto gap-1 overflow-x-auto scrollbar-hide">
             <TabsTrigger
               value="general"
-              className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary-dark data-[state=active]:text-white"
+              className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary-dark data-[state=active]:text-white whitespace-nowrap text-sm"
             >
-              <Settings className="w-4 h-4 mr-2" />
+              <Settings className="w-4 h-4 mr-1.5" />
               General
             </TabsTrigger>
-            
+
             {isGerencia && (
               <TabsTrigger
                 value="usuarios"
-                className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary-dark data-[state=active]:text-white"
+                className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary-dark data-[state=active]:text-white whitespace-nowrap text-sm"
               >
-                <Users className="w-4 h-4 mr-2" />
+                <Users className="w-4 h-4 mr-1.5" />
                 Usuarios
               </TabsTrigger>
             )}
@@ -50,37 +50,37 @@ export function ConfiguracionDashboard() {
             {isGerencia && (
               <TabsTrigger
                 value="telegram"
-                className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary-dark data-[state=active]:text-white"
+                className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary-dark data-[state=active]:text-white whitespace-nowrap text-sm"
               >
-                <Send className="w-4 h-4 mr-2" />
+                <Send className="w-4 h-4 mr-1.5" />
                 Telegram Bot
               </TabsTrigger>
             )}
 
             <TabsTrigger
               value="lotes"
-              className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary-dark data-[state=active]:text-white"
+              className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary-dark data-[state=active]:text-white whitespace-nowrap text-sm"
             >
-              <MapPin className="w-4 h-4 mr-2" />
+              <MapPin className="w-4 h-4 mr-1.5" />
               Lotes
             </TabsTrigger>
             <TabsTrigger
               value="sublotes"
-              className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary-dark data-[state=active]:text-white"
+              className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary-dark data-[state=active]:text-white whitespace-nowrap text-sm"
             >
-              <Sprout className="w-4 h-4 mr-2" />
+              <Sprout className="w-4 h-4 mr-1.5" />
               Sublotes
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="general" className="space-y-6">
             {/* Modo Seguro */}
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
-              <div className="flex items-start gap-4">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${isSafeModeEnabled ? 'bg-green-500' : 'bg-orange-500'}`}>
-                  <Shield className="w-6 h-6 text-white" />
+            <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-4 lg:p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+              <div className="flex items-start gap-3 lg:gap-4">
+                <div className={`w-10 h-10 lg:w-12 lg:h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${isSafeModeEnabled ? 'bg-green-500' : 'bg-orange-500'}`}>
+                  <Shield className="w-5 h-5 lg:w-6 lg:h-6 text-white" />
                 </div>
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg text-foreground">Modo Seguro</h3>
                     <button
