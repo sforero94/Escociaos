@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 import {
@@ -80,6 +80,24 @@ export function Layout({ onNavigate, children }: LayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Lock body scroll when mobile menu is open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      const scrollY = window.scrollY;
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
+      return () => {
+        document.body.style.overflow = '';
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.width = '';
+        window.scrollTo(0, scrollY);
+      };
+    }
+  }, [mobileMenuOpen]);
+
   const handleLogout = async () => {
     await signOut();
   };
@@ -105,7 +123,7 @@ export function Layout({ onNavigate, children }: LayoutProps) {
 
   return (
     <TooltipPrimitive.Provider delayDuration={0}>
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen min-h-[100dvh] bg-background">
         {/* Mobile Header */}
         <div className="lg:hidden bg-white/80 backdrop-blur-xl border-b border-primary/10 px-4 py-3 flex items-center justify-between sticky top-0 z-50 shadow-sm">
           <div className="flex items-center gap-2">
@@ -134,44 +152,46 @@ export function Layout({ onNavigate, children }: LayoutProps) {
 
         {/* Mobile Menu */}
         <div
-          className={`lg:hidden fixed top-[57px] left-0 right-0 bottom-0 bg-white/95 backdrop-blur-xl z-50 transform transition-transform ${
+          className={`lg:hidden fixed top-[57px] left-0 right-0 bottom-0 bg-white/95 backdrop-blur-xl z-50 transform transition-transform duration-300 ${
             mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >
-          <nav className="p-4 space-y-2 overflow-y-auto h-[calc(100%-120px)]">
-            {menuStructure.map((item) => {
-              const Icon = item.icon;
-              const active = isActive(item.path);
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => handleNavigateClick(item.path, item.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                    active
-                      ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/20'
-                      : 'text-foreground hover:bg-muted/50'
-                  }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span>{item.label}</span>
-                </button>
-              );
-            })}
-          </nav>
+          <div className="flex flex-col h-full">
+            <nav className="flex-1 p-4 space-y-2 overflow-y-auto overscroll-contain">
+              {menuStructure.map((item) => {
+                const Icon = item.icon;
+                const active = isActive(item.path);
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleNavigateClick(item.path, item.id)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                      active
+                        ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/20'
+                        : 'text-foreground hover:bg-muted/50'
+                    }`}
+                  >
+                    <Icon className="w-5 h-5" />
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+            </nav>
 
-          <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-primary/10 bg-white/80 backdrop-blur-xl">
-            <div className="mb-3 px-4">
-              <p className="text-sm text-foreground">{profile?.nombre || 'Usuario'}</p>
-              <p className="text-xs text-brand-brown/60">{profile?.rol || 'Sin rol'}</p>
+            <div className="flex-shrink-0 p-4 border-t border-primary/10 bg-white/80 backdrop-blur-xl pb-[env(safe-area-inset-bottom,1rem)]">
+              <div className="mb-3 px-4">
+                <p className="text-sm text-foreground">{profile?.nombre || 'Usuario'}</p>
+                <p className="text-xs text-brand-brown/60">{profile?.rol || 'Sin rol'}</p>
+              </div>
+              <Button
+                onClick={handleLogout}
+                variant="outline"
+                className="w-full border-destructive/20 text-destructive hover:bg-destructive/5 rounded-xl"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Cerrar Sesion
+              </Button>
             </div>
-            <Button
-              onClick={handleLogout}
-              variant="outline"
-              className="w-full border-destructive/20 text-destructive hover:bg-destructive/5 rounded-xl"
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Cerrar Sesion
-            </Button>
           </div>
         </div>
 
@@ -271,8 +291,8 @@ export function Layout({ onNavigate, children }: LayoutProps) {
             #main-content { margin-left: ${collapsed ? '72px' : '16rem'}; }
           }
         `}</style>
-        <div id="main-content" className="transition-[margin] duration-300">
-          <main className="p-4 lg:p-8">{children}</main>
+        <div id="main-content" className="transition-[margin] duration-300 min-h-[100dvh]">
+          <main className="p-4 lg:p-8 pb-20 lg:pb-8">{children}</main>
         </div>
       </div>
     </TooltipPrimitive.Provider>

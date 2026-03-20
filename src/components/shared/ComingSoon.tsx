@@ -10,7 +10,7 @@ export function ComingSoon({ moduleName }: ComingSoonProps) {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-[calc(100vh-200px)] flex items-center justify-center p-4">
+    <div className="min-h-[calc(100dvh-200px)] flex items-center justify-center p-4">
       <div className="text-center max-w-lg">
         <div className="mb-8 inline-flex items-center justify-center w-24 h-24 bg-gradient-to-br from-primary to-secondary rounded-3xl shadow-lg shadow-primary/20">
           <Construction className="w-12 h-12 text-white" />

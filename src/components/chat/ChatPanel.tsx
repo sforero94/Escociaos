@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Send, Plus, ArrowLeft, Trash2, Loader2, X, FileDown, Pencil, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -22,6 +22,8 @@ interface ChatPanelProps {
   onOpenChange: (open: boolean) => void;
 }
 
+const MOBILE_BREAKPOINT = 1024; // lg breakpoint — matches Layout.tsx
+
 export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
@@ -36,6 +38,45 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
   const [renameValue, setRenameValue] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Detect mobile viewport
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < MOBILE_BREAKPOINT);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // Lock body scroll when panel is open
+  useEffect(() => {
+    if (open) {
+      const scrollY = window.scrollY;
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
+      return () => {
+        document.body.style.overflow = '';
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.width = '';
+        window.scrollTo(0, scrollY);
+      };
+    }
+  }, [open]);
+
+  // Panel styles — responsive: on mobile, 90% height panel from bottom
+  const panelStyle = useMemo(() => ({
+    position: 'fixed' as const,
+    top: isMobile ? '10dvh' : 0,
+    right: 0,
+    bottom: 0,
+    width: isMobile ? '100%' : '50vw',
+    maxWidth: '100%',
+    minWidth: isMobile ? undefined : '400px',
+    zIndex: 51,
+    borderRadius: isMobile ? '1rem 1rem 0 0' : undefined,
+  }), [isMobile]);
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => {
@@ -229,21 +270,13 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
           inset: 0,
           zIndex: 50,
           backgroundColor: 'rgba(0,0,0,0.4)',
+          backdropFilter: isMobile ? 'blur(2px)' : undefined,
         }}
         onClick={() => onOpenChange(false)}
       />
       {/* Panel */}
       <div
-        style={{
-          position: 'fixed',
-          top: 0,
-          right: 0,
-          bottom: 0,
-          width: '50vw',
-          maxWidth: '100%',
-          minWidth: '400px',
-          zIndex: 51,
-        }}
+        style={panelStyle}
         className="bg-background shadow-lg border-l"
       >
         <div className="flex h-full flex-col">

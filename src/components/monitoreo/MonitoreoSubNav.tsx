@@ -57,18 +57,18 @@ export function MonitoreoSubNav() {
             <button
               key={tab.id}
               onClick={() => navigate(tab.path)}
-              className={`flex items-center gap-2 px-4 py-4 border-b-2 transition-all whitespace-nowrap ${
+              className={`flex items-center gap-2 px-3 lg:px-4 py-3 lg:py-4 border-b-2 transition-all whitespace-nowrap ${
                 active
                   ? 'border-primary text-foreground'
                   : 'border-transparent text-brand-brown/60 hover:text-foreground hover:border-primary/30'
               }`}
             >
-              <Icon className="w-5 h-5" />
+              <Icon className="w-4 h-4 lg:w-5 lg:h-5" />
               <div className="text-left">
                 <div className={`text-sm ${active ? 'font-medium' : ''}`}>
                   {tab.label}
                 </div>
-                <div className="text-xs text-brand-brown/50">
+                <div className="text-xs text-brand-brown/50 hidden lg:block">
                   {tab.subtitle}
                 </div>
               </div>

@@ -49,25 +49,25 @@ export function InventoryNav() {
             <Link
               key={item.path}
               to={item.path}
-              className={`flex-1 min-w-fit px-6 py-4 border-b-4 transition-all duration-200 ${
+              className={`flex-1 min-w-fit px-3 lg:px-6 py-3 lg:py-4 border-b-4 transition-all duration-200 ${
                 active
                   ? 'border-primary bg-gradient-to-br from-background to-secondary/20'
                   : 'border-transparent hover:bg-background/50'
               }`}
             >
-              <div className="flex items-center gap-3 justify-center">
-                <Icon 
-                  className={`w-6 h-6 transition-colors ${
+              <div className="flex items-center gap-2 lg:gap-3 justify-center">
+                <Icon
+                  className={`w-5 h-5 lg:w-6 lg:h-6 transition-colors ${
                     active ? 'text-primary' : 'text-brand-brown/60'
-                  }`} 
+                  }`}
                 />
                 <div className="text-left">
-                  <p className={`transition-colors ${
+                  <p className={`text-sm transition-colors ${
                     active ? 'text-primary' : 'text-foreground'
                   }`}>
                     {item.label}
                   </p>
-                  <p className={`text-xs transition-colors ${
+                  <p className={`text-xs transition-colors hidden lg:block ${
                     active ? 'text-primary/70' : 'text-brand-brown/60'
                   }`}>
                     {item.description}

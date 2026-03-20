@@ -22,11 +22,11 @@ interface StandardDialogProps {
 }
 
 const sizeClasses = {
-  sm: 'w-[90vw] max-w-md sm:max-w-md h-[70vh]',          // Small forms (ProveedorDialog)
-  md: 'w-[90vw] max-w-2xl sm:max-w-2xl h-[80vh]',       // Medium forms (CompletarGastoDialog, NuevoMovimiento)
-  lg: 'w-[90vw] max-w-4xl sm:max-w-4xl h-[85vh]',       // Large forms (CrearEditarTareaDialog)
-  xl: 'w-[90vw] sm:max-w-none h-[96vh]',                 // Extra large (RegistrarTrabajoDialog) - no max-width constraint
-  full: 'w-[70vw] sm:max-w-none h-[90vh]',               // Full size (TareaDetalleDialog, CatalogoTiposDialog)
+  sm: 'w-[calc(100vw-2rem)] max-w-md sm:max-w-md h-[70dvh]',
+  md: 'w-[calc(100vw-2rem)] max-w-2xl sm:max-w-2xl h-[80dvh]',
+  lg: 'w-[calc(100vw-2rem)] max-w-4xl sm:max-w-4xl h-[85dvh]',
+  xl: 'w-[calc(100vw-2rem)] sm:max-w-none h-[90dvh] lg:h-[96dvh]',
+  full: 'w-[calc(100vw-2rem)] sm:max-w-none lg:w-[70vw] h-[90dvh]',
 };
 
 export function StandardDialog({
