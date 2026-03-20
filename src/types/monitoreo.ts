@@ -162,3 +162,101 @@ export interface DatosMapaCalor {
     incidenciaPromedio: number;
   }>;
 }
+
+// ============================================
+// MONITOREO 2.0: Rondas, Floración, CE, Colmenas
+// ============================================
+
+export type EstadoSemaforo = 'verde' | 'amarillo' | 'rojo' | 'sin_datos';
+
+// Ronda de monitoreo
+export interface RondaMonitoreo {
+  id: string;
+  nombre?: string | null;
+  fecha_inicio: string;
+  fecha_fin?: string | null;
+  observaciones?: string | null;
+  created_at?: string;
+}
+
+// Lectura individual de CE por árbol
+export interface LecturaCE {
+  arbol: number;
+  alta: number | null;
+  baja: number | null;
+}
+
+// Conductividad Eléctrica
+export interface MonitoreoConductividad {
+  id: string;
+  fecha_monitoreo: string;
+  lote_id: string;
+  ronda_id?: string | null;
+  valor_ce: number;
+  ph?: number | null;
+  lecturas?: LecturaCE[] | null;
+  num_arboles?: number;
+  observaciones?: string | null;
+  monitor?: string | null;
+  user_id?: string | null;
+  created_at?: string;
+  // Joined
+  lote_nombre?: string;
+}
+
+// Apiarios
+export interface Apiario {
+  id: string;
+  nombre: string;
+  ubicacion?: string | null;
+  total_colmenas: number;
+  activo: boolean;
+  created_at?: string;
+}
+
+// Monitoreo de colmenas (conteo por apiario)
+export interface MonitoreoColmena {
+  id: string;
+  fecha_monitoreo: string;
+  apiario_id: string;
+  ronda_id?: string | null;
+  colmenas_fuertes: number;
+  colmenas_debiles: number;
+  colmenas_muertas: number;
+  colmenas_con_reina: number;
+  observaciones?: string | null;
+  monitor?: string | null;
+  user_id?: string | null;
+  created_at?: string;
+  // Joined
+  apiario_nombre?: string;
+}
+
+// Resultado de cálculo de floración
+export interface EstadoFloracion {
+  totalArboles: number;
+  brotes: number;
+  florMadura: number;
+  cuaje: number;
+  pctBrotes: number;
+  pctFlorMadura: number;
+  pctCuaje: number;
+}
+
+// Resultado de cálculo de CE
+export interface EstadoCE {
+  estado: EstadoSemaforo;
+  promedio: number;
+  min: number;
+  max: number;
+}
+
+// Resultado de cálculo de colmenas
+export interface EstadoColmenas {
+  estado: EstadoSemaforo;
+  totalFuertes: number;
+  totalDebiles: number;
+  totalMuertas: number;
+  total: number;
+  pctFuertes: number;
+}
