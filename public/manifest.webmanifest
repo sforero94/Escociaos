@@ -1,0 +1,28 @@
+{
+  "name": "Escocia OS",
+  "short_name": "Escocia OS",
+  "description": "Sistema de gestión agrícola para cultivos de aguacate Hass",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#dde6cc",
+  "theme_color": "#73991C",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}
