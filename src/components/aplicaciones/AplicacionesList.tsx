@@ -500,11 +500,11 @@ export function AplicacionesList() {
                       {/* Información */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <h3 className="text-foreground truncate">
+                          <h3 className="text-foreground truncate text-sm lg:text-base">
                             {aplicacion.nombre_aplicacion}
                           </h3>
                           <span
-                            className={`px-2 py-1 text-xs rounded-lg border ${
+                            className={`px-2 py-0.5 text-xs rounded-lg border whitespace-nowrap flex-shrink-0 ${
                               ESTADO_COLORS[(aplicacion.estado ?? 'Calculada') as EstadoAplicacion]
                             }`}
                           >
@@ -512,7 +512,7 @@ export function AplicacionesList() {
                           </span>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-4 text-sm text-brand-brown/70">
+                        <div className="flex flex-wrap items-center gap-2 lg:gap-4 text-sm text-brand-brown/70">
                           <span className="flex items-center gap-1">
                             <TipoIcon className="w-4 h-4" />
                             {TIPOS_LABELS[aplicacion.tipo_aplicacion]}
@@ -544,23 +544,23 @@ export function AplicacionesList() {
                             e.stopPropagation();
                             setIniciarEjecucionId(aplicacion.id);
                           }}
-                          className="px-4 py-2 bg-gradient-to-r from-green-600 to-green-500 text-white rounded-lg hover:from-green-700 hover:to-green-600 transition-all flex items-center gap-2"
+                          className="px-3 lg:px-4 py-2 bg-gradient-to-r from-green-600 to-green-500 text-white rounded-lg hover:from-green-700 hover:to-green-600 transition-all flex items-center gap-2"
                         >
                           <Play className="w-4 h-4" />
-                          <span>Iniciar Ejecución</span>
+                          <span className="hidden lg:inline">Iniciar Ejecución</span>
                         </button>
                       )}
-                      
+
                       {aplicacion.estado === 'En ejecución' && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             navigate(`/aplicaciones/${aplicacion.id}/movimientos`);
                           }}
-                          className="px-4 py-2 bg-gradient-to-r from-brand-brown to-brand-brown/80 text-white rounded-lg hover:from-brand-brown hover:to-brand-brown/80 transition-all flex items-center gap-2"
+                          className="px-3 lg:px-4 py-2 bg-gradient-to-r from-brand-brown to-brand-brown/80 text-white rounded-lg hover:from-brand-brown hover:to-brand-brown/80 transition-all flex items-center gap-2"
                         >
                           <ClipboardList className="w-4 h-4" />
-                          <span>Registrar Movimientos</span>
+                          <span className="hidden lg:inline">Registrar Movimientos</span>
                         </button>
                       )}
 
@@ -570,10 +570,10 @@ export function AplicacionesList() {
                             e.stopPropagation();
                             navigate(`/aplicaciones/${aplicacion.id}/reporte`);
                           }}
-                          className="px-4 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:from-primary-dark hover:to-secondary-dark transition-all flex items-center gap-2"
+                          className="px-3 lg:px-4 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:from-primary-dark hover:to-secondary-dark transition-all flex items-center gap-2"
                         >
                           <FileText className="w-4 h-4" />
-                          <span>Ver Reporte</span>
+                          <span className="hidden lg:inline">Ver Reporte</span>
                         </button>
                       )}
 

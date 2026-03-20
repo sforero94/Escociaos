@@ -281,20 +281,20 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
       >
         <div className="flex h-full flex-col">
           {/* Header */}
-          <div className="flex items-center gap-2 border-b px-4 py-3">
+          <div className="flex items-center gap-1 border-b px-4 lg:px-4 py-3">
             {showHistory ? (
               <>
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowHistory(false)}>
-                  <ArrowLeft className="h-4 w-4" />
+                <Button variant="ghost" size="icon" className="h-10 w-10 lg:h-8 lg:w-8" onClick={() => setShowHistory(false)}>
+                  <ArrowLeft className="h-5 w-5 lg:h-4 lg:w-4" />
                 </Button>
-                <span className="text-sm font-semibold">Conversaciones</span>
+                <span className="text-sm font-semibold ml-1">Conversaciones</span>
               </>
             ) : (
               <>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 text-xs text-muted-foreground"
+                  className="h-10 lg:h-8 px-3 text-xs text-muted-foreground"
                   onClick={() => setShowHistory(true)}
                 >
                   Historial
@@ -302,21 +302,21 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
                 <span className="flex-1 truncate text-center text-sm font-semibold">
                   {currentTitle || 'Esco'}
                 </span>
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleNewConversation}>
-                  <Plus className="h-4 w-4" />
+                <Button variant="ghost" size="icon" className="h-10 w-10 lg:h-8 lg:w-8" onClick={handleNewConversation}>
+                  <Plus className="h-5 w-5 lg:h-4 lg:w-4" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
+                  className="h-10 w-10 lg:h-8 lg:w-8"
                   onClick={handleExport}
                   disabled={!messages.some((m) => m.role === 'assistant')}
                   title="Exportar como informe"
                 >
-                  <FileDown className="h-4 w-4" />
+                  <FileDown className="h-5 w-5 lg:h-4 lg:w-4" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onOpenChange(false)}>
-                  <X className="h-4 w-4" />
+                <Button variant="ghost" size="icon" className="h-10 w-10 lg:h-8 lg:w-8" onClick={() => onOpenChange(false)}>
+                  <X className="h-5 w-5 lg:h-4 lg:w-4" />
                 </Button>
               </>
             )}
@@ -424,8 +424,11 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
               </div>
 
               {/* Input */}
-              <div className="border-t p-3">
-                <div className="flex items-end gap-2">
+              <div
+                className="border-t px-4 pt-3"
+                style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))' }}
+              >
+                <div className="flex items-end gap-3">
                   <textarea
                     ref={inputRef}
                     value={input}
@@ -433,17 +436,17 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
                     onKeyDown={handleKeyDown}
                     placeholder="Pregunta sobre la finca..."
                     rows={1}
-                    className="flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                    style={{ maxHeight: '6rem', minHeight: '40px' }}
+                    className="flex-1 resize-none rounded-xl border bg-background px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    style={{ maxHeight: '6rem', minHeight: '44px' }}
                     disabled={isStreaming}
                   />
                   <Button
                     size="icon"
-                    className="h-10 w-10 shrink-0"
+                    className="h-11 w-11 shrink-0 rounded-xl"
                     onClick={() => handleSend()}
                     disabled={!input.trim() || isStreaming}
                   >
-                    <Send className="h-4 w-4" />
+                    <Send className="h-5 w-5" />
                   </Button>
                 </div>
               </div>
