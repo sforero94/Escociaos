@@ -1,7 +1,7 @@
 // telegram/conversations/monitoreo.ts — Pest monitoring registration conversation
 //
 // Flow: lote -> sublote -> plagas (multi-select) -> arboles monitoreados ->
-// per-plaga (afectados + individuos) -> foto -> observaciones -> confirm all
+// per-plaga (afectados + individuos) -> floración -> foto -> observaciones -> confirm all
 // Then: next sublote / finish
 //
 // Each step supports a "back" button to return to the previous step.
@@ -135,6 +135,10 @@ export async function monitoreoConversation(
     let plagaPage = 0;
     let arbolesMonitoreados = 0;
     let plagasData: PlagaData[] = [];
+    let floracionBrotes: number | null = null;
+    let floracionFlor: number | null = null;
+    let floracionCuaje: number | null = null;
+    let floracionSubStep = 0; // 0=brotes, 1=flor, 2=cuaje
     let fotoUrl: string | null = null;
     let observaciones: string | null = null;
     // plagaIndex tracks position within the per-plaga loop (step 5)
@@ -148,7 +152,7 @@ export async function monitoreoConversation(
 
     let step = 2; // Start at sublote selection (lote already chosen)
 
-    while (step >= 2 && step <= 8) {
+    while (step >= 2 && step <= 9) {
       // ── Step 2: Select sublote ───────────────────────────────────────
       if (step === 2) {
         if (!sublotes) {
@@ -534,8 +538,86 @@ export async function monitoreoConversation(
         continue;
       }
 
-      // ── Step 6: Photo (optional) ─────────────────────────────────────
+      // ── Step 6: Floración (optional) ──────────────────────────────────
       if (step === 6) {
+        const florLabels = [
+          { emoji: "🌱", label: "BROTES", field: "brotes" },
+          { emoji: "🌼", label: "FLOR MADURA", field: "flor" },
+          { emoji: "🍊", label: "CUAJE", field: "cuaje" },
+        ] as const;
+
+        while (floracionSubStep <= 2) {
+          const current = florLabels[floracionSubStep];
+          const florKb = new InlineKeyboard()
+            .text("← Atrás", "go_back")
+            .text(floracionSubStep === 0 ? "Saltar floración ⏩" : "Saltar ⏩", "skip_flor")
+            .row()
+            .text("❌ Cancelar", "cancel_flow");
+
+          await ctx.reply(
+            `${current.emoji} Floración — ¿cuántos árboles con *${current.label}*?`,
+            { reply_markup: florKb, parse_mode: "Markdown" },
+          );
+
+          const florCtx = await conversation.wait();
+
+          if (florCtx.callbackQuery?.data === "cancel_flow") {
+            await florCtx.answerCallbackQuery();
+            await ctx.reply("Operación cancelada.");
+            return conversation.halt();
+          }
+
+          if (florCtx.callbackQuery?.data === "go_back") {
+            await florCtx.answerCallbackQuery();
+            if (floracionSubStep === 0) {
+              step = 5;
+              // Reset plagaIndex to re-enter step 5 from the end
+              plagaIndex = plagasData.length - 1;
+              plagaSubStep = 1;
+              break;
+            }
+            floracionSubStep--;
+            continue;
+          }
+
+          if (florCtx.callbackQuery?.data === "skip_flor") {
+            await florCtx.answerCallbackQuery();
+            if (floracionSubStep === 0) {
+              // Skip all floración
+              floracionBrotes = null;
+              floracionFlor = null;
+              floracionCuaje = null;
+            }
+            // else: leave current field null, advance
+            break; // Exit floración loop
+          }
+
+          // Parse numeric input
+          const val = parseInt(florCtx.message?.text?.trim() || "", 10);
+          if (isNaN(val) || val < 0) {
+            await ctx.reply("Ingresa un número entero ≥ 0.");
+            continue;
+          }
+
+          if (floracionSubStep === 0) floracionBrotes = val;
+          else if (floracionSubStep === 1) floracionFlor = val;
+          else floracionCuaje = val;
+
+          floracionSubStep++;
+        }
+
+        if (step === 5) {
+          // User pressed "back" from floración → go back to step 5
+          continue;
+        }
+
+        floracionSubStep = 0; // Reset for potential correction
+        step = 7;
+        continue;
+      }
+
+      // ── Step 7: Photo (optional) ─────────────────────────────────────
+      if (step === 7) {
         const photoKb = new InlineKeyboard()
           .text("← Atrás", "go_back")
           .text("Saltar ⏩", "skip_photo")
@@ -557,11 +639,7 @@ export async function monitoreoConversation(
 
         if (photoCtx.callbackQuery?.data === "go_back") {
           await photoCtx.answerCallbackQuery();
-          // Go back to step 5 — re-enter the last plaga's individuos
-          plagaIndex = selectedPlagaIds.length - 1;
-          plagaSubStep = 1;
-          plagasData.pop();
-          step = 5;
+          step = 6;
           continue;
         }
 
@@ -621,12 +699,12 @@ export async function monitoreoConversation(
           await ctx.reply("No se recibió foto. Continuando sin foto.");
         }
 
-        step = 7;
+        step = 8;
         continue;
       }
 
-      // ── Step 7: Observaciones (optional) ─────────────────────────────
-      if (step === 7) {
+      // ── Step 8: Observaciones (optional) ─────────────────────────────
+      if (step === 8) {
         const obsKb = new InlineKeyboard()
           .text("← Atrás", "go_back")
           .text("Saltar ⏩", "skip_obs")
@@ -648,7 +726,7 @@ export async function monitoreoConversation(
 
         if (obsCtx.callbackQuery?.data === "go_back") {
           await obsCtx.answerCallbackQuery();
-          step = 6;
+          step = 7;
           continue;
         }
 
@@ -658,12 +736,12 @@ export async function monitoreoConversation(
           observaciones = obsCtx.message.text.trim() || null;
         }
 
-        step = 8;
+        step = 9;
         continue;
       }
 
-      // ── Step 8: Confirmation ─────────────────────────────────────────
-      if (step === 8) {
+      // ── Step 9: Confirmation ─────────────────────────────────────────
+      if (step === 9) {
         const today = new Date();
         const fechaStr = formatDate(today);
 
@@ -690,6 +768,14 @@ export async function monitoreoConversation(
             `   Afectados: ${pd.arbolesAfectados} | Individuos: ${pd.individuos}`,
             `   Incidencia: ${incidencia.toFixed(1)}% | Severidad: ${severidad.toFixed(2)}`,
             `   ${gravedadEmoji(gravedad.texto)} Gravedad: ${gravedad.texto}`,
+          );
+        }
+
+        if (floracionBrotes != null || floracionFlor != null || floracionCuaje != null) {
+          summaryLines.push(
+            "",
+            "🌸 *Floración*",
+            `   Brotes: ${floracionBrotes ?? "—"} | Flor: ${floracionFlor ?? "—"} | Cuaje: ${floracionCuaje ?? "—"}`,
           );
         }
 
@@ -733,6 +819,52 @@ export async function monitoreoConversation(
         const insertError = await conversation.external(async () => {
           const supabase = getSupabaseAdmin();
 
+          // Assign ronda (same logic as calculosMonitoreoV2.ts asignarRonda)
+          const GAP_DIAS = 5;
+          let rondaId: string;
+
+          const { data: ultimaRonda } = await supabase
+            .from("rondas_monitoreo")
+            .select("id, fecha_inicio, fecha_fin")
+            .order("fecha_inicio", { ascending: false })
+            .limit(1)
+            .single();
+
+          if (ultimaRonda && !ultimaRonda.fecha_fin) {
+            const { data: ultimoReg } = await supabase
+              .from("monitoreos")
+              .select("fecha_monitoreo")
+              .eq("ronda_id", ultimaRonda.id)
+              .order("fecha_monitoreo", { ascending: false })
+              .limit(1)
+              .single();
+
+            const refDate = ultimoReg?.fecha_monitoreo || ultimaRonda.fecha_inicio;
+            const diffDays = Math.abs(
+              (new Date(fechaMonitoreo).getTime() - new Date(refDate).getTime()) / (1000 * 60 * 60 * 24),
+            );
+
+            if (diffDays <= GAP_DIAS) {
+              rondaId = ultimaRonda.id;
+            } else {
+              const { count } = await supabase.from("rondas_monitoreo").select("id", { count: "exact", head: true });
+              const { data: nueva } = await supabase
+                .from("rondas_monitoreo")
+                .insert({ fecha_inicio: fechaMonitoreo, nombre: `Ronda ${(count || 0) + 1}` })
+                .select("id")
+                .single();
+              rondaId = nueva!.id;
+            }
+          } else {
+            const { count } = await supabase.from("rondas_monitoreo").select("id", { count: "exact", head: true });
+            const { data: nueva } = await supabase
+              .from("rondas_monitoreo")
+              .insert({ fecha_inicio: fechaMonitoreo, nombre: `Ronda ${(count || 0) + 1}` })
+              .select("id")
+              .single();
+            rondaId = nueva!.id;
+          }
+
           const records = plagasData.map((pd) => {
             const incidencia = arbolesMonitoreados > 0
               ? (pd.arbolesAfectados / arbolesMonitoreados) * 100
@@ -751,6 +883,10 @@ export async function monitoreoConversation(
               gravedad_numerica: gravedad.numerica,
               observaciones: observaciones,
               monitor: user.nombre_display,
+              ronda_id: rondaId,
+              floracion_brotes: floracionBrotes,
+              floracion_flor_madura: floracionFlor,
+              floracion_cuaje: floracionCuaje,
             };
 
             if (fotoUrl) {
