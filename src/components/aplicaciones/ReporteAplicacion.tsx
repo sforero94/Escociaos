@@ -172,54 +172,74 @@ export function ReporteAplicacion({ aplicacion, onClose }: ReporteAplicacionProp
   const mobraPct = datos.costo_total > 0 ? ((datos.costo_total_mano_obra / datos.costo_total) * 100).toFixed(0) : '0';
 
   return (
-    <div className="space-y-6 pb-8">
+    <div className="space-y-4 lg:space-y-6 pb-8">
       {/* ============================================================ */}
       {/* SECTION A: HEADER */}
       {/* ============================================================ */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5 text-brand-brown" />
-          </button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-foreground">{datos.nombre}</h1>
-              <span className="px-3 py-1 bg-primary/10 text-primary rounded-lg text-sm font-medium flex items-center gap-1.5">
-                {getTipoIcon()}
-                {datos.tipo_aplicacion}
-              </span>
-            </div>
-            <div className="flex items-center gap-3 text-sm text-brand-brown/70 mt-1">
-              <span className="flex items-center gap-1">
-                <Calendar className="w-4 h-4" />
-                Cerrada: {formatFechaCorta(datos.fecha_cierre)}
-              </span>
-              {datos.dias_aplicacion > 0 && (
-                <>
-                  <span className="text-brand-brown/30">|</span>
-                  <span>{datos.dias_aplicacion} dias de ejecucion</span>
-                </>
-              )}
-              {datos.proposito && (
-                <>
-                  <span className="text-brand-brown/30">|</span>
-                  <span className="truncate max-w-[200px]">{datos.proposito}</span>
-                </>
-              )}
+      <div className="space-y-3">
+        {/* Top row: back + title + PDF button */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3 min-w-0 flex-1">
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0 mt-0.5"
+            >
+              <ArrowLeft className="w-5 h-5 text-brand-brown" />
+            </button>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl lg:text-2xl font-bold text-foreground">{datos.nombre}</h1>
+                <span className="px-2.5 py-0.5 bg-primary/10 text-primary rounded-lg text-sm font-medium flex items-center gap-1.5 flex-shrink-0">
+                  {getTipoIcon()}
+                  {datos.tipo_aplicacion}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-brand-brown/70 mt-1">
+                <span className="flex items-center gap-1">
+                  <Calendar className="w-4 h-4" />
+                  {formatFechaCorta(datos.fecha_cierre)}
+                </span>
+                {datos.dias_aplicacion > 0 && (
+                  <>
+                    <span className="text-brand-brown/30 hidden sm:inline">|</span>
+                    <span>{datos.dias_aplicacion} dias</span>
+                  </>
+                )}
+                {datos.proposito && (
+                  <>
+                    <span className="text-brand-brown/30 hidden sm:inline">|</span>
+                    <span className="truncate max-w-[200px]">{datos.proposito}</span>
+                  </>
+                )}
+              </div>
             </div>
           </div>
+
+          {/* PDF export button — always top-right */}
+          <Button
+            onClick={descargarPDF}
+            disabled={generandoPDF}
+            size="sm"
+            className="bg-primary hover:bg-primary-dark text-white flex-shrink-0"
+          >
+            {generandoPDF ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <>
+                <FileText className="w-4 h-4" />
+                <span className="hidden sm:inline ml-1.5">Exportar PDF</span>
+              </>
+            )}
+          </Button>
         </div>
 
+        {/* Comparison dropdown — own row */}
         <div className="flex items-center gap-3">
-          {/* Comparison dropdown */}
-          <div className="relative">
+          <div className="relative flex-1 sm:flex-none">
             <select
               value={selectedCompId || ''}
               onChange={(e) => setSelectedCompId(e.target.value || null)}
-              className="px-4 py-2 pr-8 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm bg-white min-w-[200px] appearance-none"
+              className="w-full sm:w-auto px-4 py-2 pr-8 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm bg-white sm:min-w-[200px] appearance-none"
             >
               <option value="">Comparar con...</option>
               {comparables.map((app) => (
@@ -232,20 +252,6 @@ export function ReporteAplicacion({ aplicacion, onClose }: ReporteAplicacionProp
               <Loader2 className="w-4 h-4 animate-spin absolute right-2 top-1/2 -translate-y-1/2 text-primary" />
             )}
           </div>
-
-          {/* PDF export */}
-          <Button
-            onClick={descargarPDF}
-            disabled={generandoPDF}
-            className="bg-primary hover:bg-primary-dark text-white"
-          >
-            {generandoPDF ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <FileText className="w-4 h-4 mr-2" />
-            )}
-            Exportar PDF
-          </Button>
         </div>
       </div>
 
@@ -267,60 +273,79 @@ export function ReporteAplicacion({ aplicacion, onClose }: ReporteAplicacionProp
       {/* ============================================================ */}
       {/* SECTION B: HERO KPIs (Tier 1) */}
       {/* ============================================================ */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         {/* Costo Total */}
-        <div className="bg-white rounded-2xl p-6 border border-gray-200">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-primary to-primary-dark rounded-xl flex items-center justify-center">
-              <DollarSign className="w-6 h-6 text-white" />
+        <div className="bg-white rounded-2xl p-4 lg:p-5 border border-gray-200">
+          <div className="flex items-center justify-between mb-3">
+            <div className="w-10 h-10 lg:w-12 lg:h-12 bg-gradient-to-br from-primary to-primary-dark rounded-xl flex items-center justify-center">
+              <DollarSign className="w-5 h-5 lg:w-6 lg:h-6 text-white" />
             </div>
             {datosComparacion && (
               <DeltaBadge current={datos.costo_total} previous={datosComparacion.costo_total} inverted />
             )}
           </div>
-          <h3 className="text-2xl font-bold text-gray-900">{formatearMoneda(datos.costo_total)}</h3>
-          <p className="text-sm text-gray-600 font-medium mt-1">Costo Total</p>
+          <h3 className="text-lg lg:text-2xl font-bold text-gray-900">{formatearMoneda(datos.costo_total)}</h3>
+          <p className="text-xs lg:text-sm text-gray-600 font-medium mt-1">Costo Total</p>
           {datosComparacion && (
             <p className="text-xs text-gray-400 mt-1">
-              Anterior: {formatearMoneda(datosComparacion.costo_total)}
+              Plan: {formatearMoneda(datosComparacion.costo_total)}
             </p>
           )}
         </div>
 
         {/* Costo por Arbol */}
-        <div className="bg-white rounded-2xl p-6 border border-gray-200">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center">
-              <DollarSign className="w-6 h-6 text-white" />
+        <div className="bg-white rounded-2xl p-4 lg:p-5 border border-gray-200">
+          <div className="flex items-center justify-between mb-3">
+            <div className="w-10 h-10 lg:w-12 lg:h-12 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center">
+              <DollarSign className="w-5 h-5 lg:w-6 lg:h-6 text-white" />
             </div>
             {datosComparacion && (
               <DeltaBadge current={datos.costo_por_arbol} previous={datosComparacion.costo_por_arbol} inverted />
             )}
           </div>
-          <h3 className="text-2xl font-bold text-gray-900">{formatearMoneda(datos.costo_por_arbol)}</h3>
-          <p className="text-sm text-gray-600 font-medium mt-1">Costo por Arbol</p>
+          <h3 className="text-lg lg:text-2xl font-bold text-gray-900">{formatearMoneda(datos.costo_por_arbol)}</h3>
+          <p className="text-xs lg:text-sm text-gray-600 font-medium mt-1">Costo/Arbol</p>
           {datosComparacion && (
             <p className="text-xs text-gray-400 mt-1">
-              Anterior: {formatearMoneda(datosComparacion.costo_por_arbol)}
+              Plan: {formatearMoneda(datosComparacion.costo_por_arbol)}
             </p>
           )}
         </div>
 
-        {/* Total Arboles */}
-        <div className="bg-white rounded-2xl p-6 border border-gray-200">
-          <div className="flex items-center justify-between mb-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
-              <Leaf className="w-6 h-6 text-white" />
+        {/* Bultos / Total units */}
+        <div className="bg-white rounded-2xl p-4 lg:p-5 border border-gray-200">
+          <div className="flex items-center justify-between mb-3">
+            <div className="w-10 h-10 lg:w-12 lg:h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
+              <Leaf className="w-5 h-5 lg:w-6 lg:h-6 text-white" />
             </div>
             {datosComparacion && (
               <DeltaBadge current={datos.total_arboles} previous={datosComparacion.total_arboles} />
             )}
           </div>
-          <h3 className="text-2xl font-bold text-gray-900">{datos.total_arboles.toLocaleString('es-CO')}</h3>
-          <p className="text-sm text-gray-600 font-medium mt-1">Arboles Tratados</p>
+          <h3 className="text-lg lg:text-2xl font-bold text-gray-900">{datos.total_arboles.toLocaleString('es-CO')}</h3>
+          <p className="text-xs lg:text-sm text-gray-600 font-medium mt-1">Arboles Tratados</p>
           {datosComparacion && (
             <p className="text-xs text-gray-400 mt-1">
               Anterior: {datosComparacion.total_arboles.toLocaleString('es-CO')}
+            </p>
+          )}
+        </div>
+
+        {/* Arboles por Jornal */}
+        <div className="bg-white rounded-2xl p-4 lg:p-5 border border-gray-200">
+          <div className="flex items-center justify-between mb-3">
+            <div className="w-10 h-10 lg:w-12 lg:h-12 bg-teal-50 rounded-xl flex items-center justify-center">
+              <Users className="w-5 h-5 lg:w-6 lg:h-6 text-teal-600" />
+            </div>
+            {datosComparacion && (
+              <DeltaBadge current={datos.arboles_por_jornal} previous={datosComparacion.arboles_por_jornal} />
+            )}
+          </div>
+          <h3 className="text-lg lg:text-2xl font-bold text-gray-900">{formatearNumero(datos.arboles_por_jornal, 0)}</h3>
+          <p className="text-xs lg:text-sm text-gray-600 font-medium mt-1">Arboles/Jornal</p>
+          {datosComparacion && (
+            <p className="text-xs text-gray-400 mt-1">
+              Anterior: {formatearNumero(datosComparacion.arboles_por_jornal, 0)}
             </p>
           )}
         </div>
@@ -329,10 +354,10 @@ export function ReporteAplicacion({ aplicacion, onClose }: ReporteAplicacionProp
       {/* ============================================================ */}
       {/* SECTION C: COST BREAKDOWN (Tier 2) */}
       {/* ============================================================ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
         {/* Left: Cost distribution chart */}
-        <div className="bg-white rounded-2xl p-6 border border-gray-200">
-          <h3 className="text-lg font-semibold text-foreground mb-6">Distribucion de Costos</h3>
+        <div className="bg-white rounded-2xl p-4 lg:p-6 border border-gray-200">
+          <h3 className="text-base lg:text-lg font-semibold text-foreground mb-4 lg:mb-6">Distribucion de Costos</h3>
 
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
@@ -368,32 +393,9 @@ export function ReporteAplicacion({ aplicacion, onClose }: ReporteAplicacionProp
         </div>
 
         {/* Right: Efficiency mini-KPIs */}
-        <div className="space-y-4">
-          {/* Arboles por Jornal */}
-          <div className="bg-white rounded-2xl p-5 border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600">Arboles por Jornal</p>
-                <p className="text-xl font-bold text-foreground">{formatearNumero(datos.arboles_por_jornal, 1)}</p>
-              </div>
-              <div className="flex items-center gap-3">
-                {datosComparacion && (
-                  <DeltaBadge current={datos.arboles_por_jornal} previous={datosComparacion.arboles_por_jornal} />
-                )}
-                <div className="w-10 h-10 bg-teal-50 rounded-xl flex items-center justify-center">
-                  <Users className="w-5 h-5 text-teal-600" />
-                </div>
-              </div>
-            </div>
-            {datosComparacion && (
-              <p className="text-xs text-gray-400 mt-2">
-                Anterior: {formatearNumero(datosComparacion.arboles_por_jornal, 1)}
-              </p>
-            )}
-          </div>
-
+        <div className="space-y-3 lg:space-y-4">
           {/* Dias de Ejecucion */}
-          <div className="bg-white rounded-2xl p-5 border border-gray-200">
+          <div className="bg-white rounded-2xl p-4 lg:p-5 border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Dias de Ejecucion</p>
@@ -416,7 +418,7 @@ export function ReporteAplicacion({ aplicacion, onClose }: ReporteAplicacionProp
           </div>
 
           {/* Jornales Utilizados */}
-          <div className="bg-white rounded-2xl p-5 border border-gray-200">
+          <div className="bg-white rounded-2xl p-4 lg:p-5 border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Jornales Utilizados</p>
@@ -445,8 +447,8 @@ export function ReporteAplicacion({ aplicacion, onClose }: ReporteAplicacionProp
       {/* SECTION D: COMPARISON COST CHART (only when comparing) */}
       {/* ============================================================ */}
       {datosComparacion && (
-        <div className="bg-white rounded-2xl p-6 border border-gray-200">
-          <h3 className="text-lg font-semibold text-foreground mb-6">
+        <div className="bg-white rounded-2xl p-4 lg:p-6 border border-gray-200">
+          <h3 className="text-base lg:text-lg font-semibold text-foreground mb-4 lg:mb-6">
             Comparacion de Costos: Actual vs {datosComparacion.nombre}
           </h3>
           <div className="h-64">
@@ -473,13 +475,13 @@ export function ReporteAplicacion({ aplicacion, onClose }: ReporteAplicacionProp
       {/* ============================================================ */}
       {datos.comparacion_productos.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+          <div className="px-4 lg:px-6 py-3 lg:py-4 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <h3 className="text-base lg:text-lg font-semibold text-foreground flex items-center gap-2">
               <Package className="w-5 h-5 text-primary" />
-              Comparacion de Productos (Planeado vs Real)
+              Productos (Plan vs Real)
             </h3>
-            <span className="text-sm text-brand-brown/60">
-              {datos.comparacion_productos.filter(p => Math.abs(p.porcentaje_desviacion) > 20).length} producto(s) con alta desviacion
+            <span className="text-xs lg:text-sm text-brand-brown/60">
+              {datos.comparacion_productos.filter(p => Math.abs(p.porcentaje_desviacion) > 20).length} con alta desviacion
             </span>
           </div>
 
@@ -487,12 +489,12 @@ export function ReporteAplicacion({ aplicacion, onClose }: ReporteAplicacionProp
             <table className="w-full">
               <thead className="bg-background">
                 <tr>
-                  <th className="text-left py-3 px-5 text-xs text-brand-brown/70 font-medium">Producto</th>
-                  <th className="text-right py-3 px-4 text-xs text-brand-brown/70 font-medium">Planeado</th>
-                  <th className="text-right py-3 px-4 text-xs text-brand-brown/70 font-medium">Real</th>
-                  <th className="text-right py-3 px-4 text-xs text-brand-brown/70 font-medium">Diferencia</th>
-                  <th className="text-right py-3 px-4 text-xs text-brand-brown/70 font-medium">Desviacion</th>
-                  <th className="text-right py-3 px-4 text-xs text-brand-brown/70 font-medium">Costo</th>
+                  <th className="text-left py-3 px-3 lg:px-5 text-xs text-brand-brown/70 font-medium">Producto</th>
+                  <th className="text-right py-3 px-2 lg:px-4 text-xs text-brand-brown/70 font-medium">Plan</th>
+                  <th className="text-right py-3 px-2 lg:px-4 text-xs text-brand-brown/70 font-medium">Real</th>
+                  <th className="text-right py-3 px-2 lg:px-4 text-xs text-brand-brown/70 font-medium hidden sm:table-cell">Dif.</th>
+                  <th className="text-right py-3 px-2 lg:px-4 text-xs text-brand-brown/70 font-medium">Desv.</th>
+                  <th className="text-right py-3 px-2 lg:px-4 text-xs text-brand-brown/70 font-medium">Costo</th>
                   {datosComparacion && (
                     <th className="text-right py-3 px-4 text-xs text-brand-brown/70 font-medium">Costo Anterior</th>
                   )}
@@ -507,23 +509,23 @@ export function ReporteAplicacion({ aplicacion, onClose }: ReporteAplicacionProp
 
                   return (
                     <tr key={i} className={`hover:bg-background transition-colors ${highDeviation ? 'bg-red-50/50' : ''}`}>
-                      <td className="py-3 px-5">
-                        <div className="flex items-center gap-2">
+                      <td className="py-2.5 lg:py-3 px-3 lg:px-5">
+                        <div className="flex items-center gap-1.5">
                           <span className="text-sm text-foreground">{prod.producto_nombre}</span>
                           {highDeviation && (
-                            <span className="px-1.5 py-0.5 text-xs bg-red-100 text-red-700 rounded">Alta desv.</span>
+                            <span className="px-1 py-0.5 text-[10px] lg:text-xs bg-red-100 text-red-700 rounded flex-shrink-0">!</span>
                           )}
                         </div>
                         <div className="text-xs text-brand-brown/50">{prod.producto_unidad}</div>
                       </td>
-                      <td className="py-3 px-4 text-right text-sm text-foreground">
+                      <td className="py-2.5 lg:py-3 px-2 lg:px-4 text-right text-sm text-foreground">
                         {formatearNumero(prod.cantidad_planeada)}
                       </td>
-                      <td className="py-3 px-4 text-right text-sm text-primary">
+                      <td className="py-2.5 lg:py-3 px-2 lg:px-4 text-right text-sm text-primary">
                         {formatearNumero(prod.cantidad_real)}
                       </td>
-                      <td className="py-3 px-4 text-right">
-                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-sm ${
+                      <td className="py-2.5 lg:py-3 px-2 lg:px-4 text-right hidden sm:table-cell">
+                        <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-sm ${
                           prod.diferencia > 0.1 ? 'bg-red-50 text-red-700' :
                           prod.diferencia < -0.1 ? 'bg-amber-50 text-amber-700' :
                           'bg-gray-50 text-gray-700'
@@ -531,7 +533,7 @@ export function ReporteAplicacion({ aplicacion, onClose }: ReporteAplicacionProp
                           {prod.diferencia > 0 ? '+' : ''}{formatearNumero(prod.diferencia)}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-right">
+                      <td className="py-2.5 lg:py-3 px-2 lg:px-4 text-right">
                         <span className={`text-sm font-medium ${
                           Math.abs(prod.porcentaje_desviacion) > 20 ? 'text-red-600' :
                           Math.abs(prod.porcentaje_desviacion) > 10 ? 'text-amber-600' :
@@ -540,11 +542,11 @@ export function ReporteAplicacion({ aplicacion, onClose }: ReporteAplicacionProp
                           {prod.porcentaje_desviacion > 0 ? '+' : ''}{prod.porcentaje_desviacion.toFixed(1)}%
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-right text-sm text-foreground">
+                      <td className="py-2.5 lg:py-3 px-2 lg:px-4 text-right text-sm text-foreground">
                         {formatearMoneda(prod.costo_total)}
                       </td>
                       {datosComparacion && (
-                        <td className="py-3 px-4 text-right text-sm text-gray-500">
+                        <td className="py-2.5 lg:py-3 px-2 lg:px-4 text-right text-sm text-gray-500">
                           {prevProd ? formatearMoneda(prevProd.costo_total) : '-'}
                         </td>
                       )}
@@ -555,20 +557,20 @@ export function ReporteAplicacion({ aplicacion, onClose }: ReporteAplicacionProp
               {/* Totals footer */}
               <tfoot className="bg-background border-t border-gray-200">
                 <tr>
-                  <td className="py-3 px-5 text-sm font-semibold text-foreground">Total</td>
-                  <td className="py-3 px-4 text-right text-sm font-semibold text-foreground">
+                  <td className="py-3 px-3 lg:px-5 text-sm font-semibold text-foreground">Total</td>
+                  <td className="py-3 px-2 lg:px-4 text-right text-sm font-semibold text-foreground">
                     {formatearNumero(datos.comparacion_productos.reduce((s, p) => s + p.cantidad_planeada, 0))}
                   </td>
-                  <td className="py-3 px-4 text-right text-sm font-semibold text-primary">
+                  <td className="py-3 px-2 lg:px-4 text-right text-sm font-semibold text-primary">
                     {formatearNumero(datos.comparacion_productos.reduce((s, p) => s + p.cantidad_real, 0))}
                   </td>
-                  <td className="py-3 px-4"></td>
-                  <td className="py-3 px-4"></td>
-                  <td className="py-3 px-4 text-right text-sm font-semibold text-foreground">
+                  <td className="py-3 px-2 lg:px-4 hidden sm:table-cell"></td>
+                  <td className="py-3 px-2 lg:px-4"></td>
+                  <td className="py-3 px-2 lg:px-4 text-right text-sm font-semibold text-foreground">
                     {formatearMoneda(datos.comparacion_productos.reduce((s, p) => s + p.costo_total, 0))}
                   </td>
                   {datosComparacion && (
-                    <td className="py-3 px-4 text-right text-sm font-semibold text-gray-500">
+                    <td className="py-3 px-2 lg:px-4 text-right text-sm font-semibold text-gray-500">
                       {formatearMoneda(datosComparacion.comparacion_productos.reduce((s, p) => s + p.costo_total, 0))}
                     </td>
                   )}
@@ -582,10 +584,10 @@ export function ReporteAplicacion({ aplicacion, onClose }: ReporteAplicacionProp
       {/* ============================================================ */}
       {/* SECTION F: OPERATIONAL DETAILS (Tier 4) */}
       {/* ============================================================ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
         {/* Left: Lot breakdown */}
-        <div className="bg-white rounded-2xl p-6 border border-gray-200">
-          <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+        <div className="bg-white rounded-2xl p-4 lg:p-6 border border-gray-200">
+          <h3 className="text-base lg:text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
             <MapPin className="w-5 h-5 text-primary" />
             Lotes Tratados
           </h3>
@@ -608,8 +610,8 @@ export function ReporteAplicacion({ aplicacion, onClose }: ReporteAplicacionProp
         </div>
 
         {/* Right: Observations + Metadata */}
-        <div className="bg-white rounded-2xl p-6 border border-gray-200">
-          <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+        <div className="bg-white rounded-2xl p-4 lg:p-6 border border-gray-200">
+          <h3 className="text-base lg:text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
             <FileText className="w-5 h-5 text-primary" />
             Observaciones y Metadata
           </h3>
