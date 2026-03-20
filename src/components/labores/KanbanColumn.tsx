@@ -48,7 +48,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
       </div>
 
       {/* Scrollable card area */}
-      <ScrollArea className="flex-1 min-h-0 px-3 pb-3" style={{ maxHeight: 'calc(100vh - 260px)' }}>
+      <ScrollArea className="flex-1 min-h-0 px-3 pb-3" style={{ maxHeight: 'calc(100dvh - 260px)' }}>
         <div className="space-y-2">
           {tareas.length === 0 ? (
             /* Empty state */

@@ -260,6 +260,38 @@ input[type='number'] {
   appearance: textfield !important;
 }
 
+/* Safe viewport height — uses dvh with vh fallback for mobile Safari address bar */
+.h-screen-safe {
+  height: 100vh;
+  height: 100dvh;
+}
+.min-h-screen-safe {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+.max-h-screen-safe {
+  max-height: 100vh;
+  max-height: 100dvh;
+}
+
+/* Touch-friendly tap targets on mobile */
+@media (max-width: 1023px) {
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Mobile overscroll prevention for fixed panels */
+.overscroll-contain {
+  overscroll-behavior: contain;
+}
+
+/* Ensure safe area padding for notched devices */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 /* Hide scrollbar but keep functionality */
 .scrollbar-hide {
   -ms-overflow-style: none;  /* IE and Edge */

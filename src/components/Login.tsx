@@ -38,7 +38,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
   };
 
   return (
-    <div className="min-h-screen bg-[#DEE5CC] flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen min-h-[100dvh] bg-[#DEE5CC] flex items-center justify-center p-4 relative overflow-hidden">
       {/* Decorative background elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-20 -left-20 w-72 h-72 bg-primary/5 rounded-full blur-3xl"></div>

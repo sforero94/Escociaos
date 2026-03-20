@@ -14,7 +14,7 @@ export function ChatFAB() {
       <button
         onClick={() => setOpen(true)}
         className="fixed z-50 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105 active:scale-95"
-        style={{ bottom: '1.5rem', right: '1.5rem' }}
+        style={{ bottom: 'max(1.5rem, env(safe-area-inset-bottom, 0px))', right: '1.5rem' }}
         aria-label="Abrir chat Esco"
       >
         <MessageCircle className="h-6 w-6" />
