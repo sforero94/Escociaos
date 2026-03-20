@@ -25,12 +25,12 @@ export function ChatEmptyState({ onSelectPrompt }: ChatEmptyStateProps) {
           Tu asistente de datos de Escocia Hass. Preguntame sobre labores, monitoreo, finanzas y mas.
         </p>
       </div>
-      <div className="flex flex-wrap justify-center gap-2">
+      <div className="flex flex-wrap justify-center gap-2.5 px-2">
         {SUGGESTED_PROMPTS.map((prompt) => (
           <button
             key={prompt}
             onClick={() => onSelectPrompt(prompt)}
-            className="rounded-full border border-border bg-background px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-muted"
+            className="rounded-full border border-border bg-background px-4 py-2.5 text-sm text-foreground transition-colors hover:bg-muted active:bg-muted"
           >
             {prompt}
           </button>
