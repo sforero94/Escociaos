@@ -569,8 +569,11 @@ export function DashboardMonitoreoV3() {
       return { dominio: 'CE', icon: Zap, estado: 'sin_datos', label: 'Sin datos', detalle: 'No hay lecturas' };
     }
 
-    // Aggregate all latest lecturas
-    const todasLecturas = resumen.flatMap(r => r.lecturas);
+    // Use only the most recent fecha_monitoreo to avoid mixing dates
+    const maxFecha = resumen.reduce((max, r) => r.fecha > max ? r.fecha : max, '');
+    const resumenReciente = resumen.filter(r => r.fecha === maxFecha);
+
+    const todasLecturas = resumenReciente.flatMap(r => r.lecturas);
     const dist = calcularDistribucionCE(todasLecturas);
     const estado: EstadoSemaforo = dist.pctEnRango > 80 ? 'verde' : dist.pctEnRango >= 50 ? 'amarillo' : 'rojo';
     return {
