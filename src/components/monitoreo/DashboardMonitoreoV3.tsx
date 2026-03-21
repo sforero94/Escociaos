@@ -255,7 +255,8 @@ export function DashboardMonitoreoV3() {
       const { data } = await supabase
         .from('mon_conductividad')
         .select('id, fecha_monitoreo, lote_id, valor_ce, lecturas, lotes(nombre)')
-        .order('fecha_monitoreo', { ascending: true });
+        .order('fecha_monitoreo', { ascending: true })
+        .order('created_at', { ascending: true });
 
       if (data) {
         setCeHistorico(
@@ -749,7 +750,7 @@ export function DashboardMonitoreoV3() {
     for (const r of ceHistorico) {
       if (!r.lecturas || r.lecturas.length === 0) continue;
       const existing = loteMasReciente.get(r.lote_id);
-      if (!existing || r.fecha_monitoreo > existing.fecha_monitoreo) {
+      if (!existing || r.fecha_monitoreo >= existing.fecha_monitoreo) {
         loteMasReciente.set(r.lote_id, r);
       }
     }
