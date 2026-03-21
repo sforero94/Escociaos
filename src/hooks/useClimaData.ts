@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
-import type { LecturaClima, PeriodoResumen, LecturaClimaAgregada } from '@/types/clima';
+import type { LecturaClima, PeriodoResumen, LecturaClimaAgregada, SerieAnual } from '@/types/clima';
 import {
   lecturaActual as getLecturaActual,
   calcularResumenPeriodo,
   calcularResumenAnioALaFecha,
   agregarParaGrafico,
+  agregarParaGraficoAnual,
 } from '@/utils/calculosClima';
 
 // Exported for testing
@@ -22,6 +23,7 @@ interface UseClimaDataReturn {
   lecturaActual: LecturaClima | null;
   resumenPeriodos: PeriodoResumen[];
   serieHistorica: LecturaClimaAgregada[];
+  serieAnual: SerieAnual | null;
   rawLecturas: LecturaClima[];
   estacionConfigurada: boolean;
   loading: boolean;
@@ -47,12 +49,9 @@ export function useClimaData(): UseClimaDataReturn {
       setError(null);
 
       const supabase = getSupabase();
-      const last365 = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
-
       const { data, error: supabaseError } = await (supabase
         .from('clima_lecturas' as any)
         .select('*')
-        .gte('timestamp', last365)
         .order('timestamp', { ascending: true }) as any);
 
       if (supabaseError) {
@@ -92,6 +91,13 @@ export function useClimaData(): UseClimaDataReturn {
     [rawLecturas, rangoHistorico]
   );
 
+  const serieAnual = useMemo((): SerieAnual | null => {
+    const rangoMs = rangoHistorico.hasta.getTime() - rangoHistorico.desde.getTime();
+    const rangoDias = rangoMs / (24 * 60 * 60 * 1000);
+    if (rangoDias <= 365) return null;
+    return agregarParaGraficoAnual(rawLecturas, rangoHistorico.desde, rangoHistorico.hasta);
+  }, [rawLecturas, rangoHistorico]);
+
   const setRangoHistorico = useCallback((desde: Date, hasta: Date) => {
     setRangoHistoricoState({ desde, hasta });
   }, []);
@@ -100,6 +106,7 @@ export function useClimaData(): UseClimaDataReturn {
     lecturaActual: actual,
     resumenPeriodos,
     serieHistorica,
+    serieAnual,
     rawLecturas,
     estacionConfigurada: rawLecturas.length > 0,
     loading,

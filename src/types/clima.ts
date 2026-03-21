@@ -43,3 +43,14 @@ export interface LecturaClimaAgregada {
   lluvia_diaria_mm: number | null;
   radiacion_wm2_promedio: number | null;
 }
+
+export interface DatoAnualOverlay {
+  mes: string;
+  mesNum: number;
+  [key: string]: string | number | null;
+}
+
+export interface SerieAnual {
+  datos: DatoAnualOverlay[];
+  años: number[];
+}
