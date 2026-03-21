@@ -20,6 +20,7 @@ import {
 import { toast } from 'sonner';
 import { getSupabase } from '../../utils/supabase/client';
 import { calcularIncidencia, clasificarGravedad } from '../../utils/calculosMonitoreo';
+import { asignarRonda } from '../../utils/calculosMonitoreoV2';
 
 import type { Lote, Sublote } from '../../types/shared';
 
@@ -63,7 +64,12 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
   const [plagasDetectadas, setPlagasDetectadas] = useState<PlagaDetectada[]>([]);
   const [plagaSeleccionada, setPlagaSeleccionada] = useState<string>('');
   const [observaciones, setObservaciones] = useState<string>('');
-  
+
+  // Floración
+  const [floracionBrotes, setFloracionBrotes] = useState<number>(0);
+  const [floracionFlorMadura, setFloracionFlorMadura] = useState<number>(0);
+  const [floracionCuaje, setFloracionCuaje] = useState<number>(0);
+
   // UI
   const [loading, setLoading] = useState(false);
   const [mostrarSelectMonitores, setMostrarSelectMonitores] = useState(false);
@@ -233,6 +239,9 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
       // Preparar monitores como string
       const monitoresStr = monitores.join(', ');
 
+      // Asignar ronda automáticamente
+      const rondaId = await asignarRonda(supabase, fecha);
+
       // Crear un registro por cada plaga detectada
       const registros = plagasDetectadas.map(plaga => {
         const incidencia = calcularIncidencia(plaga.arboles_afectados, arbolesMonitoreados);
@@ -249,7 +258,11 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
           gravedad_texto: gravedad.texto,
           gravedad_numerica: gravedad.numerica,
           monitor: monitoresStr,
-          observaciones: observaciones || null
+          observaciones: observaciones || null,
+          floracion_brotes: floracionBrotes,
+          floracion_flor_madura: floracionFlorMadura,
+          floracion_cuaje: floracionCuaje,
+          ronda_id: rondaId,
         };
       });
 
@@ -290,6 +303,9 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
     setPlagasDetectadas([]);
     setPlagaSeleccionada('');
     setObservaciones('');
+    setFloracionBrotes(0);
+    setFloracionFlorMadura(0);
+    setFloracionCuaje(0);
   }
 
   function limpiarFormulario() {
@@ -301,6 +317,9 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
     setPlagasDetectadas([]);
     setPlagaSeleccionada('');
     setObservaciones('');
+    setFloracionBrotes(0);
+    setFloracionFlorMadura(0);
+    setFloracionCuaje(0);
   }
 
   function handleClose() {
@@ -554,6 +573,46 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
               className="mt-1 w-full px-3 py-2 border border-secondary/30 rounded-md focus:outline-none focus:ring-2 focus:ring-primary resize-none"
               placeholder="Notas adicionales..."
             />
+          </div>
+
+          {/* FLORACIÓN */}
+          <div className="border-t border-secondary/30 pt-4">
+            <h3 className="font-semibold text-foreground mb-3">🌸 Estado de Floración (árboles por estado)</h3>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label className="text-xs">Brotes</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={floracionBrotes}
+                  onChange={(e) => setFloracionBrotes(parseInt(e.target.value) || 0)}
+                  onWheel={(e) => e.currentTarget.blur()}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Flor madura</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={floracionFlorMadura}
+                  onChange={(e) => setFloracionFlorMadura(parseInt(e.target.value) || 0)}
+                  onWheel={(e) => e.currentTarget.blur()}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Cuaje</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={floracionCuaje}
+                  onChange={(e) => setFloracionCuaje(parseInt(e.target.value) || 0)}
+                  onWheel={(e) => e.currentTarget.blur()}
+                  className="mt-1"
+                />
+              </div>
+            </div>
           </div>
 
           {/* BOTONES */}

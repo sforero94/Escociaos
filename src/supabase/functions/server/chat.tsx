@@ -18,6 +18,12 @@ interface ToolDefinition {
   parameters: Record<string, unknown>;
 }
 
+interface ToolInteraction {
+  tool: string;
+  args: Record<string, unknown>;
+  result_summary: string;
+}
+
 // ============================================================================
 // SUPABASE ADMIN CLIENT
 // ============================================================================
@@ -275,6 +281,31 @@ const TOOLS: ToolDefinition[] = [
       },
     },
   },
+  {
+    name: 'get_conductivity_data',
+    description: 'Obtiene datos de conductividad eléctrica (CE) del suelo por lote: promedios, estado semáforo (verde <0.5, amarillo 0.5-1.5, rojo >1.5 dS/m), tendencias.',
+    parameters: {
+      type: 'object',
+      properties: {
+        lote_name: { type: 'string', description: 'Nombre parcial del lote (opcional)' },
+        date_from: { type: 'string', description: 'Fecha inicio YYYY-MM-DD (opcional)' },
+        date_to: { type: 'string', description: 'Fecha fin YYYY-MM-DD (opcional)' },
+      },
+    },
+  },
+  {
+    name: 'get_beehive_data',
+    description: 'Obtiene estado de salud de colmenas por apiario: fuertes, débiles, muertas, con reina. También lista apiarios configurados con ubicación y total de colmenas.',
+    parameters: {
+      type: 'object',
+      properties: {
+        apiario_name: { type: 'string', description: 'Nombre parcial del apiario (opcional)' },
+        date_from: { type: 'string', description: 'Fecha inicio YYYY-MM-DD (opcional)' },
+        date_to: { type: 'string', description: 'Fecha fin YYYY-MM-DD (opcional)' },
+        include_config: { type: 'boolean', description: 'Incluir lista de apiarios configurados (default true)' },
+      },
+    },
+  },
 ];
 
 // ============================================================================
@@ -283,25 +314,63 @@ const TOOLS: ToolDefinition[] = [
 
 const e = encodeURIComponent;
 
+function validateDates(args: Record<string, unknown>): { date_from?: string; date_to?: string } {
+  let { date_from, date_to } = args as { date_from?: string; date_to?: string };
+
+  const clampDate = (d: string): string => {
+    const parts = d.split('-').map(Number);
+    const [y, m, day] = parts;
+    if (!y || !m || !day) return d;
+    const lastDay = new Date(y, m, 0).getDate();
+    if (day > lastDay) {
+      return `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    }
+    return d;
+  };
+
+  if (date_from) date_from = clampDate(date_from);
+  if (date_to) date_to = clampDate(date_to);
+  if (date_from && date_to && date_from > date_to) {
+    [date_from, date_to] = [date_to, date_from];
+  }
+
+  return { date_from, date_to };
+}
+
 async function executeTool(name: string, args: Record<string, unknown>): Promise<string> {
   try {
+    let result: string;
     switch (name) {
-      case 'get_labor_summary': return await execLaborSummary(args);
-      case 'get_employee_activity': return await execEmployeeActivity(args);
-      case 'get_monitoring_data': return await execMonitoringData(args);
-      case 'get_application_summary': return await execApplicationSummary(args);
-      case 'get_inventory_status': return await execInventoryStatus(args);
-      case 'get_financial_summary': return await execFinancialSummary(args);
-      case 'get_production_data': return await execProductionData(args);
-      case 'get_harvest_shipments': return await execHarvestShipments(args);
-      case 'get_lot_info': return await execLotInfo(args);
-      case 'get_purchase_history': return await execPurchaseHistory(args);
-      case 'get_inventory_movements': return await execInventoryMovements(args);
-      case 'get_application_details': return await execApplicationDetails(args);
-      case 'get_weekly_overview': return await execWeeklyOverview(args);
-      case 'get_climate_data': return await execClimateData(args);
+      case 'get_labor_summary': result = await execLaborSummary(args); break;
+      case 'get_employee_activity': result = await execEmployeeActivity(args); break;
+      case 'get_monitoring_data': result = await execMonitoringData(args); break;
+      case 'get_application_summary': result = await execApplicationSummary(args); break;
+      case 'get_inventory_status': result = await execInventoryStatus(args); break;
+      case 'get_financial_summary': result = await execFinancialSummary(args); break;
+      case 'get_production_data': result = await execProductionData(args); break;
+      case 'get_harvest_shipments': result = await execHarvestShipments(args); break;
+      case 'get_lot_info': result = await execLotInfo(args); break;
+      case 'get_purchase_history': result = await execPurchaseHistory(args); break;
+      case 'get_inventory_movements': result = await execInventoryMovements(args); break;
+      case 'get_application_details': result = await execApplicationDetails(args); break;
+      case 'get_weekly_overview': result = await execWeeklyOverview(args); break;
+      case 'get_climate_data': result = await execClimateData(args); break;
+      case 'get_conductivity_data': result = await execConductivityData(args); break;
+      case 'get_beehive_data': result = await execBeehiveData(args); break;
       default: return JSON.stringify({ error: `Tool desconocido: ${name}` });
     }
+
+    // Add diagnostic info when no results found
+    try {
+      const parsed = JSON.parse(result);
+      if (parsed.total_registros === 0) {
+        parsed._parametros_usados = args;
+        parsed._sugerencia = 'Verificar rango de fechas y ortografía de nombres. Intenta ampliar el rango o usar nombres parciales.';
+        return JSON.stringify(parsed);
+      }
+    } catch { /* not JSON or parse error, return as-is */ }
+
+    return result;
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Error ejecutando tool';
     return JSON.stringify({ error: msg });
@@ -309,9 +378,9 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
 }
 
 async function execLaborSummary(args: Record<string, unknown>): Promise<string> {
-  const { date_from, date_to, employee_name, lote_name } = args as {
-    date_from: string; date_to: string; employee_name?: string; lote_name?: string;
-  };
+  const validated = validateDates(args);
+  const { date_from, date_to } = validated as { date_from: string; date_to: string };
+  const { employee_name, lote_name } = args as { employee_name?: string; lote_name?: string };
 
   let query = `select=id,fecha_trabajo,fraccion_jornal,observaciones,empleado:empleados(nombre,tipo_contrato,salario,prestaciones_sociales,auxilios_no_salariales),contratista:contratistas(nombre,tarifa_jornal),tarea:tareas(nombre,tipo_tarea:tipos_tareas(nombre)),lote:lotes(nombre)&fecha_trabajo=gte.${e(date_from)}&fecha_trabajo=lte.${e(date_to)}&order=fecha_trabajo.desc&limit=2000`;
 
@@ -398,7 +467,7 @@ async function execLaborSummary(args: Record<string, unknown>): Promise<string> 
     }, {} as Record<string, { jornales: number; costo: number }>);
 
   const costoPromedioJornal = totalJornales > 0 ? Math.round(totalCosto / totalJornales) : 0;
-  return JSON.stringify({
+  const result: Record<string, unknown> = {
     periodo: { desde: date_from, hasta: date_to },
     total_registros: filtered.length,
     total_jornales: totalJornales,
@@ -410,7 +479,13 @@ async function execLaborSummary(args: Record<string, unknown>): Promise<string> 
     por_mes: porMes,
     por_empleado: porEmpleadoTop,
     detalle: filtered.slice(0, 20),
-  });
+  };
+
+  if ((data as unknown[]).length === 2000) {
+    result.advertencia = 'Resultado limitado a 2000 registros. Los totales pueden ser parciales para períodos largos.';
+  }
+
+  return JSON.stringify(result);
 }
 
 function computeWorkerSummary(regs: Array<Record<string, unknown>>) {
@@ -465,11 +540,11 @@ async function execEmployeeActivity(args: Record<string, unknown>): Promise<stri
 }
 
 async function execMonitoringData(args: Record<string, unknown>): Promise<string> {
-  const { lote_name, pest_name, date_from, date_to } = args as {
-    lote_name?: string; pest_name?: string; date_from?: string; date_to?: string;
-  };
+  const validated = validateDates(args);
+  const { date_from, date_to } = validated;
+  const { lote_name, pest_name } = args as { lote_name?: string; pest_name?: string };
 
-  let query = `select=id,fecha_monitoreo,incidencia,severidad,gravedad_texto,arboles_monitoreados,arboles_afectados,individuos_encontrados,observaciones,lote:lotes(nombre),sublote:sublotes(nombre),plaga:plagas_enfermedades_catalogo(nombre,tipo)&order=fecha_monitoreo.desc&limit=3000`;
+  let query = `select=id,fecha_monitoreo,incidencia,severidad,gravedad_texto,arboles_monitoreados,arboles_afectados,individuos_encontrados,observaciones,floracion_brotes,floracion_flor_madura,floracion_cuaje,ronda_id,lote:lotes(nombre),sublote:sublotes(nombre),plaga:plagas_enfermedades_catalogo(nombre,tipo)&order=fecha_monitoreo.desc&limit=3000`;
 
   if (date_from) query += `&fecha_monitoreo=gte.${e(date_from)}`;
   if (date_to) query += `&fecha_monitoreo=lte.${e(date_to)}`;
@@ -537,18 +612,33 @@ async function execMonitoringData(args: Record<string, unknown>): Promise<string
     };
   }
 
+  // Flowering summary
+  const floracionTotal = { brotes: 0, florMadura: 0, cuaje: 0, registros: 0 };
+  for (const r of filtered) {
+    const b = (r.floracion_brotes as number) || 0;
+    const fm = (r.floracion_flor_madura as number) || 0;
+    const c = (r.floracion_cuaje as number) || 0;
+    if (b + fm + c > 0) {
+      floracionTotal.brotes += b;
+      floracionTotal.florMadura += fm;
+      floracionTotal.cuaje += c;
+      floracionTotal.registros++;
+    }
+  }
+
   return JSON.stringify({
     total_registros: filtered.length,
     resumen_por_mes: byMonthSerialized,
     resumen_por_plaga: byPest,
+    resumen_floracion: floracionTotal,
     detalle: filtered.slice(0, 20),
   });
 }
 
 async function execApplicationSummary(args: Record<string, unknown>): Promise<string> {
-  const { application_id, date_from, date_to, type } = args as {
-    application_id?: string; date_from?: string; date_to?: string; type?: string;
-  };
+  const validated = validateDates(args);
+  const { date_from, date_to } = validated;
+  const { application_id, type } = args as { application_id?: string; type?: string };
 
   let query = `select=id,nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_fin_planeada,fecha_cierre,blanco_biologico,costo_total,jornales_utilizados,observaciones_cierre&order=fecha_inicio_planeada.desc&limit=30`;
 
@@ -636,9 +726,9 @@ async function execInventoryStatus(args: Record<string, unknown>): Promise<strin
 }
 
 async function execFinancialSummary(args: Record<string, unknown>): Promise<string> {
-  const { date_from, date_to, type, negocio_name, search_term } = args as {
-    date_from: string; date_to: string; type?: string; negocio_name?: string; search_term?: string;
-  };
+  const validated = validateDates(args);
+  const { date_from, date_to } = validated as { date_from: string; date_to: string };
+  const { type, negocio_name, search_term } = args as { type?: string; negocio_name?: string; search_term?: string };
 
   // If negocio_name is provided, resolve the negocio IDs first
   let negocioIds: string[] = [];
@@ -879,9 +969,9 @@ async function execLotInfo(args: Record<string, unknown>): Promise<string> {
 }
 
 async function execPurchaseHistory(args: Record<string, unknown>): Promise<string> {
-  const { date_from, date_to, product_name, proveedor } = args as {
-    date_from?: string; date_to?: string; product_name?: string; proveedor?: string;
-  };
+  const validated = validateDates(args);
+  const { date_from, date_to } = validated;
+  const { product_name, proveedor } = args as { product_name?: string; proveedor?: string };
 
   let query = `select=id,fecha_compra,proveedor,numero_factura,cantidad,unidad,costo_unitario,costo_total,producto:productos(nombre,categoria)&order=fecha_compra.desc&limit=2000`;
   if (date_from) query += `&fecha_compra=gte.${e(date_from)}`;
@@ -944,9 +1034,9 @@ async function execPurchaseHistory(args: Record<string, unknown>): Promise<strin
 }
 
 async function execInventoryMovements(args: Record<string, unknown>): Promise<string> {
-  const { product_name, date_from, date_to, tipo } = args as {
-    product_name?: string; date_from?: string; date_to?: string; tipo?: string;
-  };
+  const validated = validateDates(args);
+  const { date_from, date_to } = validated;
+  const { product_name, tipo } = args as { product_name?: string; tipo?: string };
 
   let movQuery = `select=id,fecha_movimiento,tipo_movimiento,cantidad,unidad,saldo_anterior,saldo_nuevo,valor_movimiento,observaciones,producto:productos(nombre,categoria)&order=fecha_movimiento.desc&limit=2000`;
   if (date_from) movQuery += `&fecha_movimiento=gte.${e(date_from)}`;
@@ -1082,8 +1172,9 @@ async function execWeeklyOverview(args: Record<string, unknown>): Promise<string
   const defaultTo = new Date(defaultFrom);
   defaultTo.setDate(defaultFrom.getDate() + 6);
 
-  const dateFrom = (args.date_from as string) || defaultFrom.toISOString().split('T')[0];
-  const dateTo = (args.date_to as string) || defaultTo.toISOString().split('T')[0];
+  const validatedWeek = validateDates(args);
+  const dateFrom = validatedWeek.date_from || defaultFrom.toISOString().split('T')[0];
+  const dateTo = validatedWeek.date_to || defaultTo.toISOString().split('T')[0];
 
   const [labor, monitoring, applications, harvest] = await Promise.all([
     execLaborSummary({ date_from: dateFrom, date_to: dateTo }),
@@ -1106,15 +1197,14 @@ async function execWeeklyOverview(args: Record<string, unknown>): Promise<string
 // ============================================================================
 
 async function execClimateData(args: Record<string, unknown>): Promise<string> {
-  const { date_from, date_to, metric } = args as {
-    date_from?: string; date_to?: string; metric?: string;
-  };
+  const validated = validateDates(args);
+  const { metric } = args as { metric?: string };
 
   // Default: last 7 days
   const now = new Date();
   const defaultFrom = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const from = date_from || defaultFrom;
-  const to = date_to || now.toISOString().split('T')[0];
+  const from = validated.date_from || defaultFrom;
+  const to = validated.date_to || now.toISOString().split('T')[0];
 
   // Fetch readings
   let query = `select=timestamp,temp_c,humedad_pct,viento_kmh,rafaga_kmh,viento_dir,lluvia_diaria_mm,lluvia_tasa_mm_hr,radiacion_wm2,uv_index`;
@@ -1179,14 +1269,15 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
   };
 
   // Daily breakdown (for charts or detail)
-  const porDia = new Map<string, { temps: number[]; humedad: number[]; viento: number[]; lluvia: number }>();
+  const porDia = new Map<string, { temps: number[]; humedad: number[]; viento: number[]; lluvia: number; radiacion: number[] }>();
   for (const r of readings) {
     const day = String(r.timestamp).split('T')[0];
-    if (!porDia.has(day)) porDia.set(day, { temps: [], humedad: [], viento: [], lluvia: 0 });
+    if (!porDia.has(day)) porDia.set(day, { temps: [], humedad: [], viento: [], lluvia: 0, radiacion: [] });
     const d = porDia.get(day)!;
     if (r.temp_c != null) d.temps.push(r.temp_c as number);
     if (r.humedad_pct != null) d.humedad.push(r.humedad_pct as number);
     if (r.viento_kmh != null) d.viento.push(r.viento_kmh as number);
+    if (r.radiacion_wm2 != null) d.radiacion.push(r.radiacion_wm2 as number);
     d.lluvia = Math.max(d.lluvia, (r.lluvia_diaria_mm as number) ?? 0);
   }
 
@@ -1200,6 +1291,8 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
       humedad_avg: avg(d.humedad),
       viento_avg: avg(d.viento),
       lluvia_mm: Math.round(d.lluvia * 10) / 10,
+      radiacion_avg: avg(d.radiacion),
+      radiacion_max: max(d.radiacion),
     }));
 
   result.detalle_diario = detalle_diario;
@@ -1231,11 +1324,174 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
 }
 
 // ============================================================================
+// CONDUCTIVITY DATA
+// ============================================================================
+
+async function execConductivityData(args: Record<string, unknown>): Promise<string> {
+  const validated = validateDates(args);
+  const { date_from, date_to } = validated;
+  const { lote_name } = args as { lote_name?: string };
+
+  let query = `select=id,fecha_lectura,valor_ce,unidad,profundidad_cm,observaciones,lote:lotes(nombre)&order=fecha_lectura.desc&limit=2000`;
+  if (date_from) query += `&fecha_lectura=gte.${e(date_from)}`;
+  if (date_to) query += `&fecha_lectura=lte.${e(date_to)}`;
+
+  const data = await supabaseQuery('mon_conductividad', query);
+
+  let filtered = data as Array<Record<string, unknown>>;
+  if (lote_name) {
+    const ln = lote_name.toLowerCase();
+    filtered = filtered.filter((r) => ((r.lote as Record<string, unknown>)?.nombre as string || '').toLowerCase().includes(ln));
+  }
+
+  // Summary by lote
+  const byLote: Record<string, { sum: number; count: number; min: number; max: number }> = {};
+  const byMonth: Record<string, { sum: number; count: number }> = {};
+
+  for (const r of filtered) {
+    const ce = (r.valor_ce as number) || 0;
+    const loteName = (r.lote as Record<string, unknown>)?.nombre as string || 'Sin lote';
+
+    if (!byLote[loteName]) byLote[loteName] = { sum: 0, count: 0, min: Infinity, max: -Infinity };
+    byLote[loteName].sum += ce;
+    byLote[loteName].count++;
+    byLote[loteName].min = Math.min(byLote[loteName].min, ce);
+    byLote[loteName].max = Math.max(byLote[loteName].max, ce);
+
+    const fecha = (r.fecha_lectura as string) || '';
+    const mes = fecha.slice(0, 7);
+    if (mes) {
+      if (!byMonth[mes]) byMonth[mes] = { sum: 0, count: 0 };
+      byMonth[mes].sum += ce;
+      byMonth[mes].count++;
+    }
+  }
+
+  const getSemaforo = (ce: number) => ce < 0.5 ? 'verde' : ce <= 1.5 ? 'amarillo' : 'rojo';
+
+  const resumenPorLote: Record<string, unknown> = {};
+  for (const [lote, data] of Object.entries(byLote)) {
+    const promedio = Math.round(data.sum / data.count * 100) / 100;
+    resumenPorLote[lote] = {
+      promedio_ce: promedio,
+      min_ce: Math.round(data.min * 100) / 100,
+      max_ce: Math.round(data.max * 100) / 100,
+      registros: data.count,
+      estado: getSemaforo(promedio),
+    };
+  }
+
+  const resumenPorMes: Record<string, unknown> = {};
+  for (const [mes, data] of Object.entries(byMonth)) {
+    resumenPorMes[mes] = {
+      promedio_ce: Math.round(data.sum / data.count * 100) / 100,
+      registros: data.count,
+    };
+  }
+
+  return JSON.stringify({
+    total_registros: filtered.length,
+    resumen_por_lote: resumenPorLote,
+    resumen_por_mes: resumenPorMes,
+    umbrales: { verde: '<0.5 dS/m', amarillo: '0.5-1.5 dS/m', rojo: '>1.5 dS/m' },
+    detalle: filtered.slice(0, 10),
+  });
+}
+
+// ============================================================================
+// BEEHIVE DATA
+// ============================================================================
+
+async function execBeehiveData(args: Record<string, unknown>): Promise<string> {
+  const validated = validateDates(args);
+  const { date_from, date_to } = validated;
+  const { apiario_name, include_config } = args as { apiario_name?: string; include_config?: boolean };
+
+  // Query apiarios config
+  let apiariosConfig: unknown[] = [];
+  if (include_config !== false) {
+    apiariosConfig = await supabaseQuery('apiarios', `select=id,nombre,ubicacion,total_colmenas,activo&order=nombre.asc`);
+  }
+
+  // Query beehive monitoring data
+  let query = `select=id,fecha_inspeccion,colmenas_fuertes,colmenas_debiles,colmenas_muertas,colmenas_con_reina,observaciones,apiario:apiarios(nombre)&order=fecha_inspeccion.desc&limit=2000`;
+  if (date_from) query += `&fecha_inspeccion=gte.${e(date_from)}`;
+  if (date_to) query += `&fecha_inspeccion=lte.${e(date_to)}`;
+
+  const data = await supabaseQuery('mon_colmenas', query);
+
+  let filtered = data as Array<Record<string, unknown>>;
+  if (apiario_name) {
+    const an = apiario_name.toLowerCase();
+    filtered = filtered.filter((r) => ((r.apiario as Record<string, unknown>)?.nombre as string || '').toLowerCase().includes(an));
+  }
+
+  // Summary by apiario
+  const byApiario: Record<string, { fuertes: number; debiles: number; muertas: number; con_reina: number; registros: number }> = {};
+  const byMonth: Record<string, { fuertes: number; total: number; registros: number }> = {};
+
+  for (const r of filtered) {
+    const apiarioName = (r.apiario as Record<string, unknown>)?.nombre as string || 'Sin apiario';
+    const fuertes = (r.colmenas_fuertes as number) || 0;
+    const debiles = (r.colmenas_debiles as number) || 0;
+    const muertas = (r.colmenas_muertas as number) || 0;
+    const conReina = (r.colmenas_con_reina as number) || 0;
+
+    if (!byApiario[apiarioName]) byApiario[apiarioName] = { fuertes: 0, debiles: 0, muertas: 0, con_reina: 0, registros: 0 };
+    byApiario[apiarioName].fuertes += fuertes;
+    byApiario[apiarioName].debiles += debiles;
+    byApiario[apiarioName].muertas += muertas;
+    byApiario[apiarioName].con_reina += conReina;
+    byApiario[apiarioName].registros++;
+
+    const fecha = (r.fecha_inspeccion as string) || '';
+    const mes = fecha.slice(0, 7);
+    if (mes) {
+      if (!byMonth[mes]) byMonth[mes] = { fuertes: 0, total: 0, registros: 0 };
+      byMonth[mes].fuertes += fuertes;
+      byMonth[mes].total += fuertes + debiles + muertas;
+      byMonth[mes].registros++;
+    }
+  }
+
+  // Enrich apiario summaries with % fuertes and semáforo
+  const resumenPorApiario: Record<string, unknown> = {};
+  for (const [name, data] of Object.entries(byApiario)) {
+    const total = data.fuertes + data.debiles + data.muertas;
+    const pctFuertes = total > 0 ? Math.round(data.fuertes / total * 100) : 0;
+    resumenPorApiario[name] = {
+      ...data,
+      total_colmenas_inspeccionadas: total,
+      pct_fuertes: pctFuertes,
+      estado: pctFuertes >= 70 ? 'bueno' : pctFuertes >= 40 ? 'regular' : 'critico',
+    };
+  }
+
+  const resumenPorMes: Record<string, unknown> = {};
+  for (const [mes, data] of Object.entries(byMonth)) {
+    resumenPorMes[mes] = {
+      pct_fuertes: data.total > 0 ? Math.round(data.fuertes / data.total * 100) : 0,
+      registros: data.registros,
+    };
+  }
+
+  return JSON.stringify({
+    apiarios_configurados: apiariosConfig,
+    total_registros: filtered.length,
+    resumen_por_apiario: resumenPorApiario,
+    resumen_por_mes: resumenPorMes,
+    detalle: filtered.slice(0, 10),
+  });
+}
+
+// ============================================================================
 // SYSTEM PROMPT
 // ============================================================================
 
 export function getSystemPrompt(): string {
   const hoy = new Date().toISOString().split('T')[0];
+  const diasSemana = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  const diaSemana = diasSemana[new Date().getDay()];
   return `Eres "Esco", el asistente de datos de Escocia Hass, una finca de aguacate Hass en Colombia.
 Tu rol es consultar datos operativos de la finca y responder preguntas del gerente.
 
@@ -1246,31 +1502,25 @@ REGLAS:
 - Si no tienes datos suficientes, dilo claramente
 - Formatea cifras de dinero en COP con separadores de miles ($1.250.000)
 - Usa porcentajes y comparaciones cuando sean utiles
-- Si la pregunta es ambigua, pide aclaracion
 - NO puedes modificar datos, solo consultarlos
 - Cuando muestres tablas o listas, usa formato markdown
-- Fecha actual: ${hoy}
+- Solo pide aclaracion cuando genuinamente NO puedas determinar que datos quiere el usuario. NO pidas confirmacion de fechas, años o rangos que se puedan inferir razonablemente.
 
-DOMINIOS DE DATOS DISPONIBLES:
-- Labores: tareas, registros de trabajo, jornales por empleado/contratista/lote
-- Empleados y Contratistas: personal, cargos, salarios, tarifas
-- Monitoreo: plagas/enfermedades, incidencia, severidad, tendencias por lote
-- Aplicaciones: fumigaciones, fertilizaciones, drench, productos usados, costos
-- Inventario: productos agricolas, stock, movimientos, compras
-- Finanzas: gastos (solo Confirmados), ingresos, transacciones de ganado, categorias, busqueda por nombre
-- Produccion: kilos por lote, kg/arbol, cosechas principal/traviesa
-- Cosechas y Despachos: kilos cosechados, preseleccion, despachos a clientes
-- Lotes: configuracion de la finca, arboles por tamano, sublotes
-- Clima: temperatura, humedad, precipitacion, viento (velocidad/rafaga/direccion), radiacion solar, indice UV — datos de estacion Weather Underground sincronizados cada 5 minutos
-
-COSTOS DE MANO DE OBRA:
-- El costo real por jornal se calcula como (salario + prestaciones_sociales + auxilios_no_salariales) / 22 dias laborales
-- La herramienta de labores calcula esto automaticamente con los datos de cada empleado
-- Para contratistas se usa la tarifa_jornal directamente
-- Usa siempre los valores de costo_total_mano_obra y costo_promedio_jornal que retorna la herramienta, no inventes costos
+MANEJO DE FECHAS (OBLIGATORIO):
+- Fecha actual: ${hoy} (${diaSemana})
+- SIEMPRE infiere rangos de fecha sin pedir aclaracion:
+  - "este mes" → 1 al ultimo dia del mes actual
+  - "el mes pasado" → mes anterior completo
+  - "este trimestre" → Q1(ene-mar), Q2(abr-jun), Q3(jul-sep), Q4(oct-dic) segun mes actual
+  - "este año" → 1 enero a hoy
+  - "esta semana" → lunes a domingo de la semana actual
+  - "la semana pasada" → lunes a domingo de la semana anterior
+  - "diciembre a marzo" → dic del año anterior a mar del actual (si estamos en ene-jun)
+  - "ultimos N meses" → N meses atras hasta hoy
+- NUNCA pidas confirmacion de año o rango cuando se puede inferir razonablemente
 
 FORMATO DE RESPUESTA (prioridad):
-1. GRAFICOS — cuando hay dimension temporal o comparaciones entre categorias, incluye un grafico.
+1. GRAFICOS — cuando hay dimension temporal o comparaciones entre categorias, SIEMPRE incluye gráficos. Nunca digas que no puedes generar graficos.
 2. TABLAS — para datos tabulares detallados, usa tablas markdown.
 3. VIÑETAS — para alertas o hallazgos clave.
 4. TEXTO — solo para explicaciones y contexto narrativo.
@@ -1283,7 +1533,27 @@ Usa bloques de codigo con lenguaje "chart" y JSON valido:
 Tipos: bar (comparar categorias), line (tendencias temporales), pie (distribucion), area (volumenes).
 yFormat: currency (pesos colombianos), number, percent, kg.
 Para multiples series: yKey como array ["serie1","serie2"] con colors array.
-IMPORTANTE: El JSON del grafico debe ser valido y estar en una sola linea o con formato JSON valido. No uses comillas simples ni trailing commas.`;
+IMPORTANTE: El JSON del grafico debe ser valido y estar en una sola linea o con formato JSON valido. No uses comillas simples ni trailing commas.
+
+DOMINIOS DE DATOS DISPONIBLES:
+- Labores: tareas, registros de trabajo, jornales por empleado/contratista/lote
+- Empleados y Contratistas: personal, cargos, salarios, tarifas
+- Monitoreo: plagas/enfermedades, incidencia, severidad, tendencias por lote. Incluye estado fenológico de floración (brotes, flor madura, cuaje)
+- Aplicaciones: fumigaciones, fertilizaciones, drench, productos usados, costos
+- Inventario: productos agricolas, stock, movimientos, compras
+- Finanzas: gastos (solo Confirmados), ingresos, transacciones de ganado, categorias, busqueda por nombre
+- Produccion: kilos por lote, kg/arbol, cosechas principal/traviesa
+- Cosechas y Despachos: kilos cosechados, preseleccion, despachos a clientes
+- Lotes: configuracion de la finca, arboles por tamano, sublotes
+- Conductividad Eléctrica: CE del suelo por lote, promedios, umbrales semáforo (verde <0.5, amarillo 0.5-1.5, rojo >1.5 dS/m)
+- Colmenas y Apiarios: estado de salud (fuertes/débiles/muertas/con reina), configuración de apiarios
+- Clima: temperatura, humedad, precipitacion, viento (velocidad/rafaga/direccion), radiacion solar, indice UV — datos de estacion Weather Underground sincronizados cada 5 minutos
+
+COSTOS DE MANO DE OBRA:
+- El costo real por jornal se calcula como (salario + prestaciones_sociales + auxilios_no_salariales) / 22 dias laborales
+- La herramienta de labores calcula esto automaticamente con los datos de cada empleado
+- Para contratistas se usa la tarifa_jornal directamente
+- Usa siempre los valores de costo_total_mano_obra y costo_promedio_jornal que retorna la herramienta, no inventes costos`;
 }
 
 // ============================================================================
@@ -1291,7 +1561,7 @@ IMPORTANTE: El JSON del grafico debe ser valido y estar en una sola linea o con 
 // ============================================================================
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const MODEL = 'google/gemini-2.5-flash';
+const MODEL = 'google/gemini-3-flash-preview';
 
 function getOpenRouterHeaders(): Record<string, string> {
   const apiKey = Deno.env.get('OPENROUTER_API_KEY');
@@ -1315,10 +1585,11 @@ function getToolsForAPI() {
 }
 
 // Non-streaming call for tool-calling loop
-export async function llmToolLoop(messages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; name?: string }>): Promise<string> {
+export async function llmToolLoop(messages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; name?: string }>): Promise<{ text: string; toolInteractions: ToolInteraction[] }> {
   const headers = getOpenRouterHeaders();
   const tools = getToolsForAPI();
   const maxRounds = 3;
+  const toolInteractions: ToolInteraction[] = [];
 
   for (let round = 0; round < maxRounds; round++) {
     const controller = new AbortController();
@@ -1335,7 +1606,7 @@ export async function llmToolLoop(messages: Array<{ role: string; content: strin
           tools,
           tool_choice: round === 0 ? 'required' : 'auto',
           temperature: 0.3,
-          max_tokens: 4096,
+          max_tokens: 10000,
         }),
         signal: controller.signal,
       });
@@ -1380,6 +1651,13 @@ export async function llmToolLoop(messages: Array<{ role: string; content: strin
         const toolResult = await executeTool(fnName, fnArgs);
         console.log(`[Esco] Tool result length: ${toolResult.length}`);
 
+        // Track tool interaction for context persistence
+        toolInteractions.push({
+          tool: fnName,
+          args: fnArgs,
+          result_summary: toolResult.slice(0, 500),
+        });
+
         messages.push({
           role: 'tool',
           content: toolResult,
@@ -1392,7 +1670,7 @@ export async function llmToolLoop(messages: Array<{ role: string; content: strin
     }
 
     // No tool calls — return the final text
-    return msg.content || '';
+    return { text: msg.content || '', toolInteractions };
   }
 
   // Fallback: do a final call without tools to force a text response
@@ -1409,7 +1687,7 @@ export async function llmToolLoop(messages: Array<{ role: string; content: strin
 
   if (!finalRes.ok) throw new Error('Error en respuesta final del LLM');
   const finalResult = await finalRes.json();
-  return finalResult.choices?.[0]?.message?.content || 'No pude generar una respuesta.';
+  return { text: finalResult.choices?.[0]?.message?.content || 'No pude generar una respuesta.', toolInteractions };
 }
 
 // Auto-generate title
@@ -1480,16 +1758,24 @@ export async function handleChatMessage(c: Context) {
     content: message.trim(),
   });
 
-  // Load history (last 20 messages)
+  // Load history (last 20 messages) with metadata for tool context
   const history = await supabaseQuery('chat_messages',
-    `select=role,content&conversation_id=eq.${conversationId}&order=created_at.asc&limit=20`
-  ) as Array<{ role: string; content: string }>;
+    `select=role,content,metadata&conversation_id=eq.${conversationId}&order=created_at.asc&limit=20`
+  ) as Array<{ role: string; content: string; metadata?: { tool_interactions?: ToolInteraction[] } }>;
 
-  // Build messages for LLM
+  // Build messages for LLM, injecting tool context from previous turns
   const llmMessages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; name?: string }> = [
     { role: 'system', content: getSystemPrompt() },
-    ...history.map((m) => ({ role: m.role, content: m.content })),
   ];
+  for (const m of history) {
+    if (m.role === 'assistant' && m.metadata?.tool_interactions?.length) {
+      const ctx = m.metadata.tool_interactions
+        .map((t: ToolInteraction) => `[${t.tool}(${JSON.stringify(t.args)}): ${t.result_summary}]`)
+        .join('\n');
+      llmMessages.push({ role: 'system', content: `Datos consultados en la respuesta anterior:\n${ctx}` });
+    }
+    llmMessages.push({ role: m.role, content: m.content });
+  }
 
   // SSE response
   const encoder = new TextEncoder();
@@ -1501,7 +1787,7 @@ export async function handleChatMessage(c: Context) {
 
       try {
         // Tool-calling loop (non-streaming) then stream the final answer
-        const finalText = await llmToolLoop(llmMessages);
+        const { text: finalText, toolInteractions } = await llmToolLoop(llmMessages);
 
         // Stream the final text character by character in chunks
         const chunkSize = 8;
@@ -1512,11 +1798,12 @@ export async function handleChatMessage(c: Context) {
           await new Promise((r) => setTimeout(r, 15));
         }
 
-        // Save assistant message
+        // Save assistant message with tool interaction metadata for context persistence
         await supabaseInsert('chat_messages', {
           conversation_id: conversationId,
           role: 'assistant',
           content: finalText,
+          metadata: { tool_interactions: toolInteractions },
         });
 
         // Auto-title for new conversations

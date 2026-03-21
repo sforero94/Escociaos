@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { BarChart3, List, Upload, Settings } from 'lucide-react';
+import { BarChart3, List, Upload, Settings, Hexagon } from 'lucide-react';
 
 /**
  * Submenú horizontal para las páginas de Monitoreo
@@ -36,6 +36,13 @@ export function MonitoreoSubNav() {
       subtitle: 'Plagas y enfermedades',
       icon: Settings,
       path: '/monitoreo/catalogo',
+    },
+    {
+      id: 'apiarios',
+      label: 'Apiarios',
+      subtitle: 'Colmenas',
+      icon: Hexagon,
+      path: '/monitoreo/apiarios',
     },
   ];
 

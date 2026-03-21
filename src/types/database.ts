@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      apiarios: {
+        Row: {
+          activo: boolean | null
+          created_at: string | null
+          id: string
+          nombre: string
+          total_colmenas: number
+          ubicacion: string | null
+        }
+        Insert: {
+          activo?: boolean | null
+          created_at?: string | null
+          id?: string
+          nombre: string
+          total_colmenas?: number
+          ubicacion?: string | null
+        }
+        Update: {
+          activo?: boolean | null
+          created_at?: string | null
+          id?: string
+          nombre?: string
+          total_colmenas?: number
+          ubicacion?: string | null
+        }
+        Relationships: []
+      }
       aplicaciones: {
         Row: {
           agronomo_responsable: string | null
@@ -598,6 +625,57 @@ export type Database = {
           nit?: string | null
           nombre?: string
           telefono?: string | null
+        }
+        Relationships: []
+      }
+      clima_lecturas: {
+        Row: {
+          created_at: string | null
+          humedad_pct: number | null
+          id: number
+          lluvia_diaria_mm: number | null
+          lluvia_evento_mm: number | null
+          lluvia_tasa_mm_hr: number | null
+          radiacion_wm2: number | null
+          rafaga_kmh: number | null
+          station_id: string
+          temp_c: number | null
+          timestamp: string
+          uv_index: number | null
+          viento_dir: number | null
+          viento_kmh: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          humedad_pct?: number | null
+          id?: never
+          lluvia_diaria_mm?: number | null
+          lluvia_evento_mm?: number | null
+          lluvia_tasa_mm_hr?: number | null
+          radiacion_wm2?: number | null
+          rafaga_kmh?: number | null
+          station_id: string
+          temp_c?: number | null
+          timestamp: string
+          uv_index?: number | null
+          viento_dir?: number | null
+          viento_kmh?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          humedad_pct?: number | null
+          id?: never
+          lluvia_diaria_mm?: number | null
+          lluvia_evento_mm?: number | null
+          lluvia_tasa_mm_hr?: number | null
+          radiacion_wm2?: number | null
+          rafaga_kmh?: number | null
+          station_id?: string
+          temp_c?: number | null
+          timestamp?: string
+          uv_index?: number | null
+          viento_dir?: number | null
+          viento_kmh?: number | null
         }
         Relationships: []
       }
@@ -1663,12 +1741,126 @@ export type Database = {
         }
         Relationships: []
       }
+      mon_colmenas: {
+        Row: {
+          apiario_id: string
+          colmenas_debiles: number
+          colmenas_fuertes: number
+          colmenas_muertas: number
+          created_at: string | null
+          fecha_monitoreo: string
+          id: string
+          monitor: string | null
+          observaciones: string | null
+          ronda_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          apiario_id: string
+          colmenas_debiles?: number
+          colmenas_fuertes?: number
+          colmenas_muertas?: number
+          created_at?: string | null
+          fecha_monitoreo?: string
+          id?: string
+          monitor?: string | null
+          observaciones?: string | null
+          ronda_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          apiario_id?: string
+          colmenas_debiles?: number
+          colmenas_fuertes?: number
+          colmenas_muertas?: number
+          created_at?: string | null
+          fecha_monitoreo?: string
+          id?: string
+          monitor?: string | null
+          observaciones?: string | null
+          ronda_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mon_colmenas_apiario_id_fkey"
+            columns: ["apiario_id"]
+            isOneToOne: false
+            referencedRelation: "apiarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mon_colmenas_ronda_id_fkey"
+            columns: ["ronda_id"]
+            isOneToOne: false
+            referencedRelation: "rondas_monitoreo"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mon_conductividad: {
+        Row: {
+          created_at: string | null
+          fecha_monitoreo: string
+          id: string
+          lote_id: string
+          monitor: string | null
+          observaciones: string | null
+          ph: number | null
+          ronda_id: string | null
+          user_id: string | null
+          valor_ce: number
+        }
+        Insert: {
+          created_at?: string | null
+          fecha_monitoreo?: string
+          id?: string
+          lote_id: string
+          monitor?: string | null
+          observaciones?: string | null
+          ph?: number | null
+          ronda_id?: string | null
+          user_id?: string | null
+          valor_ce: number
+        }
+        Update: {
+          created_at?: string | null
+          fecha_monitoreo?: string
+          id?: string
+          lote_id?: string
+          monitor?: string | null
+          observaciones?: string | null
+          ph?: number | null
+          ronda_id?: string | null
+          user_id?: string | null
+          valor_ce?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mon_conductividad_lote_id_fkey"
+            columns: ["lote_id"]
+            isOneToOne: false
+            referencedRelation: "lotes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mon_conductividad_ronda_id_fkey"
+            columns: ["ronda_id"]
+            isOneToOne: false
+            referencedRelation: "rondas_monitoreo"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       monitoreos: {
         Row: {
           arboles_afectados: number
           arboles_monitoreados: number
           created_at: string | null
           fecha_monitoreo: string
+          floracion_brotes: number | null
+          floracion_cuaje: number | null
+          floracion_flor_madura: number | null
           foto_url: string | null
           gravedad_numerica: number | null
           gravedad_texto: Database["public"]["Enums"]["gravedad_texto"] | null
@@ -1679,14 +1871,19 @@ export type Database = {
           monitor: string | null
           observaciones: string | null
           plaga_enfermedad_id: string
+          ronda_id: string | null
           severidad: number | null
           sublote_id: string | null
+          user_id: string | null
         }
         Insert: {
           arboles_afectados: number
           arboles_monitoreados: number
           created_at?: string | null
           fecha_monitoreo: string
+          floracion_brotes?: number | null
+          floracion_cuaje?: number | null
+          floracion_flor_madura?: number | null
           foto_url?: string | null
           gravedad_numerica?: number | null
           gravedad_texto?: Database["public"]["Enums"]["gravedad_texto"] | null
@@ -1697,14 +1894,19 @@ export type Database = {
           monitor?: string | null
           observaciones?: string | null
           plaga_enfermedad_id: string
+          ronda_id?: string | null
           severidad?: number | null
           sublote_id?: string | null
+          user_id?: string | null
         }
         Update: {
           arboles_afectados?: number
           arboles_monitoreados?: number
           created_at?: string | null
           fecha_monitoreo?: string
+          floracion_brotes?: number | null
+          floracion_cuaje?: number | null
+          floracion_flor_madura?: number | null
           foto_url?: string | null
           gravedad_numerica?: number | null
           gravedad_texto?: Database["public"]["Enums"]["gravedad_texto"] | null
@@ -1715,8 +1917,10 @@ export type Database = {
           monitor?: string | null
           observaciones?: string | null
           plaga_enfermedad_id?: string
+          ronda_id?: string | null
           severidad?: number | null
           sublote_id?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -1731,6 +1935,13 @@ export type Database = {
             columns: ["plaga_enfermedad_id"]
             isOneToOne: false
             referencedRelation: "plagas_enfermedades_catalogo"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "monitoreos_ronda_id_fkey"
+            columns: ["ronda_id"]
+            isOneToOne: false
+            referencedRelation: "rondas_monitoreo"
             referencedColumns: ["id"]
           },
           {
@@ -2488,6 +2699,33 @@ export type Database = {
           id?: string
           numero_semana?: number
           url_storage?: string | null
+        }
+        Relationships: []
+      }
+      rondas_monitoreo: {
+        Row: {
+          created_at: string | null
+          fecha_fin: string | null
+          fecha_inicio: string
+          id: string
+          nombre: string | null
+          observaciones: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          fecha_fin?: string | null
+          fecha_inicio: string
+          id?: string
+          nombre?: string | null
+          observaciones?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          fecha_fin?: string | null
+          fecha_inicio?: string
+          id?: string
+          nombre?: string | null
+          observaciones?: string | null
         }
         Relationships: []
       }

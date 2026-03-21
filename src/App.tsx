@@ -24,9 +24,11 @@ import { Dashboard } from './components/Dashboard';
 import { InventoryList } from './components/inventory/InventoryList';
 import { NewPurchase } from './components/inventory/NewPurchase';
 import { MonitoreoDashboardV2 } from './components/monitoreo/MonitoreoDashboardV2';
+import { DashboardMonitoreoV3 } from './components/monitoreo/DashboardMonitoreoV3';
 import { RegistrosMonitoreo } from './components/monitoreo/RegistrosMonitoreo';
 import { CargaMasiva } from './components/monitoreo/CargaMasiva';
 import { CatalogoPlagas } from './components/monitoreo/CatalogoPlagas';
+import { ConfigApiarios } from './components/monitoreo/ConfigApiarios';
 import { ClimaDashboard } from './components/clima/ClimaDashboard';
 import { ClimaHistorico } from './components/clima/ClimaHistorico';
 import { ConfiguracionDashboard } from './components/configuracion/ConfiguracionDashboard';
@@ -93,7 +95,7 @@ function LayoutRoutes() {
         {/* Monitoreo */}
         <Route
           path="monitoreo"
-          element={<MonitoreoDashboardV2 />}
+          element={<DashboardMonitoreoV3 />}
         />
         <Route
           path="monitoreo/registros"
@@ -106,6 +108,10 @@ function LayoutRoutes() {
         <Route
           path="monitoreo/catalogo"
           element={<CatalogoPlagas />}
+        />
+        <Route
+          path="monitoreo/apiarios"
+          element={<ConfigApiarios />}
         />
 
         {/* Clima */}

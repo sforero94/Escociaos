@@ -17,7 +17,7 @@ import { jornalConversation } from "./conversations/jornal.ts";
 import { monitoreoConversation } from "./conversations/monitoreo.ts";
 import { gastoConversation } from "./conversations/gasto.ts";
 import { ingresoConversation } from "./conversations/ingreso.ts";
-import { llmToolLoop, getSystemPrompt } from "../chat.ts";
+import { llmToolLoop, getSystemPrompt } from "../chat.tsx";
 
 // ============================================================================
 // SUPABASE CLIENT (service role — same pattern as chat.ts)
@@ -357,7 +357,116 @@ function getBot(): Bot<BotContext> {
   });
 
   // ==========================================================================
-  // FREE-TEXT FALLBACK — Esco AI engine
+  // CHAT PERSISTENCE HELPERS — same quality as web chat
+  // ==========================================================================
+
+  async function getOrCreateTelegramConversation(userId: string): Promise<string> {
+    const sb = getSupabaseAdmin();
+    const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+
+    // Look for a recent conversation (updated within last 4 hours)
+    const { data: recent } = await sb
+      .from("chat_conversations")
+      .select("id")
+      .eq("user_id", userId)
+      .gte("updated_at", fourHoursAgo)
+      .order("updated_at", { ascending: false })
+      .limit(1);
+
+    if (recent && recent.length > 0) return recent[0].id;
+
+    // Create new conversation
+    const { data: conv, error } = await sb
+      .from("chat_conversations")
+      .insert({ user_id: userId, title: "Telegram" })
+      .select("id")
+      .single();
+
+    if (error) throw new Error(`Error creating conversation: ${error.message}`);
+    return conv.id;
+  }
+
+  async function saveTelegramMessage(
+    conversationId: string,
+    role: string,
+    content: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<void> {
+    const sb = getSupabaseAdmin();
+    const { error } = await sb.from("chat_messages").insert({
+      conversation_id: conversationId,
+      role,
+      content,
+      metadata: metadata || {},
+    });
+    if (error) console.error("[Telegram] Save message error:", error.message);
+  }
+
+  async function buildTelegramLlmMessages(
+    conversationId: string,
+  ): Promise<
+    Array<{
+      role: string;
+      content: string | null;
+      tool_calls?: unknown[];
+      tool_call_id?: string;
+      name?: string;
+    }>
+  > {
+    const sb = getSupabaseAdmin();
+    const { data: history } = await sb
+      .from("chat_messages")
+      .select("role,content,metadata")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: true })
+      .limit(20);
+
+    const telegramTweaks =
+      "\n\nEstás respondiendo por Telegram. Sé conciso. " +
+      "No uses tablas markdown (no se renderizan en Telegram). " +
+      "Usa listas con viñetas en su lugar. " +
+      "Limita la respuesta a lo esencial.";
+
+    const messages: Array<{
+      role: string;
+      content: string | null;
+      tool_calls?: unknown[];
+      tool_call_id?: string;
+      name?: string;
+    }> = [{ role: "system", content: getSystemPrompt() + telegramTweaks }];
+
+    if (history) {
+      for (const m of history) {
+        const meta = m.metadata as
+          | {
+              tool_interactions?: Array<{
+                tool: string;
+                args: Record<string, unknown>;
+                result_summary: string;
+              }>;
+            }
+          | undefined;
+        if (m.role === "assistant" && meta?.tool_interactions?.length) {
+          const ctx = meta.tool_interactions
+            .map(
+              (t) =>
+                `[${t.tool}(${JSON.stringify(t.args)}): ${t.result_summary}]`,
+            )
+            .join("\n");
+          messages.push({
+            role: "system",
+            content: `Datos consultados en la respuesta anterior:\n${ctx}`,
+          });
+        }
+        messages.push({ role: m.role, content: m.content });
+      }
+    }
+
+    return messages;
+  }
+
+  // ==========================================================================
+  // FREE-TEXT FALLBACK — Esco AI engine with conversation persistence
   // ==========================================================================
 
   bot.on("message:text", async (ctx) => {
@@ -376,36 +485,56 @@ function getBot(): Bot<BotContext> {
     await ctx.replyWithChatAction("typing");
 
     try {
-      const llmMessages: Array<{
-        role: string;
-        content: string | null;
-        tool_calls?: unknown[];
-        tool_call_id?: string;
-        name?: string;
-      }> = [
-        {
-          role: "system",
-          content: getSystemPrompt() +
-            "\n\nEstás respondiendo por Telegram. Sé conciso. " +
-            "No uses tablas markdown (no se renderizan en Telegram). " +
-            "Usa listas con viñetas en su lugar. " +
-            "Limita la respuesta a lo esencial.",
-        },
-        { role: "user", content: userMessage },
-      ];
+      const userId = ctx.telegramUser.usuario_id;
+      if (!userId) {
+        await ctx.reply("Tu cuenta no está vinculada a un usuario del sistema.");
+        return;
+      }
 
-      const responseText = await llmToolLoop(llmMessages);
+      // Persist conversation
+      const conversationId = await getOrCreateTelegramConversation(userId);
+      await saveTelegramMessage(conversationId, "user", userMessage);
 
-      if (responseText.length <= 4096) {
-        await ctx.reply(responseText, { parse_mode: "Markdown" }).catch(() =>
-          ctx.reply(responseText)
-        );
-      } else {
-        const chunks = splitMessage(responseText, 4096);
-        for (const chunk of chunks) {
-          await ctx.reply(chunk, { parse_mode: "Markdown" }).catch(() =>
-            ctx.reply(chunk)
-          );
+      // Build messages with full history + tool context
+      const llmMessages = await buildTelegramLlmMessages(conversationId);
+
+      const { text: responseText, toolInteractions } =
+        await llmToolLoop(llmMessages);
+
+      // Save assistant response with tool interaction metadata
+      await saveTelegramMessage(conversationId, "assistant", responseText, {
+        tool_interactions: toolInteractions,
+      });
+
+      // Extract charts and send as images, text as messages
+      const { textParts, charts } = extractChartsAndText(responseText);
+
+      // Send text parts with Telegram-compatible markdown
+      for (const part of textParts) {
+        const formatted = formatForTelegram(part);
+        if (formatted.length <= 4096) {
+          await ctx
+            .reply(formatted, { parse_mode: "Markdown" })
+            .catch(() => ctx.reply(formatted));
+        } else {
+          const chunks = splitMessage(formatted, 4096);
+          for (const chunk of chunks) {
+            await ctx
+              .reply(chunk, { parse_mode: "Markdown" })
+              .catch(() => ctx.reply(chunk));
+          }
+        }
+      }
+
+      // Send charts as images via QuickChart.io
+      for (const chart of charts) {
+        try {
+          const url = buildQuickChartUrl(chart);
+          await ctx.replyWithPhoto(url, {
+            caption: chart.title,
+          });
+        } catch (chartErr) {
+          console.error("[Telegram] Chart render error:", chartErr);
         }
       }
     } catch (err: unknown) {
@@ -430,6 +559,103 @@ function getBot(): Bot<BotContext> {
 
   _bot = bot;
   return bot;
+}
+
+// ============================================================================
+// CHART UTILS — extract chart blocks and generate QuickChart.io images
+// ============================================================================
+
+interface ChartSpec {
+  type: string;
+  title: string;
+  data: Array<Record<string, string | number>>;
+  xKey: string;
+  yKey: string | string[];
+  yFormat?: string;
+  colors?: string[];
+}
+
+function extractChartsAndText(responseText: string): {
+  textParts: string[];
+  charts: ChartSpec[];
+} {
+  const chartPattern = /```(?:chart|json)?\s*\n?([\s\S]*?)```/g;
+  const textParts: string[] = [];
+  const charts: ChartSpec[] = [];
+
+  let lastIndex = 0;
+  let match;
+  while ((match = chartPattern.exec(responseText)) !== null) {
+    const before = responseText.slice(lastIndex, match.index).trim();
+    if (before) textParts.push(before);
+    lastIndex = match.index + match[0].length;
+
+    try {
+      const parsed = JSON.parse(match[1].trim());
+      if (parsed.type && parsed.data && parsed.xKey && parsed.yKey) {
+        charts.push(parsed as ChartSpec);
+      }
+    } catch { /* skip invalid JSON */ }
+  }
+
+  const after = responseText.slice(lastIndex).trim();
+  if (after) textParts.push(after);
+
+  if (charts.length === 0 && textParts.length === 0) {
+    textParts.push(responseText);
+  }
+
+  return { textParts, charts };
+}
+
+function buildQuickChartUrl(chart: ChartSpec): string {
+  const labels = chart.data.map((d) => String(d[chart.xKey]));
+  const keys = Array.isArray(chart.yKey) ? chart.yKey : [chart.yKey];
+  const palette = chart.colors || [
+    "#73991C", "#E74C3C", "#3498DB", "#F39C12", "#9B59B6", "#1ABC9C",
+    "#E67E22", "#34495E", "#2ECC71", "#C0392B",
+  ];
+
+  const isPie = chart.type === "pie";
+
+  const datasets = keys.map((key, i) => ({
+    label: key,
+    data: chart.data.map((d) => d[key]),
+    // Pie charts need one color per slice; bar/line need one color per series
+    backgroundColor: isPie
+      ? chart.data.map((_, j) => palette[j % palette.length])
+      : palette[i % palette.length],
+    borderColor: isPie ? "#ffffff" : palette[i % palette.length],
+    borderWidth: isPie ? 2 : undefined,
+    fill: chart.type === "area",
+  }));
+
+  const chartType = chart.type === "area" ? "line" : chart.type;
+
+  const config = {
+    type: chartType,
+    data: { labels, datasets },
+    options: {
+      title: { display: true, text: chart.title },
+      plugins: {
+        datalabels: isPie
+          ? { display: true, color: "#fff", font: { weight: "bold" } }
+          : { display: false },
+      },
+    },
+  };
+
+  return `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(config))}&w=600&h=400&bkg=white`;
+}
+
+function formatForTelegram(text: string): string {
+  return text
+    // Markdown headings → bold (### Title → *Title*)
+    .replace(/^#{1,6}\s+(.+)$/gm, "*$1*")
+    // **bold** → *bold* (Telegram Markdown v1 uses single asterisk)
+    .replace(/\*\*([^*]+)\*\*/g, "*$1*")
+    // Unordered lists: "* item" or "- item" → "• item"
+    .replace(/^[\*\-]\s+/gm, "• ");
 }
 
 // ============================================================================
