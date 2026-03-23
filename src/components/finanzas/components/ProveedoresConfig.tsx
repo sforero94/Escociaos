@@ -65,6 +65,7 @@ export function ProveedoresConfig() {
       if (error) throw error;
       setProveedores(data || []);
     } catch (error) {
+      console.error('Failed to load proveedores:', error);
     } finally {
       setIsLoading(false);
     }

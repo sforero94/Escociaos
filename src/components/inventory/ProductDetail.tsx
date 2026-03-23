@@ -113,6 +113,7 @@ export function ProductDetail() {
       if (error) throw error;
       setProduct(data as unknown as Product);
     } catch (error) {
+      console.error('Failed to load product detail:', error);
     } finally {
       setLoading(false);
     }

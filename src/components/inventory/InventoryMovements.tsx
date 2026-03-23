@@ -70,6 +70,7 @@ export function InventoryMovements() {
       if (error) throw error;
       setProducts(data || []);
     } catch (err: any) {
+      console.error('Failed to load products for movements filter:', err);
     }
   };
 

@@ -76,7 +76,7 @@ export function ConfigApiarios() {
       nombre: apiario.nombre,
       ubicacion: apiario.ubicacion || '',
       total_colmenas: apiario.total_colmenas,
-      activo: apiario.activo,
+      activo: apiario.activo ?? true,
     });
     setModalAbierto(true);
   }

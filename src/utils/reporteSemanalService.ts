@@ -4,8 +4,6 @@
 
 import { getSupabase, getCurrentUser } from './supabase/client';
 import { projectId, publicAnonKey } from './supabase/info.tsx';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import type {
   DatosReporteSemanal,
   GenerateReportResponse,
@@ -132,6 +130,9 @@ export async function convertirHTMLaPDF(html: string): Promise<Blob> {
     }
 
     console.log(`[ReporteSemanal] Renderizando ${slides.length} slides individualmente...`);
+
+    const { default: jsPDF } = await import('jspdf');
+    const { default: html2canvas } = await import('html2canvas');
 
     const pdf = new jsPDF({
       unit: 'px',

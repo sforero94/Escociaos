@@ -56,6 +56,7 @@ export function VerificacionesList() {
 
       setVerificaciones((data || []) as unknown as Verificacion[]);
     } catch (error) {
+      console.error('Failed to load verificaciones:', error);
     } finally {
       setIsLoading(false);
     }

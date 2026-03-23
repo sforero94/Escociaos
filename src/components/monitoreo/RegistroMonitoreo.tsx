@@ -130,6 +130,7 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
         localStorage.removeItem(STORAGE_KEY);
       }
     } catch (error) {
+      console.error('Failed to restore monitoring session:', error);
     }
   }
 
@@ -140,6 +141,7 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
         monitores
       }));
     } catch (error) {
+      console.error('Failed to save monitoring session:', error);
     }
   }
 

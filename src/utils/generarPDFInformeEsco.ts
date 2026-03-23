@@ -1,5 +1,4 @@
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import type jsPDF from 'jspdf';
 
 interface ContentBlock {
   type: 'text' | 'chart';
@@ -128,7 +127,9 @@ function renderTextBlock(doc: jsPDF, text: string, yPos: number): number {
   return y;
 }
 
-export function generarPDFInformeEsco(data: InformeEscoData): void {
+export async function generarPDFInformeEsco(data: InformeEscoData): Promise<void> {
+  const { default: jsPDF } = await import('jspdf');
+  const { default: autoTable } = await import('jspdf-autotable');
   const doc = new jsPDF();
   let y = 20;
 

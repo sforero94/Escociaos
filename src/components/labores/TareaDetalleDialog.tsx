@@ -132,7 +132,8 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
         setLotes([]);
       }
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      console.error('Failed to load task details:', error);
     } finally {
       setLoading(false);
     }

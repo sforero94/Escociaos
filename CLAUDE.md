@@ -144,7 +144,7 @@ These are consumed in `src/utils/supabase/client.ts` via `import.meta.env`. The 
 │   │   └── validation.ts               # Data validation utilities
 │   │
 │   ├── sql/                             # SQL scripts & migrations
-│   │   ├── migrations/                  # Sequential numbered migrations (001–021+)
+│   │   ├── migrations/                  # Sequential numbered migrations (001–031)
 │   │   └── *.sql                        # Standalone SQL scripts
 │   │
 │   ├── styles/
@@ -192,8 +192,11 @@ App
 │               ├── /login → Login
 │               └── /* → ProtectedRoute
 │                       └── Layout (sidebar + nav)
-│                           └── LayoutRoutes (nested routes)
+│                           └── Suspense (loading spinner)
+│                               └── LayoutRoutes (nested routes, all React.lazy)
 ```
+
+All route components are lazy-loaded via `React.lazy()` with a shared `<Suspense>` boundary. Heavy libraries (jsPDF, xlsx, html2canvas) are dynamically imported on demand, not bundled in the initial load.
 
 ### State Management
 
@@ -297,12 +300,13 @@ The applications module has two distinct tracking layers — **do not confuse th
 
 ### Migrations
 
-Sequential SQL migrations live in `src/sql/migrations/` (001–024). See `src/sql/migrations/README_MIGRATION.md` for instructions on running them.
+Sequential SQL migrations live in `src/sql/migrations/` (001–031). See `src/sql/migrations/README_MIGRATION.md` for instructions on running them.
 
 - **023**: `create_fin_transacciones_ganado` — cattle buy/sell transactions table with RLS
 - **024**: `alter_fin_ingresos_add_columns` — adds `cantidad`, `precio_unitario`, `cosecha`, `alianza`, `cliente`, `finca` to `fin_ingresos`
 - **029**: `create_clima_lecturas` — weather station readings table with UNIQUE(station_id, timestamp), B-tree + BRIN indexes, RLS
 - **030**: `clima_cron_sync` — pg_cron + pg_net schedule to call `/clima/sync` every 5 minutes
+- **031**: `add_colmenas_con_reina` — adds `colmenas_con_reina integer NOT NULL DEFAULT 0` to `mon_colmenas`
 
 ### Ganado ↔ Finance Integration
 

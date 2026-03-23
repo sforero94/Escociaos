@@ -193,10 +193,11 @@ export function useProduccionData() {
           case 'kg_por_arbol':
             valor = Number(record.kg_por_arbol) || 0;
             break;
-          case 'ton_por_ha':
+          case 'ton_por_ha': {
             const area = Number(record.lotes?.area_hectareas) || 1;
             valor = (Number(record.kg_totales) || 0) / 1000 / area;
             break;
+          }
         }
 
         // Acumular si hay multiples registros para el mismo lote/cosecha

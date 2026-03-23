@@ -74,7 +74,7 @@ export function ExportarInformeDialog({
         return { type: 'text' as const, value: b.value };
       });
 
-      generarPDFInformeEsco({
+      await generarPDFInformeEsco({
         titulo,
         bloques: pdfBloques,
         fechaGeneracion: new Date(),

@@ -1,8 +1,6 @@
 // utils/generarPDFReporteCierre.ts
 // Genera PDF del reporte de cierre de una aplicación
 
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { formatearMoneda, formatearNumero } from './format';
 
 export interface DatosReporteCierre {
@@ -48,7 +46,9 @@ function formatearFechaCorta(fecha?: string): string {
   return `${parseInt(day)} ${meses[parseInt(month) - 1]} ${year}`;
 }
 
-export function generarPDFReporteCierre(datos: DatosReporteCierre): void {
+export async function generarPDFReporteCierre(datos: DatosReporteCierre): Promise<void> {
+  const { default: jsPDF } = await import('jspdf');
+  const { default: autoTable } = await import('jspdf-autotable');
   const doc = new jsPDF();
 
   const colorPrimario = [115, 153, 28] as [number, number, number];

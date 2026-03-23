@@ -127,7 +127,7 @@ export function PasoListaCompras({
   /**
    * EXPORTAR LISTA A PDF
    */
-  const exportarPDF = () => {
+  const exportarPDF = async () => {
     if (lista) {
       // Datos de la empresa (podrías cargarlos de configuración global)
       const datosEmpresa = {
@@ -138,7 +138,7 @@ export function PasoListaCompras({
         email: 'contacto@escocia-hass.com', // Actualizar con email real
       };
 
-      generarPDFListaCompras(lista, configuracion, datosEmpresa);
+      await generarPDFListaCompras(lista, configuracion, datosEmpresa);
     } else {
       toast.error('No hay lista de compras para exportar');
     }

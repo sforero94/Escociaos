@@ -69,7 +69,7 @@ export function RegistroColmenas({ open, onClose, onSuccess }: RegistroColmenasP
 
     setLoading(true);
     try {
-      const payload: Record<string, unknown> = {
+      const { error } = await supabase.from('mon_colmenas').insert({
         fecha_monitoreo: fecha,
         apiario_id: apiarioId,
         colmenas_fuertes: fuertes,
@@ -77,9 +77,7 @@ export function RegistroColmenas({ open, onClose, onSuccess }: RegistroColmenasP
         colmenas_muertas: muertas,
         colmenas_con_reina: conReina,
         observaciones: observaciones || null,
-      };
-
-      const { error } = await supabase.from('mon_colmenas').insert(payload);
+      });
       if (error) throw error;
 
       toast.success('Registro de colmenas guardado');

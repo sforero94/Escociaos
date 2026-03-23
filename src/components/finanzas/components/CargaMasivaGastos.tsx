@@ -21,7 +21,6 @@ import {
   Loader2,
   X
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 import { parsearFechaFlexible } from '../../../utils/fechas';
 import type { Negocio, Region, CategoriaGasto, ConceptoGasto, Proveedor, MedioPago } from '../../../types/finanzas';
 
@@ -122,6 +121,8 @@ export function CargaMasivaGastos({
 
   const descargarPlantilla = async () => {
     try {
+      const XLSX = await import('xlsx');
+
       // Ensure catalogs are loaded
       if (negocios.length === 0) {
         await loadCatalogs();
@@ -262,6 +263,8 @@ export function CargaMasivaGastos({
     setProgress(0);
 
     try {
+      const XLSX = await import('xlsx');
+
       // Read file
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);

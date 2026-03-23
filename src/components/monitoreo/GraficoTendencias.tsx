@@ -148,6 +148,7 @@ export function GraficoTendencias({
       procesarDatos(allData || []);
 
     } catch (error) {
+      console.error('Failed to load trend data:', error);
     } finally {
       setIsLoading(false);
     }

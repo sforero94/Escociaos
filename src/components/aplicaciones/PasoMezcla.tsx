@@ -340,8 +340,10 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
               }
             });
           } else {
+            console.error('Failed to load product presentacion data:', errorProductos);
           }
         } catch (err) {
+          console.error('Failed to fetch product presentacion info for calculations:', err);
         }
       }
     }

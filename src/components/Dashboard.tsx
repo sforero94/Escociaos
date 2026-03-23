@@ -749,7 +749,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         loadInventarioStats(supabase),
         loadAlertas(supabase),
       ]);
-    } catch (error) {
+    } catch (err) {
+      console.error('Failed to load dashboard stats:', err);
     } finally {
       setIsLoading(false);
     }

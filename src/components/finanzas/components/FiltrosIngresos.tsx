@@ -53,6 +53,7 @@ export function FiltrosIngresos({ filtros, onFiltrosChange, onAplicarFiltros }: 
       if (regionesResult.data) setRegiones(regionesResult.data);
       if (categoriasResult.data) setCategorias(categoriasResult.data);
     } catch (error) {
+      console.error('Failed to load ingresos filter catalogs:', error);
     } finally {
       setLoading(false);
     }

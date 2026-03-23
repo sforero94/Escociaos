@@ -60,6 +60,7 @@ export function FacturaUploader({
             setPreviewUrl(data.signedUrl);
           }
         } catch (error) {
+          console.error('Failed to load invoice preview:', error);
         }
       }
     };

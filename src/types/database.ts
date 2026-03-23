@@ -1744,6 +1744,7 @@ export type Database = {
       mon_colmenas: {
         Row: {
           apiario_id: string
+          colmenas_con_reina: number
           colmenas_debiles: number
           colmenas_fuertes: number
           colmenas_muertas: number
@@ -1757,6 +1758,7 @@ export type Database = {
         }
         Insert: {
           apiario_id: string
+          colmenas_con_reina?: number
           colmenas_debiles?: number
           colmenas_fuertes?: number
           colmenas_muertas?: number
@@ -1770,6 +1772,7 @@ export type Database = {
         }
         Update: {
           apiario_id?: string
+          colmenas_con_reina?: number
           colmenas_debiles?: number
           colmenas_fuertes?: number
           colmenas_muertas?: number

@@ -136,6 +136,8 @@ const MOCK_APLICACIONES_PLANEADAS = [
         cantidad_necesaria: 5,
         unidad: 'Litros',
         costo_estimado: 250000,
+        inventario_actual: 0,
+        cantidad_faltante: 5,
       },
       {
         producto_nombre: 'Clorpirifós',
@@ -143,6 +145,8 @@ const MOCK_APLICACIONES_PLANEADAS = [
         cantidad_necesaria: 3,
         unidad: 'Litros',
         costo_estimado: 180000,
+        inventario_actual: 0,
+        cantidad_faltante: 3,
       },
     ],
   },
@@ -174,12 +178,12 @@ const MOCK_APLICACIONES_ACTIVAS = [
 ];
 
 const MOCK_MONITOREOS_FECHAS = [
-  { fecha_monitoreo: '2026-02-15' },
-  { fecha_monitoreo: '2026-02-15' },
-  { fecha_monitoreo: '2026-02-08' },
-  { fecha_monitoreo: '2026-02-08' },
-  { fecha_monitoreo: '2026-02-01' },
-  { fecha_monitoreo: '2026-02-01' },
+  { lote_id: 'lote-1', fecha_monitoreo: '2026-02-15' },
+  { lote_id: 'lote-1', fecha_monitoreo: '2026-02-15' },
+  { lote_id: 'lote-1', fecha_monitoreo: '2026-02-08' },
+  { lote_id: 'lote-2', fecha_monitoreo: '2026-02-08' },
+  { lote_id: 'lote-2', fecha_monitoreo: '2026-02-01' },
+  { lote_id: 'lote-2', fecha_monitoreo: '2026-02-01' },
 ];
 
 const MOCK_LOTES = [
@@ -245,6 +249,20 @@ const MOCK_MONITOREOS = [
   },
   {
     id: 'mon-4',
+    fecha_monitoreo: '2026-02-08',
+    lote_id: 'lote-2',
+    sublote_id: 'sub-3',
+    plaga_enfermedad_id: 'plaga-2',
+    arboles_monitoreados: 35,
+    arboles_afectados: 4,
+    incidencia: 11.4,
+    gravedad_texto: 'Baja',
+    plagas_enfermedades_catalogo: { nombre: 'Trips' },
+    lotes: { nombre: 'Lote ST' },
+    sublotes: { nombre: 'Sublote C' },
+  },
+  {
+    id: 'mon-5',
     fecha_monitoreo: '2026-02-01',
     lote_id: 'lote-2',
     sublote_id: 'sub-3',
@@ -668,27 +686,21 @@ describe('fetchDatosMonitoreo', () => {
     vi.clearAllMocks();
   });
 
-  // Helper to set up mocks for the new fetchDatosMonitoreo which queries:
-  // 1. lotes, 2. sublotes (in parallel), 3. monitoreos (fechas), 4. monitoreos (anterior), 5. monitoreos (full)
+  // Helper to set up mocks for fetchDatosMonitoreo which queries:
+  // 1. lotes + sublotes (in parallel), 2. monitoreos (fechas per lote),
+  // 3. monitoreos (per-lote anterior, only if needed), 4. monitoreos (full data)
   function setupMonitoreoMocks(opts: {
     fechas?: any[];
     monitoreos?: any[];
-    anteriorFecha?: any[];
   } = {}) {
     const lotesChain = createChainableMock({ data: MOCK_LOTES, error: null });
     const sublotesChain = createChainableMock({ data: MOCK_SUBLOTES, error: null });
     const fechasChain = createChainableMock({ data: opts.fechas ?? MOCK_MONITOREOS_FECHAS, error: null });
-    const anteriorChain = createChainableMock({ data: opts.anteriorFecha ?? [{ fecha_monitoreo: '2026-02-08' }], error: null });
     const monChain = createChainableMock({ data: opts.monitoreos ?? MOCK_MONITOREOS, error: null });
 
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'lotes') return lotesChain;
-      if (table === 'sublotes') return sublotesChain;
-      // monitoreos table is called multiple times; use call count to differentiate
-      return fechasChain;
-    });
-
-    // More sophisticated mock: track monitoreos calls
+    // Track monitoreos calls: 1st = fechas, subsequent = full data
+    // (With default fixtures, all lotes have both fechaActual and fechaAnterior
+    //  from the fechas query, so no per-lote anterior queries are needed.)
     let monitoreoCallCount = 0;
     mockFrom.mockImplementation((table: string) => {
       if (table === 'lotes') return lotesChain;
@@ -696,7 +708,6 @@ describe('fetchDatosMonitoreo', () => {
       if (table === 'monitoreos') {
         monitoreoCallCount++;
         if (monitoreoCallCount === 1) return fechasChain;    // fechas query
-        if (monitoreoCallCount === 2) return anteriorChain;   // anterior query
         return monChain;                                       // full data query
       }
       return createChainableMock({ data: [], error: null });

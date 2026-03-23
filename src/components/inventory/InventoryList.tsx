@@ -75,10 +75,12 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
         .order('nombre');
 
       if (error) {
+        console.error('Failed to query productos:', error);
       } else if (data) {
         setProducts(data);
       }
     } catch (error) {
+      console.error('Failed to load inventory products:', error);
     } finally {
       setIsLoading(false);
     }

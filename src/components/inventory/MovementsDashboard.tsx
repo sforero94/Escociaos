@@ -102,6 +102,7 @@ export function MovementsDashboard() {
         loadMonthlyData(),
       ]);
     } catch (err) {
+      console.error('Failed to load movements dashboard data:', err);
     } finally {
       setLoading(false);
     }
@@ -122,6 +123,7 @@ export function MovementsDashboard() {
       if (error) throw error;
       setRecentMovements(data || []);
     } catch (err) {
+      console.error('Failed to load recent movements:', err);
     }
   };
 
@@ -177,6 +179,7 @@ export function MovementsDashboard() {
 
       setTopProducts(sorted);
     } catch (err) {
+      console.error('Failed to load top products:', err);
     }
   };
 
@@ -254,6 +257,7 @@ export function MovementsDashboard() {
         promedioMensual,
       });
     } catch (err) {
+      console.error('Failed to load inventory stats:', err);
     }
   };
 
@@ -335,6 +339,7 @@ export function MovementsDashboard() {
 
       setMonthlyData(monthsArray);
     } catch (err) {
+      console.error('Failed to load monthly movement data:', err);
     }
   };
 

@@ -60,6 +60,7 @@ export function MediosPagoConfig() {
       if (error) throw error;
       setMediosPago(data || []);
     } catch (error) {
+      console.error('Failed to load medios de pago:', error);
     } finally {
       setIsLoading(false);
     }

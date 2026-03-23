@@ -1,8 +1,6 @@
 // utils/generarPDFReportesLabores.ts
 // Genera PDF de reportes de labores con registro detallado y matriz actividades × lotes
 
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { formatearMoneda, formatearNumero } from './format';
 
 interface RegistroTrabajo {
@@ -30,13 +28,15 @@ interface EstadisticasGenerales {
 /**
  * Genera PDF de reportes de labores
  */
-export function generarPDFReportesLabores(
+export async function generarPDFReportesLabores(
   registrosTrabajo: RegistroTrabajo[],
   tiposTareas: TipoTarea[],
   estadisticasGenerales: EstadisticasGenerales,
   fechaInicio: string,
   fechaFin: string
-): void {
+): Promise<void> {
+  const { default: jsPDF } = await import('jspdf');
+  const { default: autoTable } = await import('jspdf-autotable');
   const doc = new jsPDF();
 
   // Configuración de colores - Usando paleta de Escocia Hass

@@ -46,6 +46,7 @@ export function ProductMovements({ productId, productName, unidadMedida }: Produ
       if (error) throw error;
       setMovements((data || []) as unknown as Movement[]);
     } catch (err: any) {
+      console.error('Failed to load product movements:', err);
     } finally {
       setLoading(false);
     }

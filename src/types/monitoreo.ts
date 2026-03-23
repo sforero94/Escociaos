@@ -208,10 +208,10 @@ export interface MonitoreoConductividad {
 export interface Apiario {
   id: string;
   nombre: string;
-  ubicacion?: string | null;
+  ubicacion: string | null;
   total_colmenas: number;
-  activo: boolean;
-  created_at?: string;
+  activo: boolean | null;
+  created_at: string | null;
 }
 
 // Monitoreo de colmenas (conteo por apiario)

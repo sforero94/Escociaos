@@ -21,14 +21,14 @@ export function ReportesView() {
   });
   const [reporteData, setReporteData] = useState<ReportePyG | null>(null);
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (!reporteData) {
       toast.error('No hay datos para exportar. Genere un reporte primero.');
       return;
     }
 
     try {
-      generarPDFPyG({
+      await generarPDFPyG({
         reporte: reporteData,
         filtros,
         titulo: 'Reporte P&L - Escocia Hass',

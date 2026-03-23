@@ -57,6 +57,7 @@ export function FiltrosGastos({ filtros, onFiltrosChange, onAplicarFiltros }: Fi
       if (categoriasResult.data) setCategorias(categoriasResult.data);
       if (conceptosResult.data) setConceptos(conceptosResult.data);
     } catch (error) {
+      console.error('Failed to load gastos filter catalogs:', error);
     } finally {
       setLoading(false);
     }

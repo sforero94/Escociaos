@@ -275,6 +275,7 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
 
       setPurchases((data || []) as unknown as Purchase[]);
     } catch (error) {
+      console.error('Failed to load purchase history:', error);
     } finally {
       setLoading(false);
     }
@@ -376,6 +377,7 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
         .eq('compra_id', purchaseToDelete.id);
 
       if (movementDeleteError) {
+        console.error('Failed to delete purchase movement (non-blocking):', movementDeleteError);
       }
 
       // 4b. Crear nuevo movimiento de ajuste que documente la eliminación

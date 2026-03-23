@@ -54,13 +54,13 @@ describe('TELEGRAM_MODULES', () => {
 });
 
 describe('ROLES_BOT', () => {
-  it('exports exactly 3 roles', () => {
-    expect(ROLES_BOT).toHaveLength(3);
+  it('exports exactly 4 roles', () => {
+    expect(ROLES_BOT).toHaveLength(4);
   });
 
   it('contains the expected role keys', () => {
     const keys = ROLES_BOT.map((r) => r.key);
-    expect(keys).toEqual(['campo', 'admin', 'gerencia']);
+    expect(keys).toEqual(['campo', 'admin', 'gerencia', 'monitor']);
   });
 
   it('each role has key and label', () => {

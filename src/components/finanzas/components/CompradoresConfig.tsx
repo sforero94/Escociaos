@@ -64,6 +64,7 @@ export function CompradoresConfig() {
       if (error) throw error;
       setCompradores(data || []);
     } catch (error) {
+      console.error('Failed to load compradores:', error);
     } finally {
       setIsLoading(false);
     }

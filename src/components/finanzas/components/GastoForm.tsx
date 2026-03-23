@@ -148,6 +148,7 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
       if (proveedoresResult.data) setProveedores(proveedoresResult.data);
       if (mediosPagoResult.data) setMediosPago(mediosPagoResult.data);
     } catch (error) {
+      console.error('Failed to load gasto form catalogs:', error);
     } finally {
       setLoading(false);
     }

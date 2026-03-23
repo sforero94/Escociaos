@@ -1,4 +1,3 @@
-import jsPDF from 'jspdf';
 import type { ReportePyG, FiltrosFinanzas } from '../types/finanzas';
 import { formatNumber } from './format';
 
@@ -12,12 +11,13 @@ interface GenerarPDFPyGOptions {
 /**
  * Genera un PDF del reporte P&L (Pérdidas y Ganancias)
  */
-export function generarPDFPyG({
+export async function generarPDFPyG({
   reporte,
   filtros,
   titulo = 'Reporte P&L',
   empresa = 'Escocia Hass'
-}: GenerarPDFPyGOptions): void {
+}: GenerarPDFPyGOptions): Promise<void> {
+  const { default: jsPDF } = await import('jspdf');
   const doc = new jsPDF();
 
   // Configuración inicial

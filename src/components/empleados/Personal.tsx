@@ -38,7 +38,6 @@ import {
 import { Alert, AlertDescription } from '../ui/alert';
 import { Badge } from '../ui/badge';
 import { Switch } from '../ui/switch';
-// @ts-ignore papaparse may lack type declarations
 import Papa from 'papaparse';
 import { parsearFechaFlexible } from '../../utils/fechas';
 import {

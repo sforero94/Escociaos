@@ -195,7 +195,8 @@ export function AplicacionesList() {
       });
 
       setAplicaciones(aplicacionesMapeadas);
-    } catch (error) {
+    } catch (err) {
+      console.error('Failed to load aplicaciones list:', err);
     } finally {
       setIsLoading(false);
     }
@@ -250,6 +251,7 @@ export function AplicacionesList() {
         }
         
       } else {
+        /* no inventory movements to delete — proceed */
       }
 
       // 2. Eliminar relaciones con lotes

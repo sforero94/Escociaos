@@ -14,9 +14,7 @@
         'react-resizable-panels@2.1.7': 'react-resizable-panels',
         'react-hook-form@7.55.0': 'react-hook-form',
         'react-day-picker@8.10.1': 'react-day-picker',
-        'next-themes@0.4.6': 'next-themes',
         'lucide-react@0.487.0': 'lucide-react',
-        'input-otp@1.4.2': 'input-otp',
         'figma:asset/a5137a5cf75d4b4712a958a64a7a74aa50a566e8.png': path.resolve(__dirname, './src/assets/a5137a5cf75d4b4712a958a64a7a74aa50a566e8.png'),
         'embla-carousel-react@8.6.0': 'embla-carousel-react',
         'cmdk@1.1.1': 'cmdk',
@@ -56,6 +54,31 @@
     build: {
       target: 'esnext',
       outDir: 'build',
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            'vendor-radix': [
+              '@radix-ui/react-accordion',
+              '@radix-ui/react-alert-dialog',
+              '@radix-ui/react-checkbox',
+              '@radix-ui/react-collapsible',
+              '@radix-ui/react-dialog',
+              '@radix-ui/react-dropdown-menu',
+              '@radix-ui/react-label',
+              '@radix-ui/react-popover',
+              '@radix-ui/react-select',
+              '@radix-ui/react-separator',
+              '@radix-ui/react-slot',
+              '@radix-ui/react-switch',
+              '@radix-ui/react-tabs',
+              '@radix-ui/react-tooltip',
+            ],
+            'vendor-recharts': ['recharts'],
+            'vendor-supabase': ['@supabase/supabase-js'],
+          },
+        },
+      },
     },
     server: {
       port: 3000,

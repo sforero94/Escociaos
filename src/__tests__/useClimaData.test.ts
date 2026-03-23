@@ -23,14 +23,14 @@ describe('useClimaData hook - Interface validation', () => {
     const { PERIODOS } = await import('@/hooks/useClimaData');
     const ytd = PERIODOS.find((p: { label: string }) => p.label === 'Año a la fecha');
     expect(ytd).toBeDefined();
-    expect(ytd.type).toBe('ytd');
+    expect(ytd!.type).toBe('ytd');
   });
 
   it('Último año has dias: 365 (trailing)', async () => {
     const { PERIODOS } = await import('@/hooks/useClimaData');
     const lastYear = PERIODOS.find((p: { label: string }) => p.label === 'Último año');
     expect(lastYear).toBeDefined();
-    expect(lastYear.dias).toBe(365);
-    expect(lastYear.type).toBe('trailing');
+    expect(lastYear!.dias).toBe(365);
+    expect(lastYear!.type).toBe('trailing');
   });
 });

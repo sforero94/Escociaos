@@ -108,7 +108,7 @@ export function ReporteAplicacion({ aplicacion, onClose }: ReporteAplicacionProp
     if (!datos) return;
     setGenerandoPDF(true);
     try {
-      generarPDFReporteCierre(datos);
+      await generarPDFReporteCierre(datos);
     } finally {
       setGenerandoPDF(false);
     }

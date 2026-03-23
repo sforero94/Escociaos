@@ -190,7 +190,7 @@ describe('Labor Module Improvements - Phase 1-4', () => {
   });
 
   describe('PDF Export Functionality (Phase 4)', () => {
-    it('should generate PDF with correct structure', () => {
+    it('should generate PDF with correct structure', async () => {
       const registrosTrabajo = [
         {
           fecha_trabajo: '2025-12-04',
@@ -212,7 +212,7 @@ describe('Labor Module Improvements - Phase 1-4', () => {
       };
 
       // Call the PDF generation function
-      generarPDFReportesLabores(
+      await generarPDFReportesLabores(
         registrosTrabajo as any,
         tiposTareas as any,
         estadisticasGenerales,
@@ -230,7 +230,7 @@ describe('Labor Module Improvements - Phase 1-4', () => {
       expect(mockAutoTable).toHaveBeenCalled();
     });
 
-    it('should create matrix with activities as rows and lots as columns', () => {
+    it('should create matrix with activities as rows and lots as columns', async () => {
       const registrosTrabajo = [
         {
           fecha_trabajo: '2025-12-04',
@@ -266,7 +266,7 @@ describe('Labor Module Improvements - Phase 1-4', () => {
         totalJornales: 1.5
       };
 
-      generarPDFReportesLabores(
+      await generarPDFReportesLabores(
         registrosTrabajo as any,
         tiposTareas as any,
         estadisticasGenerales,
@@ -278,7 +278,7 @@ describe('Labor Module Improvements - Phase 1-4', () => {
       expect(mockAutoTable).toHaveBeenCalled();
     });
 
-    it('should calculate row and column totals correctly', () => {
+    it('should calculate row and column totals correctly', async () => {
       // Test data for matrix calculations
       const registrosTrabajo = [
         {
@@ -299,23 +299,23 @@ describe('Labor Module Improvements - Phase 1-4', () => {
 
       // This would test the internal matrix calculation logic
       // For now, just verify the function can be called without errors
-      expect(() => {
+      await expect(
         generarPDFReportesLabores(
           registrosTrabajo as any,
           tiposTareas as any,
           { totalCostos: 150000, totalJornales: 3.0 },
           '2025-12-01',
           '2025-12-31'
-        );
-      }).not.toThrow();
+        )
+      ).resolves.not.toThrow();
     });
 
-    it('should use professional formatting with brand colors', () => {
+    it('should use professional formatting with brand colors', async () => {
       const registrosTrabajo: any[] = [];
       const tiposTareas: any[] = [];
       const estadisticasGenerales = { totalCostos: 0, totalJornales: 0 };
 
-      generarPDFReportesLabores(
+      await generarPDFReportesLabores(
         registrosTrabajo,
         tiposTareas,
         estadisticasGenerales,
@@ -329,7 +329,7 @@ describe('Labor Module Improvements - Phase 1-4', () => {
   });
 
   describe('Integration Tests - Complete Flow', () => {
-    it('should handle complete labor management workflow', () => {
+    it('should handle complete labor management workflow', async () => {
       // Test the complete flow from cost calculation to PDF export
 
       // 1. Cost calculation (Phase 1)
@@ -352,9 +352,9 @@ describe('Labor Module Improvements - Phase 1-4', () => {
       const tiposTareas = [{ id: 'fum', nombre: 'Fumigación' }];
       const estadisticas = { totalCostos: costoCalculado, totalJornales: fraccion };
 
-      expect(() => {
-        generarPDFReportesLabores(registros as any, tiposTareas as any, estadisticas, '2025-12-01', '2025-12-31');
-      }).not.toThrow();
+      await expect(
+        generarPDFReportesLabores(registros as any, tiposTareas as any, estadisticas, '2025-12-01', '2025-12-31')
+      ).resolves.not.toThrow();
 
       // Verify the complete workflow completed successfully
       expect(costoCalculado).toBeGreaterThan(0);
@@ -362,7 +362,7 @@ describe('Labor Module Improvements - Phase 1-4', () => {
       expect(mockDoc.save).toHaveBeenCalled();
     });
 
-    it('should maintain data consistency across all phases', () => {
+    it('should maintain data consistency across all phases', async () => {
       // Test that data flows correctly between all phases
 
       const baseData = {
@@ -386,7 +386,7 @@ describe('Labor Module Improvements - Phase 1-4', () => {
       const tiposTareas = [{ id: 'fum', nombre: baseData.tipoTarea }];
       const estadisticas = { totalCostos: costoJornal, totalJornales: baseData.fraccion };
 
-      generarPDFReportesLabores(registros as any, tiposTareas as any, estadisticas, '2025-12-01', '2025-12-31');
+      await generarPDFReportesLabores(registros as any, tiposTareas as any, estadisticas, '2025-12-01', '2025-12-31');
 
       // Verify data consistency
       // (60000 + 12000 + 6000) / 48 * 8 * 0.75 = 78000 / 48 * 6 = 9750

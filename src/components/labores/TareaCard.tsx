@@ -87,7 +87,6 @@ const TareaCard: React.FC<TareaCardProps> = ({ tarea, estado, actions, isArchive
         </div>
 
         {/* ── Row 4: Task type (left) + Primary action (right) ── */}
-        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
         <div className="flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
           {/* Task type with gray dot */}
           <div className="flex items-center gap-1.5 min-w-0">

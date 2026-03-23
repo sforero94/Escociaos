@@ -177,7 +177,8 @@ const ReportesView: React.FC<ReportesViewProps> = ({
 
       setRegistrosTrabajo(registros || []);
       procesarDatos(registros || []);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      console.error('Failed to load labor reports:', error);
     } finally {
       setLoading(false);
     }
@@ -401,10 +402,10 @@ const ReportesView: React.FC<ReportesViewProps> = ({
   const formatNumber = (value: number) => Number(value).toFixed(2);
 
   // Función para exportar PDF
-  const exportarPDF = () => {
+  const exportarPDF = async () => {
     if (!estadisticasGenerales || registrosTrabajo.length === 0) return;
 
-    generarPDFReportesLabores(
+    await generarPDFReportesLabores(
       registrosTrabajo,
       tiposTareas,
       estadisticasGenerales,

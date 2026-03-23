@@ -1,8 +1,6 @@
 // utils/generarPDFListaCompras.ts
 // Genera PDF de lista de compras para enviar a proveedores
 
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import type { ListaCompras, ConfiguracionAplicacion } from '../types/aplicaciones';
 import { formatearMoneda, formatearNumero } from './format';
 
@@ -18,11 +16,13 @@ interface DatosEmpresa {
 /**
  * Genera PDF de lista de compras
  */
-export function generarPDFListaCompras(
+export async function generarPDFListaCompras(
   listaCompras: ListaCompras,
   configuracion: ConfiguracionAplicacion,
   datosEmpresa?: DatosEmpresa
-): void {
+): Promise<void> {
+  const { default: jsPDF } = await import('jspdf');
+  const { default: autoTable } = await import('jspdf-autotable');
   const doc = new jsPDF();
   
   // Configuración de colores - Usando paleta de Escocia Hass

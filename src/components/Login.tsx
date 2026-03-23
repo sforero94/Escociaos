@@ -5,6 +5,8 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { signIn } from '../utils/supabase/client';
 
+const LOGO_URL = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/photos/grafica%203.png`;
+
 interface LoginProps {
   onLoginSuccess: () => void;
 }
@@ -53,7 +55,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
           <div className="text-center mb-8">
             <div className="inline-block mb-6">
               <img
-                src="https://ywhtjwawnkeqlwxbvgup.supabase.co/storage/v1/object/sign/photos/grafica%203.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV80N2U5N2FlMi1lMDc1LTRiNzEtODI0Ny1mMzgwOGYzYzM0ODIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwaG90b3MvZ3JhZmljYSAzLnBuZyIsImlhdCI6MTc2NDcxNTIzMiwiZXhwIjoxNzk2MjUxMjMyfQ.gG3wTzZCKPNkyBdD0h2goOYBectef0hvLWm_Uvl8j0s"
+                src={LOGO_URL}
                 alt="Escocia Hass"
                 className="w-full max-w-sm mx-auto rounded-2xl"
               />

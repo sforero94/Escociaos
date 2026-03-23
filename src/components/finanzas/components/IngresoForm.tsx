@@ -144,6 +144,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
       if (compradoresResult.data) setCompradores(compradoresResult.data);
       if (mediosPagoResult.data) setMediosPago(mediosPagoResult.data);
     } catch (error) {
+      console.error('Failed to load ingreso form catalogs:', error);
     } finally {
       setLoading(false);
     }

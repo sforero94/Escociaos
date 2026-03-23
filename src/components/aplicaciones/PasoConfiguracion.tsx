@@ -109,7 +109,8 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
       // Debug: Verificar datos de lotes
 
       setLotesCatalogo(lotesFormateados);
-    } catch (error) {
+    } catch (err) {
+      console.error('Failed to load lotes catalog:', err);
     } finally {
       setCargandoLotes(false);
     }

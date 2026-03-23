@@ -77,6 +77,7 @@ export function DetalleAplicacion({
         .single();
 
       if (appError) {
+        console.error('Failed to load aplicacion details:', appError);
       }
 
 
@@ -211,6 +212,7 @@ export function DetalleAplicacion({
         .eq('aplicacion_id', aplicacion.id);
 
       if (errorMezclas) {
+        console.error('Failed to load mezclas for aplicacion:', errorMezclas);
       }
 
       let productosPlaneados = null;
@@ -249,6 +251,7 @@ export function DetalleAplicacion({
         }
 
         if (result.error) {
+          console.error('Failed to load planned products for mezcla:', result.error);
         }
       }
 
@@ -325,7 +328,8 @@ export function DetalleAplicacion({
       const insumos = Array.from(insumosMap.values());
       setResumenInsumos(insumos);
 
-    } catch (error) {
+    } catch (err) {
+      console.error('Failed to load aplicacion detail data:', err);
     } finally {
       setLoading(false);
     }
@@ -418,7 +422,7 @@ export function DetalleAplicacion({
         email: 'contacto@escocia-hass.com',
       };
 
-      generarPDFListaCompras(lista, configuracion as any, datosEmpresa);
+      await generarPDFListaCompras(lista, configuracion as any, datosEmpresa);
 
     } catch (error: any) {
       toast.error('Error al generar el PDF');
@@ -431,7 +435,7 @@ export function DetalleAplicacion({
     setGenerandoReporte(true);
     try {
       const datos = await fetchDatosReporteCierre(aplicacion.id);
-      generarPDFReporteCierre(datos);
+      await generarPDFReporteCierre(datos);
     } catch (error: any) {
       toast.error('Error al generar el reporte de cierre: ' + (error?.message || 'Error desconocido'));
     } finally {

@@ -1362,7 +1362,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
 
                   {/* Botón Descargar Reporte */}
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       const fechaInicio = new Date(datosFinales.fechaInicioReal);
                       const fechaFin = new Date(datosFinales.fechaFinReal);
                       const diasCalc = Math.ceil((fechaFin.getTime() - fechaInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1;
@@ -1376,7 +1376,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                         costosPorProducto.set(mov.producto_id, prev + mov.cantidad_utilizada * mov.costo_unitario);
                       });
 
-                      generarPDFReporteCierre({
+                      await generarPDFReporteCierre({
                         nombre: aplicacion.nombre_aplicacion || '',
                         tipo_aplicacion: aplicacion.tipo_aplicacion || '',
                         proposito: aplicacion.proposito ?? undefined,

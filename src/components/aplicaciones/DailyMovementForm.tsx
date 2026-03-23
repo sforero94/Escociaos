@@ -256,6 +256,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
             presentacionKgL = productoData.presentacion_kg_l ?? undefined;
           }
         } catch (err) {
+          console.error('Failed to fetch product presentacion_kg_l:', err);
         }
       }
 
@@ -286,7 +287,8 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
           setResponsable(profile.nombre_completo);
         }
       }
-    } catch (err: any) {
+    } catch (err) {
+      console.error('Failed to load current user profile:', err);
     }
   };
 
@@ -344,10 +346,12 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
           .single();
         
         if (errorProducto) {
+          console.error('Failed to fetch product presentacion_kg_l for selection:', errorProducto);
         } else {
           presentacionKgL = productoData?.presentacion_kg_l ?? undefined;
         }
       } catch (err) {
+        console.error('Failed to fetch product presentacion_kg_l for new product:', err);
       }
     }
 

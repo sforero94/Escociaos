@@ -84,12 +84,12 @@ describe('calcularEstadoCE', () => {
     expect(result.estado).toBe('verde');
   });
 
-  it('returns amarillo when CE is 2.0-3.0', () => {
+  it('returns rojo when CE is above 1.5', () => {
     const registros: Pick<MonitoreoConductividad, 'valor_ce'>[] = [
       { valor_ce: 2.5 },
     ];
     const result = calcularEstadoCE(registros);
-    expect(result.estado).toBe('amarillo');
+    expect(result.estado).toBe('rojo');
   });
 
   it('returns rojo when CE is above 3.0', () => {

@@ -45,6 +45,7 @@ export function FiltrosGlobales({ filtros, onFiltrosChange, onAplicarFiltros }: 
       if (negociosResult.data) setNegocios(negociosResult.data);
       if (regionesResult.data) setRegiones(regionesResult.data);
     } catch (error) {
+      console.error('Failed to load global filter catalogs:', error);
     } finally {
       setLoading(false);
     }

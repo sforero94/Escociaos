@@ -306,6 +306,7 @@ export function MonitoreoDashboardV2() {
       });
 
     } catch (error) {
+      console.error('Failed to load dashboard summary:', error);
     }
   }
 
@@ -325,6 +326,7 @@ export function MonitoreoDashboardV2() {
 
       setCatalogoPlagas(data || []);
     } catch (error) {
+      console.error('Failed to load pest catalog:', error);
     }
   }
 
@@ -452,6 +454,7 @@ export function MonitoreoDashboardV2() {
 
       setTendencias(datosFormateados);
     } catch (error) {
+      console.error('Failed to load trends:', error);
     }
   }
 
@@ -572,6 +575,7 @@ export function MonitoreoDashboardV2() {
 
       setInsights(insightsGenerados);
     } catch (error) {
+      console.error('Failed to load insights:', error);
     }
   }
 
@@ -716,6 +720,7 @@ export function MonitoreoDashboardV2() {
       ));
 
     } catch (error) {
+      console.error('Failed to load critical pests:', error);
     }
   }
 

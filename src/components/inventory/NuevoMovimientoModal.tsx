@@ -56,6 +56,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
       if (error) throw error;
       setProducts(data || []);
     } catch (err: any) {
+      console.error('Failed to search products:', err);
     } finally {
       setSearching(false);
     }
@@ -89,7 +90,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
       const supabase = getSupabase();
 
       // Calcular nuevo saldo según tipo de movimiento
-      const saldoAnterior = (selectedProduct.cantidad_actual ?? 0) ?? 0;
+      const saldoAnterior = selectedProduct.cantidad_actual ?? 0;
       let cantidadMovimiento = 0;
       let nuevoSaldo = 0;
 

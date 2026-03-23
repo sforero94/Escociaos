@@ -51,7 +51,7 @@ export function ApplicationResultsDashboard({ aplicacionId }: ApplicationResults
     setGenerandoPDF(true);
     try {
       const datos = await fetchDatosReporteCierre(aplicacionId);
-      generarPDFReporteCierre(datos);
+      await generarPDFReporteCierre(datos);
     } finally {
       setGenerandoPDF(false);
     }
