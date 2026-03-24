@@ -262,7 +262,7 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
           </div>
         </DialogHeader>
 
-        <DialogBody className="flex-1 min-h-0 bg-gray-50/30">
+        <DialogBody className="flex-1 min-h-0 bg-gray-50/30 mx-0 px-0">
           <div className="px-6 md:px-8 py-6 md:py-8 space-y-6 max-w-[1120px] mx-auto w-full">
 
             {/* Métricas */}
