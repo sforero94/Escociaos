@@ -385,7 +385,7 @@ export function ProveedoresConfig() {
 
       {/* Form Dialog */}
       <Dialog open={showForm} onOpenChange={setShowForm}>
-        <DialogContent className="max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>
               {editingProveedor ? 'Editar Proveedor' : 'Nuevo Proveedor'}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
-import { StandardDialog } from '@/components/ui/standard-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -173,126 +173,128 @@ export function TransaccionGanadoForm({ open, onOpenChange, transaccion, default
 
   return (
     <>
-      <StandardDialog
-        open={open}
-        onOpenChange={onOpenChange}
-        title={isEditing ? 'Editar Transaccion Ganado' : 'Nueva Transaccion Ganado'}
-        size="sm"
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancelar</Button>
-            <Button onClick={handleSubmit} disabled={saving}>
-              {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              {isEditing ? 'Guardar' : 'Registrar'}
-            </Button>
-          </div>
-        }
-      >
-        <div className="space-y-4 p-1">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label>Fecha *</Label>
-              <Input type="date" value={formData.fecha} onChange={(e) => update('fecha', e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Tipo *</Label>
-              <select
-                value={formData.tipo}
-                onChange={(e) => update('tipo', e.target.value)}
-                className={selectClass}
-              >
-                <option value="compra">Compra</option>
-                <option value="venta">Venta</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            {/* Finca dropdown */}
-            <div className="space-y-1.5">
-              <Label>Finca</Label>
-              {newFinca ? (
-                <div className="flex gap-1.5">
-                  <Input
-                    value={formData.finca}
-                    onChange={(e) => update('finca', e.target.value)}
-                    placeholder="Nueva finca..."
-                    className="flex-1"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => { setNewFinca(false); update('finca', ''); }}
-                    className="px-2 text-xs text-gray-500 hover:text-gray-700"
-                  >
-                    Cancelar
-                  </button>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent size="md">
+          <DialogHeader>
+            <DialogTitle>{isEditing ? 'Editar Transaccion Ganado' : 'Nueva Transaccion Ganado'}</DialogTitle>
+          </DialogHeader>
+          <DialogBody>
+            <div className="space-y-4 p-1">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Fecha *</Label>
+                  <Input type="date" value={formData.fecha} onChange={(e) => update('fecha', e.target.value)} />
                 </div>
-              ) : (
-                <select
-                  value={formData.finca}
-                  onChange={(e) => handleFincaChange(e.target.value)}
-                  className={selectClass}
-                >
-                  <option value="">Seleccionar...</option>
-                  {fincas.map((f) => <option key={f} value={f}>{f}</option>)}
-                  <option value="__new__">+ Nueva finca</option>
-                </select>
-              )}
-            </div>
+                <div className="space-y-1.5">
+                  <Label>Tipo *</Label>
+                  <select
+                    value={formData.tipo}
+                    onChange={(e) => update('tipo', e.target.value)}
+                    className={selectClass}
+                  >
+                    <option value="compra">Compra</option>
+                    <option value="venta">Venta</option>
+                  </select>
+                </div>
+              </div>
 
-            {/* Proveedor (compra) or Cliente (venta) dropdown */}
-            <div className="space-y-1.5">
-              <Label>{isCompra ? 'Proveedor' : 'Cliente'}</Label>
-              <div className="flex gap-1.5">
-                <select
-                  value={formData.cliente_proveedor}
-                  onChange={(e) => update('cliente_proveedor', e.target.value)}
-                  className={`${selectClass} flex-1`}
-                >
-                  <option value="">Seleccionar...</option>
-                  {isCompra
-                    ? proveedores.map((p) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)
-                    : compradores.map((c) => <option key={c.id} value={c.nombre}>{c.nombre}</option>)
-                  }
-                </select>
-                <button
-                  type="button"
-                  onClick={() => isCompra ? setShowProveedorDialog(true) : setShowCompradorDialog(true)}
-                  className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-primary transition-colors flex-shrink-0"
-                  title={isCompra ? 'Nuevo proveedor' : 'Nuevo cliente'}
-                >
-                  <Plus className="w-4 h-4" />
-                </button>
+              <div className="grid grid-cols-2 gap-4">
+                {/* Finca dropdown */}
+                <div className="space-y-1.5">
+                  <Label>Finca</Label>
+                  {newFinca ? (
+                    <div className="flex gap-1.5">
+                      <Input
+                        value={formData.finca}
+                        onChange={(e) => update('finca', e.target.value)}
+                        placeholder="Nueva finca..."
+                        className="flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { setNewFinca(false); update('finca', ''); }}
+                        className="px-2 text-xs text-gray-500 hover:text-gray-700"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      value={formData.finca}
+                      onChange={(e) => handleFincaChange(e.target.value)}
+                      className={selectClass}
+                    >
+                      <option value="">Seleccionar...</option>
+                      {fincas.map((f) => <option key={f} value={f}>{f}</option>)}
+                      <option value="__new__">+ Nueva finca</option>
+                    </select>
+                  )}
+                </div>
+
+                {/* Proveedor (compra) or Cliente (venta) dropdown */}
+                <div className="space-y-1.5">
+                  <Label>{isCompra ? 'Proveedor' : 'Cliente'}</Label>
+                  <div className="flex gap-1.5">
+                    <select
+                      value={formData.cliente_proveedor}
+                      onChange={(e) => update('cliente_proveedor', e.target.value)}
+                      className={`${selectClass} flex-1`}
+                    >
+                      <option value="">Seleccionar...</option>
+                      {isCompra
+                        ? proveedores.map((p) => <option key={p.id} value={p.nombre}>{p.nombre}</option>)
+                        : compradores.map((c) => <option key={c.id} value={c.nombre}>{c.nombre}</option>)
+                      }
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => isCompra ? setShowProveedorDialog(true) : setShowCompradorDialog(true)}
+                      className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-primary transition-colors flex-shrink-0"
+                      title={isCompra ? 'Nuevo proveedor' : 'Nuevo cliente'}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Cabezas</Label>
+                  <Input type="number" value={formData.cantidad_cabezas} onChange={(e) => update('cantidad_cabezas', e.target.value)} placeholder="0" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Kilos</Label>
+                  <Input type="number" value={formData.kilos_pagados} onChange={(e) => update('kilos_pagados', e.target.value)} placeholder="0" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>$/Kilo</Label>
+                  <Input type="number" value={formData.precio_kilo} onChange={(e) => update('precio_kilo', e.target.value)} placeholder="0" />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Valor Total *</Label>
+                <Input type="number" value={formData.valor_total} onChange={(e) => update('valor_total', e.target.value)} placeholder="0" />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Observaciones</Label>
+                <Textarea value={formData.observaciones} onChange={(e) => update('observaciones', e.target.value)} placeholder="Notas adicionales..." rows={2} />
               </div>
             </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-1.5">
-              <Label>Cabezas</Label>
-              <Input type="number" value={formData.cantidad_cabezas} onChange={(e) => update('cantidad_cabezas', e.target.value)} placeholder="0" />
+          </DialogBody>
+          <DialogFooter>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancelar</Button>
+              <Button onClick={handleSubmit} disabled={saving}>
+                {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                {isEditing ? 'Guardar' : 'Registrar'}
+              </Button>
             </div>
-            <div className="space-y-1.5">
-              <Label>Kilos</Label>
-              <Input type="number" value={formData.kilos_pagados} onChange={(e) => update('kilos_pagados', e.target.value)} placeholder="0" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>$/Kilo</Label>
-              <Input type="number" value={formData.precio_kilo} onChange={(e) => update('precio_kilo', e.target.value)} placeholder="0" />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Valor Total *</Label>
-            <Input type="number" value={formData.valor_total} onChange={(e) => update('valor_total', e.target.value)} placeholder="0" />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Observaciones</Label>
-            <Textarea value={formData.observaciones} onChange={(e) => update('observaciones', e.target.value)} placeholder="Notas adicionales..." rows={2} />
-          </div>
-        </div>
-      </StandardDialog>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ProveedorDialog
         open={showProveedorDialog}

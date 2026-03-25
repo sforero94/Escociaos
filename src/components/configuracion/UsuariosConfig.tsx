@@ -345,7 +345,7 @@ export function UsuariosConfig() {
 
       {/* Modal Crear/Editar Usuario */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent size="md">
           <DialogHeader>
             <DialogTitle className="text-foreground">
               {modalMode === 'crear' ? 'Nuevo Usuario' : 'Editar Usuario'}

@@ -4,6 +4,7 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
+  DialogBody,
   DialogTitle,
   DialogDescription
 } from '../ui/dialog';
@@ -475,7 +476,7 @@ export function MapaCalorIncidencias({
 
       {/* MODAL DE DETALLES */}
       <Dialog open={modalAbierto} onOpenChange={setModalAbierto}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent size="xl">
           {celdaSeleccionada && (
             <>
               <DialogHeader>
@@ -488,9 +489,10 @@ export function MapaCalorIncidencias({
                 </DialogDescription>
               </DialogHeader>
 
+              <DialogBody>
               <div className="mt-4">
                 <h4 className="font-medium text-foreground mb-3">Detalle de Monitoreos</h4>
-                <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                <div className="space-y-2">
                   {celdaSeleccionada.monitoreos.map((m, index) => (
                     <div
                       key={m.id || index}
@@ -529,6 +531,7 @@ export function MapaCalorIncidencias({
                   ))}
                 </div>
               </div>
+              </DialogBody>
             </>
           )}
         </DialogContent>

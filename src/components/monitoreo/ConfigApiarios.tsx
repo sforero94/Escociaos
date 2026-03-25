@@ -233,7 +233,7 @@ export function ConfigApiarios() {
 
         {/* Modal */}
         <Dialog open={modalAbierto} onOpenChange={setModalAbierto}>
-          <DialogContent className="max-w-md">
+          <DialogContent size="sm">
             <DialogHeader>
               <DialogTitle>{editando ? 'Editar Apiario' : 'Nuevo Apiario'}</DialogTitle>
             </DialogHeader>

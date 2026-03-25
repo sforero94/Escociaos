@@ -108,7 +108,7 @@ export function RegistroColmenas({ open, onClose, onSuccess }: RegistroColmenasP
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>Registrar Monitoreo de Colmenas</DialogTitle>
         </DialogHeader>

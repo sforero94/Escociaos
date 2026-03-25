@@ -1,10 +1,16 @@
 import { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { CheckCircle2, Clock, Loader2, X } from 'lucide-react';
+import { CheckCircle2, Clock, Loader2 } from 'lucide-react';
 import { getSupabase } from '@/utils/supabase/client';
 import { formatNumber } from '@/utils/format';
 import { formatearFechaCorta } from '@/utils/fechas';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogBody,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 interface GastosDetalleDialogProps {
   open: boolean;
@@ -44,16 +50,6 @@ export function GastosDetalleDialog({
   const [gastos, setGastos] = useState<GastoDetalle[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
-
-  // Lock body scroll when dialog is open
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
 
   useEffect(() => {
     if (open) loadGastos();
@@ -101,47 +97,22 @@ export function GastosDetalleDialog({
     }
   };
 
-  if (!open) return null;
-
-  return createPortal(
-    // Fullscreen overlay — flex centering, above everything
-    <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center overflow-hidden p-8"
-    >
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50"
-        onClick={() => onOpenChange(false)}
-      />
-
-      {/* Panel */}
-      <div
-        className="relative w-[90%] max-w-3xl flex flex-col overflow-hidden bg-background rounded-xl shadow-2xl border border-border"
-        style={{ maxHeight: 'min(80vh, calc(100dvh - 4rem))' }}
-      >
-        {/* Header — never scrolls */}
-        <div className="shrink-0 p-6 border-b border-border">
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="lg" className="p-0 gap-0">
+        <DialogHeader className="p-6 border-b border-border">
           <div className="flex items-start justify-between gap-4">
-            <h2 className="text-base font-semibold text-foreground">
+            <DialogTitle className="text-base">
               Gastos de {negocioNombre} para {categoriaNombre} — {periodoLabel}
-            </h2>
-            <div className="flex items-center gap-4">
-              <div className="rounded-lg bg-red-50 px-3 py-1.5 text-right">
-                <p className="text-[10px] font-medium text-red-600 uppercase">Total</p>
-                <p className="text-lg font-bold text-red-700">${formatNumber(total)}</p>
-              </div>
-              <button
-                onClick={() => onOpenChange(false)}
-                className="rounded-lg p-1.5 hover:bg-gray-100 transition-colors"
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
+            </DialogTitle>
+            <div className="rounded-lg bg-red-50 px-3 py-1.5 text-right">
+              <p className="text-[10px] font-medium text-red-600 uppercase">Total</p>
+              <p className="text-lg font-bold text-red-700">${formatNumber(total)}</p>
             </div>
           </div>
-        </div>
+        </DialogHeader>
 
-        {/* Scrollable body */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-6">
+        <DialogBody className="p-6">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-6 h-6 text-primary animate-spin" />
@@ -189,9 +160,8 @@ export function GastosDetalleDialog({
               })}
             </div>
           )}
-        </div>
-      </div>
-    </div>,
-    document.body
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -22,6 +22,7 @@ import {
 } from '../ui/table';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -485,7 +486,7 @@ const Contratistas: React.FC = () => {
 
       {/* Dialog de formulario */}
       <Dialog open={showFormDialog} onOpenChange={setShowFormDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent size="lg">
           <DialogHeader>
             <DialogTitle>
               {editingContratista ? 'Editar Contratista' : 'Nuevo Contratista'}
@@ -495,6 +496,7 @@ const Contratistas: React.FC = () => {
             </DialogDescription>
           </DialogHeader>
 
+          <DialogBody>
           <div className="space-y-4">
             {/* Información básica */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -621,6 +623,7 @@ const Contratistas: React.FC = () => {
               </div>
             </div>
           </div>
+          </DialogBody>
 
           <DialogFooter>
             <Button variant="outline" onClick={handleCloseForm}>

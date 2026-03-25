@@ -21,6 +21,7 @@ import {
 } from '../ui/table';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -634,7 +635,7 @@ María García,9876543210,3109876543,maria@example.com,Activo,Jefe de Cosecha,In
                     <span className="hidden md:inline">Importar CSV</span>
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                <DialogContent size="xl">
                   <DialogHeader>
                     <DialogTitle>Importar Empleados desde CSV</DialogTitle>
                     <DialogDescription>
@@ -643,63 +644,65 @@ María García,9876543210,3109876543,maria@example.com,Activo,Jefe de Cosecha,In
                     </DialogDescription>
                   </DialogHeader>
 
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="csv-file">Seleccionar archivo CSV</Label>
-                      <Input
-                        id="csv-file"
-                        type="file"
-                        accept=".csv"
-                        onChange={handleCsvUpload}
-                        className="mt-1"
-                      />
-                    </div>
-
-                    {csvPreview && csvData.length > 0 && (
+                  <DialogBody>
+                    <div className="space-y-4">
                       <div>
-                        <h3 className="font-semibold mb-2">
-                          Vista previa ({csvData.length} empleados)
-                        </h3>
-                        <div className="border rounded-lg overflow-x-auto max-h-96">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Nombre</TableHead>
-                                <TableHead>Cédula</TableHead>
-                                <TableHead>Cargo</TableHead>
-                                <TableHead>Estado</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {csvData.slice(0, 10).map((emp, idx) => (
-                                <TableRow key={idx}>
-                                  <TableCell>{emp.nombre}</TableCell>
-                                  <TableCell>{emp.cedula}</TableCell>
-                                  <TableCell>{emp.cargo}</TableCell>
-                                  <TableCell>
-                                    <Badge
-                                      variant={
-                                        emp.estado === 'Activo'
-                                          ? 'default'
-                                          : 'secondary'
-                                      }
-                                    >
-                                      {emp.estado}
-                                    </Badge>
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                          {csvData.length > 10 && (
-                            <p className="text-sm text-gray-500 p-2 text-center">
-                              ... y {csvData.length - 10} empleados más
-                            </p>
-                          )}
-                        </div>
+                        <Label htmlFor="csv-file">Seleccionar archivo CSV</Label>
+                        <Input
+                          id="csv-file"
+                          type="file"
+                          accept=".csv"
+                          onChange={handleCsvUpload}
+                          className="mt-1"
+                        />
                       </div>
-                    )}
-                  </div>
+
+                      {csvPreview && csvData.length > 0 && (
+                        <div>
+                          <h3 className="font-semibold mb-2">
+                            Vista previa ({csvData.length} empleados)
+                          </h3>
+                          <div className="border rounded-lg overflow-x-auto max-h-96">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Nombre</TableHead>
+                                  <TableHead>Cédula</TableHead>
+                                  <TableHead>Cargo</TableHead>
+                                  <TableHead>Estado</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {csvData.slice(0, 10).map((emp, idx) => (
+                                  <TableRow key={idx}>
+                                    <TableCell>{emp.nombre}</TableCell>
+                                    <TableCell>{emp.cedula}</TableCell>
+                                    <TableCell>{emp.cargo}</TableCell>
+                                    <TableCell>
+                                      <Badge
+                                        variant={
+                                          emp.estado === 'Activo'
+                                            ? 'default'
+                                            : 'secondary'
+                                        }
+                                      >
+                                        {emp.estado}
+                                      </Badge>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                            {csvData.length > 10 && (
+                              <p className="text-sm text-gray-500 p-2 text-center">
+                                ... y {csvData.length - 10} empleados más
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </DialogBody>
 
                   <DialogFooter>
                     <Button
@@ -895,7 +898,7 @@ María García,9876543210,3109876543,maria@example.com,Activo,Jefe de Cosecha,In
 
       {/* Dialog de formulario de empleado */}
       <Dialog open={showFormDialog} onOpenChange={setShowFormDialog}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent size="xl">
           <DialogHeader>
             <DialogTitle>
               {editingEmpleado ? 'Editar Empleado' : 'Nuevo Empleado'}
@@ -906,6 +909,7 @@ María García,9876543210,3109876543,maria@example.com,Activo,Jefe de Cosecha,In
             </DialogDescription>
           </DialogHeader>
 
+          <DialogBody>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
             {/* Información Personal */}
             <div className="col-span-2">
@@ -1196,6 +1200,7 @@ María García,9876543210,3109876543,maria@example.com,Activo,Jefe de Cosecha,In
               />
             </div>
           </div>
+          </DialogBody>
 
           <DialogFooter>
             <Button variant="outline" onClick={handleCloseForm}>

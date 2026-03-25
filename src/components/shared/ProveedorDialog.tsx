@@ -3,7 +3,7 @@ import { getSupabase } from '../../utils/supabase/client';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { StandardDialog } from '../ui/standard-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogTitle, DialogDescription } from '../ui/dialog';
 import { Building2, Loader2 } from 'lucide-react';
 
 interface ProveedorDialogProps {
@@ -118,71 +118,75 @@ export function ProveedorDialog({
   );
 
   return (
-    <StandardDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={
-        <span className="flex items-center gap-2">
-          <Building2 className="w-5 h-5 text-primary" />
-          Crear Nuevo Proveedor
-        </span>
-      }
-      description="Complete la información del proveedor para agregarlo al catálogo"
-      size="sm"
-      footer={footerButtons}
-    >
-      <form onSubmit={handleSubmit} className="space-y-4 contents">
-          {/* Nombre - Required */}
-          <div className="space-y-2">
-            <Label htmlFor="nombre">Nombre *</Label>
-            <Input
-              id="nombre"
-              value={formData.nombre}
-              onChange={(e) => handleInputChange('nombre', e.target.value)}
-              placeholder="Nombre del proveedor"
-              disabled={saving}
-              required
-            />
-          </div>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <DialogTitle>
+            <span className="flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-primary" />
+              Crear Nuevo Proveedor
+            </span>
+          </DialogTitle>
+          <DialogDescription>Complete la información del proveedor para agregarlo al catálogo</DialogDescription>
+        </DialogHeader>
+        <DialogBody>
+          <form onSubmit={handleSubmit} className="space-y-4 contents">
+            {/* Nombre - Required */}
+            <div className="space-y-2">
+              <Label htmlFor="nombre">Nombre *</Label>
+              <Input
+                id="nombre"
+                value={formData.nombre}
+                onChange={(e) => handleInputChange('nombre', e.target.value)}
+                placeholder="Nombre del proveedor"
+                disabled={saving}
+                required
+              />
+            </div>
 
-          {/* NIT - Optional */}
-          <div className="space-y-2">
-            <Label htmlFor="nit">NIT</Label>
-            <Input
-              id="nit"
-              value={formData.nit}
-              onChange={(e) => handleInputChange('nit', e.target.value)}
-              placeholder="Número de identificación tributaria"
-              disabled={saving}
-            />
-          </div>
+            {/* NIT - Optional */}
+            <div className="space-y-2">
+              <Label htmlFor="nit">NIT</Label>
+              <Input
+                id="nit"
+                value={formData.nit}
+                onChange={(e) => handleInputChange('nit', e.target.value)}
+                placeholder="Número de identificación tributaria"
+                disabled={saving}
+              />
+            </div>
 
-          {/* Teléfono - Optional */}
-          <div className="space-y-2">
-            <Label htmlFor="telefono">Teléfono</Label>
-            <Input
-              id="telefono"
-              type="tel"
-              value={formData.telefono}
-              onChange={(e) => handleInputChange('telefono', e.target.value)}
-              placeholder="Teléfono de contacto"
-              disabled={saving}
-            />
-          </div>
+            {/* Teléfono - Optional */}
+            <div className="space-y-2">
+              <Label htmlFor="telefono">Teléfono</Label>
+              <Input
+                id="telefono"
+                type="tel"
+                value={formData.telefono}
+                onChange={(e) => handleInputChange('telefono', e.target.value)}
+                placeholder="Teléfono de contacto"
+                disabled={saving}
+              />
+            </div>
 
-          {/* Email - Optional */}
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              value={formData.email}
-              onChange={(e) => handleInputChange('email', e.target.value)}
-              placeholder="Email de contacto"
-              disabled={saving}
-            />
-          </div>
-        </form>
-    </StandardDialog>
+            {/* Email - Optional */}
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                value={formData.email}
+                onChange={(e) => handleInputChange('email', e.target.value)}
+                placeholder="Email de contacto"
+                disabled={saving}
+              />
+            </div>
+          </form>
+        </DialogBody>
+        <DialogFooter>
+          {footerButtons}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

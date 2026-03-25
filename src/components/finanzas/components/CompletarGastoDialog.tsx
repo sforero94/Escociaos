@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../ui/select';
-import { StandardDialog } from '../../ui/standard-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter } from '../../ui/dialog';
 import { Badge } from '../../ui/badge';
 import { AlertCircle, CheckCircle, Clock, Package } from 'lucide-react';
 import type { Gasto, Negocio, Region, CategoriaGasto, ConceptoGasto, Proveedor, MedioPago } from '../../../types/finanzas';
@@ -232,201 +232,203 @@ export function CompletarGastoDialog({
   );
 
   return (
-    <StandardDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={
-        <>
-          <Package className="w-5 h-5 inline mr-2 text-orange-600" />
-          Completar Gasto Pendiente
-        </>
-      }
-      description="Complete la información del gasto generado automáticamente desde una compra"
-      size="md"
-      footer={footerButtons}
-    >
-      <form onSubmit={handleSubmit} className="contents">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="lg">
+        <DialogHeader>
+          <DialogTitle>
+            <Package className="w-5 h-5 inline mr-2 text-orange-600" />
+            Completar Gasto Pendiente
+          </DialogTitle>
+          <DialogDescription>Complete la información del gasto generado automáticamente desde una compra</DialogDescription>
+        </DialogHeader>
+        <DialogBody>
+          <form onSubmit={handleSubmit} className="contents">
             <div className="space-y-6">
               {/* Gasto Information Summary */}
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
-              <h4 className="font-medium text-orange-900 mb-2">Información del Gasto</h4>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-600">Nombre:</span>
-                  <p className="font-medium">{gasto.nombre}</p>
-                </div>
-                <div>
-                  <span className="text-gray-600">Valor:</span>
-                  <p className="font-medium text-green-600">{formatCurrency(gasto.valor)}</p>
-                </div>
-                <div>
-                  <span className="text-gray-600">Fecha:</span>
-                  <p className="font-medium">{new Date(gasto.fecha).toLocaleDateString('es-CO')}</p>
-                </div>
-                <div>
-                  <span className="text-gray-600">Estado:</span>
-                  <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-300">
-                    <Clock className="w-3 h-3 mr-1" />
-                    Pendiente ({getDiasPendiente()} días)
-                  </Badge>
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1">
+                    <h4 className="font-medium text-orange-900 mb-2">Información del Gasto</h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-gray-600">Nombre:</span>
+                        <p className="font-medium">{gasto.nombre}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Valor:</span>
+                        <p className="font-medium text-green-600">{formatCurrency(gasto.valor)}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Fecha:</span>
+                        <p className="font-medium">{new Date(gasto.fecha).toLocaleDateString('es-CO')}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Estado:</span>
+                        <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-300">
+                          <Clock className="w-3 h-3 mr-1" />
+                          Pendiente ({getDiasPendiente()} días)
+                        </Badge>
+                      </div>
+                    </div>
+                    {gasto.observaciones && (
+                      <div className="mt-3">
+                        <span className="text-gray-600 text-sm">Observaciones:</span>
+                        <p className="text-sm text-gray-700 mt-1">{gasto.observaciones}</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-              {gasto.observaciones && (
-                <div className="mt-3">
-                  <span className="text-gray-600 text-sm">Observaciones:</span>
-                  <p className="text-sm text-gray-700 mt-1">{gasto.observaciones}</p>
+
+              {/* Business and Region */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="negocio">Negocio *</Label>
+                  <Select
+                    value={formData.negocio_id}
+                    onValueChange={(value) => handleInputChange('negocio_id', value)}
+                    disabled={loading || loadingCatalogs}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar negocio" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {negocios.map((negocio) => (
+                        <SelectItem key={negocio.id} value={negocio.id}>
+                          {negocio.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="region">Región *</Label>
+                  <Select
+                    value={formData.region_id}
+                    onValueChange={(value) => handleInputChange('region_id', value)}
+                    disabled={loading || loadingCatalogs}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar región" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {regiones.map((region) => (
+                        <SelectItem key={region.id} value={region.id}>
+                          {region.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Category and Concept */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="categoria">Categoría *</Label>
+                  <Select
+                    value={formData.categoria_id}
+                    onValueChange={(value) => handleInputChange('categoria_id', value)}
+                    disabled={loading || loadingCatalogs}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar categoría" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categorias.map((categoria) => (
+                        <SelectItem key={categoria.id} value={categoria.id}>
+                          {categoria.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="concepto">Concepto *</Label>
+                  <Select
+                    value={formData.concepto_id}
+                    onValueChange={(value) => handleInputChange('concepto_id', value)}
+                    disabled={loading || loadingCatalogs || !formData.categoria_id}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar concepto" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {conceptos.map((concepto) => (
+                        <SelectItem key={concepto.id} value={concepto.id}>
+                          {concepto.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Provider and Payment Method */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="proveedor">Proveedor</Label>
+                  <Select
+                    value={formData.proveedor_id}
+                    onValueChange={(value) => handleInputChange('proveedor_id', value)}
+                    disabled={loading || loadingCatalogs}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar proveedor (opcional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {proveedores.map((proveedor) => (
+                        <SelectItem key={proveedor.id} value={proveedor.id}>
+                          {proveedor.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="medio_pago">Medio de Pago *</Label>
+                  <Select
+                    value={formData.medio_pago_id}
+                    onValueChange={(value) => handleInputChange('medio_pago_id', value)}
+                    disabled={loading || loadingCatalogs}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar medio de pago" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {mediosPago.map((medio) => (
+                        <SelectItem key={medio.id} value={medio.id}>
+                          {medio.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Observations */}
+              <div className="space-y-2">
+                <Label htmlFor="observaciones">Observaciones</Label>
+                <Textarea
+                  id="observaciones"
+                  value={formData.observaciones}
+                  onChange={(e) => handleInputChange('observaciones', e.target.value)}
+                  placeholder="Observaciones adicionales..."
+                  rows={3}
+                  disabled={loading}
+                />
               </div>
             </div>
-          </div>
-
-          {/* Business and Region */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="negocio">Negocio *</Label>
-              <Select
-                value={formData.negocio_id}
-                onValueChange={(value) => handleInputChange('negocio_id', value)}
-                disabled={loading || loadingCatalogs}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar negocio" />
-                </SelectTrigger>
-                <SelectContent>
-                  {negocios.map((negocio) => (
-                    <SelectItem key={negocio.id} value={negocio.id}>
-                      {negocio.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="region">Región *</Label>
-              <Select
-                value={formData.region_id}
-                onValueChange={(value) => handleInputChange('region_id', value)}
-                disabled={loading || loadingCatalogs}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar región" />
-                </SelectTrigger>
-                <SelectContent>
-                  {regiones.map((region) => (
-                    <SelectItem key={region.id} value={region.id}>
-                      {region.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Category and Concept */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="categoria">Categoría *</Label>
-              <Select
-                value={formData.categoria_id}
-                onValueChange={(value) => handleInputChange('categoria_id', value)}
-                disabled={loading || loadingCatalogs}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar categoría" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categorias.map((categoria) => (
-                    <SelectItem key={categoria.id} value={categoria.id}>
-                      {categoria.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="concepto">Concepto *</Label>
-              <Select
-                value={formData.concepto_id}
-                onValueChange={(value) => handleInputChange('concepto_id', value)}
-                disabled={loading || loadingCatalogs || !formData.categoria_id}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar concepto" />
-                </SelectTrigger>
-                <SelectContent>
-                  {conceptos.map((concepto) => (
-                    <SelectItem key={concepto.id} value={concepto.id}>
-                      {concepto.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Provider and Payment Method */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="proveedor">Proveedor</Label>
-              <Select
-                value={formData.proveedor_id}
-                onValueChange={(value) => handleInputChange('proveedor_id', value)}
-                disabled={loading || loadingCatalogs}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar proveedor (opcional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {proveedores.map((proveedor) => (
-                    <SelectItem key={proveedor.id} value={proveedor.id}>
-                      {proveedor.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="medio_pago">Medio de Pago *</Label>
-              <Select
-                value={formData.medio_pago_id}
-                onValueChange={(value) => handleInputChange('medio_pago_id', value)}
-                disabled={loading || loadingCatalogs}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar medio de pago" />
-                </SelectTrigger>
-                <SelectContent>
-                  {mediosPago.map((medio) => (
-                    <SelectItem key={medio.id} value={medio.id}>
-                      {medio.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          {/* Observations */}
-          <div className="space-y-2">
-            <Label htmlFor="observaciones">Observaciones</Label>
-            <Textarea
-              id="observaciones"
-              value={formData.observaciones}
-              onChange={(e) => handleInputChange('observaciones', e.target.value)}
-              placeholder="Observaciones adicionales..."
-              rows={3}
-              disabled={loading}
-            />
-          </div>
-        </div>
-      </form>
-    </StandardDialog>
+          </form>
+        </DialogBody>
+        <DialogFooter>
+          {footerButtons}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

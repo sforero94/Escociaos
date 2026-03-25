@@ -50,6 +50,7 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
+  DialogBody,
   DialogTitle,
 } from '../ui/dialog';
 import type {
@@ -1437,12 +1438,13 @@ export function DashboardMonitoreoV3() {
 
               {/* CE Drill-down modal: bar chart per tree */}
               <Dialog open={!!ceDrilldownLote} onOpenChange={(open) => !open && setCeDrilldownLote(null)}>
-                <DialogContent className="overflow-y-auto" style={{ width: '75vw', maxWidth: '75vw', height: '75vh' }}>
+                <DialogContent size="xl">
                   <DialogHeader>
                     <DialogTitle>
                       CE por árbol — {ceDrilldownLote?.lote_nombre} ({ceDrilldownLote?.fecha ? formatearFechaCorta(ceDrilldownLote.fecha) : ''})
                     </DialogTitle>
                   </DialogHeader>
+                  <DialogBody>
                   {ceDrilldownLote && (() => {
                     const lecturas = ceDrilldownLote.lecturas
                       .filter(l => l.alta != null || l.baja != null)
@@ -1496,6 +1498,7 @@ export function DashboardMonitoreoV3() {
                       </div>
                     );
                   })()}
+                  </DialogBody>
                 </DialogContent>
               </Dialog>
             </>

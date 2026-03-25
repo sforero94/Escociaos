@@ -360,7 +360,7 @@ export function MediosPagoConfig() {
 
       {/* Form Dialog */}
       <Dialog open={showForm} onOpenChange={setShowForm}>
-        <DialogContent className="max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>
               {editingMedioPago ? 'Editar Medio de Pago' : 'Nuevo Medio de Pago'}

@@ -4,7 +4,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { formatearFecha } from '../../utils/fechas';
-import { StandardDialog } from '../ui/standard-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter } from '../ui/dialog';
 import { CalendarIcon, Clock } from 'lucide-react';
 
 // Import types from main component
@@ -311,19 +311,16 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
   );
 
   return (
-    <StandardDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={
-        <>
-          <Clock className="h-5 w-5 inline mr-2" />
-          Registrar Trabajo - {tarea?.nombre}
-        </>
-      }
-      description="Siga los pasos para registrar el trabajo realizado"
-      size="xl"
-      footer={footerButtons}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="lg">
+        <DialogHeader>
+          <DialogTitle>
+            <Clock className="h-5 w-5 inline mr-2" />
+            Registrar Trabajo - {tarea?.nombre}
+          </DialogTitle>
+          <DialogDescription>Siga los pasos para registrar el trabajo realizado</DialogDescription>
+        </DialogHeader>
+        <DialogBody>
       <>
         {/* Progress indicator */}
         <div className="flex items-center justify-center mb-6">
@@ -477,7 +474,12 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
             </div>
           )}
       </>
-    </StandardDialog>
+        </DialogBody>
+        <DialogFooter>
+          {footerButtons}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
 

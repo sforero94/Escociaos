@@ -458,8 +458,8 @@ npm run lint
 - Modifying table schemas may break triggers — check `src/sql/migrations/` for trigger definitions
 - See `src/sql/migrations/README_APLICACIONES_LABORES_SYNC.md` for the sync architecture
 
-### GastosDetalleDialog (`src/components/finanzas/dashboard/components/GastosDetalleDialog.tsx`)
-Uses `createPortal` + manual scroll lock instead of Radix `Dialog`. This is intentional — Radix Dialog's default `grid` layout and class merging via `cn()` conflict with the flex-based scrollable body pattern needed here. Do not refactor to use Radix Dialog.
+### Dialog Size System (`src/components/ui/dialog.tsx`)
+All dialogs use a fixed-size tier via the `size` prop on `DialogContent`: `sm` (448×384px), `md` (576×512px), `lg` (768×640px), `xl` (1024×704px). These are max dimensions in rem — they never fill the screen. The base `DialogContent` enforces `overflow-hidden`, so scrollable content MUST go inside `<DialogBody>`. Never put `overflow-y-auto` on `DialogContent` directly. `StandardDialog` was removed — use `Dialog` + `DialogContent` + `DialogHeader` + `DialogBody` + `DialogFooter` directly.
 
 ---
 
@@ -548,7 +548,7 @@ All monetary and numeric values in the UI **must** follow Colombian formatting:
 
 - **Never modify desktop layout without verifying mobile**. The sidebar collapses on mobile — body content must not hide behind it.
 - **Number inputs**: must prevent scroll-to-change with `onWheel={(e) => e.currentTarget.blur()}`. This is a critical bug source — users accidentally change values by scrolling.
-- **Modals/popups**: must lock body scroll (`overflow: hidden` on body) and be fixed-position with internal scroll. Use `createPortal` if Radix Dialog doesn't support the layout.
+- **Modals/popups**: always use the `Dialog` component with a `size` prop and `DialogBody` for scrollable content. Never bypass Radix Dialog with `createPortal`.
 - **Sidebar collapse**: when collapsed, hover tooltips must have opaque background — never transparent text on transparent background.
 
 ---

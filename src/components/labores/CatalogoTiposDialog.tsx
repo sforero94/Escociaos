@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../ui/select';
-import { StandardDialog } from '../ui/standard-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter } from '../ui/dialog';
 import { ConfirmDialog } from '../ui/confirm-dialog';
 import { Badge } from '../ui/badge';
 import {
@@ -237,19 +237,18 @@ const CatalogoTiposDialog: React.FC<CatalogoTiposDialogProps> = ({
   ) : null;
 
   return (
-    <StandardDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={
-        <span className="flex items-center gap-2">
-          <Settings className="h-5 w-5" />
-          Catálogo de Tipos de Tareas
-        </span>
-      }
-      description="Gestiona los tipos de tareas disponibles para organizar el trabajo agrícola"
-      size="full"
-      footer={footerButtons}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="lg">
+        <DialogHeader>
+          <DialogTitle>
+            <span className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Catálogo de Tipos de Tareas
+            </span>
+          </DialogTitle>
+          <DialogDescription>Gestiona los tipos de tareas disponibles para organizar el trabajo agrícola</DialogDescription>
+        </DialogHeader>
+        <DialogBody>
       <div className="space-y-6">
           {!showForm ? (
             // Vista de lista
@@ -449,7 +448,14 @@ const CatalogoTiposDialog: React.FC<CatalogoTiposDialogProps> = ({
         onConfirm={confirmarEliminarTipo}
         destructive
       />
-    </StandardDialog>
+        </DialogBody>
+        {footerButtons && (
+          <DialogFooter>
+            {footerButtons}
+          </DialogFooter>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 };
 

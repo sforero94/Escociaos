@@ -3,7 +3,7 @@ import { getSupabase } from '@/utils/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { StandardDialog } from '@/components/ui/standard-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Users, Loader2 } from 'lucide-react';
 
 interface CompradorDialogProps {
@@ -102,56 +102,60 @@ export function CompradorDialog({
   );
 
   return (
-    <StandardDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={
-        <span className="flex items-center gap-2">
-          <Users className="w-5 h-5 text-primary" />
-          Crear Nuevo Comprador
-        </span>
-      }
-      description="Complete la informacion del comprador para agregarlo al catalogo"
-      size="sm"
-      footer={footerButtons}
-    >
-      <form onSubmit={handleSubmit} className="space-y-4 contents">
-        <div className="space-y-2">
-          <Label htmlFor="comprador-nombre">Nombre *</Label>
-          <Input
-            id="comprador-nombre"
-            value={formData.nombre}
-            onChange={(e) => handleInputChange('nombre', e.target.value)}
-            placeholder="Nombre del comprador"
-            disabled={saving}
-            required
-          />
-        </div>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <DialogTitle>
+            <span className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-primary" />
+              Crear Nuevo Comprador
+            </span>
+          </DialogTitle>
+          <DialogDescription>Complete la informacion del comprador para agregarlo al catalogo</DialogDescription>
+        </DialogHeader>
+        <DialogBody>
+          <form onSubmit={handleSubmit} className="space-y-4 contents">
+            <div className="space-y-2">
+              <Label htmlFor="comprador-nombre">Nombre *</Label>
+              <Input
+                id="comprador-nombre"
+                value={formData.nombre}
+                onChange={(e) => handleInputChange('nombre', e.target.value)}
+                placeholder="Nombre del comprador"
+                disabled={saving}
+                required
+              />
+            </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="comprador-telefono">Telefono</Label>
-          <Input
-            id="comprador-telefono"
-            type="tel"
-            value={formData.telefono}
-            onChange={(e) => handleInputChange('telefono', e.target.value)}
-            placeholder="Telefono de contacto"
-            disabled={saving}
-          />
-        </div>
+            <div className="space-y-2">
+              <Label htmlFor="comprador-telefono">Telefono</Label>
+              <Input
+                id="comprador-telefono"
+                type="tel"
+                value={formData.telefono}
+                onChange={(e) => handleInputChange('telefono', e.target.value)}
+                placeholder="Telefono de contacto"
+                disabled={saving}
+              />
+            </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="comprador-email">Email</Label>
-          <Input
-            id="comprador-email"
-            type="email"
-            value={formData.email}
-            onChange={(e) => handleInputChange('email', e.target.value)}
-            placeholder="Email de contacto"
-            disabled={saving}
-          />
-        </div>
-      </form>
-    </StandardDialog>
+            <div className="space-y-2">
+              <Label htmlFor="comprador-email">Email</Label>
+              <Input
+                id="comprador-email"
+                type="email"
+                value={formData.email}
+                onChange={(e) => handleInputChange('email', e.target.value)}
+                placeholder="Email de contacto"
+                disabled={saving}
+              />
+            </div>
+          </form>
+        </DialogBody>
+        <DialogFooter>
+          {footerButtons}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

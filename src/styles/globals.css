@@ -274,6 +274,19 @@ input[type='number'] {
   max-height: 100dvh;
 }
 
+/* Dialog size tiers — fixed rem values, capped by viewport via min() */
+.dialog-viewport-cap {
+  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
+}
+
+@media (min-width: 640px) {
+  .dialog-sm { max-width: 28rem; max-height: min(24rem, calc(100dvh - 2rem)); }
+  .dialog-md { max-width: 36rem; max-height: min(32rem, calc(100dvh - 2rem)); }
+  .dialog-lg { max-width: 48rem; max-height: min(40rem, calc(100dvh - 2rem)); }
+  .dialog-xl { max-width: 64rem; max-height: min(44rem, calc(100dvh - 2rem)); }
+}
+
 /* Touch-friendly tap targets on mobile */
 @media (max-width: 1023px) {
   .touch-target {

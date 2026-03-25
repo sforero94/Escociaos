@@ -228,7 +228,7 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[96vh] p-0 gap-0 overflow-hidden flex flex-col bg-white" style={{ width: '90vw', maxWidth: '90vw' }}>
+      <DialogContent size="xl" className="p-0 gap-0 bg-white">
         {/* Header */}
         <DialogHeader className="px-6 md:px-8 py-5 border-b bg-gray-50/80 flex-shrink-0 backdrop-blur-sm">
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 pr-8">

@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../ui/select';
-import { StandardDialog } from '../ui/standard-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter } from '../ui/dialog';
 import { Badge } from '../ui/badge';
 import { Switch } from '../ui/switch';
 import { X, AlertTriangle } from 'lucide-react';
@@ -187,17 +187,18 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
   );
 
   return (
-    <StandardDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={isEditing ? 'Editar Tarea' : 'Nueva Tarea'}
-      description={isEditing
-        ? 'Modifica los detalles de la tarea seleccionada.'
-        : 'Crea una nueva tarea para el sistema de gestión de labores.'
-      }
-      size="lg"
-      footer={footerButtons}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="lg">
+        <DialogHeader>
+          <DialogTitle>{isEditing ? 'Editar Tarea' : 'Nueva Tarea'}</DialogTitle>
+          <DialogDescription>
+            {isEditing
+              ? 'Modifica los detalles de la tarea seleccionada.'
+              : 'Crea una nueva tarea para el sistema de gestión de labores.'
+            }
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody>
       <form id="tarea-form" onSubmit={handleSubmit} className="space-y-3">
           {/* Warning banner for auto-generated tareas */}
           {tarea?.observaciones?.includes('Auto-generada desde aplicación') && (
@@ -502,7 +503,12 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
             />
           </div>
         </form>
-    </StandardDialog>
+        </DialogBody>
+        <DialogFooter>
+          {footerButtons}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
 

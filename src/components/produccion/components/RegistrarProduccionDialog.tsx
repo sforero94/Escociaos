@@ -144,7 +144,7 @@ export function RegistrarProduccionDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent size="md">
         <DialogHeader>
           <DialogTitle>Registrar Cosecha</DialogTitle>
         </DialogHeader>

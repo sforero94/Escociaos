@@ -430,7 +430,7 @@ export function TelegramConfig() {
 
       {/* Modal: Create / Edit user */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>
               {modalMode === 'crear' ? 'Crear usuario del bot' : 'Editar usuario del bot'}
@@ -554,7 +554,7 @@ export function TelegramConfig() {
 
       {/* Modal: Show access code */}
       <Dialog open={!!codigoModal} onOpenChange={() => setCodigoModal(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>Código de acceso generado</DialogTitle>
             <DialogDescription>

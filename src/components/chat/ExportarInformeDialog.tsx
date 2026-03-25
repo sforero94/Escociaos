@@ -93,7 +93,7 @@ export function ExportarInformeDialog({
   return (
     <Dialog open={!!data} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="sm:max-w-md"
+        size="sm"
         style={{ zIndex: 100 }}
         overlayStyle={{ zIndex: 99 }}
       >

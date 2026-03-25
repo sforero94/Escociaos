@@ -15,6 +15,7 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
+  DialogBody,
   DialogTitle,
 } from '../ui/dialog';
 import { toast } from 'sonner';
@@ -336,13 +337,14 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
             <span>📊 Nuevo Registro de Monitoreo</span>
           </DialogTitle>
         </DialogHeader>
 
+        <DialogBody>
         <div className="space-y-6 py-4">
           {/* FECHA */}
           <div>
@@ -648,6 +650,7 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
             </Button>
           </div>
         </div>
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

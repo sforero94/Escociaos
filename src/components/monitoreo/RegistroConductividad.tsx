@@ -266,7 +266,7 @@ export function RegistroConductividad({ open, onClose, onSuccess }: RegistroCond
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col p-0">
+      <DialogContent size="lg" className="p-0">
         {/* HEADER — sticky */}
         <div className="px-6 pt-6 pb-3 border-b bg-white sticky top-0 z-10">
           <DialogHeader>

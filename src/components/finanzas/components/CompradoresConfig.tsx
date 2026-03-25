@@ -376,7 +376,7 @@ export function CompradoresConfig() {
 
       {/* Form Dialog */}
       <Dialog open={showForm} onOpenChange={setShowForm}>
-        <DialogContent className="max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>
               {editingComprador ? 'Editar Comprador' : 'Nuevo Comprador'}

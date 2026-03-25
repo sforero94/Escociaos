@@ -12,13 +12,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../ui/select';
-import { StandardDialog } from '../../ui/standard-dialog';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogBody,
   DialogTitle,
 } from '../../ui/dialog';
 import { Badge } from '../../ui/badge';
@@ -278,217 +278,221 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
 
   return (
     <>
-    <StandardDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={isEditing ? 'Editar Ingreso' : 'Nuevo Ingreso'}
-      description={isEditing ? 'Modifica los detalles del ingreso seleccionado.' : 'Registra un nuevo ingreso en el sistema.'}
-      size="lg"
-      footer={
-        <div className="flex gap-2 justify-end w-full">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onCancel}
-            disabled={saving}
-          >
-            Cancelar
-          </Button>
-          <Button
-            type="submit"
-            disabled={saving}
-            className="bg-primary hover:bg-primary-dark"
-            onClick={handleSubmit}
-          >
-            {saving ? 'Guardando...' : (isEditing ? 'Actualizar Ingreso' : 'Crear Ingreso')}
-          </Button>
-        </div>
-      }
-    >
-      {loading ? (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="w-8 h-8 animate-spin" />
-        </div>
-      ) : (
-        <form onSubmit={handleSubmit} className="space-y-3">
-            {/* Información básica */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="fecha">Fecha *</Label>
-                <Input
-                  id="fecha"
-                  type="date"
-                  value={formData.fecha}
-                  onChange={(e) => handleInputChange('fecha', e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="valor">Valor *</Label>
-                <Input
-                  id="valor"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.valor}
-                  onChange={(e) => handleInputChange('valor', parseFloat(e.target.value) || 0)}
-                  placeholder="0.00"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2 md:col-span-3">
-                <Label htmlFor="nombre">Nombre del Ingreso *</Label>
-                <Input
-                  id="nombre"
-                  value={formData.nombre}
-                  onChange={(e) => handleInputChange('nombre', e.target.value)}
-                  placeholder="Ej: Venta de palmito orgánico"
-                  required
-                />
-              </div>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="lg">
+        <DialogHeader>
+          <DialogTitle>{isEditing ? 'Editar Ingreso' : 'Nuevo Ingreso'}</DialogTitle>
+          <DialogDescription>
+            {isEditing ? 'Modifica los detalles del ingreso seleccionado.' : 'Registra un nuevo ingreso en el sistema.'}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-8 h-8 animate-spin" />
             </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-3">
+                {/* Información básica */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="fecha">Fecha *</Label>
+                    <Input
+                      id="fecha"
+                      type="date"
+                      value={formData.fecha}
+                      onChange={(e) => handleInputChange('fecha', e.target.value)}
+                      required
+                    />
+                  </div>
 
-            {/* Ubicación y Clasificación */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="negocio">Negocio *</Label>
-                <Select
-                  value={formData.negocio_id}
-                  onValueChange={(value) => handleInputChange('negocio_id', value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar negocio" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {negocios.map((negocio) => (
-                      <SelectItem key={negocio.id} value={negocio.id}>
-                        {negocio.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="valor">Valor *</Label>
+                    <Input
+                      id="valor"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={formData.valor}
+                      onChange={(e) => handleInputChange('valor', parseFloat(e.target.value) || 0)}
+                      placeholder="0.00"
+                      required
+                    />
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="region">Región *</Label>
-                <Select
-                  value={formData.region_id}
-                  onValueChange={(value) => handleInputChange('region_id', value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar región" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {regiones.map((region) => (
-                      <SelectItem key={region.id} value={region.id}>
-                        {region.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="categoria">Categoría *</Label>
-                <Select
-                  value={formData.categoria_id}
-                  onValueChange={(value) => handleInputChange('categoria_id', value)}
-                  disabled={!formData.negocio_id}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar categoría" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categorias.map((categoria) => (
-                      <SelectItem key={categoria.id} value={categoria.id}>
-                        {categoria.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Comprador y Medio de Pago */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="comprador">Comprador</Label>
-                <div className="flex gap-2">
-                  <Select
-                    value={formData.comprador_id || undefined}
-                    onValueChange={(value) => handleInputChange('comprador_id', value)}
-                  >
-                    <SelectTrigger className="flex-1">
-                      <SelectValue placeholder="Seleccionar comprador (opcional)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {compradores.map((comprador) => (
-                        <SelectItem key={comprador.id} value={comprador.id}>
-                          {comprador.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowNewComprador(true)}
-                  >
-                    <Plus className="w-4 h-4" />
-                  </Button>
+                  <div className="space-y-2 md:col-span-3">
+                    <Label htmlFor="nombre">Nombre del Ingreso *</Label>
+                    <Input
+                      id="nombre"
+                      value={formData.nombre}
+                      onChange={(e) => handleInputChange('nombre', e.target.value)}
+                      placeholder="Ej: Venta de palmito orgánico"
+                      required
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="medio_pago">Medio de Pago *</Label>
-                <Select
-                  value={formData.medio_pago_id}
-                  onValueChange={(value) => handleInputChange('medio_pago_id', value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar medio de pago" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {mediosPago.map((medio) => (
-                      <SelectItem key={medio.id} value={medio.id}>
-                        {medio.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+                {/* Ubicación y Clasificación */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="negocio">Negocio *</Label>
+                    <Select
+                      value={formData.negocio_id}
+                      onValueChange={(value) => handleInputChange('negocio_id', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar negocio" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {negocios.map((negocio) => (
+                          <SelectItem key={negocio.id} value={negocio.id}>
+                            {negocio.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-            {/* Observaciones and Factura */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="observaciones">Observaciones</Label>
-                <Textarea
-                  id="observaciones"
-                  value={formData.observaciones}
-                  onChange={(e) => handleInputChange('observaciones', e.target.value)}
-                  placeholder="Observaciones adicionales..."
-                  rows={2}
-                />
-              </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="region">Región *</Label>
+                    <Select
+                      value={formData.region_id}
+                      onValueChange={(value) => handleInputChange('region_id', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar región" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {regiones.map((region) => (
+                          <SelectItem key={region.id} value={region.id}>
+                            {region.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-              <div className="space-y-2">
-                <Label>Factura</Label>
-                <FacturaUploader
-                  tipo="venta"
-                  currentUrl={formData.url_factura}
-                  onUploadSuccess={(url) => handleInputChange('url_factura', url)}
-                  onRemove={() => handleInputChange('url_factura', '')}
-                  disabled={saving}
-                />
-              </div>
-            </div>
-        </form>
-      )}
-    </StandardDialog>
+                  <div className="space-y-2">
+                    <Label htmlFor="categoria">Categoría *</Label>
+                    <Select
+                      value={formData.categoria_id}
+                      onValueChange={(value) => handleInputChange('categoria_id', value)}
+                      disabled={!formData.negocio_id}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar categoría" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categorias.map((categoria) => (
+                          <SelectItem key={categoria.id} value={categoria.id}>
+                            {categoria.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Comprador y Medio de Pago */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="comprador">Comprador</Label>
+                    <div className="flex gap-2">
+                      <Select
+                        value={formData.comprador_id || undefined}
+                        onValueChange={(value) => handleInputChange('comprador_id', value)}
+                      >
+                        <SelectTrigger className="flex-1">
+                          <SelectValue placeholder="Seleccionar comprador (opcional)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {compradores.map((comprador) => (
+                            <SelectItem key={comprador.id} value={comprador.id}>
+                              {comprador.nombre}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowNewComprador(true)}
+                      >
+                        <Plus className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="medio_pago">Medio de Pago *</Label>
+                    <Select
+                      value={formData.medio_pago_id}
+                      onValueChange={(value) => handleInputChange('medio_pago_id', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar medio de pago" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {mediosPago.map((medio) => (
+                          <SelectItem key={medio.id} value={medio.id}>
+                            {medio.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Observaciones and Factura */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="observaciones">Observaciones</Label>
+                    <Textarea
+                      id="observaciones"
+                      value={formData.observaciones}
+                      onChange={(e) => handleInputChange('observaciones', e.target.value)}
+                      placeholder="Observaciones adicionales..."
+                      rows={2}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Factura</Label>
+                    <FacturaUploader
+                      tipo="venta"
+                      currentUrl={formData.url_factura}
+                      onUploadSuccess={(url) => handleInputChange('url_factura', url)}
+                      onRemove={() => handleInputChange('url_factura', '')}
+                      disabled={saving}
+                    />
+                  </div>
+                </div>
+            </form>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          <div className="flex gap-2 justify-end w-full">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onCancel}
+              disabled={saving}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="submit"
+              disabled={saving}
+              className="bg-primary hover:bg-primary-dark"
+              onClick={handleSubmit}
+            >
+              {saving ? 'Guardando...' : (isEditing ? 'Actualizar Ingreso' : 'Crear Ingreso')}
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
 
     {/* Modal para crear nuevo comprador */}
     {showNewComprador && (
