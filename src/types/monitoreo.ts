@@ -234,10 +234,12 @@ export interface MonitoreoColmena {
 
 // Resultado de cálculo de floración
 export interface EstadoFloracion {
-  totalArboles: number;
+  arbolesMonitoreados: number;
+  sinFlor: number;
   brotes: number;
   florMadura: number;
   cuaje: number;
+  pctSinFlor: number;
   pctBrotes: number;
   pctFlorMadura: number;
   pctCuaje: number;

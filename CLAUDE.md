@@ -278,7 +278,7 @@ PostgreSQL hosted on Supabase with 32+ tables, 7+ custom ENUM types, Row-Level S
 - **Configuration**: `lotes`, `sublotes`, `empleados`, `terceros`, `usuarios`, `productos`
 - **Applications**: `aplicaciones`, `aplicaciones_calculos`, `aplicaciones_mezclas`, `aplicaciones_productos`, `aplicaciones_lotes`, `aplicaciones_lotes_planificado`, `aplicaciones_lotes_compras`, `movimientos_diarios`, `movimientos_diarios_productos`
 - **Inventory**: `movimientos_inventario`, `compras`, `compras_productos`, `verificaciones_inventario`, `verificaciones_detalle`
-- **Monitoring**: `monitoreos` (denormalized: one row per pest observation, includes `incidencia`, `lote_id`, FK to `plagas_enfermedades_catalogo`, floración fields: `floracion_brotes`, `floracion_flor_madura`, `floracion_cuaje`), `sublotes`, `plagas_enfermedades_catalogo`, `rondas_monitoreo`, `mon_conductividad` (soil CE readings), `mon_colmenas` (beehive health), `apiarios` (apiary config)
+- **Monitoring**: `monitoreos` (denormalized: one row per pest observation, includes `incidencia`, `lote_id`, FK to `plagas_enfermedades_catalogo`, floración fields: `floracion_sin_flor`, `floracion_brotes`, `floracion_flor_madura`, `floracion_cuaje`), `sublotes`, `plagas_enfermedades_catalogo`, `rondas_monitoreo`, `mon_conductividad` (soil CE readings), `mon_colmenas` (beehive health), `apiarios` (apiary config)
 - **Labor**: `tareas`, `registros_trabajo`, `empleados_tareas`
 - **Finance**: `fin_gastos`, `fin_ingresos`, `fin_transacciones_ganado`, `fin_conceptos_gastos`, `fin_proveedores`, `fin_categorias_gastos`, `fin_categorias_ingresos`, `fin_medios_pago`, `fin_regiones`, `fin_negocios`, `fin_compradores`
 - **Production**: `produccion`, `reportes_semanales`

@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { MonitoreoSubNav } from './MonitoreoSubNav';
+import { MapaCalorIncidencias } from './MapaCalorIncidencias';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
 import {
   Select,
   SelectContent,
@@ -21,6 +23,8 @@ import {
   Lock,
   ChevronDown,
   ChevronRight,
+  Grid3X3,
+  TrendingUp,
 } from 'lucide-react';
 import {
   LineChart,
@@ -71,13 +75,18 @@ interface MonitoreoRow {
   fecha_monitoreo: string;
   lote_id: string;
   sublote_id: string;
+  plaga_enfermedad_id: string;
+  arboles_monitoreados: number;
+  arboles_afectados: number;
   incidencia: number;
+  gravedad_texto: 'Baja' | 'Media' | 'Alta';
+  floracion_sin_flor: number;
   floracion_brotes: number;
   floracion_flor_madura: number;
   floracion_cuaje: number;
   ronda_id: string | null;
   lotes: { nombre: string };
-  sublotes: { nombre: string };
+  sublotes: { nombre: string; lote_id: string };
   plagas_enfermedades_catalogo: { nombre: string };
 }
 
@@ -86,6 +95,8 @@ interface LoteSnapshot {
   lote_nombre: string;
   fecha_monitoreo: string;
   plagasIncidencia: Record<string, number>; // plaga_nombre → incidencia promedio
+  arboles_monitoreados: number;
+  floracion_sin_flor: number;
   floracion_brotes: number;
   floracion_flor_madura: number;
   floracion_cuaje: number;
@@ -98,6 +109,8 @@ interface SubloteSnapshot {
   sublote_nombre: string;
   fecha_monitoreo: string;
   plagasIncidencia: Record<string, number>;
+  arboles_monitoreados: number;
+  floracion_sin_flor: number;
   floracion_brotes: number;
   floracion_flor_madura: number;
   floracion_cuaje: number;
@@ -205,10 +218,14 @@ export function DashboardMonitoreoV3() {
   // Snapshot UI
   const [lotesExpandidos, setLotesExpandidos] = useState<Set<string>>(new Set());
 
+  // Plagas sub-tab (heatmap vs tendencias)
+  const [plagasTab, setPlagasTab] = useState<string>('heatmap');
+
   // Plagas trend
   const [lotesVisiblesPlagas, setLotesVisiblesPlagas] = useState<string[]>([]);
   const [plagasVisibles, setPlagasVisibles] = useState<string[]>([...PLAGAS_INTERES]);
   const [tendenciaPlagasData, setTendenciaPlagasData] = useState<any[]>([]);
+  const [allMonitoreos, setAllMonitoreos] = useState<MonitoreoRow[]>([]);
 
   // CE new visualization
   const [ceHistorico, setCeHistorico] = useState<MonitoreoConductividad[]>([]);
@@ -219,7 +236,6 @@ export function DashboardMonitoreoV3() {
 
   // Floración trend
   const [tendenciaFloracionData, setTendenciaFloracionData] = useState<any[]>([]);
-  const [floracionLotesEnChart, setFloracionLotesEnChart] = useState<string[]>([]);
 
   // Colmenas trend
   const [tendenciaColmenasData, setTendenciaColmenasData] = useState<any[]>([]);
@@ -370,7 +386,7 @@ export function DashboardMonitoreoV3() {
     try {
       const { data } = await supabase
         .from('monitoreos')
-        .select('id, fecha_monitoreo, lote_id, sublote_id, incidencia, floracion_brotes, floracion_flor_madura, floracion_cuaje, ronda_id, lotes(nombre), sublotes(nombre), plagas_enfermedades_catalogo(nombre)')
+        .select('id, fecha_monitoreo, lote_id, sublote_id, plaga_enfermedad_id, arboles_monitoreados, arboles_afectados, incidencia, gravedad_texto, floracion_sin_flor, floracion_brotes, floracion_flor_madura, floracion_cuaje, ronda_id, lotes(nombre), sublotes(nombre, lote_id), plagas_enfermedades_catalogo(nombre)')
         .eq('ronda_id', rondaSeleccionada);
 
       setMonitoreos((data || []) as any);
@@ -388,7 +404,7 @@ export function DashboardMonitoreoV3() {
       const [monRes, colRes] = await Promise.all([
         supabase
           .from('monitoreos')
-          .select('ronda_id, lote_id, incidencia, floracion_brotes, floracion_flor_madura, floracion_cuaje, plagas_enfermedades_catalogo(nombre), lotes(nombre)')
+          .select('id, ronda_id, lote_id, fecha_monitoreo, sublote_id, arboles_monitoreados, arboles_afectados, incidencia, gravedad_texto, plaga_enfermedad_id, floracion_sin_flor, floracion_brotes, floracion_flor_madura, floracion_cuaje, plagas_enfermedades_catalogo(nombre), lotes(nombre), sublotes(nombre, lote_id)')
           .in('ronda_id', rondaIds),
         supabase
           .from('mon_colmenas')
@@ -397,6 +413,7 @@ export function DashboardMonitoreoV3() {
       ]);
 
       const monData = (monRes.data || []) as any[];
+      setAllMonitoreos(monData as MonitoreoRow[]);
 
       // Collect all unique plaga names
       const plagaSet = new Set<string>();
@@ -465,35 +482,26 @@ export function DashboardMonitoreoV3() {
       });
       setTendenciaPlagasData(tendPlagas);
 
-      // Floración trend: group by ronda+lote, sum brotes/flor/cuaje
-      const florPorRondaLote = new Map<string, { brotes: number; flor: number; cuaje: number }>();
-      const loteNombres = new Map<string, string>();
+      // Floración trend: group all records by ronda_id, aggregate farm-wide
+      const recordsPorRonda = new Map<string, typeof monData>();
       for (const m of monData) {
-        const key = `${m.ronda_id}|${m.lote_id}`;
-        const prev = florPorRondaLote.get(key) || { brotes: 0, flor: 0, cuaje: 0 };
-        prev.brotes += m.floracion_brotes || 0;
-        prev.flor += m.floracion_flor_madura || 0;
-        prev.cuaje += m.floracion_cuaje || 0;
-        florPorRondaLote.set(key, prev);
-        if (m.lotes?.nombre) loteNombres.set(m.lote_id, m.lotes.nombre);
+        const arr = recordsPorRonda.get(m.ronda_id || '') || [];
+        arr.push(m);
+        recordsPorRonda.set(m.ronda_id || '', arr);
       }
 
-      const loteIds = Array.from(loteNombres.keys()).sort((a, b) =>
-        (loteNombres.get(a) || '').localeCompare(loteNombres.get(b) || '')
-      );
-      setFloracionLotesEnChart(loteIds);
-
       const tendFlor = ultimas.map((r, i) => {
-        const row: any = { ronda: `R${i + 1}`, fechas: etiquetas[i] };
-        for (const loteId of loteIds) {
-          const stats = florPorRondaLote.get(`${r.id}|${loteId}`);
-          const nombre = loteNombres.get(loteId) || loteId;
-          row[`${nombre}_brotes`] = stats?.brotes || 0;
-          row[`${nombre}_flor`] = stats?.flor || 0;
-          row[`${nombre}_cuaje`] = stats?.cuaje || 0;
-        }
-        return row;
-      });
+        const records = recordsPorRonda.get(r.id) || [];
+        const flor = calcularEstadoFloracion(records);
+        return {
+          ronda: `R${i + 1}`,
+          fechas: etiquetas[i],
+          sinFlor: flor.sinFlor,
+          brotes: flor.brotes,
+          flor: flor.florMadura,
+          cuaje: flor.cuaje,
+        };
+      }).filter(d => d.sinFlor + d.brotes + d.flor + d.cuaje > 0);
       setTendenciaFloracionData(tendFlor);
 
       // Colmenas trend
@@ -560,8 +568,8 @@ export function DashboardMonitoreoV3() {
 
   function calcularSemaforoFloracion(): SemaforoCard {
     const flor = calcularEstadoFloracion(monitoreos);
-    if (flor.totalArboles === 0) return { dominio: 'Floración', icon: Flower2, estado: 'sin_datos', label: 'Sin datos', detalle: 'No hay datos' };
-    return { dominio: 'Floración', icon: Flower2, estado: 'verde', label: `${flor.totalArboles} árboles`, detalle: `Brotes ${flor.pctBrotes}% · Flor ${flor.pctFlorMadura}% · Cuaje ${flor.pctCuaje}%` };
+    if (flor.arbolesMonitoreados === 0) return { dominio: 'Floración', icon: Flower2, estado: 'sin_datos', label: 'Sin datos', detalle: 'No hay datos' };
+    return { dominio: 'Floración', icon: Flower2, estado: 'verde', label: `${flor.arbolesMonitoreados} árboles`, detalle: `Sin flor ${flor.pctSinFlor}% · Brotes ${flor.pctBrotes}% · Flor ${flor.pctFlorMadura}% · Cuaje ${flor.pctCuaje}%` };
   }
 
   function calcularSemaforoCE(): SemaforoCard {
@@ -600,18 +608,14 @@ export function DashboardMonitoreoV3() {
       lote_nombre: string;
       fecha_monitoreo: string;
       plagasMap: Map<string, { total: number; count: number }>;
-      floracion_brotes: number;
-      floracion_flor_madura: number;
-      floracion_cuaje: number;
+      monitoreoRows: MonitoreoRow[];
       ce?: number;
       sublotesMap: Map<string, {
         sublote_id: string;
         sublote_nombre: string;
         fecha_monitoreo: string;
         plagasMap: Map<string, { total: number; count: number }>;
-        floracion_brotes: number;
-        floracion_flor_madura: number;
-        floracion_cuaje: number;
+        monitoreoRows: MonitoreoRow[];
       }>;
     }>();
 
@@ -624,9 +628,7 @@ export function DashboardMonitoreoV3() {
           lote_nombre: m.lotes?.nombre || m.lote_id,
           fecha_monitoreo: m.fecha_monitoreo,
           plagasMap: new Map(),
-          floracion_brotes: 0,
-          floracion_flor_madura: 0,
-          floracion_cuaje: 0,
+          monitoreoRows: [],
           sublotesMap: new Map(),
         });
       }
@@ -640,9 +642,7 @@ export function DashboardMonitoreoV3() {
       lp.count += 1;
       lote.plagasMap.set(plagaNombre, lp);
 
-      lote.floracion_brotes += m.floracion_brotes || 0;
-      lote.floracion_flor_madura += m.floracion_flor_madura || 0;
-      lote.floracion_cuaje += m.floracion_cuaje || 0;
+      lote.monitoreoRows.push(m);
 
       // Sublote-level
       if (m.sublote_id) {
@@ -652,9 +652,7 @@ export function DashboardMonitoreoV3() {
             sublote_nombre: m.sublotes?.nombre || m.sublote_id,
             fecha_monitoreo: m.fecha_monitoreo,
             plagasMap: new Map(),
-            floracion_brotes: 0,
-            floracion_flor_madura: 0,
-            floracion_cuaje: 0,
+            monitoreoRows: [],
           });
         }
         const sub = lote.sublotesMap.get(m.sublote_id)!;
@@ -663,9 +661,7 @@ export function DashboardMonitoreoV3() {
         sp.total += m.incidencia || 0;
         sp.count += 1;
         sub.plagasMap.set(plagaNombre, sp);
-        sub.floracion_brotes += m.floracion_brotes || 0;
-        sub.floracion_flor_madura += m.floracion_flor_madura || 0;
-        sub.floracion_cuaje += m.floracion_cuaje || 0;
+        sub.monitoreoRows.push(m);
       }
     }
 
@@ -676,7 +672,7 @@ export function DashboardMonitoreoV3() {
       if (lote) lote.ce = ce.promedio;
     }
 
-    // Convert Maps to plain objects
+    // Convert Maps to plain objects, using calcularEstadoFloracion for deduplication
     return Array.from(lotesMap.values())
       .sort((a, b) => a.lote_nombre.localeCompare(b.lote_nombre))
       .map(l => {
@@ -684,14 +680,38 @@ export function DashboardMonitoreoV3() {
         for (const [p, stats] of l.plagasMap) {
           plagasIncidencia[p] = +(stats.total / stats.count).toFixed(1);
         }
+        const florLote = calcularEstadoFloracion(l.monitoreoRows);
         const sublotes = Array.from(l.sublotesMap.values())
           .sort((a, b) => a.sublote_nombre.localeCompare(b.sublote_nombre))
           .map(s => {
             const pi: Record<string, number> = {};
             for (const [p, stats] of s.plagasMap) pi[p] = +(stats.total / stats.count).toFixed(1);
-            return { ...s, plagasIncidencia: pi, plagasMap: undefined } as unknown as SubloteSnapshot;
+            const florSub = calcularEstadoFloracion(s.monitoreoRows);
+            return {
+              sublote_id: s.sublote_id,
+              sublote_nombre: s.sublote_nombre,
+              fecha_monitoreo: s.fecha_monitoreo,
+              plagasIncidencia: pi,
+              arboles_monitoreados: florSub.arbolesMonitoreados,
+              floracion_sin_flor: florSub.sinFlor,
+              floracion_brotes: florSub.brotes,
+              floracion_flor_madura: florSub.florMadura,
+              floracion_cuaje: florSub.cuaje,
+            } as SubloteSnapshot;
           });
-        return { ...l, plagasIncidencia, sublotes, plagasMap: undefined, sublotesMap: undefined } as unknown as LoteSnapshot;
+        return {
+          lote_id: l.lote_id,
+          lote_nombre: l.lote_nombre,
+          fecha_monitoreo: l.fecha_monitoreo,
+          plagasIncidencia,
+          arboles_monitoreados: florLote.arbolesMonitoreados,
+          floracion_sin_flor: florLote.sinFlor,
+          floracion_brotes: florLote.brotes,
+          floracion_flor_madura: florLote.florMadura,
+          floracion_cuaje: florLote.cuaje,
+          ce: l.ce,
+          sublotes,
+        } as LoteSnapshot;
       });
   }
 
@@ -1044,6 +1064,7 @@ export function DashboardMonitoreoV3() {
                     {PLAGAS_INTERES.map(p => (
                       <th key={p} className="py-2 px-3 text-right text-xs">{p}</th>
                     ))}
+                    <th className="py-2 px-3 text-right">Sin flor</th>
                     <th className="py-2 px-3 text-right">Brotes</th>
                     <th className="py-2 px-3 text-right">Flor</th>
                     <th className="py-2 px-3 text-right">Cuaje</th>
@@ -1069,6 +1090,7 @@ export function DashboardMonitoreoV3() {
                               </td>
                             );
                           })}
+                          <td className="py-2 px-3 text-right">{lote.floracion_sin_flor || '—'}</td>
                           <td className="py-2 px-3 text-right">{lote.floracion_brotes || '—'}</td>
                           <td className="py-2 px-3 text-right">{lote.floracion_flor_madura || '—'}</td>
                           <td className="py-2 px-3 text-right">{lote.floracion_cuaje || '—'}</td>
@@ -1089,6 +1111,7 @@ export function DashboardMonitoreoV3() {
                                 </td>
                               );
                             })}
+                            <td className="py-1.5 px-3 text-right text-xs">{sub.floracion_sin_flor || '—'}</td>
                             <td className="py-1.5 px-3 text-right text-xs">{sub.floracion_brotes || '—'}</td>
                             <td className="py-1.5 px-3 text-right text-xs">{sub.floracion_flor_madura || '—'}</td>
                             <td className="py-1.5 px-3 text-right text-xs">{sub.floracion_cuaje || '—'}</td>
@@ -1105,87 +1128,112 @@ export function DashboardMonitoreoV3() {
         </Card>
 
         <Card className="p-4">
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-            <h3 className="font-semibold text-foreground">Tendencia de Plagas (por ronda)</h3>
-            <div className="flex gap-3">
-              <div className="relative">
-                <Button variant="outline" size="sm" className="text-xs" onClick={(e) => {
-                  const el = e.currentTarget.nextElementSibling as HTMLElement;
-                  el.classList.toggle('hidden');
-                }}>
-                  Lotes ({lotesVisiblesPlagas.length}/{lotes.length})
-                </Button>
-                <div className="hidden absolute right-0 top-full mt-1 z-50 bg-white border rounded-md shadow-lg p-2 w-64">
-                  <div className="flex gap-1 mb-2 border-b pb-2">
-                    <button className="text-[10px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80" onClick={() => setLotesVisiblesPlagas(lotes.map(l => l.id))}>Todos</button>
-                    <button className="text-[10px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80" onClick={() => setLotesVisiblesPlagas([])}>Ninguno</button>
-                  </div>
-                  <div className="max-h-52 overflow-y-auto space-y-0.5">
-                    {lotes.map(l => (
-                      <div key={l.id} className="flex items-center justify-between gap-1 px-1.5 py-0.5 hover:bg-muted/50 rounded group">
-                        <label className="flex items-center gap-1.5 text-xs cursor-pointer flex-1 min-w-0">
-                          <input type="checkbox" checked={lotesVisiblesPlagas.includes(l.id)} onChange={() => toggleLotePlagas(l.id)} className="w-3 h-3 shrink-0" />
-                          <span className="truncate">{l.nombre}</span>
-                        </label>
-                        <button
-                          className="text-[9px] text-brand-brown/40 hover:text-primary opacity-0 group-hover:opacity-100 shrink-0"
-                          onClick={() => setLotesVisiblesPlagas([l.id])}
-                        >
-                          solo
-                        </button>
+          <Tabs value={plagasTab} onValueChange={setPlagasTab}>
+            <TabsList className="grid w-full grid-cols-2 mb-4">
+              <TabsTrigger value="heatmap" className="flex items-center gap-2">
+                <Grid3X3 className="h-4 w-4" />
+                Mapa de Calor
+              </TabsTrigger>
+              <TabsTrigger value="tendencias" className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Tendencias
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="heatmap">
+              <div className="-m-4">
+                <MapaCalorIncidencias
+                  monitoreos={allMonitoreos as any}
+                  rangoSeleccionado="todo"
+                  modoVisualizacion="ultimos3"
+                />
+              </div>
+            </TabsContent>
+
+            <TabsContent value="tendencias">
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                <h3 className="font-semibold text-foreground">Tendencia de Plagas (por ronda)</h3>
+                <div className="flex gap-3">
+                  <div className="relative">
+                    <Button variant="outline" size="sm" className="text-xs" onClick={(e) => {
+                      const el = e.currentTarget.nextElementSibling as HTMLElement;
+                      el.classList.toggle('hidden');
+                    }}>
+                      Lotes ({lotesVisiblesPlagas.length}/{lotes.length})
+                    </Button>
+                    <div className="hidden absolute right-0 top-full mt-1 z-50 bg-white border rounded-md shadow-lg p-2 w-64">
+                      <div className="flex gap-1 mb-2 border-b pb-2">
+                        <button className="text-[10px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80" onClick={() => setLotesVisiblesPlagas(lotes.map(l => l.id))}>Todos</button>
+                        <button className="text-[10px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80" onClick={() => setLotesVisiblesPlagas([])}>Ninguno</button>
                       </div>
-                    ))}
+                      <div className="max-h-52 overflow-y-auto space-y-0.5">
+                        {lotes.map(l => (
+                          <div key={l.id} className="flex items-center justify-between gap-1 px-1.5 py-0.5 hover:bg-muted/50 rounded group">
+                            <label className="flex items-center gap-1.5 text-xs cursor-pointer flex-1 min-w-0">
+                              <input type="checkbox" checked={lotesVisiblesPlagas.includes(l.id)} onChange={() => toggleLotePlagas(l.id)} className="w-3 h-3 shrink-0" />
+                              <span className="truncate">{l.nombre}</span>
+                            </label>
+                            <button
+                              className="text-[9px] text-brand-brown/40 hover:text-primary opacity-0 group-hover:opacity-100 shrink-0"
+                              onClick={() => setLotesVisiblesPlagas([l.id])}
+                            >
+                              solo
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <Button variant="outline" size="sm" className="text-xs" onClick={(e) => {
+                      const el = e.currentTarget.nextElementSibling as HTMLElement;
+                      el.classList.toggle('hidden');
+                    }}>
+                      Plagas ({plagasVisibles.length}/{todasLasPlagas.length})
+                    </Button>
+                    <div className="hidden absolute right-0 top-full mt-1 z-50 bg-white border rounded-md shadow-lg p-2 w-64">
+                      <div className="flex gap-1 mb-2 border-b pb-2">
+                        <button className="text-[10px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80" onClick={() => setPlagasVisibles([...todasLasPlagas])}>Todas</button>
+                        <button className="text-[10px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80" onClick={() => setPlagasVisibles([])}>Ninguna</button>
+                      </div>
+                      <div className="max-h-52 overflow-y-auto space-y-0.5">
+                        {todasLasPlagas.map(p => (
+                          <div key={p} className="flex items-center justify-between gap-1 px-1.5 py-0.5 hover:bg-muted/50 rounded group">
+                            <label className="flex items-center gap-1.5 text-xs cursor-pointer flex-1 min-w-0">
+                              <input type="checkbox" checked={plagasVisibles.includes(p)} onChange={() => togglePlagaVisible(p)} className="w-3 h-3 shrink-0" />
+                              <span className="truncate">{p}</span>
+                            </label>
+                            <button
+                              className="text-[9px] text-brand-brown/40 hover:text-primary opacity-0 group-hover:opacity-100 shrink-0"
+                              onClick={() => setPlagasVisibles([p])}
+                            >
+                              solo
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-              <div className="relative">
-                <Button variant="outline" size="sm" className="text-xs" onClick={(e) => {
-                  const el = e.currentTarget.nextElementSibling as HTMLElement;
-                  el.classList.toggle('hidden');
-                }}>
-                  Plagas ({plagasVisibles.length}/{todasLasPlagas.length})
-                </Button>
-                <div className="hidden absolute right-0 top-full mt-1 z-50 bg-white border rounded-md shadow-lg p-2 w-64">
-                  <div className="flex gap-1 mb-2 border-b pb-2">
-                    <button className="text-[10px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80" onClick={() => setPlagasVisibles([...todasLasPlagas])}>Todas</button>
-                    <button className="text-[10px] px-2 py-0.5 rounded bg-muted hover:bg-muted/80" onClick={() => setPlagasVisibles([])}>Ninguna</button>
-                  </div>
-                  <div className="max-h-52 overflow-y-auto space-y-0.5">
-                    {todasLasPlagas.map(p => (
-                      <div key={p} className="flex items-center justify-between gap-1 px-1.5 py-0.5 hover:bg-muted/50 rounded group">
-                        <label className="flex items-center gap-1.5 text-xs cursor-pointer flex-1 min-w-0">
-                          <input type="checkbox" checked={plagasVisibles.includes(p)} onChange={() => togglePlagaVisible(p)} className="w-3 h-3 shrink-0" />
-                          <span className="truncate">{p}</span>
-                        </label>
-                        <button
-                          className="text-[9px] text-brand-brown/40 hover:text-primary opacity-0 group-hover:opacity-100 shrink-0"
-                          onClick={() => setPlagasVisibles([p])}
-                        >
-                          solo
-                        </button>
-                      </div>
+              {plagasChartData.length > 1 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={plagasChartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="fechas" fontSize={10} angle={-25} textAnchor="end" height={50} />
+                    <YAxis fontSize={12} unit="%" />
+                    <Tooltip formatter={(value: number, name: string) => [`${value}%`, name]} labelFormatter={(_: string, payload: any[]) => payload?.[0]?.payload?.fechasDetalle || payload?.[0]?.payload?.fechas || ''} />
+                    <Legend />
+                    {getPlagasChartKeys().map(({ key, color }) => (
+                      <Line key={key} type="monotone" dataKey={key} stroke={color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
                     ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          {plagasChartData.length > 1 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={plagasChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="fechas" fontSize={10} angle={-25} textAnchor="end" height={50} />
-                <YAxis fontSize={12} unit="%" />
-                <Tooltip formatter={(value: number, name: string) => [`${value}%`, name]} labelFormatter={(_: string, payload: any[]) => payload?.[0]?.payload?.fechasDetalle || payload?.[0]?.payload?.fechas || ''} />
-                <Legend />
-                {getPlagasChartKeys().map(({ key, color }) => (
-                  <Line key={key} type="monotone" dataKey={key} stroke={color} strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="text-center py-8 text-brand-brown/50 text-sm">Se necesitan al menos 2 rondas para ver tendencias</div>
-          )}
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="text-center py-8 text-brand-brown/50 text-sm">Se necesitan al menos 2 rondas para ver tendencias</div>
+              )}
+            </TabsContent>
+          </Tabs>
         </Card></>)}
 
         {/* ============================================ */}
@@ -1194,7 +1242,6 @@ export function DashboardMonitoreoV3() {
 
         {seccionActiva === 'floracion' && (() => {
           const florData = calcularEstadoFloracion(monitoreos);
-          const loteNombresMap = new Map(lotes.map(l => [l.id, l.nombre]));
 
           return (
             <>
@@ -1202,20 +1249,24 @@ export function DashboardMonitoreoV3() {
                 <h3 className="font-semibold text-foreground mb-4">
                   Floración — {rondaActual?.nombre || 'Ronda seleccionada'}
                 </h3>
-                {florData.totalArboles === 0 ? (
+                {florData.arbolesMonitoreados === 0 ? (
                   <div className="text-center py-8 text-brand-brown/50">No hay datos de floración en esta ronda</div>
                 ) : (
                   <>
-                    <div className="grid grid-cols-3 gap-4 mb-4">
-                      <div className="text-center p-3 rounded" style={{ backgroundColor: '#dcfce7' }}>
+                    <div className="grid grid-cols-4 gap-4 mb-4">
+                      <div className="text-center p-3 rounded bg-gray-100">
+                        <div className="text-2xl font-bold text-gray-700">{florData.pctSinFlor}%</div>
+                        <div className="text-xs text-gray-600">Sin flor ({florData.sinFlor})</div>
+                      </div>
+                      <div className="text-center p-3 rounded bg-green-100">
                         <div className="text-2xl font-bold text-green-700">{florData.pctBrotes}%</div>
                         <div className="text-xs text-green-600">Brotes ({florData.brotes})</div>
                       </div>
-                      <div className="text-center p-3 rounded" style={{ backgroundColor: '#fef9c3' }}>
+                      <div className="text-center p-3 rounded bg-yellow-100">
                         <div className="text-2xl font-bold text-yellow-700">{florData.pctFlorMadura}%</div>
                         <div className="text-xs text-yellow-600">Flor Madura ({florData.florMadura})</div>
                       </div>
-                      <div className="text-center p-3 rounded" style={{ backgroundColor: '#ffedd5' }}>
+                      <div className="text-center p-3 rounded bg-orange-100">
                         <div className="text-2xl font-bold text-orange-700">{florData.pctCuaje}%</div>
                         <div className="text-xs text-orange-600">Cuaje ({florData.cuaje})</div>
                       </div>
@@ -1224,24 +1275,52 @@ export function DashboardMonitoreoV3() {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b text-left text-brand-brown/60">
+                            <th className="py-2 px-3 w-8"></th>
                             <th className="py-2 px-3">Lote</th>
+                            <th className="py-2 px-3 text-right">Sin flor</th>
                             <th className="py-2 px-3 text-right">Brotes</th>
                             <th className="py-2 px-3 text-right">Flor Madura</th>
                             <th className="py-2 px-3 text-right">Cuaje</th>
-                            <th className="py-2 px-3 text-right">Total</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {snapshot.map(l => {
-                            const total = l.floracion_brotes + l.floracion_flor_madura + l.floracion_cuaje;
+                          {snapshot.map(lote => {
+                            const isExpanded = lotesExpandidos.has(lote.lote_id);
                             return (
-                              <tr key={l.lote_id} className="border-b hover:bg-muted/50">
-                                <td className="py-2 px-3 font-medium">{l.lote_nombre}</td>
-                                <td className="py-2 px-3 text-right text-green-700">{l.floracion_brotes || '—'}</td>
-                                <td className="py-2 px-3 text-right text-yellow-700">{l.floracion_flor_madura || '—'}</td>
-                                <td className="py-2 px-3 text-right text-orange-700">{l.floracion_cuaje || '—'}</td>
-                                <td className="py-2 px-3 text-right font-medium">{total || '—'}</td>
-                              </tr>
+                              <React.Fragment key={lote.lote_id}>
+                                <tr className="border-b hover:bg-muted/50 cursor-pointer" onClick={() => toggleLote(lote.lote_id)}>
+                                  <td className="py-2 px-3">
+                                    {isExpanded ? <ChevronDown className="w-4 h-4 text-brand-brown/40" /> : <ChevronRight className="w-4 h-4 text-brand-brown/40" />}
+                                  </td>
+                                  <td className="py-2 px-3 font-medium">{lote.lote_nombre}</td>
+                                  {(() => {
+                                    const sample = lote.arboles_monitoreados || 0;
+                                    const pct = (v: number) => sample > 0 ? Math.round((v / sample) * 100) : 0;
+                                    const fmt = (v: number) => v || sample ? <><span className="font-medium">{v}/{sample}</span> <span className="text-brand-brown/40">({pct(v)}%)</span></> : '—';
+                                    return (<>
+                                      <td className="py-2 px-3 text-right text-gray-700">{fmt(lote.floracion_sin_flor)}</td>
+                                      <td className="py-2 px-3 text-right text-green-700">{fmt(lote.floracion_brotes)}</td>
+                                      <td className="py-2 px-3 text-right text-yellow-700">{fmt(lote.floracion_flor_madura)}</td>
+                                      <td className="py-2 px-3 text-right text-orange-700">{fmt(lote.floracion_cuaje)}</td>
+                                    </>);
+                                  })()}
+                                </tr>
+                                {isExpanded && lote.sublotes?.map(sub => {
+                                  const subSample = sub.arboles_monitoreados || 0;
+                                  const subPct = (v: number) => subSample > 0 ? Math.round((v / subSample) * 100) : 0;
+                                  const subFmt = (v: number) => v || subSample ? <><span className="font-medium">{v}/{subSample}</span> <span className="text-brand-brown/40">({subPct(v)}%)</span></> : '—';
+                                  return (
+                                  <tr key={sub.sublote_id} className="border-b bg-muted/30">
+                                    <td className="py-1.5 px-3"></td>
+                                    <td className="py-1.5 px-3 pl-8 text-brand-brown/70 text-xs">{sub.sublote_nombre}</td>
+                                    <td className="py-1.5 px-3 text-right text-xs text-gray-700">{subFmt(sub.floracion_sin_flor)}</td>
+                                    <td className="py-1.5 px-3 text-right text-xs text-green-700">{subFmt(sub.floracion_brotes)}</td>
+                                    <td className="py-1.5 px-3 text-right text-xs text-yellow-700">{subFmt(sub.floracion_flor_madura)}</td>
+                                    <td className="py-1.5 px-3 text-right text-xs text-orange-700">{subFmt(sub.floracion_cuaje)}</td>
+                                  </tr>
+                                  );
+                                })}
+                              </React.Fragment>
                             );
                           })}
                         </tbody>
@@ -1251,29 +1330,29 @@ export function DashboardMonitoreoV3() {
                 )}
               </Card>
 
-              {tendenciaFloracionData.length > 1 && (
+              {tendenciaFloracionData.length >= 1 && (
                 <Card className="p-4">
                   <h3 className="font-semibold text-foreground mb-4">Evolución de Floración (por ronda)</h3>
                   <div className="flex gap-4 text-xs mb-3">
+                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: '#9ca3af' }} /> Sin flor</span>
                     <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: '#22c55e' }} /> Brotes</span>
                     <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: '#eab308' }} /> Flor Madura</span>
                     <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: '#f97316' }} /> Cuaje</span>
                   </div>
                   <ResponsiveContainer width="100%" height={350}>
-                    <BarChart data={tendenciaFloracionData}>
+                    <BarChart data={tendenciaFloracionData} stackOffset="expand">
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-                      <XAxis dataKey="fechas" fontSize={10} angle={-25} textAnchor="end" height={50} />
-                      <YAxis fontSize={12} label={{ value: 'Árboles', angle: -90, position: 'insideLeft', fontSize: 11 }} />
-                      <Tooltip />
-                      <Legend />
-                      {floracionLotesEnChart.map(loteId => {
-                        const nombre = loteNombresMap.get(loteId) || loteId;
-                        return [
-                          <Bar key={`${nombre}_brotes`} dataKey={`${nombre}_brotes`} stackId={nombre} fill="#22c55e" name={`${nombre} — Brotes`} />,
-                          <Bar key={`${nombre}_flor`} dataKey={`${nombre}_flor`} stackId={nombre} fill="#eab308" name={`${nombre} — Flor`} />,
-                          <Bar key={`${nombre}_cuaje`} dataKey={`${nombre}_cuaje`} stackId={nombre} fill="#f97316" name={`${nombre} — Cuaje`} radius={[2, 2, 0, 0]} />,
-                        ];
-                      })}
+                      <XAxis dataKey="fechas" fontSize={11} />
+                      <YAxis fontSize={12} tickFormatter={(v: number) => `${Math.round(v * 100)}%`} />
+                      <Tooltip formatter={(value: number, name: string, props: any) => {
+                        const total = (props.payload.sinFlor || 0) + (props.payload.brotes || 0) + (props.payload.flor || 0) + (props.payload.cuaje || 0);
+                        const pct = total > 0 ? Math.round((value / total) * 100) : 0;
+                        return [`${value} (${pct}%)`, name];
+                      }} />
+                      <Bar dataKey="sinFlor" name="Sin flor" stackId="flor" fill="#9ca3af" />
+                      <Bar dataKey="brotes" name="Brotes" stackId="flor" fill="#22c55e" />
+                      <Bar dataKey="flor" name="Flor Madura" stackId="flor" fill="#eab308" />
+                      <Bar dataKey="cuaje" name="Cuaje" stackId="flor" fill="#f97316" radius={[2, 2, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </Card>

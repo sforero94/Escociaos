@@ -67,6 +67,7 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
   const [observaciones, setObservaciones] = useState<string>('');
 
   // Floración
+  const [floracionSinFlor, setFloracionSinFlor] = useState<number>(0);
   const [floracionBrotes, setFloracionBrotes] = useState<number>(0);
   const [floracionFlorMadura, setFloracionFlorMadura] = useState<number>(0);
   const [floracionCuaje, setFloracionCuaje] = useState<number>(0);
@@ -262,6 +263,7 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
           gravedad_numerica: gravedad.numerica,
           monitor: monitoresStr,
           observaciones: observaciones || null,
+          floracion_sin_flor: floracionSinFlor,
           floracion_brotes: floracionBrotes,
           floracion_flor_madura: floracionFlorMadura,
           floracion_cuaje: floracionCuaje,
@@ -306,6 +308,7 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
     setPlagasDetectadas([]);
     setPlagaSeleccionada('');
     setObservaciones('');
+    setFloracionSinFlor(0);
     setFloracionBrotes(0);
     setFloracionFlorMadura(0);
     setFloracionCuaje(0);
@@ -320,6 +323,7 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
     setPlagasDetectadas([]);
     setPlagaSeleccionada('');
     setObservaciones('');
+    setFloracionSinFlor(0);
     setFloracionBrotes(0);
     setFloracionFlorMadura(0);
     setFloracionCuaje(0);
@@ -582,7 +586,18 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
           {/* FLORACIÓN */}
           <div className="border-t border-secondary/30 pt-4">
             <h3 className="font-semibold text-foreground mb-3">🌸 Estado de Floración (árboles por estado)</h3>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div>
+                <Label className="text-xs">Sin flor</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={floracionSinFlor}
+                  onChange={(e) => setFloracionSinFlor(parseInt(e.target.value) || 0)}
+                  onWheel={(e) => e.currentTarget.blur()}
+                  className="mt-1"
+                />
+              </div>
               <div>
                 <Label className="text-xs">Brotes</Label>
                 <Input

@@ -544,7 +544,7 @@ async function execMonitoringData(args: Record<string, unknown>): Promise<string
   const { date_from, date_to } = validated;
   const { lote_name, pest_name } = args as { lote_name?: string; pest_name?: string };
 
-  let query = `select=id,fecha_monitoreo,incidencia,severidad,gravedad_texto,arboles_monitoreados,arboles_afectados,individuos_encontrados,observaciones,floracion_brotes,floracion_flor_madura,floracion_cuaje,ronda_id,lote:lotes(nombre),sublote:sublotes(nombre),plaga:plagas_enfermedades_catalogo(nombre,tipo)&order=fecha_monitoreo.desc&limit=3000`;
+  let query = `select=id,fecha_monitoreo,incidencia,severidad,gravedad_texto,arboles_monitoreados,arboles_afectados,individuos_encontrados,observaciones,floracion_sin_flor,floracion_brotes,floracion_flor_madura,floracion_cuaje,ronda_id,sublote_id,lote:lotes(nombre),sublote:sublotes(nombre),plaga:plagas_enfermedades_catalogo(nombre,tipo)&order=fecha_monitoreo.desc&limit=3000`;
 
   if (date_from) query += `&fecha_monitoreo=gte.${e(date_from)}`;
   if (date_to) query += `&fecha_monitoreo=lte.${e(date_to)}`;
@@ -612,18 +612,33 @@ async function execMonitoringData(args: Record<string, unknown>): Promise<string
     };
   }
 
-  // Flowering summary
-  const floracionTotal = { brotes: 0, florMadura: 0, cuaje: 0, registros: 0 };
+  // Flowering summary — deduplicate by (fecha, sublote_id) to avoid pest-row inflation
+  const florEventMap = new Map<string, { arboles: number; sinFlor: number; brotes: number; flor: number; cuaje: number }>();
   for (const r of filtered) {
+    const key = `${r.fecha_monitoreo}|${r.sublote_id ?? ''}`;
+    const sf = (r.floracion_sin_flor as number) || 0;
     const b = (r.floracion_brotes as number) || 0;
     const fm = (r.floracion_flor_madura as number) || 0;
     const c = (r.floracion_cuaje as number) || 0;
-    if (b + fm + c > 0) {
-      floracionTotal.brotes += b;
-      floracionTotal.florMadura += fm;
-      floracionTotal.cuaje += c;
-      floracionTotal.registros++;
+    const arb = (r.arboles_monitoreados as number) || 35;
+    const prev = florEventMap.get(key);
+    if (prev) {
+      prev.sinFlor = Math.max(prev.sinFlor, sf);
+      prev.brotes = Math.max(prev.brotes, b);
+      prev.flor = Math.max(prev.flor, fm);
+      prev.cuaje = Math.max(prev.cuaje, c);
+      prev.arboles = Math.max(prev.arboles, arb);
+    } else {
+      florEventMap.set(key, { arboles: arb, sinFlor: sf, brotes: b, flor: fm, cuaje: c });
     }
+  }
+  const floracionTotal = { arbolesMonitoreados: 0, sinFlor: 0, brotes: 0, florMadura: 0, cuaje: 0 };
+  for (const ev of florEventMap.values()) {
+    floracionTotal.arbolesMonitoreados += ev.arboles;
+    floracionTotal.sinFlor += ev.sinFlor;
+    floracionTotal.brotes += ev.brotes;
+    floracionTotal.florMadura += ev.flor;
+    floracionTotal.cuaje += ev.cuaje;
   }
 
   return JSON.stringify({

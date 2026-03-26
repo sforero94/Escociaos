@@ -131,80 +131,67 @@ function Celda({ celda, onClick }: CeldaProps) {
 
 interface CeldaMultipleProps {
   celda: CeldaMapaCalor | null;
-  numeroOcurrencias: 1 | 3 | 6;
   onClick: () => void;
 }
 
-function CeldaMultiple({ celda, numeroOcurrencias, onClick }: CeldaMultipleProps) {
+function getArrowColor(prev: number, curr: number): string {
+  const diff = curr - prev;
+  if (Math.abs(diff) < 1) return 'text-gray-400';
+  if (diff > 0) return 'text-red-500';
+  return 'text-green-600';
+}
+
+function CeldaMultiple({ celda, onClick }: CeldaMultipleProps) {
   if (!celda) {
-    // Celda vacía (sin datos)
     return (
-      <td className="p-2 border border-gray-200">
-        <div className="rounded-lg p-2 min-w-[80px] h-[60px] bg-gray-50 border border-gray-200" />
+      <td className="p-3 border border-gray-200 text-center" style={{ backgroundColor: '#ffffff' }}>
+        <span className="text-sm text-gray-300">—</span>
       </td>
     );
   }
 
-  const ocurrencias = celda.ocurrencias || [];
-
-  // Completar con nulls si faltan datos (agregar al inicio = menos reciente)
-  const ocurrenciasCompletas: Array<{ fecha: string; incidencia: number } | null> = [...ocurrencias];
-  while (ocurrenciasCompletas.length < numeroOcurrencias) {
-    ocurrenciasCompletas.unshift(null);
-  }
-
-  // Layout: 3 columnas
-  // Para 3 ocurrencias: 3×1 grid (1 fila, 3 columnas)
-  // Para 6 ocurrencias: 3×2 grid (2 filas, 3 columnas)
-  const gridClass = numeroOcurrencias === 3 ? 'grid-cols-3 grid-rows-1' : 'grid-cols-3 grid-rows-2';
+  const ocurrencias = (celda.ocurrencias || []).slice(-3);
 
   return (
-    <td className="p-2 border border-gray-200">
+    <td className="p-3 border border-gray-200" style={{ backgroundColor: '#ffffff' }}>
       <Tooltip>
         <TooltipTrigger asChild>
           <button
             onClick={onClick}
-            className="rounded-lg p-1 min-w-[80px] h-[60px] hover:opacity-80 transition-opacity cursor-pointer border border-gray-300 w-full"
+            className="hover:opacity-80 transition-opacity cursor-pointer w-full flex items-center justify-center gap-1"
           >
-            <div className={`grid ${gridClass} gap-0.5 h-full`}>
-              {ocurrenciasCompletas.map((ocurrencia, index) => {
-                if (!ocurrencia) {
-                  return (
-                    <div
-                      key={index}
-                      className="bg-gray-100 border border-gray-200 rounded flex items-center justify-center"
-                    >
-                      <span className="text-[8px] text-gray-400">-</span>
-                    </div>
-                  );
-                }
-
-                const colores = obtenerColorIncidencia(ocurrencia.incidencia);
-                return (
-                  <div
-                    key={index}
-                    className={`${colores.bg} ${colores.border} border rounded flex items-center justify-center`}
-                  >
-                    <span className={`text-[9px] font-semibold ${colores.text}`}>
-                      {Math.round(ocurrencia.incidencia)}%
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+            {ocurrencias.map((oc, i) => {
+              const colores = obtenerColorIncidencia(oc.incidencia);
+              return (
+                <span key={i} className="flex items-center gap-1">
+                  {i > 0 && (
+                    <span className={`text-sm font-bold ${getArrowColor(ocurrencias[i - 1].incidencia, oc.incidencia)}`}>→</span>
+                  )}
+                  <span className={`${colores.bg} ${colores.text} font-semibold text-sm px-2 py-0.5 rounded`}>
+                    {Math.round(oc.incidencia)}%
+                  </span>
+                </span>
+              );
+            })}
+            {ocurrencias.length === 0 && (
+              <span className="text-sm text-gray-300">—</span>
+            )}
           </button>
         </TooltipTrigger>
         <TooltipContent className="!bg-gray-900 !text-white p-3 rounded-lg shadow-lg max-w-xs border border-gray-700">
           <div className="space-y-1">
             <p className="font-bold">{celda.plagaNombre} - {celda.loteNombre}</p>
-            <p className="text-xs">
-              Mostrando {ocurrencias.length} de {numeroOcurrencias} ocurrencias
-            </p>
-            {ocurrencias.map((oc, i) => (
-              <p key={i} className="text-xs">
-                {formatearFecha(oc.fecha)}: {Math.round(oc.incidencia)}%
-              </p>
-            ))}
+            <p>Incidencia promedio: {Math.round(celda.incidenciaPromedio)}%</p>
+            <p>{celda.numeroMonitoreos} monitoreos</p>
+            {ocurrencias.length > 0 && (
+              <div className="mt-1 border-t border-gray-700 pt-1">
+                {ocurrencias.map((oc, i) => (
+                  <p key={i} className="text-xs">
+                    {formatearFecha(oc.fecha)}: {Math.round(oc.incidencia)}%
+                  </p>
+                ))}
+              </div>
+            )}
             <p className="text-xs opacity-75 mt-2">Click para ver detalles</p>
           </div>
         </TooltipContent>
@@ -266,9 +253,8 @@ export function MapaCalorIncidencias({
       );
       celda.incidenciaPromedio = sumaIncidencias / celda.numeroMonitoreos;
 
-      // Calcular array de ocurrencias según el modo
-      const numOcurrencias = modoVisualizacion === 'ultimo' ? 1 :
-                            modoVisualizacion === 'ultimos3' ? 3 : 6;
+      // Always keep at least 3 ocurrencias for trend arrow calculation
+      const numOcurrencias = modoVisualizacion === 'ultimos6' ? 6 : 3;
 
       // Agrupar por fecha y calcular promedio
       const monitoreoPorFecha = new Map<string, number[]>();
@@ -423,19 +409,19 @@ export function MapaCalorIncidencias({
       </div>
 
       {/* TABLA DEL MAPA DE CALOR */}
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse">
+      <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '70vh' }}>
+        <table className="w-full border-separate border-spacing-0 table-fixed" style={{ minWidth: `${200 + datosMapaCalor.columnas.length * 180}px` }}>
           <thead>
             <tr>
-              <th className="p-3 bg-primary/10 border border-gray-300 text-left sticky left-0 z-10">
+              <th className="p-3 border border-gray-300 text-left w-[200px]" style={{ backgroundColor: '#f0f4e8', position: 'sticky', left: 0, top: 0, zIndex: 30 }}>
                 <div className="font-bold text-foreground">Plaga / Lote</div>
               </th>
               {datosMapaCalor.columnas.map(columna => (
                 <th
                   key={columna.loteId}
-                  className="p-3 bg-primary/10 border border-gray-300 text-center min-w-[100px]"
+                  className="p-3 border border-gray-300 text-center w-[180px]" style={{ backgroundColor: '#f0f4e8', position: 'sticky', top: 0, zIndex: 20 }}
                 >
-                  <div className="font-bold text-foreground">{columna.loteNombre}</div>
+                  <div className="font-bold text-foreground text-sm truncate">{columna.loteNombre}</div>
                   <div className="text-xs text-gray-600 mt-1">
                     Prom: {Math.round(columna.incidenciaPromedio)}%
                   </div>
@@ -446,7 +432,7 @@ export function MapaCalorIncidencias({
           <tbody>
             {datosMapaCalor.filas.map(fila => (
               <tr key={fila.plagaId}>
-                <th className="p-3 bg-gray-50 border border-gray-300 text-left font-medium sticky left-0 z-10">
+                <th className="p-3 border border-gray-300 text-left font-medium w-[200px]" style={{ backgroundColor: '#ffffff', position: 'sticky', left: 0, zIndex: 10 }}>
                   <div className="text-foreground">{fila.plagaNombre}</div>
                   <div className="text-xs text-gray-600 mt-1">
                     Prom: {Math.round(fila.incidenciaPromedioTotal)}%
@@ -454,16 +440,10 @@ export function MapaCalorIncidencias({
                 </th>
                 {datosMapaCalor.columnas.map(columna => {
                   const celda = fila.celdas.get(columna.loteId) || null;
-
-                  // Siempre renderizar CeldaMultiple con número de ocurrencias según el modo
-                  const numOcurrencias = modoVisualizacion === 'ultimo' ? 1 :
-                                        modoVisualizacion === 'ultimos3' ? 3 : 6;
-
                   return (
                     <CeldaMultiple
                       key={`${fila.plagaId}-${columna.loteId}`}
                       celda={celda}
-                      numeroOcurrencias={numOcurrencias as 1 | 3 | 6}
                       onClick={() => celda && handleCeldaClick(celda)}
                     />
                   );

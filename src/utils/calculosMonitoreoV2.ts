@@ -108,32 +108,71 @@ export async function asignarRonda(supabase: SupabaseClient, fecha: string): Pro
 export const PLAGAS_INTERES = ['Monalonion', 'Ácaro', 'Cucarron marceño', 'Phytophtora', 'Thrips'];
 
 interface RegistroConFloracion {
+  fecha_monitoreo?: string | null;
+  sublote_id?: string | null;
+  arboles_monitoreados?: number | null;
+  floracion_sin_flor?: number | null;
   floracion_brotes?: number | null;
   floracion_flor_madura?: number | null;
   floracion_cuaje?: number | null;
 }
 
+/**
+ * Deduplicate floracion data and compute percentages relative to trees monitored.
+ *
+ * Each monitoring event (one sublote visit) creates N rows in monitoreos (one per pest).
+ * All N rows have identical floracion values. We group by (fecha, sublote_id) and take
+ * MAX of each floracion field to get the real count per event, then sum across events.
+ */
 export function calcularEstadoFloracion(registros: RegistroConFloracion[]): EstadoFloracion {
-  let brotes = 0;
-  let florMadura = 0;
-  let cuaje = 0;
+  // Group by (fecha_monitoreo, sublote_id) to deduplicate pest-row copies
+  const eventMap = new Map<string, { arboles: number; sinFlor: number; brotes: number; flor: number; cuaje: number }>();
 
   for (const r of registros) {
-    brotes += r.floracion_brotes ?? 0;
-    florMadura += r.floracion_flor_madura ?? 0;
-    cuaje += r.floracion_cuaje ?? 0;
+    const key = `${r.fecha_monitoreo ?? ''}|${r.sublote_id ?? ''}`;
+    const prev = eventMap.get(key);
+    const sinFlor = r.floracion_sin_flor ?? 0;
+    const brotes = r.floracion_brotes ?? 0;
+    const flor = r.floracion_flor_madura ?? 0;
+    const cuaje = r.floracion_cuaje ?? 0;
+    const arboles = r.arboles_monitoreados ?? 35;
+
+    if (prev) {
+      // Take MAX to deduplicate (all pest rows have the same floracion values)
+      prev.sinFlor = Math.max(prev.sinFlor, sinFlor);
+      prev.brotes = Math.max(prev.brotes, brotes);
+      prev.flor = Math.max(prev.flor, flor);
+      prev.cuaje = Math.max(prev.cuaje, cuaje);
+      prev.arboles = Math.max(prev.arboles, arboles);
+    } else {
+      eventMap.set(key, { arboles, sinFlor, brotes, flor, cuaje });
+    }
   }
 
-  const totalArboles = brotes + florMadura + cuaje;
+  let totalArboles = 0;
+  let totalSinFlor = 0;
+  let totalBrotes = 0;
+  let totalFlor = 0;
+  let totalCuaje = 0;
+
+  for (const ev of eventMap.values()) {
+    totalArboles += ev.arboles;
+    totalSinFlor += ev.sinFlor;
+    totalBrotes += ev.brotes;
+    totalFlor += ev.flor;
+    totalCuaje += ev.cuaje;
+  }
 
   return {
-    totalArboles,
-    brotes,
-    florMadura,
-    cuaje,
-    pctBrotes: totalArboles > 0 ? Math.round((brotes / totalArboles) * 100) : 0,
-    pctFlorMadura: totalArboles > 0 ? Math.round((florMadura / totalArboles) * 100) : 0,
-    pctCuaje: totalArboles > 0 ? Math.round((cuaje / totalArboles) * 100) : 0,
+    arbolesMonitoreados: totalArboles,
+    sinFlor: totalSinFlor,
+    brotes: totalBrotes,
+    florMadura: totalFlor,
+    cuaje: totalCuaje,
+    pctSinFlor: totalArboles > 0 ? Math.round((totalSinFlor / totalArboles) * 100) : 0,
+    pctBrotes: totalArboles > 0 ? Math.round((totalBrotes / totalArboles) * 100) : 0,
+    pctFlorMadura: totalArboles > 0 ? Math.round((totalFlor / totalArboles) * 100) : 0,
+    pctCuaje: totalArboles > 0 ? Math.round((totalCuaje / totalArboles) * 100) : 0,
   };
 }
 

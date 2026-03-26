@@ -20,33 +20,40 @@ describe('calcularEstadoFloracion', () => {
   it('returns zeros when no records', () => {
     const result = calcularEstadoFloracion([]);
     expect(result).toEqual({
-      totalArboles: 0,
+      arbolesMonitoreados: 0,
+      sinFlor: 0,
       brotes: 0,
       florMadura: 0,
       cuaje: 0,
+      pctSinFlor: 0,
       pctBrotes: 0,
       pctFlorMadura: 0,
       pctCuaje: 0,
     });
   });
 
-  it('sums tree counts across multiple records', () => {
+  it('deduplicates pest rows with same fecha+sublote and sums across distinct events', () => {
     const registros = [
-      { floracion_brotes: 10, floracion_flor_madura: 5, floracion_cuaje: 2 },
-      { floracion_brotes: 8, floracion_flor_madura: 12, floracion_cuaje: 3 },
+      // Two pest rows for the same sublote visit — should deduplicate via MAX
+      { fecha_monitoreo: '2026-01-01', sublote_id: 'sub1', arboles_monitoreados: 35, floracion_sin_flor: 5, floracion_brotes: 10, floracion_flor_madura: 5, floracion_cuaje: 2 },
+      { fecha_monitoreo: '2026-01-01', sublote_id: 'sub1', arboles_monitoreados: 35, floracion_sin_flor: 5, floracion_brotes: 10, floracion_flor_madura: 5, floracion_cuaje: 2 },
+      // A different sublote visit — should sum with the first
+      { fecha_monitoreo: '2026-01-01', sublote_id: 'sub2', arboles_monitoreados: 35, floracion_sin_flor: 3, floracion_brotes: 8, floracion_flor_madura: 12, floracion_cuaje: 3 },
     ];
     const result = calcularEstadoFloracion(registros);
+    expect(result.arbolesMonitoreados).toBe(70);
+    expect(result.sinFlor).toBe(8);
     expect(result.brotes).toBe(18);
     expect(result.florMadura).toBe(17);
     expect(result.cuaje).toBe(5);
-    expect(result.totalArboles).toBe(40);
   });
 
-  it('calculates percentages correctly', () => {
+  it('calculates percentages relative to arboles monitoreados', () => {
     const registros = [
-      { floracion_brotes: 50, floracion_flor_madura: 30, floracion_cuaje: 20 },
+      { fecha_monitoreo: '2026-01-01', sublote_id: 'sub1', arboles_monitoreados: 100, floracion_sin_flor: 10, floracion_brotes: 50, floracion_flor_madura: 30, floracion_cuaje: 20 },
     ];
     const result = calcularEstadoFloracion(registros);
+    expect(result.pctSinFlor).toBe(10);
     expect(result.pctBrotes).toBe(50);
     expect(result.pctFlorMadura).toBe(30);
     expect(result.pctCuaje).toBe(20);
