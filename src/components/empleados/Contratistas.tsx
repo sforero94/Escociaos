@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
+import { useFormPersistence } from '@/hooks/useFormPersistence';
+import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 import { ConfirmDialog } from '../ui/confirm-dialog';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -71,7 +73,10 @@ const Contratistas: React.FC = () => {
   const [filterTipo, setFilterTipo] = useState<string>('Todos');
   const [showFormDialog, setShowFormDialog] = useState(false);
   const [editingContratista, setEditingContratista] = useState<Contratista | null>(null);
-  const [formData, setFormData] = useState<Contratista>(CONTRATISTA_INICIAL);
+  const [formData, setFormData, clearFormData, wasRestored] = useFormPersistence<Contratista>({
+    key: 'contratista-form-v1',
+    initialState: CONTRATISTA_INICIAL,
+  });
   const [alert, setAlert] = useState<{
     type: 'success' | 'error' | 'info';
     message: string;
@@ -230,7 +235,7 @@ const Contratistas: React.FC = () => {
   const handleCloseForm = () => {
     setShowFormDialog(false);
     setEditingContratista(null);
-    setFormData(CONTRATISTA_INICIAL);
+    clearFormData();
   };
 
   // Función para manejar cambios en el formulario
@@ -485,7 +490,7 @@ const Contratistas: React.FC = () => {
       />
 
       {/* Dialog de formulario */}
-      <Dialog open={showFormDialog} onOpenChange={setShowFormDialog}>
+      <Dialog open={showFormDialog} onOpenChange={(open) => { if (!open) handleCloseForm(); else setShowFormDialog(true); }}>
         <DialogContent size="lg">
           <DialogHeader>
             <DialogTitle>
@@ -497,6 +502,7 @@ const Contratistas: React.FC = () => {
           </DialogHeader>
 
           <DialogBody>
+          <FormDraftBanner variant="restored" show={wasRestored} onDiscard={clearFormData} />
           <div className="space-y-4">
             {/* Información básica */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

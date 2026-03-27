@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useFormDraft } from '@/hooks/useFormDraft';
+import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 import { useNavigate } from 'react-router-dom';
 import {
   Settings,
@@ -124,6 +126,28 @@ export function ReporteSemanalWizard() {
   const [slideActual, setSlideActual] = useState(0);
   const [slideScale, setSlideScale] = useState(1);
   const slideContainerRef = useRef<HTMLDivElement>(null);
+
+  // Draft persistence (exclude unserializable pdfBlob and auto-loaded data)
+  const draft = useFormDraft('reporte-semanal-v1', {
+    pasoActual, semana, fallas, permisos, ingresos, retiros,
+    detalleFallas, detallePermisos, cerradasSeleccionadas, temasAdicionales,
+  }, { debounceMs: 2000 });
+
+  const handleRestoreDraft = useCallback(() => {
+    if (!draft.draftData) return;
+    const d = draft.draftData;
+    setPasoActual(d.pasoActual);
+    setSemana(d.semana);
+    setFallas(d.fallas);
+    setPermisos(d.permisos);
+    setIngresos(d.ingresos);
+    setRetiros(d.retiros);
+    setDetalleFallas(d.detalleFallas);
+    setDetallePermisos(d.detallePermisos);
+    setCerradasSeleccionadas(d.cerradasSeleccionadas);
+    setTemasAdicionales(d.temasAdicionales);
+    draft.acceptDraft();
+  }, [draft]);
 
   // Load closed applications list when entering paso 2
   useEffect(() => {
@@ -256,6 +280,7 @@ export function ReporteSemanalWizard() {
 
       setHtmlGenerado(resultado.html);
       setPdfBlob(resultado.pdfBlob);
+      draft.clearDraft();
       if (resultado.metadata) {
         toast.success('Reporte generado y guardado');
       } else if (resultado.storageWarning) {
@@ -1231,6 +1256,13 @@ export function ReporteSemanalWizard() {
       </div>
 
       {renderPasos()}
+
+      <FormDraftBanner
+        variant="available"
+        show={draft.hasDraft}
+        onRestore={handleRestoreDraft}
+        onDiscard={draft.discardDraft}
+      />
 
       {pasoActual === 1 && renderPaso1()}
       {pasoActual === 2 && renderPaso2()}

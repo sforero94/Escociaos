@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../shared/Toast';
 import { ProveedorDialog } from '../shared/ProveedorDialog';
 import { FacturaUploader } from '../shared/FacturaUploader';
+import { useFormDraft } from '@/hooks/useFormDraft';
+import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 import {
   Package,
   Search,
@@ -106,6 +108,16 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
   const [mostrandoExito, setMostrandoExito] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [showProveedorDialog, setShowProveedorDialog] = useState(false);
+
+  const draft = useFormDraft('compra-new-v1', { datosCompra, productosCompra }, { debounceMs: 1500 });
+
+  const handleRestoreDraft = useCallback(() => {
+    if (draft.draftData) {
+      setDatosCompra(draft.draftData.datosCompra);
+      setProductosCompra(draft.draftData.productosCompra);
+      draft.acceptDraft();
+    }
+  }, [draft]);
 
   // ============================================
   // EFECTOS
@@ -421,6 +433,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
 
       showSuccess(`✅ Compra registrada exitosamente: ${productosCompra.length} producto(s)`);
       showInfo('📊 Inventario actualizado automáticamente');
+      draft.clearDraft();
 
       setMostrandoExito(true);
       setTimeout(() => {
@@ -486,6 +499,12 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
       <ToastContainer />
 
       <div className="max-w-7xl mx-auto px-4">
+        <FormDraftBanner
+          variant="available"
+          show={draft.hasDraft}
+          onRestore={handleRestoreDraft}
+          onDiscard={draft.discardDraft}
+        />
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* COLUMNA PRINCIPAL - Formulario */}
           <div className="lg:col-span-2 space-y-6">

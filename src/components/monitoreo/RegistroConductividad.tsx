@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -20,6 +20,8 @@ import { toast } from 'sonner';
 import { getSupabase } from '../../utils/supabase/client';
 import type { Lote } from '../../types/shared';
 import type { LecturaCE } from '../../types/monitoreo';
+import { useFormDraft } from '@/hooks/useFormDraft';
+import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 
 interface RegistroConductividadProps {
   open: boolean;
@@ -41,6 +43,20 @@ export function RegistroConductividad({ open, onClose, onSuccess }: RegistroCond
   const [loading, setLoading] = useState(false);
   const [mostrarPaste, setMostrarPaste] = useState(false);
   const [pasteText, setPasteText] = useState('');
+
+  const draft = useFormDraft('conductividad-new-v1', { fecha, loteId, numArboles, lecturas, inputStrings, observaciones }, { debounceMs: 1500 });
+
+  const handleRestoreDraft = useCallback(() => {
+    if (draft.draftData) {
+      setFecha(draft.draftData.fecha);
+      setLoteId(draft.draftData.loteId);
+      setNumArboles(draft.draftData.numArboles);
+      setLecturas(draft.draftData.lecturas);
+      setInputStrings(draft.draftData.inputStrings);
+      setObservaciones(draft.draftData.observaciones);
+      draft.acceptDraft();
+    }
+  }, [draft]);
 
   const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
 
@@ -238,6 +254,7 @@ export function RegistroConductividad({ open, onClose, onSuccess }: RegistroCond
       if (error) throw error;
 
       toast.success(`CE guardada — ${completados}/${numArboles} árboles, promedio ${promGeneral.toFixed(2)} dS/m`);
+      draft.clearDraft();
       limpiar();
       onSuccess?.();
       onClose();
@@ -272,6 +289,13 @@ export function RegistroConductividad({ open, onClose, onSuccess }: RegistroCond
           <DialogHeader>
             <DialogTitle>Conductividad Eléctrica</DialogTitle>
           </DialogHeader>
+
+          <FormDraftBanner
+            variant="available"
+            show={draft.hasDraft}
+            onRestore={handleRestoreDraft}
+            onDiscard={draft.discardDraft}
+          />
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
             <div>

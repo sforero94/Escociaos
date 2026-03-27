@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
 import { useAuth } from '../../contexts/AuthContext';
+import { useFormPersistence } from '@/hooks/useFormPersistence';
+import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 
 interface ProductFormProps {
   isOpen: boolean;
@@ -116,7 +118,10 @@ const initialFormData: ProductData = {
 
 export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFormProps) {
   const { profile } = useAuth();
-  const [formData, setFormData] = useState<ProductData>(initialFormData);
+  const [formData, setFormData, clearFormData, wasRestored] = useFormPersistence<ProductData>({
+    key: productId ? `producto-edit-${productId}` : 'producto-new-v1',
+    initialState: initialFormData,
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentSection, setCurrentSection] = useState(1);
@@ -264,9 +269,9 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
       }
 
       // Éxito
+      clearFormData();
       onSuccess();
       onClose();
-      setFormData(initialFormData);
       setCurrentSection(1);
     } catch (err: any) {
       if (err.code === '23505') {
@@ -327,7 +332,8 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
         {/* Form Content */}
         <form onSubmit={handleSubmit} className="overflow-y-auto" style={{ maxHeight: 'calc(90vh - 220px)' }}>
           <div className="px-6 py-4">
-            
+            <FormDraftBanner variant="restored" show={wasRestored} onDiscard={clearFormData} />
+
             {/* SECCIÓN 1: INFORMACIÓN BÁSICA */}
             {currentSection === 1 && (
               <div className="space-y-4">
@@ -1004,8 +1010,8 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
               <button
                 type="button"
                 onClick={() => {
+                  clearFormData();
                   onClose();
-                  setFormData(initialFormData);
                   setCurrentSection(1);
                   setError(null);
                 }}

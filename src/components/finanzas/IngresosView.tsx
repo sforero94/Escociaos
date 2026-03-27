@@ -58,7 +58,7 @@ export function IngresosView() {
           </p>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} activationMode="manual" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="registrar" className="flex items-center gap-2">
               <ClipboardList className="w-4 h-4" />

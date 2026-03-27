@@ -7,14 +7,15 @@ interface UseFormPersistenceOptions<T> {
   enabled?: boolean; // Allow disabling persistence (default: true)
 }
 
-interface StoredFormData<T> {
+export interface StoredFormData<T> {
   data: T;
   timestamp: string;
   version: number;
 }
 
-const CURRENT_VERSION = 1;
-const RETENTION_DAYS = 7;
+export const FORM_AUTOSAVE_PREFIX = 'form_autosave_';
+export const CURRENT_VERSION = 1;
+export const RETENTION_DAYS = 7;
 
 /**
  * Custom hook for auto-saving form state to localStorage
@@ -38,10 +39,13 @@ export function useFormPersistence<T>({
   initialState,
   debounceMs = 1000,
   enabled = true
-}: UseFormPersistenceOptions<T>): [T, (value: T | ((prev: T) => T)) => void, () => void] {
+}: UseFormPersistenceOptions<T>): [T, (value: T | ((prev: T) => T)) => void, () => void, boolean] {
 
   // Storage key with prefix for namespacing
   const storageKey = `form_autosave_${key}`;
+
+  // Track whether data was restored from localStorage
+  const wasRestoredRef = useRef(false);
 
   // Initialize state from localStorage or use initial state
   const [state, setStateInternal] = useState<T>(() => {
@@ -60,6 +64,7 @@ export function useFormPersistence<T>({
         }
 
         console.log(`📂 Restored form state for: ${key}`);
+        wasRestoredRef.current = true;
         return parsed.data;
       }
     } catch (error) {
@@ -204,6 +209,7 @@ export function useFormPersistence<T>({
     try {
       localStorage.removeItem(storageKey);
       console.log(`🗑️ Cleared form state for: ${key}`);
+      wasRestoredRef.current = false;
       setStateInternal(initialState);
     } catch (error) {
       console.error(`❌ Failed to clear form state for: ${key}`, error);
@@ -211,5 +217,5 @@ export function useFormPersistence<T>({
   };
 
 
-  return [state, setState, clearFormData];
+  return [state, setState, clearFormData, wasRestoredRef.current];
 }

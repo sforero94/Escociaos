@@ -17,6 +17,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../ui/alert-dialog';
+import { useFormDraft } from '@/hooks/useFormDraft';
+import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 
 import type { Lote } from '../../types/shared';
 
@@ -29,6 +31,15 @@ export function LotesConfig() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [loteToDelete, setLoteToDelete] = useState<Lote | null>(null);
   const supabase = getSupabase();
+
+  const draft = useFormDraft('lotes-config-v1', { editForm, isCreating });
+
+  function handleRestoreDraft() {
+    if (!draft.draftData) return;
+    setEditForm(draft.draftData.editForm);
+    setIsCreating(draft.draftData.isCreating);
+    draft.acceptDraft();
+  }
 
   useEffect(() => {
     cargarLotes();
@@ -58,6 +69,7 @@ export function LotesConfig() {
   }
 
   function cancelarEdicion() {
+    draft.clearDraft();
     setEditingId(null);
     setEditForm({});
     setIsCreating(false);
@@ -112,6 +124,7 @@ export function LotesConfig() {
         return;
       }
 
+      draft.clearDraft();
       await cargarLotes();
       cancelarEdicion();
     } catch (error: any) {
@@ -273,6 +286,15 @@ export function LotesConfig() {
           Nuevo Lote
         </Button>
       </div>
+
+      {(isCreating || editingId) && (
+        <FormDraftBanner
+          variant="available"
+          show={draft.hasDraft}
+          onRestore={handleRestoreDraft}
+          onDiscard={draft.discardDraft}
+        />
+      )}
 
       {/* Formulario de creación */}
       {isCreating && (

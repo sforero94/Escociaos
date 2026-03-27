@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
+import { useFormPersistence } from '@/hooks/useFormPersistence';
+import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 import { ConfirmDialog } from '../ui/confirm-dialog';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -75,7 +77,10 @@ const Personal: React.FC = () => {
   const [showFormDialog, setShowFormDialog] = useState(false);
   const [showCsvDialog, setShowCsvDialog] = useState(false);
   const [editingEmpleado, setEditingEmpleado] = useState<Empleado | null>(null);
-  const [formData, setFormData] = useState<Empleado>(EMPLEADO_INICIAL);
+  const [formData, setFormData, clearFormData, wasRestored] = useFormPersistence<Empleado>({
+    key: 'empleado-form-v1',
+    initialState: EMPLEADO_INICIAL,
+  });
   const [alert, setAlert] = useState<{
     type: 'success' | 'error' | 'info';
     message: string;
@@ -270,7 +275,7 @@ const Personal: React.FC = () => {
   const handleCloseForm = () => {
     setShowFormDialog(false);
     setEditingEmpleado(null);
-    setFormData(EMPLEADO_INICIAL);
+    clearFormData();
   };
 
   // Función para manejar cambios en el formulario
@@ -897,7 +902,7 @@ María García,9876543210,3109876543,maria@example.com,Activo,Jefe de Cosecha,In
       />
 
       {/* Dialog de formulario de empleado */}
-      <Dialog open={showFormDialog} onOpenChange={setShowFormDialog}>
+      <Dialog open={showFormDialog} onOpenChange={(open) => { if (!open) handleCloseForm(); else setShowFormDialog(true); }}>
         <DialogContent size="xl">
           <DialogHeader>
             <DialogTitle>
@@ -910,6 +915,7 @@ María García,9876543210,3109876543,maria@example.com,Activo,Jefe de Cosecha,In
           </DialogHeader>
 
           <DialogBody>
+          <FormDraftBanner variant="restored" show={wasRestored} onDiscard={clearFormData} />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
             {/* Información Personal */}
             <div className="col-span-2">

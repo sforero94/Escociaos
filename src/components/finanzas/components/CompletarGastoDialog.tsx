@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getSupabase } from '../../../utils/supabase/client';
+import { useFormPersistence } from '@/hooks/useFormPersistence';
+import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
@@ -32,14 +34,17 @@ export function CompletarGastoDialog({
   onError
 }: CompletarGastoDialogProps) {
   // Form state
-  const [formData, setFormData] = useState({
-    negocio_id: '',
-    region_id: '',
-    categoria_id: '',
-    concepto_id: '',
-    proveedor_id: '',
-    medio_pago_id: '',
-    observaciones: '',
+  const [formData, setFormData, clearFormData, wasRestored] = useFormPersistence({
+    key: gasto?.id ? `completar-gasto-${gasto.id}` : 'completar-gasto-tmp',
+    initialState: {
+      negocio_id: '',
+      region_id: '',
+      categoria_id: '',
+      concepto_id: '',
+      proveedor_id: '',
+      medio_pago_id: '',
+      observaciones: '',
+    },
   });
 
   // Catalog data
@@ -173,6 +178,7 @@ export function CompletarGastoDialog({
 
       if (error) throw error;
 
+      clearFormData();
       onSuccess();
       onOpenChange(false);
 
@@ -206,7 +212,7 @@ export function CompletarGastoDialog({
       <Button
         type="button"
         variant="outline"
-        onClick={() => onOpenChange(false)}
+        onClick={() => { clearFormData(); onOpenChange(false); }}
         disabled={loading}
       >
         Cancelar
@@ -242,6 +248,7 @@ export function CompletarGastoDialog({
           <DialogDescription>Complete la información del gasto generado automáticamente desde una compra</DialogDescription>
         </DialogHeader>
         <DialogBody>
+          <FormDraftBanner variant="restored" show={wasRestored} onDiscard={clearFormData} />
           <form onSubmit={handleSubmit} className="contents">
             <div className="space-y-6">
               {/* Gasto Information Summary */}

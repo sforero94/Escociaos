@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useFormDraft } from '@/hooks/useFormDraft';
+import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 import { Save, X, Calendar, Package, Droplet, User, Plus, Trash2, AlertTriangle, FileText, Cloud, Clock } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { obtenerFechaHoy } from '../../utils/fechas';
@@ -78,6 +80,35 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
   const [selectedTrabajadores, setSelectedTrabajadores] = useState<Trabajador[]>([]);
   const [workMatrix, setWorkMatrix] = useState<WorkMatrix>({});
   const [observacionesMatrix, setObservacionesMatrix] = useState<ObservacionesMatrix>({});
+
+  // Draft persistence
+  const draft = useFormDraft(`mov-diario-${aplicacion.id}-v1`, {
+    fechaMovimiento, loteId, numeroCanecas, numeroBultos,
+    equipoAplicacion, personal, horaInicio, horaFin,
+    responsable, condicionesMeteorologicas, notas,
+    productosAgregados, selectedTrabajadores, workMatrix, observacionesMatrix,
+  }, { debounceMs: 2000 });
+
+  const handleRestoreDraft = useCallback(() => {
+    if (!draft.draftData) return;
+    const d = draft.draftData;
+    setFechaMovimiento(d.fechaMovimiento);
+    setLoteId(d.loteId);
+    setNumeroCanecas(d.numeroCanecas);
+    setNumeroBultos(d.numeroBultos);
+    setEquipoAplicacion(d.equipoAplicacion);
+    setPersonal(d.personal);
+    setHoraInicio(d.horaInicio);
+    setHoraFin(d.horaFin);
+    setResponsable(d.responsable);
+    setCondicionesMeteorologicas(d.condicionesMeteorologicas);
+    setNotas(d.notas);
+    setProductosAgregados(d.productosAgregados);
+    setSelectedTrabajadores(d.selectedTrabajadores);
+    setWorkMatrix(d.workMatrix);
+    setObservacionesMatrix(d.observacionesMatrix);
+    draft.acceptDraft();
+  }, [draft]);
 
   // 🔧 Productos filtrados según el lote seleccionado
   // Si hay un lote seleccionado, mostrar solo productos de su mezcla
@@ -593,7 +624,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       setWorkMatrix({});
       setObservacionesMatrix({});
 
-      // Notificar éxito
+      draft.clearDraft();
       onSuccess();
 
     } catch (err: any) {
@@ -621,6 +652,13 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
           </div>
         </div>
       </div>
+
+      <FormDraftBanner
+        variant="available"
+        show={draft.hasDraft}
+        onRestore={handleRestoreDraft}
+        onDiscard={draft.discardDraft}
+      />
 
       {/* Error */}
       {error && (

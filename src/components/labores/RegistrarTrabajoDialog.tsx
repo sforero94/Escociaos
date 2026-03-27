@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -6,6 +6,8 @@ import { Label } from '../ui/label';
 import { formatearFecha } from '../../utils/fechas';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter } from '../ui/dialog';
 import { CalendarIcon, Clock } from 'lucide-react';
+import { useFormDraft } from '@/hooks/useFormDraft';
+import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 
 // Import types from main component
 import type { Tarea, Empleado, Contratista, Trabajador, Lote, RegistroTrabajo } from './Labores';
@@ -49,6 +51,22 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
   const [observaciones, setObservaciones] = useState<ObservacionesMatrix>({}); // Use shared ObservacionesMatrix type
   const [loading, setLoading] = useState(false);
 
+  const draftKey = tarea?.id ? `trabajo-${tarea.id}-v1` : 'trabajo-new-v1';
+  const draft = useFormDraft(draftKey, { currentStep, fechaTrabajo, selectedTrabajadores, workMatrix, observaciones }, { debounceMs: 1500 });
+
+  const handleRestoreDraft = useCallback(() => {
+    if (draft.draftData) {
+      setCurrentStep(draft.draftData.currentStep);
+      setFechaTrabajo(draft.draftData.fechaTrabajo);
+      setSelectedTrabajadores(draft.draftData.selectedTrabajadores);
+      setWorkMatrix(draft.draftData.workMatrix);
+      setObservaciones(draft.draftData.observaciones);
+      draft.acceptDraft();
+    }
+  }, [draft]);
+
+  const { clearDraft } = draft;
+
   // Reset form when dialog opens
   useEffect(() => {
     if (open) {
@@ -57,8 +75,10 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
       setSelectedTrabajadores([]);
       setWorkMatrix({});
       setObservaciones({});
+    } else {
+      clearDraft();
     }
-  }, [open]);
+  }, [open, clearDraft]);
 
   // Virtual "Sin lote" placeholder for tasks without lotes
   const SIN_LOTE: Lote = { id: '__sin_lote__', nombre: 'Sin lote' } as Lote;
@@ -243,7 +263,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
         throw error;
       }
 
-      // Success message indicating automatic status change
+      draft.clearDraft();
       onSuccess();
       onOpenChange(false);
     } catch (error: any) {
@@ -322,6 +342,12 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
         </DialogHeader>
         <DialogBody>
       <>
+        <FormDraftBanner
+          variant="available"
+          show={draft.hasDraft}
+          onRestore={handleRestoreDraft}
+          onDiscard={draft.discardDraft}
+        />
         {/* Progress indicator */}
         <div className="flex items-center justify-center mb-6">
           <div className="flex items-center space-x-4">

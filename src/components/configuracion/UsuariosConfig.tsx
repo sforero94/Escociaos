@@ -10,6 +10,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getSupabase } from '../../utils/supabase/client';
 import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { Users, Plus, Edit, Trash2, Eye, EyeOff, Shield, CheckCircle2, XCircle } from 'lucide-react';
+import { useFormDraft } from '@/hooks/useFormDraft';
+import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 
 interface Usuario {
   id: string;
@@ -38,6 +40,17 @@ export function UsuariosConfig() {
   const [activo, setActivo] = useState(true);
   const [confirmEliminarOpen, setConfirmEliminarOpen] = useState(false);
   const [usuarioParaEliminar, setUsuarioParaEliminar] = useState<Usuario | null>(null);
+
+  const draft = useFormDraft('usuarios-form-v1', { nombreCompleto, email, rol, activo });
+
+  function handleRestoreDraft() {
+    if (!draft.draftData) return;
+    setNombreCompleto(draft.draftData.nombreCompleto);
+    setEmail(draft.draftData.email);
+    setRol(draft.draftData.rol);
+    setActivo(draft.draftData.activo);
+    draft.acceptDraft();
+  }
 
   // Verificar que solo Gerencia puede acceder
   useEffect(() => {
@@ -140,11 +153,12 @@ export function UsuariosConfig() {
       }
 
       toast.success(
-        modalMode === 'crear' 
-          ? 'Usuario creado exitosamente' 
+        modalMode === 'crear'
+          ? 'Usuario creado exitosamente'
           : 'Usuario actualizado exitosamente'
       );
-      
+
+      draft.clearDraft();
       setModalOpen(false);
       cargarUsuarios();
     } catch (error: any) {
@@ -344,7 +358,7 @@ export function UsuariosConfig() {
       />
 
       {/* Modal Crear/Editar Usuario */}
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+      <Dialog open={modalOpen} onOpenChange={(open) => { if (!open) draft.clearDraft(); setModalOpen(open); }}>
         <DialogContent size="md">
           <DialogHeader>
             <DialogTitle className="text-foreground">
@@ -359,6 +373,13 @@ export function UsuariosConfig() {
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            <FormDraftBanner
+              variant="available"
+              show={draft.hasDraft}
+              onRestore={handleRestoreDraft}
+              onDiscard={draft.discardDraft}
+            />
+
             {/* Nombre Completo */}
             <div>
               <Label htmlFor="nombre" className="text-foreground">

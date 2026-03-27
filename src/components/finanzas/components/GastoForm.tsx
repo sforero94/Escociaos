@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { getSupabase } from '../../../utils/supabase/client';
 import { ProveedorDialog } from '../../shared/ProveedorDialog';
 import { FacturaUploader } from '../../shared/FacturaUploader';
+import { useFormPersistence } from '@/hooks/useFormPersistence';
+import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
@@ -46,18 +48,21 @@ interface GastoFormProps {
 
 export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: GastoFormProps) {
   // Form state
-  const [formData, setFormData] = useState<GastoFormData>({
-    fecha: new Date().toISOString().split('T')[0],
-    negocio_id: '',
-    region_id: '',
-    categoria_id: '',
-    concepto_id: '',
-    nombre: '',
-    proveedor_id: '',
-    valor: 0,
-    medio_pago_id: '',
-    observaciones: '',
-    url_factura: '',
+  const [formData, setFormData, clearFormData, wasRestored] = useFormPersistence<GastoFormData>({
+    key: gasto?.id ? `gasto-edit-${gasto.id}` : 'gasto-new-v1',
+    initialState: {
+      fecha: new Date().toISOString().split('T')[0],
+      negocio_id: '',
+      region_id: '',
+      categoria_id: '',
+      concepto_id: '',
+      nombre: '',
+      proveedor_id: '',
+      valor: 0,
+      medio_pago_id: '',
+      observaciones: '',
+      url_factura: '',
+    },
   });
 
   // Catalog data
@@ -249,6 +254,7 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
         if (error) throw error;
       }
 
+      clearFormData();
       onSuccess();
     } catch (error: any) {
       toast.error('Error al guardar gasto: ' + error.message);
@@ -270,6 +276,7 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
+          <FormDraftBanner variant="restored" show={wasRestored} onDiscard={clearFormData} />
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-8 h-8 animate-spin" />
@@ -477,7 +484,7 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
             <Button
               type="button"
               variant="outline"
-              onClick={onCancel}
+              onClick={() => { clearFormData(); onCancel(); }}
               disabled={saving}
             >
               Cancelar

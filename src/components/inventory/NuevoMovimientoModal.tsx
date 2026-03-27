@@ -4,6 +4,8 @@ import { getSupabase } from '../../utils/supabase/client';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter } from '../ui/dialog';
+import { useFormDraft } from '@/hooks/useFormDraft';
+import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 
 interface Product {
   id: string;
@@ -31,6 +33,16 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  const draft = useFormDraft('movimiento-new-v1', { tipoMovimiento, cantidad, observaciones });
+
+  function handleRestoreDraft() {
+    if (!draft.draftData) return;
+    setTipoMovimiento(draft.draftData.tipoMovimiento);
+    setCantidad(draft.draftData.cantidad);
+    setObservaciones(draft.draftData.observaciones);
+    draft.acceptDraft();
+  }
 
   // Buscar productos al escribir
   useEffect(() => {
@@ -147,6 +159,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
       if (prodError) throw prodError;
 
       // Success
+      draft.clearDraft();
       setSuccess(true);
       setTimeout(() => {
         onSuccess();
@@ -161,6 +174,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
   };
 
   const handleClose = () => {
+    draft.clearDraft();
     setSearchTerm('');
     setProducts([]);
     setSelectedProduct(null);
@@ -217,6 +231,13 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
           <DialogDescription>Complete la información del movimiento de inventario</DialogDescription>
         </DialogHeader>
         <DialogBody>
+          <FormDraftBanner
+            variant="available"
+            show={draft.hasDraft}
+            onRestore={handleRestoreDraft}
+            onDiscard={draft.discardDraft}
+          />
+
           {/* Success Message */}
           {success && (
             <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3">

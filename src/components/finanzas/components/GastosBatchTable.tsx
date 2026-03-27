@@ -80,6 +80,8 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
   }, []);
 
   // Auto-save draft on row changes (debounced 5s)
+  // Skip auto-save while the draft banner is showing — otherwise the empty
+  // initial rows overwrite the saved draft before the user clicks "Restaurar".
   const saveDraft = useCallback(() => {
     const nonEmpty = rows.filter((r) => r.nombre || r.valor || r.negocio_id);
     if (nonEmpty.length > 0) {
@@ -90,12 +92,13 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
   }, [rows]);
 
   useEffect(() => {
+    if (draftBanner !== null) return;
     if (draftTimer.current) clearTimeout(draftTimer.current);
     draftTimer.current = setTimeout(saveDraft, 5000);
     return () => {
       if (draftTimer.current) clearTimeout(draftTimer.current);
     };
-  }, [saveDraft]);
+  }, [saveDraft, draftBanner]);
 
   const handleRestoreDraft = () => {
     try {

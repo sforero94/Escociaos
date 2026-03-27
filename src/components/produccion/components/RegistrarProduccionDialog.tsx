@@ -19,6 +19,8 @@ import {
 } from '../../ui/select';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
+import { useFormPersistence } from '@/hooks/useFormPersistence';
+import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 import { useProduccionData } from '../hooks/useProduccionData';
 import type {
   LoteProduccion,
@@ -51,7 +53,10 @@ export function RegistrarProduccionDialog({
   lotes,
   onSuccess,
 }: RegistrarProduccionDialogProps) {
-  const [formData, setFormData] = useState<ProduccionFormData>(INITIAL_FORM);
+  const [formData, setFormData, clearFormData, wasRestored] = useFormPersistence<ProduccionFormData>({
+    key: 'produccion-new-v1',
+    initialState: INITIAL_FORM,
+  });
   const [sublotes, setSublotes] = useState<SubloteProduccion[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [loadingSublotes, setLoadingSublotes] = useState(false);
@@ -121,7 +126,7 @@ export function RegistrarProduccionDialog({
       setSubmitting(true);
       await createProduccion(formData);
       toast.success('Registro de produccion creado exitosamente');
-      setFormData(INITIAL_FORM);
+      clearFormData();
       onSuccess();
     } catch (err: any) {
       console.error('Error creating production record:', err);
@@ -138,7 +143,7 @@ export function RegistrarProduccionDialog({
   };
 
   const handleClose = () => {
-    setFormData(INITIAL_FORM);
+    clearFormData();
     onOpenChange(false);
   };
 
@@ -150,6 +155,8 @@ export function RegistrarProduccionDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <FormDraftBanner variant="restored" show={wasRestored} onDiscard={clearFormData} />
+
           {/* Lote */}
           <div className="space-y-2">
             <Label htmlFor="lote">Lote *</Label>

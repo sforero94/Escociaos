@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { getSupabase } from '../../../utils/supabase/client';
 import { FacturaUploader } from '../../shared/FacturaUploader';
+import { useFormPersistence } from '@/hooks/useFormPersistence';
+import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
@@ -44,17 +46,20 @@ interface IngresoFormProps {
 
 export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }: IngresoFormProps) {
   // Form state
-  const [formData, setFormData] = useState<IngresoFormData>({
-    fecha: new Date().toISOString().split('T')[0],
-    negocio_id: '',
-    region_id: '',
-    categoria_id: '',
-    nombre: '',
-    comprador_id: '',
-    valor: 0,
-    medio_pago_id: '',
-    observaciones: '',
-    url_factura: '',
+  const [formData, setFormData, clearFormData, wasRestored] = useFormPersistence<IngresoFormData>({
+    key: ingreso?.id ? `ingreso-edit-${ingreso.id}` : 'ingreso-new-v1',
+    initialState: {
+      fecha: new Date().toISOString().split('T')[0],
+      negocio_id: '',
+      region_id: '',
+      categoria_id: '',
+      nombre: '',
+      comprador_id: '',
+      valor: 0,
+      medio_pago_id: '',
+      observaciones: '',
+      url_factura: '',
+    },
   });
 
   // Catalog data
@@ -266,6 +271,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
         if (error) throw error;
       }
 
+      clearFormData();
       onSuccess();
     } catch (error: any) {
       toast.error('Error al guardar ingreso: ' + error.message);
@@ -287,6 +293,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
+          <FormDraftBanner variant="restored" show={wasRestored} onDiscard={clearFormData} />
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-8 h-8 animate-spin" />
@@ -476,7 +483,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
             <Button
               type="button"
               variant="outline"
-              onClick={onCancel}
+              onClick={() => { clearFormData(); onCancel(); }}
               disabled={saving}
             >
               Cancelar

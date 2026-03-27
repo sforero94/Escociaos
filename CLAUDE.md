@@ -103,7 +103,7 @@ These are consumed in `src/utils/supabase/client.ts` via `import.meta.env`. The 
 │   │   ├── configuracion/                # System configuration (lots, users)
 │   │   ├── auth/                         # ProtectedRoute, RoleGuard
 │   │   ├── dashboard/                    # Dashboard sub-components (AlertList — "Pulso de Gestión" cross-module alerts)
-│   │   ├── shared/                       # Reusable components (dialogs, uploaders)
+│   │   ├── shared/                       # Reusable components (dialogs, uploaders, FormDraftBanner)
 │   │   ├── ui/                           # Radix UI wrappers (button, dialog, etc.)
 │   │   └── figma/                        # Image fallback component
 │   │
@@ -112,7 +112,8 @@ These are consumed in `src/utils/supabase/client.ts` via `import.meta.env`. The 
 │   │   └── SafeModeContext.tsx           # Safe-mode toggle (localStorage-persisted)
 │   │
 │   ├── hooks/
-│   │   ├── useFormPersistence.ts         # Form state persistence hook
+│   │   ├── useFormPersistence.ts         # Form state persistence hook (drop-in useState replacement)
+│   │   ├── useFormDraft.ts              # Snapshot-based draft persistence (for fragmented-state forms)
 │   │   └── useReporteAplicacion.ts       # Application report data hook
 │   │
 │   ├── types/                            # TypeScript type definitions per module
@@ -203,6 +204,19 @@ All route components are lazy-loaded via `React.lazy()` with a shared `<Suspense
 - **AuthContext** — Global authentication state (user, profile, session, role-based access). Uses Supabase auth listeners for session management.
 - **SafeModeContext** — UI toggle for confirming critical operations. Persisted in localStorage.
 - **No Redux/Zustand** — The app uses React Context + local component state. Data is fetched directly from Supabase in components and hooks.
+
+### Form Persistence
+
+All non-trivial forms auto-save to localStorage to prevent data loss. Two hooks cover different state patterns:
+
+| Hook | Use when | How |
+|------|----------|-----|
+| `useFormPersistence` | Form has a single `formData` useState object | Drop-in useState replacement. Auto-restores on mount. |
+| `useFormDraft` | Form uses many separate useStates | Observes a snapshot. Manual restore via banner. |
+
+Both use `form_autosave_` prefix, 7-day retention, and version tracking. The shared `FormDraftBanner` component provides the restoration UI (two variants: `restored` for auto-restore, `available` for manual restore).
+
+When adding persistence to a new form: prefer `useFormPersistence` if the form has a single state object; use `useFormDraft` if refactoring state is too risky. Always call `clearFormData()`/`clearDraft()` on successful save and cancel.
 
 ### Data Flow
 

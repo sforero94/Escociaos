@@ -11,11 +11,11 @@ import {
   AlertTriangle,
   FileDown,
   Loader2,
-  Clock,
 } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { generarPDFListaCompras } from '../../utils/generarPDFListaCompras';
 import { useFormPersistence } from '../../hooks/useFormPersistence';
+import { FormDraftBanner } from '../shared/FormDraftBanner';
 import type {
   EstadoCalculadora,
   ConfiguracionAplicacion,
@@ -924,28 +924,11 @@ export function CalculadoraAplicaciones() {
             </p>
           </div>
 
-          {/* Restoration Indicator */}
-          {state.paso_actual > 1 && !modoEdicion && (
-            <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
-              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Clock className="w-4 h-4 text-blue-600" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-blue-800 font-medium mb-1">
-                  Progreso restaurado automáticamente
-                </p>
-                <p className="text-xs text-blue-700">
-                  Puedes continuar donde lo dejaste. Tu progreso se guarda automáticamente.
-                </p>
-              </div>
-              <button
-                onClick={clearFormData}
-                className="text-sm text-blue-600 hover:text-blue-800 underline whitespace-nowrap flex-shrink-0"
-              >
-                Empezar de nuevo
-              </button>
-            </div>
-          )}
+          <FormDraftBanner
+            variant="restored"
+            show={state.paso_actual > 1 && !modoEdicion}
+            onDiscard={clearFormData}
+          />
 
           {/* Stepper */}
           <div className="relative">

@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
+import { useFormPersistence } from '@/hooks/useFormPersistence';
+import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,16 +26,19 @@ const selectClass = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-xl 
 export function TransaccionGanadoForm({ open, onOpenChange, transaccion, defaultTipo = 'compra', onSuccess }: TransaccionGanadoFormProps) {
   const isEditing = !!transaccion;
 
-  const [formData, setFormData] = useState({
-    fecha: new Date().toISOString().split('T')[0],
-    tipo: defaultTipo as 'compra' | 'venta',
-    finca: '',
-    cliente_proveedor: '',
-    cantidad_cabezas: '',
-    kilos_pagados: '',
-    precio_kilo: '',
-    valor_total: '',
-    observaciones: '',
+  const [formData, setFormData, clearFormData, wasRestored] = useFormPersistence({
+    key: transaccion?.id ? `ganado-edit-${transaccion.id}` : 'ganado-new-v1',
+    initialState: {
+      fecha: new Date().toISOString().split('T')[0],
+      tipo: defaultTipo as 'compra' | 'venta',
+      finca: '',
+      cliente_proveedor: '',
+      cantidad_cabezas: '',
+      kilos_pagados: '',
+      precio_kilo: '',
+      valor_total: '',
+      observaciones: '',
+    },
   });
   const [saving, setSaving] = useState(false);
 
@@ -159,6 +164,7 @@ export function TransaccionGanadoForm({ open, onOpenChange, transaccion, default
         toast.success('Transaccion registrada');
       }
 
+      clearFormData();
       onSuccess();
       onOpenChange(false);
     } catch (error: unknown) {
@@ -179,6 +185,7 @@ export function TransaccionGanadoForm({ open, onOpenChange, transaccion, default
             <DialogTitle>{isEditing ? 'Editar Transaccion Ganado' : 'Nueva Transaccion Ganado'}</DialogTitle>
           </DialogHeader>
           <DialogBody>
+            <FormDraftBanner variant="restored" show={wasRestored} onDiscard={clearFormData} />
             <div className="space-y-4 p-1">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
@@ -286,7 +293,7 @@ export function TransaccionGanadoForm({ open, onOpenChange, transaccion, default
           </DialogBody>
           <DialogFooter>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancelar</Button>
+              <Button variant="outline" onClick={() => { clearFormData(); onOpenChange(false); }} disabled={saving}>Cancelar</Button>
               <Button onClick={handleSubmit} disabled={saving}>
                 {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                 {isEditing ? 'Guardar' : 'Registrar'}

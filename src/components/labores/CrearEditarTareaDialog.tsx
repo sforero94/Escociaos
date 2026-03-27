@@ -17,6 +17,8 @@ import { Switch } from '../ui/switch';
 import { X, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { useFormPersistence } from '@/hooks/useFormPersistence';
+import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 
 // Import types from main component
 import type { Tarea, TipoTarea, Empleado, Lote } from './Labores';
@@ -42,14 +44,13 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
   onSuccess,
   onError,
 }) => {
-  // Form state
-  const [formData, setFormData] = useState({
+  const INITIAL_TAREA_FORM = {
     codigo_tarea: '',
     nombre: '',
     tipo_tarea_id: '',
     descripcion: '',
-    lote_id: '', // Keep for backward compatibility
-    lote_ids: [] as string[], // New: Multiple lotes
+    lote_id: '',
+    lote_ids: [] as string[],
     estado: 'Banco' as Tarea['estado'],
     prioridad: 'Media' as Tarea['prioridad'],
     fecha_estimada_inicio: '',
@@ -57,6 +58,12 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
     jornales_estimados: '',
     responsable_id: '',
     observaciones: '',
+  };
+
+  // Form state
+  const [formData, setFormData, clearFormData, wasRestored] = useFormPersistence({
+    key: tarea?.id ? `tarea-edit-${tarea.id}` : 'tarea-new-v1',
+    initialState: INITIAL_TAREA_FORM,
   });
 
   const [loading, setLoading] = useState(false);
@@ -154,6 +161,7 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
       // Multiple lotes are now stored directly in the tareas.lote_ids array column
       // No need for junction table operations
 
+      clearFormData();
       onSuccess();
       onOpenChange(false);
     } catch (error: any) {
@@ -170,7 +178,7 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
       <Button
         type="button"
         variant="outline"
-        onClick={() => onOpenChange(false)}
+        onClick={() => { clearFormData(); onOpenChange(false); }}
         disabled={loading}
       >
         Cancelar
@@ -200,6 +208,8 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
         </DialogHeader>
         <DialogBody>
       <form id="tarea-form" onSubmit={handleSubmit} className="space-y-3">
+          <FormDraftBanner variant="restored" show={wasRestored} onDiscard={clearFormData} />
+
           {/* Warning banner for auto-generated tareas */}
           {tarea?.observaciones?.includes('Auto-generada desde aplicación') && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex gap-2">

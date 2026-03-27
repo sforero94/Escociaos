@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ClipboardCheck,
@@ -14,6 +14,8 @@ import {
 import { getSupabase } from '../../utils/supabase/client';
 import { VerificacionesNav } from './VerificacionesNav';
 import { ConfirmDialog } from '../ui/confirm-dialog';
+import { useFormDraft } from '@/hooks/useFormDraft';
+import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 
 interface DetalleVerificacion {
   id: string;
@@ -69,6 +71,17 @@ export function ConteoFisico() {
   const [pendingNextIndex, setPendingNextIndex] = useState<number | null>(null);
   const [confirmCompletarOpen, setConfirmCompletarOpen] = useState(false);
   const [productosNoContadosCount, setProductosNoContadosCount] = useState(0);
+
+  const draft = useFormDraft(`conteo-${id}-v1`, { currentIndex, cantidadFisica, observaciones }, { debounceMs: 1500 });
+
+  const handleRestoreDraft = useCallback(() => {
+    if (draft.draftData) {
+      setCurrentIndex(draft.draftData.currentIndex);
+      setCantidadFisica(draft.draftData.cantidadFisica);
+      setObservaciones(draft.draftData.observaciones);
+      draft.acceptDraft();
+    }
+  }, [draft]);
 
   useEffect(() => {
     if (id) {
@@ -256,7 +269,7 @@ export function ConteoFisico() {
 
       if (errorUpdate) throw errorUpdate;
 
-      // Navegar a la lista
+      draft.clearDraft();
       navigate('/inventario/verificaciones');
     } catch (err: any) {
       setError('Error al completar: ' + err.message);
@@ -355,6 +368,13 @@ export function ConteoFisico() {
           />
         </div>
       </div>
+
+      <FormDraftBanner
+        variant="available"
+        show={draft.hasDraft}
+        onRestore={handleRestoreDraft}
+        onDiscard={draft.discardDraft}
+      />
 
       {/* Mensajes */}
       {error && (

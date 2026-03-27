@@ -18,6 +18,8 @@ import {
 import { toast } from 'sonner';
 import { getSupabase } from '../../utils/supabase/client';
 import { AlertTriangle } from 'lucide-react';
+import { useFormDraft } from '@/hooks/useFormDraft';
+import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 import type { Apiario } from '../../types/monitoreo';
 
 interface RegistroColmenasProps {
@@ -38,6 +40,20 @@ export function RegistroColmenas({ open, onClose, onSuccess }: RegistroColmenasP
   const [conReina, setConReina] = useState(0);
   const [observaciones, setObservaciones] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const draft = useFormDraft('colmenas-new-v1', { fecha, apiarioId, fuertes, debiles, muertas, conReina, observaciones });
+
+  function handleRestoreDraft() {
+    if (!draft.draftData) return;
+    setFecha(draft.draftData.fecha);
+    setApiarioId(draft.draftData.apiarioId);
+    setFuertes(draft.draftData.fuertes);
+    setDebiles(draft.draftData.debiles);
+    setMuertas(draft.draftData.muertas);
+    setConReina(draft.draftData.conReina);
+    setObservaciones(draft.draftData.observaciones);
+    draft.acceptDraft();
+  }
 
   useEffect(() => {
     if (open) cargarApiarios();
@@ -81,6 +97,7 @@ export function RegistroColmenas({ open, onClose, onSuccess }: RegistroColmenasP
       if (error) throw error;
 
       toast.success('Registro de colmenas guardado');
+      draft.clearDraft();
       limpiar();
       onSuccess?.();
       onClose();
@@ -114,6 +131,13 @@ export function RegistroColmenas({ open, onClose, onSuccess }: RegistroColmenasP
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          <FormDraftBanner
+            variant="available"
+            show={draft.hasDraft}
+            onRestore={handleRestoreDraft}
+            onDiscard={draft.discardDraft}
+          />
+
           <div>
             <Label>Fecha</Label>
             <Input
