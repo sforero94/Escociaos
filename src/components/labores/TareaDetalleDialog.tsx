@@ -43,7 +43,8 @@ import {
 import { Button } from '../ui/button';
 
 // Import types from main component
-import type { Tarea, RegistroTrabajo, Empleado, Lote } from './Labores';
+import type { Tarea, RegistroTrabajo, Empleado, Contratista, Lote } from './Labores';
+import EditarRegistroDialog from './EditarRegistroDialog';
 
 // Import cost calculation utilities
 import { calculateTaskEstimatedCost } from '../../utils/laborCosts';
@@ -65,8 +66,11 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
 }) => {
   const [registrosTrabajo, setRegistrosTrabajo] = useState<RegistroTrabajo[]>([]);
   const [empleados, setEmpleados] = useState<Empleado[]>([]);
+  const [contratistas, setContratistas] = useState<Contratista[]>([]);
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [loading, setLoading] = useState(false);
+  const [editRegistro, setEditRegistro] = useState<RegistroTrabajo | null>(null);
+  const [showEditDialog, setShowEditDialog] = useState(false);
 
   // Load work records and employees when dialog opens
   useEffect(() => {
@@ -109,15 +113,24 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
       if (errorRegistros) throw errorRegistros;
       setRegistrosTrabajo((registros || []) as unknown as RegistroTrabajo[]);
 
-      // Load all employees for reference
-      const { data: empleadosData, error: errorEmpleados } = await getSupabase()
-        .from('empleados')
-        .select('*')
-        .eq('estado', 'Activo')
-        .order('nombre');
+      // Load all employees and contractors for reference
+      const [empleadosRes, contratistasRes] = await Promise.all([
+        getSupabase()
+          .from('empleados')
+          .select('*')
+          .eq('estado', 'Activo')
+          .order('nombre'),
+        getSupabase()
+          .from('contratistas')
+          .select('*')
+          .eq('estado', 'Activo')
+          .order('nombre'),
+      ]);
 
-      if (errorEmpleados) throw errorEmpleados;
-      setEmpleados((empleadosData || []) as unknown as Empleado[]);
+      if (empleadosRes.error) throw empleadosRes.error;
+      if (contratistasRes.error) throw contratistasRes.error;
+      setEmpleados((empleadosRes.data || []) as unknown as Empleado[]);
+      setContratistas((contratistasRes.data || []) as unknown as Contratista[]);
 
       // Load lotes assigned to this task from lote_ids array
       if (tarea.lote_ids && tarea.lote_ids.length > 0) {
@@ -482,6 +495,9 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
                                   <TableHead className="w-[140px]">Lote</TableHead>
                                   <TableHead className="text-right w-[100px]">Jornal</TableHead>
                                   <TableHead className="text-right w-[120px]">Costo</TableHead>
+                                  {tarea.estado !== 'Completada' && tarea.estado !== 'Cancelada' && (
+                                    <TableHead className="w-[50px]"></TableHead>
+                                  )}
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
@@ -519,6 +535,21 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
                                     <TableCell className="text-right font-medium text-gray-900">
                                       ${registro.costo_jornal?.toLocaleString() || '0'}
                                     </TableCell>
+                                    {tarea.estado !== 'Completada' && tarea.estado !== 'Cancelada' && (
+                                      <TableCell className="text-center">
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-7 w-7 p-0 text-gray-400 hover:text-primary"
+                                          onClick={() => {
+                                            setEditRegistro(registro);
+                                            setShowEditDialog(true);
+                                          }}
+                                        >
+                                          <Pencil className="h-3.5 w-3.5" />
+                                        </Button>
+                                      </TableCell>
+                                    )}
                                   </TableRow>
                                 ))}
                               </TableBody>
@@ -554,6 +585,20 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
           </div>
         )}
       </DialogContent>
+
+      {/* Edit work record dialog */}
+      <EditarRegistroDialog
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        registro={editRegistro}
+        empleados={empleados}
+        contratistas={contratistas}
+        lotes={lotes}
+        onSuccess={() => {
+          cargarDatosTarea();
+        }}
+        onError={(msg) => console.error('Error editando registro:', msg)}
+      />
     </Dialog>
   );
 };
