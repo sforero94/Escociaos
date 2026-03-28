@@ -135,10 +135,11 @@ export async function monitoreoConversation(
     let plagaPage = 0;
     let arbolesMonitoreados = 0;
     let plagasData: PlagaData[] = [];
+    let floracionSinFlor: number | null = null;
     let floracionBrotes: number | null = null;
     let floracionFlor: number | null = null;
     let floracionCuaje: number | null = null;
-    let floracionSubStep = 0; // 0=brotes, 1=flor, 2=cuaje
+    let floracionSubStep = 0; // 0=sinFlor, 1=brotes, 2=flor, 3=cuaje
     let fotoUrl: string | null = null;
     let observaciones: string | null = null;
     // plagaIndex tracks position within the per-plaga loop (step 5)
@@ -541,12 +542,13 @@ export async function monitoreoConversation(
       // ── Step 6: Floración (optional) ──────────────────────────────────
       if (step === 6) {
         const florLabels = [
+          { emoji: "🚫", label: "SIN FLOR", field: "sinFlor" },
           { emoji: "🌱", label: "BROTES", field: "brotes" },
           { emoji: "🌼", label: "FLOR MADURA", field: "flor" },
           { emoji: "🍊", label: "CUAJE", field: "cuaje" },
         ] as const;
 
-        while (floracionSubStep <= 2) {
+        while (floracionSubStep <= 3) {
           const current = florLabels[floracionSubStep];
           const florKb = new InlineKeyboard()
             .text("← Atrás", "go_back")
@@ -584,6 +586,7 @@ export async function monitoreoConversation(
             await florCtx.answerCallbackQuery();
             if (floracionSubStep === 0) {
               // Skip all floración
+              floracionSinFlor = null;
               floracionBrotes = null;
               floracionFlor = null;
               floracionCuaje = null;
@@ -599,8 +602,9 @@ export async function monitoreoConversation(
             continue;
           }
 
-          if (floracionSubStep === 0) floracionBrotes = val;
-          else if (floracionSubStep === 1) floracionFlor = val;
+          if (floracionSubStep === 0) floracionSinFlor = val;
+          else if (floracionSubStep === 1) floracionBrotes = val;
+          else if (floracionSubStep === 2) floracionFlor = val;
           else floracionCuaje = val;
 
           floracionSubStep++;
@@ -771,11 +775,11 @@ export async function monitoreoConversation(
           );
         }
 
-        if (floracionBrotes != null || floracionFlor != null || floracionCuaje != null) {
+        if (floracionSinFlor != null || floracionBrotes != null || floracionFlor != null || floracionCuaje != null) {
           summaryLines.push(
             "",
             "🌸 *Floración*",
-            `   Brotes: ${floracionBrotes ?? "—"} | Flor: ${floracionFlor ?? "—"} | Cuaje: ${floracionCuaje ?? "—"}`,
+            `   Sin flor: ${floracionSinFlor ?? "—"} | Brotes: ${floracionBrotes ?? "—"} | Flor: ${floracionFlor ?? "—"} | Cuaje: ${floracionCuaje ?? "—"}`,
           );
         }
 
@@ -884,6 +888,7 @@ export async function monitoreoConversation(
               observaciones: observaciones,
               monitor: user.nombre_display,
               ronda_id: rondaId,
+              floracion_sin_flor: floracionSinFlor,
               floracion_brotes: floracionBrotes,
               floracion_flor_madura: floracionFlor,
               floracion_cuaje: floracionCuaje,
