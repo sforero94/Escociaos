@@ -577,16 +577,15 @@ export function DashboardMonitoreoV3() {
   }
 
   function calcularSemaforoCE(): SemaforoCard {
-    const resumen = getCEResumenLotes();
+    // Use the selected date if available, otherwise latest
+    const ceFechas = getCEFechasDisponibles();
+    const fechaSel = ceRegistroFecha || ceFechas[0] || '';
+    const resumen = fechaSel ? getCEResumenLotes(fechaSel) : getCEResumenLotes();
     if (resumen.length === 0) {
       return { dominio: 'CE', icon: Zap, estado: 'sin_datos', label: 'Sin datos', detalle: 'No hay lecturas' };
     }
 
-    // Use only the most recent fecha_monitoreo to avoid mixing dates
-    const maxFecha = resumen.reduce((max, r) => r.fecha > max ? r.fecha : max, '');
-    const resumenReciente = resumen.filter(r => r.fecha === maxFecha);
-
-    const todasLecturas = resumenReciente.flatMap(r => r.lecturas);
+    const todasLecturas = resumen.flatMap(r => r.lecturas);
     const dist = calcularDistribucionCE(todasLecturas);
     const estado: EstadoSemaforo = dist.pctEnRango > 80 ? 'verde' : dist.pctEnRango >= 50 ? 'amarillo' : 'rojo';
     return {
@@ -771,8 +770,28 @@ export function DashboardMonitoreoV3() {
     return rows.sort((a, b) => a.fechaRaw.localeCompare(b.fechaRaw));
   }
 
-  function getCEResumenLotes(): CEResumenLote[] {
-    // For each lote, get the most recent CE record with lecturas
+  function getCEResumenLotes(fecha?: string): CEResumenLote[] {
+    if (fecha) {
+      // Filter by specific date
+      return ceHistorico
+        .filter(r => r.fecha_monitoreo === fecha && r.lecturas && r.lecturas.length > 0)
+        .map(r => {
+          const dist = calcularDistribucionCE(r.lecturas!);
+          return {
+            lote_id: r.lote_id,
+            lote_nombre: r.lote_nombre || r.lote_id,
+            fecha: r.fecha_monitoreo,
+            promedio: dist.promedio,
+            pctBajo: dist.pctBajo,
+            pctEnRango: dist.pctEnRango,
+            pctAlto: dist.pctAlto,
+            lecturas: r.lecturas!,
+          };
+        })
+        .sort((a, b) => a.lote_nombre.localeCompare(b.lote_nombre));
+    }
+
+    // No fecha: get the most recent CE record per lote
     const loteMasReciente = new Map<string, MonitoreoConductividad>();
 
     for (const r of ceHistorico) {
@@ -1439,9 +1458,9 @@ export function DashboardMonitoreoV3() {
 
         {seccionActiva === 'ce' && (() => {
           const ceTemporalData = getCETemporalData();
-          const ceResumen = getCEResumenLotes();
           const ceFechas = getCEFechasDisponibles();
           const fechaSeleccionada = ceRegistroFecha || ceFechas[0] || '';
+          const ceResumen = getCEResumenLotes(fechaSeleccionada);
           const ceRegistroData = ceVista === 'por_registro' ? getCEPorRegistro(fechaSeleccionada) : [];
 
           return (
@@ -1465,8 +1484,8 @@ export function DashboardMonitoreoV3() {
                         Por registro
                       </button>
                     </div>
-                    {/* Context-dependent selector */}
-                    {ceVista === 'historico' ? (
+                    {/* Lote filter (only in histórico) */}
+                    {ceVista === 'historico' && (
                       <Select value={ceLoteFiltro} onValueChange={setCeLoteFiltro}>
                         <SelectTrigger className="w-56">
                           <SelectValue />
@@ -1478,18 +1497,18 @@ export function DashboardMonitoreoV3() {
                           ))}
                         </SelectContent>
                       </Select>
-                    ) : (
-                      <Select value={fechaSeleccionada} onValueChange={setCeRegistroFecha}>
-                        <SelectTrigger className="w-56">
-                          <SelectValue placeholder="Fecha" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {ceFechas.map(f => (
-                            <SelectItem key={f} value={f}>{formatearFechaCorta(f)}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
                     )}
+                    {/* Date selector (always visible — filters KPI + summary table) */}
+                    <Select value={fechaSeleccionada} onValueChange={setCeRegistroFecha}>
+                      <SelectTrigger className="w-56">
+                        <SelectValue placeholder="Fecha" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ceFechas.map(f => (
+                          <SelectItem key={f} value={f}>{formatearFechaCorta(f)}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
@@ -1552,7 +1571,7 @@ export function DashboardMonitoreoV3() {
               {/* CE Summary table per lote (latest measurement) */}
               {ceResumen.length > 0 && (
                 <Card className="p-4">
-                  <h3 className="font-semibold text-foreground mb-4">Resumen CE por lote — Última medición</h3>
+                  <h3 className="font-semibold text-foreground mb-4">Resumen CE por lote — {formatearFechaCorta(fechaSeleccionada)}</h3>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
