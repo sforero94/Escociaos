@@ -176,6 +176,57 @@ export function calcularEstadoFloracion(registros: RegistroConFloracion[]): Esta
   };
 }
 
+// Per-lote floración breakdown (for "Por registro" grouped bar chart)
+export interface FloracionPorLote {
+  loteId: string;
+  loteNombre: string;
+  sinFlor: number;
+  brotes: number;
+  florMadura: number;
+  cuaje: number;
+}
+
+interface RegistroConFloracionYLote extends RegistroConFloracion {
+  lote_id?: string | null;
+  lotes?: { nombre: string } | null;
+}
+
+/**
+ * Group floración data by lote, deduplicating pest rows, returning absolute tree counts.
+ * Used by the "Por registro" view to show one bar group per lote.
+ */
+export function calcularFloracionPorLote(registros: RegistroConFloracionYLote[]): FloracionPorLote[] {
+  // Group by lote_id first
+  const loteMap = new Map<string, { nombre: string; registros: RegistroConFloracion[] }>();
+
+  for (const r of registros) {
+    const loteId = r.lote_id ?? '';
+    if (!loteId) continue;
+    const entry = loteMap.get(loteId);
+    if (entry) {
+      entry.registros.push(r);
+    } else {
+      loteMap.set(loteId, { nombre: r.lotes?.nombre ?? loteId, registros: [r] });
+    }
+  }
+
+  // For each lote, use the same dedup logic as calcularEstadoFloracion
+  const result: FloracionPorLote[] = [];
+  for (const [loteId, { nombre, registros: loteRegistros }] of loteMap) {
+    const flor = calcularEstadoFloracion(loteRegistros);
+    result.push({
+      loteId,
+      loteNombre: nombre,
+      sinFlor: flor.sinFlor,
+      brotes: flor.brotes,
+      florMadura: flor.florMadura,
+      cuaje: flor.cuaje,
+    });
+  }
+
+  return result.sort((a, b) => a.loteNombre.localeCompare(b.loteNombre));
+}
+
 interface RegistroConCE {
   valor_ce: number;
   lecturas?: LecturaCE[] | null;

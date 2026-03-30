@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
   calcularEstadoFloracion,
+  calcularFloracionPorLote,
   calcularEstadoCE,
   calcularEstadoColmenas,
   obtenerRondaActiva,
   agruparPorRonda,
 } from '@/utils/calculosMonitoreoV2';
+import type { FloracionPorLote } from '@/utils/calculosMonitoreoV2';
 import type {
   RondaMonitoreo,
   MonitoreoConductividad,
@@ -67,6 +69,68 @@ describe('calcularEstadoFloracion', () => {
     expect(result.brotes).toBe(0);
     expect(result.florMadura).toBe(0);
     expect(result.cuaje).toBe(5);
+  });
+});
+
+// ============================================
+// FLORACIÓN POR LOTE (for "Por registro" view)
+// ============================================
+
+describe('calcularFloracionPorLote', () => {
+  it('returns empty array when no records', () => {
+    expect(calcularFloracionPorLote([])).toEqual([]);
+  });
+
+  it('returns one entry per lote with absolute tree counts', () => {
+    const registros = [
+      { fecha_monitoreo: '2026-03-01', lote_id: 'L1', sublote_id: 'S1', arboles_monitoreados: 35, floracion_sin_flor: 5, floracion_brotes: 10, floracion_flor_madura: 15, floracion_cuaje: 5, lotes: { nombre: 'Lote 1' } },
+      { fecha_monitoreo: '2026-03-01', lote_id: 'L2', sublote_id: 'S3', arboles_monitoreados: 35, floracion_sin_flor: 2, floracion_brotes: 8, floracion_flor_madura: 20, floracion_cuaje: 5, lotes: { nombre: 'Lote 2' } },
+    ];
+    const result = calcularFloracionPorLote(registros);
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({ loteId: 'L1', loteNombre: 'Lote 1', sinFlor: 5, brotes: 10, florMadura: 15, cuaje: 5 });
+    expect(result[1]).toMatchObject({ loteId: 'L2', loteNombre: 'Lote 2', sinFlor: 2, brotes: 8, florMadura: 20, cuaje: 5 });
+  });
+
+  it('aggregates multiple sublotes within the same lote', () => {
+    const registros = [
+      { fecha_monitoreo: '2026-03-01', lote_id: 'L1', sublote_id: 'S1', arboles_monitoreados: 35, floracion_sin_flor: 5, floracion_brotes: 10, floracion_flor_madura: 10, floracion_cuaje: 10, lotes: { nombre: 'Lote 1' } },
+      { fecha_monitoreo: '2026-03-01', lote_id: 'L1', sublote_id: 'S2', arboles_monitoreados: 35, floracion_sin_flor: 3, floracion_brotes: 7, floracion_flor_madura: 15, floracion_cuaje: 10, lotes: { nombre: 'Lote 1' } },
+    ];
+    const result = calcularFloracionPorLote(registros);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ loteId: 'L1', sinFlor: 8, brotes: 17, florMadura: 25, cuaje: 20 });
+  });
+
+  it('deduplicates pest rows (same fecha+sublote) via MAX', () => {
+    const registros = [
+      // Two pest rows for the same sublote visit
+      { fecha_monitoreo: '2026-03-01', lote_id: 'L1', sublote_id: 'S1', arboles_monitoreados: 35, floracion_sin_flor: 5, floracion_brotes: 10, floracion_flor_madura: 10, floracion_cuaje: 10, lotes: { nombre: 'Lote 1' } },
+      { fecha_monitoreo: '2026-03-01', lote_id: 'L1', sublote_id: 'S1', arboles_monitoreados: 35, floracion_sin_flor: 5, floracion_brotes: 10, floracion_flor_madura: 10, floracion_cuaje: 10, lotes: { nombre: 'Lote 1' } },
+    ];
+    const result = calcularFloracionPorLote(registros);
+    expect(result).toHaveLength(1);
+    // Should NOT double-count — dedup via MAX
+    expect(result[0]).toMatchObject({ sinFlor: 5, brotes: 10, florMadura: 10, cuaje: 10 });
+  });
+
+  it('handles null/undefined floración fields as 0', () => {
+    const registros = [
+      { fecha_monitoreo: '2026-03-01', lote_id: 'L1', sublote_id: 'S1', arboles_monitoreados: 35, floracion_sin_flor: null, floracion_brotes: undefined, floracion_flor_madura: 10, floracion_cuaje: 5, lotes: { nombre: 'Lote 1' } },
+    ];
+    const result = calcularFloracionPorLote(registros as any);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ sinFlor: 0, brotes: 0, florMadura: 10, cuaje: 5 });
+  });
+
+  it('sorts output by lote name', () => {
+    const registros = [
+      { fecha_monitoreo: '2026-03-01', lote_id: 'L2', sublote_id: 'S3', arboles_monitoreados: 35, floracion_sin_flor: 1, floracion_brotes: 1, floracion_flor_madura: 1, floracion_cuaje: 1, lotes: { nombre: 'Zeta' } },
+      { fecha_monitoreo: '2026-03-01', lote_id: 'L1', sublote_id: 'S1', arboles_monitoreados: 35, floracion_sin_flor: 2, floracion_brotes: 2, floracion_flor_madura: 2, floracion_cuaje: 2, lotes: { nombre: 'Alfa' } },
+    ];
+    const result = calcularFloracionPorLote(registros);
+    expect(result[0].loteNombre).toBe('Alfa');
+    expect(result[1].loteNombre).toBe('Zeta');
   });
 });
 

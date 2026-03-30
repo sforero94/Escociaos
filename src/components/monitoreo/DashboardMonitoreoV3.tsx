@@ -44,6 +44,7 @@ import { getSupabase } from '../../utils/supabase/client';
 import { formatearFechaCorta } from '../../utils/fechas';
 import {
   calcularEstadoFloracion,
+  calcularFloracionPorLote,
   calcularEstadoColmenas,
   calcularDistribucionCE,
   CE_UMBRAL_BAJO,
@@ -137,7 +138,8 @@ interface CEResumenLote {
   lecturas: LecturaCE[];
 }
 
-type CEVistaMode = 'historico' | 'por_registro';
+type VistaMode = 'historico' | 'por_registro';
+type CEVistaMode = VistaMode;
 type SeccionDashboard = 'plagas' | 'floracion' | 'ce' | 'colmenas';
 
 const DOMINIO_A_SECCION: Record<string, SeccionDashboard> = {
@@ -234,8 +236,10 @@ export function DashboardMonitoreoV3() {
   const [ceVista, setCeVista] = useState<CEVistaMode>('historico');
   const [ceRegistroFecha, setCeRegistroFecha] = useState('');
 
-  // Floración trend
+  // Floración trend + "Por registro" view
   const [tendenciaFloracionData, setTendenciaFloracionData] = useState<any[]>([]);
+  const [floracionVista, setFloracionVista] = useState<VistaMode>('historico');
+  const [floracionRondaSel, setFloracionRondaSel] = useState('');
 
   // Colmenas trend
   const [tendenciaColmenasData, setTendenciaColmenasData] = useState<any[]>([]);
@@ -1330,33 +1334,101 @@ export function DashboardMonitoreoV3() {
                 )}
               </Card>
 
-              {tendenciaFloracionData.length >= 1 && (
-                <Card className="p-4">
-                  <h3 className="font-semibold text-foreground mb-4">Evolución de Floración (por ronda)</h3>
-                  <div className="flex gap-4 text-xs mb-3">
-                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: '#9ca3af' }} /> Sin flor</span>
-                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: '#22c55e' }} /> Brotes</span>
-                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: '#eab308' }} /> Flor Madura</span>
-                    <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: '#f97316' }} /> Cuaje</span>
-                  </div>
-                  <ResponsiveContainer width="100%" height={350}>
-                    <BarChart data={tendenciaFloracionData} stackOffset="expand">
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-                      <XAxis dataKey="fechas" fontSize={11} />
-                      <YAxis fontSize={12} tickFormatter={(v: number) => `${Math.round(v * 100)}%`} />
-                      <Tooltip formatter={(value: number, name: string, props: any) => {
-                        const total = (props.payload.sinFlor || 0) + (props.payload.brotes || 0) + (props.payload.flor || 0) + (props.payload.cuaje || 0);
-                        const pct = total > 0 ? Math.round((value / total) * 100) : 0;
-                        return [`${value} (${pct}%)`, name];
-                      }} />
-                      <Bar dataKey="sinFlor" name="Sin flor" stackId="flor" fill="#9ca3af" />
-                      <Bar dataKey="brotes" name="Brotes" stackId="flor" fill="#22c55e" />
-                      <Bar dataKey="flor" name="Flor Madura" stackId="flor" fill="#eab308" />
-                      <Bar dataKey="cuaje" name="Cuaje" stackId="flor" fill="#f97316" radius={[2, 2, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </Card>
-              )}
+              {/* Evolución / Por registro chart */}
+              {(() => {
+                const florRondaId = floracionRondaSel || rondas[0]?.id || '';
+                const florPorLoteData = floracionVista === 'por_registro'
+                  ? calcularFloracionPorLote(
+                      allMonitoreos.filter(m => m.ronda_id === florRondaId)
+                    )
+                  : [];
+
+                return (
+                  <Card className="p-4">
+                    <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                      <h3 className="font-semibold text-foreground">Evolución de Floración</h3>
+                      <div className="flex gap-2 items-center">
+                        <div className="flex border rounded-md overflow-hidden text-xs">
+                          <button
+                            className={`px-3 py-1.5 ${floracionVista === 'historico' ? 'bg-primary text-white' : 'bg-white text-brand-brown/70 hover:bg-muted/50'}`}
+                            onClick={() => setFloracionVista('historico')}
+                          >
+                            Histórico
+                          </button>
+                          <button
+                            className={`px-3 py-1.5 ${floracionVista === 'por_registro' ? 'bg-primary text-white' : 'bg-white text-brand-brown/70 hover:bg-muted/50'}`}
+                            onClick={() => setFloracionVista('por_registro')}
+                          >
+                            Por registro
+                          </button>
+                        </div>
+                        {floracionVista === 'por_registro' && (
+                          <Select value={florRondaId} onValueChange={setFloracionRondaSel}>
+                            <SelectTrigger className="w-56">
+                              <SelectValue placeholder="Ronda" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {rondas.map(r => (
+                                <SelectItem key={r.id} value={r.id}>
+                                  {r.nombre || formatearFechaCorta(r.fecha_inicio)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Legend */}
+                    <div className="flex gap-4 text-xs mb-3">
+                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: '#9ca3af' }} /> Sin flor</span>
+                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: '#22c55e' }} /> Brotes</span>
+                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: '#eab308' }} /> Flor Madura</span>
+                      <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: '#f97316' }} /> Cuaje</span>
+                    </div>
+
+                    {floracionVista === 'historico' ? (
+                      tendenciaFloracionData.length >= 1 ? (
+                        <ResponsiveContainer width="100%" height={350}>
+                          <BarChart data={tendenciaFloracionData} stackOffset="expand">
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+                            <XAxis dataKey="fechas" fontSize={11} />
+                            <YAxis fontSize={12} tickFormatter={(v: number) => `${Math.round(v * 100)}%`} />
+                            <Tooltip formatter={(value: number, name: string, props: any) => {
+                              const total = (props.payload.sinFlor || 0) + (props.payload.brotes || 0) + (props.payload.flor || 0) + (props.payload.cuaje || 0);
+                              const pct = total > 0 ? Math.round((value / total) * 100) : 0;
+                              return [`${value} (${pct}%)`, name];
+                            }} />
+                            <Bar dataKey="sinFlor" name="Sin flor" stackId="flor" fill="#9ca3af" />
+                            <Bar dataKey="brotes" name="Brotes" stackId="flor" fill="#22c55e" />
+                            <Bar dataKey="flor" name="Flor Madura" stackId="flor" fill="#eab308" />
+                            <Bar dataKey="cuaje" name="Cuaje" stackId="flor" fill="#f97316" radius={[2, 2, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="text-center py-8 text-brand-brown/50 text-sm">No hay datos de floración</div>
+                      )
+                    ) : (
+                      florPorLoteData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={350}>
+                          <BarChart data={florPorLoteData} barCategoryGap="20%">
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+                            <XAxis dataKey="loteNombre" fontSize={10} angle={-25} textAnchor="end" height={60} interval={0} />
+                            <YAxis fontSize={12} label={{ value: 'Árboles', angle: -90, position: 'insideLeft', style: { fontSize: 11, fill: '#78716c' } }} />
+                            <Tooltip formatter={(value: number, name: string) => [value, name]} />
+                            <Bar dataKey="sinFlor" name="Sin flor" fill="#9ca3af" />
+                            <Bar dataKey="brotes" name="Brotes" fill="#22c55e" />
+                            <Bar dataKey="florMadura" name="Flor Madura" fill="#eab308" />
+                            <Bar dataKey="cuaje" name="Cuaje" fill="#f97316" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="text-center py-8 text-brand-brown/50 text-sm">No hay datos de floración para esta ronda</div>
+                      )
+                    )}
+                  </Card>
+                );
+              })()}
             </>
           );
         })()}
