@@ -31,7 +31,17 @@ import type {
   VistaSubloteComparativa,
   CeldaComparativa,
   TendenciaDir,
+  SeccionesReporte,
+  DatosClimaSemanal,
+  DiaClima,
+  DatosFloracionSemanal,
+  FloracionLoteReporte,
+  DatosCESemanal,
+  DatosColmenasSemanal,
 } from '../types/reporteSemanal';
+import { SECCIONES_DEFAULT } from '../types/reporteSemanal';
+import { calcularDistribucionCE } from './calculosMonitoreoV2';
+import type { LecturaCE } from '../types/monitoreo';
 import type { Insight } from '../types/monitoreo';
 
 // Plagas de interés for priority marking
@@ -261,7 +271,7 @@ export async function fetchMatrizJornales(
     .select(`
       fraccion_jornal,
       costo_jornal,
-      tareas!inner(tipo_tarea_id),
+      tareas!inner(nombre, tipo_tarea_id),
       lote:lotes!lote_id(nombre)
     `)
     .gte('fecha_trabajo', inicio)
@@ -273,28 +283,29 @@ export async function fetchMatrizJornales(
   const totalesPorActividad: Record<string, CeldaMatrizJornales> = {};
   const totalesPorLote: Record<string, CeldaMatrizJornales> = {};
   const lotesSet = new Set<string>();
-  const actividadesSet = new Set<string>();
+  const filasMap = new Map<string, string>(); // nombre → tipo
   let totalGeneralJornales = 0;
   let totalGeneralCosto = 0;
 
   (registros || []).forEach((registro: any) => {
     const tipoTareaId = registro.tareas?.tipo_tarea_id;
-    const actividad = tipoTareaId ? (tiposMap.get(tipoTareaId) || 'Sin tipo') : 'Sin tipo';
+    const tipo = tipoTareaId ? (tiposMap.get(tipoTareaId) || 'Sin tipo') : 'Sin tipo';
+    const nombre = registro.tareas?.nombre || tipo;
     const lote = registro.lote?.nombre || 'Sin lote';
     const jornales = Number(registro.fraccion_jornal) || 0;
     const costo = Number(registro.costo_jornal) || 0;
 
-    actividadesSet.add(actividad);
+    filasMap.set(nombre, tipo);
     lotesSet.add(lote);
 
-    if (!datos[actividad]) datos[actividad] = {};
-    if (!datos[actividad][lote]) datos[actividad][lote] = { jornales: 0, costo: 0 };
-    datos[actividad][lote].jornales += jornales;
-    datos[actividad][lote].costo += costo;
+    if (!datos[nombre]) datos[nombre] = {};
+    if (!datos[nombre][lote]) datos[nombre][lote] = { jornales: 0, costo: 0 };
+    datos[nombre][lote].jornales += jornales;
+    datos[nombre][lote].costo += costo;
 
-    if (!totalesPorActividad[actividad]) totalesPorActividad[actividad] = { jornales: 0, costo: 0 };
-    totalesPorActividad[actividad].jornales += jornales;
-    totalesPorActividad[actividad].costo += costo;
+    if (!totalesPorActividad[nombre]) totalesPorActividad[nombre] = { jornales: 0, costo: 0 };
+    totalesPorActividad[nombre].jornales += jornales;
+    totalesPorActividad[nombre].costo += costo;
 
     if (!totalesPorLote[lote]) totalesPorLote[lote] = { jornales: 0, costo: 0 };
     totalesPorLote[lote].jornales += jornales;
@@ -304,8 +315,14 @@ export async function fetchMatrizJornales(
     totalGeneralCosto += costo;
   });
 
+  // Build filas sorted by tipo then nombre
+  const filas = Array.from(filasMap.entries())
+    .map(([nombre, tipo]) => ({ nombre, tipo }))
+    .sort((a, b) => a.tipo.localeCompare(b.tipo) || a.nombre.localeCompare(b.nombre));
+
   return {
-    actividades: Array.from(actividadesSet).sort(),
+    actividades: filas.map(f => f.nombre),
+    filas,
     lotes: Array.from(lotesSet).sort(),
     datos,
     totalesPorActividad,
@@ -1648,6 +1665,443 @@ function generarInsightsBasicos(monitoreos: any[]): Insight[] {
 // FUNCIÓN PRINCIPAL: OBTENER TODOS LOS DATOS DEL REPORTE
 // ============================================================================
 
+// ============================================================================
+// CLIMA SEMANAL
+// ============================================================================
+
+async function fetchClimaResumenSemanal(
+  inicio: string,
+  fin: string
+): Promise<DatosClimaSemanal | undefined> {
+  const supabase = getSupabase();
+
+  const { data, error } = await supabase
+    .from('clima_lecturas')
+    .select('timestamp, temp_c, humedad_pct, lluvia_diaria_mm, radiacion_wm2')
+    .gte('timestamp', `${inicio}T00:00:00-05:00`)
+    .lte('timestamp', `${fin}T23:59:59-05:00`)
+    .order('timestamp', { ascending: true });
+
+  if (error || !data || data.length === 0) return undefined;
+
+  // Aggregate KPIs
+  let tempMin = Infinity, tempMax = -Infinity, tempSuma = 0, tempCount = 0;
+  let humSuma = 0, humCount = 0;
+  let radMax = 0, radSuma = 0, radCount = 0;
+
+  for (const r of data) {
+    if (r.temp_c != null) {
+      const t = Number(r.temp_c);
+      if (t < tempMin) tempMin = t;
+      if (t > tempMax) tempMax = t;
+      tempSuma += t;
+      tempCount++;
+    }
+    if (r.humedad_pct != null) {
+      humSuma += Number(r.humedad_pct);
+      humCount++;
+    }
+    if (r.radiacion_wm2 != null) {
+      const rad = Number(r.radiacion_wm2);
+      if (rad > radMax) radMax = rad;
+      radSuma += rad;
+      radCount++;
+    }
+  }
+
+  // Group by Bogota date for daily breakdown
+  const diaMap = new Map<string, { lluviaMax: number; radMax: number; tempMax: number; tempMin: number }>();
+
+  for (const r of data) {
+    // Convert timestamp to Bogota date (UTC-5)
+    const ts = new Date(r.timestamp);
+    const bogota = new Date(ts.getTime() - 5 * 60 * 60 * 1000);
+    const dia = bogota.toISOString().slice(0, 10);
+
+    const prev = diaMap.get(dia) ?? { lluviaMax: 0, radMax: 0, tempMax: -Infinity, tempMin: Infinity };
+    if (r.lluvia_diaria_mm != null) {
+      prev.lluviaMax = Math.max(prev.lluviaMax, Number(r.lluvia_diaria_mm));
+    }
+    if (r.radiacion_wm2 != null) {
+      prev.radMax = Math.max(prev.radMax, Number(r.radiacion_wm2));
+    }
+    if (r.temp_c != null) {
+      prev.tempMax = Math.max(prev.tempMax, Number(r.temp_c));
+      prev.tempMin = Math.min(prev.tempMin, Number(r.temp_c));
+    }
+    diaMap.set(dia, prev);
+  }
+
+  const diario: DiaClima[] = Array.from(diaMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([fecha, d]) => ({
+      fecha,
+      lluviaMm: +d.lluviaMax.toFixed(1),
+      radiacionMaxWm2: +d.radMax.toFixed(0),
+      tempMax: d.tempMax === -Infinity ? null : +d.tempMax.toFixed(1),
+      tempMin: d.tempMin === Infinity ? null : +d.tempMin.toFixed(1),
+    }));
+
+  // Total rainfall = sum of each day's max lluvia_diaria_mm
+  const lluviaTotal = diario.reduce((sum, d) => sum + d.lluviaMm, 0);
+
+  // Fetch 4-week historical averages for comparison
+  const histInicio = new Date(inicio);
+  histInicio.setDate(histInicio.getDate() - 28);
+  const histInicioStr = histInicio.toISOString().slice(0, 10);
+
+  const { data: histData } = await supabase
+    .from('clima_lecturas')
+    .select('timestamp, temp_c, humedad_pct, lluvia_diaria_mm, radiacion_wm2')
+    .gte('timestamp', `${histInicioStr}T00:00:00-05:00`)
+    .lt('timestamp', `${inicio}T00:00:00-05:00`)
+    .order('timestamp', { ascending: true });
+
+  let historico: DatosClimaSemanal['historico'];
+  if (histData && histData.length > 0) {
+    let hTemp = 0, hTempC = 0, hHum = 0, hHumC = 0, hRad = 0, hRadC = 0;
+    // Get daily rainfall totals for the 4-week period
+    const hDiaMap = new Map<string, number>();
+    for (const r of histData) {
+      if (r.temp_c != null) { hTemp += Number(r.temp_c); hTempC++; }
+      if (r.humedad_pct != null) { hHum += Number(r.humedad_pct); hHumC++; }
+      if (r.radiacion_wm2 != null) { hRad += Number(r.radiacion_wm2); hRadC++; }
+      if (r.lluvia_diaria_mm != null) {
+        const ts = new Date(r.timestamp);
+        const bogota = new Date(ts.getTime() - 5 * 60 * 60 * 1000);
+        const dia = bogota.toISOString().slice(0, 10);
+        hDiaMap.set(dia, Math.max(hDiaMap.get(dia) ?? 0, Number(r.lluvia_diaria_mm)));
+      }
+    }
+    const totalLluviaHist = Array.from(hDiaMap.values()).reduce((s, v) => s + v, 0);
+    const numSemanas = 4;
+
+    historico = {
+      tempPromedio: hTempC > 0 ? +(hTemp / hTempC).toFixed(1) : null,
+      lluviaPromSemanal: +(totalLluviaHist / numSemanas).toFixed(1),
+      humedadPromedio: hHumC > 0 ? +(hHum / hHumC).toFixed(0) : null,
+      radiacionPromedio: hRadC > 0 ? +(hRad / hRadC).toFixed(0) : null,
+      semanasAnalizadas: numSemanas,
+    };
+  }
+
+  return {
+    tempMin: tempCount > 0 ? +tempMin.toFixed(1) : null,
+    tempMax: tempCount > 0 ? +tempMax.toFixed(1) : null,
+    tempPromedio: tempCount > 0 ? +(tempSuma / tempCount).toFixed(1) : null,
+    lluviaTotal: +lluviaTotal.toFixed(1),
+    humedadPromedio: humCount > 0 ? +(humSuma / humCount).toFixed(0) : null,
+    radiacionPromedio: radCount > 0 ? +(radSuma / radCount).toFixed(0) : null,
+    radiacionMax: radMax > 0 ? +radMax.toFixed(0) : null,
+    diario,
+    historico,
+  };
+}
+
+// ============================================================================
+// FLORACIÓN SEMANAL
+// ============================================================================
+
+async function fetchFloracionSemanal(
+  semana: RangoSemana
+): Promise<DatosFloracionSemanal | undefined> {
+  const supabase = getSupabase();
+
+  const { data: rawData, error } = await supabase
+    .from('monitoreos')
+    .select('fecha_monitoreo, lote_id, sublote_id, arboles_monitoreados, floracion_sin_flor, floracion_brotes, floracion_flor_madura, floracion_cuaje, lotes(nombre)')
+    .gte('fecha_monitoreo', semana.inicio)
+    .lte('fecha_monitoreo', semana.fin);
+
+  const data = (rawData as any[] | null) ?? [];
+  if (error || data.length === 0) return undefined;
+
+  // Check if any floración data exists (all could be null/0)
+  const hasData = data.some(
+    (r: any) => (r.floracion_sin_flor ?? 0) + (r.floracion_brotes ?? 0) +
+         (r.floracion_flor_madura ?? 0) + (r.floracion_cuaje ?? 0) > 0
+  );
+  if (!hasData) return undefined;
+
+  // Group by lote, dedup pest rows, compute percentages
+  const loteMap = new Map<string, {
+    nombre: string;
+    registros: Array<{
+      fecha_monitoreo: string | null;
+      sublote_id: string | null;
+      arboles_monitoreados: number | null;
+      floracion_sin_flor: number | null;
+      floracion_brotes: number | null;
+      floracion_flor_madura: number | null;
+      floracion_cuaje: number | null;
+    }>;
+  }>();
+
+  for (const r of data) {
+    const loteId = (r as any).lote_id ?? '';
+    if (!loteId) continue;
+    const entry = loteMap.get(loteId);
+    if (entry) {
+      entry.registros.push(r);
+    } else {
+      const nombre = (r as any).lotes?.nombre ?? loteId;
+      loteMap.set(loteId, { nombre, registros: [r] });
+    }
+  }
+
+  const porLote: FloracionLoteReporte[] = [];
+
+  for (const [, { nombre, registros }] of loteMap) {
+    // Dedup by (fecha, sublote) — same logic as calcularEstadoFloracion
+    const eventMap = new Map<string, { arboles: number; sinFlor: number; brotes: number; flor: number; cuaje: number }>();
+
+    for (const r of registros) {
+      const key = `${r.fecha_monitoreo ?? ''}|${r.sublote_id ?? ''}`;
+      const sinFlor = r.floracion_sin_flor ?? 0;
+      const brotes = r.floracion_brotes ?? 0;
+      const flor = r.floracion_flor_madura ?? 0;
+      const cuaje = r.floracion_cuaje ?? 0;
+      const arboles = r.arboles_monitoreados ?? 35;
+
+      const prev = eventMap.get(key);
+      if (prev) {
+        prev.sinFlor = Math.max(prev.sinFlor, sinFlor);
+        prev.brotes = Math.max(prev.brotes, brotes);
+        prev.flor = Math.max(prev.flor, flor);
+        prev.cuaje = Math.max(prev.cuaje, cuaje);
+        prev.arboles = Math.max(prev.arboles, arboles);
+      } else {
+        eventMap.set(key, { arboles, sinFlor, brotes, flor, cuaje });
+      }
+    }
+
+    let totalArboles = 0, totalSinFlor = 0, totalBrotes = 0, totalFlor = 0, totalCuaje = 0;
+    for (const ev of eventMap.values()) {
+      totalArboles += ev.arboles;
+      totalSinFlor += ev.sinFlor;
+      totalBrotes += ev.brotes;
+      totalFlor += ev.flor;
+      totalCuaje += ev.cuaje;
+    }
+
+    porLote.push({
+      loteNombre: nombre,
+      arboresMonitoreados: totalArboles,
+      sinFlor: totalSinFlor,
+      brotes: totalBrotes,
+      florMadura: totalFlor,
+      cuaje: totalCuaje,
+      pctSinFlor: totalArboles > 0 ? Math.round((totalSinFlor / totalArboles) * 100) : 0,
+      pctBrotes: totalArboles > 0 ? Math.round((totalBrotes / totalArboles) * 100) : 0,
+      pctFlorMadura: totalArboles > 0 ? Math.round((totalFlor / totalArboles) * 100) : 0,
+      pctCuaje: totalArboles > 0 ? Math.round((totalCuaje / totalArboles) * 100) : 0,
+    });
+  }
+
+  porLote.sort((a, b) => a.loteNombre.localeCompare(b.loteNombre));
+
+  return { porLote };
+}
+
+// ============================================================================
+// CONDUCTIVIDAD ELÉCTRICA SEMANAL
+// ============================================================================
+
+async function fetchCESemanal(
+  semana: RangoSemana
+): Promise<DatosCESemanal | undefined> {
+  const supabase = getSupabase();
+
+  // Try the report week first
+  let { data: rawData, error } = await supabase
+    .from('mon_conductividad')
+    .select('lote_id, valor_ce, lecturas, lotes(nombre)')
+    .gte('fecha_monitoreo', semana.inicio)
+    .lte('fecha_monitoreo', semana.fin);
+
+  // Fall back to most recent data if nothing in the week
+  if (!error && (!rawData || rawData.length === 0)) {
+    const { data: latest } = await supabase
+      .from('mon_conductividad')
+      .select('fecha_monitoreo')
+      .order('fecha_monitoreo', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (latest?.fecha_monitoreo) {
+      const res = await supabase
+        .from('mon_conductividad')
+        .select('lote_id, valor_ce, lecturas, lotes(nombre)')
+        .eq('fecha_monitoreo', latest.fecha_monitoreo);
+      rawData = res.data;
+      error = res.error;
+    }
+  }
+
+  const data = (rawData as any[] | null) ?? [];
+  if (error || data.length === 0) return undefined;
+
+  // Group by lote, compute distribution using calcularDistribucionCE
+  const loteMap = new Map<string, { nombre: string; lecturas: LecturaCE[] }>();
+
+  for (const r of data) {
+    const loteId = (r as any).lote_id ?? '';
+    if (!loteId) continue;
+    const entry = loteMap.get(loteId);
+    const lecturas = ((r as any).lecturas as LecturaCE[] | null) ?? [];
+    if (entry) {
+      entry.lecturas.push(...lecturas);
+    } else {
+      const nombre = (r as any).lotes?.nombre ?? loteId;
+      loteMap.set(loteId, { nombre, lecturas: [...lecturas] });
+    }
+  }
+
+  const porLote = Array.from(loteMap.entries()).map(([, { nombre, lecturas }]) => {
+    const dist = calcularDistribucionCE(lecturas);
+    return {
+      loteNombre: nombre,
+      pctBajo: dist.pctBajo,
+      pctEnRango: dist.pctEnRango,
+      pctAlto: dist.pctAlto,
+      promedio: dist.promedio,
+      totalLecturas: dist.totalArboles,
+    };
+  }).sort((a, b) => a.loteNombre.localeCompare(b.loteNombre));
+
+  return { porLote };
+}
+
+// ============================================================================
+// COLMENAS SEMANAL
+// ============================================================================
+
+async function fetchColmenasSemanal(
+  semana: RangoSemana
+): Promise<DatosColmenasSemanal | undefined> {
+  const supabase = getSupabase();
+
+  // Try the report week first
+  let { data: rawData, error } = await supabase
+    .from('mon_colmenas')
+    .select('apiario_id, colmenas_fuertes, colmenas_debiles, colmenas_muertas, colmenas_con_reina, apiarios(nombre)')
+    .gte('fecha_monitoreo', semana.inicio)
+    .lte('fecha_monitoreo', semana.fin);
+
+  // Fall back to most recent data if nothing in the week
+  if (!error && (!rawData || rawData.length === 0)) {
+    const { data: latest } = await supabase
+      .from('mon_colmenas')
+      .select('fecha_monitoreo')
+      .order('fecha_monitoreo', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (latest?.fecha_monitoreo) {
+      const res = await supabase
+        .from('mon_colmenas')
+        .select('apiario_id, colmenas_fuertes, colmenas_debiles, colmenas_muertas, colmenas_con_reina, apiarios(nombre)')
+        .eq('fecha_monitoreo', latest.fecha_monitoreo);
+      rawData = res.data;
+      error = res.error;
+    }
+  }
+
+  const data = (rawData as any[] | null) ?? [];
+  if (error || data.length === 0) return undefined;
+
+  // Group by apiario
+  const apiarioMap = new Map<string, {
+    nombre: string;
+    fuertes: number;
+    debiles: number;
+    muertas: number;
+    conReina: number;
+  }>();
+
+  for (const r of data) {
+    const apiarioId = (r as any).apiario_id ?? '';
+    if (!apiarioId) continue;
+    const nombre = (r as any).apiarios?.nombre ?? apiarioId;
+    const prev = apiarioMap.get(apiarioId) ?? { nombre, fuertes: 0, debiles: 0, muertas: 0, conReina: 0 };
+    prev.fuertes += (r as any).colmenas_fuertes ?? 0;
+    prev.debiles += (r as any).colmenas_debiles ?? 0;
+    prev.muertas += (r as any).colmenas_muertas ?? 0;
+    prev.conReina += (r as any).colmenas_con_reina ?? 0;
+    apiarioMap.set(apiarioId, prev);
+  }
+
+  const porApiario = Array.from(apiarioMap.values()).map(a => ({
+    apiarioNombre: a.nombre,
+    fuertes: a.fuertes,
+    debiles: a.debiles,
+    muertas: a.muertas,
+    conReina: a.conReina,
+    total: a.fuertes + a.debiles + a.muertas,
+  })).sort((a, b) => a.apiarioNombre.localeCompare(b.apiarioNombre));
+
+  const totalFuertes = porApiario.reduce((s, a) => s + a.fuertes, 0);
+  const totalDebiles = porApiario.reduce((s, a) => s + a.debiles, 0);
+  const totalMuertas = porApiario.reduce((s, a) => s + a.muertas, 0);
+  const totalConReina = porApiario.reduce((s, a) => s + a.conReina, 0);
+  const totalGeneral = totalFuertes + totalDebiles + totalMuertas;
+
+  // Fetch last 3 distinct dates for historical charts
+  const { data: histDates } = await supabase
+    .from('mon_colmenas')
+    .select('fecha_monitoreo')
+    .order('fecha_monitoreo', { ascending: false })
+    .limit(100);
+
+  const uniqueDates = [...new Set((histDates ?? []).map((d: any) => d.fecha_monitoreo))].slice(0, 3).reverse();
+
+  const historico: Array<{ fecha: string; apiarios: typeof porApiario }> = [];
+  for (const fecha of uniqueDates) {
+    const { data: fechaData } = await supabase
+      .from('mon_colmenas')
+      .select('apiario_id, colmenas_fuertes, colmenas_debiles, colmenas_muertas, colmenas_con_reina, apiarios(nombre)')
+      .eq('fecha_monitoreo', fecha);
+
+    const fechaApiarios = new Map<string, { nombre: string; fuertes: number; debiles: number; muertas: number; conReina: number }>();
+    for (const r of ((fechaData as any[]) ?? [])) {
+      const aid = r.apiario_id ?? '';
+      if (!aid) continue;
+      const prev = fechaApiarios.get(aid) ?? { nombre: r.apiarios?.nombre ?? aid, fuertes: 0, debiles: 0, muertas: 0, conReina: 0 };
+      prev.fuertes += r.colmenas_fuertes ?? 0;
+      prev.debiles += r.colmenas_debiles ?? 0;
+      prev.muertas += r.colmenas_muertas ?? 0;
+      prev.conReina += r.colmenas_con_reina ?? 0;
+      fechaApiarios.set(aid, prev);
+    }
+
+    historico.push({
+      fecha,
+      apiarios: Array.from(fechaApiarios.values()).map(a => ({
+        apiarioNombre: a.nombre,
+        fuertes: a.fuertes, debiles: a.debiles, muertas: a.muertas,
+        conReina: a.conReina, total: a.fuertes + a.debiles + a.muertas,
+      })).sort((a, b) => a.apiarioNombre.localeCompare(b.apiarioNombre)),
+    });
+  }
+
+  return {
+    porApiario,
+    historico,
+    totales: {
+      fuertes: totalFuertes,
+      debiles: totalDebiles,
+      muertas: totalMuertas,
+      conReina: totalConReina,
+      total: totalGeneral,
+      pctFuertes: totalGeneral > 0 ? Math.round((totalFuertes / totalGeneral) * 100) : 0,
+    },
+  };
+}
+
+// ============================================================================
+// ORQUESTADOR PRINCIPAL
+// ============================================================================
+
 export interface FetchReporteParams {
   semana: RangoSemana;
   fallas: number;
@@ -1657,6 +2111,7 @@ export interface FetchReporteParams {
   detalleFallas?: Array<{ empleado: string; razon?: string }>;
   detallePermisos?: Array<{ empleado: string; razon?: string }>;
   cerradasIds?: string[];
+  secciones?: SeccionesReporte;
   temasAdicionales: BloqueAdicional[];
 }
 
@@ -1676,13 +2131,14 @@ export async function fetchDatosReporteSemanal(
     detalleFallas = [],
     detallePermisos = [],
     cerradasIds = [],
+    secciones = SECCIONES_DEFAULT,
     temasAdicionales,
   } = params;
 
   // Days in week = 5.5 (Mon–Fri full + Saturday half day)
   const diasHabiles = 5.5;
 
-  // Execute all queries in parallel
+  // Execute all queries in parallel — conditionally skip disabled sections
   const [
     personalBase,
     laboresProgramadas,
@@ -1691,14 +2147,22 @@ export async function fetchDatosReporteSemanal(
     aplicacionesActivas,
     aplicacionesCerradas,
     monitoreo,
+    clima,
+    floracion,
+    conductividadElectrica,
+    colmenas,
   ] = await Promise.all([
     fetchPersonalSemana(semana.inicio, semana.fin),
     fetchLaboresSemanales(semana.inicio, semana.fin),
     fetchMatrizJornales(semana.inicio, semana.fin),
-    fetchAplicacionesPlaneadas(),
-    fetchAplicacionesActivas(),
-    fetchAplicacionesCerradas(cerradasIds),
-    fetchDatosMonitoreo(semana),
+    secciones.aplicaciones ? fetchAplicacionesPlaneadas() : Promise.resolve([]),
+    secciones.aplicaciones ? fetchAplicacionesActivas() : Promise.resolve([]),
+    secciones.aplicaciones ? fetchAplicacionesCerradas(cerradasIds) : Promise.resolve([]),
+    secciones.monitoreoPlagas ? fetchDatosMonitoreo(semana) : Promise.resolve(emptyMonitoreo()),
+    secciones.clima ? fetchClimaResumenSemanal(semana.inicio, semana.fin) : Promise.resolve(undefined),
+    secciones.floracion ? fetchFloracionSemanal(semana) : Promise.resolve(undefined),
+    secciones.conductividadElectrica ? fetchCESemanal(semana) : Promise.resolve(undefined),
+    secciones.colmenas ? fetchColmenasSemanal(semana) : Promise.resolve(undefined),
   ]);
 
   const jornalesPosibles = personalBase.totalTrabajadores * diasHabiles;
@@ -1709,6 +2173,7 @@ export async function fetchDatosReporteSemanal(
 
   return {
     semana,
+    secciones,
     personal: {
       ...personalBase,
       fallas,
@@ -1732,6 +2197,25 @@ export async function fetchDatosReporteSemanal(
       cerradas: aplicacionesCerradas,
     },
     monitoreo,
+    clima,
+    floracion,
+    conductividadElectrica,
+    colmenas,
     temasAdicionales,
+  };
+}
+
+function emptyMonitoreo(): DatosMonitoreo {
+  return {
+    fechaActual: null,
+    fechaAnterior: null,
+    avisoFechaDesactualizada: null,
+    resumenGlobal: [],
+    vistasPorLote: [],
+    vistasPorSublote: [],
+    insights: [],
+    tendencias: [],
+    detallePorLote: [],
+    fechasMonitoreo: [],
   };
 }

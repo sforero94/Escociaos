@@ -86,6 +86,7 @@ export function CompradorDialog({
       </Button>
       <Button
         type="submit"
+        form="comprador-form"
         disabled={saving || !formData.nombre.trim()}
         className="bg-primary hover:bg-primary-dark text-white"
       >
@@ -114,7 +115,7 @@ export function CompradorDialog({
           <DialogDescription>Complete la informacion del comprador para agregarlo al catalogo</DialogDescription>
         </DialogHeader>
         <DialogBody>
-          <form onSubmit={handleSubmit} className="space-y-4 contents">
+          <form id="comprador-form" onSubmit={handleSubmit} className="space-y-4 contents">
             <div className="space-y-2">
               <Label htmlFor="comprador-nombre">Nombre *</Label>
               <Input

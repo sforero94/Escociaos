@@ -102,6 +102,7 @@ export function ProveedorDialog({
       </Button>
       <Button
         type="submit"
+        form="proveedor-form"
         disabled={saving || !formData.nombre.trim()}
         className="bg-primary hover:bg-primary-dark text-white"
       >
@@ -130,7 +131,7 @@ export function ProveedorDialog({
           <DialogDescription>Complete la información del proveedor para agregarlo al catálogo</DialogDescription>
         </DialogHeader>
         <DialogBody>
-          <form onSubmit={handleSubmit} className="space-y-4 contents">
+          <form id="proveedor-form" onSubmit={handleSubmit} className="space-y-4 contents">
             {/* Nombre - Required */}
             <div className="space-y-2">
               <Label htmlFor="nombre">Nombre *</Label>

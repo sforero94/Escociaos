@@ -15,6 +15,129 @@ export interface RangoSemana {
 }
 
 // ============================================================================
+// CONFIGURACIÓN DE SECCIONES (TOGGLES)
+// ============================================================================
+
+export interface SeccionesReporte {
+  clima: boolean;
+  monitoreoPlagas: boolean;
+  floracion: boolean;
+  conductividadElectrica: boolean;
+  colmenas: boolean;
+  aplicaciones: boolean;
+}
+
+export const SECCIONES_DEFAULT: SeccionesReporte = {
+  clima: true,
+  monitoreoPlagas: true,
+  floracion: true,
+  conductividadElectrica: true,
+  colmenas: true,
+  aplicaciones: true,
+};
+
+// ============================================================================
+// SECCIÓN: CLIMA SEMANAL
+// ============================================================================
+
+export interface DiaClima {
+  fecha: string;           // YYYY-MM-DD
+  lluviaMm: number;
+  radiacionMaxWm2: number;
+  tempMax: number | null;
+  tempMin: number | null;
+}
+
+export interface ClimaPromedioHistorico {
+  tempPromedio: number | null;
+  lluviaPromSemanal: number | null;
+  humedadPromedio: number | null;
+  radiacionPromedio: number | null;
+  semanasAnalizadas: number;
+}
+
+export interface DatosClimaSemanal {
+  tempMin: number | null;
+  tempMax: number | null;
+  tempPromedio: number | null;
+  lluviaTotal: number | null;
+  humedadPromedio: number | null;
+  radiacionPromedio: number | null;
+  radiacionMax: number | null;
+  diario: DiaClima[];
+  historico?: ClimaPromedioHistorico;
+}
+
+// ============================================================================
+// SECCIÓN: FLORACIÓN SEMANAL
+// ============================================================================
+
+export interface FloracionLoteReporte {
+  loteNombre: string;
+  arboresMonitoreados: number;
+  sinFlor: number;
+  brotes: number;
+  florMadura: number;
+  cuaje: number;
+  pctSinFlor: number;
+  pctBrotes: number;
+  pctFlorMadura: number;
+  pctCuaje: number;
+}
+
+export interface DatosFloracionSemanal {
+  porLote: FloracionLoteReporte[];
+}
+
+// ============================================================================
+// SECCIÓN: CONDUCTIVIDAD ELÉCTRICA SEMANAL
+// ============================================================================
+
+export interface CELoteReporte {
+  loteNombre: string;
+  pctBajo: number;
+  pctEnRango: number;
+  pctAlto: number;
+  promedio: number;
+  totalLecturas: number;
+}
+
+export interface DatosCESemanal {
+  porLote: CELoteReporte[];
+}
+
+// ============================================================================
+// SECCIÓN: COLMENAS SEMANAL
+// ============================================================================
+
+export interface ColmenasApiarioReporte {
+  apiarioNombre: string;
+  fuertes: number;
+  debiles: number;
+  muertas: number;
+  conReina: number;
+  total: number;
+}
+
+export interface ColmenasHistoricoFecha {
+  fecha: string;
+  apiarios: ColmenasApiarioReporte[];
+}
+
+export interface DatosColmenasSemanal {
+  porApiario: ColmenasApiarioReporte[];
+  historico: ColmenasHistoricoFecha[];
+  totales: {
+    fuertes: number;
+    debiles: number;
+    muertas: number;
+    conReina: number;
+    total: number;
+    pctFuertes: number;
+  };
+}
+
+// ============================================================================
 // SECCIÓN 1: PERSONAL
 // ============================================================================
 
@@ -58,10 +181,16 @@ export interface CeldaMatrizJornales {
   costo: number;     // SUM(costo_jornal)
 }
 
+export interface FilaMatrizJornales {
+  nombre: string;          // Task name (row label)
+  tipo: string;            // Task type category
+}
+
 export interface MatrizJornales {
-  actividades: string[];   // Nombres de tipos de tarea (filas)
+  actividades: string[];   // Nombres de tareas individuales (filas)
+  filas: FilaMatrizJornales[]; // Nombre + tipo por fila
   lotes: string[];         // Nombres de lotes (columnas)
-  datos: Record<string, Record<string, CeldaMatrizJornales>>; // actividad → lote → celda
+  datos: Record<string, Record<string, CeldaMatrizJornales>>; // nombre → lote → celda
   totalesPorActividad: Record<string, CeldaMatrizJornales>;
   totalesPorLote: Record<string, CeldaMatrizJornales>;
   totalGeneral: CeldaMatrizJornales;
@@ -345,6 +474,7 @@ export type BloqueAdicional = BloqueTexto | BloqueImagenConTexto;
 
 export interface DatosReporteSemanal {
   semana: RangoSemana;
+  secciones: SeccionesReporte;
   personal: DatosPersonal;
   labores: {
     programadas: LaborSemanal[];
@@ -358,6 +488,10 @@ export interface DatosReporteSemanal {
     cerradas: AplicacionCerrada[];
   };
   monitoreo: DatosMonitoreo;
+  clima?: DatosClimaSemanal;
+  floracion?: DatosFloracionSemanal;
+  conductividadElectrica?: DatosCESemanal;
+  colmenas?: DatosColmenasSemanal;
   temasAdicionales: BloqueAdicional[];
 }
 

@@ -40,6 +40,7 @@ import {
   TableRow,
 } from '../ui/table';
 import { toast } from 'sonner';
+import { Switch } from '../ui/switch';
 import {
   calcularSemanaAnterior,
   calcularSemanaDesdeLunes,
@@ -57,7 +58,9 @@ import type {
   BloqueTexto,
   BloqueImagenConTexto,
   DetalleFallaPermiso,
+  SeccionesReporte,
 } from '../../types/reporteSemanal';
+import { SECCIONES_DEFAULT } from '../../types/reporteSemanal';
 import { formatearFechaCorta } from '../../utils/fechas';
 import { formatNumber } from '../../utils/format';
 
@@ -104,6 +107,7 @@ export function ReporteSemanalWizard() {
   const [retiros, setRetiros] = useState(0);
   const [detalleFallas, setDetalleFallas] = useState<DetalleFallaPermiso[]>([]);
   const [detallePermisos, setDetallePermisos] = useState<DetalleFallaPermiso[]>([]);
+  const [secciones, setSecciones] = useState<SeccionesReporte>({ ...SECCIONES_DEFAULT });
 
   // Paso 2: Selección de aplicaciones cerradas
   const [listaAplicacionesCerradas, setListaAplicacionesCerradas] = useState<
@@ -130,7 +134,7 @@ export function ReporteSemanalWizard() {
   // Draft persistence (exclude unserializable pdfBlob and auto-loaded data)
   const draft = useFormDraft('reporte-semanal-v1', {
     pasoActual, semana, fallas, permisos, ingresos, retiros,
-    detalleFallas, detallePermisos, cerradasSeleccionadas, temasAdicionales,
+    detalleFallas, detallePermisos, secciones, cerradasSeleccionadas, temasAdicionales,
   }, { debounceMs: 2000 });
 
   const handleRestoreDraft = useCallback(() => {
@@ -145,6 +149,7 @@ export function ReporteSemanalWizard() {
     setDetalleFallas(d.detalleFallas);
     setDetallePermisos(d.detallePermisos);
     setCerradasSeleccionadas(d.cerradasSeleccionadas);
+    if (d.secciones) setSecciones(d.secciones);
     setTemasAdicionales(d.temasAdicionales);
     draft.acceptDraft();
   }, [draft]);
@@ -243,6 +248,7 @@ export function ReporteSemanalWizard() {
         detalleFallas,
         detallePermisos,
         cerradasIds: cerradasSeleccionadas,
+        secciones,
         temasAdicionales,
       });
       setDatosReporte(datos);
@@ -561,6 +567,44 @@ export function ReporteSemanalWizard() {
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Secciones del reporte */}
+      <Card className="rounded-xl">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-foreground text-lg">
+            <BarChart3 className="w-5 h-5 text-primary" />
+            Secciones del Reporte
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-gray-500 mb-4">
+            Selecciona qué secciones incluir en el PDF generado.
+          </p>
+          <div className="space-y-3">
+            {([
+              { key: 'clima' as const, label: 'Resumen del clima', desc: 'Temperatura, lluvia, humedad, radiación solar' },
+              { key: 'monitoreoPlagas' as const, label: 'Monitoreo de plagas', desc: 'Incidencia, tendencias, detalle por lote y sublote' },
+              { key: 'floracion' as const, label: 'Monitoreo de floración', desc: 'Estado de floración por lote' },
+              { key: 'conductividadElectrica' as const, label: 'Monitoreo de CE', desc: 'Conductividad eléctrica del suelo por lote' },
+              { key: 'colmenas' as const, label: 'Monitoreo de colmenas', desc: 'Salud de apiarios y colmenas' },
+              { key: 'aplicaciones' as const, label: 'Aplicaciones', desc: 'Activas, cerradas y planeadas' },
+            ]).map(item => (
+              <div key={item.key} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                <div>
+                  <p className="text-sm font-medium text-brand-brown">{item.label}</p>
+                  <p className="text-xs text-gray-400">{item.desc}</p>
+                </div>
+                <Switch
+                  checked={secciones[item.key]}
+                  onCheckedChange={(checked) =>
+                    setSecciones(prev => ({ ...prev, [item.key]: checked }))
+                  }
+                />
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
     </div>

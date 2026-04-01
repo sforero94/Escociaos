@@ -182,7 +182,8 @@ export async function convertirHTMLaPDF(html: string): Promise<Blob> {
  */
 export async function guardarReportePDF(
   pdfBlob: Blob,
-  datos: DatosReporteSemanal
+  datos: DatosReporteSemanal,
+  html?: string
 ): Promise<ReporteSemanalMetadata> {
   const supabase = getSupabase();
   const user = await getCurrentUser();
@@ -220,6 +221,16 @@ export async function guardarReportePDF(
   }
   console.log('[guardarReportePDF] PDF uploaded successfully');
 
+  // Upload HTML alongside PDF for preview/present features
+  let htmlStoragePath: string | undefined;
+  if (html) {
+    const htmlFileName = `reporte-slides-semana-${semana.ano}-S${String(semana.numero).padStart(2, '0')}.html`;
+    htmlStoragePath = `${semana.ano}/${htmlFileName}`;
+    await supabase.storage
+      .from('reportes-semanales')
+      .upload(htmlStoragePath, new Blob([html], { type: 'text/html' }), { contentType: 'text/html', upsert: true });
+  }
+
   // Guardar metadatos en la tabla
   console.log('[guardarReportePDF] Saving metadata to reportes_semanales...');
   console.log('[guardarReportePDF] User ID for generado_por:', user.id);
@@ -231,6 +242,7 @@ export async function guardarReportePDF(
     ano: semana.ano,
     generado_por: user.id,
     url_storage: storagePath,
+    ...(htmlStoragePath ? { html_storage: htmlStoragePath } : {}),
     datos_entrada: datos,
   };
 
@@ -361,8 +373,26 @@ export async function fetchHistorialReportes(): Promise<ReporteSemanalMetadata[]
   }));
 }
 
+/**
+ * Fetches the HTML content of a stored report for preview/presentation
+ */
+export async function fetchReporteHTML(reporte: ReporteSemanalMetadata): Promise<string> {
+  const supabase = getSupabase();
+
+  if (!reporte.html_storage) {
+    throw new Error('Este reporte no tiene HTML almacenado');
+  }
+
+  const { data, error } = await supabase.storage
+    .from('reportes-semanales')
+    .download(reporte.html_storage);
+
+  if (error) throw new Error(`Error al descargar HTML: ${error.message}`);
+  return await data.text();
+}
+
 // ============================================================================
-// GENERACIÓN RÁPIDA (sin wizard)
+// GENERACIÓN RÁPIDA (sin wizard) — REMOVED
 // ============================================================================
 
 export interface GenerarRapidoResult {
@@ -478,7 +508,7 @@ export async function generarReporteCompleto(
   try {
     onProgress?.('Guardando reporte...');
     console.log('[ReporteSemanal] Paso 3: Guardando en Supabase...');
-    metadata = await guardarReportePDF(pdfBlob, datos);
+    metadata = await guardarReportePDF(pdfBlob, datos, html);
     console.log('[ReporteSemanal] Paso 3 completado. ID:', metadata.id);
   } catch (storageError: any) {
     console.warn('[ReporteSemanal] Paso 3 falló:', storageError.message);
