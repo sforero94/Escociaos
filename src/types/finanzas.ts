@@ -356,3 +356,72 @@ export interface BatchRowDataIngreso {
   factura_file: File | null;
   factura_uploaded: boolean;
 }
+
+// ── Budget (Presupuesto) ─────────────────────────────────────────
+
+/** DB row in fin_presupuestos */
+export interface Presupuesto {
+  id: string;
+  anio: number;
+  negocio_id: string;
+  categoria_id: string;
+  concepto_id: string;
+  monto_anual: number;
+  is_principal: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by?: string;
+  updated_by?: string;
+}
+
+/** Concepto-level row in the budget comparison table */
+export interface PresupuestoRow {
+  categoria_id: string;
+  categoria_nombre: string;
+  concepto_id: string;
+  concepto_nombre: string;
+  is_principal: boolean;
+  presupuesto_id?: string;
+  monto_anual: number;
+  monto_trimestral: number;
+  pct_presupuesto: number;
+  actual_q: number;
+  pct_actual: number;
+  ejecucion_vs_q: number | null;
+  ejecucion_vs_anio: number | null;
+  actual_q_anterior: number;
+  variacion_yoy: number | null;
+  actual_anio_anterior: number;
+}
+
+/** Category aggregate row */
+export interface PresupuestoCategoriaRow {
+  categoria_id: string;
+  categoria_nombre: string;
+  conceptos: PresupuestoRow[];
+  monto_anual: number;
+  monto_trimestral: number;
+  actual_q: number;
+  pct_presupuesto: number;
+  pct_actual: number;
+  ejecucion_vs_q: number | null;
+  ejecucion_vs_anio: number | null;
+  actual_q_anterior: number;
+  variacion_yoy: number | null;
+  actual_anio_anterior: number;
+}
+
+/** Full page data returned by usePresupuestoData */
+export interface PresupuestoData {
+  categorias: PresupuestoCategoriaRow[];
+  totals: {
+    monto_anual: number;
+    monto_trimestral: number;
+    actual_q: number;
+    ejecucion_vs_q: number | null;
+    ejecucion_vs_anio: number | null;
+    actual_q_anterior: number;
+    variacion_yoy: number | null;
+    actual_anio_anterior: number;
+  };
+}

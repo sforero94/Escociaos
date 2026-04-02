@@ -43,6 +43,7 @@ const GastosView = lazy(() => import('./components/finanzas/GastosView').then(m 
 const IngresosView = lazy(() => import('./components/finanzas/IngresosView').then(m => ({ default: m.IngresosView })));
 const ReportesView = lazy(() => import('./components/finanzas/ReportesView').then(m => ({ default: m.ReportesView })));
 const ConfiguracionFinanzas = lazy(() => import('./components/finanzas/ConfiguracionFinanzas').then(m => ({ default: m.ConfiguracionFinanzas })));
+const PresupuestoView = lazy(() => import('./components/finanzas/presupuesto/PresupuestoView').then(m => ({ default: m.PresupuestoView })));
 const ProduccionDashboard = lazy(() => import('./components/produccion/ProduccionDashboard').then(m => ({ default: m.ProduccionDashboard })));
 const ReportesDashboard = lazy(() => import('./components/reportes/ReportesDashboard').then(m => ({ default: m.ReportesDashboard })));
 const ReporteSemanalWizard = lazy(() => import('./components/reportes/ReporteSemanalWizard').then(m => ({ default: m.ReporteSemanalWizard })));
@@ -125,6 +126,7 @@ function LayoutRoutes() {
             <Route path="gastos" element={<GastosView />} />
             <Route path="ingresos" element={<IngresosView />} />
             <Route path="reportes" element={<ReportesView />} />
+            <Route path="presupuesto" element={<PresupuestoView />} />
             <Route path="configuracion" element={<ConfiguracionFinanzas />} />
           </Route>
 
