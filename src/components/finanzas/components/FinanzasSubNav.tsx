@@ -4,6 +4,7 @@ import {
   TrendingDown,
   TrendingUp,
   FileBarChart,
+  Target,
   Settings
 } from 'lucide-react';
 
@@ -42,6 +43,13 @@ export function FinanzasSubNav() {
       subtitle: 'P&L y análisis',
       icon: FileBarChart,
       path: '/finanzas/reportes',
+    },
+    {
+      id: 'presupuesto',
+      label: 'Presupuesto',
+      subtitle: 'Control presupuestal',
+      icon: Target,
+      path: '/finanzas/presupuesto',
     },
     {
       id: 'configuracion',
