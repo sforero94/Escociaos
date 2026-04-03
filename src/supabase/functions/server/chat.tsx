@@ -306,6 +306,19 @@ const TOOLS: ToolDefinition[] = [
       },
     },
   },
+  {
+    name: 'get_budget_data',
+    description: 'Obtiene datos de presupuesto (budget): montos anuales asignados por concepto de gasto y su ejecucion real. Compara presupuesto vs gasto real para control presupuestal. Puede filtrar por negocio (default Aguacate Hass), año, y trimestres específicos. Retorna: presupuesto anual por concepto, gasto real ejecutado, porcentaje de ejecución, y comparativo con año anterior.',
+    parameters: {
+      type: 'object',
+      properties: {
+        anio: { type: 'number', description: 'Año del presupuesto (default: año actual)' },
+        quarters: { type: 'string', description: 'Trimestres a consultar separados por coma, ej: "1,2" para Q1+Q2. Default: trimestre actual.' },
+        negocio_name: { type: 'string', description: 'Nombre parcial del negocio (default: Aguacate Hass). Opcional.' },
+        categoria_name: { type: 'string', description: 'Nombre parcial de categoria para filtrar (ej: Fertilizantes, Mano de Obra). Opcional.' },
+      },
+    },
+  },
 ];
 
 // ============================================================================
@@ -357,6 +370,7 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
       case 'get_climate_data': result = await execClimateData(args); break;
       case 'get_conductivity_data': result = await execConductivityData(args); break;
       case 'get_beehive_data': result = await execBeehiveData(args); break;
+      case 'get_budget_data': result = await execBudgetData(args); break;
       default: return JSON.stringify({ error: `Tool desconocido: ${name}` });
     }
 
@@ -1499,6 +1513,159 @@ async function execBeehiveData(args: Record<string, unknown>): Promise<string> {
   });
 }
 
+async function execBudgetData(args: Record<string, unknown>): Promise<string> {
+  const currentYear = new Date().getFullYear();
+  const currentQ = Math.ceil((new Date().getMonth() + 1) / 3);
+  const anio = (args.anio as number) || currentYear;
+  const quartersStr = (args.quarters as string) || String(currentQ);
+  const quarters = quartersStr.split(',').map(Number).filter((q) => q >= 1 && q <= 4).sort();
+  const negocioName = (args.negocio_name as string) || 'Aguacate Hass';
+  const categoriaName = args.categoria_name as string | undefined;
+
+  // Resolve negocio
+  const negocios = await supabaseQuery('fin_negocios',
+    `select=id,nombre&nombre=ilike.*${e(negocioName)}*&activo=eq.true`);
+  if ((negocios as unknown[]).length === 0) {
+    return JSON.stringify({ error: `No se encontro negocio: ${negocioName}` });
+  }
+  const negocioId = (negocios as Array<Record<string, unknown>>)[0].id as string;
+  const negocioNombre = (negocios as Array<Record<string, unknown>>)[0].nombre as string;
+
+  // Fetch budgets for the year
+  const budgets = await supabaseQuery('fin_presupuestos',
+    `select=id,concepto_id,categoria_id,monto_anual,is_principal,fin_categorias_gastos(nombre),fin_conceptos_gastos(nombre)&anio=eq.${anio}&negocio_id=eq.${negocioId}`);
+
+  // Quarter date ranges
+  const QUARTER_MONTHS: Record<number, [number, number, number, number]> = {
+    1: [1, 1, 3, 31], 2: [4, 1, 6, 30], 3: [7, 1, 9, 30], 4: [10, 1, 12, 31],
+  };
+  const pad = (n: number) => String(n).padStart(2, '0');
+
+  // Aggregate actual expenses across selected quarters (current year + previous year)
+  const aggregateExpenses = async (year: number, qs: number[]) => {
+    const byConcepto: Record<string, { concepto_id: string; categoria: string; concepto: string; total: number }> = {};
+    for (const q of qs) {
+      const [sm, sd, em, ed] = QUARTER_MONTHS[q];
+      const desde = `${year}-${pad(sm)}-${pad(sd)}`;
+      const hasta = `${year}-${pad(em)}-${pad(ed)}`;
+      const gastos = await supabaseQuery('fin_gastos',
+        `select=concepto_id,categoria_id,valor,concepto:fin_conceptos_gastos(nombre),categoria:fin_categorias_gastos(nombre)&estado=eq.Confirmado&negocio_id=eq.${negocioId}&fecha=gte.${e(desde)}&fecha=lte.${e(hasta)}&limit=2000`);
+      for (const g of gastos as Array<Record<string, unknown>>) {
+        const cid = g.concepto_id as string;
+        const val = (g.valor as number) || 0;
+        if (!byConcepto[cid]) {
+          byConcepto[cid] = {
+            concepto_id: cid,
+            categoria: ((g.categoria as Record<string, unknown>)?.nombre as string) || 'Sin categoria',
+            concepto: ((g.concepto as Record<string, unknown>)?.nombre as string) || 'Sin concepto',
+            total: 0,
+          };
+        }
+        byConcepto[cid].total += val;
+      }
+    }
+    return byConcepto;
+  };
+
+  const [actualsMap, actualsAntMap] = await Promise.all([
+    aggregateExpenses(anio, quarters),
+    aggregateExpenses(anio - 1, quarters),
+  ]);
+
+  // Build per-concepto rows
+  const conceptoRows: Array<Record<string, unknown>> = [];
+  const seenConceptos = new Set<string>();
+  const qCount = quarters.length;
+
+  // From budgets
+  for (const b of budgets as Array<Record<string, unknown>>) {
+    const cid = b.concepto_id as string;
+    seenConceptos.add(cid);
+    const montoAnual = (b.monto_anual as number) || 0;
+    const pptoQ = (montoAnual * qCount) / 4;
+    const actual = actualsMap[cid]?.total || 0;
+    const actualAnt = actualsAntMap[cid]?.total || 0;
+    const catNombre = ((b.fin_categorias_gastos as Record<string, unknown>)?.nombre as string) || '';
+    const conNombre = ((b.fin_conceptos_gastos as Record<string, unknown>)?.nombre as string) || '';
+
+    if (categoriaName && !catNombre.toLowerCase().includes(categoriaName.toLowerCase())) continue;
+
+    conceptoRows.push({
+      categoria: catNombre,
+      concepto: conNombre,
+      presupuesto_anual: montoAnual,
+      presupuesto_periodo: pptoQ,
+      ejecucion_real: actual,
+      ejecucion_pct: pptoQ > 0 ? Math.round((actual / pptoQ) * 100) : null,
+      periodo_anterior: actualAnt,
+      variacion_yoy: actualAnt > 0 ? Math.round(((actual - actualAnt) / actualAnt) * 100) : null,
+    });
+  }
+
+  // Unbudgeted conceptos with actuals
+  for (const [cid, data] of Object.entries(actualsMap)) {
+    if (seenConceptos.has(cid)) continue;
+    if (categoriaName && !data.categoria.toLowerCase().includes(categoriaName.toLowerCase())) continue;
+    const actualAnt = actualsAntMap[cid]?.total || 0;
+    conceptoRows.push({
+      categoria: data.categoria,
+      concepto: data.concepto,
+      presupuesto_anual: 0,
+      presupuesto_periodo: 0,
+      ejecucion_real: data.total,
+      ejecucion_pct: null,
+      periodo_anterior: actualAnt,
+      variacion_yoy: actualAnt > 0 ? Math.round(((data.total - actualAnt) / actualAnt) * 100) : null,
+      sin_presupuesto: true,
+    });
+  }
+
+  // Aggregate by category
+  const byCategoria: Record<string, { ppto_anual: number; ppto_q: number; real: number; real_ant: number }> = {};
+  for (const row of conceptoRows) {
+    const cat = row.categoria as string;
+    if (!byCategoria[cat]) byCategoria[cat] = { ppto_anual: 0, ppto_q: 0, real: 0, real_ant: 0 };
+    byCategoria[cat].ppto_anual += (row.presupuesto_anual as number) || 0;
+    byCategoria[cat].ppto_q += (row.presupuesto_periodo as number) || 0;
+    byCategoria[cat].real += (row.ejecucion_real as number) || 0;
+    byCategoria[cat].real_ant += (row.periodo_anterior as number) || 0;
+  }
+
+  const categoriaSummary = Object.entries(byCategoria).map(([cat, d]) => ({
+    categoria: cat,
+    presupuesto_anual: d.ppto_anual,
+    presupuesto_periodo: d.ppto_q,
+    ejecucion_real: d.real,
+    ejecucion_pct: d.ppto_q > 0 ? Math.round((d.real / d.ppto_q) * 100) : null,
+    periodo_anterior: d.real_ant,
+    variacion_yoy: d.real_ant > 0 ? Math.round(((d.real - d.real_ant) / d.real_ant) * 100) : null,
+  })).sort((a, b) => b.ejecucion_real - a.ejecucion_real);
+
+  // Totals
+  const totalPptoAnual = conceptoRows.reduce((s, r) => s + ((r.presupuesto_anual as number) || 0), 0);
+  const totalPptoQ = conceptoRows.reduce((s, r) => s + ((r.presupuesto_periodo as number) || 0), 0);
+  const totalReal = conceptoRows.reduce((s, r) => s + ((r.ejecucion_real as number) || 0), 0);
+  const totalRealAnt = conceptoRows.reduce((s, r) => s + ((r.periodo_anterior as number) || 0), 0);
+
+  return JSON.stringify({
+    negocio: negocioNombre,
+    anio,
+    trimestres_seleccionados: quarters,
+    resumen: {
+      presupuesto_anual_total: totalPptoAnual,
+      presupuesto_periodo: totalPptoQ,
+      ejecucion_real: totalReal,
+      ejecucion_pct: totalPptoQ > 0 ? Math.round((totalReal / totalPptoQ) * 100) : null,
+      periodo_anterior: totalRealAnt,
+      variacion_yoy: totalRealAnt > 0 ? Math.round(((totalReal - totalRealAnt) / totalRealAnt) * 100) : null,
+      conceptos_con_presupuesto: conceptoRows.filter((r) => (r.presupuesto_anual as number) > 0).length,
+      conceptos_sin_presupuesto: conceptoRows.filter((r) => r.sin_presupuesto).length,
+    },
+    por_categoria: categoriaSummary,
+    detalle_conceptos: conceptoRows.sort((a, b) => (b.ejecucion_real as number) - (a.ejecucion_real as number)).slice(0, 30),
+  });
+}
+
 // ============================================================================
 // SYSTEM PROMPT
 // ============================================================================
@@ -1557,6 +1724,7 @@ DOMINIOS DE DATOS DISPONIBLES:
 - Aplicaciones: fumigaciones, fertilizaciones, drench, productos usados, costos
 - Inventario: productos agricolas, stock, movimientos, compras
 - Finanzas: gastos (solo Confirmados), ingresos, transacciones de ganado, categorias, busqueda por nombre
+- Presupuesto: control presupuestal por concepto de gasto, ejecucion real vs presupuesto asignado, % de ejecucion, comparativo año anterior. Soporta multiples trimestres (ej: Q1+Q2)
 - Produccion: kilos por lote, kg/arbol, cosechas principal/traviesa
 - Cosechas y Despachos: kilos cosechados, preseleccion, despachos a clientes
 - Lotes: configuracion de la finca, arboles por tamano, sublotes

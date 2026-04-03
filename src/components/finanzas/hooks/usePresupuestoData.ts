@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
 import type {
   Presupuesto,
@@ -61,6 +61,7 @@ export function buildPresupuestoData(
   actualsQAnterior: ActualAggregate[],
   actualsAnioAnterior: ActualAggregate[],
   conceptoCatalog: ConceptoCatalogEntry[],
+  quarterCount: number = 1,
 ): PresupuestoData {
   // Build maps for fast lookup
   const actualQMap = new Map(actualsQ.map((a) => [a.concepto_id, a.total]));
@@ -72,7 +73,7 @@ export function buildPresupuestoData(
 
   // 1. Budgeted conceptos
   for (const b of budgets) {
-    const trimestral = b.monto_anual / 4;
+    const trimestral = (b.monto_anual * quarterCount) / 4;
     const aq = actualQMap.get(b.concepto_id) ?? 0;
     const aqAnt = actualQAntMap.get(b.concepto_id) ?? 0;
     const aAnioAnt = actualAnioAntMap.get(b.concepto_id) ?? 0;
@@ -195,7 +196,7 @@ export function buildPresupuestoData(
   categorias.sort((a, b) => a.categoria_nombre.localeCompare(b.categoria_nombre));
 
   // Grand totals
-  const totalTrimestral = totalBudget / 4;
+  const totalTrimestral = (totalBudget * quarterCount) / 4;
   const totalActualQAnt = allRows.reduce((s, r) => s + r.actual_q_anterior, 0);
   const totalActualAnioAnt = allRows.reduce((s, r) => s + r.actual_anio_anterior, 0);
 
@@ -249,58 +250,86 @@ async function aggregateGastos(
   return Array.from(map.values());
 }
 
+function mergeAggregates(arrays: ActualAggregate[][]): ActualAggregate[] {
+  const map = new Map<string, ActualAggregate>();
+  for (const arr of arrays) {
+    for (const row of arr) {
+      const existing = map.get(row.concepto_id);
+      if (existing) {
+        existing.total += row.total;
+      } else {
+        map.set(row.concepto_id, { ...row });
+      }
+    }
+  }
+  return Array.from(map.values());
+}
+
 // ── Main hook ──────────────────────────────────────────────────
 
 export function usePresupuestoData() {
   const [loading, setLoading] = useState(false);
 
-  async function fetchPresupuesto(
+  const fetchPresupuesto = useCallback(async (
     anio: number,
-    trimestre: number,
+    quarters: number[],
     negocioId: string,
-  ): Promise<PresupuestoData> {
+  ): Promise<PresupuestoData> => {
     setLoading(true);
     try {
       const supabase = getSupabase();
-      const qRange = getQuarterRange(anio, trimestre);
-      const qAntRange = getQuarterRange(anio - 1, trimestre);
       const anioAntRange = { desde: `${anio - 1}-01-01`, hasta: `${anio - 1}-12-31` };
 
-      // Parallel queries
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fin_presupuestos not yet in generated DB types
       const sb = supabase as any;
-      const [budgetsRes, actualsQ, actualsQAnt, actualsAnioAnt, conceptosRes] = await Promise.all([
+
+      // Fetch budgets, catalog, and full-year anterior in parallel
+      const [budgetsRes, conceptosRes, actualsAnioAnt] = await Promise.all([
         sb
           .from('fin_presupuestos')
           .select('id, concepto_id, categoria_id, monto_anual, is_principal, fin_categorias_gastos(nombre), fin_conceptos_gastos(nombre)')
           .eq('anio', anio)
           .eq('negocio_id', negocioId),
-        aggregateGastos(negocioId, qRange.desde, qRange.hasta),
-        aggregateGastos(negocioId, qAntRange.desde, qAntRange.hasta),
-        aggregateGastos(negocioId, anioAntRange.desde, anioAntRange.hasta),
         supabase
           .from('fin_conceptos_gastos')
           .select('id, categoria_id, nombre, fin_categorias_gastos(nombre)')
           .eq('activo', true),
+        aggregateGastos(negocioId, anioAntRange.desde, anioAntRange.hasta),
       ]);
+
+      // Aggregate actuals across all selected quarters (current + anterior year)
+      const qActualResults = await Promise.all(
+        quarters.flatMap((q) => {
+          const range = getQuarterRange(anio, q);
+          const antRange = getQuarterRange(anio - 1, q);
+          return [
+            aggregateGastos(negocioId, range.desde, range.hasta),
+            aggregateGastos(negocioId, antRange.desde, antRange.hasta),
+          ];
+        }),
+      );
+
+      // Merge: even indices = current, odd = anterior
+      const actualsQ = mergeAggregates(qActualResults.filter((_, i) => i % 2 === 0));
+      const actualsQAnt = mergeAggregates(qActualResults.filter((_, i) => i % 2 === 1));
 
       const budgets = (budgetsRes.data ?? []) as unknown as RawBudget[];
       const conceptoCatalog = (conceptosRes.data ?? []) as unknown as ConceptoCatalogEntry[];
 
-      return buildPresupuestoData(budgets, actualsQ, actualsQAnt, actualsAnioAnt, conceptoCatalog);
+      return buildPresupuestoData(budgets, actualsQ, actualsQAnt, actualsAnioAnt, conceptoCatalog, quarters.length);
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  async function upsertPresupuesto(data: {
+  const upsertPresupuesto = useCallback(async (data: {
     anio: number;
     negocio_id: string;
     categoria_id: string;
     concepto_id: string;
     monto_anual: number;
     is_principal?: boolean;
-  }): Promise<Presupuesto | null> {
+  }): Promise<Presupuesto | null> => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fin_presupuestos not yet in generated DB types
     const supabase = getSupabase() as any;
     const { data: result, error } = await supabase
@@ -323,7 +352,7 @@ export function usePresupuestoData() {
       return null;
     }
     return (result as unknown as Presupuesto[])?.[0] ?? null;
-  }
+  }, []);
 
   return { loading, fetchPresupuesto, upsertPresupuesto };
 }

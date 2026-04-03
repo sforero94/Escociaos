@@ -17,7 +17,7 @@ function getCurrentQuarter(): number {
 export function PresupuestoView() {
   const currentYear = new Date().getFullYear();
   const [anio, setAnio] = useState(currentYear);
-  const [trimestre, setTrimestre] = useState(getCurrentQuarter());
+  const [quarters, setQuarters] = useState<number[]>([getCurrentQuarter()]);
   const [showPct, setShowPct] = useState(false);
   const [negocioId, setNegocioId] = useState<string | null>(null);
   const [data, setData] = useState<PresupuestoData | null>(null);
@@ -40,16 +40,31 @@ export function PresupuestoView() {
     resolveNegocio();
   }, []);
 
+  // Stable key for quarters array to use in useCallback deps
+  const quartersKey = quarters.join(',');
+
   // Fetch data when params change
   const loadData = useCallback(async () => {
-    if (!negocioId) return;
-    const result = await fetchPresupuesto(anio, trimestre, negocioId);
+    if (!negocioId || quarters.length === 0) return;
+    const result = await fetchPresupuesto(anio, quarters, negocioId);
     setData(result);
-  }, [anio, trimestre, negocioId, fetchPresupuesto]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anio, quartersKey, negocioId, fetchPresupuesto]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  const handleToggleQuarter = (q: number) => {
+    setQuarters((prev) => {
+      if (prev.includes(q)) {
+        // Don't allow deselecting the last quarter
+        if (prev.length === 1) return prev;
+        return prev.filter((v) => v !== q).sort((a, b) => a - b);
+      }
+      return [...prev, q].sort((a, b) => a - b);
+    });
+  };
 
   const handleBudgetChange = async (conceptoId: string, categoriaId: string, newAmount: number) => {
     if (!negocioId) return;
@@ -58,14 +73,13 @@ export function PresupuestoView() {
     if (data) {
       setData((prev) => {
         if (!prev) return prev;
-        // Deep clone and update
         const next = JSON.parse(JSON.stringify(prev)) as PresupuestoData;
         for (const cat of next.categorias) {
           for (const row of cat.conceptos) {
             if (row.concepto_id === conceptoId) {
               row.monto_anual = newAmount;
-              row.monto_trimestral = newAmount / 4;
-              row.ejecucion_vs_q = newAmount > 0 ? Math.round((row.actual_q / (newAmount / 4)) * 100) : null;
+              row.monto_trimestral = (newAmount * quarters.length) / 4;
+              row.ejecucion_vs_q = row.monto_trimestral > 0 ? Math.round((row.actual_q / row.monto_trimestral) * 100) : null;
               row.ejecucion_vs_anio = newAmount > 0 ? Math.round((row.actual_q / newAmount) * 100) : null;
             }
           }
@@ -86,7 +100,7 @@ export function PresupuestoView() {
       toast.success('Presupuesto actualizado');
     } else {
       toast.error('Error al guardar presupuesto');
-      loadData(); // Revert on failure
+      loadData();
     }
   };
 
@@ -106,9 +120,9 @@ export function PresupuestoView() {
         {/* Controls */}
         <PresupuestoControls
           anio={anio}
-          trimestre={trimestre}
+          quarters={quarters}
           onAnioChange={setAnio}
-          onTrimestreChange={setTrimestre}
+          onToggleQuarter={handleToggleQuarter}
           showPct={showPct}
           onTogglePct={() => setShowPct((v) => !v)}
         />
@@ -124,7 +138,7 @@ export function PresupuestoView() {
             data={data}
             showPct={showPct}
             anio={anio}
-            trimestre={trimestre}
+            quarters={quarters}
             onBudgetChange={handleBudgetChange}
           />
         ) : (

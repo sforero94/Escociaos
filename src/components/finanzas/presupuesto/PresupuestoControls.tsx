@@ -2,18 +2,18 @@ import { cn } from '@/components/ui/utils';
 
 interface PresupuestoControlsProps {
   anio: number;
-  trimestre: number;
+  quarters: number[];
   onAnioChange: (anio: number) => void;
-  onTrimestreChange: (q: number) => void;
+  onToggleQuarter: (q: number) => void;
   showPct: boolean;
   onTogglePct: () => void;
 }
 
 export function PresupuestoControls({
   anio,
-  trimestre,
+  quarters,
   onAnioChange,
-  onTrimestreChange,
+  onToggleQuarter,
   showPct,
   onTogglePct,
 }: PresupuestoControlsProps) {
@@ -36,17 +36,17 @@ export function PresupuestoControls({
         </select>
       </div>
 
-      {/* Quarter pills */}
-      <div className="flex items-center gap-2">
+      {/* Quarter pills (multi-select) */}
+      <div className="flex items-center gap-3">
         <span className="text-sm text-gray-500 font-medium">Trimestre</span>
-        <div className="flex gap-1">
+        <div className="flex gap-3">
           {[1, 2, 3, 4].map((q) => (
             <button
               key={q}
-              onClick={() => onTrimestreChange(q)}
+              onClick={() => onToggleQuarter(q)}
               className={cn(
-                'px-3.5 py-1.5 rounded-md text-sm font-semibold transition-colors',
-                q === trimestre
+                'px-5 py-1.5 rounded-md text-sm font-semibold transition-colors',
+                quarters.includes(q)
                   ? 'bg-primary text-white'
                   : 'bg-gray-100 text-gray-500 hover:bg-gray-200',
               )}
