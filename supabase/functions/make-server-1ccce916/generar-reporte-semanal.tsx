@@ -949,14 +949,16 @@ function construirSlideLaboresProgramadas(datos: any, analisis: AnalisisGemini):
     return `<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;${c[estado] || 'background:#E7EDDD;color:#4D240F;'}">${estado}</span>`;
   };
 
+  const trunc = (s: string, max: number) => s.length > max ? s.slice(0, max - 1) + '…' : s;
+
   const rows = programadas.slice(0, 10).map((l: any, i: number) =>
     `<tr style="background:${i % 2 === 0 ? '#ffffff' : '#F8FAF5'};">
-      <td style="${CSS.td}font-weight:600;color:#172E08;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${l.nombre}</td>
-      <td style="${CSS.td}color:#6b7280;">${l.tipoTarea || l.tipo || '—'}</td>
-      <td style="${CSS.tdC}">${estadoBadge(l.estado)}</td>
-      <td style="${CSS.tdC}color:#6b7280;">${l.fechaInicio || '—'}</td>
-      <td style="${CSS.tdC}color:#6b7280;">${l.fechaFin || '—'}</td>
-      <td style="${CSS.td}color:#6b7280;max-width:220px;overflow:hidden;text-overflow:ellipsis;">${(l.lotes || []).join(', ') || '—'}</td>
+      <td style="${CSS.td}font-weight:600;color:#172E08;white-space:nowrap;">${trunc(l.nombre || '', 30)}</td>
+      <td style="${CSS.td}color:#6b7280;white-space:nowrap;">${trunc(l.tipoTarea || l.tipo || '—', 20)}</td>
+      <td style="${CSS.tdC}white-space:nowrap;">${estadoBadge(l.estado)}</td>
+      <td style="${CSS.tdC}color:#6b7280;white-space:nowrap;">${l.fechaInicio || '—'}</td>
+      <td style="${CSS.tdC}color:#6b7280;white-space:nowrap;">${l.fechaFin || '—'}</td>
+      <td style="${CSS.td}color:#6b7280;white-space:nowrap;">${trunc((l.lotes || []).join(', ') || '—', 30)}</td>
     </tr>`
   ).join('');
 
@@ -969,7 +971,15 @@ function construirSlideLaboresProgramadas(datos: any, analisis: AnalisisGemini):
       ${porIniciar > 0 ? `<span style="font-size:14px;color:#4D240F;font-weight:600;">${porIniciar} Por iniciar</span>` : ''}
     </div>
     <div style="flex:1;overflow:hidden;border-radius:8px;border:1px solid #E7EDDD;">
-      <table style="width:100%;border-collapse:collapse;">
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+        <colgroup>
+          <col style="width:25%"/>
+          <col style="width:16%"/>
+          <col style="width:12%"/>
+          <col style="width:12%"/>
+          <col style="width:12%"/>
+          <col style="width:23%"/>
+        </colgroup>
         <thead><tr>
           <th style="${CSS.thGreen}">Nombre</th>
           <th style="${CSS.thGreen}">Tipo</th>
@@ -1026,7 +1036,8 @@ function construirSlidesLaboresMatriz(datos: any, analisis: AnalisisGemini): str
     }
     const tot = totalesPorActividad[row.nombre]?.jornales || 0;
     cells += `<td style="padding:5px 6px;text-align:center;font-size:12px;font-weight:700;background:#f0fdf4;color:#172E08;border-bottom:1px solid #E7EDDD;">${fmtN(tot)}</td>`;
-    bodyRows += `<tr>${tipoCell}<td style="padding:5px 8px;font-size:12px;font-weight:600;color:#172E08;border-bottom:1px solid #E7EDDD;white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis;">${row.nombre}</td>${cells}</tr>`;
+    const nombreTrunc = row.nombre.length > 26 ? row.nombre.slice(0, 25) + '…' : row.nombre;
+    bodyRows += `<tr>${tipoCell}<td style="padding:5px 8px;font-size:12px;font-weight:600;color:#172E08;border-bottom:1px solid #E7EDDD;white-space:nowrap;">${nombreTrunc}</td>${cells}</tr>`;
   }
 
   // Total row
@@ -1056,12 +1067,15 @@ function construirSlidesLaboresMatriz(datos: any, analisis: AnalisisGemini): str
   const mxN = Math.max(...nameOrd.map((a: string) => totalesPorActividad[a]?.jornales || 0), 1);
   const mxL = Math.max(...loteOrd.map((l: string) => totalesPorLote[l]?.jornales || 0), 1);
 
+  const truncLabel = (s: string, max: number) => s.length > max ? s.slice(0, max - 1) + '…' : s;
+
   const bar = (items: string[], getData: (k: string) => number, maxV: number, color: string) =>
     items.slice(0, 8).map((k: string) => {
       const v = getData(k);
       const pct = (v / maxV) * 100;
+      const label = truncLabel(k, 24);
       return `<div style="display:flex;align-items:center;margin-bottom:8px;">
-        <div style="width:180px;font-size:11px;font-weight:500;color:#4D240F;text-align:right;padding-right:10px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${k}</div>
+        <div style="width:180px;font-size:11px;font-weight:500;color:#4D240F;text-align:right;padding-right:10px;flex-shrink:0;white-space:nowrap;">${label}</div>
         <div style="flex:1;background:#E7EDDD;border-radius:3px;height:22px;position:relative;overflow:hidden;">
           <div style="background:${color};height:100%;border-radius:3px;width:${Math.max(pct, 2)}%;"></div>
           <span style="position:absolute;left:6px;top:2px;font-size:11px;font-weight:600;color:${pct > 35 ? '#fff' : '#4D240F'};">${fmtN(v, 1)}</span>
@@ -1939,7 +1953,9 @@ function construirSlideColmenas(datos: any, analisis: AnalisisGemini): string {
         const labelDebiles = hD > 14 ? `<text x="${x + barW / 2}" y="${baseY - hF - hD / 2 + 4}" text-anchor="middle" font-size="10" font-weight="600" fill="#fff">${a.debiles}</text>` : '';
         const labelMuertas = hM > 14 ? `<text x="${x + barW / 2}" y="${baseY - hF - hD - hM / 2 + 4}" text-anchor="middle" font-size="10" font-weight="600" fill="#fff">${a.muertas}</text>` : '';
 
-        const apiLabel = `<text x="${x + barW / 2}" y="${baseY + 14}" text-anchor="middle" font-size="10" fill="#4D240F">${a.apiarioNombre}</text>`;
+        const maxChars = Math.max(Math.floor(gap / 7), 6);
+        const apiName = a.apiarioNombre.length > maxChars ? a.apiarioNombre.slice(0, maxChars - 1) + '…' : a.apiarioNombre;
+        const apiLabel = `<text x="${x + barW / 2}" y="${baseY + 14}" text-anchor="middle" font-size="10" fill="#4D240F">${apiName}</text>`;
         const reinaLabel = `<text x="${x + barW / 2}" y="${baseY + 28}" text-anchor="middle" font-size="9" fill="#73991C">${a.conReina}♛</text>`;
 
         return rects + labelFuertes + labelDebiles + labelMuertas + apiLabel + reinaLabel;
