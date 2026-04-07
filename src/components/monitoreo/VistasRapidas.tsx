@@ -153,6 +153,8 @@ export function VistasRapidas({ onVistaSeleccionada }: { onVistaSeleccionada: (f
           .from('monitoreos')
           .select(`
             incidencia,
+            arboles_monitoreados,
+            arboles_afectados,
             gravedad_texto,
             plaga_enfermedad_id,
             plagas_enfermedades_catalogo!inner(nombre)
@@ -184,10 +186,9 @@ export function VistasRapidas({ onVistaSeleccionada }: { onVistaSeleccionada: (f
 
         // Calcular resumen
         const totalRegistros = data?.length || 0;
-        const incidencias = data?.map(m => Number(m.incidencia) || 0) || [];
-        const incidenciaPromedio = incidencias.length > 0
-          ? incidencias.reduce((a, b) => a + b, 0) / incidencias.length
-          : 0;
+        const totalAfectados = data?.reduce((s: number, m: any) => s + (Number(m.arboles_afectados) || 0), 0) || 0;
+        const totalMonitoreados = data?.reduce((s: number, m: any) => s + (Number(m.arboles_monitoreados) || 0), 0) || 0;
+        const incidenciaPromedio = totalMonitoreados > 0 ? (totalAfectados / totalMonitoreados) * 100 : 0;
 
         // Determinar tendencia (simplificado)
         const tendencia: 'subiendo' | 'bajando' | 'estable' = 'estable';

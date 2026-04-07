@@ -247,11 +247,9 @@ export function MapaCalorIncidencias({
 
     // 2. Calcular incidencia promedio Y ocurrencias según modo
     mapaAgrupado.forEach(celda => {
-      const sumaIncidencias = celda.monitoreos.reduce(
-        (suma, m) => suma + parseFloat(String(m.incidencia)),
-        0
-      );
-      celda.incidenciaPromedio = sumaIncidencias / celda.numeroMonitoreos;
+      const totalAfectados = celda.monitoreos.reduce((s, m) => s + (m.arboles_afectados || 0), 0);
+      const totalMonitoreados = celda.monitoreos.reduce((s, m) => s + (m.arboles_monitoreados || 0), 0);
+      celda.incidenciaPromedio = totalMonitoreados > 0 ? (totalAfectados / totalMonitoreados) * 100 : 0;
 
       // Always keep at least 3 ocurrencias for trend arrow calculation
       const numOcurrencias = modoVisualizacion === 'ultimos6' ? 6 : 3;
@@ -303,11 +301,13 @@ export function MapaCalorIncidencias({
     // 4. Calcular incidencia promedio total por fila (plaga)
     filasMap.forEach(fila => {
       const celdasArray = Array.from(fila.celdas.values());
-      const sumaIncidencias = celdasArray.reduce(
-        (suma, celda) => suma + celda.incidenciaPromedio,
-        0
+      const totalAfectados = celdasArray.reduce(
+        (s, celda) => s + celda.monitoreos.reduce((s2, m) => s2 + (m.arboles_afectados || 0), 0), 0
       );
-      fila.incidenciaPromedioTotal = sumaIncidencias / celdasArray.length;
+      const totalMonitoreados = celdasArray.reduce(
+        (s, celda) => s + celda.monitoreos.reduce((s2, m) => s2 + (m.arboles_monitoreados || 0), 0), 0
+      );
+      fila.incidenciaPromedioTotal = totalMonitoreados > 0 ? (totalAfectados / totalMonitoreados) * 100 : 0;
     });
 
     // 5. Ordenar filas por incidencia promedio descendente
@@ -316,20 +316,22 @@ export function MapaCalorIncidencias({
     );
 
     // 6. Obtener columnas únicas (lotes) con incidencia promedio
-    const lotesMap = new Map<string, { sumaIncidencia: number; count: number; nombre: string }>();
+    const lotesMap = new Map<string, { totalAfectados: number; totalMonitoreados: number; nombre: string }>();
 
     mapaAgrupado.forEach(celda => {
       if (!lotesMap.has(celda.loteId)) {
         lotesMap.set(celda.loteId, {
-          sumaIncidencia: 0,
-          count: 0,
+          totalAfectados: 0,
+          totalMonitoreados: 0,
           nombre: celda.loteNombre
         });
       }
 
       const lote = lotesMap.get(celda.loteId)!;
-      lote.sumaIncidencia += celda.incidenciaPromedio;
-      lote.count++;
+      celda.monitoreos.forEach(m => {
+        lote.totalAfectados += m.arboles_afectados || 0;
+        lote.totalMonitoreados += m.arboles_monitoreados || 0;
+      });
     });
 
     // 7. Ordenar columnas por número de lote (orden numérico)
@@ -337,7 +339,7 @@ export function MapaCalorIncidencias({
       .map(([loteId, data]) => ({
         loteId,
         loteNombre: data.nombre,
-        incidenciaPromedio: data.sumaIncidencia / data.count
+        incidenciaPromedio: data.totalMonitoreados > 0 ? (data.totalAfectados / data.totalMonitoreados) * 100 : 0
       }))
       .sort((a, b) => {
         const numA = parseInt(a.loteNombre.match(/\d+/)?.[0] || '0');

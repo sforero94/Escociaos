@@ -184,6 +184,8 @@ export function MonitoreoDashboardV2() {
           sublote_id,
           plaga_enfermedad_id,
           incidencia,
+          arboles_monitoreados,
+          arboles_afectados,
           lotes!inner(nombre),
           sublotes(nombre),
           plagas_enfermedades_catalogo!inner(nombre)
@@ -215,8 +217,10 @@ export function MonitoreoDashboardV2() {
       const fechaInicio = fechas[0];
       const fechaFin = fechas[fechas.length - 1];
 
-      // Calcular incidencia promedio
-      const incidenciaPromedio = monitoreosUltimos.reduce((sum, m) => sum + (m.incidencia || 0), 0) / monitoreosUltimos.length;
+      // Calcular incidencia promedio from raw tree counts
+      const totalAfectadosUlt = monitoreosUltimos.reduce((s, m) => s + (m.arboles_afectados || 0), 0);
+      const totalMonitUlt = monitoreosUltimos.reduce((s, m) => s + (m.arboles_monitoreados || 0), 0);
+      const incidenciaPromedio = totalMonitUlt > 0 ? (totalAfectadosUlt / totalMonitUlt) * 100 : 0;
 
       // Obtener monitoreo anterior para comparación
       const fechasAnteriores = Object.values(lotesFechas);
@@ -229,9 +233,9 @@ export function MonitoreoDashboardV2() {
         ? monitoreos.filter(m => m.fecha_monitoreo === segundaFechaMasReciente)
         : [];
 
-      const incidenciaAnterior = monitoreosAnteriores.length > 0
-        ? monitoreosAnteriores.reduce((sum, m) => sum + (m.incidencia || 0), 0) / monitoreosAnteriores.length
-        : 0;
+      const totalAfectadosAnt = monitoreosAnteriores.reduce((s, m) => s + (m.arboles_afectados || 0), 0);
+      const totalMonitAnt = monitoreosAnteriores.reduce((s, m) => s + (m.arboles_monitoreados || 0), 0);
+      const incidenciaAnterior = totalMonitAnt > 0 ? (totalAfectadosAnt / totalMonitAnt) * 100 : 0;
 
       // Plagas críticas: >30% en 2+ sublotes
       const plagasPorSublote: { [plagaId: string]: { nombre: string; sublotes: Set<string>; incidencias: number[] } } = {};
@@ -496,6 +500,8 @@ export function MonitoreoDashboardV2() {
           lote_id,
           plaga_enfermedad_id,
           incidencia,
+          arboles_monitoreados,
+          arboles_afectados,
           lotes!inner(nombre),
           plagas_enfermedades_catalogo!inner(nombre)
         `)
@@ -509,6 +515,8 @@ export function MonitoreoDashboardV2() {
           lote_id,
           plaga_enfermedad_id,
           incidencia,
+          arboles_monitoreados,
+          arboles_afectados,
           lotes!inner(nombre),
           plagas_enfermedades_catalogo!inner(nombre)
         `)
@@ -518,21 +526,21 @@ export function MonitoreoDashboardV2() {
 
       if (error1 || error2) throw error1 || error2;
 
-      // Agrupar por lote y plaga
+      // Agrupar por lote y plaga using raw tree counts
       const agruparDatos = (datos: any[]) => {
-        const agrupado: { [key: string]: { sum: number; count: number; lote: string; plaga: string } } = {};
+        const agrupado: { [key: string]: { afectados: number; monitoreados: number; lote: string; plaga: string } } = {};
         datos?.forEach(m => {
           const key = `${m.lote_id}_${m.plaga_enfermedad_id}`;
           if (!agrupado[key]) {
             agrupado[key] = {
-              sum: 0,
-              count: 0,
+              afectados: 0,
+              monitoreados: 0,
               lote: (m.lotes as any).nombre,
               plaga: (m.plagas_enfermedades_catalogo as any).nombre
             };
           }
-          agrupado[key].sum += m.incidencia || 0;
-          agrupado[key].count += 1;
+          agrupado[key].afectados += m.arboles_afectados || 0;
+          agrupado[key].monitoreados += m.arboles_monitoreados || 0;
         });
         return agrupado;
       };
@@ -547,8 +555,8 @@ export function MonitoreoDashboardV2() {
         const dataAnterior = anteriores[key];
         if (!dataAnterior) return;
 
-        const incidenciaActual = dataActual.sum / dataActual.count;
-        const incidenciaAnterior = dataAnterior.sum / dataAnterior.count;
+        const incidenciaActual = dataActual.monitoreados > 0 ? (dataActual.afectados / dataActual.monitoreados) * 100 : 0;
+        const incidenciaAnterior = dataAnterior.monitoreados > 0 ? (dataAnterior.afectados / dataAnterior.monitoreados) * 100 : 0;
 
         // ALERTA: Aumento que lleva sobre 20%
         if (incidenciaAnterior < 20 && incidenciaActual >= 20) {
@@ -617,6 +625,8 @@ export function MonitoreoDashboardV2() {
           lote_id,
           plaga_enfermedad_id,
           incidencia,
+          arboles_monitoreados,
+          arboles_afectados,
           lotes!inner(nombre),
           plagas_enfermedades_catalogo!inner(nombre)
         `)
@@ -633,46 +643,52 @@ export function MonitoreoDashboardV2() {
             lote_id,
             plaga_enfermedad_id,
             incidencia,
+            arboles_monitoreados,
+            arboles_afectados,
             lotes!inner(nombre),
             plagas_enfermedades_catalogo!inner(nombre)
           `)
           .gte('fecha_monitoreo', fechaInicioAnterior.toISOString().split('T')[0])
           .lt('fecha_monitoreo', fechaInicio.toISOString().split('T')[0])
           .limit(5000);
-        
+
         if (!error) datosAnteriores = data || [];
       }
 
       if (error1) throw error1;
 
-      // Agrupar por plaga y lote
-      const plagasLotes: { 
-        [plagaNombre: string]: { 
-          [loteNombre: string]: { 
-            actual: number[]; 
-            anterior: number[] 
-          } 
-        } 
+      // Agrupar por plaga y lote using raw tree counts
+      const plagasLotes: {
+        [plagaNombre: string]: {
+          [loteNombre: string]: {
+            actualAfectados: number;
+            actualMonitoreados: number;
+            anteriorAfectados: number;
+            anteriorMonitoreados: number;
+          }
+        }
       } = {};
 
       datosActuales?.forEach(m => {
         const plaga = (m.plagas_enfermedades_catalogo as any).nombre;
         const lote = (m.lotes as any).nombre;
-        
+
         if (!plagasLotes[plaga]) plagasLotes[plaga] = {};
-        if (!plagasLotes[plaga][lote]) plagasLotes[plaga][lote] = { actual: [], anterior: [] };
-        
-        plagasLotes[plaga][lote].actual.push(m.incidencia || 0);
+        if (!plagasLotes[plaga][lote]) plagasLotes[plaga][lote] = { actualAfectados: 0, actualMonitoreados: 0, anteriorAfectados: 0, anteriorMonitoreados: 0 };
+
+        plagasLotes[plaga][lote].actualAfectados += m.arboles_afectados || 0;
+        plagasLotes[plaga][lote].actualMonitoreados += m.arboles_monitoreados || 0;
       });
 
       datosAnteriores?.forEach(m => {
         const plaga = (m.plagas_enfermedades_catalogo as any).nombre;
         const lote = (m.lotes as any).nombre;
-        
+
         if (!plagasLotes[plaga]) plagasLotes[plaga] = {};
-        if (!plagasLotes[plaga][lote]) plagasLotes[plaga][lote] = { actual: [], anterior: [] };
-        
-        plagasLotes[plaga][lote].anterior.push(m.incidencia || 0);
+        if (!plagasLotes[plaga][lote]) plagasLotes[plaga][lote] = { actualAfectados: 0, actualMonitoreados: 0, anteriorAfectados: 0, anteriorMonitoreados: 0 };
+
+        plagasLotes[plaga][lote].anteriorAfectados += m.arboles_afectados || 0;
+        plagasLotes[plaga][lote].anteriorMonitoreados += m.arboles_monitoreados || 0;
       });
 
       // Filtrar plagas críticas (incidencia >30% en al menos un lote)
@@ -683,12 +699,12 @@ export function MonitoreoDashboardV2() {
         let tieneCritico = false;
 
         Object.entries(lotes).forEach(([lote, data]) => {
-          const incidenciaActual = data.actual.length > 0
-            ? data.actual.reduce((a, b) => a + b, 0) / data.actual.length
+          const incidenciaActual = data.actualMonitoreados > 0
+            ? (data.actualAfectados / data.actualMonitoreados) * 100
             : 0;
-          
-          const incidenciaAnterior = data.anterior.length > 0
-            ? data.anterior.reduce((a, b) => a + b, 0) / data.anterior.length
+
+          const incidenciaAnterior = data.anteriorMonitoreados > 0
+            ? (data.anteriorAfectados / data.anteriorMonitoreados) * 100
             : 0;
 
           if (incidenciaActual > 30) {

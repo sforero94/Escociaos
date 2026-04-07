@@ -427,10 +427,10 @@ export function DashboardMonitoreoV3() {
       }
       setTodasLasPlagas(Array.from(plagaSet).sort());
 
-      // Plagas trend: group by ronda+plaga, avg incidencia
+      // Plagas trend: group by ronda+plaga, compute incidencia from raw tree counts
       // Structure: [{ ronda: 'R1', nombre: '...', fechas: '...', Monalonion: 5.2, Ácaro: 3.1, ... }]
-      const plagasPorRondaPlaga = new Map<string, Map<string, { total: number; count: number }>>();
-      const plagasPorRondaLotePlaga = new Map<string, Map<string, { total: number; count: number }>>();
+      const plagasPorRondaPlaga = new Map<string, Map<string, { afectados: number; monitoreados: number }>>();
+      const plagasPorRondaLotePlaga = new Map<string, Map<string, { afectados: number; monitoreados: number }>>();
 
       for (const m of monData) {
         const plagaNombre = m.plagas_enfermedades_catalogo?.nombre;
@@ -439,18 +439,18 @@ export function DashboardMonitoreoV3() {
         // Global
         if (!plagasPorRondaPlaga.has(m.ronda_id)) plagasPorRondaPlaga.set(m.ronda_id, new Map());
         const rondaMap = plagasPorRondaPlaga.get(m.ronda_id)!;
-        const prev = rondaMap.get(plagaNombre) || { total: 0, count: 0 };
-        prev.total += m.incidencia || 0;
-        prev.count += 1;
+        const prev = rondaMap.get(plagaNombre) || { afectados: 0, monitoreados: 0 };
+        prev.afectados += m.arboles_afectados || 0;
+        prev.monitoreados += m.arboles_monitoreados || 0;
         rondaMap.set(plagaNombre, prev);
 
         // Per lote
         const loteKey = `${m.ronda_id}|${m.lote_id}`;
         if (!plagasPorRondaLotePlaga.has(loteKey)) plagasPorRondaLotePlaga.set(loteKey, new Map());
         const loteMap = plagasPorRondaLotePlaga.get(loteKey)!;
-        const lprev = loteMap.get(plagaNombre) || { total: 0, count: 0 };
-        lprev.total += m.incidencia || 0;
-        lprev.count += 1;
+        const lprev = loteMap.get(plagaNombre) || { afectados: 0, monitoreados: 0 };
+        lprev.afectados += m.arboles_afectados || 0;
+        lprev.monitoreados += m.arboles_monitoreados || 0;
         loteMap.set(plagaNombre, lprev);
       }
 
@@ -467,7 +467,7 @@ export function DashboardMonitoreoV3() {
         const rondaMap = plagasPorRondaPlaga.get(r.id);
         if (rondaMap) {
           for (const [plaga, stats] of rondaMap) {
-            row[plaga] = +(stats.total / stats.count).toFixed(1);
+            row[plaga] = stats.monitoreados > 0 ? +((stats.afectados / stats.monitoreados) * 100).toFixed(1) : 0;
           }
         }
         // Per-lote data stored separately
@@ -477,7 +477,7 @@ export function DashboardMonitoreoV3() {
             const loteId = key.split('|')[1];
             const loteData: Record<string, number> = {};
             for (const [plaga, stats] of loteMap) {
-              loteData[plaga] = +(stats.total / stats.count).toFixed(1);
+              loteData[plaga] = stats.monitoreados > 0 ? +((stats.afectados / stats.monitoreados) * 100).toFixed(1) : 0;
             }
             row._porLote.set(loteId, loteData);
           }

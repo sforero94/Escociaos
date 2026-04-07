@@ -58,6 +58,8 @@ function MonitoreoCard({ onClick }: { onClick: () => void }) {
         .select(`
           fecha_monitoreo,
           incidencia,
+          arboles_monitoreados,
+          arboles_afectados,
           plaga_enfermedad_id,
           plagas_enfermedades_catalogo!inner(nombre)
         `)
@@ -78,7 +80,7 @@ function MonitoreoCard({ onClick }: { onClick: () => void }) {
         [semanaKey: string]: { 
           semana: number; 
           año: number; 
-          plagas: { [plaga: string]: number[] } 
+          plagas: { [plaga: string]: any[] }
         } 
       } = {};
       
@@ -90,7 +92,6 @@ function MonitoreoCard({ onClick }: { onClick: () => void }) {
         const año = fecha.getFullYear();
         const semanaKey = `${año}-S${semana}`;
         const plagaNombre = (m.plagas_enfermedades_catalogo as any).nombre;
-        const incidencia = parseFloat(m.incidencia as any) || 0;
 
         plagasUnicas.add(plagaNombre);
 
@@ -104,7 +105,7 @@ function MonitoreoCard({ onClick }: { onClick: () => void }) {
         if (!datosPorSemana[semanaKey].plagas[plagaNombre]) {
           datosPorSemana[semanaKey].plagas[plagaNombre] = [];
         }
-        datosPorSemana[semanaKey].plagas[plagaNombre].push(incidencia);
+        datosPorSemana[semanaKey].plagas[plagaNombre].push(m);
       });
 
       // ✅ Ordenar por año y semana, tomar últimas 4
@@ -112,7 +113,7 @@ function MonitoreoCard({ onClick }: { onClick: () => void }) {
         .sort((a, b) => {
           const [_keyA, dataA] = a;
           const [_keyB, dataB] = b;
-          
+
           if (dataA.año !== dataB.año) {
             return dataA.año - dataB.año;
           }
@@ -120,14 +121,15 @@ function MonitoreoCard({ onClick }: { onClick: () => void }) {
         })
         .slice(-4); // Últimas 4 semanas
 
-      // ✅ Formatear para Recharts - calcular promedio por semana
-      const datosFormateados: TendenciaData[] = semanasOrdenadas.map(([key, data]) => {
+      // ✅ Formatear para Recharts - calcular incidencia from tree counts
+      const datosFormateados: TendenciaData[] = semanasOrdenadas.map(([_key, data]) => {
         const punto: TendenciaData = { semana: `S${data.semana}` };
 
-        // Calcular promedio de cada plaga en esa semana
-        Object.entries(data.plagas).forEach(([plaga, incidencias]) => {
-          const promedio = incidencias.reduce((a, b) => a + b, 0) / incidencias.length;
-          punto[plaga] = Math.round(promedio * 10) / 10;
+        Object.entries(data.plagas).forEach(([plaga, registros]) => {
+          const totalAfectados = registros.reduce((s: number, m: any) => s + (m.arboles_afectados || 0), 0);
+          const totalMonitoreados = registros.reduce((s: number, m: any) => s + (m.arboles_monitoreados || 0), 0);
+          const incidencia = totalMonitoreados > 0 ? (totalAfectados / totalMonitoreados) * 100 : 0;
+          punto[plaga] = Math.round(incidencia * 10) / 10;
         });
 
         return punto;
@@ -1015,24 +1017,24 @@ export function Dashboard({ onNavigate }: DashboardProps) {
 
         const { data, error } = await supabase
           .from('monitoreos')
-          .select('incidencia, plagas_enfermedades_catalogo(nombre)')
+          .select('incidencia, arboles_monitoreados, arboles_afectados, plagas_enfermedades_catalogo(nombre)')
           .gte('fecha_monitoreo', hace14Dias.toISOString());
 
         if (error || !data) return [];
 
-        // Group by pest, calculate avg incidencia
-        const porPlaga: Record<string, { total: number; count: number }> = {};
+        // Group by pest, calculate incidencia from raw tree counts
+        const porPlaga: Record<string, { afectados: number; monitoreados: number }> = {};
         for (const m of data) {
           const nombre = m.plagas_enfermedades_catalogo?.nombre;
-          if (!nombre || m.incidencia == null) continue;
-          if (!porPlaga[nombre]) porPlaga[nombre] = { total: 0, count: 0 };
-          porPlaga[nombre].total += m.incidencia;
-          porPlaga[nombre].count += 1;
+          if (!nombre) continue;
+          if (!porPlaga[nombre]) porPlaga[nombre] = { afectados: 0, monitoreados: 0 };
+          porPlaga[nombre].afectados += (m as any).arboles_afectados || 0;
+          porPlaga[nombre].monitoreados += (m as any).arboles_monitoreados || 0;
         }
 
         const alertas: Alerta[] = [];
-        for (const [nombre, { total, count }] of Object.entries(porPlaga)) {
-          const avg = total / count;
+        for (const [nombre, { afectados, monitoreados }] of Object.entries(porPlaga)) {
+          const avg = monitoreados > 0 ? (afectados / monitoreados) * 100 : 0;
           if (avg > 10) {
             alertas.push({
               id: `monitoreo-${nombre}`,
