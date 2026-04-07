@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Thermometer, CloudRain, Wind, Droplets, Sun, Zap } from 'lucide-react';
 import { LecturaClima } from '@/types/clima';
-import { calcularResumenPeriodo } from '@/utils/calculosClima';
+import { calcularResumen24h } from '@/utils/calculosClima';
 import { WindDirectionArrow } from './WindDirectionArrow';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -12,7 +12,7 @@ interface ClimaKPICardsProps {
 }
 
 export function ClimaKPICards({ lecturaActual, todasLecturas, loading }: ClimaKPICardsProps) {
-  const resumen24h = useMemo(() => calcularResumenPeriodo(todasLecturas, 1), [todasLecturas]);
+  const resumen24h = useMemo(() => calcularResumen24h(todasLecturas), [todasLecturas]);
 
   const getUVDescriptor = (uv: number | null) => {
     if (uv === null) return '--';

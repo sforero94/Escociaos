@@ -15,6 +15,25 @@ export interface LecturaClima {
   created_at: string;
 }
 
+export interface ResumenDiario {
+  fecha: string;
+  station_id: string;
+  temp_c_min: number | null;
+  temp_c_max: number | null;
+  temp_c_avg: number | null;
+  humedad_pct_min: number | null;
+  humedad_pct_max: number | null;
+  humedad_pct_avg: number | null;
+  lluvia_total_mm: number | null;
+  viento_kmh_avg: number | null;
+  rafaga_kmh_max: number | null;
+  viento_dir_predominante: number | null;
+  radiacion_wm2_avg: number | null;
+  radiacion_wm2_max: number | null;
+  uv_index_max: number | null;
+  lecturas_count: number;
+}
+
 export interface ResumenClima {
   lluvia_total_mm: number | null;
   temp_promedio_c: number | null;

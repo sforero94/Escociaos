@@ -1,12 +1,15 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
-import type { LecturaClima, PeriodoResumen, LecturaClimaAgregada, SerieAnual } from '@/types/clima';
+import type { LecturaClima, ResumenDiario, PeriodoResumen, LecturaClimaAgregada, SerieAnual } from '@/types/clima';
 import {
   lecturaActual as getLecturaActual,
-  calcularResumenPeriodo,
-  calcularResumenAnioALaFecha,
-  agregarParaGrafico,
-  agregarParaGraficoAnual,
+  calcularResumen24h,
+  calcularResumenPeriodoDiario,
+  calcularResumenAnioALaFechaDiario,
+  resumenDiarioToAgregada,
+  resumenDiarioToMensual,
+  lecturas24hToHorario,
+  resumenDiarioToAnual,
 } from '@/utils/calculosClima';
 
 // Exported for testing
@@ -18,6 +21,8 @@ export const PERIODOS = [
   { label: 'Año a la fecha', dias: 0, type: 'ytd' as const },
   { label: 'Último año', dias: 365, type: 'trailing' as const },
 ] as const;
+
+type RangoPreset = '24h' | '7d' | '30d' | '90d' | '365d' | '3y';
 
 interface UseClimaDataReturn {
   lecturaActual: LecturaClima | null;
@@ -33,8 +38,16 @@ interface UseClimaDataReturn {
   ultimaActualizacion: Date | null;
 }
 
+function toDateStr(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
 export function useClimaData(): UseClimaDataReturn {
-  const [rawLecturas, setRawLecturas] = useState<LecturaClima[]>([]);
+  // Live 5-min readings (rolling 24h window — small, ~288 rows)
+  const [liveLecturas, setLiveLecturas] = useState<LecturaClima[]>([]);
+  // Pre-aggregated daily summaries (one row/day — small even for years)
+  const [resumenesDiarios, setResumenesDiarios] = useState<ResumenDiario[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [ultimaActualizacion, setUltimaActualizacion] = useState<Date | null>(null);
@@ -49,17 +62,32 @@ export function useClimaData(): UseClimaDataReturn {
       setError(null);
 
       const supabase = getSupabase();
-      const { data, error: supabaseError } = await (supabase
-        .from('clima_lecturas' as any)
-        .select('*')
-        .order('timestamp', { ascending: true }) as any);
 
-      if (supabaseError) {
-        setError(supabaseError.message);
+      // Fetch both tables in parallel
+      const [liveRes, dailyRes] = await Promise.all([
+        // Live readings: all rows in clima_lecturas (rolling 24h window after migration)
+        (supabase
+          .from('clima_lecturas' as any)
+          .select('*')
+          .order('timestamp', { ascending: true }) as any),
+        // Daily summaries: all rows (one per day, stays small forever)
+        (supabase
+          .from('clima_resumen_diario' as any)
+          .select('*')
+          .order('fecha', { ascending: true }) as any),
+      ]);
+
+      if (liveRes.error) {
+        setError(liveRes.error.message);
+        return;
+      }
+      if (dailyRes.error) {
+        setError(dailyRes.error.message);
         return;
       }
 
-      setRawLecturas((data as LecturaClima[]) ?? []);
+      setLiveLecturas((liveRes.data as LecturaClima[]) ?? []);
+      setResumenesDiarios((dailyRes.data as ResumenDiario[]) ?? []);
       setUltimaActualizacion(new Date());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
@@ -74,29 +102,48 @@ export function useClimaData(): UseClimaDataReturn {
     return () => clearInterval(interval);
   }, [fetchData]);
 
-  const actual = useMemo(() => getLecturaActual(rawLecturas), [rawLecturas]);
+  // Live current reading
+  const actual = useMemo(() => getLecturaActual(liveLecturas), [liveLecturas]);
 
+  // Period summaries: "Día" uses live 5-min readings, rest use daily summaries
   const resumenPeriodos = useMemo((): PeriodoResumen[] => {
     return PERIODOS.map(p => ({
       label: p.label,
       dias: p.type === 'ytd' ? 0 : p.dias,
-      resumen: p.type === 'ytd'
-        ? calcularResumenAnioALaFecha(rawLecturas)
-        : calcularResumenPeriodo(rawLecturas, p.dias),
+      resumen: p.dias === 1
+        ? calcularResumen24h(liveLecturas)
+        : p.type === 'ytd'
+          ? calcularResumenAnioALaFechaDiario(resumenesDiarios)
+          : calcularResumenPeriodoDiario(resumenesDiarios, p.dias),
     }));
-  }, [rawLecturas]);
+  }, [liveLecturas, resumenesDiarios]);
 
-  const serieHistorica = useMemo(
-    () => agregarParaGrafico(rawLecturas, rangoHistorico.desde, rangoHistorico.hasta),
-    [rawLecturas, rangoHistorico]
-  );
+  // Historical chart series
+  const serieHistorica = useMemo((): LecturaClimaAgregada[] => {
+    const desdeStr = toDateStr(rangoHistorico.desde);
+    const hastaStr = toDateStr(rangoHistorico.hasta);
+    const rangoMs = rangoHistorico.hasta.getTime() - rangoHistorico.desde.getTime();
+    const rangoDias = rangoMs / (24 * 60 * 60 * 1000);
 
+    if (rangoDias <= 1) {
+      // 24h view: hourly granularity from live 5-min readings
+      return lecturas24hToHorario(liveLecturas);
+    } else if (rangoDias < 365) {
+      // 7d–365d: daily granularity from daily summaries
+      return resumenDiarioToAgregada(resumenesDiarios, desdeStr, hastaStr);
+    } else {
+      // >365d: monthly granularity from daily summaries
+      return resumenDiarioToMensual(resumenesDiarios, desdeStr, hastaStr);
+    }
+  }, [liveLecturas, resumenesDiarios, rangoHistorico]);
+
+  // Year-overlay series (only for ranges > 365d)
   const serieAnual = useMemo((): SerieAnual | null => {
     const rangoMs = rangoHistorico.hasta.getTime() - rangoHistorico.desde.getTime();
     const rangoDias = rangoMs / (24 * 60 * 60 * 1000);
     if (rangoDias <= 365) return null;
-    return agregarParaGraficoAnual(rawLecturas, rangoHistorico.desde, rangoHistorico.hasta);
-  }, [rawLecturas, rangoHistorico]);
+    return resumenDiarioToAnual(resumenesDiarios, toDateStr(rangoHistorico.desde), toDateStr(rangoHistorico.hasta));
+  }, [resumenesDiarios, rangoHistorico]);
 
   const setRangoHistorico = useCallback((desde: Date, hasta: Date) => {
     setRangoHistoricoState({ desde, hasta });
@@ -107,8 +154,8 @@ export function useClimaData(): UseClimaDataReturn {
     resumenPeriodos,
     serieHistorica,
     serieAnual,
-    rawLecturas,
-    estacionConfigurada: rawLecturas.length > 0,
+    rawLecturas: liveLecturas,
+    estacionConfigurada: liveLecturas.length > 0 || resumenesDiarios.length > 0,
     loading,
     error,
     refetch: fetchData,
