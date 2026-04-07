@@ -19,6 +19,7 @@ export function PresupuestoView() {
   const [anio, setAnio] = useState(currentYear);
   const [quarters, setQuarters] = useState<number[]>([getCurrentQuarter()]);
   const [showPct, setShowPct] = useState(false);
+  const [modoPresupuesto, setModoPresupuesto] = useState(false);
   const [negocioId, setNegocioId] = useState<string | null>(null);
   const [data, setData] = useState<PresupuestoData | null>(null);
 
@@ -46,10 +47,10 @@ export function PresupuestoView() {
   // Fetch data when params change
   const loadData = useCallback(async () => {
     if (!negocioId || quarters.length === 0) return;
-    const result = await fetchPresupuesto(anio, quarters, negocioId);
+    const result = await fetchPresupuesto(anio, quarters, negocioId, modoPresupuesto);
     setData(result);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [anio, quartersKey, negocioId, fetchPresupuesto]);
+  }, [anio, quartersKey, negocioId, modoPresupuesto, fetchPresupuesto]);
 
   useEffect(() => {
     loadData();
@@ -125,6 +126,8 @@ export function PresupuestoView() {
           onToggleQuarter={handleToggleQuarter}
           showPct={showPct}
           onTogglePct={() => setShowPct((v) => !v)}
+          modoPresupuesto={modoPresupuesto}
+          onToggleModo={() => setModoPresupuesto((v) => !v)}
         />
 
         {/* Table */}
@@ -139,6 +142,7 @@ export function PresupuestoView() {
             showPct={showPct}
             anio={anio}
             quarters={quarters}
+            modoPresupuesto={modoPresupuesto}
             onBudgetChange={handleBudgetChange}
           />
         ) : (
@@ -154,10 +158,12 @@ export function PresupuestoView() {
             <div className="flex items-center gap-1.5"><StatusDot ejecucion={90} /> <span>80-100%</span></div>
             <div className="flex items-center gap-1.5"><StatusDot ejecucion={120} /> <span>&gt;100%</span></div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="inline-block w-3 h-3 rounded-sm bg-green-50 border border-primary/20" />
-            <span>Celda editable</span>
-          </div>
+          {modoPresupuesto && (
+            <div className="flex items-center gap-1.5">
+              <span className="inline-block w-3 h-3 rounded-sm bg-green-50 border border-primary/20" />
+              <span>Celda editable</span>
+            </div>
+          )}
         </div>
       </div>
     </RoleGuard>

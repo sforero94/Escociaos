@@ -27,7 +27,7 @@ export function PresupuestoCategoriaRow({ categoria, expanded, onToggle, showPct
 
   return (
     <tr
-      className={cn('border-b border-gray-200 cursor-pointer text-xs font-semibold', bgColor)}
+      className={cn('border-b border-gray-200 cursor-pointer text-xs font-semibold', bgColor, 'hover:!bg-green-100')}
       onClick={onToggle}
     >
       {/* Status dot */}
@@ -36,27 +36,27 @@ export function PresupuestoCategoriaRow({ categoria, expanded, onToggle, showPct
       </td>
 
       {/* Categoria name */}
-      <td className="pl-2 pr-3 py-2.5">
+      <td className="pl-2 pr-3 py-2.5 truncate">
         <div className="flex items-center gap-1.5">
           <Chevron className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
-          <span>{categoria.categoria_nombre}</span>
+          <span className="truncate">{categoria.categoria_nombre}</span>
         </div>
       </td>
 
       {/* Actual Q */}
-      <td className="px-3 py-2.5 text-right tabular-nums">{fmt(categoria.actual_q)}</td>
+      <td className="px-3 py-2.5 text-center tabular-nums">{fmt(categoria.actual_q)}</td>
 
       {/* Act % */}
-      {showPct && <td className="px-2 py-2.5 text-right text-gray-500 tabular-nums">{categoria.pct_actual > 0 ? Math.round(categoria.pct_actual) + '%' : ''}</td>}
+      {showPct && <td className="px-2 py-2.5 text-center text-gray-500 tabular-nums">{categoria.pct_actual > 0 ? Math.round(categoria.pct_actual) + '%' : ''}</td>}
 
       {/* Ppto Q */}
-      <td className="px-3 py-2.5 text-right border-l border-gray-200/60 tabular-nums">{fmt(categoria.monto_trimestral)}</td>
+      <td className="px-3 py-2.5 text-center border-l border-gray-200/60 tabular-nums">{fmt(categoria.monto_trimestral)}</td>
 
       {/* Ppto Año */}
-      <td className="px-3 py-2.5 text-right tabular-nums">{fmt(categoria.monto_anual)}</td>
+      <td className="px-3 py-2.5 text-center tabular-nums">{fmt(categoria.monto_anual)}</td>
 
       {/* Ppto % */}
-      {showPct && <td className="px-2 py-2.5 text-right text-gray-500 tabular-nums">{categoria.pct_presupuesto > 0 ? Math.round(categoria.pct_presupuesto) + '%' : ''}</td>}
+      {showPct && <td className="px-2 py-2.5 text-center text-gray-500 tabular-nums">{categoria.pct_presupuesto > 0 ? Math.round(categoria.pct_presupuesto) + '%' : ''}</td>}
 
       {/* Ejecución vs Q */}
       <td className="px-3 py-2.5 text-center">
@@ -67,7 +67,7 @@ export function PresupuestoCategoriaRow({ categoria, expanded, onToggle, showPct
       {showPct && <td className="px-3 py-2.5 text-center"><EjecucionBadge value={categoria.ejecucion_vs_anio} /></td>}
 
       {/* Q Anterior */}
-      <td className="px-3 py-2.5 text-right border-l border-gray-200/60 tabular-nums">{fmt(categoria.actual_q_anterior)}</td>
+      <td className="px-3 py-2.5 text-center border-l border-gray-200/60 tabular-nums">{fmt(categoria.actual_q_anterior)}</td>
 
       {/* Var YoY */}
       <td className="px-2 py-2.5 text-center">
@@ -75,7 +75,7 @@ export function PresupuestoCategoriaRow({ categoria, expanded, onToggle, showPct
       </td>
 
       {/* Total Anterior */}
-      <td className="px-3 py-2.5 text-right tabular-nums">{fmt(categoria.actual_anio_anterior)}</td>
+      <td className="px-3 py-2.5 text-center tabular-nums">{fmt(categoria.actual_anio_anterior)}</td>
     </tr>
   );
 }

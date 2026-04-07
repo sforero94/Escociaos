@@ -62,6 +62,7 @@ export function buildPresupuestoData(
   actualsAnioAnterior: ActualAggregate[],
   conceptoCatalog: ConceptoCatalogEntry[],
   quarterCount: number = 1,
+  includeAllConceptos: boolean = false,
 ): PresupuestoData {
   // Build maps for fast lookup
   const actualQMap = new Map(actualsQ.map((a) => [a.concepto_id, a.total]));
@@ -142,18 +143,42 @@ export function buildPresupuestoData(
     });
   }
 
-  // 3. Compute grand totals
+  // 3. Include all remaining catalog conceptos (modo presupuesto)
+  if (includeAllConceptos) {
+    for (const entry of conceptoCatalog) {
+      if (rowMap.has(entry.id)) continue;
+      rowMap.set(entry.id, {
+        categoria_id: entry.categoria_id,
+        categoria_nombre: entry.fin_categorias_gastos.nombre,
+        concepto_id: entry.id,
+        concepto_nombre: entry.nombre,
+        is_principal: false,
+        monto_anual: 0,
+        monto_trimestral: 0,
+        pct_presupuesto: 0,
+        actual_q: 0,
+        pct_actual: 0,
+        ejecucion_vs_q: null,
+        ejecucion_vs_anio: null,
+        actual_q_anterior: 0,
+        variacion_yoy: null,
+        actual_anio_anterior: 0,
+      });
+    }
+  }
+
+  // 4. Compute grand totals
   const allRows = Array.from(rowMap.values());
   const totalBudget = allRows.reduce((s, r) => s + r.monto_anual, 0);
   const totalActual = allRows.reduce((s, r) => s + r.actual_q, 0);
 
-  // 4. Compute percentages
+  // 5. Compute percentages
   for (const r of allRows) {
     r.pct_presupuesto = totalBudget > 0 ? (r.monto_anual / totalBudget) * 100 : 0;
     r.pct_actual = totalActual > 0 ? (r.actual_q / totalActual) * 100 : 0;
   }
 
-  // 5. Group by categoria
+  // 6. Group by categoria
   const catMap = new Map<string, PresupuestoRow[]>();
   for (const r of allRows) {
     const key = r.categoria_id;
@@ -274,6 +299,7 @@ export function usePresupuestoData() {
     anio: number,
     quarters: number[],
     negocioId: string,
+    includeAllConceptos: boolean = false,
   ): Promise<PresupuestoData> => {
     setLoading(true);
     try {
@@ -316,7 +342,7 @@ export function usePresupuestoData() {
       const budgets = (budgetsRes.data ?? []) as unknown as RawBudget[];
       const conceptoCatalog = (conceptosRes.data ?? []) as unknown as ConceptoCatalogEntry[];
 
-      return buildPresupuestoData(budgets, actualsQ, actualsQAnt, actualsAnioAnt, conceptoCatalog, quarters.length);
+      return buildPresupuestoData(budgets, actualsQ, actualsQAnt, actualsAnioAnt, conceptoCatalog, quarters.length, includeAllConceptos);
     } finally {
       setLoading(false);
     }

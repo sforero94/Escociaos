@@ -16,10 +16,11 @@ interface PresupuestoTableProps {
   showPct: boolean;
   anio: number;
   quarters: number[];
+  modoPresupuesto: boolean;
   onBudgetChange: (conceptoId: string, categoriaId: string, newAmount: number) => void;
 }
 
-export function PresupuestoTable({ data, showPct, anio, quarters, onBudgetChange }: PresupuestoTableProps) {
+export function PresupuestoTable({ data, showPct, anio, quarters, modoPresupuesto, onBudgetChange }: PresupuestoTableProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const toggleCategory = (catId: string) => {
@@ -39,7 +40,23 @@ export function PresupuestoTable({ data, showPct, anio, quarters, onBudgetChange
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
-      <table className="w-full text-left">
+      <table className="w-full table-fixed text-left">
+        {/* Column widths: concepto gets remaining space, numerics are fixed */}
+        <colgroup>
+          <col className="w-7" />
+          <col />
+          <col className="w-[108px]" />
+          {showPct && <col className="w-[56px]" />}
+          <col className="w-[108px]" />
+          <col className="w-[100px]" />
+          {showPct && <col className="w-[56px]" />}
+          <col className="w-[76px]" />
+          {showPct && <col className="w-[76px]" />}
+          <col className="w-[108px]" />
+          <col className="w-[72px]" />
+          <col className="w-[112px]" />
+        </colgroup>
+
         {/* Column group headers */}
         <thead>
           <tr className="bg-gray-50/80 text-[10px] font-semibold tracking-wider uppercase">
@@ -56,18 +73,18 @@ export function PresupuestoTable({ data, showPct, anio, quarters, onBudgetChange
 
           {/* Column headers */}
           <tr className="bg-gray-50 text-[11px] font-semibold text-gray-500 border-b border-gray-200">
-            <th className="w-8 px-2 py-2"></th>
+            <th className="px-2 py-2"></th>
             <th className="px-3 py-2">Concepto</th>
-            <th className="px-3 py-2 text-right">Ejecución {formatQuarterLabel(quarters)}</th>
-            {showPct && <th className="px-2 py-2 text-right">Ejec %</th>}
-            <th className="px-3 py-2 text-right border-l border-gray-100">Ppto {formatQuarterLabel(quarters)}</th>
-            <th className="px-3 py-2 text-right">Ppto Año</th>
-            {showPct && <th className="px-2 py-2 text-right">Ppto %</th>}
+            <th className="px-3 py-2 text-center">Ejecución {formatQuarterLabel(quarters)}</th>
+            {showPct && <th className="px-2 py-2 text-center">Ejec %</th>}
+            <th className="px-3 py-2 text-center border-l border-gray-100">Ppto {formatQuarterLabel(quarters)}</th>
+            <th className="px-3 py-2 text-center">Ppto Año</th>
+            {showPct && <th className="px-2 py-2 text-center">Ppto %</th>}
             <th className="px-3 py-2 text-center">Ejecución</th>
             {showPct && <th className="px-3 py-2 text-center">Ejec Año</th>}
-            <th className="px-3 py-2 text-right border-l border-gray-100">{formatQuarterLabel(quarters)} {anio - 1}</th>
+            <th className="px-3 py-2 text-center border-l border-gray-100">{formatQuarterLabel(quarters)} {anio - 1}</th>
             <th className="px-2 py-2 text-center">Var YoY</th>
-            <th className="px-3 py-2 text-right">Total {anio - 1}</th>
+            <th className="px-3 py-2 text-center">Total {anio - 1}</th>
           </tr>
         </thead>
 
@@ -76,16 +93,16 @@ export function PresupuestoTable({ data, showPct, anio, quarters, onBudgetChange
           <tr className="bg-primary text-white text-xs font-semibold">
             <td className="px-2 py-2.5"></td>
             <td className="px-3 py-2.5">Suma Total</td>
-            <td className="px-3 py-2.5 text-right tabular-nums">{fmt(t.actual_q)}</td>
-            {showPct && <td className="px-2 py-2.5 text-right">100%</td>}
-            <td className="px-3 py-2.5 text-right tabular-nums">{fmt(t.monto_trimestral)}</td>
-            <td className="px-3 py-2.5 text-right tabular-nums">{fmt(t.monto_anual)}</td>
-            {showPct && <td className="px-2 py-2.5 text-right">100%</td>}
+            <td className="px-3 py-2.5 text-center tabular-nums">{fmt(t.actual_q)}</td>
+            {showPct && <td className="px-2 py-2.5 text-center">100%</td>}
+            <td className="px-3 py-2.5 text-center tabular-nums">{fmt(t.monto_trimestral)}</td>
+            <td className="px-3 py-2.5 text-center tabular-nums">{fmt(t.monto_anual)}</td>
+            {showPct && <td className="px-2 py-2.5 text-center">100%</td>}
             <td className="px-3 py-2.5 text-center">{t.ejecucion_vs_q !== null ? t.ejecucion_vs_q + '%' : ''}</td>
             {showPct && <td className="px-3 py-2.5 text-center">{t.ejecucion_vs_anio !== null ? t.ejecucion_vs_anio + '%' : ''}</td>}
-            <td className="px-3 py-2.5 text-right tabular-nums">{fmt(t.actual_q_anterior)}</td>
+            <td className="px-3 py-2.5 text-center tabular-nums">{fmt(t.actual_q_anterior)}</td>
             <td className="px-2 py-2.5 text-center">{t.variacion_yoy !== null ? (t.variacion_yoy > 0 ? '+' : '') + t.variacion_yoy + '%' : ''}</td>
-            <td className="px-3 py-2.5 text-right tabular-nums">{fmt(t.actual_anio_anterior)}</td>
+            <td className="px-3 py-2.5 text-center tabular-nums">{fmt(t.actual_anio_anterior)}</td>
           </tr>
 
           {/* Categories + conceptos */}
@@ -98,6 +115,7 @@ export function PresupuestoTable({ data, showPct, anio, quarters, onBudgetChange
                 expanded={isExpanded}
                 onToggle={() => toggleCategory(cat.categoria_id)}
                 showPct={showPct}
+                modoPresupuesto={modoPresupuesto}
                 onBudgetChange={onBudgetChange}
               />
             );
@@ -113,14 +131,20 @@ function PresupuestoCategoryGroup({
   expanded,
   onToggle,
   showPct,
+  modoPresupuesto,
   onBudgetChange,
 }: {
   categoria: PresupuestoData['categorias'][0];
   expanded: boolean;
   onToggle: () => void;
   showPct: boolean;
+  modoPresupuesto: boolean;
   onBudgetChange: (conceptoId: string, categoriaId: string, newAmount: number) => void;
 }) {
+  const visibleConceptos = modoPresupuesto
+    ? categoria.conceptos
+    : categoria.conceptos.filter((r) => r.monto_anual > 0 || r.actual_q > 0 || r.actual_q_anterior > 0 || r.actual_anio_anterior > 0);
+
   return (
     <>
       <PresupuestoCategoriaRow
@@ -130,11 +154,12 @@ function PresupuestoCategoryGroup({
         showPct={showPct}
       />
       {expanded &&
-        categoria.conceptos.map((row) => (
+        visibleConceptos.map((row) => (
           <PresupuestoConceptoRow
             key={row.concepto_id}
             row={row}
             showPct={showPct}
+            editable={modoPresupuesto}
             onBudgetChange={onBudgetChange}
           />
         ))}

@@ -7,6 +7,8 @@ interface PresupuestoControlsProps {
   onToggleQuarter: (q: number) => void;
   showPct: boolean;
   onTogglePct: () => void;
+  modoPresupuesto: boolean;
+  onToggleModo: () => void;
 }
 
 export function PresupuestoControls({
@@ -16,6 +18,8 @@ export function PresupuestoControls({
   onToggleQuarter,
   showPct,
   onTogglePct,
+  modoPresupuesto,
+  onToggleModo,
 }: PresupuestoControlsProps) {
   const currentYear = new Date().getFullYear();
   const years = [currentYear - 1, currentYear, currentYear + 1];
@@ -59,6 +63,17 @@ export function PresupuestoControls({
 
       {/* Spacer */}
       <div className="flex-1" />
+
+      {/* Modo presupuesto toggle */}
+      <button
+        onClick={onToggleModo}
+        className={cn(
+          'text-xs font-medium px-3 py-1.5 rounded-md transition-colors',
+          modoPresupuesto ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200',
+        )}
+      >
+        Modo presupuesto
+      </button>
 
       {/* Toggle % columns */}
       <button
