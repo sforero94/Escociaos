@@ -320,6 +320,57 @@ function parseEcowittHistory(histData: EcowittHistoryData, stationId: string) {
   return readings;
 }
 
+// Aggregate an array of parsed 5-min readings into a single daily summary row
+// for clima_resumen_diario. Readings must already be unit-converted (°C, km/h, mm).
+function aggregateReadingsToDaily(
+  readings: ReturnType<typeof parseEcowittHistory>,
+  fecha: string,
+  stationId: string
+) {
+  const nonNull = (vals: (number | null)[]): number[] =>
+    vals.filter((v): v is number => v !== null);
+
+  const temps = nonNull(readings.map(r => r.temp_c));
+  const humidity = nonNull(readings.map(r => r.humedad_pct));
+  const wind = nonNull(readings.map(r => r.viento_kmh));
+  const gust = nonNull(readings.map(r => r.rafaga_kmh));
+  const windDir = nonNull(readings.map(r => r.viento_dir));
+  const rain = nonNull(readings.map(r => r.lluvia_diaria_mm));
+  const solar = nonNull(readings.map(r => r.radiacion_wm2));
+  const uv = nonNull(readings.map(r => r.uv_index));
+
+  const avg = (arr: number[]) => arr.length > 0 ? round2(arr.reduce((s, v) => s + v, 0) / arr.length) : null;
+  const min = (arr: number[]) => arr.length > 0 ? round2(Math.min(...arr)) : null;
+  const max = (arr: number[]) => arr.length > 0 ? round2(Math.max(...arr)) : null;
+
+  // Circular mean for wind direction
+  let windDirMean: number | null = null;
+  if (windDir.length > 0) {
+    const sinSum = windDir.reduce((s, d) => s + Math.sin(d * Math.PI / 180), 0);
+    const cosSum = windDir.reduce((s, d) => s + Math.cos(d * Math.PI / 180), 0);
+    windDirMean = round2(((Math.atan2(sinSum / windDir.length, cosSum / windDir.length) * 180 / Math.PI) % 360 + 360) % 360);
+  }
+
+  return {
+    fecha,
+    station_id: stationId,
+    temp_c_min: min(temps),
+    temp_c_max: max(temps),
+    temp_c_avg: avg(temps),
+    humedad_pct_min: min(humidity),
+    humedad_pct_max: max(humidity),
+    humedad_pct_avg: avg(humidity),
+    lluvia_total_mm: max(rain), // Ecowitt daily accumulator — max = day total
+    viento_kmh_avg: avg(wind),
+    rafaga_kmh_max: max(gust),
+    viento_dir_predominante: windDirMean,
+    radiacion_wm2_avg: avg(solar),
+    radiacion_wm2_max: max(solar),
+    uv_index_max: uv.length > 0 ? Math.max(...uv) : null,
+    lecturas_count: readings.length,
+  };
+}
+
 export async function handleClimaBackfill(c: Context): Promise<Response> {
   const log = '[clima-backfill]';
 
@@ -414,8 +465,10 @@ export async function handleClimaBackfill(c: Context): Promise<Response> {
           continue;
         }
 
-        // Batch upsert
-        const insertRes = await fetch(`${sb.supabaseUrl}/rest/v1/clima_lecturas?on_conflict=station_id,timestamp`, {
+        // Aggregate into daily summary and upsert into clima_resumen_diario
+        const dailySummary = aggregateReadingsToDaily(readings, ecowittDateStr, creds.mac);
+
+        const insertRes = await fetch(`${sb.supabaseUrl}/rest/v1/clima_resumen_diario?on_conflict=fecha,station_id`, {
           method: 'POST',
           headers: {
             apikey: sb.serviceKey,
@@ -423,7 +476,7 @@ export async function handleClimaBackfill(c: Context): Promise<Response> {
             'Content-Type': 'application/json',
             Prefer: 'return=minimal,resolution=merge-duplicates',
           },
-          body: JSON.stringify(readings),
+          body: JSON.stringify(dailySummary),
         });
 
         if (!insertRes.ok) {
@@ -431,8 +484,8 @@ export async function handleClimaBackfill(c: Context): Promise<Response> {
           errors.push(`${dateStr}: insert failed — ${errorText}`);
           console.error(`${log} ${dateStr}: insert failed — ${errorText}`);
         } else {
-          totalSynced += readings.length;
-          console.info(`${log} ${dateStr}: ${readings.length} readings inserted`);
+          totalSynced += 1;
+          console.info(`${log} ${dateStr}: daily summary inserted (${readings.length} readings aggregated)`);
         }
       } catch (err) {
         errors.push(`${dateStr}: ${String(err)}`);

@@ -297,7 +297,7 @@ PostgreSQL hosted on Supabase with 32+ tables, 7+ custom ENUM types, Row-Level S
 - **Labor**: `tareas`, `registros_trabajo`, `empleados_tareas`
 - **Finance**: `fin_gastos`, `fin_ingresos`, `fin_transacciones_ganado`, `fin_conceptos_gastos`, `fin_proveedores`, `fin_categorias_gastos`, `fin_categorias_ingresos`, `fin_medios_pago`, `fin_regiones`, `fin_negocios`, `fin_compradores`, `fin_presupuestos` (budget allocations by concepto, year, negocio)
 - **Production**: `produccion`, `reportes_semanales`
-- **Climate**: `clima_lecturas` (weather station readings: temp, humidity, wind, rain, radiation, UV — synced from Ecowitt every 5 min via pg_cron)
+- **Climate**: `clima_lecturas` (rolling 24h window of 5-min Ecowitt readings — pruned daily by cron), `clima_resumen_diario` (pre-aggregated daily summaries: min/max/avg temp, humidity, wind, rainfall, radiation, UV — one row per day, scales indefinitely)
 - **Audit**: `audit_log`
 
 ### Applications Data Architecture
@@ -315,13 +315,15 @@ The applications module has two distinct tracking layers — **do not confuse th
 
 ### Migrations
 
-Sequential SQL migrations live in `src/sql/migrations/` (001–031). See `src/sql/migrations/README_MIGRATION.md` for instructions on running them.
+Sequential SQL migrations live in `src/sql/migrations/` (001–036). See `src/sql/migrations/README_MIGRATION.md` for instructions on running them.
 
 - **023**: `create_fin_transacciones_ganado` — cattle buy/sell transactions table with RLS
 - **024**: `alter_fin_ingresos_add_columns` — adds `cantidad`, `precio_unitario`, `cosecha`, `alianza`, `cliente`, `finca` to `fin_ingresos`
 - **029**: `create_clima_lecturas` — weather station readings table with UNIQUE(station_id, timestamp), B-tree + BRIN indexes, RLS
 - **030**: `clima_cron_sync` — pg_cron + pg_net schedule to call `/clima/sync` every 5 minutes
 - **031**: `add_colmenas_con_reina` — adds `colmenas_con_reina integer NOT NULL DEFAULT 0` to `mon_colmenas`
+- **035**: `create_clima_resumen_diario` — daily aggregated weather table (PK: fecha + station_id), backfills from existing readings, prunes clima_lecturas to 24h
+- **036**: `clima_daily_rollup_cron` — pg_cron at 00:15 Bogotá: aggregates yesterday's readings into clima_resumen_diario, deletes clima_lecturas older than 24h
 
 ### Ganado ↔ Finance Integration
 
