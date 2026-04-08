@@ -73,6 +73,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showNewComprador, setShowNewComprador] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [newCompradorData, setNewCompradorData] = useState({
     nombre: '',
     telefono: '',
@@ -173,6 +174,9 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
 
   const handleInputChange = (field: keyof IngresoFormData, value: string | number) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    if (errors[field]) {
+      setErrors(prev => { const next = { ...prev }; delete next[field]; return next; });
+    }
 
     // Clear categoria when negocio changes
     if (field === 'negocio_id') {
@@ -217,29 +221,18 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validation
-    if (!formData.nombre.trim()) {
-      toast.error('El nombre del ingreso es obligatorio');
-      return;
-    }
-    if (!formData.negocio_id) {
-      toast.error('Debe seleccionar un negocio');
-      return;
-    }
-    if (!formData.region_id) {
-      toast.error('Debe seleccionar una región');
-      return;
-    }
-    if (!formData.categoria_id) {
-      toast.error('Debe seleccionar una categoría');
-      return;
-    }
-    if (formData.valor <= 0) {
-      toast.error('El valor debe ser mayor a cero');
-      return;
-    }
-    if (!formData.medio_pago_id) {
-      toast.error('Debe seleccionar un medio de pago');
+    // Validation — collect all errors at once
+    const newErrors: Record<string, string> = {};
+    if (!formData.nombre.trim()) newErrors.nombre = 'El nombre del ingreso es obligatorio';
+    if (!formData.negocio_id) newErrors.negocio_id = 'Debe seleccionar un negocio';
+    if (!formData.region_id) newErrors.region_id = 'Debe seleccionar una región';
+    if (!formData.categoria_id) newErrors.categoria_id = 'Debe seleccionar una categoría';
+    if (formData.valor <= 0) newErrors.valor = 'El valor debe ser mayor a cero';
+    if (!formData.medio_pago_id) newErrors.medio_pago_id = 'Debe seleccionar un medio de pago';
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      toast.error('Por favor completa los campos obligatorios');
       return;
     }
 
@@ -324,6 +317,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
                       onChange={(e) => handleInputChange('valor', parseFloat(e.target.value) || 0)}
                       placeholder="0.00"
                       required
+                      aria-invalid={!!errors.valor}
                     />
                   </div>
 
@@ -335,6 +329,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
                       onChange={(e) => handleInputChange('nombre', e.target.value)}
                       placeholder="Ej: Venta de palmito orgánico"
                       required
+                      aria-invalid={!!errors.nombre}
                     />
                   </div>
                 </div>
@@ -347,7 +342,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
                       value={formData.negocio_id}
                       onValueChange={(value) => handleInputChange('negocio_id', value)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger aria-invalid={!!errors.negocio_id}>
                         <SelectValue placeholder="Seleccionar negocio" />
                       </SelectTrigger>
                       <SelectContent>
@@ -366,7 +361,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
                       value={formData.region_id}
                       onValueChange={(value) => handleInputChange('region_id', value)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger aria-invalid={!!errors.region_id}>
                         <SelectValue placeholder="Seleccionar región" />
                       </SelectTrigger>
                       <SelectContent>
@@ -386,7 +381,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
                       onValueChange={(value) => handleInputChange('categoria_id', value)}
                       disabled={!formData.negocio_id}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger aria-invalid={!!errors.categoria_id}>
                         <SelectValue placeholder="Seleccionar categoría" />
                       </SelectTrigger>
                       <SelectContent>
@@ -437,7 +432,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
                       value={formData.medio_pago_id}
                       onValueChange={(value) => handleInputChange('medio_pago_id', value)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger aria-invalid={!!errors.medio_pago_id}>
                         <SelectValue placeholder="Seleccionar medio de pago" />
                       </SelectTrigger>
                       <SelectContent>

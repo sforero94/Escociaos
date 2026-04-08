@@ -151,11 +151,15 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
     setShowProveedorDialog(false);
   };
 
+  const isRowTouched = (row: BatchRowData) =>
+    row.nombre || row.valor || row.negocio_id || row.region_id || row.categoria_id || row.concepto_id || row.medio_pago_id || row.observaciones;
+
   const validate = (): boolean => {
     const newErrors: Record<number, Record<string, string>> = {};
     let valid = true;
 
     rows.forEach((row, i) => {
+      if (!isRowTouched(row)) return;
       const rowErrors: Record<string, string> = {};
       for (const field of REQUIRED_FIELDS) {
         if (field === 'valor') {
@@ -178,6 +182,11 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
   };
 
   const handleSave = async () => {
+    const touchedRows = rows.filter(isRowTouched);
+    if (touchedRows.length === 0) {
+      toast.error('No hay gastos para guardar');
+      return;
+    }
     if (!validate()) {
       toast.error('Corrige los campos marcados en rojo antes de guardar');
       return;
@@ -187,9 +196,11 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
       setSaving(true);
       const supabase = getSupabase();
 
+      const rowsToSave = rows.filter(isRowTouched);
+
       const facturaUrls: Record<number, string> = {};
-      for (let i = 0; i < rows.length; i++) {
-        const file = rows[i].factura_file;
+      for (let i = 0; i < rowsToSave.length; i++) {
+        const file = rowsToSave[i].factura_file;
         if (file) {
           const timestamp = Date.now();
           const ext = file.name.split('.').pop();
@@ -202,7 +213,7 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
         }
       }
 
-      const payload = rows.map((row, i) => ({
+      const payload = rowsToSave.map((row, i) => ({
         fecha: row.fecha,
         nombre: row.nombre.trim(),
         valor: Number(row.valor),
@@ -220,7 +231,7 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
       const { error } = await supabase.from('fin_gastos').insert(payload);
       if (error) throw error;
 
-      toast.success(`${rows.length} gasto${rows.length > 1 ? 's' : ''} guardado${rows.length > 1 ? 's' : ''} exitosamente`);
+      toast.success(`${rowsToSave.length} gasto${rowsToSave.length > 1 ? 's' : ''} guardado${rowsToSave.length > 1 ? 's' : ''} exitosamente`);
       localStorage.removeItem(DRAFT_KEY);
       setRows([createEmptyRow()]);
       setErrors({});
@@ -299,7 +310,7 @@ export function GastosBatchTable({ catalogs, onSaved }: GastosBatchTableProps) {
         <Button
           type="button"
           onClick={handleSave}
-          disabled={saving || catalogs.loading || filledCount === 0}
+          disabled={saving || catalogs.loading}
           className="bg-gradient-to-r from-primary to-secondary text-white hover:from-primary-dark hover:to-secondary-dark shadow-sm"
         >
           {saving ? (

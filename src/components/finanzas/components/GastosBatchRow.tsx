@@ -15,9 +15,14 @@ interface GastosBatchRowProps {
 
 const cellClass = 'px-3 py-2.5';
 const inputBase =
-  'w-full px-3 py-2 text-sm bg-white border rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
-const inputOk = `${inputBase} border-gray-200`;
-const inputErr = `${inputBase} border-red-400 bg-red-50 focus:ring-red-200 focus:border-red-500`;
+  'w-full px-3 py-2 text-sm border rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
+const inputOk = `${inputBase} bg-white border-gray-200`;
+
+const errorStyle: React.CSSProperties = {
+  borderColor: 'var(--destructive)',
+  backgroundColor: 'color-mix(in srgb, var(--destructive) 5%, white)',
+  boxShadow: '0 0 0 2px color-mix(in srgb, var(--destructive) 20%, transparent)',
+};
 
 export function GastosBatchRow({ row, index, catalogs, errors, onChange, onRemove, onCreateProveedor }: GastosBatchRowProps) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -25,7 +30,8 @@ export function GastosBatchRow({ row, index, catalogs, errors, onChange, onRemov
     ? catalogs.getConceptosPorCategoria(row.categoria_id)
     : [];
 
-  const cls = (field: string) => (errors[field] ? inputErr : inputOk);
+  const cls = (field: string) => (errors[field] ? `${inputBase} bg-white` : inputOk);
+  const errStyle = (field: string): React.CSSProperties | undefined => errors[field] ? errorStyle : undefined;
 
   return (
     <tr className="border-b border-primary/5 hover:bg-muted/30 transition-colors">
@@ -35,7 +41,7 @@ export function GastosBatchRow({ row, index, catalogs, errors, onChange, onRemov
           value={row.fecha}
           onChange={(e) => onChange(index, 'fecha', e.target.value)}
           className={cls('fecha')}
-          style={{ minWidth: 130 }}
+          style={{ minWidth: 130, ...errStyle('fecha') }}
         />
       </td>
       <td className={cellClass}>
@@ -45,7 +51,7 @@ export function GastosBatchRow({ row, index, catalogs, errors, onChange, onRemov
           onChange={(e) => onChange(index, 'nombre', e.target.value)}
           className={cls('nombre')}
           placeholder="Nombre del gasto"
-          style={{ minWidth: 160 }}
+          style={{ minWidth: 160, ...errStyle('nombre') }}
         />
       </td>
       <td className={cellClass}>
@@ -56,7 +62,7 @@ export function GastosBatchRow({ row, index, catalogs, errors, onChange, onRemov
           className={cls('valor')}
           placeholder="0"
           min="0"
-          style={{ minWidth: 110 }}
+          style={{ minWidth: 110, ...errStyle('valor') }}
         />
       </td>
       <td className={cellClass}>
@@ -64,7 +70,7 @@ export function GastosBatchRow({ row, index, catalogs, errors, onChange, onRemov
           value={row.negocio_id}
           onChange={(e) => onChange(index, 'negocio_id', e.target.value)}
           className={cls('negocio_id')}
-          style={{ minWidth: 130 }}
+          style={{ minWidth: 130, ...errStyle('negocio_id') }}
         >
           <option value="">Seleccionar</option>
           {catalogs.negocios.map((n) => (
@@ -77,7 +83,7 @@ export function GastosBatchRow({ row, index, catalogs, errors, onChange, onRemov
           value={row.region_id}
           onChange={(e) => onChange(index, 'region_id', e.target.value)}
           className={cls('region_id')}
-          style={{ minWidth: 120 }}
+          style={{ minWidth: 120, ...errStyle('region_id') }}
         >
           <option value="">Seleccionar</option>
           {catalogs.regiones.map((r) => (
@@ -93,7 +99,7 @@ export function GastosBatchRow({ row, index, catalogs, errors, onChange, onRemov
             onChange(index, 'concepto_id', '');
           }}
           className={cls('categoria_id')}
-          style={{ minWidth: 130 }}
+          style={{ minWidth: 130, ...errStyle('categoria_id') }}
         >
           <option value="">Seleccionar</option>
           {catalogs.categorias.map((c) => (
@@ -107,7 +113,7 @@ export function GastosBatchRow({ row, index, catalogs, errors, onChange, onRemov
           onChange={(e) => onChange(index, 'concepto_id', e.target.value)}
           className={cls('concepto_id')}
           disabled={!row.categoria_id}
-          style={{ minWidth: 130 }}
+          style={{ minWidth: 130, ...errStyle('concepto_id') }}
         >
           <option value="">{row.categoria_id ? 'Seleccionar' : 'Elija categoria'}</option>
           {conceptosFiltrados.map((c) => (
@@ -142,7 +148,7 @@ export function GastosBatchRow({ row, index, catalogs, errors, onChange, onRemov
           value={row.medio_pago_id}
           onChange={(e) => onChange(index, 'medio_pago_id', e.target.value)}
           className={cls('medio_pago_id')}
-          style={{ minWidth: 120 }}
+          style={{ minWidth: 120, ...errStyle('medio_pago_id') }}
         >
           <option value="">Seleccionar</option>
           {catalogs.mediosPago.map((m) => (
