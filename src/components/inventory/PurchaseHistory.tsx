@@ -349,13 +349,13 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
       if (inventoryError) throw new Error('Error al actualizar inventario: ' + inventoryError.message);
 
       // 2. Eliminar gasto pendiente asociado (si existe)
+      // Uses SECURITY DEFINER RPC to bypass fin_gastos RLS (Administrador can't delete directly)
       const { error: gastoError } = await supabase
-        .from('fin_gastos')
-        .delete()
-        .eq('compra_id', purchaseToDelete.id);
+        .rpc('fn_cleanup_compra_dependencies', { p_compra_id: purchaseToDelete.id });
 
       if (gastoError) {
-        // No lanzar error, puede que no exista
+        console.error('Failed to cleanup compra dependencies:', gastoError);
+        // Non-blocking: FK is ON DELETE SET NULL as safety net
       }
 
       // 3. Eliminar factura de Storage (si existe)

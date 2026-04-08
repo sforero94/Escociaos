@@ -315,7 +315,7 @@ The applications module has two distinct tracking layers — **do not confuse th
 
 ### Migrations
 
-Sequential SQL migrations live in `src/sql/migrations/` (001–036). See `src/sql/migrations/README_MIGRATION.md` for instructions on running them.
+Sequential SQL migrations live in `src/sql/migrations/` (001–039). See `src/sql/migrations/README_MIGRATION.md` for instructions on running them.
 
 - **023**: `create_fin_transacciones_ganado` — cattle buy/sell transactions table with RLS
 - **024**: `alter_fin_ingresos_add_columns` — adds `cantidad`, `precio_unitario`, `cosecha`, `alianza`, `cliente`, `finca` to `fin_ingresos`
@@ -324,6 +324,9 @@ Sequential SQL migrations live in `src/sql/migrations/` (001–036). See `src/sq
 - **031**: `add_colmenas_con_reina` — adds `colmenas_con_reina integer NOT NULL DEFAULT 0` to `mon_colmenas`
 - **035**: `create_clima_resumen_diario` — daily aggregated weather table (PK: fecha + station_id), backfills from existing readings, prunes clima_lecturas to 24h
 - **036**: `clima_daily_rollup_cron` — pg_cron at 00:15 Bogotá: aggregates yesterday's readings into clima_resumen_diario, deletes clima_lecturas older than 24h
+- **037**: `allow_admin_insert_proveedores` — Administrador SELECT + INSERT policies on `fin_proveedores`
+- **038**: `fix_trigger_compra_gasto_security_definer` — SECURITY DEFINER on `crear_gasto_pendiente_de_compra()` so the purchase-to-expense trigger bypasses RLS
+- **039**: `fix_admin_purchase_workflow` — SECURITY DEFINER RPC `fn_cleanup_compra_dependencies()`, FK ON DELETE SET NULL on `fin_gastos.compra_id`, Administrador storage policies on `facturas` bucket
 
 ### Ganado ↔ Finance Integration
 
@@ -474,6 +477,8 @@ npm run lint
 - Several triggers auto-sync data between tables (e.g., applications ↔ tasks, purchases ↔ expenses)
 - Modifying table schemas may break triggers — check `src/sql/migrations/` for trigger definitions
 - See `src/sql/migrations/README_APLICACIONES_LABORES_SYNC.md` for the sync architecture
+- The `crear_gasto_pendiente_de_compra()` trigger uses SECURITY DEFINER to bypass RLS (migration 038). Any new triggers that touch cross-role tables should also use SECURITY DEFINER.
+- The `fn_cleanup_compra_dependencies()` RPC function uses SECURITY DEFINER for the same reason (migration 039). Purchase deletion calls this via `.rpc()` instead of direct `fin_gastos.delete()`.
 
 ### Dialog Size System (`src/components/ui/dialog.tsx`)
 All dialogs use a fixed-size tier via the `size` prop on `DialogContent`: `sm` (448×384px), `md` (576×512px), `lg` (768×640px), `xl` (1024×704px). These are max dimensions in rem — they never fill the screen. The base `DialogContent` enforces `overflow-hidden`, so scrollable content MUST go inside `<DialogBody>`. Never put `overflow-y-auto` on `DialogContent` directly. `StandardDialog` was removed — use `Dialog` + `DialogContent` + `DialogHeader` + `DialogBody` + `DialogFooter` directly.
