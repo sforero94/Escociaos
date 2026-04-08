@@ -14,6 +14,12 @@ import { Input } from '../../ui/input';
 import { Badge } from '../../ui/badge';
 import { Switch } from '../../ui/switch';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../../ui/dropdown-menu';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -33,8 +39,6 @@ export function MediosPagoConfig() {
   const [showForm, setShowForm] = useState(false);
   const [editingMedioPago, setEditingMedioPago] = useState<MedioPago | null>(null);
   const [saving, setSaving] = useState(false);
-  const [menuAbiertoId, setMenuAbiertoId] = useState<string | null>(null);
-  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
@@ -296,60 +300,24 @@ export function MediosPagoConfig() {
                     </div>
 
                     {/* Menu */}
-                    <div className="relative">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          setMenuAbiertoId(
-                            menuAbiertoId === medioPago.id ? null : medioPago.id
-                          );
-                          setMenuPosition({
-                            top: rect.bottom + window.scrollY,
-                            left: rect.left + window.scrollX - 192 + rect.width,
-                          });
-                        }}
-                      >
+                    <DropdownMenu>
+                      <DropdownMenuTrigger className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent hover:text-accent-foreground outline-none">
                         <MoreVertical className="w-4 h-4" />
-                      </Button>
-
-                      {/* Dropdown menu */}
-                      {menuAbiertoId === medioPago.id && menuPosition && (
-                        <div
-                          className="fixed w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[9999]"
-                          style={{
-                            top: `${menuPosition.top}px`,
-                            left: `${menuPosition.left}px`,
-                          }}
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleEditMedioPago(medioPago)}>
+                          <Edit2 className="w-4 h-4 text-gray-500" />
+                          Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => handleDeleteMedioPago(medioPago.id)}
                         >
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEditMedioPago(medioPago);
-                              setMenuAbiertoId(null);
-                            }}
-                            className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors"
-                          >
-                            <Edit2 className="w-4 h-4 text-gray-500" />
-                            Editar
-                          </button>
-
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteMedioPago(medioPago.id);
-                              setMenuAbiertoId(null);
-                            }}
-                            className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            Eliminar
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                          <Trash2 className="w-4 h-4" />
+                          Eliminar
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
               </div>
