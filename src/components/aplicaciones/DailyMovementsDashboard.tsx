@@ -75,42 +75,6 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
     calcularCanecasTotales();
   }, [movimientos, productosPlanificados]);
 
-  // Validar que la aplicación esté en ejecución SOLO si estamos en modo modal
-  // Si NO hay onClose (página dedicada), permitir visualización en cualquier estado
-  if (aplicacion.estado !== 'En ejecución' && aplicacion.estado !== 'Cerrada' && onClose) {
-    return (
-      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
-              <AlertTriangle className="w-6 h-6 text-yellow-600" />
-            </div>
-            <div>
-              <h3 className="text-lg text-foreground">Aplicación No Iniciada</h3>
-              <p className="text-sm text-brand-brown/70">No se pueden registrar movimientos</p>
-            </div>
-          </div>
-
-          <p className="text-sm text-brand-brown/70 mb-6">
-            Esta aplicación está en estado <span className="font-medium text-foreground">"{aplicacion.estado}"</span>.
-            {' '}Debes iniciar la ejecución antes de poder registrar movimientos diarios.
-          </p>
-
-          <div className="flex gap-3">
-            {onClose && (
-              <button
-                onClick={onClose}
-                className="flex-1 px-4 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:from-primary-dark hover:to-secondary-dark transition-all"
-              >
-                Entendido
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   const loadData = async () => {
     try {
       setLoading(true);
@@ -160,7 +124,7 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
             .from('productos')
             .select('id, presentacion_kg_l')
             .in('id', productosIds);
-          
+
           if (!errorPresentaciones && presentacionesData) {
             presentacionesData.forEach(p => {
               if (p.presentacion_kg_l) {
@@ -249,7 +213,7 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
       if (error) throw error;
 
       const totalPlaneadas = (calculosData || []).reduce((sum, calc) => sum + (calc.numero_canecas || 0), 0);
-      
+
       return totalPlaneadas;
     } catch (err: any) {
       return 0;
@@ -278,10 +242,10 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
     movimientos.forEach(mov => {
       mov.productos.forEach(producto => {
         const resumenItem = resumenMap.get(producto.producto_id);
-        
+
         // Convertir a unidad base (L o Kg) para comparar con planificado
         let cantidadEnUnidadBase = producto.cantidad_utilizada;
-        
+
         if ((producto.unidad as string) === 'bultos' && (producto as any).presentacion_kg_l) {
           // Para bultos: convertir de nuevo a Kg usando presentacion_kg_l
           cantidadEnUnidadBase = producto.cantidad_utilizada * (producto as any).presentacion_kg_l;
@@ -294,8 +258,8 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
         if (resumenItem) {
           resumenItem.total_utilizado += cantidadEnUnidadBase;
           resumenItem.diferencia = resumenItem.total_utilizado - resumenItem.cantidad_planeada;
-          resumenItem.porcentaje_usado = resumenItem.cantidad_planeada > 0 
-            ? (resumenItem.total_utilizado / resumenItem.cantidad_planeada) * 100 
+          resumenItem.porcentaje_usado = resumenItem.cantidad_planeada > 0
+            ? (resumenItem.total_utilizado / resumenItem.cantidad_planeada) * 100
             : 0;
           resumenItem.excede_planeado = resumenItem.total_utilizado > resumenItem.cantidad_planeada;
         } else {
@@ -348,10 +312,10 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
     try {
       // Obtener canecas planeadas
       const totalPlaneadas = await loadCanecasPlaneadas();
-      
+
       // Sumar canecas utilizadas de todos los movimientos
       const totalUtilizadas = movimientos.reduce((sum, mov) => sum + (mov.numero_canecas || 0), 0);
-      
+
       const porcentaje = totalPlaneadas > 0 ? (totalUtilizadas / totalPlaneadas) * 100 : 0;
 
       setCanecasTotales({
@@ -363,6 +327,42 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
       // error logged by caller
     }
   };
+
+  // Validar que la aplicación esté en ejecución SOLO si estamos en modo modal
+  // Si NO hay onClose (página dedicada), permitir visualización en cualquier estado
+  if (aplicacion.estado !== 'En ejecución' && aplicacion.estado !== 'Cerrada' && onClose) {
+    return (
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
+              <AlertTriangle className="w-6 h-6 text-yellow-600" />
+            </div>
+            <div>
+              <h3 className="text-lg text-foreground">Aplicación No Iniciada</h3>
+              <p className="text-sm text-brand-brown/70">No se pueden registrar movimientos</p>
+            </div>
+          </div>
+
+          <p className="text-sm text-brand-brown/70 mb-6">
+            Esta aplicación está en estado <span className="font-medium text-foreground">"{aplicacion.estado}"</span>.
+            {' '}Debes iniciar la ejecución antes de poder registrar movimientos diarios.
+          </p>
+
+          <div className="flex gap-3">
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="flex-1 px-4 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:from-primary-dark hover:to-secondary-dark transition-all"
+              >
+                Entendido
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const handleEliminarMovimiento = (movimientoId: string) => {
     setConfirmEliminarMovimientoId(movimientoId);
