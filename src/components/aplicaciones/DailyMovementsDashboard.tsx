@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { ConfirmDialog } from '../ui/confirm-dialog';
 import { getSupabase } from '../../utils/supabase/client';
 import { DailyMovementForm } from './DailyMovementForm';
+import { IniciarEjecucionModal } from './IniciarEjecucionModal';
 import { Button } from '../ui/button';
 import type {
   Aplicacion,
@@ -58,6 +59,7 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
     porcentaje: number;
   }>({ planeadas: 0, utilizadas: 0, porcentaje: 0 });
   const [confirmEliminarMovimientoId, setConfirmEliminarMovimientoId] = useState<string | null>(null);
+  const [showIniciarEjecucion, setShowIniciarEjecucion] = useState(false);
 
   // Auto-cerrar si la aplicación se cierra mientras estamos aquí
   useEffect(() => {
@@ -332,35 +334,52 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
   // Si NO hay onClose (página dedicada), permitir visualización en cualquier estado
   if (aplicacion.estado !== 'En ejecución' && aplicacion.estado !== 'Cerrada' && onClose) {
     return (
-      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
-              <AlertTriangle className="w-6 h-6 text-yellow-600" />
+      <>
+        <div className="flex items-center justify-center min-h-[400px] p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-lg border border-yellow-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
+                <AlertTriangle className="w-6 h-6 text-yellow-600" />
+              </div>
+              <div>
+                <h3 className="text-lg text-foreground">Aplicación No Iniciada</h3>
+                <p className="text-sm text-brand-brown/70">No se pueden registrar movimientos</p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-lg text-foreground">Aplicación No Iniciada</h3>
-              <p className="text-sm text-brand-brown/70">No se pueden registrar movimientos</p>
-            </div>
-          </div>
 
-          <p className="text-sm text-brand-brown/70 mb-6">
-            Esta aplicación está en estado <span className="font-medium text-foreground">"{aplicacion.estado}"</span>.
-            {' '}Debes iniciar la ejecución antes de poder registrar movimientos diarios.
-          </p>
+            <p className="text-sm text-brand-brown/70 mb-6">
+              Esta aplicación está en estado <span className="font-medium text-foreground">"{aplicacion.estado}"</span>.
+              {' '}Debes iniciar la ejecución antes de poder registrar movimientos diarios.
+            </p>
 
-          <div className="flex gap-3">
-            {onClose && (
+            <div className="flex gap-3">
               <button
                 onClick={onClose}
-                className="flex-1 px-4 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:from-primary-dark hover:to-secondary-dark transition-all"
+                className="flex-1 px-4 py-2 border border-brand-brown/20 text-brand-brown rounded-lg hover:bg-brand-brown/5 transition-all"
               >
-                Entendido
+                Volver
               </button>
-            )}
+              <button
+                onClick={() => setShowIniciarEjecucion(true)}
+                className="flex-1 px-4 py-2 bg-gradient-to-r from-green-600 to-green-500 text-white rounded-lg hover:from-green-700 hover:to-green-600 transition-all"
+              >
+                Iniciar Ejecución
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+
+        {showIniciarEjecucion && (
+          <IniciarEjecucionModal
+            aplicacion={aplicacion}
+            onClose={() => setShowIniciarEjecucion(false)}
+            onSuccess={() => {
+              setShowIniciarEjecucion(false);
+              window.location.reload();
+            }}
+          />
+        )}
+      </>
     );
   }
 

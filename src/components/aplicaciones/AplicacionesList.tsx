@@ -708,6 +708,10 @@ export function AplicacionesList() {
             setAplicacionDetalle(null);
             navigate(`/aplicaciones/${aplicacionDetalle.id}/cierre`);
           }}
+          onIniciarEjecucion={() => {
+            setAplicacionDetalle(null);
+            setIniciarEjecucionId(aplicacionDetalle.id);
+          }}
         />
       )}
     </div>

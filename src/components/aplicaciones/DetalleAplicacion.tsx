@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, Edit, PlayCircle, CheckCircle, Calendar, Droplet, Package, MapPin, Target, TrendingUp, ShoppingCart, FileText, DollarSign, Users, Loader2, BarChart2 } from 'lucide-react';
+import { X, Edit, PlayCircle, CheckCircle, Calendar, Droplet, Package, MapPin, Target, TrendingUp, ShoppingCart, FileText, DollarSign, Users, Loader2, BarChart2, Play } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { Button } from '../ui/button';
 import { generarPDFListaCompras } from '../../utils/generarPDFListaCompras';
@@ -15,6 +15,7 @@ interface DetalleAplicacionProps {
   onEditar: () => void;
   onRegistrarMovimientos: () => void;
   onCerrarAplicacion: () => void;
+  onIniciarEjecucion?: () => void;
 }
 
 interface ResumenInsumo {
@@ -30,6 +31,7 @@ export function DetalleAplicacion({
   onEditar,
   onRegistrarMovimientos,
   onCerrarAplicacion,
+  onIniciarEjecucion,
 }: DetalleAplicacionProps) {
   const navigate = useNavigate();
   const supabase = getSupabase();
@@ -845,14 +847,24 @@ export function DetalleAplicacion({
                     Editar
                   </Button>
 
-                  <Button
-                    onClick={onRegistrarMovimientos}
-                    disabled={(aplicacion.estado as string) === 'Cerrada'}
-                    className="bg-brand-brown hover:bg-brand-brown text-white"
-                  >
-                    <PlayCircle className="w-4 h-4 mr-2" />
-                    Registrar Movimientos
-                  </Button>
+                  {(aplicacion.estado as string) === 'Calculada' && onIniciarEjecucion ? (
+                    <Button
+                      onClick={onIniciarEjecucion}
+                      className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white"
+                    >
+                      <Play className="w-4 h-4 mr-2" />
+                      Iniciar Ejecución
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={onRegistrarMovimientos}
+                      disabled={(aplicacion.estado as string) !== 'En ejecución'}
+                      className="bg-brand-brown hover:bg-brand-brown text-white"
+                    >
+                      <PlayCircle className="w-4 h-4 mr-2" />
+                      Registrar Movimientos
+                    </Button>
+                  )}
 
                   <Button
                     onClick={onCerrarAplicacion}
