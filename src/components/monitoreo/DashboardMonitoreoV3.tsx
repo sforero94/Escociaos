@@ -610,14 +610,14 @@ export function DashboardMonitoreoV3() {
       lote_id: string;
       lote_nombre: string;
       fecha_monitoreo: string;
-      plagasMap: Map<string, { total: number; count: number }>;
+      plagasMap: Map<string, { afectados: number; monitoreados: number }>;
       monitoreoRows: MonitoreoRow[];
       ce?: number;
       sublotesMap: Map<string, {
         sublote_id: string;
         sublote_nombre: string;
         fecha_monitoreo: string;
-        plagasMap: Map<string, { total: number; count: number }>;
+        plagasMap: Map<string, { afectados: number; monitoreados: number }>;
         monitoreoRows: MonitoreoRow[];
       }>;
     }>();
@@ -639,10 +639,10 @@ export function DashboardMonitoreoV3() {
       const lote = lotesMap.get(m.lote_id)!;
       if (m.fecha_monitoreo > lote.fecha_monitoreo) lote.fecha_monitoreo = m.fecha_monitoreo;
 
-      // Lote-level plaga aggregation
-      const lp = lote.plagasMap.get(plagaNombre) || { total: 0, count: 0 };
-      lp.total += m.incidencia || 0;
-      lp.count += 1;
+      // Lote-level plaga aggregation — weighted by tree counts
+      const lp = lote.plagasMap.get(plagaNombre) || { afectados: 0, monitoreados: 0 };
+      lp.afectados += m.arboles_afectados || 0;
+      lp.monitoreados += m.arboles_monitoreados || 0;
       lote.plagasMap.set(plagaNombre, lp);
 
       lote.monitoreoRows.push(m);
@@ -660,9 +660,9 @@ export function DashboardMonitoreoV3() {
         }
         const sub = lote.sublotesMap.get(m.sublote_id)!;
         if (m.fecha_monitoreo > sub.fecha_monitoreo) sub.fecha_monitoreo = m.fecha_monitoreo;
-        const sp = sub.plagasMap.get(plagaNombre) || { total: 0, count: 0 };
-        sp.total += m.incidencia || 0;
-        sp.count += 1;
+        const sp = sub.plagasMap.get(plagaNombre) || { afectados: 0, monitoreados: 0 };
+        sp.afectados += m.arboles_afectados || 0;
+        sp.monitoreados += m.arboles_monitoreados || 0;
         sub.plagasMap.set(plagaNombre, sp);
         sub.monitoreoRows.push(m);
       }
@@ -681,14 +681,18 @@ export function DashboardMonitoreoV3() {
       .map(l => {
         const plagasIncidencia: Record<string, number> = {};
         for (const [p, stats] of l.plagasMap) {
-          plagasIncidencia[p] = +(stats.total / stats.count).toFixed(1);
+          plagasIncidencia[p] = stats.monitoreados > 0
+            ? +((stats.afectados / stats.monitoreados) * 100).toFixed(1)
+            : 0;
         }
         const florLote = calcularEstadoFloracion(l.monitoreoRows);
         const sublotes = Array.from(l.sublotesMap.values())
           .sort((a, b) => a.sublote_nombre.localeCompare(b.sublote_nombre))
           .map(s => {
             const pi: Record<string, number> = {};
-            for (const [p, stats] of s.plagasMap) pi[p] = +(stats.total / stats.count).toFixed(1);
+            for (const [p, stats] of s.plagasMap) pi[p] = stats.monitoreados > 0
+              ? +((stats.afectados / stats.monitoreados) * 100).toFixed(1)
+              : 0;
             const florSub = calcularEstadoFloracion(s.monitoreoRows);
             return {
               sublote_id: s.sublote_id,

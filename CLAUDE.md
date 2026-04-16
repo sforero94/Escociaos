@@ -257,7 +257,7 @@ All routes except `/login` are protected and require authentication.
 | `/aplicaciones/:id/movimientos`    | DailyMovementsDashboard      | Applications   |
 | `/aplicaciones/:id/cierre`         | CierreAplicacion             | Applications   |
 | `/aplicaciones/:id/reporte`        | ReporteAplicacion            | Applications   |
-| `/monitoreo`                       | MonitoreoDashboardV2         | Monitoring     |
+| `/monitoreo`                       | DashboardMonitoreoV3         | Monitoring     |
 | `/monitoreo/registros`             | RegistrosMonitoreo           | Monitoring     |
 | `/monitoreo/carga-masiva`          | CargaMasiva                  | Monitoring     |
 | `/monitoreo/catalogo`              | CatalogoPlagas               | Monitoring     |

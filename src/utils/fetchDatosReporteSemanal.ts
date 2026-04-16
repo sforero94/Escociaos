@@ -1303,10 +1303,15 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
     return PLAGAS_INTERES.some(p => nombre.toLowerCase().includes(p.toLowerCase()));
   }
 
-  // Helper: avg of incidencias
-  function promedio(vals: number[]): number {
-    if (vals.length === 0) return 0;
-    return Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10;
+  // Helper: weighted incidencia from raw tree counts
+  function incidenciaPonderada(recs: any[]): number {
+    let afectados = 0, monitoreados = 0;
+    for (const m of recs) {
+      afectados += Number(m.arboles_afectados) || 0;
+      monitoreados += Number(m.arboles_monitoreados) || 0;
+    }
+    if (monitoreados === 0) return 0;
+    return Math.round(((afectados / monitoreados) * 100) * 10) / 10;
   }
 
   function calcNivelAlerta(fecha: string | null): 'ninguna' | 'amarilla' | 'roja' {
@@ -1324,7 +1329,7 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
 
     const { data: historicRaw } = await supabase
       .from('monitoreos')
-      .select('fecha_monitoreo, lote_id, incidencia, plagas_enfermedades_catalogo(nombre)')
+      .select('fecha_monitoreo, lote_id, arboles_afectados, arboles_monitoreados, incidencia, plagas_enfermedades_catalogo(nombre)')
       .in('lote_id', sinDatosIds)
       .order('fecha_monitoreo', { ascending: false });
 
@@ -1360,14 +1365,12 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
       });
 
       const plagas: PlagaLoteComparativa[] = Array.from(plagasSet).map(plaga => {
-        const valsActual = lastRecs
-          .filter(m => (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga)
-          .map(m => Number(m.incidencia) || 0);
-        const valsPrev = prevRecs
-          .filter(m => (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga)
-          .map(m => Number(m.incidencia) || 0);
-        const actual = valsActual.length > 0 ? promedio(valsActual) : null;
-        const anterior = valsPrev.length > 0 ? promedio(valsPrev) : null;
+        const recsActual = lastRecs
+          .filter(m => (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga);
+        const recsPrev = prevRecs
+          .filter(m => (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga);
+        const actual = recsActual.length > 0 ? incidenciaPonderada(recsActual) : null;
+        const anterior = recsPrev.length > 0 ? incidenciaPonderada(recsPrev) : null;
         return {
           plagaNombre: plaga,
           esPlaga_interes: esPlagaInteres(plaga),
@@ -1398,27 +1401,24 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
   // 4. Build RESUMEN GLOBAL (Slide 1)
   // For each plaga: avg across all lotes (actual), min-max across lotes, and comparison with anterior
   const resumenGlobal: ResumenPlagaGlobal[] = plagasArr.map(plaga => {
-    // Current: per-lote averages
-    const lotesActuales = new Map<string, number[]>();
+    // Current: weighted incidencia per lote, then global weighted average
+    const lotesActuales = new Map<string, any[]>();
     regActuales.forEach((m: any) => {
       if ((m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') !== plaga) return;
       const loteId = m.lote_id;
       if (!lotesActuales.has(loteId)) lotesActuales.set(loteId, []);
-      lotesActuales.get(loteId)!.push(Number(m.incidencia) || 0);
+      lotesActuales.get(loteId)!.push(m);
     });
 
-    const promediosPorLote = Array.from(lotesActuales.values()).map(vals => promedio(vals));
-    const promedioActual = promediosPorLote.length > 0
-      ? Math.round((promediosPorLote.reduce((a, b) => a + b, 0) / promediosPorLote.length) * 10) / 10
-      : null;
+    const recsActuales = regActuales.filter((m: any) => (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga);
+    const promedioActual = recsActuales.length > 0 ? incidenciaPonderada(recsActuales) : null;
+    const promediosPorLote = Array.from(lotesActuales.values()).map(recs => incidenciaPonderada(recs));
     const minLote = promediosPorLote.length > 0 ? Math.min(...promediosPorLote) : null;
     const maxLote = promediosPorLote.length > 0 ? Math.max(...promediosPorLote) : null;
 
-    // Previous: global average
-    const valsAnterior = regAnteriores
-      .filter((m: any) => (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga)
-      .map((m: any) => Number(m.incidencia) || 0);
-    const promedioAnterior = valsAnterior.length > 0 ? promedio(valsAnterior) : null;
+    // Previous: global weighted average
+    const recsAnterior = regAnteriores.filter((m: any) => (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga);
+    const promedioAnterior = recsAnterior.length > 0 ? incidenciaPonderada(recsAnterior) : null;
 
     return {
       plagaNombre: plaga,
@@ -1454,15 +1454,13 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
     });
 
     const plagas: PlagaLoteComparativa[] = Array.from(plagasLote).map(plaga => {
-      const valsActual = regLoteActual
-        .filter((m: any) => (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga)
-        .map((m: any) => Number(m.incidencia) || 0);
-      const valsAnteriorLote = regLoteAnterior
-        .filter((m: any) => (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga)
-        .map((m: any) => Number(m.incidencia) || 0);
+      const recsActual = regLoteActual
+        .filter((m: any) => (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga);
+      const recsAnteriorLote = regLoteAnterior
+        .filter((m: any) => (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga);
 
-      const actual = valsActual.length > 0 ? promedio(valsActual) : null;
-      const anterior = valsAnteriorLote.length > 0 ? promedio(valsAnteriorLote) : null;
+      const actual = recsActual.length > 0 ? incidenciaPonderada(recsActual) : null;
+      const anterior = recsAnteriorLote.length > 0 ? incidenciaPonderada(recsAnteriorLote) : null;
 
       return {
         plagaNombre: plaga,
@@ -1517,21 +1515,19 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
     plagasLote.forEach(plaga => {
       celdas[plaga] = {};
       sublotesLote.forEach(subloteNombre => {
-        const valsActual = regLoteActual
+        const recsActual = regLoteActual
           .filter((m: any) =>
             (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga &&
             (m.sublotes?.nombre || 'Sin sublote') === subloteNombre
-          )
-          .map((m: any) => Number(m.incidencia) || 0);
-        const valsAnteriorSub = regLoteAnterior
+          );
+        const recsAnteriorSub = regLoteAnterior
           .filter((m: any) =>
             (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga &&
             (m.sublotes?.nombre || 'Sin sublote') === subloteNombre
-          )
-          .map((m: any) => Number(m.incidencia) || 0);
+          );
 
-        const actual = valsActual.length > 0 ? promedio(valsActual) : null;
-        const anterior = valsAnteriorSub.length > 0 ? promedio(valsAnteriorSub) : null;
+        const actual = recsActual.length > 0 ? incidenciaPonderada(recsActual) : null;
+        const anterior = recsAnteriorSub.length > 0 ? incidenciaPonderada(recsAnteriorSub) : null;
 
         celdas[plaga][subloteNombre] = {
           actual,
@@ -1553,23 +1549,23 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
   const insights: Insight[] = generarInsightsBasicos(registros);
 
   // 8. LEGACY data for Gemini prompt (tendencias + detallePorLote)
-  const tendenciasMap = new Map<string, Map<string, number[]>>();
+  const tendenciasMap = new Map<string, Map<string, any[]>>();
   registros.forEach((m: any) => {
     const fecha = m.fecha_monitoreo;
     const plaga = m.plagas_enfermedades_catalogo?.nombre || 'Desconocida';
     if (!tendenciasMap.has(fecha)) tendenciasMap.set(fecha, new Map());
     const fechaMap = tendenciasMap.get(fecha)!;
     if (!fechaMap.has(plaga)) fechaMap.set(plaga, []);
-    fechaMap.get(plaga)!.push(Number(m.incidencia) || 0);
+    fechaMap.get(plaga)!.push(m);
   });
 
   const tendencias: TendenciaMonitoreo[] = [];
   tendenciasMap.forEach((plagasMap, fecha) => {
-    plagasMap.forEach((incidencias, plagaNombre) => {
+    plagasMap.forEach((recs, plagaNombre) => {
       tendencias.push({
         fecha,
         plagaNombre,
-        incidenciaPromedio: promedio(incidencias),
+        incidenciaPromedio: incidenciaPonderada(recs),
       });
     });
   });
@@ -1619,38 +1615,43 @@ function restarDias(fechaISO: string, dias: number): string {
 function generarInsightsBasicos(monitoreos: any[]): Insight[] {
   const insights: Insight[] = [];
 
-  const plagaLoteMap = new Map<string, { incidencias: number[]; plaga: string; lote: string }>();
+  const plagaLoteMap = new Map<string, { recs: any[]; plaga: string; lote: string }>();
 
   monitoreos.forEach(m => {
     const plaga = m.plagas_enfermedades_catalogo?.nombre || 'Desconocida';
     const lote = m.lotes?.nombre || 'Sin lote';
     const key = `${plaga}|${lote}`;
     if (!plagaLoteMap.has(key)) {
-      plagaLoteMap.set(key, { incidencias: [], plaga, lote });
+      plagaLoteMap.set(key, { recs: [], plaga, lote });
     }
-    plagaLoteMap.get(key)!.incidencias.push(Number(m.incidencia) || 0);
+    plagaLoteMap.get(key)!.recs.push(m);
   });
 
-  plagaLoteMap.forEach(({ incidencias, plaga, lote }) => {
-    const promedio = incidencias.reduce((a, b) => a + b, 0) / incidencias.length;
-    if (promedio >= 30) {
+  plagaLoteMap.forEach(({ recs, plaga, lote }) => {
+    let afectados = 0, monitoreados = 0;
+    for (const m of recs) {
+      afectados += Number(m.arboles_afectados) || 0;
+      monitoreados += Number(m.arboles_monitoreados) || 0;
+    }
+    const incidencia = monitoreados > 0 ? (afectados / monitoreados) * 100 : 0;
+    if (incidencia >= 30) {
       insights.push({
         tipo: 'urgente',
         titulo: `${plaga} crítica en ${lote}`,
-        descripcion: `Incidencia promedio de ${promedio.toFixed(1)}% - requiere atención inmediata`,
+        descripcion: `Incidencia promedio de ${incidencia.toFixed(1)}% - requiere atención inmediata`,
         plaga,
         lote,
-        incidenciaActual: promedio,
+        incidenciaActual: Math.round(incidencia * 10) / 10,
         accion: 'Evaluar aplicación de tratamiento',
       });
-    } else if (promedio >= 20) {
+    } else if (incidencia >= 20) {
       insights.push({
         tipo: 'atencion',
         titulo: `${plaga} elevada en ${lote}`,
-        descripcion: `Incidencia promedio de ${promedio.toFixed(1)}% - monitorear de cerca`,
+        descripcion: `Incidencia promedio de ${incidencia.toFixed(1)}% - monitorear de cerca`,
         plaga,
         lote,
-        incidenciaActual: promedio,
+        incidenciaActual: Math.round(incidencia * 10) / 10,
         accion: 'Monitorear de cerca',
       });
     }
@@ -1675,105 +1676,86 @@ async function fetchClimaResumenSemanal(
 ): Promise<DatosClimaSemanal | undefined> {
   const supabase = getSupabase();
 
+  // Use clima_resumen_diario (permanent daily summaries) instead of
+  // clima_lecturas (rolling 24h window pruned by cron).
   const { data, error } = await supabase
-    .from('clima_lecturas')
-    .select('timestamp, temp_c, humedad_pct, lluvia_diaria_mm, radiacion_wm2')
-    .gte('timestamp', `${inicio}T00:00:00-05:00`)
-    .lte('timestamp', `${fin}T23:59:59-05:00`)
-    .order('timestamp', { ascending: true });
+    .from('clima_resumen_diario' as any)
+    .select('fecha, temp_c_min, temp_c_max, temp_c_avg, humedad_pct_avg, lluvia_total_mm, radiacion_wm2_max, radiacion_wm2_avg')
+    .gte('fecha', inicio)
+    .lte('fecha', fin)
+    .order('fecha', { ascending: true });
 
   if (error || !data || data.length === 0) return undefined;
 
-  // Aggregate KPIs
+  const rows = data as any[];
+
+  // Aggregate weekly KPIs from daily summaries
   let tempMin = Infinity, tempMax = -Infinity, tempSuma = 0, tempCount = 0;
   let humSuma = 0, humCount = 0;
   let radMax = 0, radSuma = 0, radCount = 0;
+  let lluviaTotal = 0;
 
-  for (const r of data) {
-    if (r.temp_c != null) {
-      const t = Number(r.temp_c);
+  for (const d of rows) {
+    if (d.temp_c_min != null) {
+      const t = Number(d.temp_c_min);
       if (t < tempMin) tempMin = t;
+    }
+    if (d.temp_c_max != null) {
+      const t = Number(d.temp_c_max);
       if (t > tempMax) tempMax = t;
-      tempSuma += t;
+    }
+    if (d.temp_c_avg != null) {
+      tempSuma += Number(d.temp_c_avg);
       tempCount++;
     }
-    if (r.humedad_pct != null) {
-      humSuma += Number(r.humedad_pct);
+    if (d.humedad_pct_avg != null) {
+      humSuma += Number(d.humedad_pct_avg);
       humCount++;
     }
-    if (r.radiacion_wm2 != null) {
-      const rad = Number(r.radiacion_wm2);
+    if (d.radiacion_wm2_max != null) {
+      const rad = Number(d.radiacion_wm2_max);
       if (rad > radMax) radMax = rad;
-      radSuma += rad;
+    }
+    if (d.radiacion_wm2_avg != null) {
+      radSuma += Number(d.radiacion_wm2_avg);
       radCount++;
     }
+    if (d.lluvia_total_mm != null) {
+      lluviaTotal += Number(d.lluvia_total_mm);
+    }
   }
 
-  // Group by Bogota date for daily breakdown
-  const diaMap = new Map<string, { lluviaMax: number; radMax: number; tempMax: number; tempMin: number }>();
+  // Daily breakdown — already one row per day, no grouping needed
+  const diario: DiaClima[] = rows.map((d: any) => ({
+    fecha: d.fecha,
+    lluviaMm: d.lluvia_total_mm != null ? +Number(d.lluvia_total_mm).toFixed(1) : 0,
+    radiacionMaxWm2: d.radiacion_wm2_max != null ? +Number(d.radiacion_wm2_max).toFixed(0) : 0,
+    tempMax: d.temp_c_max != null ? +Number(d.temp_c_max).toFixed(1) : null,
+    tempMin: d.temp_c_min != null ? +Number(d.temp_c_min).toFixed(1) : null,
+  }));
 
-  for (const r of data) {
-    // Convert timestamp to Bogota date (UTC-5)
-    const ts = new Date(r.timestamp);
-    const bogota = new Date(ts.getTime() - 5 * 60 * 60 * 1000);
-    const dia = bogota.toISOString().slice(0, 10);
-
-    const prev = diaMap.get(dia) ?? { lluviaMax: 0, radMax: 0, tempMax: -Infinity, tempMin: Infinity };
-    if (r.lluvia_diaria_mm != null) {
-      prev.lluviaMax = Math.max(prev.lluviaMax, Number(r.lluvia_diaria_mm));
-    }
-    if (r.radiacion_wm2 != null) {
-      prev.radMax = Math.max(prev.radMax, Number(r.radiacion_wm2));
-    }
-    if (r.temp_c != null) {
-      prev.tempMax = Math.max(prev.tempMax, Number(r.temp_c));
-      prev.tempMin = Math.min(prev.tempMin, Number(r.temp_c));
-    }
-    diaMap.set(dia, prev);
-  }
-
-  const diario: DiaClima[] = Array.from(diaMap.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([fecha, d]) => ({
-      fecha,
-      lluviaMm: +d.lluviaMax.toFixed(1),
-      radiacionMaxWm2: +d.radMax.toFixed(0),
-      tempMax: d.tempMax === -Infinity ? null : +d.tempMax.toFixed(1),
-      tempMin: d.tempMin === Infinity ? null : +d.tempMin.toFixed(1),
-    }));
-
-  // Total rainfall = sum of each day's max lluvia_diaria_mm
-  const lluviaTotal = diario.reduce((sum, d) => sum + d.lluviaMm, 0);
-
-  // Fetch 4-week historical averages for comparison
+  // Fetch 4-week historical averages from clima_resumen_diario
   const histInicio = new Date(inicio);
   histInicio.setDate(histInicio.getDate() - 28);
   const histInicioStr = histInicio.toISOString().slice(0, 10);
 
   const { data: histData } = await supabase
-    .from('clima_lecturas')
-    .select('timestamp, temp_c, humedad_pct, lluvia_diaria_mm, radiacion_wm2')
-    .gte('timestamp', `${histInicioStr}T00:00:00-05:00`)
-    .lt('timestamp', `${inicio}T00:00:00-05:00`)
-    .order('timestamp', { ascending: true });
+    .from('clima_resumen_diario' as any)
+    .select('fecha, temp_c_avg, humedad_pct_avg, lluvia_total_mm, radiacion_wm2_avg')
+    .gte('fecha', histInicioStr)
+    .lt('fecha', inicio)
+    .order('fecha', { ascending: true });
 
   let historico: DatosClimaSemanal['historico'];
   if (histData && histData.length > 0) {
     let hTemp = 0, hTempC = 0, hHum = 0, hHumC = 0, hRad = 0, hRadC = 0;
-    // Get daily rainfall totals for the 4-week period
-    const hDiaMap = new Map<string, number>();
-    for (const r of histData) {
-      if (r.temp_c != null) { hTemp += Number(r.temp_c); hTempC++; }
-      if (r.humedad_pct != null) { hHum += Number(r.humedad_pct); hHumC++; }
-      if (r.radiacion_wm2 != null) { hRad += Number(r.radiacion_wm2); hRadC++; }
-      if (r.lluvia_diaria_mm != null) {
-        const ts = new Date(r.timestamp);
-        const bogota = new Date(ts.getTime() - 5 * 60 * 60 * 1000);
-        const dia = bogota.toISOString().slice(0, 10);
-        hDiaMap.set(dia, Math.max(hDiaMap.get(dia) ?? 0, Number(r.lluvia_diaria_mm)));
-      }
+    let totalLluviaHist = 0;
+    for (const d of histData as any[]) {
+      if (d.temp_c_avg != null) { hTemp += Number(d.temp_c_avg); hTempC++; }
+      if (d.humedad_pct_avg != null) { hHum += Number(d.humedad_pct_avg); hHumC++; }
+      if (d.radiacion_wm2_avg != null) { hRad += Number(d.radiacion_wm2_avg); hRadC++; }
+      if (d.lluvia_total_mm != null) { totalLluviaHist += Number(d.lluvia_total_mm); }
     }
-    const totalLluviaHist = Array.from(hDiaMap.values()).reduce((s, v) => s + v, 0);
     const numSemanas = 4;
 
     historico = {
