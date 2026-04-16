@@ -217,6 +217,39 @@ export function MapaCalorIncidencias({
   // ============================================
 
   const datosMapaCalor = useMemo((): DatosMapaCalor => {
+    // Precompute total monitored trees per lote (deduplicated per sublote)
+    // and per (lote, fecha) for ocurrencias denominators
+    const loteTreeTotals = new Map<string, number>();
+    const loteFechaTreeTotals = new Map<string, number>();
+    const subloteSeen = new Map<string, number>(); // key → max arboles_monitoreados
+    const subloteFechaSeen = new Map<string, number>();
+
+    monitoreos.forEach(m => {
+      const loteId = m.sublotes?.lote_id || m.lote_id;
+      const subKey = `${loteId}|${m.sublote_id || loteId}`;
+      const prev = subloteSeen.get(subKey) || 0;
+      subloteSeen.set(subKey, Math.max(prev, m.arboles_monitoreados || 0));
+
+      const fecha = typeof m.fecha_monitoreo === 'string'
+        ? m.fecha_monitoreo
+        : m.fecha_monitoreo.toISOString().split('T')[0];
+      const subFechaKey = `${loteId}|${m.sublote_id || loteId}|${fecha}`;
+      const prevF = subloteFechaSeen.get(subFechaKey) || 0;
+      subloteFechaSeen.set(subFechaKey, Math.max(prevF, m.arboles_monitoreados || 0));
+    });
+
+    // Aggregate per lote
+    subloteSeen.forEach((trees, key) => {
+      const loteId = key.split('|')[0];
+      loteTreeTotals.set(loteId, (loteTreeTotals.get(loteId) || 0) + trees);
+    });
+    // Aggregate per lote+fecha
+    subloteFechaSeen.forEach((trees, key) => {
+      const parts = key.split('|');
+      const lfKey = `${parts[0]}|${parts[2]}`; // loteId|fecha
+      loteFechaTreeTotals.set(lfKey, (loteFechaTreeTotals.get(lfKey) || 0) + trees);
+    });
+
     // 1. Agrupar monitoreos por combinación plaga-lote
     const mapaAgrupado = new Map<string, CeldaMapaCalor>();
 
@@ -247,37 +280,34 @@ export function MapaCalorIncidencias({
 
     // 2. Calcular incidencia promedio Y ocurrencias según modo
     mapaAgrupado.forEach(celda => {
+      // Use total lote trees as denominator (all sublotes, not just pest-present ones)
+      const loteTotalTrees = loteTreeTotals.get(celda.loteId) || 0;
       const totalAfectados = celda.monitoreos.reduce((s, m) => s + (m.arboles_afectados || 0), 0);
-      const totalMonitoreados = celda.monitoreos.reduce((s, m) => s + (m.arboles_monitoreados || 0), 0);
-      celda.incidenciaPromedio = totalMonitoreados > 0 ? (totalAfectados / totalMonitoreados) * 100 : 0;
+      celda.incidenciaPromedio = loteTotalTrees > 0 ? (totalAfectados / loteTotalTrees) * 100 : 0;
 
       // Always keep at least 3 ocurrencias for trend arrow calculation
       const numOcurrencias = modoVisualizacion === 'ultimos6' ? 6 : 3;
 
-      // Agrupar por fecha con tree counts para promedio ponderado
-      const monitoreoPorFecha = new Map<string, { afectados: number; monitoreados: number }>();
+      // Agrupar afectados por fecha
+      const afectadosPorFecha = new Map<string, number>();
       celda.monitoreos.forEach(m => {
         const fecha = typeof m.fecha_monitoreo === 'string'
           ? m.fecha_monitoreo
           : m.fecha_monitoreo.toISOString().split('T')[0];
-        if (!monitoreoPorFecha.has(fecha)) {
-          monitoreoPorFecha.set(fecha, { afectados: 0, monitoreados: 0 });
-        }
-        const entry = monitoreoPorFecha.get(fecha)!;
-        entry.afectados += m.arboles_afectados || 0;
-        entry.monitoreados += m.arboles_monitoreados || 0;
+        afectadosPorFecha.set(fecha, (afectadosPorFecha.get(fecha) || 0) + (m.arboles_afectados || 0));
       });
 
       // Ordenar fechas y tomar las últimas N
-      const fechasOrdenadas = Array.from(monitoreoPorFecha.keys()).sort();
+      const fechasOrdenadas = Array.from(afectadosPorFecha.keys()).sort();
       const fechasSeleccionadas = fechasOrdenadas.slice(-numOcurrencias);
 
-      // Crear array de ocurrencias con incidencia ponderada
+      // Crear array de ocurrencias — denominator is total lote trees for that date
       celda.ocurrencias = fechasSeleccionadas.map(fecha => {
-        const t = monitoreoPorFecha.get(fecha)!;
+        const af = afectadosPorFecha.get(fecha) || 0;
+        const loteFechaTrees = loteFechaTreeTotals.get(`${celda.loteId}|${fecha}`) || 0;
         return {
           fecha,
-          incidencia: t.monitoreados > 0 ? (t.afectados / t.monitoreados) * 100 : 0
+          incidencia: loteFechaTrees > 0 ? (af / loteFechaTrees) * 100 : 0
         };
       });
     });
@@ -300,15 +330,14 @@ export function MapaCalorIncidencias({
     });
 
     // 4. Calcular incidencia promedio total por fila (plaga)
+    // Denominator: total trees across ALL lotes (not just lotes where this pest was found)
+    const allLotesTotalTrees = Array.from(loteTreeTotals.values()).reduce((s, v) => s + v, 0);
     filasMap.forEach(fila => {
       const celdasArray = Array.from(fila.celdas.values());
       const totalAfectados = celdasArray.reduce(
         (s, celda) => s + celda.monitoreos.reduce((s2, m) => s2 + (m.arboles_afectados || 0), 0), 0
       );
-      const totalMonitoreados = celdasArray.reduce(
-        (s, celda) => s + celda.monitoreos.reduce((s2, m) => s2 + (m.arboles_monitoreados || 0), 0), 0
-      );
-      fila.incidenciaPromedioTotal = totalMonitoreados > 0 ? (totalAfectados / totalMonitoreados) * 100 : 0;
+      fila.incidenciaPromedioTotal = allLotesTotalTrees > 0 ? (totalAfectados / allLotesTotalTrees) * 100 : 0;
     });
 
     // 5. Ordenar filas por incidencia promedio descendente
@@ -317,13 +346,12 @@ export function MapaCalorIncidencias({
     );
 
     // 6. Obtener columnas únicas (lotes) con incidencia promedio
-    const lotesMap = new Map<string, { totalAfectados: number; totalMonitoreados: number; nombre: string }>();
+    const lotesMap = new Map<string, { totalAfectados: number; nombre: string }>();
 
     mapaAgrupado.forEach(celda => {
       if (!lotesMap.has(celda.loteId)) {
         lotesMap.set(celda.loteId, {
           totalAfectados: 0,
-          totalMonitoreados: 0,
           nombre: celda.loteNombre
         });
       }
@@ -331,17 +359,19 @@ export function MapaCalorIncidencias({
       const lote = lotesMap.get(celda.loteId)!;
       celda.monitoreos.forEach(m => {
         lote.totalAfectados += m.arboles_afectados || 0;
-        lote.totalMonitoreados += m.arboles_monitoreados || 0;
       });
     });
 
     // 7. Ordenar columnas por número de lote (orden numérico)
     const columnasOrdenadas = Array.from(lotesMap.entries())
-      .map(([loteId, data]) => ({
-        loteId,
-        loteNombre: data.nombre,
-        incidenciaPromedio: data.totalMonitoreados > 0 ? (data.totalAfectados / data.totalMonitoreados) * 100 : 0
-      }))
+      .map(([loteId, data]) => {
+        const loteTrees = loteTreeTotals.get(loteId) || 0;
+        return {
+          loteId,
+          loteNombre: data.nombre,
+          incidenciaPromedio: loteTrees > 0 ? (data.totalAfectados / loteTrees) * 100 : 0
+        };
+      })
       .sort((a, b) => {
         const numA = parseInt(a.loteNombre.match(/\d+/)?.[0] || '0');
         const numB = parseInt(b.loteNombre.match(/\d+/)?.[0] || '0');

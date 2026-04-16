@@ -185,22 +185,27 @@ export function GraficoTendencias({
       // Filtrar monitoreos de esta fecha
       const monitoreosDeEstaFecha = monitoreos.filter(m => m.fecha_monitoreo === fecha);
 
-      // Agrupar por plaga y calcular incidencia ponderada
-      const plagaTotals: { [plaga: string]: { afectados: number; monitoreados: number } } = {};
+      // Total monitored trees for this date (deduplicated per sublote)
+      const subloteTreesMap = new Map<string, number>();
+      monitoreosDeEstaFecha.forEach(m => {
+        const key = m.sublote_id || m.lote_id;
+        const prev = subloteTreesMap.get(key) || 0;
+        subloteTreesMap.set(key, Math.max(prev, m.arboles_monitoreados || 0));
+      });
+      const totalTreesThisDate = Array.from(subloteTreesMap.values()).reduce((s, v) => s + v, 0);
 
+      // Sum afectados per plaga
+      const plagaAfectados: { [plaga: string]: number } = {};
       monitoreosDeEstaFecha.forEach(m => {
         const plagaNombre = m.plagas_enfermedades_catalogo.nombre;
-        if (!plagaTotals[plagaNombre]) {
-          plagaTotals[plagaNombre] = { afectados: 0, monitoreados: 0 };
-        }
-        plagaTotals[plagaNombre].afectados += m.arboles_afectados || 0;
-        plagaTotals[plagaNombre].monitoreados += m.arboles_monitoreados || 0;
+        plagaAfectados[plagaNombre] = (plagaAfectados[plagaNombre] || 0) + (m.arboles_afectados || 0);
       });
 
+      // Incidencia = afectados per pest / total trees monitored across all sublotes
       const promediosPorPlaga: { [plaga: string]: number } = {};
-      Object.entries(plagaTotals).forEach(([plaga, t]) => {
-        promediosPorPlaga[plaga] = t.monitoreados > 0
-          ? Math.round(((t.afectados / t.monitoreados) * 100) * 10) / 10
+      Object.entries(plagaAfectados).forEach(([plaga, af]) => {
+        promediosPorPlaga[plaga] = totalTreesThisDate > 0
+          ? Math.round(((af / totalTreesThisDate) * 100) * 10) / 10
           : 0;
       });
 
