@@ -639,10 +639,10 @@ export function DashboardMonitoreoV3() {
       const lote = lotesMap.get(m.lote_id)!;
       if (m.fecha_monitoreo > lote.fecha_monitoreo) lote.fecha_monitoreo = m.fecha_monitoreo;
 
-      // Lote-level plaga aggregation — weighted by tree counts
+      // Lote-level plaga aggregation — only track afectados per pest
+      // (monitoreados denominator is computed from all sublotes, not per-pest)
       const lp = lote.plagasMap.get(plagaNombre) || { afectados: 0, monitoreados: 0 };
       lp.afectados += m.arboles_afectados || 0;
-      lp.monitoreados += m.arboles_monitoreados || 0;
       lote.plagasMap.set(plagaNombre, lp);
 
       lote.monitoreoRows.push(m);
@@ -679,10 +679,22 @@ export function DashboardMonitoreoV3() {
     return Array.from(lotesMap.values())
       .sort((a, b) => a.lote_nombre.localeCompare(b.lote_nombre))
       .map(l => {
+        // Total arboles_monitoreados across all sublotes (deduplicated per sublote)
+        // Each sublote reports the same arboles_monitoreados regardless of pest,
+        // so take the max per sublote to avoid double-counting.
+        const subloteMonitoreados = new Map<string, number>();
+        for (const m of l.monitoreoRows) {
+          const key = m.sublote_id || m.lote_id;
+          const prev = subloteMonitoreados.get(key) || 0;
+          subloteMonitoreados.set(key, Math.max(prev, m.arboles_monitoreados || 0));
+        }
+        const totalMonitoreados = Array.from(subloteMonitoreados.values()).reduce((s, v) => s + v, 0);
+
+        // Lote-level incidencia: afectados per pest / total monitored trees across all sublotes
         const plagasIncidencia: Record<string, number> = {};
         for (const [p, stats] of l.plagasMap) {
-          plagasIncidencia[p] = stats.monitoreados > 0
-            ? +((stats.afectados / stats.monitoreados) * 100).toFixed(1)
+          plagasIncidencia[p] = totalMonitoreados > 0
+            ? +((stats.afectados / totalMonitoreados) * 100).toFixed(1)
             : 0;
         }
         const florLote = calcularEstadoFloracion(l.monitoreoRows);

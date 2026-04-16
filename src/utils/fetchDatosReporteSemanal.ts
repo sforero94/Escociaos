@@ -1304,14 +1304,31 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
   }
 
   // Helper: weighted incidencia from raw tree counts
-  function incidenciaPonderada(recs: any[]): number {
-    let afectados = 0, monitoreados = 0;
+  // If totalMonitoreados is provided, use it as denominator (for lote-level: all sublotes' trees)
+  function incidenciaPonderada(recs: any[], totalMonitoreados?: number): number {
+    let afectados = 0;
     for (const m of recs) {
       afectados += Number(m.arboles_afectados) || 0;
-      monitoreados += Number(m.arboles_monitoreados) || 0;
     }
-    if (monitoreados === 0) return 0;
-    return Math.round(((afectados / monitoreados) * 100) * 10) / 10;
+    if (totalMonitoreados === undefined) {
+      totalMonitoreados = 0;
+      for (const m of recs) {
+        totalMonitoreados += Number(m.arboles_monitoreados) || 0;
+      }
+    }
+    if (totalMonitoreados === 0) return 0;
+    return Math.round(((afectados / totalMonitoreados) * 100) * 10) / 10;
+  }
+
+  // Helper: total arboles_monitoreados deduplicated per sublote
+  function totalMonitoreados(recs: any[]): number {
+    const subMap = new Map<string, number>();
+    for (const m of recs) {
+      const key = m.sublote_id || m.lote_id;
+      const prev = subMap.get(key) || 0;
+      subMap.set(key, Math.max(prev, Number(m.arboles_monitoreados) || 0));
+    }
+    return Array.from(subMap.values()).reduce((s, v) => s + v, 0);
   }
 
   function calcNivelAlerta(fecha: string | null): 'ninguna' | 'amarilla' | 'roja' {
@@ -1364,13 +1381,16 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
         plagasSet.add(m.plagas_enfermedades_catalogo?.nombre || 'Desconocida');
       });
 
+      const totalMonLast = totalMonitoreados(lastRecs);
+      const totalMonPrev = totalMonitoreados(prevRecs);
+
       const plagas: PlagaLoteComparativa[] = Array.from(plagasSet).map(plaga => {
         const recsActual = lastRecs
           .filter(m => (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga);
         const recsPrev = prevRecs
           .filter(m => (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga);
-        const actual = recsActual.length > 0 ? incidenciaPonderada(recsActual) : null;
-        const anterior = recsPrev.length > 0 ? incidenciaPonderada(recsPrev) : null;
+        const actual = recsActual.length > 0 ? incidenciaPonderada(recsActual, totalMonLast) : null;
+        const anterior = recsPrev.length > 0 ? incidenciaPonderada(recsPrev, totalMonPrev) : null;
         return {
           plagaNombre: plaga,
           esPlaga_interes: esPlagaInteres(plaga),
@@ -1400,8 +1420,20 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
 
   // 4. Build RESUMEN GLOBAL (Slide 1)
   // For each plaga: avg across all lotes (actual), min-max across lotes, and comparison with anterior
+  // Precompute total monitored trees per lote (all pests, deduplicated per sublote)
+  const totalMonActual = totalMonitoreados(regActuales);
+  const totalMonAnterior = totalMonitoreados(regAnteriores);
+
+  // Per-lote totals for min/max
+  const loteIdsActuales = new Set(regActuales.map((m: any) => m.lote_id));
+  const totalMonPorLoteActual = new Map<string, number>();
+  for (const loteId of loteIdsActuales) {
+    const recsLote = regActuales.filter((m: any) => m.lote_id === loteId);
+    totalMonPorLoteActual.set(loteId, totalMonitoreados(recsLote));
+  }
+
   const resumenGlobal: ResumenPlagaGlobal[] = plagasArr.map(plaga => {
-    // Current: weighted incidencia per lote, then global weighted average
+    // Current: afectados per pest / total monitored trees (all sublotes)
     const lotesActuales = new Map<string, any[]>();
     regActuales.forEach((m: any) => {
       if ((m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') !== plaga) return;
@@ -1411,14 +1443,16 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
     });
 
     const recsActuales = regActuales.filter((m: any) => (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga);
-    const promedioActual = recsActuales.length > 0 ? incidenciaPonderada(recsActuales) : null;
-    const promediosPorLote = Array.from(lotesActuales.values()).map(recs => incidenciaPonderada(recs));
+    const promedioActual = recsActuales.length > 0 ? incidenciaPonderada(recsActuales, totalMonActual) : null;
+    const promediosPorLote = Array.from(lotesActuales.entries()).map(([loteId, recs]) =>
+      incidenciaPonderada(recs, totalMonPorLoteActual.get(loteId) || 0)
+    );
     const minLote = promediosPorLote.length > 0 ? Math.min(...promediosPorLote) : null;
     const maxLote = promediosPorLote.length > 0 ? Math.max(...promediosPorLote) : null;
 
     // Previous: global weighted average
     const recsAnterior = regAnteriores.filter((m: any) => (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga);
-    const promedioAnterior = recsAnterior.length > 0 ? incidenciaPonderada(recsAnterior) : null;
+    const promedioAnterior = recsAnterior.length > 0 ? incidenciaPonderada(recsAnterior, totalMonAnterior) : null;
 
     return {
       plagaNombre: plaga,
@@ -1453,14 +1487,18 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
       plagasLote.add(m.plagas_enfermedades_catalogo?.nombre || 'Desconocida');
     });
 
+    // Total monitored trees for this lote (all sublotes, deduplicated)
+    const totalMonLoteActual = totalMonitoreados(regLoteActual);
+    const totalMonLoteAnterior = totalMonitoreados(regLoteAnterior);
+
     const plagas: PlagaLoteComparativa[] = Array.from(plagasLote).map(plaga => {
       const recsActual = regLoteActual
         .filter((m: any) => (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga);
       const recsAnteriorLote = regLoteAnterior
         .filter((m: any) => (m.plagas_enfermedades_catalogo?.nombre || 'Desconocida') === plaga);
 
-      const actual = recsActual.length > 0 ? incidenciaPonderada(recsActual) : null;
-      const anterior = recsAnteriorLote.length > 0 ? incidenciaPonderada(recsAnteriorLote) : null;
+      const actual = recsActual.length > 0 ? incidenciaPonderada(recsActual, totalMonLoteActual) : null;
+      const anterior = recsAnteriorLote.length > 0 ? incidenciaPonderada(recsAnteriorLote, totalMonLoteAnterior) : null;
 
       return {
         plagaNombre: plaga,
