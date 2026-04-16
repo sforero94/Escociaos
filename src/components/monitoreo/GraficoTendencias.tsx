@@ -115,6 +115,8 @@ export function GraficoTendencias({
           .select(`
             fecha_monitoreo,
             incidencia,
+            arboles_afectados,
+            arboles_monitoreados,
             plaga_enfermedad_id,
             plagas_enfermedades_catalogo!inner(nombre),
             lote_id,
@@ -183,28 +185,23 @@ export function GraficoTendencias({
       // Filtrar monitoreos de esta fecha
       const monitoreosDeEstaFecha = monitoreos.filter(m => m.fecha_monitoreo === fecha);
 
-      // Agrupar por plaga y calcular promedio
-      const promediosPorPlaga: { [plaga: string]: number } = {};
+      // Agrupar por plaga y calcular incidencia ponderada
+      const plagaTotals: { [plaga: string]: { afectados: number; monitoreados: number } } = {};
 
       monitoreosDeEstaFecha.forEach(m => {
         const plagaNombre = m.plagas_enfermedades_catalogo.nombre;
-        const incidencia = parseFloat(m.incidencia) || 0;
-
-        if (!promediosPorPlaga[plagaNombre]) {
-          promediosPorPlaga[plagaNombre] = 0;
+        if (!plagaTotals[plagaNombre]) {
+          plagaTotals[plagaNombre] = { afectados: 0, monitoreados: 0 };
         }
-        promediosPorPlaga[plagaNombre] += incidencia;
+        plagaTotals[plagaNombre].afectados += m.arboles_afectados || 0;
+        plagaTotals[plagaNombre].monitoreados += m.arboles_monitoreados || 0;
       });
 
-      // Calcular promedios finales
-      const conteosPorPlaga: { [plaga: string]: number } = {};
-      monitoreosDeEstaFecha.forEach(m => {
-        const plagaNombre = m.plagas_enfermedades_catalogo.nombre;
-        conteosPorPlaga[plagaNombre] = (conteosPorPlaga[plagaNombre] || 0) + 1;
-      });
-
-      Object.keys(promediosPorPlaga).forEach(plaga => {
-        promediosPorPlaga[plaga] = Math.round((promediosPorPlaga[plaga] / conteosPorPlaga[plaga]) * 10) / 10;
+      const promediosPorPlaga: { [plaga: string]: number } = {};
+      Object.entries(plagaTotals).forEach(([plaga, t]) => {
+        promediosPorPlaga[plaga] = t.monitoreados > 0
+          ? Math.round(((t.afectados / t.monitoreados) * 100) * 10) / 10
+          : 0;
       });
 
       // Crear punto de datos

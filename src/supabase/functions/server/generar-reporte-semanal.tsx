@@ -183,7 +183,7 @@ async function fetchHistoricoSemanas(inicioSemanaActual: string): Promise<string
   try {
     const [monitoreos, aplicaciones, registros] = await Promise.all([
       fetch(
-        `${supabaseUrl}/rest/v1/monitoreos?select=fecha_monitoreo,lote_id,plaga_enfermedad_id,incidencia,gravedad_texto,lote:lotes(nombre),plaga:plagas_enfermedades_catalogo(nombre)&fecha_monitoreo=gte.${encode(inicioHistoricoStr)}&fecha_monitoreo=lt.${encode(inicioSemanaActual)}&order=fecha_monitoreo.asc`,
+        `${supabaseUrl}/rest/v1/monitoreos?select=fecha_monitoreo,lote_id,plaga_enfermedad_id,incidencia,arboles_afectados,arboles_monitoreados,gravedad_texto,lote:lotes(nombre),plaga:plagas_enfermedades_catalogo(nombre)&fecha_monitoreo=gte.${encode(inicioHistoricoStr)}&fecha_monitoreo=lt.${encode(inicioSemanaActual)}&order=fecha_monitoreo.asc`,
         { headers }
       ).then(r => r.ok ? r.json() : []),
       fetch(
@@ -201,7 +201,7 @@ async function fetchHistoricoSemanas(inicioSemanaActual: string): Promise<string
 
     if (Array.isArray(monitoreos) && monitoreos.length > 0) {
       partes.push('\n### Monitoreo fitosanitario (evolucion semanal)');
-      const trend: Record<string, Record<string, Record<string, number[]>>> = {};
+      const trend: Record<string, Record<string, Record<string, { afectados: number; monitoreados: number }>>> = {};
       for (const m of monitoreos) {
         const fecha = new Date(m.fecha_monitoreo);
         const weekStart = new Date(fecha);
@@ -211,24 +211,24 @@ async function fetchHistoricoSemanas(inicioSemanaActual: string): Promise<string
         const lote = m.lote?.nombre || m.lote_id || 'Sin lote';
         if (!trend[plaga]) trend[plaga] = {};
         if (!trend[plaga][lote]) trend[plaga][lote] = {};
-        if (!trend[plaga][lote][weekKey]) trend[plaga][lote][weekKey] = [];
-        trend[plaga][lote][weekKey].push(m.incidencia ?? 0);
+        if (!trend[plaga][lote][weekKey]) trend[plaga][lote][weekKey] = { afectados: 0, monitoreados: 0 };
+        trend[plaga][lote][weekKey].afectados += m.arboles_afectados ?? 0;
+        trend[plaga][lote][weekKey].monitoreados += m.arboles_monitoreados ?? 0;
       }
+
+      const calcInc = (t: { afectados: number; monitoreados: number }) =>
+        t.monitoreados > 0 ? (t.afectados / t.monitoreados) * 100 : 0;
 
       for (const [plaga, lotes] of Object.entries(trend)) {
         partes.push(`\n**${plaga}**`);
         for (const [lote, weeks] of Object.entries(lotes)) {
           const sortedWeeks = Object.entries(weeks).sort(([a], [b]) => a.localeCompare(b));
-          const vals = sortedWeeks.map(([wk, vs]) => {
-            const avg = vs.reduce((s, v) => s + v, 0) / vs.length;
-            return `S(${wk.slice(5)}): ${avg.toFixed(1)}%`;
+          const vals = sortedWeeks.map(([wk, t]) => {
+            return `S(${wk.slice(5)}): ${calcInc(t).toFixed(1)}%`;
           });
-          const rising = sortedWeeks.length >= 2 && sortedWeeks.every(([, vs], i) => {
+          const rising = sortedWeeks.length >= 2 && sortedWeeks.every(([, t], i) => {
             if (i === 0) return true;
-            const prev = sortedWeeks[i - 1][1];
-            const avgPrev = prev.reduce((s, v) => s + v, 0) / prev.length;
-            const avgCurr = vs.reduce((s, v) => s + v, 0) / vs.length;
-            return avgCurr >= avgPrev;
+            return calcInc(t) >= calcInc(sortedWeeks[i - 1][1]);
           });
           partes.push(`  - ${lote}: ${vals.join(' -> ')}${rising && sortedWeeks.length >= 2 ? ' TENDENCIA ASCENDENTE' : ''}`);
         }

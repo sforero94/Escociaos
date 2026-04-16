@@ -576,21 +576,23 @@ async function execMonitoringData(args: Record<string, unknown>): Promise<string
     filtered = filtered.filter((r) => ((r.plaga as Record<string, unknown>)?.nombre as string || '').toLowerCase().includes(pn));
   }
 
-  // Summary by pest
-  const byPest: Record<string, { count: number; avg_incidencia: number; max_gravedad: string }> = {};
-  // Summary by month
-  const byMonth: Record<string, { count: number; avg_incidencia: number; max_gravedad: string; plagas: Record<string, number>; lotes: Set<string> }> = {};
+  // Summary by pest — weighted by tree counts
+  const byPest: Record<string, { count: number; totalAfectados: number; totalMonitoreados: number; max_gravedad: string }> = {};
+  // Summary by month — weighted by tree counts
+  const byMonth: Record<string, { count: number; totalAfectados: number; totalMonitoreados: number; max_gravedad: string; plagas: Record<string, number>; lotes: Set<string> }> = {};
 
   for (const r of filtered) {
     const plagaName = (r.plaga as Record<string, unknown>)?.nombre as string || 'Desconocida';
     const loteName = (r.lote as Record<string, unknown>)?.nombre as string || 'Sin lote';
-    const incidencia = (r.incidencia as number) || 0;
+    const afectados = (r.arboles_afectados as number) || 0;
+    const monitoreados = (r.arboles_monitoreados as number) || 0;
     const grav = r.gravedad_texto as string || 'Baja';
 
     // By pest
-    if (!byPest[plagaName]) byPest[plagaName] = { count: 0, avg_incidencia: 0, max_gravedad: 'Baja' };
+    if (!byPest[plagaName]) byPest[plagaName] = { count: 0, totalAfectados: 0, totalMonitoreados: 0, max_gravedad: 'Baja' };
     byPest[plagaName].count++;
-    byPest[plagaName].avg_incidencia += incidencia;
+    byPest[plagaName].totalAfectados += afectados;
+    byPest[plagaName].totalMonitoreados += monitoreados;
     if (grav === 'Alta' || (grav === 'Media' && byPest[plagaName].max_gravedad === 'Baja')) {
       byPest[plagaName].max_gravedad = grav;
     }
@@ -599,9 +601,10 @@ async function execMonitoringData(args: Record<string, unknown>): Promise<string
     const fecha = r.fecha_monitoreo as string || '';
     const mes = fecha.slice(0, 7); // YYYY-MM
     if (mes) {
-      if (!byMonth[mes]) byMonth[mes] = { count: 0, avg_incidencia: 0, max_gravedad: 'Baja', plagas: {}, lotes: new Set() };
+      if (!byMonth[mes]) byMonth[mes] = { count: 0, totalAfectados: 0, totalMonitoreados: 0, max_gravedad: 'Baja', plagas: {}, lotes: new Set() };
       byMonth[mes].count++;
-      byMonth[mes].avg_incidencia += incidencia;
+      byMonth[mes].totalAfectados += afectados;
+      byMonth[mes].totalMonitoreados += monitoreados;
       byMonth[mes].plagas[plagaName] = (byMonth[mes].plagas[plagaName] || 0) + 1;
       byMonth[mes].lotes.add(loteName);
       if (grav === 'Alta' || (grav === 'Media' && byMonth[mes].max_gravedad === 'Baja')) {
@@ -611,15 +614,20 @@ async function execMonitoringData(args: Record<string, unknown>): Promise<string
   }
 
   for (const key of Object.keys(byPest)) {
-    if (byPest[key].count > 0) byPest[key].avg_incidencia = Math.round(byPest[key].avg_incidencia / byPest[key].count * 100) / 100;
+    const p = byPest[key];
+    (p as any).avg_incidencia = p.totalMonitoreados > 0
+      ? Math.round((p.totalAfectados / p.totalMonitoreados) * 100 * 100) / 100
+      : 0;
   }
 
-  // Serialize byMonth (convert Sets to arrays, compute averages)
+  // Serialize byMonth (convert Sets to arrays, compute weighted averages)
   const byMonthSerialized: Record<string, unknown> = {};
   for (const [mes, data] of Object.entries(byMonth)) {
     byMonthSerialized[mes] = {
       registros: data.count,
-      incidencia_promedio: Math.round(data.avg_incidencia / data.count * 100) / 100,
+      incidencia_promedio: data.totalMonitoreados > 0
+        ? Math.round((data.totalAfectados / data.totalMonitoreados) * 100 * 100) / 100
+        : 0,
       gravedad_maxima: data.max_gravedad,
       plagas_encontradas: data.plagas,
       lotes_monitoreados: [...data.lotes],

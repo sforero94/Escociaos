@@ -118,9 +118,14 @@ function detectarMejoras(monitoreos: Monitoreo[]): Insight[] {
     
     const ultimas2 = registros.slice(-2);
     const anteriores2 = registros.slice(-4, -2);
-    
-    const promedioUltimas = ultimas2.reduce((sum, r) => sum + r.incidencia, 0) / ultimas2.length;
-    const promedioAnteriores = anteriores2.reduce((sum, r) => sum + r.incidencia, 0) / anteriores2.length;
+
+    const calcPonderada = (recs: Monitoreo[]) => {
+      const af = recs.reduce((s, r) => s + (r.arboles_afectados || 0), 0);
+      const mon = recs.reduce((s, r) => s + (r.arboles_monitoreados || 0), 0);
+      return mon > 0 ? (af / mon) * 100 : 0;
+    };
+    const promedioUltimas = calcPonderada(ultimas2);
+    const promedioAnteriores = calcPonderada(anteriores2);
     
     if (promedioAnteriores > 10 && promedioUltimas < promedioAnteriores * 0.7) {
       const cambio = ((promedioUltimas - promedioAnteriores) / promedioAnteriores) * 100;

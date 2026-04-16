@@ -254,29 +254,30 @@ export function MapaCalorIncidencias({
       // Always keep at least 3 ocurrencias for trend arrow calculation
       const numOcurrencias = modoVisualizacion === 'ultimos6' ? 6 : 3;
 
-      // Agrupar por fecha y calcular promedio
-      const monitoreoPorFecha = new Map<string, number[]>();
+      // Agrupar por fecha con tree counts para promedio ponderado
+      const monitoreoPorFecha = new Map<string, { afectados: number; monitoreados: number }>();
       celda.monitoreos.forEach(m => {
         const fecha = typeof m.fecha_monitoreo === 'string'
           ? m.fecha_monitoreo
           : m.fecha_monitoreo.toISOString().split('T')[0];
         if (!monitoreoPorFecha.has(fecha)) {
-          monitoreoPorFecha.set(fecha, []);
+          monitoreoPorFecha.set(fecha, { afectados: 0, monitoreados: 0 });
         }
-        monitoreoPorFecha.get(fecha)!.push(parseFloat(String(m.incidencia)));
+        const entry = monitoreoPorFecha.get(fecha)!;
+        entry.afectados += m.arboles_afectados || 0;
+        entry.monitoreados += m.arboles_monitoreados || 0;
       });
 
       // Ordenar fechas y tomar las últimas N
       const fechasOrdenadas = Array.from(monitoreoPorFecha.keys()).sort();
       const fechasSeleccionadas = fechasOrdenadas.slice(-numOcurrencias);
 
-      // Crear array de ocurrencias
+      // Crear array de ocurrencias con incidencia ponderada
       celda.ocurrencias = fechasSeleccionadas.map(fecha => {
-        const incidencias = monitoreoPorFecha.get(fecha)!;
-        const promedio = incidencias.reduce((a, b) => a + b, 0) / incidencias.length;
+        const t = monitoreoPorFecha.get(fecha)!;
         return {
           fecha,
-          incidencia: promedio
+          incidencia: t.monitoreados > 0 ? (t.afectados / t.monitoreados) * 100 : 0
         };
       });
     });
