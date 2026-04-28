@@ -5,7 +5,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { signIn } from '../utils/supabase/client';
 
-const LOGO_URL = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/photos/grafica%203.png`;
+const LOGO_URL = '/login.png';
 
 interface LoginProps {
   onLoginSuccess: () => void;
