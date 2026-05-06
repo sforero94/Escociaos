@@ -327,6 +327,7 @@ Sequential SQL migrations live in `src/sql/migrations/` (001–039). See `src/sq
 - **037**: `allow_admin_insert_proveedores` — Administrador SELECT + INSERT policies on `fin_proveedores`
 - **038**: `fix_trigger_compra_gasto_security_definer` — SECURITY DEFINER on `crear_gasto_pendiente_de_compra()` so the purchase-to-expense trigger bypasses RLS
 - **039**: `fix_admin_purchase_workflow` — SECURITY DEFINER RPC `fn_cleanup_compra_dependencies()`, FK ON DELETE SET NULL on `fin_gastos.compra_id`, Administrador storage policies on `facturas` bucket
+- **040**: `admin_delete_tareas` — Administrador DELETE policy on `tareas` (scoped to `created_by = auth.uid()` OR legacy NULL rows) and BEFORE INSERT trigger `set_tarea_created_by()` to auto-populate `created_by` on new tareas
 
 ### Ganado ↔ Finance Integration
 
