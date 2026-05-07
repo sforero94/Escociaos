@@ -2,6 +2,12 @@
 // Flujo: mensaje -> tool-calling loop (non-streaming) -> streaming respuesta final -> SSE
 
 import { Context } from "npm:hono";
+import {
+  aggregateInsumosPorLote,
+  aggregateJornalesPorLote,
+  combineCostosPorLote,
+  summariseCostos,
+} from './cost-aggregation.ts';
 
 // ============================================================================
 // TIPOS
@@ -259,6 +265,29 @@ const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: 'get_application_cost_by_lote',
+    description: 'Costo real de una aplicacion desglosado por lote: insumos (productos x precio_unitario), mano de obra (registros_trabajo) y costo por arbol. Usar cuando preguntan costo de aplicacion X por lote o por arbol.',
+    parameters: {
+      type: 'object',
+      properties: {
+        application_id: { type: 'string', description: 'UUID de la aplicacion (opcional si se pasa application_name)' },
+        application_name: { type: 'string', description: 'Nombre parcial de la aplicacion (opcional si se pasa application_id)' },
+      },
+    },
+  },
+  {
+    name: 'get_cost_by_lote',
+    description: 'Costo agregado por lote sumando todas las aplicaciones en el rango de fechas. Usar para comparar lotes y responder cual lote es mas caro de mantener.',
+    parameters: {
+      type: 'object',
+      properties: {
+        date_from: { type: 'string', description: 'Fecha inicio YYYY-MM-DD' },
+        date_to: { type: 'string', description: 'Fecha fin YYYY-MM-DD' },
+      },
+      required: ['date_from', 'date_to'],
+    },
+  },
+  {
     name: 'get_weekly_overview',
     description: 'Obtiene un resumen compuesto de la semana: labores + monitoreo + aplicaciones + cosechas.',
     parameters: {
@@ -366,6 +395,8 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
       case 'get_purchase_history': result = await execPurchaseHistory(args); break;
       case 'get_inventory_movements': result = await execInventoryMovements(args); break;
       case 'get_application_details': result = await execApplicationDetails(args); break;
+      case 'get_application_cost_by_lote': result = await execApplicationCostByLote(args); break;
+      case 'get_cost_by_lote': result = await execCostByLote(args); break;
       case 'get_weekly_overview': result = await execWeeklyOverview(args); break;
       case 'get_climate_data': result = await execClimateData(args); break;
       case 'get_conductivity_data': result = await execConductivityData(args); break;
@@ -580,10 +611,14 @@ async function execMonitoringData(args: Record<string, unknown>): Promise<string
   const byPest: Record<string, { count: number; totalAfectados: number; totalMonitoreados: number; max_gravedad: string }> = {};
   // Summary by month — weighted by tree counts
   const byMonth: Record<string, { count: number; totalAfectados: number; totalMonitoreados: number; max_gravedad: string; plagas: Record<string, number>; lotes: Set<string> }> = {};
+  // Summary by sublote — for area-specific decisions
+  const bySublote: Record<string, { sublote_id: string; sublote_nombre: string; lote_nombre: string; count: number; totalAfectados: number; totalMonitoreados: number; max_gravedad: string; plagas: Set<string> }> = {};
 
   for (const r of filtered) {
     const plagaName = (r.plaga as Record<string, unknown>)?.nombre as string || 'Desconocida';
     const loteName = (r.lote as Record<string, unknown>)?.nombre as string || 'Sin lote';
+    const subloteName = (r.sublote as Record<string, unknown>)?.nombre as string || '';
+    const subloteId = (r.sublote_id as string) || '';
     const afectados = (r.arboles_afectados as number) || 0;
     const monitoreados = (r.arboles_monitoreados as number) || 0;
     const grav = r.gravedad_texto as string || 'Baja';
@@ -595,6 +630,18 @@ async function execMonitoringData(args: Record<string, unknown>): Promise<string
     byPest[plagaName].totalMonitoreados += monitoreados;
     if (grav === 'Alta' || (grav === 'Media' && byPest[plagaName].max_gravedad === 'Baja')) {
       byPest[plagaName].max_gravedad = grav;
+    }
+
+    // By sublote
+    if (subloteId) {
+      if (!bySublote[subloteId]) bySublote[subloteId] = { sublote_id: subloteId, sublote_nombre: subloteName, lote_nombre: loteName, count: 0, totalAfectados: 0, totalMonitoreados: 0, max_gravedad: 'Baja', plagas: new Set() };
+      bySublote[subloteId].count++;
+      bySublote[subloteId].totalAfectados += afectados;
+      bySublote[subloteId].totalMonitoreados += monitoreados;
+      bySublote[subloteId].plagas.add(plagaName);
+      if (grav === 'Alta' || (grav === 'Media' && bySublote[subloteId].max_gravedad === 'Baja')) {
+        bySublote[subloteId].max_gravedad = grav;
+      }
     }
 
     // By month
@@ -663,10 +710,28 @@ async function execMonitoringData(args: Record<string, unknown>): Promise<string
     floracionTotal.cuaje += ev.cuaje;
   }
 
+  // Serialize bySublote (Sets → arrays, compute weighted incidencia)
+  const bySubloteSerialized: Record<string, unknown> = {};
+  for (const [id, data] of Object.entries(bySublote)) {
+    bySubloteSerialized[id] = {
+      sublote_nombre: data.sublote_nombre,
+      lote_nombre: data.lote_nombre,
+      registros: data.count,
+      arboles_afectados: data.totalAfectados,
+      arboles_monitoreados: data.totalMonitoreados,
+      incidencia_promedio: data.totalMonitoreados > 0
+        ? Math.round((data.totalAfectados / data.totalMonitoreados) * 100 * 100) / 100
+        : 0,
+      max_gravedad: data.max_gravedad,
+      plagas_encontradas: [...data.plagas],
+    };
+  }
+
   return JSON.stringify({
     total_registros: filtered.length,
     resumen_por_mes: byMonthSerialized,
     resumen_por_plaga: byPest,
+    resumen_por_sublote: bySubloteSerialized,
     resumen_floracion: floracionTotal,
     detalle: filtered.slice(0, 20),
   });
@@ -677,7 +742,7 @@ async function execApplicationSummary(args: Record<string, unknown>): Promise<st
   const { date_from, date_to } = validated;
   const { application_id, type } = args as { application_id?: string; type?: string };
 
-  let query = `select=id,nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_fin_planeada,fecha_cierre,blanco_biologico,costo_total,jornales_utilizados,observaciones_cierre&order=fecha_inicio_planeada.desc&limit=30`;
+  let query = `select=id,nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_fin_planeada,fecha_cierre,blanco_biologico,costo_total,costo_total_insumos,costo_total_mano_obra,jornales_utilizados,valor_jornal,costo_por_arbol,arboles_jornal,observaciones_cierre&order=fecha_inicio_planeada.desc&limit=30`;
 
   if (application_id) query += `&id=eq.${e(application_id)}`;
   if (date_from) query += `&fecha_inicio_planeada=gte.${e(date_from)}`;
@@ -1153,11 +1218,18 @@ async function execApplicationDetails(args: Record<string, unknown>): Promise<st
   const id = args.application_id as string;
   if (!id) return JSON.stringify({ error: 'application_id es requerido' });
 
-  const [cierre, calculos, focos] = await Promise.all([
+  const [cierre, calculos, focos, appRows] = await Promise.all([
     supabaseQuery('aplicaciones_cierre', `select=*&aplicacion_id=eq.${e(id)}`),
     supabaseQuery('aplicaciones_calculos', `select=lote_nombre,area_hectareas,total_arboles,litros_mezcla,numero_canecas,kilos_totales,numero_bultos&aplicacion_id=eq.${e(id)}`),
     supabaseQuery('focos', `select=fecha_aplicacion,blanco_biologico,numero_focos,numero_bombas_30l,costo_insumos,jornales,costo_mano_obra,costo_total,observaciones,lote:lotes(nombre),sublote:sublotes(nombre),focos_productos(producto:productos(nombre),dosis_por_bomba,costo_producto)&aplicacion_id=eq.${e(id)}`),
+    supabaseQuery('aplicaciones', `select=id,nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_cierre,tarea_id&id=eq.${e(id)}`),
   ]);
+
+  // Per-lote cost breakdown via shared helper
+  const appRow = (appRows as AplicacionRow[])[0];
+  const costoPorLote = appRow ? await fetchPerLoteCostsForApplication(appRow) : [];
+  costoPorLote.sort((a, b) => b.costo_total - a.costo_total);
+  const costoSummary = summariseCostos(costoPorLote);
 
   // Cierre summary
   const cierreData = (cierre as Array<Record<string, unknown>>)[0] || null;
@@ -1197,6 +1269,187 @@ async function execApplicationDetails(args: Record<string, unknown>): Promise<st
       costo_total_focos: Math.round(totalCostoFocos),
       detalle: focosList,
     },
+    costo_por_lote: costoPorLote,
+    costo_resumen: costoSummary,
+  });
+}
+
+// ----------------------------------------------------------------------------
+// PER-LOTE COST ANALYSIS
+//
+// Mirrors the logic in src/utils/aplicacionesReales.ts (frontend equivalent).
+// The pure aggregation lives in ./cost-aggregation.ts so it is unit-testable
+// from Vitest without depending on Deno.
+// ----------------------------------------------------------------------------
+
+interface AplicacionRow {
+  id: string;
+  nombre_aplicacion: string;
+  tipo_aplicacion: string;
+  estado: string;
+  fecha_inicio_planeada: string;
+  fecha_cierre: string | null;
+  tarea_id: string | null;
+}
+
+async function fetchAplicacionByIdOrName(
+  applicationId?: string,
+  applicationName?: string,
+): Promise<AplicacionRow | null> {
+  let q = `select=id,nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_cierre,tarea_id&order=fecha_inicio_planeada.desc&limit=1`;
+  if (applicationId) {
+    q += `&id=eq.${e(applicationId)}`;
+  } else if (applicationName) {
+    q += `&nombre_aplicacion=ilike.*${e(applicationName)}*`;
+  } else {
+    return null;
+  }
+  const rows = (await supabaseQuery('aplicaciones', q)) as AplicacionRow[];
+  return rows[0] ?? null;
+}
+
+async function fetchPerLoteCostsForApplication(app: AplicacionRow) {
+  // Movimientos diarios for this application (with lote)
+  const movimientos = (await supabaseQuery(
+    'movimientos_diarios',
+    `select=id,lote_id&aplicacion_id=eq.${e(app.id)}&limit=2000`,
+  )) as Array<{ id: string; lote_id: string | null }>;
+
+  // Product detail per movement
+  const movIds = movimientos.map((m) => m.id).filter(Boolean);
+  const movProductos = movIds.length
+    ? ((await supabaseQuery(
+        'movimientos_diarios_productos',
+        `select=movimiento_diario_id,producto_id,producto_nombre,cantidad_utilizada,unidad&movimiento_diario_id=in.(${movIds.join(',')})&limit=2000`,
+      )) as Array<{
+        movimiento_diario_id: string;
+        producto_id: string;
+        producto_nombre: string;
+        cantidad_utilizada: number | string;
+        unidad: string;
+      }>)
+    : [];
+
+  // Product unit prices
+  const productoIds = [...new Set(movProductos.map((p) => p.producto_id).filter(Boolean))];
+  const precios = new Map<string, number>();
+  if (productoIds.length) {
+    const rows = (await supabaseQuery(
+      'productos',
+      `select=id,precio_unitario&id=in.(${productoIds.join(',')})`,
+    )) as Array<{ id: string; precio_unitario: number | string }>;
+    for (const r of rows) precios.set(r.id, Number(r.precio_unitario) || 0);
+  }
+
+  // Labor records via tarea_id
+  let registros: Array<{ lote_id: string | null; fraccion_jornal: number | string; costo_jornal: number | string }> = [];
+  if (app.tarea_id) {
+    registros = (await supabaseQuery(
+      'registros_trabajo',
+      `select=lote_id,fraccion_jornal,costo_jornal&tarea_id=eq.${e(app.tarea_id)}&limit=2000`,
+    )) as typeof registros;
+  }
+
+  // Tree counts per lote (planned)
+  const lotesPlan = (await supabaseQuery(
+    'aplicaciones_lotes_planificado',
+    `select=lote_id,total_arboles,lote:lotes(id,nombre,total_arboles)&aplicacion_id=eq.${e(app.id)}&limit=200`,
+  )) as Array<{ lote_id: string; total_arboles: number | string; lote: { id: string; nombre: string; total_arboles: number | string } | null }>;
+
+  const lotesInfo = lotesPlan
+    .filter((row) => row.lote_id)
+    .map((row) => ({
+      id: row.lote_id,
+      nombre: row.lote?.nombre ?? row.lote_id,
+      total_arboles: Number(row.total_arboles) || Number(row.lote?.total_arboles) || 0,
+    }));
+
+  const insumosByLote = aggregateInsumosPorLote(movimientos, movProductos, precios);
+  const jornalesByLote = aggregateJornalesPorLote(registros);
+  return combineCostosPorLote(insumosByLote, jornalesByLote, lotesInfo);
+}
+
+async function execApplicationCostByLote(args: Record<string, unknown>): Promise<string> {
+  const { application_id, application_name } = args as { application_id?: string; application_name?: string };
+  if (!application_id && !application_name) {
+    return JSON.stringify({ error: 'Debe pasar application_id o application_name' });
+  }
+
+  const app = await fetchAplicacionByIdOrName(application_id, application_name);
+  if (!app) return JSON.stringify({ error: 'No se encontro la aplicacion', application_id, application_name });
+
+  const rows = await fetchPerLoteCostsForApplication(app);
+  rows.sort((a, b) => b.costo_total - a.costo_total);
+  const summary = summariseCostos(rows);
+
+  return JSON.stringify({
+    aplicacion: {
+      id: app.id,
+      nombre: app.nombre_aplicacion,
+      tipo: app.tipo_aplicacion,
+      estado: app.estado,
+      fecha_inicio: app.fecha_inicio_planeada,
+      fecha_cierre: app.fecha_cierre,
+    },
+    por_lote: rows,
+    total: summary,
+  });
+}
+
+async function execCostByLote(args: Record<string, unknown>): Promise<string> {
+  const validated = validateDates(args);
+  const { date_from, date_to } = validated;
+  if (!date_from || !date_to) {
+    return JSON.stringify({ error: 'date_from y date_to son requeridos (YYYY-MM-DD)' });
+  }
+
+  const apps = (await supabaseQuery(
+    'aplicaciones',
+    `select=id,nombre_aplicacion,tipo_aplicacion,estado,fecha_inicio_planeada,fecha_cierre,tarea_id&fecha_inicio_planeada=gte.${e(date_from)}&fecha_inicio_planeada=lte.${e(date_to)}&order=fecha_inicio_planeada.asc&limit=200`,
+  )) as AplicacionRow[];
+
+  const aggregated = new Map<
+    string,
+    { lote_id: string; lote_nombre: string; arboles_total: number; costo_insumos: number; costo_mano_obra: number; costo_total: number; jornales: number; aplicaciones_count: number }
+  >();
+
+  for (const app of apps) {
+    const rows = await fetchPerLoteCostsForApplication(app);
+    for (const r of rows) {
+      let cur = aggregated.get(r.lote_id);
+      if (!cur) {
+        cur = {
+          lote_id: r.lote_id,
+          lote_nombre: r.lote_nombre,
+          arboles_total: r.arboles_total,
+          costo_insumos: 0,
+          costo_mano_obra: 0,
+          costo_total: 0,
+          jornales: 0,
+          aplicaciones_count: 0,
+        };
+        aggregated.set(r.lote_id, cur);
+      }
+      cur.costo_insumos += r.costo_insumos;
+      cur.costo_mano_obra += r.costo_mano_obra;
+      cur.costo_total += r.costo_total;
+      cur.jornales += r.jornales;
+      cur.aplicaciones_count += 1;
+      if (cur.arboles_total === 0 && r.arboles_total > 0) cur.arboles_total = r.arboles_total;
+    }
+  }
+
+  const result = [...aggregated.values()]
+    .map((row) => ({
+      ...row,
+      costo_por_arbol: row.arboles_total > 0 ? Math.round(row.costo_total / row.arboles_total) : 0,
+    }))
+    .sort((a, b) => b.costo_total - a.costo_total);
+
+  return JSON.stringify({
+    rango: { desde: date_from, hasta: date_to },
+    total_aplicaciones: apps.length,
+    por_lote: result,
   });
 }
 
@@ -1730,6 +1983,7 @@ DOMINIOS DE DATOS DISPONIBLES:
 - Empleados y Contratistas: personal, cargos, salarios, tarifas
 - Monitoreo: plagas/enfermedades, incidencia, severidad, tendencias por lote. Incluye estado fenológico de floración (brotes, flor madura, cuaje)
 - Aplicaciones: fumigaciones, fertilizaciones, drench, productos usados, costos
+- Costos por lote: desglose insumos + mano de obra y costo por arbol para una aplicacion (get_application_cost_by_lote) o sumando todas las aplicaciones en un rango de fechas (get_cost_by_lote)
 - Inventario: productos agricolas, stock, movimientos, compras
 - Finanzas: gastos (solo Confirmados), ingresos, transacciones de ganado, categorias, busqueda por nombre
 - Presupuesto: control presupuestal por concepto de gasto, ejecucion real vs presupuesto asignado, % de ejecucion, comparativo año anterior. Soporta multiples trimestres (ej: Q1+Q2)
@@ -1739,6 +1993,11 @@ DOMINIOS DE DATOS DISPONIBLES:
 - Conductividad Eléctrica: CE del suelo por lote, promedios, umbrales semáforo (verde <0.5, amarillo 0.5-1.5, rojo >1.5 dS/m)
 - Colmenas y Apiarios: estado de salud (fuertes/débiles/muertas/con reina), configuración de apiarios
 - Clima: temperatura, humedad, precipitacion, viento (velocidad/rafaga/direccion), radiacion solar, indice UV — datos de estacion Weather Underground sincronizados cada 5 minutos
+
+RUTEO DE HERRAMIENTAS PARA COSTOS:
+- "Cuanto costo la aplicacion X por lote/por arbol?" → get_application_cost_by_lote (insumos + mano de obra desglosados por lote)
+- "Que lote es mas caro de mantener este trimestre/año?" → get_cost_by_lote con date_from y date_to
+- "Costo total de la aplicacion X" → get_application_summary o get_application_details (incluyen costo_total, costo_total_insumos, costo_total_mano_obra)
 
 COSTOS DE MANO DE OBRA:
 - El costo real por jornal se calcula como (salario + prestaciones_sociales + auxilios_no_salariales) / 22 dias laborales
