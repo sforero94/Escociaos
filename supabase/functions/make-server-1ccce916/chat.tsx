@@ -12,6 +12,11 @@ import {
   parseTavilyResponse,
   parseOpenWeatherForecast,
 } from './external-tools.ts';
+import {
+  makeMemoryProposal,
+  renderMemoriasBlock,
+  type PersistedMemory,
+} from './memory.ts';
 
 // ============================================================================
 // TIPOS
@@ -314,6 +319,41 @@ const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: 'propose_memory_save',
+    description: 'Propone guardar una memoria de largo plazo cuando el usuario lo pide explicitamente ("guarda esto", "recuerda que...", "esto para luego"). NO inserta directamente: devuelve un payload para que el cliente (Telegram/web) muestre botones de confirmacion. Llama a esta herramienta SOLO cuando el usuario pida guardar, nunca por iniciativa propia.',
+    parameters: {
+      type: 'object',
+      properties: {
+        content: { type: 'string', description: 'Resumen breve y autocontenido de lo que se quiere guardar (≤500 caracteres)' },
+        reason: { type: 'string', description: 'Una linea explicando por que vale la pena recordar esto' },
+      },
+      required: ['content'],
+    },
+  },
+  {
+    name: 'commit_memory_save',
+    description: 'Confirma e inserta una memoria propuesta previamente. Solo se llama tras la aprobacion del usuario en el cliente; el cliente provee el token recibido en propose_memory_save.',
+    parameters: {
+      type: 'object',
+      properties: {
+        token: { type: 'string', description: 'Token unico devuelto por propose_memory_save' },
+        final_content: { type: 'string', description: 'Contenido final (puede haber sido editado por el usuario)' },
+      },
+      required: ['token'],
+    },
+  },
+  {
+    name: 'forget_memory',
+    description: 'Archiva (soft-delete) una memoria existente cuando el usuario dice "olvida X" o "elimina la memoria de Y". Pasa memory_id si lo conoces (lo ves en MEMORIAS GUARDADAS) o match_text para buscar por substring.',
+    parameters: {
+      type: 'object',
+      properties: {
+        memory_id: { type: 'string', description: 'UUID de la memoria a archivar' },
+        match_text: { type: 'string', description: 'Substring para encontrar la memoria si no conoces el ID' },
+      },
+    },
+  },
+  {
     name: 'get_weekly_overview',
     description: 'Obtiene un resumen compuesto de la semana: labores + monitoreo + aplicaciones + cosechas.',
     parameters: {
@@ -405,7 +445,7 @@ function validateDates(args: Record<string, unknown>): { date_from?: string; dat
   return { date_from, date_to };
 }
 
-async function executeTool(name: string, args: Record<string, unknown>): Promise<string> {
+async function executeTool(name: string, args: Record<string, unknown>, userId?: string): Promise<string> {
   try {
     let result: string;
     switch (name) {
@@ -425,6 +465,9 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
       case 'get_cost_by_lote': result = await execCostByLote(args); break;
       case 'web_search_agronomic': result = await execWebSearchAgronomic(args); break;
       case 'get_weather_forecast': result = await execWeatherForecast(args); break;
+      case 'propose_memory_save': result = await execProposeMemorySave(args); break;
+      case 'commit_memory_save': result = await execCommitMemorySave(args, userId); break;
+      case 'forget_memory': result = await execForgetMemory(args, userId); break;
       case 'get_weekly_overview': result = await execWeeklyOverview(args); break;
       case 'get_climate_data': result = await execClimateData(args); break;
       case 'get_conductivity_data': result = await execConductivityData(args); break;
@@ -1563,6 +1606,113 @@ async function execWeatherForecast(args: Record<string, unknown>): Promise<strin
   }
 }
 
+// ----------------------------------------------------------------------------
+// LONG-TERM MEMORY TOOLS
+//
+// "Save this for later" flow:
+//   user says "guarda esto" → Esco calls propose_memory_save (no DB write)
+//   → client (Telegram/web) renders inline confirmation buttons with the token
+//   → on ✅ tap, client calls commit_memory_save with the token + final content
+//   → row inserted into esco_memorias.
+//
+// At conversation start, handleChatMessage loads the user's active memorias
+// and injects them into the system prompt via renderMemoriasBlock.
+// ----------------------------------------------------------------------------
+
+const memoryProposalCache = new Map<string, { content: string; reason?: string; createdAt: number }>();
+
+async function execProposeMemorySave(args: Record<string, unknown>): Promise<string> {
+  const { content, reason } = args as { content?: string; reason?: string };
+  if (!content || typeof content !== 'string' || !content.trim()) {
+    return JSON.stringify({ error: 'content es requerido' });
+  }
+  const proposal = makeMemoryProposal({ content, reason });
+  memoryProposalCache.set(proposal.token, {
+    content: proposal.content,
+    reason: proposal.reason,
+    createdAt: Date.now(),
+  });
+  // Best-effort GC: drop tokens older than 30 minutes
+  for (const [t, v] of memoryProposalCache) {
+    if (Date.now() - v.createdAt > 30 * 60 * 1000) memoryProposalCache.delete(t);
+  }
+  return JSON.stringify(proposal);
+}
+
+async function execCommitMemorySave(args: Record<string, unknown>, userId?: string): Promise<string> {
+  const { token, final_content } = args as { token?: string; final_content?: string };
+  if (!userId) return JSON.stringify({ error: 'No hay usuario autenticado' });
+  if (!token) return JSON.stringify({ error: 'token es requerido' });
+
+  const cached = memoryProposalCache.get(token);
+  if (!cached) return JSON.stringify({ error: 'Token invalido o expirado' });
+
+  const content = (final_content && final_content.trim()) || cached.content;
+  const inserted = (await supabaseInsert('esco_memorias', {
+    user_id: userId,
+    content: content.slice(0, 1000),
+    source_channel: 'telegram',
+  })) as { id?: string; created_at?: string } | null;
+
+  memoryProposalCache.delete(token);
+
+  return JSON.stringify({
+    saved: true,
+    id: inserted?.id,
+    saved_at: inserted?.created_at,
+    content,
+  });
+}
+
+async function execForgetMemory(args: Record<string, unknown>, userId?: string): Promise<string> {
+  const { memory_id, match_text } = args as { memory_id?: string; match_text?: string };
+  if (!userId) return JSON.stringify({ error: 'No hay usuario autenticado' });
+  if (!memory_id && !match_text) {
+    return JSON.stringify({ error: 'Pasa memory_id o match_text' });
+  }
+
+  // Find candidate rows
+  let candidates: Array<{ id: string; content: string }> = [];
+  if (memory_id) {
+    candidates = (await supabaseQuery(
+      'esco_memorias',
+      `select=id,content&id=eq.${e(memory_id)}&user_id=eq.${e(userId)}&archived_at=is.null`,
+    )) as Array<{ id: string; content: string }>;
+  } else if (match_text) {
+    candidates = (await supabaseQuery(
+      'esco_memorias',
+      `select=id,content&user_id=eq.${e(userId)}&archived_at=is.null&content=ilike.*${e(match_text)}*&limit=5`,
+    )) as Array<{ id: string; content: string }>;
+  }
+
+  if (!candidates.length) {
+    return JSON.stringify({ archived: 0, message: 'No se encontro ninguna memoria activa que coincida.' });
+  }
+
+  // Soft-delete: set archived_at = now() on each
+  const { url, headers } = getAdminHeaders();
+  const ids = candidates.map((c) => c.id).join(',');
+  const res = await fetch(`${url}/rest/v1/esco_memorias?id=in.(${ids})`, {
+    method: 'PATCH',
+    headers: { ...headers, 'Prefer': 'return=minimal' },
+    body: JSON.stringify({ archived_at: new Date().toISOString() }),
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    return JSON.stringify({ error: `Error archivando memoria`, status: res.status, detail: errText.slice(0, 200) });
+  }
+  return JSON.stringify({ archived: candidates.length, items: candidates.map((c) => c.content.slice(0, 100)) });
+}
+
+async function fetchActiveMemorias(userId: string): Promise<PersistedMemory[]> {
+  if (!userId) return [];
+  const rows = (await supabaseQuery(
+    'esco_memorias',
+    `select=id,content,created_at,source_channel&user_id=eq.${e(userId)}&archived_at=is.null&order=created_at.desc&limit=50`,
+  )) as PersistedMemory[];
+  return rows;
+}
+
 async function execWeeklyOverview(args: Record<string, unknown>): Promise<string> {
   const now = new Date();
   const dayOfWeek = now.getDay();
@@ -2041,10 +2191,11 @@ async function execBudgetData(args: Record<string, unknown>): Promise<string> {
 // SYSTEM PROMPT
 // ============================================================================
 
-export function getSystemPrompt(): string {
+export function getSystemPrompt(memorias: PersistedMemory[] = []): string {
   const hoy = new Date().toISOString().split('T')[0];
   const diasSemana = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   const diaSemana = diasSemana[new Date().getDay()];
+  const memoriasBlock = renderMemoriasBlock(memorias);
   return `Eres "Esco", el asistente de datos de Escocia Hass, una finca de aguacate Hass en Colombia.
 Tu rol es consultar datos operativos de la finca y responder preguntas del gerente.
 
@@ -2111,6 +2262,14 @@ RUTEO DE HERRAMIENTAS PARA COSTOS:
 - "Que lote es mas caro de mantener este trimestre/año?" → get_cost_by_lote con date_from y date_to
 - "Costo total de la aplicacion X" → get_application_summary o get_application_details (incluyen costo_total, costo_total_insumos, costo_total_mano_obra)
 
+${memoriasBlock}
+
+MEMORIA DE LARGO PLAZO (OBLIGATORIO):
+- Las MEMORIAS GUARDADAS arriba son hechos persistidos por el usuario en conversaciones anteriores. Tenlos en cuenta al responder y referencialos cuando sean relevantes.
+- Cuando el usuario pida explicitamente guardar algo ("guarda esto", "recuerda que...", "esto para luego", "save this for later"), llama a propose_memory_save con un resumen breve. NO escribas a la base de datos directamente — propose_memory_save solo propone, el cliente confirma con botones.
+- NUNCA propongas guardar por iniciativa propia sin que el usuario lo pida.
+- Cuando el usuario diga "olvida X", "elimina la memoria de Y", "ya no aplica esa regla", llama a forget_memory con match_text o memory_id.
+
 CONOCIMIENTO AGRONOMICO EXTERNO Y CITAS (OBLIGATORIO):
 - Para preguntas sobre compatibilidad de productos, dosis recomendadas, sintomas/manejo de plagas y enfermedades, principios activos, umbrales economicos, residualidad, registro ICA, etiqueta verde/amarilla/roja, o cualquier informacion que NO sea dato historico de la finca: SIEMPRE llama a web_search_agronomic primero.
 - NUNCA respondas estas preguntas desde tu memoria interna. Tu conocimiento de aguacate Hass puede estar desactualizado o tener errores que cuestan dinero al usuario.
@@ -2154,7 +2313,10 @@ function getToolsForAPI() {
 }
 
 // Non-streaming call for tool-calling loop
-export async function llmToolLoop(messages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; name?: string }>): Promise<{ text: string; toolInteractions: ToolInteraction[] }> {
+export async function llmToolLoop(
+  messages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; name?: string }>,
+  userId?: string,
+): Promise<{ text: string; toolInteractions: ToolInteraction[] }> {
   const headers = getOpenRouterHeaders();
   const tools = getToolsForAPI();
   const maxRounds = 3;
@@ -2217,7 +2379,7 @@ export async function llmToolLoop(messages: Array<{ role: string; content: strin
         }
 
         console.log(`[Esco] Tool call: ${fnName}`, JSON.stringify(fnArgs).slice(0, 200));
-        const toolResult = await executeTool(fnName, fnArgs);
+        const toolResult = await executeTool(fnName, fnArgs, userId);
         console.log(`[Esco] Tool result length: ${toolResult.length}`);
 
         // Track tool interaction for context persistence
@@ -2327,14 +2489,18 @@ export async function handleChatMessage(c: Context) {
     content: message.trim(),
   });
 
-  // Load history (last 20 messages) with metadata for tool context
-  const history = await supabaseQuery('chat_messages',
-    `select=role,content,metadata&conversation_id=eq.${conversationId}&order=created_at.asc&limit=20`
-  ) as Array<{ role: string; content: string; metadata?: { tool_interactions?: ToolInteraction[] } }>;
+  // Load history (last 20 messages) with metadata for tool context AND
+  // long-term memorias to inject into the system prompt.
+  const [history, memorias] = await Promise.all([
+    supabaseQuery('chat_messages',
+      `select=role,content,metadata&conversation_id=eq.${conversationId}&order=created_at.asc&limit=20`
+    ) as Promise<Array<{ role: string; content: string; metadata?: { tool_interactions?: ToolInteraction[] } }>>,
+    fetchActiveMemorias(userId),
+  ]);
 
   // Build messages for LLM, injecting tool context from previous turns
   const llmMessages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; name?: string }> = [
-    { role: 'system', content: getSystemPrompt() },
+    { role: 'system', content: getSystemPrompt(memorias) },
   ];
   for (const m of history) {
     if (m.role === 'assistant' && m.metadata?.tool_interactions?.length) {
@@ -2356,7 +2522,7 @@ export async function handleChatMessage(c: Context) {
 
       try {
         // Tool-calling loop (non-streaming) then stream the final answer
-        const { text: finalText, toolInteractions } = await llmToolLoop(llmMessages);
+        const { text: finalText, toolInteractions } = await llmToolLoop(llmMessages, userId);
 
         // Stream the final text character by character in chunks
         const chunkSize = 8;

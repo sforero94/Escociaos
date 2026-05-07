@@ -502,3 +502,134 @@ describe('Phase 2C — agronomy citation discipline (system prompt)', () => {
     expect(prompt.toLowerCase()).toMatch(/agronom|fitosanitar|dosis|compatibil/);
   });
 });
+
+// ----------------------------------------------------------------------------
+// Phase 3 — Long-term memory ("save this for later" + recall + forget)
+// ----------------------------------------------------------------------------
+
+describe('Phase 3C — memory tools registered', () => {
+  it('TOOLS array includes propose_memory_save with content and reason params', () => {
+    const tool = getTool('propose_memory_save');
+    expect(tool, 'tool must be registered').toBeDefined();
+    expect(tool?.required).toContain('content');
+    expect(tool?.properties).toContain('reason');
+  });
+
+  it('TOOLS array includes commit_memory_save with token + final_content', () => {
+    const tool = getTool('commit_memory_save');
+    expect(tool, 'tool must be registered').toBeDefined();
+    expect(tool?.required).toContain('token');
+    expect(tool?.properties).toContain('final_content');
+  });
+
+  it('TOOLS array includes forget_memory accepting memory_id or match_text', () => {
+    const tool = getTool('forget_memory');
+    expect(tool, 'tool must be registered').toBeDefined();
+    expect(tool?.properties).toContain('memory_id');
+    expect(tool?.properties).toContain('match_text');
+  });
+
+  it('dispatch switch routes the three memory tools to their executors', () => {
+    expect(chatSource).toContain("case 'propose_memory_save': result = await execProposeMemorySave(args); break;");
+    expect(chatSource).toContain("case 'commit_memory_save': result = await execCommitMemorySave(args, userId); break;");
+    expect(chatSource).toContain("case 'forget_memory': result = await execForgetMemory(args, userId); break;");
+  });
+});
+
+describe('Phase 3C — propose_memory_save returns a confirmation envelope, not a DB insert', () => {
+  it('execProposeMemorySave does NOT insert into esco_memorias', () => {
+    const body = getExecFunctionBody('execProposeMemorySave') ?? '';
+    expect(body).not.toMatch(/supabaseInsert\(.*esco_memorias/);
+  });
+
+  it('execProposeMemorySave returns a payload flagged as a proposal', () => {
+    // The executor delegates to makeMemoryProposal (which sets _memory_proposal: true).
+    // We verify the delegation rather than re-asserting the literal in the body.
+    const body = getExecFunctionBody('execProposeMemorySave') ?? '';
+    expect(body).toMatch(/makeMemoryProposal/);
+    expect(body).toMatch(/token/);
+  });
+});
+
+describe('Phase 3C — commit_memory_save persists to esco_memorias', () => {
+  it('execCommitMemorySave inserts into esco_memorias with user_id', () => {
+    const body = getExecFunctionBody('execCommitMemorySave') ?? '';
+    expect(body).toMatch(/supabaseInsert\(\s*['"]esco_memorias['"]/);
+    expect(body).toContain('user_id');
+  });
+
+  it('execCommitMemorySave validates the token from the proposal payload', () => {
+    const body = getExecFunctionBody('execCommitMemorySave') ?? '';
+    expect(body).toMatch(/token/);
+  });
+});
+
+describe('Phase 3C — forget_memory soft-deletes via archived_at', () => {
+  it('execForgetMemory updates archived_at on esco_memorias rows', () => {
+    const body = getExecFunctionBody('execForgetMemory') ?? '';
+    expect(body).toContain('esco_memorias');
+    expect(body).toContain('archived_at');
+  });
+});
+
+describe('Phase 3 — pure memory-proposal helper', () => {
+  it('makeMemoryProposal produces { _memory_proposal, token, content, reason }', async () => {
+    const mod = await import('../supabase/functions/server/memory');
+    const proposal = mod.makeMemoryProposal({
+      content: 'Lote Pinares se cosecha la 3ra semana de cada mes',
+      reason: 'Regla operativa recurrente',
+    });
+    expect(proposal._memory_proposal).toBe(true);
+    expect(proposal.token).toMatch(/^mem_/);
+    expect(proposal.content).toContain('Pinares');
+    expect(proposal.reason).toContain('recurrente');
+  });
+
+  it('makeMemoryProposal generates distinct tokens on repeated calls', async () => {
+    const mod = await import('../supabase/functions/server/memory');
+    const a = mod.makeMemoryProposal({ content: 'x' });
+    const b = mod.makeMemoryProposal({ content: 'x' });
+    expect(a.token).not.toBe(b.token);
+  });
+
+  it('makeMemoryProposal trims content to <= 500 chars', async () => {
+    const mod = await import('../supabase/functions/server/memory');
+    const proposal = mod.makeMemoryProposal({ content: 'a'.repeat(800) });
+    expect(proposal.content.length).toBeLessThanOrEqual(500);
+  });
+});
+
+describe('Phase 3E — system prompt prefix for memory', () => {
+  function getSystemPromptText() {
+    const m = chatSource.match(/export function getSystemPrompt[\s\S]*?return `([\s\S]*?)`;/);
+    return m ? m[1] : '';
+  }
+
+  it('prompt contains a MEMORIAS GUARDADAS block (placeholder or live)', () => {
+    expect(getSystemPromptText()).toContain('MEMORIAS GUARDADAS');
+  });
+
+  it('prompt instructs Esco to call propose_memory_save on save requests', () => {
+    const p = getSystemPromptText().toLowerCase();
+    expect(p).toContain('propose_memory_save');
+    expect(p).toMatch(/guarda|recuerda|para luego|save this/);
+  });
+
+  it('prompt instructs Esco to call forget_memory on forget requests', () => {
+    expect(getSystemPromptText()).toContain('forget_memory');
+  });
+});
+
+describe('Phase 3 — getSystemPrompt accepts a memorias array and renders it', () => {
+  it('exported signature accepts an optional memorias parameter', () => {
+    // The function should be either getSystemPrompt(memorias?: ...) or accept a config object
+    expect(chatSource).toMatch(/export function getSystemPrompt\(\s*(memorias|opts|config)/);
+  });
+});
+
+describe('Phase 3 — handleChatMessage loads memorias before building the prompt', () => {
+  it('handleChatMessage queries esco_memorias for the user', () => {
+    expect(chatSource).toMatch(/esco_memorias/);
+    expect(chatSource).toMatch(/archived_at=is\.null|archived_at\s*IS\s*NULL/i);
+  });
+});

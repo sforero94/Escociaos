@@ -25,8 +25,10 @@ describe('Fase 0: Modelo', () => {
 
 describe('Fase 1.1: Memoria de Tool Calls', () => {
   it('llmToolLoop debe retornar objeto con text y toolInteractions', () => {
-    // The function signature should return { text, toolInteractions }
-    expect(chatSource).toMatch(/async function llmToolLoop.*Promise<\{/);
+    // The function signature should return { text, toolInteractions }.
+    // Use [\s\S] so the regex tolerates a multi-line signature (e.g. when
+    // optional params like userId are added on their own lines).
+    expect(chatSource).toMatch(/async function llmToolLoop[\s\S]*?Promise<\{/);
     expect(chatSource).toMatch(/text:\s*string/);
     expect(chatSource).toMatch(/toolInteractions:\s*ToolInteraction\[\]/);
   });
