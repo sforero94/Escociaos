@@ -1,0 +1,21 @@
+{
+  "query": "Lambda cyhalothrin compatibilidad foliar boro aguacate",
+  "answer": "Lambda-cyhalothrin (insecticida piretroide) es generalmente compatible con aplicaciones foliares de Boro en aguacate Hass siempre que se respete un orden de mezcla correcto y se realice una prueba de jarra previa. Algunas formulaciones de Boro alcalinas pueden generar precipitados; se recomienda fertilizar con Boro al menos 24h antes de aplicar el insecticida cuando se sospecha incompatibilidad de pH.",
+  "results": [
+    {
+      "title": "Compatibility chart for foliar applications in Hass avocado",
+      "url": "https://example.com/foliar-compat",
+      "content": "Lambda-cyhalothrin compatibility table including boron formulations.",
+      "score": 0.92,
+      "published_date": "2024-10-12"
+    },
+    {
+      "title": "Mixing order for tank applications",
+      "url": "https://example.com/tank-order",
+      "content": "Order: filter, water, soluble fertilisers, suspensions, EC formulations, surfactant.",
+      "score": 0.88,
+      "published_date": "2023-04-03"
+    }
+  ],
+  "response_time": 1.42
+}

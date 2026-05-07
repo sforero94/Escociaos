@@ -349,7 +349,7 @@ The edge function server uses **Hono** (via Deno/npm imports) and lives in `src/
 - User CRUD
 - Product toggle
 - Weekly report generation (calls DeepSeek `deepseek-v3.2` via OpenRouter, fetches 4-week historical context from DB + Notion)
-- **Esco chat agent** (`chat.tsx`) — conversational data assistant for farm management. Uses Gemini 3 Flash Preview (`google/gemini-3-flash-preview`) via OpenRouter with tool-calling loop (`tool_choice: 'required'` on round 0). Exports `llmToolLoop` and `getSystemPrompt` (used by telegram bot). 17 tools cover: labor summaries, employee activity, monitoring (with floración), applications, inventory, finances, budget/presupuesto (annual budget vs actual execution by concepto, multi-quarter support), production, harvests, lot info, purchases, inventory movements, application details, weekly overviews, climate data, soil conductivity (CE), and beehive/apiario health.
+- **Esco chat agent** (`chat.tsx`) — conversational data assistant for farm management. Uses Gemini 3 Flash Preview (`google/gemini-3-flash-preview`) via OpenRouter with tool-calling loop (`tool_choice: 'required'` on round 0). Exports `llmToolLoop` and `getSystemPrompt` (used by telegram bot). 21 tools cover: labor summaries, employee activity, monitoring (with floración + per-sublote aggregation), applications, **per-lote/per-árbol cost analysis (`get_application_cost_by_lote`, `get_cost_by_lote`)**, inventory, finances, budget/presupuesto, production, harvests, lot info, purchases, inventory movements, application details, weekly overviews, climate data (Ecowitt + OpenWeatherMap forecast), soil conductivity (CE), beehive/apiario health, and **agronomic web search with citations (Tavily)**. Pure aggregation logic lives in `cost-aggregation.ts` and `external-tools.ts` so it is unit-testable from Vitest.
 - **Telegram bot webhook** — registered at `/make-server-1ccce916/telegram/webhook` in `index.ts`. Uses Grammy with conversations plugin. The `handleWebhook` import in `index.ts` is critical — without it the bot returns 404. Both `index.ts` copies must stay in sync.
 - Key-value store (`kv_store.tsx`)
 
@@ -371,6 +371,9 @@ Key behaviors:
 - `ECOWITT_APP_KEY` — Ecowitt application key for climate data sync
 - `ECOWITT_API_KEY` — Ecowitt API key
 - `ECOWITT_MAC` — Ecowitt weather station MAC address (84:1F:E8:35:D8:73)
+- `TAVILY_API_KEY` — Tavily search API key (used by Esco's `web_search_agronomic` tool for cited agronomic Q&A)
+- `OPENWEATHER_API_KEY` — OpenWeatherMap API key (used by Esco's `get_weather_forecast` tool for 5–7 day forecast)
+- `FARM_LAT`, `FARM_LON` — optional. Override the default farm coordinates for the weather forecast. Defaults to Aguadas, Caldas (≈ 5.6094, -75.4582)
 - `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` — auto-injected by Supabase
 
 **Deploy command**: `npx supabase functions deploy make-server-1ccce916`

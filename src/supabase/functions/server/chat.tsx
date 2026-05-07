@@ -8,6 +8,10 @@ import {
   combineCostosPorLote,
   summariseCostos,
 } from './cost-aggregation.ts';
+import {
+  parseTavilyResponse,
+  parseOpenWeatherForecast,
+} from './external-tools.ts';
 
 // ============================================================================
 // TIPOS
@@ -288,6 +292,28 @@ const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: 'web_search_agronomic',
+    description: 'Busca informacion agronomica externa (compatibilidad de productos, dosis recomendadas, sintomas de plagas/enfermedades, umbrales economicos, regulacion ICA) y devuelve respuesta + fuentes citables. Usar SIEMPRE para preguntas fitosanitarias o de manejo agronomico que NO son datos de la finca, en vez de responder de memoria.',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Consulta en lenguaje natural (espanol o ingles)' },
+        max_results: { type: 'number', description: 'Numero maximo de fuentes (default 5)' },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'get_weather_forecast',
+    description: 'Pronostico del clima para los proximos 5-7 dias en la finca: temperatura min/max, lluvia (mm + probabilidad), viento, humedad. Para decidir ventanas de aplicacion y planificacion operativa.',
+    parameters: {
+      type: 'object',
+      properties: {
+        days: { type: 'number', description: 'Cantidad de dias a pronosticar (1-7, default 5)' },
+      },
+    },
+  },
+  {
     name: 'get_weekly_overview',
     description: 'Obtiene un resumen compuesto de la semana: labores + monitoreo + aplicaciones + cosechas.',
     parameters: {
@@ -397,6 +423,8 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
       case 'get_application_details': result = await execApplicationDetails(args); break;
       case 'get_application_cost_by_lote': result = await execApplicationCostByLote(args); break;
       case 'get_cost_by_lote': result = await execCostByLote(args); break;
+      case 'web_search_agronomic': result = await execWebSearchAgronomic(args); break;
+      case 'get_weather_forecast': result = await execWeatherForecast(args); break;
       case 'get_weekly_overview': result = await execWeeklyOverview(args); break;
       case 'get_climate_data': result = await execClimateData(args); break;
       case 'get_conductivity_data': result = await execConductivityData(args); break;
@@ -1453,6 +1481,88 @@ async function execCostByLote(args: Record<string, unknown>): Promise<string> {
   });
 }
 
+// ----------------------------------------------------------------------------
+// EXTERNAL KNOWLEDGE TOOLS
+//
+// Pure response-shaping lives in ./external-tools.ts (importable from Vitest).
+// Network I/O and Deno.env reads stay here.
+// ----------------------------------------------------------------------------
+
+async function execWebSearchAgronomic(args: Record<string, unknown>): Promise<string> {
+  const { query, max_results } = args as { query?: string; max_results?: number };
+  if (!query || typeof query !== 'string' || !query.trim()) {
+    return JSON.stringify({ error: 'query es requerido' });
+  }
+  const apiKey = Deno.env.get('TAVILY_API_KEY');
+  if (!apiKey) {
+    return JSON.stringify({ error: 'TAVILY_API_KEY no configurada en el edge function' });
+  }
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 25_000);
+  try {
+    const res = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        api_key: apiKey,
+        query,
+        search_depth: 'advanced',
+        include_answer: true,
+        include_raw_content: false,
+        max_results: typeof max_results === 'number' && max_results > 0 ? Math.min(max_results, 10) : 5,
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      return JSON.stringify({ error: `Tavily error ${res.status}`, detail: errText.slice(0, 200) });
+    }
+    const raw = await res.json();
+    const parsed = parseTavilyResponse(raw);
+    if (!parsed.sources.length) {
+      return JSON.stringify({ ...parsed, _aviso: 'Tavily no devolvio fuentes; cita explicitamente que la respuesta no esta verificada.' });
+    }
+    return JSON.stringify(parsed);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function execWeatherForecast(args: Record<string, unknown>): Promise<string> {
+  const { days } = args as { days?: number };
+  const requestedDays = Math.max(1, Math.min(Number(days) || 5, 7));
+
+  const apiKey = Deno.env.get('OPENWEATHER_API_KEY');
+  if (!apiKey) {
+    return JSON.stringify({ error: 'OPENWEATHER_API_KEY no configurada en el edge function' });
+  }
+
+  // Farm coordinates — overridable via env. Defaults to Aguadas, Caldas (Escocia
+  // Hass region). If FARM_LAT / FARM_LON are set in the edge function secrets
+  // they take precedence so the forecast resolves to the actual lot.
+  const lat = Number(Deno.env.get('FARM_LAT')) || 5.6094;
+  const lon = Number(Deno.env.get('FARM_LON')) || -75.4582;
+
+  const url = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&lang=es&appid=${apiKey}`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      return JSON.stringify({ error: `OpenWeather error ${res.status}`, detail: errText.slice(0, 200) });
+    }
+    const raw = await res.json();
+    const dias = parseOpenWeatherForecast(raw, requestedDays);
+    return JSON.stringify({
+      ubicacion: { lat, lon, ciudad: raw?.city?.name ?? 'Finca' },
+      dias,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function execWeeklyOverview(args: Record<string, unknown>): Promise<string> {
   const now = new Date();
   const dayOfWeek = now.getDay();
@@ -1984,6 +2094,8 @@ DOMINIOS DE DATOS DISPONIBLES:
 - Monitoreo: plagas/enfermedades, incidencia, severidad, tendencias por lote. Incluye estado fenológico de floración (brotes, flor madura, cuaje)
 - Aplicaciones: fumigaciones, fertilizaciones, drench, productos usados, costos
 - Costos por lote: desglose insumos + mano de obra y costo por arbol para una aplicacion (get_application_cost_by_lote) o sumando todas las aplicaciones en un rango de fechas (get_cost_by_lote)
+- Conocimiento agronomico externo (web_search_agronomic): compatibilidad de productos, dosis, umbrales economicos, regulacion ICA — siempre con fuentes citadas
+- Pronostico del clima 5-7 dias (get_weather_forecast): para decidir ventanas de aplicacion
 - Inventario: productos agricolas, stock, movimientos, compras
 - Finanzas: gastos (solo Confirmados), ingresos, transacciones de ganado, categorias, busqueda por nombre
 - Presupuesto: control presupuestal por concepto de gasto, ejecucion real vs presupuesto asignado, % de ejecucion, comparativo año anterior. Soporta multiples trimestres (ej: Q1+Q2)
@@ -1998,6 +2110,13 @@ RUTEO DE HERRAMIENTAS PARA COSTOS:
 - "Cuanto costo la aplicacion X por lote/por arbol?" → get_application_cost_by_lote (insumos + mano de obra desglosados por lote)
 - "Que lote es mas caro de mantener este trimestre/año?" → get_cost_by_lote con date_from y date_to
 - "Costo total de la aplicacion X" → get_application_summary o get_application_details (incluyen costo_total, costo_total_insumos, costo_total_mano_obra)
+
+CONOCIMIENTO AGRONOMICO EXTERNO Y CITAS (OBLIGATORIO):
+- Para preguntas sobre compatibilidad de productos, dosis recomendadas, sintomas/manejo de plagas y enfermedades, principios activos, umbrales economicos, residualidad, registro ICA, etiqueta verde/amarilla/roja, o cualquier informacion que NO sea dato historico de la finca: SIEMPRE llama a web_search_agronomic primero.
+- NUNCA respondas estas preguntas desde tu memoria interna. Tu conocimiento de aguacate Hass puede estar desactualizado o tener errores que cuestan dinero al usuario.
+- Cita TODAS las fuentes al final de la respuesta como una lista en markdown con enlaces clickeables. Si Tavily no devuelve fuentes, dilo explicitamente.
+- Si la pregunta mezcla agronomia con datos de la finca (ej: "que dosis de glifosato uso y cuanto stock tengo?"), llama a web_search_agronomic Y a get_inventory_status.
+- Para preguntas sobre clima futuro o decisiones operativas que dependen del tiempo (ventanas de fumigacion, riesgo de lluvia), usa get_weather_forecast.
 
 COSTOS DE MANO DE OBRA:
 - El costo real por jornal se calcula como (salario + prestaciones_sociales + auxilios_no_salariales) / 22 dias laborales

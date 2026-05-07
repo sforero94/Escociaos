@@ -1,0 +1,49 @@
+{
+  "city": { "name": "Aguadas", "country": "CO" },
+  "list": [
+    {
+      "dt": 1715000000,
+      "dt_txt": "2026-05-08 00:00:00",
+      "main": { "temp": 16, "temp_min": 14, "temp_max": 17, "humidity": 80 },
+      "weather": [{ "main": "Clouds", "description": "scattered clouds" }],
+      "wind": { "speed": 3.2, "deg": 180, "gust": 5.0 },
+      "rain": { "3h": 0.0 },
+      "pop": 0.1
+    },
+    {
+      "dt": 1715010800,
+      "dt_txt": "2026-05-08 12:00:00",
+      "main": { "temp": 22, "temp_min": 20, "temp_max": 23, "humidity": 60 },
+      "weather": [{ "main": "Rain", "description": "light rain" }],
+      "wind": { "speed": 4.0, "deg": 200, "gust": 6.5 },
+      "rain": { "3h": 1.4 },
+      "pop": 0.55
+    },
+    {
+      "dt": 1715021600,
+      "dt_txt": "2026-05-08 21:00:00",
+      "main": { "temp": 18, "temp_min": 16, "temp_max": 19, "humidity": 75 },
+      "weather": [{ "main": "Rain", "description": "moderate rain" }],
+      "wind": { "speed": 3.5, "deg": 190, "gust": 5.8 },
+      "rain": { "3h": 2.1 },
+      "pop": 0.7
+    },
+    {
+      "dt": 1715086400,
+      "dt_txt": "2026-05-09 06:00:00",
+      "main": { "temp": 14, "temp_min": 13, "temp_max": 15, "humidity": 85 },
+      "weather": [{ "main": "Clouds", "description": "broken clouds" }],
+      "wind": { "speed": 2.0, "deg": 170, "gust": 3.5 },
+      "rain": { "3h": 0.0 },
+      "pop": 0.2
+    },
+    {
+      "dt": 1715097200,
+      "dt_txt": "2026-05-09 15:00:00",
+      "main": { "temp": 24, "temp_min": 22, "temp_max": 25, "humidity": 55 },
+      "weather": [{ "main": "Clear", "description": "clear sky" }],
+      "wind": { "speed": 5.0, "deg": 210, "gust": 7.0 },
+      "pop": 0.05
+    }
+  ]
+}

@@ -389,3 +389,116 @@ describe('Phase 1E — system prompt routes cost-by-lote questions', () => {
     expect(prompt).toContain('get_cost_by_lote');
   });
 });
+
+// ----------------------------------------------------------------------------
+// Phase 2 — External knowledge tools (Tavily + OpenWeatherMap)
+// ----------------------------------------------------------------------------
+
+describe('Phase 2A — web_search_agronomic (Tavily)', () => {
+  it('TOOLS array includes web_search_agronomic with required query parameter', () => {
+    const tool = getTool('web_search_agronomic');
+    expect(tool, 'tool must be registered').toBeDefined();
+    expect(tool?.required).toContain('query');
+  });
+
+  it('description scopes the tool to agronomy / external knowledge', () => {
+    const tool = getTool('web_search_agronomic');
+    expect(tool?.description.toLowerCase()).toMatch(/agronomic|fitosanitar|plaga|enfermedad|dosis/);
+  });
+
+  it('dispatch switch routes web_search_agronomic to execWebSearchAgronomic', () => {
+    expect(chatSource).toContain(
+      "case 'web_search_agronomic': result = await execWebSearchAgronomic(args); break;",
+    );
+  });
+
+  it('execWebSearchAgronomic calls api.tavily.com and reads TAVILY_API_KEY', () => {
+    const body = getExecFunctionBody('execWebSearchAgronomic') ?? '';
+    expect(body).toContain('api.tavily.com');
+    expect(body).toContain("Deno.env.get('TAVILY_API_KEY')");
+  });
+
+  it('parseTavilyResponse normalises Tavily JSON into { answer, sources }', async () => {
+    const fixture = JSON.parse(
+      readFileSync(resolve(__dirname, 'fixtures/tavily-response.json'), 'utf-8'),
+    );
+    const mod = await import('../supabase/functions/server/external-tools');
+    const result = mod.parseTavilyResponse(fixture);
+    expect(result.answer).toContain('Lambda-cyhalothrin');
+    expect(result.sources).toHaveLength(2);
+    expect(result.sources[0].url).toBe('https://example.com/foliar-compat');
+    expect(result.sources[0].title).toContain('Compatibility');
+  });
+});
+
+describe('Phase 2B — get_weather_forecast (OpenWeatherMap)', () => {
+  it('TOOLS array includes get_weather_forecast with optional days parameter', () => {
+    const tool = getTool('get_weather_forecast');
+    expect(tool, 'tool must be registered').toBeDefined();
+    expect(tool?.properties).toContain('days');
+  });
+
+  it('dispatch switch routes get_weather_forecast to execWeatherForecast', () => {
+    expect(chatSource).toContain(
+      "case 'get_weather_forecast': result = await execWeatherForecast(args); break;",
+    );
+  });
+
+  it('execWeatherForecast calls openweathermap.org and reads OPENWEATHER_API_KEY', () => {
+    const body = getExecFunctionBody('execWeatherForecast') ?? '';
+    expect(body).toContain('openweathermap.org');
+    expect(body).toContain("Deno.env.get('OPENWEATHER_API_KEY')");
+  });
+
+  it('parseOpenWeatherForecast aggregates 3-hour blocks into per-day summaries', async () => {
+    const fixture = JSON.parse(
+      readFileSync(resolve(__dirname, 'fixtures/openweather-forecast.json'), 'utf-8'),
+    );
+    const mod = await import('../supabase/functions/server/external-tools');
+    const days = mod.parseOpenWeatherForecast(fixture, 7);
+
+    expect(days).toHaveLength(2); // 2026-05-08 and 2026-05-09 in fixture
+    const day1 = days.find((d: { date: string }) => d.date === '2026-05-08')!;
+    expect(day1.temp_min).toBe(14);
+    expect(day1.temp_max).toBe(23);
+    expect(day1.rainfall_mm).toBeCloseTo(3.5, 5); // 0 + 1.4 + 2.1
+    expect(day1.rain_probability_pct).toBe(70); // max pop in the day, as percent
+    expect(day1.wind_max_kmh).toBeGreaterThan(0);
+  });
+
+  it('parseOpenWeatherForecast clamps to the requested days argument', async () => {
+    const fixture = JSON.parse(
+      readFileSync(resolve(__dirname, 'fixtures/openweather-forecast.json'), 'utf-8'),
+    );
+    const mod = await import('../supabase/functions/server/external-tools');
+    const days = mod.parseOpenWeatherForecast(fixture, 1);
+    expect(days).toHaveLength(1);
+    expect(days[0].date).toBe('2026-05-08');
+  });
+});
+
+describe('Phase 2C — agronomy citation discipline (system prompt)', () => {
+  function getSystemPromptText() {
+    const m = chatSource.match(/export function getSystemPrompt[\s\S]*?return `([\s\S]*?)`;/);
+    return m ? m[1] : '';
+  }
+
+  it('prompt forbids answering agronomic questions from internal memory', () => {
+    const prompt = getSystemPromptText();
+    expect(prompt).toContain('web_search_agronomic');
+    // require an explicit "never answer from memory" type rule near the citation directive
+    expect(prompt.toLowerCase()).toMatch(/nunca.*memor|siempre.*cita|cita.*fuente|incluye.*enlace/);
+  });
+
+  it('prompt describes the weather forecast tool', () => {
+    const prompt = getSystemPromptText();
+    expect(prompt).toContain('get_weather_forecast');
+  });
+
+  it('prompt routes mixed inventory + agronomy questions to both tools', () => {
+    const prompt = getSystemPromptText();
+    // Routing block should mention "if user asks about a product they have AND its agronomic spec"
+    expect(prompt.toLowerCase()).toMatch(/inventari|stock/);
+    expect(prompt.toLowerCase()).toMatch(/agronom|fitosanitar|dosis|compatibil/);
+  });
+});
