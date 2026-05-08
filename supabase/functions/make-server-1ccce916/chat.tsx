@@ -1421,13 +1421,15 @@ async function fetchPerLoteCostsForApplication(app: AplicacionRow) {
     )) as typeof registros;
   }
 
-  // Tree counts per lote (planned)
-  const lotesPlan = (await supabaseQuery(
-    'aplicaciones_lotes_planificado',
+  // Tree counts per lote — read the canonical lot-assignment table (aplicaciones_lotes).
+  // aplicaciones_lotes_planificado is only populated when the planning Calculadora is used,
+  // so ad-hoc apps (drench, focos, edáficas registradas direct) end up with zero rows there.
+  const lotesAsignados = (await supabaseQuery(
+    'aplicaciones_lotes',
     `select=lote_id,total_arboles,lote:lotes(id,nombre,total_arboles)&aplicacion_id=eq.${e(app.id)}&limit=200`,
   )) as Array<{ lote_id: string; total_arboles: number | string; lote: { id: string; nombre: string; total_arboles: number | string } | null }>;
 
-  const lotesInfo = lotesPlan
+  const lotesInfo = lotesAsignados
     .filter((row) => row.lote_id)
     .map((row) => ({
       id: row.lote_id,
@@ -1437,6 +1439,22 @@ async function fetchPerLoteCostsForApplication(app: AplicacionRow) {
 
   const insumosByLote = aggregateInsumosPorLote(movimientos, movProductos, precios);
   const jornalesByLote = aggregateJornalesPorLote(registros);
+
+  // Fallback: any lote that shows up only in movimientos / registros (e.g. focos applied
+  // to a lote not formally assigned) gets its name + tree count from the lotes master.
+  const knownIds = new Set(lotesInfo.map((l) => l.id));
+  const orphanIds = [...new Set([...insumosByLote.keys(), ...jornalesByLote.keys()])]
+    .filter((id) => !knownIds.has(id));
+  if (orphanIds.length) {
+    const orphans = (await supabaseQuery(
+      'lotes',
+      `select=id,nombre,total_arboles&id=in.(${orphanIds.join(',')})`,
+    )) as Array<{ id: string; nombre: string; total_arboles: number | string }>;
+    for (const o of orphans) {
+      lotesInfo.push({ id: o.id, nombre: o.nombre, total_arboles: Number(o.total_arboles) || 0 });
+    }
+  }
+
   return combineCostosPorLote(insumosByLote, jornalesByLote, lotesInfo);
 }
 

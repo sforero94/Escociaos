@@ -204,8 +204,12 @@ describe('Phase 1B — execApplicationCostByLote (executor)', () => {
     expect(r).toMatch(/tarea_id=eq\./);
   });
 
-  it('queries aplicaciones_lotes_planificado for tree counts per lote', () => {
-    expect(region()).toContain('aplicaciones_lotes_planificado');
+  it('queries aplicaciones_lotes for tree counts per lote (canonical assignment table)', () => {
+    const r = region();
+    // Must read from aplicaciones_lotes, not the planning-only aplicaciones_lotes_planificado
+    // (which is empty for ad-hoc apps like drench / focos / edáficas registradas direct).
+    expect(r).toMatch(/'aplicaciones_lotes'/);
+    expect(r).not.toMatch(/'aplicaciones_lotes_planificado'/);
   });
 
   it('uses pure aggregation helpers from cost-aggregation module', () => {
