@@ -252,10 +252,16 @@ export async function fetchLaboresSemanales(
 /**
  * Obtiene la matriz de jornales: actividades (filas) × lotes (columnas)
  */
+export interface MatricesJornales {
+  propios: MatrizJornales;
+  contrato: MatrizJornales;
+  combinado: MatrizJornales;
+}
+
 export async function fetchMatrizJornales(
   inicio: string,
   fin: string
-): Promise<MatrizJornales> {
+): Promise<MatricesJornales> {
   const supabase = getSupabase();
 
   const { data: tiposTareas, error: errorTipos } = await supabase
@@ -271,6 +277,8 @@ export async function fetchMatrizJornales(
     .select(`
       fraccion_jornal,
       costo_jornal,
+      empleado_id,
+      contratista_id,
       tareas!inner(nombre, tipo_tarea_id),
       lote:lotes!lote_id(nombre)
     `)
@@ -279,13 +287,44 @@ export async function fetchMatrizJornales(
 
   if (errorRegistros) throw new Error(`Error al cargar registros: ${errorRegistros.message}`);
 
-  const datos: Record<string, Record<string, CeldaMatrizJornales>> = {};
-  const totalesPorActividad: Record<string, CeldaMatrizJornales> = {};
-  const totalesPorLote: Record<string, CeldaMatrizJornales> = {};
+  type Acc = {
+    datos: Record<string, Record<string, CeldaMatrizJornales>>;
+    totalesPorActividad: Record<string, CeldaMatrizJornales>;
+    totalesPorLote: Record<string, CeldaMatrizJornales>;
+    totalJornales: number;
+    totalCosto: number;
+  };
+  const makeAcc = (): Acc => ({
+    datos: {},
+    totalesPorActividad: {},
+    totalesPorLote: {},
+    totalJornales: 0,
+    totalCosto: 0,
+  });
+  const propiosAcc = makeAcc();
+  const contratoAcc = makeAcc();
+  const combinadoAcc = makeAcc();
+
   const lotesSet = new Set<string>();
   const filasMap = new Map<string, string>(); // nombre → tipo
-  let totalGeneralJornales = 0;
-  let totalGeneralCosto = 0;
+
+  const apply = (acc: Acc, nombre: string, lote: string, jornales: number, costo: number) => {
+    if (!acc.datos[nombre]) acc.datos[nombre] = {};
+    if (!acc.datos[nombre][lote]) acc.datos[nombre][lote] = { jornales: 0, costo: 0 };
+    acc.datos[nombre][lote].jornales += jornales;
+    acc.datos[nombre][lote].costo += costo;
+
+    if (!acc.totalesPorActividad[nombre]) acc.totalesPorActividad[nombre] = { jornales: 0, costo: 0 };
+    acc.totalesPorActividad[nombre].jornales += jornales;
+    acc.totalesPorActividad[nombre].costo += costo;
+
+    if (!acc.totalesPorLote[lote]) acc.totalesPorLote[lote] = { jornales: 0, costo: 0 };
+    acc.totalesPorLote[lote].jornales += jornales;
+    acc.totalesPorLote[lote].costo += costo;
+
+    acc.totalJornales += jornales;
+    acc.totalCosto += costo;
+  };
 
   (registros || []).forEach((registro: any) => {
     const tipoTareaId = registro.tareas?.tipo_tarea_id;
@@ -298,36 +337,43 @@ export async function fetchMatrizJornales(
     filasMap.set(nombre, tipo);
     lotesSet.add(lote);
 
-    if (!datos[nombre]) datos[nombre] = {};
-    if (!datos[nombre][lote]) datos[nombre][lote] = { jornales: 0, costo: 0 };
-    datos[nombre][lote].jornales += jornales;
-    datos[nombre][lote].costo += costo;
-
-    if (!totalesPorActividad[nombre]) totalesPorActividad[nombre] = { jornales: 0, costo: 0 };
-    totalesPorActividad[nombre].jornales += jornales;
-    totalesPorActividad[nombre].costo += costo;
-
-    if (!totalesPorLote[lote]) totalesPorLote[lote] = { jornales: 0, costo: 0 };
-    totalesPorLote[lote].jornales += jornales;
-    totalesPorLote[lote].costo += costo;
-
-    totalGeneralJornales += jornales;
-    totalGeneralCosto += costo;
+    // CHECK constraint on registros_trabajo guarantees exactly one of empleado_id / contratista_id
+    // is set. If both/neither are present (shouldn't happen), classify defensively as propios.
+    const channel: Acc = registro.contratista_id && !registro.empleado_id ? contratoAcc : propiosAcc;
+    apply(channel, nombre, lote, jornales, costo);
+    apply(combinadoAcc, nombre, lote, jornales, costo);
   });
 
-  // Build filas sorted by tipo then nombre
-  const filas = Array.from(filasMap.entries())
+  // Combined matrix keeps the full union of activities and lots so KPI cross-checks
+  // stay valid. Each channel matrix is filtered to its own non-zero rows/columns —
+  // that way the wizard and PDF only render data that actually exists per channel.
+  const allFilas = Array.from(filasMap.entries())
     .map(([nombre, tipo]) => ({ nombre, tipo }))
     .sort((a, b) => a.tipo.localeCompare(b.tipo) || a.nombre.localeCompare(b.nombre));
+  const allLotes = Array.from(lotesSet).sort();
+
+  const toMatriz = (acc: Acc, scoped: boolean): MatrizJornales => {
+    const filas = scoped
+      ? allFilas.filter(f => (acc.totalesPorActividad[f.nombre]?.jornales || 0) > 0)
+      : allFilas;
+    const lotes = scoped
+      ? allLotes.filter(l => (acc.totalesPorLote[l]?.jornales || 0) > 0)
+      : allLotes;
+    return {
+      actividades: filas.map(f => f.nombre),
+      filas,
+      lotes,
+      datos: acc.datos,
+      totalesPorActividad: acc.totalesPorActividad,
+      totalesPorLote: acc.totalesPorLote,
+      totalGeneral: { jornales: acc.totalJornales, costo: acc.totalCosto },
+    };
+  };
 
   return {
-    actividades: filas.map(f => f.nombre),
-    filas,
-    lotes: Array.from(lotesSet).sort(),
-    datos,
-    totalesPorActividad,
-    totalesPorLote,
-    totalGeneral: { jornales: totalGeneralJornales, costo: totalGeneralCosto },
+    propios: toMatriz(propiosAcc, true),
+    contrato: toMatriz(contratoAcc, true),
+    combinado: toMatriz(combinadoAcc, false),
   };
 }
 
@@ -2162,7 +2208,7 @@ export async function fetchDatosReporteSemanal(
   const [
     personalBase,
     laboresProgramadas,
-    matrizJornales,
+    matricesJornales,
     aplicacionesPlaneadas,
     aplicacionesActivas,
     aplicacionesCerradas,
@@ -2208,9 +2254,11 @@ export async function fetchDatosReporteSemanal(
     },
     labores: {
       programadas: laboresProgramadas,
-      matrizJornales,
+      matrizJornales: matricesJornales.combinado,
+      matrizJornalesPropios: matricesJornales.propios,
+      matrizJornalesContrato: matricesJornales.contrato,
     },
-    jornales: matrizJornales, // legacy
+    jornales: matricesJornales.combinado, // legacy
     aplicaciones: {
       planeadas: aplicacionesPlaneadas,
       activas: aplicacionesActivas,

@@ -478,7 +478,10 @@ export interface DatosReporteSemanal {
   personal: DatosPersonal;
   labores: {
     programadas: LaborSemanal[];
+    /** Legacy combined view; equals matrizJornalesPropios + matrizJornalesContrato. */
     matrizJornales: MatrizJornales;
+    matrizJornalesPropios: MatrizJornales;
+    matrizJornalesContrato: MatrizJornales;
   };
   // Legacy top-level jornales (kept for backward compatibility)
   jornales: MatrizJornales;

@@ -100,7 +100,8 @@ Ejemplo MALO personal: "Resumen del personal de esta semana"
 Ejemplo BUENO monitoreo: "Alerta critica: Cucarron marceno al 35% en Salto de Tequendama"
 Ejemplo MALO monitoreo: "Estado fitosanitario de los lotes monitoreados"
 
-Ejemplo BUENO jornales: "54.5 jornales — La Vega concentra 55% del esfuerzo semanal"
+Ejemplo BUENO jornales (canal mixto): "54.5 jornales: 32 propios + 22.5 contrato — contrato concentrado en poda en La Vega"
+Ejemplo BUENO jornales (un solo canal material): "54.5 jornales propios — La Vega concentra 55% del esfuerzo semanal"
 Ejemplo MALO jornales: "Distribucion de jornales por lote y actividad"
 
 Ejemplo BUENO labores: "8 labores activas, ninguna completada — zanjas llevan 7 semanas"
@@ -393,27 +394,50 @@ function formatearDatosParaPrompt(datos: any, historicoCtx = '', notionCtx = '')
   }
 
   if (datos.jornales) {
-    const { actividades, totalesPorActividad, totalesPorLote, totalGeneral } = datos.jornales;
+    const combinado = datos.jornales;
+    const propios = datos.labores?.matrizJornalesPropios;
+    const contrato = datos.labores?.matrizJornalesContrato;
 
-    // Top 5 actividades y lotes por jornales para reducir prompt
-    const topActividades = actividades
-      .map((act: string) => ({ nombre: act, jornales: totalesPorActividad[act]?.jornales || 0 }))
-      .sort((a: any, b: any) => b.jornales - a.jornales)
-      .slice(0, 5);
+    const topByChannel = (matriz: any, field: 'totalesPorActividad' | 'totalesPorLote') => {
+      if (!matriz) return [] as Array<{ nombre: string; jornales: number }>;
+      return Object.entries(matriz[field] as Record<string, { jornales: number }>)
+        .map(([nombre, v]) => ({ nombre, jornales: v.jornales || 0 }))
+        .filter(x => x.jornales > 0)
+        .sort((a, b) => b.jornales - a.jornales)
+        .slice(0, 5);
+    };
 
-    const topLotes = Object.entries(totalesPorLote as Record<string, { jornales: number }>)
-      .map(([nombre, v]) => ({ nombre, jornales: v.jornales || 0 }))
-      .sort((a, b) => b.jornales - a.jornales)
-      .slice(0, 5);
+    const topActividadesPropios = topByChannel(propios, 'totalesPorActividad');
+    const topActividadesContrato = topByChannel(contrato, 'totalesPorActividad');
+    const topLotesPropios = topByChannel(propios, 'totalesPorLote');
+    const topLotesContrato = topByChannel(contrato, 'totalesPorLote');
+
+    const fmtTop = (items: Array<{ nombre: string; jornales: number }>) =>
+      items.length === 0 ? '  - (sin registros)' : items.map(a => `  - ${a.nombre}: ${a.jornales.toFixed(2)}`).join('\n');
+
+    const totPropios = propios?.totalGeneral?.jornales || 0;
+    const totContrato = contrato?.totalGeneral?.jornales || 0;
+    const totCombinado = combinado.totalGeneral.jornales;
+    const pctContrato = totCombinado > 0 ? (totContrato / totCombinado) * 100 : 0;
+    const pctPropios = totCombinado > 0 ? (totPropios / totCombinado) * 100 : 0;
 
     partes.push(`## DISTRIBUCION DE JORNALES
-Total general: ${totalGeneral.jornales.toFixed(2)} jornales ($${Math.round(totalGeneral.costo).toLocaleString('es-CO')} COP)
+Total general: ${totCombinado.toFixed(2)} jornales ($${Math.round(combinado.totalGeneral.costo).toLocaleString('es-CO')} COP)
+Desglose por canal: ${totPropios.toFixed(2)} propios (${pctPropios.toFixed(0)}%) + ${totContrato.toFixed(2)} contrato (${pctContrato.toFixed(0)}%)
 
-### Top tareas por jornales
-${topActividades.map((a: any) => `  - ${a.nombre}: ${a.jornales.toFixed(2)}`).join('\n')}
+### Top tareas propios
+${fmtTop(topActividadesPropios)}
 
-### Top lotes por jornales
-${topLotes.map((l: any) => `  - ${l.nombre}: ${l.jornales.toFixed(2)}`).join('\n')}`);
+### Top tareas contrato
+${fmtTop(topActividadesContrato)}
+
+### Top lotes propios
+${fmtTop(topLotesPropios)}
+
+### Top lotes contrato
+${fmtTop(topLotesContrato)}
+
+NOTA: Si un canal (propios o contrato) representa menos del 5% del total combinado, omitelo del titular para no agregar ruido.`);
   }
 
   if (datos.labores?.programadas?.length > 0) {
@@ -994,16 +1018,18 @@ function construirSlideLaboresProgramadas(datos: any, analisis: AnalisisGemini):
   `);
 }
 
-function construirSlidesLaboresMatriz(datos: any, analisis: AnalisisGemini): string[] {
-  const jornales = datos.jornales;
-  if (!jornales || !jornales.actividades || jornales.actividades.length === 0) return [];
-  const { semana } = datos;
-  const { actividades, filas, lotes, datos: md, totalesPorActividad, totalesPorLote, totalGeneral } = jornales;
+// Colors for the propio/contrato split (issue #46)
+const COLOR_PROPIO = '#73991C';
+const COLOR_CONTRATO = '#B8D47F';
 
-  // Use filas (nombre+tipo) if available, fall back to actividades-only for backward compat
+function renderMatrizJornalesTable(matriz: any, titulo: string): string {
+  // Caller is responsible for skipping empty channels — when a channel has no data,
+  // we omit its section entirely so propios + contrato + charts redistribute the space.
+  const { filas, lotes, datos: md, totalesPorActividad, totalesPorLote, totalGeneral } = matriz;
+
   const rows: Array<{ nombre: string; tipo: string }> = filas && filas.length > 0
     ? filas
-    : actividades.map((a: string) => ({ nombre: a, tipo: '' }));
+    : (matriz.actividades || []).map((a: string) => ({ nombre: a, tipo: '' }));
 
   let mx = 0;
   for (const row of rows) for (const lote of lotes) {
@@ -1011,114 +1037,141 @@ function construirSlidesLaboresMatriz(datos: any, analisis: AnalisisGemini): str
     if (v > mx) mx = v;
   }
 
-  // Determine if charts fit on same slide (≤8 rows) or need their own slide
-  const MAX_ROWS_WITH_CHARTS = 8;
-  const chartsSeparate = rows.length > MAX_ROWS_WITH_CHARTS;
-
-  // Build table header
-  const hasTipo = rows.some(r => r.tipo && r.tipo !== r.nombre);
+  const hasTipo = rows.some((r: any) => r.tipo && r.tipo !== r.nombre);
   const hCells = lotes.map((l: string) => `<th style="${CSS.thGreenC}min-width:55px;">${l}</th>`).join('');
 
-  // Build table body rows
   let bodyRows = '';
   let prevTipo = '';
   for (const row of rows) {
     let cells = '';
-    // Show tipo column with rowspan-like visual grouping
     const tipoCell = hasTipo
-      ? `<td style="padding:6px 8px;font-size:11px;color:#6b7280;border-bottom:1px solid #E7EDDD;background:#F8FAF5;white-space:nowrap;${row.tipo !== prevTipo ? 'border-top:1px solid #BFD97D;' : ''}">${row.tipo !== prevTipo ? row.tipo : ''}</td>`
+      ? `<td style="padding:3px 6px;font-size:10px;color:#6b7280;border-bottom:1px solid #E7EDDD;background:#F8FAF5;white-space:nowrap;${row.tipo !== prevTipo ? 'border-top:1px solid #BFD97D;' : ''}">${row.tipo !== prevTipo ? row.tipo : ''}</td>`
       : '';
     prevTipo = row.tipo;
 
     for (const lote of lotes) {
       const v = md[row.nombre]?.[lote]?.jornales || 0;
-      cells += `<td style="padding:5px 6px;text-align:center;font-size:12px;font-weight:${v > 0 ? '600' : '400'};background:${hmBg(v, mx)};color:${hmTx(v, mx)};border-bottom:1px solid #E7EDDD;">${v > 0 ? fmtN(v) : '—'}</td>`;
+      cells += `<td style="padding:3px 6px;text-align:center;font-size:11px;font-weight:${v > 0 ? '600' : '400'};background:${hmBg(v, mx)};color:${hmTx(v, mx)};border-bottom:1px solid #E7EDDD;">${v > 0 ? fmtN(v) : '—'}</td>`;
     }
     const tot = totalesPorActividad[row.nombre]?.jornales || 0;
-    cells += `<td style="padding:5px 6px;text-align:center;font-size:12px;font-weight:700;background:#f0fdf4;color:#172E08;border-bottom:1px solid #E7EDDD;">${fmtN(tot)}</td>`;
+    cells += `<td style="padding:3px 6px;text-align:center;font-size:11px;font-weight:700;background:#f0fdf4;color:#172E08;border-bottom:1px solid #E7EDDD;">${fmtN(tot)}</td>`;
     const nombreTrunc = row.nombre.length > 26 ? row.nombre.slice(0, 25) + '…' : row.nombre;
-    bodyRows += `<tr>${tipoCell}<td style="padding:5px 8px;font-size:12px;font-weight:600;color:#172E08;border-bottom:1px solid #E7EDDD;white-space:nowrap;">${nombreTrunc}</td>${cells}</tr>`;
+    bodyRows += `<tr>${tipoCell}<td style="padding:3px 8px;font-size:11px;font-weight:600;color:#172E08;border-bottom:1px solid #E7EDDD;white-space:nowrap;">${nombreTrunc}</td>${cells}</tr>`;
   }
 
-  // Total row
   let totCells = '';
-  if (hasTipo) totCells += `<td style="padding:5px 8px;background:#E7EDDD;border-top:2px solid #73991C;"></td>`;
+  if (hasTipo) totCells += `<td style="padding:3px 8px;background:#E7EDDD;border-top:2px solid #73991C;"></td>`;
   for (const lote of lotes) {
     const v = totalesPorLote[lote]?.jornales || 0;
-    totCells += `<td style="padding:5px 6px;text-align:center;font-size:12px;font-weight:700;background:#E7EDDD;color:#172E08;border-top:2px solid #73991C;">${fmtN(v)}</td>`;
+    totCells += `<td style="padding:3px 6px;text-align:center;font-size:11px;font-weight:700;background:#E7EDDD;color:#172E08;border-top:2px solid #73991C;">${fmtN(v)}</td>`;
   }
-  totCells += `<td style="padding:5px 6px;text-align:center;font-size:14px;font-weight:900;background:#73991C;color:#ffffff;border-top:2px solid #5f7d17;">${fmtN(totalGeneral.jornales)}</td>`;
-  bodyRows += `<tr><td style="padding:5px 8px;font-size:12px;font-weight:800;color:#73991C;background:#E7EDDD;border-top:2px solid #73991C;">TOTAL</td>${totCells}</tr>`;
+  totCells += `<td style="padding:3px 6px;text-align:center;font-size:12px;font-weight:900;background:#73991C;color:#ffffff;border-top:2px solid #5f7d17;">${fmtN(totalGeneral.jornales)}</td>`;
+  bodyRows += `<tr><td style="padding:3px 8px;font-size:11px;font-weight:800;color:#73991C;background:#E7EDDD;border-top:2px solid #73991C;">TOTAL</td>${totCells}</tr>`;
 
-  // Table header row
   const thTipo = hasTipo ? `<th style="${CSS.thGreen}min-width:90px;">Tipo</th>` : '';
 
-  const tableHTML = `
-    <div style="border-radius:8px;border:1px solid #E7EDDD;overflow:hidden;">
-      <table style="width:100%;border-collapse:collapse;">
-        <thead><tr>${thTipo}<th style="${CSS.thGreen}">Nombre</th>${hCells}<th style="${CSS.thGreenC}background:#5f7d17;">Total</th></tr></thead>
-        <tbody>${bodyRows}</tbody>
-      </table>
+  return `
+    <div style="display:flex;flex-direction:column;flex:1 1 0;min-height:0;overflow:hidden;">
+      <div style="font-size:10px;font-weight:700;color:#4D240F;letter-spacing:1px;margin-bottom:3px;">${titulo}</div>
+      <div style="flex:1;min-height:0;overflow:hidden;border-radius:8px;border:1px solid #E7EDDD;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr>${thTipo}<th style="${CSS.thGreen}">Nombre</th>${hCells}<th style="${CSS.thGreenC}background:#5f7d17;">Total</th></tr></thead>
+          <tbody>${bodyRows}</tbody>
+        </table>
+      </div>
     </div>`;
+}
 
-  // Bar charts
-  const nameOrd = [...actividades].sort((a: string, b: string) => (totalesPorActividad[b]?.jornales || 0) - (totalesPorActividad[a]?.jornales || 0));
-  const loteOrd = [...lotes].sort((a: string, b: string) => (totalesPorLote[b]?.jornales || 0) - (totalesPorLote[a]?.jornales || 0));
-  const mxN = Math.max(...nameOrd.map((a: string) => totalesPorActividad[a]?.jornales || 0), 1);
-  const mxL = Math.max(...loteOrd.map((l: string) => totalesPorLote[l]?.jornales || 0), 1);
+function legendHTML(): string {
+  return `<div style="display:flex;gap:18px;align-items:center;margin-bottom:6px;font-size:10px;color:#4D240F;">
+    <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:10px;height:10px;background:${COLOR_PROPIO};border-radius:2px;"></span>Propios</span>
+    <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:10px;height:10px;background:${COLOR_CONTRATO};border-radius:2px;"></span>Contrato</span>
+  </div>`;
+}
+
+function construirSlidesLaboresMatriz(datos: any, analisis: AnalisisGemini): string[] {
+  const combinado = datos.jornales || datos.labores?.matrizJornales;
+  if (!combinado || !combinado.actividades || combinado.actividades.length === 0) return [];
+
+  const propios = datos.labores?.matrizJornalesPropios;
+  const contrato = datos.labores?.matrizJornalesContrato;
+
+  const { semana } = datos;
+  const hasPropios = (propios?.actividades?.length || 0) > 0;
+  const hasContrato = (contrato?.actividades?.length || 0) > 0;
+
+  // Stacked bar charts ordered by combined totals so propios + contrato segments line up.
+  const nameOrd = [...combinado.actividades].sort((a: string, b: string) =>
+    (combinado.totalesPorActividad[b]?.jornales || 0) - (combinado.totalesPorActividad[a]?.jornales || 0)
+  );
+  const loteOrd = [...combinado.lotes].sort((a: string, b: string) =>
+    (combinado.totalesPorLote[b]?.jornales || 0) - (combinado.totalesPorLote[a]?.jornales || 0)
+  );
+  const mxN = Math.max(...nameOrd.map((a: string) => combinado.totalesPorActividad[a]?.jornales || 0), 1);
+  const mxL = Math.max(...loteOrd.map((l: string) => combinado.totalesPorLote[l]?.jornales || 0), 1);
 
   const truncLabel = (s: string, max: number) => s.length > max ? s.slice(0, max - 1) + '…' : s;
 
-  const bar = (items: string[], getData: (k: string) => number, maxV: number, color: string) =>
-    items.slice(0, 8).map((k: string) => {
-      const v = getData(k);
-      const pct = (v / maxV) * 100;
-      const label = truncLabel(k, 24);
-      return `<div style="display:flex;align-items:center;margin-bottom:8px;">
-        <div style="width:180px;font-size:11px;font-weight:500;color:#4D240F;text-align:right;padding-right:10px;flex-shrink:0;white-space:nowrap;">${label}</div>
-        <div style="flex:1;background:#E7EDDD;border-radius:3px;height:22px;position:relative;overflow:hidden;">
-          <div style="background:${color};height:100%;border-radius:3px;width:${Math.max(pct, 2)}%;"></div>
-          <span style="position:absolute;left:6px;top:2px;font-size:11px;font-weight:600;color:${pct > 35 ? '#fff' : '#4D240F'};">${fmtN(v, 1)}</span>
+  const stackedBar = (
+    items: string[],
+    getPropio: (k: string) => number,
+    getContrato: (k: string) => number,
+    maxV: number,
+  ) =>
+    items.slice(0, 6).map((k: string) => {
+      const own = getPropio(k);
+      const ctr = getContrato(k);
+      const total = own + ctr;
+      const ownPct = (own / maxV) * 100;
+      const ctrPct = (ctr / maxV) * 100;
+      const totalPct = (total / maxV) * 100;
+      const label = truncLabel(k, 22);
+      return `<div style="display:flex;align-items:center;margin-bottom:5px;">
+        <div style="width:150px;font-size:10px;font-weight:500;color:#4D240F;text-align:right;padding-right:8px;flex-shrink:0;white-space:nowrap;">${label}</div>
+        <div style="flex:1;background:#E7EDDD;border-radius:3px;height:18px;position:relative;overflow:hidden;display:flex;">
+          <div style="background:${COLOR_PROPIO};height:100%;width:${ownPct}%;"></div>
+          <div style="background:${COLOR_CONTRATO};height:100%;width:${ctrPct}%;"></div>
+          <span style="position:absolute;left:6px;top:1px;font-size:10px;font-weight:600;color:${totalPct > 35 ? '#fff' : '#4D240F'};">${fmtN(total, 1)}</span>
         </div>
       </div>`;
     }).join('');
 
   const chartsHTML = `
-    <div style="display:flex;gap:32px;flex:1;">
-      <div style="flex:1;">
-        <div style="font-size:11px;font-weight:700;color:#4D240F;letter-spacing:1px;margin-bottom:6px;">POR TAREA</div>
-        ${bar(nameOrd, (a: string) => totalesPorActividad[a]?.jornales || 0, mxN, '#73991C')}
-      </div>
-      <div style="flex:1;">
-        <div style="font-size:11px;font-weight:700;color:#4D240F;letter-spacing:1px;margin-bottom:6px;">POR LOTE</div>
-        ${bar(loteOrd, (l: string) => totalesPorLote[l]?.jornales || 0, mxL, '#73991C')}
+    <div style="flex:0 0 auto;display:flex;flex-direction:column;">
+      ${legendHTML()}
+      <div style="display:flex;gap:24px;">
+        <div style="flex:1;">
+          <div style="font-size:10px;font-weight:700;color:#4D240F;letter-spacing:1px;margin-bottom:4px;">POR TAREA</div>
+          ${stackedBar(
+            nameOrd,
+            (a: string) => propios?.totalesPorActividad?.[a]?.jornales || 0,
+            (a: string) => contrato?.totalesPorActividad?.[a]?.jornales || 0,
+            mxN,
+          )}
+        </div>
+        <div style="flex:1;">
+          <div style="font-size:10px;font-weight:700;color:#4D240F;letter-spacing:1px;margin-bottom:4px;">POR LOTE</div>
+          ${stackedBar(
+            loteOrd,
+            (l: string) => propios?.totalesPorLote?.[l]?.jornales || 0,
+            (l: string) => contrato?.totalesPorLote?.[l]?.jornales || 0,
+            mxL,
+          )}
+        </div>
       </div>
     </div>`;
 
-  const slides: string[] = [];
+  const sections: string[] = [];
+  if (hasPropios) sections.push(renderMatrizJornalesTable(propios, 'JORNALES PROPIOS'));
+  if (hasContrato) sections.push(renderMatrizJornalesTable(contrato, 'JORNALES POR CONTRATO'));
+  sections.push(chartsHTML);
 
-  if (chartsSeparate) {
-    // Slide 1: Table only
-    slides.push(slide('JORNALES — MATRIZ', semana, `
-      ${headline(analisis.titulares.jornales)}
-      <div style="flex:1;overflow:hidden;">${tableHTML}</div>
-    `));
-    // Slide 2: Charts only
-    slides.push(slide('JORNALES — DISTRIBUCIÓN', semana, `
-      <div style="flex:1;display:flex;flex-direction:column;justify-content:center;">${chartsHTML}</div>
-    `));
-  } else {
-    // Single slide: table + charts
-    slides.push(slide('JORNALES', semana, `
-      ${headline(analisis.titulares.jornales)}
-      <div style="flex:1;display:flex;flex-direction:column;gap:16px;overflow:hidden;">
-        ${tableHTML}
-        ${chartsHTML}
-      </div>
-    `));
-  }
-
-  return slides;
+  return [slide('JORNALES', semana, `
+    ${headline(analisis.titulares.jornales)}
+    <div style="flex:1;display:flex;flex-direction:column;gap:10px;min-height:0;overflow:hidden;">
+      ${sections.join('')}
+    </div>
+  `)];
 }
 
 // ============================================================================
