@@ -114,13 +114,13 @@ const MOCK_DATOS_COMPLETOS = {
       totalGeneral: { jornales: 10.5, costo: 547500 },
     },
     matrizJornalesPropios: {
-      actividades: ['Fumigación', 'Fertilización', 'Poda'],
+      // After per-channel filtering: only Fumigación and Poda have own-labor rows.
+      actividades: ['Fumigación', 'Poda'],
       filas: [
-        { nombre: 'Fertilización', tipo: 'Fertilización' },
         { nombre: 'Fumigación', tipo: 'Fumigación' },
         { nombre: 'Poda', tipo: 'Poda' },
       ],
-      lotes: ['Lote PP', 'Lote ST', 'Lote AU'],
+      lotes: ['Lote PP', 'Lote ST'],
       datos: {
         'Fumigación': {
           'Lote PP': { jornales: 3.5, costo: 175000 },
@@ -141,13 +141,12 @@ const MOCK_DATOS_COMPLETOS = {
       totalGeneral: { jornales: 7.0, costo: 350000 },
     },
     matrizJornalesContrato: {
-      actividades: ['Fumigación', 'Fertilización', 'Poda'],
+      // After per-channel filtering: only Fertilización has contractor rows.
+      actividades: ['Fertilización'],
       filas: [
         { nombre: 'Fertilización', tipo: 'Fertilización' },
-        { nombre: 'Fumigación', tipo: 'Fumigación' },
-        { nombre: 'Poda', tipo: 'Poda' },
       ],
-      lotes: ['Lote PP', 'Lote ST', 'Lote AU'],
+      lotes: ['Lote PP', 'Lote AU'],
       datos: {
         'Fertilización': {
           'Lote PP': { jornales: 1.0, costo: 60000 },
@@ -520,6 +519,39 @@ describe('Edge Function: generarReporteSemanal', () => {
       // Legend labels are present
       expect(resultado.html).toContain('Propios');
       expect(resultado.html).toContain('Contrato');
+    });
+
+    it('colapsa la seccion de contrato cuando no hay jornales por contrato', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(MOCK_OPENROUTER_RESPONSE),
+      });
+
+      const datosSinContrato = {
+        ...MOCK_DATOS_COMPLETOS,
+        labores: {
+          ...MOCK_DATOS_COMPLETOS.labores,
+          matrizJornalesContrato: {
+            actividades: [],
+            filas: [],
+            lotes: [],
+            datos: {},
+            totalesPorActividad: {},
+            totalesPorLote: {},
+            totalGeneral: { jornales: 0, costo: 0 },
+          },
+        },
+      };
+
+      const resultado = await generarReporteSemanal({ datos: datosSinContrato });
+
+      // Propios sigue presente y las gráficas también (siempre se renderizan)
+      expect(resultado.html).toContain('JORNALES PROPIOS');
+      expect(resultado.html).toContain('POR TAREA');
+      expect(resultado.html).toContain('POR LOTE');
+
+      // La tabla de contrato queda omitida (no aparece el heading dentro de un table block)
+      expect(resultado.html).not.toContain('JORNALES POR CONTRATO');
     });
 
     it('incluye aplicaciones con barras de progreso', async () => {

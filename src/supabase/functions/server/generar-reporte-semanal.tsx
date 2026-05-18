@@ -1022,19 +1022,14 @@ function construirSlideLaboresProgramadas(datos: any, analisis: AnalisisGemini):
 const COLOR_PROPIO = '#73991C';
 const COLOR_CONTRATO = '#B8D47F';
 
-function renderMatrizJornalesTable(matriz: any, titulo: string, emptyText: string): string {
-  if (!matriz || !matriz.actividades || matriz.actividades.length === 0) {
-    return `<div style="border-radius:8px;border:1px solid #E7EDDD;background:#F8FAF5;padding:14px 16px;">
-      <div style="font-size:11px;font-weight:700;color:#4D240F;letter-spacing:1px;margin-bottom:4px;">${titulo}</div>
-      <div style="font-size:12px;color:#9ca3af;font-style:italic;">${emptyText}</div>
-    </div>`;
-  }
-
-  const { actividades, filas, lotes, datos: md, totalesPorActividad, totalesPorLote, totalGeneral } = matriz;
+function renderMatrizJornalesTable(matriz: any, titulo: string): string {
+  // Caller is responsible for skipping empty channels — when a channel has no data,
+  // we omit its section entirely so propios + contrato + charts redistribute the space.
+  const { filas, lotes, datos: md, totalesPorActividad, totalesPorLote, totalGeneral } = matriz;
 
   const rows: Array<{ nombre: string; tipo: string }> = filas && filas.length > 0
     ? filas
-    : actividades.map((a: string) => ({ nombre: a, tipo: '' }));
+    : (matriz.actividades || []).map((a: string) => ({ nombre: a, tipo: '' }));
 
   let mx = 0;
   for (const row of rows) for (const lote of lotes) {
@@ -1050,35 +1045,35 @@ function renderMatrizJornalesTable(matriz: any, titulo: string, emptyText: strin
   for (const row of rows) {
     let cells = '';
     const tipoCell = hasTipo
-      ? `<td style="padding:6px 8px;font-size:11px;color:#6b7280;border-bottom:1px solid #E7EDDD;background:#F8FAF5;white-space:nowrap;${row.tipo !== prevTipo ? 'border-top:1px solid #BFD97D;' : ''}">${row.tipo !== prevTipo ? row.tipo : ''}</td>`
+      ? `<td style="padding:3px 6px;font-size:10px;color:#6b7280;border-bottom:1px solid #E7EDDD;background:#F8FAF5;white-space:nowrap;${row.tipo !== prevTipo ? 'border-top:1px solid #BFD97D;' : ''}">${row.tipo !== prevTipo ? row.tipo : ''}</td>`
       : '';
     prevTipo = row.tipo;
 
     for (const lote of lotes) {
       const v = md[row.nombre]?.[lote]?.jornales || 0;
-      cells += `<td style="padding:5px 6px;text-align:center;font-size:12px;font-weight:${v > 0 ? '600' : '400'};background:${hmBg(v, mx)};color:${hmTx(v, mx)};border-bottom:1px solid #E7EDDD;">${v > 0 ? fmtN(v) : '—'}</td>`;
+      cells += `<td style="padding:3px 6px;text-align:center;font-size:11px;font-weight:${v > 0 ? '600' : '400'};background:${hmBg(v, mx)};color:${hmTx(v, mx)};border-bottom:1px solid #E7EDDD;">${v > 0 ? fmtN(v) : '—'}</td>`;
     }
     const tot = totalesPorActividad[row.nombre]?.jornales || 0;
-    cells += `<td style="padding:5px 6px;text-align:center;font-size:12px;font-weight:700;background:#f0fdf4;color:#172E08;border-bottom:1px solid #E7EDDD;">${fmtN(tot)}</td>`;
+    cells += `<td style="padding:3px 6px;text-align:center;font-size:11px;font-weight:700;background:#f0fdf4;color:#172E08;border-bottom:1px solid #E7EDDD;">${fmtN(tot)}</td>`;
     const nombreTrunc = row.nombre.length > 26 ? row.nombre.slice(0, 25) + '…' : row.nombre;
-    bodyRows += `<tr>${tipoCell}<td style="padding:5px 8px;font-size:12px;font-weight:600;color:#172E08;border-bottom:1px solid #E7EDDD;white-space:nowrap;">${nombreTrunc}</td>${cells}</tr>`;
+    bodyRows += `<tr>${tipoCell}<td style="padding:3px 8px;font-size:11px;font-weight:600;color:#172E08;border-bottom:1px solid #E7EDDD;white-space:nowrap;">${nombreTrunc}</td>${cells}</tr>`;
   }
 
   let totCells = '';
-  if (hasTipo) totCells += `<td style="padding:5px 8px;background:#E7EDDD;border-top:2px solid #73991C;"></td>`;
+  if (hasTipo) totCells += `<td style="padding:3px 8px;background:#E7EDDD;border-top:2px solid #73991C;"></td>`;
   for (const lote of lotes) {
     const v = totalesPorLote[lote]?.jornales || 0;
-    totCells += `<td style="padding:5px 6px;text-align:center;font-size:12px;font-weight:700;background:#E7EDDD;color:#172E08;border-top:2px solid #73991C;">${fmtN(v)}</td>`;
+    totCells += `<td style="padding:3px 6px;text-align:center;font-size:11px;font-weight:700;background:#E7EDDD;color:#172E08;border-top:2px solid #73991C;">${fmtN(v)}</td>`;
   }
-  totCells += `<td style="padding:5px 6px;text-align:center;font-size:14px;font-weight:900;background:#73991C;color:#ffffff;border-top:2px solid #5f7d17;">${fmtN(totalGeneral.jornales)}</td>`;
-  bodyRows += `<tr><td style="padding:5px 8px;font-size:12px;font-weight:800;color:#73991C;background:#E7EDDD;border-top:2px solid #73991C;">TOTAL</td>${totCells}</tr>`;
+  totCells += `<td style="padding:3px 6px;text-align:center;font-size:12px;font-weight:900;background:#73991C;color:#ffffff;border-top:2px solid #5f7d17;">${fmtN(totalGeneral.jornales)}</td>`;
+  bodyRows += `<tr><td style="padding:3px 8px;font-size:11px;font-weight:800;color:#73991C;background:#E7EDDD;border-top:2px solid #73991C;">TOTAL</td>${totCells}</tr>`;
 
   const thTipo = hasTipo ? `<th style="${CSS.thGreen}min-width:90px;">Tipo</th>` : '';
 
   return `
-    <div>
-      <div style="font-size:11px;font-weight:700;color:#4D240F;letter-spacing:1px;margin-bottom:4px;">${titulo}</div>
-      <div style="border-radius:8px;border:1px solid #E7EDDD;overflow:hidden;">
+    <div style="display:flex;flex-direction:column;flex:1 1 0;min-height:0;overflow:hidden;">
+      <div style="font-size:10px;font-weight:700;color:#4D240F;letter-spacing:1px;margin-bottom:3px;">${titulo}</div>
+      <div style="flex:1;min-height:0;overflow:hidden;border-radius:8px;border:1px solid #E7EDDD;">
         <table style="width:100%;border-collapse:collapse;">
           <thead><tr>${thTipo}<th style="${CSS.thGreen}">Nombre</th>${hCells}<th style="${CSS.thGreenC}background:#5f7d17;">Total</th></tr></thead>
           <tbody>${bodyRows}</tbody>
@@ -1088,9 +1083,9 @@ function renderMatrizJornalesTable(matriz: any, titulo: string, emptyText: strin
 }
 
 function legendHTML(): string {
-  return `<div style="display:flex;gap:18px;align-items:center;margin-bottom:8px;font-size:11px;color:#4D240F;">
-    <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:${COLOR_PROPIO};border-radius:2px;"></span>Propios</span>
-    <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:12px;height:12px;background:${COLOR_CONTRATO};border-radius:2px;"></span>Contrato</span>
+  return `<div style="display:flex;gap:18px;align-items:center;margin-bottom:6px;font-size:10px;color:#4D240F;">
+    <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:10px;height:10px;background:${COLOR_PROPIO};border-radius:2px;"></span>Propios</span>
+    <span style="display:inline-flex;align-items:center;gap:6px;"><span style="display:inline-block;width:10px;height:10px;background:${COLOR_CONTRATO};border-radius:2px;"></span>Contrato</span>
   </div>`;
 }
 
@@ -1098,19 +1093,12 @@ function construirSlidesLaboresMatriz(datos: any, analisis: AnalisisGemini): str
   const combinado = datos.jornales || datos.labores?.matrizJornales;
   if (!combinado || !combinado.actividades || combinado.actividades.length === 0) return [];
 
-  const propios = datos.labores?.matrizJornalesPropios || emptyMatrizFallback(combinado);
-  const contrato = datos.labores?.matrizJornalesContrato || emptyMatrizFallback(combinado);
+  const propios = datos.labores?.matrizJornalesPropios;
+  const contrato = datos.labores?.matrizJornalesContrato;
 
   const { semana } = datos;
-
-  const tableHTMLPropios = renderMatrizJornalesTable(propios, 'JORNALES PROPIOS', 'Sin jornales propios en la semana');
-  const tableHTMLContrato = renderMatrizJornalesTable(contrato, 'JORNALES POR CONTRATO', 'Sin jornales por contrato en la semana');
-
-  const MAX_ROWS_WITH_CHARTS = 8;
-  const chartsSeparate = Math.max(
-    (propios.actividades?.length || 0),
-    (contrato.actividades?.length || 0)
-  ) > MAX_ROWS_WITH_CHARTS;
+  const hasPropios = (propios?.actividades?.length || 0) > 0;
+  const hasContrato = (contrato?.actividades?.length || 0) > 0;
 
   // Stacked bar charts ordered by combined totals so propios + contrato segments line up.
   const nameOrd = [...combinado.actividades].sort((a: string, b: string) =>
@@ -1130,84 +1118,60 @@ function construirSlidesLaboresMatriz(datos: any, analisis: AnalisisGemini): str
     getContrato: (k: string) => number,
     maxV: number,
   ) =>
-    items.slice(0, 8).map((k: string) => {
+    items.slice(0, 6).map((k: string) => {
       const own = getPropio(k);
       const ctr = getContrato(k);
       const total = own + ctr;
       const ownPct = (own / maxV) * 100;
       const ctrPct = (ctr / maxV) * 100;
       const totalPct = (total / maxV) * 100;
-      const label = truncLabel(k, 24);
-      return `<div style="display:flex;align-items:center;margin-bottom:8px;">
-        <div style="width:180px;font-size:11px;font-weight:500;color:#4D240F;text-align:right;padding-right:10px;flex-shrink:0;white-space:nowrap;">${label}</div>
-        <div style="flex:1;background:#E7EDDD;border-radius:3px;height:22px;position:relative;overflow:hidden;display:flex;">
+      const label = truncLabel(k, 22);
+      return `<div style="display:flex;align-items:center;margin-bottom:5px;">
+        <div style="width:150px;font-size:10px;font-weight:500;color:#4D240F;text-align:right;padding-right:8px;flex-shrink:0;white-space:nowrap;">${label}</div>
+        <div style="flex:1;background:#E7EDDD;border-radius:3px;height:18px;position:relative;overflow:hidden;display:flex;">
           <div style="background:${COLOR_PROPIO};height:100%;width:${ownPct}%;"></div>
           <div style="background:${COLOR_CONTRATO};height:100%;width:${ctrPct}%;"></div>
-          <span style="position:absolute;left:6px;top:2px;font-size:11px;font-weight:600;color:${totalPct > 35 ? '#fff' : '#4D240F'};">${fmtN(total, 1)}</span>
+          <span style="position:absolute;left:6px;top:1px;font-size:10px;font-weight:600;color:${totalPct > 35 ? '#fff' : '#4D240F'};">${fmtN(total, 1)}</span>
         </div>
       </div>`;
     }).join('');
 
   const chartsHTML = `
-    ${legendHTML()}
-    <div style="display:flex;gap:32px;flex:1;">
-      <div style="flex:1;">
-        <div style="font-size:11px;font-weight:700;color:#4D240F;letter-spacing:1px;margin-bottom:6px;">POR TAREA</div>
-        ${stackedBar(
-          nameOrd,
-          (a: string) => propios.totalesPorActividad?.[a]?.jornales || 0,
-          (a: string) => contrato.totalesPorActividad?.[a]?.jornales || 0,
-          mxN,
-        )}
-      </div>
-      <div style="flex:1;">
-        <div style="font-size:11px;font-weight:700;color:#4D240F;letter-spacing:1px;margin-bottom:6px;">POR LOTE</div>
-        ${stackedBar(
-          loteOrd,
-          (l: string) => propios.totalesPorLote?.[l]?.jornales || 0,
-          (l: string) => contrato.totalesPorLote?.[l]?.jornales || 0,
-          mxL,
-        )}
+    <div style="flex:0 0 auto;display:flex;flex-direction:column;">
+      ${legendHTML()}
+      <div style="display:flex;gap:24px;">
+        <div style="flex:1;">
+          <div style="font-size:10px;font-weight:700;color:#4D240F;letter-spacing:1px;margin-bottom:4px;">POR TAREA</div>
+          ${stackedBar(
+            nameOrd,
+            (a: string) => propios?.totalesPorActividad?.[a]?.jornales || 0,
+            (a: string) => contrato?.totalesPorActividad?.[a]?.jornales || 0,
+            mxN,
+          )}
+        </div>
+        <div style="flex:1;">
+          <div style="font-size:10px;font-weight:700;color:#4D240F;letter-spacing:1px;margin-bottom:4px;">POR LOTE</div>
+          ${stackedBar(
+            loteOrd,
+            (l: string) => propios?.totalesPorLote?.[l]?.jornales || 0,
+            (l: string) => contrato?.totalesPorLote?.[l]?.jornales || 0,
+            mxL,
+          )}
+        </div>
       </div>
     </div>`;
 
-  const slides: string[] = [];
+  const sections: string[] = [];
+  if (hasPropios) sections.push(renderMatrizJornalesTable(propios, 'JORNALES PROPIOS'));
+  if (hasContrato) sections.push(renderMatrizJornalesTable(contrato, 'JORNALES POR CONTRATO'));
+  sections.push(chartsHTML);
 
-  if (chartsSeparate) {
-    slides.push(slide('JORNALES — MATRIZ', semana, `
-      ${headline(analisis.titulares.jornales)}
-      <div style="flex:1;display:flex;flex-direction:column;gap:12px;overflow:hidden;">
-        ${tableHTMLPropios}
-        ${tableHTMLContrato}
-      </div>
-    `));
-    slides.push(slide('JORNALES — DISTRIBUCIÓN', semana, `
-      <div style="flex:1;display:flex;flex-direction:column;justify-content:center;">${chartsHTML}</div>
-    `));
-  } else {
-    slides.push(slide('JORNALES', semana, `
-      ${headline(analisis.titulares.jornales)}
-      <div style="flex:1;display:flex;flex-direction:column;gap:12px;overflow:hidden;">
-        ${tableHTMLPropios}
-        ${tableHTMLContrato}
-        ${chartsHTML}
-      </div>
-    `));
-  }
-
-  return slides;
-}
-
-function emptyMatrizFallback(reference: any): any {
-  return {
-    actividades: [],
-    filas: [],
-    lotes: reference?.lotes || [],
-    datos: {},
-    totalesPorActividad: {},
-    totalesPorLote: {},
-    totalGeneral: { jornales: 0, costo: 0 },
-  };
+  return [slide('JORNALES', semana, `
+    ${headline(analisis.titulares.jornales)}
+    <div style="flex:1;display:flex;flex-direction:column;gap:10px;min-height:0;overflow:hidden;">
+      ${sections.join('')}
+    </div>
+  `)];
 }
 
 // ============================================================================

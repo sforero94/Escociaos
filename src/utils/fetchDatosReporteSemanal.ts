@@ -344,27 +344,36 @@ export async function fetchMatrizJornales(
     apply(combinadoAcc, nombre, lote, jornales, costo);
   });
 
-  // Build filas sorted by tipo then nombre — shared across all three matrices so row order matches.
-  const filas = Array.from(filasMap.entries())
+  // Combined matrix keeps the full union of activities and lots so KPI cross-checks
+  // stay valid. Each channel matrix is filtered to its own non-zero rows/columns —
+  // that way the wizard and PDF only render data that actually exists per channel.
+  const allFilas = Array.from(filasMap.entries())
     .map(([nombre, tipo]) => ({ nombre, tipo }))
     .sort((a, b) => a.tipo.localeCompare(b.tipo) || a.nombre.localeCompare(b.nombre));
-  const actividades = filas.map(f => f.nombre);
-  const lotes = Array.from(lotesSet).sort();
+  const allLotes = Array.from(lotesSet).sort();
 
-  const toMatriz = (acc: Acc): MatrizJornales => ({
-    actividades,
-    filas,
-    lotes,
-    datos: acc.datos,
-    totalesPorActividad: acc.totalesPorActividad,
-    totalesPorLote: acc.totalesPorLote,
-    totalGeneral: { jornales: acc.totalJornales, costo: acc.totalCosto },
-  });
+  const toMatriz = (acc: Acc, scoped: boolean): MatrizJornales => {
+    const filas = scoped
+      ? allFilas.filter(f => (acc.totalesPorActividad[f.nombre]?.jornales || 0) > 0)
+      : allFilas;
+    const lotes = scoped
+      ? allLotes.filter(l => (acc.totalesPorLote[l]?.jornales || 0) > 0)
+      : allLotes;
+    return {
+      actividades: filas.map(f => f.nombre),
+      filas,
+      lotes,
+      datos: acc.datos,
+      totalesPorActividad: acc.totalesPorActividad,
+      totalesPorLote: acc.totalesPorLote,
+      totalGeneral: { jornales: acc.totalJornales, costo: acc.totalCosto },
+    };
+  };
 
   return {
-    propios: toMatriz(propiosAcc),
-    contrato: toMatriz(contratoAcc),
-    combinado: toMatriz(combinadoAcc),
+    propios: toMatriz(propiosAcc, true),
+    contrato: toMatriz(contratoAcc, true),
+    combinado: toMatriz(combinadoAcc, false),
   };
 }
 

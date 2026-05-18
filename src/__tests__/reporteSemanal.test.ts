@@ -553,15 +553,24 @@ describe('fetchMatrizJornales', () => {
     expect(propios.totalGeneral.costo + contrato.totalGeneral.costo).toBeCloseTo(combinado.totalGeneral.costo);
   });
 
-  it('matrices propio y contrato comparten el mismo orden de filas y lotes que combinado', async () => {
+  it('cada canal expone solo actividades y lotes con datos reales (subconjunto del combinado)', async () => {
     setupMocks();
 
     const { propios, contrato, combinado } = await fetchMatrizJornales('2026-02-09', '2026-02-15');
 
-    expect(propios.actividades).toEqual(combinado.actividades);
-    expect(contrato.actividades).toEqual(combinado.actividades);
-    expect(propios.lotes).toEqual(combinado.lotes);
-    expect(contrato.lotes).toEqual(combinado.lotes);
+    // Propios: solo Fumigación (no Fertilización), solo lotes con propios (PP, ST — no AU)
+    expect(propios.actividades).toEqual(['Fumigación']);
+    expect(propios.lotes.sort()).toEqual(['Lote PP', 'Lote ST']);
+
+    // Contrato: solo Fertilización, solo lotes con contrato (PP, AU — no ST)
+    expect(contrato.actividades).toEqual(['Fertilización']);
+    expect(contrato.lotes.sort()).toEqual(['Lote AU', 'Lote PP']);
+
+    // Subset del combinado en ambos casos
+    expect(propios.actividades.every(a => combinado.actividades.includes(a))).toBe(true);
+    expect(contrato.actividades.every(a => combinado.actividades.includes(a))).toBe(true);
+    expect(propios.lotes.every(l => combinado.lotes.includes(l))).toBe(true);
+    expect(contrato.lotes.every(l => combinado.lotes.includes(l))).toBe(true);
   });
 
   it('canal vacio: solo contrato registrado deja propios vacio y combinado igual a contrato', async () => {
