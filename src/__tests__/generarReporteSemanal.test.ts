@@ -47,6 +47,11 @@ const MOCK_DATOS_COMPLETOS = {
   },
   jornales: {
     actividades: ['Fumigación', 'Fertilización', 'Poda'],
+    filas: [
+      { nombre: 'Fertilización', tipo: 'Fertilización' },
+      { nombre: 'Fumigación', tipo: 'Fumigación' },
+      { nombre: 'Poda', tipo: 'Poda' },
+    ],
     lotes: ['Lote PP', 'Lote ST', 'Lote AU'],
     datos: {
       'Fumigación': {
@@ -72,6 +77,92 @@ const MOCK_DATOS_COMPLETOS = {
       'Lote AU': { jornales: 2.5, costo: 137500 },
     },
     totalGeneral: { jornales: 10.5, costo: 547500 },
+  },
+  labores: {
+    programadas: [],
+    matrizJornales: {
+      actividades: ['Fumigación', 'Fertilización', 'Poda'],
+      filas: [
+        { nombre: 'Fertilización', tipo: 'Fertilización' },
+        { nombre: 'Fumigación', tipo: 'Fumigación' },
+        { nombre: 'Poda', tipo: 'Poda' },
+      ],
+      lotes: ['Lote PP', 'Lote ST', 'Lote AU'],
+      datos: {
+        'Fumigación': {
+          'Lote PP': { jornales: 3.5, costo: 175000 },
+          'Lote ST': { jornales: 2.0, costo: 100000 },
+        },
+        'Fertilización': {
+          'Lote PP': { jornales: 1.0, costo: 60000 },
+          'Lote AU': { jornales: 2.5, costo: 137500 },
+        },
+        'Poda': {
+          'Lote ST': { jornales: 1.5, costo: 75000 },
+        },
+      },
+      totalesPorActividad: {
+        'Fumigación': { jornales: 5.5, costo: 275000 },
+        'Fertilización': { jornales: 3.5, costo: 197500 },
+        'Poda': { jornales: 1.5, costo: 75000 },
+      },
+      totalesPorLote: {
+        'Lote PP': { jornales: 4.5, costo: 235000 },
+        'Lote ST': { jornales: 3.5, costo: 175000 },
+        'Lote AU': { jornales: 2.5, costo: 137500 },
+      },
+      totalGeneral: { jornales: 10.5, costo: 547500 },
+    },
+    matrizJornalesPropios: {
+      actividades: ['Fumigación', 'Fertilización', 'Poda'],
+      filas: [
+        { nombre: 'Fertilización', tipo: 'Fertilización' },
+        { nombre: 'Fumigación', tipo: 'Fumigación' },
+        { nombre: 'Poda', tipo: 'Poda' },
+      ],
+      lotes: ['Lote PP', 'Lote ST', 'Lote AU'],
+      datos: {
+        'Fumigación': {
+          'Lote PP': { jornales: 3.5, costo: 175000 },
+          'Lote ST': { jornales: 2.0, costo: 100000 },
+        },
+        'Poda': {
+          'Lote ST': { jornales: 1.5, costo: 75000 },
+        },
+      },
+      totalesPorActividad: {
+        'Fumigación': { jornales: 5.5, costo: 275000 },
+        'Poda': { jornales: 1.5, costo: 75000 },
+      },
+      totalesPorLote: {
+        'Lote PP': { jornales: 3.5, costo: 175000 },
+        'Lote ST': { jornales: 3.5, costo: 175000 },
+      },
+      totalGeneral: { jornales: 7.0, costo: 350000 },
+    },
+    matrizJornalesContrato: {
+      actividades: ['Fumigación', 'Fertilización', 'Poda'],
+      filas: [
+        { nombre: 'Fertilización', tipo: 'Fertilización' },
+        { nombre: 'Fumigación', tipo: 'Fumigación' },
+        { nombre: 'Poda', tipo: 'Poda' },
+      ],
+      lotes: ['Lote PP', 'Lote ST', 'Lote AU'],
+      datos: {
+        'Fertilización': {
+          'Lote PP': { jornales: 1.0, costo: 60000 },
+          'Lote AU': { jornales: 2.5, costo: 137500 },
+        },
+      },
+      totalesPorActividad: {
+        'Fertilización': { jornales: 3.5, costo: 197500 },
+      },
+      totalesPorLote: {
+        'Lote PP': { jornales: 1.0, costo: 60000 },
+        'Lote AU': { jornales: 2.5, costo: 137500 },
+      },
+      totalGeneral: { jornales: 3.5, costo: 197500 },
+    },
   },
   aplicaciones: {
     planeadas: [
@@ -400,14 +491,35 @@ describe('Edge Function: generarReporteSemanal', () => {
 
       const resultado = await generarReporteSemanal({ datos: MOCK_DATOS_COMPLETOS });
 
-      // Slide uses section header "LABORES" with heatmap table inside
-      expect(resultado.html).toContain('LABORES');
+      // Slide uses section header "JORNALES" with heatmap table inside
+      expect(resultado.html).toContain('JORNALES');
       expect(resultado.html).toContain('Fumigación');
       expect(resultado.html).toContain('Fertilización');
       expect(resultado.html).toContain('Poda');
       expect(resultado.html).toContain('Lote PP');
       expect(resultado.html).toContain('Lote ST');
       expect(resultado.html).toContain('Lote AU');
+    });
+
+    it('renderiza dos tablas independientes (propios + contrato) con barras apiladas y leyenda', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(MOCK_OPENROUTER_RESPONSE),
+      });
+
+      const resultado = await generarReporteSemanal({ datos: MOCK_DATOS_COMPLETOS });
+
+      // Both channel headings appear
+      expect(resultado.html).toContain('JORNALES PROPIOS');
+      expect(resultado.html).toContain('JORNALES POR CONTRATO');
+
+      // Stacked-bar colors (propio = #73991C, contrato = #B8D47F) are both present
+      expect(resultado.html).toContain('#73991C');
+      expect(resultado.html).toContain('#B8D47F');
+
+      // Legend labels are present
+      expect(resultado.html).toContain('Propios');
+      expect(resultado.html).toContain('Contrato');
     });
 
     it('incluye aplicaciones con barras de progreso', async () => {

@@ -59,6 +59,7 @@ import type {
   BloqueImagenConTexto,
   DetalleFallaPermiso,
   SeccionesReporte,
+  MatrizJornales,
 } from '../../types/reporteSemanal';
 import { SECCIONES_DEFAULT } from '../../types/reporteSemanal';
 import { formatearFechaCorta } from '../../utils/fechas';
@@ -84,6 +85,75 @@ function formatFecha(iso: string): string {
   if (!iso) return '—';
   try { return new Date(iso + 'T00:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }); }
   catch { return iso; }
+}
+
+interface MatrizJornalesCardProps {
+  titulo: string;
+  matriz: MatrizJornales;
+  emptyText: string;
+}
+
+function MatrizJornalesCard({ titulo, matriz, emptyText }: MatrizJornalesCardProps) {
+  return (
+    <Card className="rounded-xl">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-foreground text-lg">
+          {titulo}
+          <Badge variant="secondary" className="ml-2">
+            {matriz.totalGeneral.jornales.toFixed(2)} jornales
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {matriz.actividades.length === 0 ? (
+          <p className="text-gray-400 text-center py-4">{emptyText}</p>
+        ) : (
+          <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-gray-50">
+                  <TableHead className="font-semibold text-left px-4 py-3">Actividad</TableHead>
+                  {matriz.lotes.map(lote => (
+                    <TableHead key={lote} className="text-center px-3 py-3 font-medium">{lote}</TableHead>
+                  ))}
+                  <TableHead className="text-center font-bold px-4 py-3 bg-primary/5">Total</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {matriz.actividades.map((actividad, idx) => (
+                  <TableRow key={actividad} className={idx % 2 === 1 ? 'bg-gray-50/50' : ''}>
+                    <TableCell className="font-medium px-4 py-3">{actividad}</TableCell>
+                    {matriz.lotes.map(lote => {
+                      const celda = matriz.datos[actividad]?.[lote];
+                      return (
+                        <TableCell key={lote} className="text-center px-3 py-3 text-sm">
+                          {celda ? celda.jornales.toFixed(2) : '-'}
+                        </TableCell>
+                      );
+                    })}
+                    <TableCell className="text-center font-semibold px-4 py-3 bg-primary/5">
+                      {(matriz.totalesPorActividad[actividad]?.jornales || 0).toFixed(2)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                <TableRow className="bg-primary/10 font-bold border-t-2 border-primary/20">
+                  <TableCell className="px-4 py-3">Total</TableCell>
+                  {matriz.lotes.map(lote => (
+                    <TableCell key={lote} className="text-center px-3 py-3">
+                      {(matriz.totalesPorLote[lote]?.jornales || 0).toFixed(2)}
+                    </TableCell>
+                  ))}
+                  <TableCell className="text-center px-4 py-3 bg-primary/20">
+                    {matriz.totalGeneral.jornales.toFixed(2)}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 // ============================================================================
@@ -822,65 +892,23 @@ export function ReporteSemanalWizard() {
           </Card>
         )}
 
-        {/* Jornales matrix */}
-        <Card className="rounded-xl">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-foreground text-lg">
-              Distribución de Jornales
-              <Badge variant="secondary" className="ml-2">
-                {datosReporte.labores.matrizJornales.totalGeneral.jornales.toFixed(2)} jornales
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {datosReporte.labores.matrizJornales.actividades.length === 0 ? (
-              <p className="text-gray-400 text-center py-4">No hay registros de trabajo en esta semana</p>
-            ) : (
-              <div className="overflow-x-auto rounded-lg border border-gray-200">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-gray-50">
-                      <TableHead className="font-semibold text-left px-4 py-3">Actividad</TableHead>
-                      {datosReporte.labores.matrizJornales.lotes.map(lote => (
-                        <TableHead key={lote} className="text-center px-3 py-3 font-medium">{lote}</TableHead>
-                      ))}
-                      <TableHead className="text-center font-bold px-4 py-3 bg-primary/5">Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {datosReporte.labores.matrizJornales.actividades.map((actividad, idx) => (
-                      <TableRow key={actividad} className={idx % 2 === 1 ? 'bg-gray-50/50' : ''}>
-                        <TableCell className="font-medium px-4 py-3">{actividad}</TableCell>
-                        {datosReporte.labores.matrizJornales.lotes.map(lote => {
-                          const celda = datosReporte.labores.matrizJornales.datos[actividad]?.[lote];
-                          return (
-                            <TableCell key={lote} className="text-center px-3 py-3 text-sm">
-                              {celda ? celda.jornales.toFixed(2) : '-'}
-                            </TableCell>
-                          );
-                        })}
-                        <TableCell className="text-center font-semibold px-4 py-3 bg-primary/5">
-                          {(datosReporte.labores.matrizJornales.totalesPorActividad[actividad]?.jornales || 0).toFixed(2)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    <TableRow className="bg-primary/10 font-bold border-t-2 border-primary/20">
-                      <TableCell className="px-4 py-3">Total</TableCell>
-                      {datosReporte.labores.matrizJornales.lotes.map(lote => (
-                        <TableCell key={lote} className="text-center px-3 py-3">
-                          {(datosReporte.labores.matrizJornales.totalesPorLote[lote]?.jornales || 0).toFixed(2)}
-                        </TableCell>
-                      ))}
-                      <TableCell className="text-center px-4 py-3 bg-primary/20">
-                        {datosReporte.labores.matrizJornales.totalGeneral.jornales.toFixed(2)}
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {/* Jornales matrix: propios + contrato como tablas independientes */}
+        <MatrizJornalesCard
+          titulo="Jornales Propios"
+          matriz={datosReporte.labores.matrizJornalesPropios}
+          emptyText="Sin jornales propios en la semana"
+        />
+        <MatrizJornalesCard
+          titulo="Jornales por Contrato"
+          matriz={datosReporte.labores.matrizJornalesContrato}
+          emptyText="Sin jornales por contrato en la semana"
+        />
+        <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 flex items-center justify-between">
+          <span className="text-sm font-medium text-foreground">Gran Total combinado (propios + contrato)</span>
+          <span className="text-sm font-bold text-foreground">
+            {datosReporte.labores.matrizJornales.totalGeneral.jornales.toFixed(2)} jornales
+          </span>
+        </div>
 
         {/* Aplicaciones cerradas */}
         {datosReporte.aplicaciones.cerradas.length > 0 && (

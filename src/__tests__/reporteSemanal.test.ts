@@ -433,151 +433,150 @@ describe('fetchMatrizJornales', () => {
     vi.clearAllMocks();
   });
 
-  it('construye correctamente la matriz actividad × lote', async () => {
-    // Primera llamada: tipos_tareas
+  const setupMocks = (registros: any[] = MOCK_REGISTROS_TRABAJO) => {
     const tiposChain = createChainableMock({ data: MOCK_TIPOS_TAREAS, error: null });
-    // Segunda llamada: registros_trabajo
-    const registrosChain = createChainableMock({ data: MOCK_REGISTROS_TRABAJO, error: null });
-
-    let callCount = 0;
+    const registrosChain = createChainableMock({ data: registros, error: null });
     mockFrom.mockImplementation((table: string) => {
-      callCount++;
       if (table === 'tipos_tareas') return tiposChain;
       return registrosChain;
     });
+  };
 
-    const resultado = await fetchMatrizJornales('2026-02-09', '2026-02-15');
+  it('construye correctamente la matriz actividad × lote (combinado)', async () => {
+    setupMocks();
 
-    // Debe tener 2 actividades: Fumigación y Fertilización
-    expect(resultado.actividades).toContain('Fumigación');
-    expect(resultado.actividades).toContain('Fertilización');
-    expect(resultado.actividades.length).toBe(2);
+    const { combinado } = await fetchMatrizJornales('2026-02-09', '2026-02-15');
 
-    // Debe tener 3 lotes: PP, ST, AU
-    expect(resultado.lotes).toContain('Lote PP');
-    expect(resultado.lotes).toContain('Lote ST');
-    expect(resultado.lotes).toContain('Lote AU');
-    expect(resultado.lotes.length).toBe(3);
+    expect(combinado.actividades).toContain('Fumigación');
+    expect(combinado.actividades).toContain('Fertilización');
+    expect(combinado.actividades.length).toBe(2);
+
+    expect(combinado.lotes).toContain('Lote PP');
+    expect(combinado.lotes).toContain('Lote ST');
+    expect(combinado.lotes).toContain('Lote AU');
+    expect(combinado.lotes.length).toBe(3);
   });
 
-  it('calcula totales por actividad correctamente', async () => {
-    const tiposChain = createChainableMock({ data: MOCK_TIPOS_TAREAS, error: null });
-    const registrosChain = createChainableMock({ data: MOCK_REGISTROS_TRABAJO, error: null });
+  it('calcula totales por actividad correctamente (combinado)', async () => {
+    setupMocks();
 
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'tipos_tareas') return tiposChain;
-      return registrosChain;
-    });
-
-    const resultado = await fetchMatrizJornales('2026-02-09', '2026-02-15');
+    const { combinado } = await fetchMatrizJornales('2026-02-09', '2026-02-15');
 
     // Fumigación: emp-1(1.0) + emp-1(0.5) + emp-2(0.75) = 2.25
-    expect(resultado.totalesPorActividad['Fumigación'].jornales).toBeCloseTo(2.25);
-
+    expect(combinado.totalesPorActividad['Fumigación'].jornales).toBeCloseTo(2.25);
     // Fertilización: con-1(1.0) + con-2(1.0) = 2.0
-    expect(resultado.totalesPorActividad['Fertilización'].jornales).toBeCloseTo(2.0);
+    expect(combinado.totalesPorActividad['Fertilización'].jornales).toBeCloseTo(2.0);
   });
 
-  it('calcula totales por lote correctamente', async () => {
-    const tiposChain = createChainableMock({ data: MOCK_TIPOS_TAREAS, error: null });
-    const registrosChain = createChainableMock({ data: MOCK_REGISTROS_TRABAJO, error: null });
+  it('calcula totales por lote correctamente (combinado)', async () => {
+    setupMocks();
 
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'tipos_tareas') return tiposChain;
-      return registrosChain;
-    });
+    const { combinado } = await fetchMatrizJornales('2026-02-09', '2026-02-15');
 
-    const resultado = await fetchMatrizJornales('2026-02-09', '2026-02-15');
-
-    // Lote PP: emp-1(1.0, Fumigación) + con-1(1.0, Fertilización) + emp-2(0.75, Fumigación) = 2.75
-    expect(resultado.totalesPorLote['Lote PP'].jornales).toBeCloseTo(2.75);
-
-    // Lote ST: emp-1(0.5, Fumigación) = 0.5
-    expect(resultado.totalesPorLote['Lote ST'].jornales).toBeCloseTo(0.5);
-
-    // Lote AU: con-2(1.0, Fertilización) = 1.0
-    expect(resultado.totalesPorLote['Lote AU'].jornales).toBeCloseTo(1.0);
+    expect(combinado.totalesPorLote['Lote PP'].jornales).toBeCloseTo(2.75);
+    expect(combinado.totalesPorLote['Lote ST'].jornales).toBeCloseTo(0.5);
+    expect(combinado.totalesPorLote['Lote AU'].jornales).toBeCloseTo(1.0);
   });
 
-  it('calcula el total general correctamente', async () => {
-    const tiposChain = createChainableMock({ data: MOCK_TIPOS_TAREAS, error: null });
-    const registrosChain = createChainableMock({ data: MOCK_REGISTROS_TRABAJO, error: null });
+  it('calcula el total general correctamente (combinado)', async () => {
+    setupMocks();
 
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'tipos_tareas') return tiposChain;
-      return registrosChain;
-    });
+    const { combinado } = await fetchMatrizJornales('2026-02-09', '2026-02-15');
 
-    const resultado = await fetchMatrizJornales('2026-02-09', '2026-02-15');
-
-    // Total: 1.0 + 0.5 + 1.0 + 0.75 + 1.0 = 4.25
-    expect(resultado.totalGeneral.jornales).toBeCloseTo(4.25);
-
-    // Costo total: 50000 + 25000 + 60000 + 37500 + 55000 = 227500
-    expect(resultado.totalGeneral.costo).toBeCloseTo(227500);
+    expect(combinado.totalGeneral.jornales).toBeCloseTo(4.25);
+    expect(combinado.totalGeneral.costo).toBeCloseTo(227500);
   });
 
-  it('calcula celdas individuales de la matriz correctamente', async () => {
-    const tiposChain = createChainableMock({ data: MOCK_TIPOS_TAREAS, error: null });
-    const registrosChain = createChainableMock({ data: MOCK_REGISTROS_TRABAJO, error: null });
+  it('calcula celdas individuales de la matriz correctamente (combinado)', async () => {
+    setupMocks();
 
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'tipos_tareas') return tiposChain;
-      return registrosChain;
-    });
+    const { combinado } = await fetchMatrizJornales('2026-02-09', '2026-02-15');
 
-    const resultado = await fetchMatrizJornales('2026-02-09', '2026-02-15');
-
-    // Fumigación × Lote PP: emp-1(1.0) + emp-2(0.75) = 1.75
-    expect(resultado.datos['Fumigación']['Lote PP'].jornales).toBeCloseTo(1.75);
-
-    // Fumigación × Lote ST: emp-1(0.5)
-    expect(resultado.datos['Fumigación']['Lote ST'].jornales).toBeCloseTo(0.5);
-
-    // Fertilización × Lote PP: con-1(1.0)
-    expect(resultado.datos['Fertilización']['Lote PP'].jornales).toBeCloseTo(1.0);
-
-    // Fertilización × Lote AU: con-2(1.0)
-    expect(resultado.datos['Fertilización']['Lote AU'].jornales).toBeCloseTo(1.0);
+    expect(combinado.datos['Fumigación']['Lote PP'].jornales).toBeCloseTo(1.75);
+    expect(combinado.datos['Fumigación']['Lote ST'].jornales).toBeCloseTo(0.5);
+    expect(combinado.datos['Fertilización']['Lote PP'].jornales).toBeCloseTo(1.0);
+    expect(combinado.datos['Fertilización']['Lote AU'].jornales).toBeCloseTo(1.0);
   });
 
   it('maneja registros sin tipo de tarea como "Sin tipo"', async () => {
     const registrosSinTipo = [
       {
+        empleado_id: 'emp-99',
+        contratista_id: null,
         fraccion_jornal: 1.0,
         costo_jornal: 40000,
         tareas: { tipo_tarea_id: null },
         lote: { nombre: 'Lote PP' },
       },
     ];
-    const tiposChain = createChainableMock({ data: MOCK_TIPOS_TAREAS, error: null });
-    const registrosChain = createChainableMock({ data: registrosSinTipo, error: null });
+    setupMocks(registrosSinTipo);
 
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'tipos_tareas') return tiposChain;
-      return registrosChain;
-    });
+    const { combinado } = await fetchMatrizJornales('2026-02-09', '2026-02-15');
 
-    const resultado = await fetchMatrizJornales('2026-02-09', '2026-02-15');
-
-    expect(resultado.actividades).toContain('Sin tipo');
+    expect(combinado.actividades).toContain('Sin tipo');
   });
 
-  it('retorna matriz vacía cuando no hay registros', async () => {
-    const tiposChain = createChainableMock({ data: MOCK_TIPOS_TAREAS, error: null });
-    const registrosChain = createChainableMock({ data: [], error: null });
+  it('retorna matrices vacías cuando no hay registros', async () => {
+    setupMocks([]);
 
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'tipos_tareas') return tiposChain;
-      return registrosChain;
-    });
+    const { propios, contrato, combinado } = await fetchMatrizJornales('2026-03-01', '2026-03-07');
 
-    const resultado = await fetchMatrizJornales('2026-03-01', '2026-03-07');
+    for (const matriz of [propios, contrato, combinado]) {
+      expect(matriz.actividades.length).toBe(0);
+      expect(matriz.lotes.length).toBe(0);
+      expect(matriz.totalGeneral.jornales).toBe(0);
+      expect(matriz.totalGeneral.costo).toBe(0);
+    }
+  });
 
-    expect(resultado.actividades.length).toBe(0);
-    expect(resultado.lotes.length).toBe(0);
-    expect(resultado.totalGeneral.jornales).toBe(0);
-    expect(resultado.totalGeneral.costo).toBe(0);
+  it('separa propios y contrato segun empleado_id / contratista_id', async () => {
+    setupMocks();
+
+    const { propios, contrato, combinado } = await fetchMatrizJornales('2026-02-09', '2026-02-15');
+
+    // Propios: 3 registros Fumigación = 2.25 jornales (todos en Lote PP/ST)
+    expect(propios.totalGeneral.jornales).toBeCloseTo(2.25);
+    expect(propios.totalesPorActividad['Fumigación']?.jornales).toBeCloseTo(2.25);
+    expect(propios.totalesPorActividad['Fertilización']).toBeUndefined();
+    expect(propios.datos['Fumigación']?.['Lote PP']?.jornales).toBeCloseTo(1.75);
+    expect(propios.datos['Fumigación']?.['Lote ST']?.jornales).toBeCloseTo(0.5);
+
+    // Contrato: 2 registros Fertilización = 2.0 jornales (PP + AU)
+    expect(contrato.totalGeneral.jornales).toBeCloseTo(2.0);
+    expect(contrato.totalesPorActividad['Fertilización']?.jornales).toBeCloseTo(2.0);
+    expect(contrato.totalesPorActividad['Fumigación']).toBeUndefined();
+    expect(contrato.datos['Fertilización']?.['Lote PP']?.jornales).toBeCloseTo(1.0);
+    expect(contrato.datos['Fertilización']?.['Lote AU']?.jornales).toBeCloseTo(1.0);
+
+    // Suma de canales debe igualar el combinado
+    expect(propios.totalGeneral.jornales + contrato.totalGeneral.jornales).toBeCloseTo(combinado.totalGeneral.jornales);
+    expect(propios.totalGeneral.costo + contrato.totalGeneral.costo).toBeCloseTo(combinado.totalGeneral.costo);
+  });
+
+  it('matrices propio y contrato comparten el mismo orden de filas y lotes que combinado', async () => {
+    setupMocks();
+
+    const { propios, contrato, combinado } = await fetchMatrizJornales('2026-02-09', '2026-02-15');
+
+    expect(propios.actividades).toEqual(combinado.actividades);
+    expect(contrato.actividades).toEqual(combinado.actividades);
+    expect(propios.lotes).toEqual(combinado.lotes);
+    expect(contrato.lotes).toEqual(combinado.lotes);
+  });
+
+  it('canal vacio: solo contrato registrado deja propios vacio y combinado igual a contrato', async () => {
+    const soloContrato = MOCK_REGISTROS_TRABAJO.filter(r => r.contratista_id);
+    setupMocks(soloContrato);
+
+    const { propios, contrato, combinado } = await fetchMatrizJornales('2026-02-09', '2026-02-15');
+
+    // Propios queda sin actividades reales y total cero
+    expect(propios.totalGeneral.jornales).toBe(0);
+    expect(Object.keys(propios.totalesPorActividad).length).toBe(0);
+
+    // Contrato y combinado son idénticos en totales
+    expect(contrato.totalGeneral.jornales).toBeCloseTo(combinado.totalGeneral.jornales);
+    expect(contrato.totalGeneral.costo).toBeCloseTo(combinado.totalGeneral.costo);
   });
 });
 
