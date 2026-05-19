@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Thermometer, CloudRain, Wind, Droplets, Sun, Zap } from 'lucide-react';
 import { LecturaClima } from '@/types/clima';
 import { calcularResumen24h } from '@/utils/calculosClima';
+import { estimateSunHoursToday, getRadiationStatus } from '@/utils/calculosRadiacion';
 import { WindDirectionArrow } from './WindDirectionArrow';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -13,6 +14,14 @@ interface ClimaKPICardsProps {
 
 export function ClimaKPICards({ lecturaActual, todasLecturas, loading }: ClimaKPICardsProps) {
   const resumen24h = useMemo(() => calcularResumen24h(todasLecturas), [todasLecturas]);
+
+  const todaySunEstimate = useMemo(() => {
+    const todayStr = new Date().toDateString();
+    const todayReadings = todasLecturas.filter(r => new Date(r.timestamp).toDateString() === todayStr);
+    return estimateSunHoursToday(todayReadings);
+  }, [todasLecturas]);
+
+  const sunStatus = todaySunEstimate ? getRadiationStatus(todaySunEstimate.sunHoursSoFar) : null;
 
   const getUVDescriptor = (uv: number | null) => {
     if (uv === null) return '--';
@@ -125,14 +134,37 @@ export function ClimaKPICards({ lecturaActual, todasLecturas, loading }: ClimaKP
         color="from-blue-400 to-indigo-500"
       />
 
-      {/* Radiación Solar */}
-      <KPICard
-        icon={<Sun className="w-6 h-6" />}
-        label="Radiación Solar"
-        value={lecturaActual?.radiacion_wm2 ?? null}
-        unit="W/m²"
-        color="from-yellow-400 to-amber-500"
-      />
+      {/* Radiación Solar — with sun-hours estimate + status badge */}
+      <div className="bg-white rounded-xl border border-gray-200 hover:shadow-lg transition-shadow p-4">
+        <div className="flex items-start justify-between mb-3">
+          <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-amber-500 rounded-lg flex items-center justify-center text-white">
+            <Sun className="w-6 h-6" />
+          </div>
+          {sunStatus && (
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${sunStatus.bgColor} ${sunStatus.textColor}`}>
+              {sunStatus.label}
+            </span>
+          )}
+        </div>
+        <h3 className="text-sm text-gray-600 font-medium mb-1">Radiación Solar</h3>
+        {loading ? (
+          <Skeleton className="h-8 w-16" />
+        ) : (
+          <>
+            <div className="flex items-baseline gap-1">
+              <span className="text-2xl font-bold text-gray-900">
+                {lecturaActual?.radiacion_wm2 ?? '--'}
+              </span>
+              <span className="text-sm text-gray-500">W/m²</span>
+            </div>
+            {todaySunEstimate && (
+              <p className="text-xs text-gray-500 mt-1">
+                Hoy: ~{todaySunEstimate.sunHoursSoFar} horas-sol
+              </p>
+            )}
+          </>
+        )}
+      </div>
 
       {/* UV Index */}
       <KPICard

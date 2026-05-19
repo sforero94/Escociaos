@@ -8,6 +8,7 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  ReferenceArea,
 } from 'recharts';
 import type { LecturaClimaAgregada, SerieAnual } from '@/types/clima';
 
@@ -93,6 +94,8 @@ export function GraficoHumedadRadiacion({ data, dataAnual }: GraficoHumedadRadia
             formatter={(value) => (typeof value === 'number' ? value.toFixed(1) : value)}
           />
           <Legend />
+          {/* Optimal radiation band: 5–7 sun-hours/day = 208–292 W/m² avg */}
+          <ReferenceArea yAxisId="right" y1={208} y2={292} fill="#16a34a" fillOpacity={0.08} />
           <Line yAxisId="left" type="monotone" dataKey="humedad_pct_promedio" stroke="#3b82f6" strokeWidth={2} dot={false} name="Humedad (%)" />
           <Line yAxisId="right" type="monotone" dataKey="radiacion_wm2_promedio" stroke="#f59e0b" strokeWidth={2} dot={false} name="Radiación (W/m²)" />
         </ComposedChart>

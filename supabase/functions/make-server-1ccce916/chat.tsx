@@ -17,6 +17,7 @@ import {
   renderMemoriasBlock,
   type PersistedMemory,
 } from './memory.ts';
+import { buildRadiationContext } from './radiation-context.ts';
 
 // ============================================================================
 // TIPOS
@@ -377,6 +378,16 @@ const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: 'get_radiation_context',
+    description: 'Contexto agronómico de radiación solar: convierte W/m² a horas-sol equivalentes/día con bandas de estado (Crítico bajo <3.5h, Bajo 3.5-5h, Óptimo 5-7h, Alto 7-8.5h, Excesivo >8.5h) para aguacate Hass a 2200m. Incluye comparativo vs periodo anterior y conteo de días fuera del rango óptimo.',
+    parameters: {
+      type: 'object',
+      properties: {
+        period: { type: 'string', enum: ['today', '7d', '30d', '90d', 'ytd'], description: 'Periodo a analizar (default: 7d)' },
+      },
+    },
+  },
+  {
     name: 'get_conductivity_data',
     description: 'Obtiene datos de conductividad eléctrica (CE) del suelo por lote: promedios, estado semáforo (verde <0.5, amarillo 0.5-1.5, rojo >1.5 dS/m), tendencias.',
     parameters: {
@@ -470,6 +481,7 @@ async function executeTool(name: string, args: Record<string, unknown>, userId?:
       case 'forget_memory': result = await execForgetMemory(args, userId); break;
       case 'get_weekly_overview': result = await execWeeklyOverview(args); break;
       case 'get_climate_data': result = await execClimateData(args); break;
+      case 'get_radiation_context': result = await execRadiationContext(args); break;
       case 'get_conductivity_data': result = await execConductivityData(args); break;
       case 'get_beehive_data': result = await execBeehiveData(args); break;
       case 'get_budget_data': result = await execBudgetData(args); break;
@@ -1881,7 +1893,14 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
       return JSON.stringify({ periodo: result.periodo, viento_actual: latest.viento_kmh, rafaga_actual: latest.rafaga_kmh, direccion: latest.viento_dir, resumen: result.resumen_periodo });
     }
     if (m.includes('radi') || m.includes('solar')) {
-      return JSON.stringify({ periodo: result.periodo, radiacion_actual: latest.radiacion_wm2, resumen: { promedio: avg(radiacion), maxima: max(radiacion) } });
+      const avgWm2 = avg(radiacion);
+      const sunHoursPerDay = avgWm2 !== null ? Math.round(((avgWm2 * 24) / 1000) * 10) / 10 : null;
+      return JSON.stringify({
+        periodo: result.periodo,
+        radiacion_actual: latest.radiacion_wm2,
+        resumen: { promedio: avgWm2, maxima: max(radiacion) },
+        contexto_solar: { horas_sol_dia: sunHoursPerDay, nota: 'Óptimo Hass: 5.0–7.0 h/día. Usa get_radiation_context para análisis detallado.' },
+      });
     }
     if (m.includes('uv')) {
       return JSON.stringify({ periodo: result.periodo, uv_actual: latest.uv_index, resumen: { promedio: avg(uv), maximo: max(uv) } });
@@ -1889,6 +1908,63 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
   }
 
   return JSON.stringify(result);
+}
+
+// ============================================================================
+// RADIATION CONTEXT (sun-hours agronomic analysis)
+// ============================================================================
+
+async function execRadiationContext(args: Record<string, unknown>): Promise<string> {
+  const period = (args.period as string) || '7d';
+  const now = new Date();
+  let currentDays: number;
+  let periodLabel: string;
+
+  if (period === 'today') {
+    currentDays = 1;
+    periodLabel = 'Hoy';
+  } else if (period === '7d') {
+    currentDays = 7;
+    periodLabel = 'Últimos 7 días';
+  } else if (period === '30d') {
+    currentDays = 30;
+    periodLabel = 'Últimos 30 días';
+  } else if (period === '90d') {
+    currentDays = 90;
+    periodLabel = 'Últimos 90 días';
+  } else {
+    // YTD
+    const jan1 = `${now.getFullYear()}-01-01`;
+    const prevJan1 = `${now.getFullYear() - 1}-01-01`;
+    const todayStr = now.toISOString().slice(0, 10);
+    const prevSameDay = `${now.getFullYear() - 1}-${todayStr.slice(5)}`;
+
+    const currentRes = await supabaseQuery('clima_resumen_diario',
+      `select=radiacion_wm2_avg&fecha=gte.${e(jan1)}&fecha=lte.${e(todayStr)}&order=fecha.asc`);
+    const priorRes = await supabaseQuery('clima_resumen_diario',
+      `select=radiacion_wm2_avg&fecha=gte.${e(prevJan1)}&fecha=lte.${e(prevSameDay)}&order=fecha.asc`);
+
+    const currentRows = ((currentRes || []) as any[]).map(r => ({ radiacion_wm2_avg: r.radiacion_wm2_avg != null ? Number(r.radiacion_wm2_avg) : null }));
+    const priorRows = ((priorRes || []) as any[]).map(r => ({ radiacion_wm2_avg: r.radiacion_wm2_avg != null ? Number(r.radiacion_wm2_avg) : null }));
+
+    return JSON.stringify(buildRadiationContext(currentRows, priorRows, 'Año a la fecha'));
+  }
+
+  const cutoff = new Date(now.getTime() - currentDays * 24 * 60 * 60 * 1000);
+  const priorCutoff = new Date(cutoff.getTime() - currentDays * 24 * 60 * 60 * 1000);
+  const todayStr = now.toISOString().slice(0, 10);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  const priorStr = priorCutoff.toISOString().slice(0, 10);
+
+  const currentRes = await supabaseQuery('clima_resumen_diario',
+    `select=radiacion_wm2_avg&fecha=gte.${e(cutoffStr)}&fecha=lte.${e(todayStr)}&order=fecha.asc`);
+  const priorRes = await supabaseQuery('clima_resumen_diario',
+    `select=radiacion_wm2_avg&fecha=gte.${e(priorStr)}&fecha=lt.${e(cutoffStr)}&order=fecha.asc`);
+
+  const currentRows = ((currentRes || []) as any[]).map(r => ({ radiacion_wm2_avg: r.radiacion_wm2_avg != null ? Number(r.radiacion_wm2_avg) : null }));
+  const priorRows = ((priorRes || []) as any[]).map(r => ({ radiacion_wm2_avg: r.radiacion_wm2_avg != null ? Number(r.radiacion_wm2_avg) : null }));
+
+  return JSON.stringify(buildRadiationContext(currentRows, priorRows, periodLabel));
 }
 
 // ============================================================================

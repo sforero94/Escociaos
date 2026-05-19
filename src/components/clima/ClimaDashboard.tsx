@@ -3,9 +3,10 @@ import { useClimaData } from '@/hooks/useClimaData';
 import { ClimaSubNav } from './ClimaSubNav';
 import { ClimaKPICards } from './components/ClimaKPICards';
 import { ClimaPeriodosTable } from './components/ClimaPeriodosTable';
+import { ContextoSolar } from './components/ContextoSolar';
 
 export function ClimaDashboard() {
-  const { lecturaActual, resumenPeriodos, rawLecturas, estacionConfigurada, loading, error } = useClimaData();
+  const { lecturaActual, resumenPeriodos, rawLecturas, resumenesDiarios, estacionConfigurada, loading, error } = useClimaData();
 
   if (!estacionConfigurada && !loading) {
     return (
@@ -41,6 +42,11 @@ export function ClimaDashboard() {
         <section>
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Condiciones Actuales</h2>
           <ClimaKPICards lecturaActual={lecturaActual} todasLecturas={rawLecturas} loading={loading} />
+        </section>
+
+        {/* Contexto Solar */}
+        <section>
+          <ContextoSolar resumenesDiarios={resumenesDiarios} loading={loading} />
         </section>
 
         {/* Resumen Acumulado */}

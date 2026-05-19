@@ -56,6 +56,16 @@ export interface ClimaPromedioHistorico {
   semanasAnalizadas: number;
 }
 
+export interface RadiacionSolarContexto {
+  horasSolDia: number | null;
+  status: string | null;           // 'critico_bajo' | 'bajo' | 'optimo' | 'alto' | 'excesivo'
+  statusLabel: string | null;      // e.g. 'Óptimo'
+  deltaVs4Semanas: number | null;  // change vs prior 4 weeks avg
+  diasEnOptimo: number;
+  diasBajoOptimo: number;
+  diasSobreOptimo: number;
+}
+
 export interface DatosClimaSemanal {
   tempMin: number | null;
   tempMax: number | null;
@@ -64,6 +74,7 @@ export interface DatosClimaSemanal {
   humedadPromedio: number | null;
   radiacionPromedio: number | null;
   radiacionMax: number | null;
+  radiacionSolar?: RadiacionSolarContexto;
   diario: DiaClima[];
   historico?: ClimaPromedioHistorico;
 }
