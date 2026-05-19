@@ -818,10 +818,15 @@ async function execApplicationSummary(args: Record<string, unknown>): Promise<st
   if (application_id) query += `&id=eq.${e(application_id)}`;
   if (date_from) query += `&fecha_inicio_planeada=gte.${e(date_from)}`;
   if (date_to) query += `&fecha_inicio_planeada=lte.${e(date_to)}`;
-  if (type) query += `&tipo_aplicacion=ilike.*${e(type)}*`;
+  // tipo_aplicacion is an enum; PostgREST `ilike` has no operator overload
+  // for enum vs text, so filter client-side after fetch.
 
   const apps = await supabaseQuery('aplicaciones', query);
-  const appsList = apps as Array<Record<string, unknown>>;
+  let appsList = apps as Array<Record<string, unknown>>;
+  if (type) {
+    const t = type.toLowerCase();
+    appsList = appsList.filter((a) => ((a.tipo_aplicacion as string) || '').toLowerCase().includes(t));
+  }
 
   // Batch all sub-queries to avoid N+1
   const enriched: Array<Record<string, unknown>> = [];
@@ -831,7 +836,7 @@ async function execApplicationSummary(args: Record<string, unknown>): Promise<st
     const [allLotes, allLotesPlan, allMezclas, allMovimientos] = await Promise.all([
       supabaseQuery('aplicaciones_lotes', `select=aplicacion_id,lote:lotes(nombre)&aplicacion_id=in.(${appIds})&limit=2000`),
       supabaseQuery('aplicaciones_lotes_planificado', `select=aplicacion_id,lote:lotes(nombre),canecas_planificado,litros_mezcla_planificado&aplicacion_id=in.(${appIds})&limit=2000`),
-      supabaseQuery('aplicaciones_mezclas', `select=aplicacion_id,nombre,aplicaciones_productos(producto:productos(nombre),dosis_por_caneca,cantidad_total_necesaria,unidad_dosis)&aplicacion_id=in.(${appIds})&limit=2000`),
+      supabaseQuery('aplicaciones_mezclas', `select=aplicacion_id,nombre_mezcla,aplicaciones_productos(producto:productos(nombre),dosis_por_caneca,cantidad_total_necesaria,unidad_dosis)&aplicacion_id=in.(${appIds})&limit=2000`),
       supabaseQuery('movimientos_diarios', `select=aplicacion_id,fecha_movimiento,numero_canecas,numero_bultos,lote:lotes(nombre)&aplicacion_id=in.(${appIds})&order=fecha_movimiento.asc&limit=2000`),
     ]);
 
@@ -864,7 +869,7 @@ async function execApplicationSummary(args: Record<string, unknown>): Promise<st
   }
 
   return JSON.stringify({
-    total_aplicaciones: apps.length,
+    total_aplicaciones: appsList.length,
     aplicaciones: enriched,
   });
 }
@@ -1214,7 +1219,8 @@ async function execInventoryMovements(args: Record<string, unknown>): Promise<st
   let movQuery = `select=id,fecha_movimiento,tipo_movimiento,cantidad,unidad,saldo_anterior,saldo_nuevo,valor_movimiento,observaciones,producto:productos(nombre,categoria)&order=fecha_movimiento.desc&limit=2000`;
   if (date_from) movQuery += `&fecha_movimiento=gte.${e(date_from)}`;
   if (date_to) movQuery += `&fecha_movimiento=lte.${e(date_to)}`;
-  if (tipo) movQuery += `&tipo_movimiento=ilike.*${e(tipo)}*`;
+  // tipo_movimiento is an enum; PostgREST `ilike` has no operator overload
+  // for enum vs text, so filter client-side after fetch.
 
   const [movimientos, verificaciones] = await Promise.all([
     supabaseQuery('movimientos_inventario', movQuery),
@@ -1223,6 +1229,10 @@ async function execInventoryMovements(args: Record<string, unknown>): Promise<st
   ]);
 
   let filteredMov = movimientos as Array<Record<string, unknown>>;
+  if (tipo) {
+    const t = tipo.toLowerCase();
+    filteredMov = filteredMov.filter((r) => ((r.tipo_movimiento as string) || '').toLowerCase().includes(t));
+  }
   if (product_name) {
     const pn = product_name.toLowerCase();
     filteredMov = filteredMov.filter((r) => ((r.producto as Record<string, unknown>)?.nombre as string || '').toLowerCase().includes(pn));
