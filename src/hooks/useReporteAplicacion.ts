@@ -215,6 +215,7 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                 .from('aplicaciones')
                 .select(`
                     *,
+                    tareas ( jornales_estimados ),
                     aplicaciones_cierre(*),
                     aplicaciones_lotes(*, lotes(nombre, total_arboles, arboles_grandes, arboles_medianos, arboles_pequenos, arboles_clonales)),
                     aplicaciones_lotes_planificado(*, lotes(nombre, total_arboles, arboles_grandes, arboles_medianos, arboles_pequenos, arboles_clonales)),
@@ -333,6 +334,20 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
             const totalArbolesApp = lotesSource.reduce((sum: number, l: any) =>
                 sum + (l.total_arboles || l.lotes?.total_arboles || 0), 0) || 0;
 
+            // Planned jornales: canonical source is tareas.jornales_estimados (entered in the
+            // Labores task dialog). It is per-application total; prorate across lotes by tree count.
+            // Fallback to arboles/500 when no task estimate exists.
+            const tareaData = (appData as any).tareas;
+            const tareaJoined = Array.isArray(tareaData) ? tareaData[0] : tareaData;
+            const jornalesEstimadosApp = Number(tareaJoined?.jornales_estimados) || 0;
+            const jornalesPlanLote = (arboles: number) => {
+                const trees = Number(arboles) || 0;
+                if (jornalesEstimadosApp > 0 && totalArbolesApp > 0) {
+                    return jornalesEstimadosApp * (trees / totalArbolesApp);
+                }
+                return trees > 0 ? trees / 500 : 0;
+            };
+
             // Use 'jornales_utilizados' from app for total labor, defaulting to 0
             const cierreData = appData.aplicaciones_cierre as unknown as any[] | undefined;
             const totalJornalesApp = Number(appData.jornales_utilizados || cierreData?.[0]?.jornales_aplicacion || 0);
@@ -443,7 +458,7 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                     lote_id: loteId,
                     canecas_plan: canecas,
                     litros_plan: litros,
-                    jornales_plan: Math.ceil(lp.total_arboles / 500) // Rough estimate if not stored
+                    jornales_plan: jornalesPlanLote(lp.total_arboles)
                 });
 
                 // Products in this mixture
@@ -508,7 +523,7 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                   lote_id: loteId,
                   canecas_plan: bultos,
                   litros_plan: totalKg,
-                  jornales_plan: Math.ceil((al.total_arboles || lote?.total_arboles || 0) / 500),
+                  jornales_plan: jornalesPlanLote(al.total_arboles || lote?.total_arboles || 0),
                 });
 
                 // Compute per-product planned quantity from dosis × trees (not cantidad_total_necesaria)
@@ -550,7 +565,7 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                   lote_id: loteId,
                   canecas_plan: 0,
                   litros_plan: 0,
-                  jornales_plan: Math.ceil(trees / 500),
+                  jornales_plan: jornalesPlanLote(trees),
                 });
               }
             }
