@@ -701,6 +701,7 @@ export async function fetchAplicacionesCerradas(
           costo_total,
           jornales_utilizados,
           valor_jornal,
+          tareas ( jornales_estimados ),
           aplicaciones_lotes(
             lote_id,
             lotes(id, nombre, total_arboles, arboles_grandes, arboles_medianos, arboles_pequenos, arboles_clonales)
@@ -730,6 +731,13 @@ export async function fetchAplicacionesCerradas(
           pequenos: lote.arboles_pequenos || 0, clonales: lote.arboles_clonales || 0,
         });
       });
+
+      // Planned jornales: canonical source is tareas.jornales_estimados (entered in the Labores
+      // task dialog). It is per-application total; prorate across lotes by tree count.
+      const tareaData = (app as any).tareas;
+      const tareaJoined = Array.isArray(tareaData) ? tareaData[0] : tareaData;
+      const jornalesEstimadosApp = Number(tareaJoined?.jornales_estimados) || 0;
+      const totalArbolesApp = Array.from(lotesMap.values()).reduce((s, l) => s + l.arboles, 0);
 
       // Fetch planned calcs per lote
       const { data: calculos } = await supabase
@@ -925,7 +933,11 @@ export async function fetchAplicacionesCerradas(
         const insumosDesv = insumosPlaneados > 0
           ? ((insumosReales - insumosPlaneados) / insumosPlaneados) * 100 : 0;
 
-        const jornalesPlan = canecasPlan * (esFumigacion ? 1 : 0.5); // Theoretical plan
+        // Planned jornales: prorate task estimate by tree share; fallback arboles/500
+        const arbolRatio = totalArbolesApp > 0 ? arboles / totalArbolesApp : 0;
+        const jornalesPlan = jornalesEstimadosApp > 0
+          ? jornalesEstimadosApp * arbolRatio
+          : (arboles > 0 ? arboles / 500 : 0);
         const jornalesReal = jornales.jornales;
         const jornalesDesv = jornalesPlan > 0 ? ((jornalesReal - jornalesPlan) / jornalesPlan) * 100 : 0;
         
