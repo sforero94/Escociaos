@@ -68,6 +68,7 @@ export function ClimaHistorico() {
       'Humedad Promedio (%)',
       'Viento Promedio (km/h)',
       'Viento Máx (km/h)',
+      'Radiación (W/m²)',
     ];
 
     const rows = serieHistorica.map((row) => [
@@ -79,6 +80,7 @@ export function ClimaHistorico() {
       row.humedad_pct_promedio ?? '',
       row.viento_kmh_promedio ?? '',
       row.rafaga_kmh_max ?? '',
+      row.radiacion_wm2_promedio ?? '',
     ]);
 
     const csv = [headers, ...rows].map((row) => row.join(',')).join('\n');

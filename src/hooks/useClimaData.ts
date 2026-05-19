@@ -30,6 +30,7 @@ interface UseClimaDataReturn {
   serieHistorica: LecturaClimaAgregada[];
   serieAnual: SerieAnual | null;
   rawLecturas: LecturaClima[];
+  resumenesDiarios: ResumenDiario[];
   estacionConfigurada: boolean;
   loading: boolean;
   error: string | null;
@@ -155,6 +156,7 @@ export function useClimaData(): UseClimaDataReturn {
     serieHistorica,
     serieAnual,
     rawLecturas: liveLecturas,
+    resumenesDiarios,
     estacionConfigurada: liveLecturas.length > 0 || resumenesDiarios.length > 0,
     loading,
     error,

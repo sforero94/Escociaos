@@ -1,6 +1,7 @@
 import { PeriodoResumen } from '@/types/clima';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatNumber } from '@/utils/format';
+import { wm2ToSunHours, getRadiationStatus } from '@/utils/calculosRadiacion';
 
 interface ClimaPeriodosTableProps {
   periodos: PeriodoResumen[];
@@ -27,6 +28,7 @@ export function ClimaPeriodosTable({ periodos, loading }: ClimaPeriodosTableProp
               <th className="px-4 py-3 text-right font-semibold text-gray-700">Humedad Prom (%)</th>
               <th className="px-4 py-3 text-right font-semibold text-gray-700">Viento Prom (km/h)</th>
               <th className="px-4 py-3 text-right font-semibold text-gray-700">Viento Máx (km/h)</th>
+              <th className="px-4 py-3 text-right font-semibold text-gray-700">Horas-Sol/día</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
@@ -36,7 +38,7 @@ export function ClimaPeriodosTable({ periodos, loading }: ClimaPeriodosTableProp
                   <td className="px-4 py-3">
                     <Skeleton className="h-4 w-24" />
                   </td>
-                  {Array.from({ length: 7 }).map((_, j) => (
+                  {Array.from({ length: 8 }).map((_, j) => (
                     <td key={j} className="px-4 py-3 text-right">
                       <Skeleton className="h-4 w-12 ml-auto" />
                     </td>
@@ -60,6 +62,22 @@ export function ClimaPeriodosTable({ periodos, loading }: ClimaPeriodosTableProp
                     {formatValue(periodo.resumen.viento_promedio_kmh, 1)}
                   </td>
                   <td className="px-4 py-3 text-right text-gray-700">{formatValue(periodo.resumen.rafaga_max_kmh, 1)}</td>
+                  <td className="px-4 py-3 text-right">
+                    {(() => {
+                      const wm2 = periodo.resumen.radiacion_promedio_wm2;
+                      if (wm2 === null) return <span className="text-gray-700">--</span>;
+                      const sunH = Math.round(wm2ToSunHours(wm2) * 10) / 10;
+                      const status = getRadiationStatus(sunH);
+                      return (
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="text-gray-700">{sunH}</span>
+                          <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${status.bgColor} ${status.textColor}`}>
+                            {status.label}
+                          </span>
+                        </span>
+                      );
+                    })()}
+                  </td>
                 </tr>
               ))
             )}

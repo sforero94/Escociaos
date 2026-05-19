@@ -575,6 +575,17 @@ ${fechaInfo}${mon.avisoFechaDesactualizada ? `\n${mon.avisoFechaDesactualizada}`
 - Humedad: ${c.humedadPromedio ?? '—'}% vs ${h.humedadPromedio ?? '—'}% historico
 - Radiacion: ${c.radiacionPromedio ?? '—'} vs ${h.radiacionPromedio ?? '—'} W/m2 historico`);
     }
+
+    // Sun-hours agronomic context
+    const rs = c.radiacionSolar;
+    if (rs && rs.horasSolDia !== null) {
+      partes.push(`\n### CONTEXTO SOLAR AGRONOMICO
+- Horas-sol equivalentes/dia: ${rs.horasSolDia} (status: ${rs.statusLabel ?? '—'})
+- Delta vs promedio 4 semanas: ${rs.deltaVs4Semanas !== null ? (rs.deltaVs4Semanas > 0 ? '+' : '') + rs.deltaVs4Semanas + ' h' : '—'}
+- Dias en rango optimo (5-7h): ${rs.diasEnOptimo} de ${rs.diasEnOptimo + rs.diasBajoOptimo + rs.diasSobreOptimo}
+- Dias bajo optimo: ${rs.diasBajoOptimo}, dias sobre optimo: ${rs.diasSobreOptimo}
+NOTA: El rango optimo de horas-sol para Hass a 2200m es 5.0-7.0 h/dia. Valores <3.5 afectan floracion/cuaje. Valores >8.5 implican riesgo de quemado.`);
+    }
   }
 
   if (datos.floracion?.porLote?.length > 0) {
@@ -1713,13 +1724,19 @@ function construirSlideClima(datos: any, analisis: AnalisisGemini): string {
   const c = datos.clima;
   if (!c) return '';
 
+  const rs = c.radiacionSolar;
+  const sunHoursLabel = rs?.horasSolDia !== null && rs?.horasSolDia !== undefined
+    ? `${rs.horasSolDia}`
+    : '—';
+  const sunStatusLabel = rs?.statusLabel ?? '';
+
   const kpis = [
     kpiCard(`${fmtN(c.tempMin, 1)}°`, 'Temp Mín', '°C', '#4D240F'),
     kpiCard(`${fmtN(c.tempMax, 1)}°`, 'Temp Máx', '°C', '#dc2626'),
     kpiCard(`${fmtN(c.tempPromedio, 1)}°`, 'Temp Prom', '°C', '#73991C'),
     kpiCard(`${fmtN(c.lluviaTotal, 1)}`, 'Lluvia', 'mm total', '#4D240F'),
     kpiCard(`${fmtN(c.humedadPromedio, 0)}%`, 'Humedad', 'promedio', '#6b7280'),
-    kpiCard(`${fmtN(c.radiacionMax, 0)}`, 'Rad Máx', 'W/m²', '#b45309'),
+    kpiCard(`${sunHoursLabel}`, 'Horas-Sol', `h/día${sunStatusLabel ? ' · ' + sunStatusLabel : ''}`, '#b45309'),
   ].join('');
 
   // SVG combo chart: rainfall bars + radiation line

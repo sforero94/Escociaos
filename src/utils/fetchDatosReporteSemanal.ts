@@ -41,6 +41,7 @@ import type {
 } from '../types/reporteSemanal';
 import { SECCIONES_DEFAULT } from '../types/reporteSemanal';
 import { calcularDistribucionCE } from './calculosMonitoreoV2';
+import { aggregateRadiation, getRadiationStatus } from './calculosRadiacion';
 import type { LecturaCE } from '../types/monitoreo';
 import type { Insight } from '../types/monitoreo';
 
@@ -1863,6 +1864,17 @@ async function fetchClimaResumenSemanal(
     };
   }
 
+  // Compute sun-hours context for the week vs prior 4 weeks
+  const weekRows = rows.map((d: any) => ({ fecha: d.fecha as string, radiacion_wm2_avg: d.radiacion_wm2_avg != null ? Number(d.radiacion_wm2_avg) : null }));
+  const priorRows = (histData as any[] ?? []).map((d: any) => ({ fecha: d.fecha as string, radiacion_wm2_avg: d.radiacion_wm2_avg != null ? Number(d.radiacion_wm2_avg) : null }));
+
+  const weekAgg = aggregateRadiation(weekRows);
+  const priorAgg = aggregateRadiation(priorRows);
+  const status = weekAgg.avgSunHours !== null ? getRadiationStatus(weekAgg.avgSunHours) : null;
+  const deltaVs4Semanas = weekAgg.avgSunHours !== null && priorAgg.avgSunHours !== null
+    ? Math.round((weekAgg.avgSunHours - priorAgg.avgSunHours) * 10) / 10
+    : null;
+
   return {
     tempMin: tempCount > 0 ? +tempMin.toFixed(1) : null,
     tempMax: tempCount > 0 ? +tempMax.toFixed(1) : null,
@@ -1871,6 +1883,15 @@ async function fetchClimaResumenSemanal(
     humedadPromedio: humCount > 0 ? +(humSuma / humCount).toFixed(0) : null,
     radiacionPromedio: radCount > 0 ? +(radSuma / radCount).toFixed(0) : null,
     radiacionMax: radMax > 0 ? +radMax.toFixed(0) : null,
+    radiacionSolar: {
+      horasSolDia: weekAgg.avgSunHours,
+      status: status?.band ?? null,
+      statusLabel: status?.label ?? null,
+      deltaVs4Semanas,
+      diasEnOptimo: weekAgg.daysInOptimal,
+      diasBajoOptimo: weekAgg.daysBelowOptimal,
+      diasSobreOptimo: weekAgg.daysAboveOptimal,
+    },
     diario,
     historico,
   };
