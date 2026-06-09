@@ -1,0 +1,22 @@
+{
+  "Argentina":   {"scorers": [{"name": "Lautaro Martinez", "share": 0.32}, {"name": "Julian Alvarez", "share": 0.20}, {"name": "Lionel Messi", "share": 0.18}], "ball": {"name": "Lionel Messi", "star": 9.5}},
+  "France":      {"scorers": [{"name": "Kylian Mbappe", "share": 0.40}, {"name": "Ousmane Dembele", "share": 0.15}, {"name": "Marcus Thuram", "share": 0.10}], "ball": {"name": "Kylian Mbappe", "star": 10}},
+  "Spain":       {"scorers": [{"name": "Mikel Oyarzabal", "share": 0.25}, {"name": "Lamine Yamal", "share": 0.18}, {"name": "Ferran Torres", "share": 0.15}], "ball": {"name": "Lamine Yamal", "star": 9.5}},
+  "England":     {"scorers": [{"name": "Harry Kane", "share": 0.38}, {"name": "Bukayo Saka", "share": 0.12}, {"name": "Cole Palmer", "share": 0.10}], "ball": {"name": "Jude Bellingham", "star": 7.5}},
+  "Brazil":      {"scorers": [{"name": "Raphinha", "share": 0.22}, {"name": "Vinicius Junior", "share": 0.22}, {"name": "Estevao", "share": 0.15}], "ball": {"name": "Vinicius Junior", "star": 9}},
+  "Portugal":    {"scorers": [{"name": "Cristiano Ronaldo", "share": 0.30}, {"name": "Rafael Leao", "share": 0.18}, {"name": "Bruno Fernandes", "share": 0.15}], "ball": {"name": "Bruno Fernandes", "star": 7.5}},
+  "Netherlands": {"scorers": [{"name": "Cody Gakpo", "share": 0.28}, {"name": "Memphis Depay", "share": 0.22}, {"name": "Xavi Simons", "share": 0.12}], "ball": {"name": "Cody Gakpo", "star": 7}},
+  "Germany":     {"scorers": [{"name": "Nick Woltemade", "share": 0.22}, {"name": "Kai Havertz", "share": 0.18}, {"name": "Florian Wirtz", "share": 0.15}, {"name": "Jamal Musiala", "share": 0.15}], "ball": {"name": "Florian Wirtz", "star": 8}},
+  "Belgium":     {"scorers": [{"name": "Jeremy Doku", "share": 0.18}, {"name": "Romelu Lukaku", "share": 0.16}, {"name": "Kevin De Bruyne", "share": 0.15}], "ball": {"name": "Kevin De Bruyne", "star": 7.5}},
+  "Croatia":     {"scorers": [{"name": "Andrej Kramaric", "share": 0.25}, {"name": "Ante Budimir", "share": 0.18}, {"name": "Ivan Perisic", "share": 0.12}], "ball": {"name": "Luka Modric", "star": 7}},
+  "Colombia":    {"scorers": [{"name": "Luis Diaz", "share": 0.32}, {"name": "James Rodriguez", "share": 0.15}, {"name": "Jhon Duran", "share": 0.12}], "ball": {"name": "James Rodriguez", "star": 7}},
+  "Uruguay":     {"scorers": [{"name": "Darwin Nunez", "share": 0.30}, {"name": "Federico Valverde", "share": 0.18}, {"name": "Facundo Pellistri", "share": 0.10}], "ball": {"name": "Federico Valverde", "star": 7.5}},
+  "Morocco":     {"scorers": [{"name": "Ayoub El Kaabi", "share": 0.20}, {"name": "Youssef En-Nesyri", "share": 0.18}, {"name": "Brahim Diaz", "share": 0.12}], "ball": {"name": "Achraf Hakimi", "star": 7}},
+  "Mexico":      {"scorers": [{"name": "Raul Jimenez", "share": 0.30}, {"name": "Santiago Gimenez", "share": 0.18}, {"name": "Armando Gonzalez", "share": 0.10}], "ball": {"name": "Raul Jimenez", "star": 6}},
+  "United States": {"scorers": [{"name": "Christian Pulisic", "share": 0.30}, {"name": "Folarin Balogun", "share": 0.20}, {"name": "Ricardo Pepi", "share": 0.15}], "ball": {"name": "Christian Pulisic", "star": 6.5}},
+  "Switzerland": {"scorers": [{"name": "Breel Embolo", "share": 0.30}, {"name": "Dan Ndoye", "share": 0.18}, {"name": "Granit Xhaka", "share": 0.10}], "ball": {"name": "Granit Xhaka", "star": 6}},
+  "Japan":       {"scorers": [{"name": "Ayase Ueda", "share": 0.20}, {"name": "Takefusa Kubo", "share": 0.18}, {"name": "Daichi Kamada", "share": 0.12}], "ball": {"name": "Takefusa Kubo", "star": 6}},
+  "Senegal":     {"scorers": [{"name": "Sadio Mane", "share": 0.28}, {"name": "Nicolas Jackson", "share": 0.18}, {"name": "Ismaila Sarr", "share": 0.12}], "ball": {"name": "Sadio Mane", "star": 6.5}},
+  "Norway":      {"scorers": [{"name": "Erling Haaland", "share": 0.43}, {"name": "Alexander Sorloth", "share": 0.18}, {"name": "Martin Odegaard", "share": 0.12}], "ball": {"name": "Martin Odegaard", "star": 6.5}},
+  "Egypt":       {"scorers": [{"name": "Mohamed Salah", "share": 0.45}, {"name": "Omar Marmoush", "share": 0.18}, {"name": "Mostafa Mohamed", "share": 0.12}], "ball": {"name": "Mohamed Salah", "star": 7}}
+}
