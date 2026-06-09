@@ -103,7 +103,9 @@ export function DashboardNegocio({ config }: DashboardNegocioProps) {
         getDistribucionGastosNegocio(negocioId, filtros),
         getIngresosTrimestralesNegocio(negocioId, filtros),
         getGastosTrimestralesNegocio(negocioId, filtros),
-        getDetalleIngresos(negocioId, filtros),
+        // Cosecha/quincena tables show full history: groups span years, so the
+        // period filter (which keeps driving charts and gastos) doesn't apply.
+        getDetalleIngresos(negocioId, esAguacate || esHato ? {} : filtros),
         getDetalleGastos(negocioId, filtros),
         esAguacate
           ? getKPIsUnidadesNegocio(negocioId)
