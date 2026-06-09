@@ -4,6 +4,8 @@ import { calcularRangoFechasPorPeriodo } from '@/utils/fechas';
 import type {
   FiltrosFinanzas,
   KPIConVariacion,
+  KPIUnidades,
+  IngresoDetalleRow,
   PivotRow,
   DatoTrimestral,
   DatoTrimestralMultiSerie,
@@ -393,13 +395,13 @@ export function useDashboardData() {
     }
   };
 
-  const getDetalleIngresos = async (negocioId: string, _filtros: FiltrosFinanzas): Promise<Record<string, unknown>[]> => {
+  const getDetalleIngresos = async (negocioId: string, _filtros: FiltrosFinanzas): Promise<IngresoDetalleRow[]> => {
     setLoading(true);
     try {
       const { fecha_desde, fecha_hasta } = resolveFechas(_filtros);
       let q: any = supabase
         .from('fin_ingresos')
-        .select('fecha, nombre, valor, cantidad, precio_unitario, cosecha, alianza, cliente, finca, fin_categorias_ingresos(nombre)')
+        .select('fecha, nombre, valor, cantidad, precio_unitario, cosecha, alianza, cliente, finca, fin_categorias_ingresos(nombre), fin_compradores(nombre)')
         .eq('negocio_id', negocioId)
         .order('fecha', { ascending: false });
       if (fecha_desde) q = q.gte('fecha', fecha_desde);
@@ -416,7 +418,39 @@ export function useDashboardData() {
         alianza: d.alianza,
         cliente: d.cliente,
         finca: d.finca,
+        comprador: d.fin_compradores?.nombre || d.cliente || null,
       }));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // KPIs unitarios YTD: suma de cantidad (kg/litros) y precio promedio por unidad.
+  // Solo considera filas con cantidad registrada; categoriaFiltro restringe por
+  // nombre de categoria (ej. 'leche' para excluir terneros/otros del Hato).
+  const getKPIsUnidadesNegocio = async (negocioId: string, categoriaFiltro?: string): Promise<KPIUnidades> => {
+    setLoading(true);
+    try {
+      const year = new Date().getFullYear();
+      const ytd = getYTDRange(year);
+      const { data } = await (supabase
+        .from('fin_ingresos')
+        .select('valor, cantidad, fin_categorias_ingresos(nombre)')
+        .eq('negocio_id', negocioId)
+        .not('cantidad', 'is', null)
+        .gte('fecha', ytd.desde)
+        .lte('fecha', ytd.hasta) as any);
+
+      const rows = ((data || []) as any[]).filter((r: any) =>
+        !categoriaFiltro ||
+        (r.fin_categorias_ingresos?.nombre || '').toLowerCase().includes(categoriaFiltro.toLowerCase())
+      );
+      const cantidadTotal = rows.reduce((s: number, r: any) => s + (Number(r.cantidad) || 0), 0);
+      const valorTotal = rows.reduce((s: number, r: any) => s + (r.valor || 0), 0);
+      return {
+        cantidadTotal,
+        precioPromedio: cantidadTotal > 0 ? valorTotal / cantidadTotal : 0,
+      };
     } finally {
       setLoading(false);
     }
@@ -516,6 +550,7 @@ export function useDashboardData() {
     getGastosPorTrimestreMultiSerie,
     getGastosPorCategoriaStacked,
     getKPIsNegocio,
+    getKPIsUnidadesNegocio,
     getIngresosTrimestralesNegocio,
     getGastosTrimestralesNegocio,
     getDetalleIngresos,
