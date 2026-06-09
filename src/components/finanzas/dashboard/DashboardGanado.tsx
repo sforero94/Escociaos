@@ -176,27 +176,25 @@ export function DashboardGanado() {
         <GastosTrimestreLine data={gastosTrimestre} />
       </div>
 
-      {/* Detail tables */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-6">
-          <div>
-            <h3 className="text-sm font-semibold text-green-700 mb-2">Ventas Ganado</h3>
-            <DataTable
-              data={detalleTransacciones.filter((t) => t.tipo === 'venta')}
-              columns={VENTAS_COLUMNS}
-              headerColor="green"
-              emptyMessage="Sin ventas registradas"
-            />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-green-700 mb-2">Compras Ganado</h3>
-            <DataTable
-              data={detalleTransacciones.filter((t) => t.tipo === 'compra')}
-              columns={COMPRAS_COLUMNS}
-              headerColor="green"
-              emptyMessage="Sin compras registradas"
-            />
-          </div>
+      {/* Detail tables — full width so the 8 columns (peso prom., precio/kg) stay visible */}
+      <div className="space-y-6">
+        <div>
+          <h3 className="text-sm font-semibold text-green-700 mb-2">Ventas Ganado</h3>
+          <DataTable
+            data={detalleTransacciones.filter((t) => t.tipo === 'venta')}
+            columns={VENTAS_COLUMNS}
+            headerColor="green"
+            emptyMessage="Sin ventas registradas"
+          />
+        </div>
+        <div>
+          <h3 className="text-sm font-semibold text-green-700 mb-2">Compras Ganado</h3>
+          <DataTable
+            data={detalleTransacciones.filter((t) => t.tipo === 'compra')}
+            columns={COMPRAS_COLUMNS}
+            headerColor="green"
+            emptyMessage="Sin compras registradas"
+          />
         </div>
         <div>
           <h3 className="text-sm font-semibold text-red-700 mb-2">Gastos Ganado</h3>
