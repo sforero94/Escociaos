@@ -1,4 +1,5 @@
 import { KPIScorecard } from './KPIScorecard';
+import { formatNumber } from '@/utils/format';
 import type { KPIConVariacion } from '@/types/finanzas';
 
 interface KPIGanadoSectionProps {
@@ -6,13 +7,15 @@ interface KPIGanadoSectionProps {
   compras: KPIConVariacion;
   kilosVendidos: KPIConVariacion;
   kilosComprados: KPIConVariacion;
+  precioPromedioVenta?: KPIConVariacion;
+  precioPromedioCompra?: KPIConVariacion;
   gastosActual: KPIConVariacion;
   gastosYtdAnterior: KPIConVariacion;
   gastosN1: KPIConVariacion;
   gastosN2: KPIConVariacion;
 }
 
-export function KPIGanadoSection({ ventas, compras, kilosVendidos, kilosComprados, gastosActual, gastosYtdAnterior, gastosN1, gastosN2 }: KPIGanadoSectionProps) {
+export function KPIGanadoSection({ ventas, compras, kilosVendidos, kilosComprados, precioPromedioVenta, precioPromedioCompra, gastosActual, gastosYtdAnterior, gastosN1, gastosN2 }: KPIGanadoSectionProps) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Left: Ventas/Compras + Kilos */}
@@ -48,6 +51,28 @@ export function KPIGanadoSection({ ventas, compras, kilosVendidos, kilosComprado
             size="sm"
           />
         </div>
+        {(precioPromedioVenta || precioPromedioCompra) && (
+          <div className="grid grid-cols-2 gap-3">
+            {precioPromedioVenta && (
+              <KPIScorecard
+                label={precioPromedioVenta.periodo_label}
+                valor={precioPromedioVenta.valor}
+                variacion={precioPromedioVenta.variacion_porcentaje}
+                valorFormateado={`$${formatNumber(precioPromedioVenta.valor)}/kg`}
+                size="sm"
+              />
+            )}
+            {precioPromedioCompra && (
+              <KPIScorecard
+                label={precioPromedioCompra.periodo_label}
+                valor={precioPromedioCompra.valor}
+                variacion={precioPromedioCompra.variacion_porcentaje}
+                valorFormateado={`$${formatNumber(precioPromedioCompra.valor)}/kg`}
+                size="sm"
+              />
+            )}
+          </div>
+        )}
       </div>
 
       {/* Right: Gastos 2x2 */}

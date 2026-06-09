@@ -309,6 +309,27 @@ export interface ColumnDef {
   format?: 'currency' | 'number' | 'date' | 'text';
 }
 
+// Fila del detalle de ingresos por negocio (shape de getDetalleIngresos)
+export interface IngresoDetalleRow {
+  [key: string]: unknown;
+  fecha: string;
+  tipo_ingreso: string;
+  cantidad: number | null;
+  precio_unitario: number | null;
+  valor: number;
+  cosecha: string | null;
+  alianza: string | null;
+  cliente: string | null;
+  finca: string | null;
+  comprador: string | null;
+}
+
+// KPIs unitarios YTD de un negocio (toneladas/litros + precio promedio)
+export interface KPIUnidades {
+  cantidadTotal: number;
+  precioPromedio: number;
+}
+
 export interface NegocioDashboardConfig {
   slug: string;
   nombre: string;

@@ -6,10 +6,12 @@ interface KPIScorecardProps {
   valor: number;
   variacion?: number;
   formato?: 'currency' | 'number' | 'compact';
+  /** Valor ya formateado (ej. "150,3 ton", "$5.500/kg") — tiene prioridad sobre formato */
+  valorFormateado?: string;
   size?: 'sm' | 'md';
 }
 
-export function KPIScorecard({ label, valor, variacion, formato = 'compact', size = 'md' }: KPIScorecardProps) {
+export function KPIScorecard({ label, valor, variacion, formato = 'compact', valorFormateado, size = 'md' }: KPIScorecardProps) {
   const formatValue = (v: number) => {
     switch (formato) {
       case 'currency': return formatCurrency(v);
@@ -35,7 +37,7 @@ export function KPIScorecard({ label, valor, variacion, formato = 'compact', siz
     <div className="rounded-xl border border-primary/10 bg-white p-4 shadow-sm">
       <p className="text-xs font-medium text-brand-brown/60 uppercase tracking-wide mb-1">{label}</p>
       <p className={`font-bold text-foreground ${size === 'md' ? 'text-2xl' : 'text-lg'}`}>
-        {formatValue(valor)}
+        {valorFormateado ?? formatValue(valor)}
       </p>
       {variacion !== undefined && (
         <div className={`flex items-center gap-1 mt-1 ${variacionColor}`}>

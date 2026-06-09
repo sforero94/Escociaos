@@ -9,11 +9,16 @@ import { GastosPorCategoriaChart } from './components/GastosPorCategoriaChart';
 import { IngresosTrimestreChart } from './components/IngresosTrimestreChart';
 import { GastosTrimestreLine } from './components/GastosTrimestreLine';
 import { DataTable } from './components/DataTable';
+import { CosechaTable } from './components/CosechaTable';
+import { QuincenaTable } from './components/QuincenaTable';
 import { GastosDetalleDialog } from './components/GastosDetalleDialog';
+import { formatNumber } from '@/utils/format';
 import type {
   DashboardPeriodo,
   FiltrosFinanzas,
   KPIConVariacion,
+  KPIUnidades,
+  IngresoDetalleRow,
   DatoTrimestral,
   NegocioDashboardConfig,
   ColumnDef,
@@ -48,13 +53,15 @@ export function DashboardNegocio({ config }: DashboardNegocioProps) {
   const [gastosCategoria, setGastosCategoria] = useState<{ name: string; value: number }[]>([]);
   const [ingresosTrimestre, setIngresosTrimestre] = useState<DatoTrimestral[]>([]);
   const [gastosTrimestre, setGastosTrimestre] = useState<DatoTrimestral[]>([]);
-  const [detalleIngresos, setDetalleIngresos] = useState<Record<string, unknown>[]>([]);
+  const [detalleIngresos, setDetalleIngresos] = useState<IngresoDetalleRow[]>([]);
   const [detalleGastos, setDetalleGastos] = useState<Record<string, unknown>[]>([]);
+  const [kpiUnidades, setKpiUnidades] = useState<KPIUnidades | null>(null);
   const [dialogCategoria, setDialogCategoria] = useState<string | null>(null);
 
   const {
     loading,
     getKPIsNegocio,
+    getKPIsUnidadesNegocio,
     getIngresosTrimestralesNegocio,
     getGastosTrimestralesNegocio,
     getDetalleIngresos,
@@ -62,6 +69,10 @@ export function DashboardNegocio({ config }: DashboardNegocioProps) {
     getDistribucionIngresosNegocio,
     getDistribucionGastosNegocio,
   } = useDashboardData();
+
+  // Negocios con KPIs unitarios y tabla agrupada (issue #45)
+  const esAguacate = config.slug === 'aguacate';
+  const esHato = config.slug === 'hato';
 
   // Resolve negocio_id from name
   useEffect(() => {
@@ -86,16 +97,24 @@ export function DashboardNegocio({ config }: DashboardNegocioProps) {
   const loadData = async () => {
     if (!negocioId) return;
     try {
-      const [kpiResult, donut, gastosCat, ingTri, gasTri, detIng, detGas] = await Promise.all([
+      const [kpiResult, donut, gastosCat, ingTri, gasTri, detIng, detGas, unidades] = await Promise.all([
         getKPIsNegocio(negocioId),
         getDistribucionIngresosNegocio(negocioId, filtros),
         getDistribucionGastosNegocio(negocioId, filtros),
         getIngresosTrimestralesNegocio(negocioId, filtros),
         getGastosTrimestralesNegocio(negocioId, filtros),
-        getDetalleIngresos(negocioId, filtros),
+        // Cosecha/quincena tables show full history: groups span years, so the
+        // period filter (which keeps driving charts and gastos) doesn't apply.
+        getDetalleIngresos(negocioId, esAguacate || esHato ? {} : filtros),
         getDetalleGastos(negocioId, filtros),
+        esAguacate
+          ? getKPIsUnidadesNegocio(negocioId)
+          : esHato
+            ? getKPIsUnidadesNegocio(negocioId, 'leche')
+            : Promise.resolve(null),
       ]);
       setKpis(kpiResult);
+      setKpiUnidades(unidades);
       setDonutData(donut);
       setGastosCategoria(gastosCat);
       setIngresosTrimestre(ingTri);
@@ -127,6 +146,19 @@ export function DashboardNegocio({ config }: DashboardNegocioProps) {
           gastosYtdAnterior={kpis.gastosYtdAnterior}
           gastosN1={kpis.gastosN1}
           gastosN2={kpis.gastosN2}
+          unidades={
+            kpiUnidades && esAguacate
+              ? [
+                  { label: 'Toneladas vendidas YTD', valorFormateado: `${formatNumber(kpiUnidades.cantidadTotal / 1000, 1)} ton` },
+                  { label: 'Precio promedio $/kg', valorFormateado: `$${formatNumber(kpiUnidades.precioPromedio)}/kg` },
+                ]
+              : kpiUnidades && esHato
+                ? [
+                    { label: 'Litros totales YTD', valorFormateado: `${formatNumber(kpiUnidades.cantidadTotal)} L` },
+                    { label: 'Precio promedio $/L', valorFormateado: `$${formatNumber(kpiUnidades.precioPromedio)}/L` },
+                  ]
+                : undefined
+          }
         />
       )}
 
@@ -152,13 +184,21 @@ export function DashboardNegocio({ config }: DashboardNegocioProps) {
       {/* Detail tables */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>
-          <h3 className="text-sm font-semibold text-green-700 mb-2">Detalle Ingresos</h3>
-          <DataTable
-            data={detalleIngresos}
-            columns={config.ingresos_columns}
-            headerColor="green"
-            emptyMessage="Sin ingresos registrados"
-          />
+          <h3 className="text-sm font-semibold text-green-700 mb-2">
+            {esAguacate ? 'Ingresos por Cosecha' : esHato ? 'Ingresos por Quincena' : 'Detalle Ingresos'}
+          </h3>
+          {esAguacate ? (
+            <CosechaTable rows={detalleIngresos} />
+          ) : esHato ? (
+            <QuincenaTable rows={detalleIngresos} />
+          ) : (
+            <DataTable
+              data={detalleIngresos}
+              columns={config.ingresos_columns}
+              headerColor="green"
+              emptyMessage="Sin ingresos registrados"
+            />
+          )}
         </div>
         <div>
           <h3 className="text-sm font-semibold text-red-700 mb-2">Detalle Gastos</h3>

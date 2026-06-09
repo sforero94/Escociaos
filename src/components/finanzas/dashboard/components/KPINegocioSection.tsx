@@ -10,11 +10,14 @@ interface KPINegocioSectionProps {
   gastosYtdAnterior: KPIConVariacion;
   gastosN1: KPIConVariacion;
   gastosN2: KPIConVariacion;
+  /** KPIs unitarios opcionales (toneladas/litros + precio promedio), ya formateados */
+  unidades?: { label: string; valorFormateado: string }[];
 }
 
 export function KPINegocioSection({
   ingresosActual, ingresosYtdAnterior, ingresosN1, ingresosN2,
   gastosActual, gastosYtdAnterior, gastosN1, gastosN2,
+  unidades,
 }: KPINegocioSectionProps) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -47,6 +50,19 @@ export function KPINegocioSection({
             size="sm"
           />
         </div>
+        {unidades && unidades.length > 0 && (
+          <div className="grid grid-cols-2 gap-3">
+            {unidades.map((u) => (
+              <KPIScorecard
+                key={u.label}
+                label={u.label}
+                valor={0}
+                valorFormateado={u.valorFormateado}
+                size="sm"
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Gastos */}

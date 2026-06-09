@@ -61,6 +61,8 @@ export function useGanadoData() {
     compras: KPIConVariacion;
     kilosVendidos: KPIConVariacion;
     kilosComprados: KPIConVariacion;
+    precioPromedioVenta: KPIConVariacion;
+    precioPromedioCompra: KPIConVariacion;
     gastosActual: KPIConVariacion;
     gastosYtdAnterior: KPIConVariacion;
     gastosN1: KPIConVariacion;
@@ -103,11 +105,18 @@ export function useGanadoData() {
         ]);
       }
 
+      const precioVentaAct = kVendAct > 0 ? ventasAct / kVendAct : 0;
+      const precioVentaAnt = kVendAnt > 0 ? ventasAnt / kVendAnt : 0;
+      const precioCompraAct = kCompAct > 0 ? comprasAct / kCompAct : 0;
+      const precioCompraAnt = kCompAnt > 0 ? comprasAnt / kCompAnt : 0;
+
       return {
         ventas: { valor: ventasAct, variacion_porcentaje: variacion(ventasAct, ventasAnt), periodo_label: `Ventas YTD ${year}` },
         compras: { valor: comprasAct, variacion_porcentaje: variacion(comprasAct, comprasAnt), periodo_label: `Compras YTD ${year}` },
         kilosVendidos: { valor: kVendAct, variacion_porcentaje: variacion(kVendAct, kVendAnt), periodo_label: `Kilos vendidos` },
         kilosComprados: { valor: kCompAct, variacion_porcentaje: variacion(kCompAct, kCompAnt), periodo_label: `Kilos comprados` },
+        precioPromedioVenta: { valor: precioVentaAct, variacion_porcentaje: variacion(precioVentaAct, precioVentaAnt), periodo_label: `Precio prom. venta` },
+        precioPromedioCompra: { valor: precioCompraAct, variacion_porcentaje: variacion(precioCompraAct, precioCompraAnt), periodo_label: `Precio prom. compra` },
         gastosActual: { valor: gAct, variacion_porcentaje: variacion(gAct, gYtd1), periodo_label: `YTD ${year}` },
         gastosYtdAnterior: { valor: gYtd1, variacion_porcentaje: 0, periodo_label: `YTD ${year - 1}` },
         gastosN1: { valor: gFull1, variacion_porcentaje: variacion(gFull1, gFull2), periodo_label: `Total ${year - 1}` },
@@ -209,6 +218,7 @@ export function useGanadoData() {
         cliente_proveedor: t.cliente_proveedor,
         cantidad_cabezas: t.cantidad_cabezas,
         kilos_pagados: t.kilos_pagados,
+        peso_promedio: t.cantidad_cabezas > 0 ? Math.round((t.kilos_pagados || 0) / t.cantidad_cabezas) : null,
         precio_kilo: t.precio_kilo,
         valor_total: t.valor_total,
       }));

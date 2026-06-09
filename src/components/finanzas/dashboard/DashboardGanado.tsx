@@ -21,13 +21,25 @@ const PERIODO_LABELS: Record<string, string> = {
   ano_anterior: 'ano anterior',
 };
 
-const TRANSACCIONES_COLUMNS: ColumnDef[] = [
+const VENTAS_COLUMNS: ColumnDef[] = [
   { key: 'fecha', label: 'Fecha', format: 'date' },
-  { key: 'tipo', label: 'Tipo' },
   { key: 'finca', label: 'Finca' },
-  { key: 'cliente_proveedor', label: 'Cliente/Proveedor' },
+  { key: 'cliente_proveedor', label: 'Cliente' },
   { key: 'cantidad_cabezas', label: 'Cabezas', format: 'number' },
   { key: 'kilos_pagados', label: 'Kilos', format: 'number' },
+  { key: 'peso_promedio', label: 'Peso Prom.', format: 'number' },
+  { key: 'precio_kilo', label: 'Precio/Kg', format: 'currency' },
+  { key: 'valor_total', label: 'Valor Total', format: 'currency' },
+];
+
+const COMPRAS_COLUMNS: ColumnDef[] = [
+  { key: 'fecha', label: 'Fecha', format: 'date' },
+  { key: 'finca', label: 'Finca' },
+  { key: 'cliente_proveedor', label: 'Proveedor' },
+  { key: 'cantidad_cabezas', label: 'Cabezas', format: 'number' },
+  { key: 'kilos_pagados', label: 'Kilos', format: 'number' },
+  { key: 'peso_promedio', label: 'Peso Prom.', format: 'number' },
+  { key: 'precio_kilo', label: 'Precio/Kg', format: 'currency' },
   { key: 'valor_total', label: 'Valor Total', format: 'currency' },
 ];
 
@@ -49,6 +61,7 @@ export function DashboardGanado() {
   const [kpis, setKpis] = useState<{
     ventas: KPIConVariacion; compras: KPIConVariacion;
     kilosVendidos: KPIConVariacion; kilosComprados: KPIConVariacion;
+    precioPromedioVenta: KPIConVariacion; precioPromedioCompra: KPIConVariacion;
     gastosActual: KPIConVariacion; gastosYtdAnterior: KPIConVariacion;
     gastosN1: KPIConVariacion; gastosN2: KPIConVariacion;
   } | null>(null);
@@ -125,6 +138,8 @@ export function DashboardGanado() {
           compras={kpis.compras}
           kilosVendidos={kpis.kilosVendidos}
           kilosComprados={kpis.kilosComprados}
+          precioPromedioVenta={kpis.precioPromedioVenta}
+          precioPromedioCompra={kpis.precioPromedioCompra}
           gastosActual={kpis.gastosActual}
           gastosYtdAnterior={kpis.gastosYtdAnterior}
           gastosN1={kpis.gastosN1}
@@ -161,15 +176,24 @@ export function DashboardGanado() {
         <GastosTrimestreLine data={gastosTrimestre} />
       </div>
 
-      {/* Detail tables */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Detail tables — full width so the 8 columns (peso prom., precio/kg) stay visible */}
+      <div className="space-y-6">
         <div>
-          <h3 className="text-sm font-semibold text-green-700 mb-2">Transacciones Ganado</h3>
+          <h3 className="text-sm font-semibold text-green-700 mb-2">Ventas Ganado</h3>
           <DataTable
-            data={detalleTransacciones}
-            columns={TRANSACCIONES_COLUMNS}
+            data={detalleTransacciones.filter((t) => t.tipo === 'venta')}
+            columns={VENTAS_COLUMNS}
             headerColor="green"
-            emptyMessage="Sin transacciones registradas"
+            emptyMessage="Sin ventas registradas"
+          />
+        </div>
+        <div>
+          <h3 className="text-sm font-semibold text-green-700 mb-2">Compras Ganado</h3>
+          <DataTable
+            data={detalleTransacciones.filter((t) => t.tipo === 'compra')}
+            columns={COMPRAS_COLUMNS}
+            headerColor="green"
+            emptyMessage="Sin compras registradas"
           />
         </div>
         <div>
