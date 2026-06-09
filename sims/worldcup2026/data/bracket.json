@@ -1,0 +1,21 @@
+{
+  "_comment": "R32 slots in leaf order so the engine's sequential pairing reproduces the official 2026 bracket tree (SF101 = QF97+QF98, SF102 = QF99+QF100). Each consecutive pair of slots is one R32 match. Slot types: W=group winner, R=group runner-up, 3=best-third (eligible groups listed).",
+  "r32": [
+    ["W", "E"], ["3", ["A", "B", "C", "D", "F"]],
+    ["W", "I"], ["3", ["C", "D", "F", "G", "H"]],
+    ["R", "A"], ["R", "B"],
+    ["W", "F"], ["R", "C"],
+    ["R", "K"], ["R", "L"],
+    ["W", "H"], ["R", "J"],
+    ["W", "D"], ["3", ["B", "E", "F", "I", "J"]],
+    ["W", "G"], ["3", ["A", "E", "H", "I", "J"]],
+    ["W", "C"], ["R", "F"],
+    ["R", "E"], ["R", "I"],
+    ["W", "A"], ["3", ["C", "E", "F", "H", "I"]],
+    ["W", "L"], ["3", ["E", "H", "I", "J", "K"]],
+    ["W", "J"], ["R", "H"],
+    ["R", "D"], ["R", "G"],
+    ["W", "B"], ["3", ["E", "F", "G", "I", "J"]],
+    ["W", "K"], ["3", ["D", "E", "I", "J", "L"]]
+  ]
+}

@@ -1,0 +1,756 @@
+{
+  "runs": 100000,
+  "champion": [
+    {
+      "name": "Spain",
+      "pct": 29.8,
+      "count": 29796
+    },
+    {
+      "name": "Argentina",
+      "pct": 20.51,
+      "count": 20513
+    },
+    {
+      "name": "France",
+      "pct": 12.53,
+      "count": 12527
+    },
+    {
+      "name": "England",
+      "pct": 7.15,
+      "count": 7150
+    },
+    {
+      "name": "Brazil",
+      "pct": 4.7,
+      "count": 4697
+    },
+    {
+      "name": "Portugal",
+      "pct": 4.48,
+      "count": 4478
+    },
+    {
+      "name": "Colombia",
+      "pct": 3.87,
+      "count": 3873
+    },
+    {
+      "name": "Netherlands",
+      "pct": 2.28,
+      "count": 2284
+    },
+    {
+      "name": "Ecuador",
+      "pct": 1.96,
+      "count": 1957
+    },
+    {
+      "name": "Germany",
+      "pct": 1.79,
+      "count": 1793
+    },
+    {
+      "name": "Norway",
+      "pct": 1.38,
+      "count": 1375
+    },
+    {
+      "name": "Croatia",
+      "pct": 1.19,
+      "count": 1190
+    },
+    {
+      "name": "Turkiye",
+      "pct": 1.13,
+      "count": 1130
+    },
+    {
+      "name": "Belgium",
+      "pct": 1.09,
+      "count": 1094
+    },
+    {
+      "name": "Japan",
+      "pct": 1.06,
+      "count": 1065
+    },
+    {
+      "name": "Switzerland",
+      "pct": 0.93,
+      "count": 928
+    }
+  ],
+  "runner_up": [
+    {
+      "name": "Argentina",
+      "pct": 13.21,
+      "count": 13209
+    },
+    {
+      "name": "Spain",
+      "pct": 12.14,
+      "count": 12143
+    },
+    {
+      "name": "France",
+      "pct": 9.78,
+      "count": 9782
+    },
+    {
+      "name": "England",
+      "pct": 8.18,
+      "count": 8175
+    },
+    {
+      "name": "Portugal",
+      "pct": 6.02,
+      "count": 6022
+    },
+    {
+      "name": "Brazil",
+      "pct": 5.97,
+      "count": 5968
+    },
+    {
+      "name": "Colombia",
+      "pct": 5.66,
+      "count": 5662
+    },
+    {
+      "name": "Netherlands",
+      "pct": 3.96,
+      "count": 3956
+    },
+    {
+      "name": "Ecuador",
+      "pct": 3.68,
+      "count": 3679
+    },
+    {
+      "name": "Germany",
+      "pct": 3.52,
+      "count": 3524
+    },
+    {
+      "name": "Norway",
+      "pct": 2.9,
+      "count": 2897
+    },
+    {
+      "name": "Croatia",
+      "pct": 2.59,
+      "count": 2594
+    },
+    {
+      "name": "Turkiye",
+      "pct": 2.53,
+      "count": 2533
+    },
+    {
+      "name": "Belgium",
+      "pct": 2.46,
+      "count": 2465
+    },
+    {
+      "name": "Japan",
+      "pct": 2.35,
+      "count": 2349
+    },
+    {
+      "name": "Uruguay",
+      "pct": 2.26,
+      "count": 2260
+    }
+  ],
+  "third": [
+    {
+      "name": "France",
+      "pct": 12.37,
+      "count": 12372
+    },
+    {
+      "name": "Spain",
+      "pct": 9.43,
+      "count": 9427
+    },
+    {
+      "name": "Argentina",
+      "pct": 9.34,
+      "count": 9335
+    },
+    {
+      "name": "England",
+      "pct": 8.43,
+      "count": 8429
+    },
+    {
+      "name": "Brazil",
+      "pct": 7.51,
+      "count": 7506
+    },
+    {
+      "name": "Portugal",
+      "pct": 5.09,
+      "count": 5090
+    },
+    {
+      "name": "Colombia",
+      "pct": 4.8,
+      "count": 4797
+    },
+    {
+      "name": "Netherlands",
+      "pct": 4.73,
+      "count": 4726
+    },
+    {
+      "name": "Ecuador",
+      "pct": 4.48,
+      "count": 4479
+    },
+    {
+      "name": "Germany",
+      "pct": 4.17,
+      "count": 4173
+    },
+    {
+      "name": "Norway",
+      "pct": 3.34,
+      "count": 3341
+    },
+    {
+      "name": "Japan",
+      "pct": 2.89,
+      "count": 2888
+    }
+  ],
+  "fourth": [
+    {
+      "name": "France",
+      "pct": 5.94,
+      "count": 5941
+    },
+    {
+      "name": "Brazil",
+      "pct": 5.68,
+      "count": 5680
+    },
+    {
+      "name": "England",
+      "pct": 5.37,
+      "count": 5366
+    },
+    {
+      "name": "Netherlands",
+      "pct": 5.05,
+      "count": 5047
+    },
+    {
+      "name": "Ecuador",
+      "pct": 5.04,
+      "count": 5037
+    },
+    {
+      "name": "Germany",
+      "pct": 5.0,
+      "count": 4995
+    },
+    {
+      "name": "Norway",
+      "pct": 4.43,
+      "count": 4434
+    },
+    {
+      "name": "Portugal",
+      "pct": 4.19,
+      "count": 4194
+    },
+    {
+      "name": "Colombia",
+      "pct": 4.12,
+      "count": 4121
+    },
+    {
+      "name": "Japan",
+      "pct": 3.94,
+      "count": 3937
+    },
+    {
+      "name": "Morocco",
+      "pct": 3.67,
+      "count": 3674
+    },
+    {
+      "name": "Mexico",
+      "pct": 3.66,
+      "count": 3660
+    }
+  ],
+  "reach_final": [
+    {
+      "name": "Spain",
+      "pct": 41.94,
+      "count": 41939
+    },
+    {
+      "name": "Argentina",
+      "pct": 33.72,
+      "count": 33722
+    },
+    {
+      "name": "France",
+      "pct": 22.31,
+      "count": 22309
+    },
+    {
+      "name": "England",
+      "pct": 15.32,
+      "count": 15325
+    },
+    {
+      "name": "Brazil",
+      "pct": 10.66,
+      "count": 10665
+    },
+    {
+      "name": "Portugal",
+      "pct": 10.5,
+      "count": 10500
+    },
+    {
+      "name": "Colombia",
+      "pct": 9.54,
+      "count": 9535
+    },
+    {
+      "name": "Netherlands",
+      "pct": 6.24,
+      "count": 6240
+    },
+    {
+      "name": "Ecuador",
+      "pct": 5.64,
+      "count": 5636
+    },
+    {
+      "name": "Germany",
+      "pct": 5.32,
+      "count": 5317
+    },
+    {
+      "name": "Norway",
+      "pct": 4.27,
+      "count": 4272
+    },
+    {
+      "name": "Croatia",
+      "pct": 3.78,
+      "count": 3784
+    },
+    {
+      "name": "Turkiye",
+      "pct": 3.66,
+      "count": 3663
+    },
+    {
+      "name": "Belgium",
+      "pct": 3.56,
+      "count": 3559
+    },
+    {
+      "name": "Japan",
+      "pct": 3.41,
+      "count": 3414
+    },
+    {
+      "name": "Switzerland",
+      "pct": 3.17,
+      "count": 3175
+    }
+  ],
+  "reach_semis": [
+    {
+      "name": "Spain",
+      "pct": 54.17,
+      "count": 54169
+    },
+    {
+      "name": "Argentina",
+      "pct": 46.58,
+      "count": 46584
+    },
+    {
+      "name": "France",
+      "pct": 40.62,
+      "count": 40622
+    },
+    {
+      "name": "England",
+      "pct": 29.12,
+      "count": 29120
+    },
+    {
+      "name": "Brazil",
+      "pct": 23.85,
+      "count": 23851
+    },
+    {
+      "name": "Portugal",
+      "pct": 19.78,
+      "count": 19784
+    },
+    {
+      "name": "Colombia",
+      "pct": 18.45,
+      "count": 18453
+    },
+    {
+      "name": "Netherlands",
+      "pct": 16.01,
+      "count": 16013
+    },
+    {
+      "name": "Ecuador",
+      "pct": 15.15,
+      "count": 15152
+    },
+    {
+      "name": "Germany",
+      "pct": 14.48,
+      "count": 14485
+    },
+    {
+      "name": "Norway",
+      "pct": 12.05,
+      "count": 12047
+    },
+    {
+      "name": "Japan",
+      "pct": 10.24,
+      "count": 10239
+    },
+    {
+      "name": "Croatia",
+      "pct": 9.9,
+      "count": 9903
+    },
+    {
+      "name": "Turkiye",
+      "pct": 9.16,
+      "count": 9165
+    },
+    {
+      "name": "Switzerland",
+      "pct": 9.04,
+      "count": 9045
+    },
+    {
+      "name": "Belgium",
+      "pct": 8.94,
+      "count": 8941
+    }
+  ],
+  "golden_ball": [
+    {
+      "name": "Lamine Yamal",
+      "pct": 20.12,
+      "count": 20119
+    },
+    {
+      "name": "Lionel Messi",
+      "pct": 16.14,
+      "count": 16135
+    },
+    {
+      "name": "Kylian Mbappe",
+      "pct": 12.78,
+      "count": 12782
+    },
+    {
+      "name": "Jude Bellingham",
+      "pct": 7.3,
+      "count": 7305
+    },
+    {
+      "name": "Vinicius Junior",
+      "pct": 6.61,
+      "count": 6611
+    },
+    {
+      "name": "Bruno Fernandes",
+      "pct": 5.25,
+      "count": 5255
+    },
+    {
+      "name": "James Rodriguez",
+      "pct": 4.61,
+      "count": 4611
+    },
+    {
+      "name": "Cody Gakpo",
+      "pct": 3.68,
+      "count": 3676
+    },
+    {
+      "name": "Florian Wirtz",
+      "pct": 3.6,
+      "count": 3597
+    },
+    {
+      "name": "Kevin De Bruyne",
+      "pct": 2.65,
+      "count": 2645
+    },
+    {
+      "name": "Martin Odegaard",
+      "pct": 2.41,
+      "count": 2414
+    },
+    {
+      "name": "Luka Modric",
+      "pct": 2.28,
+      "count": 2280
+    }
+  ],
+  "golden_boot": [
+    {
+      "name": "Kylian Mbappe",
+      "pct": 19.95,
+      "count": 19952
+    },
+    {
+      "name": "Lautaro Martinez",
+      "pct": 11.87,
+      "count": 11874
+    },
+    {
+      "name": "Harry Kane",
+      "pct": 10.61,
+      "count": 10606
+    },
+    {
+      "name": "Mikel Oyarzabal",
+      "pct": 8.08,
+      "count": 8080
+    },
+    {
+      "name": "Erling Haaland",
+      "pct": 6.05,
+      "count": 6053
+    },
+    {
+      "name": "Luis Diaz",
+      "pct": 3.81,
+      "count": 3815
+    },
+    {
+      "name": "Mohamed Salah",
+      "pct": 3.47,
+      "count": 3472
+    },
+    {
+      "name": "Cristiano Ronaldo",
+      "pct": 3.43,
+      "count": 3426
+    },
+    {
+      "name": "Breel Embolo",
+      "pct": 3.34,
+      "count": 3336
+    },
+    {
+      "name": "Cody Gakpo",
+      "pct": 2.83,
+      "count": 2829
+    },
+    {
+      "name": "Raul Jimenez",
+      "pct": 2.8,
+      "count": 2798
+    },
+    {
+      "name": "Lamine Yamal",
+      "pct": 2.2,
+      "count": 2202
+    }
+  ],
+  "avg_goals": [
+    {
+      "name": "Kylian Mbappe",
+      "avg": 4.412
+    },
+    {
+      "name": "Lautaro Martinez",
+      "avg": 3.893
+    },
+    {
+      "name": "Harry Kane",
+      "avg": 3.843
+    },
+    {
+      "name": "Mikel Oyarzabal",
+      "avg": 3.26
+    },
+    {
+      "name": "Erling Haaland",
+      "avg": 2.96
+    },
+    {
+      "name": "Luis Diaz",
+      "avg": 2.8
+    },
+    {
+      "name": "Cristiano Ronaldo",
+      "avg": 2.704
+    },
+    {
+      "name": "Mohamed Salah",
+      "avg": 2.517
+    },
+    {
+      "name": "Julian Alvarez",
+      "avg": 2.451
+    },
+    {
+      "name": "Breel Embolo",
+      "avg": 2.413
+    },
+    {
+      "name": "Lamine Yamal",
+      "avg": 2.341
+    },
+    {
+      "name": "Cody Gakpo",
+      "avg": 2.251
+    },
+    {
+      "name": "Raul Jimenez",
+      "avg": 2.236
+    },
+    {
+      "name": "Lionel Messi",
+      "avg": 2.182
+    },
+    {
+      "name": "Raphinha",
+      "avg": 2.107
+    }
+  ],
+  "chalk_bracket": {
+    "R32": [
+      "Ecuador",
+      "Scotland",
+      "France",
+      "Australia",
+      "Czechia",
+      "Bosnia and Herzegovina",
+      "Netherlands",
+      "Morocco",
+      "Colombia",
+      "Croatia",
+      "Spain",
+      "Austria",
+      "Turkiye",
+      "Sweden",
+      "Belgium",
+      "South Korea",
+      "Brazil",
+      "Japan",
+      "Germany",
+      "Norway",
+      "Mexico",
+      "Ivory Coast",
+      "England",
+      "Senegal",
+      "Argentina",
+      "Uruguay",
+      "United States",
+      "Iran",
+      "Switzerland",
+      "Egypt",
+      "Portugal",
+      "Algeria"
+    ],
+    "R16": [
+      "Ecuador",
+      "France",
+      "Czechia",
+      "Netherlands",
+      "Colombia",
+      "Spain",
+      "Turkiye",
+      "Belgium",
+      "Brazil",
+      "Germany",
+      "Mexico",
+      "England",
+      "Argentina",
+      "United States",
+      "Switzerland",
+      "Portugal"
+    ],
+    "QF": [
+      "France",
+      "Netherlands",
+      "Spain",
+      "Turkiye",
+      "Brazil",
+      "England",
+      "Argentina",
+      "Portugal"
+    ],
+    "SF": [
+      "France",
+      "Spain",
+      "England",
+      "Argentina"
+    ],
+    "F": [
+      "Spain",
+      "Argentina"
+    ],
+    "W": [
+      "Spain"
+    ]
+  },
+  "chalk_group_winners": {
+    "A": "Mexico",
+    "B": "Switzerland",
+    "C": "Brazil",
+    "D": "Turkiye",
+    "E": "Ecuador",
+    "F": "Netherlands",
+    "G": "Belgium",
+    "H": "Spain",
+    "I": "France",
+    "J": "Argentina",
+    "K": "Portugal",
+    "L": "England"
+  },
+  "chalk_runners_up": {
+    "A": "Czechia",
+    "B": "Bosnia and Herzegovina",
+    "C": "Morocco",
+    "D": "United States",
+    "E": "Germany",
+    "F": "Japan",
+    "G": "Iran",
+    "H": "Uruguay",
+    "I": "Norway",
+    "J": "Austria",
+    "K": "Colombia",
+    "L": "Croatia"
+  },
+  "chalk_best_thirds": {
+    "I": "Senegal",
+    "C": "Scotland",
+    "A": "South Korea",
+    "F": "Sweden",
+    "G": "Egypt",
+    "D": "Australia",
+    "E": "Ivory Coast",
+    "J": "Algeria"
+  }
+}

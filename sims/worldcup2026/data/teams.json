@@ -1,0 +1,61 @@
+{
+  "Mexico":                {"elo": 1875, "group": "A", "host": true},
+  "South Korea":           {"elo": 1775, "group": "A"},
+  "South Africa":          {"elo": 1650, "group": "A"},
+  "Czechia":               {"elo": 1800, "group": "A"},
+
+  "Canada":                {"elo": 1725, "group": "B", "host": true},
+  "Switzerland":           {"elo": 1891, "group": "B"},
+  "Qatar":                 {"elo": 1650, "group": "B"},
+  "Bosnia and Herzegovina":{"elo": 1760, "group": "B"},
+
+  "Brazil":                {"elo": 1991, "group": "C"},
+  "Morocco":               {"elo": 1875, "group": "C"},
+  "Scotland":              {"elo": 1780, "group": "C"},
+  "Haiti":                 {"elo": 1500, "group": "C"},
+
+  "United States":         {"elo": 1825, "group": "D", "host": true},
+  "Australia":             {"elo": 1750, "group": "D"},
+  "Paraguay":              {"elo": 1750, "group": "D"},
+  "Turkiye":               {"elo": 1900, "group": "D"},
+
+  "Germany":               {"elo": 1932, "group": "E"},
+  "Ecuador":               {"elo": 1935, "group": "E"},
+  "Ivory Coast":           {"elo": 1750, "group": "E"},
+  "Curacao":               {"elo": 1525, "group": "E"},
+
+  "Netherlands":           {"elo": 1944, "group": "F"},
+  "Japan":                 {"elo": 1906, "group": "F"},
+  "Tunisia":               {"elo": 1725, "group": "F"},
+  "Sweden":                {"elo": 1775, "group": "F"},
+
+  "Belgium":               {"elo": 1893, "group": "G"},
+  "Iran":                  {"elo": 1800, "group": "G"},
+  "Egypt":                 {"elo": 1775, "group": "G"},
+  "New Zealand":           {"elo": 1500, "group": "G"},
+
+  "Spain":                 {"elo": 2155, "group": "H"},
+  "Uruguay":               {"elo": 1892, "group": "H"},
+  "Saudi Arabia":          {"elo": 1650, "group": "H"},
+  "Cape Verde":            {"elo": 1675, "group": "H"},
+
+  "France":                {"elo": 2062, "group": "I"},
+  "Senegal":               {"elo": 1867, "group": "I"},
+  "Norway":                {"elo": 1917, "group": "I"},
+  "Iraq":                  {"elo": 1650, "group": "I"},
+
+  "Argentina":             {"elo": 2114, "group": "J"},
+  "Austria":               {"elo": 1800, "group": "J"},
+  "Algeria":               {"elo": 1750, "group": "J"},
+  "Jordan":                {"elo": 1600, "group": "J"},
+
+  "Portugal":              {"elo": 1986, "group": "K"},
+  "Colombia":              {"elo": 1977, "group": "K"},
+  "Uzbekistan":            {"elo": 1625, "group": "K"},
+  "DR Congo":              {"elo": 1720, "group": "K"},
+
+  "England":               {"elo": 2021, "group": "L"},
+  "Croatia":               {"elo": 1908, "group": "L"},
+  "Ghana":                 {"elo": 1700, "group": "L"},
+  "Panama":                {"elo": 1675, "group": "L"}
+}

@@ -111,38 +111,31 @@ class Sim:
 
     # ---- Knockout -----------------------------------------------------------
     def knockout(self, qualifiers, best_thirds):
-        # Assign the 8 qualifying thirds to the bracket's third-slots using the
-        # official-style allocation: slots list their eligible source groups; we
-        # greedily match qualifying thirds to slots, respecting same-group rules.
+        # The 8 qualifying thirds must each fill a distinct bracket third-slot,
+        # picking from that slot's eligible source groups (FIFA constraint, so no
+        # two same-group teams meet before the QF). The official 495-row table
+        # isn't publicly enumerable, so we compute *a* valid assignment via a
+        # bipartite maximum matching over (slot -> eligible qualifying group).
         third_by_group = {g: t for (g, t, _) in best_thirds}
-        qualified_groups = sorted(third_by_group.keys())
-        alloc_table = self.bracket["third_allocation"]
-        mapping = alloc_table.get(",".join(qualified_groups))
-        if mapping is None:
-            # fallback: assign in slot order to any eligible qualifying group
-            mapping = {}
-            used = set()
-            for slot in self.bracket["r32"]:
-                if slot[0] == "3":
-                    for g in slot[1]:
-                        if g in third_by_group and g not in used:
-                            mapping[self._slot_id(slot)] = g; used.add(g); break
+        third_slots = [i for i, s in enumerate(self.bracket["r32"]) if s[0] == "3"]
+        eligible = {i: [g for g in self.bracket["r32"][i][1] if g in third_by_group]
+                    for i in third_slots}
+        match_slot = self._bipartite_match(third_slots, eligible)
         # build the 32-team seeded list in bracket order
         round_teams = []
-        for slot in self.bracket["r32"]:
+        for i, slot in enumerate(self.bracket["r32"]):
             if slot[0] == "W":
                 round_teams.append(qualifiers[f"1{slot[1]}"])
             elif slot[0] == "R":
                 round_teams.append(qualifiers[f"2{slot[1]}"])
             else:  # third slot
-                g = mapping[self._slot_id(slot)]
-                round_teams.append(third_by_group[g])
+                round_teams.append(third_by_group[match_slot[i]])
 
         rounds = ["R16", "QF", "SF"]
         result = {}
         # R32 -> ... down to final
         teams = round_teams
-        round_names = ["R32", "R16", "QF", "SF", "F"]
+        round_names = ["R32", "R16", "QF", "SF", "F", "W"]
         reached = {t: "R32" for t in teams}
         idx = 0
         while len(teams) > 1:
@@ -167,9 +160,29 @@ class Sim:
         reached[runner_up] = "RU"
         return champion, runner_up, third, fourth, reached
 
-    @staticmethod
-    def _slot_id(slot):
-        return f"3_{'-'.join(slot[1])}"
+    def _bipartite_match(self, slots, eligible):
+        """Match each third-slot to a distinct group via augmenting paths.
+        Slot order is shuffled so that, across runs, different valid FIFA
+        allocations are explored rather than always the same greedy one."""
+        order = list(slots)
+        self.rng.shuffle(order)
+        group_to_slot = {}
+
+        def try_assign(slot, seen):
+            cands = list(eligible[slot])
+            self.rng.shuffle(cands)
+            for g in cands:
+                if g in seen:
+                    continue
+                seen.add(g)
+                if g not in group_to_slot or try_assign(group_to_slot[g], seen):
+                    group_to_slot[g] = slot
+                    return True
+            return False
+
+        for s in order:
+            try_assign(s, set())
+        return {slot: g for g, slot in group_to_slot.items()}
 
     # ---- One full tournament ------------------------------------------------
     def run_once(self):
