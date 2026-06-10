@@ -45,6 +45,8 @@ const ReportesView = lazy(() => import('./components/finanzas/ReportesView').the
 const ConfiguracionFinanzas = lazy(() => import('./components/finanzas/ConfiguracionFinanzas').then(m => ({ default: m.ConfiguracionFinanzas })));
 const PresupuestoView = lazy(() => import('./components/finanzas/presupuesto/PresupuestoView').then(m => ({ default: m.PresupuestoView })));
 const ProduccionDashboard = lazy(() => import('./components/produccion/ProduccionDashboard').then(m => ({ default: m.ProduccionDashboard })));
+const GanadoDashboard = lazy(() => import('./components/ganado/GanadoDashboard').then(m => ({ default: m.GanadoDashboard })));
+const GanadoMovimientos = lazy(() => import('./components/ganado/GanadoMovimientos').then(m => ({ default: m.GanadoMovimientos })));
 const ReportesDashboard = lazy(() => import('./components/reportes/ReportesDashboard').then(m => ({ default: m.ReportesDashboard })));
 const ReporteSemanalWizard = lazy(() => import('./components/reportes/ReporteSemanalWizard').then(m => ({ default: m.ReporteSemanalWizard })));
 
@@ -128,6 +130,12 @@ function LayoutRoutes() {
             <Route path="reportes" element={<ReportesView />} />
             <Route path="presupuesto" element={<PresupuestoView />} />
             <Route path="configuracion" element={<ConfiguracionFinanzas />} />
+          </Route>
+
+          {/* Ganado - Inventario vivo */}
+          <Route path="ganado">
+            <Route index element={<GanadoDashboard />} />
+            <Route path="movimientos" element={<GanadoMovimientos />} />
           </Route>
 
           {/* Reportes */}

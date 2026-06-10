@@ -273,6 +273,8 @@ All routes except `/login` are protected and require authentication.
 | `/reportes`                        | ReportesDashboard            | Reports        |
 | `/reportes/generar`                | ReporteSemanalWizard         | Reports        |
 | `/produccion`                      | ProduccionDashboard          | Production     |
+| `/ganado`                          | GanadoDashboard              | Cattle         |
+| `/ganado/movimientos`              | GanadoMovimientos            | Cattle         |
 | `/clima`                           | ClimaDashboard               | Climate        |
 | `/clima/historico`                 | ClimaHistorico               | Climate        |
 | `/configuracion`                   | ConfiguracionDashboard       | Settings       |
@@ -296,6 +298,7 @@ PostgreSQL hosted on Supabase with 32+ tables, 7+ custom ENUM types, Row-Level S
 - **Monitoring**: `monitoreos` (denormalized: one row per pest observation, includes `incidencia`, `lote_id`, FK to `plagas_enfermedades_catalogo`, floración fields: `floracion_sin_flor`, `floracion_brotes`, `floracion_flor_madura`, `floracion_cuaje`), `sublotes`, `plagas_enfermedades_catalogo`, `rondas_monitoreo`, `mon_conductividad` (soil CE readings), `mon_colmenas` (beehive health), `apiarios` (apiary config)
 - **Labor**: `tareas`, `registros_trabajo`, `empleados_tareas`
 - **Finance**: `fin_gastos`, `fin_ingresos`, `fin_transacciones_ganado`, `fin_conceptos_gastos`, `fin_proveedores`, `fin_categorias_gastos`, `fin_categorias_ingresos`, `fin_medios_pago`, `fin_regiones`, `fin_negocios`, `fin_compradores`, `fin_presupuestos` (budget allocations by concepto, year, negocio)
+- **Cattle inventory**: `gan_ubicaciones`, `gan_fincas` (hectáreas), `gan_potreros`, `gan_inventario` (snapshot per potrero: novillos/toros/peso promedio), `gan_movimientos` (event log: compra/venta/muerte/traslado_entrada/traslado_salida/ajuste; estado pendiente/confirmado/descartado), `gan_pesos_historico`
 - **Production**: `produccion`, `reportes_semanales`
 - **Climate**: `clima_lecturas` (rolling 24h window of 5-min Ecowitt readings — pruned daily by cron), `clima_resumen_diario` (pre-aggregated daily summaries: min/max/avg temp, humidity, wind, rainfall, radiation, UV — one row per day, scales indefinitely)
 - **Audit**: `audit_log`
@@ -315,7 +318,7 @@ The applications module has two distinct tracking layers — **do not confuse th
 
 ### Migrations
 
-Sequential SQL migrations live in `src/sql/migrations/` (001–039). See `src/sql/migrations/README_MIGRATION.md` for instructions on running them.
+Sequential SQL migrations live in `src/sql/migrations/` (001–044). See `src/sql/migrations/README_MIGRATION.md` for instructions on running them.
 
 - **023**: `create_fin_transacciones_ganado` — cattle buy/sell transactions table with RLS
 - **024**: `alter_fin_ingresos_add_columns` — adds `cantidad`, `precio_unitario`, `cosecha`, `alianza`, `cliente`, `finca` to `fin_ingresos`
@@ -331,16 +334,33 @@ Sequential SQL migrations live in `src/sql/migrations/` (001–039). See `src/sq
 - **041**: `create_esco_memorias` — long-term memory table for Esco's "save this for later" flow. Soft-delete via `archived_at`. RLS policy scopes rows to `user_id = auth.uid()`. Loaded into the system prompt at conversation start (cap 50, ordered DESC).
 - **042**: `backfill_ingresos_unidades_cosecha` — backfills `fin_ingresos.cantidad`/`precio_unitario` by parsing `nombre` (Aguacate Hass: kilos, e.g. "1540"; Hato Lechero: litros, e.g. "12702 L") and derives `cosecha` for aguacate from `fecha` via `fn_cosecha_aguacate()`. Adds BEFORE INSERT trigger `trg_set_cosecha_aguacate` (SECURITY DEFINER) so new aguacate income rows auto-link to their cosecha when none is given. Applied to production 2026-06-09.
 - **043**: `fix_cosecha_aguacate_etiqueta_anio` — corrects the cosecha labeling rule in `fn_cosecha_aguacate()` and relabels existing aguacate rows: Principal nov–feb is labeled with the year it ends (dec 2025–feb 2026 = "Principal 2026"); nov/dic → Principal (year+1), ene–abr → Principal (same year, mar–abr are sale tail), may–oct → Traviesa (same year, sep–oct are sale tail). Applied to production 2026-06-09.
+- **044**: `create_ganado_inventario` — live cattle inventory (issue #51): `gan_ubicaciones` → `gan_fincas` (hectáreas) → `gan_potreros` → `gan_inventario` snapshot + `gan_movimientos` event log + `gan_pesos_historico`. Trigger `fn_crear_movimiento_pendiente_ganado()` (AFTER INSERT on `fin_transacciones_ganado`, SECURITY DEFINER) creates a `pendiente` movement per new finance transaction; `fn_aplicar_movimiento_ganado()` applies confirmed movements to `gan_inventario` (and logs to `gan_pesos_historico` when peso present). Partial unique indexes on `transaccion_ganado_id` block double confirmation. Seeds the 3 ubicaciones and `gan_fincas` from distinct historic transaction fincas. RLS: SELECT all authenticated; write Administrador + Gerencia.
 
 ### Ganado ↔ Finance Integration
 
 Cattle buy/sell transactions live in `fin_transacciones_ganado` (not in `fin_gastos`/`fin_ingresos`). The Gastos and Ingresos historial views merge ganado records alongside regular records using a `UnifiedFinanceItem` discriminated union. Ganado items display with an amber `[Ganado]` badge and route to `TransaccionGanadoForm` for editing (not `GastoForm`/`IngresoForm`).
 
 Key files:
-- `src/components/finanzas/components/TransaccionGanadoForm.tsx` — create/edit dialog for ganado transactions, with dropdown selectors for finca (from existing transactions), proveedor (`fin_proveedores`), and cliente (`fin_compradores`)
+- `src/components/finanzas/components/TransaccionGanadoForm.tsx` — create/edit dialog for ganado transactions, with dropdown selectors for finca (from the shared `gan_fincas` catalog, falling back to distinct transaction values), proveedor (`fin_proveedores`), and cliente (`fin_compradores`). New finca names are inserted into `gan_fincas`.
 - `src/types/finanzas.ts` — `UnifiedFinanceItem` type
 - `src/components/finanzas/components/GastosList.tsx` — merges `fin_transacciones_ganado` compras
 - `src/components/finanzas/components/IngresosList.tsx` — merges `fin_transacciones_ganado` ventas
+
+### Cattle Inventory Module (`/ganado`, issue #51)
+
+Live head-count inventory layered on top of the finance transactions. Hierarchy: `gan_ubicaciones` → `gan_fincas` (hectáreas) → `gan_potreros` → `gan_inventario`. `gan_movimientos` is the source of truth; a DB trigger applies confirmed movements to the `gan_inventario` snapshot (CHECK constraints prevent negative counts).
+
+Pending-confirmation flow (anti double-count): saving a `TransaccionGanadoForm` fires a DB trigger that creates a `pendiente` movement carrying the signed head count in `novillos_delta` (negative for ventas) and derived peso promedio. The user confirms it from `/ganado/movimientos`, assigning potrero + novillos/toros split (sum must equal the transaction's cabezas); only then is `gan_inventario` updated. Pendientes can be `descartado` if already registered manually; partial unique indexes block confirming the same transaction twice.
+
+Key files:
+- `src/components/ganado/GanadoDashboard.tsx` — KPIs (total cabezas, novillos, toros, variación 30 días, cabezas/ha por ubicación), cascading filters, inventory table, pending banner, bulk-adjust dialog
+- `src/components/ganado/GanadoMovimientos.tsx` — event log + manual registration (muerte/traslado/ajuste) + pending confirmation
+- `src/components/ganado/hooks/useGanadoInventario.ts` — all Supabase access for the module
+- `src/utils/calculosGanado.ts` — pure logic (KPIs, traslado building, split validation, bulk-adjust diffing); tested in `src/__tests__/calculosGanado.test.ts`
+- `src/components/configuracion/GanadoConfig.tsx` — CRUD for ubicaciones/fincas/potreros (Configuración → Ganado tab)
+- `src/components/finanzas/dashboard/components/InventarioGanadoKPIs.tsx` — inventory KPI strip embedded in the finance Ganado tab (renders nothing until migration 044 is applied)
+
+UI write actions are gated to Administrador + Gerencia (matching RLS); other roles see read-only views.
 
 > **Note**: There are two files with the `019_` prefix (`019_auto_reporte_semanal.sql` and `019_storage_policies_reportes.sql`) due to a naming conflict. Check which have been applied before creating new migrations.
 

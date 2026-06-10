@@ -6,6 +6,7 @@ import { useDashboardData } from '../hooks/useDashboardData';
 import { PeriodoFilter } from './components/PeriodoFilter';
 import { RegionFilter } from './components/RegionFilter';
 import { KPIGanadoSection } from './components/KPIGanadoSection';
+import { InventarioGanadoKPIs } from './components/InventarioGanadoKPIs';
 import { FincaCompraVentaChart } from './components/FincaCompraVentaChart';
 import { GastosPorCategoriaChart } from './components/GastosPorCategoriaChart';
 import { TransaccionesGanadoChart } from './components/TransaccionesGanadoChart';
@@ -132,6 +133,8 @@ export function DashboardGanado() {
 
   return (
     <div className="space-y-6">
+      <InventarioGanadoKPIs />
+
       {kpis && (
         <KPIGanadoSection
           ventas={kpis.ventas}

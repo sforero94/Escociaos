@@ -4,9 +4,10 @@ import { LotesConfig } from './LotesConfig';
 import { SublotesConfig } from './SublotesConfig';
 import { UsuariosConfig } from './UsuariosConfig';
 import { TelegramConfig } from './TelegramConfig';
+import { GanadoConfig } from './GanadoConfig';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSafeMode } from '../../contexts/SafeModeContext';
-import { MapPin, Sprout, Settings, Users, Shield, AlertTriangle, Send } from 'lucide-react';
+import { MapPin, Sprout, Settings, Users, Shield, AlertTriangle, Send, Beef } from 'lucide-react';
 
 export function ConfiguracionDashboard() {
   const { profile } = useAuth();
@@ -70,6 +71,13 @@ export function ConfiguracionDashboard() {
             >
               <Sprout className="w-4 h-4 mr-1.5" />
               Sublotes
+            </TabsTrigger>
+            <TabsTrigger
+              value="ganado"
+              className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary-dark data-[state=active]:text-white whitespace-nowrap text-sm"
+            >
+              <Beef className="w-4 h-4 mr-1.5" />
+              Ganado
             </TabsTrigger>
           </TabsList>
 
@@ -144,6 +152,10 @@ export function ConfiguracionDashboard() {
 
           <TabsContent value="sublotes" className="space-y-6">
             <SublotesConfig />
+          </TabsContent>
+
+          <TabsContent value="ganado" className="space-y-6">
+            <GanadoConfig />
           </TabsContent>
         </Tabs>
       </div>

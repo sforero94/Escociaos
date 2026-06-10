@@ -19,6 +19,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Cloud,
+  Beef,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { useAuth } from '../contexts/AuthContext';
@@ -37,6 +38,7 @@ const menuStructure = [
   { id: 'labores', label: 'Labores', icon: Wrench, path: '/labores' },
   { id: 'empleados', label: 'Empleados', icon: Users, path: '/empleados' },
   { id: 'finanzas', label: 'Finanzas', icon: DollarSign, path: '/finanzas' },
+  { id: 'ganado', label: 'Ganado', icon: Beef, path: '/ganado' },
   { id: 'applications', label: 'Aplicaciones', icon: Sprout, path: '/aplicaciones' },
   { id: 'monitoring', label: 'Monitoreo', icon: Activity, path: '/monitoreo' },
   { id: 'clima', label: 'Clima', icon: Cloud, path: '/clima' },

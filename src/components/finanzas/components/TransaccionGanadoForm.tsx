@@ -55,16 +55,24 @@ export function TransaccionGanadoForm({ open, onOpenChange, transaccion, default
     if (!open) return;
     const supabase = getSupabase() as any;
 
-    // Fincas from existing transactions
-    supabase.from('fin_transacciones_ganado').select('finca').then(({ data }: any) => {
-      if (!data) return;
-      const seen = new Map<string, string>();
-      (data as any[]).forEach((r: any) => {
-        if (r.finca && !seen.has(r.finca.toLowerCase())) {
-          seen.set(r.finca.toLowerCase(), r.finca);
-        }
+    // Fincas: catálogo compartido con el inventario de ganado (gan_fincas,
+    // issue #51). Fallback a las fincas históricas de transacciones si el
+    // catálogo aún no está desplegado o está vacío.
+    supabase.from('gan_fincas').select('nombre').eq('activa', true).order('nombre').then(({ data, error }: any) => {
+      if (!error && data && data.length > 0) {
+        setFincas((data as any[]).map((r: any) => r.nombre as string));
+        return;
+      }
+      supabase.from('fin_transacciones_ganado').select('finca').then(({ data: txData }: any) => {
+        if (!txData) return;
+        const seen = new Map<string, string>();
+        (txData as any[]).forEach((r: any) => {
+          if (r.finca && !seen.has(r.finca.toLowerCase())) {
+            seen.set(r.finca.toLowerCase(), r.finca);
+          }
+        });
+        setFincas(Array.from(seen.values()).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' })));
       });
-      setFincas(Array.from(seen.values()).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' })));
     });
 
     loadProveedores();
@@ -149,6 +157,24 @@ export function TransaccionGanadoForm({ open, onOpenChange, transaccion, default
       };
 
       const supabase = getSupabase() as any;
+
+      // Si la finca es nueva, registrarla en el catálogo compartido para
+      // que el inventario de ganado y futuros formularios la vean.
+      if (newFinca && formData.finca.trim()) {
+        try {
+          const { data: existente } = await supabase
+            .from('gan_fincas')
+            .select('id')
+            .ilike('nombre', formData.finca.trim())
+            .limit(1);
+          if (!existente || existente.length === 0) {
+            await supabase.from('gan_fincas').insert({ nombre: formData.finca.trim() });
+          }
+        } catch {
+          // Catálogo no desplegado aún — la transacción guarda el texto igual
+        }
+      }
+
       if (isEditing) {
         const { error } = await supabase
           .from('fin_transacciones_ganado')
