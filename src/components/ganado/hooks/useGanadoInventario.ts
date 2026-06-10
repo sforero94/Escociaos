@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
-import { construirMovimientosTraslado, construirAjustesMasivos } from '@/utils/calculosGanado';
-import type { TrasladoParams, AjusteMasivoFila } from '@/utils/calculosGanado';
+import { construirMovimientosTraslado, construirAjustesMasivos, construirMovimientosCargaInicial } from '@/utils/calculosGanado';
+import type { TrasladoParams, AjusteMasivoFila, CargaInicialFila } from '@/utils/calculosGanado';
 import type {
   GanUbicacion,
   GanFinca,
@@ -192,6 +192,48 @@ export function useGanadoInventario() {
     if (error) throw error;
   }, []);
 
+  // Carga inicial por finca: encuentra o crea el potrero "General" de cada
+  // finca con cabezas y registra un ajuste confirmado por finca.
+  const cargarInventarioInicial = useCallback(async (filas: CargaInicialFila[], nota: string) => {
+    const conCabezas = filas.filter((f) => f.novillos > 0 || f.toros > 0);
+    if (conCabezas.length === 0) return 0;
+    const fincaIds = conCabezas.map((f) => f.finca_id);
+
+    const { data: existentes, error: errorPotreros } = await supabase
+      .from('gan_potreros')
+      .select('id, finca_id, nombre, activo')
+      .in('finca_id', fincaIds)
+      .ilike('nombre', 'general');
+    if (errorPotreros) throw errorPotreros;
+
+    const potreroPorFinca: Record<string, string> = {};
+    for (const p of (existentes || []) as { id: string; finca_id: string; activo: boolean }[]) {
+      potreroPorFinca[p.finca_id] = p.id;
+      // Un "General" desactivado ocultaría las cabezas del dashboard
+      if (!p.activo) {
+        const { error } = await supabase.from('gan_potreros').update({ activo: true }).eq('id', p.id);
+        if (error) throw error;
+      }
+    }
+
+    for (const fincaId of fincaIds) {
+      if (potreroPorFinca[fincaId]) continue;
+      const { data: creado, error } = await supabase
+        .from('gan_potreros')
+        .insert({ nombre: 'General', finca_id: fincaId })
+        .select('id')
+        .single();
+      if (error) throw error;
+      potreroPorFinca[fincaId] = (creado as { id: string }).id;
+    }
+
+    const fecha = new Date().toISOString().split('T')[0];
+    const movimientos = construirMovimientosCargaInicial(conCabezas, potreroPorFinca, fecha, nota);
+    const { error: errorMovs } = await supabase.from('gan_movimientos').insert(movimientos);
+    if (errorMovs) throw errorMovs;
+    return movimientos.length;
+  }, []);
+
   const ajusteMasivo = useCallback(async (filas: AjusteMasivoFila[], nota: string) => {
     const fecha = new Date().toISOString().split('T')[0];
     const movimientos = construirAjustesMasivos(filas, fecha, nota).map((m) => ({ ...m, estado: 'confirmado' }));
@@ -244,6 +286,7 @@ export function useGanadoInventario() {
     registrarTraslado,
     registrarAjuste,
     ajusteMasivo,
+    cargarInventarioInicial,
     confirmarPendiente,
     descartarPendiente,
   };

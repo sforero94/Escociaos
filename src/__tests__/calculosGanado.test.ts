@@ -7,6 +7,8 @@ import {
   validarSplitConfirmacion,
   cabezasDePendiente,
   construirAjustesMasivos,
+  validarCargaInicial,
+  construirMovimientosCargaInicial,
 } from '@/utils/calculosGanado';
 import type { InventarioPotreroRow } from '@/types/ganado';
 
@@ -146,5 +148,62 @@ describe('construirAjustesMasivos', () => {
     expect(ajustes).toHaveLength(2);
     expect(ajustes[0]).toMatchObject({ potrero_destino_id: 'p1', novillos_delta: 2, toros_delta: 0, notas: 'Conteo físico' });
     expect(ajustes[1]).toMatchObject({ potrero_destino_id: 'p3', novillos_delta: -2, toros_delta: -1 });
+  });
+});
+
+describe('validarCargaInicial', () => {
+  const filas = [
+    { finca_id: 'f1', novillos: 30, toros: 2 },
+    { finca_id: 'f2', novillos: 0, toros: 0 },
+  ];
+  it('acepta carga válida con nota', () => {
+    expect(validarCargaInicial(filas, 'Inventario inicial')).toBeNull();
+  });
+  it('exige nota', () => {
+    expect(validarCargaInicial(filas, '  ')).toContain('obligatoria');
+  });
+  it('rechaza negativos y no enteros', () => {
+    expect(validarCargaInicial([{ finca_id: 'f1', novillos: -1, toros: 0 }], 'n')).not.toBeNull();
+    expect(validarCargaInicial([{ finca_id: 'f1', novillos: 1.5, toros: 0 }], 'n')).not.toBeNull();
+  });
+  it('exige al menos una cabeza', () => {
+    expect(validarCargaInicial([{ finca_id: 'f1', novillos: 0, toros: 0 }], 'n')).toContain('al menos');
+  });
+});
+
+describe('construirMovimientosCargaInicial', () => {
+  it('genera un ajuste confirmado por finca con cabezas, omitiendo las vacías', () => {
+    const movs = construirMovimientosCargaInicial(
+      [
+        { finca_id: 'f1', novillos: 30, toros: 2 },
+        { finca_id: 'f2', novillos: 0, toros: 0 },
+        { finca_id: 'f3', novillos: 0, toros: 5 },
+      ],
+      { f1: 'pg1', f3: 'pg3' },
+      '2026-06-10',
+      'Inventario inicial'
+    );
+    expect(movs).toHaveLength(2);
+    expect(movs[0]).toEqual({
+      tipo: 'ajuste',
+      estado: 'confirmado',
+      fecha: '2026-06-10',
+      potrero_destino_id: 'pg1',
+      novillos_delta: 30,
+      toros_delta: 2,
+      notas: 'Inventario inicial',
+    });
+    expect(movs[1].potrero_destino_id).toBe('pg3');
+    expect(movs[1].toros_delta).toBe(5);
+  });
+
+  it('omite fincas sin potrero mapeado (defensa contra mapa incompleto)', () => {
+    const movs = construirMovimientosCargaInicial(
+      [{ finca_id: 'f1', novillos: 10, toros: 0 }],
+      {},
+      '2026-06-10',
+      'n'
+    );
+    expect(movs).toHaveLength(0);
   });
 });

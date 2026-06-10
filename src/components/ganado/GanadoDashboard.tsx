@@ -4,10 +4,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGanadoInventario } from './hooks/useGanadoInventario';
 import { GanadoSubNav } from './GanadoSubNav';
 import { AjusteMasivoDialog } from './components/AjusteMasivoDialog';
+import { InventarioInicialDialog } from './components/InventarioInicialDialog';
 import { calcularKPIsInventario, calcularVariacion, cabezasPorHaFinca } from '@/utils/calculosGanado';
 import { formatNumber } from '@/utils/format';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, SlidersHorizontal, Loader2, TrendingUp, TrendingDown } from 'lucide-react';
+import { AlertTriangle, SlidersHorizontal, Loader2, TrendingUp, TrendingDown, ClipboardPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import type { InventarioPotreroRow, GanUbicacion, GanFinca, VariacionInventario } from '@/types/ganado';
 
@@ -38,6 +39,7 @@ export function GanadoDashboard() {
   const [fincaFilter, setFincaFilter] = useState('');
   const [potreroFilter, setPotreroFilter] = useState('');
   const [showAjusteMasivo, setShowAjusteMasivo] = useState(false);
+  const [showInventarioInicial, setShowInventarioInicial] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -84,6 +86,10 @@ export function GanadoDashboard() {
 
   const kpis = useMemo(() => calcularKPIsInventario(rowsFiltradas), [rowsFiltradas]);
 
+  // Total global (sin filtros) para decidir si mostrar la carga inicial
+  const totalGlobal = useMemo(() => rows.reduce((s, r) => s + r.novillos + r.toros, 0), [rows]);
+  const sinInventario = totalGlobal === 0;
+
   return (
     <div className="min-h-screen min-h-[100dvh] bg-gradient-to-br from-background via-white to-secondary/10 p-4 lg:p-8">
       <div className="max-w-7xl mx-auto w-full">
@@ -95,12 +101,33 @@ export function GanadoDashboard() {
             <p className="text-sm text-brand-brown/70">Cabezas por ubicación, finca y potrero</p>
           </div>
           {canWrite && (
-            <Button variant="outline" onClick={() => setShowAjusteMasivo(true)}>
-              <SlidersHorizontal className="w-4 h-4 mr-2" />
-              Ajuste masivo
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowInventarioInicial(true)}>
+                <ClipboardPlus className="w-4 h-4 mr-2" />
+                Inventario inicial
+              </Button>
+              <Button variant="outline" onClick={() => setShowAjusteMasivo(true)}>
+                <SlidersHorizontal className="w-4 h-4 mr-2" />
+                Ajuste masivo
+              </Button>
+            </div>
           )}
         </div>
+
+        {sinInventario && canWrite && (
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 mb-6 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-medium text-foreground mb-1">Aún no hay inventario registrado</p>
+              <p className="text-sm text-brand-brown/70">
+                Carga el conteo inicial digitando las cabezas por finca — no necesitas tener potreros configurados.
+              </p>
+            </div>
+            <Button onClick={() => setShowInventarioInicial(true)}>
+              <ClipboardPlus className="w-4 h-4 mr-2" />
+              Cargar inventario inicial
+            </Button>
+          </div>
+        )}
 
         {pendientes > 0 && (
           <Link
@@ -233,6 +260,15 @@ export function GanadoDashboard() {
         <AjusteMasivoDialog
           open={showAjusteMasivo}
           onOpenChange={setShowAjusteMasivo}
+          rows={rows}
+          onSuccess={loadData}
+        />
+
+        <InventarioInicialDialog
+          open={showInventarioInicial}
+          onOpenChange={setShowInventarioInicial}
+          fincas={fincas}
+          ubicaciones={ubicaciones}
           rows={rows}
           onSuccess={loadData}
         />

@@ -195,3 +195,63 @@ export function construirAjustesMasivos(
       notas: nota,
     }));
 }
+
+// ---------------------------------------------------------------------------
+// Carga de inventario inicial por finca: las cabezas entran como `ajuste`
+// al potrero "General" de cada finca (creado automáticamente si no existe).
+// ---------------------------------------------------------------------------
+
+export interface CargaInicialFila {
+  finca_id: string;
+  novillos: number;
+  toros: number;
+}
+
+/**
+ * Valida la carga inicial: nota obligatoria, enteros no negativos y al
+ * menos una finca con cabezas.
+ */
+export function validarCargaInicial(filas: CargaInicialFila[], nota: string): string | null {
+  if (!nota.trim()) return 'La nota de la carga inicial es obligatoria';
+  for (const f of filas) {
+    if (!Number.isInteger(f.novillos) || !Number.isInteger(f.toros) || f.novillos < 0 || f.toros < 0) {
+      return 'Novillos y toros deben ser enteros no negativos';
+    }
+  }
+  if (!filas.some((f) => f.novillos > 0 || f.toros > 0)) {
+    return 'Ingresa al menos una cabeza en alguna finca';
+  }
+  return null;
+}
+
+/**
+ * Convierte las filas por finca en movimientos `ajuste` confirmados sobre
+ * el potrero asignado a cada finca (mapa finca_id → potrero_id). Las
+ * fincas en 0 se omiten.
+ */
+export function construirMovimientosCargaInicial(
+  filas: CargaInicialFila[],
+  potreroPorFinca: Record<string, string>,
+  fecha: string,
+  nota: string
+): {
+  tipo: 'ajuste';
+  estado: 'confirmado';
+  fecha: string;
+  potrero_destino_id: string;
+  novillos_delta: number;
+  toros_delta: number;
+  notas: string;
+}[] {
+  return filas
+    .filter((f) => (f.novillos > 0 || f.toros > 0) && potreroPorFinca[f.finca_id])
+    .map((f) => ({
+      tipo: 'ajuste' as const,
+      estado: 'confirmado' as const,
+      fecha,
+      potrero_destino_id: potreroPorFinca[f.finca_id],
+      novillos_delta: f.novillos,
+      toros_delta: f.toros,
+      notas: nota,
+    }));
+}

@@ -354,7 +354,8 @@ Live head-count inventory layered on top of the finance transactions. Hierarchy:
 Pending-confirmation flow (anti double-count): saving a `TransaccionGanadoForm` fires a DB trigger that creates a `pendiente` movement carrying the signed head count in `novillos_delta` (negative for ventas) and derived peso promedio. The user confirms it from `/ganado/movimientos`, assigning potrero + novillos/toros split (sum must equal the transaction's cabezas); only then is `gan_inventario` updated. Pendientes can be `descartado` if already registered manually; partial unique indexes block confirming the same transaction twice.
 
 Key files:
-- `src/components/ganado/GanadoDashboard.tsx` — KPIs (total cabezas, novillos, toros, variación 30 días, cabezas/ha por ubicación), cascading filters, inventory table, pending banner, bulk-adjust dialog
+- `src/components/ganado/GanadoDashboard.tsx` — KPIs (total cabezas, novillos, toros, variación 30 días, cabezas/ha por ubicación), cascading filters, inventory table, pending banner, bulk-adjust dialog, and initial-load dialog
+- `src/components/ganado/components/InventarioInicialDialog.tsx` — "Cargar inventario inicial" per finca (no potrero setup needed): heads land as confirmed `ajuste` movements on an auto-created "General" potrero per finca. Surfaced as an empty-state banner when total inventory is 0; warns on fincas that already have heads (the load sums, not replaces)
 - `src/components/ganado/GanadoMovimientos.tsx` — event log + manual registration (muerte/traslado/ajuste) + pending confirmation
 - `src/components/ganado/hooks/useGanadoInventario.ts` — all Supabase access for the module
 - `src/utils/calculosGanado.ts` — pure logic (KPIs, traslado building, split validation, bulk-adjust diffing); tested in `src/__tests__/calculosGanado.test.ts`
