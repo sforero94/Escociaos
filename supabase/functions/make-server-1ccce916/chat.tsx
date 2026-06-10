@@ -18,6 +18,15 @@ import {
   type PersistedMemory,
 } from './memory.ts';
 import { buildRadiationContext } from './radiation-context.ts';
+import {
+  buildGanadoInventorySummary,
+  renderMovimientosRecientes,
+  type GanUbicacionRow,
+  type GanFincaRow,
+  type GanPotreroRow,
+  type GanInventarioRow,
+  type GanMovimientoRow,
+} from './ganado-inventario.ts';
 
 // ============================================================================
 // TIPOS
@@ -425,6 +434,20 @@ const TOOLS: ToolDefinition[] = [
       },
     },
   },
+  {
+    name: 'get_ganado_inventory',
+    description: 'Inventario VIVO de ganado: cabezas actuales (novillos y toros) por ubicación → finca → potrero, cabezas por hectárea, peso promedio, variación de los últimos 30 días (entradas vs salidas) y movimientos pendientes de confirmar desde finanzas. Opcionalmente lista los movimientos recientes (compras, ventas, muertes, traslados, ajustes). Para el dinero de compras/ventas de ganado usa get_financial_summary con type=ganado; este tool es para el conteo físico.',
+    parameters: {
+      type: 'object',
+      properties: {
+        ubicacion_name: { type: 'string', description: 'Nombre parcial de la ubicación (San Francisco, Supata, Subachoque). Opcional.' },
+        finca_name: { type: 'string', description: 'Nombre parcial de la finca. Opcional.' },
+        include_movimientos: { type: 'boolean', description: 'Incluir lista de movimientos confirmados recientes (default false)' },
+        date_from: { type: 'string', description: 'Fecha inicio YYYY-MM-DD para los movimientos (default: hace 30 días)' },
+        date_to: { type: 'string', description: 'Fecha fin YYYY-MM-DD para los movimientos (opcional)' },
+      },
+    },
+  },
 ];
 
 // ============================================================================
@@ -485,6 +508,7 @@ async function executeTool(name: string, args: Record<string, unknown>, userId?:
       case 'get_conductivity_data': result = await execConductivityData(args); break;
       case 'get_beehive_data': result = await execBeehiveData(args); break;
       case 'get_budget_data': result = await execBudgetData(args); break;
+      case 'get_ganado_inventory': result = await execGanadoInventory(args); break;
       default: return JSON.stringify({ error: `Tool desconocido: ${name}` });
     }
 
@@ -2291,6 +2315,54 @@ async function execBudgetData(args: Record<string, unknown>): Promise<string> {
   });
 }
 
+// ----------------------------------------------------------------------------
+// Inventario vivo de ganado (issue #51): conteo físico por ubicación →
+// finca → potrero, con variación 30 días y pendientes de confirmar.
+// ----------------------------------------------------------------------------
+async function execGanadoInventory(args: Record<string, unknown>): Promise<string> {
+  const { ubicacion_name, finca_name, include_movimientos } = args as {
+    ubicacion_name?: string;
+    finca_name?: string;
+    include_movimientos?: boolean;
+  };
+  const { date_from, date_to } = validateDates(args);
+
+  const hace30 = new Date();
+  hace30.setDate(hace30.getDate() - 30);
+  const desde = date_from || hace30.toISOString().split('T')[0];
+
+  let movQuery = `select=tipo,estado,fecha,novillos_delta,toros_delta,potrero_origen_id,potrero_destino_id,peso_promedio_kg,notas&estado=eq.confirmado&fecha=gte.${e(desde)}&order=fecha.desc&limit=200`;
+  if (date_to) movQuery += `&fecha=lte.${e(date_to)}`;
+
+  const [ubicaciones, fincas, potreros, inventario, movimientos, pendientes] = await Promise.all([
+    supabaseQuery('gan_ubicaciones', 'select=id,nombre') as Promise<GanUbicacionRow[]>,
+    supabaseQuery('gan_fincas', 'select=id,nombre,ubicacion_id,hectareas,activa') as Promise<GanFincaRow[]>,
+    supabaseQuery('gan_potreros', 'select=id,nombre,finca_id,activo') as Promise<GanPotreroRow[]>,
+    supabaseQuery('gan_inventario', 'select=potrero_id,novillos,toros,peso_promedio_kg,updated_at') as Promise<GanInventarioRow[]>,
+    supabaseQuery('gan_movimientos', movQuery) as Promise<GanMovimientoRow[]>,
+    supabaseQuery('gan_movimientos', 'select=id,tipo,fecha,novillos_delta,toros_delta,peso_promedio_kg,notas&estado=eq.pendiente&order=fecha.desc') as Promise<GanMovimientoRow[]>,
+  ]);
+
+  const summary = buildGanadoInventorySummary({
+    ubicaciones,
+    fincas,
+    potreros,
+    inventario,
+    movimientos30d: movimientos,
+    pendientes,
+    filtroUbicacion: ubicacion_name,
+    filtroFinca: finca_name,
+  });
+
+  return JSON.stringify({
+    ...summary,
+    periodo_movimientos: { desde, hasta: date_to || 'hoy' },
+    ...(include_movimientos
+      ? { movimientos_recientes: renderMovimientosRecientes(movimientos, potreros, fincas) }
+      : {}),
+  });
+}
+
 // ============================================================================
 // SYSTEM PROMPT
 // ============================================================================
@@ -2353,6 +2425,7 @@ DOMINIOS DE DATOS DISPONIBLES:
 - Pronostico del clima 5-7 dias (get_weather_forecast): para decidir ventanas de aplicacion
 - Inventario: productos agricolas, stock, movimientos, compras
 - Finanzas: gastos (solo Confirmados), ingresos, transacciones de ganado, categorias, busqueda por nombre
+- Inventario vivo de ganado (get_ganado_inventory): cabezas actuales (novillos/toros) por ubicacion → finca → potrero, cabezas/ha, peso promedio, variacion 30 dias, muertes/traslados/ajustes y movimientos pendientes de confirmar. Para el DINERO de compras/ventas de ganado usa get_financial_summary type=ganado; para el CONTEO fisico usa get_ganado_inventory
 - Presupuesto: control presupuestal por concepto de gasto, ejecucion real vs presupuesto asignado, % de ejecucion, comparativo año anterior. Soporta multiples trimestres (ej: Q1+Q2)
 - Produccion: kilos por lote, kg/arbol, cosechas principal/traviesa
 - Cosechas y Despachos: kilos cosechados, preseleccion, despachos a clientes

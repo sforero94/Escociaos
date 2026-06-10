@@ -272,6 +272,7 @@ describe('lecturas24hToHorario', () => {
 
   it('averages values within same hour', () => {
     const baseTime = new Date(now.getTime() - 60 * 60 * 1000); // 1 hour ago
+    baseTime.setMinutes(0, 0, 0); // anchor to the top of the hour so t1/t2 share the bucket
     const t1 = new Date(baseTime.getTime());
     const t2 = new Date(baseTime.getTime() + 10 * 60 * 1000); // 10 min later, same hour
     const rows = [
