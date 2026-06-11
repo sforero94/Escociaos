@@ -31,6 +31,36 @@ export function useProduccionData() {
   const supabase = getSupabase();
 
   /**
+   * Consolida registros a nivel lote y sublote evitando doble conteo.
+   * Si existe un registro lote-nivel para (lote_id, ano, cosecha_tipo), lo usa.
+   * Si solo existen sublotes, los suma como si fuera un registro lote-nivel.
+   */
+  const consolidarRegistros = (records: any[]): any[] => {
+    const grupos: Record<string, any[]> = {};
+    records.forEach((r: any) => {
+      const key = `${r.lote_id}__${r.ano}__${r.cosecha_tipo}`;
+      if (!grupos[key]) grupos[key] = [];
+      grupos[key].push(r);
+    });
+
+    return Object.values(grupos).map((grupo) => {
+      const nivelLote = grupo.find((r: any) => r.sublote_id === null);
+      if (nivelLote) return nivelLote;
+
+      const base = grupo[0];
+      const kgTotales = grupo.reduce((sum: number, r: any) => sum + (Number(r.kg_totales) || 0), 0);
+      const arboles = grupo.reduce((sum: number, r: any) => sum + (r.arboles_registrados || 0), 0);
+      return {
+        ...base,
+        sublote_id: null,
+        kg_totales: kgTotales,
+        arboles_registrados: arboles,
+        kg_por_arbol: arboles > 0 ? kgTotales / arboles : 0,
+      };
+    });
+  };
+
+  /**
    * Helper para aplicar filtros comunes a queries
    */
   const aplicarFiltros = (query: any, filtros: FiltrosProduccion) => {
@@ -60,28 +90,32 @@ export function useProduccionData() {
       setLoading(true);
       setError(null);
 
-      // Obtener registros de produccion con datos de lote (solo registros a nivel lote)
+      // Obtener todos los registros (lote y sublote) y consolidar para evitar doble conteo
       let query = supabase
         .from('produccion')
         .select(
           `
+          sublote_id,
           kg_totales,
           arboles_registrados,
           kg_por_arbol,
           lote_id,
+          ano,
+          cosecha_tipo,
           lotes!inner(area_hectareas, activo)
         `
-        )
-        .is('sublote_id', null); // Solo registros a nivel lote para KPIs
+        );
 
       query = aplicarFiltros(query, filtros);
-      const { data, error: queryError } = await query;
+      const { data: rawData, error: queryError } = await query;
 
       if (queryError) throw queryError;
 
+      const data = consolidarRegistros(rawData || []);
+
       // Calcular totales
       const produccionTotal =
-        data?.reduce((sum, r) => sum + (Number(r.kg_totales) || 0), 0) || 0;
+        data.reduce((sum, r) => sum + (Number(r.kg_totales) || 0), 0) || 0;
       const totalArboles =
         data?.reduce((sum, r) => sum + (r.arboles_registrados || 0), 0) || 0;
       const rendimientoPromedio =
@@ -141,11 +175,13 @@ export function useProduccionData() {
       setLoading(true);
       setError(null);
 
-      // Obtener datos a nivel lote
+      // Obtener todos los registros y consolidar para evitar doble conteo
       let query = supabase
         .from('produccion')
         .select(
           `
+          sublote_id,
+          lote_id,
           ano,
           cosecha_tipo,
           kg_totales,
@@ -153,13 +189,14 @@ export function useProduccionData() {
           arboles_registrados,
           lotes!inner(nombre, area_hectareas)
         `
-        )
-        .is('sublote_id', null); // Solo registros a nivel lote
+        );
 
       query = aplicarFiltros(query, filtros);
-      const { data, error: queryError } = await query;
+      const { data: rawData, error: queryError } = await query;
 
       if (queryError) throw queryError;
+
+      const data = consolidarRegistros(rawData || []);
 
       // Agrupar por cosecha y luego por lote
       const cosechaMap: Record<
@@ -340,25 +377,28 @@ export function useProduccionData() {
       setLoading(true);
       setError(null);
 
-      // Obtener datos a nivel lote con fecha_siembra
+      // Obtener todos los registros y consolidar para evitar doble conteo
       let query = supabase
         .from('produccion')
         .select(
           `
+          sublote_id,
           lote_id,
           ano,
+          cosecha_tipo,
           kg_totales,
           kg_por_arbol,
           arboles_registrados,
           lotes!inner(nombre, fecha_siembra, area_hectareas)
         `
-        )
-        .is('sublote_id', null);
+        );
 
       query = aplicarFiltros(query, filtros);
-      const { data, error: queryError } = await query;
+      const { data: rawData, error: queryError } = await query;
 
       if (queryError) throw queryError;
+
+      const data = consolidarRegistros(rawData || []);
 
       // Agrupar por lote y calcular promedios
       const loteMap: Record<
