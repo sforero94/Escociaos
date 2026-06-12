@@ -9,8 +9,10 @@
  *   - Overhead       : fin_gastos (estado='Confirmado', negocio 'Aguacate Hass',
  *                      fecha del año) ⋈ fin_categorias_gastos (nombre)
  *   - Árboles por lote: lotes (id, nombre, total_arboles)
- *   - Producción     : produccion (lote_id, ano, cosecha_tipo, kg_totales,
- *                      sublote_id IS NULL para nivel lote)
+ *   - Producción     : produccion (lote_id, sublote_id, ano, cosecha_tipo, kg_totales)
+ *                      Consolidado: si existe registro nivel-lote (sublote_id IS NULL)
+ *                      para (lote_id, cosecha_tipo), se usa ese; de lo contrario
+ *                      se suman sublotes para evitar doble conteo.
  *
  * NO modifica useProduccionData.ts.
  */
@@ -229,34 +231,53 @@ export function useCostoKg(): UseCostoKgReturn {
       }
 
       // ------------------------------------------------------------------
-      // 5. Producción por lote y cosecha (solo registros nivel lote:
-      //    sublote_id IS NULL, para evitar doble conteo)
+      // 5. Producción por lote y cosecha.
+      //    Consolidamos igual que consolidarRegistros en useProduccionData:
+      //    si existe un registro nivel-lote (sublote_id IS NULL) para el
+      //    grupo (lote_id, ano, cosecha_tipo), se usa ese; de lo contrario
+      //    se suman los registros de sublote para evitar doble conteo.
       // ------------------------------------------------------------------
       const { data: produccionData, error: prodAnualErr } = await supabase
         .from('produccion')
-        .select('lote_id, cosecha_tipo, kg_totales')
-        .eq('ano', ano)
-        .is('sublote_id', null);
+        .select('lote_id, sublote_id, cosecha_tipo, kg_totales')
+        .eq('ano', ano);
 
       if (prodAnualErr) throw new Error(`Produccion: ${prodAnualErr.message}`);
+
+      // Agrupar por (lote_id, cosecha_tipo) y aplicar lógica de consolidación
+      type RawProd = {
+        lote_id: string;
+        sublote_id: string | null;
+        cosecha_tipo: CosechaTipo;
+        kg_totales: number | string;
+      };
+
+      const grupos = new Map<string, RawProd[]>();
+      for (const p of (produccionData ?? []) as RawProd[]) {
+        if (!p.lote_id) continue;
+        const key = `${p.lote_id}__${p.cosecha_tipo}`;
+        const arr = grupos.get(key) ?? [];
+        arr.push(p);
+        grupos.set(key, arr);
+      }
 
       const produccionPorLoteCosecha = new Map<
         string,
         { cosecha_tipo: CosechaTipo; kg: number }[]
       >();
 
-      for (const p of (produccionData ?? []) as {
-        lote_id: string;
-        cosecha_tipo: CosechaTipo;
-        kg_totales: number | string;
-      }[]) {
-        if (!p.lote_id) continue;
-        const arr = produccionPorLoteCosecha.get(p.lote_id) ?? [];
-        arr.push({
-          cosecha_tipo: p.cosecha_tipo,
-          kg: Number(p.kg_totales) || 0,
-        });
-        produccionPorLoteCosecha.set(p.lote_id, arr);
+      for (const grupo of grupos.values()) {
+        const nivelLote = grupo.find((r) => r.sublote_id === null);
+        const canonical = nivelLote ?? null;
+        const kg = canonical
+          ? Number(canonical.kg_totales) || 0
+          : grupo.reduce((s, r) => s + (Number(r.kg_totales) || 0), 0);
+
+        const loteId = grupo[0].lote_id;
+        const cosechaTipo = grupo[0].cosecha_tipo;
+        const arr = produccionPorLoteCosecha.get(loteId) ?? [];
+        arr.push({ cosecha_tipo: cosechaTipo, kg });
+        produccionPorLoteCosecha.set(loteId, arr);
       }
 
       // ------------------------------------------------------------------

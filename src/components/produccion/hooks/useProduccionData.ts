@@ -165,6 +165,142 @@ export function useProduccionData() {
   };
 
   /**
+   * Cargar datos de exportacion/nacional por cosecha para stacked bar.
+   * Si las columnas no existen aún (migración pendiente), devuelve array vacío
+   * en lugar de romper el componente.
+   */
+  const getProduccionCalidad = async (
+    filtros: FiltrosProduccion
+  ): Promise<
+    {
+      cosecha: string;
+      cosecha_label: string;
+      kg_exportacion: number;
+      kg_nacional: number;
+      kg_sin_desglose: number;
+    }[]
+  > => {
+    try {
+      // Intentamos incluir kg_exportacion y kg_nacional; si la columna no existe
+      // Supabase devuelve error y lo manejamos de forma silenciosa.
+      let query = supabase
+        .from('produccion')
+        .select(
+          `
+          sublote_id,
+          lote_id,
+          ano,
+          cosecha_tipo,
+          kg_totales,
+          kg_exportacion,
+          kg_nacional,
+          lotes!inner(nombre)
+        `
+        );
+
+      query = aplicarFiltros(query, filtros);
+      const { data: rawData, error: queryError } = await query;
+
+      // Si la columna no existe (código 42703 = undefined_column), retornar vacío
+      if (queryError) {
+        if (
+          queryError.code === '42703' ||
+          queryError.message?.includes('kg_exportacion') ||
+          queryError.message?.includes('kg_nacional')
+        ) {
+          return [];
+        }
+        throw queryError;
+      }
+
+      const data = consolidarRegistrosConCalidad(rawData || []);
+
+      // Agrupar por cosecha
+      const cosechaMap: Record<
+        string,
+        {
+          ano: number;
+          tipo: CosechaTipo;
+          kg_exportacion: number;
+          kg_nacional: number;
+          kg_sin_desglose: number;
+        }
+      > = {};
+
+      for (const record of data) {
+        const cosechaCode = formatCosechaCode(record.ano, record.cosecha_tipo);
+        if (!cosechaMap[cosechaCode]) {
+          cosechaMap[cosechaCode] = {
+            ano: record.ano,
+            tipo: record.cosecha_tipo,
+            kg_exportacion: 0,
+            kg_nacional: 0,
+            kg_sin_desglose: 0,
+          };
+        }
+        const entry = cosechaMap[cosechaCode];
+        const expo = Number(record.kg_exportacion) || 0;
+        const nac = Number(record.kg_nacional) || 0;
+        const total = Number(record.kg_totales) || 0;
+        if (expo > 0 || nac > 0) {
+          entry.kg_exportacion += expo;
+          entry.kg_nacional += nac;
+        } else {
+          entry.kg_sin_desglose += total;
+        }
+      }
+
+      return COSECHAS_ORDEN.filter((code) => cosechaMap[code]).map((code) => {
+        const d = cosechaMap[code];
+        return {
+          cosecha: code,
+          cosecha_label: formatCosechaLabel(d.ano, d.tipo),
+          kg_exportacion: d.kg_exportacion,
+          kg_nacional: d.kg_nacional,
+          kg_sin_desglose: d.kg_sin_desglose,
+        };
+      });
+    } catch (err: any) {
+      // Error inesperado: log silencioso, no romper el dashboard
+      console.warn('getProduccionCalidad error (non-fatal):', err?.message);
+      return [];
+    }
+  };
+
+  /**
+   * Variante de consolidarRegistros que preserva kg_exportacion/kg_nacional
+   * al consolidar sublotes en nivel-lote.
+   */
+  const consolidarRegistrosConCalidad = (records: any[]): any[] => {
+    const grupos: Record<string, any[]> = {};
+    records.forEach((r: any) => {
+      const key = `${r.lote_id}__${r.ano}__${r.cosecha_tipo}`;
+      if (!grupos[key]) grupos[key] = [];
+      grupos[key].push(r);
+    });
+
+    return Object.values(grupos).map((grupo) => {
+      const nivelLote = grupo.find((r: any) => r.sublote_id === null);
+      if (nivelLote) return nivelLote;
+
+      const base = grupo[0];
+      const kgTotales = grupo.reduce((sum: number, r: any) => sum + (Number(r.kg_totales) || 0), 0);
+      const kgExpo = grupo.reduce((sum: number, r: any) => sum + (Number(r.kg_exportacion) || 0), 0);
+      const kgNac = grupo.reduce((sum: number, r: any) => sum + (Number(r.kg_nacional) || 0), 0);
+      const arboles = grupo.reduce((sum: number, r: any) => sum + (r.arboles_registrados || 0), 0);
+      return {
+        ...base,
+        sublote_id: null,
+        kg_totales: kgTotales,
+        kg_exportacion: kgExpo || null,
+        kg_nacional: kgNac || null,
+        arboles_registrados: arboles,
+        kg_por_arbol: arboles > 0 ? kgTotales / arboles : 0,
+      };
+    });
+  };
+
+  /**
    * Cargar datos para grafico de tendencias historicas (LineChart)
    * Agrupa por cosecha (P23, T23, etc.) con una linea por lote
    */
@@ -612,5 +748,6 @@ export function useProduccionData() {
     getSublotesByLote,
     createProduccion,
     getProduccionList,
+    getProduccionCalidad,
   };
 }

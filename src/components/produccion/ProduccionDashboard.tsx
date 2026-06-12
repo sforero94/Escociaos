@@ -1,33 +1,39 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { RoleGuard } from '../auth/RoleGuard';
 import { FiltrosProduccion } from './components/FiltrosProduccion';
 import { KPICardsProduccion } from './components/KPICardsProduccion';
 import { GraficoTendenciasHistorico } from './components/GraficoTendenciasHistorico';
 import { GraficoRendimientoSublotes } from './components/GraficoRendimientoSublotes';
-import { GraficoEdadRendimiento } from './components/GraficoEdadRendimiento';
-import { RegistrarProduccionDialog } from './components/RegistrarProduccionDialog';
+import { GraficoCalidadCosecha } from './components/GraficoCalidadCosecha';
+import { RentabilidadTab } from './components/RentabilidadTab';
+import { CapturaCosechaGrid } from './components/CapturaCosechaGrid';
 import { useProduccionData } from './hooks/useProduccionData';
+import { useCostoKg } from './hooks/useCostoKg';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Button } from '../ui/button';
-import { Plus, TrendingUp, Grid3X3, Calendar } from 'lucide-react';
+import { Plus, TrendingUp, DollarSign } from 'lucide-react';
 import type {
   FiltrosProduccion as FiltrosType,
   KPIProduccion,
   TendenciaHistoricaData,
   RendimientoSubloteData,
   TopSubloteData,
-  EdadRendimientoData,
   LoteProduccion,
 } from '../../types/produccion';
-import { FILTROS_PRODUCCION_DEFAULT, LOT_COLORS } from '../../types/produccion';
+import { FILTROS_PRODUCCION_DEFAULT } from '../../types/produccion';
+import type { DatosCostoKg } from './hooks/useCostoKg';
 
 /**
  * Dashboard Principal de Produccion
- * Muestra historico de cosechas, rendimiento por sublote y analisis de edad
+ *
+ * Estructura:
+ *   KPIs (3): kg totales, kg/árbol ponderado, costo/kg
+ *   Tab 1 — Rendimiento: gráfico tendencia histórica + sublotes + calidad exportación
+ *   Tab 2 — Rentabilidad: costo/kg por lote vs precio de venta
  */
 export function ProduccionDashboard() {
   const [filtros, setFiltros] = useState<FiltrosType>(FILTROS_PRODUCCION_DEFAULT);
-  const [activeTab, setActiveTab] = useState('historico');
+  const [activeTab, setActiveTab] = useState('rendimiento');
   const [dialogOpen, setDialogOpen] = useState(false);
 
   // Data states
@@ -35,8 +41,13 @@ export function ProduccionDashboard() {
   const [tendencias, setTendencias] = useState<TendenciaHistoricaData[]>([]);
   const [sublotesData, setSublotesData] = useState<RendimientoSubloteData[]>([]);
   const [topSublotes, setTopSublotes] = useState<TopSubloteData[]>([]);
-  const [edadData, setEdadData] = useState<EdadRendimientoData[]>([]);
   const [lotes, setLotes] = useState<LoteProduccion[]>([]);
+  const [calidadData, setCalidadData] = useState<
+    { cosecha: string; cosecha_label: string; kg_exportacion: number; kg_nacional: number; kg_sin_desglose: number }[]
+  >([]);
+
+  // Costo/kg para KPI card (se calcula para el año más alto seleccionado)
+  const [datosCosto, setDatosCosto] = useState<DatosCostoKg | null>(null);
 
   const {
     loading,
@@ -45,49 +56,72 @@ export function ProduccionDashboard() {
     getTendenciasHistoricas,
     getRendimientoSublotes,
     getTopSublotes,
-    getEdadRendimiento,
     getLotes,
+    getProduccionCalidad,
   } = useProduccionData();
 
-  const cargarLotes = async () => {
+  const { calcular, loading: loadingCosto } = useCostoKg();
+
+  const cargarLotes = useCallback(async () => {
     try {
       const lotesData = await getLotes();
       setLotes(lotesData);
     } catch (err) {
       console.error('Error loading lotes:', err);
     }
-  };
+  }, [getLotes]);
 
-  const cargarDatos = async () => {
+  const cargarCostoKgKPI = useCallback(async (anos: number[]) => {
+    // Solo calcular para el año más alto seleccionado (evitar N llamadas)
+    const anoRef = [...anos].sort().at(-1);
+    if (!anoRef) {
+      setDatosCosto(null);
+      return;
+    }
     try {
-      const [kpisData, tendenciasData, sublotesResult, topResult, edadResult] =
+      const datos = await calcular({ ano: anoRef });
+      setDatosCosto(datos);
+    } catch (err) {
+      console.warn('Error cargando costo/kg para KPI:', err);
+      setDatosCosto(null);
+    }
+  }, [calcular]);
+
+  const cargarDatos = useCallback(async () => {
+    try {
+      const [kpisData, tendenciasData, sublotesResult, topResult, calidadResult] =
         await Promise.all([
           getKPIs(filtros),
           getTendenciasHistoricas(filtros),
           getRendimientoSublotes(filtros),
           getTopSublotes(filtros, 10),
-          getEdadRendimiento(filtros),
+          getProduccionCalidad(filtros),
         ]);
 
       setKpis(kpisData);
       setTendencias(tendenciasData);
       setSublotesData(sublotesResult);
       setTopSublotes(topResult);
-      setEdadData(edadResult);
+      setCalidadData(calidadResult);
     } catch (err) {
       console.error('Error loading production data:', err);
     }
-  };
+  }, [filtros, getKPIs, getTendenciasHistoricas, getRendimientoSublotes, getTopSublotes, getProduccionCalidad]);
 
   // Cargar lotes al inicio
   useEffect(() => {
     cargarLotes();
-  }, []);
+  }, [cargarLotes]);
 
   // Cargar datos cuando cambien los filtros
   useEffect(() => {
     cargarDatos();
-  }, [filtros]);
+  }, [cargarDatos]);
+
+  // Cargar costo/kg para KPI cuando cambien los años seleccionados
+  useEffect(() => {
+    cargarCostoKgKPI(filtros.anos);
+  }, [filtros.anos, cargarCostoKgKPI]);
 
   const handleFiltrosChange = (nuevosFiltros: FiltrosType) => {
     setFiltros(nuevosFiltros);
@@ -118,12 +152,12 @@ export function ProduccionDashboard() {
       <div className="space-y-6">
         {/* Header */}
         <div className="relative">
-          <div className="absolute -top-4 -left-4 w-32 h-32 bg-primary/5 rounded-full blur-2xl"></div>
+          <div className="absolute -top-4 -left-4 w-32 h-32 bg-primary/5 rounded-full blur-2xl" />
           <div className="relative flex items-start justify-between">
             <div>
               <h1 className="text-foreground mb-2">Produccion</h1>
               <p className="text-brand-brown/70">
-                Historico de cosechas y rendimiento - Escocia Hass
+                Historico de cosechas y rendimiento — Escocia Hass
               </p>
             </div>
             <Button
@@ -143,45 +177,48 @@ export function ProduccionDashboard() {
           onFiltrosChange={handleFiltrosChange}
         />
 
-        {/* KPI Cards */}
-        <KPICardsProduccion kpis={kpis} loading={loading} />
+        {/* KPI Cards — 3 tarjetas */}
+        <KPICardsProduccion
+          kpis={kpis}
+          loading={loading}
+          datosCosto={datosCosto}
+          loadingCosto={loadingCosto}
+          anosSeleccionados={filtros.anos}
+        />
 
-        {/* Tabs */}
+        {/* Tabs — 2 pestañas */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="bg-white border border-gray-200 p-1 rounded-lg">
             <TabsTrigger
-              value="historico"
+              value="rendimiento"
               className="flex items-center gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
             >
               <TrendingUp className="w-4 h-4" />
-              Historico
+              Rendimiento
             </TabsTrigger>
             <TabsTrigger
-              value="sublotes"
+              value="rentabilidad"
               className="flex items-center gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
             >
-              <Grid3X3 className="w-4 h-4" />
-              Sublotes
-            </TabsTrigger>
-            <TabsTrigger
-              value="edad"
-              className="flex items-center gap-2 data-[state=active]:bg-primary/10 data-[state=active]:text-primary"
-            >
-              <Calendar className="w-4 h-4" />
-              Edad vs Rendimiento
+              <DollarSign className="w-4 h-4" />
+              Rentabilidad
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="historico" className="mt-6">
+          {/* Tab 1: Rendimiento — tendencia histórica + sublotes + calidad */}
+          <TabsContent value="rendimiento" className="mt-6 space-y-6">
+            {/* Gráfico de tendencias (lead chart) */}
             <GraficoTendenciasHistorico
               data={tendencias}
               metrica={filtros.metrica}
               lotes={lotesEnDatos}
               loading={loading}
             />
-          </TabsContent>
 
-          <TabsContent value="sublotes" className="mt-6">
+            {/* Distribución exportación/nacional (solo si hay datos con desglose) */}
+            <GraficoCalidadCosecha data={calidadData} loading={loading} />
+
+            {/* Sublotes — scatter + top 10 */}
             <GraficoRendimientoSublotes
               scatterData={sublotesData}
               topData={topSublotes}
@@ -190,12 +227,9 @@ export function ProduccionDashboard() {
             />
           </TabsContent>
 
-          <TabsContent value="edad" className="mt-6">
-            <GraficoEdadRendimiento
-              data={edadData}
-              metrica={filtros.metrica}
-              loading={loading}
-            />
+          {/* Tab 2: Rentabilidad — costo/kg por lote vs precio de venta */}
+          <TabsContent value="rentabilidad" className="mt-6">
+            <RentabilidadTab filtros={filtros} />
           </TabsContent>
         </Tabs>
 
@@ -211,11 +245,10 @@ export function ProduccionDashboard() {
           </div>
         )}
 
-        {/* Dialog para registrar produccion */}
-        <RegistrarProduccionDialog
+        {/* Grilla de captura masiva de cosechas */}
+        <CapturaCosechaGrid
           open={dialogOpen}
           onOpenChange={setDialogOpen}
-          lotes={lotes}
           onSuccess={handleProduccionCreated}
         />
       </div>
