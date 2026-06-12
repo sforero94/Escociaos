@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { getSupabase } from '../../../utils/supabase/client';
 import type {
   FiltrosProduccion,
@@ -26,8 +25,6 @@ import {
  * Hook personalizado para cargar datos de produccion/cosechas
  */
 export function useProduccionData() {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const supabase = getSupabase();
 
   /**
@@ -87,8 +84,6 @@ export function useProduccionData() {
    */
   const getKPIs = async (filtros: FiltrosProduccion): Promise<KPIProduccion> => {
     try {
-      setLoading(true);
-      setError(null);
 
       // Obtener todos los registros (lote y sublote) y consolidar para evitar doble conteo
       let query = supabase
@@ -157,10 +152,7 @@ export function useProduccionData() {
         periodo,
       };
     } catch (err: any) {
-      setError(err.message);
       throw err;
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -308,8 +300,6 @@ export function useProduccionData() {
     filtros: FiltrosProduccion
   ): Promise<TendenciaHistoricaData[]> => {
     try {
-      setLoading(true);
-      setError(null);
 
       // Obtener todos los registros y consolidar para evitar doble conteo
       let query = supabase
@@ -394,10 +384,7 @@ export function useProduccionData() {
 
       return tendencias;
     } catch (err: any) {
-      setError(err.message);
       throw err;
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -408,8 +395,6 @@ export function useProduccionData() {
     filtros: FiltrosProduccion
   ): Promise<RendimientoSubloteData[]> => {
     try {
-      setLoading(true);
-      setError(null);
 
       // Solo obtener registros a nivel sublote
       let query = supabase
@@ -455,10 +440,7 @@ export function useProduccionData() {
         }) || []
       );
     } catch (err: any) {
-      setError(err.message);
       throw err;
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -498,7 +480,6 @@ export function useProduccionData() {
         ranking: i + 1,
       }));
     } catch (err: any) {
-      setError(err.message);
       throw err;
     }
   };
@@ -510,8 +491,6 @@ export function useProduccionData() {
     filtros: FiltrosProduccion
   ): Promise<EdadRendimientoData[]> => {
     try {
-      setLoading(true);
-      setError(null);
 
       // Obtener todos los registros y consolidar para evitar doble conteo
       let query = supabase
@@ -601,10 +580,7 @@ export function useProduccionData() {
           };
         });
     } catch (err: any) {
-      setError(err.message);
       throw err;
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -628,19 +604,14 @@ export function useProduccionData() {
    * Cargar lista de lotes para filtros
    */
   const getLotes = async (): Promise<LoteProduccion[]> => {
-    try {
-      const { data, error: queryError } = await supabase
-        .from('lotes')
-        .select('id, nombre, area_hectareas, total_arboles, fecha_siembra, activo')
-        .eq('activo', true)
-        .order('numero_orden', { ascending: true });
+    const { data, error: queryError } = await supabase
+      .from('lotes')
+      .select('id, nombre, area_hectareas, total_arboles, fecha_siembra, activo')
+      .eq('activo', true)
+      .order('numero_orden', { ascending: true });
 
-      if (queryError) throw queryError;
-      return (data || []) as unknown as LoteProduccion[];
-    } catch (err: any) {
-      setError(err.message);
-      throw err;
-    }
+    if (queryError) throw queryError;
+    return (data || []) as unknown as LoteProduccion[];
   };
 
   /**
@@ -659,7 +630,6 @@ export function useProduccionData() {
       if (queryError) throw queryError;
       return (data || []) as unknown as SubloteProduccion[];
     } catch (err: any) {
-      setError(err.message);
       throw err;
     }
   };
@@ -670,34 +640,24 @@ export function useProduccionData() {
   const createProduccion = async (
     formData: ProduccionFormData
   ): Promise<Produccion> => {
-    try {
-      setLoading(true);
-      setError(null);
+    const { data, error: insertError } = await supabase
+      .from('produccion')
+      .insert([
+        {
+          lote_id: formData.lote_id,
+          sublote_id: formData.sublote_id || null,
+          ano: formData.ano,
+          cosecha_tipo: formData.cosecha_tipo,
+          kg_totales: formData.kg_totales,
+          arboles_registrados: formData.arboles_registrados,
+          observaciones: formData.observaciones,
+        },
+      ])
+      .select()
+      .single();
 
-      const { data, error: insertError } = await supabase
-        .from('produccion')
-        .insert([
-          {
-            lote_id: formData.lote_id,
-            sublote_id: formData.sublote_id || null,
-            ano: formData.ano,
-            cosecha_tipo: formData.cosecha_tipo,
-            kg_totales: formData.kg_totales,
-            arboles_registrados: formData.arboles_registrados,
-            observaciones: formData.observaciones,
-          },
-        ])
-        .select()
-        .single();
-
-      if (insertError) throw insertError;
-      return data as unknown as Produccion;
-    } catch (err: any) {
-      setError(err.message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
+    if (insertError) throw insertError;
+    return data as unknown as Produccion;
   };
 
   /**
@@ -706,38 +666,20 @@ export function useProduccionData() {
   const getProduccionList = async (
     filtros: FiltrosProduccion
   ): Promise<Produccion[]> => {
-    try {
-      setLoading(true);
-      setError(null);
+    let query = supabase
+      .from('produccion')
+      .select('*, lotes(nombre), sublotes(nombre)')
+      .order('ano', { ascending: false })
+      .order('cosecha_tipo', { ascending: true });
 
-      let query = supabase
-        .from('produccion')
-        .select(
-          `
-          *,
-          lotes(nombre),
-          sublotes(nombre)
-        `
-        )
-        .order('ano', { ascending: false })
-        .order('cosecha_tipo', { ascending: true });
+    query = aplicarFiltros(query, filtros);
+    const { data, error: queryError } = await query;
 
-      query = aplicarFiltros(query, filtros);
-      const { data, error: queryError } = await query;
-
-      if (queryError) throw queryError;
-      return (data || []) as unknown as Produccion[];
-    } catch (err: any) {
-      setError(err.message);
-      throw err;
-    } finally {
-      setLoading(false);
-    }
+    if (queryError) throw queryError;
+    return (data || []) as unknown as Produccion[];
   };
 
   return {
-    loading,
-    error,
     getKPIs,
     getTendenciasHistoricas,
     getRendimientoSublotes,
