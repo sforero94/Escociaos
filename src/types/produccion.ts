@@ -20,6 +20,10 @@ export interface Produccion {
   kg_totales: number;
   arboles_registrados: number;
   kg_por_arbol: number; // Generated column
+  /** KG destinados a exportación. NULL en registros históricos sin desglose de calidad. */
+  kg_exportacion?: number | null;
+  /** KG destinados a mercado nacional. NULL en registros históricos sin desglose de calidad. */
+  kg_nacional?: number | null;
   observaciones?: string;
   created_at: string;
   updated_at: string;
@@ -135,7 +139,110 @@ export interface ProduccionFormData {
   cosecha_tipo: CosechaTipo;
   kg_totales: number;
   arboles_registrados: number;
+  /** KG destinados a exportación. Debe satisfacer kg_exportacion + kg_nacional = kg_totales cuando ambos son non-null. */
+  kg_exportacion?: number | null;
+  /** KG destinados a mercado nacional. */
+  kg_nacional?: number | null;
   observaciones?: string;
+}
+
+// ============================================================================
+// COST ENGINE TYPES
+// ============================================================================
+
+/** Insumos consumidos en movimientos_diarios_productos para un lote en un año. */
+export interface InsumoLoteAnual {
+  lote_id: string;
+  /** Costo total de insumos (cantidad_utilizada × precio_unitario del producto). */
+  costo_insumos: number;
+}
+
+/** Mano de obra de registros_trabajo para un lote en un año. */
+export interface LaborLoteAnual {
+  lote_id: string;
+  /** Suma de costo_jornal de registros_trabajo con lote_id asignado. */
+  costo_labor: number;
+  /** Suma de fraccion_jornal. */
+  jornales: number;
+}
+
+/** Gasto overhead de la finca (fin_gastos Confirmado, negocio Aguacate Hass,
+ *  excluyendo categorías que ya se cuentan como costo directo). */
+export interface OverheadFarmaAnual {
+  ano: number;
+  total: number;
+}
+
+/** Info básica de un lote necesaria para el cálculo de costos. */
+export interface LoteInfoCosto {
+  id: string;
+  nombre: string;
+  /** Ároles totales (GENERATED column en DB). NULL o 0 → excluir de asignación overhead. */
+  total_arboles: number;
+}
+
+/** Resultado de costo por lote para un año. */
+export interface CostoLoteAnual {
+  lote_id: string;
+  lote_nombre: string;
+  ano: number;
+  arboles: number;
+  /** Σ costo_jornal de registros_trabajo lote-tagged del año. */
+  costo_labor: number;
+  /** Σ cantidad_utilizada × precio_unitario de insumos lote-tagged del año. */
+  costo_insumos: number;
+  /** costo_labor + costo_insumos */
+  costo_directo: number;
+  /** Porción del overhead de finca asignada a este lote (por proporción de árboles). */
+  overhead_asignado: number;
+  /** costo_directo + overhead_asignado */
+  costo_total: number;
+}
+
+/** Resultado de costo/kg para un lote y año específico. */
+export interface CostoKgResult {
+  lote_id: string;
+  lote_nombre: string;
+  ano: number;
+  /** null cuando kg_totales <= 0 o arboles <= 0 */
+  costo_kg: number | null;
+  costo_total: number;
+  kg_totales: number;
+  /** Desglose por cosecha (Principal/Traviesa) cuando hay datos de producción para ambas. */
+  por_cosecha: CostoKgCosecha[];
+}
+
+/** Desglose de costo total por tipo de cosecha, proporcional a los kg. */
+export interface CostoKgCosecha {
+  cosecha_tipo: CosechaTipo;
+  kg: number;
+  /** costo_total_lote × (kg_cosecha / kg_totales_lote) */
+  costo_asignado: number;
+  /** Mismo $/kg que el lote (el split es solo del $ total, no de la tasa). */
+  costo_kg: number | null;
+}
+
+/** Fallback farm-level cost/kg para años sin desglose por lote (2023–2025). */
+export interface CostoKgFarmFallback {
+  ano: number;
+  /** null si kg_totales_farm <= 0 */
+  costo_kg: number | null;
+  costo_total_farm: number;
+  kg_totales_farm: number;
+  /** Indica que es estimación a nivel finca, sin desglose por lote. */
+  es_fallback: true;
+}
+
+/** Parámetros de entrada para el motor de costo. */
+export interface ParametrosCostoKg {
+  /** Año a calcular (>= 2026 para costo por lote; años anteriores usan fallback). */
+  ano: number;
+  /**
+   * Nombres de categorías de gastos a EXCLUIR del overhead de finca porque ya
+   * se cuentan como costo directo (labor/insumos). Ajustable por el llamador.
+   * Default: ['Mano de Obra', 'Alimentos y Fertilizantes', 'Control de Plagas']
+   */
+  categoriasExcluidas?: string[];
 }
 
 // ============================================================================
