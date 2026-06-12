@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { RoleGuard } from '../auth/RoleGuard';
 import { FiltrosProduccion } from './components/FiltrosProduccion';
 import { KPICardsProduccion } from './components/KPICardsProduccion';
@@ -23,20 +23,13 @@ import type {
 import { FILTROS_PRODUCCION_DEFAULT } from '../../types/produccion';
 import type { DatosCostoKg } from './hooks/useCostoKg';
 
-/**
- * Dashboard Principal de Produccion
- *
- * Estructura:
- *   KPIs (3): kg totales, kg/árbol ponderado, costo/kg
- *   Tab 1 — Rendimiento: gráfico tendencia histórica + sublotes + calidad exportación
- *   Tab 2 — Rentabilidad: costo/kg por lote vs precio de venta
- */
 export function ProduccionDashboard() {
   const [filtros, setFiltros] = useState<FiltrosType>(FILTROS_PRODUCCION_DEFAULT);
   const [activeTab, setActiveTab] = useState('rendimiento');
   const [dialogOpen, setDialogOpen] = useState(false);
+  // Incrementar para forzar recarga tras guardar sin cambiar filtros
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  // Data states
   const [kpis, setKpis] = useState<KPIProduccion | null>(null);
   const [tendencias, setTendencias] = useState<TendenciaHistoricaData[]>([]);
   const [sublotesData, setSublotesData] = useState<RendimientoSubloteData[]>([]);
@@ -45,13 +38,14 @@ export function ProduccionDashboard() {
   const [calidadData, setCalidadData] = useState<
     { cosecha: string; cosecha_label: string; kg_exportacion: number; kg_nacional: number; kg_sin_desglose: number }[]
   >([]);
-
-  // Costo/kg para KPI card (se calcula para el año más alto seleccionado)
   const [datosCosto, setDatosCosto] = useState<DatosCostoKg | null>(null);
+  const [loadingData, setLoadingData] = useState(false);
+  const [loadingCostoKPI, setLoadingCostoKPI] = useState(false);
+  const [errorData, setErrorData] = useState<string | null>(null);
 
+  // Usamos refs para obtener siempre la versión actual de las funciones del hook
+  // sin incluirlas como deps (se recrean en cada render pero su lógica es estable).
   const {
-    loading,
-    error,
     getKPIs,
     getTendenciasHistoricas,
     getRendimientoSublotes,
@@ -60,68 +54,78 @@ export function ProduccionDashboard() {
     getProduccionCalidad,
   } = useProduccionData();
 
-  const { calcular, loading: loadingCosto } = useCostoKg();
+  const { calcular } = useCostoKg();
 
-  const cargarLotes = useCallback(async () => {
-    try {
-      const lotesData = await getLotes();
-      setLotes(lotesData);
-    } catch (err) {
-      console.error('Error loading lotes:', err);
-    }
-  }, [getLotes]);
+  const getKPIsRef = useRef(getKPIs);
+  const getTendenciasRef = useRef(getTendenciasHistoricas);
+  const getRendimientoRef = useRef(getRendimientoSublotes);
+  const getTopRef = useRef(getTopSublotes);
+  const getLotesRef = useRef(getLotes);
+  const getCalidadRef = useRef(getProduccionCalidad);
+  const calcularRef = useRef(calcular);
 
-  const cargarCostoKgKPI = useCallback(async (anos: number[]) => {
-    // Solo calcular para el año más alto seleccionado (evitar N llamadas)
-    const anoRef = [...anos].sort().at(-1);
-    if (!anoRef) {
-      setDatosCosto(null);
-      return;
-    }
-    try {
-      const datos = await calcular({ ano: anoRef });
-      setDatosCosto(datos);
-    } catch (err) {
-      console.warn('Error cargando costo/kg para KPI:', err);
-      setDatosCosto(null);
-    }
-  }, [calcular]);
+  // Mantener refs actualizadas sin disparar efectos
+  getKPIsRef.current = getKPIs;
+  getTendenciasRef.current = getTendenciasHistoricas;
+  getRendimientoRef.current = getRendimientoSublotes;
+  getTopRef.current = getTopSublotes;
+  getLotesRef.current = getLotes;
+  getCalidadRef.current = getProduccionCalidad;
+  calcularRef.current = calcular;
 
-  const cargarDatos = useCallback(async () => {
-    try {
-      const [kpisData, tendenciasData, sublotesResult, topResult, calidadResult] =
-        await Promise.all([
-          getKPIs(filtros),
-          getTendenciasHistoricas(filtros),
-          getRendimientoSublotes(filtros),
-          getTopSublotes(filtros, 10),
-          getProduccionCalidad(filtros),
-        ]);
-
-      setKpis(kpisData);
-      setTendencias(tendenciasData);
-      setSublotesData(sublotesResult);
-      setTopSublotes(topResult);
-      setCalidadData(calidadResult);
-    } catch (err) {
-      console.error('Error loading production data:', err);
-    }
-  }, [filtros, getKPIs, getTendenciasHistoricas, getRendimientoSublotes, getTopSublotes, getProduccionCalidad]);
-
-  // Cargar lotes al inicio
+  // Cargar lotes solo al montar
   useEffect(() => {
-    cargarLotes();
-  }, [cargarLotes]);
+    let cancelled = false;
+    getLotesRef.current()
+      .then((data) => { if (!cancelled) setLotes(data); })
+      .catch(console.error);
+    return () => { cancelled = true; };
+  }, []);
 
-  // Cargar datos cuando cambien los filtros
+  // Cargar datos cuando cambien filtros o refreshKey
   useEffect(() => {
-    cargarDatos();
-  }, [cargarDatos]);
+    let cancelled = false;
+    setLoadingData(true);
+    setErrorData(null);
 
-  // Cargar costo/kg para KPI cuando cambien los años seleccionados
+    Promise.all([
+      getKPIsRef.current(filtros),
+      getTendenciasRef.current(filtros),
+      getRendimientoRef.current(filtros),
+      getTopRef.current(filtros, 10),
+      getCalidadRef.current(filtros),
+    ])
+      .then(([kpisData, tendenciasData, sublotesResult, topResult, calidadResult]) => {
+        if (cancelled) return;
+        setKpis(kpisData);
+        setTendencias(tendenciasData);
+        setSublotesData(sublotesResult);
+        setTopSublotes(topResult);
+        setCalidadData(calidadResult);
+      })
+      .catch((err) => {
+        if (!cancelled) setErrorData(err?.message ?? 'Error cargando datos');
+      })
+      .finally(() => { if (!cancelled) setLoadingData(false); });
+
+    return () => { cancelled = true; };
+  }, [filtros, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cargar costo/kg para KPI cuando cambien los años
   useEffect(() => {
-    cargarCostoKgKPI(filtros.anos);
-  }, [filtros.anos, cargarCostoKgKPI]);
+    const anoRef = [...filtros.anos].sort().at(-1);
+    if (!anoRef) { setDatosCosto(null); return; }
+
+    let cancelled = false;
+    setLoadingCostoKPI(true);
+
+    calcularRef.current({ ano: anoRef })
+      .then((datos) => { if (!cancelled) setDatosCosto(datos); })
+      .catch(() => { if (!cancelled) setDatosCosto(null); })
+      .finally(() => { if (!cancelled) setLoadingCostoKPI(false); });
+
+    return () => { cancelled = true; };
+  }, [filtros.anos, refreshKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleFiltrosChange = (nuevosFiltros: FiltrosType) => {
     setFiltros(nuevosFiltros);
@@ -129,19 +133,14 @@ export function ProduccionDashboard() {
 
   const handleProduccionCreated = () => {
     setDialogOpen(false);
-    cargarDatos();
+    setRefreshKey((k) => k + 1);
   };
 
-  // Obtener lotes unicos de los datos para el grafico
   const lotesEnDatos = Array.from(
     new Set(
       tendencias.flatMap((t) =>
         Object.keys(t).filter(
-          (k) =>
-            k !== 'cosecha' &&
-            k !== 'cosecha_label' &&
-            k !== 'ano' &&
-            k !== 'tipo'
+          (k) => k !== 'cosecha' && k !== 'cosecha_label' && k !== 'ano' && k !== 'tipo'
         )
       )
     )
@@ -177,16 +176,16 @@ export function ProduccionDashboard() {
           onFiltrosChange={handleFiltrosChange}
         />
 
-        {/* KPI Cards — 3 tarjetas */}
+        {/* KPI Cards */}
         <KPICardsProduccion
           kpis={kpis}
-          loading={loading}
+          loading={loadingData}
           datosCosto={datosCosto}
-          loadingCosto={loadingCosto}
+          loadingCosto={loadingCostoKPI}
           anosSeleccionados={filtros.anos}
         />
 
-        {/* Tabs — 2 pestañas */}
+        {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="bg-white border border-gray-200 p-1 rounded-lg">
             <TabsTrigger
@@ -205,47 +204,36 @@ export function ProduccionDashboard() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Tab 1: Rendimiento — tendencia histórica + sublotes + calidad */}
           <TabsContent value="rendimiento" className="mt-6 space-y-6">
-            {/* Gráfico de tendencias (lead chart) */}
             <GraficoTendenciasHistorico
               data={tendencias}
               metrica={filtros.metrica}
               lotes={lotesEnDatos}
-              loading={loading}
+              loading={loadingData}
             />
-
-            {/* Distribución exportación/nacional (solo si hay datos con desglose) */}
-            <GraficoCalidadCosecha data={calidadData} loading={loading} />
-
-            {/* Sublotes — scatter + top 10 */}
+            <GraficoCalidadCosecha data={calidadData} loading={loadingData} />
             <GraficoRendimientoSublotes
               scatterData={sublotesData}
               topData={topSublotes}
               metrica={filtros.metrica}
-              loading={loading}
+              loading={loadingData}
             />
           </TabsContent>
 
-          {/* Tab 2: Rentabilidad — costo/kg por lote vs precio de venta */}
           <TabsContent value="rentabilidad" className="mt-6">
             <RentabilidadTab filtros={filtros} />
           </TabsContent>
         </Tabs>
 
-        {/* Mensaje de error */}
-        {error && (
+        {errorData && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-4">
             <div className="flex items-center gap-2">
               <span className="text-red-600">Error</span>
-              <p className="text-red-800 text-sm">
-                Error al cargar los datos: {error}
-              </p>
+              <p className="text-red-800 text-sm">Error al cargar los datos: {errorData}</p>
             </div>
           </div>
         )}
 
-        {/* Grilla de captura masiva de cosechas */}
         <CapturaCosechaGrid
           open={dialogOpen}
           onOpenChange={setDialogOpen}
