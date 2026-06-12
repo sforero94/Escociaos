@@ -318,7 +318,7 @@ The applications module has two distinct tracking layers — **do not confuse th
 
 ### Migrations
 
-Sequential SQL migrations live in `src/sql/migrations/` (001–044). See `src/sql/migrations/README_MIGRATION.md` for instructions on running them.
+Sequential SQL migrations live in `src/sql/migrations/` (001–046). See `src/sql/migrations/README_MIGRATION.md` for instructions on running them.
 
 - **023**: `create_fin_transacciones_ganado` — cattle buy/sell transactions table with RLS
 - **024**: `alter_fin_ingresos_add_columns` — adds `cantidad`, `precio_unitario`, `cosecha`, `alianza`, `cliente`, `finca` to `fin_ingresos`
@@ -336,6 +336,16 @@ Sequential SQL migrations live in `src/sql/migrations/` (001–044). See `src/sq
 - **043**: `fix_cosecha_aguacate_etiqueta_anio` — corrects the cosecha labeling rule in `fn_cosecha_aguacate()` and relabels existing aguacate rows: Principal nov–feb is labeled with the year it ends (dec 2025–feb 2026 = "Principal 2026"); nov/dic → Principal (year+1), ene–abr → Principal (same year, mar–abr are sale tail), may–oct → Traviesa (same year, sep–oct are sale tail). Applied to production 2026-06-09.
 - **044**: `create_ganado_inventario` — live cattle inventory (issue #51): `gan_ubicaciones` → `gan_fincas` (hectáreas) → `gan_potreros` → `gan_inventario` snapshot + `gan_movimientos` event log + `gan_pesos_historico`. Trigger `fn_crear_movimiento_pendiente_ganado()` (AFTER INSERT on `fin_transacciones_ganado`, SECURITY DEFINER) creates a `pendiente` movement per new finance transaction; `fn_aplicar_movimiento_ganado()` applies confirmed movements to `gan_inventario` (and logs to `gan_pesos_historico` when peso present). Partial unique indexes on `transaccion_ganado_id` block double confirmation. Seeds the 3 ubicaciones and `gan_fincas` from distinct historic transaction fincas. RLS: SELECT all authenticated; write Administrador + Gerencia. Applied to production 2026-06-10.
 - **045**: `fix_aplicar_movimiento_ganado_upsert` — fixes 044's apply-trigger: `INSERT ... ON CONFLICT DO UPDATE` validates CHECK constraints on the proposed row before conflict arbitration, so every negative-delta movement (venta/muerte/traslado_salida) failed even with sufficient inventory. Rewritten UPDATE-first with INSERT fallback. Applied to production 2026-06-10.
+- **046**: `add_produccion_calidad` — adds optional `kg_exportacion`/`kg_nacional` NUMERIC(12,2) columns to `produccion` with CHECK enforcing exact sum against `kg_totales` when both are non-null. Applied to production 2026-06-12.
+
+### Production Module (`/produccion`)
+
+Redesigned 2026-06 around two goals: agronomic yield analysis and cost-per-kilo. Key facts:
+
+- `produccion` holds one consolidated record per (lote, sublote, año, cosecha_tipo) — no harvest dates. Records exist at BOTH lote level (historic 2023–2025) and sublote level (2024+). All aggregation queries must consolidate via the `consolidarRegistros` pattern (lote-level record wins; otherwise sum sublotes) — never filter `sublote_id IS NULL` alone, it silently drops sublote-registered cosechas.
+- **Cost-per-kilo engine** (`src/utils/calculosCostoKg.ts`, pure + tested; fetching in `src/components/produccion/hooks/useCostoKg.ts`): direct lote costs (lote-tagged `registros_trabajo` labor + `movimientos_diarios_productos` × `productos.precio_unitario` insumos) + farm overhead (`fin_gastos` Confirmado, Aguacate Hass negocio, excluding labor/insumo categories to avoid double-counting) allocated by `lotes.total_arboles` (NOT hectares; zero-tree lotes excluded). Per-cosecha figures split lote-year cost proportionally by kg. Lote-level cost data only exists from 2026 (labor starts Oct 2025, insumos Dec 2025); earlier years fall back to farm-level totals. Cost/kg is lote-level only — no cost source reaches sublotes.
+- **Bulk capture grid** (`CapturaCosechaGrid.tsx` + `useCapturaCosecha.ts`): replaces the removed `RegistrarProduccionDialog`. All lote/sublote rows for a selected cosecha in one editable table (supports backfilling past cosechas), kg/árbol outlier detection against the lote's history with mandatory confirmation, UPDATE-by-id then INSERT (never PostgREST upsert — UNIQUE treats NULL sublote_id as distinct).
+- Dashboard: 3 KPIs (kg totales, kg/árbol, costo/kg) + 2 tabs (Rendimiento, Rentabilidad). The old Edad vs Rendimiento tab was removed.
 
 ### Ganado ↔ Finance Integration
 
