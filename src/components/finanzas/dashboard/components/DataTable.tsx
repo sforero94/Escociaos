@@ -67,7 +67,7 @@ export function DataTable({ data, columns, maxHeight = '24rem', headerColor = 'd
   }
 
   return (
-    <div className="rounded-xl border border-primary/10 bg-white overflow-hidden">
+    <div className="rounded-xl border border-primary/10 bg-white">
       <div className="overflow-auto" style={{ maxHeight }}>
         <table className="w-full text-sm">
           <thead className={`sticky top-0 ${headerBg}`}>
