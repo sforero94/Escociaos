@@ -50,8 +50,8 @@ export function DashboardGeneral() {
         />
       )}
 
-      {/* Pivot + Trimestre chart */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Pivot + Trimestre chart: stack until xl, so the 7-col pivot table gets full width at tablet */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <PivotTableGastos data={pivotData} loading={loading} />
         <GastosPorTrimestreChart
           data={trimestreData.data}

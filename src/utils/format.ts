@@ -9,15 +9,14 @@
  */
 
 /**
- * Formatea un número como moneda colombiana (COP)
- * 
- * @param value - Valor numérico a formatear
- * @returns String formateado como "$X,XXX,XXX COP"
- * 
+ * Formatea un número como moneda colombiana.
+ *
+ * No anexa "COP": la moneda es implícita en la UI (regla de CLAUDE.md).
+ *
  * @example
- * formatCurrency(4250000) // "$4,250,000 COP"
- * formatCurrency(1500000) // "$1,500,000 COP"
- * formatCurrency(0) // "$0 COP"
+ * formatCurrency(4250000) // "$4.250.000"
+ * formatCurrency(1500000) // "$1.500.000"
+ * formatCurrency(0) // "$0"
  */
 export function formatCurrency(value: number): string {
   const formatted = new Intl.NumberFormat('es-CO', {
@@ -25,8 +24,8 @@ export function formatCurrency(value: number): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(value);
-  
-  return `$${formatted} COP`;
+
+  return `$${formatted}`;
 }
 
 /**

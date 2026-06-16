@@ -18,13 +18,13 @@ export function DashboardSubNav({ activeTab }: DashboardSubNavProps) {
   const navigate = useNavigate();
 
   return (
-    <div className="border-b border-primary/10 overflow-x-auto scrollbar-hide">
-      <div className="flex gap-1 min-w-max">
+    <div className="border-b border-primary/10">
+      <div className="flex flex-wrap gap-x-1 gap-y-0">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             onClick={() => navigate(tab.path)}
-            className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-all ${
+            className={`px-3 lg:px-4 py-2 lg:py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-all ${
               activeTab === tab.id
                 ? 'border-primary text-foreground'
                 : 'border-transparent text-brand-brown/50 hover:text-foreground hover:border-primary/20'

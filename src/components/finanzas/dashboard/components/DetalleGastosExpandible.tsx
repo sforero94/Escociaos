@@ -1,8 +1,9 @@
 import { useState, Fragment } from 'react';
-import { ChevronDown, ChevronRight, TrendingUp, TrendingDown } from 'lucide-react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { formatCompact } from '@/utils/format';
 import type { PivotRow } from '@/types/finanzas';
 import { GastosDetalleDialog } from './GastosDetalleDialog';
+import './dashboardTables.css';
 
 const formatPivot = (v: number) => `$${formatCompact(v)}`;
 const cellClickable = "cursor-pointer hover:bg-primary/10 rounded transition-colors";
@@ -10,17 +11,12 @@ const cellClickable = "cursor-pointer hover:bg-primary/10 rounded transition-col
 function VariacionBadge({ actual, anterior }: { actual: number; anterior: number }) {
   if (anterior === 0 && actual === 0) return null;
   const pct = anterior === 0 ? 100 : ((actual - anterior) / anterior) * 100;
+  if (pct === 0) return null;
   const isUp = pct > 0;
-  const isNeutral = pct === 0;
-
-  if (isNeutral) return null;
 
   // For gastos: up = bad (red), down = good (green)
   return (
-    <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-medium ${
-      isUp ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
-    }`}>
-      {isUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+    <span className={`pivot-var ${isUp ? 'pivot-var--up' : 'pivot-var--down'}`}>
       {isUp ? '+' : ''}{pct.toFixed(0)}%
     </span>
   );
@@ -128,7 +124,7 @@ export function DetalleGastosExpandible({ data, loading }: DetalleGastosExpandib
         <div className="px-4 py-3 border-b border-primary/10">
           <h3 className="text-sm font-semibold text-foreground">Detalle de Gastos por Negocio y Categoria</h3>
         </div>
-        <div className="overflow-x-auto">
+        <div className="pivot-scroll">
           <table className="w-full text-sm table-fixed">
             <colgroup>
               <col className="w-[16%]" />
@@ -164,14 +160,14 @@ export function DetalleGastosExpandible({ data, loading }: DetalleGastosExpandib
                   total_n2: data.reduce((s, r) => s + r.total_n2, 0),
                 };
                 return (
-                  <tr className="border-t-2 border-foreground/20 bg-gray-100 font-bold">
+                  <tr className="pivot-total border-t-2 border-foreground/20 bg-gray-100 font-bold">
                     <td className="px-3 py-2 text-foreground">TOTAL</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{formatPivot(grandTotal.ytd_actual)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{formatPivot(grandTotal.ytd_anterior)}</td>
-                    <td className="px-3 py-2 text-right"><VariacionBadge actual={grandTotal.ytd_actual} anterior={grandTotal.ytd_anterior} /></td>
-                    <td className="px-3 py-2 text-right tabular-nums">{formatPivot(grandTotal.total_anterior)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{formatPivot(grandTotal.total_n2)}</td>
-                    <td className="px-3 py-2 text-right"><VariacionBadge actual={grandTotal.total_anterior} anterior={grandTotal.total_n2} /></td>
+                    <td className="px-3 py-2 text-right tabular-nums" data-label={`YTD ${currentYear}`}>{formatPivot(grandTotal.ytd_actual)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums" data-label={`YTD ${currentYear - 1}`}>{formatPivot(grandTotal.ytd_anterior)}</td>
+                    <td className="px-3 py-2 text-right" data-label="Var YoY (YTD)"><VariacionBadge actual={grandTotal.ytd_actual} anterior={grandTotal.ytd_anterior} /></td>
+                    <td className="px-3 py-2 text-right tabular-nums" data-label={`Total ${currentYear - 1}`}>{formatPivot(grandTotal.total_anterior)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums" data-label={`Total ${currentYear - 2}`}>{formatPivot(grandTotal.total_n2)}</td>
+                    <td className="px-3 py-2 text-right" data-label="Var YoY (Total)"><VariacionBadge actual={grandTotal.total_anterior} anterior={grandTotal.total_n2} /></td>
                   </tr>
                 );
               })()}
@@ -195,12 +191,12 @@ export function DetalleGastosExpandible({ data, loading }: DetalleGastosExpandib
                           {row.negocio}
                         </div>
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums font-medium">{formatPivot(row.ytd_actual)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{formatPivot(row.ytd_anterior)}</td>
-                      <td className="px-3 py-2 text-right"><VariacionBadge actual={row.ytd_actual} anterior={row.ytd_anterior} /></td>
-                      <td className="px-3 py-2 text-right tabular-nums font-medium">{formatPivot(row.total_anterior)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{formatPivot(row.total_n2)}</td>
-                      <td className="px-3 py-2 text-right"><VariacionBadge actual={row.total_anterior} anterior={row.total_n2} /></td>
+                      <td className="px-3 py-2 text-right tabular-nums font-medium" data-label={`YTD ${currentYear}`}>{formatPivot(row.ytd_actual)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums" data-label={`YTD ${currentYear - 1}`}>{formatPivot(row.ytd_anterior)}</td>
+                      <td className="px-3 py-2 text-right" data-label="Var YoY (YTD)"><VariacionBadge actual={row.ytd_actual} anterior={row.ytd_anterior} /></td>
+                      <td className="px-3 py-2 text-right tabular-nums font-medium" data-label={`Total ${currentYear - 1}`}>{formatPivot(row.total_anterior)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums" data-label={`Total ${currentYear - 2}`}>{formatPivot(row.total_n2)}</td>
+                      <td className="px-3 py-2 text-right" data-label="Var YoY (Total)"><VariacionBadge actual={row.total_anterior} anterior={row.total_n2} /></td>
                     </tr>
                     {isExpanded && row.categorias?.map((cat) => {
                       const catKey = `${row.negocio_id}::${cat.negocio_id}`;
@@ -225,25 +221,29 @@ export function DetalleGastosExpandible({ data, loading }: DetalleGastosExpandib
                             </td>
                             <td
                               className={`px-3 py-2 text-right tabular-nums text-sm ${cellClickable}`}
+                              data-label={`YTD ${currentYear}`}
                               onClick={(e) => handleCellClick(row, cat.negocio, 'ytd_actual', e)}
                             >
                               {formatPivot(cat.ytd_actual)}
                             </td>
                             <td
                               className={`px-3 py-2 text-right tabular-nums text-sm ${cellClickable}`}
+                              data-label={`YTD ${currentYear - 1}`}
                               onClick={(e) => handleCellClick(row, cat.negocio, 'ytd_anterior', e)}
                             >
                               {formatPivot(cat.ytd_anterior)}
                             </td>
-                            <td className="px-3 py-2 text-right"><VariacionBadge actual={cat.ytd_actual} anterior={cat.ytd_anterior} /></td>
+                            <td className="px-3 py-2 text-right" data-label="Var YoY (YTD)"><VariacionBadge actual={cat.ytd_actual} anterior={cat.ytd_anterior} /></td>
                             <td
                               className={`px-3 py-2 text-right tabular-nums text-sm ${cellClickable}`}
+                              data-label={`Total ${currentYear - 1}`}
                               onClick={(e) => handleCellClick(row, cat.negocio, 'total_anterior', e)}
                             >
                               {formatPivot(cat.total_anterior)}
                             </td>
                             <td
                               className={`px-3 py-2 text-right tabular-nums text-sm ${cellClickable}`}
+                              data-label={`Total ${currentYear - 2}`}
                               onClick={(e) => handleCellClick(row, cat.negocio, 'total_n2', e)}
                             >
                               {formatPivot(cat.total_n2)}
@@ -253,12 +253,12 @@ export function DetalleGastosExpandible({ data, loading }: DetalleGastosExpandib
                           {isCatExpanded && cat.categorias?.map((concepto) => (
                             <tr key={concepto.negocio_id} className="bg-primary/[0.01] border-t border-primary/5 hover:bg-green-50/50 transition-colors">
                               <td className="px-3 py-1.5 pl-16 text-brand-brown/50 text-xs">{concepto.negocio}</td>
-                              <td className="px-3 py-1.5 text-right tabular-nums text-xs text-brand-brown/60">{formatPivot(concepto.ytd_actual)}</td>
-                              <td className="px-3 py-1.5 text-right tabular-nums text-xs text-brand-brown/60">{formatPivot(concepto.ytd_anterior)}</td>
-                              <td className="px-3 py-1.5 text-right"><VariacionBadge actual={concepto.ytd_actual} anterior={concepto.ytd_anterior} /></td>
-                              <td className="px-3 py-1.5 text-right tabular-nums text-xs text-brand-brown/60">{formatPivot(concepto.total_anterior)}</td>
-                              <td className="px-3 py-1.5 text-right tabular-nums text-xs text-brand-brown/60">{formatPivot(concepto.total_n2)}</td>
-                              <td className="px-3 py-1.5 text-right"><VariacionBadge actual={concepto.total_anterior} anterior={concepto.total_n2} /></td>
+                              <td className="px-3 py-1.5 text-right tabular-nums text-xs text-brand-brown/60" data-label={`YTD ${currentYear}`}>{formatPivot(concepto.ytd_actual)}</td>
+                              <td className="px-3 py-1.5 text-right tabular-nums text-xs text-brand-brown/60" data-label={`YTD ${currentYear - 1}`}>{formatPivot(concepto.ytd_anterior)}</td>
+                              <td className="px-3 py-1.5 text-right" data-label="Var YoY (YTD)"><VariacionBadge actual={concepto.ytd_actual} anterior={concepto.ytd_anterior} /></td>
+                              <td className="px-3 py-1.5 text-right tabular-nums text-xs text-brand-brown/60" data-label={`Total ${currentYear - 1}`}>{formatPivot(concepto.total_anterior)}</td>
+                              <td className="px-3 py-1.5 text-right tabular-nums text-xs text-brand-brown/60" data-label={`Total ${currentYear - 2}`}>{formatPivot(concepto.total_n2)}</td>
+                              <td className="px-3 py-1.5 text-right" data-label="Var YoY (Total)"><VariacionBadge actual={concepto.total_anterior} anterior={concepto.total_n2} /></td>
                             </tr>
                           ))}
                         </Fragment>
