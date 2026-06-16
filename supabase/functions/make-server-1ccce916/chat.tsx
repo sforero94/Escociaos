@@ -398,7 +398,7 @@ const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'get_conductivity_data',
-    description: 'Obtiene datos de conductividad eléctrica (CE) del suelo por lote: promedios, estado semáforo (verde <0.5, amarillo 0.5-1.5, rojo >1.5 dS/m), tendencias.',
+    description: 'Obtiene datos de conductividad eléctrica (CE) del suelo por lote: promedios, pH, estado semáforo (verde <0.5, amarillo 0.5-1.5, rojo >1.5 dS/m), y tendencia mensual de la CE por lote. Útil para relacionar la evolución de la CE con las fertilizaciones (cruzar con get_application_summary type=Fertilizacion).',
     parameters: {
       type: 'object',
       properties: {
@@ -445,6 +445,32 @@ const TOOLS: ToolDefinition[] = [
         include_movimientos: { type: 'boolean', description: 'Incluir lista de movimientos confirmados recientes (default false)' },
         date_from: { type: 'string', description: 'Fecha inicio YYYY-MM-DD para los movimientos (default: hace 30 días)' },
         date_to: { type: 'string', description: 'Fecha fin YYYY-MM-DD para los movimientos (opcional)' },
+      },
+    },
+  },
+  {
+    name: 'get_tareas',
+    description: 'Obtiene las tareas/labores del tablero Kanban de labores (planeadas y en ejecución): estado (Banco, Programada, En Proceso, Completada, Cancelada), prioridad (Alta/Media/Baja), categoría, lote, responsable, jornales estimados y fechas estimadas/reales. Usar para "qué tareas hay pendientes/programadas/en proceso", "labores por lote", "carga de trabajo planificada". Distinto de get_labor_summary, que reporta jornales YA ejecutados (registros_trabajo).',
+    parameters: {
+      type: 'object',
+      properties: {
+        estado: { type: 'string', description: 'Filtra por estado: Banco, Programada, En Proceso, Completada, Cancelada (opcional)' },
+        lote_name: { type: 'string', description: 'Nombre parcial del lote (opcional)' },
+        categoria: { type: 'string', description: 'Categoría de la tarea (ej: Cosecha, Fertilización y Enmiendas, Monitoreo) (opcional)' },
+        date_from: { type: 'string', description: 'Fecha estimada de inicio desde YYYY-MM-DD (opcional)' },
+        date_to: { type: 'string', description: 'Fecha estimada de inicio hasta YYYY-MM-DD (opcional)' },
+      },
+    },
+  },
+  {
+    name: 'get_weekly_reports',
+    description: 'Obtiene el historial de reportes semanales generados (archivo): número de semana, año, rango de fechas, si fue automático o manual, y la URL del PDF si existe. Para consultar reportes ya generados. Para un resumen en vivo de la semana usa get_weekly_overview.',
+    parameters: {
+      type: 'object',
+      properties: {
+        anio: { type: 'number', description: 'Año del reporte (opcional)' },
+        numero_semana: { type: 'number', description: 'Número de semana ISO (opcional)' },
+        limit: { type: 'number', description: 'Máximo de reportes a retornar (default 12)' },
       },
     },
   },
@@ -509,6 +535,8 @@ async function executeTool(name: string, args: Record<string, unknown>, userId?:
       case 'get_beehive_data': result = await execBeehiveData(args); break;
       case 'get_budget_data': result = await execBudgetData(args); break;
       case 'get_ganado_inventory': result = await execGanadoInventory(args); break;
+      case 'get_tareas': result = await execTareas(args); break;
+      case 'get_weekly_reports': result = await execWeeklyReports(args); break;
       default: return JSON.stringify({ error: `Tool desconocido: ${name}` });
     }
 
@@ -2010,9 +2038,11 @@ async function execConductivityData(args: Record<string, unknown>): Promise<stri
   const { date_from, date_to } = validated;
   const { lote_name } = args as { lote_name?: string };
 
-  let query = `select=id,fecha_lectura,valor_ce,unidad,profundidad_cm,observaciones,lote:lotes(nombre)&order=fecha_lectura.desc&limit=2000`;
-  if (date_from) query += `&fecha_lectura=gte.${e(date_from)}`;
-  if (date_to) query += `&fecha_lectura=lte.${e(date_to)}`;
+  // NOTE: la columna real de fecha es `fecha_monitoreo` (no `fecha_lectura`).
+  // `valor_ce` ya es el promedio del lote en esa fecha; `ph` suele ser null; `lecturas` es el detalle por árbol.
+  let query = `select=id,fecha_monitoreo,valor_ce,ph,num_arboles,observaciones,lote:lotes(nombre)&order=fecha_monitoreo.desc&limit=2000`;
+  if (date_from) query += `&fecha_monitoreo=gte.${e(date_from)}`;
+  if (date_to) query += `&fecha_monitoreo=lte.${e(date_to)}`;
 
   const data = await supabaseQuery('mon_conductividad', query);
 
@@ -2022,57 +2052,168 @@ async function execConductivityData(args: Record<string, unknown>): Promise<stri
     filtered = filtered.filter((r) => ((r.lote as Record<string, unknown>)?.nombre as string || '').toLowerCase().includes(ln));
   }
 
-  // Summary by lote
-  const byLote: Record<string, { sum: number; count: number; min: number; max: number }> = {};
+  // Summary by lote (CE + pH)
+  const byLote: Record<string, { sum: number; count: number; min: number; max: number; phSum: number; phCount: number }> = {};
+  // Monthly trend (global) — útil para relacionar la evolución de la CE con las fertilizaciones en el tiempo
   const byMonth: Record<string, { sum: number; count: number }> = {};
+  // Monthly trend per lote
+  const byLoteMonth: Record<string, Record<string, { sum: number; count: number }>> = {};
 
   for (const r of filtered) {
-    const ce = (r.valor_ce as number) || 0;
+    const ce = Number(r.valor_ce) || 0;
+    const ph = r.ph != null ? Number(r.ph) : null;
     const loteName = (r.lote as Record<string, unknown>)?.nombre as string || 'Sin lote';
 
-    if (!byLote[loteName]) byLote[loteName] = { sum: 0, count: 0, min: Infinity, max: -Infinity };
+    if (!byLote[loteName]) byLote[loteName] = { sum: 0, count: 0, min: Infinity, max: -Infinity, phSum: 0, phCount: 0 };
     byLote[loteName].sum += ce;
     byLote[loteName].count++;
     byLote[loteName].min = Math.min(byLote[loteName].min, ce);
     byLote[loteName].max = Math.max(byLote[loteName].max, ce);
+    if (ph != null) { byLote[loteName].phSum += ph; byLote[loteName].phCount++; }
 
-    const fecha = (r.fecha_lectura as string) || '';
+    const fecha = (r.fecha_monitoreo as string) || '';
     const mes = fecha.slice(0, 7);
     if (mes) {
       if (!byMonth[mes]) byMonth[mes] = { sum: 0, count: 0 };
       byMonth[mes].sum += ce;
       byMonth[mes].count++;
+
+      if (!byLoteMonth[loteName]) byLoteMonth[loteName] = {};
+      if (!byLoteMonth[loteName][mes]) byLoteMonth[loteName][mes] = { sum: 0, count: 0 };
+      byLoteMonth[loteName][mes].sum += ce;
+      byLoteMonth[loteName][mes].count++;
     }
   }
 
   const getSemaforo = (ce: number) => ce < 0.5 ? 'verde' : ce <= 1.5 ? 'amarillo' : 'rojo';
 
   const resumenPorLote: Record<string, unknown> = {};
-  for (const [lote, data] of Object.entries(byLote)) {
-    const promedio = Math.round(data.sum / data.count * 100) / 100;
+  for (const [lote, d] of Object.entries(byLote)) {
+    const promedio = Math.round(d.sum / d.count * 100) / 100;
+    // Serie mensual por lote (ascendente) para ver la tendencia tras cada fertilización
+    const serie: Record<string, number> = {};
+    const meses = Object.keys(byLoteMonth[lote] || {}).sort();
+    for (const m of meses) serie[m] = Math.round(byLoteMonth[lote][m].sum / byLoteMonth[lote][m].count * 100) / 100;
     resumenPorLote[lote] = {
       promedio_ce: promedio,
-      min_ce: Math.round(data.min * 100) / 100,
-      max_ce: Math.round(data.max * 100) / 100,
-      registros: data.count,
+      min_ce: Math.round(d.min * 100) / 100,
+      max_ce: Math.round(d.max * 100) / 100,
+      promedio_ph: d.phCount ? Math.round(d.phSum / d.phCount * 100) / 100 : null,
+      registros: d.count,
       estado: getSemaforo(promedio),
+      tendencia_mensual_ce: serie,
     };
   }
 
   const resumenPorMes: Record<string, unknown> = {};
-  for (const [mes, data] of Object.entries(byMonth)) {
+  for (const mes of Object.keys(byMonth).sort()) {
+    const d = byMonth[mes];
     resumenPorMes[mes] = {
-      promedio_ce: Math.round(data.sum / data.count * 100) / 100,
-      registros: data.count,
+      promedio_ce: Math.round(d.sum / d.count * 100) / 100,
+      registros: d.count,
     };
   }
 
   return JSON.stringify({
     total_registros: filtered.length,
+    unidad: 'dS/m',
     resumen_por_lote: resumenPorLote,
     resumen_por_mes: resumenPorMes,
     umbrales: { verde: '<0.5 dS/m', amarillo: '0.5-1.5 dS/m', rojo: '>1.5 dS/m' },
+    nota: 'valor_ce es el promedio del lote en cada fecha de monitoreo. Para relacionar con fertilizaciones, cruza tendencia_mensual_ce / resumen_por_mes con get_application_summary type=Fertilizacion en el mismo rango.',
     detalle: filtered.slice(0, 10),
+  });
+}
+
+// ============================================================================
+// TAREAS (LABORES / KANBAN)
+// ============================================================================
+
+async function execTareas(args: Record<string, unknown>): Promise<string> {
+  const validated = validateDates(args);
+  const { date_from, date_to } = validated;
+  const { estado, lote_name, categoria } = args as { estado?: string; lote_name?: string; categoria?: string };
+
+  let query = `select=id,codigo_tarea,nombre,descripcion,estado,prioridad,fecha_estimada_inicio,fecha_estimada_fin,fecha_inicio_real,fecha_fin_real,jornales_estimados,observaciones,lote:lotes(nombre),responsable:empleados(nombre),tipo:tipos_tareas(nombre,categoria)&order=fecha_estimada_inicio.desc&limit=2000`;
+  if (estado) query += `&estado=eq.${e(estado)}`;
+  if (date_from) query += `&fecha_estimada_inicio=gte.${e(date_from)}`;
+  if (date_to) query += `&fecha_estimada_inicio=lte.${e(date_to)}`;
+
+  const data = await supabaseQuery('tareas', query);
+
+  let filtered = data as Array<Record<string, unknown>>;
+  if (lote_name) {
+    const ln = lote_name.toLowerCase();
+    filtered = filtered.filter((r) => ((r.lote as Record<string, unknown>)?.nombre as string || '').toLowerCase().includes(ln));
+  }
+  if (categoria) {
+    const cn = categoria.toLowerCase();
+    filtered = filtered.filter((r) => ((r.tipo as Record<string, unknown>)?.categoria as string || '').toLowerCase().includes(cn));
+  }
+
+  const porEstado: Record<string, { count: number; jornales_estimados: number }> = {};
+  const porCategoria: Record<string, number> = {};
+  for (const r of filtered) {
+    const est = (r.estado as string) || 'Sin estado';
+    if (!porEstado[est]) porEstado[est] = { count: 0, jornales_estimados: 0 };
+    porEstado[est].count++;
+    porEstado[est].jornales_estimados += Number(r.jornales_estimados) || 0;
+
+    const cat = (r.tipo as Record<string, unknown>)?.categoria as string || 'Sin categoría';
+    porCategoria[cat] = (porCategoria[cat] || 0) + 1;
+  }
+  for (const k of Object.keys(porEstado)) {
+    porEstado[k].jornales_estimados = Math.round(porEstado[k].jornales_estimados * 100) / 100;
+  }
+
+  return JSON.stringify({
+    total_registros: filtered.length,
+    estados_posibles: ['Banco', 'Programada', 'En Proceso', 'Completada', 'Cancelada'],
+    resumen_por_estado: porEstado,
+    resumen_por_categoria: porCategoria,
+    tareas: filtered.slice(0, 40).map((r) => ({
+      codigo: r.codigo_tarea,
+      nombre: r.nombre,
+      estado: r.estado,
+      prioridad: r.prioridad,
+      categoria: (r.tipo as Record<string, unknown>)?.categoria ?? null,
+      tipo: (r.tipo as Record<string, unknown>)?.nombre ?? null,
+      lote: (r.lote as Record<string, unknown>)?.nombre ?? null,
+      responsable: (r.responsable as Record<string, unknown>)?.nombre ?? null,
+      jornales_estimados: r.jornales_estimados,
+      fecha_estimada_inicio: r.fecha_estimada_inicio,
+      fecha_estimada_fin: r.fecha_estimada_fin,
+      fecha_inicio_real: r.fecha_inicio_real,
+      fecha_fin_real: r.fecha_fin_real,
+    })),
+  });
+}
+
+// ============================================================================
+// WEEKLY REPORTS (ARCHIVO REPORTES SEMANALES)
+// ============================================================================
+
+async function execWeeklyReports(args: Record<string, unknown>): Promise<string> {
+  const { anio, numero_semana, limit } = args as { anio?: number; numero_semana?: number; limit?: number };
+  const lim = typeof limit === 'number' && limit > 0 ? Math.min(limit, 52) : 12;
+
+  let query = `select=id,numero_semana,ano,fecha_inicio,fecha_fin,generado_automaticamente,url_storage,created_at&order=ano.desc,numero_semana.desc&limit=${lim}`;
+  if (typeof anio === 'number') query += `&ano=eq.${anio}`;
+  if (typeof numero_semana === 'number') query += `&numero_semana=eq.${numero_semana}`;
+
+  const data = await supabaseQuery('reportes_semanales', query) as Array<Record<string, unknown>>;
+
+  return JSON.stringify({
+    total_registros: data.length,
+    reportes: data.map((r) => ({
+      ano: r.ano,
+      numero_semana: r.numero_semana,
+      periodo: `${r.fecha_inicio} a ${r.fecha_fin}`,
+      generado_automaticamente: r.generado_automaticamente,
+      tiene_pdf: !!r.url_storage,
+      url_pdf: r.url_storage ?? null,
+      generado_el: r.created_at,
+    })),
   });
 }
 
@@ -2416,7 +2557,7 @@ Para multiples series: yKey como array ["serie1","serie2"] con colors array.
 IMPORTANTE: El JSON del grafico debe ser valido y estar en una sola linea o con formato JSON valido. No uses comillas simples ni trailing commas.
 
 DOMINIOS DE DATOS DISPONIBLES:
-- Labores: tareas, registros de trabajo, jornales por empleado/contratista/lote
+- Labores: tablero de tareas planeadas/en ejecucion (get_tareas: estado Banco/Programada/En Proceso/Completada/Cancelada, prioridad, categoria, lote, responsable, jornales estimados) y registros de trabajo / jornales YA ejecutados por empleado/contratista/lote (get_labor_summary)
 - Empleados y Contratistas: personal, cargos, salarios, tarifas
 - Monitoreo: plagas/enfermedades, incidencia, severidad, tendencias por lote. Incluye estado fenológico de floración (brotes, flor madura, cuaje)
 - Aplicaciones: fumigaciones, fertilizaciones, drench, productos usados, costos
@@ -2430,7 +2571,8 @@ DOMINIOS DE DATOS DISPONIBLES:
 - Produccion: kilos por lote, kg/arbol, cosechas principal/traviesa
 - Cosechas y Despachos: kilos cosechados, preseleccion, despachos a clientes
 - Lotes: configuracion de la finca, arboles por tamano, sublotes
-- Conductividad Eléctrica: CE del suelo por lote, promedios, umbrales semáforo (verde <0.5, amarillo 0.5-1.5, rojo >1.5 dS/m)
+- Conductividad Eléctrica (get_conductivity_data): CE del suelo por lote, promedios, pH, umbrales semáforo (verde <0.5, amarillo 0.5-1.5, rojo >1.5 dS/m) y tendencia mensual por lote. Para explicar la evolución de la CE en el tiempo, cruza la tendencia mensual con las fertilizaciones del mismo rango (get_application_summary type=Fertilizacion): tras una fertilización la CE suele subir y luego bajar con el riego/lavado
+- Reportes semanales (get_weekly_reports): archivo de reportes semanales generados (semana, año, periodo, PDF). Para el resumen en vivo de la semana usa get_weekly_overview
 - Colmenas y Apiarios: estado de salud (fuertes/débiles/muertas/con reina), configuración de apiarios
 - Clima: temperatura, humedad, precipitacion, viento (velocidad/rafaga/direccion), radiacion solar, indice UV — datos de estacion Weather Underground sincronizados cada 5 minutos
 
