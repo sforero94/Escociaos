@@ -29,6 +29,7 @@ function createEmptyRow(): BatchRowDataIngreso {
     observaciones: '',
     factura_file: null,
     factura_uploaded: false,
+    cantidad: '',
   };
 }
 
@@ -45,7 +46,12 @@ function serializeRows(rows: BatchRowDataIngreso[]): DraftData {
 }
 
 function deserializeRows(draft: DraftData): BatchRowDataIngreso[] {
-  return draft.rows.map((r) => ({ ...r, factura_file: null }));
+  return draft.rows.map((r) => {
+    const row = { ...r, factura_file: null } as BatchRowDataIngreso;
+    // Compatibilidad con borradores guardados antes de que se agregara el campo cantidad
+    if (!row.cantidad) row.cantidad = '';
+    return row;
+  });
 }
 
 const REQUIRED_FIELDS = ['fecha', 'nombre', 'valor', 'negocio_id', 'region_id', 'categoria_id', 'medio_pago_id'] as const;
@@ -201,18 +207,33 @@ export function IngresosBatchTable({ catalogs, onSaved }: IngresosBatchTableProp
         }
       }
 
-      const payload = rows.map((row, i) => ({
-        fecha: row.fecha,
-        nombre: row.nombre.trim(),
-        valor: Number(row.valor),
-        negocio_id: row.negocio_id,
-        region_id: row.region_id,
-        categoria_id: row.categoria_id,
-        comprador_id: row.comprador_id || null,
-        medio_pago_id: row.medio_pago_id,
-        observaciones: row.observaciones.trim() || null,
-        url_factura: facturaUrls[i] || null,
-      }));
+      const payload = rows.map((row, i) => {
+        const negocio = catalogs.negocios.find((n) => n.id === row.negocio_id);
+        const negocioNombre = negocio?.nombre ?? '';
+        const mostrarCantidad =
+          negocioNombre.toLowerCase().includes('aguacate') ||
+          negocioNombre.toLowerCase().includes('hato') ||
+          negocioNombre.toLowerCase().includes('lechero');
+        const cantidadNum = mostrarCantidad && row.cantidad ? Number(row.cantidad) : null;
+        const valorNum = Number(row.valor);
+        const precioUnitario =
+          cantidadNum && cantidadNum > 0 && valorNum > 0 ? valorNum / cantidadNum : null;
+
+        return {
+          fecha: row.fecha,
+          nombre: row.nombre.trim(),
+          valor: valorNum,
+          negocio_id: row.negocio_id,
+          region_id: row.region_id,
+          categoria_id: row.categoria_id,
+          comprador_id: row.comprador_id || null,
+          medio_pago_id: row.medio_pago_id,
+          observaciones: row.observaciones.trim() || null,
+          url_factura: facturaUrls[i] || null,
+          cantidad: cantidadNum,
+          precio_unitario: precioUnitario,
+        };
+      });
 
       const { error } = await supabase.from('fin_ingresos').insert(payload);
       if (error) throw error;

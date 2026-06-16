@@ -378,6 +378,8 @@ export interface BatchRowDataIngreso {
   observaciones: string;
   factura_file: File | null;
   factura_uploaded: boolean;
+  /** Cantidad (kg para Aguacate Hass, litros para Hato Lechero). Null para otros negocios. */
+  cantidad: string;
 }
 
 // ── Budget (Presupuesto) ─────────────────────────────────────────
