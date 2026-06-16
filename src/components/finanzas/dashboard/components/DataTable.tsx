@@ -68,7 +68,7 @@ export function DataTable({ data, columns, maxHeight: _maxHeight = '24rem', head
 
   return (
     <div className="rounded-xl border border-primary/10 bg-white overflow-hidden">
-      <div className="lg:overflow-auto lg:max-h-96">
+      <div className="lg:overflow-y-scroll lg:overscroll-contain lg:touch-pan-y lg:max-h-96">
         <table className="w-full text-sm">
           <thead className={`sticky top-0 ${headerBg}`}>
             <tr>

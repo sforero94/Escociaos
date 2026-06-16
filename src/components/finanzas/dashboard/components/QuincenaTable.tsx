@@ -77,7 +77,7 @@ export function QuincenaTable({ rows, emptyMessage = 'Sin ingresos registrados' 
 
   return (
     <div className="rounded-xl border border-primary/10 bg-white overflow-hidden">
-      <div className="lg:overflow-auto lg:max-h-[28rem]">
+      <div className="lg:overflow-y-scroll lg:overscroll-contain lg:touch-pan-y lg:max-h-[28rem]">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-green-600 text-white">
             <tr>
