@@ -203,6 +203,8 @@ export interface IngresoFormData {
   nombre: string;
   comprador_id?: string;
   valor: number;
+  cantidad?: number | null;
+  precio_unitario?: number | null;
   medio_pago_id: string;
   observaciones?: string;
   url_factura?: string;
