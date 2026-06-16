@@ -12,7 +12,7 @@ interface DataTableProps {
   emptyMessage?: string;
 }
 
-export function DataTable({ data, columns, maxHeight = '24rem', headerColor = 'default', emptyMessage = 'Sin datos' }: DataTableProps) {
+export function DataTable({ data, columns, maxHeight: _maxHeight = '24rem', headerColor = 'default', emptyMessage = 'Sin datos' }: DataTableProps) {
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
@@ -67,8 +67,8 @@ export function DataTable({ data, columns, maxHeight = '24rem', headerColor = 'd
   }
 
   return (
-    <div className="rounded-xl border border-primary/10 bg-white">
-      <div className="overflow-auto" style={{ maxHeight }}>
+    <div className="rounded-xl border border-primary/10 bg-white overflow-hidden">
+      <div className="lg:overflow-auto lg:max-h-96">
         <table className="w-full text-sm">
           <thead className={`sticky top-0 ${headerBg}`}>
             <tr>
