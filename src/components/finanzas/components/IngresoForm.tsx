@@ -47,7 +47,7 @@ interface IngresoFormProps {
 export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }: IngresoFormProps) {
   // Form state
   const [formData, setFormData, clearFormData, wasRestored] = useFormPersistence<IngresoFormData>({
-    key: ingreso?.id ? `ingreso-edit-${ingreso.id}` : 'ingreso-new-v1',
+    key: ingreso?.id ? `ingreso-edit-${ingreso.id}` : 'ingreso-new-v2',
     initialState: {
       fecha: new Date().toISOString().split('T')[0],
       negocio_id: '',
@@ -56,6 +56,8 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
       nombre: '',
       comprador_id: '',
       valor: 0,
+      cantidad: null,
+      precio_unitario: null,
       medio_pago_id: '',
       observaciones: '',
       url_factura: '',
@@ -80,6 +82,21 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
     email: '',
   });
 
+  // Detect negocio type for conditional fields
+  const selectedNegocio = negocios.find(n => n.id === formData.negocio_id);
+  const esAguacate = selectedNegocio?.nombre?.toLowerCase().includes('aguacate');
+  const esHatoLechero = selectedNegocio?.nombre?.toLowerCase().includes('hato') ||
+                        selectedNegocio?.nombre?.toLowerCase().includes('lechero');
+  const mostrarCantidad = esAguacate || esHatoLechero;
+  const labelCantidad = esHatoLechero ? 'Cantidad (litros)' : 'Cantidad (kg)';
+  const labelPrecio = esHatoLechero ? 'Precio / litro' : 'Precio / kg';
+
+  // Auto-compute precio_unitario from valor and cantidad
+  const precioComputado =
+    formData.cantidad && formData.cantidad > 0 && formData.valor > 0
+      ? formData.valor / formData.cantidad
+      : null;
+
   // Load catalogs on mount
   useEffect(() => {
     if (open) {
@@ -98,6 +115,8 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
         nombre: ingreso.nombre,
         comprador_id: ingreso.comprador_id || '',
         valor: ingreso.valor,
+        cantidad: ingreso.cantidad ?? null,
+        precio_unitario: ingreso.precio_unitario ?? null,
         medio_pago_id: ingreso.medio_pago_id,
         observaciones: ingreso.observaciones || '',
         url_factura: ingreso.url_factura || '',
@@ -112,6 +131,8 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
         nombre: '',
         comprador_id: '',
         valor: 0,
+        cantidad: null,
+        precio_unitario: null,
         medio_pago_id: '',
         observaciones: '',
         url_factura: '',
@@ -245,6 +266,8 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
         comprador_id: formData.comprador_id || null,
         observaciones: formData.observaciones || null,
         url_factura: formData.url_factura || null,
+        cantidad: mostrarCantidad && formData.cantidad ? Number(formData.cantidad) : null,
+        precio_unitario: mostrarCantidad && precioComputado ? precioComputado : null,
       };
 
       if (ingreso?.id) {
@@ -307,15 +330,16 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="valor">Valor *</Label>
+                    <Label htmlFor="valor">Valor total *</Label>
                     <Input
                       id="valor"
                       type="number"
-                      step="0.01"
+                      step="1"
                       min="0"
                       value={formData.valor}
                       onChange={(e) => handleInputChange('valor', parseFloat(e.target.value) || 0)}
-                      placeholder="0.00"
+                      onWheel={(e) => e.currentTarget.blur()}
+                      placeholder="0"
                       required
                       aria-invalid={!!errors.valor}
                     />
@@ -333,6 +357,33 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
                     />
                   </div>
                 </div>
+
+                {/* Cantidad y precio unitario — solo para Aguacate Hass / Hato Lechero */}
+                {mostrarCantidad && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 bg-muted/40 rounded-md border">
+                    <div className="space-y-2">
+                      <Label htmlFor="cantidad">{labelCantidad}</Label>
+                      <Input
+                        id="cantidad"
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        value={formData.cantidad ?? ''}
+                        onChange={(e) => handleInputChange('cantidad', parseFloat(e.target.value) || 0)}
+                        onWheel={(e) => e.currentTarget.blur()}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>{labelPrecio} (calculado)</Label>
+                      <div className="flex items-center h-9 px-3 rounded-md border bg-background text-sm text-muted-foreground">
+                        {precioComputado != null
+                          ? `$${precioComputado.toLocaleString('es-CO', { maximumFractionDigits: 0 })}`
+                          : '—'}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Ubicación y Clasificación */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
