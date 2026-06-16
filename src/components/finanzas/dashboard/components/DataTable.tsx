@@ -7,7 +7,7 @@ import type { ColumnDef } from '@/types/finanzas';
 interface DataTableProps {
   data: Record<string, unknown>[];
   columns: ColumnDef[];
-  maxHeight?: string;
+  maxHeight?: string;    // kept for API compat; applies at lg+
   headerColor?: 'green' | 'red' | 'default';
   emptyMessage?: string;
 }
@@ -43,12 +43,12 @@ export function DataTable({ data, columns, maxHeight: _maxHeight = '24rem', head
   }, [data, sortKey, sortDir]);
 
   const formatCell = (value: unknown, format?: ColumnDef['format']) => {
-    if (value == null || value === '') return '-';
+    if (value == null || value === '') return '—';
     switch (format) {
       case 'currency': return formatCurrency(Number(value));
-      case 'number': return formatNumber(Number(value));
-      case 'date': return formatearFecha(String(value));
-      default: return String(value);
+      case 'number':   return formatNumber(Number(value));
+      case 'date':     return formatearFecha(String(value));
+      default:         return String(value);
     }
   };
 
@@ -57,6 +57,9 @@ export function DataTable({ data, columns, maxHeight: _maxHeight = '24rem', head
     : headerColor === 'red'
       ? 'bg-red-600 text-white'
       : 'bg-gray-100 text-foreground';
+
+  // CSS grid: equal-width columns; last col right-aligned for currency/number
+  const gridCols = `repeat(${columns.length}, minmax(0, 1fr))`;
 
   if (data.length === 0) {
     return (
@@ -68,42 +71,48 @@ export function DataTable({ data, columns, maxHeight: _maxHeight = '24rem', head
 
   return (
     <div className="rounded-xl border border-primary/10 bg-white overflow-hidden">
-      <div className="lg:overflow-y-scroll lg:overscroll-contain lg:touch-pan-y lg:max-h-96">
-        <table className="w-full text-sm">
-          <thead className={`sticky top-0 ${headerBg}`}>
-            <tr>
-              {columns.map((col) => (
-                <th
-                  key={col.key}
-                  className={`px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap ${
-                    col.sortable !== false ? 'cursor-pointer select-none hover:opacity-80' : ''
-                  }`}
-                  onClick={() => col.sortable !== false && handleSort(col.key)}
-                >
-                  <div className="flex items-center gap-1">
-                    {col.label}
-                    {col.sortable !== false && (
-                      sortKey === col.key
-                        ? sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
-                        : <ArrowUpDown className="w-3 h-3 opacity-40" />
-                    )}
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {sortedData.map((row, i) => (
-              <tr key={i} className={`border-t border-primary/5 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
-                {columns.map((col) => (
-                  <td key={col.key} className="px-3 py-2 whitespace-nowrap">
-                    {formatCell(row[col.key], col.format)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* Encabezado sticky — solo escritorio */}
+      <div
+        className={`hidden lg:grid items-center gap-2 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide sticky top-0 z-10 ${headerBg}`}
+        style={{ gridTemplateColumns: gridCols }}
+      >
+        {columns.map((col) => (
+          <button
+            key={col.key}
+            type="button"
+            className={`flex items-center gap-1 text-left ${col.sortable !== false ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+            onClick={() => col.sortable !== false && handleSort(col.key)}
+          >
+            {col.label}
+            {col.sortable !== false && (
+              sortKey === col.key
+                ? sortDir === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />
+                : <ArrowUpDown className="w-3 h-3 opacity-40" />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Zona scrollable solo en escritorio */}
+      <div className="divide-y divide-primary/5 lg:overflow-y-auto lg:max-h-96 lg:overscroll-contain">
+        {sortedData.map((row, i) => (
+          <div
+            key={i}
+            className={`px-3 py-2.5 lg:grid lg:gap-2 lg:items-center ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}`}
+            style={{ gridTemplateColumns: gridCols }}
+          >
+            {columns.map((col, ci) => {
+              const formatted = formatCell(row[col.key], col.format);
+              const isNumeric = col.format === 'currency' || col.format === 'number';
+              return (
+                <span key={col.key} className={`flex items-baseline gap-1 lg:block text-sm ${isNumeric ? 'lg:text-right tabular-nums' : ''} ${ci > 0 ? '' : ''}`}>
+                  <span className="text-[11px] text-brand-brown/40 lg:hidden shrink-0">{col.label}:</span>
+                  <span className={isNumeric && ci === columns.length - 1 ? 'font-medium' : ''}>{formatted}</span>
+                </span>
+              );
+            })}
+          </div>
+        ))}
       </div>
     </div>
   );
