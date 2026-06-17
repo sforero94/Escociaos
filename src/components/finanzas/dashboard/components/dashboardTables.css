@@ -1,0 +1,399 @@
+/*
+ * Estilos responsive para las tablas de detalle del dashboard de finanzas
+ * (Ingresos por Cosecha / Quincena y Detalle Gastos).
+ *
+ * IMPORTANTE: este proyecto compila Tailwind a un index.css ESTÁTICO; no hay
+ * JIT, así que clases utilitarias nuevas (grid-cols arbitrarios, max-h, etc.)
+ * NO se generan y quedan inertes. Por eso el layout de estas tablas vive aquí
+ * como CSS plano con media queries reales: garantiza que el contenido se vea
+ * completo en móvil, tablet y escritorio, sin recortes ni scroll interno.
+ *
+ * Patrón: tarjetas apiladas en móvil/tablet (< 1024px), grid alineado tipo
+ * tabla en escritorio (>= 1024px). Sin alto máximo: la tabla crece y la página
+ * hace scroll.
+ */
+
+/* ---- Contenedor ---- */
+.dtab {
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background: #fff;
+  overflow: hidden;
+}
+
+/* ---- Encabezado (oculto en móvil, visible en escritorio) ---- */
+.dtab-head {
+  display: none;
+}
+
+/* ---- Estado vacío ---- */
+.dtab-empty {
+  padding: 2rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: rgba(77, 36, 15, 0.5);
+}
+
+/* =======================================================================
+   TABLA DE GRUPOS (Cosecha / Quincena)
+   ======================================================================= */
+
+.dtab-group + .dtab-group {
+  border-top: 1px solid var(--border);
+}
+
+/* Fila resumen / botón de expandir */
+.dtab-summary {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: rgba(115, 153, 28, 0.06);
+  padding: 0.625rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  transition: background-color 0.15s ease;
+}
+.dtab-group:first-child .dtab-summary {
+  border-top: 0;
+}
+.dtab-summary:hover {
+  background: rgba(115, 153, 28, 0.12);
+}
+
+.dtab-summary-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.375rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--foreground);
+}
+.dtab-summary-label svg {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+  color: #15803d;
+}
+
+/* Celda métrica (resumen) */
+.dtab-cell {
+  display: flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+.dtab-cell::before {
+  content: attr(data-label) ": ";
+  color: rgba(77, 36, 15, 0.5);
+  font-size: 0.75rem;
+}
+.dtab-cell--total {
+  color: #15803d;
+  font-weight: 600;
+}
+
+/* ---- Detalle expandido ---- */
+.dtab-detail {
+  background: rgba(0, 0, 0, 0.02);
+  border-top: 1px solid var(--border);
+}
+.dtab-detail-head {
+  display: none;
+}
+.dtab-detail-row {
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+.dtab-detail-row + .dtab-detail-row {
+  border-top: 1px solid var(--border);
+}
+.dtab-detail-fecha {
+  font-size: 0.875rem;
+  color: rgba(77, 36, 15, 0.7);
+}
+.dtab-detail-col2 {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--foreground);
+}
+.dtab-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.125rem 1rem;
+  margin-top: 0.125rem;
+}
+.dtab-dcell {
+  display: flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.dtab-dcell::before {
+  content: attr(data-label) ": ";
+  color: rgba(77, 36, 15, 0.4);
+}
+.dtab-dcell--valor {
+  color: #15803d;
+  font-weight: 600;
+}
+
+/* =======================================================================
+   TABLA SIMPLE (DataTable: Detalle Gastos / Ingresos genéricos)
+   ======================================================================= */
+
+.dtbl {
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background: #fff;
+  overflow: hidden;
+}
+.dtbl-head {
+  display: none;
+}
+.dtbl-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.625rem 0.75rem;
+}
+.dtbl-row:nth-child(even) {
+  background: rgba(0, 0, 0, 0.015);
+}
+.dtbl-cell {
+  display: flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+.dtbl-cell::before {
+  content: attr(data-label) ": ";
+  color: rgba(77, 36, 15, 0.4);
+  font-size: 0.6875rem;
+  flex-shrink: 0;
+}
+.dtbl-cell--num .dtbl-val {
+  font-weight: 500;
+}
+.dtbl-empty {
+  padding: 2rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: rgba(77, 36, 15, 0.5);
+}
+
+/* =======================================================================
+   ESCRITORIO (>= 1024px): grids alineados tipo tabla
+   ======================================================================= */
+@media (min-width: 1024px) {
+  /* --- Tabla de grupos --- */
+  .dtab-head {
+    display: grid;
+    grid-template-columns: minmax(8rem, 1fr) minmax(5rem, 7rem) minmax(5.5rem, 7.5rem) minmax(7rem, 9rem);
+    gap: 0.5rem;
+    align-items: center;
+    padding: 0.625rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #fff;
+  }
+  .dtab-head--green {
+    background: #16a34a;
+  }
+  .dtab-head .r {
+    text-align: right;
+  }
+
+  .dtab-summary {
+    display: grid;
+    grid-template-columns: minmax(8rem, 1fr) minmax(5rem, 7rem) minmax(5.5rem, 7.5rem) minmax(7rem, 9rem);
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .dtab-cell {
+    justify-content: flex-end;
+    font-size: 0.875rem;
+  }
+  .dtab-cell::before {
+    content: none;
+  }
+
+  .dtab-detail-head {
+    display: grid;
+    grid-template-columns: 1fr 1fr 7rem 7rem 8rem;
+    gap: 0.5rem;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: rgba(77, 36, 15, 0.5);
+    font-weight: 500;
+  }
+  .dtab-detail-head .r {
+    text-align: right;
+  }
+  .dtab-detail-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 7rem 7rem 8rem;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .dtab-detail-fecha,
+  .dtab-detail-col2 {
+    font-size: 0.8125rem;
+    font-weight: 400;
+    color: rgba(77, 36, 15, 0.8);
+  }
+  .dtab-detail-meta {
+    display: contents;
+  }
+  .dtab-dcell {
+    justify-content: flex-end;
+  }
+  .dtab-dcell::before {
+    content: none;
+  }
+
+  /* --- Tabla simple --- */
+  .dtbl-head {
+    display: grid;
+    gap: 0.5rem;
+    align-items: center;
+    padding: 0.625rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .dtbl-head--green {
+    background: #16a34a;
+    color: #fff;
+  }
+  .dtbl-head--red {
+    background: #dc2626;
+    color: #fff;
+  }
+  .dtbl-head--default {
+    background: #f3f4f6;
+    color: var(--foreground);
+  }
+  .dtbl-th {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    text-align: left;
+    background: none;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    text-transform: inherit;
+    letter-spacing: inherit;
+    padding: 0;
+    cursor: pointer;
+  }
+  .dtbl-th--static {
+    cursor: default;
+  }
+  .dtbl-row {
+    display: grid;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .dtbl-cell {
+    font-size: 0.875rem;
+  }
+  .dtbl-cell::before {
+    content: none;
+  }
+  .dtbl-cell--num {
+    justify-content: flex-end;
+    text-align: right;
+  }
+}
+
+/* =======================================================================
+   TABLA PIVOT (General → Gastos Acumulados / Detalle por Negocio y Categoría)
+   Mantiene <table> markup pero le añade:
+   - iOS touch-safe scroll horizontal (no atrapa el scroll vertical)
+   - Vista de tarjetas en móvil/tablet usando data-label en cada celda
+   ======================================================================= */
+.pivot-scroll {
+  overflow-x: auto;
+  touch-action: pan-y;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Insignia compacta de variación (Var YoY) */
+.pivot-var {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.0625rem;
+  border-radius: 9999px;
+  padding: 0.125rem 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.pivot-var--up   { background: rgba(254, 226, 226, 1); color: rgb(220, 38, 38); }
+.pivot-var--down { background: rgba(220, 252, 231, 1); color: rgb(22, 163, 74); }
+.pivot-var svg { width: 0.5625rem; height: 0.5625rem; flex-shrink: 0; }
+
+/* Móvil (< 768px): convertimos las filas en tarjetas apiladas.
+   En tablet la tabla cabe a ancho completo porque DashboardGeneral usa xl:grid-cols-2. */
+@media (max-width: 767.98px) {
+  .pivot-scroll { overflow-x: visible; }
+  .pivot-scroll table,
+  .pivot-scroll thead,
+  .pivot-scroll tbody,
+  .pivot-scroll tr,
+  .pivot-scroll td,
+  .pivot-scroll th { display: block; }
+  .pivot-scroll colgroup { display: none; }
+  .pivot-scroll thead { display: none; }      /* labels viven en data-label */
+  .pivot-scroll tr {
+    border-top: 1px solid var(--border);
+    padding: 0.625rem 0.75rem;
+  }
+  .pivot-scroll tr:first-child { border-top: 0; }
+  .pivot-scroll td {
+    padding: 0.25rem 0 !important;
+    text-align: left !important;
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+  .pivot-scroll td:first-child {
+    font-weight: 600;
+    font-size: 0.9375rem;
+    padding-bottom: 0.375rem !important;
+    border-bottom: 1px dashed var(--border);
+    margin-bottom: 0.25rem;
+  }
+  .pivot-scroll td[data-label]::before {
+    content: attr(data-label);
+    color: rgba(77, 36, 15, 0.55);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    flex: 0 0 auto;
+    min-width: 7.5rem;
+  }
+  /* La fila TOTAL gana borde superior fuerte */
+  .pivot-scroll tr.pivot-total {
+    border-top: 2px solid rgba(0, 0, 0, 0.15);
+    background: rgba(0, 0, 0, 0.025);
+    font-weight: 600;
+  }
+}

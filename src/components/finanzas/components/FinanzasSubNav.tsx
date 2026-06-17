@@ -69,7 +69,7 @@ export function FinanzasSubNav() {
 
   return (
     <div className="bg-white/80 backdrop-blur-xl border-b border-primary/10 mb-6 -mx-4 lg:-mx-8 px-4 lg:px-8">
-      <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+      <div className="flex flex-wrap gap-x-2 gap-y-0">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const active = isActive(tab.path);
@@ -78,7 +78,7 @@ export function FinanzasSubNav() {
             <button
               key={tab.id}
               onClick={() => navigate(tab.path)}
-              className={`flex items-center gap-2 px-3 lg:px-4 py-3 lg:py-4 border-b-2 transition-all whitespace-nowrap ${
+              className={`flex items-center gap-2 px-2 lg:px-4 py-2 lg:py-4 border-b-2 transition-all whitespace-nowrap ${
                 active
                   ? 'border-primary text-foreground'
                   : 'border-transparent text-brand-brown/60 hover:text-foreground hover:border-primary/30'

@@ -1,20 +1,17 @@
-import { TrendingUp, TrendingDown } from 'lucide-react';
 import { formatCompact } from '@/utils/format';
 import type { PivotRow } from '@/types/finanzas';
+import './dashboardTables.css';
 
 const formatPivot = (v: number) => `$${formatCompact(v)}`;
 
 function VariacionBadge({ actual, anterior }: { actual: number; anterior: number }) {
   if (anterior === 0 && actual === 0) return null;
   const pct = anterior === 0 ? 100 : ((actual - anterior) / anterior) * 100;
-  const isUp = pct > 0;
   if (pct === 0) return null;
+  const isUp = pct > 0;
 
   return (
-    <span className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-medium ${
-      isUp ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
-    }`}>
-      {isUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+    <span className={`pivot-var ${isUp ? 'pivot-var--up' : 'pivot-var--down'}`}>
       {isUp ? '+' : ''}{pct.toFixed(0)}%
     </span>
   );
@@ -62,7 +59,7 @@ export function PivotTableGastos({ data, loading }: PivotTableGastosProps) {
       <div className="px-4 py-3 border-b border-primary/10">
         <h3 className="text-sm font-semibold text-foreground">Gastos Acumulados por Negocio</h3>
       </div>
-      <div className="overflow-x-auto">
+      <div className="pivot-scroll">
         <table className="w-full text-sm table-fixed">
           <colgroup>
             <col className="w-[16%]" />
@@ -93,22 +90,22 @@ export function PivotTableGastos({ data, loading }: PivotTableGastosProps) {
             {data.map((row, i) => (
               <tr key={row.negocio_id} className={`border-t border-primary/5 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
                 <td className="px-3 py-2 font-medium text-foreground">{row.negocio}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{formatPivot(row.ytd_actual)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{formatPivot(row.ytd_anterior)}</td>
-                <td className="px-3 py-2 text-right"><VariacionBadge actual={row.ytd_actual} anterior={row.ytd_anterior} /></td>
-                <td className="px-3 py-2 text-right tabular-nums">{formatPivot(row.total_anterior)}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{formatPivot(row.total_n2)}</td>
-                <td className="px-3 py-2 text-right"><VariacionBadge actual={row.total_anterior} anterior={row.total_n2} /></td>
+                <td className="px-3 py-2 text-right tabular-nums" data-label={`YTD ${currentYear}`}>{formatPivot(row.ytd_actual)}</td>
+                <td className="px-3 py-2 text-right tabular-nums" data-label={`YTD ${currentYear - 1}`}>{formatPivot(row.ytd_anterior)}</td>
+                <td className="px-3 py-2 text-right" data-label="Var YoY (YTD)"><VariacionBadge actual={row.ytd_actual} anterior={row.ytd_anterior} /></td>
+                <td className="px-3 py-2 text-right tabular-nums" data-label={`Total ${currentYear - 1}`}>{formatPivot(row.total_anterior)}</td>
+                <td className="px-3 py-2 text-right tabular-nums" data-label={`Total ${currentYear - 2}`}>{formatPivot(row.total_n2)}</td>
+                <td className="px-3 py-2 text-right" data-label="Var YoY (Total)"><VariacionBadge actual={row.total_anterior} anterior={row.total_n2} /></td>
               </tr>
             ))}
-            <tr className="border-t-2 border-foreground/20 bg-gray-100 font-bold">
+            <tr className="pivot-total border-t-2 border-foreground/20 bg-gray-100 font-bold">
               <td className="px-3 py-2 text-foreground">{grandTotal.negocio}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{formatPivot(grandTotal.ytd_actual)}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{formatPivot(grandTotal.ytd_anterior)}</td>
-              <td className="px-3 py-2 text-right"><VariacionBadge actual={grandTotal.ytd_actual} anterior={grandTotal.ytd_anterior} /></td>
-              <td className="px-3 py-2 text-right tabular-nums">{formatPivot(grandTotal.total_anterior)}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{formatPivot(grandTotal.total_n2)}</td>
-              <td className="px-3 py-2 text-right"><VariacionBadge actual={grandTotal.total_anterior} anterior={grandTotal.total_n2} /></td>
+              <td className="px-3 py-2 text-right tabular-nums" data-label={`YTD ${currentYear}`}>{formatPivot(grandTotal.ytd_actual)}</td>
+              <td className="px-3 py-2 text-right tabular-nums" data-label={`YTD ${currentYear - 1}`}>{formatPivot(grandTotal.ytd_anterior)}</td>
+              <td className="px-3 py-2 text-right" data-label="Var YoY (YTD)"><VariacionBadge actual={grandTotal.ytd_actual} anterior={grandTotal.ytd_anterior} /></td>
+              <td className="px-3 py-2 text-right tabular-nums" data-label={`Total ${currentYear - 1}`}>{formatPivot(grandTotal.total_anterior)}</td>
+              <td className="px-3 py-2 text-right tabular-nums" data-label={`Total ${currentYear - 2}`}>{formatPivot(grandTotal.total_n2)}</td>
+              <td className="px-3 py-2 text-right" data-label="Var YoY (Total)"><VariacionBadge actual={grandTotal.total_anterior} anterior={grandTotal.total_n2} /></td>
             </tr>
           </tbody>
         </table>

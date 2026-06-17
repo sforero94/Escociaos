@@ -317,7 +317,7 @@ export function IngresosList({ onEdit }: IngresosListProps) {
       </div>
 
       {/* Compact income list */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-6 h-6 text-primary animate-spin" />
