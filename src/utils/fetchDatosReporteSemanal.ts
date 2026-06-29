@@ -1177,12 +1177,16 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
   const supabase = getSupabase();
 
   // 1. Load ALL lotes and sublotes from the DB (to guarantee all appear even without data)
+  const cutoff30d = restarDias(semana.fin, 30);
+
   const [
     { data: todosLotes, error: errLotes },
     { data: todosSublotes, error: errSub },
+    { data: fechas30dRaw },
   ] = await Promise.all([
     supabase.from('lotes').select('id, nombre').order('nombre'),
     supabase.from('sublotes').select('id, nombre, lote_id').order('nombre'),
+    supabase.from('monitoreos').select('lote_id').gte('fecha_monitoreo', cutoff30d).lte('fecha_monitoreo', semana.fin),
   ]);
 
   if (errLotes) throw new Error(`Error al cargar lotes: ${errLotes.message}`);
@@ -1190,6 +1194,10 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
 
   const lotesDB = (todosLotes || []) as Array<{ id: string; nombre: string }>;
   const sublotesDB = (todosSublotes || []) as Array<{ id: string; nombre: string; lote_id: string }>;
+
+  // Exclude lotes with no monitoring activity in the past 30 days (e.g. eradicated lots)
+  const lotesActivos30d = new Set((fechas30dRaw || []).map((r: any) => r.lote_id));
+  const lotesDBActivos = lotesDB.filter(l => lotesActivos30d.has(l.id));
 
   // 2. Find the 2 most relevant monitoring dates PER LOTE relative to the report week
   //    Different lotes may be monitored on different dates within the same week.
@@ -1261,7 +1269,7 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
 
   // Empty result if no monitoring data at all in the 2-week window
   if (!fechaActual) {
-    const vistasVacias: VistaLoteComparativa[] = lotesDB.map(l => ({
+    const vistasVacias: VistaLoteComparativa[] = lotesDBActivos.map(l => ({
       loteId: l.id,
       loteNombre: l.nombre,
       sinDatos: true,
@@ -1276,7 +1284,7 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
       avisoFechaDesactualizada: 'No se encontraron monitoreos en las últimas 2 semanas.',
       resumenGlobal: [],
       vistasPorLote: vistasVacias,
-      vistasPorSublote: lotesDB.map(l => ({
+      vistasPorSublote: lotesDBActivos.map(l => ({
         loteId: l.id,
         loteNombre: l.nombre,
         sinDatos: true,
@@ -1530,8 +1538,8 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
     return (b.promedioActual ?? 0) - (a.promedioActual ?? 0);
   });
 
-  // 5. Build VISTAS POR LOTE (Slide 2) — ALL lotes, using per-lote dates
-  const vistasPorLote: VistaLoteComparativa[] = lotesDB.map(lote => {
+  // 5. Build VISTAS POR LOTE (Slide 2) — only lotes active in the past 30 days
+  const vistasPorLote: VistaLoteComparativa[] = lotesDBActivos.map(lote => {
     const regLoteActual = getRegActualesForLote(lote.id);
     const regLoteAnterior = getRegAnterioresForLote(lote.id);
     const loteFechas = loteFechasMap.get(lote.id);
@@ -1580,8 +1588,8 @@ export async function fetchDatosMonitoreo(semana: RangoSemana): Promise<DatosMon
 
   await enrichWithHistorical(vistasPorLote);
 
-  // 6. Build VISTAS POR SUBLOTE (Slide 3) — ALL lotes/sublotes, using per-lote dates
-  const vistasPorSublote: VistaSubloteComparativa[] = lotesDB.map(lote => {
+  // 6. Build VISTAS POR SUBLOTE (Slide 3) — only lotes active in the past 30 days
+  const vistasPorSublote: VistaSubloteComparativa[] = lotesDBActivos.map(lote => {
     const sublotesLote = sublotesDB.filter(s => s.lote_id === lote.id).map(s => s.nombre).sort();
     const regLoteActual = getRegActualesForLote(lote.id);
     const regLoteAnterior = getRegAnterioresForLote(lote.id);
