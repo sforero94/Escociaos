@@ -1,4 +1,4 @@
-import { AlertTriangle, Calendar, Bug, CheckCircle2, Beaker, DollarSign, Users } from 'lucide-react';
+import { AlertTriangle, Calendar, Bug, CheckCircle2, Beaker, DollarSign, Users, Beef } from 'lucide-react';
 import { formatRelativeTime } from '../../utils/format';
 
 /**
@@ -8,13 +8,99 @@ export interface Alerta {
   /** ID único de la alerta (opcional, útil para keys) */
   id?: string | number;
   /** Tipo de alerta que determina el icono */
-  tipo: 'stock' | 'vencimiento' | 'monitoreo' | 'aplicacion' | 'gasto' | 'labor';
+  tipo: 'stock' | 'vencimiento' | 'monitoreo' | 'aplicacion' | 'gasto' | 'labor' | 'ganado';
   /** Mensaje descriptivo de la alerta */
   mensaje: string;
   /** Fecha de la alerta (Date o string ISO) */
   fecha?: string | Date;
   /** Nivel de prioridad que determina el estilo */
   prioridad: 'alta' | 'media' | 'baja';
+}
+
+/** Configuración de estilos por prioridad — usada por AlertList y CompactAlertList */
+const PRIORIDAD_CONFIG = {
+  alta: {
+    border: 'border-red-200',
+    bg: 'bg-red-50/50',
+    badgeBg: 'bg-red-100',
+    badgeText: 'text-red-700',
+    iconColor: 'text-red-600',
+    dot: 'bg-red-500',
+    label: 'Alta',
+  },
+  media: {
+    border: 'border-yellow-200',
+    bg: 'bg-yellow-50/50',
+    badgeBg: 'bg-yellow-100',
+    badgeText: 'text-yellow-700',
+    iconColor: 'text-yellow-600',
+    dot: 'bg-yellow-500',
+    label: 'Media',
+  },
+  baja: {
+    border: 'border-gray-200',
+    bg: 'bg-gray-50/50',
+    badgeBg: 'bg-gray-100',
+    badgeText: 'text-gray-700',
+    iconColor: 'text-gray-600',
+    dot: 'bg-gray-400',
+    label: 'Baja',
+  },
+} as const;
+
+function getPrioridadConfig(prioridad: Alerta['prioridad']) {
+  return PRIORIDAD_CONFIG[prioridad];
+}
+
+/** Icono según tipo de alerta — usado por AlertList y CompactAlertList */
+function getTipoIcon(tipo: Alerta['tipo'], className: string) {
+  const icons: Record<Alerta['tipo'], React.ReactNode> = {
+    stock: <AlertTriangle className={className} />,
+    vencimiento: <Calendar className={className} />,
+    monitoreo: <Bug className={className} />,
+    aplicacion: <Beaker className={className} />,
+    gasto: <DollarSign className={className} />,
+    labor: <Users className={className} />,
+    ganado: <Beef className={className} />,
+  };
+  return icons[tipo];
+}
+
+/**
+ * CompactAlertList - Fila de alerta de una sola línea (icono + mensaje),
+ * pensada para el dashboard principal: rápida de escanear entre tareas de
+ * campo. No repite la información de prioridad como badge; usa un punto de
+ * color + el color del icono.
+ */
+export function CompactAlertList({
+  alertas,
+  onAlertClick,
+}: {
+  alertas: Alerta[];
+  onAlertClick?: (alerta: Alerta) => void;
+}) {
+  if (alertas.length === 0) return null;
+
+  return (
+    <div className="space-y-1.5">
+      {alertas.map((alerta, index) => {
+        const config = getPrioridadConfig(alerta.prioridad);
+        const alertaId = alerta.id || index;
+
+        return (
+          <div
+            key={alertaId}
+            onClick={() => onAlertClick?.(alerta)}
+            className={`flex items-start gap-2.5 rounded-lg px-3 py-2 ${config.bg} ${onAlertClick ? 'cursor-pointer active:opacity-70' : ''}`}
+          >
+            <span className={`mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full ${config.dot}`} />
+            {getTipoIcon(alerta.tipo, `w-4 h-4 flex-shrink-0 mt-0.5 ${config.iconColor}`)}
+            <p className="text-sm text-gray-800 leading-snug">{alerta.mensaje}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 /**
@@ -59,50 +145,6 @@ export function AlertList({
 }: AlertListProps) {
   // Limitar alertas a mostrar
   const alertasVisibles = alertas.slice(0, maxAlertas);
-
-  // Configuración de estilos por prioridad
-  const getPrioridadConfig = (prioridad: Alerta['prioridad']) => {
-    const configs = {
-      alta: {
-        border: 'border-red-200',
-        bg: 'bg-red-50/50',
-        badgeBg: 'bg-red-100',
-        badgeText: 'text-red-700',
-        iconColor: 'text-red-600',
-        label: 'Alta',
-      },
-      media: {
-        border: 'border-yellow-200',
-        bg: 'bg-yellow-50/50',
-        badgeBg: 'bg-yellow-100',
-        badgeText: 'text-yellow-700',
-        iconColor: 'text-yellow-600',
-        label: 'Media',
-      },
-      baja: {
-        border: 'border-gray-200',
-        bg: 'bg-gray-50/50',
-        badgeBg: 'bg-gray-100',
-        badgeText: 'text-gray-700',
-        iconColor: 'text-gray-600',
-        label: 'Baja',
-      },
-    };
-    return configs[prioridad];
-  };
-
-  // Obtener icono según tipo de alerta
-  const getTipoIcon = (tipo: Alerta['tipo'], className: string) => {
-    const icons: Record<Alerta['tipo'], React.ReactNode> = {
-      stock: <AlertTriangle className={className} />,
-      vencimiento: <Calendar className={className} />,
-      monitoreo: <Bug className={className} />,
-      aplicacion: <Beaker className={className} />,
-      gasto: <DollarSign className={className} />,
-      labor: <Users className={className} />,
-    };
-    return icons[tipo];
-  };
 
   // Loading state
   if (loading) {

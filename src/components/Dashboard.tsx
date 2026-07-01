@@ -1,754 +1,95 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, Sprout, Package, Briefcase, TrendingUp, TrendingDown } from 'lucide-react';
 import { getSupabase } from '../utils/supabase/client';
 import { formatNumber, formatCompact } from '../utils/format';
-import { formatearFechaCorta } from '../utils/fechas';
-import { LineChart, Line, BarChart, Bar, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 import {
-  AlertList,
-  AlertListHeader,
-  AlertListContainer,
-  type Alerta
+  CompactAlertList,
+  EstadoHeader,
+  ClimaCard,
+  QuickLinksRow,
+  DashboardKPICard,
+  type Alerta,
 } from './dashboard/index';
+import { useGanadoInventario } from './ganado/hooks/useGanadoInventario';
+import { calcularKPIsInventario, calcularVariacion } from '../utils/calculosGanado';
 
-interface DashboardProps {
-  onNavigate?: (view: string) => void;
-}
+// Plagas de interés para el KPI de incidencia
+const PLAGAS_INTERES = [
+  'Monalonion',
+  'Ácaro',
+  'Huevos de Ácaro',
+  'Ácaro Cristalino',
+  'Cucarrón marceño',
+  'Trips',
+];
 
-/**
- * Tarjeta de Monitoreo con mini gráfica de tendencias
- */
-function MonitoreoCard({ onClick }: { onClick: () => void }) {
-  const [tendencias, setTendencias] = useState<TendenciaData[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    cargarTendencias();
-  }, []);
-
-  const cargarTendencias = async () => {
-    try {
-      const supabase = getSupabase();
-
-      // Cargar catálogo de plagas de interés
-      const { data: catalogoPlagas, error: errorCatalogo } = await supabase
-        .from('plagas_enfermedades_catalogo')
-        .select('id, nombre')
-        .eq('activo', true);
-
-      if (errorCatalogo) throw errorCatalogo;
-
-      // Filtrar IDs de plagas de interés
-      const plagasInteresIds = catalogoPlagas
-        ?.filter(p => PLAGAS_INTERES.some(nombre => 
-          p.nombre.toLowerCase().includes(nombre.toLowerCase())
-        ))
-        .map(p => p.id) || [];
-
-      if (plagasInteresIds.length === 0) {
-        setTendencias([]);
-        setIsLoading(false);
-        return;
-      }
-
-      // ✅ CORREGIDO: Cargar datos igual que GraficoTendencias (por fecha, luego agrupar por semana)
-      const { data: monitoreos, error } = await supabase
-        .from('monitoreos')
-        .select(`
-          fecha_monitoreo,
-          incidencia,
-          arboles_monitoreados,
-          arboles_afectados,
-          plaga_enfermedad_id,
-          plagas_enfermedades_catalogo!inner(nombre)
-        `)
-        .in('plaga_enfermedad_id', plagasInteresIds)
-        .order('fecha_monitoreo', { ascending: true })
-        .limit(1000);
-
-      if (error) throw error;
-
-      if (!monitoreos || monitoreos.length === 0) {
-        setTendencias([]);
-        setIsLoading(false);
-        return;
-      }
-
-      // ✅ CORREGIDO: Agrupar por SEMANA y plaga (como en el módulo)
-      const datosPorSemana: { 
-        [semanaKey: string]: { 
-          semana: number; 
-          año: number; 
-          plagas: { [plaga: string]: any[] }
-        } 
-      } = {};
-      
-      const plagasUnicas = new Set<string>();
-
-      monitoreos.forEach((m) => {
-        const fecha = new Date(m.fecha_monitoreo);
-        const semana = getNumeroSemana(fecha);
-        const año = fecha.getFullYear();
-        const semanaKey = `${año}-S${semana}`;
-        const plagaNombre = (m.plagas_enfermedades_catalogo as any).nombre;
-
-        plagasUnicas.add(plagaNombre);
-
-        if (!datosPorSemana[semanaKey]) {
-          datosPorSemana[semanaKey] = {
-            semana,
-            año,
-            plagas: {}
-          };
-        }
-        if (!datosPorSemana[semanaKey].plagas[plagaNombre]) {
-          datosPorSemana[semanaKey].plagas[plagaNombre] = [];
-        }
-        datosPorSemana[semanaKey].plagas[plagaNombre].push(m);
-      });
-
-      // ✅ Ordenar por año y semana, tomar últimas 4
-      const semanasOrdenadas = Object.entries(datosPorSemana)
-        .sort((a, b) => {
-          const [_keyA, dataA] = a;
-          const [_keyB, dataB] = b;
-
-          if (dataA.año !== dataB.año) {
-            return dataA.año - dataB.año;
-          }
-          return dataA.semana - dataB.semana;
-        })
-        .slice(-4); // Últimas 4 semanas
-
-      // ✅ Formatear para Recharts - calcular incidencia from tree counts
-      const datosFormateados: TendenciaData[] = semanasOrdenadas.map(([_key, data]) => {
-        const punto: TendenciaData = { semana: `S${data.semana}` };
-
-        Object.entries(data.plagas).forEach(([plaga, registros]) => {
-          const totalAfectados = registros.reduce((s: number, m: any) => s + (m.arboles_afectados || 0), 0);
-          const totalMonitoreados = registros.reduce((s: number, m: any) => s + (m.arboles_monitoreados || 0), 0);
-          const incidencia = totalMonitoreados > 0 ? (totalAfectados / totalMonitoreados) * 100 : 0;
-          punto[plaga] = Math.round(incidencia * 10) / 10;
-        });
-
-        return punto;
-      });
-
-      setTendencias(datosFormateados);
-    } catch (error) {
-      setTendencias([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const getNumeroSemana = (fecha: Date): number => {
-    const d = new Date(Date.UTC(fecha.getFullYear(), fecha.getMonth(), fecha.getDate()));
-    const dayNum = d.getUTCDay() || 7;
-    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-    return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-  };
-
-  // Obtener plagas únicas para la leyenda
-  const plagasEnGrafico = tendencias.length > 0
-    ? Object.keys(tendencias[0]).filter(k => k !== 'semana')
-    : [];
-
-  const COLORES_PLAGAS = ['#73991C', '#E74C3C', '#3498DB', '#F39C12', '#9B59B6', '#1ABC9C'];
-
-  return (
-    <div
-      onClick={onClick}
-      className="bg-white rounded-2xl p-6 border border-gray-200 hover:border-primary/40 transition-all cursor-pointer group shadow-sm hover:shadow-md"
-    >
-      {/* Header */}
-      <div className="flex items-start gap-4 mb-4">
-        <div className="w-12 h-12 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-          <Eye className="w-6 h-6 text-primary" />
-        </div>
-        <div className="flex-1">
-          <p className="text-xs text-brand-brown/60 mb-1 tracking-wide uppercase">Monitoreo</p>
-          <h3 className="text-foreground mb-1">Plagas de Interés</h3>
-          <p className="text-xs text-brand-brown/60">
-            Tendencias últimas 4 semanas
-          </p>
-        </div>
-      </div>
-
-      {/* Mini Gráfica */}
-      {isLoading ? (
-        <div className="h-32 flex items-center justify-center">
-          <div className="w-6 h-6 border-3 border-primary/30 border-t-primary rounded-full animate-spin"></div>
-        </div>
-      ) : tendencias.length > 0 ? (
-        <>
-          <div className="h-32 -mx-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={tendencias} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                <XAxis 
-                  dataKey="semana" 
-                  tick={{ fill: '#4D240F', fontSize: 10 }}
-                  stroke="#E5E7EB"
-                  tickLine={false}
-                />
-                <YAxis 
-                  tick={{ fill: '#4D240F', fontSize: 10 }}
-                  stroke="#E5E7EB"
-                  tickLine={false}
-                  domain={[0, 'auto']}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'white', 
-                    border: '1px solid #E5E7EB',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                    padding: '8px'
-                  }}
-                  formatter={(value: any) => `${value}%`}
-                />
-                {plagasEnGrafico.map((plaga, index) => (
-                  <Line
-                    key={plaga}
-                    type="monotone"
-                    dataKey={plaga}
-                    stroke={COLORES_PLAGAS[index % COLORES_PLAGAS.length]}
-                    strokeWidth={2}
-                    dot={{ r: 3 }}
-                    activeDot={{ r: 4 }}
-                  />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Mini leyenda */}
-          <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-2">
-            {plagasEnGrafico.slice(0, 3).map((plaga, index) => (
-              <div key={plaga} className="flex items-center gap-1.5">
-                <div 
-                  className="w-2 h-2 rounded-full" 
-                  style={{ backgroundColor: COLORES_PLAGAS[index % COLORES_PLAGAS.length] }}
-                ></div>
-                <span className="text-xs text-brand-brown/70">{plaga}</span>
-              </div>
-            ))}
-            {plagasEnGrafico.length > 3 && (
-              <span className="text-xs text-brand-brown/50">+{plagasEnGrafico.length - 3} más</span>
-            )}
-          </div>
-        </>
-      ) : (
-        <div className="h-32 flex flex-col items-center justify-center text-brand-brown/50">
-          <Eye className="w-8 h-8 mb-2 opacity-30" />
-          <p className="text-xs">Sin datos de las últimas 4 semanas</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * Tarjeta de Aplicaciones con progreso
- */
-interface AplicacionProgress {
-  id: string;
-  nombre: string;
-  tipo: string;
-  porcentaje: number;
-  aplicado: number;
-  total: number;
-  unidad: string;
-}
-
-interface AplicacionPlaneada {
-  id: string;
-  nombre: string;
-  num_lotes: number;
-  fecha_inicio: string | null;
-  fecha_fin: string | null;
-}
-
-interface AplicacionesStats {
-  planeadas: number;
-  activas: number;
-  completadas: number;
-  aplicacionesEnProgreso: AplicacionProgress[];
-  aplicacionesPlaneadas: AplicacionPlaneada[];
-}
-
-function AplicacionesCard({ 
-  stats, 
-  loading, 
-  onClick 
-}: { 
-  stats: AplicacionesStats | null; 
-  loading: boolean; 
-  onClick: () => void;
-}) {
-  if (loading) {
-    return (
-      <div className="bg-white rounded-2xl p-6 border border-gray-200 animate-pulse">
-        <div className="space-y-4">
-          <div className="h-4 bg-gray-200 rounded w-24"></div>
-          <div className="h-8 bg-gray-200 rounded w-40"></div>
-          <div className="h-16 bg-gray-200 rounded"></div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      onClick={onClick}
-      className="bg-white rounded-2xl p-6 border border-gray-200 hover:border-primary/40 transition-all cursor-pointer group shadow-sm hover:shadow-md"
-    >
-      {/* Header */}
-      <div className="flex items-start gap-4 mb-4">
-        <div className="w-12 h-12 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-          <Sprout className="w-6 h-6 text-primary" />
-        </div>
-        <div className="flex-1">
-          <p className="text-xs text-brand-brown/60 mb-1 tracking-wide uppercase">Aplicaciones</p>
-          <h3 className="text-2xl text-foreground">{stats?.activas || 0} Activas</h3>
-        </div>
-      </div>
-
-      {/* Indicadores sutiles de estado */}
-      <div className="flex items-center gap-4 mb-4 pb-4 border-b border-gray-100">
-        <div className="text-xs text-brand-brown/60">
-          <span className="inline-block w-2 h-2 bg-blue-400 rounded-full mr-1.5"></span>
-          {stats?.planeadas || 0} Planeadas
-        </div>
-        <div className="text-xs text-brand-brown/60">
-          <span className="inline-block w-2 h-2 bg-green-500 rounded-full mr-1.5"></span>
-          {stats?.completadas || 0} Completadas
-        </div>
-      </div>
-
-      {/* Progreso de aplicaciones activas */}
-      <div className="space-y-3 mb-4">
-        {stats?.aplicacionesEnProgreso && stats.aplicacionesEnProgreso.length > 0 ? (
-          stats.aplicacionesEnProgreso.slice(0, 2).map((app) => (
-            <div key={app.id} className="space-y-1.5">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-foreground truncate">{app.nombre}</span>
-                <span className="text-primary font-medium ml-2">{app.porcentaje}%</span>
-              </div>
-              <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-primary to-secondary rounded-full transition-all duration-500"
-                  style={{ width: `${app.porcentaje}%` }}
-                ></div>
-              </div>
-              <p className="text-xs text-brand-brown/60">
-                {app.aplicado} / {app.total} {app.unidad}
-              </p>
-            </div>
-          ))
-        ) : (
-          <p className="text-sm text-brand-brown/50 text-center py-4">
-            No hay aplicaciones activas
-          </p>
-        )}
-      </div>
-
-      {/* Aplicaciones planeadas */}
-      {stats?.aplicacionesPlaneadas && stats.aplicacionesPlaneadas.length > 0 && (
-        <div className="pt-4 border-t border-gray-100 space-y-2">
-          <p className="text-xs text-brand-brown/60 mb-3 uppercase tracking-wide">Planificadas</p>
-          {stats.aplicacionesPlaneadas.map((app) => (
-            <div 
-              key={app.id} 
-              className="bg-blue-50/50 border border-blue-100 rounded-xl p-3"
-            >
-              <div className="flex items-start justify-between mb-2">
-                <h4 className="text-sm text-foreground flex-1 pr-2 line-clamp-2">{app.nombre}</h4>
-                <span className="text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">
-                  {app.num_lotes} {app.num_lotes === 1 ? 'lote' : 'lotes'}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-brand-brown/60">
-                {app.fecha_inicio && app.fecha_fin ? (
-                  <>
-                    <span>{formatearFechaCorta(app.fecha_inicio)}</span>
-                    <span>→</span>
-                    <span>{formatearFechaCorta(app.fecha_fin)}</span>
-                  </>
-                ) : app.fecha_inicio ? (
-                  <span>Inicio: {formatearFechaCorta(app.fecha_inicio)}</span>
-                ) : (
-                  <span className="italic">Sin fechas definidas</span>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * Tarjeta de Inventario con valor y estado
- */
-interface InventarioStats {
-  valorTotal: number;
-  promedioTresMeses: number;
-  porcentajeCambio: number;
-  porEstado: {
-    ok: number;
-    sinExistencias: number;
-    perdido: number;
-    vencido: number;
-  };
-}
-
-function InventarioCard({ 
-  stats, 
-  loading, 
-  onClick 
-}: { 
-  stats: InventarioStats | null; 
-  loading: boolean; 
-  onClick: () => void;
-}) {
-  if (loading) {
-    return (
-      <div className="bg-white rounded-2xl p-6 border border-gray-200 animate-pulse">
-        <div className="space-y-4">
-          <div className="h-4 bg-gray-200 rounded w-24"></div>
-          <div className="h-8 bg-gray-200 rounded w-40"></div>
-          <div className="h-16 bg-gray-200 rounded"></div>
-        </div>
-      </div>
-    );
-  }
-
-  // Formatear valor a millones con 1 decimal
-  const valorEnMillones = (stats?.valorTotal || 0) / 1000000;
-  const valorFormateado = `$${valorEnMillones.toFixed(1)}M`;
-
-  // Determinar si está subiendo o bajando
-  const porcentajeCambio = stats?.porcentajeCambio || 0;
-  const estaSubiendo = porcentajeCambio > 0;
-  const estaBajando = porcentajeCambio < 0;
-
-  return (
-    <div
-      onClick={onClick}
-      className="bg-white rounded-2xl p-6 border border-gray-200 hover:border-primary/40 transition-all cursor-pointer group shadow-sm hover:shadow-md"
-    >
-      {/* Header */}
-      <div className="flex items-start gap-4 mb-4">
-        <div className="w-12 h-12 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-          <Package className="w-6 h-6 text-primary" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-xs text-brand-brown/60 mb-1 tracking-wide uppercase">Inventario</p>
-          
-          {/* Dos columnas: Valor e Indicador */}
-          <div className="flex items-start justify-between gap-4">
-            {/* Columna izquierda: Solo el valor */}
-            <div>
-              <h3 className="text-2xl text-foreground">{valorFormateado}</h3>
-            </div>
-
-            {/* Columna derecha: Indicador de tendencia CON texto descriptivo */}
-            {porcentajeCambio !== 0 && (
-              <div className="flex flex-col items-end flex-shrink-0">
-                <div className={`flex items-center gap-1 mb-0.5 ${
-                  estaBajando ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {estaBajando ? (
-                    <TrendingDown className="w-4 h-4" />
-                  ) : (
-                    <TrendingUp className="w-4 h-4" />
-                  )}
-                  <span className="text-sm font-medium">
-                    {Math.abs(porcentajeCambio).toFixed(1)}%
-                  </span>
-                </div>
-                <p className="text-xs text-brand-brown/50 text-right">
-                  vs. promedio 3 últimos meses
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Estado de productos */}
-      <div className="space-y-2 mt-4 pt-4 border-t border-gray-100">
-        <div className="flex items-center justify-between text-sm">
-          <div className="flex items-center gap-2">
-            <span className="inline-block w-2 h-2 bg-green-500 rounded-full"></span>
-            <span className="text-brand-brown/70">OK</span>
-          </div>
-          <span className="text-foreground font-medium">{stats?.porEstado.ok || 0}</span>
-        </div>
-        <div className="flex items-center justify-between text-sm">
-          <div className="flex items-center gap-2">
-            <span className="inline-block w-2 h-2 bg-red-500 rounded-full"></span>
-            <span className="text-brand-brown/70">Sin existencias</span>
-          </div>
-          <span className="text-foreground font-medium">{stats?.porEstado.sinExistencias || 0}</span>
-        </div>
-        <div className="flex items-center justify-between text-sm">
-          <div className="flex items-center gap-2">
-            <span className="inline-block w-2 h-2 bg-gray-400 rounded-full"></span>
-            <span className="text-brand-brown/70">Perdido</span>
-          </div>
-          <span className="text-foreground font-medium">{stats?.porEstado.perdido || 0}</span>
-        </div>
-        <div className="flex items-center justify-between text-sm">
-          <div className="flex items-center gap-2">
-            <span className="inline-block w-2 h-2 bg-orange-500 rounded-full"></span>
-            <span className="text-brand-brown/70">Vencido</span>
-          </div>
-          <span className="text-foreground font-medium">{stats?.porEstado.vencido || 0}</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-interface LaboresActividadSemana {
-  actividad: string;
-  jornales: number;
-}
-
-interface LaboresStats {
-  actividadesSemana: LaboresActividadSemana[];
+interface KPIsDashboard {
+  incidencia: number | null;
+  incidenciaVariacion: number | undefined;
+  incidenciaSparkline: number[];
   jornalesSemana: number;
-  personalActivo: number;
+  jornalesVariacion: number | undefined;
+  jornalesSparkline: number[];
+  jornalesContexto: string | null;
+  gastoMes: number;
+  gastoVariacion: number | undefined;
+  gastoContexto: string | null;
+  ganadoCabezas: number;
+  ganadoNeto: number;
+  ganadoContexto: string | null;
 }
 
-/**
- * Tarjeta de Labores - Datos propios (patrón MonitoreoCard)
- */
-function LaboresCard({ onClick }: { onClick: () => void }) {
-  const [stats, setStats] = useState<LaboresStats | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+const KPIS_VACIO: KPIsDashboard = {
+  incidencia: null,
+  incidenciaVariacion: undefined,
+  incidenciaSparkline: [],
+  jornalesSemana: 0,
+  jornalesVariacion: undefined,
+  jornalesSparkline: [],
+  jornalesContexto: null,
+  gastoMes: 0,
+  gastoVariacion: undefined,
+  gastoContexto: null,
+  ganadoCabezas: 0,
+  ganadoNeto: 0,
+  ganadoContexto: null,
+};
 
-  useEffect(() => {
-    cargarLaboresStats();
-  }, []);
-
-  const cargarLaboresStats = async () => {
-    try {
-      const supabase = getSupabase();
-      const hoy = new Date();
-
-      // Week bounds: Monday → today
-      const diaSemana = hoy.getDay();
-      const diasDesdeLunes = diaSemana === 0 ? 6 : diaSemana - 1;
-      const lunes = new Date(hoy);
-      lunes.setDate(hoy.getDate() - diasDesdeLunes);
-      lunes.setHours(0, 0, 0, 0);
-      const fechaLunes = lunes.toISOString().split('T')[0];
-      const fechaHoy   = hoy.toISOString().split('T')[0];
-
-      // Weekly registros → nested join to get tipo_tarea nombre + worker IDs
-      const { data: registrosSemana, error: errorSemana } = await supabase
-        .from('registros_trabajo')
-        .select(`
-          fraccion_jornal,
-          empleado_id,
-          contratista_id,
-          tareas!inner(
-            tipo_tarea_id,
-            tipos_tareas(nombre)
-          )
-        `)
-        .gte('fecha_trabajo', fechaLunes)
-        .lte('fecha_trabajo', fechaHoy);
-
-      if (errorSemana) throw errorSemana;
-
-      // Aggregate weekly data by activity type + count unique workers
-      const actividadMap = new Map<string, number>();
-      const trabajadoresUnicos = new Set<string>();
-      let jornalesSemana = 0;
-      (registrosSemana || []).forEach((r: any) => {
-        const nombre: string = r.tareas?.tipos_tareas?.nombre || 'Sin tipo';
-        const jornal = Number(r.fraccion_jornal) || 0;
-        actividadMap.set(nombre, (actividadMap.get(nombre) || 0) + jornal);
-        jornalesSemana += jornal;
-        if (r.empleado_id) trabajadoresUnicos.add(`e_${r.empleado_id}`);
-        if (r.contratista_id) trabajadoresUnicos.add(`c_${r.contratista_id}`);
-      });
-
-      const actividadesSemana: LaboresActividadSemana[] = Array.from(actividadMap.entries())
-        .map(([actividad, jornales]) => ({ actividad, jornales }))
-        .sort((a, b) => b.jornales - a.jornales);
-
-      const personalActivo = trabajadoresUnicos.size;
-
-      setStats({
-        actividadesSemana,
-        jornalesSemana: Math.round(jornalesSemana * 100) / 100,
-        personalActivo,
-      });
-    } catch {
-      setStats({ actividadesSemana: [], jornalesSemana: 0, personalActivo: 0 });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const COLORES_ACTIVIDADES = [
-    '#73991C', '#BFD97D', '#4D8C0A', '#A3C959', '#D4ED8A', '#5C7A10',
-  ];
-
+function KPITileSkeleton() {
   return (
-    <div
-      onClick={onClick}
-      className="bg-white rounded-2xl p-6 border border-gray-200 hover:border-primary/40 transition-all cursor-pointer group shadow-sm hover:shadow-md"
-    >
-      {/* Header */}
-      <div className="flex items-start gap-4 mb-4">
-        <div className="w-12 h-12 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-          <Briefcase className="w-6 h-6 text-primary" />
-        </div>
-        <div className="flex-1">
-          <p className="text-xs text-brand-brown/60 mb-1 tracking-wide uppercase">Labores</p>
-          <h3 className="text-foreground mb-1">Actividades esta semana</h3>
-          <p className="text-xs text-brand-brown/60">Jornales por tipo de tarea</p>
-        </div>
-      </div>
-
-      {/* Chart / skeleton / empty state */}
-      {isLoading ? (
-        <div className="space-y-2 mb-4">
-          {[80, 60, 45, 30].map((w, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <div className="h-3 bg-gray-200 rounded animate-pulse" style={{ width: '70px' }} />
-              <div className="h-5 bg-gray-200 rounded animate-pulse" style={{ width: `${w}%` }} />
-            </div>
-          ))}
-        </div>
-      ) : stats && stats.actividadesSemana.length > 0 ? (
-        <div className="h-32 -mx-2 mb-2">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={stats.actividadesSemana}
-              layout="vertical"
-              margin={{ top: 2, right: 30, left: 4, bottom: 2 }}
-            >
-              <XAxis
-                type="number"
-                tick={{ fill: '#4D240F', fontSize: 10 }}
-                stroke="#E5E7EB"
-                tickLine={false}
-                tickFormatter={(v: number) => v % 1 === 0 ? `${v}` : v.toFixed(1)}
-              />
-              <YAxis
-                type="category"
-                dataKey="actividad"
-                width={90}
-                tick={{ fill: '#4D240F', fontSize: 10 }}
-                stroke="#E5E7EB"
-                tickLine={false}
-                tickFormatter={(v: string) => v.length > 14 ? `${v.slice(0, 12)}…` : v}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'white',
-                  border: '1px solid #E5E7EB',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                  padding: '6px 10px',
-                }}
-                formatter={(value: number) => [
-                  value % 1 === 0 ? `${value} jornales` : `${value.toFixed(2)} jornales`,
-                  'Esta semana',
-                ]}
-              />
-              <Bar dataKey="jornales" radius={[0, 6, 6, 0]}>
-                {stats.actividadesSemana.map((_, i) => (
-                  <Cell key={`cell-${i}`} fill={COLORES_ACTIVIDADES[i % COLORES_ACTIVIDADES.length]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      ) : (
-        <div className="h-32 flex flex-col items-center justify-center text-brand-brown/50 mb-2">
-          <Briefcase className="w-8 h-8 mb-2 opacity-30" />
-          <p className="text-xs">Sin registros esta semana</p>
-        </div>
-      )}
-
-      {/* Metric boxes */}
-      <div className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-2 gap-3">
-        <div className="bg-primary/5 rounded-xl px-3 py-2">
-          {isLoading ? (
-            <div className="space-y-1">
-              <div className="h-3 bg-gray-200 rounded animate-pulse w-full" />
-              <div className="h-5 bg-gray-200 rounded animate-pulse w-12" />
-            </div>
-          ) : (
-            <>
-              <p className="text-xs text-brand-brown/60 leading-tight mb-0.5">
-                Jornales totales<br />esta semana
-              </p>
-              <p className="text-lg font-semibold text-foreground">
-                {formatNumber(stats?.jornalesSemana ?? 0)}
-              </p>
-            </>
-          )}
-        </div>
-
-        <div className="bg-primary/5 rounded-xl px-3 py-2">
-          {isLoading ? (
-            <div className="space-y-1">
-              <div className="h-3 bg-gray-200 rounded animate-pulse w-full" />
-              <div className="h-5 bg-gray-200 rounded animate-pulse w-8" />
-            </div>
-          ) : (
-            <>
-              <p className="text-xs text-brand-brown/60 leading-tight mb-0.5">
-                Personal activo<br />esta semana
-              </p>
-              <p className="text-lg font-semibold text-foreground">
-                {stats?.personalActivo ?? 0}
-              </p>
-            </>
-          )}
-        </div>
-      </div>
+    <div className="rounded-xl border border-primary/10 bg-white p-4 shadow-sm animate-pulse">
+      <div className="h-3 bg-gray-200 rounded w-16 mb-2" />
+      <div className="h-6 bg-gray-200 rounded w-20" />
     </div>
   );
 }
 
 /**
- * Dashboard Principal
+ * Dashboard Principal — feed de alertas + pulso de la finca, pensado para
+ * un vistazo rápido entre tareas de campo (no un reporte de escritorio).
  */
-export function Dashboard({ onNavigate }: DashboardProps) {
+export function Dashboard() {
   const navigate = useNavigate();
-  const [aplicacionesStats, setAplicacionesStats] = useState<AplicacionesStats | null>(null);
-  const [inventarioStats, setInventarioStats] = useState<InventarioStats | null>(null);
+  const { fetchInventario, fetchMovimientos, countPendientes } = useGanadoInventario();
   const [alertas, setAlertas] = useState<Alerta[]>([]);
+  const [kpis, setKpis] = useState<KPIsDashboard>(KPIS_VACIO);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     loadDashboardData();
-    
+
     // Auto-refresh cada 2 minutos
     const interval = setInterval(loadDashboardData, 2 * 60 * 1000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadDashboardData = async () => {
     try {
       const supabase = getSupabase();
-      
+
       await Promise.all([
-        loadAplicacionesStats(supabase),
-        loadInventarioStats(supabase),
+        loadKPIs(supabase),
         loadAlertas(supabase),
       ]);
     } catch (err) {
@@ -759,248 +100,197 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   };
 
   /**
-   * Cargar estadísticas de aplicaciones
+   * Cargar KPIs — un número + tendencia por módulo, sin gráficas ni
+   * detalle: son un vistazo, no un reporte.
    */
-  const loadAplicacionesStats = async (supabase: any) => {
-    try {
-      // 1. Contar por estado + prefetch all nested data to avoid N+1
-      const { data: aplicaciones, error } = await supabase
-        .from('aplicaciones')
+  const loadKPIs = async (supabase: any) => {
+    const now = new Date();
+
+    const loadIncidencia = async (): Promise<{ incidencia: number | null; variacion: number | undefined; sparkline: number[] }> => {
+      const { data: catalogoPlagas, error: errorCatalogo } = await supabase
+        .from('plagas_enfermedades_catalogo')
+        .select('id, nombre')
+        .eq('activo', true);
+      if (errorCatalogo) return { incidencia: null, variacion: undefined, sparkline: [] };
+
+      const plagasInteresIds = catalogoPlagas
+        ?.filter((p: any) => PLAGAS_INTERES.some(nombre => p.nombre.toLowerCase().includes(nombre.toLowerCase())))
+        .map((p: any) => p.id) || [];
+      if (plagasInteresIds.length === 0) return { incidencia: null, variacion: undefined, sparkline: [] };
+
+      // 42 días = ventana suficiente para 6 baldes semanales de tendencia + la comparación 7d vs 7d
+      const hace42Dias = new Date(now);
+      hace42Dias.setDate(hace42Dias.getDate() - 42);
+      const { data, error } = await supabase
+        .from('monitoreos')
+        .select('fecha_monitoreo, arboles_monitoreados, arboles_afectados')
+        .in('plaga_enfermedad_id', plagasInteresIds)
+        .gte('fecha_monitoreo', hace42Dias.toISOString());
+      if (error || !data || data.length === 0) return { incidencia: null, variacion: undefined, sparkline: [] };
+
+      const hace7Dias = new Date(now);
+      hace7Dias.setDate(hace7Dias.getDate() - 7);
+      const calcularIncidencia = (rows: any[]): number | null => {
+        const afectados = rows.reduce((s, m) => s + (m.arboles_afectados || 0), 0);
+        const monitoreados = rows.reduce((s, m) => s + (m.arboles_monitoreados || 0), 0);
+        return monitoreados > 0 ? (afectados / monitoreados) * 100 : null;
+      };
+      const actual = calcularIncidencia(data.filter((m: any) => new Date(m.fecha_monitoreo) >= hace7Dias));
+      const anterior = calcularIncidencia(data.filter((m: any) => new Date(m.fecha_monitoreo) < hace7Dias));
+      const variacion = actual !== null && anterior !== null && anterior > 0
+        ? ((actual - anterior) / anterior) * 100
+        : undefined;
+
+      // Tendencia semanal (últimas 6 semanas, más antigua -> más reciente)
+      const porSemana = new Map<number, { afectados: number; monitoreados: number }>();
+      data.forEach((m: any) => {
+        const idx = Math.floor((now.getTime() - new Date(m.fecha_monitoreo).getTime()) / (7 * 24 * 60 * 60 * 1000));
+        if (idx < 0 || idx > 5) return;
+        const entry = porSemana.get(idx) || { afectados: 0, monitoreados: 0 };
+        entry.afectados += m.arboles_afectados || 0;
+        entry.monitoreados += m.arboles_monitoreados || 0;
+        porSemana.set(idx, entry);
+      });
+      const sparkline = Array.from(porSemana.entries())
+        .sort((a, b) => b[0] - a[0])
+        .map(([, e]) => (e.monitoreados > 0 ? (e.afectados / e.monitoreados) * 100 : 0));
+
+      return { incidencia: actual, variacion, sparkline };
+    };
+
+    const loadJornales = async (): Promise<{ jornalesSemana: number; variacion: number | undefined; sparkline: number[]; contexto: string | null }> => {
+      const diaSemana = now.getDay();
+      const diasDesdeLunes = diaSemana === 0 ? 6 : diaSemana - 1;
+      const lunesActual = new Date(now);
+      lunesActual.setDate(now.getDate() - diasDesdeLunes);
+      lunesActual.setHours(0, 0, 0, 0);
+      const lunesAnterior = new Date(lunesActual);
+      lunesAnterior.setDate(lunesActual.getDate() - 7);
+
+      const { data, error } = await supabase
+        .from('registros_trabajo')
         .select(`
-          id,
-          nombre_aplicacion,
-          tipo_aplicacion,
-          estado,
-          fecha_inicio_planeada,
-          fecha_fin_planeada,
-          aplicaciones_lotes(lote_id),
-          movimientos_diarios(
-            id,
-            numero_canecas,
-            movimientos_diarios_productos(cantidad_utilizada, unidad)
-          ),
-          aplicaciones_calculos(numero_canecas),
-          aplicaciones_mezclas(
-            id,
-            aplicaciones_productos(cantidad_total_necesaria, producto_unidad)
-          )
-        `);
+          fecha_trabajo,
+          fraccion_jornal,
+          empleado_id,
+          contratista_id,
+          tareas!inner(tipo_tarea_id, tipos_tareas(nombre))
+        `)
+        .gte('fecha_trabajo', lunesAnterior.toISOString().split('T')[0])
+        .lte('fecha_trabajo', now.toISOString().split('T')[0]);
+      if (error || !data) return { jornalesSemana: 0, variacion: undefined, sparkline: [], contexto: null };
 
-      if (error) throw error;
+      const fechaLunesActual = lunesActual.toISOString().split('T')[0];
+      let jornalesSemana = 0;
+      let jornalesSemanaAnterior = 0;
+      const porDia = new Map<string, number>();
+      const actividadMap = new Map<string, number>();
+      const trabajadoresUnicos = new Set<string>();
 
-      const planeadas = aplicaciones?.filter((a: any) => a.estado === 'Calculada').length || 0;
-      const activas = aplicaciones?.filter((a: any) => a.estado === 'En ejecución').length || 0;
-      const completadas = aplicaciones?.filter((a: any) => a.estado === 'Cerrada').length || 0;
-
-      // 2. Calcular progreso de aplicaciones activas
-      const aplicacionesActivas = aplicaciones?.filter((a: any) => a.estado === 'En ejecución') || [];
-      const aplicacionesEnProgreso: AplicacionProgress[] = [];
-
-      for (const app of aplicacionesActivas.slice(0, 2)) {
-        let aplicado = 0;
-        let total = 0;
-        let unidad = '';
-
-        if (app.tipo_aplicacion === 'Fumigación' || app.tipo_aplicacion === 'Drench') {
-          const movimientos: any[] = (app as any).movimientos_diarios || [];
-          aplicado = movimientos.reduce((sum: number, m: any) => sum + (m.numero_canecas || 0), 0);
-
-          const calculos: any[] = (app as any).aplicaciones_calculos || [];
-          total = calculos.reduce((sum: number, c: any) => sum + (c.numero_canecas || 0), 0);
-
-          unidad = 'canecas';
-        } else if (app.tipo_aplicacion === 'Fertilización') {
-          const movimientos: any[] = (app as any).movimientos_diarios || [];
-          aplicado = movimientos.reduce((sum: number, m: any) => {
-            const productos: any[] = m.movimientos_diarios_productos || [];
-            return sum + productos.reduce((s: number, p: any) => {
-              const cantidad = parseFloat(p.cantidad_utilizada || 0);
-              return s + (p.unidad === 'g' ? cantidad / 1000 : cantidad);
-            }, 0);
-          }, 0);
-
-          const mezclas: any[] = (app as any).aplicaciones_mezclas || [];
-          total = mezclas.reduce((sum: number, m: any) => {
-            const productos: any[] = m.aplicaciones_productos || [];
-            return sum + productos.reduce((s: number, p: any) => {
-              const cantidad = parseFloat(p.cantidad_total_necesaria || 0);
-              return s + (p.producto_unidad === 'gramos' ? cantidad / 1000 : cantidad);
-            }, 0);
-          }, 0);
-
-          unidad = 'kg';
-        }
-
-        const porcentaje = total > 0 ? Math.round((aplicado / total) * 100) : 0;
-
-        aplicacionesEnProgreso.push({
-          id: app.id,
-          nombre: app.nombre_aplicacion,
-          tipo: app.tipo_aplicacion,
-          porcentaje: Math.min(porcentaje, 100),
-          aplicado: Math.round(aplicado * 10) / 10,
-          total: Math.round(total * 10) / 10,
-          unidad,
-        });
-      }
-
-      // 3. Cargar aplicaciones planeadas
-      const aplicacionesPlaneadasRaw = aplicaciones?.filter((a: any) => a.estado === 'Calculada') || [];
-      const aplicacionesPlaneadasConLotes: AplicacionPlaneada[] = [];
-
-      for (const app of aplicacionesPlaneadasRaw.slice(0, 3)) {
-        const lotes: any[] = (app as any).aplicaciones_lotes || [];
-        aplicacionesPlaneadasConLotes.push({
-          id: app.id,
-          nombre: app.nombre_aplicacion,
-          num_lotes: lotes.length,
-          fecha_inicio: (app as any).fecha_inicio_planeada || null,
-          fecha_fin: (app as any).fecha_fin_planeada || null,
-        });
-      }
-
-      setAplicacionesStats({
-        planeadas,
-        activas,
-        completadas,
-        aplicacionesEnProgreso,
-        aplicacionesPlaneadas: aplicacionesPlaneadasConLotes,
-      });
-    } catch (error) {
-      setAplicacionesStats({
-        planeadas: 0,
-        activas: 0,
-        completadas: 0,
-        aplicacionesEnProgreso: [],
-        aplicacionesPlaneadas: [],
-      });
-    }
-  };
-
-  /**
-   * Cargar estadísticas de inventario
-   */
-  const loadInventarioStats = async (supabase: any) => {
-    try {
-      const { data: productos, error } = await supabase
-        .from('productos')
-        .select('cantidad_actual, precio_unitario, estado')
-        .eq('activo', true);
-
-      if (error) throw error;
-
-      // Calcular valor total ACTUAL
-      const valorTotal = productos?.reduce(
-        (sum: number, p: any) => sum + ((p.cantidad_actual || 0) * (p.precio_unitario || 0)),
-        0
-      ) || 0;
-
-      // Calcular promedio de los últimos 3 meses usando movimientos_inventario
-      const fechaActual = new Date();
-      const fechaTresMesesAtras = new Date();
-      fechaTresMesesAtras.setMonth(fechaActual.getMonth() - 3);
-
-      // Obtener todos los productos activos con sus precios
-      const { data: productosConPrecio, error: errorProductos } = await supabase
-        .from('productos')
-        .select('id, precio_unitario')
-        .eq('activo', true);
-
-      if (errorProductos) throw errorProductos;
-
-      // Crear un mapa de precios por producto
-      const preciosPorProducto = new Map();
-      productosConPrecio?.forEach((p: any) => {
-        preciosPorProducto.set(p.id, p.precio_unitario || 0);
-      });
-
-      // Obtener movimientos de los últimos 3 meses
-      const { data: movimientos, error: errorMovimientos } = await supabase
-        .from('movimientos_inventario')
-        .select('fecha_movimiento, producto_id, saldo_nuevo')
-        .gte('fecha_movimiento', fechaTresMesesAtras.toISOString().split('T')[0])
-        .order('fecha_movimiento', { ascending: true });
-
-      let promedioTresMeses = valorTotal; // Default al valor actual si no hay movimientos
-      let porcentajeCambio = 0;
-
-      if (!errorMovimientos && movimientos && movimientos.length > 0) {
-        // Agrupar por mes y calcular valor de inventario
-        const valoresPorMes: { [mes: string]: number } = {};
-
-        movimientos.forEach((mov: any) => {
-          const fecha = new Date(mov.fecha_movimiento);
-          const mesKey = `${fecha.getFullYear()}-${(fecha.getMonth() + 1).toString().padStart(2, '0')}`;
-          const precioUnitario = preciosPorProducto.get(mov.producto_id) || 0;
-          const valorEnEseMomento = (mov.saldo_nuevo || 0) * precioUnitario;
-
-          // Guardar el último saldo del mes
-          if (!valoresPorMes[mesKey]) {
-            valoresPorMes[mesKey] = 0;
-          }
-          valoresPorMes[mesKey] = valorEnEseMomento;
-        });
-
-        // Calcular promedio de los valores mensuales
-        const valoresMensuales = Object.values(valoresPorMes);
-        if (valoresMensuales.length > 0) {
-          const sumaValores = valoresMensuales.reduce((sum, val) => sum + val, 0);
-          promedioTresMeses = sumaValores / valoresMensuales.length;
-
-          // Calcular porcentaje de cambio
-          if (promedioTresMeses > 0) {
-            porcentajeCambio = ((valorTotal - promedioTresMeses) / promedioTresMeses) * 100;
-          }
-        }
-      }
-
-      // Contar por estado
-      const hoy = new Date().toISOString().split('T')[0];
-      
-      let ok = 0;
-      let sinExistencias = 0;
-      let perdido = 0;
-      let vencido = 0;
-
-      productos?.forEach((p: any) => {
-        // Primero verificar el estado explícito
-        if (p.estado === 'Perdido') {
-          perdido++;
-        } else if (p.estado === 'Vencido') {
-          vencido++;
-        } else if (p.estado === 'Sin existencias') {
-          sinExistencias++;
-        } else if (p.estado === 'OK') {
-          ok++;
+      data.forEach((r: any) => {
+        const jornal = Number(r.fraccion_jornal) || 0;
+        if (r.fecha_trabajo >= fechaLunesActual) {
+          jornalesSemana += jornal;
+          porDia.set(r.fecha_trabajo, (porDia.get(r.fecha_trabajo) || 0) + jornal);
+          const nombreActividad = r.tareas?.tipos_tareas?.nombre || 'Sin tipo';
+          actividadMap.set(nombreActividad, (actividadMap.get(nombreActividad) || 0) + jornal);
+          if (r.empleado_id) trabajadoresUnicos.add(`e_${r.empleado_id}`);
+          if (r.contratista_id) trabajadoresUnicos.add(`c_${r.contratista_id}`);
         } else {
-          // Si no tiene estado explícito, inferir del inventario
-          if ((p.cantidad_actual || 0) <= 0) {
-            sinExistencias++;
-          } else {
-            ok++;
-          }
+          jornalesSemanaAnterior += jornal;
         }
       });
 
-      setInventarioStats({
-        valorTotal,
-        promedioTresMeses,
-        porcentajeCambio: Math.round(porcentajeCambio * 10) / 10, // Redondear a 1 decimal
-        porEstado: {
-          ok,
-          sinExistencias,
-          perdido,
-          vencido,
-        },
+      const variacion = jornalesSemanaAnterior > 0
+        ? ((jornalesSemana - jornalesSemanaAnterior) / jornalesSemanaAnterior) * 100
+        : undefined;
+
+      const sparkline: number[] = [];
+      for (const d = new Date(lunesActual); d <= now; d.setDate(d.getDate() + 1)) {
+        sparkline.push(porDia.get(d.toISOString().split('T')[0]) || 0);
+      }
+
+      const topActividad = Array.from(actividadMap.entries()).sort((a, b) => b[1] - a[1])[0];
+      const contexto = trabajadoresUnicos.size > 0
+        ? `${trabajadoresUnicos.size} activos${topActividad ? ` · ${topActividad[0]} lidera` : ''}`
+        : null;
+
+      return { jornalesSemana: Math.round(jornalesSemana * 100) / 100, variacion, sparkline, contexto };
+    };
+
+    const loadGasto = async (): Promise<{ gastoMes: number; variacion: number | undefined; contexto: string | null }> => {
+      const inicioMesActual = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      const inicioMesAnterior = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
+      const finMesAnterior = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
+
+      const { data, error } = await supabase
+        .from('fin_gastos')
+        .select('valor, fecha, categoria_id, fin_categorias_gastos(nombre)')
+        .eq('estado', 'Confirmado')
+        .gte('fecha', inicioMesAnterior)
+        .lte('fecha', now.toISOString().split('T')[0]);
+      if (error || !data) return { gastoMes: 0, variacion: undefined, contexto: null };
+
+      let gastoMes = 0;
+      let gastoMesAnterior = 0;
+      const porCategoria = new Map<string, number>();
+      data.forEach((g: any) => {
+        const valor = Number(g.valor) || 0;
+        if (g.fecha >= inicioMesActual) {
+          gastoMes += valor;
+          const nombreCategoria = g.fin_categorias_gastos?.nombre || 'Sin categoría';
+          porCategoria.set(nombreCategoria, (porCategoria.get(nombreCategoria) || 0) + valor);
+        } else if (g.fecha <= finMesAnterior) {
+          gastoMesAnterior += valor;
+        }
       });
-    } catch (error) {
-      setInventarioStats({
-        valorTotal: 0,
-        promedioTresMeses: 0,
-        porcentajeCambio: 0,
-        porEstado: { ok: 0, sinExistencias: 0, perdido: 0, vencido: 0 },
-      });
-    }
+      const variacion = gastoMesAnterior > 0
+        ? ((gastoMes - gastoMesAnterior) / gastoMesAnterior) * 100
+        : undefined;
+      const topCategoria = Array.from(porCategoria.entries()).sort((a, b) => b[1] - a[1])[0];
+      const contexto = topCategoria ? `Mayor: ${topCategoria[0]} ($${formatCompact(topCategoria[1])})` : null;
+
+      return { gastoMes, variacion, contexto };
+    };
+
+    const loadGanado = async (): Promise<{ ganadoCabezas: number; neto: number; contexto: string | null }> => {
+      try {
+        const [rows, movimientos] = await Promise.all([fetchInventario(), fetchMovimientos()]);
+        const kpisGanado = calcularKPIsInventario(rows);
+        const hace30Dias = new Date(now);
+        hace30Dias.setDate(hace30Dias.getDate() - 30);
+        const variacionCabezas = calcularVariacion(movimientos, hace30Dias.toISOString().split('T')[0]);
+        const contexto = variacionCabezas.entradas > 0 || variacionCabezas.salidas > 0
+          ? `${variacionCabezas.entradas} entran · ${variacionCabezas.salidas} salen (30d)`
+          : 'Sin movimientos en 30 días';
+        return { ganadoCabezas: kpisGanado.totalCabezas, neto: variacionCabezas.neto, contexto };
+      } catch {
+        return { ganadoCabezas: 0, neto: 0, contexto: null };
+      }
+    };
+
+    const [incidenciaRes, jornalesRes, gastoRes, ganadoRes] = await Promise.all([
+      loadIncidencia(),
+      loadJornales(),
+      loadGasto(),
+      loadGanado(),
+    ]);
+
+    setKpis({
+      incidencia: incidenciaRes.incidencia,
+      incidenciaVariacion: incidenciaRes.variacion,
+      incidenciaSparkline: incidenciaRes.sparkline,
+      jornalesSemana: jornalesRes.jornalesSemana,
+      jornalesVariacion: jornalesRes.variacion,
+      jornalesSparkline: jornalesRes.sparkline,
+      jornalesContexto: jornalesRes.contexto,
+      gastoMes: gastoRes.gastoMes,
+      gastoVariacion: gastoRes.variacion,
+      gastoContexto: gastoRes.contexto,
+      ganadoCabezas: ganadoRes.ganadoCabezas,
+      ganadoNeto: ganadoRes.neto,
+      ganadoContexto: ganadoRes.contexto,
+    });
   };
 
   /**
@@ -1022,7 +312,6 @@ export function Dashboard({ onNavigate }: DashboardProps) {
 
         if (error || !data) return [];
 
-        // Group by pest, calculate incidencia from raw tree counts
         const porPlaga: Record<string, { afectados: number; monitoreados: number }> = {};
         for (const m of data) {
           const nombre = m.plagas_enfermedades_catalogo?.nombre;
@@ -1076,62 +365,61 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         return alertas;
       };
 
-      // --- Helper 3: Gastos — Expense Anomaly ---
-      const loadGastosAlertas = async (): Promise<Alerta[]> => {
-        const hace4Meses = new Date(now);
-        hace4Meses.setMonth(hace4Meses.getMonth() - 4);
-
-        const { data, error } = await supabase
-          .from('fin_gastos')
-          .select('valor, fecha, categoria_id, fin_categorias_gastos(nombre)')
-          .eq('estado', 'Confirmado')
-          .gte('fecha', hace4Meses.toISOString());
-
-        if (error || !data) return [];
-
-        const mesActual = now.getMonth();
+      // --- Helper 3: Presupuesto — actual YTD vs. ritmo esperado del presupuesto anual ---
+      const loadPresupuestoAlertas = async (): Promise<Alerta[]> => {
         const anioActual = now.getFullYear();
+        const inicioAnio = `${anioActual}-01-01`;
+        const hoyStr = now.toISOString().split('T')[0];
+        const diaDelAnio = Math.floor((now.getTime() - new Date(anioActual, 0, 1).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        const esBisiesto = (anioActual % 4 === 0 && anioActual % 100 !== 0) || anioActual % 400 === 0;
+        const fraccionTranscurrida = Math.min(diaDelAnio / (esBisiesto ? 366 : 365), 1);
 
-        // Group by category and month
-        const porCategoria: Record<string, { nombre: string; meses: Record<string, number> }> = {};
-        for (const g of data) {
-          const catId = g.categoria_id;
-          if (!catId) continue;
-          const catNombre = g.fin_categorias_gastos?.nombre || 'Sin categoría';
-          if (!porCategoria[catId]) porCategoria[catId] = { nombre: catNombre, meses: {} };
-          const fecha = new Date(g.fecha);
-          const mesKey = `${fecha.getFullYear()}-${fecha.getMonth()}`;
-          porCategoria[catId].meses[mesKey] = (porCategoria[catId].meses[mesKey] || 0) + (g.valor || 0);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fin_presupuestos not yet in generated DB types
+        const sb = supabase as any;
+        const [presupuestosRes, gastosRes] = await Promise.all([
+          sb
+            .from('fin_presupuestos')
+            .select('negocio_id, categoria_id, monto_anual, fin_categorias_gastos(nombre)')
+            .eq('anio', anioActual),
+          supabase
+            .from('fin_gastos')
+            .select('valor, negocio_id, categoria_id')
+            .eq('estado', 'Confirmado')
+            .gte('fecha', inicioAnio)
+            .lte('fecha', hoyStr),
+        ]);
+
+        // RLS scopes fin_presupuestos to Gerencia — vacío para otros roles, no es un error
+        if (presupuestosRes.error || !presupuestosRes.data?.length || gastosRes.error) return [];
+
+        const actualPorClave = new Map<string, number>();
+        for (const g of gastosRes.data || []) {
+          const clave = `${g.negocio_id}-${g.categoria_id}`;
+          actualPorClave.set(clave, (actualPorClave.get(clave) || 0) + (Number(g.valor) || 0));
         }
 
-        const mesActualKey = `${anioActual}-${mesActual}`;
         const alertas: Alerta[] = [];
+        for (const p of presupuestosRes.data) {
+          const montoAnual = Number(p.monto_anual) || 0;
+          if (montoAnual <= 0) continue;
+          const clave = `${p.negocio_id}-${p.categoria_id}`;
+          const actual = actualPorClave.get(clave) || 0;
+          if (actual === 0) continue;
 
-        for (const [_catId, { nombre, meses }] of Object.entries(porCategoria)) {
-          const totalActual = meses[mesActualKey] || 0;
-          if (totalActual === 0) continue;
+          const esperado = montoAnual * fraccionTranscurrida;
+          if (esperado <= 0) continue;
+          const ritmo = actual / esperado;
+          if (ritmo < 1.15) continue;
 
-          // 3-month rolling average (excluding current month)
-          const mesesAnteriores: number[] = [];
-          for (let i = 1; i <= 3; i++) {
-            const d = new Date(anioActual, mesActual - i);
-            const key = `${d.getFullYear()}-${d.getMonth()}`;
-            if (meses[key] !== undefined) mesesAnteriores.push(meses[key]);
-          }
-          if (mesesAnteriores.length === 0) continue;
-          const promedio = mesesAnteriores.reduce((s, v) => s + v, 0) / mesesAnteriores.length;
-          if (promedio === 0) continue;
-
-          const porcentajeArriba = ((totalActual - promedio) / promedio) * 100;
-          if (porcentajeArriba > 50) {
-            alertas.push({
-              id: `gasto-${nombre}`,
-              tipo: 'gasto',
-              mensaje: `Gastos en ${nombre} un ${Math.round(porcentajeArriba)}% arriba del promedio trimestral`,
-              fecha: now.toISOString(),
-              prioridad: 'media',
-            });
-          }
+          const pctAnual = Math.round((actual / montoAnual) * 100);
+          const nombreCategoria = p.fin_categorias_gastos?.nombre || 'Categoría';
+          alertas.push({
+            id: `presupuesto-${clave}`,
+            tipo: 'gasto',
+            mensaje: `${nombreCategoria}: $${formatCompact(actual)} de $${formatCompact(montoAnual)} presupuestado (${pctAnual}%)`,
+            fecha: now.toISOString(),
+            prioridad: ritmo >= 1.5 ? 'alta' : 'media',
+          });
         }
         return alertas;
       };
@@ -1181,11 +469,9 @@ export function Dashboard({ onNavigate }: DashboardProps) {
 
         if (error || !data) return [];
 
-        // Group by ISO week
         const porSemana: Record<string, number> = {};
         for (const r of data) {
           const fecha = new Date(r.fecha_trabajo);
-          // Week key: year-weekNumber
           const startOfYear = new Date(fecha.getFullYear(), 0, 1);
           const weekNum = Math.ceil(((fecha.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24) + startOfYear.getDay() + 1) / 7);
           const key = `${fecha.getFullYear()}-W${weekNum}`;
@@ -1198,7 +484,6 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         const semanaActualKey = semanas[semanas.length - 1][0];
         const totalActual = semanas[semanas.length - 1][1];
 
-        // 4-week average (excluding current)
         const anteriores = semanas.slice(0, -1).slice(-4);
         if (anteriores.length === 0) return [];
         const promedio = anteriores.reduce((s, [, v]) => s + v, 0) / anteriores.length;
@@ -1217,18 +502,30 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         return [];
       };
 
-      // Run all in parallel
+      // --- Helper 6: Ganado — Pending confirmations ---
+      const loadGanadoAlertas = async (): Promise<Alerta[]> => {
+        const count = await countPendientes();
+        if (!count) return [];
+        return [{
+          id: 'ganado-pendientes',
+          tipo: 'ganado',
+          mensaje: `${count} ${count === 1 ? 'movimiento' : 'movimientos'} de ganado ${count === 1 ? 'pendiente' : 'pendientes'} de confirmar`,
+          fecha: now.toISOString(),
+          prioridad: 'media',
+        }];
+      };
+
       const results = await Promise.all([
         loadMonitoreoAlertas(),
         loadAplicacionesAlertas(),
-        loadGastosAlertas(),
+        loadPresupuestoAlertas(),
         loadVencimientoAlertas(),
         loadLaboresAlertas(),
+        loadGanadoAlertas(),
       ]);
 
       const nuevasAlertas = results.flat();
 
-      // Sort by priority then date
       const alertasOrdenadas = nuevasAlertas
         .sort((a, b) => {
           if (a.prioridad === 'alta' && b.prioridad !== 'alta') return -1;
@@ -1237,10 +534,10 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           if (!b.fecha) return -1;
           return new Date(b.fecha).getTime() - new Date(a.fecha).getTime();
         })
-        .slice(0, 7);
+        .slice(0, 6);
 
       setAlertas(alertasOrdenadas);
-    } catch (error) {
+    } catch {
       setAlertas([]);
     }
   };
@@ -1249,7 +546,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     switch (alerta.tipo) {
       case 'monitoreo': navigate('/monitoreo'); break;
       case 'aplicacion': navigate('/aplicaciones'); break;
-      case 'gasto': navigate('/finanzas/gastos'); break;
+      case 'gasto': navigate('/finanzas/presupuesto'); break;
+      case 'ganado': navigate('/ganado/movimientos'); break;
       case 'stock':
       case 'vencimiento': navigate('/inventario'); break;
       case 'labor': navigate('/labores'); break;
@@ -1257,55 +555,73 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5">
       {/* Header */}
       <div className="relative">
         <div className="absolute -top-4 -left-4 w-32 h-32 bg-primary/5 rounded-full blur-2xl"></div>
-        <div className="relative">
-          <h1 className="text-foreground mb-2">Dashboard</h1>
-          <p className="text-brand-brown/70">
-            Vista general del cultivo Escocia Hass - 52 hectáreas
-          </p>
+        <div className="relative space-y-1.5">
+          <h1 className="text-foreground">Dashboard</h1>
+          <EstadoHeader alertas={alertas} loading={isLoading} />
         </div>
       </div>
 
-      {/* Grilla 2x2 de tarjetas */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <MonitoreoCard onClick={() => navigate('/monitoreo')} />
-        <AplicacionesCard 
-          stats={aplicacionesStats} 
-          loading={isLoading} 
-          onClick={() => navigate('/aplicaciones')} 
-        />
-        <InventarioCard 
-          stats={inventarioStats} 
-          loading={isLoading} 
-          onClick={() => navigate('/inventario/dashboard')} 
-        />
-        <LaboresCard onClick={() => navigate('/labores')} />
+      {/* Alertas — colapsa a nada cuando no hay ninguna */}
+      {isLoading ? (
+        <div className="h-16 bg-gray-100 rounded-xl animate-pulse" />
+      ) : (
+        <CompactAlertList alertas={alertas} onAlertClick={handleAlertClick} />
+      )}
+
+      {/* Clima — siempre visible, no depende de alertas */}
+      <ClimaCard />
+
+      {/* KPI scoreboard */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {isLoading ? (
+          <>
+            <KPITileSkeleton />
+            <KPITileSkeleton />
+            <KPITileSkeleton />
+            <KPITileSkeleton />
+          </>
+        ) : (
+          <>
+            <DashboardKPICard
+              label="Incidencia"
+              valor={kpis.incidencia !== null ? `${kpis.incidencia.toFixed(1)}%` : 'Sin datos'}
+              variacion={kpis.incidencia !== null ? kpis.incidenciaVariacion : undefined}
+              sparkline={kpis.incidenciaSparkline}
+              onClick={() => navigate('/monitoreo')}
+            />
+            <DashboardKPICard
+              label="Jornales esta semana"
+              valor={formatNumber(kpis.jornalesSemana)}
+              variacion={kpis.jornalesVariacion}
+              sparkline={kpis.jornalesSparkline}
+              contexto={kpis.jornalesContexto ?? undefined}
+              onClick={() => navigate('/labores')}
+            />
+            <DashboardKPICard
+              label="Gasto del mes"
+              valor={`$${formatCompact(kpis.gastoMes)}`}
+              variacion={kpis.gastoVariacion}
+              contexto={kpis.gastoContexto ?? undefined}
+              onClick={() => navigate('/finanzas/gastos')}
+            />
+            <DashboardKPICard
+              label="Cabezas de ganado"
+              valor={formatNumber(kpis.ganadoCabezas)}
+              variacionTexto={kpis.ganadoNeto !== 0 ? `${kpis.ganadoNeto > 0 ? '+' : ''}${kpis.ganadoNeto} neto` : undefined}
+              variacionPositiva={kpis.ganadoNeto > 0}
+              contexto={kpis.ganadoContexto ?? undefined}
+              onClick={() => navigate('/ganado')}
+            />
+          </>
+        )}
       </div>
 
-      {/* Alertas */}
-      <AlertListContainer>
-        <AlertListHeader titulo="Pulso de Gestión" count={alertas.length} />
-        <AlertList alertas={alertas} onAlertClick={handleAlertClick} maxAlertas={5} />
-      </AlertListContainer>
+      {/* Accesos rápidos a módulos sin tarjeta propia */}
+      <QuickLinksRow />
     </div>
   );
-}
-
-// Plagas de interés para la mini gráfica
-const PLAGAS_INTERES = [
-  'Monalonion',
-  'Ácaro',
-  'Huevos de Ácaro',
-  'Ácaro Cristalino',
-  'Cucarrón marceño',
-  'Trips'
-];
-
-// Interfaz para datos de tendencias
-interface TendenciaData {
-  semana: string;
-  [plagaNombre: string]: number | string;
 }

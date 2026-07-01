@@ -1,4 +1,5 @@
 import { Context } from 'https://deno.land/x/hono@v4.0.0/mod.ts';
+import { parseOpenWeatherForecast } from './external-tools.ts';
 
 // ============================================================================
 // Ecowitt Cloud API Types
@@ -507,5 +508,42 @@ export async function handleClimaBackfill(c: Context): Promise<Response> {
   } catch (error) {
     console.error(`${log} Unhandled error:`, error);
     return c.json({ error: String(error) }, 500);
+  }
+}
+
+// ============================================================================
+// Forecast — thin proxy over OpenWeatherMap, reusing the same parser the
+// Esco chat agent uses (external-tools.ts). Exposed as its own GET endpoint
+// so the main dashboard's weather card doesn't need the chat tool-loop.
+// ============================================================================
+
+export async function handleClimaForecast(c: Context): Promise<Response> {
+  const daysParam = c.req.query('days');
+  const requestedDays = Math.max(1, Math.min(Number(daysParam) || 3, 7));
+
+  const apiKey = Deno.env.get('OPENWEATHER_API_KEY');
+  if (!apiKey) {
+    return c.json({ error: 'OPENWEATHER_API_KEY no configurada' }, 500);
+  }
+
+  const lat = Number(Deno.env.get('FARM_LAT')) || 5.6094;
+  const lon = Number(Deno.env.get('FARM_LON')) || -75.4582;
+
+  const url = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&lang=es&appid=${apiKey}`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      return c.json({ error: `OpenWeather error ${res.status}`, detail: errText.slice(0, 200) }, 502);
+    }
+    const raw = await res.json();
+    const dias = parseOpenWeatherForecast(raw, requestedDays);
+    return c.json({ ubicacion: { lat, lon, ciudad: raw?.city?.name ?? 'Finca' }, dias }, 200);
+  } catch (error) {
+    return c.json({ error: String(error) }, 500);
+  } finally {
+    clearTimeout(timeoutId);
   }
 }

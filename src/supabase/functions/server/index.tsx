@@ -7,7 +7,7 @@ import { crearUsuario, editarUsuario, eliminarUsuario } from "./usuarios.tsx";
 import { toggleProductoActivo } from "./productos.tsx";
 import { generarReporteSemanal } from "./generar-reporte-semanal.tsx";
 import { handleChatMessage } from "./chat.tsx";
-import { handleClimaSync, handleClimaBackfill } from "./clima.tsx";
+import { handleClimaSync, handleClimaBackfill, handleClimaForecast } from "./clima.tsx";
 import { handleWebhook } from "./telegram/bot.ts";
 
 const app = new Hono();
@@ -158,6 +158,11 @@ app.post("/make-server-1ccce916/clima/sync", async (c) => {
 // Backfill historical weather data from WU API
 app.post("/make-server-1ccce916/clima/backfill", async (c) => {
   return await handleClimaBackfill(c);
+});
+
+// Short-range forecast (OpenWeatherMap proxy) for the main dashboard's weather card
+app.get("/make-server-1ccce916/clima/forecast", async (c) => {
+  return await handleClimaForecast(c);
 });
 
 // Handle preflight OPTIONS at Deno.serve level to ensure CORS works
