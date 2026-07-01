@@ -16,3 +16,4 @@ export type { Alerta } from './AlertList';
 export { EstadoHeader } from './EstadoHeader';
 export { ClimaCard } from './ClimaCard';
 export { QuickLinksRow } from './QuickLinksRow';
+export { DashboardKPICard } from './DashboardKPICard';

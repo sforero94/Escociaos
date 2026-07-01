@@ -7,9 +7,9 @@ import {
   EstadoHeader,
   ClimaCard,
   QuickLinksRow,
+  DashboardKPICard,
   type Alerta,
 } from './dashboard/index';
-import { KPIScorecard } from './finanzas/dashboard/components/KPIScorecard';
 import { useGanadoInventario } from './ganado/hooks/useGanadoInventario';
 import { calcularKPIsInventario, calcularVariacion } from '../utils/calculosGanado';
 
@@ -26,23 +26,33 @@ const PLAGAS_INTERES = [
 interface KPIsDashboard {
   incidencia: number | null;
   incidenciaVariacion: number | undefined;
+  incidenciaSparkline: number[];
   jornalesSemana: number;
   jornalesVariacion: number | undefined;
+  jornalesSparkline: number[];
+  jornalesContexto: string | null;
   gastoMes: number;
   gastoVariacion: number | undefined;
+  gastoContexto: string | null;
   ganadoCabezas: number;
-  ganadoVariacion: number | undefined;
+  ganadoNeto: number;
+  ganadoContexto: string | null;
 }
 
 const KPIS_VACIO: KPIsDashboard = {
   incidencia: null,
   incidenciaVariacion: undefined,
+  incidenciaSparkline: [],
   jornalesSemana: 0,
   jornalesVariacion: undefined,
+  jornalesSparkline: [],
+  jornalesContexto: null,
   gastoMes: 0,
   gastoVariacion: undefined,
+  gastoContexto: null,
   ganadoCabezas: 0,
-  ganadoVariacion: undefined,
+  ganadoNeto: 0,
+  ganadoContexto: null,
 };
 
 function KPITileSkeleton() {
@@ -96,26 +106,27 @@ export function Dashboard() {
   const loadKPIs = async (supabase: any) => {
     const now = new Date();
 
-    const loadIncidencia = async (): Promise<{ incidencia: number | null; variacion: number | undefined }> => {
+    const loadIncidencia = async (): Promise<{ incidencia: number | null; variacion: number | undefined; sparkline: number[] }> => {
       const { data: catalogoPlagas, error: errorCatalogo } = await supabase
         .from('plagas_enfermedades_catalogo')
         .select('id, nombre')
         .eq('activo', true);
-      if (errorCatalogo) return { incidencia: null, variacion: undefined };
+      if (errorCatalogo) return { incidencia: null, variacion: undefined, sparkline: [] };
 
       const plagasInteresIds = catalogoPlagas
         ?.filter((p: any) => PLAGAS_INTERES.some(nombre => p.nombre.toLowerCase().includes(nombre.toLowerCase())))
         .map((p: any) => p.id) || [];
-      if (plagasInteresIds.length === 0) return { incidencia: null, variacion: undefined };
+      if (plagasInteresIds.length === 0) return { incidencia: null, variacion: undefined, sparkline: [] };
 
-      const hace14Dias = new Date(now);
-      hace14Dias.setDate(hace14Dias.getDate() - 14);
+      // 42 días = ventana suficiente para 6 baldes semanales de tendencia + la comparación 7d vs 7d
+      const hace42Dias = new Date(now);
+      hace42Dias.setDate(hace42Dias.getDate() - 42);
       const { data, error } = await supabase
         .from('monitoreos')
         .select('fecha_monitoreo, arboles_monitoreados, arboles_afectados')
         .in('plaga_enfermedad_id', plagasInteresIds)
-        .gte('fecha_monitoreo', hace14Dias.toISOString());
-      if (error || !data || data.length === 0) return { incidencia: null, variacion: undefined };
+        .gte('fecha_monitoreo', hace42Dias.toISOString());
+      if (error || !data || data.length === 0) return { incidencia: null, variacion: undefined, sparkline: [] };
 
       const hace7Dias = new Date(now);
       hace7Dias.setDate(hace7Dias.getDate() - 7);
@@ -129,10 +140,25 @@ export function Dashboard() {
       const variacion = actual !== null && anterior !== null && anterior > 0
         ? ((actual - anterior) / anterior) * 100
         : undefined;
-      return { incidencia: actual, variacion };
+
+      // Tendencia semanal (últimas 6 semanas, más antigua -> más reciente)
+      const porSemana = new Map<number, { afectados: number; monitoreados: number }>();
+      data.forEach((m: any) => {
+        const idx = Math.floor((now.getTime() - new Date(m.fecha_monitoreo).getTime()) / (7 * 24 * 60 * 60 * 1000));
+        if (idx < 0 || idx > 5) return;
+        const entry = porSemana.get(idx) || { afectados: 0, monitoreados: 0 };
+        entry.afectados += m.arboles_afectados || 0;
+        entry.monitoreados += m.arboles_monitoreados || 0;
+        porSemana.set(idx, entry);
+      });
+      const sparkline = Array.from(porSemana.entries())
+        .sort((a, b) => b[0] - a[0])
+        .map(([, e]) => (e.monitoreados > 0 ? (e.afectados / e.monitoreados) * 100 : 0));
+
+      return { incidencia: actual, variacion, sparkline };
     };
 
-    const loadJornales = async (): Promise<{ jornalesSemana: number; variacion: number | undefined }> => {
+    const loadJornales = async (): Promise<{ jornalesSemana: number; variacion: number | undefined; sparkline: number[]; contexto: string | null }> => {
       const diaSemana = now.getDay();
       const diasDesdeLunes = diaSemana === 0 ? 6 : diaSemana - 1;
       const lunesActual = new Date(now);
@@ -143,64 +169,103 @@ export function Dashboard() {
 
       const { data, error } = await supabase
         .from('registros_trabajo')
-        .select('fecha_trabajo, fraccion_jornal')
+        .select(`
+          fecha_trabajo,
+          fraccion_jornal,
+          empleado_id,
+          contratista_id,
+          tareas!inner(tipo_tarea_id, tipos_tareas(nombre))
+        `)
         .gte('fecha_trabajo', lunesAnterior.toISOString().split('T')[0])
         .lte('fecha_trabajo', now.toISOString().split('T')[0]);
-      if (error || !data) return { jornalesSemana: 0, variacion: undefined };
+      if (error || !data) return { jornalesSemana: 0, variacion: undefined, sparkline: [], contexto: null };
 
       const fechaLunesActual = lunesActual.toISOString().split('T')[0];
       let jornalesSemana = 0;
       let jornalesSemanaAnterior = 0;
+      const porDia = new Map<string, number>();
+      const actividadMap = new Map<string, number>();
+      const trabajadoresUnicos = new Set<string>();
+
       data.forEach((r: any) => {
         const jornal = Number(r.fraccion_jornal) || 0;
-        if (r.fecha_trabajo >= fechaLunesActual) jornalesSemana += jornal;
-        else jornalesSemanaAnterior += jornal;
+        if (r.fecha_trabajo >= fechaLunesActual) {
+          jornalesSemana += jornal;
+          porDia.set(r.fecha_trabajo, (porDia.get(r.fecha_trabajo) || 0) + jornal);
+          const nombreActividad = r.tareas?.tipos_tareas?.nombre || 'Sin tipo';
+          actividadMap.set(nombreActividad, (actividadMap.get(nombreActividad) || 0) + jornal);
+          if (r.empleado_id) trabajadoresUnicos.add(`e_${r.empleado_id}`);
+          if (r.contratista_id) trabajadoresUnicos.add(`c_${r.contratista_id}`);
+        } else {
+          jornalesSemanaAnterior += jornal;
+        }
       });
+
       const variacion = jornalesSemanaAnterior > 0
         ? ((jornalesSemana - jornalesSemanaAnterior) / jornalesSemanaAnterior) * 100
         : undefined;
-      return { jornalesSemana: Math.round(jornalesSemana * 100) / 100, variacion };
+
+      const sparkline: number[] = [];
+      for (const d = new Date(lunesActual); d <= now; d.setDate(d.getDate() + 1)) {
+        sparkline.push(porDia.get(d.toISOString().split('T')[0]) || 0);
+      }
+
+      const topActividad = Array.from(actividadMap.entries()).sort((a, b) => b[1] - a[1])[0];
+      const contexto = trabajadoresUnicos.size > 0
+        ? `${trabajadoresUnicos.size} activos${topActividad ? ` · ${topActividad[0]} lidera` : ''}`
+        : null;
+
+      return { jornalesSemana: Math.round(jornalesSemana * 100) / 100, variacion, sparkline, contexto };
     };
 
-    const loadGasto = async (): Promise<{ gastoMes: number; variacion: number | undefined }> => {
+    const loadGasto = async (): Promise<{ gastoMes: number; variacion: number | undefined; contexto: string | null }> => {
       const inicioMesActual = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
       const inicioMesAnterior = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
       const finMesAnterior = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
 
       const { data, error } = await supabase
         .from('fin_gastos')
-        .select('valor, fecha')
+        .select('valor, fecha, categoria_id, fin_categorias_gastos(nombre)')
         .eq('estado', 'Confirmado')
         .gte('fecha', inicioMesAnterior)
         .lte('fecha', now.toISOString().split('T')[0]);
-      if (error || !data) return { gastoMes: 0, variacion: undefined };
+      if (error || !data) return { gastoMes: 0, variacion: undefined, contexto: null };
 
       let gastoMes = 0;
       let gastoMesAnterior = 0;
+      const porCategoria = new Map<string, number>();
       data.forEach((g: any) => {
         const valor = Number(g.valor) || 0;
-        if (g.fecha >= inicioMesActual) gastoMes += valor;
-        else if (g.fecha <= finMesAnterior) gastoMesAnterior += valor;
+        if (g.fecha >= inicioMesActual) {
+          gastoMes += valor;
+          const nombreCategoria = g.fin_categorias_gastos?.nombre || 'Sin categoría';
+          porCategoria.set(nombreCategoria, (porCategoria.get(nombreCategoria) || 0) + valor);
+        } else if (g.fecha <= finMesAnterior) {
+          gastoMesAnterior += valor;
+        }
       });
       const variacion = gastoMesAnterior > 0
         ? ((gastoMes - gastoMesAnterior) / gastoMesAnterior) * 100
         : undefined;
-      return { gastoMes, variacion };
+      const topCategoria = Array.from(porCategoria.entries()).sort((a, b) => b[1] - a[1])[0];
+      const contexto = topCategoria ? `Mayor: ${topCategoria[0]} ($${formatCompact(topCategoria[1])})` : null;
+
+      return { gastoMes, variacion, contexto };
     };
 
-    const loadGanado = async (): Promise<{ ganadoCabezas: number; variacion: number | undefined }> => {
+    const loadGanado = async (): Promise<{ ganadoCabezas: number; neto: number; contexto: string | null }> => {
       try {
         const [rows, movimientos] = await Promise.all([fetchInventario(), fetchMovimientos()]);
         const kpisGanado = calcularKPIsInventario(rows);
         const hace30Dias = new Date(now);
         hace30Dias.setDate(hace30Dias.getDate() - 30);
         const variacionCabezas = calcularVariacion(movimientos, hace30Dias.toISOString().split('T')[0]);
-        const variacion = kpisGanado.totalCabezas > 0
-          ? (variacionCabezas.neto / kpisGanado.totalCabezas) * 100
-          : undefined;
-        return { ganadoCabezas: kpisGanado.totalCabezas, variacion };
+        const contexto = variacionCabezas.entradas > 0 || variacionCabezas.salidas > 0
+          ? `${variacionCabezas.entradas} entran · ${variacionCabezas.salidas} salen (30d)`
+          : 'Sin movimientos en 30 días';
+        return { ganadoCabezas: kpisGanado.totalCabezas, neto: variacionCabezas.neto, contexto };
       } catch {
-        return { ganadoCabezas: 0, variacion: undefined };
+        return { ganadoCabezas: 0, neto: 0, contexto: null };
       }
     };
 
@@ -214,12 +279,17 @@ export function Dashboard() {
     setKpis({
       incidencia: incidenciaRes.incidencia,
       incidenciaVariacion: incidenciaRes.variacion,
+      incidenciaSparkline: incidenciaRes.sparkline,
       jornalesSemana: jornalesRes.jornalesSemana,
       jornalesVariacion: jornalesRes.variacion,
+      jornalesSparkline: jornalesRes.sparkline,
+      jornalesContexto: jornalesRes.contexto,
       gastoMes: gastoRes.gastoMes,
       gastoVariacion: gastoRes.variacion,
+      gastoContexto: gastoRes.contexto,
       ganadoCabezas: ganadoRes.ganadoCabezas,
-      ganadoVariacion: ganadoRes.variacion,
+      ganadoNeto: ganadoRes.neto,
+      ganadoContexto: ganadoRes.contexto,
     });
   };
 
@@ -516,42 +586,36 @@ export function Dashboard() {
           </>
         ) : (
           <>
-            <div onClick={() => navigate('/monitoreo')} className="cursor-pointer">
-              <KPIScorecard
-                label="Incidencia"
-                valor={kpis.incidencia ?? 0}
-                valorFormateado={kpis.incidencia !== null ? `${kpis.incidencia.toFixed(1)}%` : 'Sin datos'}
-                variacion={kpis.incidencia !== null ? kpis.incidenciaVariacion : undefined}
-                size="sm"
-              />
-            </div>
-            <div onClick={() => navigate('/labores')} className="cursor-pointer">
-              <KPIScorecard
-                label="Jornales esta semana"
-                valor={kpis.jornalesSemana}
-                valorFormateado={formatNumber(kpis.jornalesSemana)}
-                variacion={kpis.jornalesVariacion}
-                size="sm"
-              />
-            </div>
-            <div onClick={() => navigate('/finanzas/gastos')} className="cursor-pointer">
-              <KPIScorecard
-                label="Gasto del mes"
-                valor={kpis.gastoMes}
-                valorFormateado={`$${formatCompact(kpis.gastoMes)}`}
-                variacion={kpis.gastoVariacion}
-                size="sm"
-              />
-            </div>
-            <div onClick={() => navigate('/ganado')} className="cursor-pointer">
-              <KPIScorecard
-                label="Cabezas de ganado"
-                valor={kpis.ganadoCabezas}
-                valorFormateado={formatNumber(kpis.ganadoCabezas)}
-                variacion={kpis.ganadoVariacion}
-                size="sm"
-              />
-            </div>
+            <DashboardKPICard
+              label="Incidencia"
+              valor={kpis.incidencia !== null ? `${kpis.incidencia.toFixed(1)}%` : 'Sin datos'}
+              variacion={kpis.incidencia !== null ? kpis.incidenciaVariacion : undefined}
+              sparkline={kpis.incidenciaSparkline}
+              onClick={() => navigate('/monitoreo')}
+            />
+            <DashboardKPICard
+              label="Jornales esta semana"
+              valor={formatNumber(kpis.jornalesSemana)}
+              variacion={kpis.jornalesVariacion}
+              sparkline={kpis.jornalesSparkline}
+              contexto={kpis.jornalesContexto ?? undefined}
+              onClick={() => navigate('/labores')}
+            />
+            <DashboardKPICard
+              label="Gasto del mes"
+              valor={`$${formatCompact(kpis.gastoMes)}`}
+              variacion={kpis.gastoVariacion}
+              contexto={kpis.gastoContexto ?? undefined}
+              onClick={() => navigate('/finanzas/gastos')}
+            />
+            <DashboardKPICard
+              label="Cabezas de ganado"
+              valor={formatNumber(kpis.ganadoCabezas)}
+              variacionTexto={kpis.ganadoNeto !== 0 ? `${kpis.ganadoNeto > 0 ? '+' : ''}${kpis.ganadoNeto} neto` : undefined}
+              variacionPositiva={kpis.ganadoNeto > 0}
+              contexto={kpis.ganadoContexto ?? undefined}
+              onClick={() => navigate('/ganado')}
+            />
           </>
         )}
       </div>
