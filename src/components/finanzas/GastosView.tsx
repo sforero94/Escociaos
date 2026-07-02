@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { RoleGuard } from '../auth/RoleGuard';
 import { GastosList } from './components/GastosList';
 import { GastoForm } from './components/GastoForm';
@@ -12,8 +13,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Plus, FileSpreadsheet, ClipboardList, History } from 'lucide-react';
 import { toast } from 'sonner';
 
+// Debe coincidir con los `value` de los TabsTrigger definidos más abajo
+const TABS_VALIDOS = ['registrar', 'historial'];
+
 export function GastosView() {
-  const [activeTab, setActiveTab] = useState('registrar');
+  const [searchParams] = useSearchParams();
+  const tabInicial = TABS_VALIDOS.includes(searchParams.get('tab') || '')
+    ? (searchParams.get('tab') as string)
+    : 'registrar';
+  const [activeTab, setActiveTab] = useState(tabInicial);
   const [showForm, setShowForm] = useState(false);
   const [showCargaMasiva, setShowCargaMasiva] = useState(false);
   const [editingGasto, setEditingGasto] = useState<any>(null);

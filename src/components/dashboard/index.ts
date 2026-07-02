@@ -17,3 +17,5 @@ export { EstadoHeader } from './EstadoHeader';
 export { ClimaCard } from './ClimaCard';
 export { QuickLinksRow } from './QuickLinksRow';
 export { DashboardKPICard } from './DashboardKPICard';
+export { PlagasKPICard } from './PlagasKPICard';
+export type { PlagaKPI } from './PlagasKPICard';
