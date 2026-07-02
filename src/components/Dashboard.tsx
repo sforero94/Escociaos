@@ -8,25 +8,16 @@ import {
   ClimaCard,
   QuickLinksRow,
   DashboardKPICard,
+  PlagasKPICard,
   type Alerta,
+  type PlagaKPI,
 } from './dashboard/index';
 import { useGanadoInventario } from './ganado/hooks/useGanadoInventario';
 import { calcularKPIsInventario, calcularVariacion } from '../utils/calculosGanado';
 
-// Plagas de interés para el KPI de incidencia
-const PLAGAS_INTERES = [
-  'Monalonion',
-  'Ácaro',
-  'Huevos de Ácaro',
-  'Ácaro Cristalino',
-  'Cucarrón marceño',
-  'Trips',
-];
-
 interface KPIsDashboard {
-  incidencia: number | null;
-  incidenciaVariacion: number | undefined;
-  incidenciaSparkline: number[];
+  plagas: PlagaKPI[];
+  plagasFecha: string | null;
   jornalesSemana: number;
   jornalesVariacion: number | undefined;
   jornalesSparkline: number[];
@@ -40,9 +31,8 @@ interface KPIsDashboard {
 }
 
 const KPIS_VACIO: KPIsDashboard = {
-  incidencia: null,
-  incidenciaVariacion: undefined,
-  incidenciaSparkline: [],
+  plagas: [],
+  plagasFecha: null,
   jornalesSemana: 0,
   jornalesVariacion: undefined,
   jornalesSparkline: [],
@@ -106,56 +96,70 @@ export function Dashboard() {
   const loadKPIs = async (supabase: any) => {
     const now = new Date();
 
-    const loadIncidencia = async (): Promise<{ incidencia: number | null; variacion: number | undefined; sparkline: number[] }> => {
-      const { data: catalogoPlagas, error: errorCatalogo } = await supabase
-        .from('plagas_enfermedades_catalogo')
-        .select('id, nombre')
-        .eq('activo', true);
-      if (errorCatalogo) return { incidencia: null, variacion: undefined, sparkline: [] };
-
-      const plagasInteresIds = catalogoPlagas
-        ?.filter((p: any) => PLAGAS_INTERES.some(nombre => p.nombre.toLowerCase().includes(nombre.toLowerCase())))
-        .map((p: any) => p.id) || [];
-      if (plagasInteresIds.length === 0) return { incidencia: null, variacion: undefined, sparkline: [] };
-
-      // 42 días = ventana suficiente para 6 baldes semanales de tendencia + la comparación 7d vs 7d
-      const hace42Dias = new Date(now);
-      hace42Dias.setDate(hace42Dias.getDate() - 42);
+    const loadPlagas = async (): Promise<{ plagas: PlagaKPI[]; fecha: string | null }> => {
+      // 90 días = ventana amplia para asegurar al menos dos rondas de monitoreo recientes
+      const hace90Dias = new Date(now);
+      hace90Dias.setDate(hace90Dias.getDate() - 90);
       const { data, error } = await supabase
         .from('monitoreos')
-        .select('fecha_monitoreo, arboles_monitoreados, arboles_afectados')
-        .in('plaga_enfermedad_id', plagasInteresIds)
-        .gte('fecha_monitoreo', hace42Dias.toISOString());
-      if (error || !data || data.length === 0) return { incidencia: null, variacion: undefined, sparkline: [] };
+        .select('fecha_monitoreo, ronda_id, arboles_monitoreados, arboles_afectados, plaga_enfermedad_id, plagas_enfermedades_catalogo(nombre)')
+        .gte('fecha_monitoreo', hace90Dias.toISOString());
+      if (error || !data || data.length === 0) return { plagas: [], fecha: null };
 
-      const hace7Dias = new Date(now);
-      hace7Dias.setDate(hace7Dias.getDate() - 7);
-      const calcularIncidencia = (rows: any[]): number | null => {
-        const afectados = rows.reduce((s, m) => s + (m.arboles_afectados || 0), 0);
-        const monitoreados = rows.reduce((s, m) => s + (m.arboles_monitoreados || 0), 0);
-        return monitoreados > 0 ? (afectados / monitoreados) * 100 : null;
+      // Agrupar por ronda de monitoreo (ronda_id) — es la unidad real de "un monitoreo"
+      // en el módulo (ver DashboardMonitoreoV3.tsx / RegistroMonitoreo.tsx). Las filas
+      // sin ronda_id (registros legado previos a Monitoreo 2.0) se agrupan por día
+      // calendario de fecha_monitoreo como aproximación aceptable.
+      const claveGrupo = (m: any): string =>
+        m.ronda_id || `fecha:${String(m.fecha_monitoreo).slice(0, 10)}`;
+
+      const grupos = new Map<string, { fechaMax: string; rows: any[] }>();
+      for (const m of data) {
+        const clave = claveGrupo(m);
+        const entry = grupos.get(clave) || { fechaMax: m.fecha_monitoreo, rows: [] as any[] };
+        if (String(m.fecha_monitoreo) > entry.fechaMax) entry.fechaMax = m.fecha_monitoreo;
+        entry.rows.push(m);
+        grupos.set(clave, entry);
+      }
+
+      const gruposOrdenados = Array.from(grupos.values()).sort((a, b) => b.fechaMax.localeCompare(a.fechaMax));
+      if (gruposOrdenados.length === 0) return { plagas: [], fecha: null };
+
+      const [ultimo, anterior] = gruposOrdenados;
+
+      const incidenciaPorPlaga = (rows: any[]): Map<string, number> => {
+        const acumulado = new Map<string, { afectados: number; monitoreados: number }>();
+        for (const m of rows) {
+          const nombre = m.plagas_enfermedades_catalogo?.nombre;
+          if (!nombre) continue;
+          const e = acumulado.get(nombre) || { afectados: 0, monitoreados: 0 };
+          e.afectados += m.arboles_afectados || 0;
+          e.monitoreados += m.arboles_monitoreados || 0;
+          acumulado.set(nombre, e);
+        }
+        const resultado = new Map<string, number>();
+        for (const [nombre, { afectados, monitoreados }] of acumulado) {
+          resultado.set(nombre, monitoreados > 0 ? (afectados / monitoreados) * 100 : 0);
+        }
+        return resultado;
       };
-      const actual = calcularIncidencia(data.filter((m: any) => new Date(m.fecha_monitoreo) >= hace7Dias));
-      const anterior = calcularIncidencia(data.filter((m: any) => new Date(m.fecha_monitoreo) < hace7Dias));
-      const variacion = actual !== null && anterior !== null && anterior > 0
-        ? ((actual - anterior) / anterior) * 100
-        : undefined;
 
-      // Tendencia semanal (últimas 6 semanas, más antigua -> más reciente)
-      const porSemana = new Map<number, { afectados: number; monitoreados: number }>();
-      data.forEach((m: any) => {
-        const idx = Math.floor((now.getTime() - new Date(m.fecha_monitoreo).getTime()) / (7 * 24 * 60 * 60 * 1000));
-        if (idx < 0 || idx > 5) return;
-        const entry = porSemana.get(idx) || { afectados: 0, monitoreados: 0 };
-        entry.afectados += m.arboles_afectados || 0;
-        entry.monitoreados += m.arboles_monitoreados || 0;
-        porSemana.set(idx, entry);
-      });
-      const sparkline = Array.from(porSemana.entries())
-        .sort((a, b) => b[0] - a[0])
-        .map(([, e]) => (e.monitoreados > 0 ? (e.afectados / e.monitoreados) * 100 : 0));
+      const incidenciaUltimo = incidenciaPorPlaga(ultimo.rows);
+      const incidenciaAnterior = anterior ? incidenciaPorPlaga(anterior.rows) : new Map<string, number>();
 
-      return { incidencia: actual, variacion, sparkline };
+      const plagas: PlagaKPI[] = Array.from(incidenciaUltimo.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([nombre, incidencia]) => {
+          const prev = incidenciaAnterior.get(nombre);
+          return {
+            nombre,
+            incidencia,
+            deltaPp: prev !== undefined ? incidencia - prev : null,
+          };
+        });
+
+      return { plagas, fecha: ultimo.fechaMax };
     };
 
     const loadJornales = async (): Promise<{ jornalesSemana: number; variacion: number | undefined; sparkline: number[]; contexto: string | null }> => {
@@ -269,17 +273,16 @@ export function Dashboard() {
       }
     };
 
-    const [incidenciaRes, jornalesRes, gastoRes, ganadoRes] = await Promise.all([
-      loadIncidencia(),
+    const [plagasRes, jornalesRes, gastoRes, ganadoRes] = await Promise.all([
+      loadPlagas(),
       loadJornales(),
       loadGasto(),
       loadGanado(),
     ]);
 
     setKpis({
-      incidencia: incidenciaRes.incidencia,
-      incidenciaVariacion: incidenciaRes.variacion,
-      incidenciaSparkline: incidenciaRes.sparkline,
+      plagas: plagasRes.plagas,
+      plagasFecha: plagasRes.fecha,
       jornalesSemana: jornalesRes.jornalesSemana,
       jornalesVariacion: jornalesRes.variacion,
       jornalesSparkline: jornalesRes.sparkline,
@@ -365,14 +368,13 @@ export function Dashboard() {
         return alertas;
       };
 
-      // --- Helper 3: Presupuesto — actual YTD vs. ritmo esperado del presupuesto anual ---
+      // --- Helper 3: Presupuesto — actual YTD vs. presupuesto acumulado al trimestre actual ---
       const loadPresupuestoAlertas = async (): Promise<Alerta[]> => {
         const anioActual = now.getFullYear();
         const inicioAnio = `${anioActual}-01-01`;
         const hoyStr = now.toISOString().split('T')[0];
-        const diaDelAnio = Math.floor((now.getTime() - new Date(anioActual, 0, 1).getTime()) / (1000 * 60 * 60 * 24)) + 1;
-        const esBisiesto = (anioActual % 4 === 0 && anioActual % 100 !== 0) || anioActual % 400 === 0;
-        const fraccionTranscurrida = Math.min(diaDelAnio / (esBisiesto ? 366 : 365), 1);
+        // Q1..Q4 según el mes actual (0-11) — ej. julio (mes 6) -> Q3
+        const trimestreActual = Math.floor(now.getMonth() / 3) + 1;
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fin_presupuestos not yet in generated DB types
         const sb = supabase as any;
@@ -398,27 +400,39 @@ export function Dashboard() {
           actualPorClave.set(clave, (actualPorClave.get(clave) || 0) + (Number(g.valor) || 0));
         }
 
-        const alertas: Alerta[] = [];
+        // fin_presupuestos tiene una fila por (año, negocio, concepto) — agregamos por
+        // categoría sumando el monto_anual de todos sus conceptos antes de comparar,
+        // para emitir a lo sumo UNA alerta por (negocio, categoría), no una por concepto.
+        const presupuestoPorClave = new Map<string, { montoAnual: number; nombreCategoria: string }>();
         for (const p of presupuestosRes.data) {
-          const montoAnual = Number(p.monto_anual) || 0;
-          if (montoAnual <= 0) continue;
           const clave = `${p.negocio_id}-${p.categoria_id}`;
+          const entry = presupuestoPorClave.get(clave) || {
+            montoAnual: 0,
+            nombreCategoria: p.fin_categorias_gastos?.nombre || 'Categoría',
+          };
+          entry.montoAnual += Number(p.monto_anual) || 0;
+          presupuestoPorClave.set(clave, entry);
+        }
+
+        const alertas: Alerta[] = [];
+        for (const [clave, { montoAnual, nombreCategoria }] of presupuestoPorClave) {
+          if (montoAnual <= 0) continue;
           const actual = actualPorClave.get(clave) || 0;
           if (actual === 0) continue;
 
-          const esperado = montoAnual * fraccionTranscurrida;
-          if (esperado <= 0) continue;
-          const ritmo = actual / esperado;
-          if (ritmo < 1.15) continue;
+          // "Para todo lo de presupuestos usemos el acumulado hasta el trimestre actual"
+          const presupuestoAcumQ = (montoAnual * trimestreActual) / 4;
+          if (presupuestoAcumQ <= 0) continue;
+          const ritmo = actual / presupuestoAcumQ;
+          if (ritmo < 0.9) continue;
 
-          const pctAnual = Math.round((actual / montoAnual) * 100);
-          const nombreCategoria = p.fin_categorias_gastos?.nombre || 'Categoría';
+          const pct = Math.round((actual / presupuestoAcumQ) * 100);
           alertas.push({
             id: `presupuesto-${clave}`,
             tipo: 'gasto',
-            mensaje: `${nombreCategoria}: $${formatCompact(actual)} de $${formatCompact(montoAnual)} presupuestado (${pctAnual}%)`,
+            mensaje: `${nombreCategoria}: $${formatCompact(actual)} de $${formatCompact(presupuestoAcumQ)} presupuestado al Q${trimestreActual} (${pct}%)`,
             fecha: now.toISOString(),
-            prioridad: ritmo >= 1.5 ? 'alta' : 'media',
+            prioridad: ritmo > 1.0 ? 'alta' : 'media',
           });
         }
         return alertas;
@@ -576,7 +590,8 @@ export function Dashboard() {
       <ClimaCard />
 
       {/* KPI scoreboard */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* index.css es salida Tailwind precompilada: usar solo clases ya presentes (existe lg:col-span-1, no md:col-span-1) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {isLoading ? (
           <>
             <KPITileSkeleton />
@@ -586,13 +601,14 @@ export function Dashboard() {
           </>
         ) : (
           <>
-            <DashboardKPICard
-              label="Incidencia"
-              valor={kpis.incidencia !== null ? `${kpis.incidencia.toFixed(1)}%` : 'Sin datos'}
-              variacion={kpis.incidencia !== null ? kpis.incidenciaVariacion : undefined}
-              sparkline={kpis.incidenciaSparkline}
-              onClick={() => navigate('/monitoreo')}
-            />
+            {/* Ancho completo en móvil/tablet: 3 filas de nombre+incidencia+delta no caben en media celda */}
+            <div className="col-span-2 lg:col-span-1">
+              <PlagasKPICard
+                plagas={kpis.plagas}
+                fecha={kpis.plagasFecha}
+                onClick={() => navigate('/monitoreo')}
+              />
+            </div>
             <DashboardKPICard
               label="Jornales esta semana"
               valor={formatNumber(kpis.jornalesSemana)}
@@ -606,7 +622,7 @@ export function Dashboard() {
               valor={`$${formatCompact(kpis.gastoMes)}`}
               variacion={kpis.gastoVariacion}
               contexto={kpis.gastoContexto ?? undefined}
-              onClick={() => navigate('/finanzas/gastos')}
+              onClick={() => navigate('/finanzas/gastos?tab=historial')}
             />
             <DashboardKPICard
               label="Cabezas de ganado"
