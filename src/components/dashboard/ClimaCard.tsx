@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Cloud, Droplets, Wind, CloudRain } from 'lucide-react';
+import { Cloud, Droplets, Wind, CloudRain, Sun } from 'lucide-react';
 import { useClimaData } from '@/hooks/useClimaData';
 import { getSupabase } from '@/utils/supabase/client';
 import { projectId } from '@/utils/supabase/info.tsx';
+import { aggregateRadiation } from '@/utils/calculosRadiacion';
 
 interface DiaPronostico {
   date: string;
@@ -13,6 +14,12 @@ interface DiaPronostico {
 }
 
 const EDGE_FUNCTION_BASE = `https://${projectId}.supabase.co/functions/v1`;
+
+function sunHoursUltimos7Dias(resumenesDiarios: { fecha: string; radiacion_wm2_avg: number | null }[]): number | null {
+  const cutoffStr = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const rows = resumenesDiarios.filter((r) => r.fecha >= cutoffStr);
+  return aggregateRadiation(rows).avgSunHours;
+}
 
 function nombreDia(fechaISO: string): string {
   const dias = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
@@ -31,8 +38,10 @@ function nombreDia(fechaISO: string): string {
  */
 export function ClimaCard() {
   const navigate = useNavigate();
-  const { lecturaActual, resumenPeriodos, loading, estacionConfigurada } = useClimaData();
+  const { lecturaActual, resumenPeriodos, resumenesDiarios, loading, estacionConfigurada } = useClimaData();
   const [pronostico, setPronostico] = useState<DiaPronostico[] | null>(null);
+
+  const sunHoursSemana = useMemo(() => sunHoursUltimos7Dias(resumenesDiarios), [resumenesDiarios]);
 
   useEffect(() => {
     let cancelado = false;
@@ -73,12 +82,14 @@ export function ClimaCard() {
       className="bg-white rounded-2xl p-4 border border-gray-200 hover:border-primary/40 transition-all cursor-pointer space-y-3"
     >
       <div className="flex items-center gap-4 flex-wrap">
+        <span className="text-[10px] uppercase text-brand-brown/40 tracking-wide">Ahora</span>
+
         <div className="flex items-center gap-2">
           <Cloud className="w-8 h-8 text-primary/70" />
           <span className="text-2xl font-semibold text-foreground">{Math.round(lecturaActual.temp_c)}°C</span>
         </div>
 
-        <div className="flex items-center gap-3 text-xs text-brand-brown/60">
+        <div className="flex items-center gap-3 text-xs text-brand-brown/60 flex-wrap">
           {lecturaActual.humedad_pct !== null && (
             <span className="flex items-center gap-1">
               <Droplets className="w-3.5 h-3.5" /> {Math.round(lecturaActual.humedad_pct)}%
@@ -92,6 +103,11 @@ export function ClimaCard() {
           {lecturaActual.lluvia_diaria_mm !== null && lecturaActual.lluvia_diaria_mm > 0 && (
             <span className="flex items-center gap-1">
               <CloudRain className="w-3.5 h-3.5" /> {lecturaActual.lluvia_diaria_mm.toFixed(1)} mm hoy
+            </span>
+          )}
+          {lecturaActual.radiacion_wm2 !== null && (
+            <span className="flex items-center gap-1">
+              <Sun className="w-3.5 h-3.5" /> {Math.round(lecturaActual.radiacion_wm2)} W/m²
             </span>
           )}
         </div>
@@ -114,7 +130,7 @@ export function ClimaCard() {
       </div>
 
       {resumenSemana && (
-        <div className="pt-3 border-t border-gray-100 flex items-center gap-4 text-xs text-brand-brown/70">
+        <div className="pt-3 border-t border-gray-100 flex items-center gap-4 flex-wrap text-xs text-brand-brown/70">
           <span className="text-[10px] uppercase text-brand-brown/40 tracking-wide">Esta semana</span>
           {resumenSemana.lluvia_total_mm !== null && (
             <span className="flex items-center gap-1">
@@ -132,6 +148,11 @@ export function ClimaCard() {
           {resumenSemana.rafaga_max_kmh !== null && (
             <span className="flex items-center gap-1">
               <Wind className="w-3.5 h-3.5" /> ráfaga máx. {Math.round(resumenSemana.rafaga_max_kmh)} km/h
+            </span>
+          )}
+          {sunHoursSemana !== null && (
+            <span className="flex items-center gap-1">
+              <Sun className="w-3.5 h-3.5 text-amber-500" /> {sunHoursSemana.toFixed(1)} h-sol/día
             </span>
           )}
         </div>
