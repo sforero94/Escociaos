@@ -161,6 +161,13 @@ export interface DatosMapaCalor {
     loteNombre: string;
     incidenciaPromedio: number;
   }>;
+  // Lotes excluidos del mapa de calor y de sus cálculos por no tener
+  // monitoreos en los últimos DIAS_VIGENCIA_LOTE días
+  lotesInactivos: Array<{
+    loteId: string;
+    loteNombre: string;
+    ultimaFecha: string;
+  }>;
 }
 
 // ============================================
