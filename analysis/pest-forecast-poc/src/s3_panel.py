@@ -75,6 +75,9 @@ def load_fumigacion_events(log: list) -> pd.DataFrame:
     f23 = pd.read_excel(RAW / "[2023] Planilla Detallada Escocia Hass.xlsx",
                          sheet_name=CONFIG["sources"]["excel_fumigacion_sheet"], header=1)
     f23["fecha"] = pd.to_datetime(f23["FECHA"], errors="coerce")
+    n_bad = f23["fecha"].isna().sum()
+    if n_bad:
+        log.append(f"fumigacion 2023: dropped {n_bad} rows with unparseable FECHA")
     f23 = f23[f23["fecha"].notna()].copy()
     f23["lote_key"] = f23["LOTE"].apply(lambda x: normalize_lote(x, log))
     f23 = f23[f23["lote_key"].notna()]
@@ -83,6 +86,9 @@ def load_fumigacion_events(log: list) -> pd.DataFrame:
     f24 = pd.read_excel(RAW / "[2024] Planilla Detallada Escocia Hass.xlsx",
                          sheet_name=CONFIG["sources"]["excel_fumigacion_sheet"], header=12)
     f24["fecha"] = pd.to_datetime(f24["Fecha"], errors="coerce")
+    n_bad = f24["fecha"].isna().sum()
+    if n_bad:
+        log.append(f"fumigacion 2024: dropped {n_bad} rows with unparseable Fecha")
     f24 = f24[f24["fecha"].notna()].copy()
     f24["lote_key"] = f24["Lote"].apply(lambda x: normalize_lote(x, log))
     f24 = f24[f24["lote_key"].notna()]
@@ -90,6 +96,9 @@ def load_fumigacion_events(log: list) -> pd.DataFrame:
 
     dbm = pd.read_csv(RAW / "db_movimientos_diarios_lotes.csv")
     dbm["fecha"] = pd.to_datetime(dbm["fecha"], errors="coerce")
+    n_bad = dbm["fecha"].isna().sum()
+    if n_bad:
+        log.append(f"fumigacion db: dropped {n_bad} rows with unparseable fecha")
     dbm = dbm[dbm["fecha"].notna()].copy()
     dbm["lote_key"] = dbm["lote"].apply(lambda x: normalize_lote(x, log))
     dbm = dbm[dbm["lote_key"].notna()]

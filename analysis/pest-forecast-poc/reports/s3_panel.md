@@ -13,11 +13,13 @@ Members of a pooled pest_group (acaros, fungoso) collapse to one incidencia_pct 
 ## Processing log
 
 - pest_group series: 4180 focus-pest rows -> 2759 (lote,pest_group,fecha) rows after mean-aggregating pooled members
+- fumigacion 2023: dropped 1 rows with unparseable FECHA
 - UNMAPPED lote raw='nan' — dropped
 - UNMAPPED lote raw='nan' — dropped
 - UNMAPPED lote raw='nan' — dropped
 - UNMAPPED lote raw='nan' — dropped
 - UNMAPPED lote raw='nan' — dropped
+- fumigacion 2024: dropped 4 rows with unparseable Fecha
 - fumigacion events: 686 distinct (fecha,lote) spray-days, 2021-06-29..2026-06-24
 - KNOWN GAP: no spray-log source covers 2025-06-25..2025-12-14 (~6 months between Excel FUMIGACION end and DB movimientos_diarios start) — intervention features for rounds whose trailing window falls entirely in this gap are left NaN (flagged via *_coverage_unknown), never silently zero-filled
 - intervention features: 68/634 rows flagged coverage_unknown (fall in the known spray-log gap or before any spray record)
