@@ -9,23 +9,23 @@ Success criteria (frozen, config.yaml): macro_f1 margin >= 0.05, pr_auc margin >
 |---|---|---|---|---|---|---|---|---|---|
 | acaros | 14 | hierarchical | 0.311 | 0.326 | -0.015 | nan | -1.000 | +nan | no |
 | acaros | 28 | hierarchical | 0.342 | 0.310 | +0.032 | nan | -1.000 | +nan | no |
-| cucarron_marceno | 14 | agronomic | 0.274 | 0.448 | -0.174 | 0.778 | 0.783 | -0.006 | no |
+| cucarron_marceno | 14 | agronomic | 0.274 | 0.448 | -0.174 | 0.686 | 0.783 | -0.097 | no |
 | cucarron_marceno | 28 | agronomic | 0.284 | 0.323 | -0.039 | 0.822 | 0.804 | +0.018 | no |
-| fungoso | 14 | hierarchical | 0.345 | 0.276 | +0.070 | 0.529 | 0.571 | -0.042 | YES |
-| fungoso | 28 | hierarchical | 0.317 | 0.285 | +0.032 | 0.533 | 0.550 | -0.017 | no |
+| fungoso | 14 | hierarchical | 0.345 | 0.276 | +0.070 | 0.125 | 0.571 | -0.446 | YES |
+| fungoso | 28 | hierarchical | 0.317 | 0.285 | +0.032 | 0.125 | 0.550 | -0.425 | no |
 | monalonion | 14 | hierarchical | 0.345 | 0.344 | +0.001 | 0.697 | 0.697 | +0.000 | no |
 | monalonion | 28 | hierarchical | 0.351 | 0.384 | -0.033 | 0.756 | 0.734 | +0.022 | no |
 | mosca_ovario | 14 | agronomic | 0.206 | 0.291 | -0.085 | 0.548 | 0.548 | +0.000 | no |
 | mosca_ovario | 28 | agronomic | 0.104 | 0.301 | -0.196 | 0.536 | 0.536 | +0.000 | no |
 | thrips | 14 | hierarchical | 0.331 | 0.328 | +0.003 | 0.468 | 0.619 | -0.151 | no |
-| thrips | 28 | elasticnet | 0.271 | 0.214 | +0.057 | 0.588 | 0.650 | -0.062 | YES |
+| thrips | 28 | elasticnet | 0.271 | 0.214 | +0.057 | 0.394 | 0.650 | -0.256 | YES |
 
 ## Block-bootstrap 95% CIs (monitoring-round blocks) for margin-clearing (pest,horizon)
 
 | pest_group | horizon | winner | macro_f1_skill (95% CI) | pr_auc_skill (95% CI) |
 |---|---|---|---|---|
 | fungoso | 14 | hierarchical | +0.070 [-0.088, +0.199] | -0.474 [-0.493, -0.282] |
-| thrips | 28 | elasticnet | +0.057 [-0.167, +0.239] | -0.062 [-0.189, -0.013] |
+| thrips | 28 | elasticnet | +0.057 [-0.167, +0.239] | -0.419 [-0.583, +0.166] |
 
 ## Leave-one-year-out robustness of the primary-test winner
 

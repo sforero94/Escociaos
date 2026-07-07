@@ -252,7 +252,16 @@ def ordinal_coefficients(fit_info: dict) -> dict:
 def tune_binary_hyperparams(panel: pd.DataFrame, pest_group: str, horizon: int, folds: dict,
                              feature_cols: list[str]) -> tuple[float, float]:
     """Selects (C, l1_ratio) using ONLY the primary split's train_years=[2023,2024] to fit and
-    validate_year=2025 to score (PR-AUC). test_year=2026 is never touched here."""
+    validate_year=2025 to score. test_year=2026 is never touched here.
+
+    Scoring criterion: mean(ROC-AUC, PR-AUC) rather than PR-AUC alone. This was found necessary
+    empirically — on several small, class-imbalanced pest_group/horizon validate sets (~100 rows),
+    pure PR-AUC was maximized by the degenerate ALL-ZERO-COEFFICIENT (intercept-only) elastic-net
+    solution (verified directly: e.g. cucarron_marceno h14 hits PR-AUC=0.816 with 0 non-zero
+    coefficients vs. 0.756 for the best non-degenerate model in the same grid) — a known artifact
+    of PR-AUC on small imbalanced samples, not a real "model." ROC-AUC of a constant-score model is
+    always exactly 0.5, so it acts as a guard against selecting a no-skill intercept-only model;
+    averaging the two metrics selects genuinely discriminative regularization strengths."""
     grp_panel = panel[panel["pest_group"] == pest_group]
     train_df, val_df = ev.get_split(grp_panel, horizon, folds["primary"]["train_years"],
                                      folds["primary"]["validate_year"])
@@ -277,9 +286,12 @@ def tune_binary_hyperparams(panel: pd.DataFrame, pest_group: str, horizon: int, 
                     continue
             score = clf.predict_proba(X_val_s)[:, 1]
             m = ev.metrics_binary(y_val, score)
-            pr_auc = m["pr_auc"]
-            if not np.isnan(pr_auc) and pr_auc > best_score:
-                best_score, best_c, best_l1 = pr_auc, C, l1_ratio
+            roc_auc, pr_auc = m["roc_auc"], m["pr_auc"]
+            if np.isnan(roc_auc) or np.isnan(pr_auc):
+                continue
+            composite = 0.5 * roc_auc + 0.5 * pr_auc
+            if composite > best_score:
+                best_score, best_c, best_l1 = composite, C, l1_ratio
     return best_c, best_l1
 
 
@@ -457,8 +469,16 @@ def write_report(results_df: pd.DataFrame, coefficients_by_group_horizon: dict, 
         "",
         "`(C, l1_ratio)` for the binary elastic-net were grid-searched "
         f"(C in {BINARY_C_GRID}, l1_ratio in {BINARY_L1_RATIO_GRID}) **once per (pest_group, "
-        "horizon)**, fitting on the primary split's train_years=[2023,2024] and scoring PR-AUC on "
-        "validate_year=2025 — test_year=2026 was never used for tuning. The same chosen "
+        "horizon)**, fitting on the primary split's train_years=[2023,2024] and scoring on "
+        "validate_year=2025 — test_year=2026 was never used for tuning. The scoring criterion is "
+        "**mean(ROC-AUC, PR-AUC)**, not PR-AUC alone: pure PR-AUC was empirically found to be "
+        "maximized, on several small class-imbalanced validate sets (~100 rows), by the degenerate "
+        "ALL-ZERO-COEFFICIENT (intercept-only) elastic-net solution — verified directly (e.g. "
+        "cucarron_marceno h14: PR-AUC=0.816 with 0 non-zero coefficients vs. 0.756 for the best "
+        "actually-discriminative model in the same grid), a known artifact of PR-AUC under small, "
+        "imbalanced samples rather than real skill. ROC-AUC of a constant-score model is always "
+        "exactly 0.5, so averaging the two metrics guards against selecting a no-skill intercept-"
+        "only model. The same chosen "
         "`(C, l1_ratio)` is reused for that pest_group/horizon's primary-test evaluation AND all "
         "four leave-one-year-out folds (each refits the model on its own train_years, but does not "
         "re-tune hyperparameters — a documented simplification since LOYO folds have no natural "
