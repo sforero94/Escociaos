@@ -3,22 +3,24 @@
 Primary split: train=[2023, 2024], validate=2025, test=2026
 Success criteria (frozen, config.yaml): macro_f1 margin >= 0.05, pr_auc margin >= 0.05, need >= 3/6 pests to clear
 
-## Per-pest, per-horizon: best model vs best baseline (primary test year)
+## Per-pest, per-horizon: best-by-macro_f1 model AND best-by-pr_auc model (primary test year)
 
-| pest_group | horizon | winner | model_macro_f1 | baseline_macro_f1 | macro_f1_skill | model_pr_auc | baseline_pr_auc | pr_auc_skill | clears_margin |
-|---|---|---|---|---|---|---|---|---|---|
-| acaros | 14 | hierarchical | 0.311 | 0.326 | -0.015 | nan | -1.000 | +nan | no |
-| acaros | 28 | hierarchical | 0.342 | 0.310 | +0.032 | nan | -1.000 | +nan | no |
-| cucarron_marceno | 14 | agronomic | 0.274 | 0.448 | -0.174 | 0.686 | 0.783 | -0.097 | no |
-| cucarron_marceno | 28 | agronomic | 0.284 | 0.323 | -0.039 | 0.822 | 0.804 | +0.018 | no |
-| fungoso | 14 | hierarchical | 0.345 | 0.276 | +0.070 | 0.125 | 0.571 | -0.446 | YES |
-| fungoso | 28 | hierarchical | 0.317 | 0.285 | +0.032 | 0.125 | 0.550 | -0.425 | no |
-| monalonion | 14 | hierarchical | 0.345 | 0.344 | +0.001 | 0.697 | 0.697 | +0.000 | no |
-| monalonion | 28 | hierarchical | 0.351 | 0.384 | -0.033 | 0.756 | 0.734 | +0.022 | no |
-| mosca_ovario | 14 | agronomic | 0.206 | 0.291 | -0.085 | 0.548 | 0.548 | +0.000 | no |
-| mosca_ovario | 28 | agronomic | 0.104 | 0.301 | -0.196 | 0.536 | 0.536 | +0.000 | no |
-| thrips | 14 | hierarchical | 0.331 | 0.328 | +0.003 | 0.468 | 0.619 | -0.151 | no |
-| thrips | 28 | elasticnet | 0.271 | 0.214 | +0.057 | 0.394 | 0.650 | -0.256 | YES |
+Reported separately and NOT mixed — an earlier version of this report showed one model's name next to a *different* model's pr_auc value (caught by an independent red-team). Each row below always shows a single model's own macro_f1 AND its own pr_auc together; `clears_margin` is YES if EITHER the macro_f1-best model clears the macro_f1 margin, OR the pr_auc-best model clears the pr_auc margin (matches the pre-registered rule: "does ANY candidate model beat baseline by the margin on EITHER metric").
+
+| pest_group | horizon | best_by_macro_f1 (own macro_f1/pr_auc) | f1_skill | best_by_pr_auc (own macro_f1/pr_auc) | pr_skill | clears_margin |
+|---|---|---|---|---|---|---|
+| acaros | 14 | hierarchical (0.311/nan) | -0.015 | hierarchical (0.311/nan) | +nan | no |
+| acaros | 28 | hierarchical (0.342/nan) | +0.032 | hierarchical (0.342/nan) | +nan | no |
+| cucarron_marceno | 14 | agronomic (0.274/0.658) | -0.174 | hierarchical (0.169/0.686) | -0.097 | no |
+| cucarron_marceno | 28 | agronomic (0.284/0.779) | -0.039 | lightgbm (0.190/0.822) | +0.018 | no |
+| fungoso | 14 | hierarchical (0.345/0.056) | +0.070 | agronomic (0.262/0.125) | -0.446 | YES |
+| fungoso | 28 | hierarchical (0.317/0.125) | +0.032 | hierarchical (0.317/0.125) | -0.425 | no |
+| monalonion | 14 | hierarchical (0.345/0.491) | +0.001 | elasticnet (0.189/0.697) | +0.000 | no |
+| monalonion | 28 | hierarchical (0.351/0.664) | -0.033 | agronomic (0.245/0.756) | +0.022 | no |
+| mosca_ovario | 14 | agronomic (0.206/0.076) | -0.085 | elasticnet (0.118/0.548) | +0.000 | no |
+| mosca_ovario | 28 | agronomic (0.104/0.079) | -0.196 | elasticnet (0.104/0.536) | +0.000 | no |
+| thrips | 14 | hierarchical (0.331/0.315) | +0.003 | lightgbm (0.288/0.468) | -0.151 | no |
+| thrips | 28 | elasticnet (0.271/0.231) | +0.057 | lightgbm (0.214/0.394) | -0.256 | YES |
 
 ## Block-bootstrap 95% CIs (monitoring-round blocks) for margin-clearing (pest,horizon)
 
@@ -28,6 +30,8 @@ Success criteria (frozen, config.yaml): macro_f1 margin >= 0.05, pr_auc margin >
 | thrips | 28 | elasticnet | +0.057 [-0.167, +0.239] | -0.419 [-0.583, +0.166] |
 
 ## Leave-one-year-out robustness of the primary-test winner
+
+**Caveat (found by the S7 red-team, not fixed — verified non-outcome-changing):** tier thresholds (`compute_tier_thresholds` in `s3_panel.py`) are frozen ONCE from the primary split's `train_years=[2023,2024]` and reused for every LOYO fold. For the `loyo_2023` and `loyo_2024` rows below, that means the tier/exceed labels being scored were partly calibrated on the very year held out as "test" in that fold — those two LOYO columns are not fully leakage-clean out-of-year checks. `loyo_2025` and `loyo_2026` ARE clean (neither year is in the threshold-fitting years). The red-team traced this through and confirmed it cannot flip the final verdict here: the only two (pest,horizon) pairs that clear the primary-test margin at all have their sole positive LOYO year at 2025 (clean), and no other pest clears the primary margin regardless of LOYO. A full fix (per-fold tier thresholds) was judged not worth the rebuild cost for a POC given it cannot change this run's outcome.
 
 | pest_group | horizon | winner | loyo_year | model_macro_f1 | baseline_macro_f1 | skill | positive? |
 |---|---|---|---|---|---|---|---|

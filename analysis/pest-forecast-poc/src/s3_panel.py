@@ -14,6 +14,15 @@ Leakage rules (doc section 7), enforced here:
   - Risk-tier thresholds are frozen from TRAIN-YEARS-ONLY (2023-2024) per pest_group, then
     applied uniformly to validate/test — never fit on the years being evaluated.
 
+KNOWN LIMITATION (found by the S7 red-team, documented rather than fixed): because tier
+thresholds are frozen ONCE from train_years=[2023,2024] and reused everywhere, the
+leave-one-year-out folds that hold out 2023 or 2024 as "test" are scoring against labels
+partly calibrated on that same held-out year — those two LOYO folds are not fully
+leakage-clean. loyo_2025/loyo_2026 are unaffected (neither year is in the threshold-fitting
+years). Verified in S6 (reports/s6_evaluation.md) to not change the final go/no-go outcome
+for this run; a full fix would need per-LOYO-fold tier thresholds (and thus per-fold label
+columns), judged not worth the rebuild cost here.
+
 Output:
   data/processed/panel.parquet  — frozen feature+label panel
   data/processed/folds.json     — frozen CV fold definitions (train/validate/test years + LOYO)

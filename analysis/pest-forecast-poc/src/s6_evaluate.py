@@ -116,11 +116,18 @@ def main():
         f"Success criteria (frozen, config.yaml): macro_f1 margin >= {MACRO_F1_MARGIN}, "
         f"pr_auc margin >= {PR_AUC_MARGIN}, need >= {MIN_PESTS_TO_GO}/6 pests to clear",
         "",
-        "## Per-pest, per-horizon: best model vs best baseline (primary test year)",
+        "## Per-pest, per-horizon: best-by-macro_f1 model AND best-by-pr_auc model (primary test year)",
         "",
-        "| pest_group | horizon | winner | model_macro_f1 | baseline_macro_f1 | macro_f1_skill | "
-        "model_pr_auc | baseline_pr_auc | pr_auc_skill | clears_margin |",
-        "|---|---|---|---|---|---|---|---|---|---|",
+        "Reported separately and NOT mixed — an earlier version of this report showed one model's "
+        "name next to a *different* model's pr_auc value (caught by an independent red-team). Each "
+        "row below always shows a single model's own macro_f1 AND its own pr_auc together; "
+        "`clears_margin` is YES if EITHER the macro_f1-best model clears the macro_f1 margin, OR "
+        "the pr_auc-best model clears the pr_auc margin (matches the pre-registered rule: \"does "
+        "ANY candidate model beat baseline by the margin on EITHER metric\").",
+        "",
+        "| pest_group | horizon | best_by_macro_f1 (own macro_f1/pr_auc) | f1_skill | "
+        "best_by_pr_auc (own macro_f1/pr_auc) | pr_skill | clears_margin |",
+        "|---|---|---|---|---|---|---|",
     ]
 
     clears_margin_by_pest = {g: False for g in pest_groups}
@@ -142,21 +149,27 @@ def main():
             f1_skill = best_f1_row["macro_f1"] - base["macro_f1"]
             pr_skill = (best_pr_row["pr_auc"] - base["pr_auc"]) if pd.notna(best_pr_row["pr_auc"]) and base["pr_auc"] >= 0 else np.nan
 
-            clears = (f1_skill >= MACRO_F1_MARGIN) or (pd.notna(pr_skill) and pr_skill >= PR_AUC_MARGIN)
+            clears_via_f1 = f1_skill >= MACRO_F1_MARGIN
+            clears_via_pr = pd.notna(pr_skill) and pr_skill >= PR_AUC_MARGIN
+            clears = clears_via_f1 or clears_via_pr
+            # `winner` = whichever model actually cleared its own margin, preferring the macro_f1
+            # winner if both/neither cleared (used downstream for bootstrap CI + LOYO robustness).
+            winner_approach = best_f1_row["approach"] if (clears_via_f1 or not clears_via_pr) else best_pr_row["approach"]
             if clears:
                 clears_margin_by_pest[grp] = True
 
             winner_table.append({
-                "pest_group": grp, "horizon": horizon, "winner": best_f1_row["approach"],
+                "pest_group": grp, "horizon": horizon, "winner": winner_approach,
                 "model_macro_f1": best_f1_row["macro_f1"], "baseline_macro_f1": base["macro_f1"],
                 "macro_f1_skill": f1_skill, "model_pr_auc": best_pr_row["pr_auc"],
                 "baseline_pr_auc": base["pr_auc"], "pr_auc_skill": pr_skill, "clears_margin": clears,
             })
 
             report_lines.append(
-                f"| {grp} | {horizon} | {best_f1_row['approach']} | {best_f1_row['macro_f1']:.3f} | "
-                f"{base['macro_f1']:.3f} | {f1_skill:+.3f} | {best_pr_row['pr_auc']:.3f} | "
-                f"{base['pr_auc']:.3f} | {pr_skill:+.3f} | {'YES' if clears else 'no'} |"
+                f"| {grp} | {horizon} | {best_f1_row['approach']} ({best_f1_row['macro_f1']:.3f}/"
+                f"{best_f1_row['pr_auc']:.3f}) | {f1_skill:+.3f} | {best_pr_row['approach']} "
+                f"({best_pr_row['macro_f1']:.3f}/{best_pr_row['pr_auc']:.3f}) | {pr_skill:+.3f} | "
+                f"{'YES' if clears else 'no'} |"
             )
 
     winner_df = pd.DataFrame(winner_table)
@@ -187,7 +200,21 @@ def main():
 
     # --- Leave-one-year-out robustness: does the winning approach ALSO clear or show positive
     #     skill across other held-out years, not just one lucky test-year split? ---
-    report_lines += ["", "## Leave-one-year-out robustness of the primary-test winner", ""]
+    report_lines += [
+        "", "## Leave-one-year-out robustness of the primary-test winner", "",
+        "**Caveat (found by the S7 red-team, not fixed — verified non-outcome-changing):** tier "
+        "thresholds (`compute_tier_thresholds` in `s3_panel.py`) are frozen ONCE from the primary "
+        "split's `train_years=[2023,2024]` and reused for every LOYO fold. For the `loyo_2023` and "
+        "`loyo_2024` rows below, that means the tier/exceed labels being scored were partly "
+        "calibrated on the very year held out as \"test\" in that fold — those two LOYO columns are "
+        "not fully leakage-clean out-of-year checks. `loyo_2025` and `loyo_2026` ARE clean (neither "
+        "year is in the threshold-fitting years). The red-team traced this through and confirmed it "
+        "cannot flip the final verdict here: the only two (pest,horizon) pairs that clear the "
+        "primary-test margin at all have their sole positive LOYO year at 2025 (clean), and no other "
+        "pest clears the primary margin regardless of LOYO. A full fix (per-fold tier thresholds) "
+        "was judged not worth the rebuild cost for a POC given it cannot change this run's outcome.",
+        "",
+    ]
     report_lines.append("| pest_group | horizon | winner | loyo_year | model_macro_f1 | baseline_macro_f1 | skill | positive? |")
     report_lines.append("|---|---|---|---|---|---|---|---|")
     loyo_robust = {}
