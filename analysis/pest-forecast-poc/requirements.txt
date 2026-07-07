@@ -1,0 +1,10 @@
+# pest-forecast-poc — Python deps (analysis only; decoupled from the TS/React app)
+pandas>=2.2
+numpy>=1.26
+scikit-learn>=1.4
+lightgbm>=4.3
+statsmodels>=0.14
+pyarrow>=15.0
+openpyxl>=3.1
+requests>=2.31
+pyyaml>=6.0
