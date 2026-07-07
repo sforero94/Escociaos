@@ -1,7 +1,7 @@
 # POC — Predicción de riesgo de plagas y enfermedades (Escocia Hass)
 
 **Status:** proposed · **Owner-decision gate:** go/no-go at the end · **Executor:** Claude Code goal loop
-(Opus 4.8 orchestrator + Sonnet 5 workers) · **Touches production:** NO (read-only DB + isolated workspace)
+(Fable 5 orchestrator + Sonnet 5 workers) · **Touches production:** NO (read-only DB + isolated workspace)
 
 > This document is written for **autonomous Claude Code agents**, not humans. It is contract-driven: every
 > stage has explicit input/output artifacts and an acceptance check; success criteria are pre-registered;

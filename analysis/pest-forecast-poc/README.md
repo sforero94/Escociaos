@@ -4,7 +4,7 @@ Isolated, **self-contained** proof-of-concept workspace. It is **not** part of t
 here is imported by `src/`, and no stage writes to the production database (read-only access only).
 
 **Full design & execution contract:** [`../../docs/POC_PREDICCION_PLAGAS.md`](../../docs/POC_PREDICCION_PLAGAS.md)
-— read that first. It is written for the Claude Code goal loop (Opus 4.8 orchestrator + Sonnet 5 workers)
+— read that first. It is written for the Claude Code goal loop (Fable 5 orchestrator + Sonnet 5 workers)
 and defines every stage, acceptance check, success criterion, and the two multi-agent workflows.
 
 ## Question this POC answers
