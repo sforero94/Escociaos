@@ -210,7 +210,14 @@ Top 10 features by gain, for two representative pest_groups at horizon 14d (the 
 
 ## Notes / anomalies flagged during fitting
 
-- None — every (pest_group, horizon) combination had sufficient data to fit both targets on every split.
+- [acaros h14] primary_test (2026, n=48): tier(s) ['High'] never occur in the eval set (distribution shift, not a bug) — macro-F1 is dragged down because the absent class always scores F1=0.
+- [acaros h14] primary_test (2026): exceed_h14 is a single class ({np.float64(0.0)}) in the eval set -> ROC-AUC/PR-AUC undefined (nan), per eval.metrics_binary's own contract, not a bug.
+- [acaros h28] primary_test (2026, n=46): tier(s) ['High'] never occur in the eval set (distribution shift, not a bug) — macro-F1 is dragged down because the absent class always scores F1=0.
+- [acaros h28] primary_test (2026): exceed_h28 is a single class ({np.float64(0.0)}) in the eval set -> ROC-AUC/PR-AUC undefined (nan), per eval.metrics_binary's own contract, not a bug.
+- [cucarron_marceno h14] primary_test (2026, n=36): tier(s) ['Low'] never occur in the eval set (distribution shift, not a bug) — macro-F1 is dragged down because the absent class always scores F1=0.
+- [cucarron_marceno h28] primary_test (2026, n=28): tier(s) ['Low'] never occur in the eval set (distribution shift, not a bug) — macro-F1 is dragged down because the absent class always scores F1=0.
+- [mosca_ovario h14] primary_test (2026, n=31): tier(s) ['Low'] never occur in the eval set (distribution shift, not a bug) — macro-F1 is dragged down because the absent class always scores F1=0.
+- [mosca_ovario h28] primary_test (2026, n=28): tier(s) ['Low'] never occur in the eval set (distribution shift, not a bug) — macro-F1 is dragged down because the absent class always scores F1=0.
 
 ## Caveats
 

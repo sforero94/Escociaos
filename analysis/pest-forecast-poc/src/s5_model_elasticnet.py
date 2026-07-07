@@ -574,10 +574,17 @@ def write_report(results_df: pd.DataFrame, coefficients_by_group_horizon: dict, 
         lines.append("")
         lines.append("**Binary elastic-net (exceed) model:**")
         lines.append("")
-        lines.append("| feature | coefficient |")
-        lines.append("|---|---|")
-        for name, val in top_k_by_magnitude(coef_info["binary"], 5):
-            lines.append(f"| {name} | {val:.4f} |")
+        binary_top = top_k_by_magnitude(coef_info["binary"], 5)
+        if all(abs(v) < 1e-9 for _, v in binary_top):
+            lines.append("_At the tuned regularization strength, elastic-net drove ALL coefficients "
+                          "to zero (intercept-only / no-skill model) — see the regularization-strength "
+                          "note above; this is a genuine null result for this pest_group/horizon, not "
+                          "missing data._")
+        else:
+            lines.append("| feature | coefficient |")
+            lines.append("|---|---|")
+            for name, val in binary_top:
+                lines.append(f"| {name} | {val:.4f} |")
         lines.append("")
 
     REPORTS.mkdir(exist_ok=True)

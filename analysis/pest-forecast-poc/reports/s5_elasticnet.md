@@ -180,13 +180,7 @@ Ordinal-model coefficients: positive = higher feature value pushes toward a high
 
 **Binary elastic-net (exceed) model:**
 
-| feature | coefficient |
-|---|---|
-| incidencia_pct | 0.0000 |
-| arboles_monitoreados | 0.0000 |
-| ar_last_incidencia_pct | 0.0000 |
-| ar_last_gap_days | 0.0000 |
-| days_since_last_spray | 0.0000 |
+_At the tuned regularization strength, elastic-net drove ALL coefficients to zero (intercept-only / no-skill model) — see the regularization-strength note above; this is a genuine null result for this pest_group/horizon, not missing data._
 
 ### fungoso — horizon 14d
 
@@ -246,13 +240,7 @@ Ordinal-model coefficients: positive = higher feature value pushes toward a high
 
 **Binary elastic-net (exceed) model:**
 
-| feature | coefficient |
-|---|---|
-| incidencia_pct | 0.0000 |
-| arboles_monitoreados | 0.0000 |
-| ar_last_incidencia_pct | 0.0000 |
-| ar_last_gap_days | 0.0000 |
-| days_since_last_spray | 0.0000 |
+_At the tuned regularization strength, elastic-net drove ALL coefficients to zero (intercept-only / no-skill model) — see the regularization-strength note above; this is a genuine null result for this pest_group/horizon, not missing data._
 
 ### monalonion — horizon 28d
 
@@ -268,13 +256,7 @@ Ordinal-model coefficients: positive = higher feature value pushes toward a high
 
 **Binary elastic-net (exceed) model:**
 
-| feature | coefficient |
-|---|---|
-| incidencia_pct | 0.0000 |
-| arboles_monitoreados | 0.0000 |
-| ar_last_incidencia_pct | 0.0000 |
-| ar_last_gap_days | 0.0000 |
-| days_since_last_spray | 0.0000 |
+_At the tuned regularization strength, elastic-net drove ALL coefficients to zero (intercept-only / no-skill model) — see the regularization-strength note above; this is a genuine null result for this pest_group/horizon, not missing data._
 
 ### mosca_ovario — horizon 14d
 
@@ -290,13 +272,7 @@ Ordinal-model coefficients: positive = higher feature value pushes toward a high
 
 **Binary elastic-net (exceed) model:**
 
-| feature | coefficient |
-|---|---|
-| incidencia_pct | 0.0000 |
-| arboles_monitoreados | 0.0000 |
-| ar_last_incidencia_pct | 0.0000 |
-| ar_last_gap_days | 0.0000 |
-| days_since_last_spray | 0.0000 |
+_At the tuned regularization strength, elastic-net drove ALL coefficients to zero (intercept-only / no-skill model) — see the regularization-strength note above; this is a genuine null result for this pest_group/horizon, not missing data._
 
 ### mosca_ovario — horizon 28d
 
@@ -312,13 +288,7 @@ Ordinal-model coefficients: positive = higher feature value pushes toward a high
 
 **Binary elastic-net (exceed) model:**
 
-| feature | coefficient |
-|---|---|
-| incidencia_pct | 0.0000 |
-| arboles_monitoreados | 0.0000 |
-| ar_last_incidencia_pct | 0.0000 |
-| ar_last_gap_days | 0.0000 |
-| days_since_last_spray | 0.0000 |
+_At the tuned regularization strength, elastic-net drove ALL coefficients to zero (intercept-only / no-skill model) — see the regularization-strength note above; this is a genuine null result for this pest_group/horizon, not missing data._
 
 ### thrips — horizon 14d
 
