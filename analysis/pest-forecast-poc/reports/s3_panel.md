@@ -20,9 +20,11 @@ Members of a pooled pest_group (acaros, fungoso) collapse to one incidencia_pct 
 - UNMAPPED lote raw='nan' — dropped
 - UNMAPPED lote raw='nan' — dropped
 - fumigacion 2024: dropped 4 rows with unparseable Fecha
-- fumigacion events: 686 distinct (fecha,lote) spray-days, 2021-06-29..2026-06-24
+- fumigacion 2025: dropped 1 rows with unparseable Fecha
+- fumigacion events: 810 distinct (fecha,lote) spray-days, 2021-06-29..2026-06-24
 - KNOWN GAP: no spray-log source covers 2025-06-25..2025-12-14 (~6 months between Excel FUMIGACION end and DB movimientos_diarios start) — intervention features for rounds whose trailing window falls entirely in this gap are left NaN (flagged via *_coverage_unknown), never silently zero-filled
-- intervention features: 68/634 rows flagged coverage_unknown (fall in the known spray-log gap or before any spray record)
+- intervention: no spray-log source gaps > 60d found — combined sources give continuous coverage
+- intervention features: 0/634 rows flagged coverage_unknown (fall in a detected source gap or before any spray record)
 - tier thresholds (train-years [2023, 2024] only) for acaros: Low<=16.44, Med<=51.50, High>51.50 (n=423)
 - tier thresholds (train-years [2023, 2024] only) for cucarron_marceno: Low<=3.00, Med<=9.00, High>9.00 (n=302)
 - tier thresholds (train-years [2023, 2024] only) for fungoso: Low<=6.54, Med<=11.67, High>11.67 (n=350)

@@ -103,6 +103,19 @@ def load_fumigacion_events(log: list) -> pd.DataFrame:
     f24 = f24[f24["lote_key"].notna()]
     events.append(f24[["fecha", "lote_key"]])
 
+    # Added post-POC: closes the 2025-06-25..2025-12-14 gap the original run flagged as
+    # coverage-unknown. Header row differs from 2024's (11, not 12) — verified directly, not assumed.
+    f25 = pd.read_excel(RAW / "[2025] Planilla Detallada Escocia Hass.xlsx",
+                         sheet_name=CONFIG["sources"]["excel_fumigacion_sheet"], header=11)
+    f25["fecha"] = pd.to_datetime(f25["Fecha"], errors="coerce")
+    n_bad = f25["fecha"].isna().sum()
+    if n_bad:
+        log.append(f"fumigacion 2025: dropped {n_bad} rows with unparseable Fecha")
+    f25 = f25[f25["fecha"].notna()].copy()
+    f25["lote_key"] = f25["Lote"].apply(lambda x: normalize_lote(x, log))
+    f25 = f25[f25["lote_key"].notna()]
+    events.append(f25[["fecha", "lote_key"]])
+
     dbm = pd.read_csv(RAW / "db_movimientos_diarios_lotes.csv")
     dbm["fecha"] = pd.to_datetime(dbm["fecha"], errors="coerce")
     n_bad = dbm["fecha"].isna().sum()
@@ -186,10 +199,47 @@ def weather_features_for(weather: pd.DataFrame, lote_fechas: pd.Series) -> pd.Da
     return pd.DataFrame(rows)
 
 
+SOURCE_GAP_THRESHOLD_DAYS = 60  # comfortably above the largest observed natural no-spray
+                                # stretch (42d, Dec-Jan low-pressure season) — a gap in the
+                                # ANY-lote event record wider than this looks like a genuine
+                                # spray-LOG recording hole, not routine farm operations.
+
+
+def find_source_gaps(events: pd.DataFrame, threshold_days: int = SOURCE_GAP_THRESHOLD_DAYS) -> list:
+    """Contiguous stretches with ZERO spray events at ANY lote, wider than `threshold_days`.
+    Computed dynamically from whatever spray-log sources are wired in — no hardcoded dates —
+    so this stays correct if sources are added/removed later (as happened post-POC: a 2025
+    Excel export closed what was previously a real 6-month gap; this function would now
+    correctly report no gap there without needing a code change).
+    """
+    dates = sorted(events["fecha"].dt.normalize().unique())
+    if len(dates) < 2:
+        return []
+    gaps = []
+    for prev, nxt in zip(dates[:-1], dates[1:]):
+        length = (nxt - prev).days
+        if length > threshold_days:
+            gaps.append((pd.Timestamp(prev), pd.Timestamp(nxt), length))
+    return gaps
+
+
 def intervention_features_for(events: pd.DataFrame, series: pd.DataFrame, log: list) -> pd.DataFrame:
     """days_since_last_spray + spray_count_in_trailing_window, per (lote_key, fecha), strictly prior."""
     ev_by_lote = {lote: sorted(g["fecha"].tolist()) for lote, g in events.groupby("lote_key")}
-    ev_min_max = events["fecha"].min(), events["fecha"].max()
+    earliest_event = events["fecha"].min()
+
+    source_gaps = find_source_gaps(events)
+    if source_gaps:
+        log.append(f"intervention: {len(source_gaps)} spray-log SOURCE gap(s) > "
+                   f"{SOURCE_GAP_THRESHOLD_DAYS}d detected (zero events at ANY lote):")
+        for start, end, length in source_gaps:
+            log.append(f"  source gap: {start.date()} .. {end.date()} ({length} days)")
+    else:
+        log.append(f"intervention: no spray-log source gaps > {SOURCE_GAP_THRESHOLD_DAYS}d found "
+                   f"— combined sources give continuous coverage")
+
+    def in_source_gap(fecha: pd.Timestamp) -> bool:
+        return any(start <= fecha <= end for start, end, _ in source_gaps)
 
     rows = []
     for _, r in series[["lote_key", "fecha"]].drop_duplicates().iterrows():
@@ -198,27 +248,24 @@ def intervention_features_for(events: pd.DataFrame, series: pd.DataFrame, log: l
         dates = ev_by_lote.get(lote, [])
         prior = [d for d in dates if d < fecha]
 
-        # Coverage flag: is `fecha` inside the known no-spray-log-source gap?
-        gap_start, gap_end = pd.Timestamp("2025-06-25"), pd.Timestamp("2025-12-14")
-        in_gap = gap_start <= fecha <= gap_end
+        unknown = in_source_gap(fecha) or fecha < earliest_event
+        row["intervention_coverage_unknown"] = unknown
 
-        if in_gap or fecha < ev_min_max[0]:
+        if unknown:
             row["days_since_last_spray"] = np.nan
-            row["intervention_coverage_unknown"] = True
         else:
             row["days_since_last_spray"] = (fecha - prior[-1]).days if prior else np.nan
-            row["intervention_coverage_unknown"] = False
 
         for win in WINDOWS:
             start = fecha - pd.Timedelta(days=win)
             cnt = sum(1 for d in prior if d >= start)
-            row[f"spray_count_w{win}"] = np.nan if (in_gap or fecha < ev_min_max[0]) else cnt
+            row[f"spray_count_w{win}"] = np.nan if unknown else cnt
         rows.append(row)
 
     out = pd.DataFrame(rows)
     n_unknown = out["intervention_coverage_unknown"].sum()
     log.append(f"intervention features: {n_unknown}/{len(out)} rows flagged coverage_unknown "
-               f"(fall in the known spray-log gap or before any spray record)")
+               f"(fall in a detected source gap or before any spray record)")
     return out
 
 

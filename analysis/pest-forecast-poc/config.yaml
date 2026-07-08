@@ -12,9 +12,12 @@ farm:
 sources:
   excel_2023: "~/Downloads/[2023] Planilla Detallada Escocia Hass.xlsx"
   excel_2024: "~/Downloads/[2024] Planilla Detallada Escocia Hass.xlsx"
+  excel_2025: "~/Downloads/[2025] Planilla Detallada Escocia Hass.xlsx"  # added post-POC: closes the
+                                                           # 2025-06-25..2025-12-14 FUMIGACION gap
   excel_2023_monitoreo_sheet: "MONITOREO"                 # header row 0
   excel_2024_monitoreo_sheet: "PLAGAS Y ENFERMEDADES"     # header row 11, data from row 12
-  excel_fumigacion_sheet: "FUMIGACION"                    # both files; 2024 header row 12
+  excel_fumigacion_sheet: "FUMIGACION"                    # 2023 header row 1, 2024 header row 12,
+                                                           # 2025 header row 11 (verify per-file, don't assume)
   supabase_project_id: "ywhtjwawnkeqlwxbvgup"             # READ-ONLY
 
 # --- Cross-validation (out-of-year ONLY; never random-split). ---
