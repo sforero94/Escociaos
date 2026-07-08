@@ -9,6 +9,9 @@ import { Toaster } from './components/ui/sonner';
 import { ChatFAB } from './components/chat/ChatFAB';
 import { Loader2 } from 'lucide-react';
 
+// TEMPORAL — torneo de rediseño de PriorizacionScouting. Se elimina al cerrar el torneo.
+const PriorizacionTournamentHarness = lazy(() => import('./components/monitoreo/tournament/PriorizacionTournamentHarness').then(m => ({ default: m.PriorizacionTournamentHarness })));
+
 // Route-level lazy imports — named exports
 const Dashboard = lazy(() => import('./components/Dashboard').then(m => ({ default: m.Dashboard })));
 const InventoryList = lazy(() => import('./components/inventory/InventoryList').then(m => ({ default: m.InventoryList })));
@@ -177,6 +180,15 @@ function AppContent() {
           ) : (
             <Login onLoginSuccess={() => { }} />
           )
+        }
+      />
+      {/* TEMPORAL — torneo de rediseño de PriorizacionScouting, sin auth. Eliminar al cerrar el torneo. */}
+      <Route
+        path="/dev-preview-priorizacion"
+        element={
+          <Suspense fallback={<div className="p-8">Cargando...</div>}>
+            <PriorizacionTournamentHarness />
+          </Suspense>
         }
       />
       <Route
