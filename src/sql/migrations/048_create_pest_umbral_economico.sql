@@ -13,7 +13,7 @@
 
 CREATE TABLE IF NOT EXISTS pest_umbral_economico (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  pest_id      UUID REFERENCES plagas_enfermedades_catalogo(id),
+  pest_id      UUID NOT NULL UNIQUE REFERENCES plagas_enfermedades_catalogo(id),
   grupo_key    TEXT NULL,
   umbral_pct   NUMERIC NOT NULL,
   source_label TEXT NOT NULL,
