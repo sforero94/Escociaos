@@ -288,7 +288,7 @@ describe('priorizarMonitoreo', () => {
     expect(entradasAcaro).toHaveLength(1);
     expect(entradasAcaro[0].incidenciaActual).toBe(34);
     expect(entradasAcaro[0].estadoUmbral).toBe('over');
-    expect(entradasAcaro[0].pest_nombre).toBe('Complejo de ácaros');
+    expect(entradasAcaro[0].pest_nombre).toBe('Acaros (insecto y huevos)');
   });
 
   it('Antracnosis fruto y Antracnosis ramas NO se agrupan: dos entradas independientes, cada una gatillada a su propio 10%', () => {

@@ -171,7 +171,7 @@ const MARGEN_APROXIMANDOSE = 0.8;
 const VENTANA_TENDENCIA = 4;
 
 const NOMBRES_GRUPO: Record<string, string> = {
-  acaro_complex: 'Complejo de ácaros',
+  acaro_complex: 'Acaros (insecto y huevos)',
 };
 
 // ============================================================================
