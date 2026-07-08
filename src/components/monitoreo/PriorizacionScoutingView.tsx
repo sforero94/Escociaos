@@ -15,10 +15,11 @@
 //   de fila compacta (rank + ícono tier + chip estado + % + cambio).
 // - De Concepto D: atribución de fuente inline ("Sobre umbral · Cartama",
 //   "Gravedad Alta · histórico finca") en el popover de detalle y como sufijo
-//   del subtítulo de cada bucket; rollup por lote (tira de puntos + badge)
-//   como filtro rápido de "qué lote reviso primero".
+//   del subtítulo de cada bucket; rollup por lote (grilla de tarjetas 2x2
+//   paginada, con punto de severidad + badge) como filtro rápido de "qué
+//   lote reviso primero".
 // - De Concepto A/C: indicador de temporada alta (llama) visible inline en
-//   filas críticas; fila de chips-resumen al inicio del dashboard.
+//   filas críticas.
 //
 // Regla dura (todo el archivo): Tier A y Tier B nunca comparten el mismo
 // lenguaje visual. El ícono de tier (sólido = Tier A validado externamente,
@@ -313,9 +314,11 @@ function FilaEntrada({
 }
 
 // ============================================================================
-// Rollup por lote — tira de chips filtrables con puntos de severidad + badge
-// de conteo. Responde "¿qué lote visito primero?" sin tener que sumar fila
-// por fila. Un toque activa/desactiva el filtro de esa fila para las 3 zonas.
+// Rollup por lote — grilla de tarjetas 2x2 (paginada con puntos si hay más de
+// 4 lotes). Cada tarjeta resume un lote de un vistazo: punto de severidad +
+// badge de conteo. Responde "¿qué lote visito primero?" sin tener que sumar
+// fila por fila. Un toque activa/desactiva el filtro de ese lote para las 3
+// zonas; la tarjeta activa queda resaltada (no hay chip de filtro aparte).
 // ============================================================================
 
 interface GrupoLote {
@@ -355,18 +358,93 @@ function agruparPorLote(entries: PriorizacionEntry[]): GrupoLote[] {
   return Array.from(mapa.values()).sort((a, b) => a.minBracket - b.minBracket);
 }
 
-function puntoClase(entry: PriorizacionEntry): string {
-  if (entry.tier === 'A') {
-    if (entry.estadoUmbral === 'over') return 'bg-destructive';
-    if (entry.estadoUmbral === 'approaching') return 'bg-amber-500';
-    return 'bg-muted-foreground/40';
-  }
-  if (entry.gravedad?.texto === 'Alta') return 'bg-amber-500/70';
-  if (entry.gravedad?.texto === 'Media') return 'bg-muted-foreground/50';
-  return 'bg-muted-foreground/30';
+const AMBAR_500 = '#f59e0b';
+
+interface BadgeConteo {
+  texto: string;
+  clase: string;
+  /** Color de borde vía variable CSS/valor directo — no vía clase Tailwind,
+   * para no depender de combinaciones borde+color que puedan faltar en el
+   * CSS compilado (ver nota en LoteCard más abajo). */
+  estiloBorde?: string;
 }
 
-function FiltroLotes({
+function badgeConteoDe(grupo: GrupoLote): BadgeConteo {
+  if (grupo.sobreUmbral > 0) return { texto: `${grupo.sobreUmbral} sobre umbral`, clase: 'bg-destructive text-white' };
+  if (grupo.acercandose > 0) return { texto: `${grupo.acercandose} acercándose`, clase: 'bg-amber-500 text-white' };
+  if (grupo.gravedadAlta > 0) {
+    return {
+      texto: `${grupo.gravedadAlta} grav. alta`,
+      clase: 'border text-amber-700 dark:text-amber-400',
+      estiloBorde: AMBAR_500,
+    };
+  }
+  return { texto: 'sin alertas', clase: 'border text-muted-foreground', estiloBorde: 'var(--border)' };
+}
+
+/** Punto de severidad agregado del lote — mismo criterio rojo/ámbar/neutro que
+ * el resto del dashboard (nunca verde, ni para "sin alertas"). Color vía
+ * estilo inline (no clases Tailwind con modificador de opacidad tipo
+ * `bg-amber-500/70`): este proyecto sirve `index.css` como CSS ya compilado
+ * en vez de generarlo en cada build (ver comentario de cabecera del
+ * archivo), así que cualquier combinación clase+opacidad que no se haya
+ * usado ya en otro componente puede no existir ahí todavía. Las variables
+ * CSS (`var(--destructive)`, etc.) siempre están disponibles sin depender de
+ * ese compilado. */
+function puntoEstiloGrupo(grupo: GrupoLote): { backgroundColor: string; opacity?: number } {
+  if (grupo.sobreUmbral > 0) return { backgroundColor: 'var(--destructive)' };
+  if (grupo.acercandose > 0) return { backgroundColor: AMBAR_500 };
+  if (grupo.gravedadAlta > 0) return { backgroundColor: AMBAR_500, opacity: 0.7 };
+  return { backgroundColor: 'var(--muted-foreground)', opacity: 0.3 };
+}
+
+function LoteCard({
+  grupo,
+  seleccionado,
+  onToggle,
+}: {
+  grupo: GrupoLote;
+  seleccionado: boolean;
+  onToggle: () => void;
+}) {
+  const badge = badgeConteoDe(grupo);
+
+  return (
+    <button
+      type="button"
+      aria-pressed={seleccionado}
+      onClick={onToggle}
+      className={`flex flex-col items-start gap-1.5 rounded-lg border p-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+        seleccionado ? 'bg-muted' : 'bg-card hover:bg-muted/60'
+      }`}
+      style={{ borderColor: seleccionado ? 'var(--foreground)' : 'var(--border)' }}
+    >
+      <span className="flex w-full items-center gap-1.5">
+        <span
+          className="inline-block shrink-0 rounded-full"
+          style={{ width: '0.625rem', height: '0.625rem', ...puntoEstiloGrupo(grupo) }}
+          aria-hidden="true"
+        />
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{grupo.lote_nombre}</span>
+      </span>
+      <span
+        className={`inline-flex items-center rounded-full py-0.5 font-semibold leading-none ${badge.clase}`}
+        style={{
+          fontSize: '10px',
+          paddingLeft: '0.375rem',
+          paddingRight: '0.375rem',
+          borderColor: badge.estiloBorde,
+        }}
+      >
+        {badge.texto}
+      </span>
+    </button>
+  );
+}
+
+const LOTES_POR_PAGINA = 4; // grilla 2x2
+
+function LotesGrid({
   entries,
   activo,
   onToggle,
@@ -376,111 +454,55 @@ function FiltroLotes({
   onToggle: (loteId: string) => void;
 }) {
   const grupos = useMemo(() => agruparPorLote(entries), [entries]);
+  const [pagina, setPagina] = useState(0);
+
+  const totalPaginas = Math.max(1, Math.ceil(grupos.length / LOTES_POR_PAGINA));
+  const paginaSegura = Math.min(pagina, totalPaginas - 1);
+  const grupoVisible = useMemo(
+    () => grupos.slice(paginaSegura * LOTES_POR_PAGINA, paginaSegura * LOTES_POR_PAGINA + LOTES_POR_PAGINA),
+    [grupos, paginaSegura]
+  );
 
   if (grupos.length <= 1) return null; // con un solo lote, filtrar no aporta nada
 
   return (
-    <div className="relative">
-      <div className="flex gap-2 overflow-x-auto pb-1" style={{ marginLeft: '-0.75rem', marginRight: '-0.75rem', paddingLeft: '0.75rem', paddingRight: '0.75rem' }}>
-        {grupos.map((grupo) => {
-        const seleccionado = activo === grupo.lote_id;
-        const badge =
-          grupo.sobreUmbral > 0
-            ? { texto: `${grupo.sobreUmbral} sobre umbral`, clase: 'bg-destructive text-white' }
-            : grupo.acercandose > 0
-              ? { texto: `${grupo.acercandose} acercándose`, clase: 'bg-amber-500 text-white' }
-              : grupo.gravedadAlta > 0
-                ? {
-                    texto: `${grupo.gravedadAlta} grav. alta`,
-                    clase: 'border border-amber-500 text-amber-700 dark:text-amber-400',
-                  }
-                : { texto: 'sin alertas', clase: 'border border-border text-muted-foreground' };
-
-        return (
-          <button
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-2 gap-2">
+        {grupoVisible.map((grupo) => (
+          <LoteCard
             key={grupo.lote_id}
-            type="button"
-            aria-pressed={seleccionado}
-            onClick={() => onToggle(grupo.lote_id)}
-            className={`flex shrink-0 items-center gap-2 rounded-full border px-2.5 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-              seleccionado ? 'bg-muted' : 'bg-card hover:bg-muted/60'
-            }`}
-            style={{ borderColor: seleccionado ? 'var(--foreground)' : 'var(--border)' }}
-          >
-            <span className="flex items-center" style={{ gap: '0.125rem' }} aria-hidden="true">
-              {grupo.entries.slice(0, 5).map((entry, i) => (
-                <span key={i} className={`inline-block size-2 rounded-full ${puntoClase(entry)}`} />
-              ))}
-            </span>
-            <span className="truncate font-medium text-foreground" style={{ maxWidth: '9rem' }}>
-              {grupo.lote_nombre}
-            </span>
-            <span
-              className={`inline-flex items-center rounded-full py-0.5 font-semibold leading-none ${badge.clase}`}
-              style={{ fontSize: '10px', paddingLeft: '0.375rem', paddingRight: '0.375rem' }}
-            >
-              {badge.texto}
-            </span>
-          </button>
-          );
-        })}
+            grupo={grupo}
+            seleccionado={activo === grupo.lote_id}
+            onToggle={() => onToggle(grupo.lote_id)}
+          />
+        ))}
       </div>
-      <div
-        className="pointer-events-none absolute right-0 top-0 bottom-0"
-        aria-hidden="true"
-        style={{ width: '1.5rem', background: 'linear-gradient(to right, transparent, var(--background))' }}
-      />
-    </div>
-  );
-}
-
-// ============================================================================
-// Fila de chips-resumen — puente entre el título y los buckets. Responde en
-// menos de 2 segundos "¿qué está pasando esta semana?" antes de abrir nada.
-// Siempre calculada sobre el total sin filtrar (es el panorama general).
-// ============================================================================
-
-function ResumenChips({ entries }: { entries: PriorizacionEntry[] }) {
-  const resumen = useMemo(() => {
-    let sobreUmbral = 0;
-    let acercandose = 0;
-    let gravedadAlta = 0;
-    let temporadaAlta = 0;
-    for (const entry of entries) {
-      if (entry.tier === 'A' && entry.estadoUmbral === 'over') sobreUmbral += 1;
-      if (entry.tier === 'A' && entry.estadoUmbral === 'approaching') acercandose += 1;
-      if (entry.tier === 'B' && entry.gravedad?.texto === 'Alta') gravedadAlta += 1;
-      if (entry.temporadaAlta) temporadaAlta += 1;
-    }
-    return { sobreUmbral, acercandose, gravedadAlta, temporadaAlta };
-  }, [entries]);
-
-  const chips: { texto: string; clase: string }[] = [];
-  if (resumen.sobreUmbral > 0) {
-    chips.push({ texto: `${resumen.sobreUmbral} sobre umbral (Tier A)`, clase: 'border-transparent bg-destructive text-white' });
-  }
-  if (resumen.acercandose > 0) {
-    chips.push({ texto: `${resumen.acercandose} acercándose (Tier A)`, clase: 'border-transparent bg-amber-500 text-white' });
-  }
-  if (resumen.gravedadAlta > 0) {
-    chips.push({
-      texto: `${resumen.gravedadAlta} gravedad alta (Tier B)`,
-      clase: 'border-dashed border-amber-500 bg-transparent text-amber-700 dark:text-amber-400',
-    });
-  }
-  if (resumen.temporadaAlta > 0) {
-    chips.push({ texto: `${resumen.temporadaAlta} en temporada alta`, clase: 'border-border bg-transparent text-muted-foreground' });
-  }
-
-  if (chips.length === 0) return null;
-
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {chips.map((chip) => (
-        <Badge key={chip.texto} className={chip.clase}>
-          {chip.texto}
-        </Badge>
-      ))}
+      {totalPaginas > 1 ? (
+        <div className="flex items-center justify-center gap-1" role="tablist" aria-label="Páginas de lotes">
+          {Array.from({ length: totalPaginas }, (_, i) => i).map((i) => (
+            <button
+              key={i}
+              type="button"
+              role="tab"
+              aria-selected={i === paginaSegura}
+              aria-label={`Página ${i + 1} de ${totalPaginas}`}
+              onClick={() => setPagina(i)}
+              className="flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              style={{ width: '1.75rem', height: '1.75rem' }}
+            >
+              <span
+                className="rounded-full transition-colors"
+                style={{
+                  width: i === paginaSegura ? '1.125rem' : '0.5rem',
+                  height: '0.5rem',
+                  backgroundColor: i === paginaSegura ? 'var(--foreground)' : 'var(--muted-foreground)',
+                  opacity: i === paginaSegura ? 1 : 0.5,
+                }}
+              />
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -684,8 +706,9 @@ function InfoGeneral() {
             </p>
           </div>
           <p className="text-xs text-muted-foreground">
-            Toca los chips de lote para enfocar la lista en uno solo, y toca cualquier fila para ver el
-            detalle completo (% real, umbral, tendencia, días desde la última fumigación).
+            Toca la tarjeta de un lote para enfocar la lista en ese lote (tócala de nuevo para quitar el
+            filtro), y toca cualquier fila para ver el detalle completo (% real, umbral, tendencia, días
+            desde la última fumigación).
           </p>
         </div>
       </PopoverContent>
@@ -747,10 +770,6 @@ export function PriorizacionScoutingView({ entries, loading, error }: Priorizaci
 
   const descripcionCritico = `Sobre o acercándose al umbral económico validado · ${fuentesCritico.length > 0 ? fuentesCritico.join(' / ') : 'Cartama'}.`;
 
-  const loteActivoNombre = loteActivo
-    ? (entries.find((entry) => entry.lote_id === loteActivo)?.lote_nombre ?? loteActivo)
-    : null;
-
   const handleToggleLote = (loteId: string) => {
     setLoteActivo((actual) => (actual === loteId ? null : loteId));
   };
@@ -795,20 +814,7 @@ export function PriorizacionScoutingView({ entries, loading, error }: Priorizaci
         <InfoGeneral />
       </div>
 
-      <ResumenChips entries={entries} />
-
-      <FiltroLotes entries={entries} activo={loteActivo} onToggle={handleToggleLote} />
-
-      {loteActivo ? (
-        <button
-          type="button"
-          onClick={() => setLoteActivo(null)}
-          className="flex w-fit items-center gap-1.5 rounded-full border border-foreground bg-muted px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted/70"
-        >
-          Filtrando por {loteActivoNombre}
-          <span aria-hidden="true">✕</span>
-        </button>
-      ) : null}
+      <LotesGrid entries={entries} activo={loteActivo} onToggle={handleToggleLote} />
 
       <div className="flex flex-col gap-3">
         <ZoneSection
