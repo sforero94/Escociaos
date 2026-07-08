@@ -434,18 +434,12 @@ function FilaFoco({
                 </span>
               ) : null}
             </span>
-            <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{entry.pest_nombre}</span>
-            <span className="flex shrink-0 flex-col items-end gap-0.5">
-              <span className="text-sm font-semibold tabular-nums text-foreground">
-                {formatPercentage(entry.incidenciaActual, 0)}
-              </span>
-              <TrendBadge tendencia={entry.tendencia} numRondas={entry.numRondas} />
           </span>
-          <span className="flex shrink-0 flex-col items-end" style={{ gap: '0.125rem' }}>
-            <span className="text-sm font-semibold text-foreground" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          <span className="flex shrink-0 flex-col items-end gap-0.5">
+            <span className="text-sm font-semibold tabular-nums text-foreground">
               {formatPercentage(entry.incidenciaActual, 0)}
             </span>
-            <TrendBadge tendencia={entry.tendencia} />
+            <TrendBadge tendencia={entry.tendencia} numRondas={entry.numRondas} />
           </span>
         </button>
       </PopoverTrigger>
@@ -493,7 +487,7 @@ function FilaLoteExpandible({
             <span className="text-sm font-semibold text-foreground" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {formatPercentage(peor.incidenciaActual, 0)}
             </span>
-            <TrendBadge tendencia={peor.tendencia} />
+            <TrendBadge tendencia={peor.tendencia} numRondas={peor.numRondas} />
           </span>
         </button>
       </CollapsibleTrigger>
