@@ -168,6 +168,61 @@ describe('priorizarMonitoreo', () => {
     );
   });
 
+  it('Tier B "Alta" (tercil histórico propio) supera a Tier A "under" -- un umbral Cartama no alcanzado no debe opacar una incidencia realmente severa sin umbral validado', () => {
+    // Regresión: una verificación independiente detectó que Thrips al 0.1% (Tier A,
+    // "under" del 1% de Cartama) rankeaba por encima de Mosca del ovario al 90%
+    // (Tier B, "Alta" según su propio tercil histórico) -- agronómicamente absurdo.
+    // bracketDe() ya no trata "under" como superior en bloque a todo Tier B.
+    const historiales: HistorialSublotePlaga[] = [
+      historial({
+        sublote_id: 'sub-thrips',
+        pest_id: 'pest-thrips',
+        pest_nombre: 'Thrips',
+        rondas: rondas([
+          ['2026-05-01', 0.1],
+          ['2026-05-15', 0.1],
+          ['2026-06-01', 0.1],
+          ['2026-06-15', 0.1], // umbral Cartama 1% -> muy por debajo, "under"
+        ]),
+      }),
+      historial({
+        sublote_id: 'sub-mosca2',
+        pest_id: 'pest-mosca2',
+        pest_nombre: 'Mosca del ovario',
+        rondas: rondas([
+          ['2026-05-01', 85],
+          ['2026-05-15', 88],
+          ['2026-06-01', 90],
+          ['2026-06-15', 90], // sin umbral Cartama -> Tier B; 90% es "Alta" por cualquier tercil razonable
+        ]),
+      }),
+    ];
+    const umbrales: UmbralEconomico[] = [
+      { pest_id: 'pest-thrips', grupo_key: null, umbral_pct: 1, source_label: 'Cartama' },
+      // pest-mosca2: sin fila -> Tier B
+    ];
+
+    const resultado = priorizarMonitoreo({
+      historiales,
+      umbrales,
+      perfilesEstacionales: [],
+      ultimasFumigaciones: [],
+      fechaReferencia: FECHA_REF,
+    });
+
+    const thrips = resultado.find((e) => e.pest_id === 'pest-thrips')!;
+    const mosca2 = resultado.find((e) => e.pest_id === 'pest-mosca2')!;
+    expect(thrips.tier).toBe('A');
+    expect(thrips.estadoUmbral).toBe('under');
+    expect(mosca2.tier).toBe('B');
+    expect(mosca2.gravedad?.texto).toBe('Alta');
+
+    // Mosca (Tier B "Alta", 90%) debe rankear por encima de Thrips (Tier A "under", 0.1%).
+    expect(resultado.findIndex((e) => e.pest_id === 'pest-mosca2')).toBeLessThan(
+      resultado.findIndex((e) => e.pest_id === 'pest-thrips')
+    );
+  });
+
   it('complejo de ácaros: pool por MAX de la ronda, aunque la mayoría de los miembros esté bajo 33%', () => {
     // Tres miembros se mantienen bajos en ambas rondas; uno solo (H-acaro Cristalino)
     // sube a 34% en la ronda más reciente. Si el pooling tomara un promedio (o

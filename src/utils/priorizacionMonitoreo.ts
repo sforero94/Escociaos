@@ -366,6 +366,16 @@ function construirWhy(params: {
 // Bracket de prioridad (regla de orden dura, §6)
 // ============================================================================
 
+// Bracket order, per docs/PLAN_PRIORIZACION_MONITOREO.md section 6: ONLY Tier A `over`
+// is guaranteed to outrank every Tier B entry ("an owner-validated economic breach is a
+// stronger claim than any statistical percentile"). Tier A `approaching` still leads
+// (it's closing in on a real, Cartama-validated number), but Tier A `under` -- comfortably
+// below even the early-warning margin -- must NOT blanket-outrank Tier B `Alta` (this
+// pest's own top historical tercile). An earlier version of this function put ALL Tier A
+// states ahead of ALL Tier B states, which let e.g. Thrips at 0.1% (Tier A, `under`) rank
+// above Mosca del ovario at 90% (Tier B, `Alta`) -- an independent verifier caught this by
+// running the scenario directly against the export, not just reading the code. Fixed by
+// interleaving `under` behind Tier B `Alta`.
 function bracketDe(entry: {
   tier: TierPriorizacion;
   estadoUmbral?: EstadoUmbral;
@@ -374,13 +384,14 @@ function bracketDe(entry: {
   if (entry.tier === 'A') {
     if (entry.estadoUmbral === 'over') return 0;
     if (entry.estadoUmbral === 'approaching') return 1;
-    return 2; // under
+    // 'under' falls through to the interleaved ranking below (bracket 3).
+  } else {
+    const numerica = entry.gravedad?.numerica ?? 1;
+    if (numerica === 3) return 2; // Tier B Alta
+    if (numerica === 2) return 4; // Tier B Media
+    return 5; // Tier B Baja
   }
-  // Tier B: Alta=3, Media=4, Baja=5
-  const numerica = entry.gravedad?.numerica ?? 1;
-  if (numerica === 3) return 3;
-  if (numerica === 2) return 4;
-  return 5;
+  return 3; // Tier A 'under'
 }
 
 // ============================================================================
