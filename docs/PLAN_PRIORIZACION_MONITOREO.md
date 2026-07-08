@@ -81,7 +81,7 @@ records** (% incidencia):
 | Antracnosis | 10% | `Antracnosis fruto` **and** `Antracnosis ramas` | **NOT pooled — owner confirmed both, independently**: two separate Tier A lines, each gated at 10% on its own reading |
 
 This resolves to **7 independently-ranked Tier A lines** (Thrips, Ácaro-complex, Monalonion,
-Marceño, Phytophtora, Antracnosis fruto, Antracnosis ramas), mapping to **9 real catalog pest
+Marceño, Phytophtora, Antracnosis fruto, Antracnosis ramas), mapping to **10 real catalog pest
 ids** (the Ácaro line alone covers 4). `pest_umbral_economico` (P0b) needs a `grupo_key` column so
 the 4 Ácaro-complex rows share one virtual ranking line while everything else is one-row-per-line —
 see P0b's revised acceptance check.
@@ -90,7 +90,7 @@ see P0b's revised acceptance check.
 a reference annotation. Crossing the threshold is the strongest single ranking driver; trend and
 seasonality (§6) become modifiers on top of it, not substitutes for it. The old data-driven tertile
 method (`clasificarGravedad` / POC-style per-pest tertiles) becomes the **fallback** for any catalog
-pest *outside* these 9 ids (e.g. mosca del ovario, Colletotrichum, Cladosporium — pests the POC
+pest *outside* these 10 ids (e.g. mosca del ovario, Colletotrichum, Cladosporium — pests the POC
 tracked but that have no owner-provided economic threshold).
 
 **Two assumptions still open (not blocking — reasonable defaults chosen, revisit if Cartama's
@@ -281,7 +281,7 @@ authenticated, per existing conventions in `docs/supabase_tablas.md`).
 (`pest_umbral_economico`: `pest_id`, `grupo_key` [nullable — shared only by the 4 Ácaro-complex
 rows, e.g. `'acaro_complex'`], `umbral_pct`, `source_label`, `updated_at`) — NOT derived from any
 data pipeline, just §2's resolved table. Small enough to be a plain seed migration, not a script.
-*Accept:* exactly **9 rows** (Thrips=1, Ácaro-complex=4 sharing `grupo_key='acaro_complex'` +
+*Accept:* exactly **10 rows** (Thrips=1, Ácaro-complex=4 sharing `grupo_key='acaro_complex'` +
 `umbral_pct=33`, Monalonion=1, Marceño=1, Phytophtora=1, Antracnosis fruto=1, Antracnosis ramas=1),
 every `pest_id` resolved against a live catalog query (not assumed from this doc's cached names —
 catalog names can drift), `source_label='Cartama'` on every row.
@@ -369,7 +369,7 @@ tournament and no red-team stage.
    caution rules) — never hand-edit an already-applied migration file.
 2. `pest_seasonal_profile` row count and a spot-check of 3 (lote,pest,week) rows match the POC
    parquet by hand.
-3. `pest_umbral_economico` has exactly 9 rows (4 sharing `grupo_key='acaro_complex'`, 5
+3. `pest_umbral_economico` has exactly 10 rows (4 sharing `grupo_key='acaro_complex'`, 6
    independent), every `pest_id` verified against a live catalog query (not assumed), and
    `source_label='Cartama'` throughout.
 4. Ranking engine unit tests pass, including the Tier A over-threshold ranks first regardless of
