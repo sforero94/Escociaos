@@ -50,7 +50,19 @@ import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
-import { ToggleGroup, ToggleGroupItem } from '../ui/toggle-group';
+
+// Colores directos (no vía clase Tailwind con modificador de opacidad, ej.
+// `bg-amber-500/70` o `border-amber-400/40`): este proyecto sirve `index.css`
+// como CSS ya compilado en vez de generarlo en cada build, así que cualquier
+// combinación clase+opacidad que no se haya usado ya en otro componente
+// puede no existir ahí todavía. Los valores fijos de abajo, y las variables
+// CSS (`var(--destructive)`, etc.) usadas en estilos inline en todo el
+// archivo, no dependen de ese compilado.
+const AMBAR_500 = '#f59e0b';
+const AMBAR_400 = '#fbbf24';
+const AMBAR_700 = '#b45309';
+const DESTRUCTIVE_TINT = 'rgba(220, 53, 69, 0.08)';
+const AMBAR_TINT = 'rgba(245, 158, 11, 0.08)';
 
 // ============================================================================
 // Zonificación — deriva la zona directamente del `bracket` ya calculado por
@@ -85,6 +97,10 @@ interface InfoEstado {
   etiqueta: string;
   atribucion: string;
   claseChip: string;
+  /** Color de borde/texto vía estilo inline — ver nota de AMBAR_500 más arriba:
+   * las combinaciones borde+opacidad (`border-amber-500`, `border-muted-foreground/40`)
+   * no están garantizadas en el CSS compilado. */
+  estiloChip?: { borderColor?: string; color?: string };
 }
 
 function infoEstado(entry: PriorizacionEntry): InfoEstado {
@@ -94,18 +110,38 @@ function infoEstado(entry: PriorizacionEntry): InfoEstado {
       return { etiqueta: 'Sobre umbral', atribucion, claseChip: 'bg-destructive text-white' };
     }
     if (entry.estadoUmbral === 'approaching') {
-      return { etiqueta: 'Acercándose', atribucion, claseChip: 'bg-amber-500 text-white dark:bg-amber-600' };
+      return { etiqueta: 'Acercándose', atribucion, claseChip: 'bg-amber-500 text-white' };
     }
-    return { etiqueta: 'Bajo umbral', atribucion, claseChip: 'border border-border text-muted-foreground' };
+    return {
+      etiqueta: 'Bajo umbral',
+      atribucion,
+      claseChip: 'border text-muted-foreground',
+      estiloChip: { borderColor: 'var(--border)' },
+    };
   }
   const gravedad = entry.gravedad?.texto ?? 'Baja';
-  const claseChip =
-    gravedad === 'Alta'
-      ? 'border border-amber-500 text-amber-700 dark:text-amber-400'
-      : gravedad === 'Media'
-        ? 'border border-muted-foreground/40 text-muted-foreground'
-        : 'border border-muted-foreground/25 text-muted-foreground/70';
-  return { etiqueta: `Gravedad ${gravedad}`, atribucion: 'histórico finca', claseChip };
+  if (gravedad === 'Alta') {
+    return {
+      etiqueta: 'Gravedad Alta',
+      atribucion: 'histórico finca',
+      claseChip: 'border text-amber-700',
+      estiloChip: { borderColor: AMBAR_500 },
+    };
+  }
+  if (gravedad === 'Media') {
+    return {
+      etiqueta: 'Gravedad Media',
+      atribucion: 'histórico finca',
+      claseChip: 'border text-muted-foreground',
+      estiloChip: { borderColor: 'rgba(156, 163, 175, 0.4)' },
+    };
+  }
+  return {
+    etiqueta: 'Gravedad Baja',
+    atribucion: 'histórico finca',
+    claseChip: 'border',
+    estiloChip: { borderColor: 'rgba(156, 163, 175, 0.25)', color: 'rgba(156, 163, 175, 0.7)' },
+  };
 }
 
 /** Ícono de tier — SIEMPRE neutro (relleno oscuro para A, contorno para B).
@@ -161,7 +197,9 @@ function DetailStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
       <dt className="truncate text-muted-foreground">{label}</dt>
-      <dd className="truncate font-medium text-foreground tabular-nums">{value}</dd>
+      <dd className="truncate font-medium text-foreground" style={{ fontVariantNumeric: 'tabular-nums' }}>
+        {value}
+      </dd>
     </div>
   );
 }
@@ -171,14 +209,14 @@ function DetailStat({ label, value }: { label: string; value: string }) {
 function InsigniaEstadoCompleta({ entry, estado }: { entry: PriorizacionEntry; estado: InfoEstado }) {
   if (entry.tier === 'A') {
     return (
-      <Badge className={`gap-1 border-transparent ${estado.claseChip}`}>
+      <Badge className={`gap-1 border-transparent ${estado.claseChip}`} style={estado.estiloChip}>
         <ShieldCheck className="size-3.5" />
         {estado.etiqueta} · {estado.atribucion}
       </Badge>
     );
   }
   return (
-    <Badge variant="outline" className={`gap-1 border-dashed ${estado.claseChip}`}>
+    <Badge variant="outline" className={`gap-1 border-dashed ${estado.claseChip}`} style={estado.estiloChip}>
       <BarChart3 className="size-3.5" />
       {estado.etiqueta} · {estado.atribucion}
     </Badge>
@@ -203,12 +241,12 @@ function EntryDetail({ entry }: { entry: PriorizacionEntry }) {
           <span className="font-semibold text-foreground">{entry.pest_nombre}</span>
         </div>
         <div className="mt-0.5 text-xs text-muted-foreground">{ubicacion}</div>
-        <div className="mt-1.5">
+        <div style={{ marginTop: '0.375rem' }}>
           <InsigniaEstadoCompleta entry={entry} estado={estado} />
         </div>
       </div>
 
-      <p className="leading-snug text-foreground">{entry.why}</p>
+      <p className="text-foreground" style={{ lineHeight: '1.375' }}>{entry.why}</p>
 
       <dl className="grid grid-cols-2 gap-3 text-xs">
         <DetailStat label="Incidencia actual" value={formatPercentage(entry.incidenciaActual)} />
@@ -228,7 +266,7 @@ function EntryDetail({ entry }: { entry: PriorizacionEntry }) {
       </dl>
 
       {entry.temporadaAlta ? (
-        <div className="flex items-center gap-1.5 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+        <div className="flex items-center gap-1.5 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-700">
           <Flame className="size-3.5 shrink-0" />
           Semana {entry.weekOfYear}: temporada históricamente alta para esta plaga.
         </div>
@@ -357,7 +395,10 @@ function FilaFoco({
             borderTop: '1px solid var(--border)',
           }}
         >
-          <span className="w-3.5 shrink-0 text-right tabular-nums text-muted-foreground" style={{ fontSize: '9px' }}>
+          <span
+            className="shrink-0 text-right text-muted-foreground"
+            style={{ width: '0.875rem', fontSize: '9px', fontVariantNumeric: 'tabular-nums' }}
+          >
             {rank}
           </span>
           <span className="min-w-0 flex-1">
@@ -365,7 +406,7 @@ function FilaFoco({
               {mostrarEstado ? (
                 <span
                   className={`inline-flex shrink-0 items-center rounded-md py-0.5 font-semibold leading-none ${estado.claseChip}`}
-                  style={{ fontSize: '9px', paddingLeft: '0.3rem', paddingRight: '0.3rem' }}
+                  style={{ fontSize: '9px', paddingLeft: '0.3rem', paddingRight: '0.3rem', ...estado.estiloChip }}
                 >
                   {estado.etiqueta}
                 </span>
@@ -378,22 +419,22 @@ function FilaFoco({
             >
               {detalle ? <span className="truncate">{detalle}</span> : null}
               {entry.temporadaAlta ? (
-                <span className="inline-flex shrink-0 items-center gap-0.5 text-orange-600 dark:text-orange-400">
+                <span className="inline-flex shrink-0 items-center text-orange-600" style={{ gap: '0.125rem' }}>
                   {detalle ? '· ' : ''}
                   <Flame className="size-3" /> temporada alta
                 </span>
               ) : null}
             </span>
           </span>
-          <span className="flex shrink-0 flex-col items-end gap-0.5">
-            <span className="text-sm font-semibold tabular-nums text-foreground">
+          <span className="flex shrink-0 flex-col items-end" style={{ gap: '0.125rem' }}>
+            <span className="text-sm font-semibold text-foreground" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {formatPercentage(entry.incidenciaActual, 0)}
             </span>
             <TrendBadge tendencia={entry.tendencia} />
           </span>
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-80" style={{ maxWidth: 'calc(100vw - 2rem)' }}>
+      <PopoverContent align="start" style={{ width: '20rem', maxWidth: 'calc(100vw - 2rem)' }}>
         <EntryDetail entry={entry} />
       </PopoverContent>
     </Popover>
@@ -433,8 +474,8 @@ function FilaLoteExpandible({
           <span className="shrink-0 text-muted-foreground" style={{ fontSize: '10.5px' }}>
             {lote.entries.length} sublotes
           </span>
-          <span className="flex shrink-0 flex-col items-end gap-0.5">
-            <span className="text-sm font-semibold tabular-nums text-foreground">
+          <span className="flex shrink-0 flex-col items-end" style={{ gap: '0.125rem' }}>
+            <span className="text-sm font-semibold text-foreground" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {formatPercentage(peor.incidenciaActual, 0)}
             </span>
             <TrendBadge tendencia={peor.tendencia} />
@@ -471,15 +512,15 @@ function TarjetaPlaga({
 }) {
   return (
     <div className="overflow-hidden rounded-lg border" style={{ borderColor: 'var(--border)' }}>
-      <div className="flex items-center gap-2 px-3.5 py-2.5">
+      <div className="flex items-center gap-2" style={{ padding: '0.625rem 0.875rem' }}>
         <TierIcono tier={grupo.tier} />
         <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{grupo.pest_nombre}</span>
         {grupo.temporadaAlta ? (
-          <Flame className="size-3.5 shrink-0 text-orange-600 dark:text-orange-400" aria-label="Temporada alta" />
+          <Flame className="size-3.5 shrink-0 text-orange-600" aria-label="Temporada alta" />
         ) : null}
         <span
           className="shrink-0 rounded-full font-semibold leading-none"
-          style={{ fontSize: '10px', padding: '2px 8px', color: 'var(--destructive)', backgroundColor: 'rgba(220,53,69,0.08)' }}
+          style={{ fontSize: '10px', padding: '2px 8px', color: 'var(--destructive)', backgroundColor: DESTRUCTIVE_TINT }}
         >
           {grupo.totalEntries} {grupo.totalEntries === 1 ? 'foco' : 'focos'}
         </span>
@@ -572,8 +613,6 @@ function agruparPorLote(entries: PriorizacionEntry[]): GrupoLote[] {
   return Array.from(mapa.values()).sort((a, b) => a.minBracket - b.minBracket);
 }
 
-const AMBAR_500 = '#f59e0b';
-
 interface BadgeConteo {
   texto: string;
   clase: string;
@@ -589,7 +628,7 @@ function badgeConteoDe(grupo: GrupoLote): BadgeConteo {
   if (grupo.gravedadAlta > 0) {
     return {
       texto: `${grupo.gravedadAlta} grav. alta`,
-      clase: 'border text-amber-700 dark:text-amber-400',
+      clase: 'border text-amber-700',
       estiloBorde: AMBAR_500,
     };
   }
@@ -628,10 +667,10 @@ function LoteCard({
       type="button"
       aria-pressed={seleccionado}
       onClick={onToggle}
-      className={`flex flex-col items-start gap-1.5 rounded-lg border p-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+      className={`flex flex-col items-start gap-1.5 rounded-lg border text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
         seleccionado ? 'bg-muted' : 'bg-card hover:bg-muted/60'
       }`}
-      style={{ borderColor: seleccionado ? 'var(--foreground)' : 'var(--border)' }}
+      style={{ padding: '0.625rem', borderColor: seleccionado ? 'var(--foreground)' : 'var(--border)' }}
     >
       <span className="flex w-full items-center gap-1.5">
         <span
@@ -730,28 +769,90 @@ function LotesGrid({
 
 type Tono = 'critico' | 'atencion' | 'calma';
 
-const TONO_ESTILOS: Record<Tono, { borde: string; header: string; icono: string; contador: string }> = {
+/** Colores por tono — vía variable CSS/valor directo (no clases Tailwind con
+ * modificador de opacidad, ver nota de AMBAR_500 al inicio del archivo). Sólo
+ * `icono`/`contador` quedan como clases porque son colores sólidos ya
+ * confirmados en el CSS compilado (bg-destructive, bg-amber-500, bg-muted). */
+interface EstiloTono {
+  bordeColor: string;
+  headerBg: string;
+  headerColor: string;
+  icono: string;
+  contador: string;
+}
+
+const TONO_ESTILOS: Record<Tono, EstiloTono> = {
   critico: {
-    borde: 'border-destructive',
-    header: 'bg-destructive/10 text-destructive',
+    bordeColor: 'var(--destructive)',
+    headerBg: DESTRUCTIVE_TINT,
+    headerColor: 'var(--destructive)',
     icono: 'bg-destructive text-white',
     contador: 'bg-destructive text-white',
   },
   atencion: {
-    borde: 'border-amber-400/40',
-    header: 'bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300',
+    bordeColor: AMBAR_400,
+    headerBg: AMBAR_TINT,
+    headerColor: AMBAR_700,
     icono: 'bg-amber-500 text-white',
     contador: 'bg-amber-500 text-white',
   },
   calma: {
-    borde: 'border-border',
-    header: 'bg-muted/50 text-foreground',
-    icono: 'bg-muted-foreground/20 text-muted-foreground',
+    bordeColor: 'var(--border)',
+    headerBg: 'var(--muted)',
+    headerColor: 'var(--foreground)',
+    icono: 'bg-muted text-muted-foreground',
     contador: 'bg-muted text-muted-foreground',
   },
 };
 
 type FiltroTier = 'todos' | 'A' | 'B';
+
+const OPCIONES_FILTRO_TIER: { valor: FiltroTier; etiqueta: string; ariaLabel: string }[] = [
+  { valor: 'todos', etiqueta: 'Todos', ariaLabel: 'Mostrar todos los tiers' },
+  { valor: 'A', etiqueta: 'Tier A', ariaLabel: 'Filtrar Tier A' },
+  { valor: 'B', etiqueta: 'Tier B', ariaLabel: 'Filtrar Tier B' },
+];
+
+/** Segmentado Todos/Tier A/Tier B — reemplaza `ToggleGroup` de `ui/toggle-group.tsx`
+ * en este único uso: ese componente compartido depende de varias clases
+ * (`bg-transparent`, `bg-accent`, `px-1.5`, `rounded-l-md`/`rounded-r-md`) que
+ * faltan en el CSS compilado, así que sus 3 opciones se renderizaban sin
+ * padding ni separación (texto corrido). Editar `ui/toggle-group.tsx`
+ * arreglaría esto en todos sus usos en la app pero excede el alcance de este
+ * componente; en vez de eso, este control autocontenido no depende de esas
+ * clases en absoluto. */
+function FiltroTierSegmentado({ valor, onCambio }: { valor: FiltroTier; onCambio: (v: FiltroTier) => void }) {
+  return (
+    <div
+      className="inline-flex shrink-0 overflow-hidden rounded-md border"
+      style={{ borderColor: 'var(--border)' }}
+      role="group"
+      aria-label="Filtrar por tier"
+    >
+      {OPCIONES_FILTRO_TIER.map((opcion, i) => {
+        const activo = valor === opcion.valor;
+        return (
+          <button
+            key={opcion.valor}
+            type="button"
+            aria-pressed={activo}
+            aria-label={opcion.ariaLabel}
+            onClick={() => onCambio(opcion.valor)}
+            className="text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            style={{
+              padding: '0.25rem 0.5rem',
+              borderLeft: i > 0 ? '1px solid var(--border)' : undefined,
+              backgroundColor: activo ? 'var(--muted)' : 'transparent',
+              color: activo ? 'var(--foreground)' : 'var(--muted-foreground)',
+            }}
+          >
+            {opcion.etiqueta}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 interface ZoneSectionProps {
   titulo: string;
@@ -789,9 +890,18 @@ function ZoneSection({ titulo, descripcion, icono, entries, tono, defaultOpen, v
       : '';
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className={`overflow-hidden rounded-lg border ${estilos.borde}`}>
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className="overflow-hidden rounded-lg border"
+      style={{ borderColor: estilos.bordeColor }}
+    >
       <CollapsibleTrigger asChild>
-        <button type="button" className={`flex w-full items-start gap-3 px-3 py-2.5 text-left ${estilos.header}`}>
+        <button
+          type="button"
+          className="flex w-full items-start gap-3 text-left"
+          style={{ padding: '0.625rem 0.75rem', backgroundColor: estilos.headerBg, color: estilos.headerColor }}
+        >
           <span
             className={`mt-0.5 flex shrink-0 items-center justify-center rounded-full ${estilos.icono}`}
             style={{ width: '1.75rem', height: '1.75rem' }}
@@ -822,7 +932,7 @@ function ZoneSection({ titulo, descripcion, icono, entries, tono, defaultOpen, v
       <CollapsibleContent>
         <div className="flex flex-col gap-1.5 bg-card p-2">
           {conFiltro && entries.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-2 pb-1">
+            <div className="flex flex-wrap items-center gap-2" style={{ paddingBottom: '0.25rem' }}>
               <div className="relative flex-1" style={{ minWidth: '10rem' }}>
                 <Search
                   className="pointer-events-none absolute top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
@@ -836,34 +946,22 @@ function ZoneSection({ titulo, descripcion, icono, entries, tono, defaultOpen, v
                   style={{ paddingLeft: '1.75rem' }}
                 />
               </div>
-              <ToggleGroup
-                type="single"
-                size="sm"
-                value={filtroTier}
-                onValueChange={(v) => v && setFiltroTier(v as FiltroTier)}
-                className="shrink-0 rounded-md border"
-              >
-                <ToggleGroupItem value="todos" className="text-xs" aria-label="Mostrar todos los tiers">
-                  Todos
-                </ToggleGroupItem>
-                <ToggleGroupItem value="A" className="text-xs" aria-label="Filtrar Tier A">
-                  Tier A
-                </ToggleGroupItem>
-                <ToggleGroupItem value="B" className="text-xs" aria-label="Filtrar Tier B">
-                  Tier B
-                </ToggleGroupItem>
-              </ToggleGroup>
+              <FiltroTierSegmentado valor={filtroTier} onCambio={setFiltroTier} />
             </div>
           ) : null}
 
           {entries.length === 0 ? (
-            <p className="px-1 py-2 text-xs text-muted-foreground">{vacioTexto}</p>
+            <p className="py-2 text-xs text-muted-foreground" style={{ paddingLeft: '0.25rem', paddingRight: '0.25rem' }}>
+              {vacioTexto}
+            </p>
           ) : entriesFiltradas.length === 0 ? (
-            <p className="px-1 py-2 text-xs text-muted-foreground">Ninguna combinación coincide con el filtro/búsqueda actual.</p>
+            <p className="py-2 text-xs text-muted-foreground" style={{ paddingLeft: '0.25rem', paddingRight: '0.25rem' }}>
+              Ninguna combinación coincide con el filtro/búsqueda actual.
+            </p>
           ) : (
             <>
               {conFiltro && entriesFiltradas.length !== entries.length ? (
-                <p className="px-1 text-[11px] text-muted-foreground">
+                <p className="text-muted-foreground" style={{ paddingLeft: '0.25rem', paddingRight: '0.25rem', fontSize: '11px' }}>
                   Mostrando {entriesFiltradas.length} de {entries.length}.
                 </p>
               ) : null}
@@ -895,8 +993,8 @@ function InfoGeneral() {
           <Info className="size-4" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 text-sm" style={{ maxWidth: 'calc(100vw - 2rem)' }}>
-        <div className="flex flex-col gap-2.5">
+      <PopoverContent align="end" className="text-sm" style={{ width: '20rem', maxWidth: 'calc(100vw - 2rem)' }}>
+        <div className="flex flex-col" style={{ gap: '0.625rem' }}>
           <p className="font-semibold text-foreground">¿Qué es esta lista?</p>
           <p className="text-muted-foreground">
             Prioriza qué lote/sublote revisar primero esta semana. No indica qué tratamiento aplicar —
@@ -991,7 +1089,10 @@ export function PriorizacionScoutingView({ entries, loading, error }: Priorizaci
   if (loading) {
     return (
       <div className="py-12 text-center">
-        <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent" />
+        <div
+          className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-solid border-r-transparent"
+          style={{ borderColor: 'var(--primary)', borderRightColor: 'transparent' }}
+        />
         <p className="text-sm text-muted-foreground">Calculando priorización...</p>
       </div>
     );
@@ -999,11 +1100,11 @@ export function PriorizacionScoutingView({ entries, loading, error }: Priorizaci
 
   if (error) {
     return (
-      <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900/50 dark:bg-red-950/30">
+      <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-4">
         <AlertTriangle className="mt-0.5 size-4 shrink-0 text-red-600" />
         <div>
-          <p className="text-sm font-medium text-red-900 dark:text-red-200">No se pudo calcular la priorización</p>
-          <p className="mt-0.5 text-xs text-red-700 dark:text-red-400">{error}</p>
+          <p className="text-sm font-medium text-red-900">No se pudo calcular la priorización</p>
+          <p className="mt-0.5 text-xs text-red-700">{error}</p>
         </div>
       </div>
     );
@@ -1019,7 +1120,7 @@ export function PriorizacionScoutingView({ entries, loading, error }: Priorizaci
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 p-3 sm:p-4">
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-base font-semibold text-foreground">Priorización de monitoreo</h2>
@@ -1047,7 +1148,10 @@ export function PriorizacionScoutingView({ entries, loading, error }: Priorizaci
               <>
                 {sobre.length > 0 ? (
                   <div className="flex flex-col gap-1.5">
-                    <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-destructive">
+                    <p
+                      className="font-semibold uppercase tracking-wide text-destructive"
+                      style={{ paddingLeft: '0.25rem', paddingRight: '0.25rem', fontSize: '11px' }}
+                    >
                       Sobre umbral ({sobre.length})
                     </p>
                     <HierarquiaEntradas entries={sobre} rankPorClave={rankPorClave} mostrarEstado={false} />
@@ -1055,7 +1159,10 @@ export function PriorizacionScoutingView({ entries, loading, error }: Priorizaci
                 ) : null}
                 {acercandose.length > 0 ? (
                   <div className="flex flex-col gap-1.5">
-                    <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                    <p
+                      className="font-semibold uppercase tracking-wide text-amber-700"
+                      style={{ paddingLeft: '0.25rem', paddingRight: '0.25rem', fontSize: '11px' }}
+                    >
                       Acercándose ({acercandose.length})
                     </p>
                     <HierarquiaEntradas entries={acercandose} rankPorClave={rankPorClave} mostrarEstado={false} />
