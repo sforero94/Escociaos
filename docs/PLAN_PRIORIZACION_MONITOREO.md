@@ -21,13 +21,17 @@ monitoring team know where to send people before the next monitoring round, not 
 already went wrong last round (which is what today's `insightsAutomaticos.ts` alert feed already
 does, retrospectively). This is a transparent, rule-based ranking — **not** a machine-learning
 model. The POC already tested the ML route at this granularity and it did not beat the simple
-signals; building another model here would repeat a result we already have.
+signals; building another model here would repeat a result we already have. **The same ranking
+must be reachable two ways: a dashboard view, and conversationally through Esco (web chat) and
+Telegram** — "¿qué debo revisar esta semana?" or "¿cómo va el riesgo de trips en Piedra Paula?"
+should get a real, live answer, not just a static screen someone has to remember to check.
 
 ## 1. The decision this serves
 
 **Primary:** scout prioritization — a ranked list telling the monitoring team which lote/sublote ×
 pest combinations most deserve a visit in the coming week, and why (rising trend, entering
-historical high season, currently elevated, etc.).
+historical high season, currently elevated, etc.) — surfaced both as a dashboard view and as an
+answer Esco/Telegram can give on request.
 
 **Explicitly not the target for this iteration:** spray/treatment timing (would need validated
 economic action thresholds, which section 3 explains we don't reliably have) and pure dashboard
@@ -131,13 +135,18 @@ methodology turns out to differ):**
   independently verified twice (S1 builder+verifier pairs).
 - New UI surface: a ranked view (new component under `src/components/monitoreo/`) plus optional
   top-N entries surfaced in `AlertList` ("Pulso de Gestión").
+- **Conversational access via Esco + Telegram** — a new Esco tool that calls the *exact same*
+  ranking logic as the dashboard view (§5), so a chat answer and the dashboard can never disagree.
+  Telegram gets this automatically (it shares Esco's tool loop — no separate Telegram-specific
+  work, see §5).
 
 **Non-goals:**
 - No weather integration (see §2).
 - No ML model (see §0, §2).
 - No automatic spray/treatment triggering — this ranks where to *look*, not what to *do*; the
   agronomist stays in the loop for any action decision, even for Tier A pests with a real economic
-  threshold — the tool flags "over threshold," it does not prescribe or auto-trigger a spray.
+  threshold — the tool flags "over threshold," it does not prescribe or auto-trigger a spray. This
+  applies equally to the Esco/Telegram surface: it answers "what's the risk," never "I sprayed X."
 - No change to the existing `insightsAutomaticos.ts` alert feed's *retrospective* behavior — this
   is an additive, *prospective* ranking, not a replacement. (Whether to eventually consolidate them
   is a follow-up decision, not part of this build.)
@@ -157,7 +166,12 @@ methodology turns out to differ):**
 
 - **New utility** `src/utils/priorizacionMonitoreo.ts` — the ranking engine (§6). Pure functions,
   unit-testable like `calculosMonitoreo.ts`/`insightsAutomaticos.ts`, which it imports from and
-  extends (reuse `calcularTendencia`, `formatearCambio`; do not reimplement).
+  extends (reuse `calcularTendencia`, `formatearCambio`; do not reimplement). **Must stay a pure
+  module with zero React/browser/Deno-specific dependencies** (plain functions over plain data in,
+  ranked data out) — this is the load-bearing design choice that lets the Esco/Telegram tool below
+  import and call the *identical* ranking code instead of re-implementing it server-side. If the
+  logic can't stay pure for some reason, that's a red flag to raise before proceeding, not something
+  to route around by forking the algorithm in two places.
 - **New component** `src/components/monitoreo/PriorizacionScouting.tsx` — the ranked list view,
   following the `InsightCard`/`VistaRapidaCard` visual patterns already established. Added as a new
   tab/section in `DashboardMonitoreoV3.tsx` (the current, live dashboard — not the stale
@@ -165,9 +179,41 @@ methodology turns out to differ):**
 - **Optional, follow-up decision (not in this build):** surface the top 1-2 entries in
   `AlertList.tsx`'s "Pulso de Gestión" cross-module feed once the standalone view has been used for
   a few weeks and is trusted.
-- **New migration** `src/sql/migrations/047_create_pest_seasonal_profile.sql` (or next free number —
-  check `src/sql/migrations/` for the actual next sequential number before writing it) — creates
-  the seasonal reference table and seeds it from the POC parquet (§6).
+- **New migrations** `src/sql/migrations/047_create_pest_seasonal_profile.sql` and
+  `048_create_pest_umbral_economico.sql` (or the actual next free sequential numbers — check
+  `src/sql/migrations/` before writing them) — create the seasonal reference table and the umbral
+  económico table, seeded per §2/§6/P0/P0b.
+- **New Esco tool `get_pest_risk_priorizacion`**, registered in
+  `src/supabase/functions/server/chat.tsx` (both the live copy and its synced counterpart in
+  `supabase/functions/make-server-1ccce916/chat.tsx` — per CLAUDE.md, these two copies must be kept
+  identical and the edge function redeployed after any change). Follows the existing tool-definition
+  shape exactly (see e.g. `get_monitoring_data` at line ~164): `name`, Spanish `description`, JSON
+  Schema `parameters`. Proposed shape:
+  ```
+  name: 'get_pest_risk_priorizacion'
+  description: 'Obtiene el ranking de prioridad de monitoreo por lote/sublote x plaga: cuáles
+    combinaciones ameritan revisión esta semana y por qué (umbral económico superado, tendencia,
+    estacionalidad histórica). Distingue plagas con umbral económico validado (Cartama) de las que
+    usan un nivel estadístico de referencia.'
+  parameters:
+    lote_name: string, opcional — filtra por lote/sublote (nombre parcial)
+    pest_name: string, opcional — filtra por plaga (nombre parcial; puede resolver a un grupo
+      pooled, p.ej. "ácaro" -> el complejo de 4 plagas)
+    top_n: number, opcional, default ~10 — cuántas entradas devolver
+  ```
+  The executor function (`execPestPriorizacion`, following the `exec*` naming convention already
+  used for every other tool) queries the DB directly (edge functions use the service-role client,
+  not the frontend hook) and calls the **same** `priorizacionMonitoreo.ts` ranking functions the
+  dashboard uses — no separate server-side re-implementation of §6's logic.
+- **Telegram needs no separate work.** Per CLAUDE.md, "the Telegram bot inherits all tools
+  automatically via `llmToolLoop`" — registering the tool in `chat.tsx` is sufficient for both
+  surfaces. Verify this is still true for this tool specifically as part of P1b's acceptance check
+  (send a real Telegram test message), don't just assume it from the doc.
+- **System prompt routing directive** — add a line to `getSystemPrompt()` telling Esco when to use
+  this tool (e.g. "cuando el usuario pregunte qué lotes o plagas requieren atención, o el riesgo de
+  una plaga específica, usa `get_pest_risk_priorizacion`"), matching the existing pattern where
+  other tools have routing guidance in the system prompt, asserted by `esco-evals.test.ts`'s Tier A
+  structural checks.
 
 ## 6. Ranking logic (transparent, rule-based — no black box)
 
@@ -254,22 +300,38 @@ every entry and states which logic produced it (umbral económico vs. tercil his
 Tier A over-threshold entries are visually distinguishable from Tier B statistical-tier entries at
 a glance, not just in the tooltip text.
 
+**P2b — Esco/Telegram tool.** Register `get_pest_risk_priorizacion` in `chat.tsx` (§5) — both the
+live and deployed copies — implement `execPestPriorizacion` calling into `priorizacionMonitoreo.ts`,
+add the system-prompt routing directive, extend `esco-evals.test.ts` with Tier A structural
+assertions for the new tool (definition present in both copies, in sync) and Tier B pure-function
+tests reusing P1's ranking test cases against the same shared module. *Accept:* `npm test` passes
+including the new eval-suite assertions; a manual Esco chat query ("¿qué debo revisar esta semana?")
+and a real Telegram message both return an answer consistent with the P2 dashboard view for the
+same data; edge function redeployed (`npx supabase functions deploy make-server-1ccce916`) and both
+`chat.tsx` copies confirmed identical before calling this done, per CLAUDE.md's edge-function rules.
+
 **P3 — Verification.** Manual pass (or the `/verify` skill) against real current DB data: do the
 top-ranked entries make agronomic sense to a human reviewer? Cross-check at least 3 entries by
-hand against raw `monitoreos` rows.
+hand against raw `monitoreos` rows — across both the dashboard (P2) and Esco/Telegram (P2b)
+surfaces, confirming they agree.
 
 ## 8. Multi-agent execution model
 
 Lighter than the POC's — this is a scoped feature build, not a research tournament.
 
-- **P0 (migration) and P1 (ranking engine) get a builder → independent verifier pair**, same shape
-  as the POC's Workflow 1: one Sonnet worker builds, a second audits the migration's join
+- **P0/P0b (migrations) and P1 (ranking engine) get a builder → independent verifier pair**, same
+  shape as the POC's Workflow 1: one Sonnet worker builds, a second audits the migrations' join
   correctness and the ranking engine's edge cases before either is considered done. This is the
-  highest-leverage place for adversarial checking here too — a wrong lote/pest id mapping in P0
-  would silently corrupt every seasonal-context row downstream, the same class of risk the POC's
-  S1 stage carried.
+  highest-leverage place for adversarial checking here too — a wrong lote/pest id mapping in P0/P0b
+  would silently corrupt every seasonal-context or threshold row downstream, the same class of risk
+  the POC's S1 stage carried.
 - **P2 (UI) does not need a verifier pair** — visual/manual review (P3) covers it; don't
   over-orchestrate a straightforward component build.
+- **P2b (Esco/Telegram tool) gets a lightweight consistency check, not a full verifier pair** — the
+  real risk here isn't a wrong algorithm (P1 already verified that), it's the tool wiring silently
+  drifting from the dashboard (wrong query, stale copy of `chat.tsx`, forgotten redeploy). A single
+  agent running P2b's acceptance check (dashboard vs. chat vs. Telegram agreement on the same data)
+  covers this; no need for an independent second builder.
 - **No modeling tournament** — there is no modeling in this design (see §0). If the owner later
   wants to revisit whether the seasonal/trend rule-based weights in §6 could be learned rather than
   hand-set, that would be a new, separate, small POC — not part of this build.
@@ -295,8 +357,10 @@ Lighter than the POC's — this is a scoped feature build, not a research tourna
 ## 10. Deliverables & effort envelope
 
 Two migrations (seasonal profile + umbral económico seed), ranking utility + tests, one new
-component, one dashboard wiring change. Bounded: a few days of agent time (builder/verifier pair on
-P0+P0b+P1, solo build on P2, manual verification on P3) — smaller than the POC, since there's no
+component, one dashboard wiring change, one new Esco tool (registered in both `chat.tsx` copies,
+inherited by Telegram automatically) + eval-suite extension + one edge function redeploy. Bounded:
+a few days of agent time (builder/verifier pair on P0+P0b+P1, solo build on P2, single-agent
+consistency check on P2b, manual verification on P3) — smaller than the POC, since there's no
 tournament and no red-team stage.
 
 ## 11. Verification checklist (how the owner confirms this was done right)
@@ -316,6 +380,11 @@ tournament and no red-team stage.
    including at least one Tier A over-threshold entry and one Tier B entry.
 7. Tier A (umbral económico) and Tier B (tercil histórico) entries are visually and textually
    distinct — confirm a reader can immediately tell which logic produced any given entry.
+8. `get_pest_risk_priorizacion` is registered identically in both `chat.tsx` copies, the eval
+   suite (`esco-evals.test.ts`) passes with the new assertions, and the edge function has been
+   redeployed — confirm via a live Esco chat query AND a real Telegram message, not just the tests.
+9. A dashboard (P2) answer and an Esco/Telegram (P2b) answer for the *same* lote/pest agree —
+   spot-check at least 2 combinations across both surfaces.
 
 ---
 
