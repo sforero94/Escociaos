@@ -4,6 +4,7 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { MonitoreoSubNav } from './MonitoreoSubNav';
 import { MapaCalorIncidencias } from './MapaCalorIncidencias';
+import { PriorizacionScouting } from './PriorizacionScouting';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
 import {
   Select,
@@ -25,6 +26,7 @@ import {
   ChevronRight,
   Grid3X3,
   TrendingUp,
+  ListOrdered,
 } from 'lucide-react';
 import {
   LineChart,
@@ -1168,7 +1170,7 @@ export function DashboardMonitoreoV3() {
 
         <Card className="p-4">
           <Tabs value={plagasTab} onValueChange={setPlagasTab}>
-            <TabsList className="grid w-full grid-cols-2 mb-4">
+            <TabsList className="grid w-full grid-cols-3 mb-4">
               <TabsTrigger value="heatmap" className="flex items-center gap-2">
                 <Grid3X3 className="h-4 w-4" />
                 Mapa de Calor
@@ -1176,6 +1178,10 @@ export function DashboardMonitoreoV3() {
               <TabsTrigger value="tendencias" className="flex items-center gap-2">
                 <TrendingUp className="h-4 w-4" />
                 Tendencias
+              </TabsTrigger>
+              <TabsTrigger value="priorizacion" className="flex items-center gap-2">
+                <ListOrdered className="h-4 w-4" />
+                Priorización
               </TabsTrigger>
             </TabsList>
 
@@ -1271,6 +1277,10 @@ export function DashboardMonitoreoV3() {
               ) : (
                 <div className="text-center py-8 text-brand-brown/50 text-sm">Se necesitan al menos 2 rondas para ver tendencias</div>
               )}
+            </TabsContent>
+
+            <TabsContent value="priorizacion">
+              <PriorizacionScouting />
             </TabsContent>
           </Tabs>
         </Card></>)}

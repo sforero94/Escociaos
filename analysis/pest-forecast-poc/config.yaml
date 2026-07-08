@@ -1,0 +1,75 @@
+# pest-forecast-poc configuration — the single source of tunable knobs.
+# Agents: read everything from here; no magic numbers inline. See docs/POC_PREDICCION_PLAGAS.md.
+
+seed: 42
+
+# --- Farm location (for NASA POWER weather backbone). Default = Aguadas, Caldas. ---
+farm:
+  lat: 5.6094
+  lon: -75.4582
+
+# --- Source files (copy into data/raw/ at S0). Paths are the owner's originals. ---
+sources:
+  excel_2023: "~/Downloads/[2023] Planilla Detallada Escocia Hass.xlsx"
+  excel_2024: "~/Downloads/[2024] Planilla Detallada Escocia Hass.xlsx"
+  excel_2025: "~/Downloads/[2025] Planilla Detallada Escocia Hass.xlsx"  # added post-POC: closes the
+                                                           # 2025-06-25..2025-12-14 FUMIGACION gap
+  excel_2023_monitoreo_sheet: "MONITOREO"                 # header row 0
+  excel_2024_monitoreo_sheet: "PLAGAS Y ENFERMEDADES"     # header row 11, data from row 12
+  excel_fumigacion_sheet: "FUMIGACION"                    # 2023 header row 1, 2024 header row 12,
+                                                           # 2025 header row 11 (verify per-file, don't assume)
+  supabase_project_id: "ywhtjwawnkeqlwxbvgup"             # READ-ONLY
+
+# --- Cross-validation (out-of-year ONLY; never random-split). ---
+cv:
+  train_years: [2023, 2024]
+  validate_year: 2025
+  test_year: 2026
+  leave_one_year_out: true
+
+# --- Feature construction ---
+features:
+  trailing_windows_days: [7, 14, 21, 28]
+  warm_wet_temp_min_c: 18      # fungal infection proxy: day counts as "warm-wet" if avg temp >= this
+  warm_wet_rain_min_mm: 1      #   AND rain >= this
+  hot_dry_temp_min_c: 22       # mite flare proxy: "hot-dry" day if max temp >= this
+  hot_dry_rain_max_mm: 0.5     #   AND rain <= this
+  gdd_base_c: 10               # generic base for growing-degree-days (per-pest override allowed below)
+
+# --- Prediction horizons (defined by monitoring rounds, not exact calendar days). ---
+horizons_days: [14, 28]        # +2wk uses "next round >= 14d"; +4wk uses "next round >= 28d"
+
+# --- Risk tiers. Default = per-pest historical tertiles. Replace with agronomic economic ---
+# --- thresholds (incidencia_pct) here if/when the owner provides them. ---
+tiers:
+  method: "tertiles"           # "tertiles" | "fixed"
+  fixed_thresholds_pct: {}     # e.g. { monalonion: {med: 10, high: 25}, acaros: {med: 20, high: 40} }
+  binary_exceed_tier: "high"   # binary label = incidencia reaches this tier
+
+# --- Minimum data rule (drop + LOG series below these; no silent truncation). ---
+min_data:
+  min_obs_per_series: 20
+  min_years_per_series: 2
+
+# --- Focus targets. pest_group pools by biology to borrow strength. ---
+focus_pests:
+  acaros:
+    members: ["Ácaro", "Ácaro Cristalino", "Huevos de acaro", "H-acaro  Cristalino"]
+  fungoso:
+    members: ["Colletotrichum", "Antracnosis ramas", "Antracnosis fruto", "Cladosporium"]
+  monalonion:
+    members: ["Monalonion"]
+  thrips:
+    members: ["Thrips"]
+  mosca_ovario:
+    members: ["Mosca del ovario"]
+  cucarron_marceno:
+    members: ["Cucarron marceño"]
+
+# --- Success criteria (PRE-REGISTERED — do not change after seeing results; red-team verifies). ---
+success:
+  metric_macro_f1_margin: 0.05     # 3-tier, absolute, over best baseline, on test year
+  metric_pr_auc_margin: 0.05       # binary exceed, absolute, over best baseline, on test year
+  min_pests_to_go: 3               # of 6
+  require_leave_one_year_out: true
+  require_leakage_redteam_pass: true

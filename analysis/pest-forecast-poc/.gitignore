@@ -1,0 +1,13 @@
+# Raw/interim/processed data artifacts are large and/or proprietary — never commit.
+# Pipeline code (src/), config, and reports (markdown) are tracked.
+data/raw/*
+data/interim/*
+data/processed/*
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+
+# Python venv + caches
+.venv/
+__pycache__/
+*.pyc
