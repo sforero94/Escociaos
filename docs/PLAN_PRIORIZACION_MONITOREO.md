@@ -62,54 +62,42 @@ An initial research pass (web search, this session) tried to find Colombia-speci
 thresholds for the 3 pests with the strongest **persistence** signal in the POC and came back weak:
 count-based (traps/leaf, not % incidence), inconsistent across sources, and in 2 of 3 cases not
 Colombia-specific at all. That research is preserved in git history but is **no longer the basis
-for this design** — the owner has since provided a real **umbral económico** table from an
-industry source ("market leader"), in **the same unit this farm already records** (% incidencia):
+for this design** — the owner has since provided a real **umbral económico** table, sourced from
+**Cartama** (recorded here for citation — use this name, not "a market leader," in the migration's
+`source_label` and anywhere else this is referenced), in **the same unit this farm already
+records** (% incidencia):
 
-| Plaga | Umbral económico (% incidencia) |
-|---|---|
-| Thrips | 1% |
-| Ácaro | 33% |
-| Monalonion | 26% |
-| Marceño (cucarrón marceño) | 36% |
-| Phytophthora | 10% |
-| Antracnosis | 10% |
+| Plaga (owner's table) | Umbral económico | Resolved to catalog pest(s) | Pooling |
+|---|---|---|---|
+| Thrips | 1% | `Thrips` | independent |
+| Ácaro | 33% | `Ácaro` + `Ácaro Cristalino` + `Huevos de acaro` + `H-acaro  Cristalino` | **pooled — MAX reading across all 4 that round** (owner confirmed: broad mite-complex scope, same 4 entries the POC pooled as "acaros") |
+| Monalonion | 26% | `Monalonion` | independent |
+| Marceño | 36% | `Cucarron marceño` | independent |
+| Phytophthora | 10% | `Phytophtora` (catalog spelling lacks the 2nd "h" — same pest, name-normalize, don't exact-match) | independent |
+| Antracnosis | 10% | `Antracnosis fruto` **and** `Antracnosis ramas` | **NOT pooled — owner confirmed both, independently**: two separate Tier A lines, each gated at 10% on its own reading |
 
-**This changes the design materially — these are now the PRIMARY tier/action signal for these 6
-pests**, not a reference annotation. Crossing the threshold is the strongest single ranking driver;
-trend and seasonality (§6) become modifiers on top of it, not substitutes for it. The old
-data-driven tertile method (`clasificarGravedad` / POC-style per-pest tertiles) becomes the
-**fallback** for any catalog pest *outside* this list of 6 (e.g. mosca del ovario, Colletotrichum,
-Cladosporium — pests the POC tracked but that have no owner-provided economic threshold).
+This resolves to **7 independently-ranked Tier A lines** (Thrips, Ácaro-complex, Monalonion,
+Marceño, Phytophtora, Antracnosis fruto, Antracnosis ramas), mapping to **9 real catalog pest
+ids** (the Ácaro line alone covers 4). `pest_umbral_economico` (P0b) needs a `grupo_key` column so
+the 4 Ácaro-complex rows share one virtual ranking line while everything else is one-row-per-line —
+see P0b's revised acceptance check.
 
-**Assumptions and confirmed name-matching gotchas — resolve before P0b (not the builder's call to
-guess silently on any of these, they change which real number applies to which pest):**
+**This changes the design materially — these 7 lines are now the PRIMARY tier/action signal**, not
+a reference annotation. Crossing the threshold is the strongest single ranking driver; trend and
+seasonality (§6) become modifiers on top of it, not substitutes for it. The old data-driven tertile
+method (`clasificarGravedad` / POC-style per-pest tertiles) becomes the **fallback** for any catalog
+pest *outside* these 9 ids (e.g. mosca del ovario, Colletotrichum, Cladosporium — pests the POC
+tracked but that have no owner-provided economic threshold).
 
-1. **Unit match assumed, not yet independently confirmed against the source's own methodology** —
-   this table's "% incidencia" is assumed to mean the same thing as this farm's `incidencia_pct`
-   (% of monitored trees/leaves affected in a round). If the source's protocol differs (e.g. % of
-   *leaves per affected tree* rather than % of *trees affected*), the numbers are not directly
-   comparable and would need a documented conversion or a re-ask to the source.
-2. **Comparison basis assumed to be the single latest monitoring round's `incidencia`** — not a
-   rolling average — matching how the existing `clasificarGravedad` fixed cutoffs are already used
-   elsewhere in the app. Flag if the source intends a different aggregation (e.g. "sustained above
-   threshold for 2 consecutive rounds").
-3. **Source attribution is currently just "a market leader"** — for the doc's own credibility and
-   for anyone auditing this later, get a citable name (company/consultant/publication) before or
-   during P0, and record it in the migration's seed comment and this doc.
-4. **"Antracnosis" is genuinely ambiguous against the real catalog** — `plagas_enfermedades_catalogo`
-   has no plain "Antracnosis" row; it has **"Antracnosis fruto" and "Antracnosis ramas" as two
-   separate catalog entries** (confirmed by direct query). The owner's table doesn't say which.
-   Needs an explicit answer: apply 10% to fruto, to ramas, to both independently, or pool them
-   (max or mean) under one 10% threshold?
-5. **"Phytophthora" vs. catalog's "Phytophtora"** — the catalog entry is spelled without the second
-   "h" (`Phytophtora`, confirmed by direct query — likely a long-standing data-entry typo baked into
-   the catalog). Same pest, just needs a name-normalization step in P0b rather than an exact-string
-   match that would silently fail to find it.
-6. **"Ácaro" — narrow or broad?** The catalog has **four** separate mite-related entries: `Ácaro`,
-   `Ácaro Cristalino`, `Huevos de acaro`, `H-acaro  Cristalino` (the POC pooled all four into one
-   "acaros" group for statistical power). The owner's table has one line, "Ácaro" — does the 33%
-   threshold apply only to the specific `Ácaro` catalog pest, or to the whole mite complex (e.g. the
-   worst/max reading among all four that round)? This changes real ranking behavior, not just labels.
+**Two assumptions still open (not blocking — reasonable defaults chosen, revisit if Cartama's
+methodology turns out to differ):**
+
+1. **Unit match** — assumed Cartama's "% incidencia" means the same thing as this farm's
+   `incidencia_pct` (% of monitored trees/leaves affected in a round). Flag for review if Cartama's
+   own protocol differs (e.g. % of leaves per affected tree rather than % of trees affected).
+2. **Comparison basis** — assumed to be the single latest monitoring round's `incidencia`, not a
+   rolling average, matching how `clasificarGravedad`'s fixed cutoffs are already used elsewhere in
+   the app.
 
 ## 3. Scope & non-goals
 
@@ -126,8 +114,9 @@ guess silently on any of these, they change which real number applies to which p
   group — no structural conflict, since this design was already going to unpool.
 - **Two-tier pest coverage**, driven directly by which pests have an owner-provided economic
   threshold (§2):
-  - **Tier A — threshold-driven (primary path):** Thrips, Ácaro, Monalonion, Marceño,
-    Phytophthora, Antracnosis. Ranking leads with "crossed the economic threshold," modified by
+  - **Tier A — threshold-driven (primary path):** the 7 lines resolved in §2 (Thrips, Ácaro-complex
+    [pooled, max of 4 catalog entries], Monalonion, Marceño, Phytophtora, Antracnosis fruto,
+    Antracnosis ramas). Ranking leads with "crossed the economic threshold," modified by
     trend/seasonality.
   - **Tier B — statistical-tier fallback:** every other catalogued pest (mosca del ovario,
     Colletotrichum, Cladosporium, etc.) — ranked via the existing `clasificarGravedad` fixed cuts
@@ -184,13 +173,18 @@ guess silently on any of these, they change which real number applies to which p
 
 For each (sublote, pest) with at least 2 historical rounds, branch by tier (§3):
 
-**Tier A pests (Thrips, Ácaro, Monalonion, Marceño, Phytophthora, Antracnosis) — threshold-led:**
+**Tier A — the 7 resolved lines from §2 (Thrips, Ácaro-complex, Monalonion, Marceño, Phytophtora,
+Antracnosis fruto, Antracnosis ramas) — threshold-led:**
 
-1. **Threshold status (primary driver)** — latest `incidencia` reading vs. the owner's umbral
-   económico (§2 table). Three states, not just binary: *over threshold* (strongest signal),
+1. **Threshold status (primary driver)** — latest `incidencia` reading vs. Cartama's umbral
+   económico (§2 table). For the Ácaro-complex line specifically: take the **max** `incidencia`
+   among the 4 pooled catalog pests observed that round before comparing to 33% (not each entry
+   compared separately — that would produce 4 partial signals instead of 1 clear one). For
+   Antracnosis fruto/ramas: compare each independently to its own 10% — these are 2 separate
+   ranking lines, not pooled. Three states, not just binary: *over threshold* (strongest signal),
    *approaching* (e.g. within some margin below it — the builder should pick a sensible margin,
    such as 80% of the threshold, and justify it in the report), *under*. This replaces
-   `clasificarGravedad`'s fixed 10%/30% cuts for these 6 pests specifically — don't run both and
+   `clasificarGravedad`'s fixed 10%/30% cuts for these 7 lines specifically — don't run both and
    pick whichever looks better; the economic threshold is the more meaningful number where we have
    it, full stop.
 2. **Trend** — `calcularTendencia` over the last 3-4 rounds (already implemented, reused as-is).
@@ -237,14 +231,14 @@ distinct (lote,pest,week) combinations in the parquet; every mapped lote/pest id
 real, current catalog row (no orphaned foreign keys); RLS mirrors other reference tables (read-all
 authenticated, per existing conventions in `docs/supabase_tablas.md`).
 
-**P0b — Umbral económico table.** A small, separate, hand-seeded table/config (`pest_umbral_economico`:
-`pest_id`, `umbral_pct`, `source_label`, `updated_at`) — NOT derived from any data pipeline, just
-the owner's 6-row table (§2) mapped to real `plagas_enfermedades_catalogo.id`s. Small enough to be
-a plain seed migration, not a script. *Accept:* exactly 6 rows, each `pest_id` resolves to a real
-catalog row whose name is an unambiguous match to the Plaga column (verify "Marceño" -> "Cucarron
-marceño" and "Ácaro" -> the right one of "Ácaro" vs "Ácaro Cristalino" in the catalog — don't guess,
-confirm against `docs/supabase_tablas.md` or a live query); `source_label` records the citable
-source name once available (§2 assumption 3), not left as "market leader."
+**P0b — Umbral económico table.** A small, separate, hand-seeded table/config
+(`pest_umbral_economico`: `pest_id`, `grupo_key` [nullable — shared only by the 4 Ácaro-complex
+rows, e.g. `'acaro_complex'`], `umbral_pct`, `source_label`, `updated_at`) — NOT derived from any
+data pipeline, just §2's resolved table. Small enough to be a plain seed migration, not a script.
+*Accept:* exactly **9 rows** (Thrips=1, Ácaro-complex=4 sharing `grupo_key='acaro_complex'` +
+`umbral_pct=33`, Monalonion=1, Marceño=1, Phytophtora=1, Antracnosis fruto=1, Antracnosis ramas=1),
+every `pest_id` resolved against a live catalog query (not assumed from this doc's cached names —
+catalog names can drift), `source_label='Cartama'` on every row.
 
 **P1 — Ranking engine.** `priorizacionMonitoreo.ts` implementing §6. *Accept:* unit tests
 (Vitest, `src/__tests__/`) covering: a Tier A pest over threshold + rising (must rank at the top),
@@ -282,22 +276,19 @@ Lighter than the POC's — this is a scoped feature build, not a research tourna
 
 ## 9. Known limitations (carry forward, don't hide)
 
-1. **Umbral económico source needs a citable name** (§2, assumption 3) — currently "a market
-   leader." Get the actual source name before or during P0 and record it in
-   `pest_umbral_economico.source_label` and this doc; don't ship with an anonymous citation.
-2. **Unit-match and comparison-basis assumptions are unverified** (§2, assumptions 1-2) — the
-   design assumes the owner's % incidencia means the same thing as this farm's `incidencia_pct`
-   (% trees/leaves affected in a round, single latest round, not a rolling average). If the source
-   uses a different protocol, the numbers need a documented conversion or a re-ask, not a silent
-   as-is application.
-3. **Tier B pests still lack any real economic threshold** — mosca del ovario (real persistence
-   signal in the POC) and the individual fungal pests not on the owner's list (Colletotrichum,
-   Cladosporium) fall back to statistical tiers, a strictly weaker basis than Tier A's validated
-   numbers. Worth asking the same industry source whether thresholds exist for these too, as a
-   cheap follow-up — not blocking this build.
-4. **Seasonal profile for 2023-2024 is lote-level, inherited down to sublote** — real sublote-level
+1. **Unit-match and comparison-basis assumptions are unverified against Cartama's own methodology**
+   (§2) — the design assumes their % incidencia means the same thing as this farm's
+   `incidencia_pct` (% trees/leaves affected in a round, single latest round, not a rolling
+   average). If their protocol differs, the numbers need a documented conversion, not a silent
+   as-is application. Not blocking this build; worth a direct confirmation with Cartama if the
+   ranking's Tier A behavior looks off in practice.
+2. **Tier B pests still lack any real economic threshold** — mosca del ovario (real persistence
+   signal in the POC) and the fungal pests not on Cartama's list (Colletotrichum, Cladosporium)
+   fall back to statistical tiers, a strictly weaker basis than Tier A's validated numbers. Worth
+   asking Cartama whether thresholds exist for these too, as a cheap follow-up — not blocking.
+3. **Seasonal profile for 2023-2024 is lote-level, inherited down to sublote** — real sublote-level
    seasonal history only starts in 2025. Label this in the UI, don't imply false precision.
-5. **This is descriptive/rule-based, not causal or predictive in the ML sense** — it will not
+4. **This is descriptive/rule-based, not causal or predictive in the ML sense** — it will not
    catch a genuinely novel outbreak pattern the historical seasonal profile has never seen. That's
    an accepted tradeoff given the POC's own evidence that a fancier model didn't do better here.
 
@@ -314,9 +305,9 @@ tournament and no red-team stage.
    caution rules) — never hand-edit an already-applied migration file.
 2. `pest_seasonal_profile` row count and a spot-check of 3 (lote,pest,week) rows match the POC
    parquet by hand.
-3. `pest_umbral_economico` has exactly 6 rows, each correctly matched to a real catalog pest
-   (confirm the Ácaro/Ácaro Cristalino and Marceño/Cucarron marceño name matches specifically —
-   easy to get wrong), and a real `source_label`.
+3. `pest_umbral_economico` has exactly 9 rows (4 sharing `grupo_key='acaro_complex'`, 5
+   independent), every `pest_id` verified against a live catalog query (not assumed), and
+   `source_label='Cartama'` throughout.
 4. Ranking engine unit tests pass, including the Tier A over-threshold ranks first regardless of
    trend/seasonality case; edge cases (insufficient history, missing seasonal data) don't crash,
    they exclude gracefully and are logged.
