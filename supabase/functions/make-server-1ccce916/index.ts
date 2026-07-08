@@ -55,9 +55,9 @@ app.post("/make-server-1ccce916/inventario/importar-productos", async (c) => {
     return c.json(resultado);
   } catch (error: any) {
     console.error('Error en endpoint de importación:', error);
-    return c.json({ 
-      success: false, 
-      error: error.message || 'Error al procesar la solicitud' 
+    return c.json({
+      success: false,
+      error: error.message || 'Error al procesar la solicitud'
     }, 500);
   }
 });
@@ -70,9 +70,9 @@ app.post("/make-server-1ccce916/usuarios/crear", async (c) => {
     return c.json(resultado);
   } catch (error: any) {
     console.error('Error en endpoint de creación de usuario:', error);
-    return c.json({ 
-      success: false, 
-      error: error.message || 'Error al procesar la solicitud' 
+    return c.json({
+      success: false,
+      error: error.message || 'Error al procesar la solicitud'
     }, 500);
   }
 });
@@ -84,9 +84,9 @@ app.post("/make-server-1ccce916/usuarios/editar", async (c) => {
     return c.json(resultado);
   } catch (error: any) {
     console.error('Error en endpoint de edición de usuario:', error);
-    return c.json({ 
-      success: false, 
-      error: error.message || 'Error al procesar la solicitud' 
+    return c.json({
+      success: false,
+      error: error.message || 'Error al procesar la solicitud'
     }, 500);
   }
 });
@@ -98,9 +98,9 @@ app.post("/make-server-1ccce916/usuarios/eliminar", async (c) => {
     return c.json(resultado);
   } catch (error: any) {
     console.error('Error en endpoint de eliminación de usuario:', error);
-    return c.json({ 
-      success: false, 
-      error: error.message || 'Error al procesar la solicitud' 
+    return c.json({
+      success: false,
+      error: error.message || 'Error al procesar la solicitud'
     }, 500);
   }
 });
@@ -113,9 +113,9 @@ app.post("/make-server-1ccce916/inventario/toggle-producto-activo", async (c) =>
     return c.json(resultado);
   } catch (error: any) {
     console.error('Error en endpoint de toggle producto activo:', error);
-    return c.json({ 
-      success: false, 
-      error: error.message || 'Error al procesar la solicitud' 
+    return c.json({
+      success: false,
+      error: error.message || 'Error al procesar la solicitud'
     }, 500);
   }
 });
