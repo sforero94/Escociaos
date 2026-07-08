@@ -394,4 +394,10 @@ tournament and no red-team stage.
 
 ---
 
+## Addendum (2026-07): "most recent round only" staleness rule
+
+`priorizarMonitoreo` now takes a required `rondaActualId` (id of the latest `rondas_monitoreo`, ordered by `fecha_inicio` desc). A (sublote, plaga) series is only ranked if it has a reading in that round; if its last reading is from an older round, it is excluded entirely. This corrects a real case (Cucarron marceño in La Vega surfacing a 43% reading from ~3 months prior as if it were current — which would fire an alert and potentially an application on stale data). `incidenciaActual`/`incidenciaAnterior`/`numRondas` are computed relative to that round's position in the series, and the Ácaro-complex pooling groups by `ronda_id` (not `fecha_monitoreo`, since one round can span several dates). Applied to both the frontend engine and the `priorizacion-scouting.ts` edge port (kept byte-identical; parity guarded by `priorizacionScoutingParidad.test.ts`). Both `usePriorizacionMonitoreo.ts` and `chat.tsx`'s `execPestPriorizacion` fetch the latest round and pass `rondaActualId`.
+
+---
+
 **This document requires explicit owner approval before any of P0-P3 begins.**

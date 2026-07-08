@@ -80,9 +80,9 @@ These are consumed in `src/utils/supabase/client.ts` via `import.meta.env`. The 
 │   │   ├── monitoreo/                    # Pest/disease monitoring module
 │   │   │   ├── components/               # Monitoring sub-components
 │   │   │   ├── MonitoreoSubNav.tsx       # Monitoring sub-navigation
-│   │   │   ├── GraficoTendencias.tsx     # Trend charts
-│   │   │   ├── MapaCalorIncidencias.tsx  # Incidence heat map
-│   │   │   └── VistasRapidas.tsx         # Quick-view panels
+│   │   │   ├── DashboardMonitoreoV3.tsx  # Main dashboard: Snapshot + Mapa de Calor/Tendencias/Priorización tabs
+│   │   │   ├── MapaCalorIncidencias.tsx  # Incidence heat map (grouped by ronda)
+│   │   │   └── PriorizacionScoutingView.tsx # Scouting priority ranking
 │   │   ├── clima/                         # Weather monitoring module
 │   │   │   ├── ClimaDashboard.tsx        # Vista Rápida: KPI cards + period summary
 │   │   │   ├── ClimaHistorico.tsx        # Historical view: 2x2 chart grid + CSV export
@@ -337,6 +337,19 @@ Sequential SQL migrations live in `src/sql/migrations/` (001–046). See `src/sq
 - **044**: `create_ganado_inventario` — live cattle inventory (issue #51): `gan_ubicaciones` → `gan_fincas` (hectáreas) → `gan_potreros` → `gan_inventario` snapshot + `gan_movimientos` event log + `gan_pesos_historico`. Trigger `fn_crear_movimiento_pendiente_ganado()` (AFTER INSERT on `fin_transacciones_ganado`, SECURITY DEFINER) creates a `pendiente` movement per new finance transaction; `fn_aplicar_movimiento_ganado()` applies confirmed movements to `gan_inventario` (and logs to `gan_pesos_historico` when peso present). Partial unique indexes on `transaccion_ganado_id` block double confirmation. Seeds the 3 ubicaciones and `gan_fincas` from distinct historic transaction fincas. RLS: SELECT all authenticated; write Administrador + Gerencia. Applied to production 2026-06-10.
 - **045**: `fix_aplicar_movimiento_ganado_upsert` — fixes 044's apply-trigger: `INSERT ... ON CONFLICT DO UPDATE` validates CHECK constraints on the proposed row before conflict arbitration, so every negative-delta movement (venta/muerte/traslado_salida) failed even with sufficient inventory. Rewritten UPDATE-first with INSERT fallback. Applied to production 2026-06-10.
 - **046**: `add_produccion_calidad` — adds optional `kg_exportacion`/`kg_nacional` NUMERIC(12,2) columns to `produccion` with CHECK enforcing exact sum against `kg_totales` when both are non-null. Applied to production 2026-06-12.
+
+### Monitoring Module (`/monitoreo`) — incidencia aggregation
+
+`monitoreos` is denormalized: **one row per pest observation per visit** — a monitor only inserts a row for a pest they chose to record, so there is NO explicit "0%, not found" row. Absence of a row means "not checked", not "not present". Rows link to a real round via `monitoreos.ronda_id` → `rondas_monitoreo` (a round can span several calendar dates depending on the lote — always group by `ronda_id`, never by `fecha_monitoreo`).
+
+The three dashboard views (`DashboardMonitoreoV3.tsx`) were homologated 2026-07 so they never disagree on the same number. Two display contracts:
+
+- **Single-datum views** (most-recent value): use the latest `ronda_id` per (lote/sublote × plaga). The Snapshot table filters to one selected `ronda_id`.
+- **Multi-datum views** (matrix/trend): group by the last N distinct `ronda_id`. A pest with no row in a given round renders **blank (`—`), never 0%**, so "not checked" is never confused with "found in 0 trees". The Mapa de Calor's row/column "Prom" is computed over the SAME visible round window as the chained cells (not a wider history).
+
+Weighted incidencia everywhere via `calcularIncidencia(afectados, monitoreados)` and the shared `clasificarGravedad` color buckets (10% / 30%) from `src/utils/calculosMonitoreo.ts` — never re-derive inline or use a different color scale.
+
+**Scouting priority** (`PriorizacionScoutingView.tsx` → `usePriorizacionMonitoreo.ts` → pure engine `src/utils/priorizacionMonitoreo.ts`, hand-ported to `src/supabase/functions/server/priorizacion-scouting.ts` for Esco/Telegram — keep byte-identical, guarded by `priorizacionScoutingParidad.test.ts`): only a (sublote, plaga) with a reading in the **most recent round** (`rondaActualId`) is shown. A combination whose last reading is from an older round is excluded entirely — surfacing a stale reading as if current would fire alerts (and potentially an application) on months-old data. Combinations with a single round show the value without a trend arrow.
 
 ### Production Module (`/produccion`)
 
