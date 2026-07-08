@@ -15,7 +15,8 @@
 --
 -- Data-density check performed before deciding (on the cleaned parquet, 9 real lotes,
 -- 31 pest_keys, all mapped to real catalog rows):
---   - Per (lote_key, pest_key, ISO week) cell: 4,254 distinct cells, median 1 row/cell,
+--   - Per (lote_key, pest_key, ISO week) cell: 4,252 distinct cells after dropping the
+--     2 rows for the non-current lote '7. El Triunfo' (see below) -- median 1 row/cell,
 --     mean 1.38 rows/cell, mean 1.35 distinct years observed per cell. Far too thin to
 --     compute a stable modal tier at lote grain -- most cells have exactly one
 --     observation ever, so "the historical tier for this lote/pest/week" would really
@@ -30,6 +31,14 @@
 --     in the same micro-region (see CLAUDE.md's Ecowitt/OpenWeather farm-coordinates
 --     note, a single lat/lon serves the whole farm). There is no strong agronomic
 --     reason to expect lote A's thrips season to differ in timing from lote B's.
+--     CAVEAT (flagged by independent review, not fully resolved by the density argument
+--     alone): the farm's lotes sit on Andean terrain (Aguadas, Caldas) where altitude
+--     can vary meaningfully lote-to-lote, and altitude does affect temperature-driven
+--     pest phenology in principle. The pooling decision here is ultimately forced by
+--     data density regardless (median 1 obs/cell makes per-lote modal tiers meaningless
+--     with or without an altitude effect) -- but if per-sublote history accumulates
+--     enough in future years to test this, an altitude-stratified profile would be worth
+--     revisiting rather than assuming uniformity is fully correct.
 --
 -- Conclusion: pool across lotes. The `lote_id` column is kept nullable (per the design
 -- doc's original column list) rather than dropped, so a future recomputation with more
