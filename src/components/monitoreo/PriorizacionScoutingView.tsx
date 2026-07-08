@@ -50,7 +50,19 @@ import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
-import { ToggleGroup, ToggleGroupItem } from '../ui/toggle-group';
+
+// Colores directos (no vía clase Tailwind con modificador de opacidad, ej.
+// `bg-amber-500/70` o `border-amber-400/40`): este proyecto sirve `index.css`
+// como CSS ya compilado en vez de generarlo en cada build, así que cualquier
+// combinación clase+opacidad que no se haya usado ya en otro componente
+// puede no existir ahí todavía. Los valores fijos de abajo, y las variables
+// CSS (`var(--destructive)`, etc.) usadas en estilos inline en todo el
+// archivo, no dependen de ese compilado.
+const AMBAR_500 = '#f59e0b';
+const AMBAR_400 = '#fbbf24';
+const AMBAR_700 = '#b45309';
+const DESTRUCTIVE_TINT = 'rgba(220, 53, 69, 0.08)';
+const AMBAR_TINT = 'rgba(245, 158, 11, 0.08)';
 
 // ============================================================================
 // Zonificación — deriva la zona directamente del `bracket` ya calculado por
@@ -85,6 +97,10 @@ interface InfoEstado {
   etiqueta: string;
   atribucion: string;
   claseChip: string;
+  /** Color de borde/texto vía estilo inline — ver nota de AMBAR_500 más arriba:
+   * las combinaciones borde+opacidad (`border-amber-500`, `border-muted-foreground/40`)
+   * no están garantizadas en el CSS compilado. */
+  estiloChip?: { borderColor?: string; color?: string };
 }
 
 function infoEstado(entry: PriorizacionEntry): InfoEstado {
@@ -94,18 +110,38 @@ function infoEstado(entry: PriorizacionEntry): InfoEstado {
       return { etiqueta: 'Sobre umbral', atribucion, claseChip: 'bg-destructive text-white' };
     }
     if (entry.estadoUmbral === 'approaching') {
-      return { etiqueta: 'Acercándose', atribucion, claseChip: 'bg-amber-500 text-white dark:bg-amber-600' };
+      return { etiqueta: 'Acercándose', atribucion, claseChip: 'bg-amber-500 text-white' };
     }
-    return { etiqueta: 'Bajo umbral', atribucion, claseChip: 'border border-border text-muted-foreground' };
+    return {
+      etiqueta: 'Bajo umbral',
+      atribucion,
+      claseChip: 'border text-muted-foreground',
+      estiloChip: { borderColor: 'var(--border)' },
+    };
   }
   const gravedad = entry.gravedad?.texto ?? 'Baja';
-  const claseChip =
-    gravedad === 'Alta'
-      ? 'border border-amber-500 text-amber-700 dark:text-amber-400'
-      : gravedad === 'Media'
-        ? 'border border-muted-foreground/40 text-muted-foreground'
-        : 'border border-muted-foreground/25 text-muted-foreground/70';
-  return { etiqueta: `Gravedad ${gravedad}`, atribucion: 'histórico finca', claseChip };
+  if (gravedad === 'Alta') {
+    return {
+      etiqueta: 'Gravedad Alta',
+      atribucion: 'histórico finca',
+      claseChip: 'border text-amber-700',
+      estiloChip: { borderColor: AMBAR_500 },
+    };
+  }
+  if (gravedad === 'Media') {
+    return {
+      etiqueta: 'Gravedad Media',
+      atribucion: 'histórico finca',
+      claseChip: 'border text-muted-foreground',
+      estiloChip: { borderColor: 'rgba(156, 163, 175, 0.4)' },
+    };
+  }
+  return {
+    etiqueta: 'Gravedad Baja',
+    atribucion: 'histórico finca',
+    claseChip: 'border',
+    estiloChip: { borderColor: 'rgba(156, 163, 175, 0.25)', color: 'rgba(156, 163, 175, 0.7)' },
+  };
 }
 
 /** Ícono de tier — SIEMPRE neutro (relleno oscuro para A, contorno para B).
@@ -164,7 +200,9 @@ function DetailStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
       <dt className="truncate text-muted-foreground">{label}</dt>
-      <dd className="truncate font-medium text-foreground tabular-nums">{value}</dd>
+      <dd className="truncate font-medium text-foreground" style={{ fontVariantNumeric: 'tabular-nums' }}>
+        {value}
+      </dd>
     </div>
   );
 }
@@ -174,14 +212,14 @@ function DetailStat({ label, value }: { label: string; value: string }) {
 function InsigniaEstadoCompleta({ entry, estado }: { entry: PriorizacionEntry; estado: InfoEstado }) {
   if (entry.tier === 'A') {
     return (
-      <Badge className={`gap-1 border-transparent ${estado.claseChip}`}>
+      <Badge className={`gap-1 border-transparent ${estado.claseChip}`} style={estado.estiloChip}>
         <ShieldCheck className="size-3.5" />
         {estado.etiqueta} · {estado.atribucion}
       </Badge>
     );
   }
   return (
-    <Badge variant="outline" className={`gap-1 border-dashed ${estado.claseChip}`}>
+    <Badge variant="outline" className={`gap-1 border-dashed ${estado.claseChip}`} style={estado.estiloChip}>
       <BarChart3 className="size-3.5" />
       {estado.etiqueta} · {estado.atribucion}
     </Badge>
@@ -206,12 +244,12 @@ function EntryDetail({ entry }: { entry: PriorizacionEntry }) {
           <span className="font-semibold text-foreground">{entry.pest_nombre}</span>
         </div>
         <div className="mt-0.5 text-xs text-muted-foreground">{ubicacion}</div>
-        <div className="mt-1.5">
+        <div style={{ marginTop: '0.375rem' }}>
           <InsigniaEstadoCompleta entry={entry} estado={estado} />
         </div>
       </div>
 
-      <p className="leading-snug text-foreground">{entry.why}</p>
+      <p className="text-foreground" style={{ lineHeight: '1.375' }}>{entry.why}</p>
 
       <dl className="grid grid-cols-2 gap-3 text-xs">
         <DetailStat label="Incidencia actual" value={formatPercentage(entry.incidenciaActual)} />
@@ -237,7 +275,7 @@ function EntryDetail({ entry }: { entry: PriorizacionEntry }) {
       </dl>
 
       {entry.temporadaAlta ? (
-        <div className="flex items-center gap-1.5 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+        <div className="flex items-center gap-1.5 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-700">
           <Flame className="size-3.5 shrink-0" />
           Semana {entry.weekOfYear}: temporada históricamente alta para esta plaga.
         </div>
@@ -247,46 +285,154 @@ function EntryDetail({ entry }: { entry: PriorizacionEntry }) {
 }
 
 // ============================================================================
-// Fila compacta — rank + ícono tier + chip de estado (+ umbral/temporada en
-// filas críticas) + % + tendencia. Popover al tocar/clic (no Tooltip: debe
-// funcionar en pantallas táctiles, no sólo con hover de mouse).
+// Jerarquía Plaga → Lote → Sublote — agrupa las entradas de una zona/bucket
+// para responder "qué plaga reviso primero, en qué lote, en qué sublote" sin
+// escanear una lista plana. Los sublotes de un mismo lote quedan colapsados
+// detrás de un toggle (excepto cuando el lote tiene un único sublote: ahí no
+// hay nada que ocultar, se aplana en una sola fila). El orden de agrupación
+// respeta el `rank` global ya calculado por el motor de priorización — no
+// inventa una prioridad nueva, sólo reorganiza la presentación.
 // ============================================================================
 
-function FilaEntrada({
+interface LoteGrupoJerarquia {
+  lote_id: string;
+  lote_nombre: string;
+  entries: PriorizacionEntry[]; // ordenadas por rank ascendente (más urgente primero)
+  minRank: number;
+}
+
+interface PlagaGrupoJerarquia {
+  key: string;
+  pest_nombre: string;
+  tier: TierPriorizacion;
+  temporadaAlta: boolean; // true si CUALQUIER entrada del grupo está en temporada alta
+  minRank: number;
+  totalEntries: number;
+  lotes: LoteGrupoJerarquia[]; // ordenados por minRank ascendente
+}
+
+function agruparPorPlagaLoteSublote(
+  entries: PriorizacionEntry[],
+  rankPorClave: Map<string, number>
+): PlagaGrupoJerarquia[] {
+  const rankDe = (entry: PriorizacionEntry) => rankPorClave.get(entryKey(entry)) ?? Number.MAX_SAFE_INTEGER;
+
+  const plagas = new Map<
+    string,
+    { pest_nombre: string; tier: TierPriorizacion; temporadaAlta: boolean; lotes: Map<string, LoteGrupoJerarquia> }
+  >();
+
+  for (const entry of entries) {
+    // Igual criterio que agruparPorLote/badges: grupo_key pooled (ej. acaro_complex)
+    // identifica la plaga, no el pest_id individual que aportó el valor máximo.
+    const plagaKey = entry.grupo_key ?? entry.pest_id;
+    let plaga = plagas.get(plagaKey);
+    if (!plaga) {
+      plaga = { pest_nombre: entry.pest_nombre, tier: entry.tier, temporadaAlta: false, lotes: new Map() };
+      plagas.set(plagaKey, plaga);
+    }
+    if (entry.temporadaAlta) plaga.temporadaAlta = true;
+
+    let lote = plaga.lotes.get(entry.lote_id);
+    if (!lote) {
+      lote = { lote_id: entry.lote_id, lote_nombre: entry.lote_nombre ?? entry.lote_id, entries: [], minRank: rankDe(entry) };
+      plaga.lotes.set(entry.lote_id, lote);
+    }
+    lote.entries.push(entry);
+    lote.minRank = Math.min(lote.minRank, rankDe(entry));
+  }
+
+  const resultado: PlagaGrupoJerarquia[] = [];
+  for (const [key, plaga] of plagas) {
+    const lotes = Array.from(plaga.lotes.values())
+      .map((lote) => ({ ...lote, entries: [...lote.entries].sort((a, b) => rankDe(a) - rankDe(b)) }))
+      .sort((a, b) => a.minRank - b.minRank);
+    const minRank = lotes.length > 0 ? lotes[0].minRank : Number.MAX_SAFE_INTEGER;
+    const totalEntries = lotes.reduce((suma, lote) => suma + lote.entries.length, 0);
+    resultado.push({ key, pest_nombre: plaga.pest_nombre, tier: plaga.tier, temporadaAlta: plaga.temporadaAlta, minRank, totalEntries, lotes });
+  }
+
+  return resultado.sort((a, b) => a.minRank - b.minRank);
+}
+
+/** Línea de detalle bajo el nombre principal de una fila: comparación contra
+ * umbral (Tier A) o gravedad histórica (Tier B) — siempre visible, ya no sólo
+ * en filas "críticas", porque agrupar por plaga/lote deja espacio de sobra. */
+function fragmentosDetalle(entry: PriorizacionEntry): string[] {
+  const frags: string[] = [];
+  if (entry.tier === 'A' && entry.umbralPct !== undefined && entry.estadoUmbral) {
+    const simbolo = entry.estadoUmbral === 'over' ? '≥' : entry.estadoUmbral === 'approaching' ? '≈' : '<';
+    frags.push(`${formatPercentage(entry.incidenciaActual, 0)} ${simbolo} umbral ${formatPercentage(entry.umbralPct, 0)}`);
+  } else if (entry.gravedad) {
+    frags.push(`Gravedad ${entry.gravedad.texto}`);
+  }
+  return frags;
+}
+
+/** Fila hoja — un (sublote, plaga) individual. Reusada tanto para un lote de
+ * un único sublote (aplanado, `mainLabel` = nombre de lote) como para cada
+ * sublote revelado dentro de un lote expandible (`mainLabel` = nombre de
+ * sublote, `indentado`). El chip de estado sólo se muestra cuando el estado
+ * NO está ya anunciado por el encabezado de la zona/subsección (ej. "En
+ * orden" mezcla "Bajo umbral" y "Gravedad Media/Baja" en un mismo grupo). */
+function FilaFoco({
   entry,
   rank,
-  variante,
+  mainLabel,
+  subLabel,
+  mostrarEstado,
+  indentado,
 }: {
   entry: PriorizacionEntry;
   rank: number;
-  variante: 'critico' | 'estandar';
+  mainLabel: string;
+  subLabel?: string;
+  mostrarEstado: boolean;
+  indentado: boolean;
 }) {
   const estado = infoEstado(entry);
-  const ubicacion = [entry.lote_nombre ?? entry.lote_id, entry.sublote_nombre].filter(Boolean).join(' · ');
-  const mostrarUmbral = variante === 'critico' && entry.tier === 'A' && entry.umbralPct !== undefined;
-  const mostrarTemporada = variante === 'critico' && entry.temporadaAlta;
+  const detalle = [subLabel, ...fragmentosDetalle(entry)].filter(Boolean).join(' · ');
 
   return (
     <Popover>
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex w-full flex-col gap-1 rounded-md border bg-card px-2.5 py-2 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          style={{ borderColor: 'var(--border)' }}
+          className="flex w-full items-center gap-2 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          style={{
+            padding: indentado ? '0.4rem 0.75rem 0.4rem 1.75rem' : '0.55rem 0.75rem',
+            borderTop: '1px solid var(--border)',
+          }}
         >
-          <div className="flex items-center gap-2">
-            <span
-              className="w-4 shrink-0 text-right font-medium tabular-nums text-muted-foreground"
-              style={{ fontSize: '10px' }}
-            >
-              {rank}
+          <span
+            className="shrink-0 text-right text-muted-foreground"
+            style={{ width: '0.875rem', fontSize: '9px', fontVariantNumeric: 'tabular-nums' }}
+          >
+            {rank}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-1.5">
+              {mostrarEstado ? (
+                <span
+                  className={`inline-flex shrink-0 items-center rounded-md py-0.5 font-semibold leading-none ${estado.claseChip}`}
+                  style={{ fontSize: '9px', paddingLeft: '0.3rem', paddingRight: '0.3rem', ...estado.estiloChip }}
+                >
+                  {estado.etiqueta}
+                </span>
+              ) : null}
+              <span className={`truncate font-medium text-foreground ${indentado ? 'text-xs' : 'text-sm'}`}>{mainLabel}</span>
             </span>
-            <TierIcono tier={entry.tier} />
             <span
-              className={`inline-flex shrink-0 items-center rounded-md py-0.5 font-semibold leading-none ${estado.claseChip}`}
-              style={{ fontSize: '10px', paddingLeft: '0.375rem', paddingRight: '0.375rem' }}
+              className="mt-0.5 flex flex-wrap items-center text-muted-foreground"
+              style={{ fontSize: '10.5px', columnGap: '0.375rem', rowGap: '0.125rem' }}
             >
-              {estado.etiqueta}
+              {detalle ? <span className="truncate">{detalle}</span> : null}
+              {entry.temporadaAlta ? (
+                <span className="inline-flex shrink-0 items-center text-orange-600" style={{ gap: '0.125rem' }}>
+                  {detalle ? '· ' : ''}
+                  <Flame className="size-3" /> temporada alta
+                </span>
+              ) : null}
             </span>
             <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{entry.pest_nombre}</span>
             <span className="flex shrink-0 flex-col items-end gap-0.5">
@@ -294,31 +440,146 @@ function FilaEntrada({
                 {formatPercentage(entry.incidenciaActual, 0)}
               </span>
               <TrendBadge tendencia={entry.tendencia} numRondas={entry.numRondas} />
+          </span>
+          <span className="flex shrink-0 flex-col items-end" style={{ gap: '0.125rem' }}>
+            <span className="text-sm font-semibold text-foreground" style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {formatPercentage(entry.incidenciaActual, 0)}
             </span>
-          </div>
-          <div
-            className="flex flex-wrap items-center text-xs text-muted-foreground"
-            style={{ columnGap: '0.5rem', rowGap: '0.125rem', paddingLeft: '1.5rem' }}
-          >
-            <span className="truncate">{ubicacion}</span>
-            {mostrarUmbral ? (
-              <span className="shrink-0 tabular-nums">
-                · {formatPercentage(entry.incidenciaActual, 0)} {entry.estadoUmbral === 'over' ? '≥' : '≈'} umbral{' '}
-                {formatPercentage(entry.umbralPct as number, 0)}
-              </span>
-            ) : null}
-            {mostrarTemporada ? (
-              <span className="inline-flex shrink-0 items-center gap-0.5 text-orange-600 dark:text-orange-400">
-                · <Flame className="size-3.5" /> temporada alta
-              </span>
-            ) : null}
-          </div>
+            <TrendBadge tendencia={entry.tendencia} />
+          </span>
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-80" style={{ maxWidth: 'calc(100vw - 2rem)' }}>
+      <PopoverContent align="start" style={{ width: '20rem', maxWidth: 'calc(100vw - 2rem)' }}>
         <EntryDetail entry={entry} />
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** Fila de lote con más de un sublote — resumen colapsado (peor % + tendencia
+ * del sublote más urgente) con un toggle que revela cada `FilaFoco` de
+ * sublote. Colapsada por defecto: el punto de este nivel es esconder detalle
+ * que no siempre hace falta, no forzarlo a la vista. */
+function FilaLoteExpandible({
+  lote,
+  rankPorClave,
+  mostrarEstado,
+}: {
+  lote: LoteGrupoJerarquia;
+  rankPorClave: Map<string, number>;
+  mostrarEstado: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const peor = lote.entries[0]; // ya ordenado por rank asc — el primero es el más urgente
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          aria-label={`${lote.lote_nombre}, ${lote.entries.length} sublotes, ${open ? 'ocultar' : 'mostrar'} detalle`}
+          className="flex w-full items-center gap-2 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          style={{ padding: '0.5rem 0.75rem 0.5rem 1.75rem', borderTop: '1px solid var(--border)' }}
+        >
+          <ChevronDown
+            className="size-3 shrink-0 text-muted-foreground transition-transform"
+            style={{ transform: open ? undefined : 'rotate(-90deg)' }}
+          />
+          <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{lote.lote_nombre}</span>
+          <span className="shrink-0 text-muted-foreground" style={{ fontSize: '10.5px' }}>
+            {lote.entries.length} sublotes
+          </span>
+          <span className="flex shrink-0 flex-col items-end" style={{ gap: '0.125rem' }}>
+            <span className="text-sm font-semibold text-foreground" style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {formatPercentage(peor.incidenciaActual, 0)}
+            </span>
+            <TrendBadge tendencia={peor.tendencia} />
+          </span>
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        {lote.entries.map((entry) => (
+          <FilaFoco
+            key={entryKey(entry)}
+            entry={entry}
+            rank={rankPorClave.get(entryKey(entry)) ?? 0}
+            mainLabel={entry.sublote_nombre ?? entry.sublote_id}
+            mostrarEstado={mostrarEstado}
+            indentado
+          />
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+/** Tarjeta de plaga — encabezado (tier + nombre + temporada alta + conteo de
+ * focos) y, debajo, un lote por fila: aplanada si tiene un único sublote,
+ * expandible si tiene varios. */
+function TarjetaPlaga({
+  grupo,
+  rankPorClave,
+  mostrarEstado,
+}: {
+  grupo: PlagaGrupoJerarquia;
+  rankPorClave: Map<string, number>;
+  mostrarEstado: boolean;
+}) {
+  return (
+    <div className="overflow-hidden rounded-lg border" style={{ borderColor: 'var(--border)' }}>
+      <div className="flex items-center gap-2" style={{ padding: '0.625rem 0.875rem' }}>
+        <TierIcono tier={grupo.tier} />
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{grupo.pest_nombre}</span>
+        {grupo.temporadaAlta ? (
+          <Flame className="size-3.5 shrink-0 text-orange-600" aria-label="Temporada alta" />
+        ) : null}
+        <span
+          className="shrink-0 rounded-full font-semibold leading-none"
+          style={{ fontSize: '10px', padding: '2px 8px', color: 'var(--destructive)', backgroundColor: DESTRUCTIVE_TINT }}
+        >
+          {grupo.totalEntries} {grupo.totalEntries === 1 ? 'foco' : 'focos'}
+        </span>
+      </div>
+      <div className="flex flex-col">
+        {grupo.lotes.map((lote) =>
+          lote.entries.length === 1 ? (
+            <FilaFoco
+              key={lote.lote_id}
+              entry={lote.entries[0]}
+              rank={rankPorClave.get(entryKey(lote.entries[0])) ?? 0}
+              mainLabel={lote.lote_nombre}
+              subLabel={lote.entries[0].sublote_nombre}
+              mostrarEstado={mostrarEstado}
+              indentado={false}
+            />
+          ) : (
+            <FilaLoteExpandible key={lote.lote_id} lote={lote} rankPorClave={rankPorClave} mostrarEstado={mostrarEstado} />
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Punto de entrada de la jerarquía — agrupa y renderiza. Recibe ya filtradas
+ * las entradas de una zona/subsección (ej. sólo "sobre umbral", o sólo "En
+ * orden" tras el filtro de tier/búsqueda). */
+function HierarquiaEntradas({
+  entries,
+  rankPorClave,
+  mostrarEstado,
+}: {
+  entries: PriorizacionEntry[];
+  rankPorClave: Map<string, number>;
+  mostrarEstado: boolean;
+}) {
+  const grupos = useMemo(() => agruparPorPlagaLoteSublote(entries, rankPorClave), [entries, rankPorClave]);
+  return (
+    <div className="flex flex-col gap-2">
+      {grupos.map((grupo) => (
+        <TarjetaPlaga key={grupo.key} grupo={grupo} rankPorClave={rankPorClave} mostrarEstado={mostrarEstado} />
+      ))}
+    </div>
   );
 }
 
@@ -367,8 +628,6 @@ function agruparPorLote(entries: PriorizacionEntry[]): GrupoLote[] {
   return Array.from(mapa.values()).sort((a, b) => a.minBracket - b.minBracket);
 }
 
-const AMBAR_500 = '#f59e0b';
-
 interface BadgeConteo {
   texto: string;
   clase: string;
@@ -384,7 +643,7 @@ function badgeConteoDe(grupo: GrupoLote): BadgeConteo {
   if (grupo.gravedadAlta > 0) {
     return {
       texto: `${grupo.gravedadAlta} grav. alta`,
-      clase: 'border text-amber-700 dark:text-amber-400',
+      clase: 'border text-amber-700',
       estiloBorde: AMBAR_500,
     };
   }
@@ -423,10 +682,10 @@ function LoteCard({
       type="button"
       aria-pressed={seleccionado}
       onClick={onToggle}
-      className={`flex flex-col items-start gap-1.5 rounded-lg border p-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+      className={`flex flex-col items-start gap-1.5 rounded-lg border text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
         seleccionado ? 'bg-muted' : 'bg-card hover:bg-muted/60'
       }`}
-      style={{ borderColor: seleccionado ? 'var(--foreground)' : 'var(--border)' }}
+      style={{ padding: '0.625rem', borderColor: seleccionado ? 'var(--foreground)' : 'var(--border)' }}
     >
       <span className="flex w-full items-center gap-1.5">
         <span
@@ -525,28 +784,90 @@ function LotesGrid({
 
 type Tono = 'critico' | 'atencion' | 'calma';
 
-const TONO_ESTILOS: Record<Tono, { borde: string; header: string; icono: string; contador: string }> = {
+/** Colores por tono — vía variable CSS/valor directo (no clases Tailwind con
+ * modificador de opacidad, ver nota de AMBAR_500 al inicio del archivo). Sólo
+ * `icono`/`contador` quedan como clases porque son colores sólidos ya
+ * confirmados en el CSS compilado (bg-destructive, bg-amber-500, bg-muted). */
+interface EstiloTono {
+  bordeColor: string;
+  headerBg: string;
+  headerColor: string;
+  icono: string;
+  contador: string;
+}
+
+const TONO_ESTILOS: Record<Tono, EstiloTono> = {
   critico: {
-    borde: 'border-destructive',
-    header: 'bg-destructive/10 text-destructive',
+    bordeColor: 'var(--destructive)',
+    headerBg: DESTRUCTIVE_TINT,
+    headerColor: 'var(--destructive)',
     icono: 'bg-destructive text-white',
     contador: 'bg-destructive text-white',
   },
   atencion: {
-    borde: 'border-amber-400/40',
-    header: 'bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300',
+    bordeColor: AMBAR_400,
+    headerBg: AMBAR_TINT,
+    headerColor: AMBAR_700,
     icono: 'bg-amber-500 text-white',
     contador: 'bg-amber-500 text-white',
   },
   calma: {
-    borde: 'border-border',
-    header: 'bg-muted/50 text-foreground',
-    icono: 'bg-muted-foreground/20 text-muted-foreground',
+    bordeColor: 'var(--border)',
+    headerBg: 'var(--muted)',
+    headerColor: 'var(--foreground)',
+    icono: 'bg-muted text-muted-foreground',
     contador: 'bg-muted text-muted-foreground',
   },
 };
 
 type FiltroTier = 'todos' | 'A' | 'B';
+
+const OPCIONES_FILTRO_TIER: { valor: FiltroTier; etiqueta: string; ariaLabel: string }[] = [
+  { valor: 'todos', etiqueta: 'Todos', ariaLabel: 'Mostrar todos los tiers' },
+  { valor: 'A', etiqueta: 'Tier A', ariaLabel: 'Filtrar Tier A' },
+  { valor: 'B', etiqueta: 'Tier B', ariaLabel: 'Filtrar Tier B' },
+];
+
+/** Segmentado Todos/Tier A/Tier B — reemplaza `ToggleGroup` de `ui/toggle-group.tsx`
+ * en este único uso: ese componente compartido depende de varias clases
+ * (`bg-transparent`, `bg-accent`, `px-1.5`, `rounded-l-md`/`rounded-r-md`) que
+ * faltan en el CSS compilado, así que sus 3 opciones se renderizaban sin
+ * padding ni separación (texto corrido). Editar `ui/toggle-group.tsx`
+ * arreglaría esto en todos sus usos en la app pero excede el alcance de este
+ * componente; en vez de eso, este control autocontenido no depende de esas
+ * clases en absoluto. */
+function FiltroTierSegmentado({ valor, onCambio }: { valor: FiltroTier; onCambio: (v: FiltroTier) => void }) {
+  return (
+    <div
+      className="inline-flex shrink-0 overflow-hidden rounded-md border"
+      style={{ borderColor: 'var(--border)' }}
+      role="group"
+      aria-label="Filtrar por tier"
+    >
+      {OPCIONES_FILTRO_TIER.map((opcion, i) => {
+        const activo = valor === opcion.valor;
+        return (
+          <button
+            key={opcion.valor}
+            type="button"
+            aria-pressed={activo}
+            aria-label={opcion.ariaLabel}
+            onClick={() => onCambio(opcion.valor)}
+            className="text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            style={{
+              padding: '0.25rem 0.5rem',
+              borderLeft: i > 0 ? '1px solid var(--border)' : undefined,
+              backgroundColor: activo ? 'var(--muted)' : 'transparent',
+              color: activo ? 'var(--foreground)' : 'var(--muted-foreground)',
+            }}
+          >
+            {opcion.etiqueta}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 interface ZoneSectionProps {
   titulo: string;
@@ -584,9 +905,18 @@ function ZoneSection({ titulo, descripcion, icono, entries, tono, defaultOpen, v
       : '';
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className={`overflow-hidden rounded-lg border ${estilos.borde}`}>
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className="overflow-hidden rounded-lg border"
+      style={{ borderColor: estilos.bordeColor }}
+    >
       <CollapsibleTrigger asChild>
-        <button type="button" className={`flex w-full items-start gap-3 px-3 py-2.5 text-left ${estilos.header}`}>
+        <button
+          type="button"
+          className="flex w-full items-start gap-3 text-left"
+          style={{ padding: '0.625rem 0.75rem', backgroundColor: estilos.headerBg, color: estilos.headerColor }}
+        >
           <span
             className={`mt-0.5 flex shrink-0 items-center justify-center rounded-full ${estilos.icono}`}
             style={{ width: '1.75rem', height: '1.75rem' }}
@@ -617,7 +947,7 @@ function ZoneSection({ titulo, descripcion, icono, entries, tono, defaultOpen, v
       <CollapsibleContent>
         <div className="flex flex-col gap-1.5 bg-card p-2">
           {conFiltro && entries.length > 0 ? (
-            <div className="flex flex-wrap items-center gap-2 pb-1">
+            <div className="flex flex-wrap items-center gap-2" style={{ paddingBottom: '0.25rem' }}>
               <div className="relative flex-1" style={{ minWidth: '10rem' }}>
                 <Search
                   className="pointer-events-none absolute top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
@@ -631,34 +961,22 @@ function ZoneSection({ titulo, descripcion, icono, entries, tono, defaultOpen, v
                   style={{ paddingLeft: '1.75rem' }}
                 />
               </div>
-              <ToggleGroup
-                type="single"
-                size="sm"
-                value={filtroTier}
-                onValueChange={(v) => v && setFiltroTier(v as FiltroTier)}
-                className="shrink-0 rounded-md border"
-              >
-                <ToggleGroupItem value="todos" className="text-xs" aria-label="Mostrar todos los tiers">
-                  Todos
-                </ToggleGroupItem>
-                <ToggleGroupItem value="A" className="text-xs" aria-label="Filtrar Tier A">
-                  Tier A
-                </ToggleGroupItem>
-                <ToggleGroupItem value="B" className="text-xs" aria-label="Filtrar Tier B">
-                  Tier B
-                </ToggleGroupItem>
-              </ToggleGroup>
+              <FiltroTierSegmentado valor={filtroTier} onCambio={setFiltroTier} />
             </div>
           ) : null}
 
           {entries.length === 0 ? (
-            <p className="px-1 py-2 text-xs text-muted-foreground">{vacioTexto}</p>
+            <p className="py-2 text-xs text-muted-foreground" style={{ paddingLeft: '0.25rem', paddingRight: '0.25rem' }}>
+              {vacioTexto}
+            </p>
           ) : entriesFiltradas.length === 0 ? (
-            <p className="px-1 py-2 text-xs text-muted-foreground">Ninguna combinación coincide con el filtro/búsqueda actual.</p>
+            <p className="py-2 text-xs text-muted-foreground" style={{ paddingLeft: '0.25rem', paddingRight: '0.25rem' }}>
+              Ninguna combinación coincide con el filtro/búsqueda actual.
+            </p>
           ) : (
             <>
               {conFiltro && entriesFiltradas.length !== entries.length ? (
-                <p className="px-1 text-[11px] text-muted-foreground">
+                <p className="text-muted-foreground" style={{ paddingLeft: '0.25rem', paddingRight: '0.25rem', fontSize: '11px' }}>
                   Mostrando {entriesFiltradas.length} de {entries.length}.
                 </p>
               ) : null}
@@ -690,8 +1008,8 @@ function InfoGeneral() {
           <Info className="size-4" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 text-sm" style={{ maxWidth: 'calc(100vw - 2rem)' }}>
-        <div className="flex flex-col gap-2.5">
+      <PopoverContent align="end" className="text-sm" style={{ width: '20rem', maxWidth: 'calc(100vw - 2rem)' }}>
+        <div className="flex flex-col" style={{ gap: '0.625rem' }}>
           <p className="font-semibold text-foreground">¿Qué es esta lista?</p>
           <p className="text-muted-foreground">
             Prioriza qué lote/sublote revisar primero esta semana. No indica qué tratamiento aplicar —
@@ -786,7 +1104,10 @@ export function PriorizacionScoutingView({ entries, loading, error }: Priorizaci
   if (loading) {
     return (
       <div className="py-12 text-center">
-        <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent" />
+        <div
+          className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-4 border-solid border-r-transparent"
+          style={{ borderColor: 'var(--primary)', borderRightColor: 'transparent' }}
+        />
         <p className="text-sm text-muted-foreground">Calculando priorización...</p>
       </div>
     );
@@ -794,11 +1115,11 @@ export function PriorizacionScoutingView({ entries, loading, error }: Priorizaci
 
   if (error) {
     return (
-      <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900/50 dark:bg-red-950/30">
+      <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-4">
         <AlertTriangle className="mt-0.5 size-4 shrink-0 text-red-600" />
         <div>
-          <p className="text-sm font-medium text-red-900 dark:text-red-200">No se pudo calcular la priorización</p>
-          <p className="mt-0.5 text-xs text-red-700 dark:text-red-400">{error}</p>
+          <p className="text-sm font-medium text-red-900">No se pudo calcular la priorización</p>
+          <p className="mt-0.5 text-xs text-red-700">{error}</p>
         </div>
       </div>
     );
@@ -814,7 +1135,7 @@ export function PriorizacionScoutingView({ entries, loading, error }: Priorizaci
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 p-3 sm:p-4">
+    <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-base font-semibold text-foreground">Priorización de monitoreo</h2>
@@ -842,22 +1163,24 @@ export function PriorizacionScoutingView({ entries, loading, error }: Priorizaci
               <>
                 {sobre.length > 0 ? (
                   <div className="flex flex-col gap-1.5">
-                    <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-destructive">
+                    <p
+                      className="font-semibold uppercase tracking-wide text-destructive"
+                      style={{ paddingLeft: '0.25rem', paddingRight: '0.25rem', fontSize: '11px' }}
+                    >
                       Sobre umbral ({sobre.length})
                     </p>
-                    {sobre.map((entry) => (
-                      <FilaEntrada key={entryKey(entry)} entry={entry} rank={rankPorClave.get(entryKey(entry)) ?? 0} variante="critico" />
-                    ))}
+                    <HierarquiaEntradas entries={sobre} rankPorClave={rankPorClave} mostrarEstado={false} />
                   </div>
                 ) : null}
                 {acercandose.length > 0 ? (
                   <div className="flex flex-col gap-1.5">
-                    <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                    <p
+                      className="font-semibold uppercase tracking-wide text-amber-700"
+                      style={{ paddingLeft: '0.25rem', paddingRight: '0.25rem', fontSize: '11px' }}
+                    >
                       Acercándose ({acercandose.length})
                     </p>
-                    {acercandose.map((entry) => (
-                      <FilaEntrada key={entryKey(entry)} entry={entry} rank={rankPorClave.get(entryKey(entry)) ?? 0} variante="critico" />
-                    ))}
+                    <HierarquiaEntradas entries={acercandose} rankPorClave={rankPorClave} mostrarEstado={false} />
                   </div>
                 ) : null}
               </>
@@ -874,13 +1197,7 @@ export function PriorizacionScoutingView({ entries, loading, error }: Priorizaci
           defaultOpen={false}
           vacioTexto="Sin combinaciones en gravedad Alta esta semana."
         >
-          {(filtradas) => (
-            <div className="flex flex-col gap-1.5">
-              {filtradas.map((entry) => (
-                <FilaEntrada key={entryKey(entry)} entry={entry} rank={rankPorClave.get(entryKey(entry)) ?? 0} variante="estandar" />
-              ))}
-            </div>
-          )}
+          {(filtradas) => <HierarquiaEntradas entries={filtradas} rankPorClave={rankPorClave} mostrarEstado={false} />}
         </ZoneSection>
 
         <ZoneSection
@@ -893,13 +1210,7 @@ export function PriorizacionScoutingView({ entries, loading, error }: Priorizaci
           conFiltro
           vacioTexto="Sin combinaciones en esta categoría."
         >
-          {(filtradas) => (
-            <div className="flex flex-col gap-1.5">
-              {filtradas.map((entry) => (
-                <FilaEntrada key={entryKey(entry)} entry={entry} rank={rankPorClave.get(entryKey(entry)) ?? 0} variante="estandar" />
-              ))}
-            </div>
-          )}
+          {(filtradas) => <HierarquiaEntradas entries={filtradas} rankPorClave={rankPorClave} mostrarEstado />}
         </ZoneSection>
       </div>
     </div>
