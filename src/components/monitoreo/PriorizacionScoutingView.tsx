@@ -238,78 +238,292 @@ function EntryDetail({ entry }: { entry: PriorizacionEntry }) {
 }
 
 // ============================================================================
-// Fila compacta — rank + ícono tier + chip de estado (+ umbral/temporada en
-// filas críticas) + % + tendencia. Popover al tocar/clic (no Tooltip: debe
-// funcionar en pantallas táctiles, no sólo con hover de mouse).
+// Jerarquía Plaga → Lote → Sublote — agrupa las entradas de una zona/bucket
+// para responder "qué plaga reviso primero, en qué lote, en qué sublote" sin
+// escanear una lista plana. Los sublotes de un mismo lote quedan colapsados
+// detrás de un toggle (excepto cuando el lote tiene un único sublote: ahí no
+// hay nada que ocultar, se aplana en una sola fila). El orden de agrupación
+// respeta el `rank` global ya calculado por el motor de priorización — no
+// inventa una prioridad nueva, sólo reorganiza la presentación.
 // ============================================================================
 
-function FilaEntrada({
+interface LoteGrupoJerarquia {
+  lote_id: string;
+  lote_nombre: string;
+  entries: PriorizacionEntry[]; // ordenadas por rank ascendente (más urgente primero)
+  minRank: number;
+}
+
+interface PlagaGrupoJerarquia {
+  key: string;
+  pest_nombre: string;
+  tier: TierPriorizacion;
+  temporadaAlta: boolean; // true si CUALQUIER entrada del grupo está en temporada alta
+  minRank: number;
+  totalEntries: number;
+  lotes: LoteGrupoJerarquia[]; // ordenados por minRank ascendente
+}
+
+function agruparPorPlagaLoteSublote(
+  entries: PriorizacionEntry[],
+  rankPorClave: Map<string, number>
+): PlagaGrupoJerarquia[] {
+  const rankDe = (entry: PriorizacionEntry) => rankPorClave.get(entryKey(entry)) ?? Number.MAX_SAFE_INTEGER;
+
+  const plagas = new Map<
+    string,
+    { pest_nombre: string; tier: TierPriorizacion; temporadaAlta: boolean; lotes: Map<string, LoteGrupoJerarquia> }
+  >();
+
+  for (const entry of entries) {
+    // Igual criterio que agruparPorLote/badges: grupo_key pooled (ej. acaro_complex)
+    // identifica la plaga, no el pest_id individual que aportó el valor máximo.
+    const plagaKey = entry.grupo_key ?? entry.pest_id;
+    let plaga = plagas.get(plagaKey);
+    if (!plaga) {
+      plaga = { pest_nombre: entry.pest_nombre, tier: entry.tier, temporadaAlta: false, lotes: new Map() };
+      plagas.set(plagaKey, plaga);
+    }
+    if (entry.temporadaAlta) plaga.temporadaAlta = true;
+
+    let lote = plaga.lotes.get(entry.lote_id);
+    if (!lote) {
+      lote = { lote_id: entry.lote_id, lote_nombre: entry.lote_nombre ?? entry.lote_id, entries: [], minRank: rankDe(entry) };
+      plaga.lotes.set(entry.lote_id, lote);
+    }
+    lote.entries.push(entry);
+    lote.minRank = Math.min(lote.minRank, rankDe(entry));
+  }
+
+  const resultado: PlagaGrupoJerarquia[] = [];
+  for (const [key, plaga] of plagas) {
+    const lotes = Array.from(plaga.lotes.values())
+      .map((lote) => ({ ...lote, entries: [...lote.entries].sort((a, b) => rankDe(a) - rankDe(b)) }))
+      .sort((a, b) => a.minRank - b.minRank);
+    const minRank = lotes.length > 0 ? lotes[0].minRank : Number.MAX_SAFE_INTEGER;
+    const totalEntries = lotes.reduce((suma, lote) => suma + lote.entries.length, 0);
+    resultado.push({ key, pest_nombre: plaga.pest_nombre, tier: plaga.tier, temporadaAlta: plaga.temporadaAlta, minRank, totalEntries, lotes });
+  }
+
+  return resultado.sort((a, b) => a.minRank - b.minRank);
+}
+
+/** Línea de detalle bajo el nombre principal de una fila: comparación contra
+ * umbral (Tier A) o gravedad histórica (Tier B) — siempre visible, ya no sólo
+ * en filas "críticas", porque agrupar por plaga/lote deja espacio de sobra. */
+function fragmentosDetalle(entry: PriorizacionEntry): string[] {
+  const frags: string[] = [];
+  if (entry.tier === 'A' && entry.umbralPct !== undefined && entry.estadoUmbral) {
+    const simbolo = entry.estadoUmbral === 'over' ? '≥' : entry.estadoUmbral === 'approaching' ? '≈' : '<';
+    frags.push(`${formatPercentage(entry.incidenciaActual, 0)} ${simbolo} umbral ${formatPercentage(entry.umbralPct, 0)}`);
+  } else if (entry.gravedad) {
+    frags.push(`Gravedad ${entry.gravedad.texto}`);
+  }
+  return frags;
+}
+
+/** Fila hoja — un (sublote, plaga) individual. Reusada tanto para un lote de
+ * un único sublote (aplanado, `mainLabel` = nombre de lote) como para cada
+ * sublote revelado dentro de un lote expandible (`mainLabel` = nombre de
+ * sublote, `indentado`). El chip de estado sólo se muestra cuando el estado
+ * NO está ya anunciado por el encabezado de la zona/subsección (ej. "En
+ * orden" mezcla "Bajo umbral" y "Gravedad Media/Baja" en un mismo grupo). */
+function FilaFoco({
   entry,
   rank,
-  variante,
+  mainLabel,
+  subLabel,
+  mostrarEstado,
+  indentado,
 }: {
   entry: PriorizacionEntry;
   rank: number;
-  variante: 'critico' | 'estandar';
+  mainLabel: string;
+  subLabel?: string;
+  mostrarEstado: boolean;
+  indentado: boolean;
 }) {
   const estado = infoEstado(entry);
-  const ubicacion = [entry.lote_nombre ?? entry.lote_id, entry.sublote_nombre].filter(Boolean).join(' · ');
-  const mostrarUmbral = variante === 'critico' && entry.tier === 'A' && entry.umbralPct !== undefined;
-  const mostrarTemporada = variante === 'critico' && entry.temporadaAlta;
+  const detalle = [subLabel, ...fragmentosDetalle(entry)].filter(Boolean).join(' · ');
 
   return (
     <Popover>
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex w-full flex-col gap-1 rounded-md border bg-card px-2.5 py-2 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          style={{ borderColor: 'var(--border)' }}
+          className="flex w-full items-center gap-2 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          style={{
+            padding: indentado ? '0.4rem 0.75rem 0.4rem 1.75rem' : '0.55rem 0.75rem',
+            borderTop: '1px solid var(--border)',
+          }}
         >
-          <div className="flex items-center gap-2">
+          <span className="w-3.5 shrink-0 text-right tabular-nums text-muted-foreground" style={{ fontSize: '9px' }}>
+            {rank}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-1.5">
+              {mostrarEstado ? (
+                <span
+                  className={`inline-flex shrink-0 items-center rounded-md py-0.5 font-semibold leading-none ${estado.claseChip}`}
+                  style={{ fontSize: '9px', paddingLeft: '0.3rem', paddingRight: '0.3rem' }}
+                >
+                  {estado.etiqueta}
+                </span>
+              ) : null}
+              <span className={`truncate font-medium text-foreground ${indentado ? 'text-xs' : 'text-sm'}`}>{mainLabel}</span>
+            </span>
             <span
-              className="w-4 shrink-0 text-right font-medium tabular-nums text-muted-foreground"
-              style={{ fontSize: '10px' }}
+              className="mt-0.5 flex flex-wrap items-center text-muted-foreground"
+              style={{ fontSize: '10.5px', columnGap: '0.375rem', rowGap: '0.125rem' }}
             >
-              {rank}
+              {detalle ? <span className="truncate">{detalle}</span> : null}
+              {entry.temporadaAlta ? (
+                <span className="inline-flex shrink-0 items-center gap-0.5 text-orange-600 dark:text-orange-400">
+                  {detalle ? '· ' : ''}
+                  <Flame className="size-3" /> temporada alta
+                </span>
+              ) : null}
             </span>
-            <TierIcono tier={entry.tier} />
-            <span
-              className={`inline-flex shrink-0 items-center rounded-md py-0.5 font-semibold leading-none ${estado.claseChip}`}
-              style={{ fontSize: '10px', paddingLeft: '0.375rem', paddingRight: '0.375rem' }}
-            >
-              {estado.etiqueta}
+          </span>
+          <span className="flex shrink-0 flex-col items-end gap-0.5">
+            <span className="text-sm font-semibold tabular-nums text-foreground">
+              {formatPercentage(entry.incidenciaActual, 0)}
             </span>
-            <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{entry.pest_nombre}</span>
-            <span className="flex shrink-0 flex-col items-end gap-0.5">
-              <span className="text-sm font-semibold tabular-nums text-foreground">
-                {formatPercentage(entry.incidenciaActual, 0)}
-              </span>
-              <TrendBadge tendencia={entry.tendencia} />
-            </span>
-          </div>
-          <div
-            className="flex flex-wrap items-center text-xs text-muted-foreground"
-            style={{ columnGap: '0.5rem', rowGap: '0.125rem', paddingLeft: '1.5rem' }}
-          >
-            <span className="truncate">{ubicacion}</span>
-            {mostrarUmbral ? (
-              <span className="shrink-0 tabular-nums">
-                · {formatPercentage(entry.incidenciaActual, 0)} {entry.estadoUmbral === 'over' ? '≥' : '≈'} umbral{' '}
-                {formatPercentage(entry.umbralPct as number, 0)}
-              </span>
-            ) : null}
-            {mostrarTemporada ? (
-              <span className="inline-flex shrink-0 items-center gap-0.5 text-orange-600 dark:text-orange-400">
-                · <Flame className="size-3.5" /> temporada alta
-              </span>
-            ) : null}
-          </div>
+            <TrendBadge tendencia={entry.tendencia} />
+          </span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80" style={{ maxWidth: 'calc(100vw - 2rem)' }}>
         <EntryDetail entry={entry} />
       </PopoverContent>
     </Popover>
+  );
+}
+
+/** Fila de lote con más de un sublote — resumen colapsado (peor % + tendencia
+ * del sublote más urgente) con un toggle que revela cada `FilaFoco` de
+ * sublote. Colapsada por defecto: el punto de este nivel es esconder detalle
+ * que no siempre hace falta, no forzarlo a la vista. */
+function FilaLoteExpandible({
+  lote,
+  rankPorClave,
+  mostrarEstado,
+}: {
+  lote: LoteGrupoJerarquia;
+  rankPorClave: Map<string, number>;
+  mostrarEstado: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const peor = lote.entries[0]; // ya ordenado por rank asc — el primero es el más urgente
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          aria-label={`${lote.lote_nombre}, ${lote.entries.length} sublotes, ${open ? 'ocultar' : 'mostrar'} detalle`}
+          className="flex w-full items-center gap-2 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          style={{ padding: '0.5rem 0.75rem 0.5rem 1.75rem', borderTop: '1px solid var(--border)' }}
+        >
+          <ChevronDown
+            className="size-3 shrink-0 text-muted-foreground transition-transform"
+            style={{ transform: open ? undefined : 'rotate(-90deg)' }}
+          />
+          <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{lote.lote_nombre}</span>
+          <span className="shrink-0 text-muted-foreground" style={{ fontSize: '10.5px' }}>
+            {lote.entries.length} sublotes
+          </span>
+          <span className="flex shrink-0 flex-col items-end gap-0.5">
+            <span className="text-sm font-semibold tabular-nums text-foreground">
+              {formatPercentage(peor.incidenciaActual, 0)}
+            </span>
+            <TrendBadge tendencia={peor.tendencia} />
+          </span>
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        {lote.entries.map((entry) => (
+          <FilaFoco
+            key={entryKey(entry)}
+            entry={entry}
+            rank={rankPorClave.get(entryKey(entry)) ?? 0}
+            mainLabel={entry.sublote_nombre ?? entry.sublote_id}
+            mostrarEstado={mostrarEstado}
+            indentado
+          />
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+/** Tarjeta de plaga — encabezado (tier + nombre + temporada alta + conteo de
+ * focos) y, debajo, un lote por fila: aplanada si tiene un único sublote,
+ * expandible si tiene varios. */
+function TarjetaPlaga({
+  grupo,
+  rankPorClave,
+  mostrarEstado,
+}: {
+  grupo: PlagaGrupoJerarquia;
+  rankPorClave: Map<string, number>;
+  mostrarEstado: boolean;
+}) {
+  return (
+    <div className="overflow-hidden rounded-lg border" style={{ borderColor: 'var(--border)' }}>
+      <div className="flex items-center gap-2 px-3.5 py-2.5">
+        <TierIcono tier={grupo.tier} />
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{grupo.pest_nombre}</span>
+        {grupo.temporadaAlta ? (
+          <Flame className="size-3.5 shrink-0 text-orange-600 dark:text-orange-400" aria-label="Temporada alta" />
+        ) : null}
+        <span
+          className="shrink-0 rounded-full font-semibold leading-none"
+          style={{ fontSize: '10px', padding: '2px 8px', color: 'var(--destructive)', backgroundColor: 'rgba(220,53,69,0.08)' }}
+        >
+          {grupo.totalEntries} {grupo.totalEntries === 1 ? 'foco' : 'focos'}
+        </span>
+      </div>
+      <div className="flex flex-col">
+        {grupo.lotes.map((lote) =>
+          lote.entries.length === 1 ? (
+            <FilaFoco
+              key={lote.lote_id}
+              entry={lote.entries[0]}
+              rank={rankPorClave.get(entryKey(lote.entries[0])) ?? 0}
+              mainLabel={lote.lote_nombre}
+              subLabel={lote.entries[0].sublote_nombre}
+              mostrarEstado={mostrarEstado}
+              indentado={false}
+            />
+          ) : (
+            <FilaLoteExpandible key={lote.lote_id} lote={lote} rankPorClave={rankPorClave} mostrarEstado={mostrarEstado} />
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Punto de entrada de la jerarquía — agrupa y renderiza. Recibe ya filtradas
+ * las entradas de una zona/subsección (ej. sólo "sobre umbral", o sólo "En
+ * orden" tras el filtro de tier/búsqueda). */
+function HierarquiaEntradas({
+  entries,
+  rankPorClave,
+  mostrarEstado,
+}: {
+  entries: PriorizacionEntry[];
+  rankPorClave: Map<string, number>;
+  mostrarEstado: boolean;
+}) {
+  const grupos = useMemo(() => agruparPorPlagaLoteSublote(entries, rankPorClave), [entries, rankPorClave]);
+  return (
+    <div className="flex flex-col gap-2">
+      {grupos.map((grupo) => (
+        <TarjetaPlaga key={grupo.key} grupo={grupo} rankPorClave={rankPorClave} mostrarEstado={mostrarEstado} />
+      ))}
+    </div>
   );
 }
 
@@ -836,9 +1050,7 @@ export function PriorizacionScoutingView({ entries, loading, error }: Priorizaci
                     <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-destructive">
                       Sobre umbral ({sobre.length})
                     </p>
-                    {sobre.map((entry) => (
-                      <FilaEntrada key={entryKey(entry)} entry={entry} rank={rankPorClave.get(entryKey(entry)) ?? 0} variante="critico" />
-                    ))}
+                    <HierarquiaEntradas entries={sobre} rankPorClave={rankPorClave} mostrarEstado={false} />
                   </div>
                 ) : null}
                 {acercandose.length > 0 ? (
@@ -846,9 +1058,7 @@ export function PriorizacionScoutingView({ entries, loading, error }: Priorizaci
                     <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
                       Acercándose ({acercandose.length})
                     </p>
-                    {acercandose.map((entry) => (
-                      <FilaEntrada key={entryKey(entry)} entry={entry} rank={rankPorClave.get(entryKey(entry)) ?? 0} variante="critico" />
-                    ))}
+                    <HierarquiaEntradas entries={acercandose} rankPorClave={rankPorClave} mostrarEstado={false} />
                   </div>
                 ) : null}
               </>
@@ -865,13 +1075,7 @@ export function PriorizacionScoutingView({ entries, loading, error }: Priorizaci
           defaultOpen={false}
           vacioTexto="Sin combinaciones en gravedad Alta esta semana."
         >
-          {(filtradas) => (
-            <div className="flex flex-col gap-1.5">
-              {filtradas.map((entry) => (
-                <FilaEntrada key={entryKey(entry)} entry={entry} rank={rankPorClave.get(entryKey(entry)) ?? 0} variante="estandar" />
-              ))}
-            </div>
-          )}
+          {(filtradas) => <HierarquiaEntradas entries={filtradas} rankPorClave={rankPorClave} mostrarEstado={false} />}
         </ZoneSection>
 
         <ZoneSection
@@ -884,13 +1088,7 @@ export function PriorizacionScoutingView({ entries, loading, error }: Priorizaci
           conFiltro
           vacioTexto="Sin combinaciones en esta categoría."
         >
-          {(filtradas) => (
-            <div className="flex flex-col gap-1.5">
-              {filtradas.map((entry) => (
-                <FilaEntrada key={entryKey(entry)} entry={entry} rank={rankPorClave.get(entryKey(entry)) ?? 0} variante="estandar" />
-              ))}
-            </div>
-          )}
+          {(filtradas) => <HierarquiaEntradas entries={filtradas} rankPorClave={rankPorClave} mostrarEstado />}
         </ZoneSection>
       </div>
     </div>
