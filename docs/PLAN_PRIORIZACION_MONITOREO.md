@@ -56,28 +56,60 @@ horizon, lote-level, weather-driven):
   ("last sprayed N days ago"), not necessarily as a ranking driver, since the POC never found it
   to be a strong direct predictor either.
 
-### Agronomic threshold research (this round, not part of the original POC)
+### Agronomic thresholds — superseded by an owner-provided industry table
 
-A research pass for the 3 pests with the strongest **persistence** signal in the POC (cucarrón
-marceño, ácaros, mosca del ovario — ranked by persistence-baseline balanced accuracy in
-`data/processed/baselines.parquet`) found:
+An initial research pass (web search, this session) tried to find Colombia-specific economic
+thresholds for the 3 pests with the strongest **persistence** signal in the POC and came back weak:
+count-based (traps/leaf, not % incidence), inconsistent across sources, and in 2 of 3 cases not
+Colombia-specific at all. That research is preserved in git history but is **no longer the basis
+for this design** — the owner has since provided a real **umbral económico** table from an
+industry source ("market leader"), in **the same unit this farm already records** (% incidencia):
 
-| Pest | Best available threshold | Unit | Confidence |
-|---|---|---|---|
-| Cucarrón marceño (*Astaena pygidialis*) | 1–2 adults/trap = detection trigger (no economic threshold found) | trap count | LOW — Colombian literature itself says this threshold doesn't exist yet |
-| Ácaros (*Oligonychus* spp.) | ≤5 mobile mites/leaf (Chile INIA, same species, NOT Colombia-specific) | mites/leaf | LOW-MEDIUM — sources disagree by 20-100x; UC IPM says no validated threshold exists at all |
-| Mosca del ovario (*Bruggmanniella perseae*) | ≥1 adult/trap (single weak Colombian university source) | trap count | LOW |
+| Plaga | Umbral económico (% incidencia) |
+|---|---|
+| Thrips | 1% |
+| Ácaro | 33% |
+| Monalonion | 26% |
+| Marceño (cucarrón marceño) | 36% |
+| Phytophthora | 10% |
+| Antracnosis | 10% |
 
-**Critical implication: none of these use the same measurement unit as this farm's data.** This
-farm records **incidencia** — % of monitored trees/leaves affected per round. Every threshold found
-is a **raw count per trap or per leaf**, a different sampling protocol entirely. They cannot be
-substituted in as literal cutoffs for the existing `incidencia_pct` scale without a fabricated,
-unjustified unit conversion. **Decision: keep the existing data-driven tiering approach
-(`clasificarGravedad` in `calculosMonitoreo.ts`, or the POC's per-pest tertile method — see §6) as
-the only tier logic that drives ranking.** The researched thresholds are surfaced as a **read-only
-reference annotation** (tooltip/footnote, clearly labeled "reference only, different measurement
-method, not Colombia-validated in 2 of 3 cases") — informative context for the agronomist, never a
-silent gate. This is a limitation worth carrying forward, not a solved problem — see §9.
+**This changes the design materially — these are now the PRIMARY tier/action signal for these 6
+pests**, not a reference annotation. Crossing the threshold is the strongest single ranking driver;
+trend and seasonality (§6) become modifiers on top of it, not substitutes for it. The old
+data-driven tertile method (`clasificarGravedad` / POC-style per-pest tertiles) becomes the
+**fallback** for any catalog pest *outside* this list of 6 (e.g. mosca del ovario, Colletotrichum,
+Cladosporium — pests the POC tracked but that have no owner-provided economic threshold).
+
+**Assumptions and confirmed name-matching gotchas — resolve before P0b (not the builder's call to
+guess silently on any of these, they change which real number applies to which pest):**
+
+1. **Unit match assumed, not yet independently confirmed against the source's own methodology** —
+   this table's "% incidencia" is assumed to mean the same thing as this farm's `incidencia_pct`
+   (% of monitored trees/leaves affected in a round). If the source's protocol differs (e.g. % of
+   *leaves per affected tree* rather than % of *trees affected*), the numbers are not directly
+   comparable and would need a documented conversion or a re-ask to the source.
+2. **Comparison basis assumed to be the single latest monitoring round's `incidencia`** — not a
+   rolling average — matching how the existing `clasificarGravedad` fixed cutoffs are already used
+   elsewhere in the app. Flag if the source intends a different aggregation (e.g. "sustained above
+   threshold for 2 consecutive rounds").
+3. **Source attribution is currently just "a market leader"** — for the doc's own credibility and
+   for anyone auditing this later, get a citable name (company/consultant/publication) before or
+   during P0, and record it in the migration's seed comment and this doc.
+4. **"Antracnosis" is genuinely ambiguous against the real catalog** — `plagas_enfermedades_catalogo`
+   has no plain "Antracnosis" row; it has **"Antracnosis fruto" and "Antracnosis ramas" as two
+   separate catalog entries** (confirmed by direct query). The owner's table doesn't say which.
+   Needs an explicit answer: apply 10% to fruto, to ramas, to both independently, or pool them
+   (max or mean) under one 10% threshold?
+5. **"Phytophthora" vs. catalog's "Phytophtora"** — the catalog entry is spelled without the second
+   "h" (`Phytophtora`, confirmed by direct query — likely a long-standing data-entry typo baked into
+   the catalog). Same pest, just needs a name-normalization step in P0b rather than an exact-string
+   match that would silently fail to find it.
+6. **"Ácaro" — narrow or broad?** The catalog has **four** separate mite-related entries: `Ácaro`,
+   `Ácaro Cristalino`, `Huevos de acaro`, `H-acaro  Cristalino` (the POC pooled all four into one
+   "acaros" group for statistical power). The owner's table has one line, "Ácaro" — does the 33%
+   threshold apply only to the specific `Ácaro` catalog pest, or to the whole mite complex (e.g. the
+   worst/max reading among all four that round)? This changes real ranking behavior, not just labels.
 
 ## 3. Scope & non-goals
 
@@ -88,7 +120,20 @@ silent gate. This is a limitation worth carrying forward, not a solved problem �
   here).
 - Per-individual-pest ranking (not the POC's biology-pooled `pest_group`s — pooling was a
   statistical-power device for a data-hungry ML tournament; a rule-based ranking has no such need
-  and the agronomist already thinks in terms of individual catalog pests).
+  and the agronomist already thinks in terms of individual catalog pests). This also happens to be
+  exactly what's needed to use the owner's threshold table directly: Phytophthora and Antracnosis
+  each get their own threshold, where the POC had pooled Antracnosis into a multi-pest "fungoso"
+  group — no structural conflict, since this design was already going to unpool.
+- **Two-tier pest coverage**, driven directly by which pests have an owner-provided economic
+  threshold (§2):
+  - **Tier A — threshold-driven (primary path):** Thrips, Ácaro, Monalonion, Marceño,
+    Phytophthora, Antracnosis. Ranking leads with "crossed the economic threshold," modified by
+    trend/seasonality.
+  - **Tier B — statistical-tier fallback:** every other catalogued pest (mosca del ovario,
+    Colletotrichum, Cladosporium, etc.) — ranked via the existing `clasificarGravedad` fixed cuts
+    or POC-style tertiles, exactly as originally designed in the pre-threshold-table version of
+    this doc. Still useful (mosca del ovario had real persistence signal in the POC), just weaker
+    footing without a validated economic number.
 - A one-time import of the POC's already-verified `monitoreo_lote.parquet` (2023-2026,
   lote-level) into a lightweight **seasonal reference table** — not into the live `monitoreos`
   operational table (different grain: lote-only vs sublote-level, would corrupt assumptions other
@@ -101,9 +146,9 @@ silent gate. This is a limitation worth carrying forward, not a solved problem �
 **Non-goals:**
 - No weather integration (see §2).
 - No ML model (see §0, §2).
-- No hard economic-threshold gating (see §2's unit-mismatch finding) — reference-only annotations.
 - No automatic spray/treatment triggering — this ranks where to *look*, not what to *do*; the
-  agronomist stays in the loop for any action decision.
+  agronomist stays in the loop for any action decision, even for Tier A pests with a real economic
+  threshold — the tool flags "over threshold," it does not prescribe or auto-trigger a spray.
 - No change to the existing `insightsAutomaticos.ts` alert feed's *retrospective* behavior — this
   is an additive, *prospective* ranking, not a replacement. (Whether to eventually consolidate them
   is a follow-up decision, not part of this build.)
@@ -117,7 +162,7 @@ silent gate. This is a limitation worth carrying forward, not a solved problem �
 | DB `plagas_enfermedades_catalogo` | canonical pest names/types | display, one row per real pest (not pooled) |
 | DB `movimientos_diarios` / `aplicaciones_lotes` | spray execution dates per lote | "days since last spray" context |
 | **New:** `analysis/pest-forecast-poc/data/processed/monitoreo_lote.parquet` (POC-frozen, verified) | 2023-2026 lote-level incidence, already harmonized/normalized | one-time seed for the seasonal reference table (§6) — reuses verified work, not re-derived |
-| Research findings (§2 table) | reference-only threshold annotations | tooltip context, never a scoring input |
+| **New:** owner-provided umbral económico table (§2) | 6 pests, % incidencia threshold | **primary Tier A scoring input** — seeded as a small static config/table, not derived from data |
 
 ## 5. Where this lives in the app
 
@@ -137,32 +182,49 @@ silent gate. This is a limitation worth carrying forward, not a solved problem �
 
 ## 6. Ranking logic (transparent, rule-based — no black box)
 
-For each (sublote, pest) with at least 2 historical rounds:
+For each (sublote, pest) with at least 2 historical rounds, branch by tier (§3):
 
-1. **Current level & tier** — latest `incidencia` reading, tiered via the existing
-   `clasificarGravedad` (fixed 10%/30% cuts) **or** a refreshed per-pest tertile (POC method) if
-   the seasonal-profile import (below) makes per-pest tiers available — **pick one and document
-   the choice explicitly in the builder's PR/commit, don't silently mix both**.
+**Tier A pests (Thrips, Ácaro, Monalonion, Marceño, Phytophthora, Antracnosis) — threshold-led:**
+
+1. **Threshold status (primary driver)** — latest `incidencia` reading vs. the owner's umbral
+   económico (§2 table). Three states, not just binary: *over threshold* (strongest signal),
+   *approaching* (e.g. within some margin below it — the builder should pick a sensible margin,
+   such as 80% of the threshold, and justify it in the report), *under*. This replaces
+   `clasificarGravedad`'s fixed 10%/30% cuts for these 6 pests specifically — don't run both and
+   pick whichever looks better; the economic threshold is the more meaningful number where we have
+   it, full stop.
 2. **Trend** — `calcularTendencia` over the last 3-4 rounds (already implemented, reused as-is).
-3. **Seasonal context** — from the new `pest_seasonal_profile` table: is the current
-   ISO week-of-year within this pest's historical top-tertile window (computed once from the
-   POC's 2023-2026 `monitoreo_lote.parquet`, refreshed periodically as more DB-native years
-   accumulate)? Sublotes inherit their parent lote's historical profile for the 2023-2024 portion
-   (that data only exists at lote granularity) — document this inherited-resolution caveat in the
-   UI copy, don't present it as sublote-precise history it isn't.
+   Rising + approaching/over threshold is the clearest "go scout this" signal; rising + well-under
+   threshold is a weaker but still worth-surfacing secondary signal.
+3. **Seasonal context** — from the new `pest_seasonal_profile` table (built for all catalogued
+   pests, not just Tier A — see P0): is the current ISO week-of-year within this pest's historical
+   top-tertile window? Modifier only here, since threshold status already carries the primary
+   signal for Tier A.
 4. **Spray recency (context only, not scored)** — days since last spray at that lote, shown
    alongside the ranking entry so the agronomist can immediately tell "this is elevated 3 days
    after treatment" vs "this is elevated with no recent intervention."
-5. **Reference threshold annotation (context only, not scored)** — for the 3 researched pests,
-   show the §2 table's number with its confidence label and unit caveat, nothing else.
 
-**Priority score** = a simple, explainable weighted combination of (1)+(2)+(3) only — e.g. current
-tier (0/1/2) + trend bonus (rising=+1, stable=0, falling=-1) + seasonal bonus (in high-season
-window=+1). Rank descending; surface a one-line "why" per entry built from whichever components
-fired (mirrors the existing `Insight.descripcion` pattern). Exact weights are a tuning decision for
-the builder agent to propose and justify in its report — not frozen in this doc, since the POC's
-own effort-envelope philosophy applies: keep this cheap and inspectable, adjust after the
-monitoring team uses it for a couple of weeks rather than over-designing weights up front.
+**Tier B pests (everything else — mosca del ovario, Colletotrichum, Cladosporium, etc.) —
+statistical-tier-led, unchanged from the original design:**
+
+1. **Current level & tier** — latest `incidencia` reading, tiered via the existing
+   `clasificarGravedad` (fixed 10%/30% cuts) **or** a refreshed per-pest tertile (POC method) —
+   **pick one and document the choice explicitly in the builder's PR/commit, don't silently mix
+   both**.
+2. **Trend** — same as Tier A.
+3. **Seasonal context** — same mechanism as Tier A, same caveat about lote-level 2023-2024 history.
+4. **Spray recency** — same, context only.
+
+**Priority score:** Tier A entries that are *over threshold* rank above all Tier B entries and all
+non-over-threshold Tier A entries by construction (an owner-validated economic breach is a
+stronger claim than any statistical percentile) — then within each tier, rank by
+threshold-margin/statistical-tier + trend + seasonal modifiers. Surface a one-line "why" per entry
+built from whichever components fired (mirrors the existing `Insight.descripcion` pattern), and
+**always show which tier/logic produced the ranking** (e.g. "36% > 26% umbral económico Marceño,
+subiendo" vs. "Tercil histórico Alto para Mosca del ovario, sin umbral económico validado") so nothing
+is presented with more authority than it has. Exact weights beyond the tier-A-over-threshold-first
+rule are a tuning decision for the builder agent to propose and justify in its report — keep it
+cheap and inspectable, adjust after the monitoring team uses it for a couple of weeks.
 
 ## 7. Pipeline stages (contract + acceptance check per stage)
 
@@ -175,16 +237,28 @@ distinct (lote,pest,week) combinations in the parquet; every mapped lote/pest id
 real, current catalog row (no orphaned foreign keys); RLS mirrors other reference tables (read-all
 authenticated, per existing conventions in `docs/supabase_tablas.md`).
 
+**P0b — Umbral económico table.** A small, separate, hand-seeded table/config (`pest_umbral_economico`:
+`pest_id`, `umbral_pct`, `source_label`, `updated_at`) — NOT derived from any data pipeline, just
+the owner's 6-row table (§2) mapped to real `plagas_enfermedades_catalogo.id`s. Small enough to be
+a plain seed migration, not a script. *Accept:* exactly 6 rows, each `pest_id` resolves to a real
+catalog row whose name is an unambiguous match to the Plaga column (verify "Marceño" -> "Cucarron
+marceño" and "Ácaro" -> the right one of "Ácaro" vs "Ácaro Cristalino" in the catalog — don't guess,
+confirm against `docs/supabase_tablas.md` or a live query); `source_label` records the citable
+source name once available (§2 assumption 3), not left as "market leader."
+
 **P1 — Ranking engine.** `priorizacionMonitoreo.ts` implementing §6. *Accept:* unit tests
-(Vitest, `src/__tests__/`) covering: a rising-trend case, a falling-trend case, a
-seasonal-boost case, a sublote with insufficient history (< 2 rounds — must be excluded, not
-crash), and the lote→sublote seasonal-profile inheritance fallback.
+(Vitest, `src/__tests__/`) covering: a Tier A pest over threshold + rising (must rank at the top),
+a Tier A pest under threshold + rising (must rank below any over-threshold entry regardless of
+trend), a Tier B rising-trend case, a Tier B falling-trend case, a seasonal-boost case, a sublote
+with insufficient history (< 2 rounds — must be excluded, not crash), and the lote→sublote
+seasonal-profile inheritance fallback.
 
 **P2 — UI.** `PriorizacionScouting.tsx` + wiring into `DashboardMonitoreoV3.tsx`. *Accept:*
 loads on both desktop and mobile viewport (per CLAUDE.md's responsive rules — sidebar-collapsed
 check required before considering this done); ranked list is legible, "why" text is present for
-every entry, reference-threshold tooltip is visually distinct from the primary score (never
-implies it's an official economic threshold).
+every entry and states which logic produced it (umbral económico vs. tercil histórico — see §6);
+Tier A over-threshold entries are visually distinguishable from Tier B statistical-tier entries at
+a glance, not just in the tooltip text.
 
 **P3 — Verification.** Manual pass (or the `/verify` skill) against real current DB data: do the
 top-ranked entries make agronomic sense to a human reviewer? Cross-check at least 3 entries by
@@ -208,34 +282,49 @@ Lighter than the POC's — this is a scoped feature build, not a research tourna
 
 ## 9. Known limitations (carry forward, don't hide)
 
-1. **Reference thresholds are weak and unit-incompatible** (§2) — presented as context only. A
-   real fix would mean sourcing/translating the Agrosavia Hass-avocado IPM guide (the research
-   agent found it referenced but couldn't fetch the PDF in this sandbox) or running a parallel
-   trap-count monitoring protocol for these 3 pests — out of scope here.
-2. **Seasonal profile for 2023-2024 is lote-level, inherited down to sublote** — real sublote-level
+1. **Umbral económico source needs a citable name** (§2, assumption 3) — currently "a market
+   leader." Get the actual source name before or during P0 and record it in
+   `pest_umbral_economico.source_label` and this doc; don't ship with an anonymous citation.
+2. **Unit-match and comparison-basis assumptions are unverified** (§2, assumptions 1-2) — the
+   design assumes the owner's % incidencia means the same thing as this farm's `incidencia_pct`
+   (% trees/leaves affected in a round, single latest round, not a rolling average). If the source
+   uses a different protocol, the numbers need a documented conversion or a re-ask, not a silent
+   as-is application.
+3. **Tier B pests still lack any real economic threshold** — mosca del ovario (real persistence
+   signal in the POC) and the individual fungal pests not on the owner's list (Colletotrichum,
+   Cladosporium) fall back to statistical tiers, a strictly weaker basis than Tier A's validated
+   numbers. Worth asking the same industry source whether thresholds exist for these too, as a
+   cheap follow-up — not blocking this build.
+4. **Seasonal profile for 2023-2024 is lote-level, inherited down to sublote** — real sublote-level
    seasonal history only starts in 2025. Label this in the UI, don't imply false precision.
-3. **This is descriptive/rule-based, not causal or predictive in the ML sense** — it will not
+5. **This is descriptive/rule-based, not causal or predictive in the ML sense** — it will not
    catch a genuinely novel outbreak pattern the historical seasonal profile has never seen. That's
    an accepted tradeoff given the POC's own evidence that a fancier model didn't do better here.
 
 ## 10. Deliverables & effort envelope
 
-Migration + seed script, ranking utility + tests, one new component, one dashboard wiring change.
-Bounded: a few days of agent time (builder/verifier pair on P0+P1, solo build on P2, manual
-verification on P3) — smaller than the POC, since there's no tournament and no red-team stage.
+Two migrations (seasonal profile + umbral económico seed), ranking utility + tests, one new
+component, one dashboard wiring change. Bounded: a few days of agent time (builder/verifier pair on
+P0+P0b+P1, solo build on P2, manual verification on P3) — smaller than the POC, since there's no
+tournament and no red-team stage.
 
 ## 11. Verification checklist (how the owner confirms this was done right)
 
-1. Migration applied cleanly against a dev/staging check first (per CLAUDE.md's migration caution
-   rules) — never hand-edit an already-applied migration file.
+1. Both migrations applied cleanly against a dev/staging check first (per CLAUDE.md's migration
+   caution rules) — never hand-edit an already-applied migration file.
 2. `pest_seasonal_profile` row count and a spot-check of 3 (lote,pest,week) rows match the POC
    parquet by hand.
-3. Ranking engine unit tests pass; edge cases (insufficient history, missing seasonal data) don't
-   crash, they exclude gracefully and are logged.
-4. UI reviewed on both desktop and mobile (sidebar collapsed) before calling this done.
-5. At least 3 top-ranked entries manually sanity-checked against raw `monitoreos` data by a human.
-6. Reference-threshold tooltips are visually and textually distinct from the primary ranking —
-   confirm a reader can't mistake them for validated economic action thresholds.
+3. `pest_umbral_economico` has exactly 6 rows, each correctly matched to a real catalog pest
+   (confirm the Ácaro/Ácaro Cristalino and Marceño/Cucarron marceño name matches specifically —
+   easy to get wrong), and a real `source_label`.
+4. Ranking engine unit tests pass, including the Tier A over-threshold ranks first regardless of
+   trend/seasonality case; edge cases (insufficient history, missing seasonal data) don't crash,
+   they exclude gracefully and are logged.
+5. UI reviewed on both desktop and mobile (sidebar collapsed) before calling this done.
+6. At least 3 top-ranked entries manually sanity-checked against raw `monitoreos` data by a human —
+   including at least one Tier A over-threshold entry and one Tier B entry.
+7. Tier A (umbral económico) and Tier B (tercil histórico) entries are visually and textually
+   distinct — confirm a reader can immediately tell which logic produced any given entry.
 
 ---
 
