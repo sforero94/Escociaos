@@ -171,6 +171,23 @@ export function ReporteSemanalWizard() {
 
   // Paso 1: Configuración
   const [semana, setSemana] = useState<RangoSemana>(calcularSemanaAnterior);
+
+  // El resumen diario de clima (clima_resumen_diario) se llena una vez al día
+  // (cron a las 00:15 hora Bogotá, que agrega el día anterior). Si la semana
+  // elegida incluye hoy o días futuros, esos días saldrán con datos parciales
+  // o inexistentes en el reporte — avisamos antes de generar.
+  const advertenciaClima = useMemo(() => {
+    const hoyStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+    const ayer = new Date();
+    ayer.setDate(ayer.getDate() - 1);
+    const ayerStr = ayer.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+
+    if (semana.fin < ayerStr) return null;
+
+    return semana.fin > hoyStr
+      ? 'Esta semana todavía no ha terminado: los días futuros no tendrán datos de clima.'
+      : 'Esta semana terminó hace muy poco: el resumen de clima de los últimos días puede salir parcial o incompleto porque aún no se ha procesado. Si puedes, espera un día más o genera el reporte de la semana anterior.';
+  }, [semana]);
   const [fallas, setFallas] = useState(0);
   const [permisos, setPermisos] = useState(0);
   const [ingresos, setIngresos] = useState(0);
@@ -537,6 +554,13 @@ export function ReporteSemanalWizard() {
               <ArrowRight className="w-4 h-4" />
             </Button>
           </div>
+
+          {advertenciaClima && (
+            <div className="mt-4 flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-amber-800">{advertenciaClima}</p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -1209,6 +1233,12 @@ export function ReporteSemanalWizard() {
                 <p className="text-gray-500 mb-6">
                   El reporte en formato diapositivas (landscape) será generado para la Semana {semana.numero}
                 </p>
+                {advertenciaClima && (
+                  <div className="mb-6 flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-left max-w-md mx-auto">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-amber-800">{advertenciaClima}</p>
+                  </div>
+                )}
                 <Button
                   size="lg"
                   className="bg-primary hover:bg-primary-dark text-white px-8"

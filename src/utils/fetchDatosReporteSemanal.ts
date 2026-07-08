@@ -1775,6 +1775,72 @@ function generarInsightsBasicos(monitoreos: any[]): Insight[] {
 // CLIMA SEMANAL
 // ============================================================================
 
+function enumerarFechas(inicio: string, fin: string): string[] {
+  const fechas: string[] = [];
+  const cursor = new Date(inicio + 'T00:00:00');
+  const finDate = new Date(fin + 'T00:00:00');
+  while (cursor <= finDate) {
+    fechas.push(cursor.toISOString().slice(0, 10));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return fechas;
+}
+
+// clima_resumen_diario solo se llena una vez al dia (cron a las 00:15 Bogota,
+// que agrega el dia ANTERIOR). Si el reporte se genera antes de ese corte —
+// por ejemplo, para una semana que aun esta en curso — los ultimos dias no
+// existen todavia ahi. clima_lecturas guarda una ventana rodante de ~24h de
+// lecturas crudas (cada 5 min), asi que la usamos para reconstruir en vivo
+// el resumen del dia en curso y no perder esos dias en el grafico.
+async function fetchClimaLecturasFaltantes(fechasFaltantes: string[]): Promise<any[]> {
+  if (fechasFaltantes.length === 0) return [];
+
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('clima_lecturas' as any)
+    .select('timestamp, temp_c, humedad_pct, lluvia_diaria_mm, radiacion_wm2')
+    .order('timestamp', { ascending: true });
+
+  if (error || !data || data.length === 0) return [];
+
+  const fechasSet = new Set(fechasFaltantes);
+  const porDia = new Map<string, any[]>();
+
+  for (const lectura of data as any[]) {
+    const fecha = new Date(lectura.timestamp).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+    if (!fechasSet.has(fecha)) continue;
+    if (!porDia.has(fecha)) porDia.set(fecha, []);
+    porDia.get(fecha)!.push(lectura);
+  }
+
+  const soloNumeros = (arr: any[], campo: string): number[] =>
+    arr.map((l) => l[campo]).filter((v) => v != null).map(Number);
+  const promedio = (nums: number[]): number | null =>
+    nums.length > 0 ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
+
+  const resultado: any[] = [];
+  for (const [fecha, lecturas] of porDia) {
+    const temps = soloNumeros(lecturas, 'temp_c');
+    const humedades = soloNumeros(lecturas, 'humedad_pct');
+    const lluvias = soloNumeros(lecturas, 'lluvia_diaria_mm');
+    const radiaciones = soloNumeros(lecturas, 'radiacion_wm2');
+
+    resultado.push({
+      fecha,
+      temp_c_min: temps.length > 0 ? Math.min(...temps) : null,
+      temp_c_max: temps.length > 0 ? Math.max(...temps) : null,
+      temp_c_avg: promedio(temps),
+      humedad_pct_avg: promedio(humedades),
+      // lluvia_diaria_mm es un acumulado del dia; el maximo del dia = total del dia
+      lluvia_total_mm: lluvias.length > 0 ? Math.max(...lluvias) : 0,
+      radiacion_wm2_max: radiaciones.length > 0 ? Math.max(...radiaciones) : null,
+      radiacion_wm2_avg: promedio(radiaciones),
+    });
+  }
+
+  return resultado;
+}
+
 async function fetchClimaResumenSemanal(
   inicio: string,
   fin: string
@@ -1790,9 +1856,22 @@ async function fetchClimaResumenSemanal(
     .lte('fecha', fin)
     .order('fecha', { ascending: true });
 
-  if (error || !data || data.length === 0) return undefined;
+  if (error) return undefined;
 
-  const rows = data as any[];
+  let rows = (data ?? []) as any[];
+
+  // Backfill days missing from clima_resumen_diario (typically the day the
+  // report is being generated) from the live clima_lecturas readings.
+  const fechasPresentes = new Set(rows.map((d: any) => d.fecha));
+  const fechasFaltantes = enumerarFechas(inicio, fin).filter((f) => !fechasPresentes.has(f));
+  if (fechasFaltantes.length > 0) {
+    const fallback = await fetchClimaLecturasFaltantes(fechasFaltantes);
+    if (fallback.length > 0) {
+      rows = [...rows, ...fallback].sort((a, b) => a.fecha.localeCompare(b.fecha));
+    }
+  }
+
+  if (rows.length === 0) return undefined;
 
   // Aggregate weekly KPIs from daily summaries
   let tempMin = Infinity, tempMax = -Infinity, tempSuma = 0, tempCount = 0;
