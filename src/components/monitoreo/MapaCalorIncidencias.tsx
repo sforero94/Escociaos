@@ -17,9 +17,11 @@ import {
   MonitoreoConRelaciones,
   DatosMapaCalor,
   CeldaMapaCalor,
-  FilaMapaCalor
+  FilaMapaCalor,
+  RondaMonitoreo
 } from '../../types/monitoreo';
 import { formatearFecha } from '../../utils/fechas';
+import { calcularIncidencia, clasificarGravedad } from '../../utils/calculosMonitoreo';
 
 // ============================================
 // INTERFACES
@@ -27,7 +29,10 @@ import { formatearFecha } from '../../utils/fechas';
 
 interface MapaCalorIncidenciasProps {
   monitoreos: MonitoreoConRelaciones[];
-  rangoSeleccionado: 'semana' | 'mes' | 'trimestre' | 'todo';
+  // Rondas de monitoreo, en orden cronológico ascendente (más antigua primero).
+  // Determina tanto la ventana de rondas usada para "Prom" como los N puntos
+  // de la cadena de tendencia (según modoVisualizacion).
+  rondas: Pick<RondaMonitoreo, 'id' | 'fecha_inicio'>[];
   modoVisualizacion: 'ultimo' | 'ultimos3' | 'ultimos6';
 }
 
@@ -50,6 +55,9 @@ function esBenefico(nombrePlaga: string): boolean {
 // UTILIDAD: DETERMINAR COLOR DE CELDA
 // ============================================
 
+// Mismos cortes (10% / 30%) que el resto del módulo de monitoreo (Snapshot,
+// Priorización, captura de registros) vía clasificarGravedad — un mismo % de
+// incidencia debe verse igual de crítico en cualquier vista.
 function obtenerColorIncidencia(incidencia: number | null): {
   bg: string;
   text: string;
@@ -63,29 +71,24 @@ function obtenerColorIncidencia(incidencia: number | null): {
     };
   }
 
-  if (incidencia < 10) {
+  const { numerica } = clasificarGravedad(incidencia);
+  if (numerica === 3) {
     return {
-      bg: 'bg-green-100',
-      text: 'text-green-800',
-      border: 'border-green-300'
+      bg: 'bg-red-100',
+      text: 'text-red-800',
+      border: 'border-red-300'
     };
-  } else if (incidencia < 15) {
+  } else if (numerica === 2) {
     return {
       bg: 'bg-yellow-100',
       text: 'text-yellow-800',
       border: 'border-yellow-300'
     };
-  } else if (incidencia < 20) {
-    return {
-      bg: 'bg-orange-100',
-      text: 'text-orange-800',
-      border: 'border-orange-300'
-    };
   } else {
     return {
-      bg: 'bg-red-100',
-      text: 'text-red-800',
-      border: 'border-red-300'
+      bg: 'bg-green-100',
+      text: 'text-green-800',
+      border: 'border-green-300'
     };
   }
 }
@@ -149,7 +152,8 @@ interface CeldaMultipleProps {
   onClick: () => void;
 }
 
-function getArrowColor(prev: number, curr: number): string {
+function getArrowColor(prev: number | null, curr: number | null): string {
+  if (prev === null || curr === null) return 'text-gray-300';
   const diff = curr - prev;
   if (Math.abs(diff) < 1) return 'text-gray-400';
   if (diff > 0) return 'text-red-500';
@@ -165,7 +169,10 @@ function CeldaMultiple({ celda, onClick }: CeldaMultipleProps) {
     );
   }
 
-  const ocurrencias = (celda.ocurrencias || []).slice(-3);
+  // Ya viene con exactamente una entrada por ronda de la ventana visible
+  // (ver useMemo más abajo) — no se recorta aquí para no perder rondas en
+  // modo "últimos6".
+  const ocurrencias = celda.ocurrencias || [];
 
   return (
     <td className="p-3 border border-gray-200" style={{ backgroundColor: '#ffffff' }}>
@@ -182,9 +189,13 @@ function CeldaMultiple({ celda, onClick }: CeldaMultipleProps) {
                   {i > 0 && (
                     <span className={`text-sm font-bold ${getArrowColor(ocurrencias[i - 1].incidencia, oc.incidencia)}`}>→</span>
                   )}
-                  <span className={`${colores.bg} ${colores.text} font-semibold text-sm px-2 py-0.5 rounded`}>
-                    {Math.round(oc.incidencia)}%
-                  </span>
+                  {oc.incidencia === null ? (
+                    <span className="text-gray-300 font-semibold text-sm px-2 py-0.5">—</span>
+                  ) : (
+                    <span className={`${colores.bg} ${colores.text} font-semibold text-sm px-2 py-0.5 rounded`}>
+                      {Math.round(oc.incidencia)}%
+                    </span>
+                  )}
                 </span>
               );
             })}
@@ -202,7 +213,7 @@ function CeldaMultiple({ celda, onClick }: CeldaMultipleProps) {
               <div className="mt-1 border-t border-gray-700 pt-1">
                 {ocurrencias.map((oc, i) => (
                   <p key={i} className="text-xs">
-                    {formatearFecha(oc.fecha)}: {Math.round(oc.incidencia)}%
+                    {formatearFecha(oc.fecha)}: {oc.incidencia === null ? 'sin datos esa ronda' : `${Math.round(oc.incidencia)}%`}
                   </p>
                 ))}
               </div>
@@ -221,7 +232,7 @@ function CeldaMultiple({ celda, onClick }: CeldaMultipleProps) {
 
 export function MapaCalorIncidencias({
   monitoreos,
-  rangoSeleccionado,
+  rondas,
   modoVisualizacion
 }: MapaCalorIncidenciasProps) {
   const [celdaSeleccionada, setCeldaSeleccionada] = useState<CeldaMapaCalor | null>(null);
@@ -235,6 +246,7 @@ export function MapaCalorIncidencias({
     // 0. Última fecha de monitoreo por lote → determina qué lotes siguen vigentes.
     // Un lote sin mediciones en los últimos DIAS_VIGENCIA_LOTE días se excluye
     // por completo (no se muestra como columna y no afecta ningún promedio).
+    // Esto sigue basado en fecha calendario real (recencia), no en rondas.
     const hoy = new Date();
     const ultimaFechaPorLote = new Map<string, { nombre: string; fecha: string }>();
     monitoreos.forEach(m => {
@@ -257,36 +269,43 @@ export function MapaCalorIncidencias({
       }
     });
 
-    // 1. Monitoreos válidos: solo lotes vigentes, excluyendo "Beneficos"
-    // (no son una plaga ni una enfermedad, no deben contar como incidencia)
-    const monitoreosValidos = monitoreos.filter(m => {
+    // 1. Ventana de rondas visible: últimas N rondas (3 o 6 según modoVisualizacion),
+    // en orden cronológico. Tanto la cadena encadenada como "Prom" se calculan
+    // sobre esta MISMA ventana, para que nunca queden en desacuerdo entre sí.
+    const numOcurrencias = modoVisualizacion === 'ultimos6' ? 6 : 3;
+    const rondasVentana = rondas.slice(-numOcurrencias);
+    const rondaIdsVentana = new Set(rondasVentana.map(r => r.id));
+
+    // 2. Monitoreos válidos: dentro de la ventana de rondas, en lotes vigentes,
+    // excluyendo "Beneficos" (no son una plaga ni una enfermedad).
+    const monitoreosVentana = monitoreos.filter(m => {
       const loteId = m.sublotes?.lote_id || m.lote_id;
-      return lotesVigentes.has(loteId) && !esBenefico(m.plagas_enfermedades_catalogo?.nombre || '');
+      return rondaIdsVentana.has(m.ronda_id)
+        && lotesVigentes.has(loteId)
+        && !esBenefico(m.plagas_enfermedades_catalogo?.nombre || '');
     });
 
-    // 2. Árboles monitoreados por (lote, fecha) — deduplicado por sublote, ya que cada
-    // sublote reporta el mismo arboles_monitoreados sin importar la plaga. Este total
-    // escala junto con el número de rondas de monitoreo, a diferencia de un total fijo.
-    const loteFechaTreeTotals = new Map<string, number>();
-    const subloteFechaSeen = new Map<string, number>();
+    // 3. Árboles monitoreados por (lote, ronda) — deduplicado por sublote, ya que cada
+    // sublote reporta el mismo arboles_monitoreados sin importar la plaga.
+    const loteRondaTreeTotals = new Map<string, number>();
+    const subloteRondaSeen = new Map<string, number>();
 
-    monitoreosValidos.forEach(m => {
+    monitoreosVentana.forEach(m => {
       const loteId = m.sublotes?.lote_id || m.lote_id;
-      const fecha = obtenerFecha(m.fecha_monitoreo);
-      const subFechaKey = `${loteId}|${m.sublote_id || loteId}|${fecha}`;
-      const prev = subloteFechaSeen.get(subFechaKey) || 0;
-      subloteFechaSeen.set(subFechaKey, Math.max(prev, m.arboles_monitoreados || 0));
+      const subRondaKey = `${loteId}|${m.sublote_id || loteId}|${m.ronda_id}`;
+      const prev = subloteRondaSeen.get(subRondaKey) || 0;
+      subloteRondaSeen.set(subRondaKey, Math.max(prev, m.arboles_monitoreados || 0));
     });
-    subloteFechaSeen.forEach((trees, key) => {
-      const [loteId, , fecha] = key.split('|');
-      const lfKey = `${loteId}|${fecha}`;
-      loteFechaTreeTotals.set(lfKey, (loteFechaTreeTotals.get(lfKey) || 0) + trees);
+    subloteRondaSeen.forEach((trees, key) => {
+      const [loteId, , rondaId] = key.split('|');
+      const lrKey = `${loteId}|${rondaId}`;
+      loteRondaTreeTotals.set(lrKey, (loteRondaTreeTotals.get(lrKey) || 0) + trees);
     });
 
-    // 3. Agrupar monitoreos por combinación plaga-lote
+    // 4. Agrupar monitoreos por combinación plaga-lote
     const mapaAgrupado = new Map<string, CeldaMapaCalor>();
 
-    monitoreosValidos.forEach(m => {
+    monitoreosVentana.forEach(m => {
       const plagaId = m.plaga_enfermedad_id;
       const plagaNombre = m.plagas_enfermedades_catalogo.nombre;
       const loteId = m.sublotes?.lote_id || m.lote_id; // Consolidar a nivel de lote
@@ -311,44 +330,35 @@ export function MapaCalorIncidencias({
       celda.numeroMonitoreos++;
     });
 
-    // 4. Calcular incidencia promedio Y ocurrencias por celda
-    // Promedio = árboles afectados acumulados / árboles monitoreados acumulados en
-    // esas MISMAS fechas (árboles afectados ÷ árboles monitoreados real), en vez de
-    // un promedio de porcentajes por ronda dividido entre un total fijo de árboles.
+    // 5. Calcular incidencia promedio (ponderada sobre la ventana) Y ocurrencias
+    // por ronda — una entrada por CADA ronda de rondasVentana, en orden, dejando
+    // incidencia=null (blanco) cuando la plaga no se registró en esa ronda
+    // puntual para ese lote, en vez de omitir la ronda silenciosamente.
     mapaAgrupado.forEach(celda => {
-      const afectadosPorFecha = new Map<string, number>();
+      const afectadosPorRonda = new Map<string, number>();
       celda.monitoreos.forEach(m => {
-        const fecha = obtenerFecha(m.fecha_monitoreo);
-        afectadosPorFecha.set(fecha, (afectadosPorFecha.get(fecha) || 0) + (m.arboles_afectados || 0));
+        afectadosPorRonda.set(m.ronda_id, (afectadosPorRonda.get(m.ronda_id) || 0) + (m.arboles_afectados || 0));
       });
 
       let sumAfectados = 0;
       let sumMonitoreados = 0;
-      afectadosPorFecha.forEach((afectados, fecha) => {
+      afectadosPorRonda.forEach((afectados, rondaId) => {
         sumAfectados += afectados;
-        sumMonitoreados += loteFechaTreeTotals.get(`${celda.loteId}|${fecha}`) || 0;
+        sumMonitoreados += loteRondaTreeTotals.get(`${celda.loteId}|${rondaId}`) || 0;
       });
-      celda.incidenciaPromedio = sumMonitoreados > 0 ? (sumAfectados / sumMonitoreados) * 100 : 0;
+      celda.incidenciaPromedio = calcularIncidencia(sumAfectados, sumMonitoreados);
 
-      // Always keep at least 3 ocurrencias for trend arrow calculation
-      const numOcurrencias = modoVisualizacion === 'ultimos6' ? 6 : 3;
-
-      // Ordenar fechas y tomar las últimas N
-      const fechasOrdenadas = Array.from(afectadosPorFecha.keys()).sort();
-      const fechasSeleccionadas = fechasOrdenadas.slice(-numOcurrencias);
-
-      // Crear array de ocurrencias — denominator is trees monitored that specific date
-      celda.ocurrencias = fechasSeleccionadas.map(fecha => {
-        const af = afectadosPorFecha.get(fecha) || 0;
-        const loteFechaTrees = loteFechaTreeTotals.get(`${celda.loteId}|${fecha}`) || 0;
-        return {
-          fecha,
-          incidencia: loteFechaTrees > 0 ? (af / loteFechaTrees) * 100 : 0
-        };
+      celda.ocurrencias = rondasVentana.map(ronda => {
+        if (!afectadosPorRonda.has(ronda.id)) {
+          return { fecha: ronda.fecha_inicio, incidencia: null };
+        }
+        const af = afectadosPorRonda.get(ronda.id) || 0;
+        const treesRonda = loteRondaTreeTotals.get(`${celda.loteId}|${ronda.id}`) || 0;
+        return { fecha: ronda.fecha_inicio, incidencia: calcularIncidencia(af, treesRonda) };
       });
     });
 
-    // 5. Agrupar por plaga (filas)
+    // 6. Agrupar por plaga (filas)
     const filasMap = new Map<string, FilaMapaCalor>();
 
     mapaAgrupado.forEach(celda => {
@@ -365,61 +375,63 @@ export function MapaCalorIncidencias({
       fila.celdas.set(celda.loteId, celda);
     });
 
-    // 6. Incidencia promedio por fila (plaga): árboles afectados por esta plaga en toda
-    // la finca / árboles monitoreados en las visitas (lote+fecha) donde se registró.
+    // 7. Incidencia promedio por fila (plaga), sobre la misma ventana de rondas:
+    // árboles afectados por esta plaga en toda la finca / árboles monitoreados
+    // en las visitas (lote+ronda) donde se registró.
     filasMap.forEach(fila => {
       let sumAfectados = 0;
       let sumMonitoreados = 0;
-      const loteFechasContadas = new Set<string>();
+      const loteRondasContadas = new Set<string>();
 
       fila.celdas.forEach(celda => {
         celda.monitoreos.forEach(m => {
           sumAfectados += m.arboles_afectados || 0;
-          const key = `${celda.loteId}|${obtenerFecha(m.fecha_monitoreo)}`;
-          if (!loteFechasContadas.has(key)) {
-            loteFechasContadas.add(key);
-            sumMonitoreados += loteFechaTreeTotals.get(key) || 0;
+          const key = `${celda.loteId}|${m.ronda_id}`;
+          if (!loteRondasContadas.has(key)) {
+            loteRondasContadas.add(key);
+            sumMonitoreados += loteRondaTreeTotals.get(key) || 0;
           }
         });
       });
 
-      fila.incidenciaPromedioTotal = sumMonitoreados > 0 ? (sumAfectados / sumMonitoreados) * 100 : 0;
+      fila.incidenciaPromedioTotal = calcularIncidencia(sumAfectados, sumMonitoreados);
     });
 
-    // 7. Ordenar filas por incidencia promedio descendente
+    // 8. Ordenar filas por incidencia promedio descendente
     const filasOrdenadas = Array.from(filasMap.values()).sort(
       (a, b) => b.incidenciaPromedioTotal - a.incidenciaPromedioTotal
     );
 
-    // 8. Incidencia promedio por columna (lote): árboles afectados por cualquier plaga
-    // (Beneficos ya excluidos) / árboles monitoreados en las visitas de ese lote.
-    // Nota: como suma la afectación de varias plagas distintas en la misma fecha,
-    // puede superar 100% cuando varias plagas coinciden con incidencia alta a la vez.
-    const lotesMap = new Map<string, { nombre: string; totalAfectados: number; fechasVistas: Set<string> }>();
+    // 9. Incidencia promedio por columna (lote), sobre la misma ventana de rondas:
+    // árboles afectados por cualquier plaga (Beneficos ya excluidos) / árboles
+    // monitoreados en las visitas de ese lote. Nota: como suma la afectación de
+    // varias plagas distintas en la misma ronda, puede superar 100% cuando varias
+    // plagas coinciden con incidencia alta a la vez.
+    const lotesMap = new Map<string, { nombre: string; totalAfectados: number; rondasVistas: Set<string> }>();
 
     mapaAgrupado.forEach(celda => {
       if (!lotesMap.has(celda.loteId)) {
-        lotesMap.set(celda.loteId, { nombre: celda.loteNombre, totalAfectados: 0, fechasVistas: new Set() });
+        lotesMap.set(celda.loteId, { nombre: celda.loteNombre, totalAfectados: 0, rondasVistas: new Set() });
       }
 
       const lote = lotesMap.get(celda.loteId)!;
       celda.monitoreos.forEach(m => {
         lote.totalAfectados += m.arboles_afectados || 0;
-        lote.fechasVistas.add(obtenerFecha(m.fecha_monitoreo));
+        lote.rondasVistas.add(m.ronda_id);
       });
     });
 
-    // 9. Ordenar columnas por número de lote (orden numérico)
+    // 10. Ordenar columnas por número de lote (orden numérico)
     const columnasOrdenadas = Array.from(lotesMap.entries())
       .map(([loteId, data]) => {
         let sumMonitoreados = 0;
-        data.fechasVistas.forEach(fecha => {
-          sumMonitoreados += loteFechaTreeTotals.get(`${loteId}|${fecha}`) || 0;
+        data.rondasVistas.forEach(rondaId => {
+          sumMonitoreados += loteRondaTreeTotals.get(`${loteId}|${rondaId}`) || 0;
         });
         return {
           loteId,
           loteNombre: data.nombre,
-          incidenciaPromedio: sumMonitoreados > 0 ? (data.totalAfectados / sumMonitoreados) * 100 : 0
+          incidenciaPromedio: calcularIncidencia(data.totalAfectados, sumMonitoreados)
         };
       })
       .sort((a, b) => {
@@ -433,7 +445,7 @@ export function MapaCalorIncidencias({
       columnas: columnasOrdenadas,
       lotesInactivos: lotesInactivos.sort((a, b) => a.loteNombre.localeCompare(b.loteNombre))
     };
-  }, [monitoreos, modoVisualizacion]);
+  }, [monitoreos, rondas, modoVisualizacion]);
 
   // ============================================
   // HANDLERS
@@ -480,15 +492,11 @@ export function MapaCalorIncidencias({
           </div>
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 bg-yellow-100 border border-yellow-300 rounded"></div>
-            <span className="text-sm">10-15% (Media)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-orange-100 border border-orange-300 rounded"></div>
-            <span className="text-sm">15-20% (Alta)</span>
+            <span className="text-sm">10-30% (Media)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 bg-red-100 border border-red-300 rounded"></div>
-            <span className="text-sm">{'>20%'} (Crítica)</span>
+            <span className="text-sm">{'≥30%'} (Alta)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 bg-gray-50 border border-gray-200 rounded"></div>

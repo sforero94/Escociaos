@@ -70,6 +70,11 @@ export function formatearCambio(cambio: number): string {
 /** Una ronda de monitoreo histórica para un (sublote, plaga) específico. */
 export interface RondaHistorica {
   fecha_monitoreo: string;
+  /** FK a `rondas_monitoreo` — identifica la ronda real (una ronda puede
+   * abarcar varias fechas calendario según el lote). Usado para exigir que
+   * `incidenciaActual` venga de la ronda más reciente de la finca, no de
+   * cualquier lectura histórica vieja. */
+  ronda_id: string;
   incidencia: number;
   arboles_monitoreados?: number;
   arboles_afectados?: number;
@@ -116,6 +121,11 @@ export interface PriorizacionInput {
   umbrales: UmbralEconomico[];
   perfilesEstacionales: PerfilEstacional[];
   ultimasFumigaciones: EventoFumigacion[];
+  /** id de `rondas_monitoreo` más reciente de la finca. Una serie (sublote,
+   * plaga) SIN lectura en esta ronda se excluye por completo del resultado --
+   * mostrar la última lectura disponible sin importar su antigüedad generaría
+   * alertas sobre datos viejos. */
+  rondaActualId: string;
   /** Fecha de referencia para semana ISO / días desde fumigación. Default `new Date()`. */
   fechaReferencia?: Date;
 }
@@ -286,17 +296,21 @@ function construirSeries(
 
   for (const [key, miembros] of gruposPooled) {
     const grupoKey = key.split('|')[1];
-    const porFecha = new Map<
+    // Para cada RONDA (no fecha calendario -- una ronda puede abarcar varias
+    // fechas según el lote), tomar el MAX de incidencia entre los miembros del
+    // grupo observados esa ronda específica.
+    const porRonda = new Map<
       string,
-      { incidencia: number; pest_id: string; pest_nombre?: string; arboles_monitoreados?: number; arboles_afectados?: number }
+      { incidencia: number; fecha_monitoreo: string; pest_id: string; pest_nombre?: string; arboles_monitoreados?: number; arboles_afectados?: number }
     >();
 
     for (const hist of miembros) {
       for (const ronda of hist.rondas) {
-        const existente = porFecha.get(ronda.fecha_monitoreo);
+        const existente = porRonda.get(ronda.ronda_id);
         if (!existente || ronda.incidencia > existente.incidencia) {
-          porFecha.set(ronda.fecha_monitoreo, {
+          porRonda.set(ronda.ronda_id, {
             incidencia: ronda.incidencia,
+            fecha_monitoreo: ronda.fecha_monitoreo,
             pest_id: hist.pest_id,
             pest_nombre: hist.pest_nombre,
             arboles_monitoreados: ronda.arboles_monitoreados,
@@ -306,19 +320,22 @@ function construirSeries(
       }
     }
 
-    const fechasOrdenadas = [...porFecha.keys()].sort((a, b) => a.localeCompare(b));
-    const rondas: RondaHistorica[] = fechasOrdenadas.map((fecha) => {
-      const v = porFecha.get(fecha)!;
+    const rondaIdsOrdenados = [...porRonda.entries()]
+      .sort((a, b) => a[1].fecha_monitoreo.localeCompare(b[1].fecha_monitoreo))
+      .map(([rondaId]) => rondaId);
+    const rondas: RondaHistorica[] = rondaIdsOrdenados.map((rondaId) => {
+      const v = porRonda.get(rondaId)!;
       return {
-        fecha_monitoreo: fecha,
+        fecha_monitoreo: v.fecha_monitoreo,
+        ronda_id: rondaId,
         incidencia: v.incidencia,
         arboles_monitoreados: v.arboles_monitoreados,
         arboles_afectados: v.arboles_afectados,
       };
     });
 
-    const ultimaFecha = fechasOrdenadas[fechasOrdenadas.length - 1];
-    const contribuyenteUltimo = ultimaFecha ? porFecha.get(ultimaFecha) : undefined;
+    const ultimaRondaId = rondaIdsOrdenados[rondaIdsOrdenados.length - 1];
+    const contribuyenteUltimo = ultimaRondaId ? porRonda.get(ultimaRondaId) : undefined;
     const primero = miembros[0];
 
     series.push({
@@ -346,29 +363,34 @@ function construirWhy(params: {
   incidenciaActual: number;
   tendencia: Tendencia;
   temporadaAlta: boolean;
+  primeraLectura: boolean;
   estadoUmbral?: EstadoUmbral;
   umbralPct?: number;
   sourceLabel?: string;
   gravedad?: { texto: string };
 }): string {
-  const { tier, pestNombre, incidenciaActual, tendencia, temporadaAlta } = params;
+  const { tier, pestNombre, incidenciaActual, tendencia, temporadaAlta, primeraLectura } = params;
   const sufijoEstacion = temporadaAlta ? ', en temporada alta histórica' : '';
   const incidenciaTxt = `${incidenciaActual.toFixed(0)}%`;
+  // Con una sola ronda no hay ronda anterior con qué comparar -- no decir
+  // "estable" como si hubiera una tendencia observada cuando en realidad es la
+  // primera lectura de este (sublote, plaga).
+  const tendenciaTxt = primeraLectura ? 'primera lectura registrada, aún sin tendencia' : tendencia;
 
   if (tier === 'A') {
     const umbralTxt = `${params.umbralPct}%`;
     const fuente = params.sourceLabel ?? 'Cartama';
     if (params.estadoUmbral === 'over') {
-      return `${incidenciaTxt} ≥ umbral económico ${fuente} de ${pestNombre} (${umbralTxt}), ${tendencia}${sufijoEstacion}`;
+      return `${incidenciaTxt} ≥ umbral económico ${fuente} de ${pestNombre} (${umbralTxt}), ${tendenciaTxt}${sufijoEstacion}`;
     }
     if (params.estadoUmbral === 'approaching') {
-      return `${incidenciaTxt} se acerca al umbral económico ${fuente} de ${pestNombre} (${umbralTxt}), ${tendencia}${sufijoEstacion}`;
+      return `${incidenciaTxt} se acerca al umbral económico ${fuente} de ${pestNombre} (${umbralTxt}), ${tendenciaTxt}${sufijoEstacion}`;
     }
-    return `${incidenciaTxt} por debajo del umbral económico ${fuente} de ${pestNombre} (${umbralTxt}), ${tendencia}${sufijoEstacion}`;
+    return `${incidenciaTxt} por debajo del umbral económico ${fuente} de ${pestNombre} (${umbralTxt}), ${tendenciaTxt}${sufijoEstacion}`;
   }
 
   const gravedadTxt = params.gravedad?.texto ?? 'Baja';
-  return `Gravedad ${gravedadTxt} (${incidenciaTxt}) para ${pestNombre}, sin umbral económico validado, ${tendencia}${sufijoEstacion}`;
+  return `Gravedad ${gravedadTxt} (${incidenciaTxt}) para ${pestNombre}, sin umbral económico validado, ${tendenciaTxt}${sufijoEstacion}`;
 }
 
 // ============================================================================
@@ -423,18 +445,30 @@ export function priorizarMonitoreo(input: PriorizacionInput): PriorizacionEntry[
   const entries: PriorizacionEntry[] = [];
 
   for (const serie of series) {
-    if (serie.rondas.length < 2) continue; // historia insuficiente: excluir, no crashear
+    if (serie.rondas.length === 0) continue; // sin ningún registro: nada que priorizar
 
     const rondasOrdenadas = serie.rondas;
-    const ultima = rondasOrdenadas[rondasOrdenadas.length - 1];
-    const penultima = rondasOrdenadas[rondasOrdenadas.length - 2];
+
+    // Sólo se prioriza si hay una lectura de la ronda más reciente de la finca.
+    // Mostrar la última lectura disponible sin importar su antigüedad generaría
+    // alertas sobre datos viejos (caso real: Cucarron marceño en La Vega con un
+    // 43% de hace 3 meses mostrado como si fuera el estado actual).
+    const idxActual = rondasOrdenadas.findIndex((r) => r.ronda_id === input.rondaActualId);
+    if (idxActual === -1) continue; // sin lectura de la ronda actual: nada "actual" que priorizar
+
+    const ultima = rondasOrdenadas[idxActual];
+    // Dato individual = monitoreo más reciente: con una sola ronda igual se
+    // muestra (evaluada contra el umbral), sólo que sin ronda anterior con qué
+    // comparar tendencia -- no se excluye del todo como antes.
+    const primeraLectura = idxActual === 0;
+    const penultima = primeraLectura ? null : rondasOrdenadas[idxActual - 1];
 
     const incidenciaActual = ultima.incidencia;
-    const incidenciaAnterior = penultima.incidencia;
-    const cambio = calcularCambioRelativo(incidenciaActual, incidenciaAnterior);
+    const incidenciaAnterior = primeraLectura ? incidenciaActual : penultima!.incidencia;
+    const cambio = primeraLectura ? 0 : calcularCambioRelativo(incidenciaActual, incidenciaAnterior);
 
-    const ventana = rondasOrdenadas.slice(-VENTANA_TENDENCIA).map((r) => r.incidencia);
-    const tendencia = calcularTendencia(ventana);
+    const ventana = rondasOrdenadas.slice(0, idxActual + 1).slice(-VENTANA_TENDENCIA).map((r) => r.incidencia);
+    const tendencia = calcularTendencia(ventana); // ya devuelve 'estable' si ventana.length < 2
 
     const perfil = buscarPerfilEstacional(input.perfilesEstacionales, serie.pest_id, serie.lote_id, weekOfYear);
     const temporadaAlta = perfil?.historical_tier === 'High';
@@ -467,6 +501,7 @@ export function priorizarMonitoreo(input: PriorizacionInput): PriorizacionEntry[
       incidenciaActual,
       tendencia,
       temporadaAlta,
+      primeraLectura,
       estadoUmbral,
       umbralPct: umbral?.umbral_pct,
       sourceLabel: umbral?.source_label,
@@ -497,7 +532,7 @@ export function priorizarMonitoreo(input: PriorizacionInput): PriorizacionEntry[
       historicalTier: perfil?.historical_tier,
       weekOfYear,
       diasDesdeUltimaFumigacion,
-      numRondas: rondasOrdenadas.length,
+      numRondas: idxActual + 1,
       why,
       bracket,
     });

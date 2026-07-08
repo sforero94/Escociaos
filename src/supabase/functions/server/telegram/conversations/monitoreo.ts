@@ -26,7 +26,7 @@ function calcularGravedad(incidencia: number): {
   numerica: 1 | 2 | 3;
 } {
   if (incidencia < 10) return { texto: "Baja", numerica: 1 };
-  if (incidencia <= 30) return { texto: "Media", numerica: 2 };
+  if (incidencia < 30) return { texto: "Media", numerica: 2 };
   return { texto: "Alta", numerica: 3 };
 }
 

@@ -2540,6 +2540,7 @@ const LOOKBACK_FUMIGACIONES_DIAS_PRIORIZACION = 730; // ~2 años, igual que el h
 
 interface MonitoreoPriorizacionRow {
   fecha_monitoreo: string;
+  ronda_id: string;
   lote_id: string;
   sublote_id: string | null;
   plaga_enfermedad_id: string;
@@ -2581,6 +2582,7 @@ function agruparHistorialesPriorizacion(rows: MonitoreoPriorizacionRow[]): Histo
       // para que observaciones de la misma ronda compartan el mismo string de
       // fecha y el pooling del complejo de ácaros funcione (ver el hook).
       fecha_monitoreo: row.fecha_monitoreo,
+      ronda_id: row.ronda_id,
       incidencia: Number(row.incidencia) || 0,
       arboles_monitoreados: row.arboles_monitoreados,
       arboles_afectados: row.arboles_afectados,
@@ -2603,10 +2605,10 @@ async function execPestPriorizacion(args: Record<string, unknown>): Promise<stri
   const desdeMonitoreos = fechaHaceNDias(LOOKBACK_MONITOREOS_DIAS_PRIORIZACION);
   const desdeFumigaciones = fechaHaceNDias(LOOKBACK_FUMIGACIONES_DIAS_PRIORIZACION);
 
-  const [monitoreosRows, umbralesRows, perfilesRows, movimientosRows] = await Promise.all([
+  const [monitoreosRows, umbralesRows, perfilesRows, movimientosRows, rondaActualRows] = await Promise.all([
     supabaseQuery(
       'monitoreos',
-      `select=fecha_monitoreo,lote_id,sublote_id,plaga_enfermedad_id,arboles_monitoreados,arboles_afectados,incidencia,lote:lotes(nombre),sublote:sublotes(nombre),plaga:plagas_enfermedades_catalogo(nombre)&fecha_monitoreo=gte.${e(desdeMonitoreos)}&order=fecha_monitoreo.asc&limit=5000`,
+      `select=fecha_monitoreo,ronda_id,lote_id,sublote_id,plaga_enfermedad_id,arboles_monitoreados,arboles_afectados,incidencia,lote:lotes(nombre),sublote:sublotes(nombre),plaga:plagas_enfermedades_catalogo(nombre)&fecha_monitoreo=gte.${e(desdeMonitoreos)}&order=fecha_monitoreo.asc&limit=5000`,
     ) as Promise<MonitoreoPriorizacionRow[]>,
     supabaseQuery('pest_umbral_economico', 'select=pest_id,grupo_key,umbral_pct,source_label') as Promise<UmbralEconomico[]>,
     supabaseQuery('pest_seasonal_profile', 'select=pest_id,lote_id,week_of_year,historical_tier,n_years_observed') as Promise<PerfilEstacional[]>,
@@ -2614,7 +2616,14 @@ async function execPestPriorizacion(args: Record<string, unknown>): Promise<stri
       'movimientos_diarios',
       `select=lote_id,fecha_movimiento&lote_id=not.is.null&fecha_movimiento=gte.${e(desdeFumigaciones)}`,
     ) as Promise<Array<{ lote_id: string; fecha_movimiento: string }>>,
+    supabaseQuery('rondas_monitoreo', 'select=id&order=fecha_inicio.desc&limit=1') as Promise<Array<{ id: string }>>,
   ]);
+
+  // Sin ninguna ronda registrada todavía: nada que priorizar.
+  const rondaActualId = rondaActualRows[0]?.id;
+  if (!rondaActualId) {
+    return JSON.stringify({ total_registros: 0, total_evaluado: 0, filtros: { lote_name: lote_name ?? null, pest_name: pest_name ?? null, top_n: topN }, top: [] });
+  }
 
   const historiales = agruparHistorialesPriorizacion(monitoreosRows);
   const umbrales: UmbralEconomico[] = umbralesRows.map((u) => ({
@@ -2640,6 +2649,7 @@ async function execPestPriorizacion(args: Record<string, unknown>): Promise<stri
     umbrales,
     perfilesEstacionales,
     ultimasFumigaciones,
+    rondaActualId,
   });
 
   let filtered = ranked;

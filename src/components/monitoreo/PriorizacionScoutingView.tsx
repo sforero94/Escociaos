@@ -135,7 +135,10 @@ function TierIcono({ tier }: { tier: TierPriorizacion }) {
   );
 }
 
-function TrendBadge({ tendencia }: { tendencia: Tendencia }) {
+function TrendBadge({ tendencia, numRondas }: { tendencia: Tendencia; numRondas: number }) {
+  // Primera lectura de este (sublote, plaga): no hay ronda anterior con qué
+  // comparar, así que no se muestra ninguna flecha (ni siquiera "estable").
+  if (numRondas < 2) return null;
   if (tendencia === 'subiendo') {
     return (
       <span className="inline-flex items-center text-destructive">
@@ -212,14 +215,20 @@ function EntryDetail({ entry }: { entry: PriorizacionEntry }) {
 
       <dl className="grid grid-cols-2 gap-3 text-xs">
         <DetailStat label="Incidencia actual" value={formatPercentage(entry.incidenciaActual)} />
-        <DetailStat label="Ronda anterior" value={formatPercentage(entry.incidenciaAnterior)} />
+        <DetailStat
+          label="Ronda anterior"
+          value={entry.numRondas < 2 ? 'Sin ronda previa' : formatPercentage(entry.incidenciaAnterior)}
+        />
         {entry.tier === 'A' && entry.umbralPct !== undefined ? (
           <DetailStat label={`Umbral (${estado.atribucion})`} value={formatPercentage(entry.umbralPct)} />
         ) : null}
         {entry.tier === 'B' && entry.gravedad ? (
           <DetailStat label="Gravedad histórica" value={entry.gravedad.texto} />
         ) : null}
-        <DetailStat label="Cambio vs. ronda anterior" value={entry.cambioFormateado} />
+        <DetailStat
+          label="Cambio vs. ronda anterior"
+          value={entry.numRondas < 2 ? '—' : entry.cambioFormateado}
+        />
         <DetailStat
           label="Última fumigación del lote"
           value={entry.diasDesdeUltimaFumigacion === null ? 'Sin dato' : `hace ${entry.diasDesdeUltimaFumigacion} días`}
@@ -284,7 +293,7 @@ function FilaEntrada({
               <span className="text-sm font-semibold tabular-nums text-foreground">
                 {formatPercentage(entry.incidenciaActual, 0)}
               </span>
-              <TrendBadge tendencia={entry.tendencia} />
+              <TrendBadge tendencia={entry.tendencia} numRondas={entry.numRondas} />
             </span>
           </div>
           <div
@@ -798,8 +807,8 @@ export function PriorizacionScoutingView({ entries, loading, error }: Priorizaci
   if (entries.length === 0) {
     return (
       <div className="py-12 text-center text-sm text-muted-foreground">
-        Sin suficiente historial de monitoreo (se necesitan al menos 2 rondas por sublote/plaga en los
-        últimos ~6 meses) para calcular una priorización.
+        Ninguna combinación sublote/plaga tiene todavía una lectura de la ronda más reciente (o no hay
+        suficiente historial de monitoreo en los últimos ~6 meses) para calcular una priorización.
       </div>
     );
   }

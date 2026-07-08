@@ -20,11 +20,13 @@
 // - El pooling del complejo de ácaros NO se hace aquí: cada fila de `monitoreos`
 //   se agrupa por (sublote_id, plaga_enfermedad_id) individual, tal como exige el
 //   módulo puro (ver comentario en HistorialSublotePlaga). `priorizarMonitoreo`
-//   hace el pooling internamente usando `pest_umbral_economico.grupo_key`.
-// - `fecha_monitoreo` se pasa TAL CUAL viene de la fila de `monitoreos` (string,
-//   sin reformatear) -- crítico para que las observaciones de una misma ronda
-//   (mismo `ronda_id`) compartan el mismo string de fecha y así el pooling por
-//   MAX de la ronda funcione correctamente (ver instrucciones del diseño).
+//   hace el pooling internamente usando `pest_umbral_economico.grupo_key`, agrupado
+//   por `ronda_id` (no por fecha calendario -- una ronda puede abarcar varias
+//   fechas según el lote).
+// - Se pasa también el `id` de la ronda más reciente (`rondas_monitoreo` ordenada
+//   por `fecha_inicio` desc) como `rondaActualId`: `priorizarMonitoreo` excluye
+//   cualquier (sublote, plaga) sin lectura en esa ronda, para no mostrar una
+//   lectura vieja como si fuera el estado actual.
 
 import { useState, useCallback } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
@@ -55,6 +57,7 @@ function fechaHaceNDias(dias: number): string {
 
 interface MonitoreoRawRow {
   fecha_monitoreo: string;
+  ronda_id: string;
   lote_id: string;
   sublote_id: string | null;
   plaga_enfermedad_id: string;
@@ -97,6 +100,7 @@ function agruparHistoriales(rows: MonitoreoRawRow[]): HistorialSublotePlaga[] {
       // para que observaciones de la misma ronda (mismo ronda_id) compartan
       // el mismo string de fecha y el pooling del complejo de ácaros funcione.
       fecha_monitoreo: row.fecha_monitoreo,
+      ronda_id: row.ronda_id,
       incidencia: Number(row.incidencia) || 0,
       arboles_monitoreados: row.arboles_monitoreados,
       arboles_afectados: row.arboles_afectados,
@@ -124,11 +128,11 @@ export function usePriorizacionMonitoreo(): UsePriorizacionMonitoreoReturn {
     setError(null);
 
     try {
-      const [monitoreosRes, umbralesRes, perfilesRes, movimientosRes] = await Promise.all([
+      const [monitoreosRes, umbralesRes, perfilesRes, movimientosRes, rondaActualRes] = await Promise.all([
         supabase
           .from('monitoreos')
           .select(
-            'fecha_monitoreo, lote_id, sublote_id, plaga_enfermedad_id, arboles_monitoreados, arboles_afectados, incidencia, lotes(nombre), sublotes(nombre), plagas_enfermedades_catalogo(nombre)'
+            'fecha_monitoreo, ronda_id, lote_id, sublote_id, plaga_enfermedad_id, arboles_monitoreados, arboles_afectados, incidencia, lotes(nombre), sublotes(nombre), plagas_enfermedades_catalogo(nombre)'
           )
           .gte('fecha_monitoreo', fechaHaceNDias(LOOKBACK_MONITOREOS_DIAS))
           .order('fecha_monitoreo', { ascending: true }),
@@ -143,12 +147,22 @@ export function usePriorizacionMonitoreo(): UsePriorizacionMonitoreoReturn {
           .select('lote_id, fecha_movimiento')
           .not('lote_id', 'is', null)
           .gte('fecha_movimiento', fechaHaceNDias(LOOKBACK_FUMIGACIONES_DIAS)),
+        supabase
+          .from('rondas_monitoreo')
+          .select('id')
+          .order('fecha_inicio', { ascending: false })
+          .limit(1),
       ]);
 
       if (monitoreosRes.error) throw new Error(`Monitoreos: ${monitoreosRes.error.message}`);
       if (umbralesRes.error) throw new Error(`Umbral económico: ${umbralesRes.error.message}`);
       if (perfilesRes.error) throw new Error(`Perfil estacional: ${perfilesRes.error.message}`);
       if (movimientosRes.error) throw new Error(`Movimientos diarios: ${movimientosRes.error.message}`);
+      if (rondaActualRes.error) throw new Error(`Ronda actual: ${rondaActualRes.error.message}`);
+
+      // Sin ninguna ronda registrada todavía: nada que priorizar.
+      const rondaActualId: string | undefined = rondaActualRes.data?.[0]?.id;
+      if (!rondaActualId) return [];
 
       const historiales = agruparHistoriales((monitoreosRes.data ?? []) as MonitoreoRawRow[]);
 
@@ -177,6 +191,7 @@ export function usePriorizacionMonitoreo(): UsePriorizacionMonitoreoReturn {
         umbrales,
         perfilesEstacionales,
         ultimasFumigaciones,
+        rondaActualId,
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);

@@ -43,9 +43,14 @@ function semanaISOParaFixture(fecha: Date): number {
 }
 const SEMANA_ACTUAL = semanaISOParaFixture(FECHA_REF);
 
+// Todas las fixtures usan fechas únicas por ronda -- se reutiliza la fecha como
+// ronda_id y la última fecha ('2026-06-15') como "ronda actual" de la finca.
+const RONDA_ACTUAL_ID = '2026-06-15';
+
 function rondas(valores: Array<[string, number]>): RondaFrontend[] & RondaEdge[] {
   return valores.map(([fecha, incidencia]) => ({
     fecha_monitoreo: fecha,
+    ronda_id: fecha,
     incidencia,
     arboles_monitoreados: 100,
     arboles_afectados: Math.round(incidencia),
@@ -288,7 +293,7 @@ const escenarios: Scenario[] = [
     ultimasFumigaciones: [],
   },
   {
-    nombre: 'historia insuficiente se excluye en ambas implementaciones',
+    nombre: 'una sola ronda se incluye igual en ambas implementaciones (sin tendencia, dato = monitoreo más reciente)',
     historiales: [
       historial({
         sublote_id: 'sub-nueva',
@@ -362,6 +367,7 @@ describe('Paridad frontend <-> edge function (priorizacion-scouting.ts)', () => 
         perfilesEstacionales: escenario.perfilesEstacionales as PerfilFrontend[],
         ultimasFumigaciones: escenario.ultimasFumigaciones as EventoFrontend[],
         fechaReferencia: FECHA_REF,
+        rondaActualId: RONDA_ACTUAL_ID,
       };
       const inputEdge = {
         historiales: escenario.historiales as HistorialEdge[],
@@ -369,6 +375,7 @@ describe('Paridad frontend <-> edge function (priorizacion-scouting.ts)', () => 
         perfilesEstacionales: escenario.perfilesEstacionales as PerfilEdge[],
         ultimasFumigaciones: escenario.ultimasFumigaciones as EventoEdge[],
         fechaReferencia: FECHA_REF,
+        rondaActualId: RONDA_ACTUAL_ID,
       };
 
       const resultadoFrontend = priorizarFrontend(inputFrontend);
@@ -399,6 +406,7 @@ describe('Paridad frontend <-> edge function (priorizacion-scouting.ts)', () => 
         perfilesEstacionales: escenario.perfilesEstacionales as PerfilFrontend[],
         ultimasFumigaciones: escenario.ultimasFumigaciones as EventoFrontend[],
         fechaReferencia: FECHA_REF,
+        rondaActualId: RONDA_ACTUAL_ID,
       });
       const resultadoEdge = priorizarEdge({
         historiales: escenario.historiales as HistorialEdge[],
@@ -406,6 +414,7 @@ describe('Paridad frontend <-> edge function (priorizacion-scouting.ts)', () => 
         perfilesEstacionales: escenario.perfilesEstacionales as PerfilEdge[],
         ultimasFumigaciones: escenario.ultimasFumigaciones as EventoEdge[],
         fechaReferencia: FECHA_REF,
+        rondaActualId: RONDA_ACTUAL_ID,
       });
       expect(resultadoEdge.map((e) => e.why)).toEqual(resultadoFrontend.map((e) => e.why));
     }

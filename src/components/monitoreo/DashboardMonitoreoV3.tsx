@@ -53,6 +53,7 @@ import {
   CE_UMBRAL_ALTO,
   PLAGAS_INTERES,
 } from '../../utils/calculosMonitoreoV2';
+import { calcularIncidencia, clasificarGravedad } from '../../utils/calculosMonitoreo';
 import {
   Dialog,
   DialogContent,
@@ -191,8 +192,9 @@ function generarEtiquetasRondas(rondas: { fecha_inicio: string }[]): string[] {
 }
 
 function incidenciaColor(val: number): string {
-  if (val >= 30) return 'text-red-600 font-semibold';
-  if (val >= 10) return 'text-yellow-600 font-semibold';
+  const { numerica } = clasificarGravedad(val);
+  if (numerica === 3) return 'text-red-600 font-semibold';
+  if (numerica === 2) return 'text-yellow-600 font-semibold';
   return 'text-green-700';
 }
 
@@ -230,6 +232,9 @@ export function DashboardMonitoreoV3() {
   const [plagasVisibles, setPlagasVisibles] = useState<string[]>([...PLAGAS_INTERES]);
   const [tendenciaPlagasData, setTendenciaPlagasData] = useState<any[]>([]);
   const [allMonitoreos, setAllMonitoreos] = useState<MonitoreoRow[]>([]);
+  // Rondas (orden cronológico ascendente) detrás de allMonitoreos — el Mapa de
+  // Calor las usa para agrupar por ronda en vez de por fecha calendario.
+  const [rondasVentanaTendencias, setRondasVentanaTendencias] = useState<RondaMonitoreo[]>([]);
 
   // CE new visualization
   const [ceHistorico, setCeHistorico] = useState<MonitoreoConductividad[]>([]);
@@ -403,6 +408,7 @@ export function DashboardMonitoreoV3() {
 
   async function cargarTendencias(rondasList: RondaMonitoreo[]) {
     const ultimas = rondasList.slice(0, 10).reverse();
+    setRondasVentanaTendencias(ultimas);
     if (ultimas.length === 0) return;
     const rondaIds = ultimas.map(r => r.id);
 
@@ -695,18 +701,16 @@ export function DashboardMonitoreoV3() {
         // Lote-level incidencia: afectados per pest / total monitored trees across all sublotes
         const plagasIncidencia: Record<string, number> = {};
         for (const [p, stats] of l.plagasMap) {
-          plagasIncidencia[p] = totalMonitoreados > 0
-            ? +((stats.afectados / totalMonitoreados) * 100).toFixed(1)
-            : 0;
+          plagasIncidencia[p] = +calcularIncidencia(stats.afectados, totalMonitoreados).toFixed(1);
         }
         const florLote = calcularEstadoFloracion(l.monitoreoRows);
         const sublotes = Array.from(l.sublotesMap.values())
           .sort((a, b) => a.sublote_nombre.localeCompare(b.sublote_nombre))
           .map(s => {
             const pi: Record<string, number> = {};
-            for (const [p, stats] of s.plagasMap) pi[p] = stats.monitoreados > 0
-              ? +((stats.afectados / stats.monitoreados) * 100).toFixed(1)
-              : 0;
+            for (const [p, stats] of s.plagasMap) {
+              pi[p] = +calcularIncidencia(stats.afectados, stats.monitoreados).toFixed(1);
+            }
             const florSub = calcularEstadoFloracion(s.monitoreoRows);
             return {
               sublote_id: s.sublote_id,
@@ -1189,7 +1193,7 @@ export function DashboardMonitoreoV3() {
               <div className="-m-4">
                 <MapaCalorIncidencias
                   monitoreos={allMonitoreos as any}
-                  rangoSeleccionado="todo"
+                  rondas={rondasVentanaTendencias}
                   modoVisualizacion="ultimos3"
                 />
               </div>

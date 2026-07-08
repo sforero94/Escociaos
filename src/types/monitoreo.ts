@@ -120,6 +120,7 @@ export interface EstadisticaRapida {
 export interface MonitoreoConRelaciones {
   id: string;
   fecha_monitoreo: Date | string;
+  ronda_id: string;
   lote_id: string;
   sublote_id: string;
   plaga_enfermedad_id: string;
@@ -140,10 +141,13 @@ export interface CeldaMapaCalor {
   incidenciaPromedio: number;
   numeroMonitoreos: number;
   monitoreos: MonitoreoConRelaciones[];
-  // NUEVO: Para modo múltiples ocurrencias
+  // Una entrada por ronda de la ventana visible, en orden cronológico.
+  // incidencia = null cuando la plaga no se registró en esa ronda puntual
+  // (se renderiza en blanco, nunca como 0%, para no confundir "no encontrada"
+  // con "encontrada en 0 árboles").
   ocurrencias?: Array<{
     fecha: string;
-    incidencia: number;
+    incidencia: number | null;
   }>;
 }
 

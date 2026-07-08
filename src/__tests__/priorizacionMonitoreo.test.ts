@@ -23,9 +23,15 @@ function semanaISOParaFixture(fecha: Date): number {
 }
 const SEMANA_ACTUAL = semanaISOParaFixture(FECHA_REF);
 
+// Todas las fixtures de este archivo usan fechas únicas por ronda -- se reutiliza
+// la fecha como ronda_id (simplifica los fixtures sin perder expresividad) y la
+// última fecha ('2026-06-15') como la "ronda actual" de la finca en cada test.
+const RONDA_ACTUAL_ID = '2026-06-15';
+
 function rondas(valores: Array<[string, number]>): RondaHistorica[] {
   return valores.map(([fecha, incidencia]) => ({
     fecha_monitoreo: fecha,
+    ronda_id: fecha,
     incidencia,
     arboles_monitoreados: 100,
     arboles_afectados: Math.round(incidencia),
@@ -80,6 +86,7 @@ describe('priorizarMonitoreo', () => {
       perfilesEstacionales: [],
       ultimasFumigaciones: [],
       fechaReferencia: FECHA_REF,
+      rondaActualId: RONDA_ACTUAL_ID,
     });
 
     expect(resultado[0].pest_id).toBe('pest-thrips');
@@ -144,6 +151,7 @@ describe('priorizarMonitoreo', () => {
       perfilesEstacionales,
       ultimasFumigaciones: [],
       fechaReferencia: FECHA_REF,
+      rondaActualId: RONDA_ACTUAL_ID,
     });
 
     // Confirmamos primero que las condiciones de fondo son las esperadas.
@@ -208,6 +216,7 @@ describe('priorizarMonitoreo', () => {
       perfilesEstacionales: [],
       ultimasFumigaciones: [],
       fechaReferencia: FECHA_REF,
+      rondaActualId: RONDA_ACTUAL_ID,
     });
 
     const thrips = resultado.find((e) => e.pest_id === 'pest-thrips')!;
@@ -282,6 +291,7 @@ describe('priorizarMonitoreo', () => {
       perfilesEstacionales: [],
       ultimasFumigaciones: [],
       fechaReferencia: FECHA_REF,
+      rondaActualId: RONDA_ACTUAL_ID,
     });
 
     const entradasAcaro = resultado.filter((e) => e.grupo_key === 'acaro_complex');
@@ -323,6 +333,7 @@ describe('priorizarMonitoreo', () => {
       perfilesEstacionales: [],
       ultimasFumigaciones: [],
       fechaReferencia: FECHA_REF,
+      rondaActualId: RONDA_ACTUAL_ID,
     });
 
     expect(resultado).toHaveLength(2);
@@ -334,7 +345,7 @@ describe('priorizarMonitoreo', () => {
     expect(ramas.estadoUmbral).toBe('under');
   });
 
-  it('un (sublote, plaga) con sólo 1 ronda histórica se excluye del resultado, sin crashear', () => {
+  it('un (sublote, plaga) con sólo 1 ronda histórica se incluye sin tendencia (dato individual = monitoreo más reciente), sin crashear', () => {
     const historiales: HistorialSublotePlaga[] = [
       historial({
         sublote_id: 'sub-nueva',
@@ -362,6 +373,7 @@ describe('priorizarMonitoreo', () => {
         perfilesEstacionales: [],
         ultimasFumigaciones: [],
         fechaReferencia: FECHA_REF,
+        rondaActualId: RONDA_ACTUAL_ID,
       })
     ).not.toThrow();
 
@@ -371,8 +383,17 @@ describe('priorizarMonitoreo', () => {
       perfilesEstacionales: [],
       ultimasFumigaciones: [],
       fechaReferencia: FECHA_REF,
+      rondaActualId: RONDA_ACTUAL_ID,
     });
-    expect(resultado.some((e) => e.pest_id === 'pest-nueva')).toBe(false);
+
+    const nueva = resultado.find((e) => e.pest_id === 'pest-nueva');
+    expect(nueva).toBeDefined();
+    expect(nueva!.numRondas).toBe(1);
+    expect(nueva!.incidenciaActual).toBe(20);
+    expect(nueva!.incidenciaAnterior).toBe(20); // sin ronda previa: no se inventa un cambio
+    expect(nueva!.cambio).toBe(0);
+    expect(nueva!.tendencia).toBe('estable');
+    expect(nueva!.why).toMatch(/primera lectura registrada/);
     expect(resultado.some((e) => e.pest_id === 'pest-normal')).toBe(true);
   });
 
@@ -395,6 +416,7 @@ describe('priorizarMonitoreo', () => {
       perfilesEstacionales: [], // sin ningún perfil estacional
       ultimasFumigaciones: [],
       fechaReferencia: FECHA_REF,
+      rondaActualId: RONDA_ACTUAL_ID,
     });
 
     expect(resultado).toHaveLength(1);
@@ -435,6 +457,7 @@ describe('priorizarMonitoreo', () => {
       perfilesEstacionales,
       ultimasFumigaciones: [],
       fechaReferencia: FECHA_REF,
+      rondaActualId: RONDA_ACTUAL_ID,
     });
 
     expect(resultado[0].historicalTier).toBe('High');
@@ -461,6 +484,7 @@ describe('priorizarMonitoreo', () => {
       perfilesEstacionales: [],
       ultimasFumigaciones,
       fechaReferencia: FECHA_REF,
+      rondaActualId: RONDA_ACTUAL_ID,
     });
 
     expect(resultado[0].diasDesdeUltimaFumigacion).toBeNull();
@@ -489,6 +513,7 @@ describe('priorizarMonitoreo', () => {
       perfilesEstacionales: [],
       ultimasFumigaciones,
       fechaReferencia: FECHA_REF,
+      rondaActualId: RONDA_ACTUAL_ID,
     });
 
     expect(resultado[0].diasDesdeUltimaFumigacion).toBe(5);
