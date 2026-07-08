@@ -637,3 +637,102 @@ describe('Phase 3 — handleChatMessage loads memorias before building the promp
     expect(chatSource).toMatch(/archived_at=is\.null|archived_at\s*IS\s*NULL/i);
   });
 });
+
+// ----------------------------------------------------------------------------
+// P2b — get_pest_risk_priorizacion (docs/PLAN_PRIORIZACION_MONITOREO.md §5, §7)
+//
+// New shared module: src/supabase/functions/server/priorizacion-scouting.ts —
+// a Deno-side port of src/utils/priorizacionMonitoreo.ts (see that file's
+// header comment for why a port, not an import, is required). Pure-function
+// parity between the two copies is covered separately in
+// src/__tests__/priorizacionScoutingParidad.test.ts — this file only asserts
+// Tier A source-structure: tool registration, dispatch wiring, and system
+// prompt routing guidance, in both chat.tsx copies.
+// ----------------------------------------------------------------------------
+
+describe('P2b — get_pest_risk_priorizacion (tool registration)', () => {
+  it('TOOLS array includes get_pest_risk_priorizacion', () => {
+    const tool = getTool('get_pest_risk_priorizacion');
+    expect(tool, 'tool must be registered').toBeDefined();
+  });
+
+  it('accepts lote_name, pest_name, and top_n, none required', () => {
+    const tool = getTool('get_pest_risk_priorizacion');
+    expect(tool?.properties).toContain('lote_name');
+    expect(tool?.properties).toContain('pest_name');
+    expect(tool?.properties).toContain('top_n');
+    expect(tool?.required).toEqual([]);
+  });
+
+  it('description distinguishes it from web_search_agronomic and mentions umbral economico', () => {
+    const tool = getTool('get_pest_risk_priorizacion');
+    expect(tool?.description.toLowerCase()).toMatch(/umbral econ/);
+    expect(tool?.description.toLowerCase()).toMatch(/web_search_agronomic/);
+  });
+
+  it('dispatch switch routes get_pest_risk_priorizacion to execPestPriorizacion', () => {
+    expect(chatSource).toContain(
+      "case 'get_pest_risk_priorizacion': result = await execPestPriorizacion(args); break;",
+    );
+  });
+
+  it('executor function exists and delegates ranking to the shared priorizarMonitoreo port', () => {
+    const body = getExecFunctionBody('execPestPriorizacion');
+    expect(body).not.toBeNull();
+    expect(body).toContain('priorizarMonitoreo(');
+  });
+
+  it('executor queries monitoreos, pest_umbral_economico, pest_seasonal_profile, and movimientos_diarios', () => {
+    const body = getExecFunctionBody('execPestPriorizacion') ?? '';
+    expect(body).toContain("'monitoreos'");
+    expect(body).toContain("'pest_umbral_economico'");
+    expect(body).toContain("'pest_seasonal_profile'");
+    expect(body).toContain("'movimientos_diarios'");
+  });
+
+  it('imports priorizarMonitoreo and its types from the local priorizacion-scouting module (not the frontend path)', () => {
+    expect(chatSource).toMatch(/from '\.\/priorizacion-scouting\.ts'/);
+    expect(chatSource).not.toMatch(/from ['"]@\/utils\/priorizacionMonitoreo['"]/);
+  });
+
+  it('this tool definition and dispatch line are present identically in the deployed chat.tsx copy', () => {
+    const deployed = readFileSync(deployedChatSourcePath, 'utf-8');
+    const deployedTool = getTool('get_pest_risk_priorizacion', deployed);
+    expect(deployedTool).toBeDefined();
+    expect(deployed).toContain(
+      "case 'get_pest_risk_priorizacion': result = await execPestPriorizacion(args); break;",
+    );
+  });
+});
+
+describe('P2b — priorizacion-scouting.ts port exists alongside chat.tsx (both copies)', () => {
+  it('src/supabase/functions/server/priorizacion-scouting.ts exists and exports priorizarMonitoreo', () => {
+    const path = resolve(__dirname, '../supabase/functions/server/priorizacion-scouting.ts');
+    const source = readFileSync(path, 'utf-8');
+    expect(source).toContain('export function priorizarMonitoreo(');
+  });
+
+  it('deployed copy supabase/functions/make-server-1ccce916/priorizacion-scouting.ts is byte-identical', () => {
+    const localPath = resolve(__dirname, '../supabase/functions/server/priorizacion-scouting.ts');
+    const deployedPath = resolve(__dirname, '../../supabase/functions/make-server-1ccce916/priorizacion-scouting.ts');
+    expect(readFileSync(deployedPath, 'utf-8')).toBe(readFileSync(localPath, 'utf-8'));
+  });
+});
+
+describe('P2b — system prompt routes monitoring-priority questions to get_pest_risk_priorizacion', () => {
+  function getSystemPromptText() {
+    const m = chatSource.match(/export function getSystemPrompt[\s\S]*?return `([\s\S]*?)`;/);
+    return m ? m[1] : '';
+  }
+
+  it('mentions get_pest_risk_priorizacion with explicit routing guidance', () => {
+    const prompt = getSystemPromptText();
+    expect(prompt).toContain('get_pest_risk_priorizacion');
+  });
+
+  it('explicitly tells Esco not to confuse it with web_search_agronomic', () => {
+    const prompt = getSystemPromptText();
+    const routingBlock = prompt.slice(prompt.indexOf('get_pest_risk_priorizacion'));
+    expect(routingBlock).toMatch(/web_search_agronomic/);
+  });
+});

@@ -27,6 +27,13 @@ import {
   type GanInventarioRow,
   type GanMovimientoRow,
 } from './ganado-inventario.ts';
+import {
+  priorizarMonitoreo,
+  type HistorialSublotePlaga,
+  type UmbralEconomico,
+  type PerfilEstacional,
+  type EventoFumigacion,
+} from './priorizacion-scouting.ts';
 
 // ============================================================================
 // TIPOS
@@ -474,6 +481,18 @@ const TOOLS: ToolDefinition[] = [
       },
     },
   },
+  {
+    name: 'get_pest_risk_priorizacion',
+    description: 'Obtiene el ranking de prioridad de monitoreo por lote/sublote x plaga: cuales combinaciones ameritan revision esta semana y por que (umbral economico Cartama superado, tendencia, estacionalidad historica). Distingue plagas con umbral economico validado de las que usan un nivel estadistico de referencia (tercil historico). NO es lo mismo que web_search_agronomic (esa busca informacion externa; esta usa el ranking en vivo de ESTA finca).',
+    parameters: {
+      type: 'object',
+      properties: {
+        lote_name: { type: 'string', description: 'Nombre parcial del lote o sublote para filtrar (opcional)' },
+        pest_name: { type: 'string', description: 'Nombre parcial de la plaga para filtrar (opcional)' },
+        top_n: { type: 'number', description: 'Cuantas entradas devolver, ordenadas por prioridad (default 10)' },
+      },
+    },
+  },
 ];
 
 // ============================================================================
@@ -537,6 +556,7 @@ async function executeTool(name: string, args: Record<string, unknown>, userId?:
       case 'get_ganado_inventory': result = await execGanadoInventory(args); break;
       case 'get_tareas': result = await execTareas(args); break;
       case 'get_weekly_reports': result = await execWeeklyReports(args); break;
+      case 'get_pest_risk_priorizacion': result = await execPestPriorizacion(args); break;
       default: return JSON.stringify({ error: `Tool desconocido: ${name}` });
     }
 
@@ -2504,6 +2524,164 @@ async function execGanadoInventory(args: Record<string, unknown>): Promise<strin
   });
 }
 
+// ----------------------------------------------------------------------------
+// PEST RISK PRIORITIZATION (P2b, docs/PLAN_PRIORIZACION_MONITOREO.md)
+//
+// Fetches the same tables/lookback windows as
+// src/components/monitoreo/hooks/usePriorizacionMonitoreo.ts and delegates ALL
+// ranking logic to priorizarMonitoreo() from ./priorizacion-scouting.ts (the
+// Deno-side port of src/utils/priorizacionMonitoreo.ts) — no ranking logic is
+// re-implemented here, only fetch + shape + filter/limit, exactly like the
+// frontend hook does.
+// ----------------------------------------------------------------------------
+
+const LOOKBACK_MONITOREOS_DIAS_PRIORIZACION = 200; // ~6.5 meses, igual que el hook
+const LOOKBACK_FUMIGACIONES_DIAS_PRIORIZACION = 730; // ~2 años, igual que el hook
+
+interface MonitoreoPriorizacionRow {
+  fecha_monitoreo: string;
+  lote_id: string;
+  sublote_id: string | null;
+  plaga_enfermedad_id: string;
+  arboles_monitoreados: number;
+  arboles_afectados: number;
+  incidencia: number;
+  lote: { nombre: string } | null;
+  sublote: { nombre: string } | null;
+  plaga: { nombre: string } | null;
+}
+
+/** Agrupa filas crudas de `monitoreos` en historiales por (sublote, plaga
+ * individual). No agrupa el complejo de ácaros -- eso lo hace
+ * `priorizarMonitoreo` internamente vía `pest_umbral_economico.grupo_key`,
+ * igual que agruparHistoriales() en el hook del frontend. */
+function agruparHistorialesPriorizacion(rows: MonitoreoPriorizacionRow[]): HistorialSublotePlaga[] {
+  const grupos = new Map<string, HistorialSublotePlaga>();
+
+  for (const row of rows) {
+    if (!row.sublote_id) continue; // el ranking es a nivel sublote
+
+    const key = `${row.sublote_id}|${row.plaga_enfermedad_id}`;
+    let grupo = grupos.get(key);
+    if (!grupo) {
+      grupo = {
+        sublote_id: row.sublote_id,
+        sublote_nombre: row.sublote?.nombre,
+        lote_id: row.lote_id,
+        lote_nombre: row.lote?.nombre,
+        pest_id: row.plaga_enfermedad_id,
+        pest_nombre: row.plaga?.nombre,
+        rondas: [],
+      };
+      grupos.set(key, grupo);
+    }
+
+    grupo.rondas.push({
+      // NUNCA reformatear: debe coincidir exactamente con el valor de la fila
+      // para que observaciones de la misma ronda compartan el mismo string de
+      // fecha y el pooling del complejo de ácaros funcione (ver el hook).
+      fecha_monitoreo: row.fecha_monitoreo,
+      incidencia: Number(row.incidencia) || 0,
+      arboles_monitoreados: row.arboles_monitoreados,
+      arboles_afectados: row.arboles_afectados,
+    });
+  }
+
+  return Array.from(grupos.values());
+}
+
+async function execPestPriorizacion(args: Record<string, unknown>): Promise<string> {
+  const { lote_name, pest_name, top_n } = args as { lote_name?: string; pest_name?: string; top_n?: number };
+  const topN = typeof top_n === 'number' && top_n > 0 ? Math.floor(top_n) : 10;
+
+  const fechaHaceNDias = (dias: number): string => {
+    const d = new Date();
+    d.setDate(d.getDate() - dias);
+    return d.toISOString().split('T')[0];
+  };
+
+  const desdeMonitoreos = fechaHaceNDias(LOOKBACK_MONITOREOS_DIAS_PRIORIZACION);
+  const desdeFumigaciones = fechaHaceNDias(LOOKBACK_FUMIGACIONES_DIAS_PRIORIZACION);
+
+  const [monitoreosRows, umbralesRows, perfilesRows, movimientosRows] = await Promise.all([
+    supabaseQuery(
+      'monitoreos',
+      `select=fecha_monitoreo,lote_id,sublote_id,plaga_enfermedad_id,arboles_monitoreados,arboles_afectados,incidencia,lote:lotes(nombre),sublote:sublotes(nombre),plaga:plagas_enfermedades_catalogo(nombre)&fecha_monitoreo=gte.${e(desdeMonitoreos)}&order=fecha_monitoreo.asc&limit=5000`,
+    ) as Promise<MonitoreoPriorizacionRow[]>,
+    supabaseQuery('pest_umbral_economico', 'select=pest_id,grupo_key,umbral_pct,source_label') as Promise<UmbralEconomico[]>,
+    supabaseQuery('pest_seasonal_profile', 'select=pest_id,lote_id,week_of_year,historical_tier,n_years_observed') as Promise<PerfilEstacional[]>,
+    supabaseQuery(
+      'movimientos_diarios',
+      `select=lote_id,fecha_movimiento&lote_id=not.is.null&fecha_movimiento=gte.${e(desdeFumigaciones)}`,
+    ) as Promise<Array<{ lote_id: string; fecha_movimiento: string }>>,
+  ]);
+
+  const historiales = agruparHistorialesPriorizacion(monitoreosRows);
+  const umbrales: UmbralEconomico[] = umbralesRows.map((u) => ({
+    pest_id: u.pest_id,
+    grupo_key: u.grupo_key,
+    umbral_pct: Number(u.umbral_pct),
+    source_label: u.source_label,
+  }));
+  const perfilesEstacionales: PerfilEstacional[] = perfilesRows.map((p) => ({
+    pest_id: p.pest_id,
+    lote_id: p.lote_id,
+    week_of_year: p.week_of_year,
+    historical_tier: p.historical_tier,
+    n_years_observed: p.n_years_observed,
+  }));
+  const ultimasFumigaciones: EventoFumigacion[] = movimientosRows.map((m) => ({
+    lote_id: m.lote_id,
+    fecha: m.fecha_movimiento,
+  }));
+
+  const ranked = priorizarMonitoreo({
+    historiales,
+    umbrales,
+    perfilesEstacionales,
+    ultimasFumigaciones,
+  });
+
+  let filtered = ranked;
+  if (lote_name) {
+    const ln = lote_name.toLowerCase();
+    filtered = filtered.filter(
+      (r) => (r.lote_nombre || '').toLowerCase().includes(ln) || (r.sublote_nombre || '').toLowerCase().includes(ln),
+    );
+  }
+  if (pest_name) {
+    const pn = pest_name.toLowerCase();
+    filtered = filtered.filter((r) => r.pest_nombre.toLowerCase().includes(pn));
+  }
+
+  const top = filtered.slice(0, topN).map((r) => ({
+    lote: r.lote_nombre,
+    sublote: r.sublote_nombre,
+    plaga: r.pest_nombre,
+    grupo_key: r.grupo_key,
+    tier: r.tier,
+    estado: r.tier === 'A' ? r.estadoUmbral : r.gravedad?.texto,
+    umbral_pct: r.umbralPct,
+    umbral_fuente: r.umbralSourceLabel,
+    incidencia_actual: r.incidenciaActual,
+    incidencia_anterior: r.incidenciaAnterior,
+    cambio: r.cambioFormateado,
+    tendencia: r.tendencia,
+    temporada_alta: r.temporadaAlta,
+    historical_tier: r.historicalTier,
+    dias_desde_ultima_fumigacion: r.diasDesdeUltimaFumigacion,
+    num_rondas: r.numRondas,
+    why: r.why,
+  }));
+
+  return JSON.stringify({
+    total_registros: filtered.length,
+    total_evaluado: ranked.length,
+    filtros: { lote_name: lote_name ?? null, pest_name: pest_name ?? null, top_n: topN },
+    top,
+  });
+}
+
 // ============================================================================
 // SYSTEM PROMPT
 // ============================================================================
@@ -2560,6 +2738,7 @@ DOMINIOS DE DATOS DISPONIBLES:
 - Labores: tablero de tareas planeadas/en ejecucion (get_tareas: estado Banco/Programada/En Proceso/Completada/Cancelada, prioridad, categoria, lote, responsable, jornales estimados) y registros de trabajo / jornales YA ejecutados por empleado/contratista/lote (get_labor_summary)
 - Empleados y Contratistas: personal, cargos, salarios, tarifas
 - Monitoreo: plagas/enfermedades, incidencia, severidad, tendencias por lote. Incluye estado fenológico de floración (brotes, flor madura, cuaje)
+- Priorizacion de monitoreo (get_pest_risk_priorizacion): ranking en vivo de que lote/sublote x plaga amerita revision esta semana, basado en umbral economico Cartama (cuando existe), tendencia y estacionalidad historica de ESTA finca. Distinto de web_search_agronomic (esa es informacion externa, no datos de la finca)
 - Aplicaciones: fumigaciones, fertilizaciones, drench, productos usados, costos
 - Costos por lote: desglose insumos + mano de obra y costo por arbol para una aplicacion (get_application_cost_by_lote) o sumando todas las aplicaciones en un rango de fechas (get_cost_by_lote)
 - Conocimiento agronomico externo (web_search_agronomic): compatibilidad de productos, dosis, umbrales economicos, regulacion ICA — siempre con fuentes citadas
@@ -2580,6 +2759,11 @@ RUTEO DE HERRAMIENTAS PARA COSTOS:
 - "Cuanto costo la aplicacion X por lote/por arbol?" → get_application_cost_by_lote (insumos + mano de obra desglosados por lote)
 - "Que lote es mas caro de mantener este trimestre/año?" → get_cost_by_lote con date_from y date_to
 - "Costo total de la aplicacion X" → get_application_summary o get_application_details (incluyen costo_total, costo_total_insumos, costo_total_mano_obra)
+
+RUTEO DE HERRAMIENTAS PARA PRIORIZACION DE MONITOREO (OBLIGATORIO):
+- "Que debo revisar esta semana?", "que lotes/plagas necesitan atencion?", "como va el riesgo de X plaga en Y lote?" → get_pest_risk_priorizacion. Devuelve un ranking en vivo (tier A = umbral economico Cartama validado, tier B = tercil estadistico de referencia sin umbral validado) con la razon ("why") de cada entrada.
+- NUNCA confundas esto con web_search_agronomic: get_pest_risk_priorizacion usa datos y umbrales YA cargados de ESTA finca (monitoreos, pest_umbral_economico, pest_seasonal_profile); web_search_agronomic busca informacion agronomica externa en internet. Si la pregunta es sobre el riesgo/prioridad actual de la finca, usa get_pest_risk_priorizacion, no busques en la web.
+- Esta herramienta solo indica DONDE mirar, no prescribe ni ejecuta acciones de fumigacion/tratamiento.
 
 ${memoriasBlock}
 
