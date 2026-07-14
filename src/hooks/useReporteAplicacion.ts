@@ -323,6 +323,32 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                 }
             }
 
+            // Fetch Real Labor Data (registros_trabajo — same source as the Historial de
+            // Trabajo labor log) so per-lote jornales reflect actual worker assignments
+            // instead of a tree-count proration of a single application-wide total.
+            const jornalesPorLoteReal = new Map<string, { jornales: number; costo: number; lote_nombre?: string; total_arboles?: number }>();
+            if (appData.tarea_id) {
+                const { data: registrosTrabajo } = await supabase
+                    .from('registros_trabajo')
+                    .select('lote_id, fraccion_jornal, costo_jornal, lotes(nombre, total_arboles)')
+                    .eq('tarea_id', appData.tarea_id);
+
+                (registrosTrabajo || []).forEach((r: any) => {
+                    if (!r.lote_id) return;
+                    const existing = jornalesPorLoteReal.get(r.lote_id) || {
+                        jornales: 0,
+                        costo: 0,
+                        lote_nombre: r.lotes?.nombre,
+                        total_arboles: r.lotes?.total_arboles,
+                    };
+                    existing.jornales += Number(r.fraccion_jornal) || 0;
+                    existing.costo += Number(r.costo_jornal) || 0;
+                    jornalesPorLoteReal.set(r.lote_id, existing);
+                });
+            }
+            const totalJornalesRegistros = Array.from(jornalesPorLoteReal.values())
+                .reduce((sum, v) => sum + v.jornales, 0);
+
             // 2. AGGREGATE DATA
             // ----------------------------------------------------------------
 
@@ -348,9 +374,13 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                 return trees > 0 ? trees / 500 : 0;
             };
 
-            // Use 'jornales_utilizados' from app for total labor, defaulting to 0
+            // Prefer the live sum of registros_trabajo (ground truth, matches the labor log);
+            // fall back to the 'jornales_utilizados' snapshot taken at cierre time when the
+            // application has no linked tarea or no work has been logged yet.
             const cierreData = appData.aplicaciones_cierre as unknown as any[] | undefined;
-            const totalJornalesApp = Number(appData.jornales_utilizados || cierreData?.[0]?.jornales_aplicacion || 0);
+            const totalJornalesApp = totalJornalesRegistros > 0
+                ? totalJornalesRegistros
+                : Number(appData.jornales_utilizados || cierreData?.[0]?.jornales_aplicacion || 0);
             const valorJornal = Number(appData.valor_jornal || cierreData?.[0]?.valor_jornal || 0);
 
             // --- Real Data Processing ---
@@ -412,11 +442,36 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                 }
             });
 
-            // Distribute Labor (Proportional to trees)
+            // Ensure lots with logged labor but no movement/plan entry (rare) still appear
+            jornalesPorLoteReal.forEach((real, loteId) => {
+                if (!lotesRealMap.has(loteId)) {
+                    lotesRealMap.set(loteId, {
+                        lote_id: loteId,
+                        lote_nombre: real.lote_nombre || 'Unknown',
+                        total_arboles: real.total_arboles || 0,
+                        canecas_200l: 0,
+                        litros_total: 0,
+                        jornales: 0,
+                        costo_mano_obra: 0
+                    });
+                }
+            });
+
+            // Distribute Labor: when the application has any registros_trabajo, they are
+            // ground truth (matches the Historial de Trabajo labor log exactly) — a lot with
+            // no logged rows genuinely got 0 jornales, it must NOT receive a tree-count share
+            // of jornales actually worked on other lots. Only fall back to proration when the
+            // application has no registros_trabajo at all (e.g. no linked tarea).
             lotesRealMap.forEach((lote) => {
-                const share = safeDivide(lote.total_arboles, totalArbolesApp);
-                lote.jornales = totalJornalesApp * share;
-                lote.costo_mano_obra = lote.jornales * valorJornal;
+                if (totalJornalesRegistros > 0) {
+                    const real = jornalesPorLoteReal.get(lote.lote_id);
+                    lote.jornales = real?.jornales || 0;
+                    lote.costo_mano_obra = real?.costo || (lote.jornales * valorJornal);
+                } else {
+                    const share = safeDivide(lote.total_arboles, totalArbolesApp);
+                    lote.jornales = totalJornalesApp * share;
+                    lote.costo_mano_obra = lote.jornales * valorJornal;
+                }
             });
 
             // Aggregate Real Products
@@ -574,7 +629,11 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
             // ----------------------------------------------------------------
 
             // Totals
-            const totalCostoManoObraReal = totalJornalesApp * valorJornal;
+            // Prefer the sum of actual per-worker costo_jornal from registros_trabajo (accounts
+            // for each worker's real rate); fall back to average valorJornal × jornales otherwise.
+            const totalCostoManoObraReal = totalJornalesRegistros > 0
+                ? Array.from(jornalesPorLoteReal.values()).reduce((sum, v) => sum + v.costo, 0)
+                : totalJornalesApp * valorJornal;
             const totalCostoProductosReal = Array.from(productosRealMap.values()).reduce((sum: number, p: any) => sum + p.costo, 0);
             const totalCostoReal = totalCostoManoObraReal + totalCostoProductosReal; // Ignore app.costo_total to force recalc
 
