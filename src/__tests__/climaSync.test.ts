@@ -228,6 +228,80 @@ describe('parseEcowittObservation', () => {
   });
 });
 
+// ============================================================================
+// computeDailyRainFromDeltas (copied from edge function for testing)
+// ============================================================================
+
+function computeDailyRainFromDeltas(
+  rainValues: (number | null)[],
+  previousAccumulator: number | null
+): { total: number; lastValue: number | null } {
+  let total = 0;
+  let prev = previousAccumulator;
+  let lastValue = previousAccumulator;
+  for (const v of rainValues) {
+    if (v === null) continue;
+    if (prev !== null) {
+      total += v >= prev ? v - prev : v;
+    }
+    prev = v;
+    lastValue = v;
+  }
+  return { total: round2(total), lastValue };
+}
+
+describe('computeDailyRainFromDeltas', () => {
+  it('sums positive increments within a single accumulating run', () => {
+    const r = computeDailyRainFromDeltas([0, 2, 5, 5, 8], null);
+    expect(r.total).toBe(8);
+    expect(r.lastValue).toBe(8);
+  });
+
+  it('treats a decrease as a device reset and counts the post-reset value, not the drop', () => {
+    // accumulator climbs to 10, resets to 0, climbs to 3 again (two rain events same day)
+    const r = computeDailyRainFromDeltas([0, 10, 0, 3], null);
+    expect(r.total).toBe(13); // 10 (first run) + 3 (post-reset run), not 10 - 3
+  });
+
+  it('does not double-count a plateaued accumulator carried in from the previous day', () => {
+    // station's own reset boundary falls mid-morning, not at Bogotá midnight:
+    // today's readings start already elevated (28mm from last night's rain)
+    // and stay flat until the device resets later in the day.
+    const previousDayLastReading = 28; // last raw value seen yesterday
+    const r = computeDailyRainFromDeltas([28, 28, 28, 0, 0], previousDayLastReading);
+    expect(r.total).toBe(0); // no NEW rain today — old total must not reappear as today's total
+  });
+
+  it('counts new rain that starts after a same-day device reset following a carried-in plateau', () => {
+    const previousDayLastReading = 28;
+    const r = computeDailyRainFromDeltas([28, 28, 0, 4], previousDayLastReading);
+    expect(r.total).toBe(4); // reset at index 2, then 4mm of genuinely new rain
+  });
+
+  it('treats the very first reading of a range (no prior baseline) as establishing state, not a delta', () => {
+    const r = computeDailyRainFromDeltas([5], null);
+    expect(r.total).toBe(0);
+    expect(r.lastValue).toBe(5);
+  });
+
+  it('ignores nulls without breaking the running baseline', () => {
+    const r = computeDailyRainFromDeltas([2, null, 6], null);
+    expect(r.total).toBe(4);
+  });
+
+  it('returns zero total and null lastValue for an all-null/empty series', () => {
+    const r = computeDailyRainFromDeltas([null, null], null);
+    expect(r.total).toBe(0);
+    expect(r.lastValue).toBeNull();
+  });
+
+  it('preserves the incoming lastValue when the series is empty', () => {
+    const r = computeDailyRainFromDeltas([], 12);
+    expect(r.lastValue).toBe(12);
+    expect(r.total).toBe(0);
+  });
+});
+
 describe('unit conversion helpers', () => {
   it('fToC: 32°F = 0°C', () => expect(fToC(32)).toBe(0));
   it('fToC: 212°F = 100°C', () => expect(fToC(212)).toBe(100));

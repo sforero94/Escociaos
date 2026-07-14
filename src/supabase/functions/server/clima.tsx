@@ -321,12 +321,43 @@ function parseEcowittHistory(histData: EcowittHistoryData, stationId: string) {
   return readings;
 }
 
+// Reconstructs a day's true rainfall from reading-to-reading deltas instead
+// of MAX(lluvia_diaria_mm). A raw MAX assumes the station's own accumulator
+// resets exactly at Bogotá midnight; if the station's configured timezone
+// doesn't match America/Bogota, an elevated accumulator value bleeds into
+// the next day's readings until the device's own reset catches up, and
+// MAX() re-reports the same total as a phantom duplicate day. Treating any
+// decrease as a device reset (counting the post-reset value, not the drop,
+// as new rain) is agnostic to wherever that reset boundary actually falls.
+// `previousAccumulator` carries the last known raw value across day
+// boundaries so the first reading of a day is diffed against real state
+// rather than treated as a reset; pass null only for the very first day of
+// a backfill range, where no prior baseline is known.
+function computeDailyRainFromDeltas(
+  rainValues: (number | null)[],
+  previousAccumulator: number | null
+): { total: number; lastValue: number | null } {
+  let total = 0;
+  let prev = previousAccumulator;
+  let lastValue = previousAccumulator;
+  for (const v of rainValues) {
+    if (v === null) continue;
+    if (prev !== null) {
+      total += v >= prev ? v - prev : v;
+    }
+    prev = v;
+    lastValue = v;
+  }
+  return { total: round2(total), lastValue };
+}
+
 // Aggregate an array of parsed 5-min readings into a single daily summary row
 // for clima_resumen_diario. Readings must already be unit-converted (°C, km/h, mm).
 function aggregateReadingsToDaily(
   readings: ReturnType<typeof parseEcowittHistory>,
   fecha: string,
-  stationId: string
+  stationId: string,
+  previousRainAccumulator: number | null = null
 ) {
   const nonNull = (vals: (number | null)[]): number[] =>
     vals.filter((v): v is number => v !== null);
@@ -336,7 +367,7 @@ function aggregateReadingsToDaily(
   const wind = nonNull(readings.map(r => r.viento_kmh));
   const gust = nonNull(readings.map(r => r.rafaga_kmh));
   const windDir = nonNull(readings.map(r => r.viento_dir));
-  const rain = nonNull(readings.map(r => r.lluvia_diaria_mm));
+  const rainDelta = computeDailyRainFromDeltas(readings.map(r => r.lluvia_diaria_mm), previousRainAccumulator);
   const solar = nonNull(readings.map(r => r.radiacion_wm2));
   const uv = nonNull(readings.map(r => r.uv_index));
 
@@ -353,22 +384,25 @@ function aggregateReadingsToDaily(
   }
 
   return {
-    fecha,
-    station_id: stationId,
-    temp_c_min: min(temps),
-    temp_c_max: max(temps),
-    temp_c_avg: avg(temps),
-    humedad_pct_min: min(humidity),
-    humedad_pct_max: max(humidity),
-    humedad_pct_avg: avg(humidity),
-    lluvia_total_mm: max(rain), // Ecowitt daily accumulator — max = day total
-    viento_kmh_avg: avg(wind),
-    rafaga_kmh_max: max(gust),
-    viento_dir_predominante: windDirMean,
-    radiacion_wm2_avg: avg(solar),
-    radiacion_wm2_max: max(solar),
-    uv_index_max: uv.length > 0 ? Math.max(...uv) : null,
-    lecturas_count: readings.length,
+    summary: {
+      fecha,
+      station_id: stationId,
+      temp_c_min: min(temps),
+      temp_c_max: max(temps),
+      temp_c_avg: avg(temps),
+      humedad_pct_min: min(humidity),
+      humedad_pct_max: max(humidity),
+      humedad_pct_avg: avg(humidity),
+      lluvia_total_mm: rainDelta.total,
+      viento_kmh_avg: avg(wind),
+      rafaga_kmh_max: max(gust),
+      viento_dir_predominante: windDirMean,
+      radiacion_wm2_avg: avg(solar),
+      radiacion_wm2_max: max(solar),
+      uv_index_max: uv.length > 0 ? Math.max(...uv) : null,
+      lecturas_count: readings.length,
+    },
+    lastRainAccumulator: rainDelta.lastValue,
   };
 }
 
@@ -409,6 +443,11 @@ export async function handleClimaBackfill(c: Context): Promise<Response> {
     let totalSynced = 0;
     let totalDays = 0;
     const errors: string[] = [];
+
+    // Carries the last raw lluvia_diaria_mm value across day iterations so
+    // each day's rain delta is diffed against real prior state instead of
+    // being treated as a reset — see computeDailyRainFromDeltas().
+    let previousRainAccumulator: number | null = null;
 
     // Iterate day by day
     const current = new Date(fromDate);
@@ -467,7 +506,13 @@ export async function handleClimaBackfill(c: Context): Promise<Response> {
         }
 
         // Aggregate into daily summary and upsert into clima_resumen_diario
-        const dailySummary = aggregateReadingsToDaily(readings, ecowittDateStr, creds.mac);
+        const { summary: dailySummary, lastRainAccumulator } = aggregateReadingsToDaily(
+          readings,
+          ecowittDateStr,
+          creds.mac,
+          previousRainAccumulator
+        );
+        previousRainAccumulator = lastRainAccumulator;
 
         const insertRes = await fetch(`${sb.supabaseUrl}/rest/v1/clima_resumen_diario?on_conflict=fecha,station_id`, {
           method: 'POST',
