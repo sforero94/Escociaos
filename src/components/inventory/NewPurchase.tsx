@@ -7,6 +7,7 @@ import { ProveedorDialog } from '../shared/ProveedorDialog';
 import { FacturaUploader } from '../shared/FacturaUploader';
 import { useFormDraft } from '@/hooks/useFormDraft';
 import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
+import { calcularPrecioAutoFillBulto, calcularTotalesCompra } from '@/utils/calculosCompras';
 import {
   Package,
   Search,
@@ -49,6 +50,7 @@ interface Producto {
   unidad_medida: string;
   categoria: string;
   precio_unitario: number | null;
+  precio_por_presentacion: number | null;
   cantidad_actual: number | null;
   activo: boolean | null;
 }
@@ -137,7 +139,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
     try {
       const { data, error } = await getSupabase()
         .from('productos')
-        .select('id, nombre, presentacion_kg_l, unidad_medida, categoria, precio_unitario, cantidad_actual, activo')
+        .select('id, nombre, presentacion_kg_l, unidad_medida, categoria, precio_unitario, precio_por_presentacion, cantidad_actual, activo')
         .eq('activo', true)
         .order('nombre');
 
@@ -222,7 +224,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
         // Auto-rellenar con datos del producto
         const presentacionCantidad = productoSeleccionado.presentacion_kg_l || 1;
         const presentacionUnidad = productoSeleccionado.unidad_medida || 'Kilos';
-        const precioPorBulto = productoSeleccionado.precio_unitario || 0;
+        const precioPorBulto = calcularPrecioAutoFillBulto(productoSeleccionado);
 
         return {
           ...item,
@@ -266,24 +268,11 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
         const precioPorBulto = Number(item.precio_por_bulto) || 0;
         const presentacionCantidad = Number(item.presentacion_cantidad) || 0;
 
-        // Validar valores
-        if (cantidadBultos <= 0 || precioPorBulto <= 0 || presentacionCantidad <= 0) {
-          return {
-            ...item,
-            cantidad_total: 0,
-            costo_total: 0,
-            precio_unitario_real: 0,
-          };
-        }
-
-        // CÁLCULO 1: Total kg/L = cantidad_bultos × presentacion_cantidad
-        const cantidadTotal = cantidadBultos * presentacionCantidad;
-
-        // CÁLCULO 2: Costo Total = cantidad_bultos × precio_por_bulto
-        const costoTotal = cantidadBultos * precioPorBulto;
-
-        // CÁLCULO 3: Precio Unitario Real = costo_total ÷ cantidad_total
-        const precioUnitarioReal = costoTotal / cantidadTotal;
+        const { cantidadTotal, costoTotal, precioUnitarioReal } = calcularTotalesCompra(
+          cantidadBultos,
+          precioPorBulto,
+          presentacionCantidad
+        );
 
         return {
           ...item,
@@ -424,7 +413,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
               saldo_nuevo: cantidadNueva,
               valor_movimiento: item.costo_total,
               responsable: user?.email || null,
-              observaciones: `Compra - Factura: ${datosCompra.numero_factura} - Proveedor: ${proveedorNombre} - ${item.cantidad_bultos} bultos de ${item.presentacion_cantidad} ${item.presentacion_unidad}`,
+              observaciones: `Compra - Factura: ${datosCompra.numero_factura} - Proveedor: ${proveedorNombre} - ${item.cantidad_bultos} bultos de ${item.presentacion_cantidad} ${item.presentacion_unidad} a ${formatearPesos(item.precio_por_bulto)}/bulto`,
               provisional: false,
             } as any);
 
