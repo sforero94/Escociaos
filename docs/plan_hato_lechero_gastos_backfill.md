@@ -1,6 +1,6 @@
 # Homologación de Gastos — Negocio Hato Lechero (tarea paralela)
 
-**Fecha:** 2026-07-17 · **Relación con el módulo de diseño:** independiente. No bloquea ni es bloqueada por `docs/plan_hato_lechero_module.md`, ni consume ninguna de sus sesiones (§9 de ese documento). No requiere migraciones ni cambios de esquema — usa el modelo `fin_*` que ya existe.
+**Fecha:** 2026-07-17 · **Estado: Sesión A y B ejecutadas para ene–jun 2026 — ver §13.** · **Relación con el módulo de diseño:** independiente. No bloquea ni es bloqueada por `docs/plan_hato_lechero_module.md`, ni consume ninguna de sus sesiones (§9 de ese documento). No requiere migraciones ni cambios de esquema — usa el modelo `fin_*` que ya existe.
 
 ---
 
@@ -69,6 +69,8 @@ Un gasto del Excel se considera **ya registrado** en `fin_gastos` si existe una 
 Solo lo que **no** encuentra coincidencia bajo esa regla se propone para inserción. Ante cualquier ambigüedad (coincidencia parcial, monto distinto, concepto dudoso), **no se inserta automáticamente** — se agrega al reporte de revisión para que Santiago/Martha decidan.
 
 ## 6. Mapeo de conceptos y categorías
+
+> **Corrección tras la ejecución (§13)**: el catálogo real de `fin_categorias_gastos` **no** está organizado por sección del Excel — es un catálogo único, compartido entre todos los negocios de la finca (Aguacate, Ganado, Caballos, Hato Lechero, etc.), con categorías temáticas amplias (`Mano de Obra y Asistencia Técnica`, `Equipos y Herramientas`, `Alimentos y Fertilizantes`, `Control de Plagas`, `Gastos Generales`, …) que no coinciden 1:1 con las categorías de columna del Excel de Martha (`Salarios`, `Combustible`, `Administracion`, …). El mapeo correcto sale de leer el catálogo real (paso 1 abajo) y de mirar cómo Consuelito ya viene categorizando gastos equivalentes del mismo negocio en los meses que sí están bien cargados — no de asumir una correspondencia por nombre. El detalle completo del mapeo usado está en §13.2.
 
 El Excel usa texto libre inconsistente (`"NOMiNA SUBACHOQUE $1.825..."`, `"MARE Hapadex/secamil (12...)"`, mezclando a veces nombre de proveedor y concepto en la misma celda — p. ej. `"AGROCAMPO"`, `"El Establo Villeta"` parecen proveedores, no conceptos); la app tiene un catálogo estructurado (`fin_categorias_gastos` → `fin_conceptos_gastos`). El mapeo se construye así, en este orden:
 
@@ -157,3 +159,81 @@ Documento/CSV con tres secciones:
 ## 12. Extensión futura opcional (fuera de esta tarea)
 
 El mismo método (extraer → mapear → emparejar por concepto+fecha+monto → reporte de faltantes/ambiguos → checkpoint humano → carga) aplica igual de bien a **ingresos** (`fin_ingresos`): el Excel ya trae ventas de leche, terneras y vacas mes a mes, arriba de la sección de gastos en la misma hoja. Se deja anotado por si se decide ampliar el alcance más adelante, pero no forma parte de esta tarea.
+
+## 13. Resultado ejecutado — 17 de julio de 2026 (ene–jun 2026)
+
+Sesión A y Sesión B (§8) se corrieron de punta a punta para la ventana ene–jun 2026. Registro de lo que realmente pasó, para que sirva de precedente si se corre para años anteriores (§11).
+
+### 13.1 Sesión A — hallazgos del dry-run
+
+Contra los 44 gastos de Hato Lechero ya cargados en ese rango, la sección SUBACHOQUE del Excel arrojó:
+
+| | Filas | Monto |
+|---|---|---|
+| Coincidencias (ya cargado, no se tocó) | — | Ene–Mar razonablemente al día |
+| Faltantes — alta confianza (concepto ya usado en meses previos para el mismo ítem) | 14 | $18.289.071 |
+| Faltantes — ambiguos (sin match exacto de catálogo, requerían decisión humana) | 9 | $7.314.900 |
+| Excluido del reporte (valor `2` en la celda de "Químicos/El Establo Villeta", enero — casi seguro un artefacto de digitación, no una cifra real) | 1 | — |
+
+Hallazgo más relevante: **la nómina de Subachoque faltaba en enero, abril, mayo y junio** (no solo abr–jun como reportó Martha en la entrevista — enero también estaba sin cargar), y **el combustible (ACPM + gasolina) estaba en cero desde abril**, un hueco que la entrevista no había mencionado porque es menos visible que la nómina.
+
+### 13.2 Checkpoint humano — decisiones de Santiago
+
+| Ambiguo del reporte | Decisión | Resultado |
+|---|---|---|
+| `Administracion / Fondo`, 6 meses, $3.540.000 | "Son aportes al fondo de emergencias de Subachoque. Agregar." | Se insertó bajo `Gastos Generales → Administración Propiedades` (el concepto existente más cercano; el catálogo no tiene un concepto literal de "fondo de emergencias") |
+| `Cesantías e Intereses` (junio, $1.690.000) + `Bonificaciones/primas trabajadores` (junio, $1.690.000) — dos filas separadas del Excel | "Son la misma prima extra salarial (prestaciones sociales) de los trabajadores. Unificar y agregar — valor total $1.690.000, no $3.380.000." | Se insertó **una sola fila** de $1.690.000 bajo `Mano de Obra y Asistencia Técnica → Primas` — la duplicación aparente en el Excel (misma cifra en dos filas) era la misma transacción anotada dos veces, no dos gastos reales |
+| `Facturatech` (febrero, $394.900) | "Es el sistema contable de todo Fovemsa, no atribuible al negocio lechero. Excluir." | No se insertó — a pesar de que un gasto hermano de marzo (Fedepapa, mismo bloque "OFICINA CENTRAL" del Excel) sí resultó ser del hato, este no lo era; confirma que la categoría "OFICINA CENTRAL" del Excel de Martha no predice por sí sola si el gasto es o no del hato |
+| Las 14 de alta confianza | "Se pueden agregar. Renombrar `NOMiNA SUBACHOQUE` → `Nomina Subachoque {{mes}}`." | Insertadas con el nombre ajustado |
+
+### 13.3 Sesión B — carga
+
+Antes de insertar se revalidó la idempotencia (§7.5): el conteo de gastos ya cargados subió de 43 a 44 filas entre la Sesión A y la Sesión B por actividad real y concurrente en la app — se re-verificó fila por fila que la nueva no chocaba con ningún candidato antes de escribir.
+
+**21 filas insertadas**, `estado='Confirmado'`, `region='Subachoque'`, `medio_pago='N/A'` (el Excel no especifica cuenta por línea; se usó la opción ya existente para casos sin dato, en vez de inventar una cuenta — pendiente que Santiago/Martha reasignen medio de pago real donde lo sepan), `observaciones='Importado de GASTOS_FOV_ENERO_2026, sección SUBACHOQUE, homologación jul-2026'` en las 21:
+
+| Fecha | Categoría → Concepto | Nombre | Valor |
+|---|---|---|---|
+| Ene | Mano de Obra → Salarios | Nomina Subachoque Enero | $3.380.000 |
+| Abr | Mano de Obra → Salarios | Nomina Subachoque Abril | $3.380.000 |
+| May | Mano de Obra → Salarios | Nomina Subachoque Mayo | $3.380.000 |
+| Jun | Mano de Obra → Salarios | Nomina Subachoque Junio | $3.380.000 |
+| Abr | Equipos y Herramientas → Combustible | ACPM Abril/26 | $500.000 |
+| Abr | Equipos y Herramientas → Combustible | Gasolina ordeño Abril/26 | $560.000 |
+| May | Equipos y Herramientas → Combustible | ACPM Mayo/26 | $600.000 |
+| May | Equipos y Herramientas → Combustible | Gasolina ordeño Mayo/26 | $560.000 |
+| Jun | Equipos y Herramientas → Combustible | ACPM Junio/26 | $530.000 |
+| Jun | Equipos y Herramientas → Combustible | Gasolina ordeño Junio/26 | $560.000 |
+| Abr | Alimentos y Fertilizantes → Heno-Pasto-Silo | Jornal silo/ordeño Abril/26 | $90.000 |
+| May | Alimentos y Fertilizantes → Heno-Pasto-Silo | Jornal silo/ordeño Mayo/26 | $150.000 |
+| Abr | Equipos y Herramientas → Herramientas | COLAGRA equipo ordeño/sellador/vacumetro mtto pezoneras | $894.501 |
+| May | Control de Plagas → Remedios-Vacunas-Purgas | MARE Hapadex/secamil Mayo/26 | $324.570 |
+| Ene | Gastos Generales → Administración Propiedades | Aporte fondo de emergencias Subachoque - Enero/26 | $450.000 |
+| Feb | Gastos Generales → Administración Propiedades | Aporte fondo de emergencias Subachoque - Febrero/26 | $650.000 |
+| Mar | Gastos Generales → Administración Propiedades | Aporte fondo de emergencias Subachoque - Marzo/26 | $630.000 |
+| Abr | Gastos Generales → Administración Propiedades | Aporte fondo de emergencias Subachoque - Abril/26 | $520.000 |
+| May | Gastos Generales → Administración Propiedades | Aporte fondo de emergencias Subachoque - Mayo/26 | $630.000 |
+| Jun | Gastos Generales → Administración Propiedades | Aporte fondo de emergencias Subachoque - Junio/26 | $660.000 |
+| Jun | Mano de Obra → Primas | Prima extra salarial trabajadores Subachoque - Junio/26 | $1.690.000 |
+
+**Total insertado: $23.519.071** (Facturatech y la fila de valor `2` quedaron fuera, per §13.2).
+
+### 13.4 Totales de Hato Lechero después del backfill
+
+| Mes | Filas | Total |
+|---|---|---|
+| Enero | 11 | $16.219.956 |
+| Febrero | 11 | $15.719.429 |
+| Marzo | 12 | $19.374.273 |
+| Abril | 14 | $17.063.092 |
+| Mayo | 11 | $20.084.965 |
+| Junio | 6 | $7.761.300 |
+| **Total ene–jun 2026** | **65** | **$96.223.015** |
+
+Junio sigue siendo el mes más delgado (6 filas) — no es un problema de homologación (no hay más nada que rescatar del Excel de Martha para junio), es un hueco de captura hacia adelante: junio probablemente todavía no está transcrito ni en el Excel ni en la app al día de este backfill.
+
+### 13.5 Pendiente de esta ejecución
+
+- Reasignar `medio_pago_id` real (hoy `N/A`) en las 21 filas donde Santiago/Martha conozcan la cuenta/efectivo real usado.
+- Repetir Sesión A/B para años anteriores a 2026 si Martha entrega los archivos correspondientes (§11) — reutilizando el mapeo de categoría/concepto validado en §13.2 como punto de partida, no como verdad absoluta (cada año puede tener sus propias sorpresas de catálogo).
+- La extensión a ingresos (§12) sigue sin ejecutarse.
