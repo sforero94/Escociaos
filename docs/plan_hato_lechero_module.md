@@ -14,7 +14,7 @@ Tres capítulos funcionales (los mismos de la entrevista):
 
 1. **Control de animales** — ficha individual (hoja de vida) + captura del chequeo veterinario bimestral.
 2. **Ordeño** — pesaje semanal por vaca + litros diarios al camión → PL calculado, proyecciones.
-3. **Ingresos y gastos** — ya cubierto por Finanzas (negocio "Hato Lechero"); este módulo lo consume, no lo duplica.
+3. **Ingresos y gastos** — ya cubierto por Finanzas (negocio "Hato Lechero"); este módulo lo consume, no lo duplica. La limpieza/backfill de gastos históricos es una **tarea paralela independiente** (`docs/plan_hato_lechero_gastos_backfill.md`), no parte de este diseño.
 
 Capacidad estrella: **alertas proactivas por Telegram** (secado, tratamientos multi-paso, servicios sin confirmar, rechequeos, partos próximos), sobre la infraestructura de bot ya validada con David.
 
@@ -41,7 +41,7 @@ Capacidad estrella: **alertas proactivas por Telegram** (secado, tratamientos mu
 - **Archivo de flujo de leche** diario (Martha quedó de enviarlo).
 - **Registro explícito de ventas/muertes** de vacas — hoy se infiere por desaparición.
 - **Celos e inseminaciones ejecutadas entre chequeos** — el hueco central que motivan las alertas.
-- **Nómina abr–jun 2026** en Finanzas (Excel de Consuelito saturado) — pendiente de Finanzas, NO de este módulo.
+- **Nómina abr–jun 2026** y homologación general de gastos del hato en Finanzas (Excel de Consuelito saturado) — cubierto por la tarea paralela `docs/plan_hato_lechero_gastos_backfill.md`, NO por este módulo.
 - Edad de vacas anteriores a 2017 (cuadernos de Nathalie) — se marca "sin fecha de nacimiento", nunca se inventa.
 
 ---
@@ -95,8 +95,7 @@ Capacidad estrella: **alertas proactivas por Telegram** (secado, tratamientos mu
 
 ### Fuera (explícito)
 - Rehacer Finanzas (gastos/ingresos/presupuesto ya existen; la leche sigue entrando por `fin_ingresos`).
-- Recuperar nómina abr–jun 2026 (tarea de datos de Finanzas, se gestiona aparte).
-- Gastos de Villeta y Bogotá casa del Excel FOV (no son del hato; no se importan).
+- **Homologación de gastos históricos del Excel GASTOS FOV contra `fin_gastos`** (incluye recuperar la nómina faltante abr–jun 2026) — es una **tarea paralela e independiente**, documentada en `docs/plan_hato_lechero_gastos_backfill.md`. No requiere las tablas `hato_*` ni las migraciones de este plan; puede correr en cualquier momento, antes o en paralelo al resto del cronograma (§8).
 - Calendario sanitario preventivo completo (solo lo que aparece en el chequeo, por ahora).
 - Reemplazar la planilla de papel (el sistema la asiste; a futuro la genera pre-llenada).
 - Diseño visual detallado (paso siguiente).
@@ -238,7 +237,7 @@ Regla de oro: **ningún dato ambiguo se importa en silencio** — lo limpio entr
 4. **Load** — orden de dependencias, transaccional, idempotente (re-corrida limpia `origen='importacion_historica'` primero). UPDATE-by-id + INSERT, nunca upsert PostgREST con claves NULL (lección de `CapturaCosechaGrid`).
 5. **Verify** — invariantes: cada A{n} tiene animal o flag; conteo de partos ≈ `#P` máximo; hato activo ≈ ~45; dos activas jamás comparten numero.
 
-La matriz P&G de gastos queda **fuera del pipeline** (Finanzas ya es dueña del dinero del hato; backfill histórico opcional se decide aparte).
+La matriz P&G de gastos queda **fuera de este pipeline** — se homologa por separado, con el método de matching (concepto + fecha + monto, sin duplicar lo ya cargado) descrito en `docs/plan_hato_lechero_gastos_backfill.md`.
 
 ### 7.5 Frontend
 
@@ -292,6 +291,7 @@ Convenciones obligatorias: `format.ts` para números (formato colombiano), `onWh
 | W7 | Herramientas Esco + `hato-aggregation.ts` | M | W1, W3 | Durante la visita |
 | W8 | Foto-OCR (endpoint + prefill de grilla, afinado con fotos reales) | M | W4 | Fase 2 (post-visita) |
 | W9 | Flujo venta/muerte ↔ `TransaccionGanadoForm` (`es_hato`) | S/M | W1, W3 | Durante la visita (ventas son infrecuentes) |
+| **B** | **Homologación de gastos** (`docs/plan_hato_lechero_gastos_backfill.md`) — extraer P&G sección Subachoque, emparejar contra `fin_gastos` por concepto+fecha+monto, insertar solo faltantes | S/M | Ninguna (tarea desacoplada, no usa `hato_*`) | **Puede correr en cualquier momento, en paralelo a W1–W9** |
 
 **Encendido escalonado de alertas (mitigación del riesgo de confianza):**
 1. ~Ago 1: modo sombra — el tick corre y envía solo a Martha/Santiago; se verifica cada alerta contra la realidad.
@@ -340,10 +340,9 @@ Convenciones obligatorias: `format.ts` para números (formato colombiano), `onWh
 - Machos vendidos (OV) sin ficha propia — solo eventos (confirmado en D3).
 - RLS de `fin_transacciones_ganado` se extiende a Administrador (migración 053).
 - Rechequeo a nivel hato por "60 días desde el último chequeo" (no fecha planificada).
-- Matriz P&G histórica NO se importa a `fin_gastos` por este módulo (decisión aparte de Finanzas).
 - Conteos del hato jamás se copian a `gan_inventario`.
+- La homologación de gastos (P&G/nómina) es tarea paralela e independiente — ver `docs/plan_hato_lechero_gastos_backfill.md`, no forma parte de este documento.
 
 **Pendientes externos (no bloquean el diseño):**
 - Martha envía el archivo de flujo de leche y los chequeos que falten.
-- Recuperación de nómina abr–jun 2026 en Finanzas (tarea de datos aparte).
 - Avisar a Consuelito que los datos de vacas están al día hasta julio.
