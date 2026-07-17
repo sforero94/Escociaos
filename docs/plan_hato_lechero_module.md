@@ -53,7 +53,7 @@ Capacidad estrella: **alertas proactivas por Telegram** (secado, tratamientos mu
 | D1 | **El # de vaca es chapeta permanente, nunca se recicla** | `numero` es llave de identidad fuerte: `UNIQUE(numero)` global en `hato_animales`. La importación usa numero como llave primaria de resolución y el nombre como validación; cualquier contradicción en el histórico se marca para revisión (no se asume reciclaje). |
 | D2 | **Fernando tiene Telegram y puede recibir/responder en Subachoque** | El lazo cerrado va dirigido a Fernando como respondiente primario; escalamiento a Martha a las 48h sin respuesta. |
 | D3 | **Alcance: vacas + terneras/novillas retenidas.** Machos vendidos (OV) quedan solo como eventos de parto, sin ficha propia | Ficha individual para todo animal hembra retenido (base de genealogía y levante). Menos fabricación de registros en la importación. |
-| D4 | **Las alertas deben estar funcionando ANTES de la visita (6 de agosto)** | El motor de alertas (W6) se adelanta al tramo pre-visita. Prerequisito duro: sesión remota de validación de datos con Martha antes del encendido (una alerta con datos malos quema la confianza de Fernando). Encendido escalonado: primero en "modo sombra" hacia Martha/Santiago, luego a Fernando. |
+| D4 | **Las alertas deben estar funcionando ANTES de la visita a la finca (6 de agosto)** | La sesión del motor de alertas (S6, §8) no espera a la visita para encenderse. Prerequisito duro: el checkpoint humano de la sesión de importación (S3) — validación de datos con Martha — debe cerrarse antes de que S6 pueda avanzar de "modo sombra" a habilitación real (una alerta con datos malos quema la confianza de Fernando). |
 
 ---
 
@@ -95,7 +95,7 @@ Capacidad estrella: **alertas proactivas por Telegram** (secado, tratamientos mu
 
 ### Fuera (explícito)
 - Rehacer Finanzas (gastos/ingresos/presupuesto ya existen; la leche sigue entrando por `fin_ingresos`).
-- **Homologación de gastos históricos del Excel GASTOS FOV contra `fin_gastos`** (incluye recuperar la nómina faltante abr–jun 2026) — es una **tarea paralela e independiente**, documentada en `docs/plan_hato_lechero_gastos_backfill.md`. No requiere las tablas `hato_*` ni las migraciones de este plan; puede correr en cualquier momento, antes o en paralelo al resto del cronograma (§8).
+- **Homologación de gastos históricos del Excel GASTOS FOV contra `fin_gastos`** (incluye recuperar la nómina faltante abr–jun 2026) — es una **tarea paralela e independiente**, documentada en `docs/plan_hato_lechero_gastos_backfill.md`. No requiere las tablas `hato_*` ni las migraciones de este plan; vive fuera del grafo de sesiones (§8) y puede tomarla cualquier agente disponible en cualquier momento.
 - Calendario sanitario preventivo completo (solo lo que aparece en el chequeo, por ahora).
 - Reemplazar la planilla de papel (el sistema la asiste; a futuro la genera pre-llenada).
 - Diseño visual detallado (paso siguiente).
@@ -276,37 +276,98 @@ Convenciones obligatorias: `format.ts` para números (formato colombiano), `onWh
 
 ---
 
-## 8. Plan de implementación
+## 8. Plan de ejecución — sesiones de trabajo por agente
 
-**Ventana: hoy (jul 17) → visita 6–21 de agosto (~3 semanas).** Por decisión D4, las alertas se encienden ANTES de la visita, con validación remota de datos como prerequisito.
+Este plan lo ejecuta el equipo global de agentes (CPO, CTO, backend, frontend, integraciones, QA), no una persona con calendario. Por eso la estructura no es temporal — **es un grafo de dependencias entre sesiones**, donde cada sesión es la unidad de trabajo que un agente puede tomar de principio a fin. Una sesión especifica: qué agente la ejecuta, qué insumos necesita (y de qué sesión salen), qué entrega, y a qué otras sesiones desbloquea. Dos sesiones sin dependencia entre sí pueden correr **en paralelo**, en la misma ventana o en agentes distintos.
 
-| # | Workstream | Tamaño | Depende de | Fecha objetivo |
-|---|---|---|---|---|
-| W1 | Migraciones **049** `create_hato_core`, **050** `create_hato_leche`, **051** `create_hato_tratamientos`, **052** `create_hato_alertas`, **053** `fin_transacciones_ganado_hato_link`, **054** `hato_alertas_cron` + vista `v_hato_estado_actual`. Actualizar `docs/supabase_tablas.md` y CLAUDE.md | M | — | Semana 1 (jul 20–24) |
-| W2 | Lógica pura `calculosHato.ts` (parsers, SX, motor de fechas, derivación de estado, proyecciones) + copia servidor + test de paridad + fixtures de planillas reales | M | — (paralelo) | Semana 1 |
-| W3 | Pipeline de importación `scripts/import-hato/` + **sesión remota de revisión con Martha** + carga a producción | L | W1, W2 | Semanas 1–2 · **sesión con Martha ~jul 27–29 (agendar YA — es el riesgo de cronograma)** |
-| W4 | Frontend core: rutas, AnimalesList, HojaDeVida, ChequeoCapturaGrid, dashboard | L | W1, W2 (contra datos de W3) | Semanas 2–3 |
-| W5 | Captura de leche: LecheView + conversaciones Telegram `pesajeLeche`/`litrosCamion` + onboarding `telegram_usuarios` de Fernando | M | W1 | Semana 2 |
-| W6 | **Motor de alertas** (adelantado por D4): tick endpoint (generar/despachar/escalar), helper de envío saliente + log, callbacks con efectos de dominio, AlertasView, cron 054 | L | W1, W2, W5 | Semana 3 · **modo sombra ~ago 1 (alertas a Martha/Santiago), Fernando ~ago 3–5 solo con tipos validados (`secado_due`, `tratamiento_paso`)** |
-| W7 | Herramientas Esco + `hato-aggregation.ts` | M | W1, W3 | Durante la visita |
-| W8 | Foto-OCR (endpoint + prefill de grilla, afinado con fotos reales) | M | W4 | Fase 2 (post-visita) |
-| W9 | Flujo venta/muerte ↔ `TransaccionGanadoForm` (`es_hato`) | S/M | W1, W3 | Durante la visita (ventas son infrecuentes) |
-| **B** | **Homologación de gastos** (`docs/plan_hato_lechero_gastos_backfill.md`) — extraer P&G sección Subachoque, emparejar contra `fin_gastos` por concepto+fecha+monto, insertar solo faltantes | S/M | Ninguna (tarea desacoplada, no usa `hato_*`) | **Puede correr en cualquier momento, en paralelo a W1–W9** |
+La única referencia temporal real en todo el plan es un evento externo fijo — la visita de Santiago a la finca (6–21 de agosto) — que no es una fecha de cronograma interno sino un **checkpoint del mundo real**: la ventana en la que Fernando y Martha están presencialmente disponibles para entrenamiento y calibración en vivo. Las sesiones se ordenan para que el trabajo que *necesita* ese checkpoint (calibrar alertas con Fernando, capturar el primer chequeo en vivo si coincide la fecha) llegue con todo lo demás ya resuelto — no para llenar semanas.
 
-**Encendido escalonado de alertas (mitigación del riesgo de confianza):**
-1. ~Ago 1: modo sombra — el tick corre y envía solo a Martha/Santiago; se verifica cada alerta contra la realidad.
-2. ~Ago 3–5: Fernando recibe solo `secado_due` y `tratamiento_paso` (los tipos cuyos datos quedaron validados en la sesión W3).
-3. Durante la visita: se calibran redacción/horarios con Fernando en persona y se activan `servicio_sin_confirmacion` y `parto_proximo`.
+**S0 — CPO + CTO: Diseño (completada)**
+Este documento. Entrega: alcance, épicas priorizadas, modelo de datos, arquitectura de integraciones, motor de alertas, estrategia de importación, arquitectura de frontend, riesgos.
 
-**Regla de recorte pre-acordada** si el cronograma aprieta: caen primero D1-grilla-web (el pesaje puede seguir 2 semanas en papel) y E-avanzados; **nunca** caen fichas + chequeo + importación validada + alertas de secado/tratamiento.
+**S1 — CTO/Backend: Esquema y RLS**
+- Objetivo: migraciones **049** `create_hato_core`, **050** `create_hato_leche`, **051** `create_hato_tratamientos`, **052** `create_hato_alertas`, **053** `fin_transacciones_ganado_hato_link`, **054** `hato_alertas_cron` + vista `v_hato_estado_actual`. Actualizar `docs/supabase_tablas.md` y CLAUDE.md.
+- Insumos: §7.1–7.2 de este plan.
+- Entregable: esquema aplicado (un solo PR, para evitar la colisión de numeración que ya ocurrió antes en el repo) + RLS verificada.
+- Depende de: nada — sesión de arranque.
+- Desbloquea: S3, S4, S6, S9.
 
-**Definición de éxito al cierre de la visita (ago 21):** (1) hato completo en el sistema y un chequeo real capturado en la app; (2) Fernando respondió alertas reales ≥1 semana; (3) litros del carro llegan a diario; (4) ≥1 pesaje semanal capturado; (5) Martha no abrió el Excel de chequeos para nada nuevo.
+**S2 — Backend: Motor de lógica pura (`calculosHato.ts`)**
+- Objetivo: parsers de planilla (fechas multi-valor, `#VALUE!`), descomposición SX→eventos, motor de fechas (SECAR/PP), derivación de estado, cálculo de PL/proyecciones.
+- Insumos: §6 (criterios de aceptación por épica), §7.1 (tabla de descomposición SX), los 5 archivos Excel como fixtures de test.
+- Entregable: `src/utils/calculosHato.ts` + `calculosHato.test.ts`, copia en `src/supabase/functions/server/` + `calculosHatoParidad.test.ts`.
+- Depende de: nada — sin dependencia real de esquema, corre en paralelo a S1.
+- Desbloquea: S3, S4, S6, S7.
 
-**Transversal:** cada cambio de edge function se despliega con `npx supabase functions deploy make-server-1ccce916` y se sincroniza en ambas copias; migraciones 049–054 coordinadas en un solo PR (ya hubo colisiones de numeración); toda la lógica de negocio en módulos puros con Vitest (los fixtures de planillas reales son los tests de mayor ROI: multi-fechas, `#VALUE!`, cada variante de SX).
+**S3 — Backend/Data: Pipeline de importación**
+- Objetivo: `scripts/import-hato/` (extract → normalize → resolve → load → verify).
+- Insumos: esquema de S1, parsers de S2, los 5 archivos Excel.
+- Entregable: `animales.csv` + `resolution-report.md` + carga a producción.
+- Depende de: S1, S2.
+- **Checkpoint humano obligatorio** (no delegable a ningún agente): revisión de `resolution-report.md` con Martha antes de cargar a producción — el único gate de este plan que exige su tiempo, y el de mayor riesgo de cronograma real porque depende de su disponibilidad, no de capacidad de agentes. Agendarlo es la acción de mayor prioridad fuera de las sesiones mismas.
+- Desbloquea: S4 (necesita datos reales para probarse contra el hato verdadero), S6 (las alertas no se encienden sobre datos sin validar), S7, S9.
 
-### Fases posteriores
-- **Fase 2 (sept–oct):** A3, A5, B5 (planilla pre-llenada — primera reducción neta de trabajo de Martha, lista para el chequeo de ~octubre), C5–C7, D4–D6, E3–E5, F2 (histórico completo de chequeos), W8 (OCR), W9 si no quedó.
-- **Fase 3:** A6 (consanguinidad), E6 (reporte semanal), convergencia eventual con módulo Ganado.
+**S4 — Frontend: Núcleo del módulo**
+- Objetivo: rutas, `AnimalesList`, `HojaDeVida`, `ChequeoCapturaGrid`, `HatoDashboard`.
+- Insumos: esquema de S1, motor de S2 (preview de normalización en vivo en la grilla), datos de S3 para prueba contra el hato real.
+- Entregable: módulo navegable end-to-end para fichas + captura de chequeo.
+- Depende de: S1, S2. Puede empezar contra fixtures antes de que S3 cierre, pero su validación final requiere los datos reales de S3.
+- Desbloquea: nada aguas abajo (es hoja del grafo).
+
+**S5 — Frontend/Integraciones: Captura de leche**
+- Objetivo: `LecheView` (pesajes + litros diarios) + conversaciones Telegram `pesajeLeche`/`litrosCamion` + alta de Fernando en `telegram_usuarios`.
+- Insumos: esquema de S1 (`hato_pesajes_leche`, `hato_litros_diarios`).
+- Depende de: S1.
+- Desbloquea: S6 — no por los datos de leche en sí, sino porque S5 deja lista la plomería de bot y el onboarding de Fernando que el motor de alertas reutiliza para poder escribirle.
+
+**S6 — Backend/Integraciones: Motor de alertas** *(capacidad estrella — máxima prioridad de secuenciación)*
+- Objetivo: tick endpoint (generar/despachar/escalar), helper de envío saliente + log a `telegram_mensajes`, callbacks con efectos de dominio, `AlertasView`, cron 054.
+- Insumos: esquema S1, motor S2, datos **validados** de S3 (checkpoint humano cumplido), onboarding de Fernando de S5.
+- Depende de: S1, S2, S3 (con su checkpoint humano cerrado), S5.
+- **Dos checkpoints de confianza en cascada, no fechas** — cada uno gatea al siguiente por evidencia, no por calendario:
+  1. *Modo sombra*: el tick corre en real pero notifica solo a Martha/Santiago; cada alerta generada se contrasta contra la realidad del hato antes de avanzar.
+  2. *Habilitación a Fernando*: solo se activan para él los tipos de alerta (`secado_due`, `tratamiento_paso`) cuyos datos quedaron con confianza alta tras S3; el resto (`servicio_sin_confirmacion`, `parto_proximo`) se calibra en persona durante la visita a la finca, con Santiago presente para ajustar redacción y horarios con Fernando en vivo.
+- Desbloquea: nada aguas abajo.
+
+**S7 — Backend: Herramientas Esco**
+- Objetivo: `get_hato_animal`, `get_hato_reproduccion`, `get_hato_leche` + `hato-aggregation.ts`.
+- Depende de: S1, S2, S3 (necesita datos reales para responder preguntas útiles).
+- Prioridad de secuenciación baja: no bloquea el checkpoint de la visita a la finca, puede correr en cualquier ventana ociosa una vez S3 cierra.
+
+**S8 — Frontend: Foto-OCR** *(no ejecutable todavía)*
+- Depende de: S4 (la grilla debe existir para recibir el prefill) **y** de un insumo que hoy no existe — fotos reales de la planilla, que solo se recolectan durante la visita a la finca. Esta sesión queda fuera del grafo ejecutable hasta que ese insumo aparezca; no se agenda, se espera.
+
+**S9 — Backend: Flujo venta/muerte ↔ `TransaccionGanadoForm`**
+- Objetivo: marcar `vendida`/`muerta` en la ficha abre el formulario existente pre-llenado, vínculo `es_hato`/`hato_animal_id`.
+- Depende de: S1, S3.
+- Prioridad de secuenciación baja: las ventas son infrecuentes, no bloquea nada.
+
+**Homologación de gastos** (`docs/plan_hato_lechero_gastos_backfill.md`) — fuera de este grafo por diseño: no consume ni produce insumos de ninguna sesión de arriba. Cualquier agente disponible puede tomarla en cualquier momento.
+
+### Grafo de paralelismo
+
+```
+S1 ─┬─ S3 ─┬─ S4
+S2 ─┘      ├─ S6 ← S5 ← S1
+           ├─ S7
+           └─ S9
+S8: bloqueada hasta visita a la finca (insumo externo)
+Homologación de gastos: sin conexión al grafo, ejecutable siempre
+```
+
+S1 y S2 son las únicas sesiones sin dependencias — arrancan primero y en paralelo. Todo lo demás (salvo la homologación de gastos, que vive fuera del grafo) pasa por S3 y su checkpoint humano; **por eso agendar ese checkpoint con Martha es la acción crítica, no una fecha de sprint.**
+
+**Regla de priorización si hay que recortar sesiones**: caen primero S5 (el pesaje puede seguir en papel mientras tanto) y S7/S8/S9; **nunca** caen S1–S4 ni el "modo sombra" de S6 — fichas, chequeo, importación validada y las primeras alertas de secado/tratamiento son el núcleo no negociable.
+
+**Definición de éxito antes del checkpoint de la visita a la finca:** (1) hato completo en el sistema, con al menos un chequeo real capturado en la app (S4); (2) Fernando respondiendo alertas reales de secado/tratamiento en modo habilitado, no sombra (S6); (3) litros del carro llegando a diario (S5); (4) al menos un pesaje semanal capturado (S5); (5) Martha sin necesidad de volver a abrir el Excel de chequeos para nada nuevo.
+
+**Transversal a todas las sesiones de backend/integraciones:** cada cambio de edge function se despliega con `npx supabase functions deploy make-server-1ccce916` y se sincroniza en ambas copias del código fuente; toda la lógica de negocio va en módulos puros con Vitest (los fixtures de planillas reales son los tests de mayor ROI: multi-fechas, `#VALUE!`, cada variante de SX).
+
+### Sesiones futuras (habilitadas después del checkpoint de la visita)
+
+Depende de que el checkpoint externo (visita a la finca) haya ocurrido y de que las sesiones S1–S7 estén cerradas:
+- A3, A5, B5 (planilla pre-llenada — primera reducción neta de trabajo de Martha, lista para el siguiente chequeo bimestral), C5–C7, D4–D6, E3–E5, F2 (histórico completo de chequeos), S8 (Foto-OCR, una vez existan fotos reales), S9 si no se hizo antes.
+- Más adelante: A6 (consanguinidad), E6 (reporte semanal), convergencia eventual con el módulo Ganado.
 
 ---
 
@@ -314,8 +375,8 @@ Convenciones obligatorias: `format.ts` para números (formato colombiano), `onWh
 
 | Riesgo | Prob. | Impacto | Mitigación |
 |---|---|---|---|
-| **Alertas con datos malos queman la confianza de Fernando** (agravado por D4: encendido remoto) | Alta | Crítico | Encendido escalonado (sombra → tipos validados → resto en visita); sesión de validación W3 como prerequisito duro; botón "esto está mal" en toda alerta |
-| Sesión de revisión con Martha se atrasa → todo el cronograma D4 se corre | Media | Alto | Agendar ya (~jul 27–29); el pipeline W3 etapas 1–2 corre contra los 5 archivos en semana 1 para que las sorpresas salgan temprano |
+| **Alertas con datos malos queman la confianza de Fernando** (agravado por D4: encendido antes de la visita) | Alta | Crítico | Encendido escalonado por checkpoints de confianza, no por fecha (sombra → tipos validados → resto calibrado en visita); el checkpoint humano de S3 es prerequisito duro de S6; botón "esto está mal" en toda alerta |
+| El checkpoint humano de S3 (revisión con Martha) se atrasa → S6 no puede avanzar de modo sombra a habilitación real antes de la visita | Media | Alto | Agendarlo cuanto antes — es la acción crítica del plan; las etapas de extracción/normalización de S3 (que no requieren a Martha) arrancan de inmediato contra los 5 archivos para que las sorpresas salgan temprano, sin esperar su agenda |
 | Doble carga transitoria (Excel + app) mata la adopción | Media | Alto | Corte tajante en la visita: el Excel de chequeos se congela como archivo histórico |
 | Fatiga/rechazo del bot (mensajes a deshora, percepción de vigilancia) | Media | Alto | Agregación 1 mensaje/franja; horarios acordados con Fernando en persona; tono de ayuda, no de auditoría; el precedente de David juega a favor |
 | Calidad del histórico peor que la muestra | Alta | Medio | Regla "ambiguo → revisión, nunca importación silenciosa"; F2 es P1 y no bloquea el MVP; KPIs reproductivos apagados hasta validar |
@@ -327,7 +388,7 @@ Convenciones obligatorias: `format.ts` para números (formato colombiano), `onWh
 
 ## 10. Preguntas abiertas restantes
 
-**Para Martha (agendar en la sesión de validación de datos, ~jul 27–29):**
+**Para Martha (agendar en el checkpoint humano de la sesión de importación, S3):**
 1. ¿Quién pesa la leche semanal y cómo nace el dato (papel en el ordeño → quién transcribe)? Define la forma final de D1.
 2. ¿Quién reporta los litros diarios del camión — Fernando por Telegram a diario, o Martha semanal contra el recibo? Define el alcance de `litrosCamion`.
 3. Regla de secado: ¿la fecha calculada (servicio+7m) la ajusta el veterinario según condición/producción? ¿Quién tiene la última palabra? → fecha calculada-editable y por quién.
