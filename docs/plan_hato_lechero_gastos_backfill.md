@@ -1,6 +1,8 @@
-# Homologación de Gastos — Negocio Hato Lechero (tarea paralela)
+# Homologación de Gastos e Ingresos — Negocio Hato Lechero (tarea paralela)
 
-**Fecha:** 2026-07-17 · **Estado: Sesión A y B ejecutadas para ene–jun 2026 — ver §13.** · **Relación con el módulo de diseño:** independiente. No bloquea ni es bloqueada por `docs/plan_hato_lechero_module.md`, ni consume ninguna de sus sesiones (§9 de ese documento). No requiere migraciones ni cambios de esquema — usa el modelo `fin_*` que ya existe.
+**Fecha:** 2026-07-17 · **Estado: Gastos e ingresos ejecutados para ene–jun 2026 — ver §13 y §14.** · **Relación con el módulo de diseño:** independiente. No bloquea ni es bloqueada por `docs/plan_hato_lechero_module.md`, ni consume ninguna de sus sesiones (§9 de ese documento). No requiere migraciones ni cambios de esquema — usa el modelo `fin_*` que ya existe.
+
+> Este documento nació enfocado solo en gastos (§1–§12); tras ejecutar esa parte (§13), se amplió al mismo tratamiento para ingresos (§14), que originalmente estaba planteado como extensión futura opcional (antiguo §12, ahora ejecutado).
 
 ---
 
@@ -156,9 +158,9 @@ Documento/CSV con tres secciones:
 - Si Martha entrega archivos GASTOS FOV de años anteriores a 2026 (mencionado como posible en la entrevista pero no confirmado), la misma Sesión A/B se puede correr por año adicional, reutilizando `mapping.json`.
 - No depende de las migraciones `049`–`054` del módulo de diseño ni de ninguna tabla `hato_*`.
 
-## 12. Extensión futura opcional (fuera de esta tarea)
+## 12. Extensión a ingresos — ejecutada (ver §14)
 
-El mismo método (extraer → mapear → emparejar por concepto+fecha+monto → reporte de faltantes/ambiguos → checkpoint humano → carga) aplica igual de bien a **ingresos** (`fin_ingresos`): el Excel ya trae ventas de leche, terneras y vacas mes a mes, arriba de la sección de gastos en la misma hoja. Se deja anotado por si se decide ampliar el alcance más adelante, pero no forma parte de esta tarea.
+*(Esta sección describía originalmente la extensión a ingresos como opcional y futura. Se ejecutó el 17 de julio de 2026 — ver §14 para el detalle completo. El método fue el mismo: extraer → mapear → emparejar por concepto+fecha+monto → reporte de faltantes/ambiguos → checkpoint humano → carga, aplicado a `fin_ingresos` en vez de `fin_gastos`.)*
 
 ## 13. Resultado ejecutado — 17 de julio de 2026 (ene–jun 2026)
 
@@ -236,4 +238,64 @@ Junio sigue siendo el mes más delgado (6 filas) — no es un problema de homolo
 
 - Reasignar `medio_pago_id` real (hoy `N/A`) en las 21 filas donde Santiago/Martha conozcan la cuenta/efectivo real usado.
 - Repetir Sesión A/B para años anteriores a 2026 si Martha entrega los archivos correspondientes (§11) — reutilizando el mapeo de categoría/concepto validado en §13.2 como punto de partida, no como verdad absoluta (cada año puede tener sus propias sorpresas de catálogo).
-- La extensión a ingresos (§12) sigue sin ejecutarse.
+- La extensión a ingresos se ejecutó el mismo día — ver §14.
+
+## 14. Resultado ejecutado — ingresos, 17 de julio de 2026 (ene–jun 2026)
+
+Mismo tratamiento que §13 pero sobre `fin_ingresos`, con dos reglas explícitas de Santiago que no estaban en el diseño original del documento (§1–§12 solo cubrían gastos):
+
+1. **Fecha**: último día calendario de cada mes (no el primer día como en gastos — el archivo de ingresos no tiene el mismo patrón mensual-agregado-sin-día que gastos, y así lo pidió Santiago).
+2. **Leche**: usar el **valor neto** (fila "Ingreso Neto Leche ($) (-2,25%)" del Excel), no el bruto (fila "Ventas Leche ($)").
+
+### 14.1 Punto de partida
+
+`fin_ingresos` para Hato Lechero estaba en **cero para todo 2026** — sin ninguna fila cargada, confirmando textualmente lo que dijo Martha en la entrevista ("los ingresos acá aparecen en cero por lo que no hemos cargado"). A diferencia de gastos, no hubo que distinguir coincidencias de faltantes: **todo lo del Excel era faltante**.
+
+El catálogo `fin_categorias_ingresos` de Hato Lechero (a diferencia de `fin_categorias_gastos`, este sí es específico por negocio) tiene dos entradas nunca usadas (`Venta de Leche`, `Venta de Vacas`) junto a las realmente usadas en 2023–2025 (`Venta Leche`, `Venta de Terneros`) — se detectó revisando el histórico real de uso, no por nombre. El precedente 2023–2025 (28 filas revisadas) fijó también comprador (`El Pomar`, 100% de las filas de leche) y medio de pago (`Cuenta Fovemsa`, 100% de las filas), que Santiago confirmó usar igual para 2026.
+
+### 14.2 Filas insertadas
+
+**Leche** — 6 filas, categoría `Venta Leche`, comprador `El Pomar`, medio de pago `Cuenta Fovemsa`, `nombre="{litros} L"`, `cantidad`/`precio_unitario` poblados:
+
+| Mes | Fecha | Litros | Bruto (Excel) | Neto insertado | Precio/L |
+|---|---|---|---|---|---|
+| Enero | 2026-01-31 | 12.541 | $25.207.410 | $24.640.243,28 | $1.964,78 |
+| Febrero | 2026-02-28 | 12.946 | $26.021.460 | $25.435.977,15 | $1.964,78 |
+| Marzo | 2026-03-31 | 11.700 | $23.211.175 | $22.688.923,56 | $1.939,22 |
+| Abril | 2026-04-30 | 9.812 | $19.624.000 | $19.182.460,00 | $1.955,00 |
+| Mayo | 2026-05-31 | 12.567 | $25.134.000 | $24.568.485,00 | $1.955,00 |
+| Junio | 2026-06-30 | 13.781 | $27.699.810 | $27.076.564,28 | $1.964,78 |
+
+Total leche: **$143.592.653,27** — coincide casi exactamente con lo que Martha recordó de memoria en la llamada ("143.592 millones de ingresos"), validando que el neto era el número correcto a usar.
+
+**Terneras** — 7 filas, categoría `Venta de Terneros`, sin comprador (precedente: siempre null), `nombre="1"` por venta (patrón histórico: una fila por ternera):
+
+| Mes | Fecha | Filas | Valor c/u | Origen |
+|---|---|---|---|---|
+| Enero | 2026-01-31 | 1 | $120.000 | 🟢 Directo del Excel |
+| Febrero | 2026-02-28 | 1 | $120.000 | 🟢 Directo del Excel |
+| Marzo | 2026-03-31 | 1 | $120.000 | 🟢 Directo del Excel |
+| Mayo | 2026-05-31 | **4** | $120.000 c/u | 🟡→✅ El Excel traía una sola celda de $480.000; Santiago confirmó que eran **4 terneras a $120.000 cada una**, no 1 a $480.000 — se insertaron como 4 filas separadas para mantener el patrón "una fila por venta" del histórico |
+
+**Excluido** (igual que en el dry-run, §-anterior de este mismo apartado):
+- `Venta Vacas ($)` — sin ningún valor en el Excel para ene–jun 2026, nada que insertar.
+- `Ingreso Hato (Ingreso Neto leche + terneras + vacas)` — fila de total calculado por Martha, no una transacción; insertarla habría duplicado el ingreso de leche y terneras ya registrado por separado.
+
+### 14.3 Totales de Hato Lechero después del backfill de ingresos
+
+| Mes | Filas | Total |
+|---|---|---|
+| Enero | 2 | $24.760.243,28 |
+| Febrero | 2 | $25.555.977,15 |
+| Marzo | 2 | $22.808.923,56 |
+| Abril | 1 | $19.182.460,00 |
+| Mayo | 5 | $25.048.485,00 |
+| Junio | 1 | $27.076.564,28 |
+| **Total ene–jun 2026** | **13** | **$144.432.653,27** |
+
+Con gastos (§13.4, $96.223.015) e ingresos (§14.3, $144.432.653,27) ya cargados para el mismo período, Hato Lechero queda con un margen ene–jun 2026 de **~$48,2M** en el sistema — cercano a lo que Martha estimó de memoria en la entrevista (ingresos ~143,5M, gastos ~74M *sin contar* lo que ella misma reconoció que le faltaba, que es justo lo que este backfill llenó).
+
+### 14.4 Pendiente de esta ejecución
+
+- Confirmar si el comprador de leche y la cuenta de cobro fueron realmente `El Pomar`/`Cuenta Fovemsa` en 2026 (se asumió por precedente 100% consistente 2023–2025, no por confirmación específica de 2026).
+- Igual que en gastos (§13.5), repetir para años anteriores a 2026 si Martha entrega más archivos.
