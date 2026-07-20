@@ -1,6 +1,6 @@
 # Plan de Diseño e Implementación — Módulo Hato Lechero
 
-**Fecha:** 2026-07-17 · **Estado:** Aprobación de diseño (pre-implementación) · **Detalle visual:** fuera de alcance (paso posterior)
+**Fecha:** 2026-07-17 · **Estado:** Aprobación de diseño (pre-implementación) · **Detalle visual:** look-and-feel de referencia aprobado 2026-07-20 (§7.6); contenido/campos finales siguen siendo decisión de los agentes de implementación
 
 Fuentes: entrevista con Martha (administradora, llamada 2026-07-17, Notion "Vaquitas Lecheras"), análisis de los 5 archivos Excel entregados (chequeos 2019–2026, terneras 2017+, promedio leche 2025, gastos FOV 2026), y revisión del código/esquema existente de Escocia OS.
 
@@ -273,6 +273,44 @@ src/__tests__/hatoAlertas.test.ts
 **Foto-OCR (B6, Fase 2)**: viable — OpenRouter ya integrado, Gemini 3 Flash acepta imágenes. Foto → endpoint `/hato/chequeos/ocr` → JSON estricto → **pre-llena la misma grilla como borrador para revisión humana, nunca commit directo**. Se pospone: la grilla debe existir primero y el prompt se afina con fotos reales recolectadas en la visita de agosto.
 
 Convenciones obligatorias: `format.ts` para números (formato colombiano), `onWheel` blur en cada input numérico (grilla de 45×10 celdas = máxima exposición al bug de scroll), Dialog con `size` + `DialogBody`, RoleGuard + RLS Administrador/Gerencia.
+
+### 7.6 Referencia visual (prototipo Figma)
+
+**[Prototipo completo](https://www.figma.com/design/rtcPBS6WdZW0k063g8u9KH/Escocia-OS-—-Módulo-Hato-Lechero--Mockups-)** — 7 pantallas de referencia (17 jul 2026).
+
+> **Regla de uso**: estas pantallas fijan el *look and feel* (densidad de tabla, chips, tarjetas de KPI, gráficas, jerarquía visual) — no el contenido final. Los datos, columnas y campos específicos mostrados son ilustrativos; las épicas de §6 siguen siendo la autoridad sobre qué información se captura y se muestra. Los agentes de frontend deciden el detalle final de contenido dentro de este lenguaje visual.
+
+**Inventario de pantallas → épica/ruta correspondiente:**
+
+| Pantalla Figma | Ruta (§7.5) | Épica (§6) |
+|---|---|---|
+| ① Dashboard | `/hato` | E — Tablero e indicadores |
+| ② Lista del hato | `/hato/animales` | A1 |
+| ③ Hoja de vida — #47 Estrella | `/hato/animales/:id` | A2, A3, A5 |
+| ④ Captura de chequeo | `/hato/chequeos/:id` | B1–B4 |
+| ⑤ Control de ordeño | `/hato/leche` | D |
+| ⑥ Cola de alertas | `/hato/alertas` | C |
+| ⑦ Telegram — lazo cerrado | (fuera de la app web) | C1–C4 |
+
+**Lenguaje visual a preservar** (mapeado a lo que ya existe en el repo, para reusar y no reinventar):
+
+- **Chips/badges de estado semánticos** — todo estado (etapa de vaca, estado de alerta, resultado de chequeo) se pinta como un chip de color, nunca como texto plano. Paleta consistente en las 7 pantallas: verde = saludable/confirmado/en leche, ámbar = requiere atención pronto (próxima a secar, escalada), azul = en progreso (servida, enviada), gris = neutro/inactivo (seca, pendiente), rojo = vencido/urgente/destructivo. Construir sobre `src/components/ui/badge.tsx`; recomiendo un helper único de color-por-estado (`calculosHato.ts`) siguiendo el precedente de `clasificarGravedad` en `calculosMonitoreo.ts` — una sola fuente de verdad para el color, nunca derivarlo inline pantalla por pantalla.
+- **Tarjetas de KPI** (fila de 3–4 en Dashboard y Leche) — icono en círculo de color, label pequeño gris, número grande, delta/subtexto abajo. Patrón ya establecido en el repo (`KPICardsProduccion.tsx`, `ClimaKPICards.tsx`, `DashboardKPICard.tsx`, `finanzas/components/KPICards.tsx`) — reusar ese patrón, no crear uno nuevo.
+- **Tablas limpias** (Lista de animales, grilla de Chequeo, Cola de alertas) — header gris claro en mayúsculas pequeñas, filas blancas con divisor sutil (sin grid pesado), sin zebra-striping, valores de estado siempre como chip. Sobre `src/components/ui/table.tsx`.
+- **Barra de progreso horizontal por categoría** ("Vacas por estado" en el Dashboard) — sobre `src/components/ui/progress.tsx` o Recharts horizontal bar, con leyenda de puntos de color.
+- **Gráficas** (curva de PL en la hoja de vida, litros diarios en Leche) — Recharts, mismo patrón ya usado en `produccion/components/Grafico*.tsx`: línea con marcadores + burbuja resaltando el último valor; barras con la barra de "hoy" resaltada en verde oscuro vs. el resto en verde claro.
+- **Línea de tiempo vertical** (hoja de vida — "Línea de tiempo reproductiva") — patrón nuevo, no existe hoy en el repo; construir como componente reusable (`EventoTimeline.tsx`, ya listado en §7.5) con punto sólido para eventos pasados, punto hueco para proyectados, y una entrada resaltable "HOY".
+- **Vista de genealogía en mini-árbol** (madre → esta vaca → crías, cajas conectadas por líneas finas) — patrón nuevo, construir dentro de `HojaDeVida.tsx`.
+- **Grilla de captura con preview de cálculo en vivo** (pantalla ④) — banner informativo arriba de la tabla explicando el pre-llenado; fila en edición muestra un banner inline debajo con el resultado del auto-cálculo (Secar/PP) antes de guardar. Este patrón de "explicar + previsualizar antes de comprometer" es nuevo pero encaja con el principio ya establecido de `ChequeoCapturaGrid` en §7.5.
+- **Franja de estadísticas compactas** (hoja de vida, debajo del header — PL actual, #Partos, Días en leche, Días abiertos, Secar, Parto probable en una sola fila sin tarjetas) — patrón nuevo, más denso que las KPI cards; usar solo en vistas de detalle de un único registro, no en dashboards.
+- **Chips de contexto persistente** (header: "Finca: Subachoque" + avatar de usuario) — verificar si ya existe un patrón equivalente en `Layout.tsx`/breadcrumb antes de construir uno nuevo.
+
+**Decisiones abiertas que el prototipo no resuelve** (para que el agente de frontend las zanje explícitamente, no las herede en silencio):
+
+1. **Sub-navegación del módulo**: el mockup muestra los 5 sub-ítems (Dashboard/Animales/Chequeos/Leche/Alertas) como árbol indentado *dentro* del sidebar bajo "Hato Lechero". El resto de la app usa un patrón distinto: un `SubNav` horizontal debajo del breadcrumb (`InventorySubNav`, `MonitoreoSubNav`, `EmpleadosSubNav`, `GanadoDashboard`). Decidir cuál seguir — recomiendo el patrón horizontal existente por consistencia, pero lo dejo para la sesión de frontend.
+2. El chip **"Datos de demostración"** del Dashboard es un artefacto del mockup (deja claro que los números son ficticios) — no implica una funcionalidad de "modo demo" real; se descarta al implementar salvo que se pida explícitamente.
+3. Las 7 pantallas son **desktop-only (1440px)** — ninguna cubre el comportamiento en móvil. Sigue vigente la regla de CLAUDE.md sobre sidebar colapsado y no ocultar contenido; el agente de frontend debe resolver el responsive, no está en el prototipo.
+4. El botón destructivo **"× Marcar vendida/muerta"** (outline rojo) — confirmar que usa la variante destructiva ya existente de `button.tsx` en vez de un estilo nuevo.
 
 ---
 
