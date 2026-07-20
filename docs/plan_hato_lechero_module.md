@@ -92,6 +92,7 @@ Capacidad estrella: **alertas proactivas por Telegram** (secado, tratamientos mu
 6. Importación histórica 2017–2026 (asistida, con reporte de calidad y sesión de revisión con Martha).
 7. Genealogía para selección de toros.
 8. Integración de lectura con Finanzas ("Hato Lechero": $/litro, margen).
+9. Seguimiento de pajillas de inseminación: inventario simple (nombre del toro, cantidad) + fecha de uso de cada pajilla.
 
 ### Fuera (explícito)
 - Rehacer Finanzas (gastos/ingresos/presupuesto ya existen; la leche sigue entrando por `fin_ingresos`).
@@ -166,6 +167,18 @@ Criterio clave: KPIs reproductivos apagados hasta que la importación esté vali
 
 Regla de oro: **ningún dato ambiguo se importa en silencio** — lo limpio entra, lo ambiguo va a lista de revisión con Martha.
 
+### Épica G — Seguimiento de pajillas (inventario de inseminación)
+
+Funcionalidad secundaria: un inventario simple de las pajillas de inseminación, sin la complejidad del resto del módulo — deliberadamente mínimo, no un sistema de inventario general.
+
+- **G1 (P1)** Catálogo de pajillas: registrar toro/pajilla con nombre y cantidad inicial en inventario.
+- **G2 (P1)** Registrar el uso de una pajilla: fecha de uso y, si se conoce, la vaca servida.
+- **G3 (P1)** Vista de inventario: cantidad actual por toro (inicial − usos registrados), para poder monitorear qué queda disponible.
+
+Criterios clave: solo se guardan los tres datos pedidos — nombre del toro, cantidad en inventario, fecha de uso de cada pajilla — sin campos no solicitados (raza, proveedor, costo; se agregan después si hace falta). El vínculo opcional con la vaca servida en G2 no es obligatorio para registrar un uso (mejor registrar el uso sin la vaca que no registrarlo), pero cuando existe alimenta A5/A6 (genealogía y advertencia de consanguinidad) sin digitación adicional. Si el stock llega a 0, la UI advierte pero **no bloquea** registrar un uso nuevo — es más importante que quede el evento reproductivo que la exactitud del conteo.
+
+Fuera de alcance de esta épica: vincular automáticamente cada `servicio` de `hato_eventos` a una pajilla (evitaría doble digitación pero acopla dos flujos que hoy son independientes) — se anota como mejora futura opcional, no como parte de G.
+
 ---
 
 ## 7. Arquitectura técnica
@@ -187,6 +200,8 @@ Regla de oro: **ningún dato ambiguo se importa en silencio** — lo limpio entr
 - **`hato_pesajes_leche`** — `UNIQUE(animal_id, fecha)`, `litros_am`, `litros_pm`, `litros_total GENERATED`. Sin cabecera de ronda (la fecha ES la ronda; no existe el problema multi-fecha de monitoreo).
 - **`hato_litros_diarios`** — `fecha UNIQUE`, `litros`, `litros_consumo_finca` opcional. Columna vertebral de conciliación: pesaje semanal (por vaca) + litros diarios (volumen real) + `fin_ingresos` (volumen facturado) = tres series que se cruzan, nunca se mezclan.
 - **`hato_alertas`** — cola de tareas salientes: `tipo` (`secado_due|tratamiento_paso|rechequeo_due|servicio_sin_confirmacion|parto_proximo`), `animal_id`, `regla_clave UNIQUE` (idempotencia), `fecha_programada`, `estado` (`pendiente|enviada|respondida|confirmada|descartada|escalada|expirada`), `destinatario_telegram_id`, `intentos`, `respuesta`, `respondida_por`, `escalada_at`. + **`hato_alertas_config`** (tipo → destinatario, horas de escalamiento).
+- **`hato_pajillas`** (Épica G) — catálogo/inventario: `id uuid PK`, `toro_nombre text NOT NULL`, `cantidad_inicial integer NOT NULL CHECK (cantidad_inicial >= 0)`, `activa boolean DEFAULT true`, `created_at`, `created_by`. Deliberadamente mínima — sin raza/proveedor/costo (no solicitados).
+- **`hato_pajillas_uso`** (Épica G) — log de uso, append-only (mismo patrón capa-de-eventos que `hato_eventos`): `id uuid PK`, `pajilla_id uuid NOT NULL REFERENCES hato_pajillas(id)`, `fecha_uso date NOT NULL`, `animal_id uuid REFERENCES hato_animales(id)` (opcional — vaca servida, si se conoce). Vista derivada `v_hato_pajillas_stock`: `cantidad_actual = cantidad_inicial - COUNT(usos)` por pajilla, sin tabla de stock materializada (mismo razonamiento de §7.1 intro — volumen trivial).
 
 **Descomposición de códigos SX** (mismo parser para importación y captura en vivo):
 
@@ -252,15 +267,18 @@ Rutas lazy nuevas (entrada "Hato Lechero" en el sidebar):
 | `/hato/chequeos/:id` | `ChequeoCapturaGrid` (borrador → cerrado) |
 | `/hato/leche` | `LecheView` — pesajes + litros diarios |
 | `/hato/alertas` | `AlertasView` — cola con estados y respuestas |
+| `/hato/pajillas` | `PajillasView` — catálogo + inventario (Épica G) |
 
 ```
 src/components/hato/            # espejo de src/components/ganado/
 ├── HatoDashboard.tsx, HatoSubNav.tsx, AnimalesList.tsx, HojaDeVida.tsx,
-│   ChequeosList.tsx, ChequeoCapturaGrid.tsx, LecheView.tsx, AlertasView.tsx
+│   ChequeosList.tsx, ChequeoCapturaGrid.tsx, LecheView.tsx, AlertasView.tsx,
+│   PajillasView.tsx
 ├── components/                 # VentaAnimalDialog, PartoDialog, TratamientoDialog,
-│                               # PesajeSemanalGrid, LitrosDiariosForm, EventoTimeline
+│                               # PesajeSemanalGrid, LitrosDiariosForm, EventoTimeline,
+│                               # RegistrarUsoPajillaDialog
 └── hooks/                      # useHatoAnimales, useChequeoCaptura, usePesajesLeche,
-                                # useHatoAlertas, useEstadoReproductivo
+                                # useHatoAlertas, useEstadoReproductivo, usePajillas
 src/utils/calculosHato.ts       # puro: motor de fechas, parser SX/planilla, PL, proyecciones
 src/types/hato.ts
 src/__tests__/calculosHato.test.ts
@@ -328,7 +346,7 @@ Este documento. Entrega: alcance, épicas priorizadas, modelo de datos, arquitec
 - Insumos: §7.1–7.2 de este plan.
 - Entregable: esquema aplicado (un solo PR, para evitar la colisión de numeración que ya ocurrió antes en el repo) + RLS verificada.
 - Depende de: nada — sesión de arranque.
-- Desbloquea: S3, S4, S6, S9.
+- Desbloquea: S3, S4, S6, S9, S10.
 
 **S2 — Backend: Motor de lógica pura (`calculosHato.ts`)**
 - Objetivo: parsers de planilla (fechas multi-valor, `#VALUE!`), descomposición SX→eventos, motor de fechas (SECAR/PP), derivación de estado, cálculo de PL/proyecciones.
@@ -380,6 +398,13 @@ Este documento. Entrega: alcance, épicas priorizadas, modelo de datos, arquitec
 - Depende de: S1, S3.
 - Prioridad de secuenciación baja: las ventas son infrecuentes, no bloquea nada.
 
+**S10 — Backend/Frontend: Seguimiento de pajillas (Épica G)**
+- Objetivo: tablas `hato_pajillas`/`hato_pajillas_uso` + vista `v_hato_pajillas_stock`, `PajillasView` (catálogo + registro de uso + inventario actual).
+- Insumos: esquema de S1.
+- Entregable: inventario de pajillas navegable y funcional, independiente del resto del módulo.
+- Depende de: S1 únicamente — no depende de S3 (no necesita datos importados del hato para funcionar, es un catálogo propio).
+- Prioridad de secuenciación baja: funcionalidad secundaria, no bloquea el checkpoint de la visita a la finca; puede correr en cualquier ventana ociosa tras S1.
+
 **Homologación de gastos** (`docs/plan_hato_lechero_gastos_backfill.md`) — fuera de este grafo por diseño: no consume ni produce insumos de ninguna sesión de arriba. Cualquier agente disponible puede tomarla en cualquier momento.
 
 ### Grafo de paralelismo
@@ -389,13 +414,14 @@ S1 ─┬─ S3 ─┬─ S4
 S2 ─┘      ├─ S6 ← S5 ← S1
            ├─ S7
            └─ S9
+S1 ─── S10 (directo, no pasa por S3 — catálogo propio)
 S8: bloqueada hasta visita a la finca (insumo externo)
 Homologación de gastos: sin conexión al grafo, ejecutable siempre
 ```
 
 S1 y S2 son las únicas sesiones sin dependencias — arrancan primero y en paralelo. Todo lo demás (salvo la homologación de gastos, que vive fuera del grafo) pasa por S3 y su checkpoint humano; **por eso agendar ese checkpoint con Martha es la acción crítica, no una fecha de sprint.**
 
-**Regla de priorización si hay que recortar sesiones**: caen primero S5 (el pesaje puede seguir en papel mientras tanto) y S7/S8/S9; **nunca** caen S1–S4 ni el "modo sombra" de S6 — fichas, chequeo, importación validada y las primeras alertas de secado/tratamiento son el núcleo no negociable.
+**Regla de priorización si hay que recortar sesiones**: caen primero S5 (el pesaje puede seguir en papel mientras tanto) y S7/S8/S9/S10; **nunca** caen S1–S4 ni el "modo sombra" de S6 — fichas, chequeo, importación validada y las primeras alertas de secado/tratamiento son el núcleo no negociable.
 
 **Definición de éxito antes del checkpoint de la visita a la finca:** (1) hato completo en el sistema, con al menos un chequeo real capturado en la app (S4); (2) Fernando respondiendo alertas reales de secado/tratamiento en modo habilitado, no sombra (S6); (3) litros del carro llegando a diario (S5); (4) al menos un pesaje semanal capturado (S5); (5) Martha sin necesidad de volver a abrir el Excel de chequeos para nada nuevo.
 
@@ -431,7 +457,7 @@ Depende de que el checkpoint externo (visita a la finca) haya ocurrido y de que 
 2. ¿Quién reporta los litros diarios del camión — Fernando por Telegram a diario, o Martha semanal contra el recibo? Define el alcance de `litrosCamion`.
 3. Regla de secado: ¿la fecha calculada (servicio+7m) la ajusta el veterinario según condición/producción? ¿Quién tiene la última palabra? → fecha calculada-editable y por quién.
 4. Semántica exacta de "OK" (¿vacía apta esperando celo?) y cómo distingue una vacía-problema de una vacía normal post-parto → afina la máquina de estados y el KPI de días abiertos.
-5. Catálogo de toros: ¿cuántos propios, qué pajillas se usan, cómo los identifica en la planilla? → catálogo para genealogía/consanguinidad.
+5. Catálogo de toros: ¿cuántos propios, qué pajillas se usan actualmente, con qué inventario inicial se debe cargar el catálogo de la Épica G? → alimenta directamente G1 y, cuando se vincula a la vaca servida, A5/A6 (genealogía/consanguinidad).
 6. ¿Fecha del próximo chequeo veterinario? (si cae en la visita, el primer chequeo en la app se captura en vivo — mejor sesión de entrenamiento posible).
 7. Adjudicación del `resolution-report.md` (identidades con confianza media/baja del histórico).
 
