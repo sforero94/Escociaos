@@ -1,14 +1,14 @@
 import { Outlet } from 'react-router-dom';
-import { EmpleadosSubNav } from './EmpleadosSubNav';
+import { LaboresSubNav } from './LaboresSubNav';
 
 /**
- * Wrapper component para el módulo de Empleados
+ * Wrapper component para el módulo de Labores
  * Muestra el submenú de navegación y renderiza las vistas hijas
  */
-export function Empleados() {
+export function LaboresLayout() {
   return (
     <div>
-      <EmpleadosSubNav />
+      <LaboresSubNav />
       <Outlet />
     </div>
   );

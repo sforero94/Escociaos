@@ -3100,6 +3100,7 @@ export type Database = {
           email: string
           id: string
           last_login: string | null
+          modulos_acceso: string[] | null
           nombre_completo: string | null
           rol: Database["public"]["Enums"]["rol_usuario"]
         }
@@ -3109,6 +3110,7 @@ export type Database = {
           email: string
           id: string
           last_login?: string | null
+          modulos_acceso?: string[] | null
           nombre_completo?: string | null
           rol: Database["public"]["Enums"]["rol_usuario"]
         }
@@ -3118,6 +3120,7 @@ export type Database = {
           email?: string
           id?: string
           last_login?: string | null
+          modulos_acceso?: string[] | null
           nombre_completo?: string | null
           rol?: Database["public"]["Enums"]["rol_usuario"]
         }

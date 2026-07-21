@@ -12,6 +12,7 @@ import { projectId, publicAnonKey } from '../../utils/supabase/info';
 import { Users, Plus, Edit, Trash2, Eye, EyeOff, Shield, CheckCircle2, XCircle } from 'lucide-react';
 import { useFormDraft } from '@/hooks/useFormDraft';
 import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
+import { MODULOS, MODULO_KEYS, toggleModulo } from '@/utils/modulosAcceso';
 
 interface Usuario {
   id: string;
@@ -21,6 +22,7 @@ interface Usuario {
   activo: boolean | null;
   created_at?: string | null;
   last_login?: string | null;
+  modulos_acceso?: string[] | null;
 }
 
 export function UsuariosConfig() {
@@ -38,6 +40,7 @@ export function UsuariosConfig() {
   const [rol, setRol] = useState<'Administrador' | 'Verificador' | 'Gerencia' | 'Monitor'>('Administrador');
   const [clave, setClave] = useState('');
   const [activo, setActivo] = useState(true);
+  const [modulosAcceso, setModulosAcceso] = useState<string[]>([]);
   const [confirmEliminarOpen, setConfirmEliminarOpen] = useState(false);
   const [usuarioParaEliminar, setUsuarioParaEliminar] = useState<Usuario | null>(null);
 
@@ -87,6 +90,7 @@ export function UsuariosConfig() {
     setRol('Administrador');
     setClave('');
     setActivo(true);
+    setModulosAcceso([]);
     setModalOpen(true);
   };
 
@@ -98,6 +102,7 @@ export function UsuariosConfig() {
     setRol(usuario.rol);
     setClave('');
     setActivo(usuario.activo ?? true);
+    setModulosAcceso(usuario.modulos_acceso ?? []);
     setModalOpen(true);
   };
 
@@ -126,6 +131,7 @@ export function UsuariosConfig() {
         nombre_completo: nombreCompleto,
         rol,
         activo,
+        modulos_acceso: rol === 'Gerencia' ? MODULO_KEYS : modulosAcceso,
       };
 
       if (modalMode === 'editar' && usuarioActual) {
@@ -434,6 +440,33 @@ export function UsuariosConfig() {
                 <option value="Gerencia">Gerencia</option>
                 <option value="Monitor">Monitor (solo Telegram)</option>
               </select>
+            </div>
+
+            {/* Módulos de acceso */}
+            <div>
+              <Label className="text-foreground">Módulos de acceso</Label>
+              <div className="mt-2 space-y-2">
+                {MODULOS.map((modulo) => (
+                  <div key={modulo.key} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id={`modulo-${modulo.key}`}
+                      checked={rol === 'Gerencia' ? true : modulosAcceso.includes(modulo.key)}
+                      disabled={rol === 'Gerencia'}
+                      onChange={() => setModulosAcceso((prev) => toggleModulo(prev, modulo.key))}
+                      className="w-4 h-4 text-primary border-secondary/30 rounded focus:ring-primary disabled:opacity-50"
+                    />
+                    <Label htmlFor={`modulo-${modulo.key}`} className="text-foreground cursor-pointer font-normal">
+                      {modulo.label}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+              {rol === 'Gerencia' && (
+                <p className="text-xs text-brand-brown/60 mt-1">
+                  Gerencia tiene acceso a todo
+                </p>
+              )}
             </div>
 
             {/* Clave */}

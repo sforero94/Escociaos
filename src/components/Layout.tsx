@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import * as TooltipPrimitive from '@radix-ui/react-tooltip';
+import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard,
   Package,
@@ -12,7 +13,6 @@ import {
   X,
   LogOut,
   Leaf,
-  Users,
   Wrench,
   DollarSign,
   FileText,
@@ -20,9 +20,17 @@ import {
   PanelLeftOpen,
   Cloud,
   Beef,
+  Milk,
+  ClipboardCheck,
+  Bell,
+  ChevronDown,
+  TrendingDown,
+  FileBarChart,
+  Target,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { useAuth } from '../contexts/AuthContext';
+import { puedeAccederModulo } from '@/utils/modulosAcceso';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 
 interface LayoutProps {
@@ -32,20 +40,78 @@ interface LayoutProps {
 
 const SIDEBAR_COLLAPSED_KEY = 'sidebar_collapsed';
 
-const menuStructure = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/' },
-  { id: 'inventario', label: 'Inventario', icon: Package, path: '/inventario/dashboard' },
-  { id: 'labores', label: 'Labores', icon: Wrench, path: '/labores' },
-  { id: 'empleados', label: 'Empleados', icon: Users, path: '/empleados' },
-  { id: 'finanzas', label: 'Finanzas', icon: DollarSign, path: '/finanzas' },
-  { id: 'ganado', label: 'Ganado', icon: Beef, path: '/ganado' },
-  { id: 'applications', label: 'Aplicaciones', icon: Sprout, path: '/aplicaciones' },
-  { id: 'monitoring', label: 'Monitoreo', icon: Activity, path: '/monitoreo' },
-  { id: 'clima', label: 'Clima', icon: Cloud, path: '/clima' },
-  { id: 'production', label: 'Produccion', icon: TrendingUp, path: '/produccion' },
-  { id: 'reportes', label: 'Reportes', icon: FileText, path: '/reportes' },
-  { id: 'settings', label: 'Configuracion', icon: Settings, path: '/configuracion' },
+// ---------------------------------------------------------------------------
+// Nav data model — grouped sidebar (accordion groups + single items)
+// ---------------------------------------------------------------------------
+
+type NavLeaf = {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  path: string;
+  exact?: boolean;
+  /** Extra prefix that also marks this leaf active (e.g. /finanzas dashboard sub-tabs). */
+  matchPrefix?: string;
+  soloGerencia?: boolean;
+};
+type NavGroup = { id: string; label: string; icon: LucideIcon; modulo: string; children: NavLeaf[] };
+type NavEntry = (NavLeaf & { modulo?: string }) | NavGroup;
+
+const isGroup = (e: NavEntry): e is NavGroup => 'children' in e;
+
+const NAV: NavEntry[] = [
+  { id: 'tablero', label: 'Tablero General', icon: LayoutDashboard, path: '/', exact: true },
+  {
+    id: 'aguacate', label: 'Aguacate', icon: Leaf, modulo: 'aguacate', children: [
+      { id: 'labores', label: 'Labores', icon: Wrench, path: '/labores' },
+      { id: 'monitoreo', label: 'Monitoreo', icon: Activity, path: '/monitoreo' },
+      { id: 'aplicaciones', label: 'Aplicaciones', icon: Sprout, path: '/aplicaciones' },
+      { id: 'inventario', label: 'Inventario', icon: Package, path: '/inventario/dashboard' },
+      { id: 'clima', label: 'Clima', icon: Cloud, path: '/clima' },
+      { id: 'produccion', label: 'Producción', icon: TrendingUp, path: '/produccion', soloGerencia: true },
+      { id: 'reportes', label: 'Reportes', icon: FileText, path: '/reportes' },
+    ],
+  },
+  {
+    id: 'hato', label: 'Hato Lechero', icon: Milk, modulo: 'hato_lechero', children: [
+      { id: 'hato-tablero', label: 'Tablero', icon: LayoutDashboard, path: '/hato-lechero', exact: true },
+      { id: 'hato-produccion', label: 'Producción', icon: TrendingUp, path: '/hato-lechero/produccion' },
+      { id: 'hato-hato', label: 'Hato', icon: Beef, path: '/hato-lechero/hato' },
+      { id: 'hato-chequeos', label: 'Chequeos', icon: ClipboardCheck, path: '/hato-lechero/chequeos' },
+      { id: 'hato-alertas', label: 'Alertas', icon: Bell, path: '/hato-lechero/alertas' },
+    ],
+  },
+  { id: 'ganado', label: 'Ganado', icon: Beef, path: '/ganado', modulo: 'ganado' },
+  {
+    id: 'finanzas', label: 'Finanzas', icon: DollarSign, modulo: 'finanzas', children: [
+      { id: 'fin-dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/finanzas', exact: true, matchPrefix: '/finanzas/dashboard' },
+      { id: 'fin-gastos', label: 'Gastos', icon: TrendingDown, path: '/finanzas/gastos' },
+      { id: 'fin-ingresos', label: 'Ingresos', icon: TrendingUp, path: '/finanzas/ingresos' },
+      { id: 'fin-reportes', label: 'Reportes', icon: FileBarChart, path: '/finanzas/reportes' },
+      { id: 'fin-presupuesto', label: 'Presupuesto', icon: Target, path: '/finanzas/presupuesto' },
+      { id: 'fin-configuracion', label: 'Configuración', icon: Settings, path: '/finanzas/configuracion' },
+    ],
+  },
+  { id: 'settings', label: 'Configuración', icon: Settings, path: '/configuracion' },
 ];
+
+/** True when the current pathname should highlight this leaf. */
+function leafMatches(leaf: NavLeaf, pathname: string): boolean {
+  const base = leaf.exact || leaf.path === '/'
+    ? pathname === leaf.path
+    : pathname.startsWith(leaf.path);
+  return base || (leaf.matchPrefix ? pathname.startsWith(leaf.matchPrefix) : false);
+}
+
+/** First group (in NAV order) containing a leaf matching the given pathname, if any. */
+function getActiveGroupId(pathname: string): string | undefined {
+  for (const entry of NAV) {
+    if (isGroup(entry)) {
+      if (entry.children.some((child) => leafMatches(child, pathname))) return entry.id;
+    }
+  }
+  return undefined;
+}
 
 interface SidebarTooltipProps {
   label: string;
@@ -82,6 +148,24 @@ export function Layout({ onNavigate, children }: LayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Accordion groups open state — initialized so the group containing the active route is open.
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
+    const activeId = getActiveGroupId(location.pathname);
+    return activeId ? new Set([activeId]) : new Set();
+  });
+
+  // Auto-open the active group on navigation, without force-closing groups the user opened.
+  useEffect(() => {
+    const activeId = getActiveGroupId(location.pathname);
+    if (!activeId) return;
+    setOpenGroups((prev) => {
+      if (prev.has(activeId)) return prev;
+      const next = new Set(prev);
+      next.add(activeId);
+      return next;
+    });
+  }, [location.pathname]);
+
   // Lock body scroll when mobile menu is open
   useEffect(() => {
     if (mobileMenuOpen) {
@@ -112,15 +196,190 @@ export function Layout({ onNavigate, children }: LayoutProps) {
     });
   };
 
-  const isActive = (path: string) => {
-    if (path === '/') return location.pathname === '/';
-    return location.pathname.startsWith(path);
-  };
+  const isActive = (leaf: NavLeaf) => leafMatches(leaf, location.pathname);
 
   const handleNavigateClick = (path: string, id: string) => {
     if (onNavigate) onNavigate(id);
     navigate(path);
     setMobileMenuOpen(false);
+  };
+
+  const toggleGroup = (groupId: string) => {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  };
+
+  // Clicking a group icon while collapsed un-collapses the sidebar AND expands the group.
+  const handleGroupIconClick = (groupId: string) => {
+    setCollapsed(false);
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, 'false');
+    setOpenGroups((prev) => {
+      if (prev.has(groupId)) return prev;
+      const next = new Set(prev);
+      next.add(groupId);
+      return next;
+    });
+  };
+
+  // Fail-open: unconfirmed profile (null or rol==='') is treated as Gerencia for the
+  // soloGerencia gate, consistent with puedeAccederModulo's fail-open behavior.
+  const rolSinConfirmar = !profile || profile.rol === '';
+  const esGerencia = profile?.rol === 'Gerencia';
+  const leafVisible = (l: NavLeaf) => !l.soloGerencia || esGerencia || rolSinConfirmar;
+
+  const visible = NAV
+    .filter((e) => isGroup(e)
+      ? puedeAccederModulo(profile, e.modulo)
+      : (e.modulo ? puedeAccederModulo(profile, e.modulo) : true) && leafVisible(e as NavLeaf))
+    .map((e) => isGroup(e) ? { ...e, children: e.children.filter(leafVisible) } : e)
+    .filter((e) => !isGroup(e) || e.children.length > 0);
+
+  // Render a single nav entry (group or leaf) for the DESKTOP sidebar (collapsed-aware).
+  const renderDesktopEntry = (entry: NavEntry) => {
+    if (isGroup(entry)) {
+      const Icon = entry.icon;
+      const groupActive = entry.children.some((c) => isActive(c));
+      const open = openGroups.has(entry.id);
+
+      if (collapsed) {
+        return (
+          <SidebarTooltip key={entry.id} label={entry.label} collapsed={collapsed}>
+            <button
+              onClick={() => handleGroupIconClick(entry.id)}
+              className={`w-full flex items-center justify-center px-0 py-3 rounded-xl transition-all duration-200 ${
+                groupActive ? 'nav-item-active font-semibold' : 'text-foreground hover:bg-muted/50'
+              }`}
+            >
+              <Icon className="w-5 h-5 flex-shrink-0" />
+            </button>
+          </SidebarTooltip>
+        );
+      }
+
+      return (
+        <div key={entry.id}>
+          <button
+            onClick={() => toggleGroup(entry.id)}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+              groupActive ? 'nav-item-active font-semibold' : 'text-foreground hover:bg-muted/50'
+            }`}
+          >
+            <Icon className="w-5 h-5 flex-shrink-0" />
+            <span className="flex-1 text-left truncate">{entry.label}</span>
+            <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+          </button>
+          {open && (
+            <div className="space-y-1 mt-1">
+              {entry.children.map((child) => {
+                const ChildIcon = child.icon;
+                const childActive = isActive(child);
+                return (
+                  <button
+                    key={child.id}
+                    onClick={() => handleNavigateClick(child.path, child.id)}
+                    className={`w-full flex items-center gap-3 pl-9 pr-4 py-2.5 rounded-xl transition-all duration-200 ${
+                      childActive
+                        ? 'nav-item-active font-semibold'
+                        : 'text-foreground hover:bg-muted/50'
+                    }`}
+                  >
+                    <ChildIcon className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate">{child.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const Icon = entry.icon;
+    const active = isActive(entry);
+    return (
+      <SidebarTooltip key={entry.id} label={entry.label} collapsed={collapsed}>
+        <button
+          onClick={() => handleNavigateClick(entry.path, entry.id)}
+          className={`w-full flex items-center rounded-xl transition-all duration-200 ${
+            collapsed ? 'justify-center px-0 py-3' : 'gap-3 px-4 py-3'
+          } ${
+            active
+              ? 'nav-item-active font-semibold'
+              : 'text-foreground hover:bg-muted/50'
+          }`}
+        >
+          <Icon className="w-5 h-5 flex-shrink-0" />
+          {!collapsed && <span className="truncate">{entry.label}</span>}
+        </button>
+      </SidebarTooltip>
+    );
+  };
+
+  // Render a single nav entry (group or leaf) for the MOBILE drawer (no collapse concept).
+  const renderMobileEntry = (entry: NavEntry) => {
+    if (isGroup(entry)) {
+      const Icon = entry.icon;
+      const groupActive = entry.children.some((c) => isActive(c));
+      const open = openGroups.has(entry.id);
+
+      return (
+        <div key={entry.id}>
+          <button
+            onClick={() => toggleGroup(entry.id)}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+              groupActive ? 'nav-item-active font-semibold' : 'text-foreground hover:bg-muted/50'
+            }`}
+          >
+            <Icon className="w-5 h-5 flex-shrink-0" />
+            <span className="flex-1 text-left truncate">{entry.label}</span>
+            <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+          </button>
+          {open && (
+            <div className="space-y-1 mt-1">
+              {entry.children.map((child) => {
+                const ChildIcon = child.icon;
+                const childActive = isActive(child);
+                return (
+                  <button
+                    key={child.id}
+                    onClick={() => handleNavigateClick(child.path, child.id)}
+                    className={`w-full flex items-center gap-3 pl-9 pr-4 py-3 rounded-xl transition-all duration-200 ${
+                      childActive
+                        ? 'nav-item-active font-semibold'
+                        : 'text-foreground hover:bg-muted/50'
+                    }`}
+                  >
+                    <ChildIcon className="w-5 h-5 flex-shrink-0" />
+                    <span>{child.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const Icon = entry.icon;
+    const active = isActive(entry);
+    return (
+      <button
+        key={entry.id}
+        onClick={() => handleNavigateClick(entry.path, entry.id)}
+        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+          active
+            ? 'nav-item-active font-semibold'
+            : 'text-foreground hover:bg-muted/50'
+        }`}
+      >
+        <Icon className="w-5 h-5" />
+        <span>{entry.label}</span>
+      </button>
+    );
   };
 
   return (
@@ -160,24 +419,7 @@ export function Layout({ onNavigate, children }: LayoutProps) {
         >
           <div className="flex flex-col h-full">
             <nav className="flex-1 p-4 space-y-2 overflow-y-auto overscroll-contain">
-              {menuStructure.map((item) => {
-                const Icon = item.icon;
-                const active = isActive(item.path);
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => handleNavigateClick(item.path, item.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                      active
-                        ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/20'
-                        : 'text-foreground hover:bg-muted/50'
-                    }`}
-                  >
-                    <Icon className="w-5 h-5" />
-                    <span>{item.label}</span>
-                  </button>
-                );
-              })}
+              {visible.map((entry) => renderMobileEntry(entry))}
             </nav>
 
             <div className="flex-shrink-0 p-4 border-t border-primary/10 bg-white/80 backdrop-blur-xl pb-[env(safe-area-inset-bottom,1rem)]">
@@ -242,27 +484,7 @@ export function Layout({ onNavigate, children }: LayoutProps) {
 
           {/* Navigation */}
           <nav className={`flex-1 overflow-y-auto overflow-x-hidden space-y-1 ${collapsed ? 'px-2 py-2' : 'p-2'}`}>
-            {menuStructure.map((item) => {
-              const Icon = item.icon;
-              const active = isActive(item.path);
-              return (
-                <SidebarTooltip key={item.id} label={item.label} collapsed={collapsed}>
-                  <button
-                    onClick={() => handleNavigateClick(item.path, item.id)}
-                    className={`w-full flex items-center rounded-xl transition-all duration-200 ${
-                      collapsed ? 'justify-center px-0 py-3' : 'gap-3 px-4 py-3'
-                    } ${
-                      active
-                        ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/20'
-                        : 'text-foreground hover:bg-muted/50'
-                    }`}
-                  >
-                    <Icon className="w-5 h-5 flex-shrink-0" />
-                    {!collapsed && <span className="truncate">{item.label}</span>}
-                  </button>
-                </SidebarTooltip>
-              );
-            })}
+            {visible.map((entry) => renderDesktopEntry(entry))}
           </nav>
 
           {/* User Info - Desktop */}

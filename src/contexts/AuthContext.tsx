@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useRef, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { getSupabase, getCurrentUser, getUserProfile, signOut as supabaseSignOut } from '../utils/supabase/client';
+import { puedeAccederModulo } from '../utils/modulosAcceso';
 
 // Tipos
 interface UserProfile {
@@ -8,6 +9,7 @@ interface UserProfile {
   nombre: string;
   email: string;
   rol: string;
+  modulos: string[];
   created_at?: string;
 }
 
@@ -20,6 +22,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   hasRole: (allowedRoles: string[]) => boolean;
+  hasModulo: (moduloKey: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -143,6 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         nombre: currentUser.email?.split('@')[0] || 'Usuario',
         email: currentUser.email || '',
         rol: '',
+        modulos: [],
       };
 
       // Establecer perfil temporal PRIMERO para que la app funcione de inmediato
@@ -185,6 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         nombre: currentSession.user.email?.split('@')[0] || 'Usuario',
         email: currentSession.user.email || '',
         rol: '',
+        modulos: [],
       };
 
       setUser(currentSession.user);
@@ -225,6 +230,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return allowedRoles.includes(profile.rol);
   };
 
+  // Verificar acceso a un módulo (aguacate | hato_lechero | ganado | finanzas)
+  const hasModulo = (moduloKey: string): boolean => {
+    return puedeAccederModulo(profile, moduloKey);
+  };
+
   const value: AuthContextType = {
     user,
     profile,
@@ -234,6 +244,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signOut,
     refreshProfile,
     hasRole,
+    hasModulo,
   };
 
   // Debug: Log del estado cada vez que cambia

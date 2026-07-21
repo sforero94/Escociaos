@@ -1,5 +1,3 @@
-import { RoleGuard } from '../auth/RoleGuard';
-import { FinanzasSubNav } from './components/FinanzasSubNav';
 import { DashboardSubNav } from './dashboard/DashboardSubNav';
 import { DashboardGeneral } from './dashboard/DashboardGeneral';
 import { DashboardNegocio } from './dashboard/DashboardNegocio';
@@ -78,24 +76,21 @@ export function FinanzasDashboard({ tab = 'general' }: FinanzasDashboardProps) {
   };
 
   return (
-    <RoleGuard allowedRoles={['Gerencia']}>
-      <div className="space-y-6">
-        <FinanzasSubNav />
+    <div className="space-y-6">
 
+      <div className="relative">
+        <div className="absolute -top-4 -left-4 w-32 h-32 bg-primary/5 rounded-full blur-2xl"></div>
         <div className="relative">
-          <div className="absolute -top-4 -left-4 w-32 h-32 bg-primary/5 rounded-full blur-2xl"></div>
-          <div className="relative">
-            <h1 className="text-foreground mb-2">Finanzas</h1>
-            <p className="text-brand-brown/70">
-              Gestion financiera de Escocia Hass - Dashboard por negocio
-            </p>
-          </div>
+          <h1 className="text-foreground mb-2">Finanzas</h1>
+          <p className="text-brand-brown/70">
+            Gestion financiera de Escocia Hass - Dashboard por negocio
+          </p>
         </div>
-
-        <DashboardSubNav activeTab={tab} />
-
-        {renderPage()}
       </div>
-    </RoleGuard>
+
+      <DashboardSubNav activeTab={tab} />
+
+      {renderPage()}
+    </div>
   );
 }

@@ -59,6 +59,7 @@ export async function getUserProfile(userId: string) {
       nombre: data.nombre_completo || 'Usuario',
       email: data.email,
       rol: data.rol || 'Administrador',
+      modulos: (data as any).modulos_acceso ?? [],
       created_at: data.created_at
     };
   } catch (error) {
