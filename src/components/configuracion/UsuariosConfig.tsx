@@ -3,7 +3,7 @@ import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter } from '../ui/dialog';
 import { ConfirmDialog } from '../ui/confirm-dialog';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
@@ -378,142 +378,143 @@ export function UsuariosConfig() {
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <FormDraftBanner
-              variant="available"
-              show={draft.hasDraft}
-              onRestore={handleRestoreDraft}
-              onDiscard={draft.discardDraft}
-            />
-
-            {/* Nombre Completo */}
-            <div>
-              <Label htmlFor="nombre" className="text-foreground">
-                Nombre Completo *
-              </Label>
-              <Input
-                id="nombre"
-                value={nombreCompleto}
-                onChange={(e) => setNombreCompleto(e.target.value)}
-                placeholder="Ej: Juan Pérez García"
-                required
-                className="border-secondary/30 focus:border-primary"
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 gap-4">
+            <DialogBody className="space-y-4">
+              <FormDraftBanner
+                variant="available"
+                show={draft.hasDraft}
+                onRestore={handleRestoreDraft}
+                onDiscard={draft.discardDraft}
               />
-            </div>
 
-            {/* Email */}
-            <div>
-              <Label htmlFor="email" className="text-foreground">
-                Email *
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="usuario@ejemplo.com"
-                required
-                disabled={modalMode === 'editar'}
-                className="border-secondary/30 focus:border-primary disabled:opacity-50"
-              />
-              {modalMode === 'editar' && (
-                <p className="text-xs text-brand-brown/60 mt-1">
-                  El email no se puede modificar
-                </p>
-              )}
-            </div>
-
-            {/* Rol */}
-            <div>
-              <Label htmlFor="rol" className="text-foreground">
-                Rol *
-              </Label>
-              <select
-                id="rol"
-                value={rol}
-                onChange={(e) => setRol(e.target.value as any)}
-                className="w-full px-3 py-2 border border-secondary/30 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
-                required
-              >
-                <option value="Administrador">Administrador</option>
-                <option value="Verificador">Verificador</option>
-                <option value="Gerencia">Gerencia</option>
-                <option value="Monitor">Monitor (solo Telegram)</option>
-              </select>
-            </div>
-
-            {/* Módulos de acceso */}
-            <div>
-              <Label className="text-foreground">Módulos de acceso</Label>
-              <div className="mt-2 space-y-2">
-                {MODULOS.map((modulo) => (
-                  <div key={modulo.key} className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id={`modulo-${modulo.key}`}
-                      checked={rol === 'Gerencia' ? true : modulosAcceso.includes(modulo.key)}
-                      disabled={rol === 'Gerencia'}
-                      onChange={() => setModulosAcceso((prev) => toggleModulo(prev, modulo.key))}
-                      className="w-4 h-4 text-primary border-secondary/30 rounded focus:ring-primary disabled:opacity-50"
-                    />
-                    <Label htmlFor={`modulo-${modulo.key}`} className="text-foreground cursor-pointer font-normal">
-                      {modulo.label}
-                    </Label>
-                  </div>
-                ))}
-              </div>
-              {rol === 'Gerencia' && (
-                <p className="text-xs text-brand-brown/60 mt-1">
-                  Gerencia tiene acceso a todo
-                </p>
-              )}
-            </div>
-
-            {/* Clave */}
-            <div>
-              <Label htmlFor="clave" className="text-foreground">
-                Clave {modalMode === 'crear' ? '*' : '(dejar vacío para no cambiar)'}
-              </Label>
-              <div className="relative">
+              {/* Nombre Completo */}
+              <div>
+                <Label htmlFor="nombre" className="text-foreground">
+                  Nombre Completo *
+                </Label>
                 <Input
-                  id="clave"
-                  type={showPassword ? 'text' : 'password'}
-                  value={clave}
-                  onChange={(e) => setClave(e.target.value)}
-                  placeholder={modalMode === 'crear' ? 'Mínimo 6 caracteres' : 'Nueva clave (opcional)'}
-                  required={modalMode === 'crear'}
-                  className="border-secondary/30 focus:border-primary pr-10"
+                  id="nombre"
+                  value={nombreCompleto}
+                  onChange={(e) => setNombreCompleto(e.target.value)}
+                  placeholder="Ej: Juan Pérez García"
+                  required
+                  className="border-secondary/30 focus:border-primary"
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-brown/50 hover:text-brand-brown"
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-4 h-4" />
-                  ) : (
-                    <Eye className="w-4 h-4" />
-                  )}
-                </button>
               </div>
-            </div>
 
-            {/* Estado Activo/Inactivo */}
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="activo"
-                checked={activo}
-                onChange={(e) => setActivo(e.target.checked)}
-                className="w-4 h-4 text-primary border-secondary/30 rounded focus:ring-primary"
-              />
-              <Label htmlFor="activo" className="text-foreground cursor-pointer">
-                Usuario activo
-              </Label>
-            </div>
+              {/* Email */}
+              <div>
+                <Label htmlFor="email" className="text-foreground">
+                  Email *
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="usuario@ejemplo.com"
+                  required
+                  disabled={modalMode === 'editar'}
+                  className="border-secondary/30 focus:border-primary disabled:opacity-50"
+                />
+                {modalMode === 'editar' && (
+                  <p className="text-xs text-brand-brown/60 mt-1">
+                    El email no se puede modificar
+                  </p>
+                )}
+              </div>
 
-            {/* Botones */}
-            <div className="flex gap-3 pt-4">
+              {/* Rol */}
+              <div>
+                <Label htmlFor="rol" className="text-foreground">
+                  Rol *
+                </Label>
+                <select
+                  id="rol"
+                  value={rol}
+                  onChange={(e) => setRol(e.target.value as any)}
+                  className="w-full px-3 py-2 border border-secondary/30 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+                  required
+                >
+                  <option value="Administrador">Administrador</option>
+                  <option value="Verificador">Verificador</option>
+                  <option value="Gerencia">Gerencia</option>
+                  <option value="Monitor">Monitor (solo Telegram)</option>
+                </select>
+              </div>
+
+              {/* Módulos de acceso */}
+              <div>
+                <Label className="text-foreground">Módulos de acceso</Label>
+                <div className="mt-2 space-y-2">
+                  {MODULOS.map((modulo) => (
+                    <div key={modulo.key} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id={`modulo-${modulo.key}`}
+                        checked={rol === 'Gerencia' ? true : modulosAcceso.includes(modulo.key)}
+                        disabled={rol === 'Gerencia'}
+                        onChange={() => setModulosAcceso((prev) => toggleModulo(prev, modulo.key))}
+                        className="w-4 h-4 text-primary border-secondary/30 rounded focus:ring-primary disabled:opacity-50"
+                      />
+                      <Label htmlFor={`modulo-${modulo.key}`} className="text-foreground cursor-pointer font-normal">
+                        {modulo.label}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+                {rol === 'Gerencia' && (
+                  <p className="text-xs text-brand-brown/60 mt-1">
+                    Gerencia tiene acceso a todo
+                  </p>
+                )}
+              </div>
+
+              {/* Clave */}
+              <div>
+                <Label htmlFor="clave" className="text-foreground">
+                  Clave {modalMode === 'crear' ? '*' : '(dejar vacío para no cambiar)'}
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="clave"
+                    type={showPassword ? 'text' : 'password'}
+                    value={clave}
+                    onChange={(e) => setClave(e.target.value)}
+                    placeholder={modalMode === 'crear' ? 'Mínimo 6 caracteres' : 'Nueva clave (opcional)'}
+                    required={modalMode === 'crear'}
+                    className="border-secondary/30 focus:border-primary pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-brown/50 hover:text-brand-brown"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Estado Activo/Inactivo */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="activo"
+                  checked={activo}
+                  onChange={(e) => setActivo(e.target.checked)}
+                  className="w-4 h-4 text-primary border-secondary/30 rounded focus:ring-primary"
+                />
+                <Label htmlFor="activo" className="text-foreground cursor-pointer">
+                  Usuario activo
+                </Label>
+              </div>
+            </DialogBody>
+
+            <DialogFooter className="gap-3">
               <Button
                 type="button"
                 variant="outline"
@@ -528,7 +529,7 @@ export function UsuariosConfig() {
               >
                 {modalMode === 'crear' ? 'Crear Usuario' : 'Guardar Cambios'}
               </Button>
-            </div>
+            </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>

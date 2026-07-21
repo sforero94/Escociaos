@@ -21,6 +21,7 @@ import {
 } from '../../ui/dropdown-menu';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -341,38 +342,40 @@ export function MediosPagoConfig() {
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="nombre">Nombre *</Label>
-              <Input
-                id="nombre"
-                value={formData.nombre}
-                onChange={(e) => setFormData(prev => ({ ...prev, nombre: e.target.value }))}
-                placeholder="Ej: Efectivo, Transferencia, Tarjeta de crédito"
-                required
-              />
-            </div>
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 gap-4">
+            <DialogBody className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="nombre">Nombre *</Label>
+                <Input
+                  id="nombre"
+                  value={formData.nombre}
+                  onChange={(e) => setFormData(prev => ({ ...prev, nombre: e.target.value }))}
+                  placeholder="Ej: Efectivo, Transferencia, Tarjeta de crédito"
+                  required
+                />
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="descripcion">Descripción</Label>
-              <Input
-                id="descripcion"
-                value={formData.descripcion}
-                onChange={(e) => setFormData(prev => ({ ...prev, descripcion: e.target.value }))}
-                placeholder="Descripción opcional del medio de pago"
-              />
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="descripcion">Descripción</Label>
+                <Input
+                  id="descripcion"
+                  value={formData.descripcion}
+                  onChange={(e) => setFormData(prev => ({ ...prev, descripcion: e.target.value }))}
+                  placeholder="Descripción opcional del medio de pago"
+                />
+              </div>
 
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="activo"
-                checked={formData.activo}
-                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, activo: checked }))}
-              />
-              <Label htmlFor="activo">Medio de pago activo</Label>
-            </div>
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="activo"
+                  checked={formData.activo}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, activo: checked }))}
+                />
+                <Label htmlFor="activo">Medio de pago activo</Label>
+              </div>
+            </DialogBody>
 
-            <DialogFooter>
+            <DialogFooter className="gap-3">
               <Button
                 type="button"
                 variant="outline"

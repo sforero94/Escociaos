@@ -9,7 +9,9 @@ import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog';
@@ -237,7 +239,7 @@ export function ConfigApiarios() {
             <DialogHeader>
               <DialogTitle>{editando ? 'Editar Apiario' : 'Nuevo Apiario'}</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <DialogBody className="space-y-4 py-4">
               <div>
                 <Label>Nombre *</Label>
                 <Input
@@ -278,15 +280,16 @@ export function ConfigApiarios() {
                   <Label>Activo</Label>
                 </div>
               )}
-              <div className="flex gap-3 pt-2">
-                <Button variant="outline" onClick={() => setModalAbierto(false)} className="flex-1">
-                  Cancelar
-                </Button>
-                <Button onClick={guardar} disabled={guardando} className="flex-1 bg-primary hover:bg-primary-dark">
-                  {guardando ? 'Guardando...' : 'Guardar'}
-                </Button>
-              </div>
-            </div>
+            </DialogBody>
+
+            <DialogFooter className="gap-3">
+              <Button variant="outline" onClick={() => setModalAbierto(false)} className="flex-1">
+                Cancelar
+              </Button>
+              <Button onClick={guardar} disabled={guardando} className="flex-1 bg-primary hover:bg-primary-dark">
+                {guardando ? 'Guardando...' : 'Guardar'}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
 

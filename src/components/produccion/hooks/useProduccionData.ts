@@ -83,13 +83,12 @@ export function useProduccionData() {
    * Cargar KPIs del periodo
    */
   const getKPIs = async (filtros: FiltrosProduccion): Promise<KPIProduccion> => {
-    try {
 
-      // Obtener todos los registros (lote y sublote) y consolidar para evitar doble conteo
-      let query = supabase
-        .from('produccion')
-        .select(
-          `
+    // Obtener todos los registros (lote y sublote) y consolidar para evitar doble conteo
+    let query = supabase
+      .from('produccion')
+      .select(
+        `
           sublote_id,
           kg_totales,
           arboles_registrados,
@@ -99,61 +98,58 @@ export function useProduccionData() {
           cosecha_tipo,
           lotes!inner(area_hectareas, activo)
         `
-        );
-
-      query = aplicarFiltros(query, filtros);
-      const { data: rawData, error: queryError } = await query;
-
-      if (queryError) throw queryError;
-
-      const data = consolidarRegistros(rawData || []);
-
-      // Calcular totales
-      const produccionTotal =
-        data.reduce((sum, r) => sum + (Number(r.kg_totales) || 0), 0) || 0;
-      const totalArboles =
-        data?.reduce((sum, r) => sum + (r.arboles_registrados || 0), 0) || 0;
-      const rendimientoPromedio =
-        totalArboles > 0 ? produccionTotal / totalArboles : 0;
-
-      // Calcular ton/ha (usando area unica por lote)
-      const lotesUnicos = new Map<string, number>();
-      data?.forEach((r: any) => {
-        if (r.lote_id && r.lotes?.area_hectareas) {
-          lotesUnicos.set(r.lote_id, Number(r.lotes.area_hectareas));
-        }
-      });
-      const areaTotal = Array.from(lotesUnicos.values()).reduce(
-        (sum, area) => sum + area,
-        0
       );
-      const tonPorHa = areaTotal > 0 ? produccionTotal / 1000 / areaTotal : 0;
 
-      // Contar lotes activos
-      const { count: lotesActivos } = await supabase
-        .from('lotes')
-        .select('*', { count: 'exact', head: true })
-        .eq('activo', true);
+    query = aplicarFiltros(query, filtros);
+    const { data: rawData, error: queryError } = await query;
 
-      // Construir descripcion del periodo
-      const periodo =
-        filtros.anos.length === 1
-          ? `${filtros.anos[0]}`
-          : filtros.anos.length > 1
-            ? `${Math.min(...filtros.anos)}-${Math.max(...filtros.anos)}`
-            : 'Todos los anos';
+    if (queryError) throw queryError;
 
-      return {
-        produccion_total_kg: Math.round(produccionTotal),
-        rendimiento_promedio_kg_arbol:
-          Math.round(rendimientoPromedio * 100) / 100,
-        ton_por_ha_promedio: Math.round(tonPorHa * 100) / 100,
-        lotes_activos: lotesActivos || 0,
-        periodo,
-      };
-    } catch (err: any) {
-      throw err;
-    }
+    const data = consolidarRegistros(rawData || []);
+
+    // Calcular totales
+    const produccionTotal =
+      data.reduce((sum, r) => sum + (Number(r.kg_totales) || 0), 0) || 0;
+    const totalArboles =
+      data?.reduce((sum, r) => sum + (r.arboles_registrados || 0), 0) || 0;
+    const rendimientoPromedio =
+      totalArboles > 0 ? produccionTotal / totalArboles : 0;
+
+    // Calcular ton/ha (usando area unica por lote)
+    const lotesUnicos = new Map<string, number>();
+    data?.forEach((r: any) => {
+      if (r.lote_id && r.lotes?.area_hectareas) {
+        lotesUnicos.set(r.lote_id, Number(r.lotes.area_hectareas));
+      }
+    });
+    const areaTotal = Array.from(lotesUnicos.values()).reduce(
+      (sum, area) => sum + area,
+      0
+    );
+    const tonPorHa = areaTotal > 0 ? produccionTotal / 1000 / areaTotal : 0;
+
+    // Contar lotes activos
+    const { count: lotesActivos } = await supabase
+      .from('lotes')
+      .select('*', { count: 'exact', head: true })
+      .eq('activo', true);
+
+    // Construir descripcion del periodo
+    const periodo =
+      filtros.anos.length === 1
+        ? `${filtros.anos[0]}`
+        : filtros.anos.length > 1
+          ? `${Math.min(...filtros.anos)}-${Math.max(...filtros.anos)}`
+          : 'Todos los anos';
+
+    return {
+      produccion_total_kg: Math.round(produccionTotal),
+      rendimiento_promedio_kg_arbol:
+        Math.round(rendimientoPromedio * 100) / 100,
+      ton_por_ha_promedio: Math.round(tonPorHa * 100) / 100,
+      lotes_activos: lotesActivos || 0,
+      periodo,
+    };
   };
 
   /**
@@ -299,13 +295,12 @@ export function useProduccionData() {
   const getTendenciasHistoricas = async (
     filtros: FiltrosProduccion
   ): Promise<TendenciaHistoricaData[]> => {
-    try {
 
-      // Obtener todos los registros y consolidar para evitar doble conteo
-      let query = supabase
-        .from('produccion')
-        .select(
-          `
+    // Obtener todos los registros y consolidar para evitar doble conteo
+    let query = supabase
+      .from('produccion')
+      .select(
+        `
           sublote_id,
           lote_id,
           ano,
@@ -315,77 +310,74 @@ export function useProduccionData() {
           arboles_registrados,
           lotes!inner(nombre, area_hectareas)
         `
-        );
+      );
 
-      query = aplicarFiltros(query, filtros);
-      const { data: rawData, error: queryError } = await query;
+    query = aplicarFiltros(query, filtros);
+    const { data: rawData, error: queryError } = await query;
 
-      if (queryError) throw queryError;
+    if (queryError) throw queryError;
 
-      const data = consolidarRegistros(rawData || []);
+    const data = consolidarRegistros(rawData || []);
 
-      // Agrupar por cosecha y luego por lote
-      const cosechaMap: Record<
-        string,
-        {
-          ano: number;
-          tipo: CosechaTipo;
-          lotes: Record<string, number>;
-        }
-      > = {};
+    // Agrupar por cosecha y luego por lote
+    const cosechaMap: Record<
+      string,
+      {
+        ano: number;
+        tipo: CosechaTipo;
+        lotes: Record<string, number>;
+      }
+    > = {};
 
-      data?.forEach((record: any) => {
-        const cosechaCode = formatCosechaCode(record.ano, record.cosecha_tipo);
+    data?.forEach((record: any) => {
+      const cosechaCode = formatCosechaCode(record.ano, record.cosecha_tipo);
 
-        if (!cosechaMap[cosechaCode]) {
-          cosechaMap[cosechaCode] = {
-            ano: record.ano,
-            tipo: record.cosecha_tipo,
-            lotes: {},
-          };
-        }
-
-        const loteCode = getLoteCode(record.lotes?.nombre || '');
-
-        // Calcular valor segun metrica seleccionada
-        let valor = 0;
-        switch (filtros.metrica) {
-          case 'kg_totales':
-            valor = Number(record.kg_totales) || 0;
-            break;
-          case 'kg_por_arbol':
-            valor = Number(record.kg_por_arbol) || 0;
-            break;
-          case 'ton_por_ha': {
-            const area = Number(record.lotes?.area_hectareas) || 1;
-            valor = (Number(record.kg_totales) || 0) / 1000 / area;
-            break;
-          }
-        }
-
-        // Acumular si hay multiples registros para el mismo lote/cosecha
-        cosechaMap[cosechaCode].lotes[loteCode] =
-          (cosechaMap[cosechaCode].lotes[loteCode] || 0) + valor;
-      });
-
-      // Convertir a array ordenado por cosecha
-      const tendencias: TendenciaHistoricaData[] = COSECHAS_ORDEN.filter(
-        (code) => cosechaMap[code]
-      ).map((cosechaCode) => {
-        const cosechaData = cosechaMap[cosechaCode];
-        return {
-          cosecha: cosechaCode,
-          cosecha_label: formatCosechaLabel(cosechaData.ano, cosechaData.tipo),
-          ano: cosechaData.ano,
-          tipo: cosechaData.tipo,
-          ...cosechaData.lotes,
+      if (!cosechaMap[cosechaCode]) {
+        cosechaMap[cosechaCode] = {
+          ano: record.ano,
+          tipo: record.cosecha_tipo,
+          lotes: {},
         };
-      });
+      }
 
-      return tendencias;
-    } catch (err: any) {
-      throw err;
-    }
+      const loteCode = getLoteCode(record.lotes?.nombre || '');
+
+      // Calcular valor segun metrica seleccionada
+      let valor = 0;
+      switch (filtros.metrica) {
+        case 'kg_totales':
+          valor = Number(record.kg_totales) || 0;
+          break;
+        case 'kg_por_arbol':
+          valor = Number(record.kg_por_arbol) || 0;
+          break;
+        case 'ton_por_ha': {
+          const area = Number(record.lotes?.area_hectareas) || 1;
+          valor = (Number(record.kg_totales) || 0) / 1000 / area;
+          break;
+        }
+      }
+
+      // Acumular si hay multiples registros para el mismo lote/cosecha
+      cosechaMap[cosechaCode].lotes[loteCode] =
+        (cosechaMap[cosechaCode].lotes[loteCode] || 0) + valor;
+    });
+
+    // Convertir a array ordenado por cosecha
+    const tendencias: TendenciaHistoricaData[] = COSECHAS_ORDEN.filter(
+      (code) => cosechaMap[code]
+    ).map((cosechaCode) => {
+      const cosechaData = cosechaMap[cosechaCode];
+      return {
+        cosecha: cosechaCode,
+        cosecha_label: formatCosechaLabel(cosechaData.ano, cosechaData.tipo),
+        ano: cosechaData.ano,
+        tipo: cosechaData.tipo,
+        ...cosechaData.lotes,
+      };
+    });
+
+    return tendencias;
   };
 
   /**
@@ -394,13 +386,12 @@ export function useProduccionData() {
   const getRendimientoSublotes = async (
     filtros: FiltrosProduccion
   ): Promise<RendimientoSubloteData[]> => {
-    try {
 
-      // Solo obtener registros a nivel sublote
-      let query = supabase
-        .from('produccion')
-        .select(
-          `
+    // Solo obtener registros a nivel sublote
+    let query = supabase
+      .from('produccion')
+      .select(
+        `
           sublote_id,
           kg_totales,
           kg_por_arbol,
@@ -410,38 +401,35 @@ export function useProduccionData() {
           sublotes!inner(nombre, numero_sublote),
           lotes!inner(nombre, area_hectareas)
         `
-        )
-        .not('sublote_id', 'is', null);
+      )
+      .not('sublote_id', 'is', null);
 
-      query = aplicarFiltros(query, filtros);
-      const { data, error: queryError } = await query;
+    query = aplicarFiltros(query, filtros);
+    const { data, error: queryError } = await query;
 
-      if (queryError) throw queryError;
+    if (queryError) throw queryError;
 
-      return (
-        data?.map((record: any) => {
-          const loteNombre = record.lotes?.nombre || 'Desconocido';
-          const area = Number(record.lotes?.area_hectareas) || 1;
-          // Estimar area del sublote como area del lote / 3 (asumiendo 3 sublotes por lote)
-          const areaSublote = area / 3;
+    return (
+      data?.map((record: any) => {
+        const loteNombre = record.lotes?.nombre || 'Desconocido';
+        const area = Number(record.lotes?.area_hectareas) || 1;
+        // Estimar area del sublote como area del lote / 3 (asumiendo 3 sublotes por lote)
+        const areaSublote = area / 3;
 
-          return {
-            sublote_id: record.sublote_id,
-            sublote_nombre: record.sublotes?.nombre || 'Desconocido',
-            lote_id: record.lote_id,
-            lote_nombre: loteNombre,
-            lote_color: getLoteColor(loteNombre),
-            kg_totales: Number(record.kg_totales) || 0,
-            kg_por_arbol: Number(record.kg_por_arbol) || 0,
-            ton_por_ha: (Number(record.kg_totales) || 0) / 1000 / areaSublote,
-            arboles: record.arboles_registrados || 0,
-            cosecha: formatCosechaCode(record.ano, record.cosecha_tipo),
-          };
-        }) || []
-      );
-    } catch (err: any) {
-      throw err;
-    }
+        return {
+          sublote_id: record.sublote_id,
+          sublote_nombre: record.sublotes?.nombre || 'Desconocido',
+          lote_id: record.lote_id,
+          lote_nombre: loteNombre,
+          lote_color: getLoteColor(loteNombre),
+          kg_totales: Number(record.kg_totales) || 0,
+          kg_por_arbol: Number(record.kg_por_arbol) || 0,
+          ton_por_ha: (Number(record.kg_totales) || 0) / 1000 / areaSublote,
+          arboles: record.arboles_registrados || 0,
+          cosecha: formatCosechaCode(record.ano, record.cosecha_tipo),
+        };
+      }) || []
+    );
   };
 
   /**
@@ -451,37 +439,33 @@ export function useProduccionData() {
     filtros: FiltrosProduccion,
     limit: number = 10
   ): Promise<TopSubloteData[]> => {
-    try {
-      const sublotes = await getRendimientoSublotes(filtros);
+    const sublotes = await getRendimientoSublotes(filtros);
 
-      // Agregar valor segun metrica y ordenar
-      const withValue = sublotes.map((s) => ({
-        ...s,
-        valor:
-          filtros.metrica === 'kg_totales'
-            ? s.kg_totales
-            : filtros.metrica === 'kg_por_arbol'
-              ? s.kg_por_arbol
-              : s.ton_por_ha,
-      }));
+    // Agregar valor segun metrica y ordenar
+    const withValue = sublotes.map((s) => ({
+      ...s,
+      valor:
+        filtros.metrica === 'kg_totales'
+          ? s.kg_totales
+          : filtros.metrica === 'kg_por_arbol'
+            ? s.kg_por_arbol
+            : s.ton_por_ha,
+    }));
 
-      // Ordenar descendente y limitar
-      const sorted = withValue
-        .sort((a, b) => b.valor - a.valor)
-        .slice(0, limit);
+    // Ordenar descendente y limitar
+    const sorted = withValue
+      .sort((a, b) => b.valor - a.valor)
+      .slice(0, limit);
 
-      return sorted.map((s, i) => ({
-        sublote_id: s.sublote_id,
-        sublote_nombre: s.sublote_nombre,
-        lote_nombre: s.lote_nombre,
-        lote_color: s.lote_color,
-        valor: Math.round(s.valor * 100) / 100,
-        metrica: filtros.metrica,
-        ranking: i + 1,
-      }));
-    } catch (err: any) {
-      throw err;
-    }
+    return sorted.map((s, i) => ({
+      sublote_id: s.sublote_id,
+      sublote_nombre: s.sublote_nombre,
+      lote_nombre: s.lote_nombre,
+      lote_color: s.lote_color,
+      valor: Math.round(s.valor * 100) / 100,
+      metrica: filtros.metrica,
+      ranking: i + 1,
+    }));
   };
 
   /**
@@ -490,13 +474,12 @@ export function useProduccionData() {
   const getEdadRendimiento = async (
     filtros: FiltrosProduccion
   ): Promise<EdadRendimientoData[]> => {
-    try {
 
-      // Obtener todos los registros y consolidar para evitar doble conteo
-      let query = supabase
-        .from('produccion')
-        .select(
-          `
+    // Obtener todos los registros y consolidar para evitar doble conteo
+    let query = supabase
+      .from('produccion')
+      .select(
+        `
           sublote_id,
           lote_id,
           ano,
@@ -506,82 +489,79 @@ export function useProduccionData() {
           arboles_registrados,
           lotes!inner(nombre, fecha_siembra, area_hectareas)
         `
-        );
+      );
 
-      query = aplicarFiltros(query, filtros);
-      const { data: rawData, error: queryError } = await query;
+    query = aplicarFiltros(query, filtros);
+    const { data: rawData, error: queryError } = await query;
 
-      if (queryError) throw queryError;
+    if (queryError) throw queryError;
 
-      const data = consolidarRegistros(rawData || []);
+    const data = consolidarRegistros(rawData || []);
 
-      // Agrupar por lote y calcular promedios
-      const loteMap: Record<
-        string,
-        {
-          nombre: string;
-          fecha_siembra: string | null;
-          area: number;
-          totalKg: number;
-          totalArboles: number;
-          numRegistros: number;
+    // Agrupar por lote y calcular promedios
+    const loteMap: Record<
+      string,
+      {
+        nombre: string;
+        fecha_siembra: string | null;
+        area: number;
+        totalKg: number;
+        totalArboles: number;
+        numRegistros: number;
+      }
+    > = {};
+
+    data?.forEach((record: any) => {
+      const loteId = record.lote_id;
+
+      if (!loteMap[loteId]) {
+        loteMap[loteId] = {
+          nombre: record.lotes?.nombre || 'Desconocido',
+          fecha_siembra: record.lotes?.fecha_siembra,
+          area: Number(record.lotes?.area_hectareas) || 1,
+          totalKg: 0,
+          totalArboles: 0,
+          numRegistros: 0,
+        };
+      }
+
+      loteMap[loteId].totalKg += Number(record.kg_totales) || 0;
+      loteMap[loteId].totalArboles += record.arboles_registrados || 0;
+      loteMap[loteId].numRegistros += 1;
+    });
+
+    // Convertir a array con calculo de edad
+    const currentYear = new Date().getFullYear();
+
+    return Object.entries(loteMap)
+      .filter(([, lote]) => lote.fecha_siembra) // Solo lotes con fecha de siembra
+      .map(([loteId, lote]) => {
+        const fechaSiembra = new Date(lote.fecha_siembra!);
+        const edadAnos = currentYear - fechaSiembra.getFullYear();
+
+        // Calcular rendimiento promedio segun metrica
+        let rendimiento = 0;
+        if (filtros.metrica === 'ton_por_ha') {
+          rendimiento =
+            lote.numRegistros > 0
+              ? lote.totalKg / 1000 / lote.area / lote.numRegistros
+              : 0;
+        } else {
+          // kg/arbol promedio
+          rendimiento =
+            lote.totalArboles > 0 ? lote.totalKg / lote.totalArboles : 0;
         }
-      > = {};
 
-      data?.forEach((record: any) => {
-        const loteId = record.lote_id;
-
-        if (!loteMap[loteId]) {
-          loteMap[loteId] = {
-            nombre: record.lotes?.nombre || 'Desconocido',
-            fecha_siembra: record.lotes?.fecha_siembra,
-            area: Number(record.lotes?.area_hectareas) || 1,
-            totalKg: 0,
-            totalArboles: 0,
-            numRegistros: 0,
-          };
-        }
-
-        loteMap[loteId].totalKg += Number(record.kg_totales) || 0;
-        loteMap[loteId].totalArboles += record.arboles_registrados || 0;
-        loteMap[loteId].numRegistros += 1;
+        return {
+          lote_id: loteId,
+          lote_nombre: lote.nombre,
+          lote_codigo: getLoteCode(lote.nombre),
+          lote_color: getLoteColor(lote.nombre),
+          edad_anos: edadAnos,
+          rendimiento: Math.round(rendimiento * 100) / 100,
+          arboles: Math.round(lote.totalArboles / (lote.numRegistros || 1)),
+        };
       });
-
-      // Convertir a array con calculo de edad
-      const currentYear = new Date().getFullYear();
-
-      return Object.entries(loteMap)
-        .filter(([, lote]) => lote.fecha_siembra) // Solo lotes con fecha de siembra
-        .map(([loteId, lote]) => {
-          const fechaSiembra = new Date(lote.fecha_siembra!);
-          const edadAnos = currentYear - fechaSiembra.getFullYear();
-
-          // Calcular rendimiento promedio segun metrica
-          let rendimiento = 0;
-          if (filtros.metrica === 'ton_por_ha') {
-            rendimiento =
-              lote.numRegistros > 0
-                ? lote.totalKg / 1000 / lote.area / lote.numRegistros
-                : 0;
-          } else {
-            // kg/arbol promedio
-            rendimiento =
-              lote.totalArboles > 0 ? lote.totalKg / lote.totalArboles : 0;
-          }
-
-          return {
-            lote_id: loteId,
-            lote_nombre: lote.nombre,
-            lote_codigo: getLoteCode(lote.nombre),
-            lote_color: getLoteColor(lote.nombre),
-            edad_anos: edadAnos,
-            rendimiento: Math.round(rendimiento * 100) / 100,
-            arboles: Math.round(lote.totalArboles / (lote.numRegistros || 1)),
-          };
-        });
-    } catch (err: any) {
-      throw err;
-    }
   };
 
   /**
@@ -620,18 +600,14 @@ export function useProduccionData() {
   const getSublotesByLote = async (
     loteId: string
   ): Promise<SubloteProduccion[]> => {
-    try {
-      const { data, error: queryError } = await supabase
-        .from('sublotes')
-        .select('id, nombre, lote_id, numero_sublote, total_arboles')
-        .eq('lote_id', loteId)
-        .order('numero_sublote', { ascending: true });
+    const { data, error: queryError } = await supabase
+      .from('sublotes')
+      .select('id, nombre, lote_id, numero_sublote, total_arboles')
+      .eq('lote_id', loteId)
+      .order('numero_sublote', { ascending: true });
 
-      if (queryError) throw queryError;
-      return (data || []) as unknown as SubloteProduccion[];
-    } catch (err: any) {
-      throw err;
-    }
+    if (queryError) throw queryError;
+    return (data || []) as unknown as SubloteProduccion[];
   };
 
   /**

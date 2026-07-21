@@ -483,12 +483,13 @@ npm test             # Single run
 npm run test:watch   # Watch mode
 ```
 
-Current test files:
+Selected test files (the directory holds ~25 — run `ls src/__tests__/` for the full set):
 - `aplicacionesReales.test.ts` — Real applications data handling
 - `generarReporteSemanal.test.ts` — Report generation logic
 - `laborImprovements.test.ts` — Labor module improvements
 - `laborRegistration.test.ts` — Labor registration & DB trigger shapes
 - `reporteSemanal.test.ts` — Weekly report logic
+- `dialogScrollContract.test.ts` — Static guard: every `DialogContent` must scroll (see Dialog Size System)
 
 When adding new tests, place them in `src/__tests__/` and follow existing patterns for mocking Supabase.
 
@@ -579,6 +580,17 @@ See `src/guidelines/Guidelines.md` for the full design system.
 
 ### Dialog Size System (`src/components/ui/dialog.tsx`)
 All dialogs use a fixed-size tier via the `size` prop on `DialogContent`: `sm` (448×384px), `md` (576×512px), `lg` (768×640px), `xl` (1024×704px). These are max dimensions in rem — they never fill the screen. The base `DialogContent` enforces `overflow-hidden`, so scrollable content MUST go inside `<DialogBody>`. Never put `overflow-y-auto` on `DialogContent` directly. `StandardDialog` was removed — use `Dialog` + `DialogContent` + `DialogHeader` + `DialogBody` + `DialogFooter` directly.
+
+**When a `<form>` wraps the dialog content**, it becomes the flex child and must be able to shrink, or it clips the panel exactly as if `DialogBody` were absent:
+
+```tsx
+<form onSubmit={…} className="flex flex-col flex-1 min-h-0 gap-4">
+  <DialogBody className="space-y-4">{/* fields */}</DialogBody>
+  <DialogFooter className="gap-3">{/* buttons */}</DialogFooter>
+</form>
+```
+
+`src/__tests__/dialogScrollContract.test.ts` enforces both rules across the codebase. See `docs/bugs/2026-07-21-dialog-sin-scroll-usuarios.md`.
 
 ---
 

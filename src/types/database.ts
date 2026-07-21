@@ -3408,6 +3408,10 @@ export type Database = {
         }[]
       }
       es_usuario_gerencia: { Args: never; Returns: boolean }
+      fn_cleanup_compra_dependencies: {
+        Args: { p_compra_id: string }
+        Returns: undefined
+      }
       get_user_role: {
         Args: never
         Returns: Database["public"]["Enums"]["rol_usuario"]

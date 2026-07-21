@@ -558,7 +558,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <DialogBody className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="nuevo-nombre">Nombre *</Label>
               <Input
@@ -589,7 +589,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
                 placeholder="correo@ejemplo.com"
               />
             </div>
-          </div>
+          </DialogBody>
 
           <DialogFooter>
             <Button

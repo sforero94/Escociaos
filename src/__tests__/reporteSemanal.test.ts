@@ -697,26 +697,35 @@ describe('fetchDatosMonitoreo', () => {
   // Helper to set up mocks for fetchDatosMonitoreo which queries:
   // 1. lotes + sublotes (in parallel), 2. monitoreos (fechas per lote),
   // 3. monitoreos (per-lote anterior, only if needed), 4. monitoreos (full data)
+  /**
+   * `fetchDatosMonitoreo` consulta `monitoreos` en este orden:
+   *   1. actividad de los últimos 30 días (`select('lote_id')`) → decide qué lotes
+   *      siguen activos; un lote sin actividad se excluye del informe por completo.
+   *   2. fechas dentro de la ventana de 2 semanas (`select('lote_id, fecha_monitoreo')`).
+   *   3. datos completos (y, si hace falta, una consulta `anterior` por lote).
+   * Cada escalón se mockea por separado: mezclarlos hace que los tests pasen por
+   * coincidencia y oculta cuál de los tres filtros es el que realmente actúa.
+   */
   function setupMonitoreoMocks(opts: {
+    actividad30d?: any[];
     fechas?: any[];
     monitoreos?: any[];
   } = {}) {
     const lotesChain = createChainableMock({ data: MOCK_LOTES, error: null });
     const sublotesChain = createChainableMock({ data: MOCK_SUBLOTES, error: null });
+    const actividadChain = createChainableMock({ data: opts.actividad30d ?? MOCK_MONITOREOS_FECHAS, error: null });
     const fechasChain = createChainableMock({ data: opts.fechas ?? MOCK_MONITOREOS_FECHAS, error: null });
     const monChain = createChainableMock({ data: opts.monitoreos ?? MOCK_MONITOREOS, error: null });
 
-    // Track monitoreos calls: 1st = fechas, subsequent = full data
-    // (With default fixtures, all lotes have both fechaActual and fechaAnterior
-    //  from the fechas query, so no per-lote anterior queries are needed.)
     let monitoreoCallCount = 0;
     mockFrom.mockImplementation((table: string) => {
       if (table === 'lotes') return lotesChain;
       if (table === 'sublotes') return sublotesChain;
       if (table === 'monitoreos') {
         monitoreoCallCount++;
-        if (monitoreoCallCount === 1) return fechasChain;    // fechas query
-        return monChain;                                       // full data query
+        if (monitoreoCallCount === 1) return actividadChain; // actividad 30 días
+        if (monitoreoCallCount === 2) return fechasChain;    // fechas ventana 2 semanas
+        return monChain;                                     // datos completos / anterior
       }
       return createChainableMock({ data: [], error: null });
     });
@@ -772,7 +781,9 @@ describe('fetchDatosMonitoreo', () => {
     expect(lotePP!.sublotes.length).toBe(2); // Sublote A y B
   });
 
-  it('retorna datos vacíos cuando no hay monitoreos', async () => {
+  it('sin datos en la ventana de 2 semanas: los lotes activos aparecen marcados sinDatos', async () => {
+    // Hay actividad en los últimos 30 días (los lotes siguen vivos), pero ninguna
+    // medición cae dentro de la ventana del informe.
     setupMonitoreoMocks({ fechas: [], monitoreos: [] });
 
     const resultado = await fetchDatosMonitoreo(MOCK_SEMANA_MONITOREO);
@@ -781,9 +792,20 @@ describe('fetchDatosMonitoreo', () => {
     expect(resultado.detallePorLote.length).toBe(0);
     expect(resultado.insights.length).toBe(0);
     expect(resultado.fechaActual).toBeNull();
-    // Should still have lotes in vistasPorLote (all sinDatos)
     expect(resultado.vistasPorLote.length).toBe(2);
-    expect(resultado.vistasPorLote[0].sinDatos).toBe(true);
+    expect(resultado.vistasPorLote.every((l: any) => l.sinDatos)).toBe(true);
+  });
+
+  it('sin actividad en 30 días: los lotes se excluyen por completo del informe', async () => {
+    // Regla introducida en 1753706: un lote erradicado o sin monitoreo en 30 días
+    // no debe aparecer en el informe, ni siquiera como fila "sin datos".
+    setupMonitoreoMocks({ actividad30d: [], fechas: [], monitoreos: [] });
+
+    const resultado = await fetchDatosMonitoreo(MOCK_SEMANA_MONITOREO);
+
+    expect(resultado.fechaActual).toBeNull();
+    expect(resultado.vistasPorLote.length).toBe(0);
+    expect(resultado.vistasPorSublote.length).toBe(0);
   });
 });
 
