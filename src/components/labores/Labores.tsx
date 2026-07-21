@@ -1,18 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { getSupabase } from '../../utils/supabase/client';
 import { ConfirmDialog } from '../ui/confirm-dialog';
 import { Alert, AlertDescription } from '../ui/alert';
 import {
   Tabs,
   TabsContent,
-  TabsList,
-  TabsTrigger,
 } from '../ui/tabs';
 import {
-  ListTodo,
   CheckCircle,
   XCircle,
-  FileBarChart,
   AlertCircle,
 } from 'lucide-react';
 
@@ -112,8 +109,9 @@ const Labores: React.FC = () => {
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleteTargetTarea, setDeleteTargetTarea] = useState<Tarea | null>(null);
 
-  // Tab activo
-  const [tabActivo, setTabActivo] = useState('kanban');
+  // Vista activa (Kanban | Reportes), controlada por el subnav vía ?vista=
+  const [searchParams] = useSearchParams();
+  const vista = searchParams.get('vista') === 'reportes' ? 'reportes' : 'kanban';
 
   // Cargar datos al montar
   useEffect(() => {
@@ -361,14 +359,6 @@ const Labores: React.FC = () => {
   // Renderizar
   return (
     <div className="container mx-auto py-6 px-4">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Gestión de Labores</h1>
-        <p className="text-gray-600 mt-1">
-          Administra tareas y registra trabajo diario del personal
-        </p>
-      </div>
-
       {/* Alertas */}
       {alert && (
         <Alert
@@ -387,19 +377,8 @@ const Labores: React.FC = () => {
         </Alert>
       )}
 
-      {/* Tabs */}
-      <Tabs value={tabActivo} onValueChange={setTabActivo}>
-        <TabsList className="grid w-full grid-cols-2 mb-6">
-          <TabsTrigger value="kanban" className="flex items-center gap-2">
-            <ListTodo className="h-4 w-4" />
-            Tablero Kanban
-          </TabsTrigger>
-          <TabsTrigger value="reportes" className="flex items-center gap-2">
-            <FileBarChart className="h-4 w-4" />
-            Reportes
-          </TabsTrigger>
-        </TabsList>
-
+      {/* Tabs (selección controlada por LaboresSubNav vía ?vista=) */}
+      <Tabs value={vista}>
         {/* Tab: Tablero Kanban */}
         <TabsContent value="kanban">
           <KanbanBoard

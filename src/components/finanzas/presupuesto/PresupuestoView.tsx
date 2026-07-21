@@ -1,6 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { RoleGuard } from '@/components/auth/RoleGuard';
-import { FinanzasSubNav } from '@/components/finanzas/components/FinanzasSubNav';
 import { PresupuestoControls } from './PresupuestoControls';
 import { PresupuestoTable } from './PresupuestoTable';
 import { StatusDot } from './EjecucionBadge';
@@ -106,8 +104,7 @@ export function PresupuestoView() {
   };
 
   return (
-    <RoleGuard allowedRoles={['Gerencia']}>
-      <FinanzasSubNav />
+    <>
 
       <div className="space-y-5">
         {/* Header */}
@@ -166,6 +163,6 @@ export function PresupuestoView() {
           )}
         </div>
       </div>
-    </RoleGuard>
+    </>
   );
 }

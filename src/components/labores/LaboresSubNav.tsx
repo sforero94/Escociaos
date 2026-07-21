@@ -1,43 +1,57 @@
-import { useLocation, useNavigate } from 'react-router-dom';
-import { Users, UserCheck } from 'lucide-react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { ListTodo, FileBarChart, Users, UserCheck } from 'lucide-react';
 
 /**
- * Submenú horizontal para las páginas de Empleados
+ * Submenú horizontal para las páginas de Labores
+ * (Kanban / Reportes / Empleados / Contratistas)
  */
-export function EmpleadosSubNav() {
+export function LaboresSubNav() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const vista = searchParams.get('vista');
 
   const tabs = [
+    {
+      id: 'kanban',
+      label: 'Kanban',
+      subtitle: 'Tablero de tareas',
+      icon: ListTodo,
+      path: '/labores?vista=kanban',
+      isActive: () => location.pathname === '/labores' && vista !== 'reportes',
+    },
+    {
+      id: 'reportes',
+      label: 'Reportes',
+      subtitle: 'Análisis de labores',
+      icon: FileBarChart,
+      path: '/labores?vista=reportes',
+      isActive: () => location.pathname === '/labores' && vista === 'reportes',
+    },
     {
       id: 'empleados',
       label: 'Empleados',
       subtitle: 'Personal de planta',
       icon: Users,
-      path: '/empleados',
+      path: '/labores/empleados',
+      isActive: () => location.pathname === '/labores/empleados',
     },
     {
       id: 'contratistas',
       label: 'Contratistas',
       subtitle: 'Personal externo',
       icon: UserCheck,
-      path: '/empleados/contratistas',
+      path: '/labores/contratistas',
+      isActive: () => location.pathname.startsWith('/labores/contratistas'),
     },
   ];
-
-  const isActive = (path: string) => {
-    if (path === '/empleados') {
-      return location.pathname === '/empleados';
-    }
-    return location.pathname.startsWith(path);
-  };
 
   return (
     <div className="bg-white/80 backdrop-blur-xl border-b border-primary/10 mb-6 -mx-4 lg:-mx-8 px-4 lg:px-8">
       <div className="flex gap-2 overflow-x-auto scrollbar-hide">
         {tabs.map((tab) => {
           const Icon = tab.icon;
-          const active = isActive(tab.path);
+          const active = tab.isActive();
 
           return (
             <button

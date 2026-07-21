@@ -5,7 +5,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
  */
 export async function crearUsuario(body: any) {
   try {
-    const { email, password, nombre_completo, rol, activo } = body;
+    const { email, password, nombre_completo, rol, activo, modulos_acceso } = body;
 
     // Validaciones
     if (!email || !password || !nombre_completo || !rol) {
@@ -65,6 +65,7 @@ export async function crearUsuario(body: any) {
         nombre_completo,
         rol,
         activo: activo !== undefined ? activo : true,
+        modulos_acceso: Array.isArray(modulos_acceso) ? modulos_acceso : [],
       });
 
     if (dbError) {
@@ -104,7 +105,7 @@ export async function crearUsuario(body: any) {
  */
 export async function editarUsuario(body: any) {
   try {
-    const { id, email, password, nombre_completo, rol, activo } = body;
+    const { id, email, password, nombre_completo, rol, activo, modulos_acceso } = body;
 
     // Validaciones
     if (!id || !email || !nombre_completo || !rol) {
@@ -184,6 +185,7 @@ export async function editarUsuario(body: any) {
         nombre_completo,
         rol,
         activo: activo !== undefined ? activo : true,
+        modulos_acceso: Array.isArray(modulos_acceso) ? modulos_acceso : [],
       })
       .eq('id', id);
 

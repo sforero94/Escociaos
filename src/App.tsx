@@ -37,7 +37,8 @@ const ConfigApiarios = lazy(() => import('./components/monitoreo/ConfigApiarios'
 const ClimaDashboard = lazy(() => import('./components/clima/ClimaDashboard').then(m => ({ default: m.ClimaDashboard })));
 const ClimaHistorico = lazy(() => import('./components/clima/ClimaHistorico').then(m => ({ default: m.ClimaHistorico })));
 const ConfiguracionDashboard = lazy(() => import('./components/configuracion/ConfiguracionDashboard').then(m => ({ default: m.ConfiguracionDashboard })));
-const Empleados = lazy(() => import('./components/empleados/Empleados').then(m => ({ default: m.Empleados })));
+const LaboresLayout = lazy(() => import('./components/labores/LaboresLayout').then(m => ({ default: m.LaboresLayout })));
+const ModuleGuard = lazy(() => import('./components/auth/ModuleGuard').then(m => ({ default: m.ModuleGuard })));
 const FinanzasDashboard = lazy(() => import('./components/finanzas/FinanzasDashboard').then(m => ({ default: m.FinanzasDashboard })));
 const GastosView = lazy(() => import('./components/finanzas/GastosView').then(m => ({ default: m.GastosView })));
 const IngresosView = lazy(() => import('./components/finanzas/IngresosView').then(m => ({ default: m.IngresosView })));
@@ -71,90 +72,106 @@ function LayoutRoutes() {
           {/* Dashboard - Ruta principal */}
           <Route index element={<Dashboard />} />
 
-          {/* Inventario - Rutas anidadas */}
-          <Route path="inventario">
-            <Route index element={<InventoryList />} />
-            <Route path="dashboard" element={<InventoryDashboard />} />
-            <Route path="compras" element={<ComprasIntegrado />} />
-            <Route path="producto/:id" element={<ProductDetail />} />
-            <Route path="movimientos" element={<InventoryMovements />} />
-            <Route path="importar" element={<ImportarProductosPage />} />
-            <Route path="verificaciones">
-              <Route index element={<VerificacionesList />} />
-              <Route path="nueva" element={<NuevaVerificacion />} />
-              <Route path="conteo/:id" element={<ConteoFisico />} />
-              <Route path=":id" element={<ComingSoon moduleName="Detalle de Verificación" />} />
+          {/* ===== Módulo Aguacate ===== */}
+          <Route element={<ModuleGuard modulo="aguacate" />}>
+            {/* Inventario - Rutas anidadas */}
+            <Route path="inventario">
+              <Route index element={<InventoryList />} />
+              <Route path="dashboard" element={<InventoryDashboard />} />
+              <Route path="compras" element={<ComprasIntegrado />} />
+              <Route path="producto/:id" element={<ProductDetail />} />
+              <Route path="movimientos" element={<InventoryMovements />} />
+              <Route path="importar" element={<ImportarProductosPage />} />
+              <Route path="verificaciones">
+                <Route index element={<VerificacionesList />} />
+                <Route path="nueva" element={<NuevaVerificacion />} />
+                <Route path="conteo/:id" element={<ConteoFisico />} />
+                <Route path=":id" element={<ComingSoon moduleName="Detalle de Verificación" />} />
+              </Route>
+            </Route>
+
+            {/* Aplicaciones */}
+            <Route path="aplicaciones">
+              <Route index element={<AplicacionesList />} />
+              <Route path="calculadora" element={<CalculadoraAplicaciones />} />
+              <Route path="calculadora/:id" element={<CalculadoraAplicaciones />} />
+              <Route path=":id/movimientos" element={<DailyMovementsDashboardWrapper />} />
+              <Route path=":id/cierre" element={<CierreAplicacionWrapper />} />
+              <Route path=":id/reporte" element={<ReporteAplicacionWrapper />} />
+            </Route>
+
+            {/* Monitoreo */}
+            <Route path="monitoreo" element={<DashboardMonitoreoV3 />} />
+            <Route path="monitoreo/registros" element={<RegistrosMonitoreo />} />
+            <Route path="monitoreo/carga-masiva" element={<CargaMasiva />} />
+            <Route path="monitoreo/catalogo" element={<CatalogoPlagas />} />
+            <Route path="monitoreo/apiarios" element={<ConfigApiarios />} />
+
+            {/* Clima */}
+            <Route path="clima" element={<ClimaDashboard />} />
+            <Route path="clima/historico" element={<ClimaHistorico />} />
+
+            {/* Labores (nuevo layout anidado) */}
+            <Route path="labores" element={<LaboresLayout />}>
+              <Route index element={<Labores />} />
+              <Route path="empleados" element={<Personal />} />
+              <Route path="contratistas" element={<Contratistas />} />
+            </Route>
+
+            {/* Redirects legados (mantener links antiguos vivos) */}
+            <Route path="empleados" element={<Navigate to="/labores/empleados" replace />} />
+            <Route path="empleados/contratistas" element={<Navigate to="/labores/contratistas" replace />} />
+
+            {/* Producción */}
+            <Route path="produccion" element={<ProduccionDashboard />} />
+
+            {/* Reportes (semanales) */}
+            <Route path="reportes">
+              <Route index element={<ReportesDashboard />} />
+              <Route path="generar" element={<ReporteSemanalWizard />} />
             </Route>
           </Route>
 
-          {/* Aplicaciones */}
-          <Route path="aplicaciones">
-            <Route index element={<AplicacionesList />} />
-            <Route path="calculadora" element={<CalculadoraAplicaciones />} />
-            <Route path="calculadora/:id" element={<CalculadoraAplicaciones />} />
-            <Route path=":id/movimientos" element={<DailyMovementsDashboardWrapper />} />
-            <Route path=":id/cierre" element={<CierreAplicacionWrapper />} />
-            <Route path=":id/reporte" element={<ReporteAplicacionWrapper />} />
+          {/* ===== Módulo Hato Lechero ===== */}
+          <Route element={<ModuleGuard modulo="hato_lechero" />}>
+            <Route path="hato-lechero">
+              <Route index element={<ComingSoon moduleName="Hato Lechero — Tablero" />} />
+              <Route path="produccion" element={<ComingSoon moduleName="Hato Lechero — Producción" />} />
+              <Route path="hato" element={<ComingSoon moduleName="Hato Lechero — Hato" />} />
+              <Route path="chequeos" element={<ComingSoon moduleName="Hato Lechero — Chequeos" />} />
+              <Route path="alertas" element={<ComingSoon moduleName="Hato Lechero — Alertas" />} />
+            </Route>
           </Route>
 
-          {/* Monitoreo */}
-          <Route path="monitoreo" element={<DashboardMonitoreoV3 />} />
-          <Route path="monitoreo/registros" element={<RegistrosMonitoreo />} />
-          <Route path="monitoreo/carga-masiva" element={<CargaMasiva />} />
-          <Route path="monitoreo/catalogo" element={<CatalogoPlagas />} />
-          <Route path="monitoreo/apiarios" element={<ConfigApiarios />} />
-
-          {/* Clima */}
-          <Route path="clima" element={<ClimaDashboard />} />
-          <Route path="clima/historico" element={<ClimaHistorico />} />
-
-          {/* Labores */}
-          <Route path="labores" element={<Labores />} />
-
-          {/* Empleados - Rutas anidadas */}
-          <Route path="empleados" element={<Empleados />}>
-            <Route index element={<Personal />} />
-            <Route path="contratistas" element={<Contratistas />} />
+          {/* ===== Módulo Ganado ===== */}
+          <Route element={<ModuleGuard modulo="ganado" />}>
+            <Route path="ganado">
+              <Route index element={<GanadoDashboard />} />
+              <Route path="movimientos" element={<GanadoMovimientos />} />
+            </Route>
           </Route>
 
-          {/* Finanzas */}
-          <Route path="finanzas">
-            <Route index element={<FinanzasDashboard />} />
-            <Route path="dashboard/aguacate" element={<FinanzasDashboard tab="aguacate" />} />
-            <Route path="dashboard/hato" element={<FinanzasDashboard tab="hato" />} />
-            <Route path="dashboard/ganado" element={<FinanzasDashboard tab="ganado" />} />
-            <Route path="dashboard/caballos" element={<FinanzasDashboard tab="caballos" />} />
-            <Route path="dashboard/agricola" element={<FinanzasDashboard tab="agricola" />} />
-            <Route path="gastos" element={<GastosView />} />
-            <Route path="ingresos" element={<IngresosView />} />
-            <Route path="reportes" element={<ReportesView />} />
-            <Route path="presupuesto" element={<PresupuestoView />} />
-            <Route path="configuracion" element={<ConfiguracionFinanzas />} />
+          {/* ===== Módulo Finanzas ===== */}
+          <Route element={<ModuleGuard modulo="finanzas" />}>
+            <Route path="finanzas">
+              <Route index element={<FinanzasDashboard />} />
+              <Route path="dashboard/aguacate" element={<FinanzasDashboard tab="aguacate" />} />
+              <Route path="dashboard/hato" element={<FinanzasDashboard tab="hato" />} />
+              <Route path="dashboard/ganado" element={<FinanzasDashboard tab="ganado" />} />
+              <Route path="dashboard/caballos" element={<FinanzasDashboard tab="caballos" />} />
+              <Route path="dashboard/agricola" element={<FinanzasDashboard tab="agricola" />} />
+              <Route path="gastos" element={<GastosView />} />
+              <Route path="ingresos" element={<IngresosView />} />
+              <Route path="reportes" element={<ReportesView />} />
+              <Route path="presupuesto" element={<PresupuestoView />} />
+              <Route path="configuracion" element={<ConfiguracionFinanzas />} />
+            </Route>
           </Route>
 
-          {/* Ganado - Inventario vivo */}
-          <Route path="ganado">
-            <Route index element={<GanadoDashboard />} />
-            <Route path="movimientos" element={<GanadoMovimientos />} />
-          </Route>
-
-          {/* Reportes */}
-          <Route path="reportes">
-            <Route index element={<ReportesDashboard />} />
-            <Route path="generar" element={<ReporteSemanalWizard />} />
-          </Route>
-
-          {/* Producción */}
-          <Route path="produccion" element={<ProduccionDashboard />} />
-
-          {/* Ventas */}
-          <Route path="ventas" element={<ComingSoon moduleName="Ventas y Despachos" />} />
-
-          {/* Lotes */}
-          <Route path="lotes" element={<ComingSoon moduleName="Gestión de Lotes" />} />
-
-          {/* Configuración */}
+          {/* ===== Siempre disponibles ===== */}
           <Route path="configuracion" element={<ConfiguracionDashboard />} />
+          <Route path="ventas" element={<ComingSoon moduleName="Ventas y Despachos" />} />
+          <Route path="lotes" element={<ComingSoon moduleName="Gestión de Lotes" />} />
 
           {/* Ruta 404 - Redirigir al dashboard */}
           <Route path="*" element={<Navigate to="/" replace />} />

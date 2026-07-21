@@ -426,3 +426,13 @@ input[type='number'] {
   background: none;
   padding: 0;
 }
+
+/* Sidebar active state — soft highlight per the approved Figma design:
+   #E7EDDD background + #73991C text/icons.
+   Defined here (not as Tailwind utilities) because src/index.css is a FROZEN
+   pre-compiled Tailwind build: utilities such as `bg-sidebar-accent` or
+   `bg-primary/10` do not exist in it and silently render transparent. */
+.nav-item-active {
+  background-color: var(--sidebar-accent);
+  color: var(--primary);
+}

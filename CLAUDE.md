@@ -261,9 +261,17 @@ All routes except `/login` are protected and require authentication.
 | `/monitoreo/registros`             | RegistrosMonitoreo           | Monitoring     |
 | `/monitoreo/carga-masiva`          | CargaMasiva                  | Monitoring     |
 | `/monitoreo/catalogo`              | CatalogoPlagas               | Monitoring     |
-| `/labores`                         | Labores (Kanban)             | Labor          |
-| `/empleados`                       | Personal                     | Employees      |
-| `/empleados/contratistas`          | Contratistas                 | Employees      |
+| `/labores`                         | LaboresLayout → Labores      | Labor          |
+| `/labores?vista=reportes`          | LaboresLayout → Labores      | Labor          |
+| `/labores/empleados`               | Personal                     | Labor          |
+| `/labores/contratistas`            | Contratistas                 | Labor          |
+| `/empleados`                       | → redirects to `/labores/empleados`      | Legacy |
+| `/empleados/contratistas`          | → redirects to `/labores/contratistas`   | Legacy |
+| `/hato-lechero`                    | ComingSoon (En Desarrollo)   | Hato Lechero   |
+| `/hato-lechero/produccion`         | ComingSoon (En Desarrollo)   | Hato Lechero   |
+| `/hato-lechero/hato`               | ComingSoon (En Desarrollo)   | Hato Lechero   |
+| `/hato-lechero/chequeos`           | ComingSoon (En Desarrollo)   | Hato Lechero   |
+| `/hato-lechero/alertas`            | ComingSoon (En Desarrollo)   | Hato Lechero   |
 | `/finanzas`                        | FinanzasDashboard            | Finance        |
 | `/finanzas/gastos`                 | GastosView                   | Finance        |
 | `/finanzas/ingresos`               | IngresosView                 | Finance        |
@@ -281,6 +289,30 @@ All routes except `/login` are protected and require authentication.
 | `/ventas`                          | ComingSoon                   | Not implemented|
 | `/lotes`                           | ComingSoon                   | Not implemented|
 | `/login`                           | Login                        | Auth (public)  |
+
+---
+
+## Module Access Control (per-user)
+
+Per-user module visibility governs 4 modules: **`aguacate`, `hato_lechero`, `ganado`, `finanzas`**.
+
+- **Source of truth**: `usuarios.modulos_acceso text[]` (migration 049).
+- **Pure rule**: `puedeAccederModulo(profile, moduloKey)` in `src/utils/modulosAcceso.ts` (unit-tested in `src/__tests__/modulosAcceso.test.ts`):
+  1. `profile == null` → **true** (fail open)
+  2. `profile.rol === ''` → **true** (temporal/unconfirmed profile — fail open so Gerencia is never briefly locked out during `AuthContext`'s 2s profile window)
+  3. `profile.rol === 'Gerencia'` → **true** (Gerencia always has every module)
+  4. else → `profile.modulos.includes(moduloKey)`
+- **Administrador / Verificador start with `'{}'`** and see only non-governed items until a Gerencia user configures them.
+- **Enforced at two layers, both driven by that one function**: the sidebar filter in `Layout.tsx`, and `ModuleGuard` layout routes in `App.tsx` (deny → `<Navigate to="/" replace/>`).
+- **NOT a data boundary** — no RLS changes. Existing role-based RLS is untouched.
+- **Configured** from Configuración → Usuarios (`UsuariosConfig.tsx`, Gerencia-only), persisted via the `usuarios/crear|editar` edge-function endpoints.
+- **Exception — Producción**: `/produccion` sits under the Aguacate group but stays **Gerencia-only** (cost/rentabilidad data). Its sidebar leaf carries `soloGerencia: true` and `ProduccionDashboard` keeps its inner `RoleGuard allowedRoles={['Gerencia']}`.
+- The 6 Finanzas screens no longer carry inner Gerencia `RoleGuard`s — they are governed purely by the `finanzas` module.
+- `Monitor` role is unaffected: still fully blocked by `ProtectedRoute` (Telegram-only).
+
+Sidebar structure (`Layout.tsx` `NAV`): Tablero General · **Aguacate** (group: Labores, Monitoreo, Aplicaciones, Inventario, Clima, Producción, Reportes) · **Hato Lechero** (group, all En Desarrollo: Tablero, Producción, Hato, Chequeos, Alertas) · Ganado · **Finanzas** (group: Dashboard, Gastos, Ingresos, Reportes, Presupuesto, Configuración) · Configuración.
+
+Design/implementation plan: `docs/plan_sidebar_modulos.md`.
 
 ---
 
@@ -337,6 +369,7 @@ Sequential SQL migrations live in `src/sql/migrations/` (001–046). See `src/sq
 - **044**: `create_ganado_inventario` — live cattle inventory (issue #51): `gan_ubicaciones` → `gan_fincas` (hectáreas) → `gan_potreros` → `gan_inventario` snapshot + `gan_movimientos` event log + `gan_pesos_historico`. Trigger `fn_crear_movimiento_pendiente_ganado()` (AFTER INSERT on `fin_transacciones_ganado`, SECURITY DEFINER) creates a `pendiente` movement per new finance transaction; `fn_aplicar_movimiento_ganado()` applies confirmed movements to `gan_inventario` (and logs to `gan_pesos_historico` when peso present). Partial unique indexes on `transaccion_ganado_id` block double confirmation. Seeds the 3 ubicaciones and `gan_fincas` from distinct historic transaction fincas. RLS: SELECT all authenticated; write Administrador + Gerencia. Applied to production 2026-06-10.
 - **045**: `fix_aplicar_movimiento_ganado_upsert` — fixes 044's apply-trigger: `INSERT ... ON CONFLICT DO UPDATE` validates CHECK constraints on the proposed row before conflict arbitration, so every negative-delta movement (venta/muerte/traslado_salida) failed even with sufficient inventory. Rewritten UPDATE-first with INSERT fallback. Applied to production 2026-06-10.
 - **046**: `add_produccion_calidad` — adds optional `kg_exportacion`/`kg_nacional` NUMERIC(12,2) columns to `produccion` with CHECK enforcing exact sum against `kg_totales` when both are non-null. Applied to production 2026-06-12.
+- **049**: `add_usuarios_modulos_acceso` — adds `modulos_acceso text[] NOT NULL DEFAULT '{}'` to `usuarios`. Per-user app-module visibility (`aguacate` | `hato_lechero` | `ganado` | `finanzas`). Navigation/visibility only — **NOT enforced by RLS**. Gerencia bypasses it in app code. Applied to production 2026-07-21.
 
 ### Monitoring Module (`/monitoreo`) — incidencia aggregation
 
@@ -512,6 +545,18 @@ npm run lint
 ---
 
 ## Caution Zones
+
+### ⚠️ Tailwind classes are FROZEN (`src/index.css`)
+
+`src/index.css` is a **checked-in, pre-compiled Tailwind v4.1.3 build**. Tailwind does **not** run during `vite build` (it is not a dependency in `package.json`; there is no Tailwind plugin in `vite.config.ts`). **The set of usable utility classes is therefore fixed** — any class not already present in `index.css` is silently ignored (no error, the style simply never applies). This includes arbitrary values (`bg-[#E7EDDD]`) and opacity modifiers (`bg-primary/10`).
+
+Before using an unfamiliar utility, check it exists:
+```bash
+grep -cF 'bg-sidebar-accent' src/index.css   # 0 = does not exist, will do nothing
+```
+If it doesn't exist, add a real CSS rule to `src/styles/globals.css` (a live stylesheet, imported *after* `index.css`, so it wins the cascade) — e.g. `.nav-item-active`. Never hand-edit `index.css`.
+
+See `src/guidelines/Guidelines.md` for the full design system.
 
 ### Supabase Migrations (`src/sql/migrations/`)
 - **Do NOT modify existing migration files** — they may have already been applied to production
