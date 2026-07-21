@@ -274,6 +274,14 @@ input[type='number'] {
   max-height: 100dvh;
 }
 
+/* Not present in the frozen index.css build, but referenced across the app.
+   Lets a flex item shrink below its content height — required on wrappers that
+   are NOT scroll containers themselves (e.g. a <form> holding a DialogBody),
+   since `overflow: visible` keeps the automatic minimum size at min-content. */
+.min-h-0 {
+  min-height: 0;
+}
+
 /* Dialog size tiers — fixed rem values, capped by viewport via min() */
 .dialog-viewport-cap {
   max-height: calc(100vh - 2rem);

@@ -3,7 +3,7 @@ import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { ConfirmDialog } from '../ui/confirm-dialog';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
@@ -442,101 +442,103 @@ export function TelegramConfig() {
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Usuario vinculado */}
-            <div>
-              <Label htmlFor="usuario-vinculado">Usuario vinculado</Label>
-              <select
-                id="usuario-vinculado"
-                value={usuarioVinculadoId ?? ''}
-                onChange={(e) => {
-                  const id = e.target.value || null;
-                  setUsuarioVinculadoId(id);
-                  if (id) {
-                    const usr = usuariosSistema.find((u) => u.id === id);
-                    if (usr?.nombre_completo) setNombreDisplay(usr.nombre_completo);
-                  }
-                }}
-                className="w-full mt-1 px-3 py-2 border border-secondary/30 rounded-lg bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="">— Sin vincular —</option>
-                {usuariosSistema.map((usr) => (
-                  <option key={usr.id} value={usr.id}>
-                    {usr.nombre_completo ?? usr.email} ({usr.rol})
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-brand-brown/50 mt-1">
-                Seleccionar un usuario auto-completa el nombre.
-              </p>
-            </div>
-
-            {/* Nombre */}
-            <div>
-              <Label htmlFor="nombre">Nombre completo *</Label>
-              <Input
-                id="nombre"
-                placeholder="Ej: Carlos Mendoza"
-                value={nombreDisplay}
-                onChange={(e) => setNombreDisplay(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-
-            {/* Rol */}
-            <div>
-              <Label htmlFor="rol">Rol en el bot</Label>
-              <select
-                id="rol"
-                value={rolBot}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (ROLES_BOT.some((r) => r.key === val)) {
-                    setRolBot(val as RolBot);
-                  }
-                }}
-                className="w-full mt-1 px-3 py-2 border border-secondary/30 rounded-lg bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                {ROLES_BOT.map((r) => (
-                  <option key={r.key} value={r.key}>{r.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Modules */}
-            <div>
-              <Label>Módulos permitidos</Label>
-              <div className="mt-2 space-y-2">
-                {TELEGRAM_MODULES.map((mod) => (
-                  <label
-                    key={mod.key}
-                    className={`flex items-start gap-2 p-2 rounded-lg border transition ${
-                      mod.sensitive
-                        ? 'border-amber-200 bg-amber-50/50'
-                        : 'border-transparent'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={modulosPermitidos.includes(mod.key)}
-                      onChange={() => setModulosPermitidos(toggleModulo(modulosPermitidos, mod.key))}
-                      className="w-4 h-4 mt-0.5 rounded border-secondary/30"
-                    />
-                    <div>
-                      <span className={`text-sm font-medium ${mod.sensitive ? 'text-amber-700' : 'text-foreground'}`}>
-                        {mod.label}
-                      </span>
-                      <p className={`text-xs ${mod.sensitive ? 'text-amber-600' : 'text-brand-brown/60'}`}>
-                        {mod.description}
-                      </p>
-                    </div>
-                  </label>
-                ))}
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 gap-4">
+            <DialogBody className="space-y-4">
+              {/* Usuario vinculado */}
+              <div>
+                <Label htmlFor="usuario-vinculado">Usuario vinculado</Label>
+                <select
+                  id="usuario-vinculado"
+                  value={usuarioVinculadoId ?? ''}
+                  onChange={(e) => {
+                    const id = e.target.value || null;
+                    setUsuarioVinculadoId(id);
+                    if (id) {
+                      const usr = usuariosSistema.find((u) => u.id === id);
+                      if (usr?.nombre_completo) setNombreDisplay(usr.nombre_completo);
+                    }
+                  }}
+                  className="w-full mt-1 px-3 py-2 border border-secondary/30 rounded-lg bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="">— Sin vincular —</option>
+                  {usuariosSistema.map((usr) => (
+                    <option key={usr.id} value={usr.id}>
+                      {usr.nombre_completo ?? usr.email} ({usr.rol})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-brand-brown/50 mt-1">
+                  Seleccionar un usuario auto-completa el nombre.
+                </p>
               </div>
-            </div>
 
-            {/* Buttons */}
-            <div className="flex gap-3 pt-4">
+              {/* Nombre */}
+              <div>
+                <Label htmlFor="nombre">Nombre completo *</Label>
+                <Input
+                  id="nombre"
+                  placeholder="Ej: Carlos Mendoza"
+                  value={nombreDisplay}
+                  onChange={(e) => setNombreDisplay(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+
+              {/* Rol */}
+              <div>
+                <Label htmlFor="rol">Rol en el bot</Label>
+                <select
+                  id="rol"
+                  value={rolBot}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (ROLES_BOT.some((r) => r.key === val)) {
+                      setRolBot(val as RolBot);
+                    }
+                  }}
+                  className="w-full mt-1 px-3 py-2 border border-secondary/30 rounded-lg bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {ROLES_BOT.map((r) => (
+                    <option key={r.key} value={r.key}>{r.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Modules */}
+              <div>
+                <Label>Módulos permitidos</Label>
+                <div className="mt-2 space-y-2">
+                  {TELEGRAM_MODULES.map((mod) => (
+                    <label
+                      key={mod.key}
+                      className={`flex items-start gap-2 p-2 rounded-lg border transition ${
+                        mod.sensitive
+                          ? 'border-amber-200 bg-amber-50/50'
+                          : 'border-transparent'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={modulosPermitidos.includes(mod.key)}
+                        onChange={() => setModulosPermitidos(toggleModulo(modulosPermitidos, mod.key))}
+                        className="w-4 h-4 mt-0.5 rounded border-secondary/30"
+                      />
+                      <div>
+                        <span className={`text-sm font-medium ${mod.sensitive ? 'text-amber-700' : 'text-foreground'}`}>
+                          {mod.label}
+                        </span>
+                        <p className={`text-xs ${mod.sensitive ? 'text-amber-600' : 'text-brand-brown/60'}`}>
+                          {mod.description}
+                        </p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+            </DialogBody>
+
+            <DialogFooter className="gap-3">
               <Button type="button" variant="outline" onClick={() => setModalOpen(false)} className="flex-1">
                 Cancelar
               </Button>
@@ -547,7 +549,7 @@ export function TelegramConfig() {
                     ? 'Crear usuario'
                     : 'Guardar cambios'}
               </Button>
-            </div>
+            </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
@@ -562,7 +564,7 @@ export function TelegramConfig() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <DialogBody className="space-y-4">
             <div className="bg-secondary/10 p-4 rounded-lg border-2 border-primary">
               <p className="text-xs text-brand-brown/70 mb-2">Enviar este mensaje al bot:</p>
               <div className="flex items-center gap-2">
@@ -586,10 +588,13 @@ export function TelegramConfig() {
               </p>
             </div>
 
+          </DialogBody>
+
+          <DialogFooter>
             <Button onClick={() => setCodigoModal(null)} className="w-full">
               Listo
             </Button>
-          </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

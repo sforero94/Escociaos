@@ -24,6 +24,7 @@ import {
 } from '../../ui/dropdown-menu';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -366,59 +367,61 @@ export function ProveedoresConfig() {
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="nombre">Nombre *</Label>
-              <Input
-                id="nombre"
-                value={formData.nombre}
-                onChange={(e) => setFormData(prev => ({ ...prev, nombre: e.target.value }))}
-                placeholder="Nombre del proveedor"
-                required
-              />
-            </div>
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 gap-4">
+            <DialogBody className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="nombre">Nombre *</Label>
+                <Input
+                  id="nombre"
+                  value={formData.nombre}
+                  onChange={(e) => setFormData(prev => ({ ...prev, nombre: e.target.value }))}
+                  placeholder="Nombre del proveedor"
+                  required
+                />
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="nit">NIT</Label>
-              <Input
-                id="nit"
-                value={formData.nit}
-                onChange={(e) => setFormData(prev => ({ ...prev, nit: e.target.value }))}
-                placeholder="Número de identificación tributaria"
-              />
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="nit">NIT</Label>
+                <Input
+                  id="nit"
+                  value={formData.nit}
+                  onChange={(e) => setFormData(prev => ({ ...prev, nit: e.target.value }))}
+                  placeholder="Número de identificación tributaria"
+                />
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="telefono">Teléfono</Label>
-              <Input
-                id="telefono"
-                value={formData.telefono}
-                onChange={(e) => setFormData(prev => ({ ...prev, telefono: e.target.value }))}
-                placeholder="Número de teléfono"
-              />
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="telefono">Teléfono</Label>
+                <Input
+                  id="telefono"
+                  value={formData.telefono}
+                  onChange={(e) => setFormData(prev => ({ ...prev, telefono: e.target.value }))}
+                  placeholder="Número de teléfono"
+                />
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                placeholder="correo@ejemplo.com"
-              />
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                  placeholder="correo@ejemplo.com"
+                />
+              </div>
 
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="activo"
-                checked={formData.activo}
-                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, activo: checked }))}
-              />
-              <Label htmlFor="activo">Proveedor activo</Label>
-            </div>
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="activo"
+                  checked={formData.activo}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, activo: checked }))}
+                />
+                <Label htmlFor="activo">Proveedor activo</Label>
+              </div>
+            </DialogBody>
 
-            <DialogFooter>
+            <DialogFooter className="gap-3">
               <Button
                 type="button"
                 variant="outline"

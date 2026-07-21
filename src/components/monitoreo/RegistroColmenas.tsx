@@ -11,7 +11,9 @@ import {
 } from '../ui/select';
 import {
   Dialog,
+  DialogBody,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog';
@@ -130,7 +132,7 @@ export function RegistroColmenas({ open, onClose, onSuccess }: RegistroColmenasP
           <DialogTitle>Registrar Monitoreo de Colmenas</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <DialogBody className="space-y-4 py-4">
           <FormDraftBanner
             variant="available"
             show={draft.hasDraft}
@@ -235,15 +237,16 @@ export function RegistroColmenas({ open, onClose, onSuccess }: RegistroColmenasP
             />
           </div>
 
-          <div className="flex gap-3 pt-2">
-            <Button variant="outline" onClick={handleClose} disabled={loading} className="flex-1">
-              Cancelar
-            </Button>
-            <Button onClick={guardar} disabled={loading} className="flex-1 bg-primary hover:bg-primary-dark">
-              {loading ? 'Guardando...' : 'Guardar'}
-            </Button>
-          </div>
-        </div>
+        </DialogBody>
+
+        <DialogFooter className="gap-3">
+          <Button variant="outline" onClick={handleClose} disabled={loading} className="flex-1">
+            Cancelar
+          </Button>
+          <Button onClick={guardar} disabled={loading} className="flex-1 bg-primary hover:bg-primary-dark">
+            {loading ? 'Guardando...' : 'Guardar'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
