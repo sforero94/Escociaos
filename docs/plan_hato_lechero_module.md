@@ -1,6 +1,8 @@
 # Plan de Diseño e Implementación — Módulo Hato Lechero
 
-**Fecha:** 2026-07-17 · **Estado:** Aprobación de diseño (pre-implementación) · **Detalle visual:** look-and-feel de referencia aprobado 2026-07-20 (§7.6); contenido/campos finales siguen siendo decisión de los agentes de implementación
+**Fecha:** 2026-07-17 · act. 2026-07-21 tras validación del prototipo con Martha · **Estado:** Aprobación de diseño (pre-implementación) · **Detalle visual:** look-and-feel de referencia aprobado 2026-07-20 (§7.6); contenido/campos finales siguen siendo decisión de los agentes de implementación
+
+> **Reconciliación con producción (2026-07-20, PR #70 mergeado a `main`)**: el sidebar agrupado con control de acceso por-usuario ya existe en producción. El módulo vive en la ruta base **`/hato-lechero`** (no `/hato`), con 5 sub-ítems ya fijados en el sidebar (**Tablero · Producción · Hato · Chequeos · Alertas**, hoy `ComingSoon`), la clave de acceso `hato_lechero` y su `ModuleGuard`. Este plan adopta esa nomenclatura y estructura de navegación tal cual; las pantallas de contenido siguen el sistema de diseño del mock de Figma (§7.6). **La migración base del hato ya no es 049 (tomada por el sidebar reorg) — arranca en 050.**
 
 Fuentes: entrevista con Martha (administradora, llamada 2026-07-17, Notion "Vaquitas Lecheras"), análisis de los 5 archivos Excel entregados (chequeos 2019–2026, terneras 2017+, promedio leche 2025, gastos FOV 2026), y revisión del código/esquema existente de Escocia OS.
 
@@ -13,7 +15,7 @@ El hato lechero de Subachoque (~40–45 vacas en ordeño + levante) se administr
 Tres capítulos funcionales (los mismos de la entrevista):
 
 1. **Control de animales** — ficha individual (hoja de vida) + captura del chequeo veterinario bimestral.
-2. **Ordeño** — pesaje semanal por vaca + litros diarios al camión → PL calculado, proyecciones.
+2. **Producción** (antes "Ordeño"/"Leche") — pesaje semanal por vaca + litros al camión **por quincena** → PL calculado, productividad (litros/vaca), proyecciones.
 3. **Ingresos y gastos** — ya cubierto por Finanzas (negocio "Hato Lechero"); este módulo lo consume, no lo duplica. La limpieza/backfill de gastos históricos es una **tarea paralela independiente** (`docs/plan_hato_lechero_gastos_backfill.md`), no parte de este diseño.
 
 Capacidad estrella: **alertas proactivas por Telegram** (secado, tratamientos multi-paso, servicios sin confirmar, rechequeos, partos próximos), sobre la infraestructura de bot ya validada con David.
@@ -55,6 +57,27 @@ Capacidad estrella: **alertas proactivas por Telegram** (secado, tratamientos mu
 | D3 | **Alcance: vacas + terneras/novillas retenidas.** Machos vendidos (OV) quedan solo como eventos de parto, sin ficha propia | Ficha individual para todo animal hembra retenido (base de genealogía y levante). Menos fabricación de registros en la importación. |
 | D4 | **Las alertas deben estar funcionando ANTES de la visita a la finca (6 de agosto)** | La sesión del motor de alertas (S6, §8) no espera a la visita para encenderse. Prerequisito duro: el checkpoint humano de la sesión de importación (S3) — validación de datos con Martha — debe cerrarse antes de que S6 pueda avanzar de "modo sombra" a habilitación real (una alerta con datos malos quema la confianza de Fernando). |
 
+### 3.1 Decisiones de la validación del prototipo (Santiago + Martha, 2026-07-21)
+
+Tras revisar el prototipo de Figma en vivo con Martha. Cada ítem `Vn` está trazado a lo largo del documento en su sección correspondiente.
+
+| # | Decisión | Implicación de diseño |
+|---|---|---|
+| V1 | **Sistema de diseño**: las pantallas de contenido siguen el mock de Figma; el sidebar es el de producción (§7.6). Los componentes nuevos del mock (timeline, mini-árbol de genealogía, franja de stats, preview de cálculo, chips) se construyen **scoped al módulo hato**, sin editar las definiciones globales del sistema de diseño (`globals.css`, primitivos `ui/`). El módulo hato es la **referencia** para el futuro rediseño de UI de toda la app. | Componentes nuevos, no override de globales. Decisión abierta #1 de §7.6 resuelta por el sidebar de producción. |
+| V2 | **"Leche" → "Producción"** (ya reflejado en el sidebar de producción: ruta `/hato-lechero/produccion`, label "Producción"; el listado de animales se llama "Hato" en `/hato-lechero/hato`). | §6 Épica D, §7.5. |
+| V3 | **Producción de leche se registra por QUINCENA, no por día** (ciclo de la tarjeta del Pomar). La tarjeta diaria sigue en papel; el sistema registra la quincena. | `hato_produccion_quincenal` reemplaza `hato_litros_diarios`; §6 D2, §7.1, §7.2. |
+| V4 | **KPI de productividad**: litros ÷ número de vacas en ordeño. | §6 D, §7.6 (KPI cards). |
+| V5 | Conciliación **quincenal vs. confirmación del Pomar** (reclamo de discrepancias). | §6 D5. |
+| V6 | **Secado dependiente de raza** (Jersey/Holstein: 2 meses antes del parto; Normanda: 3) **+ sub-módulo "Ajustes del Hato" en Configuración global** para editar las condicionales de las fórmulas (tiempo de secado por raza, catálogo de razas, umbrales). | `raza` en `hato_animales`, tabla `hato_config`; §7.1, §7.3, §6 Épica H, ubicación en Configuración. |
+| V7 | **Timeline reproductiva muestra TODOS los intentos de servicio**, incluidos los fallidos (servicio → celo/no quedó → re-servicio), cada uno con inseminación-vs-toro y cuál toro. | §6 A3. |
+| V8 | **Genealogía muestra padre Y madre** (el mock solo mostraba madre; padre está en ~40% → "sin registrar" cuando falta). | §6 A5, §7.6. |
+| V9 | **Indicador "próxima a reemplazo"**: vacas cerca de 9 partos. | §6 A/E. |
+| V10 | **Subir el Excel del chequeo es el flujo recomendado P0** (subir `.xlsx` → parsear → poblar); la grilla (B1) queda como camino manual y foto-OCR (B6) sigue P2. Razón: es lo que Martha ya hace + los datos quedan seguros en el Excel si el sistema falla. | §6 Épica B, §7.4, §7.5. |
+| V11 | Alertas: **arrancar con revisión semanal de Martha en el sistema** (no diaria); escalamiento a 48h se mantiene; futuro opcional: notificar al dueño cuando Fernando completa una tarea. | §6 C4/C6. |
+| V12 | **Catálogo de toros editable** (agregar toro nuevo fácil), unifica la referencia de toro para genealogía (padre) y pajillas/servicios. | §7.1 `hato_toros`, §6 Épica G. |
+| — | **Pajillas** (Épica G) = 6º ítem del sidebar del hato: `/hato-lechero/pajillas`. | §7.5. |
+| — | **V13–V15 diferidos** (potreros/pastos, definición de "días abiertos", correcciones de copy) — no se aplican en esta versión. | — |
+
 ---
 
 ## 4. Visión de producto y actores
@@ -87,12 +110,13 @@ Capacidad estrella: **alertas proactivas por Telegram** (secado, tratamientos mu
 1. Ficha por animal (hoja de vida): identidad, estado, historial reproductivo, tratamientos, producción, genealogía.
 2. Captura del chequeo bimestral (grilla planilla → app, pre-llenada con el chequeo anterior).
 3. Motor de fechas + alertas Telegram con lazo cerrado (secado, tratamientos multi-paso, servicios, rechequeos, partos).
-4. Control de ordeño: pesaje semanal por vaca + litros diarios al camión; PL calculado.
+4. Producción: pesaje semanal por vaca + litros al camión por quincena; PL calculado; productividad litros/vaca.
 5. Tablero: KPIs de producción y reproducción + listas de acción.
 6. Importación histórica 2017–2026 (asistida, con reporte de calidad y sesión de revisión con Martha).
-7. Genealogía para selección de toros.
+7. Genealogía para selección de toros (madre **y** padre).
 8. Integración de lectura con Finanzas ("Hato Lechero": $/litro, margen).
 9. Seguimiento de pajillas de inseminación: inventario simple (nombre del toro, cantidad) + fecha de uso de cada pajilla.
+10. Ajustes del Hato: sub-módulo en Configuración global para editar las condicionales de las fórmulas (tiempo de secado por raza, catálogo de razas, umbrales de alertas) sin tocar código.
 
 ### Fuera (explícito)
 - Rehacer Finanzas (gastos/ingresos/presupuesto ya existen; la leche sigue entrando por `fin_ingresos`).
@@ -110,51 +134,54 @@ Son dominios distintos: `gan_inventario` es **conteo por cabezas** para ceba (no
 
 ### Épica A — Fichas individuales
 - **A1 (P0)** Lista del hato (número, nombre, estado, PL, próximo evento).
-- **A2 (P0)** Ficha completa por vaca: identidad, partos, servicio vigente, toro, TP, fechas proyectadas, tratamientos, notas.
-- **A3 (P1)** Línea de tiempo reproductiva por vaca.
+- **A2 (P0)** Ficha completa por vaca: identidad, raza, partos, servicio vigente, toro, TP, fechas proyectadas, tratamientos, notas.
+- **A3 (P1)** Línea de tiempo reproductiva por vaca. **(V7)** Debe mostrar **todos** los intentos de servicio del ciclo, incluidos los que no cuajaron: `servicio → celo/no quedó → re-servicio`, cada evento indicando si fue inseminación o monta y con cuál toro. El mock solo mostraba un servicio "exitoso" — la realidad tiene varios intentos y todos deben quedar visibles.
 - **A4 (P0)** Registro de eventos de ciclo de vida (parto con destino de cría, venta, muerte, cambio de etapa).
-- **A5 (P1)** Árbol genealógico (madre/padre/crías desde TERNERAS).
+- **A5 (P1)** Árbol genealógico (madre **y padre**/crías desde TERNERAS). **(V8)** El mock solo mostraba la madre; se muestran ambos progenitores. El padre está en ~40% de las terneras → cuando falta se renderiza "sin registrar", nunca en blanco (blanco no implica "sin padre").
 - **A6 (P2)** Advertencia de consanguinidad al proponer toro.
+- **A7 (P1) (V9)** Indicador **"próxima a reemplazo"**: vaca cercana a 9 partos se marca en lista y ficha — cerca de ese umbral las vacas empiezan a reemplazarse. Umbral configurable en Ajustes del Hato (Épica H).
 
 Criterios clave: máquina de estados estructurada (`novilla → servida → preñada → próxima a secar → seca → parida…` + terminales `vendida`/`muerta`); las abreviaturas del dominio (OV, AV, A+, O+, A{n}, TJ, ins {toro}, OK, Rech) se mapean a eventos estructurados pero la UI habla el vocabulario de Martha; ningún animal se elimina jamás; el # es la llave visible en todo el módulo.
 
 ### Épica B — Chequeo veterinario
-- **B1 (P0)** Grilla "nuevo chequeo" pre-llenada con el chequeo anterior; Martha solo digita lo que cambió.
-- **B2 (P0)** Cálculo automático de SECAR (servicio + 7 meses) y PP (servicio + 9 meses), sin `#VALUE!`.
+- **B0 (P0) (V10) — flujo recomendado para arrancar: subir el Excel del chequeo.** Martha sigue llenando su Excel de chequeo como siempre y, en vez de archivarlo, lo sube al sistema con un botón (`.xlsx` → el pipeline lo parsea, descompone SX→eventos y puebla el chequeo). Es el camino de menor fricción y de mayor seguridad: es lo que ella ya hace y, si el sistema falla, los datos siguen intactos en el Excel ("empalme gradual"). Reusa la lógica de S3 (§7.4) como import recurrente por chequeo, con la misma regla de "ambiguo → revisión, nunca en silencio". Al subir, muestra un diff para aprobar antes de comprometer.
+- **B1 (P1)** Grilla "nuevo chequeo" pre-llenada con el chequeo anterior; Martha solo digita lo que cambió. Camino **manual/alternativo** a B0 (para ediciones puntuales o cuando no hay Excel a la mano). Baja de P0 a P1: con B0 funcionando, la grilla deja de ser crítica para el lanzamiento.
+- **B2 (P0)** Cálculo automático de SECAR y PP. **(V6)** PP = servicio + 9 meses; SECAR = PP − periodo de secado **según raza** (Jersey/Holstein 2 meses, Normanda 3), sin `#VALUE!`. El periodo por raza se lee de Ajustes del Hato (Épica H), no se hardcodea.
 - **B3 (P0)** TTTO estructurado con pasos y fechas (ej. estrumate día 0 → servir día 7) + nota libre siempre disponible.
-- **B4 (P0)** Borrador persistente (transcribe ~45 vacas; no puede perder avance).
+- **B4 (P0)** Borrador persistente (para el camino manual B1; transcribe ~45 vacas, no puede perder avance).
 - **B5 (P1)** Planilla pre-llenada imprimible para llevar al chequeo.
 - **B6 (P2)** Foto de planilla → OCR propone cambios sobre la misma grilla; nunca aplica sin revisión.
 
-Criterios clave: el chequeo es un evento con identidad (patrón `rondas_monitoreo`); vaca sin novedad = cero digitación; una fecha por campo con validación dura; al cerrar, resumen de acciones generadas ("7 tareas, 3 secados en ventana, 2 rechequeos") para validación final.
+Criterios clave: el chequeo es un evento con identidad (patrón `rondas_monitoreo`); una fecha por campo con validación dura; al cerrar, resumen de acciones generadas ("7 tareas, 3 secados en ventana, 2 rechequeos") para validación final. Tanto B0 (subida de Excel) como B1 (grilla) desembocan en el mismo chequeo estructurado y la misma descomposición de eventos.
 
 ### Épica C — Alertas Telegram con lazo cerrado (capacidad estrella)
 - **C1 (P0)** "Vaca 47 (Estrella) se debe secar hoy. ¿Ya se secó?" [Sí / Todavía no / Otra cosa] → registra `secado_real`.
 - **C2 (P0)** Recordatorio de pasos de tratamiento el día que tocan, con confirmación.
 - **C3 (P0)** Seguimiento de "servir al próximo celo": pregunta periódica "¿ya se sirvió la 15? ¿qué día y con qué toro?".
-- **C4 (P0)** Resumen a Martha de confirmado/pendiente/vencido (supervisión por excepción).
+- **C4 (P0)** Supervisión por excepción de Martha. **(V11)** Para arrancar, el control se revisa **una vez por semana** directamente en la Cola de alertas del sistema (Martha no necesita meterse a diario). El resumen a Martha se reserva para lo vencido/escalado. Futuro opcional: notificar al dueño cuando Fernando marca una tarea como completada, para que al revisar semanalmente esté todo al día.
 - **C5 (P1)** Aviso de rechequeos pendientes antes del próximo chequeo.
 - **C6 (P1)** Configuración de destinatarios y horarios por tipo de alerta sin tocar código.
 - **C7 (P1)** Reporte espontáneo de eventos ("la 22 parió anoche, macho") con conversación guiada.
 
-Criterios clave: toda alerta es accionable y cerrable con botones; "No" repregunta motivo y reagenda; sin respuesta → reintento +1 día, escalamiento a Martha a las 48h — **nada se pierde en silencio**; número + nombre siempre juntos; anti-fatiga: mensajes agregados por franja, nunca ráfagas; toda respuesta escribe evento auditado (quién, cuándo, qué).
+Criterios clave: toda alerta es accionable y cerrable con botones; "No" repregunta motivo y reagenda; sin respuesta → reintento +1 día, escalamiento a Martha a las 48h — **nada se pierde en silencio**; número + nombre siempre juntos; anti-fatiga: mensajes agregados por franja, nunca ráfagas; toda respuesta escribe evento auditado (quién, cuándo, qué). El espíritu es **recordatorio útil para Fernando, no supervisión presionante** (validado con Martha).
 
-### Épica D — Control de ordeño
-- **D1 (P0)** Pesaje semanal por vaca (AM/PM) — grilla web + conversación Telegram.
-- **D2 (P0)** Litros diarios al camión (un número/día por Telegram, con recordatorio si no llega).
+### Épica D — Producción de leche *(módulo "Producción" en el sidebar; antes "Control de ordeño"/"Leche", V2)*
+- **D1 (P0)** Pesaje semanal por vaca (AM/PM) — grilla web + conversación Telegram. **Se mantiene tal cual** (Martha: "no cambiemos nada de cómo estamos operando"); alimenta el PL por vaca.
+- **D2 (P0) (V3)** Litros al camión **por quincena**, no por día. El camión recoge a diario y Fernando anota en la tarjeta de papel; el sistema registra el **total quincenal** (el ciclo con que el Pomar liquida). El dato diario es demasiado granular y no se captura en el sistema.
 - **D3 (P0)** Curva de producción y PL vigente por vaca (PL pasa a ser **calculado**, no digitado).
-- **D4 (P1)** Proyección mensual/anual de litros.
-- **D5 (P1)** Conciliación litros producidos vs litros pagados (`fin_ingresos`).
-- **D6 (P1)** Importar archivo "promedio leche" (abr 2025+).
+- **D4 (P0) (V4)** KPI de **productividad = litros ÷ número de vacas en ordeño** — la métrica que Martha quiere para juzgar si el hato rinde (varía con potrero/pasto).
+- **D5 (P1)** Proyección mensual/anual de litros a partir de la serie quincenal.
+- **D6 (P1) (V5)** Conciliación **quincenal vs. confirmación del Pomar**: el sistema muestra los litros registrados vs. los que el Pomar confirma; cuando hay diferencia (a veces quitan litros), queda el soporte para el reclamo. Complementa el cruce con `fin_ingresos`.
+- **D7 (P1)** Importar archivo "promedio leche" (abr 2025+).
 
 Criterio clave: vaca no pesada = sin dato (—), **nunca 0** (misma regla del módulo de monitoreo).
 
 ### Épica E — Tablero e indicadores
 - **E1 (P0)** Listas de acción: próximas a secar (30d), próximas a parir (30d), rechequeo, vacías/por servir.
-- **E2 (P0)** KPIs: vacas por estado, litros/día del hato, litros/vaca en leche, PL promedio.
+- **E2 (P0)** KPIs: vacas por estado, litros/quincena del hato, **litros/vaca en ordeño (productividad, V4)**, PL promedio.
 - **E3 (P1)** Indicadores reproductivos: días abiertos, intervalo entre partos, % preñez, días en leche.
 - **E4 (P1)** Cruce con Finanzas: ingreso leche, gastos del negocio, margen, costo/litro.
-- **E5 (P1)** Herramientas Esco: `get_hato_animal`, `get_hato_reproduccion`, `get_hato_leche` (web + Telegram automático vía `llmToolLoop`).
+- **E5 (P1)** Herramientas Esco: `get_hato_animal`, `get_hato_reproduccion`, `get_hato_produccion` (web + Telegram automático vía `llmToolLoop`).
 - **E6 (P2)** Sección hato en el reporte semanal.
 
 Criterio clave: KPIs reproductivos apagados hasta que la importación esté validada — mejor "sin dato" que un número falso.
@@ -175,15 +202,27 @@ Funcionalidad secundaria: un inventario simple de las pajillas de inseminación,
 - **G2 (P1)** Registrar el uso de una pajilla: fecha de uso y, si se conoce, la vaca servida.
 - **G3 (P1)** Vista de inventario: cantidad actual por toro (inicial − usos registrados), para poder monitorear qué queda disponible.
 
-Criterios clave: solo se guardan los tres datos pedidos — nombre del toro, cantidad en inventario, fecha de uso de cada pajilla — sin campos no solicitados (raza, proveedor, costo; se agregan después si hace falta). El vínculo opcional con la vaca servida en G2 no es obligatorio para registrar un uso (mejor registrar el uso sin la vaca que no registrarlo), pero cuando existe alimenta A5/A6 (genealogía y advertencia de consanguinidad) sin digitación adicional. Si el stock llega a 0, la UI advierte pero **no bloquea** registrar un uso nuevo — es más importante que quede el evento reproductivo que la exactitud del conteo.
+- **G4 (P1) (V12)** Catálogo de toros editable: agregar un toro nuevo fácilmente. Es la fuente única del toro que alimenta la genealogía (padre) y las pajillas/servicios — la lista se sembró automáticamente desde los datos históricos, pero debe ser modificable.
+
+Criterios clave: la pajilla solo guarda nombre del toro, cantidad en inventario y fecha de uso de cada pajilla — sin campos no solicitados (proveedor, costo; se agregan después si hace falta). El toro se referencia desde el catálogo de toros (G4), no como texto suelto. El vínculo opcional con la vaca servida en G2 no es obligatorio para registrar un uso (mejor registrar el uso sin la vaca que no registrarlo), pero cuando existe alimenta A5/A6 (genealogía y advertencia de consanguinidad) sin digitación adicional. Si el stock llega a 0, la UI advierte pero **no bloquea** registrar un uso nuevo — es más importante que quede el evento reproductivo que la exactitud del conteo.
 
 Fuera de alcance de esta épica: vincular automáticamente cada `servicio` de `hato_eventos` a una pajilla (evitaría doble digitación pero acopla dos flujos que hoy son independientes) — se anota como mejora futura opcional, no como parte de G.
+
+### Épica H — Ajustes del Hato *(sub-módulo dentro de Configuración global, V6)*
+
+Panel de configuración de las condicionales que hoy irían hardcodeadas en el motor de fórmulas, para que Martha/Gerencia las editen sin tocar código.
+
+- **H1 (P0)** Catálogo de razas + periodo de secado por raza (Jersey/Holstein: 2 meses antes del parto; Normanda: 3). Alimenta el cálculo de SECAR (B2/V6).
+- **H2 (P1)** Umbrales de indicadores/alertas editables: umbral de "próxima a reemplazo" (partos, default 9, A7); ventanas de "próxima a secar/parir"; días para `servicio_sin_confirmacion` y `rechequeo_due`.
+- **H3 (P2)** Otros parámetros que emerjan (ej. gestación por raza si hiciera falta).
+
+Criterios clave: vive en **Configuración global** (no en el sidebar del hato), gateado a Gerencia; los valores son leídos por `calculosHato.ts`/el motor de alertas desde la tabla `hato_config`, nunca constantes en código. Defaults sensatos precargados para que el módulo funcione sin configuración previa.
 
 ---
 
 ## 7. Arquitectura técnica
 
-### 7.1 Modelo de datos (prefijo `hato_`, migraciones 049+)
+### 7.1 Modelo de datos (prefijo `hato_`, migraciones **050+** — 049 la tomó el sidebar reorg)
 
 **Diseño en tres capas** (recomendado sobre snapshot puro):
 1. **Capa cruda** — `hato_chequeo_vacas` conserva los valores de la planilla textuales (`*_raw text`). La procedencia sobrevive a errores de normalización.
@@ -192,16 +231,18 @@ Fuera de alcance de esta épica: vincular automáticamente cada `servicio` de `h
 
 **Tablas:**
 
-- **`hato_animales`** — un registro por animal, para siempre. `id uuid PK`, `numero integer UNIQUE` (chapeta permanente, D1; nullable para animales históricos sin número), `nombre`, `sexo`, `etapa` (`ternera|novilla|vaca|toro`), `estado` (`activa|vendida|muerta|descartada`), `fecha_estado`, `fecha_nacimiento` + `fecha_nacimiento_confianza` (`exacta|aproximada|desconocida`), `madre_id` (self-FK), `padre_nombre` (texto — pajillas externas), `padre_id` (solo si es animal propio), `finca_id → gan_fincas`, `origen` (`nacimiento|compra|importacion_historica`), `confianza` (`alta|media|baja`), `import_meta jsonb`, `notas`. Índices: `(estado, etapa)`, `madre_id`.
+- **`hato_animales`** — un registro por animal, para siempre. `id uuid PK`, `numero integer UNIQUE` (chapeta permanente, D1; nullable para animales históricos sin número), `nombre`, `sexo`, `etapa` (`ternera|novilla|vaca|toro`), `raza text` (**V6** — `jersey|holstein|normanda|…`, FK lógica al catálogo de razas de `hato_config`; nullable, default al comportamiento Jersey/Holstein cuando no se conoce), `estado` (`activa|vendida|muerta|descartada`), `fecha_estado`, `fecha_nacimiento` + `fecha_nacimiento_confianza` (`exacta|aproximada|desconocida`), `madre_id` (self-FK), `padre_toro_id uuid REFERENCES hato_toros(id)` (**V8/V12** — progenitor desde el catálogo de toros; nullable, ~40% sin registrar), `padre_id` (solo si el padre es un animal propio del hato), `finca_id → gan_fincas`, `origen` (`nacimiento|compra|importacion_historica`), `confianza` (`alta|media|baja`), `import_meta jsonb`, `notas`. Índices: `(estado, etapa)`, `madre_id`.
 - **`hato_chequeos`** — cabecera de ronda: `fecha`, `veterinario`, `estado` (`borrador|cerrado`), `fuente` (`web|importacion`), `sheet_ref`.
 - **`hato_chequeo_vacas`** — una fila por vaca por chequeo, `UNIQUE(chequeo_id, animal_id)`. Columnas raw (`pl_raw`, `sx_raw`, `fecha_servicio_raw`, `ttto_raw`, …) + normalizadas nullable (`pl numeric`, `fecha_servicio date`, `toro`, `tipo_servicio`, `meses_prenez`, `fecha_secar`, `fecha_probable_parto`, `normalizacion_issues jsonb`).
-- **`hato_eventos`** — log reproductivo/ciclo de vida: `animal_id`, `tipo` (`servicio|celo|confirmacion_prenez|parto|aborto|secado_real|venta|muerte|compra|cambio_etapa|rechequeo`), `fecha` + `fecha_confianza`, `toro`, `tipo_servicio`, `cria_id`, `cria_destino` (`retenida|macho_vendido|hembra_vendida|muerta|aborto`), `sx_raw`, procedencia (`chequeo_vaca_id`, `alerta_id`, `fuente`, `transaccion_ganado_id`), `datos jsonb`. Nota: `secado_planificado`/`parto_probable` NO son eventos — son fechas derivadas (una sola fuente de verdad). Índices: `(animal_id, fecha)`, `(tipo, fecha)`, parcial sobre `tipo='servicio'`.
+- **`hato_eventos`** — log reproductivo/ciclo de vida: `animal_id`, `tipo` (`servicio|celo|confirmacion_prenez|parto|aborto|secado_real|venta|muerte|compra|cambio_etapa|rechequeo`), `fecha` + `fecha_confianza`, `toro_id uuid REFERENCES hato_toros(id)` (**V12** — antes texto `toro`), `tipo_servicio` (`monta|inseminacion`), `cria_id`, `cria_destino` (`retenida|macho_vendido|hembra_vendida|muerta|aborto`), `sx_raw`, procedencia (`chequeo_vaca_id`, `alerta_id`, `fuente`, `transaccion_ganado_id`), `datos jsonb`. Nota: `secado_planificado`/`parto_probable` NO son eventos — son fechas derivadas (una sola fuente de verdad). **(V7)** Un ciclo puede tener **varios `servicio`** encadenados: un `servicio` que no cuaja se sigue de un `celo` (retorno a celo) y luego otro `servicio` — todos quedan en el log y la timeline (A3) los muestra en orden con su toro/tipo. Índices: `(animal_id, fecha)`, `(tipo, fecha)`, parcial sobre `tipo='servicio'`.
 - **`hato_tratamientos`** + **`hato_tratamiento_pasos`** — prescripción del chequeo con pasos programados (`paso_num`, `offset_dias`, `fecha_programada`, `fecha_ejecutada`, `requiere_confirmacion`). Catálogo **`hato_protocolos`** (ej. "Estrumate": día 0 aplicar → día 7 servir → día 9 verificar celo) para que Martha elija en vez de digitar.
-- **`hato_pesajes_leche`** — `UNIQUE(animal_id, fecha)`, `litros_am`, `litros_pm`, `litros_total GENERATED`. Sin cabecera de ronda (la fecha ES la ronda; no existe el problema multi-fecha de monitoreo).
-- **`hato_litros_diarios`** — `fecha UNIQUE`, `litros`, `litros_consumo_finca` opcional. Columna vertebral de conciliación: pesaje semanal (por vaca) + litros diarios (volumen real) + `fin_ingresos` (volumen facturado) = tres series que se cruzan, nunca se mezclan.
+- **`hato_pesajes_leche`** — `UNIQUE(animal_id, fecha)`, `litros_am`, `litros_pm`, `litros_total GENERATED`. Sin cabecera de ronda (la fecha ES la ronda; no existe el problema multi-fecha de monitoreo). Se mantiene semanal (V3 solo cambia el registro del camión, no el pesaje por vaca).
+- **`hato_produccion_quincenal`** (**V3** — reemplaza `hato_litros_diarios`) — `id uuid PK`, `anio int`, `quincena int CHECK (quincena IN (1,2))` (o `fecha_inicio`/`fecha_fin date`), `UNIQUE(anio, quincena)`, `litros_total numeric NOT NULL`, `litros_pomar_confirmado numeric` (nullable — llega después del Pomar, **V5**), `num_vacas_ordeño int` (para la productividad de D4/V4), `notas`, `fuente`, `created_at`, `created_by`. Productividad = `litros_total / num_vacas_ordeño` (derivada, no almacenada). Columna vertebral de conciliación: pesaje semanal (por vaca) + producción quincenal (volumen real al camión) + confirmación del Pomar + `fin_ingresos` (volumen facturado) = series que se cruzan, nunca se mezclan. La tarjeta diaria de papel no entra al sistema.
 - **`hato_alertas`** — cola de tareas salientes: `tipo` (`secado_due|tratamiento_paso|rechequeo_due|servicio_sin_confirmacion|parto_proximo`), `animal_id`, `regla_clave UNIQUE` (idempotencia), `fecha_programada`, `estado` (`pendiente|enviada|respondida|confirmada|descartada|escalada|expirada`), `destinatario_telegram_id`, `intentos`, `respuesta`, `respondida_por`, `escalada_at`. + **`hato_alertas_config`** (tipo → destinatario, horas de escalamiento).
-- **`hato_pajillas`** (Épica G) — catálogo/inventario: `id uuid PK`, `toro_nombre text NOT NULL`, `cantidad_inicial integer NOT NULL CHECK (cantidad_inicial >= 0)`, `activa boolean DEFAULT true`, `created_at`, `created_by`. Deliberadamente mínima — sin raza/proveedor/costo (no solicitados).
+- **`hato_toros`** (**V12**, Épica G4) — catálogo editable de toros/sementales: `id uuid PK`, `nombre text NOT NULL`, `tipo text` (`monta|inseminacion`), `raza text`, `activo boolean DEFAULT true`, `created_at`, `created_by`. Fuente única del progenitor referenciado por `hato_animales.padre_toro_id`, por los `servicio` de `hato_eventos` y por las pajillas. Sembrado desde los datos históricos, modificable en UI.
+- **`hato_pajillas`** (Épica G) — inventario: `id uuid PK`, `toro_id uuid NOT NULL REFERENCES hato_toros(id)` (**V12** — ya no texto suelto), `cantidad_inicial integer NOT NULL CHECK (cantidad_inicial >= 0)`, `activa boolean DEFAULT true`, `created_at`, `created_by`. Deliberadamente mínima — sin proveedor/costo (no solicitados).
 - **`hato_pajillas_uso`** (Épica G) — log de uso, append-only (mismo patrón capa-de-eventos que `hato_eventos`): `id uuid PK`, `pajilla_id uuid NOT NULL REFERENCES hato_pajillas(id)`, `fecha_uso date NOT NULL`, `animal_id uuid REFERENCES hato_animales(id)` (opcional — vaca servida, si se conoce). Vista derivada `v_hato_pajillas_stock`: `cantidad_actual = cantidad_inicial - COUNT(usos)` por pajilla, sin tabla de stock materializada (mismo razonamiento de §7.1 intro — volumen trivial).
+- **`hato_config`** (**V6**, Épica H) — parámetros editables de las fórmulas, key-value tipado o filas por concepto: catálogo de razas + `meses_secado` por raza (Jersey/Holstein=2, Normanda=3), umbral de partos para "próxima a reemplazo" (default 9), ventanas de secado/parto próximos, días para `servicio_sin_confirmacion`/`rechequeo_due`. Leída por `calculosHato.ts` y el motor de alertas — **ninguna de estas constantes vive en código**. Defaults precargados en la migración. Escritura Gerencia.
 
 **Descomposición de códigos SX** (mismo parser para importación y captura en vivo):
 
@@ -212,16 +253,19 @@ Fuera de alcance de esta épica: vincular automáticamente cada `servicio` de `h
 | `A{n}` | `parto` + `cria_destino='retenida'` + alta/match de `hato_animales` (numero=n, madre, fecha nacimiento), reconciliado contra TERNERAS |
 | `A+`/`O+` | `parto` con `cria_destino='muerta'`; `O+` sin parto → `aborto` |
 
-**RLS:** patrón de la migración 044 — SELECT para `authenticated`, escritura Administrador + Gerencia; `hato_alertas` con escritura service-role para cron/bot.
+**RLS:** patrón de la migración 044 — SELECT para `authenticated`, escritura Administrador + Gerencia; `hato_alertas` con escritura service-role para cron/bot; `hato_config` con escritura Gerencia. **Capa de visibilidad (producción, #70):** el módulo ya está gateado por `ModuleGuard modulo="hato_lechero"` + la columna `usuarios.modulos_acceso` (Gerencia ve todo; a Administrador/Verificador se les habilita por-usuario desde Configuración → Usuarios). Esto es visibilidad de navegación, NO un límite de datos — la RLS de tabla es la frontera real. Las rutas del hato viven bajo ese `ModuleGuard`.
 
 ### 7.2 Integraciones
 
+> **Numeración de migraciones**: 049 la tomó el sidebar reorg (`049_add_usuarios_modulos_acceso.sql`). Las migraciones del hato arrancan en **050**: `050 create_hato_core`, `051 create_hato_leche` (incluye `hato_produccion_quincenal`), `052 create_hato_tratamientos`, `053 create_hato_alertas`, `054 create_hato_toros_pajillas` (Épica G), `055 create_hato_config` (Épica H), `056 fin_transacciones_ganado_hato_link`, `057 hato_alertas_cron`. Coordinar en un solo PR (ya hubo colisiones de numeración).
+
+- **Sidebar / navegación (producción, #70)**: las 5 pantallas ya existen como `ComingSoon` en `/hato-lechero/{'',produccion,hato,chequeos,alertas}`; la implementación las reemplaza por las vistas reales. **Pajillas** se agrega como 6º ítem `/hato-lechero/pajillas` (requiere sumar una entrada al grupo Hato en `Layout.tsx`). **Ajustes del Hato** NO va al sidebar del hato — vive en Configuración global (`ConfiguracionDashboard`), gateado a Gerencia.
 - **`gan_inventario`: excluido** (firme). Sus columnas son `novillos`/`toros`; el conteo lechero sale de `COUNT(*)` sobre `hato_animales` vía vista `v_hato_conteo`.
-- **`fin_transacciones_ganado`** — un conflicto real a resolver: el trigger 044 `fn_crear_movimiento_pendiente_ganado` dispara con CADA insert, generando un pendiente de ceba espurio al vender una vaca lechera. Migración `053`: agregar `es_hato boolean DEFAULT false` + `hato_animal_id uuid FK`, y `IF NEW.es_hato THEN RETURN NEW` en el trigger. Flujo: marcar `vendida`/`muerta` en la UI del hato abre el `TransaccionGanadoForm` existente pre-llenado; al guardar se crea el `hato_eventos` de venta con el vínculo financiero. Extender RLS de `fin_transacciones_ganado` (hoy solo Gerencia, migración 023) a Administrador, en línea con 037/039.
+- **`fin_transacciones_ganado`** — un conflicto real a resolver: el trigger 044 `fn_crear_movimiento_pendiente_ganado` dispara con CADA insert, generando un pendiente de ceba espurio al vender una vaca lechera. Migración `056`: agregar `es_hato boolean DEFAULT false` + `hato_animal_id uuid FK`, y `IF NEW.es_hato THEN RETURN NEW` en el trigger. Flujo: marcar `vendida`/`muerta` en la UI del hato abre el `TransaccionGanadoForm` existente pre-llenado; al guardar se crea el `hato_eventos` de venta con el vínculo financiero. Extender RLS de `fin_transacciones_ganado` (hoy solo Gerencia, migración 023) a Administrador, en línea con 037/039.
 - **Finanzas**: cero trabajo de esquema. La leche sigue por `fin_ingresos` (parsing de litros ya existe, migración 042).
-- **Esco**: 3 herramientas nuevas en `chat.tsx` (`get_hato_animal`, `get_hato_reproduccion`, `get_hato_leche`); lógica de agregación en módulo puro `hato-aggregation.ts` (patrón `cost-aggregation.ts`) testeable con Vitest. Actualizar descripción de `get_ganado_inventory` (excluye hato). Telegram hereda automático vía `llmToolLoop`.
-- **Conversaciones Telegram nuevas**: `pesajeLeche` (itera vacas en ordeño, acepta "8.5 7", salteable, reanudable) y `litrosCamion` (una pregunta, UPSERT por fecha). Respuestas de alertas NO son conversaciones: son handlers `callbackQuery(/^hato_alerta:(.+):(si|no|otro)$/)` — el patrón `mem_save:` existente. Nuevos valores de `modulos_permitidos`: `hato_leche`, `hato_alertas`.
-- **pg_cron** (migración 054): tick diario 05:45 Bogotá → `net.http_post` a `/make-server-1ccce916/hato/alertas/tick` (patrón 030), protegido con header de secreto compartido (dispara mensajes salientes).
+- **Esco**: 3 herramientas nuevas en `chat.tsx` (`get_hato_animal`, `get_hato_reproduccion`, `get_hato_produccion`); lógica de agregación en módulo puro `hato-aggregation.ts` (patrón `cost-aggregation.ts`) testeable con Vitest. Actualizar descripción de `get_ganado_inventory` (excluye hato). Telegram hereda automático vía `llmToolLoop`.
+- **Conversaciones Telegram nuevas**: `pesajeLeche` (itera vacas en ordeño, acepta "8.5 7", salteable, reanudable) y `produccionQuincenal` (**V3** — captura el total de litros de la quincena al cierre, UPSERT por `anio+quincena`; antes era `litrosCamion` diario). Respuestas de alertas NO son conversaciones: son handlers `callbackQuery(/^hato_alerta:(.+):(si|no|otro)$/)` — el patrón `mem_save:` existente. Nuevos valores de `modulos_permitidos`: `hato_produccion`, `hato_alertas`.
+- **pg_cron** (migración 057): tick diario 05:45 Bogotá → `net.http_post` a `/make-server-1ccce916/hato/alertas/tick` (patrón 030), protegido con header de secreto compartido (dispara mensajes salientes).
 - **Reporte semanal**: sección Hato Lechero aditiva en `fetchDatosReporteSemanal.ts` (P2).
 
 ### 7.3 Motor de alertas
@@ -230,7 +274,7 @@ Fuera de alcance de esta épica: vincular automáticamente cada `servicio` de `h
 
 | Tipo | Dispara cuando | `regla_clave` (idempotencia) |
 |---|---|---|
-| `secado_due` | `fecha_secar <= hoy` y sin `secado_real` posterior al servicio | `secado:{animal}:{fecha_servicio}` |
+| `secado_due` | `fecha_secar <= hoy` y sin `secado_real` posterior al servicio. **(V6)** `fecha_secar` = `parto_probable − meses_secado(raza)`, con `meses_secado` leído de `hato_config` (Jersey/Holstein 2, Normanda 3) — no una constante | `secado:{animal}:{fecha_servicio}` |
 | `tratamiento_paso` | `fecha_programada <= hoy` y sin ejecutar | `ttto:{paso_id}` |
 | `rechequeo_due` | `rechq` en último chequeo, o >60 días desde el último chequeo (nivel hato) | `rechq:{animal}:{chequeo}` |
 | `servicio_sin_confirmacion` | servicio ≥45 días sin confirmación/celo/aborto/parto posterior | `servconf:{animal}:{fecha_servicio}` |
@@ -254,81 +298,91 @@ Fuera de alcance de esta épica: vincular automáticamente cada `servicio` de `h
 
 La matriz P&G de gastos queda **fuera de este pipeline** — se homologa por separado, con el método de matching (concepto + fecha + monto, sin duplicar lo ya cargado) descrito en `docs/plan_hato_lechero_gastos_backfill.md`.
 
+**Import recurrente por chequeo (V10, flujo B0)** — la misma lógica de Extract→Normalize (etapas 1–2, que ya viven en `calculosHato.ts`) se expone como una **funcionalidad en la app**: Martha sube el `.xlsx` de un chequeo nuevo, el sistema lo parsea, descompone SX→eventos y muestra un **diff para aprobar** antes de comprometer (nunca commit directo). Difiere del pipeline histórico en tres cosas: (a) corre en la app (edge/endpoint), no offline; (b) es de una hoja/chequeo, no 40; (c) la resolución de identidad es trivial porque el hato ya está poblado (match por `numero`, alta confianza). Reusa el parser compartido → los mismos tests cubren ambos caminos. Es el flujo **recomendado para arrancar** (empalme gradual: el Excel sigue siendo la fuente segura).
+
 ### 7.5 Frontend
 
-Rutas lazy nuevas (entrada "Hato Lechero" en el sidebar):
+Rutas lazy bajo `/hato-lechero` — la estructura y los labels ya están fijados por el sidebar de producción (#70). Los 5 primeros existen como `ComingSoon`; la implementación los reemplaza. Pajillas es el 6º ítem a agregar; Ajustes vive en Configuración global.
 
-| Ruta | Componente |
-|---|---|
-| `/hato` | `HatoDashboard` — KPIs + tablero de alertas |
-| `/hato/animales` | `AnimalesList` |
-| `/hato/animales/:id` | `HojaDeVida` — timeline + chequeos + curva PL + genealogía |
-| `/hato/chequeos` | `ChequeosList` |
-| `/hato/chequeos/:id` | `ChequeoCapturaGrid` (borrador → cerrado) |
-| `/hato/leche` | `LecheView` — pesajes + litros diarios |
-| `/hato/alertas` | `AlertasView` — cola con estados y respuestas |
-| `/hato/pajillas` | `PajillasView` — catálogo + inventario (Épica G) |
+| Ruta (producción) | Label sidebar | Componente |
+|---|---|---|
+| `/hato-lechero` | Tablero | `HatoDashboard` — KPIs + tablero de alertas |
+| `/hato-lechero/produccion` | Producción | `ProduccionView` — pesaje semanal por vaca + producción quincenal + productividad (V2/V3/V4) |
+| `/hato-lechero/hato` | Hato | `AnimalesList` |
+| `/hato-lechero/hato/:id` | — | `HojaDeVida` — timeline (todos los servicios, V7) + chequeos + curva PL + genealogía madre+padre (V8) |
+| `/hato-lechero/chequeos` | Chequeos | `ChequeosList` + subir Excel (B0/V10) |
+| `/hato-lechero/chequeos/:id` | — | `ChequeoCapturaGrid` (camino manual B1, borrador → cerrado) |
+| `/hato-lechero/alertas` | Alertas | `AlertasView` — cola con estados y respuestas |
+| `/hato-lechero/pajillas` | Pajillas *(6º ítem nuevo)* | `PajillasView` — catálogo de toros + inventario (Épica G) |
+| `/configuracion` → tab "Hato" | *(en Configuración global)* | `AjustesHato` — razas, secado, umbrales (Épica H) |
 
 ```
 src/components/hato/            # espejo de src/components/ganado/
 ├── HatoDashboard.tsx, HatoSubNav.tsx, AnimalesList.tsx, HojaDeVida.tsx,
-│   ChequeosList.tsx, ChequeoCapturaGrid.tsx, LecheView.tsx, AlertasView.tsx,
+│   ChequeosList.tsx, ChequeoCapturaGrid.tsx, ProduccionView.tsx, AlertasView.tsx,
 │   PajillasView.tsx
 ├── components/                 # VentaAnimalDialog, PartoDialog, TratamientoDialog,
-│                               # PesajeSemanalGrid, LitrosDiariosForm, EventoTimeline,
-│                               # RegistrarUsoPajillaDialog
-└── hooks/                      # useHatoAnimales, useChequeoCaptura, usePesajesLeche,
+│                               # PesajeSemanalGrid, ProduccionQuincenalForm, EventoTimeline,
+│                               # GenealogiaArbol, RegistrarUsoPajillaDialog, SubirChequeoExcel
+└── hooks/                      # useHatoAnimales, useChequeoCaptura, useProduccion,
                                 # useHatoAlertas, useEstadoReproductivo, usePajillas
-src/utils/calculosHato.ts       # puro: motor de fechas, parser SX/planilla, PL, proyecciones
+src/components/configuracion/AjustesHato.tsx   # Épica H — tab en ConfiguracionDashboard
+src/utils/calculosHato.ts       # puro: motor de fechas (lee hato_config), parser SX/planilla, PL, proyecciones
 src/types/hato.ts
 src/__tests__/calculosHato.test.ts
 src/__tests__/calculosHatoParidad.test.ts
 src/__tests__/hatoAlertas.test.ts
 ```
 
-**Captura del chequeo: grilla, no formulario por vaca** — la planilla ES una grilla y el patrón está validado en `CapturaCosechaGrid`: todas las vacas activas pre-pobladas, valores del chequeo anterior en fantasma por celda, entrada raw con preview de normalización en vivo, borrador con `useFormPersistence`, y "cerrar chequeo" ejecuta la descomposición de eventos con diálogo de confirmación. Diálogos por vaca solo para eventos fuera de ciclo (parto, venta, tratamiento).
+**Captura del chequeo — dos caminos al mismo destino (V10):** el recomendado para arrancar es **subir el Excel** (`SubirChequeoExcel` → parse → diff → aprobar). La **grilla** (`ChequeoCapturaGrid`, patrón validado en `CapturaCosechaGrid`: vacas pre-pobladas, valores anteriores en fantasma, preview de normalización, borrador con `useFormPersistence`) queda como camino manual/alternativo. Ambos ejecutan la misma descomposición de eventos con diálogo de confirmación. Diálogos por vaca solo para eventos fuera de ciclo (parto, venta, tratamiento).
 
-**Foto-OCR (B6, Fase 2)**: viable — OpenRouter ya integrado, Gemini 3 Flash acepta imágenes. Foto → endpoint `/hato/chequeos/ocr` → JSON estricto → **pre-llena la misma grilla como borrador para revisión humana, nunca commit directo**. Se pospone: la grilla debe existir primero y el prompt se afina con fotos reales recolectadas en la visita de agosto.
+**Foto-OCR (B6, Fase 2)**: viable — OpenRouter ya integrado, Gemini 3 Flash acepta imágenes. Foto → endpoint `/hato-lechero/chequeos/ocr` → JSON estricto → **pre-llena la misma grilla como borrador para revisión humana, nunca commit directo**. Se pospone: la grilla debe existir primero y el prompt se afina con fotos reales recolectadas en la visita de agosto.
 
-Convenciones obligatorias: `format.ts` para números (formato colombiano), `onWheel` blur en cada input numérico (grilla de 45×10 celdas = máxima exposición al bug de scroll), Dialog con `size` + `DialogBody`, RoleGuard + RLS Administrador/Gerencia.
+Convenciones obligatorias: `format.ts` para números (formato colombiano), `onWheel` blur en cada input numérico (grilla de 45×10 celdas = máxima exposición al bug de scroll), Dialog con `size` + `DialogBody`, RoleGuard + RLS Administrador/Gerencia, y el `ModuleGuard hato_lechero` de producción para la visibilidad del módulo.
 
 ### 7.6 Referencia visual (prototipo Figma)
 
 **[Prototipo completo](https://www.figma.com/design/rtcPBS6WdZW0k063g8u9KH/Escocia-OS-—-Módulo-Hato-Lechero--Mockups-)** — 7 pantallas de referencia (17 jul 2026).
 
-> **Regla de uso**: estas pantallas fijan el *look and feel* (densidad de tabla, chips, tarjetas de KPI, gráficas, jerarquía visual) — no el contenido final. Los datos, columnas y campos específicos mostrados son ilustrativos; las épicas de §6 siguen siendo la autoridad sobre qué información se captura y se muestra. Los agentes de frontend deciden el detalle final de contenido dentro de este lenguaje visual.
+> **Regla de uso (V1, validado con Martha 2026-07-21 — el mock funcionó muy bien en la demo)**: el mock es el **sistema de diseño autoritativo** para las **pantallas de contenido** del módulo. No es solo "inspiración de look-and-feel": los componentes se construyen para coincidir con él (chips, tablas limpias, KPI cards, gráficas, timeline, mini-árbol, franja de stats). Dos límites firmes:
+> - **El sidebar NO lo dicta el mock** — es el de producción (#70): grupo "Hato Lechero" con Tablero/Producción/Hato/Chequeos/Alertas + `ModuleGuard`. El render de sidebar de las capturas del mock se ignora.
+> - **No se editan las definiciones globales del sistema de diseño** (`src/styles/globals.css`, comportamiento de los primitivos compartidos `src/components/ui/`). Los componentes nuevos del mock se construyen **scoped al módulo hato**. El rediseño de UI de toda la app es el **proyecto siguiente y separado**, y este módulo es su **referencia** — por eso los componentes nuevos deben quedar limpios y extraíbles.
+>
+> El *contenido* (datos, columnas, campos exactos) sigue gobernado por las épicas de §6, no por el mock — los agentes de frontend deciden el detalle final dentro de este lenguaje visual.
 
 **Inventario de pantallas → épica/ruta correspondiente:**
 
-| Pantalla Figma | Ruta (§7.5) | Épica (§6) |
+| Pantalla Figma | Ruta producción (§7.5) | Épica (§6) |
 |---|---|---|
-| ① Dashboard | `/hato` | E — Tablero e indicadores |
-| ② Lista del hato | `/hato/animales` | A1 |
-| ③ Hoja de vida — #47 Estrella | `/hato/animales/:id` | A2, A3, A5 |
-| ④ Captura de chequeo | `/hato/chequeos/:id` | B1–B4 |
-| ⑤ Control de ordeño | `/hato/leche` | D |
-| ⑥ Cola de alertas | `/hato/alertas` | C |
+| ① Dashboard | `/hato-lechero` (Tablero) | E — Tablero e indicadores |
+| ② Lista del hato | `/hato-lechero/hato` | A1 |
+| ③ Hoja de vida — #47 Estrella | `/hato-lechero/hato/:id` | A2, A3 (todos los servicios, V7), A5 (madre+padre, V8) |
+| ④ Captura de chequeo | `/hato-lechero/chequeos/:id` | B0–B4 |
+| ⑤ Control de ordeño → **Producción** | `/hato-lechero/produccion` | D (quincenal V3, productividad V4) |
+| ⑥ Cola de alertas | `/hato-lechero/alertas` | C |
 | ⑦ Telegram — lazo cerrado | (fuera de la app web) | C1–C4 |
 
-**Lenguaje visual a preservar** (mapeado a lo que ya existe en el repo, para reusar y no reinventar):
+> Nota sobre la pantalla ⑤: el mock muestra barras **diarias**; con V3 el dato se registra **por quincena**. Se conserva el estilo del gráfico de barras, cambia el eje a quincenas.
 
-- **Chips/badges de estado semánticos** — todo estado (etapa de vaca, estado de alerta, resultado de chequeo) se pinta como un chip de color, nunca como texto plano. Paleta consistente en las 7 pantallas: verde = saludable/confirmado/en leche, ámbar = requiere atención pronto (próxima a secar, escalada), azul = en progreso (servida, enviada), gris = neutro/inactivo (seca, pendiente), rojo = vencido/urgente/destructivo. Construir sobre `src/components/ui/badge.tsx`; recomiendo un helper único de color-por-estado (`calculosHato.ts`) siguiendo el precedente de `clasificarGravedad` en `calculosMonitoreo.ts` — una sola fuente de verdad para el color, nunca derivarlo inline pantalla por pantalla.
-- **Tarjetas de KPI** (fila de 3–4 en Dashboard y Leche) — icono en círculo de color, label pequeño gris, número grande, delta/subtexto abajo. Patrón ya establecido en el repo (`KPICardsProduccion.tsx`, `ClimaKPICards.tsx`, `DashboardKPICard.tsx`, `finanzas/components/KPICards.tsx`) — reusar ese patrón, no crear uno nuevo.
-- **Tablas limpias** (Lista de animales, grilla de Chequeo, Cola de alertas) — header gris claro en mayúsculas pequeñas, filas blancas con divisor sutil (sin grid pesado), sin zebra-striping, valores de estado siempre como chip. Sobre `src/components/ui/table.tsx`.
+**Lenguaje visual — componentes canónicos del módulo** (construidos scoped al hato, sin tocar globales; quedan como referencia para el futuro rediseño de la app):
+
+- **Chips/badges de estado semánticos** — todo estado (etapa de vaca, estado de alerta, resultado de chequeo) se pinta como un chip de color, nunca como texto plano. Paleta consistente: verde = saludable/confirmado/en leche, ámbar = requiere atención pronto (próxima a secar, escalada, próxima a reemplazo), azul = en progreso (servida, enviada), gris = neutro/inactivo (seca, pendiente), rojo = vencido/urgente/destructivo. Componente scoped que envuelve `src/components/ui/badge.tsx` sin alterarlo; helper único de color-por-estado en `calculosHato.ts` (precedente `clasificarGravedad` de `calculosMonitoreo.ts`) — una sola fuente de verdad, nunca color inline.
+- **Tarjetas de KPI** (fila de 3–4 en Dashboard y Producción) — icono en círculo de color, label pequeño gris, número grande, delta/subtexto abajo. Coincidir con el mock; hay precedentes en el repo (`KPICardsProduccion.tsx`, `ClimaKPICards.tsx`, `DashboardKPICard.tsx`) que sirven de base pero el estilo final lo fija el mock.
+- **Tablas limpias** (Lista del hato, grilla de Chequeo, Cola de alertas) — header gris claro en mayúsculas pequeñas, filas blancas con divisor sutil (sin grid pesado), sin zebra-striping, valores de estado siempre como chip. Sobre `src/components/ui/table.tsx`.
 - **Barra de progreso horizontal por categoría** ("Vacas por estado" en el Dashboard) — sobre `src/components/ui/progress.tsx` o Recharts horizontal bar, con leyenda de puntos de color.
-- **Gráficas** (curva de PL en la hoja de vida, litros diarios en Leche) — Recharts, mismo patrón ya usado en `produccion/components/Grafico*.tsx`: línea con marcadores + burbuja resaltando el último valor; barras con la barra de "hoy" resaltada en verde oscuro vs. el resto en verde claro.
-- **Línea de tiempo vertical** (hoja de vida — "Línea de tiempo reproductiva") — patrón nuevo, no existe hoy en el repo; construir como componente reusable (`EventoTimeline.tsx`, ya listado en §7.5) con punto sólido para eventos pasados, punto hueco para proyectados, y una entrada resaltable "HOY".
-- **Vista de genealogía en mini-árbol** (madre → esta vaca → crías, cajas conectadas por líneas finas) — patrón nuevo, construir dentro de `HojaDeVida.tsx`.
-- **Grilla de captura con preview de cálculo en vivo** (pantalla ④) — banner informativo arriba de la tabla explicando el pre-llenado; fila en edición muestra un banner inline debajo con el resultado del auto-cálculo (Secar/PP) antes de guardar. Este patrón de "explicar + previsualizar antes de comprometer" es nuevo pero encaja con el principio ya establecido de `ChequeoCapturaGrid` en §7.5.
-- **Franja de estadísticas compactas** (hoja de vida, debajo del header — PL actual, #Partos, Días en leche, Días abiertos, Secar, Parto probable en una sola fila sin tarjetas) — patrón nuevo, más denso que las KPI cards; usar solo en vistas de detalle de un único registro, no en dashboards.
-- **Chips de contexto persistente** (header: "Finca: Subachoque" + avatar de usuario) — verificar si ya existe un patrón equivalente en `Layout.tsx`/breadcrumb antes de construir uno nuevo.
+- **Gráficas** (curva de PL en la hoja de vida, producción quincenal en Producción) — Recharts, patrón de `produccion/components/Grafico*.tsx`: línea con marcadores + burbuja resaltando el último valor; barras con la barra actual resaltada en verde oscuro vs. el resto en verde claro.
+- **Línea de tiempo vertical** (`EventoTimeline.tsx`) — **componente canónico nuevo**: punto sólido para eventos pasados, punto hueco para proyectados, entrada resaltable "HOY"; debe soportar **múltiples servicios encadenados** (V7).
+- **Mini-árbol de genealogía** (`GenealogiaArbol.tsx`) — **componente canónico nuevo**: madre **y padre** → esta vaca → crías, cajas conectadas por líneas finas; "sin registrar" cuando falta el padre (V8).
+- **Grilla de captura con preview de cálculo en vivo** — banner explicativo arriba; fila en edición muestra el auto-cálculo (Secar/PP) antes de guardar.
+- **Franja de estadísticas compactas** (hoja de vida, bajo el header — PL, #Partos, Días en leche, Días abiertos, Secar, Parto probable en una fila) — **componente canónico nuevo**, denso; solo en vistas de detalle de un registro.
+- **Chips de contexto persistente** (header: "Finca: Subachoque" + avatar) — reutilizar el header/breadcrumb de producción; no duplicar.
 
-**Decisiones abiertas que el prototipo no resuelve** (para que el agente de frontend las zanje explícitamente, no las herede en silencio):
+**Decisiones que el prototipo no resuelve:**
 
-1. **Sub-navegación del módulo**: el mockup muestra los 5 sub-ítems (Dashboard/Animales/Chequeos/Leche/Alertas) como árbol indentado *dentro* del sidebar bajo "Hato Lechero". El resto de la app usa un patrón distinto: un `SubNav` horizontal debajo del breadcrumb (`InventorySubNav`, `MonitoreoSubNav`, `EmpleadosSubNav`, `GanadoDashboard`). Decidir cuál seguir — recomiendo el patrón horizontal existente por consistencia, pero lo dejo para la sesión de frontend.
-2. El chip **"Datos de demostración"** del Dashboard es un artefacto del mockup (deja claro que los números son ficticios) — no implica una funcionalidad de "modo demo" real; se descarta al implementar salvo que se pida explícitamente.
-3. Las 7 pantallas son **desktop-only (1440px)** — ninguna cubre el comportamiento en móvil. Sigue vigente la regla de CLAUDE.md sobre sidebar colapsado y no ocultar contenido; el agente de frontend debe resolver el responsive, no está en el prototipo.
-4. El botón destructivo **"× Marcar vendida/muerta"** (outline rojo) — confirmar que usa la variante destructiva ya existente de `button.tsx` en vez de un estilo nuevo.
+1. ~~Sub-navegación~~ — **resuelta por producción (#70)**: es el sidebar agrupado con `ModuleGuard`, no un `SubNav` horizontal ni el render del mock.
+2. El chip **"Datos de demostración"** del Dashboard es artefacto del mock — no implica un "modo demo" real; se descarta salvo pedido explícito.
+3. Las 7 pantallas son **desktop-only (1440px)**. Sigue vigente la regla de CLAUDE.md sobre sidebar colapsado; el responsive lo resuelve el agente de frontend.
+4. El botón destructivo **"× Marcar vendida/muerta"** — usar la variante destructiva de `button.tsx`, sin estilo nuevo.
 
 ---
 
@@ -342,42 +396,42 @@ La única referencia temporal real en todo el plan es un evento externo fijo —
 Este documento. Entrega: alcance, épicas priorizadas, modelo de datos, arquitectura de integraciones, motor de alertas, estrategia de importación, arquitectura de frontend, riesgos.
 
 **S1 — CTO/Backend: Esquema y RLS**
-- Objetivo: migraciones **049** `create_hato_core`, **050** `create_hato_leche`, **051** `create_hato_tratamientos`, **052** `create_hato_alertas`, **053** `fin_transacciones_ganado_hato_link`, **054** `hato_alertas_cron` + vista `v_hato_estado_actual`. Actualizar `docs/supabase_tablas.md` y CLAUDE.md.
+- Objetivo: migraciones **050** `create_hato_core` (incluye `raza`, `padre_toro_id`), **051** `create_hato_leche` (incluye `hato_produccion_quincenal`), **052** `create_hato_tratamientos`, **053** `create_hato_alertas`, **054** `create_hato_toros_pajillas` (Épica G), **055** `create_hato_config` (Épica H, con defaults precargados de razas/secado/umbrales), **056** `fin_transacciones_ganado_hato_link`, **057** `hato_alertas_cron` + vista `v_hato_estado_actual`. **Arranca en 050 — 049 la tomó el sidebar reorg.** Actualizar `docs/supabase_tablas.md` y CLAUDE.md.
 - Insumos: §7.1–7.2 de este plan.
-- Entregable: esquema aplicado (un solo PR, para evitar la colisión de numeración que ya ocurrió antes en el repo) + RLS verificada.
+- Entregable: esquema aplicado (un solo PR, para evitar la colisión de numeración que ya ocurrió antes en el repo) + RLS verificada. `hato_config` con defaults hace que el motor de fechas funcione sin UI de Ajustes.
 - Depende de: nada — sesión de arranque.
 - Desbloquea: S3, S4, S6, S9, S10.
 
 **S2 — Backend: Motor de lógica pura (`calculosHato.ts`)**
-- Objetivo: parsers de planilla (fechas multi-valor, `#VALUE!`), descomposición SX→eventos, motor de fechas (SECAR/PP), derivación de estado, cálculo de PL/proyecciones.
-- Insumos: §6 (criterios de aceptación por épica), §7.1 (tabla de descomposición SX), los 5 archivos Excel como fixtures de test.
-- Entregable: `src/utils/calculosHato.ts` + `calculosHato.test.ts`, copia en `src/supabase/functions/server/` + `calculosHatoParidad.test.ts`.
+- Objetivo: parsers de planilla (fechas multi-valor, `#VALUE!`), descomposición SX→eventos (incl. servicios múltiples/fallidos, V7), motor de fechas (SECAR **dependiente de raza leída de `hato_config`**, V6; PP), derivación de estado, cálculo de PL/proyecciones y productividad (V4).
+- Insumos: §6 (criterios de aceptación por épica), §7.1 (tabla de descomposición SX, `hato_config`), los 5 archivos Excel como fixtures de test.
+- Entregable: `src/utils/calculosHato.ts` + `calculosHato.test.ts`, copia en `src/supabase/functions/server/` + `calculosHatoParidad.test.ts`. Los parámetros (secado por raza, umbrales) se inyectan desde `hato_config`, nunca constantes — los tests cubren varias razas.
 - Depende de: nada — sin dependencia real de esquema, corre en paralelo a S1.
 - Desbloquea: S3, S4, S6, S7.
 
-**S3 — Backend/Data: Pipeline de importación**
-- Objetivo: `scripts/import-hato/` (extract → normalize → resolve → load → verify).
+**S3 — Backend/Data: Pipeline de importación + endpoint de subida de chequeo (B0/V10)**
+- Objetivo: `scripts/import-hato/` (extract → normalize → resolve → load → verify), que además **siembra `hato_toros`** desde los toros históricos e infiere `raza` donde el dato lo permita. Expone la etapa Extract→Normalize como **endpoint de subida de Excel por chequeo** (B0) que reusa el mismo parser de S2 y devuelve un diff para aprobar.
 - Insumos: esquema de S1, parsers de S2, los 5 archivos Excel.
-- Entregable: `animales.csv` + `resolution-report.md` + carga a producción.
+- Entregable: `animales.csv` + `resolution-report.md` + carga a producción + endpoint de subida recurrente.
 - Depende de: S1, S2.
 - **Checkpoint humano obligatorio** (no delegable a ningún agente): revisión de `resolution-report.md` con Martha antes de cargar a producción — el único gate de este plan que exige su tiempo, y el de mayor riesgo de cronograma real porque depende de su disponibilidad, no de capacidad de agentes. Agendarlo es la acción de mayor prioridad fuera de las sesiones mismas.
-- Desbloquea: S4 (necesita datos reales para probarse contra el hato verdadero), S6 (las alertas no se encienden sobre datos sin validar), S7, S9.
+- Desbloquea: S4 (necesita datos reales para probarse contra el hato verdadero + el endpoint de subida), S6 (las alertas no se encienden sobre datos sin validar), S7, S9.
 
 **S4 — Frontend: Núcleo del módulo**
-- Objetivo: rutas, `AnimalesList`, `HojaDeVida`, `ChequeoCapturaGrid`, `HatoDashboard`.
-- Insumos: esquema de S1, motor de S2 (preview de normalización en vivo en la grilla), datos de S3 para prueba contra el hato real.
-- Entregable: módulo navegable end-to-end para fichas + captura de chequeo.
-- Depende de: S1, S2. Puede empezar contra fixtures antes de que S3 cierre, pero su validación final requiere los datos reales de S3.
+- Objetivo: reemplazar los `ComingSoon` de producción por las vistas reales bajo `/hato-lechero`: `HatoDashboard` (Tablero), `AnimalesList` (Hato) + `HojaDeVida` (timeline con todos los servicios V7 + genealogía madre+padre V8 + `GenealogiaArbol`/`EventoTimeline`), `ChequeosList` + **`SubirChequeoExcel` (B0/V10, el flujo recomendado)** y `ChequeoCapturaGrid` (manual). Sigue el sistema de diseño del mock (§7.6), sin editar globales.
+- Insumos: esquema de S1, motor de S2 (preview de normalización), datos + endpoint de subida de S3.
+- Entregable: módulo navegable end-to-end para fichas + captura de chequeo (subida de Excel + grilla).
+- Depende de: S1, S2. Puede empezar contra fixtures antes de que S3 cierre, pero su validación final (y B0) requiere S3.
 - Desbloquea: nada aguas abajo (es hoja del grafo).
 
-**S5 — Frontend/Integraciones: Captura de leche**
-- Objetivo: `LecheView` (pesajes + litros diarios) + conversaciones Telegram `pesajeLeche`/`litrosCamion` + alta de Fernando en `telegram_usuarios`.
-- Insumos: esquema de S1 (`hato_pesajes_leche`, `hato_litros_diarios`).
+**S5 — Frontend/Integraciones: Producción (V2/V3/V4)**
+- Objetivo: `ProduccionView` (pesaje semanal por vaca + producción **quincenal** + KPI de productividad litros/vaca) + conversaciones Telegram `pesajeLeche` + `produccionQuincenal` (reemplaza el `litrosCamion` diario) + alta de Fernando en `telegram_usuarios`.
+- Insumos: esquema de S1 (`hato_pesajes_leche`, `hato_produccion_quincenal`).
 - Depende de: S1.
-- Desbloquea: S6 — no por los datos de leche en sí, sino porque S5 deja lista la plomería de bot y el onboarding de Fernando que el motor de alertas reutiliza para poder escribirle.
+- Desbloquea: S6 — no por los datos de producción en sí, sino porque S5 deja lista la plomería de bot y el onboarding de Fernando que el motor de alertas reutiliza para poder escribirle.
 
 **S6 — Backend/Integraciones: Motor de alertas** *(capacidad estrella — máxima prioridad de secuenciación)*
-- Objetivo: tick endpoint (generar/despachar/escalar), helper de envío saliente + log a `telegram_mensajes`, callbacks con efectos de dominio, `AlertasView`, cron 054.
+- Objetivo: tick endpoint (generar/despachar/escalar), helper de envío saliente + log a `telegram_mensajes`, callbacks con efectos de dominio, `AlertasView` (con revisión semanal de Martha, V11), cron 057.
 - Insumos: esquema S1, motor S2, datos **validados** de S3 (checkpoint humano cumplido), onboarding de Fernando de S5.
 - Depende de: S1, S2, S3 (con su checkpoint humano cerrado), S5.
 - **Dos checkpoints de confianza en cascada, no fechas** — cada uno gatea al siguiente por evidencia, no por calendario:
@@ -386,7 +440,7 @@ Este documento. Entrega: alcance, épicas priorizadas, modelo de datos, arquitec
 - Desbloquea: nada aguas abajo.
 
 **S7 — Backend: Herramientas Esco**
-- Objetivo: `get_hato_animal`, `get_hato_reproduccion`, `get_hato_leche` + `hato-aggregation.ts`.
+- Objetivo: `get_hato_animal`, `get_hato_reproduccion`, `get_hato_produccion` + `hato-aggregation.ts`.
 - Depende de: S1, S2, S3 (necesita datos reales para responder preguntas útiles).
 - Prioridad de secuenciación baja: no bloquea el checkpoint de la visita a la finca, puede correr en cualquier ventana ociosa una vez S3 cierra.
 
@@ -398,14 +452,14 @@ Este documento. Entrega: alcance, épicas priorizadas, modelo de datos, arquitec
 - Depende de: S1, S3.
 - Prioridad de secuenciación baja: las ventas son infrecuentes, no bloquea nada.
 
-**S10 — Backend/Frontend: Seguimiento de pajillas (Épica G)**
-- Objetivo: tablas `hato_pajillas`/`hato_pajillas_uso` + vista `v_hato_pajillas_stock`, `PajillasView` (catálogo + registro de uso + inventario actual).
-- Insumos: esquema de S1.
-- Entregable: inventario de pajillas navegable y funcional, independiente del resto del módulo.
-- Depende de: S1 únicamente — no depende de S3 (no necesita datos importados del hato para funcionar, es un catálogo propio).
-- Prioridad de secuenciación baja: funcionalidad secundaria, no bloquea el checkpoint de la visita a la finca; puede correr en cualquier ventana ociosa tras S1.
+**S10 — Backend/Frontend: Pajillas + catálogo de toros + Ajustes del Hato (Épicas G y H)**
+- Objetivo: `PajillasView` como **6º ítem del sidebar** (`/hato-lechero/pajillas`, requiere sumar la entrada en `Layout.tsx`) sobre `hato_toros`/`hato_pajillas`/`hato_pajillas_uso` + `v_hato_pajillas_stock`; catálogo de toros editable (G4/V12); y **`AjustesHato` como tab en Configuración global** (Épica H — editar razas, secado por raza, umbrales sobre `hato_config`, gateado a Gerencia).
+- Insumos: esquema de S1 (tablas ya creadas ahí, incl. `hato_config` con defaults).
+- Entregable: pajillas/toros navegables + panel de Ajustes funcional, independientes del resto del módulo.
+- Depende de: S1 únicamente — no depende de S3 (catálogos propios; el motor ya funciona con los defaults de `hato_config`).
+- Prioridad de secuenciación baja: funcionalidad secundaria, no bloquea el checkpoint de la visita; puede correr en cualquier ventana ociosa tras S1.
 
-**Homologación de gastos** (`docs/plan_hato_lechero_gastos_backfill.md`) — fuera de este grafo por diseño: no consume ni produce insumos de ninguna sesión de arriba. Cualquier agente disponible puede tomarla en cualquier momento.
+**Homologación de gastos e ingresos** (`docs/plan_hato_lechero_gastos_backfill.md`) — fuera de este grafo por diseño: no consume ni produce insumos de ninguna sesión de arriba. **Ya ejecutada para ene–jun 2026** (ver ese documento). Cualquier agente disponible puede retomarla para otros períodos.
 
 ### Grafo de paralelismo
 
@@ -414,24 +468,25 @@ S1 ─┬─ S3 ─┬─ S4
 S2 ─┘      ├─ S6 ← S5 ← S1
            ├─ S7
            └─ S9
-S1 ─── S10 (directo, no pasa por S3 — catálogo propio)
+S1 ─── S10 (directo, no pasa por S3 — catálogos propios + Ajustes; el motor usa los defaults de hato_config)
 S8: bloqueada hasta visita a la finca (insumo externo)
-Homologación de gastos: sin conexión al grafo, ejecutable siempre
+Homologación gastos/ingresos: sin conexión al grafo, ejecutada para ene–jun 2026
 ```
 
 S1 y S2 son las únicas sesiones sin dependencias — arrancan primero y en paralelo. Todo lo demás (salvo la homologación de gastos, que vive fuera del grafo) pasa por S3 y su checkpoint humano; **por eso agendar ese checkpoint con Martha es la acción crítica, no una fecha de sprint.**
 
 **Regla de priorización si hay que recortar sesiones**: caen primero S5 (el pesaje puede seguir en papel mientras tanto) y S7/S8/S9/S10; **nunca** caen S1–S4 ni el "modo sombra" de S6 — fichas, chequeo, importación validada y las primeras alertas de secado/tratamiento son el núcleo no negociable.
 
-**Definición de éxito antes del checkpoint de la visita a la finca:** (1) hato completo en el sistema, con al menos un chequeo real capturado en la app (S4); (2) Fernando respondiendo alertas reales de secado/tratamiento en modo habilitado, no sombra (S6); (3) litros del carro llegando a diario (S5); (4) al menos un pesaje semanal capturado (S5); (5) Martha sin necesidad de volver a abrir el Excel de chequeos para nada nuevo.
+**Definición de éxito antes del checkpoint de la visita a la finca:** (1) hato completo en el sistema, con al menos un chequeo real capturado en la app (vía subida de Excel B0 o grilla, S4); (2) Fernando respondiendo alertas reales de secado/tratamiento en modo habilitado, no sombra (S6); (3) la producción quincenal registrándose (S5); (4) al menos un pesaje semanal capturado (S5); (5) Martha sin necesidad de volver a abrir el Excel de chequeos para nada nuevo (o subiéndolo directo al sistema, B0).
 
 **Transversal a todas las sesiones de backend/integraciones:** cada cambio de edge function se despliega con `npx supabase functions deploy make-server-1ccce916` y se sincroniza en ambas copias del código fuente; toda la lógica de negocio va en módulos puros con Vitest (los fixtures de planillas reales son los tests de mayor ROI: multi-fechas, `#VALUE!`, cada variante de SX).
 
 ### Sesiones futuras (habilitadas después del checkpoint de la visita)
 
 Depende de que el checkpoint externo (visita a la finca) haya ocurrido y de que las sesiones S1–S7 estén cerradas:
-- A3, A5, B5 (planilla pre-llenada — primera reducción neta de trabajo de Martha, lista para el siguiente chequeo bimestral), C5–C7, D4–D6, E3–E5, F2 (histórico completo de chequeos), S8 (Foto-OCR, una vez existan fotos reales), S9 si no se hizo antes.
+- A3, A5, A7 (reemplazo), B5 (planilla pre-llenada), C5–C7, D5–D7, E3–E5, F2 (histórico completo de chequeos), Épica H completa (S10), S8 (Foto-OCR, una vez existan fotos reales), S9 si no se hizo antes.
 - Más adelante: A6 (consanguinidad), E6 (reporte semanal), convergencia eventual con el módulo Ganado.
+- **V13–V15 (diferidos en la validación 2026-07-21)**: gestión de potreros/pastos + inversión en pastos (montar primero el sistema actual; Daniel tiene registro por potrero de referencia); definición precisa de "días abiertos"; correcciones de copy del mock (ej. "ahorro"). No están en el alcance de esta versión.
 
 ---
 
@@ -441,7 +496,7 @@ Depende de que el checkpoint externo (visita a la finca) haya ocurrido y de que 
 |---|---|---|---|
 | **Alertas con datos malos queman la confianza de Fernando** (agravado por D4: encendido antes de la visita) | Alta | Crítico | Encendido escalonado por checkpoints de confianza, no por fecha (sombra → tipos validados → resto calibrado en visita); el checkpoint humano de S3 es prerequisito duro de S6; botón "esto está mal" en toda alerta |
 | El checkpoint humano de S3 (revisión con Martha) se atrasa → S6 no puede avanzar de modo sombra a habilitación real antes de la visita | Media | Alto | Agendarlo cuanto antes — es la acción crítica del plan; las etapas de extracción/normalización de S3 (que no requieren a Martha) arrancan de inmediato contra los 5 archivos para que las sorpresas salgan temprano, sin esperar su agenda |
-| Doble carga transitoria (Excel + app) mata la adopción | Media | Alto | Corte tajante en la visita: el Excel de chequeos se congela como archivo histórico |
+| Doble carga transitoria (Excel + app) mata la adopción | Media | Alto | **V10 lo convierte de riesgo en estrategia**: Martha sigue con su Excel y lo *sube* al sistema (empalme gradual); no hay doble digitación. El corte a captura nativa (grilla) es opcional y posterior |
 | Fatiga/rechazo del bot (mensajes a deshora, percepción de vigilancia) | Media | Alto | Agregación 1 mensaje/franja; horarios acordados con Fernando en persona; tono de ayuda, no de auditoría; el precedente de David juega a favor |
 | Calidad del histórico peor que la muestra | Alta | Medio | Regla "ambiguo → revisión, nunca importación silenciosa"; F2 es P1 y no bloquea el MVP; KPIs reproductivos apagados hasta validar |
 | Conectividad intermitente en el ordeño | Media | Alto | Confirmaciones que no expiran (respondibles horas después); verificar en visita |
@@ -452,21 +507,25 @@ Depende de que el checkpoint externo (visita a la finca) haya ocurrido y de que 
 
 ## 10. Preguntas abiertas restantes
 
+**Resueltas en la validación (2026-07-21):**
+- ~~¿Diario o quincenal para el camión?~~ → **quincenal** (V3), ciclo del Pomar.
+- ~~¿Regla de secado fija?~~ → **dependiente de raza, editable en Ajustes del Hato** (V6): Jersey/Holstein 2 meses antes del parto, Normanda 3.
+- ~~¿Grilla o subir Excel para el chequeo?~~ → **subir Excel es el flujo recomendado** (V10); grilla como alternativa manual.
+
 **Para Martha (agendar en el checkpoint humano de la sesión de importación, S3):**
 1. ¿Quién pesa la leche semanal y cómo nace el dato (papel en el ordeño → quién transcribe)? Define la forma final de D1.
-2. ¿Quién reporta los litros diarios del camión — Fernando por Telegram a diario, o Martha semanal contra el recibo? Define el alcance de `litrosCamion`.
-3. Regla de secado: ¿la fecha calculada (servicio+7m) la ajusta el veterinario según condición/producción? ¿Quién tiene la última palabra? → fecha calculada-editable y por quién.
-4. Semántica exacta de "OK" (¿vacía apta esperando celo?) y cómo distingue una vacía-problema de una vacía normal post-parto → afina la máquina de estados y el KPI de días abiertos.
-5. Catálogo de toros: ¿cuántos propios, qué pajillas se usan actualmente, con qué inventario inicial se debe cargar el catálogo de la Épica G? → alimenta directamente G1 y, cuando se vincula a la vaca servida, A5/A6 (genealogía/consanguinidad).
-6. ¿Fecha del próximo chequeo veterinario? (si cae en la visita, el primer chequeo en la app se captura en vivo — mejor sesión de entrenamiento posible).
-7. Adjudicación del `resolution-report.md` (identidades con confianza media/baja del histórico).
+2. Semántica exacta de "OK" (¿vacía apta esperando celo?) y cómo distingue una vacía-problema de una vacía normal post-parto → afina la máquina de estados y el KPI de días abiertos (V14 diferido — confirmar definición de "días abiertos").
+3. Catálogo de toros/razas: ¿cuántos toros propios, qué pajillas y con qué inventario inicial se siembran `hato_toros`/`hato_pajillas` (Épica G)? ¿Qué vacas son Normanda (secado a 3 meses, V6)? → alimenta G4, la `raza` de `hato_animales` y `hato_config`.
+4. ¿Fecha del próximo chequeo veterinario? (si cae en la visita, el primer chequeo en la app se captura en vivo — mejor sesión de entrenamiento posible).
+5. Adjudicación del `resolution-report.md` (identidades con confianza media/baja del histórico).
 
 **Decisiones por defecto ya tomadas en este plan (objetar si algo no cuadra):**
 - Machos vendidos (OV) sin ficha propia — solo eventos (confirmado en D3).
-- RLS de `fin_transacciones_ganado` se extiende a Administrador (migración 053).
+- RLS de `fin_transacciones_ganado` se extiende a Administrador (migración 056).
 - Rechequeo a nivel hato por "60 días desde el último chequeo" (no fecha planificada).
 - Conteos del hato jamás se copian a `gan_inventario`.
-- La homologación de gastos (P&G/nómina) es tarea paralela e independiente — ver `docs/plan_hato_lechero_gastos_backfill.md`, no forma parte de este documento.
+- Migraciones del hato en 050+ (049 la tomó el sidebar reorg); rutas bajo `/hato-lechero`; módulo gateado por `ModuleGuard hato_lechero` (producción).
+- La homologación de gastos/ingresos (P&G/nómina/leche) es tarea paralela — ver `docs/plan_hato_lechero_gastos_backfill.md`, **ya ejecutada para ene–jun 2026**.
 
 **Pendientes externos (no bloquean el diseño):**
 - Martha envía el archivo de flujo de leche y los chequeos que falten.
