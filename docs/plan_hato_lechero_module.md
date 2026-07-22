@@ -4,6 +4,8 @@
 
 > **Reconciliación con producción (2026-07-20, PR #70 mergeado a `main`)**: el sidebar agrupado con control de acceso por-usuario ya existe en producción. El módulo vive en la ruta base **`/hato-lechero`** (no `/hato`), con 5 sub-ítems ya fijados en el sidebar (**Tablero · Producción · Hato · Chequeos · Alertas**, hoy `ComingSoon`), la clave de acceso `hato_lechero` y su `ModuleGuard`. Este plan adopta esa nomenclatura y estructura de navegación tal cual; las pantallas de contenido siguen el sistema de diseño del mock de Figma (§7.6). **La migración base del hato ya no es 049 (tomada por el sidebar reorg) — arranca en 050.**
 
+> **Reconciliación de numeración de migraciones (2026-07-22, ejecución de S1)**: las migraciones del hato, planeadas 050–057, se renumeraron **053–060** porque 050/051/052 ya están en producción (`gastos_created_by_tracking`, `add_clasificacion_costos`, `create_fin_parametros`) — la misma colisión que el plan advirtió. Mapeo: 053 `create_hato_core` · 054 `create_hato_leche` · 055 `create_hato_tratamientos` · 056 `create_hato_alertas` · 057 `create_hato_pajillas` · 058 `create_hato_config` · 059 `fin_transacciones_ganado_hato_link` · 060 `hato_alertas_cron`. Tres correcciones estructurales dentro del modelo de datos aprobado (no cambian alcance): (a) `hato_toros` se crea en 053 (core), no en 057, por dependencia de FK de `hato_animales.padre_toro_id`/`hato_eventos.toro_id` — por eso 057 se renombró `create_hato_pajillas`; (b) la vista `v_hato_estado_actual` vive en 056 (junto a su consumidor, el motor de alertas), no en el archivo de cron; (c) `hato_produccion_quincenal` agregó columna `mes` con `UNIQUE(anio, mes, quincena)` — el `UNIQUE(anio, quincena)` original con `quincena IN (1,2)` solo permitía 2 filas por año, imposible para un ciclo quincenal (24/año).
+
 Fuentes: entrevista con Martha (administradora, llamada 2026-07-17, Notion "Vaquitas Lecheras"), análisis de los 5 archivos Excel entregados (chequeos 2019–2026, terneras 2017+, promedio leche 2025, gastos FOV 2026), y revisión del código/esquema existente de Escocia OS.
 
 ---
@@ -16,7 +18,7 @@ Tres capítulos funcionales (los mismos de la entrevista):
 
 1. **Control de animales** — ficha individual (hoja de vida) + captura del chequeo veterinario bimestral.
 2. **Producción** (antes "Ordeño"/"Leche") — pesaje semanal por vaca + litros al camión **por quincena** → PL calculado, productividad (litros/vaca), proyecciones.
-3. **Ingresos y gastos** — ya cubierto por Finanzas (negocio "Hato Lechero"); este módulo lo consume, no lo duplica. La limpieza/backfill de gastos históricos es una **tarea paralela independiente** (`docs/plan_hato_lechero_gastos_backfill.md`), no parte de este diseño.
+3. **Ingresos y gastos** — ya cubierto por Finanzas (negocio "Hato Lechero"); este módulo lo consume, no lo duplica. La limpieza/backfill de gastos históricos fue una **tarea paralela independiente** ya ejecutada para ene–jun 2026 (ver [`archive/implementation/plan_hato_lechero_gastos_backfill.md`](./archive/implementation/plan_hato_lechero_gastos_backfill.md)).
 
 Capacidad estrella: **alertas proactivas por Telegram** (secado, tratamientos multi-paso, servicios sin confirmar, rechequeos, partos próximos), sobre la infraestructura de bot ya validada con David.
 
@@ -43,7 +45,7 @@ Capacidad estrella: **alertas proactivas por Telegram** (secado, tratamientos mu
 - **Archivo de flujo de leche** diario (Martha quedó de enviarlo).
 - **Registro explícito de ventas/muertes** de vacas — hoy se infiere por desaparición.
 - **Celos e inseminaciones ejecutadas entre chequeos** — el hueco central que motivan las alertas.
-- **Nómina abr–jun 2026** y homologación general de gastos del hato en Finanzas (Excel de Consuelito saturado) — cubierto por la tarea paralela `docs/plan_hato_lechero_gastos_backfill.md`, NO por este módulo.
+- **Nómina abr–jun 2026** y homologación general de gastos del hato en Finanzas (Excel de Consuelito saturado) — cubierto por la tarea paralela archivada de backfill, NO por este módulo.
 - Edad de vacas anteriores a 2017 (cuadernos de Nathalie) — se marca "sin fecha de nacimiento", nunca se inventa.
 
 ---
@@ -120,7 +122,7 @@ Tras revisar el prototipo de Figma en vivo con Martha. Cada ítem `Vn` está tra
 
 ### Fuera (explícito)
 - Rehacer Finanzas (gastos/ingresos/presupuesto ya existen; la leche sigue entrando por `fin_ingresos`).
-- **Homologación de gastos históricos del Excel GASTOS FOV contra `fin_gastos`** (incluye recuperar la nómina faltante abr–jun 2026) — es una **tarea paralela e independiente**, documentada en `docs/plan_hato_lechero_gastos_backfill.md`. No requiere las tablas `hato_*` ni las migraciones de este plan; vive fuera del grafo de sesiones (§8) y puede tomarla cualquier agente disponible en cualquier momento.
+- **Homologación de gastos históricos del Excel GASTOS FOV contra `fin_gastos`** (incluye recuperar la nómina faltante abr–jun 2026) — fue una **tarea paralela e independiente**, documentada en el [registro archivado](./archive/implementation/plan_hato_lechero_gastos_backfill.md). No requiere las tablas `hato_*` ni las migraciones de este plan; vive fuera del grafo de sesiones (§8).
 - Calendario sanitario preventivo completo (solo lo que aparece en el chequeo, por ahora).
 - Reemplazar la planilla de papel (el sistema la asiste; a futuro la genera pre-llenada).
 - Diseño visual detallado (paso siguiente).
@@ -296,7 +298,7 @@ Criterios clave: vive en **Configuración global** (no en el sidebar del hato), 
 4. **Load** — orden de dependencias, transaccional, idempotente (re-corrida limpia `origen='importacion_historica'` primero). UPDATE-by-id + INSERT, nunca upsert PostgREST con claves NULL (lección de `CapturaCosechaGrid`).
 5. **Verify** — invariantes: cada A{n} tiene animal o flag; conteo de partos ≈ `#P` máximo; hato activo ≈ ~45; dos activas jamás comparten numero.
 
-La matriz P&G de gastos queda **fuera de este pipeline** — se homologa por separado, con el método de matching (concepto + fecha + monto, sin duplicar lo ya cargado) descrito en `docs/plan_hato_lechero_gastos_backfill.md`.
+La matriz P&G de gastos queda **fuera de este pipeline** — se homologó por separado, con el método de matching (concepto + fecha + monto, sin duplicar lo ya cargado) descrito en el [registro archivado](./archive/implementation/plan_hato_lechero_gastos_backfill.md).
 
 **Import recurrente por chequeo (V10, flujo B0)** — la misma lógica de Extract→Normalize (etapas 1–2, que ya viven en `calculosHato.ts`) se expone como una **funcionalidad en la app**: Martha sube el `.xlsx` de un chequeo nuevo, el sistema lo parsea, descompone SX→eventos y muestra un **diff para aprobar** antes de comprometer (nunca commit directo). Difiere del pipeline histórico en tres cosas: (a) corre en la app (edge/endpoint), no offline; (b) es de una hoja/chequeo, no 40; (c) la resolución de identidad es trivial porque el hato ya está poblado (match por `numero`, alta confianza). Reusa el parser compartido → los mismos tests cubren ambos caminos. Es el flujo **recomendado para arrancar** (empalme gradual: el Excel sigue siendo la fuente segura).
 
@@ -459,7 +461,7 @@ Este documento. Entrega: alcance, épicas priorizadas, modelo de datos, arquitec
 - Depende de: S1 únicamente — no depende de S3 (catálogos propios; el motor ya funciona con los defaults de `hato_config`).
 - Prioridad de secuenciación baja: funcionalidad secundaria, no bloquea el checkpoint de la visita; puede correr en cualquier ventana ociosa tras S1.
 
-**Homologación de gastos e ingresos** (`docs/plan_hato_lechero_gastos_backfill.md`) — fuera de este grafo por diseño: no consume ni produce insumos de ninguna sesión de arriba. **Ya ejecutada para ene–jun 2026** (ver ese documento). Cualquier agente disponible puede retomarla para otros períodos.
+**Homologación de gastos e ingresos** ([registro archivado](./archive/implementation/plan_hato_lechero_gastos_backfill.md)) — fuera de este grafo por diseño: no consume ni produce insumos de ninguna sesión de arriba. **Ya ejecutada para ene–jun 2026**. Un eventual período adicional debe abrirse como una nueva tarea.
 
 ### Grafo de paralelismo
 
@@ -525,7 +527,7 @@ Depende de que el checkpoint externo (visita a la finca) haya ocurrido y de que 
 - Rechequeo a nivel hato por "60 días desde el último chequeo" (no fecha planificada).
 - Conteos del hato jamás se copian a `gan_inventario`.
 - Migraciones del hato en 050+ (049 la tomó el sidebar reorg); rutas bajo `/hato-lechero`; módulo gateado por `ModuleGuard hato_lechero` (producción).
-- La homologación de gastos/ingresos (P&G/nómina/leche) es tarea paralela — ver `docs/plan_hato_lechero_gastos_backfill.md`, **ya ejecutada para ene–jun 2026**.
+- La homologación de gastos/ingresos (P&G/nómina/leche) fue una tarea paralela **ya ejecutada para ene–jun 2026**; ver el [registro archivado](./archive/implementation/plan_hato_lechero_gastos_backfill.md).
 
 **Pendientes externos (no bloquean el diseño):**
 - Martha envía el archivo de flujo de leche y los chequeos que falten.
