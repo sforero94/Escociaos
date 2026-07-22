@@ -3,7 +3,9 @@
 
 **Última actualización:** 2025-11-13
 **Versión:** 1.1
-**Propósito:** Documentación técnica completa del esquema de base de datos
+**Propósito:** Referencia histórica del esquema de base de datos
+
+> **Estado de mantenimiento (2026-07-22):** pendiente de actualización integral. Para cambios de esquema, RLS o migraciones, las fuentes de verdad son `src/sql/migrations/`, los tipos y las consultas actuales. Esta referencia no cubre varios dominios creados después de 2025 y puede listar tablas retiradas.
 
 ---
 
@@ -19,6 +21,7 @@
    - [Monitoreo y Control](#5-monitoreo-y-control)
    - [Verificaciones de Inventario](#6-verificaciones-de-inventario)
    - [Auditoría y Usuarios](#7-auditoría-y-usuarios)
+   - [Hato Lechero](#8-hato-lechero)
 4. [Diagrama de Relaciones](#diagrama-de-relaciones)
 5. [Índices y Constraints](#índices-y-constraints)
 6. [Notas de Implementación](#notas-de-implementación)
@@ -941,6 +944,360 @@ Almacenamiento key-value (posiblemente para caché o configuración).
 
 ---
 
+## 8. Hato Lechero
+
+> Añadido 2026-07-22 (S1 del módulo Hato Lechero, migraciones `053`–`060` de
+> `src/sql/migrations/`; ver `docs/plan_hato_lechero_module.md` §7.1–7.2 y el
+> brief técnico de la sesión). **Aplicadas a producción el 2026-07-22.**
+> Estas 15 tablas + 2 vistas son posteriores al
+> conteo de "32 tablas" de la Visión General (§ arriba) — ese conteo no se
+> actualizó, ver la nota de estado de mantenimiento al inicio del documento.
+> Prefijo `hato_` (dominio propio, distinto de `gan_*` — ver
+> `docs/plan_hato_lechero_module.md` §5 "Relación con el módulo Ganado
+> existente").
+>
+> **Diseño en tres capas:** capa cruda (`hato_chequeo_vacas`, columnas
+> `*_raw`) → capa de eventos append-only (`hato_eventos`) → capa derivada
+> (vista `v_hato_estado_actual`, solo hechos, sin constantes de negocio ni
+> clasificación de estado — esa lógica vive en `calculosHato.ts`, sesión S2).
+> Todos los umbrales/ventanas/periodos de secado por raza se leen de
+> `hato_config` en tiempo de ejecución — nunca hardcodeados.
+>
+> **RLS:** patrón 044 en todas las tablas salvo `hato_config`
+> (Gerencia-only en escritura, vía `es_usuario_gerencia()`) — SELECT para
+> cualquier `authenticated`, escritura para Administrador + Gerencia.
+> `hato_alertas`/`hato_alertas_config` además reciben escritura del cron/bot
+> vía `service_role`, que bypasea RLS (no lleva política propia — ver
+> comentario en la migración 056).
+
+### 📍 `hato_toros`
+Catálogo editable de toros/sementales — fuente única del progenitor para genealogía (`hato_animales.padre_toro_id`), eventos de servicio (`hato_eventos.toro_id`) y pajillas (`hato_pajillas.toro_id`).
+
+| Campo | Tipo | Descripción | Constraints |
+|-------|------|-------------|-------------|
+| `id` | `uuid` | Identificador único | PK, DEFAULT gen_random_uuid() |
+| `nombre` | `text` | Nombre del toro | NOT NULL |
+| `tipo` | `text` | Modo de servicio | CHECK IN ('monta','inseminacion') |
+| `raza` | `text` | Raza del toro | |
+| `activo` | `boolean` | Si sigue en uso | NOT NULL, DEFAULT true |
+| `created_at` | `timestamptz` | Fecha creación | DEFAULT now() |
+| `created_by` | `uuid` | Usuario que lo creó | FK → auth.users(id) |
+
+**Índices:** UNIQUE case-insensitive sobre `lower(nombre)` (`hato_toros_nombre_unique`).
+
+---
+
+### 📍 `hato_animales`
+Ficha por animal, para siempre — `numero` es la chapeta permanente y nunca se recicla (ningún animal se elimina).
+
+| Campo | Tipo | Descripción | Constraints |
+|-------|------|-------------|-------------|
+| `id` | `uuid` | Identificador único | PK, DEFAULT gen_random_uuid() |
+| `numero` | `integer` | Chapeta permanente | UNIQUE, nullable |
+| `nombre` | `text` | Nombre del animal | |
+| `sexo` | `text` | Sexo | CHECK IN ('hembra','macho'), DEFAULT 'hembra' |
+| `etapa` | `text` | Etapa productiva | NOT NULL, CHECK IN ('ternera','novilla','vaca','toro') |
+| `raza` | `text` | Raza (FK lógica al catálogo de `hato_config`) | |
+| `estado` | `text` | Estado de ciclo de vida | NOT NULL, DEFAULT 'activa', CHECK IN ('activa','vendida','muerta','descartada') |
+| `fecha_estado` | `date` | Fecha del último cambio de estado | |
+| `fecha_nacimiento` | `date` | Fecha de nacimiento (nunca inventada) | |
+| `fecha_nacimiento_confianza` | `text` | Confianza del dato de nacimiento | NOT NULL, DEFAULT 'desconocida', CHECK IN ('exacta','aproximada','desconocida') |
+| `madre_id` | `uuid` | Madre (self-FK) | FK → hato_animales(id) |
+| `padre_toro_id` | `uuid` | Padre desde el catálogo de toros | FK → hato_toros(id) |
+| `padre_id` | `uuid` | Padre, si es un animal propio del hato | FK → hato_animales(id) |
+| `finca_id` | `uuid` | Finca (reutiliza el catálogo de Ganado) | FK → gan_fincas(id) |
+| `origen` | `text` | Origen del registro | CHECK IN ('nacimiento','compra','importacion_historica') |
+| `confianza` | `text` | Confianza del registro (importación) | NOT NULL, DEFAULT 'alta', CHECK IN ('alta','media','baja') |
+| `import_meta` | `jsonb` | Metadatos de importación | |
+| `notas` | `text` | Notas libres | |
+| `created_at` | `timestamptz` | Fecha creación | DEFAULT now() |
+| `created_by` | `uuid` | Usuario que lo creó | FK → auth.users(id) |
+
+**Relaciones:**
+- 1:N con `hato_chequeo_vacas`, `hato_eventos`, `hato_pesajes_leche`, `hato_tratamientos`, `hato_pajillas_uso`
+- N:1 con `hato_toros` (padre_toro_id), `gan_fincas` (finca_id)
+
+**Índices:** `(estado, etapa)`, `(madre_id)`.
+
+---
+
+### 📍 `hato_chequeos`
+Cabecera de ronda del chequeo veterinario bimestral (patrón `rondas_monitoreo`).
+
+| Campo | Tipo | Descripción | Constraints |
+|-------|------|-------------|-------------|
+| `id` | `uuid` | Identificador único | PK, DEFAULT gen_random_uuid() |
+| `fecha` | `date` | Fecha del chequeo | NOT NULL |
+| `veterinario` | `text` | Veterinario a cargo | |
+| `estado` | `text` | Estado de la ronda | NOT NULL, DEFAULT 'borrador', CHECK IN ('borrador','cerrado') |
+| `fuente` | `text` | Origen del registro | NOT NULL, DEFAULT 'web', CHECK IN ('web','importacion') |
+| `sheet_ref` | `text` | Referencia a la hoja de Excel origen | |
+| `created_at` | `timestamptz` | Fecha creación | DEFAULT now() |
+| `created_by` | `uuid` | Usuario que lo creó | FK → auth.users(id) |
+
+**Relaciones:** 1:N con `hato_chequeo_vacas`, `hato_tratamientos`.
+
+---
+
+### 📍 `hato_chequeo_vacas`
+Una fila por vaca por chequeo. Capa cruda (`*_raw`, preserva la planilla verbatim) + capa normalizada (nullable).
+
+| Campo | Tipo | Descripción | Constraints |
+|-------|------|-------------|-------------|
+| `id` | `uuid` | Identificador único | PK, DEFAULT gen_random_uuid() |
+| `chequeo_id` | `uuid` | Chequeo al que pertenece | NOT NULL, FK → hato_chequeos(id) ON DELETE CASCADE |
+| `animal_id` | `uuid` | Animal | NOT NULL, FK → hato_animales(id) |
+| `pl_raw`, `np_raw`, `ultima_cria_raw`, `sx_raw`, `fecha_servicio_raw`, `toro_raw`, `tp_raw`, `estado_raw`, `secar_raw`, `pp_raw`, `ttto_raw` | `text` | Valores textuales verbatim de la planilla | nullable |
+| `pl` | `numeric` | PL normalizado | nullable |
+| `num_partos` | `integer` | Número de partos normalizado | nullable |
+| `fecha_servicio` | `date` | Fecha de servicio normalizada | nullable |
+| `toro` | `text` | Toro (texto, capa normalizada) | nullable |
+| `tipo_servicio` | `text` | Tipo de servicio | CHECK IN ('monta','inseminacion') |
+| `meses_prenez` | `numeric` | Meses de preñez | nullable |
+| `fecha_secar` | `date` | Fecha de secado calculada (por `calculosHato.ts`) | nullable |
+| `fecha_probable_parto` | `date` | Fecha probable de parto calculada | nullable |
+| `normalizacion_issues` | `jsonb` | Problemas de normalización detectados | nullable |
+| `created_at` | `timestamptz` | Fecha creación | DEFAULT now() |
+
+**Constraints:** UNIQUE (chequeo_id, animal_id).
+**Índices:** `(animal_id)`.
+
+---
+
+### 📍 `hato_eventos`
+Log append-only del ciclo reproductivo/de vida — la fuente de verdad. Un ciclo puede tener varios `servicio` encadenados (uno que no cuaja, seguido de `celo` y un re-servicio); todos quedan en el log.
+
+| Campo | Tipo | Descripción | Constraints |
+|-------|------|-------------|-------------|
+| `id` | `uuid` | Identificador único | PK, DEFAULT gen_random_uuid() |
+| `animal_id` | `uuid` | Animal | NOT NULL, FK → hato_animales(id) |
+| `tipo` | `text` | Tipo de evento | NOT NULL, CHECK IN ('servicio','celo','confirmacion_prenez','parto','aborto','secado_real','venta','muerte','compra','cambio_etapa','rechequeo') |
+| `fecha` | `date` | Fecha del evento | NOT NULL |
+| `fecha_confianza` | `text` | Confianza de la fecha | NOT NULL, DEFAULT 'exacta', CHECK IN ('exacta','aproximada','desconocida') |
+| `toro_id` | `uuid` | Toro (para eventos de servicio) | FK → hato_toros(id) |
+| `tipo_servicio` | `text` | Monta o inseminación | CHECK IN ('monta','inseminacion') |
+| `cria_id` | `uuid` | Cría (para eventos de parto) | FK → hato_animales(id) |
+| `cria_destino` | `text` | Destino de la cría | CHECK IN ('retenida','macho_vendido','hembra_vendida','muerta','aborto') |
+| `sx_raw` | `text` | Código SX de origen (importación) | |
+| `chequeo_vaca_id` | `uuid` | Procedencia: chequeo que generó el evento | FK → hato_chequeo_vacas(id) |
+| `alerta_id` | `uuid` | Procedencia: alerta que generó el evento | FK → hato_alertas(id) ON DELETE SET NULL (back-patch en migración 056) |
+| `transaccion_ganado_id` | `uuid` | Vínculo con la transacción de finanzas (venta/muerte) | FK → fin_transacciones_ganado(id) ON DELETE SET NULL |
+| `fuente` | `text` | Canal de captura | CHECK IN ('web','telegram','importacion','alerta','chequeo') |
+| `datos` | `jsonb` | Datos adicionales del evento | |
+| `created_at` | `timestamptz` | Fecha creación | DEFAULT now() |
+| `created_by` | `uuid` | Usuario que lo creó | FK → auth.users(id) |
+
+**Índices:** `(animal_id, fecha)`, `(tipo, fecha)`, parcial `(animal_id, fecha) WHERE tipo='servicio'`.
+
+---
+
+### 📍 `hato_pesajes_leche`
+Pesaje semanal por vaca (AM/PM).
+
+| Campo | Tipo | Descripción | Constraints |
+|-------|------|-------------|-------------|
+| `id` | `uuid` | Identificador único | PK, DEFAULT gen_random_uuid() |
+| `animal_id` | `uuid` | Animal | NOT NULL, FK → hato_animales(id) |
+| `fecha` | `date` | Fecha del pesaje | NOT NULL |
+| `litros_am` | `numeric` | Litros de la ordeña de la mañana | nullable |
+| `litros_pm` | `numeric` | Litros de la ordeña de la tarde | nullable |
+| `litros_total` | `numeric` | Suma AM+PM | GENERATED ALWAYS AS (COALESCE(litros_am,0)+COALESCE(litros_pm,0)) STORED |
+| `fuente` | `text` | Canal de captura | |
+| `created_at` | `timestamptz` | Fecha creación | DEFAULT now() |
+| `created_by` | `uuid` | Usuario que lo creó | FK → auth.users(id) |
+
+**Constraints:** UNIQUE (animal_id, fecha).
+**Índices:** `(fecha)`.
+**Nota:** vaca no pesada = sin dato (fila ausente), nunca 0 — regla de UI, misma convención del módulo de Monitoreo.
+
+---
+
+### 📍 `hato_produccion_quincenal`
+Litros al camión por quincena (ciclo de liquidación del Pomar) — reemplaza el concepto de "litros diarios" del diseño original.
+
+| Campo | Tipo | Descripción | Constraints |
+|-------|------|-------------|-------------|
+| `id` | `uuid` | Identificador único | PK, DEFAULT gen_random_uuid() |
+| `anio` | `integer` | Año | NOT NULL |
+| `mes` | `integer` | Mes | NOT NULL, CHECK BETWEEN 1 AND 12 |
+| `quincena` | `integer` | Quincena del mes | NOT NULL, CHECK IN (1,2) |
+| `fecha_inicio` | `date` | Fecha de inicio (informativa) | nullable |
+| `fecha_fin` | `date` | Fecha de fin (informativa) | nullable |
+| `litros_total` | `numeric` | Litros entregados al camión | NOT NULL, CHECK >= 0 |
+| `litros_pomar_confirmado` | `numeric` | Litros confirmados por el Pomar | nullable |
+| `num_vacas_ordeno` | `integer` | Vacas en ordeño (base de la productividad) | nullable |
+| `notas` | `text` | Notas libres | |
+| `fuente` | `text` | Canal de captura | |
+| `created_at` | `timestamptz` | Fecha creación | DEFAULT now() |
+| `created_by` | `uuid` | Usuario que lo creó | FK → auth.users(id) |
+
+**Constraints:** UNIQUE (anio, mes, quincena) — corregido desde el diseño original `UNIQUE(anio, quincena)`, que solo permitía 2 filas por año.
+**Índices:** `(anio, mes)`.
+**Nota:** productividad = `litros_total / num_vacas_ordeno` (derivada, nunca almacenada).
+
+---
+
+### 📍 `hato_protocolos`
+Catálogo reusable de protocolos de tratamiento (ej. "Estrumate": día 0 aplicar → día 7 servir → día 9 verificar celo).
+
+| Campo | Tipo | Descripción | Constraints |
+|-------|------|-------------|-------------|
+| `id` | `uuid` | Identificador único | PK, DEFAULT gen_random_uuid() |
+| `nombre` | `text` | Nombre del protocolo | NOT NULL |
+| `descripcion` | `text` | Descripción | |
+| `pasos_default` | `jsonb` | Array de `{paso_num, offset_dias, descripcion, requiere_confirmacion}` | |
+| `activo` | `boolean` | Si está disponible para elegir | NOT NULL, DEFAULT true |
+| `created_at` | `timestamptz` | Fecha creación | DEFAULT now() |
+| `created_by` | `uuid` | Usuario que lo creó | FK → auth.users(id) |
+
+**Índices:** UNIQUE case-insensitive sobre `lower(nombre)` (`hato_protocolos_nombre_unique`).
+
+---
+
+### 📍 `hato_tratamientos`
+Prescripción por animal — protocolo elegido o tratamiento libre (nota libre siempre disponible).
+
+| Campo | Tipo | Descripción | Constraints |
+|-------|------|-------------|-------------|
+| `id` | `uuid` | Identificador único | PK, DEFAULT gen_random_uuid() |
+| `animal_id` | `uuid` | Animal | NOT NULL, FK → hato_animales(id) |
+| `chequeo_id` | `uuid` | Ronda que prescribió el tratamiento | FK → hato_chequeos(id) |
+| `protocolo_id` | `uuid` | Protocolo aplicado (opcional) | FK → hato_protocolos(id) |
+| `nombre` | `text` | Nombre libre del tratamiento | |
+| `fecha_inicio` | `date` | Fecha de inicio | NOT NULL |
+| `estado` | `text` | Estado del tratamiento | NOT NULL, DEFAULT 'activo', CHECK IN ('activo','completado','cancelado') |
+| `nota` | `text` | Nota libre | |
+| `created_at` | `timestamptz` | Fecha creación | DEFAULT now() |
+| `created_by` | `uuid` | Usuario que lo creó | FK → auth.users(id) |
+
+**Relaciones:** 1:N con `hato_tratamiento_pasos`.
+**Índices:** `(animal_id)`.
+
+---
+
+### 📍 `hato_tratamiento_pasos`
+Pasos programados/ejecutados de cada tratamiento — el motor de alertas lee los pendientes (regla `tratamiento_paso`).
+
+| Campo | Tipo | Descripción | Constraints |
+|-------|------|-------------|-------------|
+| `id` | `uuid` | Identificador único | PK, DEFAULT gen_random_uuid() |
+| `tratamiento_id` | `uuid` | Tratamiento al que pertenece | NOT NULL, FK → hato_tratamientos(id) ON DELETE CASCADE |
+| `paso_num` | `integer` | Número de paso | NOT NULL |
+| `descripcion` | `text` | Descripción del paso | |
+| `offset_dias` | `integer` | Días desde el inicio del tratamiento | NOT NULL, DEFAULT 0 |
+| `fecha_programada` | `date` | Fecha en que toca el paso | NOT NULL |
+| `fecha_ejecutada` | `date` | Fecha en que se ejecutó (null = pendiente) | nullable |
+| `requiere_confirmacion` | `boolean` | Si necesita confirmación por Telegram | NOT NULL, DEFAULT true |
+| `created_at` | `timestamptz` | Fecha creación | DEFAULT now() |
+
+**Constraints:** UNIQUE (tratamiento_id, paso_num).
+**Índices:** parcial `(fecha_programada) WHERE fecha_ejecutada IS NULL`.
+
+---
+
+### 📍 `hato_alertas`
+Cola de tareas salientes por Telegram (secado, tratamientos, servicios sin confirmar, rechequeos, partos próximos).
+
+| Campo | Tipo | Descripción | Constraints |
+|-------|------|-------------|-------------|
+| `id` | `uuid` | Identificador único | PK, DEFAULT gen_random_uuid() |
+| `tipo` | `text` | Tipo de alerta | NOT NULL, CHECK IN ('secado_due','tratamiento_paso','rechequeo_due','servicio_sin_confirmacion','parto_proximo') |
+| `animal_id` | `uuid` | Animal relacionado | FK → hato_animales(id) |
+| `regla_clave` | `text` | Clave de idempotencia del motor | NOT NULL, UNIQUE |
+| `fecha_programada` | `date` | Fecha en que debe dispararse | NOT NULL |
+| `estado` | `text` | Estado de la alerta | NOT NULL, DEFAULT 'pendiente', CHECK IN ('pendiente','enviada','respondida','confirmada','descartada','escalada','expirada') |
+| `destinatario_telegram_id` | `text` | Destinatario | nullable |
+| `intentos` | `integer` | Número de reintentos | NOT NULL, DEFAULT 0 |
+| `respuesta` | `text` | Respuesta recibida | |
+| `respondida_por` | `text` | Quién respondió | |
+| `paso_id` | `uuid` | Paso de tratamiento relacionado (alertas `tratamiento_paso`) | FK → hato_tratamiento_pasos(id) |
+| `datos` | `jsonb` | Datos adicionales | |
+| `escalada_at` | `timestamptz` | Momento del escalamiento a Martha | nullable |
+| `created_at` | `timestamptz` | Fecha creación | DEFAULT now() |
+| `updated_at` | `timestamptz` | Última actualización | DEFAULT now(), trigger `update_updated_at_column()` |
+| `created_by` | `uuid` | Usuario que la creó (si es manual) | FK → auth.users(id) |
+
+**Índices:** `(estado)`, `(tipo, fecha_programada)`, `(animal_id)`.
+**Nota RLS:** el tick diario y el bot de Telegram escriben con `service_role`, que bypasea RLS — no lleva política propia para ese canal.
+
+---
+
+### 📍 `hato_alertas_config`
+Destinatario y horas de escalamiento por tipo de alerta — sembrada con las 5 reglas para que el motor corra sin UI de Ajustes.
+
+| Campo | Tipo | Descripción | Constraints |
+|-------|------|-------------|-------------|
+| `id` | `uuid` | Identificador único | PK, DEFAULT gen_random_uuid() |
+| `tipo` | `text` | Tipo de alerta | NOT NULL, UNIQUE, CHECK IN (los mismos 5 tipos de `hato_alertas`) |
+| `destinatario_telegram_id` | `text` | Destinatario por defecto | nullable |
+| `horas_escalamiento` | `integer` | Horas antes de escalar a Martha | NOT NULL, DEFAULT 48 |
+| `activo` | `boolean` | Si el tipo de alerta está habilitado | NOT NULL, DEFAULT true |
+| `created_at` | `timestamptz` | Fecha creación | DEFAULT now() |
+| `updated_at` | `timestamptz` | Última actualización | DEFAULT now(), trigger `update_updated_at_column()` |
+
+---
+
+### 📍 `hato_pajillas`
+Inventario de pajillas de inseminación por toro — deliberadamente mínimo, sin proveedor/costo.
+
+| Campo | Tipo | Descripción | Constraints |
+|-------|------|-------------|-------------|
+| `id` | `uuid` | Identificador único | PK, DEFAULT gen_random_uuid() |
+| `toro_id` | `uuid` | Toro | NOT NULL, FK → hato_toros(id) |
+| `cantidad_inicial` | `integer` | Cantidad inicial en inventario | NOT NULL, CHECK >= 0 |
+| `activa` | `boolean` | Si sigue en uso | NOT NULL, DEFAULT true |
+| `created_at` | `timestamptz` | Fecha creación | DEFAULT now() |
+| `created_by` | `uuid` | Usuario que la creó | FK → auth.users(id) |
+
+**Relaciones:** 1:N con `hato_pajillas_uso`.
+**Índices:** `(toro_id)`.
+
+---
+
+### 📍 `hato_pajillas_uso`
+Log de uso de pajillas, append-only. La vaca servida es opcional (mejor registrar el uso sin la vaca que no registrarlo).
+
+| Campo | Tipo | Descripción | Constraints |
+|-------|------|-------------|-------------|
+| `id` | `uuid` | Identificador único | PK, DEFAULT gen_random_uuid() |
+| `pajilla_id` | `uuid` | Pajilla usada | NOT NULL, FK → hato_pajillas(id) |
+| `fecha_uso` | `date` | Fecha de uso | NOT NULL |
+| `animal_id` | `uuid` | Vaca servida (opcional) | FK → hato_animales(id), nullable |
+| `created_at` | `timestamptz` | Fecha creación | DEFAULT now() |
+| `created_by` | `uuid` | Usuario que lo registró | FK → auth.users(id) |
+
+**Índices:** `(pajilla_id)`.
+
+---
+
+### 📍 `hato_config`
+Parámetros configurables clave/valor (jsonb) de las fórmulas del motor de fechas y del motor de alertas — ninguna de estas constantes vive en código.
+
+| Campo | Tipo | Descripción | Constraints |
+|-------|------|-------------|-------------|
+| `id` | `uuid` | Identificador único | PK, DEFAULT gen_random_uuid() |
+| `clave` | `text` | Nombre del parámetro | NOT NULL, UNIQUE |
+| `valor` | `jsonb` | Valor (escalar, lista o mapa) | NOT NULL |
+| `descripcion` | `text` | Descripción del parámetro | |
+| `created_at` | `timestamptz` | Fecha creación | DEFAULT now() |
+| `updated_at` | `timestamptz` | Última actualización | DEFAULT now(), trigger `update_updated_at_column()` |
+| `updated_by` | `uuid` | Usuario que lo editó | FK → auth.users(id) |
+
+**Claves sembradas** (9, `ON CONFLICT (clave) DO NOTHING`): `razas`, `meses_secado_por_raza`, `meses_gestacion_default`, `umbral_partos_reemplazo`, `ventana_proxima_secar_dias`, `ventana_proximo_parir_dias`, `dias_parto_proximo_alerta`, `dias_servicio_sin_confirmacion`, `dias_rechequeo_due`.
+**RLS:** SELECT para cualquier `authenticated`; escritura Gerencia-only vía `es_usuario_gerencia()`.
+
+---
+
+### 👁️ Vistas
+
+#### `v_hato_estado_actual`
+Una fila por animal en `hato_animales` con los últimos hechos reproductivos (último chequeo, último servicio, último parto, último secado real, última confirmación de preñez, último evento). **Solo hechos** — no calcula `fecha_secar`, no clasifica estado reproductivo ni aplica ningún umbral de `hato_config`; esa lógica vive en `calculosHato.ts` (S2). `security_invoker = true` (nunca `SECURITY DEFINER` — mismo fix que la migración 033 aplicó a las vistas financieras). Definida en la migración `056_create_hato_alertas.sql`.
+
+#### `v_hato_pajillas_stock`
+`cantidad_actual = cantidad_inicial - COUNT(usos)` por pajilla — sin tabla de stock materializada. Puede quedar negativa (la UI advierte, no bloquea). `security_invoker = true`. Definida en la migración `057_create_hato_pajillas.sql`.
+
+---
+
 ## 📊 Diagrama de Relaciones
 
 ```
@@ -1237,6 +1594,7 @@ lotes
 | 2025-11-13 | Agregadas columnas `costo_por_arbol` y `arboles_jornal` a tabla `aplicaciones` para métricas de eficiencia | Sistema |
 | 2025-11-13 | Reestructuración de sistema de movimientos diarios: modificada tabla `movimientos_diarios` (agregado `numero_canecas`, eliminadas columnas de productos individuales) y creada tabla `movimientos_diarios_productos` para evitar duplicación de conteo de canecas | Sistema |
 | 2025-11-13 | Actualización documentación tabla `movimientos_diarios`: agregado campo `numero_bultos` para fertilización y campo `condiciones_meteorologicas` ENUM | Sistema |
+| 2026-07-22 | Agregada sección "8. Hato Lechero": 15 tablas (`hato_toros`, `hato_animales`, `hato_chequeos`, `hato_chequeo_vacas`, `hato_eventos`, `hato_pesajes_leche`, `hato_produccion_quincenal`, `hato_protocolos`, `hato_tratamientos`, `hato_tratamiento_pasos`, `hato_alertas`, `hato_alertas_config`, `hato_pajillas`, `hato_pajillas_uso`, `hato_config`) y 2 vistas (`v_hato_estado_actual`, `v_hato_pajillas_stock`) — migraciones `053`–`060` (S1 del módulo Hato Lechero) | Backend |
 
 ---
 

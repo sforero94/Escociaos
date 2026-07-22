@@ -173,10 +173,9 @@ These are consumed in `src/utils/supabase/client.ts` via `import.meta.env`. The 
 │   └── functions/
 │
 ├── docs/                                # Extended documentation
-│   ├── supabase_tablas.md               # Complete DB schema (32+ tables, enums)
-│   ├── CHECKLIST_SETUP.md
-│   ├── INSTRUCCIONES_SETUP_COMPLETO.md
-│   └── ... (20 planning/implementation docs)
+│   ├── README.md                        # Documentation index and canonical references
+│   ├── supabase_tablas.md               # DB schema reference (validate against migrations)
+│   └── archive/                         # Completed plans, resolved incidents, legacy guides
 │
 ├── package.json
 ├── tsconfig.json                        # Strict TS config, path alias @/* → ./src/*
@@ -340,6 +339,7 @@ PostgreSQL hosted on Supabase with 32+ tables, 7+ custom ENUM types, Row-Level S
 - **Labor**: `tareas`, `registros_trabajo`, `empleados_tareas`
 - **Finance**: `fin_gastos`, `fin_ingresos`, `fin_transacciones_ganado`, `fin_conceptos_gastos`, `fin_proveedores`, `fin_categorias_gastos`, `fin_categorias_ingresos`, `fin_medios_pago`, `fin_regiones`, `fin_negocios`, `fin_compradores`, `fin_presupuestos` (budget allocations by concepto, year, negocio), `fin_parametros` (accounting inputs the system cannot derive: `cabezas_inventario_inicial`, `costo_cabeza_inventario_inicial`, `saldo_inicial_caja`)
 - **Cattle inventory**: `gan_ubicaciones`, `gan_fincas` (hectáreas), `gan_potreros`, `gan_inventario` (snapshot per potrero: novillos/toros/peso promedio), `gan_movimientos` (event log: compra/venta/muerte/traslado_entrada/traslado_salida/ajuste; estado pendiente/confirmado/descartado), `gan_pesos_historico`
+- **Dairy herd (Hato Lechero)** (migrations 053–060): `hato_toros` (bull catalog), `hato_animales` (individual registry, `numero` permanent chapeta), `hato_chequeos` + `hato_chequeo_vacas` (bimonthly vet check: raw + normalized layers), `hato_eventos` (append-only reproductive/lifecycle log), `hato_pesajes_leche` (weekly per-cow), `hato_produccion_quincenal` (fortnightly camión volume), `hato_protocolos` + `hato_tratamientos` + `hato_tratamiento_pasos`, `hato_alertas` + `hato_alertas_config` (Telegram closed-loop queue), `hato_pajillas` + `hato_pajillas_uso` (insemination straws), `hato_config` (editable formula params). Views: `v_hato_estado_actual`, `v_hato_pajillas_stock`
 - **Production**: `produccion`, `reportes_semanales`
 - **Climate**: `clima_lecturas` (rolling 24h window of 5-min Ecowitt readings — pruned daily by cron), `clima_resumen_diario` (pre-aggregated daily summaries: min/max/avg temp, humidity, wind, rainfall, radiation, UV — one row per day, scales indefinitely)
 - **Audit**: `audit_log`
@@ -382,6 +382,19 @@ Sequential SQL migrations live in `src/sql/migrations/` (001–050). See `src/sq
 - **050**: `gastos_created_by_tracking` — BEFORE INSERT triggers on `fin_gastos` and `fin_transacciones_ganado` (`set_gasto_created_by()` / `set_transaccion_ganado_created_by()`, same `COALESCE(created_by, auth.uid())` pattern as migration 040's tareas trigger) so every new row is attributed to its creator going forward. One-time backfill for 2026: 48 gastos Efrain confirmed as his (matched by `fecha`+`nombre`+`valor`, 3 of the 45 identified entries had 2 identical physical rows each — pre-existing duplicate data entry) are attributed to him; the remaining 453 `fin_gastos` rows dated in 2026 are attributed to Consuelo. Rows outside 2026 (3870), and `fin_transacciones_ganado` history, are left with `created_by = NULL` (never populated pre-migration, no way to backfill). Applied to production 2026-07-21.
 - **051**: `add_clasificacion_costos` — adds `tipo_costo` (`directo` | `indirecto`, NOT NULL DEFAULT `'indirecto'`) to `fin_categorias_gastos` and a nullable override on `fin_conceptos_gastos` (NULL = inherit). Drives the Margen de Contribución line in `/finanzas/reportes`; editable from Configuración → Finanzas → Reportes. Seeds by `ILIKE`, not equality — the production catalog diverged from the versioned SQL (the real category is `Mano de Obra y Asistencia Técnica`, while `calculosCostoKg.ts:41` still compares against `'Mano de Obra'`). Result: 7 directas / 7 indirectas. Applied to production 2026-07-21.
 - **052**: `create_fin_parametros` — key/value table (`clave`, `anio`, `negocio_id`, `valor`) for accounting inputs the system cannot derive from its own data. Unique index over `COALESCE`d columns, so writes must be UPDATE-by-id then INSERT — **never PostgREST upsert**, since `on_conflict` cannot reference an expression index. RLS Gerencia-only via `es_usuario_gerencia()`. Applied to production 2026-07-21.
+- **053–060**: **Hato Lechero module schema (session S1)** — 8 migrations shipped as one PR (the plan numbered them 050–057, renumbered +3 because 050–052 were already taken). All `hato_*` tables use the 044 RLS pattern (SELECT authenticated / write Administrador+Gerencia); SQL comments in Spanish. **Applied to production 2026-07-22** (15 tables + 2 views, 32 policies, 14 seeded rows; the live body of `fn_crear_movimiento_pendiente_ganado()` was verified byte-identical to 044 before 059 replaced it, so the only behavioral delta is the `es_hato` guard).
+  - **053**: `create_hato_core` — `hato_toros` (bull catalog, created first as FK target), `hato_animales` (one row per animal forever; `numero integer UNIQUE` permanent chapeta, `raza`, `padre_toro_id`→`hato_toros`, `madre_id`/`padre_id` self-FK, `estado` lifecycle), `hato_chequeos` (round header), `hato_chequeo_vacas` (`UNIQUE(chequeo_id, animal_id)`; raw `*_raw text` columns + normalized nullable columns — the "capa cruda" that survives normalization errors), `hato_eventos` (append-only lifecycle log; `tipo` covers servicio/celo/parto/secado_real/venta/muerte/…; `alerta_id` column declared here, FK back-patched in 056).
+  - **054**: `create_hato_leche` — `hato_pesajes_leche` (`UNIQUE(animal_id, fecha)`, `litros_total` GENERATED), `hato_produccion_quincenal` (`UNIQUE(anio, mes, quincena)`, `quincena CHECK IN (1,2)`; the Pomar's fortnightly cycle, V3). "no pesada = sin dato (—), nunca 0" is a missing-row rule.
+  - **055**: `create_hato_tratamientos` — `hato_protocolos` (catalog, e.g. Estrumate steps), `hato_tratamientos`, `hato_tratamiento_pasos` (`UNIQUE(tratamiento_id, paso_num)`, partial index on pending steps for the alert engine).
+  - **056**: `create_hato_alertas` — `hato_alertas` (`regla_clave text UNIQUE` = idempotency key for `INSERT … ON CONFLICT DO NOTHING`), `hato_alertas_config` (seeded 5 tipos, `horas_escalamiento` default 48), the `hato_eventos.alerta_id` FK back-patch, and **view `v_hato_estado_actual`** (facts only — no raza date-math, no state machine, no thresholds; those live in `calculosHato.ts`, S2).
+  - **057**: `create_hato_pajillas` — `hato_pajillas`, `hato_pajillas_uso` (append-only, `animal_id` optional), view `v_hato_pajillas_stock` (`cantidad_inicial − COUNT(usos)`; may go negative, UI warns but never blocks — Épica G).
+  - **058**: `create_hato_config` — key/value + `jsonb` table (`UNIQUE(clave)`), seeds 9 defaults (`razas`, `meses_secado_por_raza` jersey/holstein=2 normanda=3, `meses_gestacion_default`=9, `umbral_partos_reemplazo`=9, dashboard windows=30d, `dias_parto_proximo_alerta`=14, `dias_servicio_sin_confirmacion`=45, `dias_rechequeo_due`=60). SELECT authenticated (the engine reads params for all hato users); write Gerencia-only via `es_usuario_gerencia()`. Defaults let the date/alert engine run before the Ajustes UI (S10) exists.
+  - **059**: `fin_transacciones_ganado_hato_link` — adds `es_hato boolean NOT NULL DEFAULT false` + `hato_animal_id uuid`→`hato_animales` to `fin_transacciones_ganado`; `CREATE OR REPLACE` of `fn_crear_movimiento_pendiente_ganado()` (044 body verbatim + `IF NEW.es_hato THEN RETURN NEW` guard, so a lechera sale/death spawns **no** spurious ceba pending-movement); extends RLS to Administrador (037/039 precedent). Never edits 023/044.
+  - **060**: `hato_alertas_cron` — pg_cron `'45 10 * * *'` (05:45 Bogotá) → `net.http_post` to `/make-server-1ccce916/hato/alertas/tick`, secret read from Supabase Vault (`vault.decrypted_secrets`, never committed). Endpoint ships in S6 — until then a daily benign 404, no data mutated.
+
+### Hato Lechero Module (`/hato-lechero`, plan `docs/plan_hato_lechero_module.md`)
+
+Individual-animal dairy herd registry (Subachoque, ~45 cows), distinct from the head-count `gan_*` cattle module — different domain, never copied into `gan_inventario`. **Three-layer data design** (mirrors `gan_movimientos → gan_inventario` and `rondas_monitoreo → observaciones`): raw layer (`hato_chequeo_vacas.*_raw`) preserves the planilla verbatim; event layer (`hato_eventos`) is the append-only source of truth; derived layer is the SQL view `v_hato_estado_actual` **plus** the pure TS engine `calculosHato.ts` (S2) — the view exposes facts only, all raza-dependent date math (SECAR = parto_probable − meses_secado(raza)) and every threshold live in the engine reading `hato_config`, **never as constants in code or in the view**. Absence of a row means "not checked", never 0 — same rule as monitoreo. RLS: 044 pattern; `hato_config` write Gerencia-only; `hato_alertas`/`hato_alertas_config` are written by the cron/bot via service-role (RLS-bypass, no extra policy). Module visibility gated by `ModuleGuard hato_lechero` (per-user `usuarios.modulos_acceso`) — navigation only, table RLS is the real boundary. As of S1 only the schema exists; the frontend routes are still `ComingSoon` until S4+.
 
 
 ### Monitoring Module (`/monitoreo`) — incidencia aggregation
@@ -664,31 +677,19 @@ See `BUG_REPORT.md` for current tracked bugs. As of the last update, the Reporte
 
 ## Key Documentation
 
-| Document                                    | Location                     | Purpose                          |
-|---------------------------------------------|------------------------------|----------------------------------|
-| Database schema (32+ tables)                | `docs/supabase_tablas.md`    | Complete DB reference            |
-| Financial reports plan (P&G + cash flow)    | `docs/plan_reportes_finanzas.md` | Approved accounting rules, phases, findings |
-| Setup checklist                             | `docs/CHECKLIST_SETUP.md`    | Environment setup guide          |
-| Full setup instructions                     | `docs/INSTRUCCIONES_SETUP_COMPLETO.md` | Detailed setup walkthrough |
-| Final setup instructions                    | `docs/SETUP_FINAL_INSTRUCCIONES.md` | Latest setup walkthrough   |
-| CSV upload guide                            | `docs/README_CARGA_CSV.md`   | Monitoring CSV bulk import       |
-| CSV index                                   | `docs/INDEX_CARGA_CSV.md`    | CSV upload entry point           |
-| CSV flow diagram                            | `docs/DIAGRAMA_FLUJO_CSV.md` | CSV processing architecture      |
-| Lots/sublots config guide                   | `docs/GUIA_CONFIGURACION_LOTES_SUBLOTES.md` | Lot management      |
-| Contractor tracking implementation          | `docs/CONTRACTOR_TRACKING_IMPLEMENTATION.md` | Contractor feature  |
-| Labor module improvements plan              | `docs/PLAN_MEJORAS_MODULO_LABORES.md` | Labor roadmap           |
-| Labor refactor plan                         | `docs/PLAN_REFACTORIZACION_LABORES.md` | Labor refactoring guide  |
-| Labor phase 1 changelog                     | `docs/CHANGELOG_LABORES_FASE1.md` | Labor changes history       |
-| Monitoring refinement plan                  | `docs/PLAN_REFINAMIENTO_MONITOREO.md` | Monitoring roadmap        |
-| Production module plan                      | `docs/plan_produccion_module.md` | Production module design     |
-| Migration instructions (units)              | `docs/INSTRUCCIONES_MIGRACION_UNIDADES.md` | Unit migration guide |
-| Implemented changes log                     | `docs/CAMBIOS_IMPLEMENTADOS.md` | History of major changes    |
-| NewPurchase technical issue                 | `docs/PROBLEMA_TECNICO_NEWPURCHASE.md` | Known technical issue    |
-| Application ↔ Labor sync architecture       | `src/sql/migrations/README_APLICACIONES_LABORES_SYNC.md` | Trigger sync docs |
-| Design guidelines                           | `src/guidelines/Guidelines.md` | UI/UX design reference        |
-| SQL scripts index                           | `src/sql/README.md`          | SQL scripts overview             |
-| Attributions                                | `docs/Attributions.md`       | Third-party attributions         |
-| Bug report                                  | `BUG_REPORT.md`              | Known issues tracker             |
+Start with [`docs/README.md`](docs/README.md) for the living-document index. Completed plans, resolved incidents and one-time setup guides live under [`docs/archive/`](docs/archive/README.md).
+
+| Document | Location | Purpose |
+|----------|----------|---------|
+| Database schema | `docs/supabase_tablas.md` | Schema reference; validate against migrations |
+| Financial-report rules | `docs/plan_reportes_finanzas.md` | Approved P&G and cash-flow accounting contract |
+| Hato Lechero plan | `docs/plan_hato_lechero_module.md` | Active module design |
+| CSV import guide | `docs/README_CARGA_CSV.md` | Monitoring bulk import |
+| Lots / sublots guide | `docs/GUIA_CONFIGURACION_LOTES_SUBLOTES.md` | Configuration workflow |
+| Application ↔ Labor sync | `src/sql/migrations/README_APLICACIONES_LABORES_SYNC.md` | Trigger architecture |
+| Design guidelines | `src/guidelines/Guidelines.md` | UI/UX reference |
+| SQL scripts index | `src/sql/README.md` | SQL script overview |
+| Bug tracker | `BUG_REPORT.md` | Active known issues |
 
 ---
 

@@ -332,7 +332,7 @@ describe('Phase 1B — pure aggregation helpers (cost-aggregation.ts)', () => {
 // ----------------------------------------------------------------------------
 // Phase 1C — High-severity audit fixes (test-first per gap)
 //
-// Source: docs/esco-tool-audit.md
+// Historical source: docs/archive/monitoring/esco-tool-audit.md
 // Scope (per plan): only the cost-related summary gaps and the monitoring
 // sublote aggregation. Other High items (labor task-type matrix) are tracked
 // in BUG_REPORT.md for a follow-up sprint.
