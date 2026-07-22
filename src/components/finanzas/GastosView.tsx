@@ -18,7 +18,7 @@ export function GastosView() {
   const [searchParams] = useSearchParams();
   const tabInicial = TABS_VALIDOS.includes(searchParams.get('tab') || '')
     ? (searchParams.get('tab') as string)
-    : 'registrar';
+    : 'historial';
   const [activeTab, setActiveTab] = useState(tabInicial);
   const [showForm, setShowForm] = useState(false);
   const [showCargaMasiva, setShowCargaMasiva] = useState(false);
@@ -64,15 +64,19 @@ export function GastosView() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} activationMode="manual" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="registrar" className="flex items-center gap-2">
-            <ClipboardList className="w-4 h-4" />
-            Registrar
-          </TabsTrigger>
           <TabsTrigger value="historial" className="flex items-center gap-2">
             <History className="w-4 h-4" />
             Historial
           </TabsTrigger>
+          <TabsTrigger value="registrar" className="flex items-center gap-2">
+            <ClipboardList className="w-4 h-4" />
+            Registrar
+          </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="historial" className="mt-6">
+          <GastosList key={refreshKey} onEdit={handleEditGasto} />
+        </TabsContent>
 
         <TabsContent value="registrar" className="mt-6 space-y-6">
           <div className="flex flex-wrap gap-3">
@@ -102,10 +106,6 @@ export function GastosView() {
           </div>
 
           <GastosBatchTable catalogs={catalogs} onSaved={handleBatchSaved} />
-        </TabsContent>
-
-        <TabsContent value="historial" className="mt-6">
-          <GastosList key={refreshKey} onEdit={handleEditGasto} />
         </TabsContent>
       </Tabs>
 

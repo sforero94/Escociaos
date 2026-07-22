@@ -444,3 +444,63 @@ input[type='number'] {
   background-color: var(--sidebar-accent);
   color: var(--primary);
 }
+
+/* Gastos historial — mobile filter collapse.
+   Defined here because src/index.css is a FROZEN pre-compiled Tailwind build
+   that ships no `sm:hidden` / `sm:flex` utilities: writing them in JSX would
+   silently do nothing. Breakpoint matches Tailwind's `sm` (640px). */
+
+/* Toggle button: only reachable on mobile, where the filters are collapsed. */
+.filtros-toggle {
+  display: inline-flex;
+}
+
+/* Second line of a gastos row, mobile only: carries the fecha + categoría that
+   desktop shows in its own column / inline after the name. The desktop halves
+   use `hidden sm:block`, which the frozen build does provide. */
+.gasto-meta-movil {
+  display: block;
+}
+
+/* On mobile the value column leaves the name too little room to read on one
+   line, so let it wrap to two before ellipsing. Desktop keeps `truncate`. */
+@media (max-width: 639px) {
+  .gasto-nombre {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+/* Filter group: hidden on mobile until toggled open. From `sm` up it becomes
+   `display: contents`, so its children flow into the parent flex row exactly
+   as they did before this wrapper existed — desktop layout is untouched. */
+.filtros-colapsables {
+  display: none;
+}
+
+.filtros-colapsables.abierto {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+@media (min-width: 640px) {
+  .filtros-toggle {
+    display: none;
+  }
+
+  .gasto-meta-movil {
+    display: none;
+  }
+
+  .filtros-colapsables,
+  .filtros-colapsables.abierto {
+    display: contents;
+  }
+}
