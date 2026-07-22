@@ -34,6 +34,17 @@ import {
   type PerfilEstacional,
   type EventoFumigacion,
 } from './priorizacion-scouting.ts';
+import {
+  construirPeriodos,
+  construirResumenPyG,
+  construirResumenFlujoCaja,
+  type DatosReportes,
+  type GanadoRow,
+  type GastoRow,
+  type IngresoRow,
+  type ModoReporte,
+  type VistaReporte,
+} from './reportes-financieros.ts';
 
 // ============================================================================
 // TIPOS
@@ -82,6 +93,27 @@ async function supabaseQuery(table: string, query: string): Promise<unknown[]> {
     throw new Error(`Query failed on ${table} (${res.status}): ${errText.slice(0, 200)}`);
   }
   return await res.json();
+}
+
+/**
+ * Igual que supabaseQuery pero paginando hasta traer todo.
+ *
+ * PostgREST corta en 1.000 filas por defecto y NO avisa. `fin_gastos` tiene
+ * ~1.250 filas por año y los reportes financieros leen dos años, así que una
+ * consulta sin paginar devolvería un P&G incompleto que se ve normal.
+ */
+async function supabaseQueryAll(table: string, query: string): Promise<unknown[]> {
+  const PAGINA = 1000;
+  const MAX_PAGINAS = 20;
+  const filas: unknown[] = [];
+
+  for (let p = 0; p < MAX_PAGINAS; p += 1) {
+    const pagina = await supabaseQuery(table, `${query}&limit=${PAGINA}&offset=${p * PAGINA}`);
+    filas.push(...pagina);
+    if (pagina.length < PAGINA) return filas;
+  }
+  console.warn(`[Esco] supabaseQueryAll llegó al tope de páginas en ${table}`);
+  return filas;
 }
 
 async function supabaseInsert(table: string, data: Record<string, unknown>): Promise<unknown> {
@@ -206,7 +238,7 @@ const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'get_financial_summary',
-    description: 'Obtiene resumen financiero: gastos (solo Confirmados), ingresos o transacciones de ganado con categorias, proveedores y totales agregados. Puede filtrar por negocio (ej: Hato Lechero, Aguacate, Ganaderia). Gastos e ingresos incluyen desglose por categoria. Ganado incluye totales de compras/ventas y desglose por finca.',
+    description: 'Lista y desglosa movimientos financieros: gastos (solo Confirmados), ingresos o transacciones de ganado con categorias, proveedores y totales agregados. Puede filtrar por negocio (ej: Hato Lechero, Aguacate, Ganaderia). Gastos e ingresos incluyen desglose por categoria. Ganado incluye totales de compras/ventas y desglose por finca. NO uses este tool para calcular utilidad, margen ni rentabilidad: aqui la compra de ganado aparece como salida de dinero y no como inventario, asi que restar ingresos menos gastos da un resultado que CONTRADICE al P&G oficial. Para "cuanto gano/perdio", margen, utilidad, costo por kilo/litro o flujo de caja usa get_pyg_flujo_caja.',
     parameters: {
       type: 'object',
       properties: {
@@ -456,6 +488,28 @@ const TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: 'get_pyg_flujo_caja',
+    description: 'Estado de resultados (P&G) y flujo de caja por negocio, con las MISMAS reglas contables que la pantalla /finanzas/reportes. Usar SIEMPRE para preguntas de rentabilidad, utilidad, margen, "cuánto ganó/perdió un negocio", costo por kilo/litro, margen por cabeza, o movimiento de caja mes a mes. El P&G trae: Ingresos → Costos directos → Margen de contribución → Gastos indirectos → Utilidad operativa, en columnas acumuladas (Q1, Q1-Q2, Q1-Q3, Año) o por cosecha (solo aguacate). Reglas clave: solo gastos Confirmados; la COMPRA de ganado NO es gasto (es inventario) y solo el costo de las cabezas vendidas entra al P&G; en el flujo de caja esa compra SÍ es salida. Prefiere este tool sobre get_financial_summary cuando la pregunta sea de resultado o rentabilidad; get_financial_summary sirve para listar gastos/ingresos por categoría o proveedor, no para calcular utilidad.',
+    parameters: {
+      type: 'object',
+      properties: {
+        vista: {
+          type: 'string',
+          description: 'Negocio: global (todos, incluye Oficina Central y Caballos), aguacate, ganado, hato. Default: global',
+        },
+        anio: { type: 'number', description: 'Año del reporte. Default: año en curso' },
+        modo: {
+          type: 'string',
+          description: 'trimestres (acumulados Q1/Q1-Q2/Q1-Q3/Año) o cosecha (Principal/Traviesa, SOLO aguacate). Default: trimestres',
+        },
+        incluir_flujo_caja: {
+          type: 'boolean',
+          description: 'Incluir el flujo de caja mensual de 12 meses además del P&G. Default false',
+        },
+      },
+    },
+  },
+  {
     name: 'get_tareas',
     description: 'Obtiene las tareas/labores del tablero Kanban de labores (planeadas y en ejecución): estado (Banco, Programada, En Proceso, Completada, Cancelada), prioridad (Alta/Media/Baja), categoría, lote, responsable, jornales estimados y fechas estimadas/reales. Usar para "qué tareas hay pendientes/programadas/en proceso", "labores por lote", "carga de trabajo planificada". Distinto de get_labor_summary, que reporta jornales YA ejecutados (registros_trabajo).',
     parameters: {
@@ -554,6 +608,7 @@ async function executeTool(name: string, args: Record<string, unknown>, userId?:
       case 'get_beehive_data': result = await execBeehiveData(args); break;
       case 'get_budget_data': result = await execBudgetData(args); break;
       case 'get_ganado_inventory': result = await execGanadoInventory(args); break;
+      case 'get_pyg_flujo_caja': result = await execPygFlujoCaja(args); break;
       case 'get_tareas': result = await execTareas(args); break;
       case 'get_weekly_reports': result = await execWeeklyReports(args); break;
       case 'get_pest_risk_priorizacion': result = await execPestPriorizacion(args); break;
@@ -2480,6 +2535,118 @@ async function execBudgetData(args: Record<string, unknown>): Promise<string> {
 // Inventario vivo de ganado (issue #51): conteo físico por ubicación →
 // finca → potrero, con variación 30 días y pendientes de confirmar.
 // ----------------------------------------------------------------------------
+/**
+ * P&G + flujo de caja, con las mismas reglas contables que /finanzas/reportes.
+ * El cálculo vive en `reportes-financieros.ts`, un port a mano de los motores
+ * del frontend guardado por `src/__tests__/reportesFinancierosParidad.test.ts`.
+ */
+async function execPygFlujoCaja(args: Record<string, unknown>): Promise<string> {
+  const vista = (['global', 'aguacate', 'ganado', 'hato'].includes(String(args.vista))
+    ? String(args.vista)
+    : 'global') as VistaReporte;
+  const anio = Number.isFinite(Number(args.anio))
+    ? Number(args.anio)
+    : new Date().getFullYear();
+  // El modo cosecha solo tiene sentido en aguacate: es su ciclo productivo.
+  const modo: ModoReporte =
+    args.modo === 'cosecha' && vista === 'aguacate' ? 'cosecha' : 'trimestres';
+  const incluirFlujo = args.incluir_flujo_caja === true;
+
+  // Dos años de gastos: el modo cosecha necesita el 2º semestre del anterior.
+  const desdeGastos = `${anio - 1}-01-01`;
+  const hastaGastos = `${anio}-12-31`;
+
+  const [negocios, catGastos, conceptos, catIngresos, gastosRaw, ingresosRaw, ganadoRaw, parametros] =
+    await Promise.all([
+      supabaseQuery('fin_negocios', 'select=id,nombre'),
+      supabaseQuery('fin_categorias_gastos', 'select=id,nombre,tipo_costo'),
+      supabaseQuery('fin_conceptos_gastos', 'select=id,tipo_costo'),
+      supabaseQuery('fin_categorias_ingresos', 'select=id,nombre'),
+      supabaseQueryAll(
+        'fin_gastos',
+        `select=id,fecha,negocio_id,valor,estado,categoria_id,concepto_id&fecha=gte.${e(desdeGastos)}&fecha=lte.${e(hastaGastos)}&order=id`
+      ),
+      supabaseQueryAll('fin_ingresos', 'select=id,fecha,negocio_id,valor,categoria_id,cosecha,cantidad&order=id'),
+      // Histórico COMPLETO: el costo promedio móvil del ganado es path-dependent.
+      supabaseQueryAll('fin_transacciones_ganado', 'select=id,fecha,tipo,cantidad_cabezas,kilos_pagados,valor_total&order=id'),
+      supabaseQuery('fin_parametros', 'select=clave,anio,valor'),
+    ]);
+
+  const mapaCatGastos = new Map(
+    (catGastos as { id: string; nombre: string; tipo_costo: string | null }[]).map((c) => [c.id, c])
+  );
+  const mapaConceptos = new Map(
+    (conceptos as { id: string; tipo_costo: string | null }[]).map((c) => [c.id, c])
+  );
+  const mapaCatIngresos = new Map(
+    (catIngresos as { id: string; nombre: string }[]).map((c) => [c.id, c])
+  );
+
+  const tipoCosto = (v: string | null | undefined) =>
+    v === 'directo' || v === 'indirecto' ? v : null;
+  const num = (v: unknown): number => {
+    const n = typeof v === 'number' ? v : parseFloat(String(v ?? ''));
+    return Number.isFinite(n) ? n : 0;
+  };
+  const numONull = (v: unknown): number | null => {
+    if (v == null) return null;
+    const n = typeof v === 'number' ? v : parseFloat(String(v));
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const datos: DatosReportes = {
+    anio,
+    negocios: negocios as { id: string; nombre: string }[],
+    gastos: (gastosRaw as Record<string, unknown>[]).map((g): GastoRow => {
+      const cat = mapaCatGastos.get(String(g.categoria_id));
+      const con = mapaConceptos.get(String(g.concepto_id));
+      return {
+        id: String(g.id),
+        fecha: String(g.fecha),
+        negocio_id: String(g.negocio_id),
+        valor: num(g.valor),
+        estado: g.estado == null ? null : String(g.estado),
+        categoria_id: g.categoria_id == null ? null : String(g.categoria_id),
+        categoria_nombre: cat?.nombre ?? null,
+        categoria_tipo_costo: tipoCosto(cat?.tipo_costo),
+        concepto_tipo_costo: tipoCosto(con?.tipo_costo),
+      };
+    }),
+    ingresos: (ingresosRaw as Record<string, unknown>[]).map((i): IngresoRow => ({
+      id: String(i.id),
+      fecha: String(i.fecha),
+      negocio_id: String(i.negocio_id),
+      valor: num(i.valor),
+      categoria_id: i.categoria_id == null ? null : String(i.categoria_id),
+      categoria_nombre: mapaCatIngresos.get(String(i.categoria_id))?.nombre ?? null,
+      cosecha: i.cosecha == null ? null : String(i.cosecha),
+      cantidad: numONull(i.cantidad),
+    })),
+    ganado: (ganadoRaw as Record<string, unknown>[])
+      .filter((t) => t.tipo === 'compra' || t.tipo === 'venta')
+      .map((t): GanadoRow => ({
+        id: String(t.id),
+        fecha: String(t.fecha),
+        tipo: t.tipo as 'compra' | 'venta',
+        cantidad_cabezas: num(t.cantidad_cabezas),
+        kilos_pagados: numONull(t.kilos_pagados),
+        valor_total: num(t.valor_total),
+      })),
+    parametros: (parametros as Record<string, unknown>[]).map((p) => ({
+      clave: String(p.clave),
+      anio: p.anio == null ? null : Number(p.anio),
+      valor: num(p.valor),
+    })),
+  };
+
+  const pyg = construirResumenPyG(datos, construirPeriodos(anio, modo), vista, modo);
+  const salida: Record<string, unknown> = { pyg };
+
+  if (incluirFlujo) salida.flujo_caja = construirResumenFlujoCaja(datos, vista);
+
+  return JSON.stringify(salida);
+}
+
 async function execGanadoInventory(args: Record<string, unknown>): Promise<string> {
   const { ubicacion_name, finca_name, include_movimientos } = args as {
     ubicacion_name?: string;
@@ -2756,6 +2923,14 @@ DOMINIOS DE DATOS DISPONIBLES:
 - Inventario: productos agricolas, stock, movimientos, compras
 - Finanzas: gastos (solo Confirmados), ingresos, transacciones de ganado, categorias, busqueda por nombre
 - Inventario vivo de ganado (get_ganado_inventory): cabezas actuales (novillos/toros) por ubicacion → finca → potrero, cabezas/ha, peso promedio, variacion 30 dias, muertes/traslados/ajustes y movimientos pendientes de confirmar. Para el DINERO de compras/ventas de ganado usa get_financial_summary type=ganado; para el CONTEO fisico usa get_ganado_inventory
+- P&G y flujo de caja (get_pyg_flujo_caja): estado de resultados por negocio (global, aguacate, ganado, hato) con Ingresos → Costos directos → Margen de contribucion → Gastos indirectos → Utilidad operativa, en trimestres acumulados o por cosecha (aguacate), mas indicadores unitarios (costo por kilo, $/litro, margen por cabeza) y flujo de caja mensual opcional. USA ESTE TOOL para toda pregunta de rentabilidad, utilidad, margen o "cuanto gano/perdio X"; usa get_financial_summary solo para listar o desglosar gastos e ingresos por categoria, proveedor o comprador.
+  REGLAS CONTABLES que debes respetar al interpretar sus cifras, porque son la razon de que no coincidan con una simple resta de ingresos menos gastos:
+  · Solo cuentan gastos Confirmados; los Pendientes salen listados en advertencias y NO estan sumados.
+  · Comprar ganado NO es un gasto: es inventario. Solo el costo de las cabezas VENDIDAS entra al P&G, a promedio ponderado por cabeza. En el flujo de caja la compra SI aparece como salida. Si el usuario se extraña de que un mes con compra grande no golpee la utilidad, esa es la razon.
+  · Un periodo de ganado sin ventas da margen negativo y es correcto: es el costo de sostener el hato mientras engorda.
+  · En modo cosecha, cada cosecha carga los gastos del semestre en que se trabajo esa fruta (Principal 2026 ← jul-dic 2025), asi que mezcla dos años calendario a proposito.
+  · No hay prorrateo entre negocios: los gastos de Oficina Central no los carga ningun negocio y solo aparecen en la vista global. Al comparar utilidades por negocio, mencionalo si es relevante.
+  · Si las advertencias mencionan que falta el inventario inicial de ganado, avisa que el costo de venta es aproximado.
 - Presupuesto: control presupuestal por concepto de gasto, ejecucion real vs presupuesto asignado, % de ejecucion, comparativo año anterior. Soporta multiples trimestres (ej: Q1+Q2)
 - Produccion: kilos por lote, kg/arbol, cosechas principal/traviesa
 - Cosechas y Despachos: kilos cosechados, preseleccion, despachos a clientes
