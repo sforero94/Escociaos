@@ -312,8 +312,8 @@ Rutas lazy bajo `/hato-lechero` — la estructura y los labels ya están fijados
 | `/hato-lechero/produccion` | Producción | `ProduccionView` — pesaje semanal por vaca + producción quincenal + productividad (V2/V3/V4) |
 | `/hato-lechero/hato` | Hato | `AnimalesList` |
 | `/hato-lechero/hato/:id` | — | `HojaDeVida` — timeline (todos los servicios, V7) + chequeos + curva PL + genealogía madre+padre (V8) |
-| `/hato-lechero/chequeos` | Chequeos | `ChequeosList` + subir Excel (B0/V10) |
-| `/hato-lechero/chequeos/:id` | — | `ChequeoCapturaGrid` (camino manual B1, borrador → cerrado) |
+| `/hato-lechero/chequeos` | Chequeos | `ChequeosList` + **exportar planilla XLSX pre-llenada (B5)** + `SubirChequeoExcel` (B0/V10) |
+| `/hato-lechero/chequeos/:id` | — | `ChequeoDiffReview` — revisión del diff antes de comprometer. **(D-4, 2026-07-22: `ChequeoCapturaGrid`/B1 eliminado del alcance — no hay internet en la finca, el chequeo nunca se captura en la app.)** |
 | `/hato-lechero/alertas` | Alertas | `AlertasView` — cola con estados y respuestas |
 | `/hato-lechero/pajillas` | Pajillas *(6º ítem nuevo)* | `PajillasView` — catálogo de toros + inventario (Épica G) |
 | `/configuracion` → tab "Hato" | *(en Configuración global)* | `AjustesHato` — razas, secado, umbrales (Épica H) |
@@ -406,12 +406,59 @@ Este documento. Entrega: alcance, épicas priorizadas, modelo de datos, arquitec
 - **Cierre (2026-07-22)**: las 8 migraciones (renumeradas 053–060, ver nota al inicio del documento) se aplicaron a producción. Verificado en la base viva: 15 tablas con RLS habilitada + 32 políticas, 2 vistas con `security_invoker=true`, 9 defaults en `hato_config` y 5 filas en `hato_alertas_config`, el FK `hato_eventos.alerta_id` back-patcheado, la guarda `es_hato` presente en `fn_crear_movimiento_pendiente_ganado()` (cuyo cuerpo previo se confirmó byte-idéntico al de 044 antes de reemplazarlo), las columnas `es_hato`/`hato_animal_id` en `fin_transacciones_ganado` con sus 8 políticas (4 de 023 + 4 nuevas de Administrador), y el cron `hato-alertas-tick` activo en `45 10 * * *`. Los advisors de seguridad de Supabase no reportan ningún hallazgo nuevo sobre `hato_*`.
 - **Pendiente fuera de banda (no bloquea S2)**: aprovisionar el secreto de Vault `hato_alertas_tick_secret` y su gemelo `HATO_ALERTAS_TICK_SECRET` en los secretos de la edge function. Hasta que S6 despliegue `/hato/alertas/tick`, el cron devuelve un 404 diario benigno.
 
-**S2 — Backend: Motor de lógica pura (`calculosHato.ts`)**
+**S2 — Backend: Motor de lógica pura (`calculosHato.ts`) (completada 2026-07-22)**
 - Objetivo: parsers de planilla (fechas multi-valor, `#VALUE!`), descomposición SX→eventos (incl. servicios múltiples/fallidos, V7), motor de fechas (SECAR **dependiente de raza leída de `hato_config`**, V6; PP), derivación de estado, cálculo de PL/proyecciones y productividad (V4).
 - Insumos: §6 (criterios de aceptación por épica), §7.1 (tabla de descomposición SX, `hato_config`), los 5 archivos Excel como fixtures de test.
 - Entregable: `src/utils/calculosHato.ts` + `calculosHato.test.ts`, copia en `src/supabase/functions/server/` + `calculosHatoParidad.test.ts`. Los parámetros (secado por raza, umbrales) se inyectan desde `hato_config`, nunca constantes — los tests cubren varias razas.
 - Depende de: nada — sin dependencia real de esquema, corre en paralelo a S1.
 - Desbloquea: S3, S4, S6, S7.
+- **Cierre (2026-07-22)**: entregado `src/utils/calculosHato.ts` (motor puro, cero imports, determinista) + `calculosHato.test.ts` (80 casos) + las DOS copias del servidor (`src/supabase/functions/server/` y `supabase/functions/make-server-1ccce916/`) + `calculosHatoParidad.test.ts` (13 casos). Suite completa 756/756, typecheck limpio, lint 0 errores. El test de paridad se verificó por mutación: invertir una comparación sólo en la copia del servidor hace fallar tanto la capa estructural (byte-identidad) como la de comportamiento.
+- **Barrido adversarial previo a la implementación**: se recorrieron las **45 hojas de chequeo completas** (36 fechas únicas tras deduplicar) fila por fila, más las 7 hojas TERNERAS y las 6 de leche. Eso refutó cuantitativamente tres supuestos con los que se iba a codificar:
+  1. **`TP` no es "meses en unas hojas, semanas en otras"** — es una fórmula `TODAY()` congelada (`F_Servicio + TP×30,44` converge a la fecha de último guardado del archivo, sin importar el año real de la hoja). No se lee nunca, ni para validación cruzada.
+  2. **`SECAR` se deriva en un paso desde `F Servicio`**, no encadenando sobre `PP`: 99,4% vs 94,6% de coincidencia sobre 1.156 filas. La diferencia es doble *clamping* de fecha cuando el servicio cae en día 29-31. Algebraicamente equivalentes, numéricamente no.
+  3. **Los "nombres de vaca en la columna SX"** (`RICARENA`, `VIKINGA`…) no son errores de digitación: son una **sub-tabla ajena embebida sin marcador** al final de una hoja normal (`CHEQUEO AGOSTO 2024` filas 54-58, "Deben entrar a servicio estas terneras") con otro desfase de columnas.
+- **Fuera de alcance de S2, movido a S3 ("Extract")**: resolución de estructura de grilla — fallback posicional cuando el encabezado trae cuatro columnas llamadas `TP` (`AGOSTI 1 2023`), filas fantasma por columna decorativa de índice (`CHEQUE MAYO 25`: 225 de 274 filas), desfase de columnas en hojas sin encabezado, y sub-tablas embebidas. El motor de S2 opera sobre valores de celda ya extraídos; no ve la grilla 2D.
+- **Bloqueante descubierto para S3/F1**: al menos **9 chapetas están duplicadas entre animales concurrentemente activos**, incluidas `#162` (ESMERALDA/VITROLA) y `#175` (MONA/MARGARITA) **en el chequeo de julio 2026**, el que F1 usará como "hato actual". Viola el `UNIQUE(numero)` de `hato_animales`, ya aplicado a producción. `detectarColisionesChapeta()` las detecta y reporta; **desempatarlas es decisión de Martha**, y se suma al checkpoint humano de S3.
+
+**Preguntas abiertas de S2 para el dueño** (ninguna resuelta inventando):
+1. ~~`hato_pesajes_leche.litros_total` es `GENERATED`…~~ **RESUELTA 2026-07-22** → migración 061 (ver abajo).
+2. ¿Qué significan `Mv` (16 filas) y `gem+` (4)? El parser los marca `desconocido` con el crudo intacto. **Sigue abierta.**
+3. Una fecha en `ESTADO`/`OBS` ¿es secado real o parto real? La columna Gen 1 cambió de nombre (`SEC REAL`→`parto real`) a mitad de 2019; QA midió 57/43, no es resoluble por regla. **Sigue abierta.**
+4. `FLUJO LECHE` trae litros **mensuales** y `hato_produccion_quincenal` es quincenal — ¿se carga como quincena 1 con el total del mes, o queda fuera del backfill? **Sigue abierta.**
+5. ~~`meses_secado_por_raza` no incluye `gyr`…~~ **RESUELTA**: por ahora todas holstein (`_default: 2` ya coincide). Sin cambio de config.
+6. Las 9 colisiones de chapeta. **Sigue abierta — bloquea S3/F1.**
+7. TERNERAS: los valores de `PADRE` incluyen `yaguen`/`fabace`, que parecen raza y no identidad de toro. **Sigue abierta.**
+
+---
+
+### Decisiones del dueño — 2026-07-22
+
+Cuatro respuestas que cierran preguntas abiertas y **cambian el alcance de S4**.
+
+**D-1 · Pesaje de leche (Épica D1).** El pesaje se hace **en la finca**, y se necesita **una sola lectura por vaca por jornada: el total (am + pm ya sumados)**. No existe desglose por ordeño, ni en el histórico ni a futuro.
+→ **Migración 061 aplicada a producción**: `litros_total` deja de ser columna generada (`DROP EXPRESSION`), pasa a `NOT NULL` con `CHECK >= 0`, y es el dato canónico. `litros_am`/`litros_pm` quedan como detalle opcional que ya no lo alimenta. Motivo: con la columna generada, cargar un total obligaba a mentir (total en `litros_am`) o a almacenar `0`, y un 0 almacenado es indistinguible de "esta vaca dio 0 litros" — justo lo que prohíbe la regla "sin dato (—), nunca 0".
+
+**D-2 · `ESTADO = 'ok'` = vacía APTA esperando celo.** → **Migración 062 aplicada a producción.** Implementarla destapó que `hato_chequeo_vacas` guardaba `estado_raw` sin contraparte normalizada (a diferencia de todas las demás columnas de esa tabla), así que la clasificación no tenía dónde aterrizar: 062 agrega `hato_chequeo_vacas.estado` y lo expone en la vista como `ultimo_estado_chequeo`. Además crea la clave propia `dias_espera_voluntaria_post_parto` (**default provisional 60, sin confirmar**) — el motor estaba reutilizando `dias_servicio_sin_confirmacion` como proxy, acoplando dos conceptos que cuentan desde eventos distintos (servicio vs. parto). Es un estado normal y sano, no un problema. La máquina de estados de `calculosHato.ts` debe separar **vacía normal** (`ok`/`0k`/`OK`, o post-parto dentro del período de espera) de **vacía problema** (`rech`/`rechq`/`rec`/`r`, o servicios repetidos sin concepción).
+→ **"Días abiertos" (V14) queda definido**: días desde el último parto hasta la concepción (servicio con preñez confirmada); si sigue vacía, hasta la fecha de referencia. `null` —nunca 0— cuando no hay parto previo (una novilla no tiene días abiertos).
+
+**D-3 · Toros, pajillas y razas (Épica G/V6).** Un solo toro propio, **raza Jersey**. **Inventario inicial de pajillas = 0.** Todas las vacas se asumen **holstein** por ahora; las normandas se marcarán después.
+→ `hato_config.meses_secado_por_raza` no cambia (`_default: 2` = holstein). La siembra de `hato_toros` necesita el **nombre** del toro (dato que falta). `hato_pajillas` arranca vacía — la vista `v_hato_pajillas_stock` ya tolera stock 0/negativo sin bloquear (G3).
+
+**D-4 · El chequeo NUNCA se captura en la app — no hay internet en la finca.** ⚠️ **Cambio de alcance de S4.**
+El flujo real es un ciclo de ida y vuelta sobre Excel:
+```
+app IMPRIME planilla XLSX pre-llenada
+  → chequeo a mano en la finca (papel)
+    → alguien actualiza el XLSX a mano
+      → se sube a Escociaos
+        → actualización automática (parse + diff + aprobar)
+```
+Consecuencias directas sobre §6 Épica B y §7.5:
+- **B5 "planilla pre-llenada" deja de ser trabajo futuro y pasa a ser núcleo**: sin la exportación no hay ciclo. Es la mitad de ida del flujo.
+- **B1 `ChequeoCapturaGrid` (captura manual en grilla) se elimina del alcance.** La ruta `/hato-lechero/chequeos/:id` ya no necesita una grilla editable de captura; sí una vista de revisión del diff antes de comprometer.
+- **B0/V10 `SubirChequeoExcel` es el único camino de entrada**, no "el recomendado para arrancar".
+- Simplificación real que esto habilita: el **formato de ida y vuelta lo controlamos nosotros**, así que la deriva de encabezados de tres generaciones (§2 del análisis de S2) sólo aplica al **import histórico, una sola vez**. El parser recurrente lee nuestro propio layout. Conviene separar "parser histórico tolerante" de "parser del formato propio" sin perder la tolerancia del primero.
+- Requisito nuevo que se deriva: la exportación y el parser tienen que ser **inversos verificables** — un XLSX generado y vuelto a subir sin cambios debe producir un diff vacío. Es un test de ida y vuelta, no una promesa.
 
 **S3 — Backend/Data: Pipeline de importación + endpoint de subida de chequeo (B0/V10)**
 - Objetivo: `scripts/import-hato/` (extract → normalize → resolve → load → verify), que además **siembra `hato_toros`** desde los toros históricos e infiere `raza` donde el dato lo permita. Expone la etapa Extract→Normalize como **endpoint de subida de Excel por chequeo** (B0) que reusa el mismo parser de S2 y devuelve un diff para aprobar.

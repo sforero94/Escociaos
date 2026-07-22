@@ -350,7 +350,7 @@ describe('contrato de esquema — Hato Lechero S1 (053-060)', () => {
       const region = extractTableRegion(c, 'hato_pesajes_leche');
       expect(
         /UNIQUE\s*\(\s*animal_id\s*,\s*fecha\s*\)/i.test(region),
-        'Falta UNIQUE (animal_id, fecha) en hato_pesajes_leche — sin esta restricción, un mismo animal podría tener dos pesajes el mismo día; litros_total (la columna GENERATED que suma AM+PM) quedaría duplicado y la curva de PL de la hoja de vida se distorsiona.',
+        'Falta UNIQUE (animal_id, fecha) en hato_pesajes_leche — sin esta restricción, un mismo animal podría tener dos pesajes el mismo día, se duplicaría litros_total y la curva de PL de la hoja de vida se distorsiona. (Nota: 054 declaró litros_total como columna GENERATED sobre AM+PM; la migración 061 la convirtió en columna normal NOT NULL — el pesaje en finca produce una sola cifra por vaca. Este archivo describe 054 tal como se aplicó y no se edita.)',
       ).toBe(true);
     });
 
