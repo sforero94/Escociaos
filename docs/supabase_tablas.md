@@ -948,7 +948,8 @@ Almacenamiento key-value (posiblemente para caché o configuración).
 
 > Añadido 2026-07-22 (S1 del módulo Hato Lechero, migraciones `053`–`060` de
 > `src/sql/migrations/`; ver `docs/plan_hato_lechero_module.md` §7.1–7.2 y el
-> brief técnico de la sesión). Estas 15 tablas + 2 vistas son posteriores al
+> brief técnico de la sesión). **Aplicadas a producción el 2026-07-22.**
+> Estas 15 tablas + 2 vistas son posteriores al
 > conteo de "32 tablas" de la Visión General (§ arriba) — ese conteo no se
 > actualizó, ver la nota de estado de mantenimiento al inicio del documento.
 > Prefijo `hato_` (dominio propio, distinto de `gan_*` — ver

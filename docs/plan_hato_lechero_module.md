@@ -397,12 +397,14 @@ La única referencia temporal real en todo el plan es un evento externo fijo —
 **S0 — CPO + CTO: Diseño (completada)**
 Este documento. Entrega: alcance, épicas priorizadas, modelo de datos, arquitectura de integraciones, motor de alertas, estrategia de importación, arquitectura de frontend, riesgos.
 
-**S1 — CTO/Backend: Esquema y RLS**
+**S1 — CTO/Backend: Esquema y RLS (completada — aplicada a producción 2026-07-22)**
 - Objetivo: migraciones **050** `create_hato_core` (incluye `raza`, `padre_toro_id`), **051** `create_hato_leche` (incluye `hato_produccion_quincenal`), **052** `create_hato_tratamientos`, **053** `create_hato_alertas`, **054** `create_hato_toros_pajillas` (Épica G), **055** `create_hato_config` (Épica H, con defaults precargados de razas/secado/umbrales), **056** `fin_transacciones_ganado_hato_link`, **057** `hato_alertas_cron` + vista `v_hato_estado_actual`. **Arranca en 050 — 049 la tomó el sidebar reorg.** Actualizar `docs/supabase_tablas.md` y CLAUDE.md.
 - Insumos: §7.1–7.2 de este plan.
 - Entregable: esquema aplicado (un solo PR, para evitar la colisión de numeración que ya ocurrió antes en el repo) + RLS verificada. `hato_config` con defaults hace que el motor de fechas funcione sin UI de Ajustes.
 - Depende de: nada — sesión de arranque.
 - Desbloquea: S3, S4, S6, S9, S10.
+- **Cierre (2026-07-22)**: las 8 migraciones (renumeradas 053–060, ver nota al inicio del documento) se aplicaron a producción. Verificado en la base viva: 15 tablas con RLS habilitada + 32 políticas, 2 vistas con `security_invoker=true`, 9 defaults en `hato_config` y 5 filas en `hato_alertas_config`, el FK `hato_eventos.alerta_id` back-patcheado, la guarda `es_hato` presente en `fn_crear_movimiento_pendiente_ganado()` (cuyo cuerpo previo se confirmó byte-idéntico al de 044 antes de reemplazarlo), las columnas `es_hato`/`hato_animal_id` en `fin_transacciones_ganado` con sus 8 políticas (4 de 023 + 4 nuevas de Administrador), y el cron `hato-alertas-tick` activo en `45 10 * * *`. Los advisors de seguridad de Supabase no reportan ningún hallazgo nuevo sobre `hato_*`.
+- **Pendiente fuera de banda (no bloquea S2)**: aprovisionar el secreto de Vault `hato_alertas_tick_secret` y su gemelo `HATO_ALERTAS_TICK_SECRET` en los secretos de la edge function. Hasta que S6 despliegue `/hato/alertas/tick`, el cron devuelve un 404 diario benigno.
 
 **S2 — Backend: Motor de lógica pura (`calculosHato.ts`)**
 - Objetivo: parsers de planilla (fechas multi-valor, `#VALUE!`), descomposición SX→eventos (incl. servicios múltiples/fallidos, V7), motor de fechas (SECAR **dependiente de raza leída de `hato_config`**, V6; PP), derivación de estado, cálculo de PL/proyecciones y productividad (V4).
