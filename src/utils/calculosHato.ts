@@ -74,6 +74,12 @@ export interface HatoConfig {
   dias_servicio_sin_confirmacion: number;
   /** Días desde el último chequeo para disparar `rechequeo_due` a nivel hato (§7.3). */
   dias_rechequeo_due: number;
+  /** Días tras el parto durante los cuales una vaca vacía es NORMAL (período
+   * de espera voluntario), no un problema (D-2, migración 062). Concepto
+   * distinto de `dias_servicio_sin_confirmacion`: ese cuenta desde el
+   * SERVICIO, este desde el PARTO. Tenerlos separados evita que cambiar uno
+   * mueva en silencio la clasificación del otro. */
+  dias_espera_voluntaria_post_parto: number;
 }
 
 // ============================================================================
@@ -719,6 +725,115 @@ export function parseValorNumerico(raw: unknown): ResultadoValorNumerico {
   return { valor: null, issues: [{ crudo, motivo: 'texto no numérico' }] };
 }
 
+// ----------------------------------------------------------------------------
+// 1.e `parseEstado` -- celda `ESTADO`/`OBS`. Distingue "vacía normal" de
+// "vacía problema" (decisión confirmada por el dueño, V14) y preserva la
+// fecha heredada de Gen 1 cuando esta columna trae `SEC REAL`/`parto real`
+// en vez de un código (doc S2 §2/§7, QA §2.10).
+// ----------------------------------------------------------------------------
+
+export type TipoEstado =
+  | 'vacia_apta' // ok/0k -- vacía NORMAL y sana, esperando celo (V14, confirmado por el dueño)
+  | 'vacia_problema' // rech/rechq/rec/r -- requiere rechequeo/revisión veterinaria
+  | 'fecha_heredada' // el valor es una fecha -- residuo de SEC REAL/parto real de Gen 1
+  | 'desconocido' // código no reconocido (ej. 'momia', '3m') -- no se inventa semántica
+  | 'vacio'; // celda vacía -- no se checó, nunca "0"
+
+export interface ResultadoEstado {
+  crudo: string;
+  tipo: TipoEstado;
+  /** Solo presente cuando `tipo === 'fecha_heredada'`. */
+  fecha?: string;
+  incierto: boolean;
+  issues: ParseIssue[];
+}
+
+/** Intenta leer `texto` como una fecha completa (día/mes/año, cualquier
+ * separador, reutilizando la misma extracción numérica que `F Servicio`; o
+ * ISO directo `yyyy-mm-dd`, forma en que a veces llega si el extractor de
+ * origen ya serializó la celda como fecha). `null` si no hay ninguna fecha
+ * completa reconocible -- nunca lanza. */
+function intentarExtraerFechaHeredada(texto: string): string | null {
+  const isoDirecto = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(texto);
+  if (isoDirecto) {
+    const anio = parseInt(isoDirecto[1], 10);
+    const mes = parseInt(isoDirecto[2], 10);
+    const dia = parseInt(isoDirecto[3], 10);
+    if (anioEnRango(anio) && mes >= 1 && mes <= 12 && dia >= 1 && dia <= 31) {
+      return construirIso(anio, mes, dia);
+    }
+    return null;
+  }
+  const numeros = texto.match(/\d+/g);
+  if (!numeros) return null;
+  const fragmentos = dividirCorridaLarga(numeros);
+  if (fragmentos.length < 3) return null;
+  const { fecha } = normalizarFechaDDMMYYYY(fragmentos[0], fragmentos[1], fragmentos[2]);
+  return fecha;
+}
+
+/**
+ * Parser de la celda `ESTADO`/`OBS`. `ok`/`0k` (y variantes) es un estado
+ * SANO -- vacía normal esperando celo, NUNCA se trata como un problema; a
+ * diferencia de `rech`/`rechq`/`rec`/`r` (a veces con `?`), que sí indica
+ * que la vaca necesita rechequeo/revisión (V14, confirmado por el dueño).
+ * `'ok rech'` (2 casos reales, ambas señales en una sola celda) resuelve a
+ * `'vacia_problema'`: ante la duda, prevalece la señal más cautelosa, nunca
+ * se oculta un "necesita revisión" detrás de un "ok".
+ *
+ * Esta es la MISMA posición de columna que en Gen 1 traía `SEC REAL`/
+ * `parto real` (doc S2 §2) -- a veces el valor es una fecha en vez de un
+ * código. Esa fecha documenta un evento de un ciclo reproductivo ANTERIOR:
+ * la correspondencia con el SECAR/PP de la fila NO es consistente ni
+ * siquiera dentro de una sola hoja (QA §2.10, 57%/43% de split contra ambas
+ * proyecciones) -- se preserva como `tipo: 'fecha_heredada'` con un issue,
+ * nunca se usa aquí para invalidar o confirmar el ciclo reproductivo vigente.
+ */
+export function parseEstado(raw: unknown): ResultadoEstado {
+  const crudo = convertirRawATexto(raw);
+  if (crudo === '') return { crudo, tipo: 'vacio', incierto: false, issues: [] };
+
+  const incierto = crudo.includes('?');
+  const sinIncertidumbre = incierto ? crudo.replace(/\?/g, '').trim() : crudo;
+
+  const fechaHeredada = intentarExtraerFechaHeredada(sinIncertidumbre);
+  if (fechaHeredada) {
+    return {
+      crudo,
+      tipo: 'fecha_heredada',
+      fecha: fechaHeredada,
+      incierto,
+      issues: [
+        {
+          crudo,
+          motivo:
+            'ESTADO/OBS trae una fecha en vez de un código -- residuo de la columna SEC REAL/parto real de Gen 1; documenta un ciclo reproductivo ANTERIOR, no se usa para validar el ciclo actual, revisar',
+        },
+      ],
+    };
+  }
+
+  const key = sinIncertidumbre.replace(/\s+/g, '').toLowerCase();
+
+  // 'rech' se revisa ANTES que 'ok': 'ok rech' combina ambas señales -- la
+  // más cautelosa prevalece.
+  if (/rech|^rec$|^r$/.test(key)) {
+    return { crudo, tipo: 'vacia_problema', incierto, issues: [] };
+  }
+  if (key === 'ok' || key === '0k') {
+    return { crudo, tipo: 'vacia_apta', incierto, issues: [] };
+  }
+
+  return {
+    crudo,
+    tipo: 'desconocido',
+    incierto,
+    issues: [
+      { crudo, motivo: `código de ESTADO/OBS no reconocido: '${crudo}' -- no se inventa semántica, queda para revisión` },
+    ],
+  };
+}
+
 // ============================================================================
 // BLOQUE 2 — Motor de fechas (todo parametrizado desde HatoConfig)
 // ============================================================================
@@ -1006,6 +1121,15 @@ export interface EstadoActualHatoRow {
    * o muerte, no se proyecta un ciclo de preñez activo con datos que ese
    * evento puede haber invalidado -- ver `derivarEstadoReproductivo`. */
   ultimo_evento_fecha: string | null;
+  /** `tipo` de `parseEstado` sobre el `ESTADO`/`OBS` del último chequeo
+   * cerrado (`'vacia_apta' | 'vacia_problema' | 'fecha_heredada' |
+   * 'desconocido' | 'vacio'`), o `null` si no hay ninguna señal disponible
+   * -- hoy `hato_chequeo_vacas` no tiene una columna normalizada para esto
+   * (ver nota en `derivarEstadoReproductivo`), así que en la práctica este
+   * campo llega `null` hasta que exista esa columna. Requerido (no
+   * opcional) para que cada caller decida explícitamente "no tengo esta
+   * señal" en vez de omitirlo por accidente. */
+  ultimo_estado_chequeo: TipoEstado | null;
 }
 
 export type EstadoReproductivo =
@@ -1039,6 +1163,18 @@ export interface EstadoReproductivoDerivado {
   fecha_probable_parto: string | null;
   dias_abiertos: number | null;
   proxima_a_reemplazo: boolean;
+  /**
+   * Discriminador "¿esta vaca vacía es normal o es un problema?" (V14,
+   * confirmado por el dueño). Solo tiene sentido para los estados
+   * efectivamente "vacía" (`vacia_por_servir`, `parida_reciente`) -- en
+   * cualquier otro estado (preñez activa, cría, terminal, indeterminado)
+   * es `null` porque la pregunta no aplica. Dentro de esos dos estados:
+   * `true`/`false` cuando hay señal (`ultimo_estado_chequeo`, o el tiempo
+   * transcurrido sin nuevo servicio supera `dias_servicio_sin_confirmacion`
+   * como proxy -- ver comentario en el cuerpo de la función); `null` cuando
+   * no hay ninguna señal disponible -- nunca se adivina.
+   */
+  vacia_es_problema: boolean | null;
   alertas: AlertasReproductivas;
 }
 
@@ -1054,6 +1190,35 @@ function calcularRechequeoDue(fila: EstadoActualHatoRow, config: HatoConfig, fec
   return diferenciaDias(fila.ultimo_chequeo_fecha, fechaReferencia) >= config.dias_rechequeo_due;
 }
 
+/** Discrimina "vacía normal" (apta, esperando celo) de "vacía problema"
+ * (V14, confirmado por el dueño): primero por la señal explícita de
+ * `ultimo_estado_chequeo` (`vacia_apta` -> normal, `vacia_problema` ->
+ * problema); si no hay señal, cae a `dias_espera_voluntaria_post_parto`
+ * sobre `diasSinProgreso` (días desde el último parto sin un nuevo
+ * servicio): dentro del período de espera voluntario una vaca vacía es
+ * NORMAL, pasado ese punto es un problema.
+ *
+ * Ese umbral tiene clave propia en `hato_config` desde la migración 062. La
+ * primera versión de este motor reutilizaba `dias_servicio_sin_confirmacion`
+ * como proxy, lo cual acoplaba dos conceptos distintos: cambiar el umbral de
+ * "servicio sin confirmar" movía en silencio la clasificación de vacías.
+ * Separarlos es justamente el punto de la clave nueva.
+ *
+ * Sin `ultimo_estado_chequeo` NI `diasSinProgreso` (nunca hubo parto que
+ * ancle la cuenta), devuelve `null` -- nunca se adivina sin ninguna señal. */
+function clasificarVaciaProblema(
+  ultimoEstadoChequeo: TipoEstado | null,
+  diasSinProgreso: number | null,
+  config: HatoConfig,
+): boolean | null {
+  if (ultimoEstadoChequeo === 'vacia_problema') return true;
+  if (ultimoEstadoChequeo === 'vacia_apta') return false;
+  if (diasSinProgreso !== null) {
+    return diasSinProgreso >= config.dias_espera_voluntaria_post_parto;
+  }
+  return null;
+}
+
 /**
  * Deriva el estado reproductivo actual de un animal y las 4 alertas de
  * §7.3 (secado_due, rechequeo_due, servicio_sin_confirmacion, parto_proximo)
@@ -1061,13 +1226,20 @@ function calcularRechequeoDue(fila: EstadoActualHatoRow, config: HatoConfig, fec
  * umbrales (ventanas, días, partos de reemplazo) salen de `config` -- ninguno
  * vive hardcodeado aquí.
  *
+ * `vacia_es_problema` (V14, confirmado por el dueño): las vacías se
+ * distinguen entre normales (aptas, esperando celo) y problema (necesitan
+ * rechequeo) sin multiplicar los valores de `estado` -- ver el campo en
+ * `EstadoReproductivoDerivado`.
+ *
  * Nota de brecha real encontrada: la regla de `rechequeo_due` del plan §7.3
  * es "`rechq` en el último chequeo, O >60 días desde el último chequeo" --
  * pero `v_hato_estado_actual` (migración 056) no expone ninguna columna que
  * indique si el último chequeo pidió rechequeo explícito; solo trae
  * `ultimo_chequeo_fecha`. Esta función solo puede evaluar la segunda mitad
  * de la regla (días desde el último chequeo); la primera mitad ("rechq" en
- * el chequeo) requiere un campo normalizado que hoy no existe en la vista.
+ * el chequeo) requiere un campo normalizado que hoy no existe en la vista
+ * (el mismo campo que necesitaría `ultimo_estado_chequeo` para dejar de
+ * llegar `null` siempre, ver su comentario en `EstadoActualHatoRow`).
  */
 export function derivarEstadoReproductivo(
   fila: EstadoActualHatoRow,
@@ -1083,6 +1255,7 @@ export function derivarEstadoReproductivo(
       fecha_probable_parto: null,
       dias_abiertos: null,
       proxima_a_reemplazo: false,
+      vacia_es_problema: null,
       alertas: SIN_ALERTAS,
     };
   }
@@ -1096,6 +1269,7 @@ export function derivarEstadoReproductivo(
       fecha_probable_parto: null,
       dias_abiertos: null,
       proxima_a_reemplazo: proximaAReemplazo,
+      vacia_es_problema: null,
       alertas: { ...SIN_ALERTAS, rechequeo_due: rechequeoDue },
     };
   }
@@ -1124,13 +1298,19 @@ export function derivarEstadoReproductivo(
 
   if (candidatos.length === 0) {
     // Nunca tuvo servicio, parto, secado real ni confirmación registrados.
-    const estado: EstadoReproductivo = fila.etapa === 'novilla' ? 'novilla' : 'vacia_por_servir';
+    const esNovilla = fila.etapa === 'novilla';
+    const estado: EstadoReproductivo = esNovilla ? 'novilla' : 'vacia_por_servir';
     return {
       estado,
       fecha_secar: null,
       fecha_probable_parto: null,
       dias_abiertos: null,
       proxima_a_reemplazo: proximaAReemplazo,
+      // Sin parto conocido no hay ancla de tiempo (`diasSinProgreso`) --
+      // solo la señal explícita de `ultimo_estado_chequeo` puede decidir.
+      // Una novilla nunca ha entrado al ciclo reproductivo: la pregunta
+      // "¿normal o problema?" no aplica todavía.
+      vacia_es_problema: esNovilla ? null : clasificarVaciaProblema(fila.ultimo_estado_chequeo, null, config),
       alertas: { ...SIN_ALERTAS, rechequeo_due: rechequeoDue },
     };
   }
@@ -1155,17 +1335,24 @@ export function derivarEstadoReproductivo(
       fecha_probable_parto: null,
       dias_abiertos: null,
       proxima_a_reemplazo: proximaAReemplazo,
+      vacia_es_problema: null,
       alertas: { ...SIN_ALERTAS, rechequeo_due: rechequeoDue },
     };
   }
 
   if (masReciente === 'parto') {
+    // V14: "días abiertos" desde el último parto hasta hoy (sigue vacía) --
+    // el mismo valor sirve de ancla temporal para `vacia_es_problema` cuando
+    // no hay señal de `ultimo_estado_chequeo` (proxy: demasiado tiempo vacía
+    // sin nuevo servicio).
+    const diasAbiertos = diferenciaDias(fila.ultimo_parto_fecha as string, fechaReferencia);
     return {
       estado: 'parida_reciente',
       fecha_secar: null,
       fecha_probable_parto: null,
-      dias_abiertos: diferenciaDias(fila.ultimo_parto_fecha as string, fechaReferencia),
+      dias_abiertos: diasAbiertos,
       proxima_a_reemplazo: proximaAReemplazo,
+      vacia_es_problema: clasificarVaciaProblema(fila.ultimo_estado_chequeo, diasAbiertos, config),
       alertas: { ...SIN_ALERTAS, rechequeo_due: rechequeoDue },
     };
   }
@@ -1182,6 +1369,7 @@ export function derivarEstadoReproductivo(
       fecha_probable_parto: null,
       dias_abiertos: null,
       proxima_a_reemplazo: proximaAReemplazo,
+      vacia_es_problema: null,
       alertas: { ...SIN_ALERTAS, rechequeo_due: rechequeoDue },
     };
   }
@@ -1216,15 +1404,32 @@ export function derivarEstadoReproductivo(
     estado = 'servida';
   }
 
+  // V14 (confirmado por el dueño): días abiertos = días desde el último
+  // parto hasta LA CONCEPCIÓN (el servicio que resultó en preñez), nunca
+  // `null` solo porque hay una preñez activa -- antes esta rama devolvía
+  // `null` incondicionalmente, lo cual perdía el dato justo en el caso en
+  // que ya se conoce (servicio posterior al parto registrado). Solo se
+  // ancla al `ultimo_servicio_fecha` cuando este es efectivamente POSTERIOR
+  // al último parto conocido -- si el único servicio que la vista reporta
+  // es anterior a ese parto (o no hay parto), no hay con qué anclar el
+  // cierre del período abierto con los datos de esta fila (queda `null`,
+  // nunca `0`).
+  const diasAbiertos =
+    fila.ultimo_parto_fecha && fila.ultimo_parto_fecha < fila.ultimo_servicio_fecha
+      ? diferenciaDias(fila.ultimo_parto_fecha, fila.ultimo_servicio_fecha)
+      : null;
+
   return {
     estado,
     fecha_secar: fechaSecar,
     fecha_probable_parto: fechaProbableParto,
-    // "Días abiertos" (E3) solo tiene sentido entre un parto y el siguiente
-    // servicio -- durante una preñez activa no aplica (definición completa
-    // de la KPI queda pendiente de refinamiento cuando se implemente E3).
-    dias_abiertos: null,
+    dias_abiertos: diasAbiertos,
     proxima_a_reemplazo: proximaAReemplazo,
+    // Preñez activa (confirmada o no) no es un estado "vacía" -- la
+    // pregunta "¿normal o problema?" de V14 no aplica aquí; el riesgo de
+    // "servicios repetidos sin concepción" ya lo cubre la alerta
+    // `servicio_sin_confirmacion` de arriba, sin necesidad de duplicarlo.
+    vacia_es_problema: null,
     alertas: {
       secado_due: secadoDue,
       rechequeo_due: rechequeoDue,

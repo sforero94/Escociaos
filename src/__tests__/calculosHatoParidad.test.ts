@@ -105,6 +105,7 @@ const CONFIG: frontend.HatoConfig = {
   ventana_proximo_parir_dias: 30,
   dias_parto_proximo_alerta: 14,
   dias_servicio_sin_confirmacion: 45,
+  dias_espera_voluntaria_post_parto: 60,
   dias_rechequeo_due: 60,
 };
 
@@ -290,6 +291,7 @@ describe('paridad de comportamiento calculosHato ⇄ calculos-hato', () => {
       ultimo_secado_real_fecha: null,
       ultima_confirmacion_prenez_fecha: null,
       ultimo_evento_fecha: null,
+      ultimo_estado_chequeo: null,
     };
     const filas: frontend.EstadoActualHatoRow[] = [
       base,

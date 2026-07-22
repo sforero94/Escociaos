@@ -4,6 +4,7 @@ import {
   parseSX,
   parseFechaChequeo,
   parseValorNumerico,
+  parseEstado,
   calcularPartoProbable,
   calcularFechaSecar,
   calcularMesesPrenez,
@@ -32,6 +33,7 @@ const CONFIG_BASE: HatoConfig = {
   ventana_proximo_parir_dias: 30,
   dias_parto_proximo_alerta: 14,
   dias_servicio_sin_confirmacion: 45,
+  dias_espera_voluntaria_post_parto: 60,
   dias_rechequeo_due: 60,
 };
 
@@ -387,6 +389,73 @@ describe('parseValorNumerico', () => {
   });
 });
 
+describe('parseEstado', () => {
+  it('celda vacía => tipo vacio, sin issues', () => {
+    expect(parseEstado('')).toEqual({ crudo: '', tipo: 'vacio', incierto: false, issues: [] });
+    expect(parseEstado(null).tipo).toBe('vacio');
+  });
+
+  it("V14 (confirmado por el dueño): 'ok'/'0k'/'OK' es VACÍA NORMAL, no un problema", () => {
+    for (const v of ['ok', 'OK', '0k', 'Ok']) {
+      const r = parseEstado(v);
+      expect(r.tipo).toBe('vacia_apta');
+      expect(r.issues).toEqual([]);
+    }
+  });
+
+  it("'rech'/'rechq'/'rec'/'r' es VACÍA PROBLEMA -- requiere rechequeo", () => {
+    for (const v of ['rech', 'RECH', 'rechq', 'rec', 'r']) {
+      expect(parseEstado(v).tipo).toBe('vacia_problema');
+    }
+  });
+
+  it("'r?' es problema con incertidumbre marcada", () => {
+    const r = parseEstado('r?');
+    expect(r.tipo).toBe('vacia_problema');
+    expect(r.incierto).toBe(true);
+  });
+
+  it("'ok rech' (2 casos reales, ambas señales en una celda) resuelve a PROBLEMA -- prevalece la señal cautelosa", () => {
+    expect(parseEstado('ok rech').tipo).toBe('vacia_problema');
+  });
+
+  it('una fecha en ESTADO/OBS (residuo de SEC REAL/parto real de Gen 1) se preserva como fecha_heredada, no como código', () => {
+    const casos: Array<[string, string]> = [
+      ['2021-10-08', '2021-10-08'],
+      ['2019-09-09', '2019-09-09'],
+      ['2025-09-23', '2025-09-23'],
+      ['**9/09/2019', '2019-09-09'],
+      ['30/06//19', '2019-06-30'],
+      ['5/10/19 sec', '2019-10-05'],
+    ];
+    for (const [crudo, esperada] of casos) {
+      const r = parseEstado(crudo);
+      expect(r.tipo, `crudo: ${crudo}`).toBe('fecha_heredada');
+      expect(r.fecha, `crudo: ${crudo}`).toBe(esperada);
+      expect(r.issues.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("códigos no reconocidos ('momia', '3m') quedan como desconocido, nunca se inventa semántica", () => {
+    for (const v of ['momia', '3m']) {
+      const r = parseEstado(v);
+      expect(r.tipo).toBe('desconocido');
+      expect(r.issues.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('nunca lanza para ningún valor crudo real de ESTADO/OBS (doc S2 §7)', () => {
+    const valores = [
+      'ok', 'OK', '0k', 'rech', 'RECH', '0k', 'r', 'rec', '3m', 'momia', 'rechq', 'ok rech', 'r?',
+      '2021-10-08', '2019-09-09', '2025-09-23', '**9/09/2019', '30/06//19', '5/10/19 sec',
+      '', null, undefined,
+    ];
+    for (const v of valores) {
+      expect(() => parseEstado(v)).not.toThrow();
+    }
+  });
+});
+
 describe('motor de fechas (calcularPartoProbable / calcularFechaSecar / calcularMesesPrenez)', () => {
   it('PP = servicio + meses_gestacion_default', () => {
     expect(calcularPartoProbable('2024-05-14', CONFIG_BASE)).toBe('2025-02-14');
@@ -537,6 +606,7 @@ describe('derivarEstadoReproductivo', () => {
     ultimo_secado_real_fecha: null,
     ultima_confirmacion_prenez_fecha: null,
     ultimo_evento_fecha: null,
+    ultimo_estado_chequeo: null,
   };
 
   it('novilla sin servicio nunca registrado', () => {
@@ -544,6 +614,9 @@ describe('derivarEstadoReproductivo', () => {
     expect(r.estado).toBe('novilla');
     expect(r.alertas.secado_due).toBe(false);
     expect(r.alertas.parto_proximo).toBe(false);
+    // Una novilla nunca entró al ciclo reproductivo -- la pregunta "¿normal
+    // o problema?" (V14) no aplica todavía.
+    expect(r.vacia_es_problema).toBeNull();
   });
 
   it('vaca servida recientemente, lejos de secar: estado servida', () => {
@@ -552,6 +625,8 @@ describe('derivarEstadoReproductivo', () => {
     expect(r.estado).toBe('servida');
     expect(r.fecha_probable_parto).toBe('2025-05-01');
     expect(r.fecha_secar).toBe('2025-03-01'); // jersey: PP - 2 meses
+    // Preñez activa no es un estado "vacía" -- V14 no aplica aquí.
+    expect(r.vacia_es_problema).toBeNull();
   });
 
   it('dentro de la ventana de secado (config): estado proxima_a_secar y alerta secado_due', () => {
@@ -582,6 +657,106 @@ describe('derivarEstadoReproductivo', () => {
     const r = derivarEstadoReproductivo(fila, CONFIG_BASE, '2024-08-10');
     expect(r.estado).toBe('parida_reciente');
     expect(r.dias_abiertos).toBe(40);
+  });
+
+  it('V14: dias_abiertos en preñez activa = días entre el último parto y el servicio que la concibió, nunca null solo por estar preñada', () => {
+    // Parió 2024-01-10, se sirvió de nuevo 2024-03-05 (55 días abiertos) --
+    // antes esta rama devolvía null incondicionalmente.
+    const fila: EstadoActualHatoRow = {
+      ...filaBase,
+      ultimo_parto_fecha: '2024-01-10',
+      ultimo_servicio_fecha: '2024-03-05',
+    };
+    const r = derivarEstadoReproductivo(fila, CONFIG_BASE, '2024-04-01');
+    expect(r.estado).toBe('servida');
+    expect(r.dias_abiertos).toBe(55);
+  });
+
+  it('dias_abiertos es null (nunca 0) cuando no hay parto previo conocido, incluso con servicio activo', () => {
+    const fila: EstadoActualHatoRow = { ...filaBase, ultimo_servicio_fecha: '2024-03-05' };
+    const r = derivarEstadoReproductivo(fila, CONFIG_BASE, '2024-04-01');
+    expect(r.dias_abiertos).toBeNull();
+  });
+
+  it('dias_abiertos es null cuando el único servicio conocido es ANTERIOR al parto conocido (no se puede anclar con estos datos)', () => {
+    const fila: EstadoActualHatoRow = {
+      ...filaBase,
+      ultimo_servicio_fecha: '2023-01-01',
+      ultimo_parto_fecha: '2023-10-01',
+      ultimo_secado_real_fecha: '2024-07-01', // fuerza masReciente != 'parto'
+    };
+    const r = derivarEstadoReproductivo(fila, CONFIG_BASE, '2024-08-01');
+    expect(r.dias_abiertos).toBeNull();
+  });
+
+  describe('V14 -- vacia_es_problema (confirmado por el dueño: ok=normal, rech=problema)', () => {
+    it("ESTADO='vacia_apta' (ok/0k) sobre una vaca sin servicio activo => vacia_es_problema=false", () => {
+      const fila: EstadoActualHatoRow = { ...filaBase, ultimo_estado_chequeo: 'vacia_apta' };
+      const r = derivarEstadoReproductivo(fila, CONFIG_BASE, '2024-08-09');
+      expect(r.estado).toBe('vacia_por_servir');
+      expect(r.vacia_es_problema).toBe(false);
+    });
+
+    it("ESTADO='vacia_problema' (rech) sobre una vaca sin servicio activo => vacia_es_problema=true", () => {
+      const fila: EstadoActualHatoRow = { ...filaBase, ultimo_estado_chequeo: 'vacia_problema' };
+      const r = derivarEstadoReproductivo(fila, CONFIG_BASE, '2024-08-09');
+      expect(r.estado).toBe('vacia_por_servir');
+      expect(r.vacia_es_problema).toBe(true);
+    });
+
+    it('sin señal de ESTADO y sin parto que ancle el tiempo, vacia_es_problema es null (nunca se adivina)', () => {
+      const r = derivarEstadoReproductivo(filaBase, CONFIG_BASE, '2024-08-09');
+      expect(r.estado).toBe('vacia_por_servir');
+      expect(r.vacia_es_problema).toBeNull();
+    });
+
+    it('parida_reciente: sin señal de ESTADO, usa dias_espera_voluntaria_post_parto como proxy', () => {
+      const filaReciente: EstadoActualHatoRow = { ...filaBase, ultimo_parto_fecha: '2024-07-01' };
+      // 40 días desde el parto (< 60) -> todavía dentro del período de espera
+      // voluntario: vacía NORMAL, no problema.
+      const rNormal = derivarEstadoReproductivo(filaReciente, CONFIG_BASE, '2024-08-10');
+      expect(rNormal.estado).toBe('parida_reciente');
+      expect(rNormal.vacia_es_problema).toBe(false);
+
+      // 60 días exactos (== el umbral) -> ya cuenta como problema.
+      const rLimite = derivarEstadoReproductivo(filaReciente, CONFIG_BASE, '2024-08-30');
+      expect(rLimite.vacia_es_problema).toBe(true);
+
+      // El umbral viene de su PROPIA clave: cambiar
+      // dias_servicio_sin_confirmacion (que cuenta desde el SERVICIO, no
+      // desde el parto) no debe mover esta clasificación. Es la regresión que
+      // motivó la migración 062.
+      const configOtroUmbral: HatoConfig = { ...CONFIG_BASE, dias_servicio_sin_confirmacion: 5 };
+      const rIndiferente = derivarEstadoReproductivo(filaReciente, configOtroUmbral, '2024-08-10');
+      expect(rIndiferente.vacia_es_problema).toBe(false);
+    });
+
+    it('la señal de ESTADO explícita prevalece sobre el proxy de tiempo, en cualquier dirección', () => {
+      const filaReciente: EstadoActualHatoRow = { ...filaBase, ultimo_parto_fecha: '2024-07-01' };
+      // 60 días (el proxy de tiempo diría "problema"), pero el chequeo dijo 'ok'.
+      const r = derivarEstadoReproductivo(
+        { ...filaReciente, ultimo_estado_chequeo: 'vacia_apta' },
+        CONFIG_BASE,
+        '2024-08-30',
+      );
+      expect(r.vacia_es_problema).toBe(false);
+    });
+
+    it('vacia_es_problema es null para cría, preñez activa, indeterminado y estados terminales', () => {
+      expect(
+        derivarEstadoReproductivo({ ...filaBase, etapa: 'ternera' }, CONFIG_BASE, '2024-08-09').vacia_es_problema,
+      ).toBeNull();
+      expect(
+        derivarEstadoReproductivo(
+          { ...filaBase, ultimo_servicio_fecha: '2026-01-10', ultimo_evento_fecha: '2026-06-30' },
+          CONFIG_BASE,
+          '2026-07-09',
+        ).vacia_es_problema,
+      ).toBeNull();
+      expect(
+        derivarEstadoReproductivo({ ...filaBase, estado: 'vendida' }, CONFIG_BASE, '2024-08-09').vacia_es_problema,
+      ).toBeNull();
+    });
   });
 
   it('servicio_sin_confirmacion se activa solo al pasar el umbral de config (45 días default)', () => {
