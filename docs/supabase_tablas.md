@@ -3,7 +3,9 @@
 
 **Última actualización:** 2025-11-13
 **Versión:** 1.1
-**Propósito:** Documentación técnica completa del esquema de base de datos
+**Propósito:** Referencia histórica del esquema de base de datos
+
+> **Estado de mantenimiento (2026-07-22):** pendiente de actualización integral. Para cambios de esquema, RLS o migraciones, las fuentes de verdad son `src/sql/migrations/`, los tipos y las consultas actuales. Esta referencia no cubre varios dominios creados después de 2025 y puede listar tablas retiradas.
 
 ---
 

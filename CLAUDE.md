@@ -173,10 +173,9 @@ These are consumed in `src/utils/supabase/client.ts` via `import.meta.env`. The 
 │   └── functions/
 │
 ├── docs/                                # Extended documentation
-│   ├── supabase_tablas.md               # Complete DB schema (32+ tables, enums)
-│   ├── CHECKLIST_SETUP.md
-│   ├── INSTRUCCIONES_SETUP_COMPLETO.md
-│   └── ... (20 planning/implementation docs)
+│   ├── README.md                        # Documentation index and canonical references
+│   ├── supabase_tablas.md               # DB schema reference (validate against migrations)
+│   └── archive/                         # Completed plans, resolved incidents, legacy guides
 │
 ├── package.json
 ├── tsconfig.json                        # Strict TS config, path alias @/* → ./src/*
@@ -678,31 +677,19 @@ See `BUG_REPORT.md` for current tracked bugs. As of the last update, the Reporte
 
 ## Key Documentation
 
-| Document                                    | Location                     | Purpose                          |
-|---------------------------------------------|------------------------------|----------------------------------|
-| Database schema (32+ tables)                | `docs/supabase_tablas.md`    | Complete DB reference            |
-| Financial reports plan (P&G + cash flow)    | `docs/plan_reportes_finanzas.md` | Approved accounting rules, phases, findings |
-| Setup checklist                             | `docs/CHECKLIST_SETUP.md`    | Environment setup guide          |
-| Full setup instructions                     | `docs/INSTRUCCIONES_SETUP_COMPLETO.md` | Detailed setup walkthrough |
-| Final setup instructions                    | `docs/SETUP_FINAL_INSTRUCCIONES.md` | Latest setup walkthrough   |
-| CSV upload guide                            | `docs/README_CARGA_CSV.md`   | Monitoring CSV bulk import       |
-| CSV index                                   | `docs/INDEX_CARGA_CSV.md`    | CSV upload entry point           |
-| CSV flow diagram                            | `docs/DIAGRAMA_FLUJO_CSV.md` | CSV processing architecture      |
-| Lots/sublots config guide                   | `docs/GUIA_CONFIGURACION_LOTES_SUBLOTES.md` | Lot management      |
-| Contractor tracking implementation          | `docs/CONTRACTOR_TRACKING_IMPLEMENTATION.md` | Contractor feature  |
-| Labor module improvements plan              | `docs/PLAN_MEJORAS_MODULO_LABORES.md` | Labor roadmap           |
-| Labor refactor plan                         | `docs/PLAN_REFACTORIZACION_LABORES.md` | Labor refactoring guide  |
-| Labor phase 1 changelog                     | `docs/CHANGELOG_LABORES_FASE1.md` | Labor changes history       |
-| Monitoring refinement plan                  | `docs/PLAN_REFINAMIENTO_MONITOREO.md` | Monitoring roadmap        |
-| Production module plan                      | `docs/plan_produccion_module.md` | Production module design     |
-| Migration instructions (units)              | `docs/INSTRUCCIONES_MIGRACION_UNIDADES.md` | Unit migration guide |
-| Implemented changes log                     | `docs/CAMBIOS_IMPLEMENTADOS.md` | History of major changes    |
-| NewPurchase technical issue                 | `docs/PROBLEMA_TECNICO_NEWPURCHASE.md` | Known technical issue    |
-| Application ↔ Labor sync architecture       | `src/sql/migrations/README_APLICACIONES_LABORES_SYNC.md` | Trigger sync docs |
-| Design guidelines                           | `src/guidelines/Guidelines.md` | UI/UX design reference        |
-| SQL scripts index                           | `src/sql/README.md`          | SQL scripts overview             |
-| Attributions                                | `docs/Attributions.md`       | Third-party attributions         |
-| Bug report                                  | `BUG_REPORT.md`              | Known issues tracker             |
+Start with [`docs/README.md`](docs/README.md) for the living-document index. Completed plans, resolved incidents and one-time setup guides live under [`docs/archive/`](docs/archive/README.md).
+
+| Document | Location | Purpose |
+|----------|----------|---------|
+| Database schema | `docs/supabase_tablas.md` | Schema reference; validate against migrations |
+| Financial-report rules | `docs/plan_reportes_finanzas.md` | Approved P&G and cash-flow accounting contract |
+| Hato Lechero plan | `docs/plan_hato_lechero_module.md` | Active module design |
+| CSV import guide | `docs/README_CARGA_CSV.md` | Monitoring bulk import |
+| Lots / sublots guide | `docs/GUIA_CONFIGURACION_LOTES_SUBLOTES.md` | Configuration workflow |
+| Application ↔ Labor sync | `src/sql/migrations/README_APLICACIONES_LABORES_SYNC.md` | Trigger architecture |
+| Design guidelines | `src/guidelines/Guidelines.md` | UI/UX reference |
+| SQL scripts index | `src/sql/README.md` | SQL script overview |
+| Bug tracker | `BUG_REPORT.md` | Active known issues |
 
 ---
 
