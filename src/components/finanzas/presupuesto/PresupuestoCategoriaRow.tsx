@@ -9,9 +9,10 @@ interface PresupuestoCategoriaRowProps {
   expanded: boolean;
   onToggle: () => void;
   showPct: boolean;
+  onVerGastos: () => void;
 }
 
-export function PresupuestoCategoriaRow({ categoria, expanded, onToggle, showPct }: PresupuestoCategoriaRowProps) {
+export function PresupuestoCategoriaRow({ categoria, expanded, onToggle, showPct, onVerGastos }: PresupuestoCategoriaRowProps) {
   const exec = categoria.ejecucion_vs_q;
   const bgColor =
     exec === null
@@ -43,8 +44,24 @@ export function PresupuestoCategoriaRow({ categoria, expanded, onToggle, showPct
         </div>
       </td>
 
-      {/* Actual Q */}
-      <td className="px-3 py-2.5 text-center tabular-nums">{fmt(categoria.actual_q)}</td>
+      {/* Actual Q — abre el detalle de gastos; el clic no debe plegar la fila */}
+      <td className="px-3 py-2.5 text-center tabular-nums">
+        {categoria.actual_q > 0 ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onVerGastos();
+            }}
+            className="cursor-pointer hover:underline"
+            title="Ver gastos"
+          >
+            {fmt(categoria.actual_q)}
+          </button>
+        ) : (
+          fmt(categoria.actual_q)
+        )}
+      </td>
 
       {/* Act % */}
       {showPct && <td className="px-2 py-2.5 text-center text-gray-500 tabular-nums">{categoria.pct_actual > 0 ? Math.round(categoria.pct_actual) + '%' : ''}</td>}

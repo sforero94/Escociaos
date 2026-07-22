@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { formatCompact } from '@/utils/format';
-import { EjecucionBadge, VariacionBadge } from './EjecucionBadge';
 import { PresupuestoCategoriaRow } from './PresupuestoCategoriaRow';
 import { PresupuestoConceptoRow } from './PresupuestoConceptoRow';
+import { GastosEjecucionDialog, type GastosEjecucionTarget } from './GastosEjecucionDialog';
 import type { PresupuestoData } from '@/types/finanzas';
 
 function formatQuarterLabel(quarters: number[]): string {
@@ -16,12 +16,14 @@ interface PresupuestoTableProps {
   showPct: boolean;
   anio: number;
   quarters: number[];
+  negocioId: string;
   modoPresupuesto: boolean;
   onBudgetChange: (conceptoId: string, categoriaId: string, newAmount: number) => void;
 }
 
-export function PresupuestoTable({ data, showPct, anio, quarters, modoPresupuesto, onBudgetChange }: PresupuestoTableProps) {
+export function PresupuestoTable({ data, showPct, anio, quarters, negocioId, modoPresupuesto, onBudgetChange }: PresupuestoTableProps) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [detalleTarget, setDetalleTarget] = useState<GastosEjecucionTarget | null>(null);
 
   const toggleCategory = (catId: string) => {
     setExpanded((prev) => {
@@ -35,10 +37,8 @@ export function PresupuestoTable({ data, showPct, anio, quarters, modoPresupuest
   const fmt = (v: number) => (v > 0 ? '$' + formatCompact(v) : '');
   const t = data.totals;
 
-  // Column count varies with showPct toggle
-  const extraCols = showPct ? 3 : 0; // Act%, Ppto%, EjecAño
-
   return (
+    <>
     <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
       <table className="w-full table-fixed text-left">
         {/* Column widths: concepto gets remaining space, numerics are fixed */}
@@ -117,12 +117,22 @@ export function PresupuestoTable({ data, showPct, anio, quarters, modoPresupuest
                 showPct={showPct}
                 modoPresupuesto={modoPresupuesto}
                 onBudgetChange={onBudgetChange}
+                onVerGastos={setDetalleTarget}
               />
             );
           })}
         </tbody>
       </table>
     </div>
+
+    <GastosEjecucionDialog
+      target={detalleTarget}
+      onClose={() => setDetalleTarget(null)}
+      negocioId={negocioId}
+      anio={anio}
+      quarters={quarters}
+    />
+    </>
   );
 }
 
@@ -133,6 +143,7 @@ function PresupuestoCategoryGroup({
   showPct,
   modoPresupuesto,
   onBudgetChange,
+  onVerGastos,
 }: {
   categoria: PresupuestoData['categorias'][0];
   expanded: boolean;
@@ -140,6 +151,7 @@ function PresupuestoCategoryGroup({
   showPct: boolean;
   modoPresupuesto: boolean;
   onBudgetChange: (conceptoId: string, categoriaId: string, newAmount: number) => void;
+  onVerGastos: (target: GastosEjecucionTarget) => void;
 }) {
   const visibleConceptos = modoPresupuesto
     ? categoria.conceptos
@@ -152,6 +164,12 @@ function PresupuestoCategoryGroup({
         expanded={expanded}
         onToggle={onToggle}
         showPct={showPct}
+        onVerGastos={() =>
+          onVerGastos({
+            titulo: categoria.categoria_nombre,
+            conceptoIds: categoria.conceptos.map((c) => c.concepto_id),
+          })
+        }
       />
       {expanded &&
         visibleConceptos.map((row) => (
@@ -161,6 +179,13 @@ function PresupuestoCategoryGroup({
             showPct={showPct}
             editable={modoPresupuesto}
             onBudgetChange={onBudgetChange}
+            onVerGastos={() =>
+              onVerGastos({
+                titulo: row.concepto_nombre,
+                categoriaNombre: row.categoria_nombre,
+                conceptoIds: [row.concepto_id],
+              })
+            }
           />
         ))}
     </>

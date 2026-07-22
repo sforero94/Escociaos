@@ -133,12 +133,13 @@ export function PresupuestoView() {
             <Loader2 className="w-6 h-6 animate-spin text-primary" />
             <span className="ml-2 text-sm text-gray-500">Cargando presupuesto...</span>
           </div>
-        ) : data ? (
+        ) : data && negocioId ? (
           <PresupuestoTable
             data={data}
             showPct={showPct}
             anio={anio}
             quarters={quarters}
+            negocioId={negocioId}
             modoPresupuesto={modoPresupuesto}
             onBudgetChange={handleBudgetChange}
           />
