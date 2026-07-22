@@ -211,44 +211,8 @@ export interface IngresoFormData {
 }
 
 // Report types
-export interface ReportePyG {
-  ingresos: {
-    total: number;
-    por_negocio: Array<{
-      negocio: string;
-      total: number;
-      categorias: Array<{
-        categoria: string;
-        total: number;
-      }>;
-    }>;
-  };
-  gastos: {
-    total: number;
-    por_categoria: Array<{
-      categoria: string;
-      total: number;
-    }>;
-  };
-  utilidad_operativa: number;
-  comparativo?: {
-    periodo_anterior: {
-      ingresos: number;
-      gastos: number;
-      utilidad: number;
-    };
-    variacion_porcentaje: {
-      ingresos: number;
-      gastos: number;
-      utilidad: number;
-    };
-    variacion_valor: {
-      ingresos: number;
-      gastos: number;
-      utilidad: number;
-    };
-  };
-}
+// `ReportePyG` v1 vivía aquí; lo reemplazó `src/types/reportesFinancieros.ts`
+// (array plano de líneas, períodos acumulados, ganado y clasificación de costos).
 
 // Export types
 export interface ExportOptions {

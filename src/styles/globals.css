@@ -504,3 +504,133 @@ input[type='number'] {
     display: contents;
   }
 }
+/* ── Tablas financieras (P&G y Flujo de Caja) ─────────────────────────────
+   src/index.css es un build precompilado y CONGELADO de Tailwind: no incluye
+   `table-fixed`, `tabular-nums` ni `border-collapse`, así que escribirlas en
+   el JSX no haría absolutamente nada (verificado con grep, 2026-07-21).
+   Aquí van como CSS real. globals.css se importa después de index.css, así
+   que gana la cascada. */
+
+.tabla-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tabla-financiera {
+  table-layout: fixed;
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 640px;
+}
+
+.tabla-financiera th,
+.tabla-financiera td {
+  white-space: nowrap;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+/* Cifras: ancho de dígito fijo para que las columnas se lean alineadas. */
+.celda-num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Primera columna congelada: el nombre de la línea sigue visible al hacer
+   scroll horizontal sobre los 12 meses del flujo de caja. */
+.col-etiqueta {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #fff;
+  text-align: left;
+  width: 250px;
+  min-width: 250px;
+}
+
+/* Debe ganarle en especificidad a `.tabla-financiera td { white-space: nowrap }`
+   (0,1,1 vs 0,1,0), o una etiqueta larga como "Compra de ganado (inversion en
+   inventario)" se sale de su celda y se monta sobre la primera cifra. */
+.tabla-financiera .col-etiqueta {
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.col-periodo { width: 150px; }
+.col-total { width: 132px; }
+
+/* El flujo de caja tiene 12 columnas de meses. Con `table-layout: fixed` y
+   `white-space: nowrap`, una cifra mas ancha que su celda se desborda y se
+   encabalga con la vecina — pasaba con los totales en negrita del tipo
+   "-$132.444.174" (14 caracteres). Fuente algo menor + 116px de ancho hacen
+   que quepa la cifra mas larga posible sin sacrificar precision: la tabla
+   scrollea en horizontal y la primera columna queda congelada. */
+.tabla-flujo th,
+.tabla-flujo td { font-size: 0.8125rem; padding: 0.5rem 0.5rem; }
+.tabla-flujo .col-mes { width: 116px; }
+
+/* Jerarquía visual de las filas del estado financiero. */
+.fila-subtotal > .col-etiqueta,
+.fila-resultado > .col-etiqueta,
+.fila-seccion > .col-etiqueta {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.fila-subtotal {
+  background: #f9fafb;
+  border-top: 1px solid #e5e7eb;
+}
+.fila-subtotal > .col-etiqueta { background: #f9fafb; }
+
+.fila-resultado {
+  background: #eef4e4;
+  border-top: 2px solid #73991c;
+  border-bottom: 1px solid #d5e0bd;
+}
+.fila-resultado > .col-etiqueta { background: #eef4e4; }
+.fila-resultado td { font-weight: 700; }
+
+.fila-seccion {
+  background: #f9fafb;
+  border-top: 1px solid #e5e7eb;
+}
+.fila-seccion > .col-etiqueta { background: #f9fafb; }
+
+.fila-detalle:hover { background: #fafafa; }
+.fila-detalle:hover > .col-etiqueta { background: #fafafa; }
+
+.sangria-1 { padding-left: 1.5rem !important; }
+.sangria-2 { padding-left: 3rem !important; }
+
+.fila-nivel-2 > .col-etiqueta { color: #6b7280; font-size: 0.8125rem; }
+.fila-nivel-2 > .celda-num { color: #6b7280; font-size: 0.8125rem; }
+
+.fila-indicador > .col-etiqueta,
+.fila-indicador > .celda-num {
+  color: #6b7280;
+  font-style: italic;
+}
+
+.valor-negativo { color: #dc2626; }
+
+/* Botón para expandir/colapsar los conceptos de una categoría. */
+.toggle-concepto {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+}
+
+@media (max-width: 639px) {
+  .col-etiqueta { width: 170px; min-width: 170px; }
+  .tabla-financiera th,
+  .tabla-financiera td { padding: 0.5rem; font-size: 0.8125rem; }
+}
