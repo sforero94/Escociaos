@@ -7,11 +7,14 @@ import {
   Trash2,
   Loader2,
   X,
+  Filter,
 } from 'lucide-react';
 import { getSupabase } from '@/utils/supabase/client';
 import { formatNumber } from '@/utils/format';
 import { formatearFechaCorta, calcularRangoFechasPorPeriodo } from '@/utils/fechas';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { IngresoDetalleDialog } from './IngresoDetalleDialog';
 import type { Ingreso, Negocio, Region, CategoriaIngreso, TransaccionGanado, UnifiedFinanceItem } from '@/types/finanzas';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -26,9 +29,17 @@ interface FiltrosState {
   negocio_id: string;
   region_id: string;
   categoria_id: string;
+  usuario_id: string;
   fecha_desde: string;
   fecha_hasta: string;
 }
+
+interface UsuarioOption {
+  id: string;
+  nombre_completo: string;
+}
+
+const SIN_USUARIO = '__sin_usuario__';
 
 const selectClass = 'px-2 py-1.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary min-w-0';
 
@@ -42,10 +53,11 @@ export function IngresosList({ onEdit }: IngresosListProps) {
   const [filtros, setFiltros] = useState<FiltrosState>(() => {
     const state = location.state as any;
     return {
-      periodo: state?.periodo || 'mes_actual',
+      periodo: state?.periodo || 'ytd',
       negocio_id: state?.negocio_id || '',
       region_id: state?.region_id || '',
       categoria_id: state?.categoria || '',
+      usuario_id: '',
       fecha_desde: state?.fecha_desde || '',
       fecha_hasta: state?.fecha_hasta || '',
     };
@@ -56,11 +68,15 @@ export function IngresosList({ onEdit }: IngresosListProps) {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [deleteTargetSource, setDeleteTargetSource] = useState<'ingreso' | 'ganado'>('ingreso');
   const [editingGanado, setEditingGanado] = useState<TransaccionGanado | null>(null);
+  const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
+  const [detalleItem, setDetalleItem] = useState<UnifiedFinanceItem | null>(null);
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
 
   // Catalogs
   const [negocios, setNegocios] = useState<Negocio[]>([]);
   const [regiones, setRegiones] = useState<Region[]>([]);
   const [categorias, setCategorias] = useState<CategoriaIngreso[]>([]);
+  const [usuarios, setUsuarios] = useState<UsuarioOption[]>([]);
 
   const aplicadoKey = useRef<string | null>(location.key);
 
@@ -71,10 +87,12 @@ export function IngresosList({ onEdit }: IngresosListProps) {
       supabase.from('fin_negocios').select('*').eq('activo', true).order('nombre'),
       supabase.from('fin_regiones').select('*').eq('activo', true).order('nombre'),
       supabase.from('fin_categorias_ingresos').select('*').eq('activo', true).order('nombre'),
-    ]).then(([neg, reg, cat]) => {
+      supabase.from('usuarios').select('id, nombre_completo').eq('activo', true).order('nombre_completo'),
+    ]).then(([neg, reg, cat, usr]) => {
       if (neg.data) setNegocios(neg.data);
       if (reg.data) setRegiones(reg.data);
       if (cat.data) setCategorias(cat.data);
+      if (usr.data) setUsuarios(usr.data as UsuarioOption[]);
     });
   }, []);
 
@@ -85,7 +103,7 @@ export function IngresosList({ onEdit }: IngresosListProps) {
       aplicadoKey.current = location.key;
       setFiltros((prev) => ({
         ...prev,
-        periodo: state.periodo || 'mes_actual',
+        periodo: state.periodo || 'ytd',
         negocio_id: state.negocio_id || '',
         region_id: state.region_id || '',
         categoria_id: state.categoria || '',
@@ -98,6 +116,7 @@ export function IngresosList({ onEdit }: IngresosListProps) {
   // Auto-load on any filter change
   useEffect(() => {
     loadIngresos();
+    setSeleccionados(new Set());
   }, [filtros, searchQuery]);
 
   useEffect(() => {
@@ -128,6 +147,8 @@ export function IngresosList({ onEdit }: IngresosListProps) {
       if (filtros.negocio_id) query = query.eq('negocio_id', filtros.negocio_id);
       if (filtros.region_id) query = query.eq('region_id', filtros.region_id);
       if (filtros.categoria_id) query = query.eq('categoria_id', filtros.categoria_id);
+      if (filtros.usuario_id === SIN_USUARIO) query = query.is('created_by', null);
+      else if (filtros.usuario_id) query = query.eq('created_by', filtros.usuario_id);
 
       query = query.order('fecha', { ascending: false });
       const { data, error } = await query;
@@ -142,6 +163,8 @@ export function IngresosList({ onEdit }: IngresosListProps) {
         .eq('tipo', 'venta');
       if (fechaDesde) ganadoQuery = ganadoQuery.gte('fecha', fechaDesde);
       if (fechaHasta) ganadoQuery = ganadoQuery.lte('fecha', fechaHasta);
+      if (filtros.usuario_id === SIN_USUARIO) ganadoQuery = ganadoQuery.is('created_by', null);
+      else if (filtros.usuario_id) ganadoQuery = ganadoQuery.eq('created_by', filtros.usuario_id);
       ganadoQuery = ganadoQuery.order('fecha', { ascending: false });
       const { data: ganadoData } = await ganadoQuery;
 
@@ -207,7 +230,13 @@ export function IngresosList({ onEdit }: IngresosListProps) {
     ? categorias.filter((c) => c.negocio_id === filtros.negocio_id)
     : categorias;
 
-  const tieneFiltrosActivos = filtros.negocio_id || filtros.region_id || filtros.categoria_id;
+  const tieneFiltrosActivos = filtros.negocio_id || filtros.region_id || filtros.categoria_id || filtros.usuario_id;
+  const conteoFiltrosActivos = [
+    filtros.negocio_id,
+    filtros.region_id,
+    filtros.categoria_id,
+    filtros.usuario_id,
+  ].filter(Boolean).length;
   const valorTotalIngresos = ingresos.reduce((sum, i) => sum + (i.valor || 0), 0);
   const valorTotalGanado = ganadoItems.reduce((sum, g) => sum + (g.valor_total || 0), 0);
   const valorTotal = valorTotalIngresos + valorTotalGanado;
@@ -236,9 +265,37 @@ export function IngresosList({ onEdit }: IngresosListProps) {
 
   const totalCount = unifiedItems.length;
 
+  const toggleSeleccionado = (key: string) => {
+    setSeleccionados((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const todosSeleccionados = totalCount > 0 && unifiedItems.every((item) => seleccionados.has(`${item.source}-${item.id}`));
+
+  const toggleSeleccionarTodos = () => {
+    if (todosSeleccionados) {
+      setSeleccionados(new Set());
+    } else {
+      setSeleccionados(new Set(unifiedItems.map((item) => `${item.source}-${item.id}`)));
+    }
+  };
+
+  const itemsSeleccionados = unifiedItems.filter((item) => seleccionados.has(`${item.source}-${item.id}`));
+  const subtotalSeleccionado = itemsSeleccionados.reduce((sum, item) => sum + (item.valor || 0), 0);
+
+  const nombreCreadoPor = (item: UnifiedFinanceItem | null) => {
+    const creadoPor = (item?.raw as { created_by?: string | null } | undefined)?.created_by;
+    if (!creadoPor) return undefined;
+    return usuarios.find((u) => u.id === creadoPor)?.nombre_completo;
+  };
+
   return (
     <div className="space-y-3">
-      {/* Compact filter bar */}
+      {/* Compact filter bar: search + all filters in one row */}
       <div className="bg-white rounded-xl border border-gray-200 px-3 py-2.5">
         <div className="flex flex-wrap items-center gap-2">
           {/* Search */}
@@ -253,46 +310,67 @@ export function IngresosList({ onEdit }: IngresosListProps) {
             />
           </div>
 
-          {/* Periodo */}
-          <select value={filtros.periodo} onChange={(e) => updateFiltro('periodo', e.target.value)} className={selectClass}>
-            <option value="mes_actual">Mes Actual</option>
-            <option value="trimestre">Trimestre</option>
-            <option value="ytd">YTD</option>
-            <option value="ano_anterior">Ano Anterior</option>
-            <option value="rango_personalizado">Personalizado</option>
-          </select>
+          {/* Mobile-only: the filters below collapse behind this toggle */}
+          <button
+            onClick={() => setFiltrosAbiertos((prev) => !prev)}
+            className="filtros-toggle items-center gap-2 h-8 px-3 text-sm border border-gray-200 rounded-xl bg-white text-gray-600"
+          >
+            <Filter className="w-4 h-4" />
+            Filtros
+            {conteoFiltrosActivos > 0 && (
+              <span className="px-2 rounded-md bg-primary text-white text-xs">{conteoFiltrosActivos}</span>
+            )}
+          </button>
 
-          {/* Negocio */}
-          <select value={filtros.negocio_id} onChange={(e) => { updateFiltro('negocio_id', e.target.value); updateFiltro('categoria_id', ''); }} className={selectClass}>
-            <option value="">Negocio</option>
-            {negocios.map((n) => <option key={n.id} value={n.id}>{n.nombre}</option>)}
-          </select>
+          <div className={filtrosAbiertos ? 'filtros-colapsables abierto' : 'filtros-colapsables'}>
+            {/* Periodo */}
+            <select value={filtros.periodo} onChange={(e) => updateFiltro('periodo', e.target.value)} className={selectClass}>
+              <option value="mes_actual">Mes Actual</option>
+              <option value="trimestre">Trimestre</option>
+              <option value="ytd">YTD</option>
+              <option value="ano_anterior">Ano Anterior</option>
+              <option value="rango_personalizado">Personalizado</option>
+            </select>
 
-          {/* Region */}
-          <select value={filtros.region_id} onChange={(e) => updateFiltro('region_id', e.target.value)} className={selectClass}>
-            <option value="">Region</option>
-            {regiones.map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}
-          </select>
+            {/* Negocio */}
+            <select value={filtros.negocio_id} onChange={(e) => { updateFiltro('negocio_id', e.target.value); updateFiltro('categoria_id', ''); }} className={selectClass}>
+              <option value="">Negocio</option>
+              {negocios.map((n) => <option key={n.id} value={n.id}>{n.nombre}</option>)}
+            </select>
 
-          {/* Categoria */}
-          <select value={filtros.categoria_id} onChange={(e) => updateFiltro('categoria_id', e.target.value)} className={selectClass}>
-            <option value="">Categoria</option>
-            {categoriasFiltradas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-          </select>
+            {/* Region */}
+            <select value={filtros.region_id} onChange={(e) => updateFiltro('region_id', e.target.value)} className={selectClass}>
+              <option value="">Region</option>
+              {regiones.map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+            </select>
 
-          {/* Clear filters */}
-          {tieneFiltrosActivos && (
-            <button
-              onClick={() => setFiltros({ periodo: 'mes_actual', negocio_id: '', region_id: '', categoria_id: '', fecha_desde: '', fecha_hasta: '' })}
-              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-              title="Limpiar filtros"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
+            {/* Categoria */}
+            <select value={filtros.categoria_id} onChange={(e) => updateFiltro('categoria_id', e.target.value)} className={selectClass}>
+              <option value="">Categoria</option>
+              {categoriasFiltradas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select>
+
+            {/* Usuario */}
+            <select value={filtros.usuario_id} onChange={(e) => updateFiltro('usuario_id', e.target.value)} className={selectClass}>
+              <option value="">Usuario</option>
+              {usuarios.map((u) => <option key={u.id} value={u.id}>{u.nombre_completo}</option>)}
+              <option value={SIN_USUARIO}>Sin usuario</option>
+            </select>
+
+            {/* Clear filters */}
+            {tieneFiltrosActivos && (
+              <button
+                onClick={() => setFiltros({ periodo: 'ytd', negocio_id: '', region_id: '', categoria_id: '', usuario_id: '', fecha_desde: '', fecha_hasta: '' })}
+                className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                title="Limpiar filtros"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Custom date range */}
+        {/* Custom date range — only when selected */}
         {filtros.periodo === 'rango_personalizado' && (
           <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100">
             <span className="text-xs text-gray-500">Desde</span>
@@ -304,19 +382,42 @@ export function IngresosList({ onEdit }: IngresosListProps) {
       </div>
 
       {/* Inline stats summary */}
-      <div className="flex items-center gap-4 px-1 text-sm text-gray-500">
+      <div className="flex items-center gap-4 px-1 text-sm text-gray-500 flex-wrap">
+        {totalCount > 0 && (
+          <label className="flex items-center gap-1.5 cursor-pointer select-none">
+            <Checkbox checked={todosSeleccionados} onCheckedChange={toggleSeleccionarTodos} />
+            <span>Seleccionar todos</span>
+          </label>
+        )}
         <span><strong className="text-gray-900">{totalCount}</strong> ingresos</span>
-        <span className="text-gray-300">|</span>
+        <span className="hidden sm:inline text-gray-300">|</span>
         <span>Total: <strong className="text-green-700">${formatNumber(valorTotal)}</strong></span>
+        {seleccionados.size > 0 && (
+          <>
+            <span className="hidden sm:inline text-gray-300">|</span>
+            <span className="text-primary">
+              Subtotal seleccionado ({seleccionados.size}): <strong>${formatNumber(subtotalSeleccionado)}</strong>
+            </span>
+            <button
+              onClick={() => setSeleccionados(new Set())}
+              className="text-gray-400 hover:text-gray-600 underline"
+            >
+              Limpiar selección
+            </button>
+          </>
+        )}
         {ganadoItems.length > 0 && (
           <>
-            <span className="text-gray-300">|</span>
+            <span className="hidden sm:inline text-gray-300">|</span>
             <span className="text-amber-700">{ganadoItems.length} ganado</span>
           </>
         )}
       </div>
 
-      {/* Compact income list */}
+      {/* Compact income list.
+          Sin `overflow-hidden`: el menú `⋮` es absolute y se abre hacia abajo, así que
+          el contenedor lo recortaría en las últimas filas. Las esquinas las redondea
+          la primera/última fila via `.lista-financiera`. Igual que GastosList. */}
       <div className="bg-white rounded-xl border border-gray-200">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
@@ -329,40 +430,60 @@ export function IngresosList({ onEdit }: IngresosListProps) {
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-100">
-            {unifiedItems.map((item) => (
-              <div key={`${item.source}-${item.id}`} className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50/50 transition-colors group">
-                {/* Ganado badge or spacer for alignment */}
+          <div className="lista-financiera divide-y divide-gray-100">
+            {unifiedItems.map((item) => {
+              const itemKey = `${item.source}-${item.id}`;
+              return (
+              <div
+                key={itemKey}
+                onClick={() => setDetalleItem(item)}
+                className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 transition-colors group cursor-pointer"
+              >
+                <span onClick={(e) => e.stopPropagation()} className="flex-shrink-0 flex items-center">
+                  <Checkbox
+                    checked={seleccionados.has(itemKey)}
+                    onCheckedChange={() => toggleSeleccionado(itemKey)}
+                  />
+                </span>
+
+                {/* Ganado badge */}
                 {item.source === 'ganado' && (
-                  <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-md bg-amber-100 text-amber-800 flex-shrink-0">
+                  <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-md bg-amber-100 text-amber-700 flex-shrink-0">
                     Ganado
                   </span>
                 )}
 
-                {/* Date */}
-                <span className="text-xs text-gray-400 w-[70px] flex-shrink-0">
+                {/* Date — own column on desktop; on mobile it moves to the meta line below */}
+                <span className="hidden sm:block text-xs text-gray-400 w-[70px] flex-shrink-0">
                   {formatearFechaCorta(item.fecha)}
                 </span>
 
-                {/* Name + details */}
-                <div className="flex-1 min-w-0 flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-900 truncate">
-                    {item.nombre}
-                  </span>
-                  {item.details && (
-                    <span className="hidden sm:inline text-xs text-gray-400 truncate">
-                      {item.details}
+                {/* Name (+ details inline on desktop, stacked below on mobile) */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="gasto-nombre text-sm font-medium text-gray-900 truncate">
+                      {item.nombre}
                     </span>
-                  )}
+                    {item.details && (
+                      <span className="hidden sm:inline text-xs text-gray-400 truncate">
+                        {item.details}
+                      </span>
+                    )}
+                  </div>
+                  <div className="gasto-meta-movil text-xs text-gray-400 truncate">
+                    {formatearFechaCorta(item.fecha)}
+                    {item.details ? ` · ${item.details}` : ''}
+                  </div>
                 </div>
 
                 {/* Value */}
-                <span className="text-sm font-semibold text-green-700 flex-shrink-0 tabular-nums">
+                <span className="text-sm font-semibold text-green-700 flex-shrink-0">
                   +${formatNumber(item.valor)}
                 </span>
 
-                {/* Actions menu */}
-                <div className="relative flex-shrink-0">
+                {/* Actions menu — desktop only; on mobile the row opens the detail dialog,
+                    which carries the same actions (the hover-gated button is unreachable on touch) */}
+                <div className="hidden sm:block relative flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -413,7 +534,8 @@ export function IngresosList({ onEdit }: IngresosListProps) {
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -427,6 +549,24 @@ export function IngresosList({ onEdit }: IngresosListProps) {
           onSuccess={() => { setEditingGanado(null); loadIngresos(); }}
         />
       )}
+
+      <IngresoDetalleDialog
+        item={detalleItem}
+        open={!!detalleItem}
+        onOpenChange={(open) => { if (!open) setDetalleItem(null); }}
+        nombreUsuario={nombreCreadoPor(detalleItem)}
+        onEdit={() => {
+          if (!detalleItem) return;
+          if (detalleItem.source === 'ganado') setEditingGanado(detalleItem.raw as TransaccionGanado);
+          else onEdit?.(detalleItem.raw as Ingreso);
+          setDetalleItem(null);
+        }}
+        onEliminar={() => {
+          if (!detalleItem) return;
+          handleEliminar(detalleItem.id, detalleItem.source === 'ganado' ? 'ganado' : 'ingreso');
+          setDetalleItem(null);
+        }}
+      />
 
       <ConfirmDialog
         open={confirmDeleteOpen}
