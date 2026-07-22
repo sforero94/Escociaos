@@ -3,7 +3,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { ProveedoresConfig } from './components/ProveedoresConfig';
 import { CompradoresConfig } from './components/CompradoresConfig';
 import { MediosPagoConfig } from './components/MediosPagoConfig';
-import { Building2, Users, CreditCard } from 'lucide-react';
+import { ConfigReportesFinancieros } from './components/ConfigReportesFinancieros';
+import { Building2, Users, CreditCard, SlidersHorizontal } from 'lucide-react';
 
 /**
  * Vista de Configuración Financiera
@@ -29,7 +30,10 @@ export function ConfiguracionFinanzas() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        {/* grid-cols-5 no existe en el build congelado de Tailwind: por eso la
+            clasificación de costos y los parámetros contables comparten una
+            sola pestaña «Reportes» en vez de tener una cada uno. */}
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="proveedores" className="flex items-center gap-2">
             <Building2 className="w-4 h-4" />
             Proveedores
@@ -41,6 +45,10 @@ export function ConfiguracionFinanzas() {
           <TabsTrigger value="medios-pago" className="flex items-center gap-2">
             <CreditCard className="w-4 h-4" />
             Medios de Pago
+          </TabsTrigger>
+          <TabsTrigger value="reportes" className="flex items-center gap-2">
+            <SlidersHorizontal className="w-4 h-4" />
+            Reportes
           </TabsTrigger>
         </TabsList>
 
@@ -54,6 +62,10 @@ export function ConfiguracionFinanzas() {
 
         <TabsContent value="medios-pago" className="mt-6">
           <MediosPagoConfig />
+        </TabsContent>
+
+        <TabsContent value="reportes" className="mt-6">
+          <ConfigReportesFinancieros />
         </TabsContent>
       </Tabs>
 

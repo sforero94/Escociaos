@@ -95,6 +95,9 @@ These are consumed in `src/utils/supabase/client.ts` via `import.meta.env`. The 
 │   │   │   └── EmpleadosSubNav.tsx       # Employees sub-navigation
 │   │   ├── finanzas/                     # Finance (expenses, income, reports)
 │   │   │   ├── components/               # Finance sub-components
+│   │   │   ├── dashboard/                # Per-negocio dashboards
+│   │   │   ├── presupuesto/              # Budget vs actual
+│   │   │   ├── reportes/                 # P&G + Flujo de Caja tables & controls
 │   │   │   └── hooks/                    # Finance-specific hooks
 │   │   ├── produccion/                   # Production tracking & charts
 │   │   │   ├── components/               # Production sub-components
@@ -122,6 +125,7 @@ These are consumed in `src/utils/supabase/client.ts` via `import.meta.env`. The 
 │   │   ├── monitoreo.ts
 │   │   ├── produccion.ts
 │   │   ├── reporteSemanal.ts
+│   │   ├── reportesFinancieros.ts
 │   │   └── shared.ts
 │   │
 │   ├── utils/                            # Business logic & helper functions
@@ -142,6 +146,11 @@ These are consumed in `src/utils/supabase/client.ts` via `import.meta.env`. The 
 │   │   ├── generarPDF*.ts              # PDF generators (reports, P&L, shopping lists)
 │   │   ├── insightsAutomaticos.ts       # Automatic insight generation
 │   │   ├── laborCosts.ts               # Labor cost calculations
+│   │   ├── calculosPyG.ts              # P&G engine (pure) — see Financial Reports
+│   │   ├── calculosFlujoCaja.ts        # Cash-flow engine (pure)
+│   │   ├── costoVentaGanado.ts         # Cattle COGS, moving weighted average per head
+│   │   ├── periodosReporte.ts          # Cumulative quarters & cosecha periods
+│   │   ├── clasificacionCostos.ts      # Direct vs indirect cost resolution
 │   │   └── validation.ts               # Data validation utilities
 │   │
 │   ├── sql/                             # SQL scripts & migrations
@@ -307,7 +316,7 @@ Per-user module visibility governs 4 modules: **`aguacate`, `hato_lechero`, `gan
 - **NOT a data boundary** — no RLS changes. Existing role-based RLS is untouched.
 - **Configured** from Configuración → Usuarios (`UsuariosConfig.tsx`, Gerencia-only), persisted via the `usuarios/crear|editar` edge-function endpoints.
 - **Exception — Producción**: `/produccion` sits under the Aguacate group but stays **Gerencia-only** (cost/rentabilidad data). Its sidebar leaf carries `soloGerencia: true` and `ProduccionDashboard` keeps its inner `RoleGuard allowedRoles={['Gerencia']}`.
-- The 6 Finanzas screens no longer carry inner Gerencia `RoleGuard`s — they are governed purely by the `finanzas` module.
+- The Finanzas screens no longer carry inner Gerencia `RoleGuard`s — they are governed purely by the `finanzas` module. **Exception — Reportes**: `/finanzas/reportes` keeps an explicit `RoleGuard allowedRoles={['Gerencia']}`. Every `fin_*` table is Gerencia-only at the RLS layer (`es_usuario_gerencia()`, verified against production 2026-07-21), so without the guard a non-Gerencia user with the module granted would see a P&G full of zeros — indistinguishable from "no data" — instead of an explanation.
 - `Monitor` role is unaffected: still fully blocked by `ProtectedRoute` (Telegram-only).
 
 Sidebar structure (`Layout.tsx` `NAV`): Tablero General · **Aguacate** (group: Labores, Monitoreo, Aplicaciones, Inventario, Clima, Producción, Reportes) · **Hato Lechero** (group, all En Desarrollo: Tablero, Producción, Hato, Chequeos, Alertas) · Ganado · **Finanzas** (group: Dashboard, Gastos, Ingresos, Reportes, Presupuesto, Configuración) · Configuración.
@@ -329,7 +338,7 @@ PostgreSQL hosted on Supabase with 32+ tables, 7+ custom ENUM types, Row-Level S
 - **Inventory**: `movimientos_inventario`, `compras`, `compras_productos`, `verificaciones_inventario`, `verificaciones_detalle`
 - **Monitoring**: `monitoreos` (denormalized: one row per pest observation, includes `incidencia`, `lote_id`, FK to `plagas_enfermedades_catalogo`, floración fields: `floracion_sin_flor`, `floracion_brotes`, `floracion_flor_madura`, `floracion_cuaje`), `sublotes`, `plagas_enfermedades_catalogo`, `rondas_monitoreo`, `mon_conductividad` (soil CE readings), `mon_colmenas` (beehive health), `apiarios` (apiary config)
 - **Labor**: `tareas`, `registros_trabajo`, `empleados_tareas`
-- **Finance**: `fin_gastos`, `fin_ingresos`, `fin_transacciones_ganado`, `fin_conceptos_gastos`, `fin_proveedores`, `fin_categorias_gastos`, `fin_categorias_ingresos`, `fin_medios_pago`, `fin_regiones`, `fin_negocios`, `fin_compradores`, `fin_presupuestos` (budget allocations by concepto, year, negocio)
+- **Finance**: `fin_gastos`, `fin_ingresos`, `fin_transacciones_ganado`, `fin_conceptos_gastos`, `fin_proveedores`, `fin_categorias_gastos`, `fin_categorias_ingresos`, `fin_medios_pago`, `fin_regiones`, `fin_negocios`, `fin_compradores`, `fin_presupuestos` (budget allocations by concepto, year, negocio), `fin_parametros` (accounting inputs the system cannot derive: `cabezas_inventario_inicial`, `costo_cabeza_inventario_inicial`, `saldo_inicial_caja`)
 - **Cattle inventory**: `gan_ubicaciones`, `gan_fincas` (hectáreas), `gan_potreros`, `gan_inventario` (snapshot per potrero: novillos/toros/peso promedio), `gan_movimientos` (event log: compra/venta/muerte/traslado_entrada/traslado_salida/ajuste; estado pendiente/confirmado/descartado), `gan_pesos_historico`
 - **Production**: `produccion`, `reportes_semanales`
 - **Climate**: `clima_lecturas` (rolling 24h window of 5-min Ecowitt readings — pruned daily by cron), `clima_resumen_diario` (pre-aggregated daily summaries: min/max/avg temp, humidity, wind, rainfall, radiation, UV — one row per day, scales indefinitely)
@@ -371,6 +380,9 @@ Sequential SQL migrations live in `src/sql/migrations/` (001–050). See `src/sq
 - **046**: `add_produccion_calidad` — adds optional `kg_exportacion`/`kg_nacional` NUMERIC(12,2) columns to `produccion` with CHECK enforcing exact sum against `kg_totales` when both are non-null. Applied to production 2026-06-12.
 - **049**: `add_usuarios_modulos_acceso` — adds `modulos_acceso text[] NOT NULL DEFAULT '{}'` to `usuarios`. Per-user app-module visibility (`aguacate` | `hato_lechero` | `ganado` | `finanzas`). Navigation/visibility only — **NOT enforced by RLS**. Gerencia bypasses it in app code. Applied to production 2026-07-21.
 - **050**: `gastos_created_by_tracking` — BEFORE INSERT triggers on `fin_gastos` and `fin_transacciones_ganado` (`set_gasto_created_by()` / `set_transaccion_ganado_created_by()`, same `COALESCE(created_by, auth.uid())` pattern as migration 040's tareas trigger) so every new row is attributed to its creator going forward. One-time backfill for 2026: 48 gastos Efrain confirmed as his (matched by `fecha`+`nombre`+`valor`, 3 of the 45 identified entries had 2 identical physical rows each — pre-existing duplicate data entry) are attributed to him; the remaining 453 `fin_gastos` rows dated in 2026 are attributed to Consuelo. Rows outside 2026 (3870), and `fin_transacciones_ganado` history, are left with `created_by = NULL` (never populated pre-migration, no way to backfill). Applied to production 2026-07-21.
+- **051**: `add_clasificacion_costos` — adds `tipo_costo` (`directo` | `indirecto`, NOT NULL DEFAULT `'indirecto'`) to `fin_categorias_gastos` and a nullable override on `fin_conceptos_gastos` (NULL = inherit). Drives the Margen de Contribución line in `/finanzas/reportes`; editable from Configuración → Finanzas → Reportes. Seeds by `ILIKE`, not equality — the production catalog diverged from the versioned SQL (the real category is `Mano de Obra y Asistencia Técnica`, while `calculosCostoKg.ts:41` still compares against `'Mano de Obra'`). Result: 7 directas / 7 indirectas. Applied to production 2026-07-21.
+- **052**: `create_fin_parametros` — key/value table (`clave`, `anio`, `negocio_id`, `valor`) for accounting inputs the system cannot derive from its own data. Unique index over `COALESCE`d columns, so writes must be UPDATE-by-id then INSERT — **never PostgREST upsert**, since `on_conflict` cannot reference an expression index. RLS Gerencia-only via `es_usuario_gerencia()`. Applied to production 2026-07-21.
+
 
 ### Monitoring Module (`/monitoreo`) — incidencia aggregation
 
@@ -403,6 +415,31 @@ Key files:
 - `src/types/finanzas.ts` — `UnifiedFinanceItem` type
 - `src/components/finanzas/components/GastosList.tsx` — merges `fin_transacciones_ganado` compras
 - `src/components/finanzas/components/IngresosList.tsx` — merges `fin_transacciones_ganado` ventas
+
+### Financial Reports (`/finanzas/reportes`) — P&G + Flujo de Caja
+
+Two reports × four views (Global, Aguacate Hass, Ganado, Hato Lechero). Global includes *every* negocio — Oficina Central, Caballos, Agrícola, Finca de Descanso have no view of their own. Design doc: `docs/plan_reportes_finanzas.md`.
+
+**Accounting rules the engine enforces** (approved by the owner; changing one is a business decision, not a refactor):
+
+- **Only `estado='Confirmado'` gastos count.** Pendientes are excluded and surfaced as a warning with their total.
+- **Buying cattle is not an expense — it is inventory.** The purchase never appears in the P&G; only the COGS of animals actually sold crosses the line, at a **moving weighted average per head** (`costoVentaGanado.ts`). Per head and not per kilo on purpose: the animal is bought thin and sold fat, so costing sold kilos at purchase price would charge the fattening twice — feed and vet are already in `fin_gastos`. The purchase *is* a cash outflow in the Flujo de Caja: that asymmetry is the single most misread thing in these two reports and carries its own labelled line.
+- **The COGS calculation is path-dependent** — the hook fetches the *entire* `fin_transacciones_ganado` history, never just the year. Truncating the series changes the answer (there is a test that proves it).
+- **Cosecha assignment (aguacate only)**: `Traviesa N` ← egresos ene–jun of N; `Principal N` ← egresos jul–dic of **N−1** (it is sold nov N−1 → abr N, so that is the semester the fruit was worked). Controlled by the single constant `DESFASE_ANIO_PRINCIPAL` in `periodosReporte.ts`.
+- **No prorrateo between negocios.** `fin_gastos.negocio_id` is NOT NULL, so every gasto already has its business. Note the consequence: Oficina Central (~$2.356M historical, zero income) is pure shared overhead that no per-business utility carries — it only shows up in Global.
+- **P&G columns are cumulative** (Q1 ⊂ Q1–Q2 ⊂ Q1–Q3 ⊂ Año); the Flujo de Caja is 12 calendar months.
+
+**Structure**: pure engines in `src/utils/` (`periodosReporte`, `clasificacionCostos`, `costoVentaGanado`, `calculosPyG`, `calculosFlujoCaja`, `reportesFinancierosComun`) — zero Supabase imports, tested in `src/__tests__/` — fed by a single fetching hook (`useReportesFinancierosData`) that loads once per year and serves all 4 views, so the two reports can never disagree by having read the DB at different moments.
+
+**Contracts that matter when editing:**
+
+- Report lines are a **flat ordered array** with `nivel` + `padre_id`, not a tree: the table, the PDF and the Excel all walk the same structure.
+- `valores`/`meses` are **always positive**; the sign lives in `esResta`/`signo`. Never infer sign from the value.
+- `sinDato[]` marks cells that render `—` rather than `0` — the difference between "the margin was 0%" and "there were no sales, so there is no percentage".
+- **All report queries must go through `fetchAll`** (`src/utils/supabase/fetchAll.ts`). There are ~1.250 gastos per year and PostgREST silently caps at 1.000.
+- The PDF/Excel exporters reuse `formatearCelda`/`formatearCeldaFlujo` from the table components. Do **not** switch them to `formatearMoneda` (used by the older PDF generators): it renders the COP symbol and the PDF would stop matching the screen.
+- **Never feed these reports from `movimientos_diarios_productos`, `movimientos_inventario`, `compras` or `registros_trabajo`.** Those are operational costing (cost/kg per lote) and would double-count insumos already captured in `fin_gastos` by the compra→gasto trigger. The only sources are `fin_gastos`, `fin_ingresos` and `fin_transacciones_ganado`.
+- Financial tables need real CSS, not Tailwind: `table-fixed`, `tabular-nums` and `border-collapse` **do not exist** in the frozen `index.css`. The `.tabla-financiera` / `.celda-num` / `.col-etiqueta` rules live in `globals.css`. `.tabla-financiera .col-etiqueta` must keep its specificity above `.tabla-financiera td`, or long labels overflow onto the first figure.
 
 ### Gastos historial (`/finanzas/gastos`) — view contract
 
@@ -622,6 +659,7 @@ See `BUG_REPORT.md` for current tracked bugs. As of the last update, the Reporte
 | Document                                    | Location                     | Purpose                          |
 |---------------------------------------------|------------------------------|----------------------------------|
 | Database schema (32+ tables)                | `docs/supabase_tablas.md`    | Complete DB reference            |
+| Financial reports plan (P&G + cash flow)    | `docs/plan_reportes_finanzas.md` | Approved accounting rules, phases, findings |
 | Setup checklist                             | `docs/CHECKLIST_SETUP.md`    | Environment setup guide          |
 | Full setup instructions                     | `docs/INSTRUCCIONES_SETUP_COMPLETO.md` | Detailed setup walkthrough |
 | Final setup instructions                    | `docs/SETUP_FINAL_INSTRUCCIONES.md` | Latest setup walkthrough   |
