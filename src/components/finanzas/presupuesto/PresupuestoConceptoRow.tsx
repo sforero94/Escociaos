@@ -8,9 +8,10 @@ interface PresupuestoConceptoRowProps {
   showPct: boolean;
   editable: boolean;
   onBudgetChange: (conceptoId: string, categoriaId: string, newAmount: number) => void;
+  onVerGastos: () => void;
 }
 
-export function PresupuestoConceptoRow({ row, showPct, editable, onBudgetChange }: PresupuestoConceptoRowProps) {
+export function PresupuestoConceptoRow({ row, showPct, editable, onBudgetChange, onVerGastos }: PresupuestoConceptoRowProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -50,8 +51,21 @@ export function PresupuestoConceptoRow({ row, showPct, editable, onBudgetChange 
         </span>
       </td>
 
-      {/* Actual Q */}
-      <td className="px-3 py-1.5 text-center tabular-nums">{fmt(row.actual_q)}</td>
+      {/* Actual Q — abre el detalle de gastos que suman esta cifra */}
+      <td className="px-3 py-1.5 text-center tabular-nums">
+        {row.actual_q > 0 ? (
+          <button
+            type="button"
+            onClick={onVerGastos}
+            className="cursor-pointer hover:underline"
+            title="Ver gastos"
+          >
+            {fmt(row.actual_q)}
+          </button>
+        ) : (
+          fmt(row.actual_q)
+        )}
+      </td>
 
       {/* Act % (toggleable) */}
       {showPct && <td className="px-2 py-1.5 text-center text-gray-400 tabular-nums">{row.pct_actual > 0 ? Math.round(row.pct_actual) + '%' : ''}</td>}
