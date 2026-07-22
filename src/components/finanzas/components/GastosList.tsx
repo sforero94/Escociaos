@@ -456,8 +456,12 @@ export function GastosList({ onEdit }: GastosListProps) {
         )}
       </div>
 
-      {/* Compact expense list */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      {/* Compact expense list.
+          Sin `overflow-hidden`: el menú `⋮` es absolute y se abre hacia abajo, así que
+          el contenedor lo recortaba en las últimas filas (acciones inalcanzables en
+          desktop). Las esquinas las redondea ahora la primera/última fila via
+          `.lista-financiera`, que es para lo que servía el overflow. */}
+      <div className="bg-white rounded-xl border border-gray-200">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-6 h-6 text-primary animate-spin" />
@@ -469,14 +473,14 @@ export function GastosList({ onEdit }: GastosListProps) {
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-100">
+          <div className="lista-financiera divide-y divide-gray-100">
             {unifiedItems.map((item) => {
               const itemKey = `${item.source}-${item.id}`;
               return (
               <div
                 key={itemKey}
                 onClick={() => setDetalleItem(item)}
-                className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50/50 transition-colors group cursor-pointer"
+                className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 transition-colors group cursor-pointer"
               >
                 <span onClick={(e) => e.stopPropagation()} className="flex-shrink-0 flex items-center">
                   <Checkbox

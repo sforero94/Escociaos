@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { IngresosList } from './components/IngresosList';
 import { IngresoForm } from './components/IngresoForm';
 import { IngresosBatchTable } from './components/IngresosBatchTable';
@@ -10,8 +11,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Plus, FileSpreadsheet, ClipboardList, History } from 'lucide-react';
 import { toast } from 'sonner';
 
+// Debe coincidir con los `value` de los TabsTrigger definidos más abajo
+const TABS_VALIDOS = ['registrar', 'historial'];
+
 export function IngresosView() {
-  const [activeTab, setActiveTab] = useState('registrar');
+  const [searchParams] = useSearchParams();
+  const tabInicial = TABS_VALIDOS.includes(searchParams.get('tab') || '')
+    ? (searchParams.get('tab') as string)
+    : 'historial';
+  const [activeTab, setActiveTab] = useState(tabInicial);
   const [showForm, setShowForm] = useState(false);
   const [showCargaMasiva, setShowCargaMasiva] = useState(false);
   const [editingIngreso, setEditingIngreso] = useState<any>(null);
@@ -56,15 +64,19 @@ export function IngresosView() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} activationMode="manual" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="registrar" className="flex items-center gap-2">
-            <ClipboardList className="w-4 h-4" />
-            Registrar
-          </TabsTrigger>
           <TabsTrigger value="historial" className="flex items-center gap-2">
             <History className="w-4 h-4" />
             Historial
           </TabsTrigger>
+          <TabsTrigger value="registrar" className="flex items-center gap-2">
+            <ClipboardList className="w-4 h-4" />
+            Registrar
+          </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="historial" className="mt-6">
+          <IngresosList key={refreshKey} onEdit={handleEditIngreso} />
+        </TabsContent>
 
         <TabsContent value="registrar" className="mt-6 space-y-6">
           <div className="flex flex-wrap gap-3">
@@ -94,10 +106,6 @@ export function IngresosView() {
           </div>
 
           <IngresosBatchTable catalogs={catalogs} onSaved={handleBatchSaved} />
-        </TabsContent>
-
-        <TabsContent value="historial" className="mt-6">
-          <IngresosList key={refreshKey} onEdit={handleEditIngreso} />
         </TabsContent>
       </Tabs>
 
