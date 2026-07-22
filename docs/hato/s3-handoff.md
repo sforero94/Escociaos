@@ -19,7 +19,7 @@ arrancar S3 sin reconstruir el contexto de S1/S2. Escrito 2026-07-22 al cerrar S
 > `FLUJO LECHE` sí era resoluble): el estado vigente está en el plan §8 y en
 > `s3-verificacion-independiente.md`, no aquí.
 
-Producción corre las migraciones **053–063**. La base tiene 15 tablas `hato_*`
+Producción corre las migraciones **053–064** (la 063 la tomó `ingresos_created_by_tracking`, ajena al módulo). La base tiene 15 tablas `hato_*`
 + 2 vistas, todas vacías: **nunca se ha cargado un solo animal.**
 
 Estado del código en la rama:

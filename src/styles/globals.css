@@ -445,10 +445,12 @@ input[type='number'] {
   color: var(--primary);
 }
 
-/* Gastos historial — mobile filter collapse.
-   Defined here because src/index.css is a FROZEN pre-compiled Tailwind build
-   that ships no `sm:hidden` / `sm:flex` utilities: writing them in JSX would
-   silently do nothing. Breakpoint matches Tailwind's `sm` (640px). */
+/* Historial de Gastos e Ingresos — mobile filter collapse.
+   Compartido por GastosList e IngresosList: el prefijo `gasto-` es histórico,
+   las reglas no son de un módulo en particular. Definido aquí porque
+   src/index.css es un build precompilado y CONGELADO de Tailwind que no trae
+   utilidades `sm:hidden` / `sm:flex`: escribirlas en el JSX no haría nada.
+   El breakpoint coincide con el `sm` de Tailwind (640px). */
 
 /* Toggle button: only reachable on mobile, where the filters are collapsed. */
 .filtros-toggle {
@@ -503,6 +505,28 @@ input[type='number'] {
   .filtros-colapsables.abierto {
     display: contents;
   }
+}
+
+/* Lista de filas del historial (gastos e ingresos).
+   El contenedor NO puede llevar `overflow-hidden`: el menú `⋮` de cada fila es
+   absolute y se abre hacia abajo, así que recortarlo dejaba las acciones de las
+   últimas filas fuera de la vista — inalcanzables en desktop, donde ese menú es
+   la única vía además del modal. Lo que aportaba el overflow era que el fondo de
+   hover de la primera/última fila no pisara las esquinas redondeadas del
+   contenedor, y eso se resuelve redondeando esas filas directamente.
+
+   OJO con el radio: este build redefine `rounded-xl` como
+   `calc(var(--radius) + 4px)` (--radius: 1rem → 20px), NO el 0.75rem por
+   defecto de Tailwind. Se referencia la misma expresión para que las esquinas
+   no se desalineen si cambia el token. */
+.lista-financiera > :first-child {
+  border-top-left-radius: calc(var(--radius) + 4px);
+  border-top-right-radius: calc(var(--radius) + 4px);
+}
+
+.lista-financiera > :last-child {
+  border-bottom-left-radius: calc(var(--radius) + 4px);
+  border-bottom-right-radius: calc(var(--radius) + 4px);
 }
 /* ── Tablas financieras (P&G y Flujo de Caja) ─────────────────────────────
    src/index.css es un build precompilado y CONGELADO de Tailwind: no incluye

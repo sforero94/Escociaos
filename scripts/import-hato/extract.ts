@@ -72,7 +72,7 @@ const ARCHIVOS_EXCLUIDOS = [/^GASTOS FOV/i];
  * leerlas; no se hizo para no pedir credenciales que este paso no necesita).
  */
 const CONFIG: HatoConfig = {
-  // gyr: agregada por decisión del dueño 2026-07-22 (migración 063 -- si esa
+  // gyr: agregada por decisión del dueño 2026-07-22 (migración 064 -- si esa
   // migración aún no se aplicó a producción, este espejo va un paso adelante
   // de la tabla, deliberadamente: la decisión ya está tomada).
   razas: ['jersey', 'holstein', 'normanda', 'gyr'],

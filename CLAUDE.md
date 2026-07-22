@@ -155,7 +155,7 @@ These are consumed in `src/utils/supabase/client.ts` via `import.meta.env`. The 
 │   │   └── validation.ts               # Data validation utilities
 │   │
 │   ├── sql/                             # SQL scripts & migrations
-│   │   ├── migrations/                  # Sequential numbered migrations (001–050)
+│   │   ├── migrations/                  # Sequential numbered migrations (001–064)
 │   │   └── *.sql                        # Standalone SQL scripts
 │   │
 │   ├── styles/
@@ -360,7 +360,7 @@ The applications module has two distinct tracking layers — **do not confuse th
 
 ### Migrations
 
-Sequential SQL migrations live in `src/sql/migrations/` (001–050). See `src/sql/migrations/README_MIGRATION.md` for instructions on running them.
+Sequential SQL migrations live in `src/sql/migrations/` (001–064). See `src/sql/migrations/README_MIGRATION.md` for instructions on running them.
 
 - **023**: `create_fin_transacciones_ganado` — cattle buy/sell transactions table with RLS
 - **024**: `alter_fin_ingresos_add_columns` — adds `cantidad`, `precio_unitario`, `cosecha`, `alianza`, `cliente`, `finca` to `fin_ingresos`
@@ -394,7 +394,8 @@ Sequential SQL migrations live in `src/sql/migrations/` (001–050). See `src/sq
   - **060**: `hato_alertas_cron` — pg_cron `'45 10 * * *'` (05:45 Bogotá) → `net.http_post` to `/make-server-1ccce916/hato/alertas/tick`, secret read from Supabase Vault (`vault.decrypted_secrets`, never committed). Endpoint ships in S6 — until then a daily benign 404, no data mutated.
 - **061**: `hato_pesajes_litros_total` — corrects 054. `litros_total` was `GENERATED ALWAYS AS (COALESCE(litros_am,0)+COALESCE(litros_pm,0))`, but the farm records **one figure per cow per weighing day (am+pm already summed)** — no per-milking split exists, historically or going forward. The generated column forced a choice between two lies: put the total in `litros_am`, or leave both NULL and store `litros_total = 0` — and a stored 0 is indistinguishable from "this cow gave 0 litres", which is exactly what Épica D forbids. Uses `ALTER COLUMN … DROP EXPRESSION` (PG 14+; prod runs 17) to convert in place, then `SET NOT NULL` + `CHECK >= 0`. `litros_am`/`litros_pm` survive as optional detail that no longer feeds the total. Applied to production 2026-07-22 (table verified empty first).
 - **062**: `hato_chequeo_estado_normalizado` — `hato_chequeo_vacas` stored `estado_raw` with **no normalized counterpart**, unlike every other column in that table, so `parseEstado()` had nowhere to land. Adds `estado TEXT` (`vacia_apta` | `vacia_problema` | `fecha_heredada` | `desconocido`; NULL = empty cell, never defaulted to "apta") and exposes it in `v_hato_estado_actual` as `ultimo_estado_chequeo` (appended **last** — `CREATE OR REPLACE VIEW` cannot reorder or insert columns). Also seeds a 10th `hato_config` key, `dias_espera_voluntaria_post_parto` (**provisional 60, unconfirmed by the owner**): the engine was borrowing `dias_servicio_sin_confirmacion` as a proxy, which coupled two different concepts — one counts from the *service*, the other from the *parto* — so changing one silently moved the other. Applied to production 2026-07-22.
-- **063**: `hato_config_gyr_dia_pesaje` — two owner decisions from the second decision round (2026-07-22): appends `"gyr"` to the `razas` catalog (~101 occurrences in the historical Toro column; `meses_secado_por_raza` deliberately untouched — no gyr-specific value was given, `_default` applies) and seeds an 11th key `dia_pesaje_semanal` (`{"iso": 3, "nombre": "miercoles"}`) so the S5 milk backfill can derive calendar dates from "SEMANA N" sheets. Applied to production 2026-07-22 (verified: `razas` carries gyr, `dia_pesaje_semanal` seeded, `meses_secado_por_raza` untouched).
+- **063**: `ingresos_created_by_tracking` — the 050 fix, applied to `fin_ingresos`. The `created_by` column has existed since the original schema but no write path ever populated it, which blocked the Usuario filter in the Ingresos historial. Adds `set_ingreso_created_by()` + BEFORE INSERT trigger (same `COALESCE(created_by, auth.uid())` pattern as 050/040) and backfills **every** NULL row to Santiago. The unconditional backfill deliberately departs from 050, which left pre-2026 gastos NULL because their author was genuinely unrecoverable; here the author of the whole history is known. `fin_transacciones_ganado` is untouched — 050 already covers it, so ganado ventas need nothing. Applied to production 2026-07-22 (221 rows, all of `fin_ingresos`, spanning 2023-01-03 → 2026-06-30; 0 left unattributed). The backfill targets `sforero94@gmail.com` — Santiago's Gerencia account in `usuarios`, **not** `santiago@thinksid.co`, which is a separate "Santiago Admin" Administrador account; both exist, so the wrong one would have failed silently rather than loudly. Known gap, identical to gastos post-050: the Telegram bot inserts via the service role where `auth.uid()` is NULL, so bot-created rows still land as "Sin usuario".
+- **064**: `hato_config_gyr_dia_pesaje` — two owner decisions from the second decision round (2026-07-22): appends `"gyr"` to the `razas` catalog (~101 occurrences in the historical Toro column; `meses_secado_por_raza` deliberately untouched — no gyr-specific value was given, `_default` applies) and seeds an 11th key `dia_pesaje_semanal` (`{"iso": 3, "nombre": "miercoles"}`) so the S5 milk backfill can derive calendar dates from "SEMANA N" sheets. Renumbered from 063 to 064 while integrating with `main` — 063 was already taken by `ingresos_created_by_tracking`, applied to production first. Applied to production 2026-07-22 (verified: `razas` carries gyr, `dia_pesaje_semanal` seeded, `meses_secado_por_raza` untouched).
 
 ### Hato Lechero Module (`/hato-lechero`, plan `docs/plan_hato_lechero_module.md`)
 
@@ -477,6 +478,10 @@ Key files:
 - `src/components/finanzas/components/GastosList.tsx` — merges `fin_transacciones_ganado` compras
 - `src/components/finanzas/components/IngresosList.tsx` — merges `fin_transacciones_ganado` ventas
 
+**Filtering the merged lists — `fin_transacciones_ganado` has none of the dimensions the filters use.** No `negocio_id`, `region_id`, `categoria_id`, `concepto_id` or `estado`; a ganado row is by definition the **Ganado** negocio and has no región, categoría, concepto or Confirmado/Pendiente state. Those filters therefore cannot be expressed as query predicates on that table — each list computes an `incluirGanado` boolean and includes or excludes the ganado block wholesale: excluded whenever región/categoría/concepto/estado is set, or when the negocio filter is set to anything other than Ganado (resolved by name via `NEGOCIO_GANADO`, never a hardcoded UUID).
+
+This was silently broken until 2026-07-22: ganado rows ignored every non-date filter, so they appeared under *any* negocio and their value was added to the header total. Filtering Ingresos by negocio "Agrícola" for 2025 showed 27 rows / $1.417M when the truth was 10 rows / $239M — **83% of the figure came from ganado that should not have been on screen.** `negocioGanadoId` must stay in the load effect's dependency array: the catalogs resolve after first render, so without it a Ganado-negocio filter drops the ganado rows until the next filter change.
+
 ### Financial Reports (`/finanzas/reportes`) — P&G + Flujo de Caja
 
 Two reports × four views (Global, Aguacate Hass, Ganado, Hato Lechero). Global includes *every* negocio — Oficina Central, Caballos, Agrícola, Finca de Descanso have no view of their own. Design doc: `docs/plan_reportes_finanzas.md`.
@@ -510,6 +515,20 @@ Two reports × four views (Global, Aguacate Hass, Ganado, Hato Lechero). Global 
 - **Selection subtotal** — per-row checkboxes plus "seleccionar todos"; the subtotal is computed over `unifiedItems`, so it always reflects the active filters. Selection resets whenever filters or the search query change.
 - **Detail dialog** (`GastoDetalleDialog.tsx`) — opens on row click for gasto and ganado items alike, and carries Editar / Eliminar / Completar. The row's `onClick` is suppressed on the checkbox and the `⋮` wrapper via `stopPropagation`.
 - **Mobile** — the `⋮` menu is `hidden sm:block` **on purpose**: it is gated on `group-hover`, which never fires on touch, so on mobile the detail dialog is the only path to the actions. Do not re-enable it on mobile without also removing the hover gate. The two-line mobile row and the collapsible filter bar rely on the custom `globals.css` classes listed in the frozen-Tailwind caution zone below.
+- **The list container must not carry `overflow-hidden`.** The `⋮` menu is absolutely positioned and opens downward, so clipping the container hid the actions on the last rows entirely — on desktop that menu is the only path to them besides the dialog. Corner rounding is handled instead by `.lista-financiera` (`globals.css`), which rounds the first and last row. Note its radius is `calc(var(--radius) + 4px)`, not Tailwind's stock `0.75rem`: **this build redefines `rounded-xl`** (`--radius` is `1rem`, so the real radius is 20px). Anything matching that container's corners must use the same expression.
+- Row hover was written `hover:bg-gray-50/50` and did **nothing** — the frozen build ships `.hover\:bg-gray-50` but no opacity-modified variant. Corrected to `hover:bg-gray-50`, which matters now that the whole row is clickable and needs the affordance. A live row background is also what makes the `.lista-financiera` rounding load-bearing rather than decorative.
+
+### Ingresos historial (`/finanzas/ingresos`) — view contract
+
+Mirrors the Gastos contract above (Historial default + leftmost, `?tab=registrar` deep-link, `ytd` default repeated in the same three places, Usuario filter, selection subtotal, row-click detail dialog, collapsible mobile filters, no `overflow-hidden` on the list container). It reuses the same `globals.css` classes — `.filtros-toggle`, `.filtros-colapsables`, `.gasto-nombre`, `.gasto-meta-movil`, `.lista-financiera`. The `gasto-` prefix is historical: **the rules are module-agnostic and shared with Ingresos on purpose** — renaming them means touching both lists.
+
+Where it deliberately differs from Gastos, because `fin_ingresos` has no such column:
+
+- **No `estado`** — no Confirmado/Pendiente filter, no estado icon, no "N pendientes" counter, and no Completar action. `IngresoDetalleDialog` therefore has no `onCompletar` prop, unlike its gastos twin.
+- **No `concepto`** — the categoría filter has no cascade; instead it is **scoped by negocio** (`categoriasFiltradas`), and selecting a negocio clears `categoria_id`. Gastos does neither.
+- **Extra ingreso-only fields** surfaced in the detail dialog: `cantidad`, `precio_unitario`, `cosecha`, `alianza`, `cliente`, `finca` (migration 024 columns that had no UI until now).
+- **Usuario filter** — `created_by` on `fin_ingresos` is populated by migration **063**, not 050; the `fin_transacciones_ganado` half was already covered by 050.
+Everything else is intentionally identical to Gastos — the two lists should stay in sync.
 
 ### Cattle Inventory Module (`/ganado`, issue #51)
 

@@ -1,6 +1,11 @@
 -- =====================================================================
--- 063: Hato Lechero — gyr en el catálogo de razas + día de pesaje semanal
+-- 064: Hato Lechero — gyr en el catálogo de razas + día de pesaje semanal
 -- Fecha: 2026-07-22
+--
+-- Renumerada de 063 a 064 al integrar con main: la 063 ya la tomó
+-- `ingresos_created_by_tracking` (aplicada a producción antes que esta).
+-- Mismo patrón de colisión de numeración que ya documentan S1/S3 en el plan
+-- del Hato Lechero — nunca reescribir una migración ajena, renumerar la propia.
 --
 -- Dos decisiones del dueño (segunda ronda, 2026-07-22 — plan §8):
 --
