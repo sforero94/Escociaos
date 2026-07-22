@@ -289,7 +289,9 @@ export type TipoSX =
   | 'vacia' // estado, no evento
   | 'vendida' // estado, no evento (la venta se registra por otro flujo)
   | 'cero' // '0' -- significado no definido en el plan, agrupado como estado
-  | 'desconocido' // código no reconocido (Mv, gem+, nombres de vaca, basura)
+  | 'gemelar' // 'gem+' = parto GEMELAR (confirmado por el dueño, 2026-07-22)
+  | 'mv' // 'Mv' = "vacas de Martha" -- sin significado para el sistema (dueño, 2026-07-22)
+  | 'desconocido' // código no reconocido (nombres de vaca, basura)
   | 'vacio'; // celda vacía -- no se checó/no aplica esta ronda, nunca "0"
 
 export interface ResultadoSX {
@@ -303,11 +305,12 @@ export interface ResultadoSX {
 
 /**
  * Parser de la celda `SX`. Reconoce las familias documentadas (OV/AV/A{n}/
- * A+/O+/aborto/vacia/vendida), sufijos de raza pegados al código (gir/hol/
- * hlt) y marcadores de incertidumbre (`?`). Todo lo demás (Mv, gem+, nombres
- * de vaca mal digitados en la columna) se preserva como `tipo: 'desconocido'`
- * con el crudo intacto -- son preguntas abiertas para el dueño, no algo que
- * este parser deba adivinar.
+ * A+/O+/aborto/vacia/vendida), los códigos definidos por el dueño en la
+ * segunda ronda de decisiones 2026-07-22 (`gem+` = parto gemelar, `Mv` =
+ * marca personal de Martha sin significado para el sistema), sufijos de raza
+ * pegados al código (gir/hol/hlt) y marcadores de incertidumbre (`?`). Todo
+ * lo demás (nombres de vaca mal digitados en la columna, basura) se preserva
+ * como `tipo: 'desconocido'` con el crudo intacto -- nada se adivina.
  */
 export function parseSX(raw: unknown): ResultadoSX {
   const crudo = convertirRawATexto(raw);
@@ -400,23 +403,19 @@ export function parseSX(raw: unknown): ResultadoSX {
     });
     return { crudo, tipo: 'cero', raza, incierto, issues };
   }
-  // 'Mv' y 'gem+' NO son typos aislados (evidencia QA: 'gem+' aparece de
-  // forma recurrente y consistente en CUÑA, en al menos 3 hojas distintas) --
-  // se señalan con un mensaje específico para el dueño en vez del genérico
-  // "código no reconocido", sin por eso inventarles semántica.
+  // 'Mv' y 'gem+' dejaron de ser preguntas abiertas: el dueño los definió el
+  // 2026-07-22 (segunda ronda de decisiones, ver plan §8).
   if (key === 'mv') {
-    issues.push({
-      crudo,
-      motivo: "código 'Mv' no está definido en el plan (§7.1) y aparece de forma recurrente en varias hojas, no es un typo aislado -- pregunta abierta para el dueño",
-    });
-    return { crudo, tipo: 'desconocido', raza, incierto, issues };
+    // "Vacas de Martha" -- una marca personal de la dueña sin significado
+    // para el sistema. Se reconoce (no cae al genérico 'desconocido' con
+    // issue de revisión) y se ignora: ni evento ni estado. El crudo queda
+    // intacto, como siempre.
+    return { crudo, tipo: 'mv', raza, incierto, issues };
   }
   if (key === 'gem+') {
-    issues.push({
-      crudo,
-      motivo: "código 'gem+' no está definido en el plan (§7.1); posible parto gemelar -- aparece de forma recurrente y consistente (ej. CUÑA), no es un typo aislado. Pregunta abierta para el dueño, no se asume su significado aquí",
-    });
-    return { crudo, tipo: 'desconocido', raza, incierto, issues };
+    // Parto GEMELAR, confirmado por el dueño. `descomponerSX` genera el
+    // evento de parto con `datos.gemelar = true`.
+    return { crudo, tipo: 'gemelar', raza, incierto, issues };
   }
 
   issues.push({ crudo, motivo: `código SX no reconocido: '${crudo}' -- no se inventa semántica, queda para revisión` });
@@ -1060,12 +1059,34 @@ export function descomponerSX(input: InputDescomposicionSX): ResultadoDescomposi
         motivo: "SX indica 'vendida' -- no se genera evento aquí (la venta se registra por el flujo de TransaccionGanadoForm/migración 059); confirmar que exista",
       });
       break;
+    case 'gemelar':
+      // Parto gemelar (decisión del dueño, 2026-07-22). Se emite UN evento de
+      // parto con la marca `gemelar` en `datos`. El destino de las crías no
+      // está registrado en la planilla (TERNERAS solo registra hembras, y no
+      // hay filas para este parto) -- se documenta como issue en vez de
+      // inventar `cria_destino`.
+      eventos.push({
+        tipo: 'parto',
+        fecha: fechaEvento,
+        fecha_confianza: confianzaEvento,
+        datos: { gemelar: true },
+        sx_raw: input.sx.crudo,
+        procedencia: 'sx_raw',
+      });
+      issues.push({
+        crudo: input.sx.crudo,
+        motivo:
+          'parto GEMELAR (gem+, confirmado por el dueño 2026-07-22) -- el destino de las crías no quedó registrado en la planilla, no se asume',
+      });
+      break;
     case 'vacia':
     case 'cero':
+    case 'mv':
     case 'desconocido':
     case 'vacio':
-      // Estado, no evento (plan §7.1) -- o SX vacío/no reconocido: no se
-      // inventa un evento reproductivo sin evidencia real.
+      // Estado, no evento (plan §7.1) -- o SX vacío/no reconocido/marca
+      // personal ('Mv', sin significado para el sistema): no se inventa un
+      // evento reproductivo sin evidencia real.
       break;
     default: {
       const _exhaustivo: never = input.sx.tipo;

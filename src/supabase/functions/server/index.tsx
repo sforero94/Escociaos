@@ -8,6 +8,7 @@ import { toggleProductoActivo } from "./productos.tsx";
 import { generarReporteSemanal } from "./generar-reporte-semanal.tsx";
 import { handleChatMessage } from "./chat.tsx";
 import { handleClimaSync, handleClimaBackfill, handleClimaForecast } from "./clima.tsx";
+import { handleHatoChequeoPreview } from "./hato-chequeo-preview.ts";
 import { handleWebhook } from "./telegram/bot.ts";
 
 const app = new Hono();
@@ -163,6 +164,12 @@ app.post("/make-server-1ccce916/clima/backfill", async (c) => {
 // Short-range forecast (OpenWeatherMap proxy) for the main dashboard's weather card
 app.get("/make-server-1ccce916/clima/forecast", async (c) => {
   return await handleClimaForecast(c);
+});
+
+// Hato Lechero: B0/V10 -- sube el .xlsx de un chequeo nuevo, devuelve un diff
+// para aprobar. NUNCA comete un INSERT/UPDATE (plan §7.4).
+app.post("/make-server-1ccce916/hato/chequeo/preview", async (c) => {
+  return await handleHatoChequeoPreview(c);
 });
 
 // Handle preflight OPTIONS at Deno.serve level to ensure CORS works

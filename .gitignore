@@ -1,5 +1,8 @@
 # Dependencies
 node_modules/
+# Sin barra: en worktrees node_modules suele ser un symlink al del repo
+# principal, y `node_modules/` (con barra) solo ignora directorios reales.
+node_modules
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -31,3 +34,6 @@ Thumbs.db
 
 # Supabase CLI cache
 supabase/.temp/
+# Hato Lechero — datos reales, NUNCA commitear
+*.xlsx
+scripts/import-hato/out/
