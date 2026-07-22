@@ -272,15 +272,29 @@ describe('parseSX', () => {
     expect(ao.tipo).toBe('desconocido');
   });
 
-  it("'Mv' y 'gem+' son desconocidos, nunca se les inventa semántica (pregunta abierta)", () => {
+  it("'Mv' es la marca personal de Martha: reconocida e ignorada, sin issue (dueño, 2026-07-22)", () => {
     const mv = parseSX('Mv');
-    expect(mv.tipo).toBe('desconocido');
+    expect(mv.tipo).toBe('mv');
     expect(mv.crudo).toBe('Mv');
-    expect(mv.issues.length).toBeGreaterThan(0);
+    // Ya no es pregunta abierta -- reconocerla sin issue es el punto.
+    expect(mv.issues).toEqual([]);
+  });
 
+  it("'gem+' es parto GEMELAR (dueño, 2026-07-22)", () => {
     const gem = parseSX('gem+');
-    expect(gem.tipo).toBe('desconocido');
+    expect(gem.tipo).toBe('gemelar');
     expect(gem.crudo).toBe('gem+');
+    expect(gem.issues).toEqual([]);
+  });
+
+  it('gemelar genera UN evento de parto con datos.gemelar, y un issue sobre el destino de las crías', () => {
+    const r = descomponerSX({ chequeoFecha: '2022-09-06', sx: parseSX('gem+'), fechasServicio: [] });
+    expect(r.eventos).toHaveLength(1);
+    expect(r.eventos[0].tipo).toBe('parto');
+    expect(r.eventos[0].datos).toEqual({ gemelar: true });
+    // El destino de las crías no está en la planilla: se documenta, no se inventa.
+    expect(r.eventos[0].cria_destino).toBeUndefined();
+    expect(r.issues.some((i) => /GEMELAR/i.test(i.motivo))).toBe(true);
   });
 
   it('nombres de vaca mal digitados en la columna SX quedan como desconocido, crudo intacto', () => {

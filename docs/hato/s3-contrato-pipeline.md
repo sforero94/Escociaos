@@ -37,7 +37,31 @@ solo parser para importación y captura, y hay un test de paridad que lo protege
 Lo que S2 dejó explícitamente fuera y S3 debe resolver es el nivel de **GRILLA**
 (estructura 2D de la hoja), no el de celda.
 
+## Dónde vive el código (ajuste del coordinador, 2026-07-22)
+
+El contrato original decía "ambos agentes trabajan sobre `scripts/import-hato/`".
+Se ajustó al arrancar S3 porque `scripts/` no lo cubre **ninguna** de las tres
+redes del repo: `tsconfig.json` tiene `"include": ["src"]`, `npm run lint` corre
+sobre `src/`, y los tests viven en `src/__tests__/`. Lógica de grilla e identidad
+sin typecheck, sin lint y sin tests es exactamente lo que este pipeline no puede
+permitirse.
+
+| Capa | Dónde | Por qué |
+|---|---|---|
+| Lógica pura (grilla, normalización, identidad, verificación) | `src/utils/importHato/*.ts` | typecheck + lint + Vitest, igual que `calculosPyG`/`priorizacionMonitoreo` |
+| Tests | `src/__tests__/importHato*.test.ts` | patrón del repo |
+| Runners de I/O (leer `.xlsx`, escribir `out/`) | `scripts/import-hato/*.ts` | única capa que toca disco y `xlsx`; sin lógica de negocio |
+
+La frontera de tipos es **`src/utils/importHato/tipos.ts`** (ya escrito, no lo
+edites). El JSON intermedio sigue en `scripts/import-hato/out/`, fuera de git.
+
+Corolario: el normalizador recibe `HojaCruda` (una matriz de celdas), no una
+ruta de archivo. Eso es lo que lo hace testeable sin abrir un `.xlsx`.
+
 ## El tipo de la frontera
+
+Fuente de verdad: [`src/utils/importHato/tipos.ts`](../../src/utils/importHato/tipos.ts).
+Lo de abajo es la versión resumida con la que se acordó el corte.
 
 ```ts
 /** Una fila de animal en una hoja de chequeo, ya resuelta a nivel de grilla

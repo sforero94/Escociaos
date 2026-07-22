@@ -11,9 +11,15 @@ arrancar S3 sin reconstruir el contexto de S1/S2. Escrito 2026-07-22 al cerrar S
 |---|---|
 | **S1** — Esquema y RLS | ✅ Completa. Migraciones **053–060 aplicadas a producción** (2026-07-22). PR #76 mergeado. |
 | **S2** — Motor puro `calculosHato.ts` | ✅ Código completo y probado. Migraciones **061 y 062 también aplicadas**. Quedan preguntas abiertas para Martha (§4). |
-| **S3** — Importación histórica | ⏸️ **No arrancada.** Es lo que sigue. |
+| **S3** — Importación histórica | ✅ **Completa (2026-07-22).** Pipeline Extract→Normalize→Resolve corriendo sobre los datos reales, Load/Verify escritos, endpoint B0/V10 construido, y las DOS rondas de decisiones del dueño integradas (ver plan §8). `Load` no se ha ejecutado: espera la revisión de `resolution-report.md` (checkpoint humano). Ver también [`s3-verificacion-independiente.md`](./s3-verificacion-independiente.md). |
 
-Producción corre las migraciones **053–062**. La base tiene 15 tablas `hato_*`
+> ⚠️ Este documento fue el arranque en frío de S3 y se conserva como registro.
+> Varias de sus afirmaciones fueron **corregidas al medir** (las 9 hojas
+> duplicadas son 8, las fechas únicas son 35 y no 36, la pregunta del año de
+> `FLUJO LECHE` sí era resoluble): el estado vigente está en el plan §8 y en
+> `s3-verificacion-independiente.md`, no aquí.
+
+Producción corre las migraciones **053–063**. La base tiene 15 tablas `hato_*`
 + 2 vistas, todas vacías: **nunca se ha cargado un solo animal.**
 
 Estado del código en la rama:
