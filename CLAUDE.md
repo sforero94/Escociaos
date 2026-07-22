@@ -95,6 +95,9 @@ These are consumed in `src/utils/supabase/client.ts` via `import.meta.env`. The 
 │   │   │   └── EmpleadosSubNav.tsx       # Employees sub-navigation
 │   │   ├── finanzas/                     # Finance (expenses, income, reports)
 │   │   │   ├── components/               # Finance sub-components
+│   │   │   ├── dashboard/                # Per-negocio dashboards
+│   │   │   ├── presupuesto/              # Budget vs actual
+│   │   │   ├── reportes/                 # P&G + Flujo de Caja tables & controls
 │   │   │   └── hooks/                    # Finance-specific hooks
 │   │   ├── produccion/                   # Production tracking & charts
 │   │   │   ├── components/               # Production sub-components
@@ -122,6 +125,7 @@ These are consumed in `src/utils/supabase/client.ts` via `import.meta.env`. The 
 │   │   ├── monitoreo.ts
 │   │   ├── produccion.ts
 │   │   ├── reporteSemanal.ts
+│   │   ├── reportesFinancieros.ts
 │   │   └── shared.ts
 │   │
 │   ├── utils/                            # Business logic & helper functions
@@ -142,6 +146,11 @@ These are consumed in `src/utils/supabase/client.ts` via `import.meta.env`. The 
 │   │   ├── generarPDF*.ts              # PDF generators (reports, P&L, shopping lists)
 │   │   ├── insightsAutomaticos.ts       # Automatic insight generation
 │   │   ├── laborCosts.ts               # Labor cost calculations
+│   │   ├── calculosPyG.ts              # P&G engine (pure) — see Financial Reports
+│   │   ├── calculosFlujoCaja.ts        # Cash-flow engine (pure)
+│   │   ├── costoVentaGanado.ts         # Cattle COGS, moving weighted average per head
+│   │   ├── periodosReporte.ts          # Cumulative quarters & cosecha periods
+│   │   ├── clasificacionCostos.ts      # Direct vs indirect cost resolution
 │   │   └── validation.ts               # Data validation utilities
 │   │
 │   ├── sql/                             # SQL scripts & migrations
@@ -650,6 +659,7 @@ See `BUG_REPORT.md` for current tracked bugs. As of the last update, the Reporte
 | Document                                    | Location                     | Purpose                          |
 |---------------------------------------------|------------------------------|----------------------------------|
 | Database schema (32+ tables)                | `docs/supabase_tablas.md`    | Complete DB reference            |
+| Financial reports plan (P&G + cash flow)    | `docs/plan_reportes_finanzas.md` | Approved accounting rules, phases, findings |
 | Setup checklist                             | `docs/CHECKLIST_SETUP.md`    | Environment setup guide          |
 | Full setup instructions                     | `docs/INSTRUCCIONES_SETUP_COMPLETO.md` | Detailed setup walkthrough |
 | Final setup instructions                    | `docs/SETUP_FINAL_INSTRUCCIONES.md` | Latest setup walkthrough   |
