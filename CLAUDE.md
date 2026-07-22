@@ -145,7 +145,7 @@ These are consumed in `src/utils/supabase/client.ts` via `import.meta.env`. The 
 │   │   └── validation.ts               # Data validation utilities
 │   │
 │   ├── sql/                             # SQL scripts & migrations
-│   │   ├── migrations/                  # Sequential numbered migrations (001–031)
+│   │   ├── migrations/                  # Sequential numbered migrations (001–050)
 │   │   └── *.sql                        # Standalone SQL scripts
 │   │
 │   ├── styles/
@@ -350,7 +350,7 @@ The applications module has two distinct tracking layers — **do not confuse th
 
 ### Migrations
 
-Sequential SQL migrations live in `src/sql/migrations/` (001–046). See `src/sql/migrations/README_MIGRATION.md` for instructions on running them.
+Sequential SQL migrations live in `src/sql/migrations/` (001–050). See `src/sql/migrations/README_MIGRATION.md` for instructions on running them.
 
 - **023**: `create_fin_transacciones_ganado` — cattle buy/sell transactions table with RLS
 - **024**: `alter_fin_ingresos_add_columns` — adds `cantidad`, `precio_unitario`, `cosecha`, `alianza`, `cliente`, `finca` to `fin_ingresos`
@@ -370,6 +370,7 @@ Sequential SQL migrations live in `src/sql/migrations/` (001–046). See `src/sq
 - **045**: `fix_aplicar_movimiento_ganado_upsert` — fixes 044's apply-trigger: `INSERT ... ON CONFLICT DO UPDATE` validates CHECK constraints on the proposed row before conflict arbitration, so every negative-delta movement (venta/muerte/traslado_salida) failed even with sufficient inventory. Rewritten UPDATE-first with INSERT fallback. Applied to production 2026-06-10.
 - **046**: `add_produccion_calidad` — adds optional `kg_exportacion`/`kg_nacional` NUMERIC(12,2) columns to `produccion` with CHECK enforcing exact sum against `kg_totales` when both are non-null. Applied to production 2026-06-12.
 - **049**: `add_usuarios_modulos_acceso` — adds `modulos_acceso text[] NOT NULL DEFAULT '{}'` to `usuarios`. Per-user app-module visibility (`aguacate` | `hato_lechero` | `ganado` | `finanzas`). Navigation/visibility only — **NOT enforced by RLS**. Gerencia bypasses it in app code. Applied to production 2026-07-21.
+- **050**: `gastos_created_by_tracking` — BEFORE INSERT triggers on `fin_gastos` and `fin_transacciones_ganado` (`set_gasto_created_by()` / `set_transaccion_ganado_created_by()`, same `COALESCE(created_by, auth.uid())` pattern as migration 040's tareas trigger) so every new row is attributed to its creator going forward. One-time backfill for 2026: 48 gastos Efrain confirmed as his (matched by `fecha`+`nombre`+`valor`, 3 of the 45 identified entries had 2 identical physical rows each — pre-existing duplicate data entry) are attributed to him; the remaining 453 `fin_gastos` rows dated in 2026 are attributed to Consuelo. Rows outside 2026 (3870), and `fin_transacciones_ganado` history, are left with `created_by = NULL` (never populated pre-migration, no way to backfill). Applied to production 2026-07-21.
 
 ### Monitoring Module (`/monitoreo`) — incidencia aggregation
 
@@ -402,6 +403,15 @@ Key files:
 - `src/types/finanzas.ts` — `UnifiedFinanceItem` type
 - `src/components/finanzas/components/GastosList.tsx` — merges `fin_transacciones_ganado` compras
 - `src/components/finanzas/components/IngresosList.tsx` — merges `fin_transacciones_ganado` ventas
+
+### Gastos historial (`/finanzas/gastos`) — view contract
+
+`GastosView` opens on the **Historial** tab (leftmost); `?tab=registrar` still deep-links to the capture grid. `GastosList` defaults its period filter to **`ytd`**, not `mes_actual` — that default is repeated in three places (initial state, the navigation-state effect, and the clear-filters reset); change all three together or they silently disagree.
+
+- **Usuario filter** — filters `created_by` on both `fin_gastos` and `fin_transacciones_ganado`, plus a "Sin usuario" option for `created_by IS NULL` (everything before migration 050, i.e. all pre-2026 rows and all ganado history).
+- **Selection subtotal** — per-row checkboxes plus "seleccionar todos"; the subtotal is computed over `unifiedItems`, so it always reflects the active filters. Selection resets whenever filters or the search query change.
+- **Detail dialog** (`GastoDetalleDialog.tsx`) — opens on row click for gasto and ganado items alike, and carries Editar / Eliminar / Completar. The row's `onClick` is suppressed on the checkbox and the `⋮` wrapper via `stopPropagation`.
+- **Mobile** — the `⋮` menu is `hidden sm:block` **on purpose**: it is gated on `group-hover`, which never fires on touch, so on mobile the detail dialog is the only path to the actions. Do not re-enable it on mobile without also removing the hover gate. The two-line mobile row and the collapsible filter bar rely on the custom `globals.css` classes listed in the frozen-Tailwind caution zone below.
 
 ### Cattle Inventory Module (`/ganado`, issue #51)
 
@@ -554,7 +564,14 @@ Before using an unfamiliar utility, check it exists:
 ```bash
 grep -cF 'bg-sidebar-accent' src/index.css   # 0 = does not exist, will do nothing
 ```
-If it doesn't exist, add a real CSS rule to `src/styles/globals.css` (a live stylesheet, imported *after* `index.css`, so it wins the cascade) — e.g. `.nav-item-active`. Never hand-edit `index.css`.
+⚠️ That plain form only works for classes **without a `:`**. Variants (`sm:`, `hover:`, `focus:`) are written escaped in the CSS (`.sm\:inline`), so `grep -F 'sm:inline'` returns 0 even when the class exists — a false negative. Search the escaped form instead:
+```bash
+grep -oF 'sm\:inline' src/index.css | wc -l      # variant classes
+grep -oE '\.sm\\:[a-z0-9\\:.\[\]-]+' src/index.css | sort -u   # list every sm: variant present
+```
+Beware substring matches: `sm\:flex` also matches inside `sm\:flex-row`. Verified **absent** as of migration 050 work: `sm:hidden`, `sm:flex`, `sm:w-auto`, `sm:text-right`, `sm:gap-*`, `tabular-nums`, `break-words`, `text-[10px]`, `px-1.5`/`py-1.5`, `w-[70px]` — several of these are already written in existing JSX and silently do nothing.
+
+If it doesn't exist, add a real CSS rule to `src/styles/globals.css` (a live stylesheet, imported *after* `index.css`, so it wins the cascade) — e.g. `.nav-item-active`, or the `.filtros-toggle` / `.filtros-colapsables` / `.gasto-meta-movil` / `.gasto-nombre` rules that give the Gastos historial its mobile layout. Never hand-edit `index.css`.
 
 See `src/guidelines/Guidelines.md` for the full design system.
 
