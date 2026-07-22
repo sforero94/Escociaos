@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { IngresoDetalleDialog } from './IngresoDetalleDialog';
 import type { Ingreso, Negocio, Region, CategoriaIngreso, TransaccionGanado, UnifiedFinanceItem } from '@/types/finanzas';
+import { NEGOCIO_GANADO } from '@/types/reportesFinancieros';
 import { toast } from 'sonner';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { TransaccionGanadoForm } from './TransaccionGanadoForm';
@@ -113,11 +114,26 @@ export function IngresosList({ onEdit }: IngresosListProps) {
     }
   }, [location.state, location.key]);
 
-  // Auto-load on any filter change
+  // `fin_transacciones_ganado` no tiene negocio_id, region_id ni categoria_id: una
+  // venta de ganado es por definición del negocio Ganado, y no tiene región ni
+  // categoría. Por eso los filtros de esas tres dimensiones no se pueden traducir a
+  // la query — se resuelven incluyendo o excluyendo el bloque de ganado completo.
+  // Sin esto las ventas de ganado se colaban en CUALQUIER filtro (p.ej. negocio
+  // "Agrícola" las seguía mostrando) y además inflaban el total.
+  const negocioGanadoId = negocios.find((n) => n.nombre === NEGOCIO_GANADO)?.id;
+  const incluirGanado =
+    !filtros.region_id &&
+    !filtros.categoria_id &&
+    (!filtros.negocio_id || filtros.negocio_id === negocioGanadoId);
+
+  // Auto-load on any filter change.
+  // `negocioGanadoId` va en las deps porque los catálogos llegan después del primer
+  // render: sin él, filtrar por negocio Ganado excluiría el ganado hasta el próximo
+  // cambio de filtro.
   useEffect(() => {
     loadIngresos();
     setSeleccionados(new Set());
-  }, [filtros, searchQuery]);
+  }, [filtros, searchQuery, negocioGanadoId]);
 
   useEffect(() => {
     const handleClickOutside = () => { if (menuAbiertoId) setMenuAbiertoId(null); };
@@ -156,19 +172,24 @@ export function IngresosList({ onEdit }: IngresosListProps) {
 
       let result = (data || []) as any[];
 
-      // Fetch ganado ventas with same date filters
-      let ganadoQuery = getSupabase()
-        .from('fin_transacciones_ganado' as any)
-        .select('*')
-        .eq('tipo', 'venta');
-      if (fechaDesde) ganadoQuery = ganadoQuery.gte('fecha', fechaDesde);
-      if (fechaHasta) ganadoQuery = ganadoQuery.lte('fecha', fechaHasta);
-      if (filtros.usuario_id === SIN_USUARIO) ganadoQuery = ganadoQuery.is('created_by', null);
-      else if (filtros.usuario_id) ganadoQuery = ganadoQuery.eq('created_by', filtros.usuario_id);
-      ganadoQuery = ganadoQuery.order('fecha', { ascending: false });
-      const { data: ganadoData } = await ganadoQuery;
+      // Fetch ganado ventas with same date filters — solo cuando los filtros activos
+      // pueden aplicarles (ver `incluirGanado` arriba).
+      let ganadoResult: TransaccionGanado[] = [];
 
-      let ganadoResult = (ganadoData || []) as unknown as TransaccionGanado[];
+      if (incluirGanado) {
+        let ganadoQuery = getSupabase()
+          .from('fin_transacciones_ganado' as any)
+          .select('*')
+          .eq('tipo', 'venta');
+        if (fechaDesde) ganadoQuery = ganadoQuery.gte('fecha', fechaDesde);
+        if (fechaHasta) ganadoQuery = ganadoQuery.lte('fecha', fechaHasta);
+        if (filtros.usuario_id === SIN_USUARIO) ganadoQuery = ganadoQuery.is('created_by', null);
+        else if (filtros.usuario_id) ganadoQuery = ganadoQuery.eq('created_by', filtros.usuario_id);
+        ganadoQuery = ganadoQuery.order('fecha', { ascending: false });
+        const { data: ganadoData } = await ganadoQuery;
+
+        ganadoResult = (ganadoData || []) as unknown as TransaccionGanado[];
+      }
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
