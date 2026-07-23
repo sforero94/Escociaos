@@ -39,7 +39,7 @@ describe('clasificarCategoriaHato', () => {
     expect(clasificarCategoriaHato('novilla', estado)).toBeNull();
   });
 
-  it('una novilla activa (aún sin ciclo) cae en "hato", no en "ternera"', () => {
-    expect(clasificarCategoriaHato('novilla', 'novilla')).toBe('hato');
+  it('una novilla activa cae en "ternera" -- nunca ha estado en ordeño (regla unificada con hato-aggregation.ts)', () => {
+    expect(clasificarCategoriaHato('novilla', 'novilla')).toBe('ternera');
   });
 });

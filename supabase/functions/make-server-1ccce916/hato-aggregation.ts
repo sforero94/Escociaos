@@ -234,8 +234,10 @@ export function buildAnimalFicha(params: {
 /** V-tres categorías del hato (owner, ronda de decisiones 2026-07-22, plan
  * "El S4 herd view must show three categories: terneras, hato (milking),
  * horro"): terneras/novillas (no productivas), hato en ordeño (vacas
- * activas que no están próximas a secar ni secas) y horro (vacas activas
- * próximas a secar o ya secas, esperando el parto). Los toros (etapa
+ * activas que no están secas -- una 'proxima_a_secar' sigue en ordeño) y
+ * horro (vacas activas YA secas, esperando el parto). Regla unificada con
+ * `hatoCategorias.ts` del frontend: Esco y la UI dan el mismo conteo,
+ * cambiar una copia exige cambiar la otra. Los toros (etapa
  * histórica de import, el catálogo vivo es `hato_toros`) quedan fuera de
  * las tres categorías — se reportan aparte si aparecen. */
 export type CategoriaHato = 'terneras' | 'hato_ordeno' | 'horro';
@@ -245,7 +247,7 @@ function categorizarAnimal(fila: HatoEstadoActualRow, estado: EstadoReproductivo
   if (fila.etapa === 'toro') return 'toro';
   if (fila.etapa === 'ternera' || fila.etapa === 'novilla') return 'terneras';
   // etapa === 'vaca'
-  if (estado === 'proxima_a_secar' || estado === 'seca') return 'horro';
+  if (estado === 'seca') return 'horro';
   return 'hato_ordeno';
 }
 

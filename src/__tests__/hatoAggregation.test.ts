@@ -220,23 +220,32 @@ describe('buildReproduccionSummary', () => {
     expect(summary.inactivos).toEqual({ vendidas: 0, muertas: 0, descartadas: 0 });
   });
 
-  it('categoriza terneras/novillas, hato en ordeño, horro (próxima a secar/seca) y toros por separado', () => {
+  it('categoriza terneras/novillas, hato en ordeño (incl. próxima a secar), horro (solo secas) y toros por separado', () => {
     const filas: HatoEstadoActualRow[] = [
       estadoBase({ animal_id: 't1', numero: 200, nombre: 'TERNERA1', etapa: 'ternera', num_partos: 0 }),
       estadoBase({ animal_id: 'n1', numero: 201, nombre: 'NOVILLA1', etapa: 'novilla', num_partos: 0 }),
       // servida (ordeño): servicio reciente, lejos de secar
       estadoBase({ animal_id: 'o1', numero: 47, nombre: 'MONA', ultimo_servicio_fecha: '2024-08-01' }),
-      // próxima a secar / horro: servicio viejo -> dentro de ventana de secado
+      // próxima a secar: sigue en ordeño -> cuenta en "hato", no en "horro"
+      // (regla unificada con hatoCategorias.ts: horro = solo 'seca')
       estadoBase({ animal_id: 'h1', numero: 48, nombre: 'ROSA', ultimo_servicio_fecha: '2024-05-14' }),
+      // seca (secado_real registrado) -> horro
+      estadoBase({
+        animal_id: 'h2',
+        numero: 49,
+        nombre: 'SECA1',
+        ultimo_servicio_fecha: '2024-05-14',
+        ultimo_secado_real_fecha: '2024-11-25',
+      }),
       // toro histórico de importación (catálogo vivo es hato_toros, no cuenta en las 3 categorías)
       estadoBase({ animal_id: 'x1', numero: 5, nombre: 'NITRO', etapa: 'toro', num_partos: 0 }),
       // vendida: no cuenta en categorías activas
       estadoBase({ animal_id: 'v1', numero: 99, nombre: 'VENDIDA', estado: 'vendida' }),
     ];
     const summary = buildReproduccionSummary(filas, CONFIG_BASE, '2024-12-01');
-    expect(summary.total_animales).toBe(6);
+    expect(summary.total_animales).toBe(7);
     expect(summary.categorias.terneras).toBe(2);
-    expect(summary.categorias.hato_ordeno).toBe(1);
+    expect(summary.categorias.hato_ordeno).toBe(2);
     expect(summary.categorias.horro).toBe(1);
     expect(summary.categorias.toros).toBe(1);
     expect(summary.inactivos.vendidas).toBe(1);

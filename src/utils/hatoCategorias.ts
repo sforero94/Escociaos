@@ -16,23 +16,25 @@
 // definición de "horro" o "hato" a nivel de UI.
 //
 // ASUNCIÓN DOCUMENTADA (sin confirmar por el dueño, S4): el plan y las
-// decisiones registradas no definen con precisión el límite entre "hato" y
-// "horro" más allá de la frase citada arriba. Se interpreta:
-//   - terneras -- etapa === 'ternera' (crías, aún no entran al ciclo
-//     reproductivo).
-//   - horro    -- cualquier animal no-ternera cuyo estado reproductivo
-//     derivado sea 'seca' (masReciente === 'secado_real', ver
-//     `derivarEstadoReproductivo`) -- es decir, YA se secó y espera parto.
-//     Un animal 'proxima_a_secar' (todavía en ordeño, dentro de la ventana
-//     de aviso) se queda en "hato": el dueño describió horro como "secas",
-//     no "por secar".
-//   - hato     -- todo lo demás activo (novilla, servida, preñada,
-//     parida_reciente, vacia_por_servir, indeterminado): sigue en ordeño o
-//     en levante hacia el ordeño.
+// decisiones registradas no definen con precisión los límites de las 3
+// categorías más allá de la frase citada arriba. Se interpreta (regla
+// unificada con `hato-aggregation.ts` del servidor -- Esco y la UI deben
+// dar siempre el mismo conteo):
+//   - terneras -- etapa 'ternera' o 'novilla': aún no ha parido, nunca ha
+//     estado en ordeño, así que no puede ser "hato (en ordeño)" ni "horro
+//     (seca)".
+//   - horro    -- vaca cuyo estado reproductivo derivado sea 'seca'
+//     (masReciente === 'secado_real', ver `derivarEstadoReproductivo`) --
+//     es decir, YA se secó y espera parto. Un animal 'proxima_a_secar'
+//     (todavía en ordeño, dentro de la ventana de aviso) se queda en
+//     "hato": el dueño describió horro como "secas", no "por secar".
+//   - hato     -- toda otra vaca activa (servida, preñada, parida_reciente,
+//     vacia_por_servir, indeterminado): sigue en ordeño.
 //   - null     -- estados terminales (vendida/muerta/descartada): no
 //     pertenecen a ninguna de las 3 categorías del inventario vivo.
 // Si el dueño precisa un límite distinto (ej. "próxima a secar" también
-// cuenta como horro), este es el único archivo que hay que tocar.
+// cuenta como horro, o novillas fuera de terneras), hay que tocar este
+// archivo Y `categorizarAnimal` en ambas copias de `hato-aggregation.ts`.
 
 import type { EtapaHato } from '@/types/hato';
 import type { EstadoReproductivo } from '@/utils/calculosHato';
@@ -50,7 +52,7 @@ export function clasificarCategoriaHato(
   ) {
     return null;
   }
-  if (etapa === 'ternera') return 'ternera';
+  if (etapa === 'ternera' || etapa === 'novilla') return 'ternera';
   if (estadoReproductivo === 'seca') return 'horro';
   return 'hato';
 }
