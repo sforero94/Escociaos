@@ -8,7 +8,7 @@ import type { ChipEstilo } from '@/utils/hatoUi';
 
 export function EstadoChip({ chip, className }: { chip: ChipEstilo; className?: string }) {
   return (
-    <Badge variant="outline" className={`${chip.className} ${className ?? ''}`.trim()}>
+    <Badge variant="outline" className={`${chip.className} ${className ?? ''}`.trim()} title={chip.title}>
       {chip.label}
     </Badge>
   );

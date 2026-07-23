@@ -198,6 +198,11 @@ export async function handleHatoChequeoPreview(c: Context): Promise<Response> {
     const { data, error } = await supabase
       .from('hato_animales')
       .select('id, numero, nombre, etapa, estado')
+      // Migración 066: `numero` ya no es UNIQUE global -- solo lo es entre
+      // animales `activa`. Un chequeo describe el hato VIVO, así que se
+      // filtra a `activa` para no traer dos filas con el mismo número
+      // (una vendida/muerta + una activa) y perder una en el Map por número.
+      .eq('estado', 'activa')
       .in('numero', numerosEnHoja);
     if (error) return respuestaError(c, 500, `No se pudo leer hato_animales: ${error.message}`);
     animales = (data ?? []) as AnimalHatoActual[];

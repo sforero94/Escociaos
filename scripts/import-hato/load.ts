@@ -95,6 +95,7 @@ function crearClienteServiceRole() {
 
 interface FilaAnimalCsv {
   numero: string;
+  numero_observado: string;
   nombre: string;
   etapa_presunta: string;
   origen: string;
@@ -217,9 +218,12 @@ async function obtenerOCrearToro(
     return existente.id as string;
   }
 
+  // `hato_toros` (migración 053) NO tiene columna `origen` -- solo
+  // hato_animales la tiene. Insertar `origen` aquí falla con "column does
+  // not exist" y aborta Load en el paso de siembra de toros.
   const { data: creado, error: errInsert } = await supabase
     .from('hato_toros')
-    .insert({ nombre: nombre.trim(), origen: 'importacion_historica' })
+    .insert({ nombre: nombre.trim() })
     .select('id')
     .single();
   if (errInsert) throw errInsert;
@@ -234,7 +238,7 @@ async function obtenerOCrearToro(
 async function cargarAnimales(
   supabase: ReturnType<typeof createClient>,
   filas: FilaAnimalCsv[],
-): Promise<Map<number, string>> {
+): Promise<{ numeroAId: Map<number, string>; numeroObservadoNombreAId: Map<string, string> }> {
   const numeroAId = new Map<number, string>();
   const CHUNK = 200;
   for (let i = 0; i < filas.length; i += CHUNK) {
@@ -258,7 +262,110 @@ async function cargarAnimales(
     }
   }
   console.log(`hato_animales: ${numeroAId.size} animales cargados.`);
-  return numeroAId;
+
+  // Índice adicional: chapeta OBSERVADA en la planilla + nombre -> id del
+  // animal. Para los pares con colisión desempatada por `overridesChapeta.ts`,
+  // `animales.csv` guarda `numero` = número de TRABAJO (999, 998...) y
+  // `numero_observado` = la chapeta cruda que trae la planilla (162...) --
+  // ver `animalesACsv` en resolver.ts. `entrada.chequeos` (normalizado.json)
+  // trae siempre el numero CRUDO, que ya NO es el `numero` de NINGÚN animal
+  // tras el desempate (ambos lados del par recibieron un número de trabajo
+  // distinto). Sin este índice, `cargarChequeos`/`cargarEventos` no pueden
+  // resolver ni una sola fila histórica de estos animales y las pierden en
+  // silencio -- bug real, encontrado corriendo Load contra el histórico real
+  // (2026-07-23): cero filas de chequeo/evento para los animales en colisión,
+  // sin ningún error. La clave incluye el NOMBRE (mismo criterio que
+  // `buscarOverride` en overridesChapeta.ts) porque un numero observado
+  // colisionado apunta a DOS animales distintos -- indexar solo por numero
+  // sería ambiguo.
+  const numeroObservadoNombreAId = new Map<string, string>();
+  for (const f of filas) {
+    const observado = vacio(f.numero_observado);
+    if (!observado) continue;
+    const nombre = vacio(f.nombre)?.trim().toUpperCase();
+    if (!nombre) continue;
+    const id = numeroAId.get(Number(f.numero));
+    if (!id) continue; // defensivo -- debería existir siempre, viene del mismo INSERT de arriba
+    numeroObservadoNombreAId.set(`${observado}::${nombre}`, id);
+  }
+
+  return { numeroAId, numeroObservadoNombreAId };
+}
+
+/** Resuelve el `animal_id` para una fila CRUDA de chequeo/evento
+ * (`entrada.chequeos`, siempre con el numero tal cual lo trae la planilla).
+ * Primero intenta el numero directo (caso común, sin colisión); si no
+ * encuentra nada, intenta vía `numeroObservadoNombreAId` (numero observado +
+ * nombre, mismo criterio que `buscarOverride` en overridesChapeta.ts) --
+ * cubre a los animales cuya chapeta fue reasignada a un número de trabajo por
+ * una colisión ya desempatada. `undefined` solo cuando el animal
+ * genuinamente no está en el registro (bloqueado por colisión sin desempate,
+ * u otra exclusión de Resolve). */
+function resolverAnimalId(
+  numero: number,
+  nombre: string | null,
+  numeroAId: Map<number, string>,
+  numeroObservadoNombreAId: Map<string, string>,
+): string | undefined {
+  const directo = numeroAId.get(numero);
+  if (directo) return directo;
+  const nombreClave = nombre?.trim().toUpperCase();
+  if (!nombreClave) return undefined;
+  return numeroObservadoNombreAId.get(`${numero}::${nombreClave}`);
+}
+
+/** Cuenta cuántos campos crudos (`raw.*`) NO son null -- mide qué tan
+ * "completa" es una fila, para desempatar duplicados (ver
+ * `deduplicarPorChequeoYAnimal`). */
+function contarCamposCrudosNoNulos(raw: FilaChequeoNormalizada['raw']): number {
+  return Object.values(raw).filter((v) => v !== null).length;
+}
+
+/** Deduplica candidatos que resolvieron al MISMO (chequeo_id, animal_id) --
+ * la base no puede tener dos filas de `hato_chequeo_vacas` para el mismo
+ * animal en la misma lectura (`UNIQUE(chequeo_id, animal_id)`, migración
+ * 053), pero el corpus real SÍ trae casos así: dos filas físicas para el
+ * mismo numero+nombre en la misma fecha (encontrado corriendo Load contra el
+ * histórico real 2026-07-23 -- ej. CARLA #156, `CHEO VETE 2026.xlsx ::
+ * CHEQUEO ASEPT 2025`, filas 9 y 42; y ~40 casos más el 2020-06-09 que
+ * apuntan a dos hojas físicas resolviendo a la misma fecha con contenido casi
+ * idéntico -- señal de un hueco de dedupe en Extract, NO investigado ni
+ * resuelto aquí, ver CLAUDE.md "Known follow-ups").
+ *
+ * Se conserva la fila con más campos crudos no-nulos (más completa);
+ * empate -> el número de fila más bajo (determinista). La(s) descartada(s) se
+ * anuncian por consola con su procedencia completa -- nunca un descarte
+ * silencioso, mismo criterio que el resto del pipeline. */
+function deduplicarPorChequeoYAnimal<T extends { fila: FilaChequeoNormalizada; animalId: string; chequeoId: string }>(
+  candidatos: T[],
+): T[] {
+  const porPar = new Map<string, T[]>();
+  for (const c of candidatos) {
+    const clave = `${c.chequeoId}::${c.animalId}`;
+    if (!porPar.has(clave)) porPar.set(clave, []);
+    porPar.get(clave)!.push(c);
+  }
+
+  const resultado: T[] = [];
+  for (const grupo of porPar.values()) {
+    if (grupo.length === 1) {
+      resultado.push(grupo[0]);
+      continue;
+    }
+    const ordenado = [...grupo].sort(
+      (a, b) => contarCamposCrudosNoNulos(b.fila.raw) - contarCamposCrudosNoNulos(a.fila.raw) || a.fila.fila - b.fila.fila,
+    );
+    const [elegida, ...descartadas] = ordenado;
+    resultado.push(elegida);
+    console.warn(
+      `Fila(s) duplicada(s) en la misma lectura -- numero ${elegida.fila.numero} (${elegida.fila.nombre ?? 'sin nombre'}), ` +
+        `fecha ${elegida.fila.chequeoFecha}: se conserva ${elegida.fila.archivo}::${elegida.fila.hoja}::fila ${elegida.fila.fila} ` +
+        `(más campos con dato); se descarta ${descartadas
+          .map((d) => `${d.fila.archivo}::${d.fila.hoja}::fila ${d.fila.fila}`)
+          .join(', ')}.`,
+    );
+  }
+  return resultado;
 }
 
 // ============================================================================
@@ -273,6 +380,7 @@ async function cargarChequeos(
   supabase: ReturnType<typeof createClient>,
   chequeos: FilaChequeoNormalizada[],
   numeroAId: Map<number, string>,
+  numeroObservadoNombreAId: Map<string, string>,
 ): Promise<Map<string, string>> {
   const lecturas = new Map<string, { fecha: string | null; archivo: string; hoja: string }>();
   for (const fila of chequeos) {
@@ -296,26 +404,32 @@ async function cargarChequeos(
   }
   console.log(`hato_chequeos: ${claveAChequeoId.size} lecturas cargadas.`);
 
+  // Resuelve TODAS las filas primero (sin chunking) para deduplicar
+  // globalmente por (chequeo_id, animal_id) antes de insertar -- si el
+  // deduplicado se hiciera por chunk, dos filas del mismo par cayendo en
+  // chunks distintos no se detectarían entre sí y la segunda seguiría
+  // reventando el UNIQUE(chequeo_id, animal_id) de hato_chequeo_vacas
+  // (migración 053). Ver `deduplicarPorChequeoYAnimal`.
+  const candidatos: Array<{ fila: FilaChequeoNormalizada; animalId: string; chequeoId: string }> = [];
+  for (const fila of chequeos) {
+    if (fila.numero === null) continue; // sin numero -> no hay animal_id, no se puede cargar (queda solo en el reporte)
+    const animalId = resolverAnimalId(fila.numero, fila.nombre, numeroAId, numeroObservadoNombreAId);
+    const chequeoId = claveAChequeoId.get(claveLectura(fila));
+    if (!animalId || !chequeoId) continue; // animal bloqueado/no resuelto, o lectura sin fecha
+    candidatos.push({ fila, animalId, chequeoId });
+  }
+  const filasDeduplicadas = deduplicarPorChequeoYAnimal(candidatos);
+
   const chequeoVacaId = new Map<FilaChequeoNormalizada, string>();
   const CHUNK = 200;
-  for (let i = 0; i < chequeos.length; i += CHUNK) {
-    const lote = chequeos.slice(i, i + CHUNK);
-    const filasInsertables = lote
-      .map((fila) => {
-        if (fila.numero === null) return null; // sin numero -> no hay animal_id, no se puede cargar (queda solo en el reporte)
-        const animalId = numeroAId.get(fila.numero);
-        const chequeoId = claveAChequeoId.get(claveLectura(fila));
-        if (!animalId || !chequeoId) return null; // animal bloqueado/no resuelto, o lectura sin fecha
-        return { fila, animalId, chequeoId };
-      })
-      .filter((x): x is { fila: FilaChequeoNormalizada; animalId: string; chequeoId: string } => x !== null);
-
-    if (filasInsertables.length === 0) continue;
+  for (let i = 0; i < filasDeduplicadas.length; i += CHUNK) {
+    const lote = filasDeduplicadas.slice(i, i + CHUNK);
+    if (lote.length === 0) continue;
 
     const { data, error } = await supabase
       .from('hato_chequeo_vacas')
       .insert(
-        filasInsertables.map(({ fila, animalId, chequeoId }) => ({
+        lote.map(({ fila, animalId, chequeoId }) => ({
           chequeo_id: chequeoId,
           animal_id: animalId,
           pl_raw: fila.raw.pl,
@@ -336,13 +450,18 @@ async function cargarChequeos(
           tipo_servicio: fila.tipoServicio,
           fecha_secar: fila.fechaSecar,
           fecha_probable_parto: fila.fechaProbableParto,
-          estado: fila.estado?.tipo === 'vacio' || fila.estado?.tipo === undefined ? null : fila.estado?.tipo,
+          // `fila.estado` es un `TipoEstado` plano (tipos.ts), no un objeto
+          // -- `.tipo` siempre era `undefined`, así que esta columna nunca se
+          // pobló. Mismo mapeo que `normalizarEstadoParaDiff` en
+          // diffChequeo.ts: 'vacio' (celda sin dato) y null colapsan a NULL;
+          // la columna (migración 062) además rechaza 'vacio' por CHECK.
+          estado: fila.estado === null || fila.estado === 'vacio' ? null : fila.estado,
           normalizacion_issues: fila.issues.length > 0 ? fila.issues : null,
         })),
       )
       .select('id');
     if (error) throw error;
-    (data ?? []).forEach((row, idx) => chequeoVacaId.set(filasInsertables[idx].fila, row.id as string));
+    (data ?? []).forEach((row, idx) => chequeoVacaId.set(lote[idx].fila, row.id as string));
   }
   console.log(`hato_chequeo_vacas: ${chequeoVacaId.size} filas cargadas.`);
 
@@ -366,6 +485,7 @@ async function cargarEventos(
   supabase: ReturnType<typeof createClient>,
   chequeos: FilaChequeoNormalizada[],
   numeroAId: Map<number, string>,
+  numeroObservadoNombreAId: Map<string, string>,
   chequeoVacaIdPorClave: Map<string, string>,
   toroCache: Map<string, string>,
 ): Promise<void> {
@@ -373,9 +493,19 @@ async function cargarEventos(
 
   for (const fila of chequeos) {
     if (fila.numero === null) continue;
-    const animalId = numeroAId.get(fila.numero);
+    const animalId = resolverAnimalId(fila.numero, fila.nombre, numeroAId, numeroObservadoNombreAId);
     if (!animalId) continue; // bloqueado por colisión, no resuelto -- no se generan eventos
+
     const chequeoVacaId = chequeoVacaIdPorClave.get(`${fila.archivo}::${fila.hoja}::${fila.fila}`);
+    // Una fila sin `chequeoVacaId` no produjo una fila real en
+    // hato_chequeo_vacas -- porque su lectura no tiene fecha (cubierto por el
+    // guard de abajo también) o porque `deduplicarPorChequeoYAnimal` la
+    // descartó por ser la copia más pobre de otra fila del mismo animal en la
+    // misma lectura. En ambos casos no debe generar eventos propios: un
+    // evento sin la fila de chequeo que lo originó no es trazable, y si es la
+    // duplicada descartada, sus datos ya están representados por la fila que
+    // sí se cargó.
+    if (!chequeoVacaId) continue;
 
     const sxResuelto = fila.raw.sx !== null ? parseSX(fila.raw.sx) : null;
     if (!sxResuelto || fila.chequeoFecha === null) continue;
@@ -407,7 +537,7 @@ async function cargarEventos(
         toro_id: toroId,
         cria_destino: evento.cria_destino ?? null,
         sx_raw: evento.sx_raw ?? null,
-        chequeo_vaca_id: chequeoVacaId ?? null,
+        chequeo_vaca_id: chequeoVacaId,
         fuente: 'importacion',
         datos: evento.datos ?? null,
       });
@@ -452,9 +582,12 @@ async function main(): Promise<void> {
   }
   console.log(`hato_toros: ${toroCache.size} toros sembrados/reutilizados.`);
 
-  const numeroAId = await cargarAnimales(supabase, filasCsv.filter((f) => f.bloqueado_por_colision !== 'true'));
-  const chequeoVacaIdPorClave = await cargarChequeos(supabase, entrada.chequeos, numeroAId);
-  await cargarEventos(supabase, entrada.chequeos, numeroAId, chequeoVacaIdPorClave, toroCache);
+  const { numeroAId, numeroObservadoNombreAId } = await cargarAnimales(
+    supabase,
+    filasCsv.filter((f) => f.bloqueado_por_colision !== 'true'),
+  );
+  const chequeoVacaIdPorClave = await cargarChequeos(supabase, entrada.chequeos, numeroAId, numeroObservadoNombreAId);
+  await cargarEventos(supabase, entrada.chequeos, numeroAId, numeroObservadoNombreAId, chequeoVacaIdPorClave, toroCache);
 
   console.log('--- Load: completo ---');
   console.log('Corre scripts/import-hato/verify.ts a continuación.');
