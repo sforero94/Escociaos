@@ -51,6 +51,8 @@ const AnimalesList = lazy(() => import('./components/hato/AnimalesList').then(m 
 const HojaDeVida = lazy(() => import('./components/hato/HojaDeVida').then(m => ({ default: m.HojaDeVida })));
 const ChequeosList = lazy(() => import('./components/hato/ChequeosList').then(m => ({ default: m.ChequeosList })));
 const HatoProduccionView = lazy(() => import('./components/hato/ProduccionView').then(m => ({ default: m.ProduccionView })));
+const AlertasView = lazy(() => import('./components/hato/AlertasView').then(m => ({ default: m.AlertasView })));
+const PajillasView = lazy(() => import('./components/hato/PajillasView').then(m => ({ default: m.PajillasView })));
 const GanadoDashboard = lazy(() => import('./components/ganado/GanadoDashboard').then(m => ({ default: m.GanadoDashboard })));
 const GanadoMovimientos = lazy(() => import('./components/ganado/GanadoMovimientos').then(m => ({ default: m.GanadoMovimientos })));
 const ReportesDashboard = lazy(() => import('./components/reportes/ReportesDashboard').then(m => ({ default: m.ReportesDashboard })));
@@ -147,7 +149,8 @@ function LayoutRoutes() {
                 <Route path=":id" element={<HojaDeVida />} />
               </Route>
               <Route path="chequeos" element={<ChequeosList />} />
-              <Route path="alertas" element={<ComingSoon moduleName="Hato Lechero — Alertas" />} />
+              <Route path="alertas" element={<AlertasView />} />
+              <Route path="pajillas" element={<PajillasView />} />
             </Route>
           </Route>
 

@@ -478,6 +478,97 @@ function getBot(): Bot<BotContext> {
     await ctx.editMessageText("❌ No se guardó la memoria.");
   });
 
+  // --------------------------------------------------------------------------
+  // HATO LECHERO — respuesta a una alerta del motor de S6 (plan §6 Épica C).
+  // Botones [Sí / Todavía no / Otra cosa] generados por `hato-alertas-tick.ts`
+  // (`hato_alerta:{alertaId}:{si|no|otro}`), mismo patrón que `mem_save:`.
+  // Toda respuesta escribe un evento auditado (quién, cuándo, qué) — plan
+  // §6 Épica C "toda respuesta escribe evento auditado".
+  // --------------------------------------------------------------------------
+
+  bot.callbackQuery(/^hato_alerta:(.+):(si|no|otro)$/, async (ctx) => {
+    const alertaId = ctx.match?.[1];
+    const respuesta = ctx.match?.[2] as "si" | "no" | "otro" | undefined;
+    if (!alertaId || !respuesta) {
+      await ctx.answerCallbackQuery({ text: "No se pudo procesar la respuesta." });
+      return;
+    }
+
+    const sb = getSupabaseAdmin();
+    const { data: alerta, error: errorAlerta } = await sb
+      .from("hato_alertas")
+      .select("id, tipo, animal_id, paso_id, estado")
+      .eq("id", alertaId)
+      .maybeSingle();
+
+    if (errorAlerta || !alerta) {
+      await ctx.answerCallbackQuery({ text: "No encontré esa alerta -- puede que ya no exista." });
+      return;
+    }
+
+    const respondidaPor = ctx.telegramUser?.nombre_display ?? String(ctx.from?.id ?? "desconocido");
+    const hoyIso = new Date().toISOString().slice(0, 10);
+
+    if (respuesta === "si") {
+      const { error: errorUpdate } = await sb
+        .from("hato_alertas")
+        .update({ estado: "confirmada", respuesta: "si", respondida_por: respondidaPor })
+        .eq("id", alertaId);
+      if (errorUpdate) {
+        console.error("[Telegram] hato_alerta 'si' update error:", errorUpdate.message);
+        await ctx.answerCallbackQuery({ text: "No pude guardar tu respuesta. Intenta de nuevo." });
+        return;
+      }
+
+      // Efectos de dominio, append-only -- nunca se borra ni se sobreescribe
+      // evidencia. Solo dos tipos tienen un efecto de dominio definido más
+      // allá de marcar la alerta -- el resto (rechequeo_due,
+      // servicio_sin_confirmacion, parto_proximo) se resuelve con la sola
+      // confirmación (Martha/Fernando ya lo dejan constar por otra vía --
+      // chequeo, ficha -- este "sí" solo cierra el lazo de la alerta).
+      if (alerta.tipo === "secado_due" && alerta.animal_id) {
+        const { error: errorEvento } = await sb.from("hato_eventos").insert({
+          animal_id: alerta.animal_id,
+          tipo: "secado_real",
+          fecha: hoyIso,
+          fecha_confianza: "aproximada",
+          alerta_id: alertaId,
+          fuente: "alerta",
+        });
+        if (errorEvento) console.error("[Telegram] hato_eventos (secado_real) insert error:", errorEvento.message);
+      } else if (alerta.tipo === "tratamiento_paso" && alerta.paso_id) {
+        // hato_eventos.tipo (CHECK de la migración 053) no tiene ninguna
+        // variante de "tratamiento" -- no hay un evento que insertar aquí,
+        // solo se marca ejecutado el paso mismo (055).
+        const { error: errorPaso } = await sb
+          .from("hato_tratamiento_pasos")
+          .update({ fecha_ejecutada: hoyIso })
+          .eq("id", alerta.paso_id);
+        if (errorPaso) console.error("[Telegram] hato_tratamiento_pasos update error:", errorPaso.message);
+      }
+
+      await ctx.answerCallbackQuery({ text: "Gracias, quedó registrado." });
+      await ctx.editMessageReplyMarkup().catch(() => {});
+      return;
+    }
+
+    // "no"/"otro" -- NUNCA se auto-resuelve: Martha lo revisa desde
+    // AlertasView (plan §6 Épica C, C4 "supervisión por excepción").
+    const { error: errorUpdate } = await sb
+      .from("hato_alertas")
+      .update({ estado: "respondida", respuesta, respondida_por: respondidaPor })
+      .eq("id", alertaId);
+    if (errorUpdate) {
+      console.error("[Telegram] hato_alerta respuesta update error:", errorUpdate.message);
+      await ctx.answerCallbackQuery({ text: "No pude guardar tu respuesta. Intenta de nuevo." });
+      return;
+    }
+    await ctx.answerCallbackQuery({
+      text: respuesta === "no" ? "Anotado, seguimos pendientes." : "Anotado -- Martha lo revisa.",
+    });
+    await ctx.editMessageReplyMarkup().catch(() => {});
+  });
+
   // ==========================================================================
   // MEMORY PROPOSAL DETECTOR — inspects llmToolLoop's toolInteractions
   // ==========================================================================

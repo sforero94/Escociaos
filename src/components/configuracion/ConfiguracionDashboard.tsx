@@ -5,9 +5,10 @@ import { SublotesConfig } from './SublotesConfig';
 import { UsuariosConfig } from './UsuariosConfig';
 import { TelegramConfig } from './TelegramConfig';
 import { GanadoConfig } from './GanadoConfig';
+import { AjustesHato } from './AjustesHato';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSafeMode } from '../../contexts/SafeModeContext';
-import { MapPin, Sprout, Settings, Users, Shield, AlertTriangle, Send, Beef } from 'lucide-react';
+import { MapPin, Sprout, Settings, Users, Shield, AlertTriangle, Send, Beef, Milk } from 'lucide-react';
 
 export function ConfiguracionDashboard() {
   const { profile } = useAuth();
@@ -79,6 +80,16 @@ export function ConfiguracionDashboard() {
               <Beef className="w-4 h-4 mr-1.5" />
               Ganado
             </TabsTrigger>
+
+            {isGerencia && (
+              <TabsTrigger
+                value="hato"
+                className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-primary data-[state=active]:to-primary-dark data-[state=active]:text-white whitespace-nowrap text-sm"
+              >
+                <Milk className="w-4 h-4 mr-1.5" />
+                Hato
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="general" className="space-y-6">
@@ -157,6 +168,12 @@ export function ConfiguracionDashboard() {
           <TabsContent value="ganado" className="space-y-6">
             <GanadoConfig />
           </TabsContent>
+
+          {isGerencia && (
+            <TabsContent value="hato" className="space-y-6">
+              <AjustesHato />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </div>
