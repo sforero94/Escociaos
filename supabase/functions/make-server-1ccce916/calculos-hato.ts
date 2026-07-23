@@ -814,6 +814,71 @@ export function parseEstado(raw: unknown): ResultadoEstado {
   };
 }
 
+// ----------------------------------------------------------------------------
+// 1.f `parseUltimaCria` -- celda `Última Cría`: normalmente UNA sola fecha, a
+// diferencia de `F Servicio` (hasta 3 intentos de servicio reales). La celda
+// llega como texto ya pasado por `valorFechaATexto` (serial de Excel ->
+// `D/M/AAAA`, o el texto crudo tal cual si Excel nunca pudo tiparla como
+// fecha) -- las mismas fuentes de ruido de F Servicio (años de 2-3 dígitos,
+// separadores mixtos) aplican aquí, así que este parser REUTILIZA la misma
+// recuperación día/mes/año (`dividirCorridaLarga`/`normalizarFechaDDMMYYYY`/
+// `normalizarAnio`) en vez de escribir un segundo parser de fechas.
+// ----------------------------------------------------------------------------
+
+export interface ResultadoUltimaCria {
+  fecha: string | null;
+  issues: ParseIssue[];
+}
+
+/**
+ * Parser de la celda `ultima_cria_raw` ("Última Cría"). Interpreta SOLO el
+ * primer triplete día/mes/año reconocible -- a diferencia de `F Servicio`,
+ * esta columna documenta un único nacimiento, no una cadena de intentos,
+ * así que nunca se buscan fechas adicionales en el mismo valor; dígitos
+ * sobrantes quedan como issue, nunca se inventa una segunda fecha que esta
+ * columna no representa.
+ *
+ * `descomponerSX` usa el resultado (ya parseado por el caller, nunca el
+ * texto crudo) para distinguir un parto YA registrado en un chequeo
+ * anterior de uno genuinamente nuevo: "Última Cría" es un marcador de
+ * ESTADO que permanece igual entre chequeos hasta el próximo nacimiento
+ * real, no un evento nuevo por cada chequeo en que aparece (evidencia real:
+ * ALINA #157, misma Última Cría en 3 chequeos consecutivos).
+ */
+export function parseUltimaCria(raw: unknown): ResultadoUltimaCria {
+  const crudo = convertirRawATexto(raw);
+  if (crudo === '') return { fecha: null, issues: [] };
+
+  const numerosOriginales = crudo.match(/\d+/g);
+  if (!numerosOriginales) {
+    return { fecha: null, issues: [{ crudo, motivo: 'no contiene una fecha reconocible' }] };
+  }
+
+  const fragmentos = dividirCorridaLarga(numerosOriginales);
+  if (fragmentos.length < 3) {
+    return {
+      fecha: null,
+      issues: [{ crudo, motivo: `resto numérico sin fecha completa: ${fragmentos.join('/')}` }],
+    };
+  }
+
+  const [d, m, y] = fragmentos;
+  const { fecha, nota } = normalizarFechaDDMMYYYY(d, m, y);
+  const issues: ParseIssue[] = [];
+  if (nota) issues.push({ crudo, motivo: nota });
+  if (fragmentos.length > 3) {
+    issues.push({ crudo, motivo: `dígitos adicionales sin usar tras la fecha: ${fragmentos.slice(3).join('/')}` });
+  }
+  if (crudo.includes('?')) {
+    issues.push({ crudo, motivo: "contiene marcador de incertidumbre '?'" });
+  }
+  if (!fecha) {
+    if (!nota) issues.push({ crudo, motivo: 'no se pudo interpretar como fecha día/mes/año' });
+    return { fecha: null, issues };
+  }
+  return { fecha, issues };
+}
+
 // ============================================================================
 // BLOQUE 2 — Motor de fechas (todo parametrizado desde HatoConfig)
 // ============================================================================
@@ -937,11 +1002,86 @@ export interface InputDescomposicionSX {
    * la ambigüedad nunca se resuelve en silencio.
    */
   huboPartoConfirmado?: boolean;
+  /**
+   * Última cría de ESTA fila, ya parseada a ISO por el caller
+   * (`parseUltimaCria(...).fecha`) -- este motor no parsea texto crudo aquí,
+   * solo compara fechas ya resueltas (mismo patrón que `sx`/`fechasServicio`).
+   * `undefined`/`null` significa "la celda venía vacía o no se pudo
+   * interpretar" -- ver la rama correspondiente en el switch de más abajo.
+   */
+  ultimaCria?: string | null;
+  /**
+   * Última cría YA CONOCIDA del animal antes de este chequeo -- la que trae
+   * el chequeo cronológicamente anterior (o `undefined`/`null` si no hay
+   * ninguno, ej. el primer chequeo del animal). Responsabilidad del caller:
+   * este motor no tiene acceso a la base para buscar el chequeo anterior de
+   * un animal. Junto con `ultimaCria`, decide si un SX que describe un parto
+   * es un nacimiento YA registrado (misma Última Cría que el chequeo
+   * anterior) o uno genuinamente nuevo -- ver `decidirEventoParto`.
+   */
+  ultimaCriaAnterior?: string | null;
 }
 
 export interface ResultadoDescomposicionSX {
   eventos: EventoDerivado[];
   issues: ParseIssue[];
+}
+
+/** Decide, para las ramas de `descomponerSX` que describen un parto (OV/AV/
+ * A{n}/A+/O+ confirmado como parto/gemelar -- NUNCA aborto, que no se
+ * "arrastra" entre chequeos de la misma forma), si corresponde emitir un
+ * evento nuevo y con qué fecha/confianza.
+ *
+ * Raíz del bug que corrige (verificado en producción, ALINA #157): el SX de
+ * la planilla es un marcador de ESTADO que la fuente deja igual en varios
+ * chequeos bimensuales seguidos hasta el próximo parto real -- exactamente
+ * como `ultima_cria_raw` permanece congelada en la misma fecha. Sin comparar
+ * contra el valor anterior, cada chequeo con el mismo SX generaba un evento
+ * `parto` nuevo, fechado al chequeo (nunca al nacimiento real).
+ *
+ * Tres casos:
+ *   1. Sin `ultimaCria` interpretable -- no hay con qué verificar si este
+ *      parto ya se registró antes ni su fecha real. Se conserva el
+ *      comportamiento previo del motor (fecha del chequeo o
+ *      `fechaPartoReal` si el caller la trae, confianza 'aproximada' salvo
+ *      que sí venga `fechaPartoReal') pero SIEMPRE se deja un issue --
+ *      "ambiguo -> revisión, nunca en silencio", la misma regla que rige
+ *      todo este archivo.
+ *   2. `ultimaCria` igual a `ultimaCriaAnterior` -- el mismo nacimiento que
+ *      ya generó un evento en un chequeo previo. No se emite un segundo
+ *      evento.
+ *   3. `ultimaCria` distinta de `ultimaCriaAnterior` (incluye el caso en que
+ *      `ultimaCriaAnterior` no existe, ej. primer chequeo del animal) --
+ *      nacimiento genuinamente nuevo, y esta vez SÍ se conoce su fecha real:
+ *      `fecha = ultimaCria`, `confianza = 'exacta'`.
+ */
+function decidirEventoParto(input: InputDescomposicionSX): {
+  emitir: boolean;
+  fecha: string;
+  confianza: 'exacta' | 'aproximada';
+  issue?: ParseIssue;
+} {
+  const fechaFallback = input.fechaPartoReal ?? input.chequeoFecha;
+  const confianzaFallback: 'exacta' | 'aproximada' = input.fechaPartoReal ? 'exacta' : 'aproximada';
+
+  if (input.ultimaCria === undefined || input.ultimaCria === null) {
+    return {
+      emitir: true,
+      fecha: fechaFallback,
+      confianza: confianzaFallback,
+      issue: {
+        crudo: input.sx.crudo,
+        motivo:
+          "SX indica un parto pero la celda 'Última Cría' está vacía o no se pudo interpretar -- no se puede verificar si este nacimiento ya se registró en un chequeo anterior ni conocer su fecha real; se usó la fecha del chequeo como aproximación, revisar",
+      },
+    };
+  }
+
+  if (input.ultimaCria === input.ultimaCriaAnterior) {
+    return { emitir: false, fecha: fechaFallback, confianza: confianzaFallback };
+  }
+
+  return { emitir: true, fecha: input.ultimaCria, confianza: 'exacta' };
 }
 
 /**
@@ -970,55 +1110,78 @@ export function descomponerSX(input: InputDescomposicionSX): ResultadoDescomposi
   const confianzaEvento: 'exacta' | 'aproximada' = input.fechaPartoReal ? 'exacta' : 'aproximada';
 
   switch (input.sx.tipo) {
-    case 'ov':
-      eventos.push({
-        tipo: 'parto',
-        fecha: fechaEvento,
-        fecha_confianza: confianzaEvento,
-        cria_destino: 'macho_vendido',
-        sx_raw: input.sx.crudo,
-        procedencia: 'sx_raw',
-      });
+    case 'ov': {
+      const decision = decidirEventoParto(input);
+      if (decision.issue) issues.push(decision.issue);
+      if (decision.emitir) {
+        eventos.push({
+          tipo: 'parto',
+          fecha: decision.fecha,
+          fecha_confianza: decision.confianza,
+          cria_destino: 'macho_vendido',
+          sx_raw: input.sx.crudo,
+          procedencia: 'sx_raw',
+        });
+      }
       break;
-    case 'av':
-      eventos.push({
-        tipo: 'parto',
-        fecha: fechaEvento,
-        fecha_confianza: confianzaEvento,
-        cria_destino: 'hembra_vendida',
-        sx_raw: input.sx.crudo,
-        procedencia: 'sx_raw',
-      });
+    }
+    case 'av': {
+      const decision = decidirEventoParto(input);
+      if (decision.issue) issues.push(decision.issue);
+      if (decision.emitir) {
+        eventos.push({
+          tipo: 'parto',
+          fecha: decision.fecha,
+          fecha_confianza: decision.confianza,
+          cria_destino: 'hembra_vendida',
+          sx_raw: input.sx.crudo,
+          procedencia: 'sx_raw',
+        });
+      }
       break;
-    case 'a_n':
+    }
+    case 'a_n': {
       if (input.sx.numeroCria === undefined) {
         issues.push({
           crudo: input.sx.crudo,
           motivo: "código 'A' (retenida) sin número de cría -- no se puede dar de alta/emparejar el animal, revisar",
         });
       }
-      eventos.push({
-        tipo: 'parto',
-        fecha: fechaEvento,
-        fecha_confianza: confianzaEvento,
-        cria_destino: 'retenida',
-        datos: input.sx.numeroCria !== undefined ? { numero_cria: input.sx.numeroCria } : undefined,
-        sx_raw: input.sx.crudo,
-        procedencia: 'sx_raw',
-      });
+      const decision = decidirEventoParto(input);
+      if (decision.issue) issues.push(decision.issue);
+      if (decision.emitir) {
+        eventos.push({
+          tipo: 'parto',
+          fecha: decision.fecha,
+          fecha_confianza: decision.confianza,
+          cria_destino: 'retenida',
+          datos: input.sx.numeroCria !== undefined ? { numero_cria: input.sx.numeroCria } : undefined,
+          sx_raw: input.sx.crudo,
+          procedencia: 'sx_raw',
+        });
+      }
       break;
-    case 'a_mas':
-      eventos.push({
-        tipo: 'parto',
-        fecha: fechaEvento,
-        fecha_confianza: confianzaEvento,
-        cria_destino: 'muerta',
-        sx_raw: input.sx.crudo,
-        procedencia: 'sx_raw',
-      });
+    }
+    case 'a_mas': {
+      const decision = decidirEventoParto(input);
+      if (decision.issue) issues.push(decision.issue);
+      if (decision.emitir) {
+        eventos.push({
+          tipo: 'parto',
+          fecha: decision.fecha,
+          fecha_confianza: decision.confianza,
+          cria_destino: 'muerta',
+          sx_raw: input.sx.crudo,
+          procedencia: 'sx_raw',
+        });
+      }
       break;
+    }
     case 'o_mas':
       if (input.huboPartoConfirmado === false) {
+        // Aborto explícito -- NUNCA se deduplica contra Última Cría: un
+        // aborto no deja un nacimiento que "Última Cría" pueda congelar
+        // entre chequeos, cada reporte de aborto es un evento real propio.
         eventos.push({
           tipo: 'aborto',
           fecha: fechaEvento,
@@ -1034,17 +1197,23 @@ export function descomponerSX(input: InputDescomposicionSX): ResultadoDescomposi
               "'O+'/'A+' es ambiguo entre parto con cría muerta y aborto sin parto (plan §7.1) -- se asumió parto por ser la lectura mayoritaria; confirmar con Martha si corresponde registrar aborto en su lugar",
           });
         }
-        eventos.push({
-          tipo: 'parto',
-          fecha: fechaEvento,
-          fecha_confianza: confianzaEvento,
-          cria_destino: 'muerta',
-          sx_raw: input.sx.crudo,
-          procedencia: 'sx_raw',
-        });
+        const decision = decidirEventoParto(input);
+        if (decision.issue) issues.push(decision.issue);
+        if (decision.emitir) {
+          eventos.push({
+            tipo: 'parto',
+            fecha: decision.fecha,
+            fecha_confianza: decision.confianza,
+            cria_destino: 'muerta',
+            sx_raw: input.sx.crudo,
+            procedencia: 'sx_raw',
+          });
+        }
       }
       break;
     case 'aborto':
+      // Aborto explícito -- mismo motivo que la rama de 'o_mas' arriba: nunca
+      // se deduplica contra Última Cría, cada reporte es un evento propio.
       eventos.push({
         tipo: 'aborto',
         fecha: fechaEvento,
@@ -1059,26 +1228,34 @@ export function descomponerSX(input: InputDescomposicionSX): ResultadoDescomposi
         motivo: "SX indica 'vendida' -- no se genera evento aquí (la venta se registra por el flujo de TransaccionGanadoForm/migración 059); confirmar que exista",
       });
       break;
-    case 'gemelar':
+    case 'gemelar': {
       // Parto gemelar (decisión del dueño, 2026-07-22). Se emite UN evento de
-      // parto con la marca `gemelar` en `datos`. El destino de las crías no
-      // está registrado en la planilla (TERNERAS solo registra hembras, y no
-      // hay filas para este parto) -- se documenta como issue en vez de
-      // inventar `cria_destino`.
-      eventos.push({
-        tipo: 'parto',
-        fecha: fechaEvento,
-        fecha_confianza: confianzaEvento,
-        datos: { gemelar: true },
-        sx_raw: input.sx.crudo,
-        procedencia: 'sx_raw',
-      });
+      // parto con la marca `gemelar` en `datos`, sujeto a la misma
+      // deduplicación contra Última Cría que el resto de las ramas de parto.
+      // El destino de las crías no está registrado en la planilla (TERNERAS
+      // solo registra hembras, y no hay filas para este parto) -- se
+      // documenta como issue en vez de inventar `cria_destino`, SIEMPRE
+      // (incluso cuando el evento no se emite por ser un duplicado ya
+      // registrado): es información sobre la fila, no sobre el evento.
+      const decision = decidirEventoParto(input);
+      if (decision.issue) issues.push(decision.issue);
+      if (decision.emitir) {
+        eventos.push({
+          tipo: 'parto',
+          fecha: decision.fecha,
+          fecha_confianza: decision.confianza,
+          datos: { gemelar: true },
+          sx_raw: input.sx.crudo,
+          procedencia: 'sx_raw',
+        });
+      }
       issues.push({
         crudo: input.sx.crudo,
         motivo:
           'parto GEMELAR (gem+, confirmado por el dueño 2026-07-22) -- el destino de las crías no quedó registrado en la planilla, no se asume',
       });
       break;
+    }
     case 'vacia':
     case 'cero':
     case 'mv':

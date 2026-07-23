@@ -5,6 +5,7 @@ import {
   parseFechaChequeo,
   parseValorNumerico,
   parseEstado,
+  parseUltimaCria,
   calcularPartoProbable,
   calcularFechaSecar,
   calcularMesesPrenez,
@@ -474,6 +475,61 @@ describe('parseEstado', () => {
   });
 });
 
+describe('parseUltimaCria', () => {
+  it('celda vacía o null no produce fecha ni issues', () => {
+    expect(parseUltimaCria('')).toEqual({ fecha: null, issues: [] });
+    expect(parseUltimaCria(null)).toEqual({ fecha: null, issues: [] });
+    expect(parseUltimaCria(undefined)).toEqual({ fecha: null, issues: [] });
+  });
+
+  it('fecha limpia día/mes/año con separador "/"', () => {
+    expect(parseUltimaCria('28/1/2024').fecha).toBe('2024-01-28');
+    expect(parseUltimaCria('9/09/2019').fecha).toBe('2019-09-09');
+  });
+
+  it('año de 2 dígitos se interpreta como 20xx', () => {
+    expect(parseUltimaCria('15/03/24').fecha).toBe('2024-03-15');
+  });
+
+  it("año de 3 dígitos con '2' inicial perdido se recupera con issue de revisión", () => {
+    const r = parseUltimaCria('13/05/019');
+    expect(r.fecha).toBe('2019-05-13');
+    expect(r.issues.length).toBeGreaterThan(0);
+  });
+
+  it('dígitos sobrantes tras la fecha quedan como issue, nunca se inventa una segunda fecha', () => {
+    const r = parseUltimaCria('28/1/2024 5');
+    expect(r.fecha).toBe('2024-01-28');
+    expect(r.issues.some((i) => /adicionales/.test(i.motivo))).toBe(true);
+  });
+
+  it('texto sin ningún dígito no produce fecha, sí issue con el crudo intacto', () => {
+    const r = parseUltimaCria('ok');
+    expect(r.fecha).toBeNull();
+    expect(r.issues).toHaveLength(1);
+    expect(r.issues[0].crudo).toBe('ok');
+  });
+
+  it('menos de un triplete completo de dígitos no produce fecha, sí issue', () => {
+    const r = parseUltimaCria('1/2024');
+    expect(r.fecha).toBeNull();
+    expect(r.issues.length).toBeGreaterThan(0);
+  });
+
+  it('mes fuera de rango no produce fecha, sí issue', () => {
+    const r = parseUltimaCria('15/015/2025');
+    expect(r.fecha).toBeNull();
+    expect(r.issues.some((i) => /mes/i.test(i.motivo))).toBe(true);
+  });
+
+  it('nunca lanza para ningún valor crudo real de Última Cría', () => {
+    const valores = ['28/1/2024', '9/09/2019', '13/05/019', 'ok', '', null, undefined, '1/2024', '15/015/2025', '28/1/2024 ?'];
+    for (const v of valores) {
+      expect(() => parseUltimaCria(v)).not.toThrow();
+    }
+  });
+});
+
 describe('motor de fechas (calcularPartoProbable / calcularFechaSecar / calcularMesesPrenez)', () => {
   it('PP = servicio + meses_gestacion_default', () => {
     expect(calcularPartoProbable('2024-05-14', CONFIG_BASE)).toBe('2025-02-14');
@@ -609,6 +665,166 @@ describe('descomponerSX', () => {
         descomponerSX({ chequeoFecha: '2024-08-09', sx: parseSX(raw), fechasServicio: [] }),
       ).not.toThrow();
     }
+  });
+
+  // ==========================================================================
+  // Deduplicación de parto vía Última Cría -- fix del bug real de producción
+  // (ALINA #157: 3 chequeos consecutivos con la misma Última Cría generaban 3
+  // eventos `parto`, cada uno fechado al chequeo en vez del nacimiento real).
+  // ==========================================================================
+  describe('deduplicación de parto contra Última Cría (ultimaCria/ultimaCriaAnterior)', () => {
+    it('misma Última Cría que el chequeo anterior -- NO emite un segundo evento parto', () => {
+      const r = descomponerSX({
+        chequeoFecha: '2024-05-20',
+        sx: parseSX('OV'),
+        fechasServicio: [],
+        ultimaCria: '2024-01-28',
+        ultimaCriaAnterior: '2024-01-28',
+      });
+      expect(r.eventos).toEqual([]);
+    });
+
+    it('Última Cría distinta -- SÍ emite, con fecha=ultimaCria y confianza exacta', () => {
+      const r = descomponerSX({
+        chequeoFecha: '2024-05-20',
+        sx: parseSX('OV'),
+        fechasServicio: [],
+        ultimaCria: '2024-04-02',
+        ultimaCriaAnterior: '2024-01-28',
+      });
+      expect(r.eventos).toEqual([
+        expect.objectContaining({
+          tipo: 'parto',
+          cria_destino: 'macho_vendido',
+          fecha: '2024-04-02',
+          fecha_confianza: 'exacta',
+        }),
+      ]);
+    });
+
+    it('primer chequeo del animal (ultimaCriaAnterior ausente) con ultimaCria presente -- emite UNA vez', () => {
+      const r = descomponerSX({
+        chequeoFecha: '2024-03-18',
+        sx: parseSX('OV'),
+        fechasServicio: [],
+        ultimaCria: '2024-01-28',
+        ultimaCriaAnterior: undefined,
+      });
+      expect(r.eventos).toEqual([
+        expect.objectContaining({ tipo: 'parto', fecha: '2024-01-28', fecha_confianza: 'exacta' }),
+      ]);
+    });
+
+    it('ultimaCria ausente (celda vacía/no interpretable) -- conserva el comportamiento previo (fecha del chequeo, aproximada) y deja un issue de verificación', () => {
+      const r = descomponerSX({ chequeoFecha: '2024-08-09', sx: parseSX('OV'), fechasServicio: [] });
+      expect(r.eventos).toEqual([
+        expect.objectContaining({ tipo: 'parto', fecha: '2024-08-09', fecha_confianza: 'aproximada' }),
+      ]);
+      expect(r.issues.some((i) => /Última Cría/.test(i.motivo))).toBe(true);
+    });
+
+    it('fechaPartoReal explícita sigue ganando sobre chequeoFecha cuando no hay ultimaCria', () => {
+      const r = descomponerSX({
+        chequeoFecha: '2024-08-09',
+        fechaPartoReal: '2024-08-01',
+        sx: parseSX('OV'),
+        fechasServicio: [],
+      });
+      expect(r.eventos[0]).toMatchObject({ fecha: '2024-08-01', fecha_confianza: 'exacta' });
+    });
+
+    it('aborto explícito (huboPartoConfirmado=false en O+) NUNCA se deduplica -- se emite igual con la misma ultimaCria repetida', () => {
+      const params = {
+        chequeoFecha: '2024-08-09',
+        sx: parseSX('O+'),
+        fechasServicio: [],
+        huboPartoConfirmado: false,
+        ultimaCria: '2024-01-28',
+        ultimaCriaAnterior: '2024-01-28',
+      };
+      const r1 = descomponerSX(params);
+      const r2 = descomponerSX(params);
+      expect(r1.eventos).toEqual([expect.objectContaining({ tipo: 'aborto' })]);
+      expect(r2.eventos).toEqual([expect.objectContaining({ tipo: 'aborto' })]);
+    });
+
+    it('tipo aborto (SX="aborto") tampoco se deduplica -- cada reporte de aborto es un evento propio', () => {
+      const params = {
+        chequeoFecha: '2024-08-09',
+        sx: parseSX('aborto'),
+        fechasServicio: [],
+        ultimaCria: '2024-01-28',
+        ultimaCriaAnterior: '2024-01-28',
+      };
+      expect(descomponerSX(params).eventos).toEqual([expect.objectContaining({ tipo: 'aborto' })]);
+      expect(descomponerSX(params).eventos).toEqual([expect.objectContaining({ tipo: 'aborto' })]);
+    });
+
+    it('gem+ (gemelar) se deduplica igual que el resto de las ramas de parto, y el issue de destino de crías se conserva siempre', () => {
+      const dup = descomponerSX({
+        chequeoFecha: '2024-05-20',
+        sx: parseSX('gem+'),
+        fechasServicio: [],
+        ultimaCria: '2024-01-28',
+        ultimaCriaAnterior: '2024-01-28',
+      });
+      expect(dup.eventos).toEqual([]);
+      expect(dup.issues.some((i) => /GEMELAR/i.test(i.motivo))).toBe(true);
+
+      const nuevo = descomponerSX({
+        chequeoFecha: '2024-05-20',
+        sx: parseSX('gem+'),
+        fechasServicio: [],
+        ultimaCria: '2024-04-02',
+        ultimaCriaAnterior: '2024-01-28',
+      });
+      expect(nuevo.eventos).toEqual([
+        expect.objectContaining({ tipo: 'parto', datos: { gemelar: true }, fecha: '2024-04-02', fecha_confianza: 'exacta' }),
+      ]);
+    });
+
+    it('A{n} (retenida) -- la ausencia de número de cría sigue generando su propio issue aunque el evento se suprima por duplicado', () => {
+      const r = descomponerSX({
+        chequeoFecha: '2024-05-20',
+        sx: parseSX('A'), // sin número -- parseSX ya deja su propio issue
+        fechasServicio: [],
+        ultimaCria: '2024-01-28',
+        ultimaCriaAnterior: '2024-01-28',
+      });
+      expect(r.eventos).toEqual([]);
+      expect(r.issues.some((i) => /sin número de cría/.test(i.motivo))).toBe(true);
+    });
+
+    it('caso real ALINA #157: misma Última Cría (28/1/2024) en 3 chequeos consecutivos -- 1 evento parto, no 3', () => {
+      const chequeos = ['2024-03-18', '2024-05-20', '2024-08-09'];
+      let ultimaCriaAnterior: string | undefined;
+      const todosLosEventos: ReturnType<typeof descomponerSX>['eventos'] = [];
+
+      for (const chequeoFecha of chequeos) {
+        const { eventos } = descomponerSX({
+          chequeoFecha,
+          sx: parseSX('OV'),
+          fechasServicio: [],
+          ultimaCria: '2024-01-28',
+          ultimaCriaAnterior,
+        });
+        todosLosEventos.push(...eventos);
+        ultimaCriaAnterior = '2024-01-28';
+      }
+
+      expect(todosLosEventos).toHaveLength(1);
+      expect(todosLosEventos[0]).toMatchObject({ tipo: 'parto', fecha: '2024-01-28', fecha_confianza: 'exacta' });
+    });
+
+    it('omitir ultimaCria/ultimaCriaAnterior (como en todos los fixtures existentes) preserva el comportamiento previo sin cambios', () => {
+      // Ningún test preexistente de este archivo pasa estos campos -- este
+      // caso documenta explícitamente la compatibilidad hacia atrás que el
+      // resto de la suite ya ejercita implícitamente.
+      const r = descomponerSX({ chequeoFecha: '2024-08-09', sx: parseSX('OV'), fechasServicio: [] });
+      expect(r.eventos).toEqual([
+        expect.objectContaining({ tipo: 'parto', cria_destino: 'macho_vendido', fecha: '2024-08-09', fecha_confianza: 'aproximada' }),
+      ]);
+    });
   });
 });
 

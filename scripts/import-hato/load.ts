@@ -74,7 +74,7 @@ import { dirname, resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import Papa from 'papaparse';
-import { descomponerSX, parseSX, type EventoDerivado } from '../../src/utils/calculosHato';
+import { descomponerSX, parseSX, parseUltimaCria, type EventoDerivado } from '../../src/utils/calculosHato';
 import type { SalidaNormalizado, FilaChequeoNormalizada } from '../../src/utils/importHato/tipos';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -481,6 +481,28 @@ async function cargarChequeos(
 // captura").
 // ============================================================================
 
+/**
+ * >>> CORREGIDO PERO NUNCA RE-EJECUTADO (ver el encabezado del archivo y
+ * CLAUDE.md, "Load es backfill-only, para siempre"). <<<
+ *
+ * Bug real encontrado en producción (2026-07-23, animal ALINA #157): esta
+ * función generaba un evento `parto` nuevo CADA VEZ que el SX de un chequeo
+ * indicaba nacimiento (OV/AV/A{n}/A+/O+/gem+), sin memoria del chequeo
+ * anterior -- pero el SX (igual que `ultima_cria_raw`) es un marcador de
+ * ESTADO que la fuente deja IGUAL en varios chequeos bimensuales seguidos
+ * hasta el próximo parto real. ALINA tiene `ultima_cria_raw` = "28/1/2024"
+ * en TRES chequeos consecutivos (2024-03-18, 2024-05-20, 2024-08-09) -- un
+ * solo nacimiento real, que esta función registraba tres veces, cada una
+ * fechada al chequeo (nunca a la fecha real del parto).
+ *
+ * Corregido agrupando por animal y recorriendo sus chequeos en orden
+ * CRONOLÓGICO (nunca se asume que `chequeos` ya viene ordenado así -- no lo
+ * está, es el orden en que Extract recorrió archivos/hojas), llevando un
+ * `Map` de la última "Última Cría" conocida por animal y pasándola a
+ * `descomponerSX` como `ultimaCriaAnterior` -- el mismo motor decide, con
+ * `decidirEventoParto` (calculosHato.ts), si el parto de esta fila ya se
+ * registró antes o es genuinamente nuevo (y en ese caso, con qué fecha real).
+ */
 async function cargarEventos(
   supabase: ReturnType<typeof createClient>,
   chequeos: FilaChequeoNormalizada[],
@@ -491,56 +513,83 @@ async function cargarEventos(
 ): Promise<void> {
   const eventosInsertables: Array<Record<string, unknown>> = [];
 
+  // Agrupa por animal (resolviendo colisiones desempatadas igual que el resto
+  // del script) -- una fila sin `numero` o sin fecha de chequeo no tiene con
+  // qué anclar temporalmente nada, ni evento ni el rastreo de Última Cría, y
+  // se descarta igual que antes.
+  const porAnimal = new Map<string, FilaChequeoNormalizada[]>();
   for (const fila of chequeos) {
-    if (fila.numero === null) continue;
+    if (fila.numero === null || fila.chequeoFecha === null) continue;
     const animalId = resolverAnimalId(fila.numero, fila.nombre, numeroAId, numeroObservadoNombreAId);
     if (!animalId) continue; // bloqueado por colisión, no resuelto -- no se generan eventos
+    if (!porAnimal.has(animalId)) porAnimal.set(animalId, []);
+    porAnimal.get(animalId)!.push(fila);
+  }
 
-    const chequeoVacaId = chequeoVacaIdPorClave.get(`${fila.archivo}::${fila.hoja}::${fila.fila}`);
-    // Una fila sin `chequeoVacaId` no produjo una fila real en
-    // hato_chequeo_vacas -- porque su lectura no tiene fecha (cubierto por el
-    // guard de abajo también) o porque `deduplicarPorChequeoYAnimal` la
-    // descartó por ser la copia más pobre de otra fila del mismo animal en la
-    // misma lectura. En ambos casos no debe generar eventos propios: un
-    // evento sin la fila de chequeo que lo originó no es trazable, y si es la
-    // duplicada descartada, sus datos ya están representados por la fila que
-    // sí se cargó.
-    if (!chequeoVacaId) continue;
+  for (const [animalId, filasAnimal] of porAnimal) {
+    const filasOrdenadas = [...filasAnimal].sort((a, b) =>
+      (a.chequeoFecha as string).localeCompare(b.chequeoFecha as string),
+    );
 
-    const sxResuelto = fila.raw.sx !== null ? parseSX(fila.raw.sx) : null;
-    if (!sxResuelto || fila.chequeoFecha === null) continue;
+    // Última Cría conocida del animal HASTA el chequeo procesado hasta ahora
+    // -- `undefined` en el primer chequeo (no hay "anterior" que comparar).
+    let ultimaCriaAnterior: string | null | undefined;
 
-    const { eventos } = descomponerSX({
-      chequeoFecha: fila.chequeoFecha,
-      sx: sxResuelto,
-      fechasServicio: fila.fechasServicio,
-      toroNombre: fila.toroNombre ?? undefined,
-      tipoServicio: fila.tipoServicio ?? undefined,
-      // `huboPartoConfirmado` deliberadamente undefined -- este runner no
-      // tiene forma de saberlo; `descomponerSX` ya deja un issue explícito
-      // para ese caso (ver calculosHato.ts), consistente con la regla de
-      // nunca resolver una ambigüedad en silencio.
-    });
+    for (const fila of filasOrdenadas) {
+      const ultimaCriaFila = parseUltimaCria(fila.raw.ultimaCria).fecha;
 
-    for (const evento of eventos as EventoDerivado[]) {
-      let toroId: string | null = null;
-      if (evento.toro_nombre) {
-        const clave = evento.toro_nombre.trim().toLowerCase();
-        toroId = toroCache.get(clave) ?? null; // solo reusa un toro YA sembrado -- nunca crea uno nuevo aquí
+      const chequeoVacaId = chequeoVacaIdPorClave.get(`${fila.archivo}::${fila.hoja}::${fila.fila}`);
+      // Una fila sin `chequeoVacaId` no produjo una fila real en
+      // hato_chequeo_vacas -- porque `deduplicarPorChequeoYAnimal` la
+      // descartó por ser la copia más pobre de otra fila del mismo animal en
+      // la misma lectura. No genera eventos propios (sus datos ya están
+      // representados por la fila que sí se cargó), pero SÍ actualiza el
+      // rastreo de Última Cría -- es una lectura real del animal, aunque su
+      // fila física haya sido la descartada.
+      if (!chequeoVacaId) {
+        if (ultimaCriaFila !== null) ultimaCriaAnterior = ultimaCriaFila;
+        continue;
       }
-      eventosInsertables.push({
-        animal_id: animalId,
-        tipo: evento.tipo,
-        fecha: evento.fecha,
-        fecha_confianza: evento.fecha_confianza,
-        tipo_servicio: evento.tipo_servicio ?? null,
-        toro_id: toroId,
-        cria_destino: evento.cria_destino ?? null,
-        sx_raw: evento.sx_raw ?? null,
-        chequeo_vaca_id: chequeoVacaId,
-        fuente: 'importacion',
-        datos: evento.datos ?? null,
-      });
+
+      const sxResuelto = fila.raw.sx !== null ? parseSX(fila.raw.sx) : null;
+      if (sxResuelto) {
+        const { eventos } = descomponerSX({
+          chequeoFecha: fila.chequeoFecha as string,
+          sx: sxResuelto,
+          fechasServicio: fila.fechasServicio,
+          toroNombre: fila.toroNombre ?? undefined,
+          tipoServicio: fila.tipoServicio ?? undefined,
+          ultimaCria: ultimaCriaFila,
+          ultimaCriaAnterior,
+          // `huboPartoConfirmado` deliberadamente undefined -- este runner no
+          // tiene forma de saberlo; `descomponerSX` ya deja un issue explícito
+          // para ese caso (ver calculosHato.ts), consistente con la regla de
+          // nunca resolver una ambigüedad en silencio.
+        });
+
+        for (const evento of eventos as EventoDerivado[]) {
+          let toroId: string | null = null;
+          if (evento.toro_nombre) {
+            const clave = evento.toro_nombre.trim().toLowerCase();
+            toroId = toroCache.get(clave) ?? null; // solo reusa un toro YA sembrado -- nunca crea uno nuevo aquí
+          }
+          eventosInsertables.push({
+            animal_id: animalId,
+            tipo: evento.tipo,
+            fecha: evento.fecha,
+            fecha_confianza: evento.fecha_confianza,
+            tipo_servicio: evento.tipo_servicio ?? null,
+            toro_id: toroId,
+            cria_destino: evento.cria_destino ?? null,
+            sx_raw: evento.sx_raw ?? null,
+            chequeo_vaca_id: chequeoVacaId,
+            fuente: 'importacion',
+            datos: evento.datos ?? null,
+          });
+        }
+      }
+
+      if (ultimaCriaFila !== null) ultimaCriaAnterior = ultimaCriaFila;
     }
   }
 

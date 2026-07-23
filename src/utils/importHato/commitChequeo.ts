@@ -35,7 +35,7 @@
 // sigue viajando con su crudo intacto (los `raw.*` se copian VERBATIM, nunca
 // se reinterpretan aquí).
 
-import { descomponerSX, type EventoDerivado, type ParseIssue } from '@/utils/calculosHato';
+import { descomponerSX, parseUltimaCria, type EventoDerivado, type ParseIssue } from '@/utils/calculosHato';
 import type { FilaChequeoNormalizada } from './tipos';
 import type { ClasificacionFilaDiff, ResultadoDiffChequeo } from './diffChequeo';
 
@@ -210,6 +210,47 @@ export interface ResultadoDerivacionEventos {
   issues: ParseIssue[];
 }
 
+/** Una fila histórica de `hato_chequeo_vacas` -- solo lo que
+ * `seleccionarUltimaCriaAnteriorPorAnimal` necesita (identidad + fecha del
+ * chequeo al que pertenece + su `ultima_cria_raw` VERBATIM). El handler I/O
+ * (`hato-chequeo-commit.ts`) arma este arreglo con una consulta a
+ * `hato_chequeo_vacas` unida a `hato_chequeos`, la misma fuente que ya usa
+ * para el diff -- este módulo sigue sin tocar Supabase. */
+export interface FilaUltimaCriaHistorico {
+  animalId: string;
+  chequeoFecha: string;
+  ultimaCriaRaw: string | null;
+}
+
+/**
+ * Reduce el historial de `hato_chequeo_vacas` de varios animales al último
+ * `ultima_cria_raw` CONOCIDO estrictamente ANTES de `chequeoNuevoFecha`, ya
+ * parseado con `parseUltimaCria` -- lo que `descomponerSX` necesita como
+ * `ultimaCriaAnterior` para decidir si un parto ya fue registrado en un
+ * chequeo previo (ver `decidirEventoParto` en `calculosHato.ts`). Un animal
+ * sin ningún chequeo anterior a esa fecha no aparece en el mapa resultante
+ * (equivalente a `undefined` -- "no hay Última Cría anterior conocida",
+ * nunca se inventa un valor).
+ */
+export function seleccionarUltimaCriaAnteriorPorAnimal(
+  historico: FilaUltimaCriaHistorico[],
+  chequeoNuevoFecha: string,
+): Map<string, string | null> {
+  const masRecientePorAnimal = new Map<string, FilaUltimaCriaHistorico>();
+  for (const fila of historico) {
+    if (fila.chequeoFecha >= chequeoNuevoFecha) continue; // solo estrictamente ANTERIOR
+    const actual = masRecientePorAnimal.get(fila.animalId);
+    if (!actual || fila.chequeoFecha > actual.chequeoFecha) {
+      masRecientePorAnimal.set(fila.animalId, fila);
+    }
+  }
+  const resultado = new Map<string, string | null>();
+  for (const [animalId, fila] of masRecientePorAnimal) {
+    resultado.set(animalId, parseUltimaCria(fila.ultimaCriaRaw).fecha);
+  }
+  return resultado;
+}
+
 /**
  * Deriva los eventos de `hato_eventos` de cada fila aprobada, reusando
  * `descomponerSX` (mismo motor que `Load` y la captura en vivo). Una fila
@@ -217,12 +258,21 @@ export interface ResultadoDerivacionEventos {
  * `chequeoFecha` resuelta no puede anclar temporalmente un evento -- se
  * omite sin generar un evento inventado, mismo criterio que
  * `scripts/import-hato/load.ts` Paso 5.
+ *
+ * `ultimaCriaAnteriorPorAnimal` (default vacío -- compatible con llamadas
+ * existentes que no lo traen) es el mapa que arma el handler con
+ * `seleccionarUltimaCriaAnteriorPorAnimal`; la Última Cría de ESTA fila se
+ * parsea aquí mismo desde `fila.raw.ultimaCria` (capa cruda), nunca se le
+ * pide al caller que la parsee dos veces.
  */
-export function derivarEventosDeChequeo(aprobadas: FilaChequeoAprobada[]): ResultadoDerivacionEventos {
+export function derivarEventosDeChequeo(
+  aprobadas: FilaChequeoAprobada[],
+  ultimaCriaAnteriorPorAnimal: Map<string, string | null> = new Map(),
+): ResultadoDerivacionEventos {
   const eventos: EventoConIndice[] = [];
   const issues: ParseIssue[] = [];
 
-  aprobadas.forEach(({ fila }, vacaIndice) => {
+  aprobadas.forEach(({ fila, animalId }, vacaIndice) => {
     if (fila.sx === null || fila.chequeoFecha === null) return;
 
     const { eventos: eventosFila, issues: issuesFila } = descomponerSX({
@@ -231,6 +281,8 @@ export function derivarEventosDeChequeo(aprobadas: FilaChequeoAprobada[]): Resul
       fechasServicio: fila.fechasServicio,
       toroNombre: fila.toroNombre ?? undefined,
       tipoServicio: fila.tipoServicio ?? undefined,
+      ultimaCria: parseUltimaCria(fila.raw.ultimaCria).fecha,
+      ultimaCriaAnterior: ultimaCriaAnteriorPorAnimal.get(animalId),
       // `huboPartoConfirmado` deliberadamente undefined -- el diff de B0/V10
       // no tiene forma de saberlo (mismo motivo que Load); `descomponerSX`
       // ya deja un issue explícito para el caso ambiguo `o_mas`.
