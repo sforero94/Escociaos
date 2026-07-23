@@ -9,6 +9,7 @@ import { generarReporteSemanal } from "./generar-reporte-semanal.tsx";
 import { handleChatMessage } from "./chat.tsx";
 import { handleClimaSync, handleClimaBackfill, handleClimaForecast } from "./clima.tsx";
 import { handleHatoChequeoPreview } from "./hato-chequeo-preview.ts";
+import { handleHatoChequeoCommit } from "./hato-chequeo-commit.ts";
 import { handleWebhook } from "./telegram/bot.ts";
 
 const app = new Hono();
@@ -170,6 +171,13 @@ app.get("/make-server-1ccce916/clima/forecast", async (c) => {
 // para aprobar. NUNCA comete un INSERT/UPDATE (plan §7.4).
 app.post("/make-server-1ccce916/hato/chequeo/preview", async (c) => {
   return await handleHatoChequeoPreview(c);
+});
+
+// Hato Lechero: B0/V10 commit path -- "Aprobar" el diff de arriba. Revalida
+// contra el estado fresco del hato y escribe en UNA transacción (RPC
+// fn_hato_commit_chequeo, migración 065). Nunca re-parsea el .xlsx.
+app.post("/make-server-1ccce916/hato/chequeo/commit", async (c) => {
+  return await handleHatoChequeoCommit(c);
 });
 
 // Handle preflight OPTIONS at Deno.serve level to ensure CORS works

@@ -658,3 +658,15 @@ input[type='number'] {
   .tabla-financiera th,
   .tabla-financiera td { padding: 0.5rem; font-size: 0.8125rem; }
 }
+
+/* Tablero Hato Lechero: 5 KPIs (4 categorías del hato + próximas a
+   reemplazo). La build congelada de Tailwind no trae lg:grid-cols-5, así
+   que la regla vive aquí (misma razón que .filtros-toggle etc.). */
+.kpi-grid-hato {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+@media (min-width: 1024px) {
+  .kpi-grid-hato { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}

@@ -27,13 +27,13 @@ beforeAll(async () => {
 // ---------------------------------------------------------------------------
 
 describe('TELEGRAM_MODULES', () => {
-  it('exports exactly 5 modules', () => {
-    expect(TELEGRAM_MODULES).toHaveLength(5);
+  it('exports exactly 6 modules', () => {
+    expect(TELEGRAM_MODULES).toHaveLength(6);
   });
 
   it('contains the expected module keys', () => {
     const keys = TELEGRAM_MODULES.map((m) => m.key);
-    expect(keys).toEqual(['labores', 'monitoreo', 'gastos', 'ingresos', 'consultas']);
+    expect(keys).toEqual(['labores', 'monitoreo', 'gastos', 'ingresos', 'hato_produccion', 'consultas']);
   });
 
   it('each module has key, label, and description', () => {

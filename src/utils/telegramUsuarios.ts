@@ -51,6 +51,7 @@ export const TELEGRAM_MODULES: TelegramModulo[] = [
   { key: 'monitoreo', label: 'Monitoreo', description: 'Registrar monitoreo de plagas' },
   { key: 'gastos', label: 'Gastos', description: 'Registrar gastos' },
   { key: 'ingresos', label: 'Ingresos', description: 'Registrar ingresos' },
+  { key: 'hato_produccion', label: 'Producción Hato Lechero', description: 'Pesaje semanal de leche y producción quincenal (litros al camión)' },
   { key: 'consultas', label: 'Consultas IA', description: 'Acceso a Esco IA — solo para usuarios autorizados', sensitive: true },
 ];
 

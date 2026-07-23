@@ -482,7 +482,12 @@ Santiago respondió las 12 secciones del reporte generado. Las respuestas con ef
 - **§7 PADRE en TERNERAS**: `yaguen`/`fabace` son **nombres de toro, no razas; asumir jersey**.
 - **§8 Ventas inferidas**: la nota `'chispa. Dacota, indir  vendida'` (CHEQUEO JULIO 2026) basta para marcar **CHISPA, DACOTA e INDIRA como vendidas**, con número de trabajo 800-899 donde haga falta.
 - **§9 Sub-tabla de novillas 2024**: intentar resolver contra los chequeos de 2025; si no, ignorar.
-- **§10**: `Mv` = "vacas de Martha", **ignorar para el sistema** · `gem+` = **parto gemelar** · fechas en OBS/ESTADO de 2019: ignorar (muy antiguas, sin impacto material) · **litros al camión mide producción del hato (venta); el pesaje por vaca mide productividad individual** — datos distintos, historias distintas, sin atribución por ordeño · **el pesaje se hace los miércoles** (migración 064: `dia_pesaje_semanal`) · Fabace = FABA confirmado · **agregar gyr** al catálogo (migración 064) · la nota de novillas vivirá en observaciones en el sistema nuevo · **El hato tiene tres categorías: terneras, hato (en ordeño) y horro (secas próximas a parir) — el inventario y la vista de S4 deben mostrar esas tres.**
+- **§10**: `Mv` = "vacas de Martha", **ignorar para el sistema** · `gem+` = **parto gemelar** · fechas en OBS/ESTADO de 2019: ignorar (muy antiguas, sin impacto material) · **litros al camión mide producción del hato (venta); el pesaje por vaca mide productividad individual** — datos distintos, historias distintas, sin atribución por ordeño · **el pesaje se hace los miércoles** (migración 064: `dia_pesaje_semanal`) · Fabace = FABA confirmado · **agregar gyr** al catálogo (migración 064) · la nota de novillas vivirá en observaciones en el sistema nuevo · **El hato tiene tres categorías: terneras, hato (en ordeño) y horro (secas próximas a parir) — el inventario y la vista de S4 deben mostrar esas tres.** *(Superada por la tercera ronda, abajo: son CUATRO.)*
+
+### Decisiones del dueño — tercera ronda (2026-07-22, sobre la regla de categorías implementada en S4/S7)
+
+- **CUATRO categorías, no tres: terneras y novillas van separadas** — "it was my oversight", palabras del dueño. El inventario (`AnimalesList`), el tablero (`HatoDashboard`) y Esco (`get_hato_reproduccion`) muestran las cuatro: terneras · novillas · hato (en ordeño) · horro.
+- **Confirmada la lectura de "horro" = solo secas**: una vaca `proxima_a_secar` sigue en el hato (en ordeño) hasta que el secado se confirme (`secado_real`). Regla unificada en `src/utils/hatoCategorias.ts` (UI) y `hato-aggregation.ts` (Esco, ambas copias) — cambiar un límite exige tocar ambos lados.
 
 **S4 — Frontend: Núcleo del módulo**
 - Objetivo: reemplazar los `ComingSoon` de producción por las vistas reales bajo `/hato-lechero`: `HatoDashboard` (Tablero), `AnimalesList` (Hato) + `HojaDeVida` (timeline con todos los servicios V7 + genealogía madre+padre V8 + `GenealogiaArbol`/`EventoTimeline`), `ChequeosList` + **`SubirChequeoExcel` (B0/V10, el flujo recomendado)** y `ChequeoCapturaGrid` (manual). Sigue el sistema de diseño del mock (§7.6), sin editar globales.
@@ -490,12 +495,14 @@ Santiago respondió las 12 secciones del reporte generado. Las respuestas con ef
 - Entregable: módulo navegable end-to-end para fichas + captura de chequeo (subida de Excel + grilla).
 - Depende de: S1, S2. Puede empezar contra fixtures antes de que S3 cierre, pero su validación final (y B0) requiere S3.
 - Desbloquea: nada aguas abajo (es hoja del grafo).
+- **Cierre (2026-07-22)**: entregada en paralelo con S5/S7 (rama `claude/hato-lechero-s4-7-parallel-1a2903`). Tablero, `AnimalesList` (4 categorías, tercera ronda) + `HojaDeVida`, `ChequeosList` + subida B0 con diff. `ChequeoCapturaGrid` NO se construyó (D-4 la eliminó del alcance — este bullet la listaba porque predata esa decisión). El "Aprobar" del diff se cerró el mismo día con el commit path: preview extendido + `POST /hato/chequeo/commit` + RPC `fn_hato_commit_chequeo` (migración 065, aplicada a producción). Detalle completo en CLAUDE.md §Hato Lechero.
 
 **S5 — Frontend/Integraciones: Producción (V2/V3/V4)**
 - Objetivo: `ProduccionView` (pesaje semanal por vaca + producción **quincenal** + KPI de productividad litros/vaca) + conversaciones Telegram `pesajeLeche` + `produccionQuincenal` (reemplaza el `litrosCamion` diario) + alta de Fernando en `telegram_usuarios`.
 - Insumos: esquema de S1 (`hato_pesajes_leche`, `hato_produccion_quincenal`).
 - Depende de: S1.
 - Desbloquea: S6 — no por los datos de producción en sí, sino porque S5 deja lista la plomería de bot y el onboarding de Fernando que el motor de alertas reutiliza para poder escribirle.
+- **Cierre (2026-07-22)**: entregada. `ProduccionView` (pesaje semanal + quincenal + KPI litros/vaca, "sin dato ≠ 0"), conversaciones `pesajeLeche`/`produccionQuincenal` (reemplaza `litrosCamion`), comandos `/pesaje` y `/produccion`. El alta de Fernando quedó documentada en `docs/hato/s5-alta-fernando-telegram.md`, NO ejecutada. De paso restauró `telegram/types.ts`, borrado por un resync previo — el bot entero no compilaba en deploy sin él. S6 queda desbloqueada por este lado; sigue esperando el checkpoint de Martha (S3).
 
 **S6 — Backend/Integraciones: Motor de alertas** *(capacidad estrella — máxima prioridad de secuenciación)*
 - Objetivo: tick endpoint (generar/despachar/escalar), helper de envío saliente + log a `telegram_mensajes`, callbacks con efectos de dominio, `AlertasView` (con revisión semanal de Martha, V11), cron 057.
@@ -510,6 +517,7 @@ Santiago respondió las 12 secciones del reporte generado. Las respuestas con ef
 - Objetivo: `get_hato_animal`, `get_hato_reproduccion`, `get_hato_produccion` + `hato-aggregation.ts`.
 - Depende de: S1, S2, S3 (necesita datos reales para responder preguntas útiles).
 - Prioridad de secuenciación baja: no bloquea el checkpoint de la visita a la finca, puede correr en cualquier ventana ociosa una vez S3 cierra.
+- **Cierre (2026-07-22)**: entregada. `get_hato_animal` / `get_hato_reproduccion` / `get_hato_produccion` sobre `hato-aggregation.ts` puro (misma regla de 4 categorías que la UI — las dos copias deben cambiar juntas). Edge function desplegada.
 
 **S8 — Frontend: Foto-OCR** *(no ejecutable todavía)*
 - Depende de: S4 (la grilla debe existir para recibir el prefill) **y** de un insumo que hoy no existe — fotos reales de la planilla, que solo se recolectan durante la visita a la finca. Esta sesión queda fuera del grafo ejecutable hasta que ese insumo aparezca; no se agenda, se espera.

@@ -17,6 +17,8 @@ import { jornalConversation } from "./conversations/jornal.ts";
 import { monitoreoConversation } from "./conversations/monitoreo.ts";
 import { gastoConversation } from "./conversations/gasto.ts";
 import { ingresoConversation } from "./conversations/ingreso.ts";
+import { pesajeLecheConversation } from "./conversations/pesajeLeche.ts";
+import { produccionQuincenalConversation } from "./conversations/produccionQuincenal.ts";
 import { llmToolLoop, getSystemPrompt } from "../chat.tsx";
 
 // ============================================================================
@@ -132,6 +134,8 @@ function getBot(): Bot<BotContext> {
   bot.use(createConversation(monitoreoConversation, "monitoreo"));
   bot.use(createConversation(gastoConversation, "gasto"));
   bot.use(createConversation(ingresoConversation, "ingreso"));
+  bot.use(createConversation(pesajeLecheConversation, "pesajeLeche"));
+  bot.use(createConversation(produccionQuincenalConversation, "produccionQuincenal"));
 
   // ==========================================================================
   // HELPERS
@@ -152,6 +156,10 @@ function getBot(): Bot<BotContext> {
     }
     if (mods.includes("ingresos")) {
       kb.text("💵 Registrar ingreso", "start_ingreso").row();
+    }
+    if (mods.includes("hato_produccion")) {
+      kb.text("🐄 Pesaje semanal (leche)", "start_pesajeLeche").row();
+      kb.text("🥛 Producción quincenal", "start_produccionQuincenal").row();
     }
     if (mods.includes("consultas")) {
       kb.text("💬 Preguntarle a Esco", "start_consulta").row();
@@ -282,6 +290,22 @@ function getBot(): Bot<BotContext> {
     await ctx.conversation.enter("ingreso");
   });
 
+  bot.command("pesaje", async (ctx) => {
+    if (!ctx.telegramUser?.modulos_permitidos?.includes("hato_produccion")) {
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
+    await ctx.conversation.enter("pesajeLeche");
+  });
+
+  bot.command("produccion", async (ctx) => {
+    if (!ctx.telegramUser?.modulos_permitidos?.includes("hato_produccion")) {
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
+    await ctx.conversation.enter("produccionQuincenal");
+  });
+
   bot.command("cancelar", async (ctx) => {
     await ctx.conversation.exit();
     await ctx.reply("Operación cancelada.");
@@ -297,6 +321,8 @@ function getBot(): Bot<BotContext> {
         "/monitoreo — Registrar monitoreo",
         "/gasto — Registrar un gasto",
         "/ingreso — Registrar un ingreso",
+        "/pesaje — Pesaje semanal de leche por vaca",
+        "/produccion — Producción quincenal (litros al camión)",
         "/cancelar — Cancelar operación actual",
         "/ayuda — Ver esta ayuda",
         "",
@@ -343,6 +369,24 @@ function getBot(): Bot<BotContext> {
       return;
     }
     await ctx.conversation.enter("ingreso");
+  });
+
+  bot.callbackQuery("start_pesajeLeche", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!ctx.telegramUser?.modulos_permitidos?.includes("hato_produccion")) {
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
+    await ctx.conversation.enter("pesajeLeche");
+  });
+
+  bot.callbackQuery("start_produccionQuincenal", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!ctx.telegramUser?.modulos_permitidos?.includes("hato_produccion")) {
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
+    await ctx.conversation.enter("produccionQuincenal");
   });
 
   bot.callbackQuery("start_consulta", async (ctx) => {
@@ -695,6 +739,8 @@ function getBot(): Bot<BotContext> {
     { command: "monitoreo", description: "Registrar monitoreo" },
     { command: "gasto", description: "Registrar un gasto" },
     { command: "ingreso", description: "Registrar un ingreso" },
+    { command: "pesaje", description: "Pesaje semanal de leche" },
+    { command: "produccion", description: "Producción quincenal" },
     { command: "cancelar", description: "Cancelar operación actual" },
     { command: "ayuda", description: "Ver ayuda" },
   ]).catch((err) => console.error("[Telegram] setMyCommands error:", err));

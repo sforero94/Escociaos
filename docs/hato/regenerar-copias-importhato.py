@@ -36,10 +36,12 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ORIGEN_DIR = os.path.join(ROOT, 'src/utils/importHato')
 
-# Los 10 módulos que el endpoint necesita en tiempo de ejecución: los 8 de
+# Los 11 módulos que el endpoint necesita en tiempo de ejecución: los 8 de
 # Extract+Normalize (contrato docs/hato/s3-contrato-pipeline.md) más
 # `overridesChapeta.ts` y `diffChequeo.ts`, que el diff de B0/V10 importa
-# directamente. Orden = orden de dependencia, solo por legibilidad del log.
+# directamente, más `commitChequeo.ts` (commit path B0/V10 -- el paso
+# "Aprobar", `hato-chequeo-commit.ts`). Orden = orden de dependencia, solo
+# por legibilidad del log.
 MODULOS = [
     'tipos.ts',
     'celdas.ts',
@@ -51,6 +53,7 @@ MODULOS = [
     'normalizar.ts',
     'overridesChapeta.ts',
     'diffChequeo.ts',
+    'commitChequeo.ts',
 ]
 
 DESTINOS = [

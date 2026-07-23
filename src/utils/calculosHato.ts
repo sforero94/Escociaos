@@ -1522,3 +1522,88 @@ export function detectarColisionesChapeta(animales: AnimalEnChequeo[]): Colision
   }
   return colisiones.sort((a, b) => a.numero - b.numero);
 }
+
+// ============================================================================
+// BLOQUE 7 — Producción de leche (S5): fecha de pesaje semanal, quincena
+// ============================================================================
+
+/** Día ISO-8601 de la semana (1=lunes … 7=domingo) de una fecha ISO
+ * yyyy-mm-dd. Usa Date.UTC para no depender del huso horario del proceso
+ * que ejecuta esto -- mismo motivo que `sumarMeses`/`diferenciaDias`. */
+function diaIsoSemana(fechaIso: string): number {
+  const { anio, mes, dia } = parsearIso(fechaIso);
+  const dowJs = new Date(Date.UTC(anio, mes - 1, dia)).getUTCDay(); // 0=domingo..6=sábado
+  return dowJs === 0 ? 7 : dowJs;
+}
+
+/** Suma (o resta, con `dias` negativo) días calendario a una fecha ISO. */
+function sumarDias(fechaIso: string, dias: number): string {
+  const { anio, mes, dia } = parsearIso(fechaIso);
+  const d = new Date(Date.UTC(anio, mes - 1, dia));
+  d.setUTCDate(d.getUTCDate() + dias);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Fecha del último día de pesaje semanal (D1/V2) en o antes de
+ * `fechaReferencia`: el día ISO de la semana configurado en
+ * `hato_config.dia_pesaje_semanal` (migración 064 -- decisión del dueño:
+ * miércoles/`iso=3`, pero esta función NUNCA asume ese valor, lo recibe
+ * como parámetro, igual que el resto del motor lee sus umbrales de
+ * `HatoConfig` en vez de tenerlos hardcodeados). Si `fechaReferencia` cae
+ * exactamente en `diaPesajeIso`, se devuelve ella misma -- "el pesaje de
+ * hoy" es un default válido. Nunca retrocede más de 6 días.
+ */
+export function calcularFechaUltimoDiaPesaje(fechaReferencia: string, diaPesajeIso: number): string {
+  const hoy = diaIsoSemana(fechaReferencia);
+  const retroceso = ((hoy - diaPesajeIso) + 7) % 7;
+  return retroceso === 0 ? fechaReferencia : sumarDias(fechaReferencia, -retroceso);
+}
+
+export interface QuincenaResuelta {
+  anio: number;
+  mes: number;
+  quincena: 1 | 2;
+}
+
+/**
+ * Resuelve a qué quincena (V3/D2) pertenece una fecha ISO: días 1-15 →
+ * quincena 1, 16-fin de mes → quincena 2. Espejo de
+ * `UNIQUE(anio, mes, quincena)` en `hato_produccion_quincenal` (migración
+ * 054, corregida sobre el `UNIQUE(anio, quincena)` original -- ver brief
+ * S1 Decisión 4: ese índice solo permitía 2 filas por año, imposible para
+ * un ciclo quincenal de 24/año).
+ */
+export function resolverQuincena(fechaIso: string): QuincenaResuelta {
+  const { anio, mes, dia } = parsearIso(fechaIso);
+  return { anio, mes, quincena: dia <= 15 ? 1 : 2 };
+}
+
+/**
+ * Rango de fechas (inicio/fin) de una quincena ya resuelta -- para prellenar
+ * `fecha_inicio`/`fecha_fin` en el formulario de producción quincenal.
+ * Nunca asume 30 días: el fin de la segunda quincena es el último día real
+ * del mes (28-31), calculado con el mismo truco de `Date.UTC(anio, mes, 0)`
+ * que usa `sumarMeses` para el fin de mes de destino.
+ */
+export function rangoQuincena(anio: number, mes: number, quincena: 1 | 2): { fechaInicio: string; fechaFin: string } {
+  const mm = String(mes).padStart(2, '0');
+  if (quincena === 1) {
+    return { fechaInicio: `${anio}-${mm}-01`, fechaFin: `${anio}-${mm}-15` };
+  }
+  const ultimoDia = new Date(Date.UTC(anio, mes, 0)).getUTCDate();
+  return { fechaInicio: `${anio}-${mm}-16`, fechaFin: `${anio}-${mm}-${String(ultimoDia).padStart(2, '0')}` };
+}
+
+/**
+ * Quincena inmediatamente anterior a `q` -- cruza mes y año correctamente
+ * (la 1ª quincena de enero retrocede a la 2ª de diciembre del año
+ * anterior). Usada por el atajo "quincena anterior" de la conversación de
+ * Telegram `produccionQuincenal` (S5) para no obligar a Fernando a teclear
+ * la quincena completa cuando registra la que acaba de cerrar.
+ */
+export function quincenaAnterior(q: QuincenaResuelta): QuincenaResuelta {
+  if (q.quincena === 2) return { anio: q.anio, mes: q.mes, quincena: 1 };
+  if (q.mes === 1) return { anio: q.anio - 1, mes: 12, quincena: 2 };
+  return { anio: q.anio, mes: q.mes - 1, quincena: 2 };
+}
