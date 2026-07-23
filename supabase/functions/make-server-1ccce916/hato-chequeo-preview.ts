@@ -233,13 +233,30 @@ export async function handleHatoChequeoPreview(c: Context): Promise<Response> {
   const ultimosChequeos = seleccionarUltimoChequeoPorAnimal(historico);
   const diffChequeos = construirDiffChequeo(salida.chequeos, animales, ultimosChequeos);
 
+  // Fecha del chequeo, para precargar el campo `chequeo.fecha` del commit
+  // (`POST .../hato/chequeo/commit`, `hato-chequeo-commit.ts`) sin que el
+  // cliente tenga que re-derivarla del manifiesto. B0/V10 sube UN chequeo
+  // por archivo, así que `salida.hojas` (manifiestos de hojas clasificadas
+  // 'chequeo' -- TERNERAS no genera manifiesto) trae normalmente una sola
+  // entrada; se toma la primera con fecha resuelta por si el dedupe dejara
+  // más de una.
+  const chequeoFecha = salida.hojas.map((h) => h.chequeoFecha).find((f): f is string => f !== null) ?? null;
+
   // --- 5. Respuesta: SOLO diff, nunca un commit ----------------------------
   return c.json({
     success: true,
     archivo: archivo.name,
     generadoEn,
+    chequeoFecha,
     hojas: salida.hojas,
     diffChequeos,
+    // Filas normalizadas COMPLETAS (raw + capa normalizada + issues) --
+    // joinables al diff por `fila`. El diff solo trae la clasificación y los
+    // campos que cambiaron; el commit (`hato-chequeo-commit.ts`) necesita la
+    // fila entera para escribir `hato_chequeo_vacas` sin perder la capa
+    // cruda ni para derivar `hato_eventos` con `descomponerSX` -- nunca
+    // re-parsea el .xlsx en el paso de aprobar.
+    filasNormalizadas: salida.chequeos,
     // TERNERAS/sub-tablas: se parsean (mismo motor) pero no se diffean contra
     // la BD en este endpoint -- son un dato distinto (nacimientos, no un
     // estado reproductivo por vaca) fuera del alcance de B0/V10. Se

@@ -1,21 +1,19 @@
 // ARCHIVO: components/hato/components/ChequeoDiffReview.tsx
 // DESCRIPCIÓN: Muestra el diff que devuelve
 // `POST /make-server-1ccce916/hato/chequeo/preview` (B0/V10) para que
-// alguien lo revise ANTES de comprometer -- el endpoint nunca escribe
+// alguien lo revise ANTES de aprobar -- ese endpoint nunca escribe
 // (`src/supabase/functions/server/hato-chequeo-preview.ts`). Agrupa las
 // filas por clasificación (`nuevo`/`cambio`/`sin_cambio`/`no_reconocido`,
 // `utils/importHato/diffChequeo.ts`), muestra el resumen, las colisiones de
 // chapeta dentro de la misma hoja y los issues de normalización de cada
 // fila -- ninguno se oculta, "ambiguo -> revisión, nunca en silencio".
 //
-// ⚠️ El botón "Aprobar y guardar" está deshabilitado a propósito -- ver el
-// comentario largo en `hooks/useSubirChequeoExcel.ts` y el reporte de la
-// sesión S4: la respuesta actual del endpoint no trae la fila normalizada
-// completa (`raw`/`sx`/fechas) que se necesita para escribir
-// `hato_chequeo_vacas` sin perder la capa cruda ni para derivar
-// `hato_eventos` con `descomponerSX`. Escribir con los datos parciales que
-// SÍ llegan violaría esa regla en vez de dejarla pendiente -- así que se
-// deja pendiente, explícitamente, en vez de fingir que funciona.
+// Puramente presentacional: el botón "Aprobar y guardar" y el estado del
+// commit (éxito/error 409) viven en `SubirChequeoExcel.tsx`, que es quien
+// tiene el hook (`useSubirChequeoExcel`). Solo `sin_cambio`/`cambio` se
+// pueden aprobar -- `nuevo` (la chapeta no tiene ficha en `hato_animales`
+// todavía) y `no_reconocido` nunca se escriben desde este flujo, así que se
+// los señala explícitamente en vez de dejarlos caer en silencio.
 
 import { AlertTriangle, Info } from 'lucide-react';
 import { EstadoChip } from './EstadoChip';
@@ -113,8 +111,10 @@ export function ChequeoDiffReview({ resultado }: { resultado: PreviewChequeoResp
       <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
         <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
         <p>
-          Este es un diff de revisión — el archivo todavía NO se guardó en el sistema. La aprobación y escritura
-          automática está pendiente de una decisión de arquitectura (ver el reporte de la sesión).
+          Este es un diff de revisión — el archivo todavía NO se guardó en el sistema. Al aprobar, solo se escriben
+          las filas <strong>Con cambios</strong> y <strong>Sin cambios</strong>. Las filas <strong>Nuevas</strong>{' '}
+          necesitan que crees la ficha del animal primero (chapeta sin registrar en el hato); las{' '}
+          <strong>No reconocidas</strong> requieren revisión manual — ninguna de las dos se aprueba en silencio.
         </p>
       </div>
 

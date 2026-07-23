@@ -1,15 +1,20 @@
 // ARCHIVO: components/hato/components/SubirChequeoExcel.tsx
 // DESCRIPCIÓN: Diálogo B0/V10 -- sube el .xlsx del chequeo, lo envía a
 // `POST /hato/chequeo/preview` y muestra el diff (`ChequeoDiffReview`) para
-// revisión. El endpoint NUNCA comete -- ver esa nota en el componente hijo.
-// Sigue el patrón `Dialog + DialogContent size + DialogBody` obligatorio
-// (CLAUDE.md, Dialog Size System) y el patrón de subida de
-// `ImportarProductosCSV.tsx` (drag & drop + selección manual).
+// revisión, y expone el botón "Aprobar" que llama a
+// `POST /hato/chequeo/commit` (revalida el diff contra el estado fresco del
+// hato y escribe en una sola transacción -- ver
+// `src/supabase/functions/server/hato-chequeo-commit.ts`). Sigue el patrón
+// `Dialog + DialogContent size + DialogBody` obligatorio (CLAUDE.md, Dialog
+// Size System) y el patrón de subida de `ImportarProductosCSV.tsx` (drag &
+// drop + selección manual).
 
 import { useRef, useState } from 'react';
-import { Upload, FileSpreadsheet, Loader2, AlertTriangle, X } from 'lucide-react';
+import { Upload, FileSpreadsheet, Loader2, AlertTriangle, CheckCircle2, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useSubirChequeoExcel } from '../hooks/useSubirChequeoExcel';
 import { ChequeoDiffReview } from './ChequeoDiffReview';
 
@@ -22,18 +27,44 @@ export function SubirChequeoExcel({
   onOpenChange: (open: boolean) => void;
   onCompletado?: () => void;
 }) {
-  const { subir, limpiar, loading, error, resultado } = useSubirChequeoExcel();
+  const {
+    subir,
+    comprometer,
+    limpiar,
+    loading,
+    error,
+    resultado,
+    comprometiendo,
+    errorCommit,
+    filasRechazadas,
+    commitResultado,
+  } = useSubirChequeoExcel();
   const [archivo, setArchivo] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [veterinario, setVeterinario] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleClose = (nextOpen: boolean) => {
     if (!nextOpen) {
       setArchivo(null);
+      setVeterinario('');
       limpiar();
       onCompletado?.();
     }
     onOpenChange(nextOpen);
+  };
+
+  const filasAprobables = resultado
+    ? resultado.diffChequeos.filas.filter((f) => f.clasificacion === 'sin_cambio' || f.clasificacion === 'cambio').length
+    : 0;
+
+  const handleAprobar = async () => {
+    try {
+      await comprometer(veterinario.trim() || undefined);
+    } catch {
+      // El error/las filas rechazadas ya quedan en el hook (`errorCommit`/
+      // `filasRechazadas`), se muestran abajo.
+    }
   };
 
   const seleccionarArchivo = (file: File) => {
@@ -120,6 +151,47 @@ export function SubirChequeoExcel({
             </div>
           )}
 
+          {commitResultado && (
+            <div className="flex items-start gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+              <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <p>
+                Chequeo guardado — {commitResultado.filasEscritas} fila(s), {commitResultado.eventosEscritos} evento(s)
+                {commitResultado.torosCreados > 0 && ` (${commitResultado.torosCreados} toro(s) nuevo(s) en el catálogo)`}.
+              </p>
+            </div>
+          )}
+
+          {errorCommit && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <p>{errorCommit}</p>
+              </div>
+              {filasRechazadas && filasRechazadas.length > 0 && (
+                <ul className="mt-2 ml-6 space-y-1 text-xs list-disc">
+                  {filasRechazadas.map((f) => (
+                    <li key={f.fila}>
+                      {f.numero != null ? `#${f.numero}` : `fila ${f.fila}`}: {f.motivo}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {resultado && !commitResultado && filasAprobables > 0 && (
+            <div className="space-y-1.5">
+              <Label htmlFor="veterinario-chequeo">Veterinario (opcional)</Label>
+              <Input
+                id="veterinario-chequeo"
+                value={veterinario}
+                onChange={(e) => setVeterinario(e.target.value)}
+                placeholder="Nombre del veterinario"
+                disabled={comprometiendo}
+              />
+            </div>
+          )}
+
           {resultado && <ChequeoDiffReview resultado={resultado} />}
         </DialogBody>
         <DialogFooter>
@@ -133,10 +205,20 @@ export function SubirChequeoExcel({
                 {loading ? 'Procesando...' : 'Subir y revisar'}
               </Button>
             </>
-          ) : (
+          ) : commitResultado ? (
             <Button type="button" onClick={() => handleClose(false)}>
               Cerrar
             </Button>
+          ) : (
+            <>
+              <Button type="button" variant="outline" onClick={() => handleClose(false)} disabled={comprometiendo}>
+                Cerrar
+              </Button>
+              <Button type="button" onClick={handleAprobar} disabled={filasAprobables === 0 || comprometiendo}>
+                {comprometiendo && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                {comprometiendo ? 'Aprobando...' : `Aprobar (${filasAprobables})`}
+              </Button>
+            </>
           )}
         </DialogFooter>
       </DialogContent>

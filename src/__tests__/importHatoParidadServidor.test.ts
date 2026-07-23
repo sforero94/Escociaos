@@ -32,6 +32,8 @@ import * as normalizarFrontend from '@/utils/importHato/normalizar';
 import * as normalizarEdge from '../supabase/functions/server/importHato/normalizar';
 import * as diffFrontend from '@/utils/importHato/diffChequeo';
 import * as diffEdge from '../supabase/functions/server/importHato/diffChequeo';
+import * as commitFrontend from '@/utils/importHato/commitChequeo';
+import * as commitEdge from '../supabase/functions/server/importHato/commitChequeo';
 import type { HojaCruda } from '@/utils/importHato/tipos';
 import type { HatoConfig } from '@/utils/calculosHato';
 
@@ -60,6 +62,11 @@ describe('paridad estructural importHato ⇄ importHato (server)', () => {
   it('ambas implementaciones exportan exactamente la misma API (diffChequeo.ts)', () => {
     const nombres = (m: object) => Object.keys(m).sort();
     expect(nombres(diffEdge)).toEqual(nombres(diffFrontend));
+  });
+
+  it('ambas implementaciones exportan exactamente la misma API (commitChequeo.ts)', () => {
+    const nombres = (m: object) => Object.keys(m).sort();
+    expect(nombres(commitEdge)).toEqual(nombres(commitFrontend));
   });
 });
 
@@ -189,5 +196,91 @@ describe('paridad de comportamiento construirDiffChequeo', () => {
     expect(diffEdge.seleccionarUltimoChequeoPorAnimal(historico)).toEqual(
       diffFrontend.seleccionarUltimoChequeoPorAnimal(historico),
     );
+  });
+});
+
+// ============================================================================
+// 3. Paridad de comportamiento -- commit path (B0/V10 "Aprobar").
+// ============================================================================
+
+describe('paridad de comportamiento commitChequeo', () => {
+  it('validarFilasCommit + construirFilasVacas + derivarEventosDeChequeo + construirPayloadCommit producen la misma salida en ambas implementaciones', () => {
+    const salida = normalizarFrontend.normalizarHojas(HOJAS, GENERADO_EN, CONFIG);
+    const filaEsmeralda = salida.chequeos.find((f) => f.numero === 162)!;
+
+    const animales: diffFrontend.AnimalHatoActual[] = [
+      { id: 'animal-esmeralda', numero: 162, nombre: 'ESMERALDA', etapa: 'vaca', estado: 'activa' },
+    ];
+
+    // Diff fresco calculado con AMBAS implementaciones, exactamente como lo
+    // haría el handler antes de comprometer (nunca reutiliza el diff de la
+    // vista previa -- ver la cabecera de commitChequeo.ts).
+    const diffFrescoFrontend = diffFrontend.construirDiffChequeo([filaEsmeralda], animales, []);
+    const diffFrescoEdge = diffEdge.construirDiffChequeo([filaEsmeralda], animales, []);
+
+    const validacionFrontend = commitFrontend.validarFilasCommit([filaEsmeralda], diffFrescoFrontend);
+    const validacionEdge = commitEdge.validarFilasCommit([filaEsmeralda], diffFrescoEdge);
+    expect(validacionEdge).toEqual(validacionFrontend);
+    expect(validacionFrontend.rechazadas).toEqual([]);
+    expect(validacionFrontend.aceptadas).toHaveLength(1);
+
+    const vacasFrontend = commitFrontend.construirFilasVacas(validacionFrontend.aceptadas);
+    const vacasEdge = commitEdge.construirFilasVacas(validacionEdge.aceptadas);
+    expect(vacasEdge).toEqual(vacasFrontend);
+
+    const eventosFrontend = commitFrontend.derivarEventosDeChequeo(validacionFrontend.aceptadas);
+    const eventosEdge = commitEdge.derivarEventosDeChequeo(validacionEdge.aceptadas);
+    expect(eventosEdge).toEqual(eventosFrontend);
+
+    // `parseToro` normaliza 'ins laredo' -> toroNombre='laredo' (tipoServicio
+    // 'inseminacion', el prefijo 'ins' se separa) -- la clave de resolución
+    // usa el nombre YA normalizado, nunca el texto crudo de la celda.
+    const toroIdPorNombre = new Map([['laredo', 'toro-uuid-1']]);
+    const payloadFrontend = commitFrontend.construirPayloadCommit(
+      { fecha: '2026-07-09', veterinario: 'Dr. Pérez' },
+      vacasFrontend,
+      eventosFrontend.eventos,
+      toroIdPorNombre,
+    );
+    const payloadEdge = commitEdge.construirPayloadCommit(
+      { fecha: '2026-07-09', veterinario: 'Dr. Pérez' },
+      vacasEdge,
+      eventosEdge.eventos,
+      toroIdPorNombre,
+    );
+    expect(payloadEdge).toEqual(payloadFrontend);
+
+    // Sanity check de que el fixture realmente ejercita algo: ESMERALDA trae
+    // SX='A210' (parto, cría #210 retenida) y F Servicio, así que debe emitir
+    // eventos servicio + parto, y el payload debe traer el toro resuelto.
+    expect(eventosFrontend.eventos.map((e) => e.tipo)).toEqual(['servicio', 'parto']);
+    expect(payloadFrontend.eventos[0].toro_id).toBe('toro-uuid-1');
+  });
+
+  it('validarFilasCommit rechaza igual en ambas implementaciones una fila con número provisional', () => {
+    const filaProvisional = normalizarFrontend.normalizarHojas(
+      [
+        {
+          archivo: 'PARIDAD.xlsx',
+          hoja: 'CHEQUEO JULIO 2026',
+          filas: [
+            ['CHEQUEO VETE 9 JULIO  2026'],
+            ['#', 'NOMBRE', 'PL', '#P2', 'UC', 'SX', 'F SERVICIO', 'TORO', 'TP', 'ESTADO', 'SECAR', 'PP', 'TTTO'],
+            [950, 'PROVISIONAL', null, null, null, null, null, null, null, null, null, null, null],
+          ],
+        },
+      ],
+      GENERADO_EN,
+      CONFIG,
+    ).chequeos;
+
+    const diffFrontendResultado = diffFrontend.construirDiffChequeo(filaProvisional, [], []);
+    const diffEdgeResultado = diffEdge.construirDiffChequeo(filaProvisional, [], []);
+
+    const validacionFrontend = commitFrontend.validarFilasCommit(filaProvisional, diffFrontendResultado);
+    const validacionEdge = commitEdge.validarFilasCommit(filaProvisional, diffEdgeResultado);
+    expect(validacionEdge).toEqual(validacionFrontend);
+    expect(validacionFrontend.aceptadas).toEqual([]);
+    expect(validacionFrontend.rechazadas).toHaveLength(1);
   });
 });
