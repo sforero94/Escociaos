@@ -46,6 +46,7 @@ const ReportesView = lazy(() => import('./components/finanzas/ReportesView').the
 const ConfiguracionFinanzas = lazy(() => import('./components/finanzas/ConfiguracionFinanzas').then(m => ({ default: m.ConfiguracionFinanzas })));
 const PresupuestoView = lazy(() => import('./components/finanzas/presupuesto/PresupuestoView').then(m => ({ default: m.PresupuestoView })));
 const ProduccionDashboard = lazy(() => import('./components/produccion/ProduccionDashboard').then(m => ({ default: m.ProduccionDashboard })));
+const HatoProduccionView = lazy(() => import('./components/hato/ProduccionView').then(m => ({ default: m.ProduccionView })));
 const GanadoDashboard = lazy(() => import('./components/ganado/GanadoDashboard').then(m => ({ default: m.GanadoDashboard })));
 const GanadoMovimientos = lazy(() => import('./components/ganado/GanadoMovimientos').then(m => ({ default: m.GanadoMovimientos })));
 const ReportesDashboard = lazy(() => import('./components/reportes/ReportesDashboard').then(m => ({ default: m.ReportesDashboard })));
@@ -136,7 +137,7 @@ function LayoutRoutes() {
           <Route element={<ModuleGuard modulo="hato_lechero" />}>
             <Route path="hato-lechero">
               <Route index element={<ComingSoon moduleName="Hato Lechero — Tablero" />} />
-              <Route path="produccion" element={<ComingSoon moduleName="Hato Lechero — Producción" />} />
+              <Route path="produccion" element={<HatoProduccionView />} />
               <Route path="hato" element={<ComingSoon moduleName="Hato Lechero — Hato" />} />
               <Route path="chequeos" element={<ComingSoon moduleName="Hato Lechero — Chequeos" />} />
               <Route path="alertas" element={<ComingSoon moduleName="Hato Lechero — Alertas" />} />

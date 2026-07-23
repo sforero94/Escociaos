@@ -12,6 +12,10 @@ import {
   derivarEstadoReproductivo,
   calcularProductividad,
   detectarColisionesChapeta,
+  calcularFechaUltimoDiaPesaje,
+  resolverQuincena,
+  rangoQuincena,
+  quincenaAnterior,
   type HatoConfig,
   type EstadoActualHatoRow,
 } from '@/utils/calculosHato';
@@ -928,5 +932,105 @@ describe('detectarColisionesChapeta', () => {
   it('sin animales o sin colisiones, devuelve un arreglo vacío', () => {
     expect(detectarColisionesChapeta([])).toEqual([]);
     expect(detectarColisionesChapeta([{ numero: 1, nombre: 'A' }])).toEqual([]);
+  });
+});
+
+describe('calcularFechaUltimoDiaPesaje (S5 -- V2/D1, día de pesaje leído de hato_config.dia_pesaje_semanal)', () => {
+  it('devuelve la misma fecha cuando fechaReferencia YA es el día de pesaje configurado', () => {
+    // 2026-07-22 es miércoles (iso=3)
+    expect(calcularFechaUltimoDiaPesaje('2026-07-22', 3)).toBe('2026-07-22');
+  });
+
+  it('retrocede al miércoles anterior cuando fechaReferencia es jueves', () => {
+    expect(calcularFechaUltimoDiaPesaje('2026-07-23', 3)).toBe('2026-07-22');
+  });
+
+  it('retrocede al miércoles anterior cuando fechaReferencia es martes (casi una semana completa)', () => {
+    // martes 2026-07-21 -> miércoles anterior es 2026-07-15
+    expect(calcularFechaUltimoDiaPesaje('2026-07-21', 3)).toBe('2026-07-15');
+  });
+
+  it('nunca retrocede más de 6 días', () => {
+    for (let iso = 1; iso <= 7; iso++) {
+      const resultado = calcularFechaUltimoDiaPesaje('2026-07-22', iso);
+      const dias = Math.round(
+        (new Date('2026-07-22').getTime() - new Date(resultado).getTime()) / 86400000,
+      );
+      expect(dias).toBeGreaterThanOrEqual(0);
+      expect(dias).toBeLessThanOrEqual(6);
+    }
+  });
+
+  it('funciona con cualquier día configurado, no solo miércoles (nunca hardcodea el día)', () => {
+    // 2026-07-22 es miércoles; si el día configurado fuera lunes (iso=1),
+    // el último lunes es 2026-07-20.
+    expect(calcularFechaUltimoDiaPesaje('2026-07-22', 1)).toBe('2026-07-20');
+    // si fuera domingo (iso=7), el último domingo es 2026-07-19.
+    expect(calcularFechaUltimoDiaPesaje('2026-07-22', 7)).toBe('2026-07-19');
+  });
+
+  it('cruza el límite de mes correctamente', () => {
+    // 2026-08-01 es sábado; el miércoles anterior es 2026-07-29.
+    expect(calcularFechaUltimoDiaPesaje('2026-08-01', 3)).toBe('2026-07-29');
+  });
+});
+
+describe('resolverQuincena (S5 -- V3/D2)', () => {
+  it('día 1-15 -> quincena 1', () => {
+    expect(resolverQuincena('2026-07-01')).toEqual({ anio: 2026, mes: 7, quincena: 1 });
+    expect(resolverQuincena('2026-07-15')).toEqual({ anio: 2026, mes: 7, quincena: 1 });
+  });
+
+  it('día 16-fin de mes -> quincena 2', () => {
+    expect(resolverQuincena('2026-07-16')).toEqual({ anio: 2026, mes: 7, quincena: 2 });
+    expect(resolverQuincena('2026-07-31')).toEqual({ anio: 2026, mes: 7, quincena: 2 });
+  });
+
+  it('funciona en meses cortos (febrero)', () => {
+    expect(resolverQuincena('2026-02-28')).toEqual({ anio: 2026, mes: 2, quincena: 2 });
+  });
+});
+
+describe('rangoQuincena (S5)', () => {
+  it('quincena 1 siempre es 01-15', () => {
+    expect(rangoQuincena(2026, 7, 1)).toEqual({ fechaInicio: '2026-07-01', fechaFin: '2026-07-15' });
+  });
+
+  it('quincena 2 termina en el último día real del mes (31)', () => {
+    expect(rangoQuincena(2026, 7, 2)).toEqual({ fechaInicio: '2026-07-16', fechaFin: '2026-07-31' });
+  });
+
+  it('quincena 2 respeta meses de 30 días', () => {
+    expect(rangoQuincena(2026, 4, 2)).toEqual({ fechaInicio: '2026-04-16', fechaFin: '2026-04-30' });
+  });
+
+  it('quincena 2 respeta febrero (no bisiesto en 2026)', () => {
+    expect(rangoQuincena(2026, 2, 2)).toEqual({ fechaInicio: '2026-02-16', fechaFin: '2026-02-28' });
+  });
+
+  it('quincena 2 respeta febrero bisiesto', () => {
+    expect(rangoQuincena(2028, 2, 2)).toEqual({ fechaInicio: '2028-02-16', fechaFin: '2028-02-29' });
+  });
+
+  it('resolverQuincena + rangoQuincena son coherentes: la fecha original cae dentro del rango devuelto', () => {
+    for (const fecha of ['2026-01-05', '2026-01-20', '2026-12-31', '2027-06-16']) {
+      const { anio, mes, quincena } = resolverQuincena(fecha);
+      const { fechaInicio, fechaFin } = rangoQuincena(anio, mes, quincena);
+      expect(fecha >= fechaInicio && fecha <= fechaFin).toBe(true);
+    }
+  });
+});
+
+describe('quincenaAnterior (S5 -- atajo "quincena anterior" de /produccion en Telegram)', () => {
+  it('de la 2ª quincena retrocede a la 1ª del mismo mes', () => {
+    expect(quincenaAnterior({ anio: 2026, mes: 7, quincena: 2 })).toEqual({ anio: 2026, mes: 7, quincena: 1 });
+  });
+
+  it('de la 1ª quincena retrocede a la 2ª del mes anterior', () => {
+    expect(quincenaAnterior({ anio: 2026, mes: 7, quincena: 1 })).toEqual({ anio: 2026, mes: 6, quincena: 2 });
+  });
+
+  it('cruza el año al retroceder desde enero', () => {
+    expect(quincenaAnterior({ anio: 2026, mes: 1, quincena: 1 })).toEqual({ anio: 2025, mes: 12, quincena: 2 });
   });
 });
