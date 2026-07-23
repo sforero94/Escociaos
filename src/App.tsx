@@ -46,6 +46,10 @@ const ReportesView = lazy(() => import('./components/finanzas/ReportesView').the
 const ConfiguracionFinanzas = lazy(() => import('./components/finanzas/ConfiguracionFinanzas').then(m => ({ default: m.ConfiguracionFinanzas })));
 const PresupuestoView = lazy(() => import('./components/finanzas/presupuesto/PresupuestoView').then(m => ({ default: m.PresupuestoView })));
 const ProduccionDashboard = lazy(() => import('./components/produccion/ProduccionDashboard').then(m => ({ default: m.ProduccionDashboard })));
+const HatoDashboard = lazy(() => import('./components/hato/HatoDashboard').then(m => ({ default: m.HatoDashboard })));
+const AnimalesList = lazy(() => import('./components/hato/AnimalesList').then(m => ({ default: m.AnimalesList })));
+const HojaDeVida = lazy(() => import('./components/hato/HojaDeVida').then(m => ({ default: m.HojaDeVida })));
+const ChequeosList = lazy(() => import('./components/hato/ChequeosList').then(m => ({ default: m.ChequeosList })));
 const GanadoDashboard = lazy(() => import('./components/ganado/GanadoDashboard').then(m => ({ default: m.GanadoDashboard })));
 const GanadoMovimientos = lazy(() => import('./components/ganado/GanadoMovimientos').then(m => ({ default: m.GanadoMovimientos })));
 const ReportesDashboard = lazy(() => import('./components/reportes/ReportesDashboard').then(m => ({ default: m.ReportesDashboard })));
@@ -135,10 +139,13 @@ function LayoutRoutes() {
           {/* ===== Módulo Hato Lechero ===== */}
           <Route element={<ModuleGuard modulo="hato_lechero" />}>
             <Route path="hato-lechero">
-              <Route index element={<ComingSoon moduleName="Hato Lechero — Tablero" />} />
+              <Route index element={<HatoDashboard />} />
               <Route path="produccion" element={<ComingSoon moduleName="Hato Lechero — Producción" />} />
-              <Route path="hato" element={<ComingSoon moduleName="Hato Lechero — Hato" />} />
-              <Route path="chequeos" element={<ComingSoon moduleName="Hato Lechero — Chequeos" />} />
+              <Route path="hato">
+                <Route index element={<AnimalesList />} />
+                <Route path=":id" element={<HojaDeVida />} />
+              </Route>
+              <Route path="chequeos" element={<ChequeosList />} />
               <Route path="alertas" element={<ComingSoon moduleName="Hato Lechero — Alertas" />} />
             </Route>
           </Route>
