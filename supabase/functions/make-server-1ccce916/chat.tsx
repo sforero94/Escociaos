@@ -45,6 +45,21 @@ import {
   type ModoReporte,
   type VistaReporte,
 } from './reportes-financieros.ts';
+import { construirHatoConfigDesdeFilas, type FilaHatoConfig } from './hato-config-desde-tabla.ts';
+import type { HatoConfig } from './calculos-hato.ts';
+import {
+  shapeAnimalMatches,
+  buildAnimalFicha,
+  buildReproduccionSummary,
+  buildProduccionSummary,
+  type HatoAnimalRow,
+  type HatoToroRow,
+  type HatoEventoRow,
+  type HatoEstadoActualRow,
+  type HatoChequeoVacaDetalleRow,
+  type HatoPesajeRow,
+  type HatoProduccionQuincenalRow,
+} from './hato-aggregation.ts';
 
 // ============================================================================
 // TIPOS
@@ -475,7 +490,7 @@ const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'get_ganado_inventory',
-    description: 'Inventario VIVO de ganado: cabezas actuales (novillos y toros) por ubicación → finca → potrero, cabezas por hectárea, peso promedio, variación de los últimos 30 días (entradas vs salidas) y movimientos pendientes de confirmar desde finanzas. Opcionalmente lista los movimientos recientes (compras, ventas, muertes, traslados, ajustes). Para el dinero de compras/ventas de ganado usa get_financial_summary con type=ganado; este tool es para el conteo físico.',
+    description: 'Inventario VIVO de ganado de CEBA (gan_*, cabezas de novillos/toros por ubicación → finca → potrero): cabezas actuales, cabezas por hectárea, peso promedio, variación de los últimos 30 días (entradas vs salidas) y movimientos pendientes de confirmar desde finanzas. Opcionalmente lista los movimientos recientes (compras, ventas, muertes, traslados, ajustes). NO incluye el Hato Lechero (animales individuales de ordeño) — para eso usa get_hato_reproduccion (panorama del hato) o get_hato_animal (una vaca puntual). Para el dinero de compras/ventas de ganado de ceba usa get_financial_summary con type=ganado; este tool es para el conteo físico.',
     parameters: {
       type: 'object',
       properties: {
@@ -506,6 +521,38 @@ const TOOLS: ToolDefinition[] = [
           type: 'boolean',
           description: 'Incluir el flujo de caja mensual de 12 meses además del P&G. Default false',
         },
+      },
+    },
+  },
+  {
+    name: 'get_hato_animal',
+    description: 'Ficha de UN animal del Hato Lechero (vacas/terneras/novillas individuales, distinto del conteo de cabezas de ganado de get_ganado_inventory): raza, etapa, estado, fecha de nacimiento, genealogía (madre + padre, sea toro del catálogo o animal propio), estado reproductivo actual (servida/preñada/próxima a secar/seca/parida reciente/vacía por servir, con fecha probable de parto y fecha de secado si aplica), últimos eventos del ciclo (servicios, celos, partos, secados) y los valores del último chequeo veterinario. Busca por número de chapeta (numero) o por nombre parcial. Si el nombre coincide con varios animales, devuelve la lista para que el usuario precise en vez de adivinar. Números de chapeta entre 800 y 999 son NUMEROS DE TRABAJO provisionales (colisiones sin resolver o ventas inferidas de la importación histórica), NUNCA una caravana física — la ficha lo marca explícito con numero_es_provisional.',
+    parameters: {
+      type: 'object',
+      properties: {
+        numero: { type: 'number', description: 'Número de chapeta exacto del animal (opcional si se da nombre)' },
+        nombre: { type: 'string', description: 'Nombre parcial del animal, case-insensitive (opcional si se da numero)' },
+      },
+    },
+  },
+  {
+    name: 'get_hato_reproduccion',
+    description: 'Panorama reproductivo del Hato Lechero completo: conteo de animales por las 3 categorías del hato (terneras/novillas, hato en ordeño, horro = vacas secas o próximas a secar esperando el parto), conteo por estado reproductivo detallado, cuántas alertas de secado/rechequeo/servicio-sin-confirmar/parto-próximo están activas HOY, listas ordenadas de próximos partos y próximas a secar (con días restantes), vacas próximas a reemplazo (cerca del umbral de partos) y vacas vacías marcadas como "problema" (necesitan rechequeo, no es normal que sigan vacías). Todos los umbrales salen de hato_config, nunca son fijos. Usar para "cómo va el hato", "cuántas vacas están próximas a parir/secar", "cuántas vacas necesitan atención". Para UN animal puntual usa get_hato_animal.',
+    parameters: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'get_hato_produccion',
+    description: 'Producción de leche del Hato Lechero: pesaje SEMANAL por vaca individual (litros/vaca, productividad por animal) y producción QUINCENAL en litros vendidos al camión del Pomar (volumen de venta, con conciliación contra la confirmación del Pomar cuando existe). Son dos series DISTINTAS que nunca se mezclan: el pesaje mide productividad individual, la quincenal mide venta del hato completo. Una vaca sin pesaje en el rango simplemente no aparece en la lista — nunca se reporta con 0 litros (ausencia de dato, no "no produjo"). KPI litros/vaca = litros_total de la quincena ÷ num_vacas_ordeño. Para el DINERO de la venta de leche usa get_financial_summary o get_pyg_flujo_caja (negocio Hato Lechero); este tool es solo volumen físico.',
+    parameters: {
+      type: 'object',
+      properties: {
+        date_from: { type: 'string', description: 'Fecha inicio YYYY-MM-DD para los pesajes semanales (default: hace 90 días)' },
+        date_to: { type: 'string', description: 'Fecha fin YYYY-MM-DD para los pesajes semanales (default: hoy)' },
+        animal_numero: { type: 'number', description: 'Filtra los pesajes semanales a un solo animal por número de chapeta (opcional)' },
+        num_quincenas: { type: 'number', description: 'Cuántas quincenas recientes de producción traer, ordenadas de más reciente a más antigua (default 6)' },
       },
     },
   },
@@ -609,6 +656,9 @@ async function executeTool(name: string, args: Record<string, unknown>, userId?:
       case 'get_budget_data': result = await execBudgetData(args); break;
       case 'get_ganado_inventory': result = await execGanadoInventory(args); break;
       case 'get_pyg_flujo_caja': result = await execPygFlujoCaja(args); break;
+      case 'get_hato_animal': result = await execHatoAnimal(args); break;
+      case 'get_hato_reproduccion': result = await execHatoReproduccion(args); break;
+      case 'get_hato_produccion': result = await execHatoProduccion(args); break;
       case 'get_tareas': result = await execTareas(args); break;
       case 'get_weekly_reports': result = await execWeeklyReports(args); break;
       case 'get_pest_risk_priorizacion': result = await execPestPriorizacion(args); break;
@@ -2692,6 +2742,166 @@ async function execGanadoInventory(args: Record<string, unknown>): Promise<strin
 }
 
 // ----------------------------------------------------------------------------
+// HATO LECHERO (S7, plan §7.2 "Esco: 3 herramientas nuevas") — get_hato_animal,
+// get_hato_reproduccion, get_hato_produccion. Toda la agregación/forma vive en
+// `hato-aggregation.ts`; aquí solo se consultan las tablas y se pasa la data ya
+// tipada. `hato_config` se lee EN VIVO en cada llamada (nunca cacheado ni
+// hardcodeado) via `construirHatoConfigDesdeFilas`, que lanza un error
+// explícito si falta alguna clave -- mismo contrato que `hato-chequeo-preview.ts`.
+// ----------------------------------------------------------------------------
+
+const HATO_ANIMAL_COLS = 'id,numero,nombre,sexo,etapa,raza,estado,fecha_estado,fecha_nacimiento,fecha_nacimiento_confianza,madre_id,padre_toro_id,padre_id,origen,confianza,notas';
+
+async function fetchHatoConfig(): Promise<HatoConfig> {
+  const filas = (await supabaseQuery('hato_config', 'select=clave,valor')) as FilaHatoConfig[];
+  return construirHatoConfigDesdeFilas(filas);
+}
+
+async function execHatoAnimal(args: Record<string, unknown>): Promise<string> {
+  const { numero, nombre } = args as { numero?: number; nombre?: string };
+  if (numero == null && !nombre) {
+    return JSON.stringify({ error: 'Debes indicar "numero" (chapeta) o "nombre" del animal.' });
+  }
+
+  const filtro = numero != null ? `numero=eq.${Number(numero)}` : `nombre=ilike.*${e(String(nombre))}*`;
+  const candidatos = (await supabaseQuery('hato_animales', `select=${HATO_ANIMAL_COLS}&${filtro}&limit=10`)) as HatoAnimalRow[];
+
+  if (candidatos.length === 0) {
+    return JSON.stringify({
+      encontrado: false,
+      criterio_busqueda: numero != null ? { numero } : { nombre },
+      mensaje: 'No se encontró ningún animal del Hato Lechero con ese criterio.',
+    });
+  }
+  if (candidatos.length > 1) {
+    return JSON.stringify({
+      encontrado: false,
+      criterio_busqueda: { nombre },
+      mensaje: `${candidatos.length} animales coinciden con ese nombre. Pide precisar el número de chapeta o un nombre más específico.`,
+      coincidencias: shapeAnimalMatches(candidatos),
+    });
+  }
+
+  const animal = candidatos[0];
+  const fechaReferencia = new Date().toISOString().split('T')[0];
+
+  const [config, madreRows, padreAnimalRows, padreToroRows, estadoActualRows, eventosRows] = await Promise.all([
+    fetchHatoConfig(),
+    animal.madre_id
+      ? (supabaseQuery('hato_animales', `select=${HATO_ANIMAL_COLS}&id=eq.${e(animal.madre_id)}`) as Promise<HatoAnimalRow[]>)
+      : Promise.resolve([]),
+    animal.padre_id
+      ? (supabaseQuery('hato_animales', `select=${HATO_ANIMAL_COLS}&id=eq.${e(animal.padre_id)}`) as Promise<HatoAnimalRow[]>)
+      : Promise.resolve([]),
+    animal.padre_toro_id
+      ? (supabaseQuery('hato_toros', `select=id,nombre,tipo,raza,activo&id=eq.${e(animal.padre_toro_id)}`) as Promise<HatoToroRow[]>)
+      : Promise.resolve([]),
+    supabaseQuery('v_hato_estado_actual', `select=*&animal_id=eq.${e(animal.id)}`) as Promise<Array<Record<string, unknown>>>,
+    supabaseQuery(
+      'hato_eventos',
+      `select=tipo,fecha,fecha_confianza,tipo_servicio,cria_destino,datos,toro:hato_toros(nombre)&animal_id=eq.${e(animal.id)}&order=fecha.desc&limit=20`
+    ) as Promise<HatoEventoRow[]>,
+  ]);
+
+  const estadoActualRaw = estadoActualRows[0] ?? null;
+  const estadoActual = estadoActualRaw ? (estadoActualRaw as unknown as HatoEstadoActualRow) : null;
+
+  let ultimoChequeo: HatoChequeoVacaDetalleRow | null = null;
+  const ultimoChequeoVacaId = estadoActual?.ultimo_chequeo_vaca_id;
+  if (ultimoChequeoVacaId) {
+    const rows = (await supabaseQuery(
+      'hato_chequeo_vacas',
+      `select=pl,num_partos,fecha_servicio,toro,tipo_servicio,meses_prenez,fecha_secar,fecha_probable_parto,estado,estado_raw,normalizacion_issues,hato_chequeos(fecha)&id=eq.${e(ultimoChequeoVacaId)}`
+    )) as Array<Record<string, unknown>>;
+    const fila = rows[0];
+    if (fila) {
+      const chequeo = fila.hato_chequeos as { fecha: string } | { fecha: string }[] | null;
+      const chequeoFecha = Array.isArray(chequeo) ? chequeo[0]?.fecha ?? null : chequeo?.fecha ?? null;
+      ultimoChequeo = {
+        pl: fila.pl as number | null,
+        num_partos: fila.num_partos as number | null,
+        fecha_servicio: fila.fecha_servicio as string | null,
+        toro: fila.toro as string | null,
+        tipo_servicio: fila.tipo_servicio as string | null,
+        meses_prenez: fila.meses_prenez as number | null,
+        fecha_secar: fila.fecha_secar as string | null,
+        fecha_probable_parto: fila.fecha_probable_parto as string | null,
+        estado: fila.estado as string | null,
+        estado_raw: fila.estado_raw as string | null,
+        normalizacion_issues: fila.normalizacion_issues,
+        chequeo_fecha: chequeoFecha,
+      };
+    }
+  }
+
+  const ficha = buildAnimalFicha({
+    animal,
+    madre: madreRows[0] ?? null,
+    padreAnimal: padreAnimalRows[0] ?? null,
+    padreToro: padreToroRows[0] ?? null,
+    estadoActual,
+    config,
+    fechaReferencia,
+    eventosRecientes: eventosRows,
+    ultimoChequeo,
+  });
+
+  return JSON.stringify(ficha);
+}
+
+async function execHatoReproduccion(_args: Record<string, unknown>): Promise<string> {
+  const fechaReferencia = new Date().toISOString().split('T')[0];
+  const [config, filas] = await Promise.all([
+    fetchHatoConfig(),
+    supabaseQuery('v_hato_estado_actual', 'select=*') as Promise<Array<Record<string, unknown>>>,
+  ]);
+
+  const summary = buildReproduccionSummary(filas as unknown as HatoEstadoActualRow[], config, fechaReferencia);
+
+  return JSON.stringify(summary);
+}
+
+async function execHatoProduccion(args: Record<string, unknown>): Promise<string> {
+  const { animal_numero, num_quincenas } = args as { animal_numero?: number; num_quincenas?: number };
+  const { date_from, date_to } = validateDates(args);
+
+  const hoy = new Date().toISOString().split('T')[0];
+  const hace90 = new Date();
+  hace90.setDate(hace90.getDate() - 90);
+  const desde = date_from || hace90.toISOString().split('T')[0];
+  const hasta = date_to || hoy;
+
+  let pesajesQuery = `select=fecha,litros_am,litros_pm,litros_total,animal:hato_animales(numero,nombre)&fecha=gte.${e(desde)}&fecha=lte.${e(hasta)}&order=fecha.asc&limit=2000`;
+  if (animal_numero != null) {
+    // El número de chapeta vive en la tabla embebida -- se resuelve el
+    // animal_id primero para poder filtrar server-side.
+    const animalRows = (await supabaseQuery('hato_animales', `select=id&numero=eq.${Number(animal_numero)}`)) as Array<{ id: string }>;
+    if (animalRows.length === 0) {
+      return JSON.stringify({ error: `No existe ningún animal con numero=${animal_numero}.` });
+    }
+    pesajesQuery += `&animal_id=eq.${e(animalRows[0].id)}`;
+  }
+
+  const limiteQuincenas = Number.isFinite(Number(num_quincenas)) && Number(num_quincenas) > 0 ? Number(num_quincenas) : 6;
+
+  const [pesajes, quincenas] = await Promise.all([
+    supabaseQuery('hato_pesajes_leche', pesajesQuery) as Promise<HatoPesajeRow[]>,
+    supabaseQuery(
+      'hato_produccion_quincenal',
+      `select=anio,mes,quincena,fecha_inicio,fecha_fin,litros_total,litros_pomar_confirmado,num_vacas_ordeno,notas&order=anio.desc,mes.desc,quincena.desc&limit=${limiteQuincenas}`
+    ) as Promise<HatoProduccionQuincenalRow[]>,
+  ]);
+
+  const summary = buildProduccionSummary({
+    periodo: { desde, hasta },
+    pesajes,
+    produccionQuincenal: quincenas,
+  });
+
+  return JSON.stringify(summary);
+}
+
+// ----------------------------------------------------------------------------
 // PEST RISK PRIORITIZATION (P2b, docs/PLAN_PRIORIZACION_MONITOREO.md)
 //
 // Fetches the same tables/lookback windows as
@@ -2922,7 +3132,8 @@ DOMINIOS DE DATOS DISPONIBLES:
 - Pronostico del clima 5-7 dias (get_weather_forecast): para decidir ventanas de aplicacion
 - Inventario: productos agricolas, stock, movimientos, compras
 - Finanzas: gastos (solo Confirmados), ingresos, transacciones de ganado, categorias, busqueda por nombre
-- Inventario vivo de ganado (get_ganado_inventory): cabezas actuales (novillos/toros) por ubicacion → finca → potrero, cabezas/ha, peso promedio, variacion 30 dias, muertes/traslados/ajustes y movimientos pendientes de confirmar. Para el DINERO de compras/ventas de ganado usa get_financial_summary type=ganado; para el CONTEO fisico usa get_ganado_inventory
+- Inventario vivo de ganado de ceba (get_ganado_inventory): cabezas actuales (novillos/toros) por ubicacion → finca → potrero, cabezas/ha, peso promedio, variacion 30 dias, muertes/traslados/ajustes y movimientos pendientes de confirmar. NO incluye el Hato Lechero. Para el DINERO de compras/ventas de ganado usa get_financial_summary type=ganado; para el CONTEO fisico usa get_ganado_inventory
+- Hato Lechero (vacas/terneras/novillas individuales, modulo distinto de ganado de ceba): get_hato_animal trae la ficha de UN animal por numero de chapeta o nombre (raza, genealogia madre+padre, estado reproductivo actual, eventos recientes, ultimo chequeo veterinario). get_hato_reproduccion trae el panorama del hato completo: conteo por las 3 categorias (terneras/novillas, hato en ordeño, horro = secas o proximas a secar), conteo por estado reproductivo, alertas activas (secado/rechequeo/servicio sin confirmar/parto proximo), listas de proximos partos y proximas a secar con dias restantes, y vacas vacias marcadas "problema". get_hato_produccion trae el volumen de leche: pesaje SEMANAL por vaca (litros/vaca — una vaca sin pesaje en el rango no aparece, nunca se reporta con 0) y produccion QUINCENAL vendida al camion del Pomar (litros totales, litros/vaca, conciliacion contra la confirmacion del Pomar). Numeros de chapeta 800-999 son de TRABAJO (colisiones sin resolver de la importacion historica), nunca una caravana fisica — get_hato_animal lo marca explicito. Para el DINERO de la venta de leche usa get_financial_summary o get_pyg_flujo_caja vista=hato.
 - P&G y flujo de caja (get_pyg_flujo_caja): estado de resultados por negocio (global, aguacate, ganado, hato) con Ingresos → Costos directos → Margen de contribucion → Gastos indirectos → Utilidad operativa, en trimestres acumulados o por cosecha (aguacate), mas indicadores unitarios (costo por kilo, $/litro, margen por cabeza) y flujo de caja mensual opcional. USA ESTE TOOL para toda pregunta de rentabilidad, utilidad, margen o "cuanto gano/perdio X"; usa get_financial_summary solo para listar o desglosar gastos e ingresos por categoria, proveedor o comprador.
   REGLAS CONTABLES que debes respetar al interpretar sus cifras, porque son la razon de que no coincidan con una simple resta de ingresos menos gastos:
   · Solo cuentan gastos Confirmados; los Pendientes salen listados en advertencias y NO estan sumados.
