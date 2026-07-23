@@ -107,7 +107,7 @@ export function AnimalesList() {
   }, [animales, busqueda]);
 
   const porCategoria = useMemo(() => {
-    const grupos: Record<CategoriaHato, AnimalHatoDerivado[]> = { ternera: [], hato: [], horro: [] };
+    const grupos: Record<CategoriaHato, AnimalHatoDerivado[]> = { ternera: [], novilla: [], hato: [], horro: [] };
     for (const animal of animalesFiltrados) {
       if (animal.categoria) grupos[animal.categoria].push(animal);
     }
@@ -120,7 +120,7 @@ export function AnimalesList() {
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
           <div>
             <h1 className="text-foreground mb-1">Hato</h1>
-            <p className="text-sm text-gray-500">Terneras, hato en ordeño y horro (secas) — Finca Subachoque</p>
+            <p className="text-sm text-gray-500">Terneras, novillas, hato en ordeño y horro (secas) — Finca Subachoque</p>
           </div>
           <div className="relative w-full max-w-xs">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -149,6 +149,7 @@ export function AnimalesList() {
             <TabsList>
               <TabsTrigger value="hato">{LABEL_CATEGORIA_HATO.hato} ({porCategoria.hato.length})</TabsTrigger>
               <TabsTrigger value="horro">{LABEL_CATEGORIA_HATO.horro} ({porCategoria.horro.length})</TabsTrigger>
+              <TabsTrigger value="novilla">{LABEL_CATEGORIA_HATO.novilla} ({porCategoria.novilla.length})</TabsTrigger>
               <TabsTrigger value="ternera">{LABEL_CATEGORIA_HATO.ternera} ({porCategoria.ternera.length})</TabsTrigger>
             </TabsList>
             <TabsContent value="hato" className="mt-4">
@@ -156,6 +157,9 @@ export function AnimalesList() {
             </TabsContent>
             <TabsContent value="horro" className="mt-4">
               <TablaAnimales animales={porCategoria.horro} />
+            </TabsContent>
+            <TabsContent value="novilla" className="mt-4">
+              <TablaAnimales animales={porCategoria.novilla} />
             </TabsContent>
             <TabsContent value="ternera" className="mt-4">
               <TablaAnimales animales={porCategoria.ternera} />

@@ -105,11 +105,13 @@ export function chipClasificacionDiff(clasificacion: ClasificacionFilaDiff): Chi
   }
 }
 
-/** Chip para las 3 categorías de inventario (terneras/hato/horro). */
+/** Chip para las 4 categorías de inventario (terneras/novillas/hato/horro). */
 export function chipCategoriaHato(categoria: CategoriaHato): ChipEstilo {
   switch (categoria) {
     case 'ternera':
       return { label: 'Ternera', className: AZUL };
+    case 'novilla':
+      return { label: 'Novilla', className: AMBAR };
     case 'hato':
       return { label: 'En ordeño', className: VERDE };
     case 'horro':

@@ -231,21 +231,23 @@ export function buildAnimalFicha(params: {
 // get_hato_reproduccion — panorama reproductivo del hato
 // ============================================================================
 
-/** V-tres categorías del hato (owner, ronda de decisiones 2026-07-22, plan
- * "El S4 herd view must show three categories: terneras, hato (milking),
- * horro"): terneras/novillas (no productivas), hato en ordeño (vacas
- * activas que no están secas -- una 'proxima_a_secar' sigue en ordeño) y
- * horro (vacas activas YA secas, esperando el parto). Regla unificada con
- * `hatoCategorias.ts` del frontend: Esco y la UI dan el mismo conteo,
- * cambiar una copia exige cambiar la otra. Los toros (etapa
- * histórica de import, el catálogo vivo es `hato_toros`) quedan fuera de
- * las tres categorías — se reportan aparte si aparecen. */
-export type CategoriaHato = 'terneras' | 'hato_ordeno' | 'horro';
+/** CUATRO categorías del hato (decisión del dueño, tercera ronda
+ * 2026-07-22 — terneras y novillas van SEPARADAS): terneras (crías),
+ * novillas (levante, aún sin parir), hato en ordeño (vacas activas que no
+ * están secas -- una 'proxima_a_secar' sigue en ordeño hasta el
+ * secado_real, lectura confirmada por el dueño) y horro (vacas activas YA
+ * secas, esperando el parto). Regla unificada con `hatoCategorias.ts` del
+ * frontend: Esco y la UI dan el mismo conteo, cambiar una copia exige
+ * cambiar la otra. Los toros (etapa histórica de import, el catálogo vivo
+ * es `hato_toros`) quedan fuera de las categorías — se reportan aparte si
+ * aparecen. */
+export type CategoriaHato = 'terneras' | 'novillas' | 'hato_ordeno' | 'horro';
 
 function categorizarAnimal(fila: HatoEstadoActualRow, estado: EstadoReproductivo): CategoriaHato | 'toro' | null {
   if (fila.estado !== 'activa') return null;
   if (fila.etapa === 'toro') return 'toro';
-  if (fila.etapa === 'ternera' || fila.etapa === 'novilla') return 'terneras';
+  if (fila.etapa === 'ternera') return 'terneras';
+  if (fila.etapa === 'novilla') return 'novillas';
   // etapa === 'vaca'
   if (estado === 'seca') return 'horro';
   return 'hato_ordeno';
@@ -264,6 +266,7 @@ export interface ReproduccionSummary {
   total_animales: number;
   categorias: {
     terneras: number;
+    novillas: number;
     hato_ordeno: number;
     horro: number;
     toros: number;
@@ -303,7 +306,7 @@ export function buildReproduccionSummary(
   config: HatoConfig,
   fechaReferencia: string,
 ): ReproduccionSummary {
-  const categorias = { terneras: 0, hato_ordeno: 0, horro: 0, toros: 0 };
+  const categorias = { terneras: 0, novillas: 0, hato_ordeno: 0, horro: 0, toros: 0 };
   const porEstado: Partial<Record<EstadoReproductivo, number>> = {};
   const alertas = { secado_due: 0, rechequeo_due: 0, servicio_sin_confirmacion: 0, parto_proximo: 0 };
   const proximosPartos: AnimalResumenReproductivo[] = [];
@@ -322,6 +325,7 @@ export function buildReproduccionSummary(
 
     const categoria = categorizarAnimal(fila, derivado.estado);
     if (categoria === 'terneras') categorias.terneras += 1;
+    else if (categoria === 'novillas') categorias.novillas += 1;
     else if (categoria === 'hato_ordeno') categorias.hato_ordeno += 1;
     else if (categoria === 'horro') categorias.horro += 1;
     else if (categoria === 'toro') categorias.toros += 1;

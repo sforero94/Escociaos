@@ -76,18 +76,19 @@ export function HatoDashboard() {
   const { animales, loading, error } = useHatoAnimales();
 
   const {
-    enOrdeno, horro, terneras, proximasAReemplazo,
+    enOrdeno, horro, novillas, terneras, proximasAReemplazo,
     proximasASecar, proximasAParir, rechequeoPendiente, vaciasPorServir,
   } = useMemo(() => {
     const enOrdeno = animales.filter((a) => a.categoria === 'hato');
     const horro = animales.filter((a) => a.categoria === 'horro');
+    const novillas = animales.filter((a) => a.categoria === 'novilla');
     const terneras = animales.filter((a) => a.categoria === 'ternera');
     const proximasAReemplazo = animales.filter((a) => a.derivado.proxima_a_reemplazo);
     const proximasASecar = animales.filter((a) => a.derivado.alertas.secado_due || (a.derivado.estado === 'proxima_a_secar'));
     const proximasAParir = animales.filter((a) => a.derivado.alertas.parto_proximo);
     const rechequeoPendiente = animales.filter((a) => a.derivado.alertas.rechequeo_due);
     const vaciasPorServir = animales.filter((a) => a.derivado.estado === 'vacia_por_servir');
-    return { enOrdeno, horro, terneras, proximasAReemplazo, proximasASecar, proximasAParir, rechequeoPendiente, vaciasPorServir };
+    return { enOrdeno, horro, novillas, terneras, proximasAReemplazo, proximasASecar, proximasAParir, rechequeoPendiente, vaciasPorServir };
   }, [animales]);
 
   return (
@@ -111,9 +112,10 @@ export function HatoDashboard() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="kpi-grid-hato mb-6">
               <KPICard icon={Milk} label="En ordeño" value={formatNumber(enOrdeno.length)} />
               <KPICard icon={Droplet} label="Horro (secas)" value={formatNumber(horro.length)} />
+              <KPICard icon={Baby} label="Novillas" value={formatNumber(novillas.length)} />
               <KPICard icon={Baby} label="Terneras" value={formatNumber(terneras.length)} />
               <KPICard icon={Repeat} label="Próximas a reemplazo" value={formatNumber(proximasAReemplazo.length)} />
             </div>

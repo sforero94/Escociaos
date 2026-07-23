@@ -15,31 +15,31 @@
 // protegidos por `calculosHatoParidad.test.ts` cada vez que cambie la
 // definición de "horro" o "hato" a nivel de UI.
 //
-// ASUNCIÓN DOCUMENTADA (sin confirmar por el dueño, S4): el plan y las
-// decisiones registradas no definen con precisión los límites de las 3
-// categorías más allá de la frase citada arriba. Se interpreta (regla
-// unificada con `hato-aggregation.ts` del servidor -- Esco y la UI deben
-// dar siempre el mismo conteo):
-//   - terneras -- etapa 'ternera' o 'novilla': aún no ha parido, nunca ha
-//     estado en ordeño, así que no puede ser "hato (en ordeño)" ni "horro
-//     (seca)".
+// REGLA CONFIRMADA POR EL DUEÑO (tercera ronda, 2026-07-22): CUATRO
+// categorías, no tres -- terneras y novillas van separadas ("it was my
+// oversight", palabras del dueño). Regla unificada con
+// `hato-aggregation.ts` del servidor -- Esco y la UI deben dar siempre el
+// mismo conteo:
+//   - ternera  -- etapa 'ternera': cría.
+//   - novilla  -- etapa 'novilla': en levante, aún no ha parido ni ha
+//     estado en ordeño.
 //   - horro    -- vaca cuyo estado reproductivo derivado sea 'seca'
 //     (masReciente === 'secado_real', ver `derivarEstadoReproductivo`) --
 //     es decir, YA se secó y espera parto. Un animal 'proxima_a_secar'
 //     (todavía en ordeño, dentro de la ventana de aviso) se queda en
-//     "hato": el dueño describió horro como "secas", no "por secar".
+//     "hato" hasta que el secado se confirme -- lectura confirmada por el
+//     dueño en la misma ronda.
 //   - hato     -- toda otra vaca activa (servida, preñada, parida_reciente,
 //     vacia_por_servir, indeterminado): sigue en ordeño.
 //   - null     -- estados terminales (vendida/muerta/descartada): no
-//     pertenecen a ninguna de las 3 categorías del inventario vivo.
-// Si el dueño precisa un límite distinto (ej. "próxima a secar" también
-// cuenta como horro, o novillas fuera de terneras), hay que tocar este
-// archivo Y `categorizarAnimal` en ambas copias de `hato-aggregation.ts`.
+//     pertenecen a ninguna categoría del inventario vivo.
+// Cambiar un límite exige tocar este archivo Y `categorizarAnimal` en
+// ambas copias de `hato-aggregation.ts`.
 
 import type { EtapaHato } from '@/types/hato';
 import type { EstadoReproductivo } from '@/utils/calculosHato';
 
-export type CategoriaHato = 'ternera' | 'hato' | 'horro';
+export type CategoriaHato = 'ternera' | 'novilla' | 'hato' | 'horro';
 
 export function clasificarCategoriaHato(
   etapa: EtapaHato,
@@ -52,13 +52,15 @@ export function clasificarCategoriaHato(
   ) {
     return null;
   }
-  if (etapa === 'ternera' || etapa === 'novilla') return 'ternera';
+  if (etapa === 'ternera') return 'ternera';
+  if (etapa === 'novilla') return 'novilla';
   if (estadoReproductivo === 'seca') return 'horro';
   return 'hato';
 }
 
 export const LABEL_CATEGORIA_HATO: Record<CategoriaHato, string> = {
   ternera: 'Terneras',
+  novilla: 'Novillas',
   hato: 'Hato (en ordeño)',
   horro: 'Horro (secas)',
 };

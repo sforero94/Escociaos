@@ -214,13 +214,13 @@ describe('buildReproduccionSummary', () => {
   it('hato vacío: totales y listas en cero/vacío, nunca undefined', () => {
     const summary = buildReproduccionSummary([], CONFIG_BASE, '2024-08-09');
     expect(summary.total_animales).toBe(0);
-    expect(summary.categorias).toEqual({ terneras: 0, hato_ordeno: 0, horro: 0, toros: 0 });
+    expect(summary.categorias).toEqual({ terneras: 0, novillas: 0, hato_ordeno: 0, horro: 0, toros: 0 });
     expect(summary.proximos_partos).toEqual([]);
     expect(summary.proximas_a_secar).toEqual([]);
     expect(summary.inactivos).toEqual({ vendidas: 0, muertas: 0, descartadas: 0 });
   });
 
-  it('categoriza terneras/novillas, hato en ordeño (incl. próxima a secar), horro (solo secas) y toros por separado', () => {
+  it('categoriza terneras, novillas, hato en ordeño (incl. próxima a secar), horro (solo secas) y toros por separado', () => {
     const filas: HatoEstadoActualRow[] = [
       estadoBase({ animal_id: 't1', numero: 200, nombre: 'TERNERA1', etapa: 'ternera', num_partos: 0 }),
       estadoBase({ animal_id: 'n1', numero: 201, nombre: 'NOVILLA1', etapa: 'novilla', num_partos: 0 }),
@@ -244,7 +244,8 @@ describe('buildReproduccionSummary', () => {
     ];
     const summary = buildReproduccionSummary(filas, CONFIG_BASE, '2024-12-01');
     expect(summary.total_animales).toBe(7);
-    expect(summary.categorias.terneras).toBe(2);
+    expect(summary.categorias.terneras).toBe(1);
+    expect(summary.categorias.novillas).toBe(1);
     expect(summary.categorias.hato_ordeno).toBe(2);
     expect(summary.categorias.horro).toBe(1);
     expect(summary.categorias.toros).toBe(1);

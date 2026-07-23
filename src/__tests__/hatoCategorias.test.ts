@@ -39,7 +39,11 @@ describe('clasificarCategoriaHato', () => {
     expect(clasificarCategoriaHato('novilla', estado)).toBeNull();
   });
 
-  it('una novilla activa cae en "ternera" -- nunca ha estado en ordeño (regla unificada con hato-aggregation.ts)', () => {
-    expect(clasificarCategoriaHato('novilla', 'novilla')).toBe('ternera');
+  it('una novilla activa cae en "novilla" -- categoría propia (decisión del dueño, tercera ronda 2026-07-22)', () => {
+    expect(clasificarCategoriaHato('novilla', 'novilla')).toBe('novilla');
+  });
+
+  it('una novilla seca (caso raro) sigue siendo "novilla" -- la etapa manda antes que el estado', () => {
+    expect(clasificarCategoriaHato('novilla', 'seca')).toBe('novilla');
   });
 });
