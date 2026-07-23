@@ -359,6 +359,18 @@ describe('derivarEventosDeChequeo', () => {
     expect(eventos).toEqual([expect.objectContaining({ tipo: 'parto', fecha: '2024-04-02', fecha_confianza: 'exacta' })]);
   });
 
+  // Colapso de partos CERCANOS (owner decision 2026-07-23, caso real GALLEGA
+  // #148) -- prueba que el WIRING de este commit path (una lectura anterior
+  // conocida por animal) llega al umbral de proximidad de
+  // `agruparPartosPorProximidad`, no solo a la igualdad exacta.
+  it('con ultimaCriaAnteriorPorAnimal a <= 60 días (distinta, no exacta) el evento se suprime y deja un issue de revisión', () => {
+    const fila = filaBase({ sx: parseSX('OV'), fechasServicio: [], raw: { ...filaBase().raw, ultimaCria: '1/11/2025' } });
+    const mapa = new Map([['a1', '2025-12-02']]); // 31 días de diferencia -- caso real GALLEGA
+    const { eventos, issues } = derivarEventosDeChequeo([{ fila, animalId: 'a1' }], mapa);
+    expect(eventos).toEqual([]);
+    expect(issues.some((i) => /Última Cría/.test(i.motivo))).toBe(true);
+  });
+
   it('el mapa se consulta por animalId de cada fila, no globalmente', () => {
     const filaA = filaBase({ fila: 3, numero: 162, sx: parseSX('OV'), fechasServicio: [], raw: { ...filaBase().raw, ultimaCria: '28/1/2024' } });
     const filaB = filaBase({ fila: 4, numero: 175, sx: parseSX('OV'), fechasServicio: [], raw: { ...filaBase().raw, ultimaCria: '28/1/2024' } });

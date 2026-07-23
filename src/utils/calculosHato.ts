@@ -1035,8 +1035,15 @@ export interface InputDescomposicionSX {
    * ninguno, ej. el primer chequeo del animal). Responsabilidad del caller:
    * este motor no tiene acceso a la base para buscar el chequeo anterior de
    * un animal. Junto con `ultimaCria`, decide si un SX que describe un parto
-   * es un nacimiento YA registrado (misma Última Cría que el chequeo
-   * anterior) o uno genuinamente nuevo -- ver `decidirEventoParto`.
+   * es un nacimiento YA registrado -- misma Última Cría que el chequeo
+   * anterior, O una a `DIAS_MINIMOS_ENTRE_PARTOS` días o menos de distancia
+   * (colapso de partos cercanos, decisión del dueño 2026-07-23) -- o uno
+   * genuinamente nuevo. Ver `decidirEventoParto`/`agruparPartosPorProximidad`.
+   * Para un análisis con el historial COMPLETO de un animal (no solo "la
+   * lectura anterior"), un caller debe llamar `agruparPartosPorProximidad`
+   * directamente en vez de invocar este motor fila por fila -- ver
+   * `scripts/import-hato/load.ts::cargarEventos` y
+   * `scripts/import-hato/recompute-partos-cercanos.ts`.
    */
   ultimaCriaAnterior?: string | null;
 }
@@ -1046,17 +1053,125 @@ export interface ResultadoDescomposicionSX {
   issues: ParseIssue[];
 }
 
+/** Tipos de `TipoSX` para los que `descomponerSX` puede generar un evento
+ * `parto` (sujeto a la deduplicación/colapso de `decidirEventoParto`) --
+ * expuesto para que callers que necesitan preseleccionar lecturas de "Última
+ * Cría" ANTES de invocar `descomponerSX` (`agruparPartosPorProximidad`
+ * necesita el historial completo del animal, no fila por fila) sepan qué
+ * filas participan, sin re-derivar esta lista a mano en un segundo lugar.
+ * `o_mas` se incluye porque, sin `huboPartoConfirmado` conocido (el caso de
+ * Load y de la importación histórica: ningún caller de ese archivo puede
+ * saberlo), este motor asume parto por default -- ver la rama `o_mas` de
+ * `descomponerSX`. */
+export function esTipoSxDeParto(tipo: TipoSX): boolean {
+  return tipo === 'ov' || tipo === 'av' || tipo === 'a_n' || tipo === 'a_mas' || tipo === 'o_mas' || tipo === 'gemelar';
+}
+
+// ----------------------------------------------------------------------------
+// Colapso de partos cercanos (decisión del dueño, 2026-07-23 -- confirmado
+// contra producción, no hipotético). La deduplicación EXACTA de arriba
+// (misma Última Cría carácter por carácter) no atrapa el caso real donde el
+// veterinario re-estima la fecha de memoria en cada visita: el MISMO
+// nacimiento queda registrado con lecturas LIGERAMENTE distintas entre
+// chequeos consecutivos (evidencia real: GALLEGA #148, "2/12/2025" en el
+// chequeo de 2025-11-25, luego "1/11/2025" en el de 2026-02-25 -- 31 días de
+// diferencia entre las dos LECTURAS, un solo parto real).
+//
+// El intervalo real mínimo entre partos de una vaca es ~270+ días, así que
+// cualquier par de lecturas de Última Cría a MENOS de
+// `DIAS_MINIMOS_ENTRE_PARTOS` es inequívocamente el MISMO nacimiento, nunca
+// dos genuinamente distintos. Es una constante TÉCNICA/de seguridad del
+// motor -- mismo estilo y motivo que `HORAS_MINIMAS_REENVIO`/
+// `DIAS_EXPIRACION_ALERTA` en `hatoAlertas.ts` -- NO un parámetro de negocio
+// editable por Gerencia, así que NO vive en `hato_config`.
+// ----------------------------------------------------------------------------
+
+export const DIAS_MINIMOS_ENTRE_PARTOS = 60;
+
+/** Una lectura de "Última Cría" ya parseada a ISO (`parseUltimaCria(...).fecha`,
+ * nunca `null`), anclada a la fecha del chequeo en que se registró -- unidad
+ * mínima que agrupa `agruparPartosPorProximidad`. */
+export interface LecturaUltimaCria {
+  chequeoFecha: string;
+  ultimaCria: string;
+}
+
+/** Un cluster de lecturas de Última Cría que `agruparPartosPorProximidad`
+ * determinó que representan el MISMO nacimiento real. `lecturas` conserva
+ * TODOS los miembros del cluster (orden cronológico de llegada) para que el
+ * caller pueda construir un mensaje de revisión citando cada lectura
+ * colapsada -- nunca se descarta esa trazabilidad. `fechaEvento` es la
+ * Última Cría del ÚLTIMO miembro (decisión del dueño: se asume que el
+ * chequeo más reciente trae el dato más corregido/refinado, incluso cuando
+ * esa fecha es, como valor calendario, "anterior" a una lectura previa del
+ * mismo cluster -- ver el caso real GALLEGA en los tests). Un cluster de un
+ * solo miembro (`lecturas.length === 1`) es el caso normal, sin colapso.
+ */
+export interface ClusterParto {
+  lecturas: LecturaUltimaCria[];
+  fechaEvento: string;
+  fechaConfianza: 'exacta';
+}
+
+/**
+ * Agrupa una secuencia CRONOLÓGICAMENTE ORDENADA de lecturas de "Última
+ * Cría" de un MISMO animal (responsabilidad del caller: esta función no
+ * ordena ni filtra por animal) en clusters de "mismo nacimiento real",
+ * cuando dos lecturas caen a `umbralDias` (o menos) de distancia.
+ *
+ * Encadena contra el ÚLTIMO miembro del cluster ACTUALMENTE ABIERTO -- nunca
+ * contra su primer miembro ni contra un valor fijo. Es lo que resuelve
+ * correctamente la oscilación real A -> B -> A: B se agrupa con A por estar
+ * a <= `umbralDias`; la segunda A se agrupa con B (no con la primera A) por
+ * el mismo motivo, aunque numéricamente A2 == A1. Reabrir un cluster nuevo
+ * solo porque una lectura "coincide" con un valor de varias lecturas atrás
+ * partiría en dos un nacimiento real que la fuente reportó tres veces (ver
+ * test de oscilación).
+ *
+ * Un exact-repeat (misma Última Cría carácter por carácter, el caso que
+ * arregló `decidirEventoParto` antes de esta sesión) es simplemente el caso
+ * degenerado de distancia 0 -- este mecanismo lo cubre sin un camino
+ * separado, nunca dos mecanismos de deduplicación superpuestos.
+ */
+export function agruparPartosPorProximidad(
+  lecturas: LecturaUltimaCria[],
+  umbralDias: number = DIAS_MINIMOS_ENTRE_PARTOS,
+): ClusterParto[] {
+  const clusters: LecturaUltimaCria[][] = [];
+
+  for (const lectura of lecturas) {
+    const clusterActual = clusters.at(-1);
+    const ultimoMiembro = clusterActual?.at(-1);
+    if (ultimoMiembro && Math.abs(diferenciaDias(ultimoMiembro.ultimaCria, lectura.ultimaCria)) <= umbralDias) {
+      clusterActual!.push(lectura);
+    } else {
+      clusters.push([lectura]);
+    }
+  }
+
+  return clusters.map((miembros) => ({
+    lecturas: miembros,
+    fechaEvento: miembros.at(-1)!.ultimaCria,
+    fechaConfianza: 'exacta' as const,
+  }));
+}
+
 /** Decide, para las ramas de `descomponerSX` que describen un parto (OV/AV/
  * A{n}/A+/O+ confirmado como parto/gemelar -- NUNCA aborto, que no se
  * "arrastra" entre chequeos de la misma forma), si corresponde emitir un
  * evento nuevo y con qué fecha/confianza.
  *
- * Raíz del bug que corrige (verificado en producción, ALINA #157): el SX de
- * la planilla es un marcador de ESTADO que la fuente deja igual en varios
- * chequeos bimensuales seguidos hasta el próximo parto real -- exactamente
- * como `ultima_cria_raw` permanece congelada en la misma fecha. Sin comparar
+ * Raíz del bug que corrige (verificado en producción, ALINA #157 y, para el
+ * colapso por proximidad, GALLEGA #148): el SX de la planilla es un marcador
+ * de ESTADO que la fuente deja igual en varios chequeos bimensuales
+ * seguidos hasta el próximo parto real -- exactamente como `ultima_cria_raw`
+ * permanece (aproximadamente) congelada en la misma fecha. Sin comparar
  * contra el valor anterior, cada chequeo con el mismo SX generaba un evento
- * `parto` nuevo, fechado al chequeo (nunca al nacimiento real).
+ * `parto` nuevo, fechado al chequeo (nunca al nacimiento real); y sin
+ * tolerancia de proximidad, un veterinario re-estimando la fecha de memoria
+ * en cada visita (GALLEGA: "2/12/2025" y luego "1/11/2025", 31 días de
+ * diferencia) seguía generando un duplicado, solo que ahora fechado a un
+ * valor "exacto" pero incorrecto en vez de al chequeo.
  *
  * Tres casos:
  *   1. Sin `ultimaCria` interpretable -- no hay con qué verificar si este
@@ -1066,13 +1181,24 @@ export interface ResultadoDescomposicionSX {
  *      que sí venga `fechaPartoReal') pero SIEMPRE se deja un issue --
  *      "ambiguo -> revisión, nunca en silencio", la misma regla que rige
  *      todo este archivo.
- *   2. `ultimaCria` igual a `ultimaCriaAnterior` -- el mismo nacimiento que
- *      ya generó un evento en un chequeo previo. No se emite un segundo
- *      evento.
- *   3. `ultimaCria` distinta de `ultimaCriaAnterior` (incluye el caso en que
- *      `ultimaCriaAnterior` no existe, ej. primer chequeo del animal) --
- *      nacimiento genuinamente nuevo, y esta vez SÍ se conoce su fecha real:
- *      `fecha = ultimaCria`, `confianza = 'exacta'`.
+ *   2. Sin `ultimaCriaAnterior` conocida (ej. primer chequeo del animal) --
+ *      nada con qué comparar todavía; este es el primer miembro de un
+ *      cluster potencial. Se emite, `fecha = ultimaCria`, confianza exacta.
+ *   3. `ultimaCriaAnterior` conocida -- se agrupan ambas lecturas con
+ *      `agruparPartosPorProximidad` (mismo mecanismo que usan los callers
+ *      con el historial completo, aquí aplicado a un par):
+ *        - Si caen en el MISMO cluster (idénticas, o a `DIAS_MINIMOS_ENTRE_PARTOS`
+ *          días o menos una de otra) -- el mismo nacimiento que ya generó un
+ *          evento en un chequeo previo. No se emite un segundo evento. Un
+ *          colapso EXACTO no deja issue (comportamiento verificado en
+ *          producción antes de esta sesión, ver el test "ALINA #157"); un
+ *          colapso por PROXIMIDAD (distinto pero cercano) SÍ deja un issue
+ *          -- el evento ya insertado para la lectura anterior sigue fechado
+ *          a esa lectura, y este motor (llamado fila por fila, sin acceso a
+ *          la BD) no puede corregirlo desde aquí; queda para revisión
+ *          humana o para el recompute batch (`scripts/import-hato/recompute-partos-cercanos.ts`).
+ *        - Si caen en clusters DISTINTOS -- nacimiento genuinamente nuevo:
+ *          `fecha = ultimaCria`, `confianza = 'exacta'`.
  */
 function decidirEventoParto(input: InputDescomposicionSX): {
   emitir: boolean;
@@ -1096,8 +1222,29 @@ function decidirEventoParto(input: InputDescomposicionSX): {
     };
   }
 
-  if (input.ultimaCria === input.ultimaCriaAnterior) {
-    return { emitir: false, fecha: fechaFallback, confianza: confianzaFallback };
+  if (input.ultimaCriaAnterior === undefined || input.ultimaCriaAnterior === null) {
+    return { emitir: true, fecha: input.ultimaCria, confianza: 'exacta' };
+  }
+
+  const clusters = agruparPartosPorProximidad([
+    { chequeoFecha: '(anterior)', ultimaCria: input.ultimaCriaAnterior },
+    { chequeoFecha: input.chequeoFecha, ultimaCria: input.ultimaCria },
+  ]);
+
+  if (clusters.length === 1) {
+    const esExacto = input.ultimaCria === input.ultimaCriaAnterior;
+    return {
+      emitir: false,
+      fecha: fechaFallback,
+      confianza: confianzaFallback,
+      issue: esExacto
+        ? undefined
+        : {
+            crudo: input.sx.crudo,
+            motivo:
+              `Última Cría '${input.ultimaCria}' está a ${Math.abs(diferenciaDias(input.ultimaCriaAnterior, input.ultimaCria))} día(s) de la lectura anterior conocida ('${input.ultimaCriaAnterior}') -- menos de ${DIAS_MINIMOS_ENTRE_PARTOS} días, es el MISMO nacimiento reportado con una fecha distinta (probable re-estimación del veterinario), no un parto nuevo; no se emite un segundo evento. El evento ya registrado para la lectura anterior sigue fechado a '${input.ultimaCriaAnterior}' -- este motor no puede corregirlo desde una fila nueva (no tiene acceso al evento ya insertado). Revisar si '${input.ultimaCria}' es el dato más confiable y, de ser así, corregir la fecha del evento existente manualmente (o vía el recompute batch).`,
+          },
+    };
   }
 
   return { emitir: true, fecha: input.ultimaCria, confianza: 'exacta' };

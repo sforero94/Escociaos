@@ -264,6 +264,27 @@ export function seleccionarUltimaCriaAnteriorPorAnimal(
  * `seleccionarUltimaCriaAnteriorPorAnimal`; la Última Cría de ESTA fila se
  * parsea aquí mismo desde `fila.raw.ultimaCria` (capa cruda), nunca se le
  * pide al caller que la parsee dos veces.
+ *
+ * Colapso de partos CERCANOS (decisión del dueño, 2026-07-23, ver
+ * `calculosHato.ts::agruparPartosPorProximidad`/`decidirEventoParto`): como
+ * este commit procesa UN chequeo nuevo a la vez, `descomponerSX` ya decide
+ * -- comparando la Última Cría de esta fila contra `ultimaCriaAnteriorPorAnimal`
+ * con un umbral de proximidad, no solo igualdad exacta -- si esta lectura es
+ * el MISMO nacimiento que la última conocida y, de serlo, suprime el evento
+ * y deja un issue de revisión. Lo que este commit NO puede hacer es corregir
+ * retroactivamente la FECHA de un evento `parto` que un chequeo ANTERIOR ya
+ * insertó: `fn_hato_commit_chequeo` (migración 065) solo limpia/inserta
+ * filas del chequeo que se está aprobando, nunca toca eventos de otros
+ * chequeos. Así que, para una vaca cuya Última Cría oscila en visitas
+ * sucesivas, el evento sobreviviente queda fechado a la lectura del PRIMER
+ * chequeo del cluster (no a la más reciente/refinada) hasta que alguien
+ * corrija esa fecha a mano o se vuelva a correr el recompute batch
+ * (`scripts/import-hato/recompute-partos-cercanos.ts`) contra el estado
+ * fresco de producción -- el issue que deja `descomponerSX` es precisamente
+ * la señal para eso. Cerrar esa brecha con una escritura automática exigiría
+ * que el commit pudiera actualizar un evento de un chequeo distinto al que
+ * se está aprobando -- un cambio de contrato de `fn_hato_commit_chequeo`,
+ * decisión de CTO, fuera del alcance de este fix.
  */
 export function derivarEventosDeChequeo(
   aprobadas: FilaChequeoAprobada[],

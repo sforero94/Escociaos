@@ -74,7 +74,16 @@ import { dirname, resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import Papa from 'papaparse';
-import { descomponerSX, parseSX, parseUltimaCria, type EventoDerivado } from '../../src/utils/calculosHato';
+import {
+  descomponerSX,
+  parseSX,
+  parseUltimaCria,
+  agruparPartosPorProximidad,
+  esTipoSxDeParto,
+  DIAS_MINIMOS_ENTRE_PARTOS,
+  type EventoDerivado,
+  type LecturaUltimaCria,
+} from '../../src/utils/calculosHato';
 import type { SalidaNormalizado, FilaChequeoNormalizada } from '../../src/utils/importHato/tipos';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -485,23 +494,50 @@ async function cargarChequeos(
  * >>> CORREGIDO PERO NUNCA RE-EJECUTADO (ver el encabezado del archivo y
  * CLAUDE.md, "Load es backfill-only, para siempre"). <<<
  *
- * Bug real encontrado en producción (2026-07-23, animal ALINA #157): esta
+ * Bug real #1 encontrado en producción (2026-07-23, animal ALINA #157): esta
  * función generaba un evento `parto` nuevo CADA VEZ que el SX de un chequeo
  * indicaba nacimiento (OV/AV/A{n}/A+/O+/gem+), sin memoria del chequeo
  * anterior -- pero el SX (igual que `ultima_cria_raw`) es un marcador de
  * ESTADO que la fuente deja IGUAL en varios chequeos bimensuales seguidos
  * hasta el próximo parto real. ALINA tiene `ultima_cria_raw` = "28/1/2024"
- * en TRES chequeos consecutivos (2024-03-18, 2024-05-20, 2024-08-09) -- un
- * solo nacimiento real, que esta función registraba tres veces, cada una
- * fechada al chequeo (nunca a la fecha real del parto).
+ * en TRES chequeos consecutivos -- un solo nacimiento real, registrado tres
+ * veces, cada una fechada al chequeo (nunca a la fecha real del parto).
  *
- * Corregido agrupando por animal y recorriendo sus chequeos en orden
- * CRONOLÓGICO (nunca se asume que `chequeos` ya viene ordenado así -- no lo
- * está, es el orden en que Extract recorrió archivos/hojas), llevando un
- * `Map` de la última "Última Cría" conocida por animal y pasándola a
- * `descomponerSX` como `ultimaCriaAnterior` -- el mismo motor decide, con
- * `decidirEventoParto` (calculosHato.ts), si el parto de esta fila ya se
- * registró antes o es genuinamente nuevo (y en ese caso, con qué fecha real).
+ * Bug real #2, encontrado DESPUÉS de corregir el #1 (mismo día, animal
+ * GALLEGA #148): la deduplicación EXACTA de arriba no atrapa el caso donde
+ * el veterinario re-estima la fecha de memoria en cada visita -- el MISMO
+ * nacimiento queda registrado con lecturas LIGERAMENTE distintas ("2/12/2025"
+ * en el chequeo de 2025-11-25, luego "1/11/2025" en el de 2026-02-25 -- 31
+ * días de diferencia). Decisión del dueño (2026-07-23): dos lecturas de
+ * Última Cría a `DIAS_MINIMOS_ENTRE_PARTOS` días o menos de distancia son el
+ * MISMO nacimiento (el intervalo real mínimo entre partos es ~270+ días), y
+ * el chequeo MÁS RECIENTE se asume más corregido/refinado, así que su
+ * lectura es la que sobrevive.
+ *
+ * Esto último NO se puede resolver con el mismo patrón "un valor anterior,
+ * fila por fila" del bug #1: un cluster puede abarcar MÁS de dos chequeos
+ * (A -> B -> A, ver `agruparPartosPorProximidad`), así que hace falta ver el
+ * historial COMPLETO de un animal ANTES de decidir qué fila ancla el evento
+ * sobreviviente. Por eso esta función ahora corre en DOS pasadas por animal:
+ *   1. Junta las "candidatas" (filas con fila física en `hato_chequeo_vacas`,
+ *      SX de tipo parto -- `esTipoSxDeParto` -- y Última Cría interpretable)
+ *      y las agrupa con `agruparPartosPorProximidad`. Solo el ÚLTIMO miembro
+ *      de cada cluster conserva su evento `parto`; el resto se colapsa, y
+ *      SIEMPRE se advierte por consola (nunca en silencio) qué lecturas se
+ *      fusionaron y en cuál sobrevivieron.
+ *   2. Recorre los chequeos en orden cronológico como antes para derivar
+ *      servicio/aborto/otros eventos (sin cambios), pero el evento `parto`
+ *      de `descomponerSX` solo se conserva si la fila es ese "último
+ *      miembro" -- por eso se le pasa `ultimaCriaAnterior: undefined`
+ *      siempre (el colapso ya no es responsabilidad de esa comparación fila
+ *      a fila, se decidió en el paso 1 con el historial completo).
+ *
+ * Una fila sin `chequeoVacaId` (duplicado descartado por
+ * `deduplicarPorChequeoYAnimal`) queda fuera de las candidatas -- no puede
+ * anclar un evento propio, y su lectura es prácticamente idéntica a la de su
+ * fila hermana del MISMO chequeo que sí se cargó (mismo `chequeo_id`,
+ * `deduplicarPorChequeoYAnimal` agrupa por eso), así que excluirla del
+ * clustering no cambia el resultado real.
  */
 async function cargarEventos(
   supabase: ReturnType<typeof createClient>,
@@ -515,8 +551,8 @@ async function cargarEventos(
 
   // Agrupa por animal (resolviendo colisiones desempatadas igual que el resto
   // del script) -- una fila sin `numero` o sin fecha de chequeo no tiene con
-  // qué anclar temporalmente nada, ni evento ni el rastreo de Última Cría, y
-  // se descarta igual que antes.
+  // qué anclar temporalmente nada, ni evento ni el clustering de Última Cría,
+  // y se descarta igual que antes.
   const porAnimal = new Map<string, FilaChequeoNormalizada[]>();
   for (const fila of chequeos) {
     if (fila.numero === null || fila.chequeoFecha === null) continue;
@@ -531,65 +567,99 @@ async function cargarEventos(
       (a.chequeoFecha as string).localeCompare(b.chequeoFecha as string),
     );
 
-    // Última Cría conocida del animal HASTA el chequeo procesado hasta ahora
-    // -- `undefined` en el primer chequeo (no hay "anterior" que comparar).
-    let ultimaCriaAnterior: string | null | undefined;
-
+    // ------------------------------------------------------------------
+    // Paso 1: candidatas + clustering con el historial COMPLETO del animal.
+    // ------------------------------------------------------------------
+    const candidatas: Array<{ chequeoVacaId: string; lectura: LecturaUltimaCria }> = [];
     for (const fila of filasOrdenadas) {
-      const ultimaCriaFila = parseUltimaCria(fila.raw.ultimaCria).fecha;
-
       const chequeoVacaId = chequeoVacaIdPorClave.get(`${fila.archivo}::${fila.hoja}::${fila.fila}`);
-      // Una fila sin `chequeoVacaId` no produjo una fila real en
-      // hato_chequeo_vacas -- porque `deduplicarPorChequeoYAnimal` la
-      // descartó por ser la copia más pobre de otra fila del mismo animal en
-      // la misma lectura. No genera eventos propios (sus datos ya están
-      // representados por la fila que sí se cargó), pero SÍ actualiza el
-      // rastreo de Última Cría -- es una lectura real del animal, aunque su
-      // fila física haya sido la descartada.
-      if (!chequeoVacaId) {
-        if (ultimaCriaFila !== null) ultimaCriaAnterior = ultimaCriaFila;
-        continue;
+      if (!chequeoVacaId) continue;
+      const ultimaCria = parseUltimaCria(fila.raw.ultimaCria).fecha;
+      if (ultimaCria === null) continue;
+      const sx = fila.raw.sx !== null ? parseSX(fila.raw.sx) : null;
+      if (!sx || !esTipoSxDeParto(sx.tipo)) continue;
+      candidatas.push({ chequeoVacaId, lectura: { chequeoFecha: fila.chequeoFecha as string, ultimaCria } });
+    }
+
+    const clusters = agruparPartosPorProximidad(candidatas.map((c) => c.lectura));
+
+    // chequeoVacaId -> true si es el ÚLTIMO miembro del cluster al que
+    // pertenece (el único que conserva su evento `parto`). Reconstruye la
+    // partición contigua que produce `agruparPartosPorProximidad` sobre
+    // `candidatas` (mismo orden, nunca reordena).
+    const sobrevive = new Set<string>();
+    let cursor = 0;
+    for (const cluster of clusters) {
+      const miembros = candidatas.slice(cursor, cursor + cluster.lecturas.length);
+      cursor += cluster.lecturas.length;
+      sobrevive.add(miembros.at(-1)!.chequeoVacaId);
+      if (miembros.length > 1) {
+        console.warn(
+          `[hato] Colapso de partos cercanos, animal ${animalId}: ${miembros.length} lecturas de Última Cría a <= ${DIAS_MINIMOS_ENTRE_PARTOS} días entre sí se registran como UN solo nacimiento, fechado a '${cluster.fechaEvento}' (chequeo ${miembros.at(-1)!.lectura.chequeoFecha}, la lectura más reciente) -- lecturas colapsadas: ${miembros
+            .map((m) => `${m.lectura.chequeoFecha}: ${m.lectura.ultimaCria}`)
+            .join(' | ')}.`,
+        );
       }
+    }
+
+    // ------------------------------------------------------------------
+    // Paso 2: recorrido cronológico normal -- servicio/aborto/otros eventos
+    // se derivan como siempre; el evento `parto` de una candidata SOLO se
+    // conserva si es el último miembro de su cluster (paso 1).
+    // ------------------------------------------------------------------
+    for (const fila of filasOrdenadas) {
+      const chequeoVacaId = chequeoVacaIdPorClave.get(`${fila.archivo}::${fila.hoja}::${fila.fila}`);
+      if (!chequeoVacaId) continue; // no genera eventos propios, ver Paso 1
 
       const sxResuelto = fila.raw.sx !== null ? parseSX(fila.raw.sx) : null;
-      if (sxResuelto) {
-        const { eventos } = descomponerSX({
-          chequeoFecha: fila.chequeoFecha as string,
-          sx: sxResuelto,
-          fechasServicio: fila.fechasServicio,
-          toroNombre: fila.toroNombre ?? undefined,
-          tipoServicio: fila.tipoServicio ?? undefined,
-          ultimaCria: ultimaCriaFila,
-          ultimaCriaAnterior,
-          // `huboPartoConfirmado` deliberadamente undefined -- este runner no
-          // tiene forma de saberlo; `descomponerSX` ya deja un issue explícito
-          // para ese caso (ver calculosHato.ts), consistente con la regla de
-          // nunca resolver una ambigüedad en silencio.
-        });
+      if (!sxResuelto) continue;
 
-        for (const evento of eventos as EventoDerivado[]) {
-          let toroId: string | null = null;
-          if (evento.toro_nombre) {
-            const clave = evento.toro_nombre.trim().toLowerCase();
-            toroId = toroCache.get(clave) ?? null; // solo reusa un toro YA sembrado -- nunca crea uno nuevo aquí
-          }
-          eventosInsertables.push({
-            animal_id: animalId,
-            tipo: evento.tipo,
-            fecha: evento.fecha,
-            fecha_confianza: evento.fecha_confianza,
-            tipo_servicio: evento.tipo_servicio ?? null,
-            toro_id: toroId,
-            cria_destino: evento.cria_destino ?? null,
-            sx_raw: evento.sx_raw ?? null,
-            chequeo_vaca_id: chequeoVacaId,
-            fuente: 'importacion',
-            datos: evento.datos ?? null,
-          });
+      const ultimaCriaFila = parseUltimaCria(fila.raw.ultimaCria).fecha;
+      const esCandidataDeParto = ultimaCriaFila !== null && esTipoSxDeParto(sxResuelto.tipo);
+
+      const { eventos } = descomponerSX({
+        chequeoFecha: fila.chequeoFecha as string,
+        sx: sxResuelto,
+        fechasServicio: fila.fechasServicio,
+        toroNombre: fila.toroNombre ?? undefined,
+        tipoServicio: fila.tipoServicio ?? undefined,
+        ultimaCria: ultimaCriaFila,
+        // Deliberadamente SIEMPRE `undefined` -- el colapso de partos
+        // cercanos ya se decidió arriba con el historial completo del
+        // animal (`agruparPartosPorProximidad`); este motor, llamado fila
+        // por fila, ya no necesita "la lectura anterior" para eso (habría
+        // colapsado contra la fila INMEDIATAMENTE anterior nada más, y
+        // habría anclado el evento sobreviviente al PRIMER miembro del
+        // cluster en vez del último -- ver el encabezado de esta función).
+        ultimaCriaAnterior: undefined,
+        // `huboPartoConfirmado` deliberadamente undefined -- este runner no
+        // tiene forma de saberlo; `descomponerSX` ya deja un issue explícito
+        // para ese caso (ver calculosHato.ts), consistente con la regla de
+        // nunca resolver una ambigüedad en silencio.
+      });
+
+      for (const evento of eventos as EventoDerivado[]) {
+        if (evento.tipo === 'parto' && esCandidataDeParto && !sobrevive.has(chequeoVacaId)) continue; // colapsado, ver advertencia del Paso 1
+
+        let toroId: string | null = null;
+        if (evento.toro_nombre) {
+          const clave = evento.toro_nombre.trim().toLowerCase();
+          toroId = toroCache.get(clave) ?? null; // solo reusa un toro YA sembrado -- nunca crea uno nuevo aquí
         }
+        eventosInsertables.push({
+          animal_id: animalId,
+          tipo: evento.tipo,
+          fecha: evento.fecha,
+          fecha_confianza: evento.fecha_confianza,
+          tipo_servicio: evento.tipo_servicio ?? null,
+          toro_id: toroId,
+          cria_destino: evento.cria_destino ?? null,
+          sx_raw: evento.sx_raw ?? null,
+          chequeo_vaca_id: chequeoVacaId,
+          fuente: 'importacion',
+          datos: evento.datos ?? null,
+        });
       }
-
-      if (ultimaCriaFila !== null) ultimaCriaAnterior = ultimaCriaFila;
     }
   }
 
