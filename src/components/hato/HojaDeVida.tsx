@@ -4,19 +4,26 @@
 // reproductiva (A3, TODOS los servicios, V7) + genealogía (madre Y padre,
 // A5/V8) + historial de chequeos.
 
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Loader2, AlertTriangle, ArrowLeft } from 'lucide-react';
+import { Loader2, AlertTriangle, ArrowLeft, Pencil } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 import { useHatoAnimal } from './hooks/useHatoAnimal';
 import { EstadoChip } from './components/EstadoChip';
 import { FranjaEstadisticas } from './components/FranjaEstadisticas';
 import { EventoTimeline } from './components/EventoTimeline';
 import { GenealogiaArbol } from './components/GenealogiaArbol';
+import { EditarAnimalDialog } from './components/EditarAnimalDialog';
+import { Button } from '@/components/ui/button';
 import { chipEstadoReproductivo, chipVaciaEsProblema, chipProximaAReemplazo, chipNumeroProvisional } from '@/utils/hatoUi';
 import { formatShortDate, formatNumber, capitalize } from '@/utils/format';
 
 export function HojaDeVida() {
   const { id } = useParams<{ id: string }>();
-  const { detalle, loading, error } = useHatoAnimal(id);
+  const { detalle, loading, error, reload } = useHatoAnimal(id);
+  const { profile } = useAuth();
+  const canEdit = profile?.rol === 'Administrador' || profile?.rol === 'Gerencia';
+  const [editOpen, setEditOpen] = useState(false);
 
   if (loading) {
     return (
@@ -64,7 +71,12 @@ export function HojaDeVida() {
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-foreground">
-                  {animal.numero != null ? `#${animal.numero}` : 'Sin número'} {animal.nombre ?? ''}
+                  {animal.numero != null ? (
+                    `#${animal.numero}`
+                  ) : (
+                    <span className="text-gray-400 italic">sin caravana</span>
+                  )}{' '}
+                  {animal.nombre ?? ''}
                 </h1>
               </div>
               <p className="text-sm text-gray-500 mt-1">
@@ -72,11 +84,18 @@ export function HojaDeVida() {
                 {animal.fecha_nacimiento ? ` · Nació ${formatShortDate(animal.fecha_nacimiento)}` : ''}
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-1.5 justify-end">
-              <EstadoChip chip={chipEstadoReproductivo(derivado.estado)} />
-              {vaciaChip && <EstadoChip chip={vaciaChip} />}
-              {derivado.proxima_a_reemplazo && <EstadoChip chip={chipProximaAReemplazo()} />}
-              {numeroEsProvisional && <EstadoChip chip={chipNumeroProvisional()} />}
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex flex-wrap items-center gap-1.5 justify-end">
+                <EstadoChip chip={chipEstadoReproductivo(derivado.estado)} />
+                {vaciaChip && <EstadoChip chip={vaciaChip} />}
+                {derivado.proxima_a_reemplazo && <EstadoChip chip={chipProximaAReemplazo()} />}
+                {numeroEsProvisional && <EstadoChip chip={chipNumeroProvisional()} />}
+              </div>
+              {canEdit && (
+                <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+                  <Pencil className="w-3.5 h-3.5 mr-1.5" /> Editar
+                </Button>
+              )}
             </div>
           </div>
 
@@ -147,6 +166,15 @@ export function HojaDeVida() {
           )}
         </div>
       </div>
+
+      {canEdit && (
+        <EditarAnimalDialog
+          open={editOpen}
+          onOpenChange={setEditOpen}
+          animal={animal}
+          onGuardado={reload}
+        />
+      )}
     </div>
   );
 }

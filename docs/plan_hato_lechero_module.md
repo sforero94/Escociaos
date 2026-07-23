@@ -489,6 +489,29 @@ Santiago respondió las 12 secciones del reporte generado. Las respuestas con ef
 - **CUATRO categorías, no tres: terneras y novillas van separadas** — "it was my oversight", palabras del dueño. El inventario (`AnimalesList`), el tablero (`HatoDashboard`) y Esco (`get_hato_reproduccion`) muestran las cuatro: terneras · novillas · hato (en ordeño) · horro.
 - **Confirmada la lectura de "horro" = solo secas**: una vaca `proxima_a_secar` sigue en el hato (en ordeño) hasta que el secado se confirme (`secado_real`). Regla unificada en `src/utils/hatoCategorias.ts` (UI) y `hato-aggregation.ts` (Esco, ambas copias) — cambiar un límite exige tocar ambos lados.
 
+### Decisiones del dueño — cuarta ronda (2026-07-23, identidad y renumeración)
+
+**El problema real de las chapetas duplicadas:** no son errores de digitación — son **vacas compradas que llegaron con una caravana ya en uso** por otro animal del hato. Martha comprará caravanas nuevas y **renumerará el hato completo**. Es decir, hoy los números están duplicados Y además van a cambiar en bloque; la caravana física resultó ser un atributo mutable, no la identidad.
+
+**Decisión (destrabar el desarrollo ya, sin esperar el retag físico):** la identidad del animal es `hato_animales.id` (uuid), no la caravana. Se descartan las dos opciones que el dueño barajó — usar el **nombre** como llave (los nombres colisionan igual, no son únicos ni obligatorios) y sembrar un **hato dummy** (dato falso, prohibido por el principio "mejor sin dato que un número falso", y se filtraría a la vista real de papá/Esco). En su lugar:
+
+- **`numero` pasa a ser atributo mutable ("chapeta actual"), no identidad permanente.** Migración **066** (aplicada a producción 2026-07-23): elimina el `UNIQUE(numero)` global, agrega índice único parcial solo entre animales `estado='activa'`. El hato real se carga **ahora** con los números provisionales que ya asigna `overridesChapeta.ts` (las ~5 vacas en colisión vigente quedan en 900–999; el resto conserva su caravana actual).
+- **La UI permite editar la caravana (renumeración) desde el arranque** — pedido explícito del dueño: *"UI should allow for these modifications regardless and it will be a good test of the functionality"*. `EditarAnimalDialog` + hook `useActualizarHatoAnimal` en `HojaDeVida` (rol Administrador/Gerencia), con manejo de la colisión `23505` del índice parcial. Ese es el camino para corregir el inventario cuando entren las caravanas nuevas.
+- **El retag es un `UPDATE` en sitio indexado por `id`, en una sola transacción — nunca un re-Load.** `Load` queda como backfill histórico de una sola vez (borra `origen='importacion_historica'` y las tablas hijas no tienen `ON DELETE CASCADE` — re-correrlo sobre datos vivos rompería por FK o dejaría historia huérfana).
+- **Checkpoint de Martha reformulado:** de "adjudicar colisiones viejas" (sin sentido — esos números se botan) a "confirmar que el roster está completo y mapear las caravanas nuevas". El dueño autorizó correr `Load` antes del checkpoint completo; la corrección se hace en vivo desde la UI (*"we can fix the inventory later"*).
+- **Barandas del período provisional:** acceso al módulo solo Gerencia + Martha hasta el retag (papá aún no); las alertas S6 lideran con el **nombre**, no con un número provisional, para vacas provisionales (Fernando lee la caravana física en el corral); las caravanas nuevas de Martha deben quedar **por debajo de 800** para no chocar con la banda provisional (800–999).
+
+**`Load` corrió en producción el mismo día (2026-07-23).** 168 animales cargados
+(102 activas), 33 chequeos, 1.479 filas de `hato_chequeo_vacas`, 2.005 eventos, 23
+con número provisional. El corpus real destapó dos bugs más allá de los ya
+conocidos — pérdida silenciosa de historial para los animales en colisión, y filas
+físicas duplicadas dentro de una misma lectura (un intento abortado a mitad, con
+rollback limpio antes de reintentar) — ambos corregidos en `load.ts` la misma
+sesión. Pendiente de revisión con Martha: 102 activas es más que los ~45 animales
+que se estima hay hoy en el hato real (el heurístico de cierre presunto D5 no
+necesariamente capturó cada baja). Detalle completo: CLAUDE.md §"Identity model &
+renumeración (2026-07-23)" y `docs/hato/runbook-load-historico.md`.
+
 **S4 — Frontend: Núcleo del módulo**
 - Objetivo: reemplazar los `ComingSoon` de producción por las vistas reales bajo `/hato-lechero`: `HatoDashboard` (Tablero), `AnimalesList` (Hato) + `HojaDeVida` (timeline con todos los servicios V7 + genealogía madre+padre V8 + `GenealogiaArbol`/`EventoTimeline`), `ChequeosList` + **`SubirChequeoExcel` (B0/V10, el flujo recomendado)** y `ChequeoCapturaGrid` (manual). Sigue el sistema de diseño del mock (§7.6), sin editar globales.
 - Insumos: esquema de S1, motor de S2 (preview de normalización), datos + endpoint de subida de S3.

@@ -59,7 +59,11 @@ function TablaAnimales({ animales }: { animales: AnimalHatoDerivado[] }) {
               >
                 <td className="px-3 py-2.5 whitespace-nowrap font-medium">
                   <Link to={`/hato-lechero/hato/${animal.animalId}`} className="hover:text-primary">
-                    {animal.numero != null ? `#${animal.numero}` : '—'}
+                    {animal.numero != null ? (
+                      `#${animal.numero}`
+                    ) : (
+                      <span className="text-gray-400 italic">sin caravana</span>
+                    )}
                   </Link>
                 </td>
                 <td className="px-3 py-2.5 whitespace-nowrap">

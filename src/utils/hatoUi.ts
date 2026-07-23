@@ -25,6 +25,10 @@ import type { CategoriaHato } from '@/utils/hatoCategorias';
 export interface ChipEstilo {
   label: string;
   className: string;
+  /** Tooltip opcional (`title` nativo) -- solo para chips cuya etiqueta
+   * corta necesita una aclaración (ej. "N.º provisional" no es
+   * autoexplicativo). La mayoría de los chips no lo necesitan. */
+  title?: string;
 }
 
 const VERDE = 'bg-green-50 text-green-700 border-green-200';
@@ -82,9 +86,15 @@ export function chipProximaAReemplazo(): ChipEstilo {
   return { label: 'Próxima a reemplazo', className: AMBAR };
 }
 
-/** Chip para una chapeta provisional (900-999, `esNumeroProvisional`). */
+/** Chip para una chapeta provisional (900-999, `esNumeroProvisional`). Migración
+ * 066 (`numero` es atributo mutable, no identidad): el tooltip aclara que no
+ * es una caravana física para que nadie salga a buscarla en el potrero. */
 export function chipNumeroProvisional(): ChipEstilo {
-  return { label: 'N.º provisional', className: AMBAR };
+  return {
+    label: 'provisional',
+    className: AMBAR,
+    title: 'Número de trabajo, pendiente de retag — no es la caravana física',
+  };
 }
 
 /** Chip para la clasificación de una fila del diff de chequeo (B0/V10). */
