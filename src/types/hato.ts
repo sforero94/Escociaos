@@ -1,10 +1,14 @@
 // ARCHIVO: types/hato.ts
-// DESCRIPCIÓN: Formas de fila (Supabase) del módulo Hato Lechero (S4,
-// frontend). Espejo 1:1 de las columnas creadas en las migraciones
-// 053-062 (docs/plan_hato_lechero_module.md §7.1) -- NO redefine tipos de
-// negocio que ya viven en `src/utils/calculosHato.ts` (HatoConfig,
+// DESCRIPCIÓN: Formas de fila (Supabase) del módulo Hato Lechero. Espejo
+// 1:1 de las columnas creadas en las migraciones 053-062
+// (docs/plan_hato_lechero_module.md §7.1) -- NO redefine tipos de negocio
+// que ya viven en `src/utils/calculosHato.ts` (HatoConfig,
 // EstadoReproductivo, TipoEventoHato, TipoEstado, etc.), solo los reexporta
 // donde hace falta para que los componentes tengan un único punto de import.
+//
+// Secciones: fichas/chequeos/eventos (S4) y producción (S5 — pesaje
+// semanal + quincenal). Otras sesiones (S6, S10) añaden aquí sus propios
+// tipos según lo necesiten.
 
 import type { TipoEventoHato, CriaDestino, TipoEstado } from '@/utils/calculosHato';
 
@@ -125,4 +129,62 @@ export interface EstadoActualHatoViewRow {
   ultima_confirmacion_prenez_fecha: string | null;
   ultimo_evento_fecha: string | null;
   ultimo_estado_chequeo: TipoEstado | null;
+}
+
+// ============================================================================
+// Producción (S5 — V2/V3/V4)
+// ============================================================================
+
+/** Vaca activa candidata a la grilla de pesaje semanal (D1/V2). Solo el
+ * subconjunto de `hato_animales` que necesita esa grilla. */
+export interface HatoVacaActiva {
+  id: string;
+  numero: number | null;
+  nombre: string | null;
+}
+
+/** Fila de `hato_pesajes_leche` (migración 054, corregida por 061:
+ * `litros_total` es el dato canónico -- una sola lectura por vaca por
+ * jornada de pesaje, am+pm ya sumados). Ausencia de fila = "no pesada",
+ * nunca 0 (regla D del plan §6). */
+export interface HatoPesajeLeche {
+  id: string;
+  animal_id: string;
+  fecha: string;
+  litros_total: number;
+  litros_am: number | null;
+  litros_pm: number | null;
+  fuente: string | null;
+}
+
+/** Fila de `hato_produccion_quincenal` (migración 054): litros al camión
+ * por quincena (V3/D2) — dato distinto y sin atribución cruzada con el
+ * pesaje semanal por vaca (decisión del dueño, segunda ronda 2026-07-22:
+ * "litros al camión mide producción del hato (venta); el pesaje por vaca
+ * mide productividad individual"). */
+export interface HatoProduccionQuincenal {
+  id: string;
+  anio: number;
+  mes: number;
+  quincena: 1 | 2;
+  fecha_inicio: string | null;
+  fecha_fin: string | null;
+  litros_total: number;
+  litros_pomar_confirmado: number | null;
+  num_vacas_ordeno: number | null;
+  notas: string | null;
+  fuente: string | null;
+}
+
+/** Payload editable del formulario de producción quincenal — subconjunto
+ * de `HatoProduccionQuincenal` sin campos derivados/de sistema (`id`,
+ * `fuente`). */
+export interface ProduccionQuincenalFormData {
+  anio: number;
+  mes: number;
+  quincena: 1 | 2;
+  litros_total: number | undefined;
+  litros_pomar_confirmado: number | undefined;
+  num_vacas_ordeno: number | undefined;
+  notas: string;
 }
