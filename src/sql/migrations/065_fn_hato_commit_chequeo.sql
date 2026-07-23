@@ -171,7 +171,10 @@ BEGIN
   FOR v_evento IN SELECT value FROM jsonb_array_elements(COALESCE(payload -> 'eventos', '[]'::jsonb))
   LOOP
     v_vaca_index := (v_evento ->> 'vaca_index')::INTEGER;
-    IF v_vaca_index IS NULL OR v_vaca_index < 0 OR v_vaca_index >= array_length(v_vaca_ids, 1) THEN
+    -- COALESCE obligatorio: array_length de un arreglo vacío es NULL, y
+    -- "0 >= NULL" es NULL (no TRUE), lo que saltaría la excepción en
+    -- silencio si llegara un payload con eventos pero sin vacas.
+    IF v_vaca_index IS NULL OR v_vaca_index < 0 OR v_vaca_index >= COALESCE(array_length(v_vaca_ids, 1), 0) THEN
       RAISE EXCEPTION 'fn_hato_commit_chequeo: evento con vaca_index % fuera de rango (vacas escritas: %)', v_vaca_index, COALESCE(array_length(v_vaca_ids, 1), 0);
     END IF;
 
@@ -206,7 +209,14 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION fn_hato_commit_chequeo(JSONB, UUID) TO authenticated;
+-- El ÚNICO caller es el edge function hato-chequeo-commit.ts, que usa el
+-- cliente service_role (ya verificó rol Administrador/Gerencia en el borde).
+-- La función NO tiene chequeo de rol interno, así que exponerla a
+-- `authenticated` permitiría a cualquier usuario logueado escribir
+-- chequeos/eventos vía PostgREST saltándose la RLS -- se revoca de todos y
+-- se concede solo a service_role.
+REVOKE EXECUTE ON FUNCTION fn_hato_commit_chequeo(JSONB, UUID) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION fn_hato_commit_chequeo(JSONB, UUID) TO service_role;
 
 COMMENT ON FUNCTION fn_hato_commit_chequeo(JSONB, UUID) IS
   'SECURITY DEFINER: commit path del chequeo B0/V10 (paso "Aprobar"). Recibe '
