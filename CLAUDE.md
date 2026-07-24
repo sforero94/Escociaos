@@ -12,39 +12,15 @@ The system manages: inventory, phytosanitary applications (fumigation/fertilizat
 
 ## Tech Stack
 
-| Layer         | Technology                                                       |
-|---------------|------------------------------------------------------------------|
-| Language      | TypeScript 5.9 (strict mode)                                    |
-| Framework     | React 18.3 (functional components, hooks only)                  |
-| Routing       | React Router DOM 7.10                                            |
-| Build         | Vite 6.3 with SWC plugin                                        |
-| Styling       | Tailwind CSS 4.1 (CSS-first config via `globals.css`; no separate `tailwind.config.js`) |
-| Components    | Radix UI (25+ headless primitives) + custom `src/components/ui` |
-| Icons         | Lucide React                                                     |
-| Charts        | Recharts                                                         |
-| Backend       | Supabase (PostgreSQL + Auth + Storage + Edge Functions)          |
-| PDF           | jsPDF + jspdf-autotable + html2canvas                           |
-| CSV/Excel     | PapaParse (CSV), xlsx (Excel)                                   |
-| Toast/Notif   | Sonner                                                           |
-| Testing       | Vitest 4.0                                                       |
-| Linting       | ESLint 9 + typescript-eslint + eslint-plugin-react-hooks        |
-| Deployment    | Vercel                                                           |
+See `package.json` for the full dependency list. The three facts it does **not** tell you:
 
----
+- **Tailwind CSS 4.1 does not run at build time.** It is not a dependency and there is no Vite plugin — `src/index.css` is a checked-in pre-compiled build. See the frozen-Tailwind caution zone below.
+- There is no `tailwind.config.js`; theme customization lives in `src/styles/globals.css`.
+- TypeScript runs in strict mode with `@/*` aliased to `./src/*`.
 
 ## Quick Reference Commands
 
-```bash
-npm install          # Install dependencies
-npm run dev          # Start dev server on http://localhost:3000
-npm run build        # Production build → /build directory
-npm run typecheck    # TypeScript check (tsc --noEmit)
-npm run lint         # ESLint check on src/
-npm test             # Run tests once (vitest run)
-npm run test:watch   # Run tests in watch mode
-```
-
----
+Standard npm scripts — see `package.json`. `npm run dev` serves on port 3000; `npm run build` outputs to `/build` (not `dist`).
 
 ## Environment Variables
 
@@ -61,133 +37,12 @@ These are consumed in `src/utils/supabase/client.ts` via `import.meta.env`. The 
 
 ## Project Structure
 
-```
-/
-├── src/
-│   ├── main.tsx                          # Entry point
-│   ├── App.tsx                           # Root component, routing setup
-│   ├── index.css                         # Tailwind compiled output (do not hand-edit)
-│   │
-│   ├── components/
-│   │   ├── Layout.tsx                    # Sidebar + navigation shell
-│   │   ├── Login.tsx                     # Auth login page
-│   │   ├── Dashboard.tsx                 # Main overview dashboard
-│   │   ├── aplicaciones/                 # Phytosanitary applications module
-│   │   ├── inventory/                    # Inventory & purchases module
-│   │   │   ├── InventoryNav.tsx          # Inventory section nav bar
-│   │   │   ├── InventorySubNav.tsx       # Inventory sub-navigation
-│   │   │   └── VerificacionesNav.tsx     # Verificaciones sub-navigation
-│   │   ├── monitoreo/                    # Pest/disease monitoring module
-│   │   │   ├── components/               # Monitoring sub-components
-│   │   │   ├── MonitoreoSubNav.tsx       # Monitoring sub-navigation
-│   │   │   ├── DashboardMonitoreoV3.tsx  # Main dashboard: Snapshot + Mapa de Calor/Tendencias/Priorización tabs
-│   │   │   ├── MapaCalorIncidencias.tsx  # Incidence heat map (grouped by ronda)
-│   │   │   └── PriorizacionScoutingView.tsx # Scouting priority ranking
-│   │   ├── clima/                         # Weather monitoring module
-│   │   │   ├── ClimaDashboard.tsx        # Vista Rápida: KPI cards + period summary
-│   │   │   ├── ClimaHistorico.tsx        # Historical view: 2x2 chart grid + CSV export
-│   │   │   ├── ClimaSubNav.tsx           # Tab navigation
-│   │   │   └── components/               # KPI cards, period table, 4 chart components, wind arrow
-│   │   ├── labores/                      # Task/labor management (Kanban)
-│   │   │   ├── ReportesView.tsx          # Labor reports view
-│   │   │   └── kanban-types.ts           # Kanban TypeScript types
-│   │   ├── empleados/                    # Personnel & contractors
-│   │   │   └── EmpleadosSubNav.tsx       # Employees sub-navigation
-│   │   ├── finanzas/                     # Finance (expenses, income, reports)
-│   │   │   ├── components/               # Finance sub-components
-│   │   │   ├── dashboard/                # Per-negocio dashboards
-│   │   │   ├── presupuesto/              # Budget vs actual
-│   │   │   ├── reportes/                 # P&G + Flujo de Caja tables & controls
-│   │   │   └── hooks/                    # Finance-specific hooks
-│   │   ├── produccion/                   # Production tracking & charts
-│   │   │   ├── components/               # Production sub-components
-│   │   │   └── hooks/                    # Production-specific hooks
-│   │   ├── reportes/                     # Weekly report wizard & history
-│   │   ├── configuracion/                # System configuration (lots, users)
-│   │   ├── auth/                         # ProtectedRoute, RoleGuard
-│   │   ├── dashboard/                    # Dashboard sub-components (AlertList — "Pulso de Gestión" cross-module alerts)
-│   │   ├── shared/                       # Reusable components (dialogs, uploaders, FormDraftBanner)
-│   │   ├── ui/                           # Radix UI wrappers (button, dialog, etc.)
-│   │   └── figma/                        # Image fallback component
-│   │
-│   ├── contexts/
-│   │   ├── AuthContext.tsx               # Auth state (user, profile, session, roles)
-│   │   └── SafeModeContext.tsx           # Safe-mode toggle (localStorage-persisted)
-│   │
-│   ├── hooks/
-│   │   ├── useFormPersistence.ts         # Form state persistence hook (drop-in useState replacement)
-│   │   ├── useFormDraft.ts              # Snapshot-based draft persistence (for fragmented-state forms)
-│   │   └── useReporteAplicacion.ts       # Application report data hook
-│   │
-│   ├── types/                            # TypeScript type definitions per module
-│   │   ├── aplicaciones.ts
-│   │   ├── finanzas.ts
-│   │   ├── monitoreo.ts
-│   │   ├── produccion.ts
-│   │   ├── reporteSemanal.ts
-│   │   ├── reportesFinancieros.ts
-│   │   └── shared.ts
-│   │
-│   ├── utils/                            # Business logic & helper functions
-│   │   ├── supabase/
-│   │   │   ├── client.ts                 # Supabase singleton client + auth helpers
-│   │   │   └── info.tsx                  # Supabase connection info component
-│   │   ├── aplicacionesReales.ts        # Applications with real-data handling
-│   │   ├── calculosAplicaciones.ts       # Application dose/cost calculations
-│   │   ├── calculosMonitoreo.ts          # Monitoring metric calculations
-│   │   ├── calculosReporteAplicacion.ts  # Application report calculations
-│   │   ├── csvMonitoreo.ts              # CSV parsing & validation for monitoring
-│   │   ├── dailyMovementUtils.ts        # Daily movement helpers
-│   │   ├── fechas.ts                    # Date formatting utilities
-│   │   ├── format.ts                    # Number/currency formatting
-│   │   ├── fetchDatosReporteSemanal.ts  # Weekly report data aggregation
-│   │   ├── fetchDatosReporteCierre.ts   # Closure report data
-│   │   ├── reporteSemanalService.ts     # Report generation service
-│   │   ├── generarPDF*.ts              # PDF generators (reports, P&L, shopping lists)
-│   │   ├── insightsAutomaticos.ts       # Automatic insight generation
-│   │   ├── laborCosts.ts               # Labor cost calculations
-│   │   ├── calculosPyG.ts              # P&G engine (pure) — see Financial Reports
-│   │   ├── calculosFlujoCaja.ts        # Cash-flow engine (pure)
-│   │   ├── costoVentaGanado.ts         # Cattle COGS, moving weighted average per head
-│   │   ├── periodosReporte.ts          # Cumulative quarters & cosecha periods
-│   │   ├── clasificacionCostos.ts      # Direct vs indirect cost resolution
-│   │   ├── calculosHato.ts             # Hato Lechero pure engine (S2) — see below
-│   │   └── validation.ts               # Data validation utilities
-│   │
-│   ├── sql/                             # SQL scripts & migrations
-│   │   ├── migrations/                  # Sequential numbered migrations (001–064)
-│   │   └── *.sql                        # Standalone SQL scripts
-│   │
-│   ├── styles/
-│   │   └── globals.css                  # Theme variables, font-face, Tailwind theme
-│   │
-│   ├── supabase/
-│   │   └── functions/server/            # Edge function source (Hono framework)
-│   │
-│   ├── guidelines/
-│   │   └── Guidelines.md                # Design guidelines reference
-│   ├── assets/                          # Static images
-│   └── __tests__/                       # Vitest unit tests
-│
-├── supabase/                            # Supabase project config
-│   ├── config.toml
-│   └── functions/
-│
-├── docs/                                # Extended documentation
-│   ├── README.md                        # Documentation index and canonical references
-│   ├── supabase_tablas.md               # DB schema reference (validate against migrations)
-│   └── archive/                         # Completed plans, resolved incidents, legacy guides
-│
-├── package.json
-├── tsconfig.json                        # Strict TS config, path alias @/* → ./src/*
-├── vite.config.ts                       # Vite config with extensive aliases
-├── eslint.config.js
-├── vercel.json                          # Vercel deployment config
-├── BUG_REPORT.md                        # Known issues tracker
-└── index.html                           # SPA entry point
-```
+Run `ls`/`find` over `src/` — the layout is conventional and self-describing. Non-obvious placement rules that the tree does not show:
 
----
+- Pure business logic lives in `src/utils/calculos*.ts` and `fetch*.ts`; components must not re-derive it inline.
+- Types are per-module in `src/types/`; SQL migrations in `src/sql/migrations/`.
+- Edge-function source is duplicated in `src/supabase/functions/server/` and `supabase/functions/make-server-1ccce916/` — both must stay in sync.
+- Import-pipeline logic lives in `src/utils/importHato/` (typechecked), never in `scripts/` (not typechecked, not linted).
 
 ## Architecture & Key Patterns
 
@@ -247,62 +102,7 @@ import { getSupabase } from '@/utils/supabase/client';
 
 ## Routing Map
 
-All routes except `/login` are protected and require authentication.
-
-| Route                              | Component                    | Module         |
-|------------------------------------|------------------------------|----------------|
-| `/`                                | Dashboard                    | Overview       |
-| `/inventario`                      | InventoryList                | Inventory      |
-| `/inventario/dashboard`            | MovementsDashboard           | Inventory      |
-| `/inventario/compras`              | ComprasIntegrado             | Inventory      |
-| `/inventario/producto/:id`         | ProductDetail                | Inventory      |
-| `/inventario/movimientos`          | InventoryMovements           | Inventory      |
-| `/inventario/importar`             | ImportarProductosPage        | Inventory      |
-| `/inventario/verificaciones`       | VerificacionesList           | Inventory      |
-| `/inventario/verificaciones/nueva` | NuevaVerificacion            | Inventory      |
-| `/inventario/verificaciones/conteo/:id` | ConteoFisico            | Inventory      |
-| `/aplicaciones`                    | AplicacionesList             | Applications   |
-| `/aplicaciones/calculadora`        | CalculadoraAplicaciones      | Applications   |
-| `/aplicaciones/:id/movimientos`    | DailyMovementsDashboard      | Applications   |
-| `/aplicaciones/:id/cierre`         | CierreAplicacion             | Applications   |
-| `/aplicaciones/:id/reporte`        | ReporteAplicacion            | Applications   |
-| `/monitoreo`                       | DashboardMonitoreoV3         | Monitoring     |
-| `/monitoreo/registros`             | RegistrosMonitoreo           | Monitoring     |
-| `/monitoreo/carga-masiva`          | CargaMasiva                  | Monitoring     |
-| `/monitoreo/catalogo`              | CatalogoPlagas               | Monitoring     |
-| `/labores`                         | LaboresLayout → Labores      | Labor          |
-| `/labores?vista=reportes`          | LaboresLayout → Labores      | Labor          |
-| `/labores/empleados`               | Personal                     | Labor          |
-| `/labores/contratistas`            | Contratistas                 | Labor          |
-| `/empleados`                       | → redirects to `/labores/empleados`      | Legacy |
-| `/empleados/contratistas`          | → redirects to `/labores/contratistas`   | Legacy |
-| `/hato-lechero`                    | HatoDashboard                 | Hato Lechero   |
-| `/hato-lechero/produccion`         | HatoProduccionView            | Hato Lechero   |
-| `/hato-lechero/hato`               | AnimalesList                  | Hato Lechero   |
-| `/hato-lechero/hato/:id`           | HojaDeVida                    | Hato Lechero   |
-| `/hato-lechero/chequeos`           | ChequeosList                  | Hato Lechero   |
-| `/hato-lechero/chequeos/:id`       | ChequeoDetalle                | Hato Lechero   |
-| `/hato-lechero/alertas`            | AlertasView                   | Hato Lechero   |
-| `/hato-lechero/pajillas`           | PajillasView                  | Hato Lechero   |
-| `/finanzas`                        | FinanzasDashboard            | Finance        |
-| `/finanzas/gastos`                 | GastosView                   | Finance        |
-| `/finanzas/ingresos`               | IngresosView                 | Finance        |
-| `/finanzas/reportes`               | ReportesView                 | Finance        |
-| `/finanzas/presupuesto`            | PresupuestoView              | Finance        |
-| `/finanzas/configuracion`          | ConfiguracionFinanzas        | Finance        |
-| `/reportes`                        | ReportesDashboard            | Reports        |
-| `/reportes/generar`                | ReporteSemanalWizard         | Reports        |
-| `/produccion`                      | ProduccionDashboard          | Production     |
-| `/ganado`                          | GanadoDashboard              | Cattle         |
-| `/ganado/movimientos`              | GanadoMovimientos            | Cattle         |
-| `/clima`                           | ClimaDashboard               | Climate        |
-| `/clima/historico`                 | ClimaHistorico               | Climate        |
-| `/configuracion`                   | ConfiguracionDashboard       | Settings       |
-| `/ventas`                          | ComingSoon                   | Not implemented|
-| `/lotes`                           | ComingSoon                   | Not implemented|
-| `/login`                           | Login                        | Auth (public)  |
-
----
+Routes are defined in [`src/App.tsx`](src/App.tsx) (`LayoutRoutes`). All routes except `/login` are protected. Read that file rather than relying on a transcribed table.
 
 ## Module Access Control (per-user)
 
@@ -403,120 +203,12 @@ Sequential SQL migrations live in `src/sql/migrations/` (001–064). See `src/sq
 - **066**: `hato_numero_atributo_mutable` — `numero` deja de ser identidad permanente y pasa a **"chapeta actual" (atributo mutable)**. Owner decision 2026-07-23: the duplicate historical chapetas are **bought-in cows that arrived wearing a tag already in use** (not data errors), and Martha will re-tag the whole herd — so `numero` is both non-unique today and about to change wholesale. Identity was always `hato_animales.id`; every FK (chequeos, eventos, pesajes, madre/padre) hangs off `id`, never `numero`. Drops the inline `UNIQUE (numero)` (`hato_animales_numero_key`, from 053) and replaces it with a **partial** unique index `hato_animales_numero_activa_unique ON hato_animales(numero) WHERE estado='activa' AND numero IS NOT NULL` — no two *living* cows share a tag, but a sold/dead animal's tag can be recycled and provisional working numbers (900–999) coexist. Applied to production 2026-07-23 via the authenticated Supabase MCP (verified: constraint dropped, partial index present; table was empty). See the "Identity model & renumeración" note under Hato Lechero.
 - **068**: `clima_lluvia_confianza` — fixes the recurring duplicate-daily-rainfall bug (e.g. 2026-07-20/21 both showing 15.75mm; ≥22 occurrences since 2026-03). Root cause: Ecowitt's `rainfall_piezo.daily` value is a cumulative counter that is supposed to reset at local midnight; when the sensor fails to reset, the API keeps serving the previous day's frozen total, and the old rollup (migration 036, blind `MAX(lluvia_diaria_mm)`) wrote it in as if fresh. Adds `clima_lecturas.lluvia_diaria_actualizada_en` (Ecowitt's own per-field last-updated time, captured in `clima.tsx`'s `parseEcowittObservation`) and `clima_resumen_diario.lluvia_confianza` (`ok` | `contador_congelado` | `sin_time_piezo`). Replaces the inline cron SQL with `fn_clima_rollup_diario()`, which trusts a day's rain total only if (a) the freshest reading's counter was actually updated within that Bogotá calendar day, and (b) the total isn't a suspicious exact duplicate of the prior day's — either check failing marks the day `contador_congelado` with `lluvia_total_mm = NULL` ("sin dato", never a fabricated duplicate — same rule as monitoreo/hato). Reschedules the existing `clima-daily-rollup` cron job (same name, `cron.schedule` upserts in place) to call the new function, and retroactively flags historical rows matching the confirmed duplicate signature (metadata only — `lluvia_total_mm` is left intact for audit; the frontend nulls it out for display via `lluvia_confianza`). The same freshness gate was independently applied client-side in `calculosClima.ts` (live 24h view), Esco's `execClimateData` tool in `chat.tsx` (a 4th vulnerable site found during this fix, querying `clima_lecturas` directly), and the weekly-report live-backfill added by PR #63 (`fetchDatosReporteSemanal.ts`'s `fetchClimaLecturasFaltantes`) — all four previously did an unguarded `MAX()`/`Math.max()` over the raw cumulative counter. **Not yet applied to production** — this session had no live Supabase connection; apply the migration and redeploy `make-server-1ccce916` before relying on the fix.
 
-### Hato Lechero Module (`/hato-lechero`, plan `docs/plan_hato_lechero_module.md`)
+### Hato Lechero Module (`/hato-lechero`)
 
-Individual-animal dairy herd registry (Subachoque, ~45 cows), distinct from the head-count `gan_*` cattle module — different domain, never copied into `gan_inventario`. **Three-layer data design** (mirrors `gan_movimientos → gan_inventario` and `rondas_monitoreo → observaciones`): raw layer (`hato_chequeo_vacas.*_raw`) preserves the planilla verbatim; event layer (`hato_eventos`) is the append-only source of truth; derived layer is the SQL view `v_hato_estado_actual` **plus** the pure TS engine `calculosHato.ts` (S2) — the view exposes facts only, all raza-dependent date math (SECAR = parto_probable − meses_secado(raza)) and every threshold live in the engine reading `hato_config`, **never as constants in code or in the view**. Absence of a row means "not checked", never 0 — same rule as monitoreo. RLS: 044 pattern; `hato_config` write Gerencia-only; `hato_alertas`/`hato_alertas_config` are written by the cron/bot via service-role (RLS-bypass, no extra policy). Module visibility gated by `ModuleGuard hato_lechero` (per-user `usuarios.modulos_acceso`) — navigation only, table RLS is the real boundary. As of S6/S9/S10 (2026-07-23) all six frontend routes are live — no `ComingSoon` remains in the module.
+Full contract lives in [`src/components/hato/CLAUDE.md`](src/components/hato/CLAUDE.md) — read it before touching anything in this module. Two rules that apply from **outside** that directory, so they stay here:
 
-**Pure engine (S2)** — `src/utils/calculosHato.ts`, hand-mirrored to `src/supabase/functions/server/calculos-hato.ts` **and** `supabase/functions/make-server-1ccce916/calculos-hato.ts`. Zero imports, fully deterministic (every function that depends on "today" takes `fechaReferencia`). `src/__tests__/calculosHatoParidad.test.ts` enforces the copies are **byte-identical below the `// Tipos compartidos` marker** *and* behaviourally equal on shared fixtures — stricter than the `priorizacionScouting` parity test, which it can afford because the engine has no imports. **Change the logic in all three files in the same commit, and never hand-edit a copy to silence a parity failure — regenerate it.**
-
-Three rules the engine encodes, each grounded in a sweep of all 45 chequeo sheets (2019–2026), not in the plan's assumptions:
-- **`TP` is never read.** It is a frozen `TODAY()` formula: `F_Servicio + TP×30.44` converges on the workbook's last-save date regardless of the sheet's real year. Months of pregnancy are derived from `F Servicio` + chequeo date instead.
-- **`SECAR` is derived in one step** from `F Servicio` (`meses_gestacion_default − meses_secado_por_raza[raza]`), not by chaining off `parto_probable` — chaining double-clamps when the service date lands on day 29–31 (99.4% vs 94.6% match across 1.156 rows).
-- **`#VALUE!` is derived, not noise.** A multi-date `F Servicio` cell makes Excel's TP/SECAR/PP formulas cascade to `#VALUE!`; the engine recovers the dates and re-derives the values. An uninterpretable cell **never** drops a row — it lands in `issues` with the raw value intact, same contract as monitoreo's "missing row ≠ 0".
-
-All thresholds come from `hato_config` (migration 058) via the `HatoConfig` parameter — **no business constant lives in the engine**. `detectarColisionesChapeta` reports duplicate chapetas but never breaks a tie: at least 9 numbers are shared by concurrently-active animals (incl. `#162`, `#175` in the July 2026 sheet). These are **real bought-in animals sharing a tag, not data errors** (owner, 2026-07-23) — migration 066 demoted `numero` from a permanent `UNIQUE` identity to a mutable "chapeta actual", so the collisions no longer block `Load`: each colliding animal loads under a provisional working number (900–999, `overridesChapeta.ts`) and is corrected via the edit UI once Martha re-tags. (Identity is `hato_animales.id`, not `numero` — see the "Identity model & renumeración" note below.)
-
-**Historical import pipeline (S3)** — `Extract → Normalize → Resolve → [HUMAN CHECKPOINT] → Load → Verify`, plan §7.4. Split by layer, not by stage:
-
-| Layer | Path | Why |
-|---|---|---|
-| Pure logic | `src/utils/importHato/*.ts` | `tsconfig.json` is `"include": ["src"]` and `npm run lint` targets `src/` — logic in `scripts/` gets no typecheck, no lint, no tests |
-| Tests | `src/__tests__/importHato*.test.ts` | repo pattern |
-| I/O runners | `scripts/import-hato/{extract,resolve,load}.ts` | only layer that opens `.xlsx` or touches the DB |
-
-Run it (`node_modules` may need symlinking from the main repo in a worktree):
-```bash
-node --import ./scripts/import-hato/register-alias.mjs scripts/import-hato/extract.ts
-node --import ./scripts/import-hato/register-alias.mjs scripts/import-hato/resolve.ts
-```
-Node 24 runs `.ts` natively; `register-alias.mjs` only teaches it the `@/` alias and extensionless relative imports (no new dependency). Output lands in `scripts/import-hato/out/` — **gitignored, along with `*.xlsx`: both hold real herd data and must never be committed.**
-
-Contracts that matter when editing:
-- **Reuse `calculosHato.ts` for cell parsing.** S3 solves the **grid** level (2D structure: column offsets, embedded sub-tables, phantom rows); the cell level already exists and is parity-protected. Never write a second cell parser.
-- **Two names in the same sheet is two animals, never a rename.** Concurrency in *any* sheet proves it, regardless of how old — `#43` CUÑA/MONTAÑA coexist in 25 sheets over 7 years. Gating this on "still present in the latest chequeo" silently merged 9 real animals; see `docs/hato/s3-verificacion-independiente.md` §3.10.
-- **Dedupe falls back to a content signature when the sheet has no resolvable date** — `CHEQUEO_MARZO_2019` has no day in its title, so date-only grouping loaded March 2019 twice.
-- **Chapeta overrides live in `src/utils/importHato/overridesChapeta.ts`**, numbered **999 downwards**. The reserved range is **800–999** (highest real chapeta in the corpus is 442), split in two: **900–999** = collision desempates, **800–899** = inferred sales / ambiguous identity (`ventasInferidas.ts`). All are **provisional working numbers, not physical ear tags** — `esNumeroProvisional()` exists so the UI can mark them. Editing those files and re-running is the whole update path; `Load` is idempotent on `origen='importacion_historica'`.
-- **A name that looks like a typo still gets its own number.** Merging is discarding, and the code never discards — Martha merges.
-- **Owner decisions, second round (2026-07-22, plan §8 "Decisiones del dueño — segunda ronda")** — the ones that live in code: `INOOK`/`ok` in the Toro column is **not a bull**, it means "the cow is ok" (`rech` = recheck; the tell is no service date) — it would have been the most frequent bull in the catalog (110 rows). Breed-as-toro-name is **allowed** (not all bulls have names) — `parseToro.ts` canonicalizes `hol/hols/h t/HOLST/toro holst/hins`→Holstein, `jers/jersey/jer/TJ`→Jersey, `nor`→Normando, `gir`→Gyr; real bulls: Nitro, Steem, **Fabace** (=`FABA`, jersey; same bull as TERNERAS' `fabace`; `yaguen` is also a bull name, jersey assumed). `gem+` = **twin birth** (parto with `datos.gemelar`), `Mv` = Martha's personal mark, ignored. Presumed exits use a **>365-days-absent** rule, not "absent ≥2 chequeos". `CHISPA`(#899)/`DACOTA`(#129)/`INDIRA`(#983) marked vendidas from the comment row in CHEQUEO JULIO 2026.
-- **The S4 herd view must show three categories: terneras, hato (milking), horro (dry cows due to calve)** — owner requirement from the same round. **Superseded by the third round (2026-07-22): FOUR categories — terneras and novillas split** (see the S4 note below).
-- Running the pipeline on the real files is **part of** verification, not a victory lap: both defects above passed 146 green unit tests.
-
-**B0/V10 endpoint — `POST /make-server-1ccce916/hato/chequeo/preview`** (pairs with S4's `SubirChequeoExcel`; plan §7.4 "Import recurrente por chequeo"). Martha uploads one chequeo's `.xlsx` (D-4: it is the *only* entry path, no internet at the farm); the endpoint reuses the same Extract+Normalize engine as the historical pipeline, matches each row to `hato_animales` by `numero` among **active** animals (trivial identity — the herd is already populated; migration 066 made `numero` unique only within `estado='activa'`, so the preview query filters `.eq('estado','activa')` to keep the match Map unambiguous), and returns a **diff for approval**. It **never commits** — no `INSERT`/`UPDATE` runs from this endpoint at all.
-- Request: `multipart/form-data`, one field `archivo` (the `.xlsx`, ≤20MB). Auth: `Authorization: Bearer <jwt>`, role must be Administrador or Gerencia (same set as the module's write RLS).
-- Response: `{ success, archivo, generadoEn, hojas, diffChequeos: { filas, resumen, colisionesEnHoja }, terneras, subtablas }`. `diffChequeos.filas[]` classifies each chequeo row `nuevo | sin_cambio | cambio | no_reconocido`, with per-field `{ campo, anterior, nuevo }` for `cambio`. TERNERAS/sub-tabla rows are parsed and returned but **not diffed** — different domain (births, not a reproductive-state field to compare against a previous chequeo), out of B0's scope.
-- Diff logic is pure and tested: `src/utils/importHato/diffChequeo.ts` (`construirDiffChequeo`, `seleccionarUltimoChequeoPorAnimal`) — `src/__tests__/importHatoDiffChequeo.test.ts`. A row whose `numero` (or whose matched animal's `numero`) falls in the 900–999 provisional range (`esNumeroProvisional()`) is always `no_reconocido`, never shown as a real chapeta. Two rows in the SAME upload sharing a `numero` with different names (`detectarColisionesChapeta`) are both `no_reconocido` — nothing is adjudicated automatically. `TipoEstado`'s `'vacio'` sentinel and the DB's `NULL` are normalized to the same value before diffing, so an empty ESTADO cell never reads as a false "change".
-- `HatoConfig` is read live from `hato_config` (`hato-config-desde-tabla.ts`, `construirHatoConfigDesdeFilas` — tested in `hatoConfigDesdeTabla.test.ts`) and throws an explicit error naming every missing/mistyped key — unlike the offline runner (`extract.ts`), the endpoint has a Supabase session, so there is no excuse for a hardcoded fallback.
-- Handler (`hato-chequeo-preview.ts`, I/O only) reads the workbook with the same two non-negotiable rules as `extract.ts`: `cellDates:false` and a cell-by-cell grid (never `sheet_to_json`, which turns `#VALUE!` into the numeric code 15).
-- **Deno-side mirror of the Extract+Normalize pipeline** — `src/utils/importHato/{tipos,celdas,grilla,parseToro,chequeos,terneras,dedupe,normalizar,overridesChapeta,diffChequeo}.ts` are mirrored (not hand-copied) into `src/supabase/functions/server/importHato/` and `supabase/functions/make-server-1ccce916/importHato/` by `docs/hato/regenerar-copias-importhato.py`. Unlike `calculosHato.ts` (zero imports, byte-identical copy via `regenerar-copias-servidor.py`), these modules import each other and `@/utils/calculosHato`, so the generator rewrites import specifiers deterministically (`@/utils/calculosHato` → `../calculos-hato.ts`, `./xxx` → `./xxx.ts` — Deno needs explicit extensions) and leaves everything else untouched. Run `python3 docs/hato/regenerar-copias-importhato.py` after editing any original; `--check` regenerates in memory and diffs against the tree without writing (exit 1 on drift) — `src/__tests__/importHatoParidadServidor.test.ts` runs it in `--check` mode plus a behavioral parity check (same fixtures through both `normalizarHojas` and `construirDiffChequeo`). **Never hand-edit a file under either `importHato/` copy** — same rule as `calculos-hato.ts`.
-
-`Load` **ran successfully in production 2026-07-23** (see the "Identity model & renumeración" note below for the full account) — this endpoint (preview-only, never commits) is unaffected either way.
-
-**S4 — Frontend: núcleo del módulo (2026-07-22).** Replaced the `ComingSoon` placeholders at `/hato-lechero`, `/hato-lechero/hato(/:id)` and `/hato-lechero/chequeos` with real views. `/hato-lechero/produccion` (S5) and `/hato-lechero/alertas` (S6) stayed `ComingSoon` until their own sessions closed (see below).
-
-- `HatoDashboard.tsx` (Tablero) — KPI strip (en ordeño / horro / terneras / próximas a reemplazo) + 4 action lists (E1: próximas a secar, próximas a parir, rechequeo pendiente, vacías por servir), all derived client-side by feeding `v_hato_estado_actual` rows through `derivarEstadoReproductivo` (`calculosHato.ts`) with `fechaReferencia = hoy`. Litros/PL promedio (E2) intentionally omitted — `hato_pesajes_leche`/`hato_produccion_quincenal` are still empty until S5, and showing `0` there would violate "sin dato, nunca 0".
-- `AnimalesList.tsx` (Hato) — **FOUR categories** as tabs (owner decision, third round 2026-07-22: terneras and novillas are separate — the original "three categories" phrasing was the owner's oversight), powered by `utils/hatoCategorias.ts::clasificarCategoriaHato`, composing on top of the already-engine-derived `EstadoReproductivo` rather than adding a new constant to `calculosHato.ts`. **Owner-confirmed rule, unified with Esco's `hato-aggregation.ts` (S7)**: `ternera` = etapa `ternera` · `novilla` = etapa `novilla` (etapa wins over estado) · `horro` = only `estado === 'seca'` (a `proxima_a_secar` cow is still milking → `hato` until `secado_real` — reading explicitly confirmed by the owner) · `hato` = every other active vaca. Changing a boundary means editing `hatoCategorias.ts` AND `categorizarAnimal` in both `hato-aggregation.ts` copies — the UI and Esco must never disagree on the same count. The dashboard's 5-KPI row uses `.kpi-grid-hato` in `globals.css` (frozen Tailwind has no `lg:grid-cols-5`).
-- `HojaDeVida.tsx` (`/hato-lechero/hato/:id`) — identity header, `FranjaEstadisticas` (PL/partos/días abiertos/secar/parto probable), `EventoTimeline` (**all** `servicio` events in order, V7 — not just the current cycle), `GenealogiaArbol` (madre **and** padre, V8; padre resolved from `hato_toros` via `padre_toro_id` or from `hato_animales` via `padre_id`; renders "Sin registrar" when absent, never blank), and a chequeo history table.
-- `ChequeosList.tsx` + `components/SubirChequeoExcel.tsx` + `components/ChequeoDiffReview.tsx` — the B0/V10 upload flow: drag-and-drop `.xlsx` → `POST /hato/chequeo/preview` (Bearer JWT from `supabase.auth.getSession()`, same pattern as `ClimaCard.tsx`) → renders the returned diff grouped by classification (`nuevo`/`cambio`/`sin_cambio`/`no_reconocido`), with colisiones-en-hoja and per-row issues always visible.
-- **`ChequeoCapturaGrid` (B1, manual grid capture) was intentionally NOT built.** Decision D-4 (owner, 2026-07-22, plan §8) removed it from scope after S4 was originally scoped: "no hay internet en la finca, el chequeo nunca se captura en la app... B1 se elimina del alcance." The S4 session bullet in the plan (§8) still lists it because that bullet predates D-4 and was never updated — D-4 is the more specific, later, owner-approved decision and takes precedence.
-- `src/types/database.ts` (generated) does not include any `hato_*` table or view — it predates even migration 044 (`gan_inventario` is also missing), so this is pre-existing staleness, not new. The three new hooks (`useHatoAnimales`, `useHatoAnimal`, `useHatoChequeos`) cast `getSupabase() as any` at the call site, the same workaround already used by `useGanadoInventario.ts`. Regenerating `database.ts` (`supabase gen types typescript`) would remove the need for this cast across both modules — worth doing as a standalone tooling task.
-- ~~Known API contract gap blocking "approve and write"~~ → **closed the same day by the commit path** (CTO decision, option "echo-back + re-validation + RPC"). The preview response now also returns `chequeoFecha` and `filasNormalizadas: FilaChequeoNormalizada[]` (joinable to the diff by `fila`), and a second endpoint performs the write — see "Chequeo commit path" below. `useSubirChequeoExcel.ts::comprometer()` posts the approved subset (`sin_cambio`/`cambio` rows only) and surfaces the 409 herd-changed rejection; `nuevo` rows show a visible "crear ficha primero" note and are never silently skipped.
-
-**Chequeo commit path — `POST /make-server-1ccce916/hato/chequeo/commit`** (`hato-chequeo-commit.ts`; pure logic in `src/utils/importHato/commitChequeo.ts`, tested in `importHatoCommitChequeo.test.ts`, mirrored by the same generator as the rest of `importHato/`). The Aprobar step of B0. Contract highlights:
-- JSON request `{ archivo, generadoEn, chequeo: { fecha, veterinario? }, filas: FilaChequeoNormalizada[] }` — **only matched rows** (`sin_cambio`/`cambio`). `nuevo` and `no_reconocido`/provisional/collision rows are never written; creating fichas mid-chequeo is out of scope by design.
-- The handler **re-validates by re-running `construirDiffChequeo` against fresh DB state** — it never re-parses any `.xlsx` and never re-derives the approved values (a `hato_config` edit between preview and commit must not change what Martha saw). Any row that degraded since the preview → HTTP 409 listing the rows, nothing written.
-- `toroNombre` → `hato_toros.id` via SELECT-or-INSERT (the unique index is on `lower(nombre)` — never PostgREST upsert). Eventos derive through the existing `descomponerSX` — there is exactly one decomposer in the codebase.
-- Atomicity via one `SECURITY DEFINER` RPC, **`fn_hato_commit_chequeo` (migration 065)**: find-or-create header by fecha, idempotent cleanup **scoped to that chequeo only** (`hato_eventos` by `chequeo_vaca_id`, then the vacas rows), fresh inserts. Re-approving a corrected file for the same date converges; other chequeos and manually-captured eventos are untouchable. The RPC is `REVOKE`d from `authenticated`/`anon` and granted **only to `service_role`** — it has no internal role check (the endpoint is the auth gate), so exposing it via PostgREST would bypass the module's write RLS.
-
-**S5 — Producción (2026-07-22).** `HatoProduccionView` at `/hato-lechero/produccion`: weekly per-cow pesaje grid (`PesajeSemanalGrid`, capture date defaults to the most recent configured weekday from `hato_config.dia_pesaje_semanal` — never a hardcoded Wednesday), fortnightly camión form (`ProduccionQuincenalForm`, UPDATE-by-id then INSERT — `UNIQUE(anio, mes, quincena)`), litros/vaca KPIs. A cow with no pesaje row renders `—`, never 0. Pure date/quincena math (`calcularFechaUltimoDiaPesaje`, `resolverQuincena`, `rangoQuincena`, `quincenaAnterior`) lives in `calculosHato.ts` (all three copies, parity-enforced). Telegram side: see the edge-functions list. Fernando's `telegram_usuarios` alta is documented in `docs/hato/s5-alta-fernando-telegram.md` — **not executed**; the recommended path is the existing `TelegramConfig.tsx` UI. `dia_pesaje_semanal` is read directly (explicit throw if missing), deliberately NOT folded into the strict `HatoConfig`/`construirHatoConfigDesdeFilas` contract — that type serves the chequeo engine, which doesn't need this key.
-
-**S7 — Herramientas Esco (2026-07-22).** Three hato tools in `chat.tsx` backed by the pure `hato-aggregation.ts` (see the Esco section). Herd categories use the **same owner-confirmed four-group rule** as `hatoCategorias.ts` — the two files reference each other and must change together.
-
-**Identity model & renumeración (2026-07-23).** The physical ear tag (`numero`) was never the identity — `hato_animales.id` (uuid) is; every relationship hangs off `id`, never `numero`. Owner decision: the duplicate historical chapetas are bought-in cows that arrived wearing a tag already in use, and Martha will re-tag the whole herd, so `numero` is a **mutable "chapeta actual"**, not a permanent key. Migration **066** encodes it (drop global `UNIQUE(numero)` → partial unique only among `estado='activa'`). Consequences codified across the module:
-- **`numero` edit UI (renumeración path).** `HojaDeVida.tsx` gains a role-gated (Administrador/Gerencia) "Editar" button → `components/EditarAnimalDialog.tsx` (edits `numero` + `nombre`/`etapa`/`estado`/`raza`/`fecha_nacimiento`) writing via the new `hooks/useActualizarHatoAnimal.ts` (`getSupabase() as any`, same cast as the read hooks). The hook catches Postgres `23505` from `hato_animales_numero_activa_unique` and surfaces "la caravana ya la lleva otro animal activo" instead of a raw error, leaving the dialog open. This is the correction mechanism for the wholesale re-tag.
-- **Provisional badge.** `hatoUi.ts::chipNumeroProvisional()` (range 800–999, `esNumeroProvisional`) renders a "provisional" chip with a "no es la caravana física" tooltip everywhere `numero` shows; a null `numero` renders "sin caravana", never blank or 0. (Not yet unified into `HatoDashboard.tsx`/`GenealogiaArbol.tsx`/`ChequeoDiffReview.tsx`'s null rendering — minor consistency follow-up.)
-- **Load is backfill-only, forever.** `load.ts` deletes `origen='importacion_historica'`, and `hato_chequeo_vacas`/`hato_eventos` have no `ON DELETE CASCADE` (053), so re-running Load after any live B0 chequeo/pesaje exists would FK-fail or orphan live history. The wholesale re-tag is a **single-transaction in-place `UPDATE hato_animales SET numero=… FROM (VALUES (id,nuevo)…) WHERE id=…`** (the partial index is validated at statement end, so transient old↔new pairs don't collide), **never** a re-Load. The "edit `overridesChapeta.ts` + re-Load" path was valid only in the pre-live window — that window is now closed (see below).
-- **Provisional-period guardrails (product).** Keep `hato_lechero` module access to Gerencia + Martha (Administrador) until re-tag is done (no papá/read-only yet); S6 alerts must lead with the **name**, not a provisional number, for provisional-numbered cows (Fernando reads the physical tag in the corral); Martha's new physical tags must stay **below 800** to avoid the provisional band.
-
-**Historical Load — executed 2026-07-23.** Ran `Extract → Normalize → Resolve → Load` against the real 7-file corpus (2019–2026) with the owner's explicit go-ahead to proceed before Martha's full sit-down (checkpoint reframed as noted above). Result in production: 68 `hato_toros`, 168 `hato_animales` (102 `activa`, 66 closed/sold), 33 `hato_chequeos`, 1.479 `hato_chequeo_vacas`, 2.005 `hato_eventos`, 23 animals on a provisional number (800–999). Full account, including two bugs the real corpus surfaced beyond the two known ones (fixed the same session, before Load ran):
-- **Silent history loss for every collision animal.** `animales.csv` carries `numero` (final, post-override) *and* `numero_observado` (the raw planilla chapeta) for overridden rows, but `load.ts` only ever indexed by the final `numero` — so a raw chequeo row keyed on the *observed* number (e.g. 162) matched nothing, and was dropped with zero warning. Fixed with a second index (`numero_observado` + `nombre` → id, same key shape as `buscarOverride`) and a `resolverAnimalId` helper that falls back to it. Verified post-fix: ESMERALDA/VITROLA/MARGARITA/MONA all carry real chequeo history again.
-- **Duplicate physical rows within one reading.** The real corpus has ~42 rows resolving to the same (fecha, numero, nombre) — mostly two *different source files* (`chequeo 21 y 22.xlsx` and `CHEQUEO ACTUALIZADO ENERO 2020.xlsx`) both containing a near-identical "CHEQUEO JUNIO 9 2020" sheet; one isolated same-sheet case (CARLA #156). Unhandled, this violates `UNIQUE(chequeo_id, animal_id)` (053) and aborted the first Load attempt mid-run (partial prod state was cleaned up via `load.ts`'s own documented rollback before retrying). Fixed with `deduplicarPorChequeoYAnimal`: keeps the row with more non-null raw fields, loudly `console.warn`s the dropped one with full file/sheet/row provenance — never a silent drop, same contract as the rest of the pipeline.
-
-Both fixes live in `scripts/import-hato/load.ts` only (I/O layer) — no parity-mirrored module touched. Full run log and verification queries: `docs/hato/runbook-load-historico.md`.
-
-**S6 — Motor de alertas (2026-07-23).** Pure engine `src/utils/hatoAlertas.ts`, mirrored to both server trees as `hato-alertas.ts` by `docs/hato/regenerar-copias-hato-alertas.py` (GENERATED — never hand-edit; same import-rewrite pattern as the importHato generator; parity enforced by `hatoAlertasParidadServidor.test.ts` running `--check` + behavioral fixtures). Five rules with the exact `regla_clave` formats from plan §7.3 (`secado:` · `ttto:` · `rechq:` · `servconf:` · `parto:`); every threshold read from `hato_config`, zero business constants; alert text **leads with the cow's name** when `numero` is provisional (800–999) or null (Fernando reads the physical tag). Tick endpoint `POST /make-server-1ccce916/hato/alertas/tick` (`hato-alertas-tick.ts`, hand-synced pair like `hato-chequeo-preview.ts`): auth = header `x-hato-tick-secret` vs env `HATO_ALERTAS_TICK_SECRET` (unset env → 503 before any DB read; mismatch → 401). Three phases: **generate** (`.upsert(..., { onConflict: 'regla_clave', ignoreDuplicates: true })`), **dispatch** (only tipos `activo` with `destinatario_telegram_id` set in `hato_alertas_config` — the seed is NULL, so a fresh deploy sends **nothing** until recipients are configured; resend only ≥48h + `intentos < 3`; per-alert Telegram failures are counted, never abort the tick), **escalate/expire** (escalation ONLY for `estado='enviada'`, anchored to `datos.enviada_en` — a never-sent shadow alert can never escalate; expiry >14 días from `fecha_programada`; escalation always sends a NEW message — Telegram forbids edits >48h — to optional env `HATO_ALERTAS_ESCALAMIENTO_TELEGRAM_ID`, else the row is just marked `escalada`). Outbound helper `telegram/enviar.ts` (both trees) logs every send to `telegram_mensajes` and never throws. Callbacks `hato_alerta:{id}:{si|no|otro}` in `telegram/bot.ts` (the `mem_save:` pattern): `si` → `confirmada` + domain effect (`hato_eventos` `secado_real` for `secado_due`; `fecha_ejecutada` on the paso for `tratamiento_paso`); `no`/`otro` → `respondida`, reviewed by Martha in AlertasView, never auto-resolved. Secrets provisioned 2026-07-23: Vault `hato_alertas_tick_secret` + edge `HATO_ALERTAS_TICK_SECRET` (same value), so the 060 cron authenticates as soon as the function deploys. Frontend `AlertasView.tsx` (+ `useHatoAlertas`, pure `hatoAlertasUi.ts` re-exporting the tipo/estado unions from `hatoAlertas.ts` — single source): queue with estado/tipo filters, "Revisión semanal" section (respondida + escalada + expirada), write actions Administrador/Gerencia only.
-
-**Bugfix — eventos `parto` duplicados (2026-07-23).** Auditoría cruzada de una planilla real contra la app descubrió que `descomponerSX()` (`src/utils/calculosHato.ts`) decidía "esta vaca parió" únicamente a partir del código SX de UN chequeo, sin memoria de chequeos anteriores — pero el código SX (igual que "Última Cría") es un marcador de **estado** que Martha repite en la planilla mientras nada cambia, no un evento nuevo por visita. Resultado real verificado: ALINA (#157) con **10** eventos `parto` en la base para **4** nacimientos reales (fecha "Última Cría" congelada en 3 tríos de chequeos consecutivos). Corrección:
-- `InputDescomposicionSX` gana `ultimaCria`/`ultimaCriaAnterior` (ya parseados por el llamador, nunca texto crudo dentro del motor). Nueva función pura `parseUltimaCria` (reutiliza los mismos helpers de recuperación de fecha que `parseFechasServicio` — nunca un segundo parser de fechas). Si la Última Cría de esta fila coincide con la anterior conocida del mismo animal → el nacimiento ya está registrado, no se emite un `parto` nuevo. Si difiere → se emite con `fecha = ultimaCria` y `fecha_confianza = 'exacta'` (antes: siempre la fecha del chequeo, siempre `'aproximada'`). Si Última Cría no se puede parsear → se mantiene el comportamiento anterior + un issue explícito (nunca se decide en silencio). `aborto` no se toca — un aborto sí es un evento real cada vez que se reporta.
-- Corregido en las TRES copias (`calculosHato.ts` + 2 espejos generados) y en ambos llamadores reales: `derivarEventosDeChequeo` (`commitChequeo.ts`, el camino B0 en vivo — sin el fix, cada chequeo futuro seguiría generando un parto duplicado) y `cargarEventos` (`load.ts`, corregido solo para que el código quede correcto para quien lo lea después — **ese script no se re-ejecuta nunca**, per la regla de "Load es backfill único, para siempre").
-- **Limpieza de producción ejecutada 2026-07-23** vía SQL directo (conexión autenticada, replicando la MISMA lógica de `ultima_cria`/carry-forward del motor corregido — nunca un segundo decompositor; validada primero contra el caso conocido de ALINA antes de aplicar al resto). Resultado: de 1.185 eventos `parto`, **806 eliminados** (duplicados de un nacimiento ya registrado) y **364 corregidos en sitio** (fecha/confianza), dejando **379** eventos reales — uno por nacimiento. 15 filas con Última Cría no interpretable quedaron intactas, sin decidir. `hato_eventos.id` se preservó en todos los casos (no hay FK que dependa de él, pero conservar el id es la operación menos destructiva).
-- El script de limpieza usado como referencia vetada (dry-run por defecto, requiere `--apply`) vive en `scripts/import-hato/cleanup-partos-duplicados.ts` para cualquier reconciliación futura si aparecieran más duplicados por otra vía.
-
-**Bugfix — partos casi-duplicados por deriva de "Última Cría" (2026-07-23).** El fix de exact-match de arriba no atrapa el caso donde la misma cría real se registra con una fecha LIGERAMENTE distinta entre chequeos cercanos (días a ~2 meses de deriva de transcripción, no texto idéntico) — confirmado en producción: GALLEGA (#148) con "2/12/2025" en un chequeo y "1/11/2025" 31 días después, misma cría real (una vaca no puede parir dos veces en 60 días; el intervalo mínimo real entre partos es ~270+ días). Se generalizó `decidirEventoParto` a un mecanismo de **clustering por proximidad** (`agruparPartosPorProximidad`, `calculosHato.ts`): encadena lecturas contra la ÚLTIMA lectura del cluster actual (no la primera), con `DIAS_MINIMOS_ENTRE_PARTOS = 60` como constante del motor (mismo estilo que `HORAS_MINIMAS_REENVIO` de `hatoAlertas.ts`) — el exact-match es ahora el caso degenerado (distancia 0) del mismo mecanismo, no un camino separado. Decisión del dueño sobre el desempate: se conserva la fecha del chequeo MÁS RECIENTE del cluster (se asume la lectura más refinada), colapsando las anteriores; cada colapso por proximidad (no exacto) queda con un issue explícito para revisión de Martha. Aplicado en vivo (`commitChequeo.ts`) y documentado en `load.ts` (nunca re-ejecutado). Limitación conocida: el commit path en vivo solo toca eventos de SU PROPIO chequeo — un cluster que cruce un chequeo ya comprometido y uno nuevo deja la fecha en la lectura más antigua del cluster hasta corrección manual o un nuevo recompute (cambiar esto requeriría tocar el contrato de `fn_hato_commit_chequeo`, decisión de CTO, no tomada unilateralmente).
-- **Limpieza de producción — completa (2026-07-23/24, en dos sesiones)**: `scripts/import-hato/recompute-partos-cercanos.ts` (JSON-in/JSON-out, SIN cliente de Supabase, SIN flag `--apply` — lección del incidente de corrupción de abajo) corrió contra un dump real de producción: 271 clusters evaluados, 14 actualizaciones y 37 eliminaciones propuestas, 263 advertencias de "promoción" (el último miembro del cluster no tenía evento propio). Primera sesión: se aplicaron a mano los 2 casos verificados individualmente (GALLEGA + CHISPA #168, esta última destapando que el cleanup de la ronda anterior había sido demasiado estricto: `"11/07/19/"` con slash final no pasaba el regex SQL de esa ronda, dejando 7 eventos duplicados intactos — el parser real de esta ronda sí lo interpreta). Segunda sesión: revisados los ~21 animales restantes por lote — cada uno verificado sistemáticamente contra la composición real del cluster (a lo sumo 2 valores distintos de Última Cría, ≤59 días de separación entre ellos — dentro de la zona segura, muy por debajo del mínimo real de ~270 días entre partos) antes de aplicar 12 actualizaciones + 30 eliminaciones más.
-  - **Dos patrones residuales adicionales descubiertos y cerrados en la segunda sesión** (ninguno cubierto por el clustering por proximidad, que solo encadena contra el último miembro del cluster ACTUAL): **(a) texto crudo idéntico pero NO parseable** repetido en chequeos consecutivos (RICARENA #88, `"8/08/02022"` — año de 5 dígitos — repetido 4 veces; cada aparición generaba su propio evento `'aproximada'` porque el camino de fallback de valores no-parseables no participa en la deduplicación por diseño) — colapsado a 1 evento (el más reciente). **(b) el mismo valor EXACTO reaparece de forma no-adyacente** después de que una lectura distinta intermedia rompiera la cadena (6 animales — ENIGMA #119, MARIPOSA #120, PAULA #152, JASPEADA #160, FABIOLA #984, MONA #986 — todos con el chequeo `2026-02-25` re-reportando una Última Cría idéntica a un chequeo bastante anterior) — una fecha idéntica para el mismo animal nunca puede ser dos partos reales sin importar la distancia temporal, así que se colapsaron sin ambigüedad. Verificación final de cierre: 0 grupos de fecha exacta duplicada, 0 grupos de texto crudo duplicado, y el único par restante bajo 60 días (RICARENA, evento `'aproximada'` con fecha de respaldo cerca de un parto real distinto) es un artefacto de imprecisión aceptado, no un duplicado.
-  - **Total**: 1.185 eventos `parto` originales → **333 reales** tras las tres rondas de limpieza (exact-match + proximidad inicial + los dos patrones residuales). Ningún animal queda pendiente de revisión.
-- **Incidente de corrupción y corrección (2026-07-23, ya cerrado)**: la limpieza EXACT-MATCH original (806 eliminados / 364 corregidos, ver arriba) se aplicó con SQL ad hoc en vez del parser TS vetted, y ese SQL aceptó años con dígitos de más/de menos ("1/9/2323", "5/01/230") en vez de rechazarlos como el `parseUltimaCria` real. Encontrado por barrido de años fuera de rango (`EXTRACT(YEAR...) < 2000 OR > 2027`) en VIGOROSA (#100) y VANESA (#125) — exactamente 2 filas, sin efecto en cascada sobre otras filas de esos animales (verificado). Ambas restauradas a su estado pre-limpieza real (fecha del chequeo, confianza 'aproximada'). Lección aplicada de inmediato: la ronda de partos-cercanos que sigue usa el script TS real vía JSON, nunca SQL ad hoc, precisamente para no repetir esto.
-
-**S9 — Flujo venta/muerte (2026-07-23).** `HojaDeVida` gains "Registrar venta"/"Registrar muerte" (Administrador/Gerencia, only `estado='activa'`). Venta reuses `TransaccionGanadoForm` through THREE new **optional** props (`hatoAnimalId`, `hatoCantidadCabezasDefault`, `onGuardadoTransaccion`) — with the props absent the ceba path is byte-identical (all four existing call sites pass none); with them, the insert carries `es_hato`/`hato_animal_id` (059's trigger guard then skips the spurious ceba pendiente) and post-save writes `hato_eventos` tipo `'venta'` (linked via the real `transaccion_ganado_id` FK column from 053, not `datos`) + `estado='vendida'`. Muerte is NOT a financial transaction: small dialog (fecha + causa) → evento `'muerte'` + `estado='muerta'`. A post-save failure **closes** the dialog and toasts exactly what got half-done — leaving it open invites a duplicate financial transaction on retry. Pure logic in `hatoSalida.ts`; `created_by` on the new eventos is set explicitly from the session (no trigger covers `hato_eventos`). The estado change frees the chapeta from 066's partial unique index automatically — `numero` is never touched.
-
-**S10 — Pajillas + toros + Ajustes del Hato (2026-07-23).** `PajillasView` at `/hato-lechero/pajillas` (6º sidebar item): `hato_toros` CRUD (SELECT-or-INSERT against `lower(nombre)` — never PostgREST upsert; `23505` surfaced as "ese toro ya existe"), per-lote stock from `v_hato_pajillas_stock` (uso registers against a specific purchase lote — the view's real grain; amber chip at stock ≤ 0, **never blocks**, Épica G), compra (`hato_pajillas`) + uso (`hato_pajillas_uso`, append-only, optional animal picker, deliberately NO side effects — no eventos). `AjustesHato` as Gerencia-only tab in `ConfiguracionDashboard` (matches `hato_config` write RLS): edits the 11 config keys; serialization guarded by pure `ajustesHatoValidacion.ts`, whose tests round-trip every shape through `construirHatoConfigDesdeFilas` so a shape regression fails in Vitest, not in production; persists UPDATE-by-`clave` only.
-
-**Known follow-ups (flagged, not fixed):** (1) `dedupe.ts` (Extract) doesn't catch duplicate sheets **across different source files** (see the cross-file case above) — worth a standalone investigation. (2) Nothing populates `hato_chequeo_vacas.meses_prenez` (neither `Load` nor the commit path). (3) `src/types/database.ts` is stale (predates 044) — regenerating it would remove the `as any` casts in the hato/ganado hooks. (4) `scripts/import-hato/verify.ts` is referenced by `load.ts`'s final log line but was never written. (5) ~~102 animals loaded as `estado='activa'` vs. an estimated ~45 in the real current herd~~ **RESOLVED 2026-07-24** — Martha's corrected inventory ("TAREA MEV") applied directly to `hato_animales` via targeted `UPDATE … WHERE id` (never a re-Load, never touching `hato_eventos`): 25 animals `activa→vendida`, 39 reclassified `etapa='novilla'` (closing the "Novillas always 0" gap independently confirmed the same day by a real-file consistency audit), 3 new fichas added (#181 BRILLANTINA, #182 NORMA, #183 MORA), 85 `madre_id` resolved by name (verified against fecha de nacimiento, previously all NULL). Final: **80 activas** (35 vaca + 42 novilla + 3 pendientes) · 91 vendidas · 85 with madre resolved. 11 madres of the active herd and 3 estados remain unresolved, deliberately left for Martha's judgment — not a gap to fix in code. Full detail: `docs/hato/inventario-mev-2026-07-24.md`.
-
-**S8 — Figma UI alignment (2026-07-24).** Aligned the whole Hato Lechero UI to the Figma mockups file *"Escocia OS — Módulo Hato Lechero (Mockups)"* (Hato-only, **not** a whole-app prototype — an audit-confirmed scope correction). New shared primitives under `components/`: `HatoPageHeader`, `HatoKpiCard`, `HatoReproCard`, `AnimalLabel`. New pure/tested helpers: `utils/hatoAlertasTablero.ts` (derives the 4 Dashboard alert-panel signals — secado/parto/rechequeo/servir — for `HatoDashboard.tsx`'s quick-glance "Tablero de alertas"; **distinct from S6's real engine `utils/hatoAlertas.ts`**, which drives the actual `AlertasView` queue), `utils/ordenarAnimalesHato.ts`, `utils/graficoLitrosQuincenal.ts`.
-- **Dashboard** rebuilt: header, 4 KPI cards, "Vacas por estado" horizontal bars, derived alerts board, action-list day/urgency pills (`chipDiasRestantes`/`chipVencimiento`, hatoUi.ts).
-- **Hoja de Vida**: PL curve (`CurvaProduccionLeche`, from the per-chequeo `pl` series already in `detalle.chequeos` — labeled "Por chequeo", **not** weekly, since `hato_pesajes_leche` is still empty), Tratamientos card (`useHatoTratamientos`, new query of `hato_tratamientos`/`_pasos`/`_protocolos`), role-gated quick action Registrar parto (`useEventoRapidoHato`); the header's Registrar venta / Registrar muerte buttons come from S9 (`VentaAnimalDialog`/`MuerteAnimalDialog`), folded into the same `HatoPageHeader` actions slot.
-- **Animales**: A–Z sortable headers + "+ Registrar" (`CrearAnimalDialog`/`useCrearHatoAnimal`; new physical tags must stay **<800** to avoid the provisional band).
-- **Chequeos**: rows now open a read-only detail grid at **new route `/hato-lechero/chequeos/:id` → `ChequeoDetalle`** (`useHatoChequeoDetalle`), modeled on Figma's "Nuevo chequeo" grid (raw `*_raw` fallback, estado chip).
-- **Producción**: Figma "Litros por quincena al camión" bar chart (`GraficoLitrosQuincenal`) — empty-state until quincenal data flows, never 0-bars.
-- **Dashboard "Tablero de alertas"** is a derived quick-glance panel (see the merge note below) — the real managed Alertas queue is S6's `AlertasView`, untouched by this branch.
-
-**% Preñez → 3-KPI reproductive card (owner decision, this session).** The single "% Preñez" KPI is replaced by `HatoReproCard` showing **Preñadas / Servidas / Vacías** over the en-ordeño denominator (a 100% partition). Preñadas = `preñada` + `proxima_a_secar` (late gestation, unambiguously pregnant); Servidas = `servida` (bred, unconfirmed — deliberately NOT counted as pregnant, since this historical corpus rarely records confirmation); Vacías = the remainder (open). The same Preñadas definition feeds the "Vacas por estado" panel, so they agree.
-
-**Merged onto S6/S9/S10 (2026-07-24).** This branch was built against the S4/S5/S7 state, then merged with `main`'s S6 (alertas), S9 (venta/muerte) and S10 (pajillas). Reconciliation decisions: (1) the Dashboard's alert panel keeps its **own** derived helper, renamed `hatoAlertasTablero.ts`, to coexist with S6's real engine `hatoAlertas.ts` (same-filename collision) — a **follow-up** could unify the panel to read S6's real `hato_alertas` rows instead of deriving them client-side. (2) Venta/muerte defers entirely to S9's finance-integrated `VentaAnimalDialog`/`MuerteAnimalDialog` (they write `fin_transacciones_ganado` via `TransaccionGanadoForm`); this branch's redundant `MarcarSalidaDialog` and its atomic-write migration **067 (`fn_hato_registrar_salida`) were dropped** — the migration file removed and the function (briefly applied to prod) dropped from prod. Only `registrarParto` remains in `useEventoRapidoHato`, folded next to S9's venta/muerte in the Hoja de Vida header.
-
-**Frozen-Tailwind hygiene:** dead classes fixed inside touched files (`w-3.5`/`h-3.5`/`gap-0.5`/`overflow-auto` → compiled `w-4`/`h-4`/`gap-1`/`overflow-x-auto`); `min-h-[100dvh]`/`py-16`/`hover:text-primary` remain dead **app-wide** in pre-existing files (untouched, out of scope) — worth a standalone sweep. `src/types/database.ts` is still stale, so the new hooks keep the `getSupabase() as any` cast (follow-up #3 above).
-
+- **`src/utils/calculosHato.ts` and `src/utils/hatoAlertas.ts` are mirrored** into both edge-function trees, and `src/utils/importHato/*` is mirrored by `docs/hato/regenerar-copias-importhato.py`. Change the logic in **all** copies in the same commit, and **never hand-edit a generated copy to silence a parity failure — regenerate it.**
+- **`scripts/import-hato/load.ts` is backfill-only, forever.** Re-running it after any live chequeo exists would FK-fail or orphan live history. Chapeta corrections are in-place `UPDATE`s, never a re-Load.
 
 ### Monitoring Module (`/monitoreo`) — incidencia aggregation
 
@@ -540,25 +232,11 @@ Redesigned 2026-06 around two goals: agronomic yield analysis and cost-per-kilo.
 - **Bulk capture grid** (`CapturaCosechaGrid.tsx` + `useCapturaCosecha.ts`): replaces the removed `RegistrarProduccionDialog`. All lote/sublote rows for a selected cosecha in one editable table (supports backfilling past cosechas), kg/árbol outlier detection against the lote's history with mandatory confirmation, UPDATE-by-id then INSERT (never PostgREST upsert — UNIQUE treats NULL sublote_id as distinct).
 - Dashboard: 3 KPIs (kg totales, kg/árbol, costo/kg) + 2 tabs (Rendimiento, Rentabilidad). The old Edad vs Rendimiento tab was removed.
 
-### Ganado ↔ Finance Integration
-
-Cattle buy/sell transactions live in `fin_transacciones_ganado` (not in `fin_gastos`/`fin_ingresos`). The Gastos and Ingresos historial views merge ganado records alongside regular records using a `UnifiedFinanceItem` discriminated union. Ganado items display with an amber `[Ganado]` badge and route to `TransaccionGanadoForm` for editing (not `GastoForm`/`IngresoForm`).
-
-Key files:
-- `src/components/finanzas/components/TransaccionGanadoForm.tsx` — create/edit dialog for ganado transactions, with dropdown selectors for finca (from the shared `gan_fincas` catalog, falling back to distinct transaction values), proveedor (`fin_proveedores`), and cliente (`fin_compradores`). New finca names are inserted into `gan_fincas`.
-- `src/types/finanzas.ts` — `UnifiedFinanceItem` type
-- `src/components/finanzas/components/GastosList.tsx` — merges `fin_transacciones_ganado` compras
-- `src/components/finanzas/components/IngresosList.tsx` — merges `fin_transacciones_ganado` ventas
-
-**Filtering the merged lists — `fin_transacciones_ganado` has none of the dimensions the filters use.** No `negocio_id`, `region_id`, `categoria_id`, `concepto_id` or `estado`; a ganado row is by definition the **Ganado** negocio and has no región, categoría, concepto or Confirmado/Pendiente state. Those filters therefore cannot be expressed as query predicates on that table — each list computes an `incluirGanado` boolean and includes or excludes the ganado block wholesale: excluded whenever región/categoría/concepto/estado is set, or when the negocio filter is set to anything other than Ganado (resolved by name via `NEGOCIO_GANADO`, never a hardcoded UUID).
-
-This was silently broken until 2026-07-22: ganado rows ignored every non-date filter, so they appeared under *any* negocio and their value was added to the header total. Filtering Ingresos by negocio "Agrícola" for 2025 showed 27 rows / $1.417M when the truth was 10 rows / $239M — **83% of the figure came from ganado that should not have been on screen.** `negocioGanadoId` must stay in the load effect's dependency array: the catalogs resolve after first render, so without it a Ganado-negocio filter drops the ganado rows until the next filter change.
-
 ### Financial Reports (`/finanzas/reportes`) — P&G + Flujo de Caja
 
-Two reports × four views (Global, Aguacate Hass, Ganado, Hato Lechero). Global includes *every* negocio — Oficina Central, Caballos, Agrícola, Finca de Descanso have no view of their own. Design doc: `docs/plan_reportes_finanzas.md`.
+Two reports × four views (Global, Aguacate Hass, Ganado, Hato Lechero). Global includes *every* negocio — Oficina Central, Caballos, Agrícola, Finca de Descanso have no view of their own. Design doc: `docs/plan_reportes_finanzas.md`. Per-view UI and list contracts (Gastos/Ingresos historial, the ganado merge, table CSS): [`src/components/finanzas/CLAUDE.md`](src/components/finanzas/CLAUDE.md).
 
-**Accounting rules the engine enforces** (approved by the owner; changing one is a business decision, not a refactor):
+**Accounting rules the engine enforces** (approved by the owner; changing one is a business decision, not a refactor). These live here, not in the finanzas directory file, because the same rules are enforced by the pure engines in `src/utils/` and re-implemented in the Deno port `src/supabase/functions/server/reportes-financieros.ts` — sessions touching either never open `src/components/finanzas/`:
 
 - **Only `estado='Confirmado'` gastos count.** Pendientes are excluded and surfaced as a warning with their total.
 - **Buying cattle is not an expense — it is inventory.** The purchase never appears in the P&G; only the COGS of animals actually sold crosses the line, at a **moving weighted average per head** (`costoVentaGanado.ts`). Per head and not per kilo on purpose: the animal is bought thin and sold fat, so costing sold kilos at purchase price would charge the fattening twice — feed and vet are already in `fin_gastos`. The purchase *is* a cash outflow in the Flujo de Caja: that asymmetry is the single most misread thing in these two reports and carries its own labelled line.
@@ -567,44 +245,18 @@ Two reports × four views (Global, Aguacate Hass, Ganado, Hato Lechero). Global 
 - **No prorrateo between negocios.** `fin_gastos.negocio_id` is NOT NULL, so every gasto already has its business. Note the consequence: Oficina Central (~$2.356M historical, zero income) is pure shared overhead that no per-business utility carries — it only shows up in Global.
 - **P&G columns are cumulative** (Q1 ⊂ Q1–Q2 ⊂ Q1–Q3 ⊂ Año); the Flujo de Caja is 12 calendar months.
 
-**Structure**: pure engines in `src/utils/` (`periodosReporte`, `clasificacionCostos`, `costoVentaGanado`, `calculosPyG`, `calculosFlujoCaja`, `reportesFinancierosComun`) — zero Supabase imports, tested in `src/__tests__/` — fed by a single fetching hook (`useReportesFinancierosData`) that loads once per year and serves all 4 views, so the two reports can never disagree by having read the DB at different moments.
+**Contracts that hold outside `src/components/finanzas/`:**
 
-**Contracts that matter when editing:**
-
-- Report lines are a **flat ordered array** with `nivel` + `padre_id`, not a tree: the table, the PDF and the Excel all walk the same structure.
 - `valores`/`meses` are **always positive**; the sign lives in `esResta`/`signo`. Never infer sign from the value.
 - `sinDato[]` marks cells that render `—` rather than `0` — the difference between "the margin was 0%" and "there were no sales, so there is no percentage".
 - **All report queries must go through `fetchAll`** (`src/utils/supabase/fetchAll.ts`). There are ~1.250 gastos per year and PostgREST silently caps at 1.000.
-- The PDF/Excel exporters reuse `formatearCelda`/`formatearCeldaFlujo` from the table components. Do **not** switch them to `formatearMoneda` (used by the older PDF generators): it renders the COP symbol and the PDF would stop matching the screen.
 - **Never feed these reports from `movimientos_diarios_productos`, `movimientos_inventario`, `compras` or `registros_trabajo`.** Those are operational costing (cost/kg per lote) and would double-count insumos already captured in `fin_gastos` by the compra→gasto trigger. The only sources are `fin_gastos`, `fin_ingresos` and `fin_transacciones_ganado`.
-- Financial tables need real CSS, not Tailwind: `table-fixed`, `tabular-nums` and `border-collapse` **do not exist** in the frozen `index.css`. The `.tabla-financiera` / `.celda-num` / `.col-etiqueta` rules live in `globals.css`. `.tabla-financiera .col-etiqueta` must keep its specificity above `.tabla-financiera td`, or long labels overflow onto the first figure.
-
-### Gastos historial (`/finanzas/gastos`) — view contract
-
-`GastosView` opens on the **Historial** tab (leftmost); `?tab=registrar` still deep-links to the capture grid. `GastosList` defaults its period filter to **`ytd`**, not `mes_actual` — that default is repeated in three places (initial state, the navigation-state effect, and the clear-filters reset); change all three together or they silently disagree.
-
-- **Usuario filter** — filters `created_by` on both `fin_gastos` and `fin_transacciones_ganado`, plus a "Sin usuario" option for `created_by IS NULL` (everything before migration 050, i.e. all pre-2026 rows and all ganado history).
-- **Selection subtotal** — per-row checkboxes plus "seleccionar todos"; the subtotal is computed over `unifiedItems`, so it always reflects the active filters. Selection resets whenever filters or the search query change.
-- **Detail dialog** (`GastoDetalleDialog.tsx`) — opens on row click for gasto and ganado items alike, and carries Editar / Eliminar / Completar. The row's `onClick` is suppressed on the checkbox and the `⋮` wrapper via `stopPropagation`.
-- **Mobile** — the `⋮` menu is `hidden sm:block` **on purpose**: it is gated on `group-hover`, which never fires on touch, so on mobile the detail dialog is the only path to the actions. Do not re-enable it on mobile without also removing the hover gate. The two-line mobile row and the collapsible filter bar rely on the custom `globals.css` classes listed in the frozen-Tailwind caution zone below.
-- **The list container must not carry `overflow-hidden`.** The `⋮` menu is absolutely positioned and opens downward, so clipping the container hid the actions on the last rows entirely — on desktop that menu is the only path to them besides the dialog. Corner rounding is handled instead by `.lista-financiera` (`globals.css`), which rounds the first and last row. Note its radius is `calc(var(--radius) + 4px)`, not Tailwind's stock `0.75rem`: **this build redefines `rounded-xl`** (`--radius` is `1rem`, so the real radius is 20px). Anything matching that container's corners must use the same expression.
-- Row hover was written `hover:bg-gray-50/50` and did **nothing** — the frozen build ships `.hover\:bg-gray-50` but no opacity-modified variant. Corrected to `hover:bg-gray-50`, which matters now that the whole row is clickable and needs the affordance. A live row background is also what makes the `.lista-financiera` rounding load-bearing rather than decorative.
-
-### Ingresos historial (`/finanzas/ingresos`) — view contract
-
-Mirrors the Gastos contract above (Historial default + leftmost, `?tab=registrar` deep-link, `ytd` default repeated in the same three places, Usuario filter, selection subtotal, row-click detail dialog, collapsible mobile filters, no `overflow-hidden` on the list container). It reuses the same `globals.css` classes — `.filtros-toggle`, `.filtros-colapsables`, `.gasto-nombre`, `.gasto-meta-movil`, `.lista-financiera`. The `gasto-` prefix is historical: **the rules are module-agnostic and shared with Ingresos on purpose** — renaming them means touching both lists.
-
-Where it deliberately differs from Gastos, because `fin_ingresos` has no such column:
-
-- **No `estado`** — no Confirmado/Pendiente filter, no estado icon, no "N pendientes" counter, and no Completar action. `IngresoDetalleDialog` therefore has no `onCompletar` prop, unlike its gastos twin.
-- **No `concepto`** — the categoría filter has no cascade; instead it is **scoped by negocio** (`categoriasFiltradas`), and selecting a negocio clears `categoria_id`. Gastos does neither.
-- **Extra ingreso-only fields** surfaced in the detail dialog: `cantidad`, `precio_unitario`, `cosecha`, `alianza`, `cliente`, `finca` (migration 024 columns that had no UI until now).
-- **Usuario filter** — `created_by` on `fin_ingresos` is populated by migration **063**, not 050; the `fin_transacciones_ganado` half was already covered by 050.
-Everything else is intentionally identical to Gastos — the two lists should stay in sync.
 
 ### Cattle Inventory Module (`/ganado`, issue #51)
 
 Live head-count inventory layered on top of the finance transactions. Hierarchy: `gan_ubicaciones` → `gan_fincas` (hectáreas) → `gan_potreros` → `gan_inventario`. `gan_movimientos` is the source of truth; a DB trigger applies confirmed movements to the `gan_inventario` snapshot (CHECK constraints prevent negative counts).
+
+How `fin_transacciones_ganado` rows surface inside the Gastos/Ingresos lists — and why they cannot be filtered by negocio/región/categoría as query predicates — is in [`src/components/finanzas/CLAUDE.md`](src/components/finanzas/CLAUDE.md).
 
 Pending-confirmation flow (anti double-count): saving a `TransaccionGanadoForm` fires a DB trigger that creates a `pendiente` movement carrying the signed head count in `novillos_delta` (negative for ventas) and derived peso promedio. The user confirms it from `/ganado/movimientos`, assigning potrero + novillos/toros split (sum must equal the transaction's cabezas); only then is `gan_inventario` updated. Pendientes can be `descartado` if already registered manually; partial unique indexes block confirming the same transaction twice.
 
@@ -824,8 +476,12 @@ See `BUG_REPORT.md` for current tracked bugs. As of the last update, the Reporte
 
 Start with [`docs/README.md`](docs/README.md) for the living-document index. Completed plans, resolved incidents and one-time setup guides live under [`docs/archive/`](docs/archive/README.md).
 
+Two module contracts live as **nested `CLAUDE.md` files** rather than in this one — they load automatically only when Claude works with files under their directory, which keeps them out of unrelated sessions. Read them directly when working on those modules.
+
 | Document | Location | Purpose |
 |----------|----------|---------|
+| Hato Lechero contract | `src/components/hato/CLAUDE.md` | Full module contract (auto-loads under that dir) |
+| Finanzas view contracts | `src/components/finanzas/CLAUDE.md` | Gastos/Ingresos historial, ganado merge, table CSS (auto-loads under that dir) |
 | Database schema | `docs/supabase_tablas.md` | Schema reference; validate against migrations |
 | Financial-report rules | `docs/plan_reportes_finanzas.md` | Approved P&G and cash-flow accounting contract |
 | Hato Lechero plan | `docs/plan_hato_lechero_module.md` | Active module design |
@@ -899,7 +555,9 @@ Before committing at the end of a session:
 
 1. Run `npm run lint` and fix any issues from this session's changes.
 2. Verify the app loads on mobile viewport (sidebar collapsed state).
-3. Update this `CLAUDE.md` if any of these changed: schema, routes, edge functions, env vars, dependencies.
+3. Update the right memory file if any of these changed: schema, routes, edge functions, env vars, dependencies.
+   - Cross-cutting facts → this `CLAUDE.md`.
+   - Hato Lechero or Finanzas module detail → the nested `CLAUDE.md` in that component directory (see Key Documentation). Do **not** grow this file back with module-specific detail — it is deliberately kept small so every session pays less to load it.
 4. If edge functions were modified, redeploy: `npx supabase functions deploy make-server-1ccce916`.
 
 ---
