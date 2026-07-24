@@ -1,17 +1,21 @@
 # Sesiones de trabajo — B5 (export planilla) · E3 (duraciones + card) · D7 (backfill leche) + follow-ups
 
-**Fecha:** 2026-07-24 · **Estado:** S-B en ejecución (agente backend); S-A diferida por conflicto
+**Fecha:** 2026-07-24 · **Estado:** COMPLETADO — [PR #89](https://github.com/sforero94/Escociaos/pull/89) abierto contra `main`
 **Origen:** cierre del módulo Hato Lechero (plan `docs/plan_hato_lechero_module.md`, §6 B5/E3/D7 + "Known follow-ups").
 
-> **Estado de ejecución (2026-07-24):**
-> - **S-B código completo + verificado** (agente backend): D7 (`pesajesLeche.ts` + runner + 30 tests), `verify.ts`, `meses_prenez` (deriva en `commitChequeo.ts` + backfill script), `dedupe.ts` cross-file fix. Main loop: espejos `importHato` regenerados (22 al día), **migración 069** redactada (wirea `meses_prenez` en `fn_hato_commit_chequeo` — 065 lo descartaba; renumerada 067→069 porque 067/068 las tomaron sesiones concurrentes), suite **1267 verde**, typecheck+lint limpios. **Falta ejecutar en prod** (necesitan connector/service-role/Martha): aplicar 069 + `deploy make-server-1ccce916`, correr `backfill-meses-prenez.ts`, correr `backfill-leche.ts` (dry-run → adjudicar VALENCIANA/MONZA → real), `verify.ts`, regenerar `database.ts`.
-> - **E3.1 motor (`calculosHato.ts`) HECHO**: `tiempo_prenez_dias` (preñada/proxima_a_secar, desde el servicio) + `tiempo_secada_dias` (seca, desde el secado real) en `EstadoReproductivoDerivado`, `null` fuera de su estado (nunca 0). `tiempo_vacia` = `dias_abiertos` existente. Espejos regenerados, 6 tests nuevos, paridad verde. Sin consumidor todavía (la card lo lee en E3.3, en espera de la rama de UI).
-> - **Card "Vacas por estado" + duraciones E3 = SCOPE DE ESTA SESIÓN** (decisión del dueño 2026-07-24: es un scope coherente, no se mezcla con la sesión de UI). Se **rediseña sobre lo que entregue** la sesión de UI, no en paralelo.
->   - **E3.1 (motor, `calculosHato.ts`)**: agregar `tiempo_prenez_dias`/`tiempo_secada_dias` — **arranca cuando el agente de S-B libere `calculosHato.ts`** (evitar colisión de archivo dentro de la misma rama). No está en el set sin-commitear de la rama de UI, así que no choca con ella.
->   - **E3.2/E3.3 (visible: card + KPIs de ficha)**: **en espera hasta que la rama de UI `claude/ui-figma-alignment-e99b29` aterrice** (commit/merge de su `HatoDashboard.tsx`/`globals.css`/`hatoUi.ts`/`HojaDeVida.tsx`). Luego se rediseña el card de **3 ejes** encima — nuestra versión supersede la suya. Sin 3-way merge.
->   - ⚠️ La rama de UI ya construyó "Vacas por estado" en la versión **vieja de 5 categorías**; el diseño autoritativo es el de **3 ejes** de este doc.
->   - **F/U 4** (unificar chip de `numero` nulo/provisional) viaja con este trabajo de frontend post-aterrizaje (toca `HatoDashboard`/`ChequeoDiffReview`).
-> - **B5 (export planilla) = scope separado**, en su propia pista — NO se pliega al card (decisión del dueño: no mezclar scopes). Sigue diferida hasta reconciliar con la sesión de UI (toca `ChequeosList.tsx`).
+> **Estado de ejecución final (2026-07-24):** todo entregado en la rama `claude/hato-lechero-completion-ec3048` (suite **1357/1357 verde**, typecheck+lint limpios). Se mergeó `origin/main` (UI Figma alignment + S6/S9/S10) primero; las vistas visibles se rediseñaron **sobre** esa UI, sin 3-way merge.
+> - **Session A HECHO**: E3.1 motor (`tiempo_prenez_dias`/`tiempo_secada_dias` en `EstadoReproductivoDerivado`, `null` fuera de su estado, 3 copias con paridad; `tiempo_vacia` = `dias_abiertos`); E3.2 KPI de duración dinámico por estado en la Hoja de Vida (`hatoDuracion.ts`); **E3.3 card "Vacas por estado" de 3 ejes** (`VacasPorEstadoCard` — Producción Ordeño↔Horro, Reproducción Preñadas↔Por servir nominales; Etapa Vacas·Novillas·Terneras totaliza inventario; **colores 100% de la paleta del app**: `--primary`/`--secondary` verdes, `--brand-brown` cafés, `--foreground`/`--warning`/`--brand-brown` etapa — sin hex hardcodeado); F/U4 chip provisional/nulo unificado; **B5 export** (planilla pre-llenada + record-keeping + test de round-trip verde, `grilla.ts` aprende los headers del formato propio).
+> - **Session B HECHO + APLICADO A PROD** (vía connector, verificado):
+>   - Migración **069** aplicada (`fn_hato_commit_chequeo` persiste `meses_prenez`; EXECUTE solo `postgres`+`service_role`).
+>   - Backfill `meses_prenez`: **926 filas** (fiel a `calcularMesesPrenez`; 553 quedan NULL = sin fecha de servicio).
+>   - **Backfill de leche EJECUTADO**: **364 lecturas / 31 vacas** (Mar–Jun 2026), corrido con el parser vetado (`procesarHojaLeche`/`resolverIdentidadLeche`) → connector (patrón JSON-in/JSON-out, **nunca SQL ad-hoc** — lección del incidente de partos). Verificado exacto (Σ `litros_total`=5972.50, 31 animales, rango 2026-03-04→2026-06-24, `fuente='importacion_leche_2026'` → reversible).
+>     - **Sin resolver — 57 lecturas, para Martha (no se adivina)**: DACOTA/FLACA/VICTORIA (tienen datos pero no son vacas activas — vendidas/reclasificadas), FABIOLA (2 activas comparten el nombre, #984/#993), VALENCIANA (fila duplicada dentro de la hoja).
+>     - **1 outlier excluido**: VENUS 2026-05-13 `am=505 L` (typo de transcripción en el Excel; no se inventa el valor correcto — se corrige en la fuente y se re-sube).
+>   - Baseline de invariantes sano: 0 chapetas activas duplicadas, 80 activas, 171 total, 333 partos, 33 chequeos.
+> - **Pendientes humanos (fuera del código):**
+>   1. **Redeploy** `make-server-1ccce916` (auth CLI) — activa en prod el parseo de planillas B5 en el endpoint de preview, la escritura de `meses_prenez` en el commit path y el fix de `dedupe`. 069 es forward-compatible: nada se rompe hasta el redeploy.
+>   2. Las **57 lecturas sin resolver + el outlier de VENUS** esperan la revisión de Martha.
+>   3. `database.ts` regen — diferido (bajo valor sin el refactor de los ~6 casts `as any`, un trabajo aparte).
 
 Todas las decisiones de diseño están cerradas con el dueño (Santiago) en esta sesión. Este doc es el
 brief que ejecuta el equipo de agentes; los ports de paridad y la verificación final se quedan en el
