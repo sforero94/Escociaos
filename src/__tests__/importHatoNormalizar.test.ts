@@ -352,7 +352,12 @@ describe('Dedupe -- contenido idéntico vs. contenido que difiere (corrección d
     expect(salida.chequeos).toHaveLength(2);
     const manifiestoB = salida.hojas.find((h) => h.archivo === 'chequeo 21 y 22.xlsx')!;
     expect(manifiestoB.duplicadaDe).not.toBeNull();
-    expect(manifiestoB.issues.some((i) => i.motivo.includes('DIFIERE'))).toBe(true);
+    // F/U 5 (docs/hato/runbook-load-historico.md): la reconciliación ahora es
+    // POR ANIMAL, no por hoja completa -- el mensaje deja de decir "contenido
+    // DIFIERE en N puntos" (comparación por posición) y en su lugar reporta
+    // cuántas filas son duplicado exacto vs. cuántas difieren/son exclusivas,
+    // con el detalle por fila (que sigue incluyendo "campo 'pl' difiere").
+    expect(manifiestoB.issues.some((i) => i.motivo.includes('difieren o son exclusivas de esta hoja'))).toBe(true);
     expect(manifiestoB.issues.some((i) => i.motivo.includes("campo 'pl' difiere"))).toBe(true);
   });
 

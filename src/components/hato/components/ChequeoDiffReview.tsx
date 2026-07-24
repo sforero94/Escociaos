@@ -17,9 +17,18 @@
 
 import { AlertTriangle, Info } from 'lucide-react';
 import { EstadoChip } from './EstadoChip';
-import { chipClasificacionDiff } from '@/utils/hatoUi';
+import { chipClasificacionDiff, chipNumeroProvisional } from '@/utils/hatoUi';
 import type { PreviewChequeoRespuesta } from '../hooks/useSubirChequeoExcel';
 import type { FilaDiffChequeo, ClasificacionFilaDiff } from '@/utils/importHato/diffChequeo';
+
+// Render de `numero` unificado con el resto del módulo (F/U4,
+// docs/hato/sesiones-b5-d7-e3.md): null -> "Sin caravana" (nunca "Sin
+// número" ni en blanco), provisional (800-999) -> chip reusado de
+// `hatoUi.ts` (nunca un texto ámbar inline propio) -- mismos helpers que
+// `AnimalLabel.tsx`/`GenealogiaArbol.tsx`.
+function etiquetaNumero(numero: number | null): string {
+  return numero != null ? `#${numero}` : 'Sin caravana';
+}
 
 const ORDEN: ClasificacionFilaDiff[] = ['no_reconocido', 'cambio', 'nuevo', 'sin_cambio'];
 const TITULO: Record<ClasificacionFilaDiff, string> = {
@@ -34,12 +43,10 @@ function FilaDiffRow({ fila }: { fila: FilaDiffChequeo }) {
     <div className="border-t border-gray-100 px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium text-sm text-gray-900">
-          {fila.numero != null ? `#${fila.numero}` : 'Sin número'} {fila.nombre ?? ''}
+          {etiquetaNumero(fila.numero)} {fila.nombre ?? ''}
         </span>
         <EstadoChip chip={chipClasificacionDiff(fila.clasificacion)} />
-        {fila.numeroEsProvisional && (
-          <span className="text-xs text-amber-600">número provisional — no es chapeta física</span>
-        )}
+        {fila.numeroEsProvisional && <EstadoChip chip={chipNumeroProvisional()} />}
       </div>
       {fila.motivoNoReconocido && (
         <p className="text-xs text-red-600 mt-1">{fila.motivoNoReconocido}</p>

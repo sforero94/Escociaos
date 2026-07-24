@@ -1132,6 +1132,65 @@ describe('derivarEstadoReproductivo', () => {
     expect(r.dias_abiertos).toBeNull();
   });
 
+  describe('E3 -- duraciones dinámicas por estado (tiempo de preñez / secada / vacía)', () => {
+    it('preñada: tiempo_prenez_dias cuenta desde el último servicio; tiempo_secada_dias null', () => {
+      const fila: EstadoActualHatoRow = {
+        ...filaBase,
+        ultimo_servicio_fecha: '2024-03-01',
+        ultima_confirmacion_prenez_fecha: '2024-03-15',
+      };
+      const r = derivarEstadoReproductivo(fila, CONFIG_BASE, '2024-03-31');
+      expect(r.estado).toBe('preñada');
+      expect(r.tiempo_prenez_dias).toBe(30); // 2024-03-01 -> 2024-03-31
+      expect(r.tiempo_secada_dias).toBeNull();
+    });
+
+    it('proxima_a_secar sigue siendo preñez: tiempo_prenez_dias no-null, tiempo_secada_dias null', () => {
+      const fila: EstadoActualHatoRow = { ...filaBase, ultimo_servicio_fecha: '2024-05-14' };
+      const r = derivarEstadoReproductivo(fila, CONFIG_BASE, '2024-12-01');
+      expect(r.estado).toBe('proxima_a_secar');
+      expect(r.tiempo_prenez_dias).toBe(201); // 2024-05-14 -> 2024-12-01
+      expect(r.tiempo_secada_dias).toBeNull();
+    });
+
+    it('seca: tiempo_secada_dias cuenta desde el secado real; tiempo_prenez_dias null', () => {
+      const fila: EstadoActualHatoRow = {
+        ...filaBase,
+        ultimo_servicio_fecha: '2024-01-01',
+        ultimo_secado_real_fecha: '2024-03-01',
+      };
+      const r = derivarEstadoReproductivo(fila, CONFIG_BASE, '2024-03-31');
+      expect(r.estado).toBe('seca');
+      expect(r.tiempo_secada_dias).toBe(30); // 2024-03-01 -> 2024-03-31
+      expect(r.tiempo_prenez_dias).toBeNull();
+    });
+
+    it('servida (sin confirmación de preñez) no cuenta como preñez: ambas duraciones null', () => {
+      const fila: EstadoActualHatoRow = { ...filaBase, ultimo_servicio_fecha: '2024-08-01' };
+      const r = derivarEstadoReproductivo(fila, CONFIG_BASE, '2024-08-09');
+      expect(r.estado).toBe('servida');
+      expect(r.tiempo_prenez_dias).toBeNull();
+      expect(r.tiempo_secada_dias).toBeNull();
+    });
+
+    it('parida_reciente (vacía): preñez/secada null; el "tiempo vacía" es dias_abiertos', () => {
+      const fila: EstadoActualHatoRow = { ...filaBase, ultimo_parto_fecha: '2024-07-01' };
+      const r = derivarEstadoReproductivo(fila, CONFIG_BASE, '2024-08-10');
+      expect(r.estado).toBe('parida_reciente');
+      expect(r.tiempo_prenez_dias).toBeNull();
+      expect(r.tiempo_secada_dias).toBeNull();
+      expect(r.dias_abiertos).toBe(40); // "tiempo vacía"
+    });
+
+    it('animal no activo (vendida): ambas duraciones null', () => {
+      const fila: EstadoActualHatoRow = { ...filaBase, estado: 'vendida' };
+      const r = derivarEstadoReproductivo(fila, CONFIG_BASE, '2024-08-09');
+      expect(r.estado).toBe('vendida');
+      expect(r.tiempo_prenez_dias).toBeNull();
+      expect(r.tiempo_secada_dias).toBeNull();
+    });
+  });
+
   describe('V14 -- vacia_es_problema (confirmado por el dueño: ok=normal, rech=problema)', () => {
     it("ESTADO='vacia_apta' (ok/0k) sobre una vaca sin servicio activo => vacia_es_problema=false", () => {
       const fila: EstadoActualHatoRow = { ...filaBase, ultimo_estado_chequeo: 'vacia_apta' };

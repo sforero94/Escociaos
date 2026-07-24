@@ -22,6 +22,8 @@ function derivado(overrides: Partial<EstadoReproductivoDerivado> = {}): EstadoRe
     fecha_secar: null,
     fecha_probable_parto: null,
     dias_abiertos: null,
+    tiempo_prenez_dias: null,
+    tiempo_secada_dias: null,
     proxima_a_reemplazo: false,
     vacia_es_problema: null,
     alertas: { secado_due: false, rechequeo_due: false, servicio_sin_confirmacion: false, parto_proximo: false },

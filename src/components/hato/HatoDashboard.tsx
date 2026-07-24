@@ -2,10 +2,11 @@
 // DESCRIPCIÓN: Ruta `/hato-lechero` (Tablero). Rebuild Wave 1 del Figma
 // alignment spec (`docs/.../hato-figma-spec.md` §2): header compartido
 // (`HatoPageHeader`), 4 KPIs con datos reales (`HatoKpiCard`), panel
-// "Vacas por estado" (barras horizontales), panel derivado "Tablero de
-// alertas" (NO es la cola Telegram de S6 -- ver nota en `utils/hatoAlertas.ts`)
-// y las 4 listas de acción de la Épica E1 restyleadas con pills de
-// día/urgencia (`chipDiasRestantes`/`chipVencimiento`, hatoUi.ts).
+// "Vacas por estado" (`VacasPorEstadoCard` -- E3.3, rediseño de 3 ejes, ver
+// esa cabecera para el detalle), panel derivado "Tablero de alertas" (NO es
+// la cola Telegram de S6 -- ver nota en `utils/hatoAlertas.ts`) y las 4
+// listas de acción de la Épica E1 restyleadas con pills de día/urgencia
+// (`chipDiasRestantes`/`chipVencimiento`, hatoUi.ts).
 //
 // Todo sigue derivado por `derivarEstadoReproductivo` (calculosHato.ts) vía
 // `useHatoAnimales` -- este archivo no calcula ningún umbral de negocio,
@@ -29,6 +30,7 @@ import { useProduccionHato } from './hooks/useProduccionHato';
 import { HatoPageHeader } from './components/HatoPageHeader';
 import { HatoKpiCard } from './components/HatoKpiCard';
 import { HatoReproCard } from './components/HatoReproCard';
+import { VacasPorEstadoCard } from './components/VacasPorEstadoCard';
 import { EstadoChip } from './components/EstadoChip';
 import { AnimalLabel } from './components/AnimalLabel';
 import { ALERTA_META_TABLERO, PILL_ALERTA_TABLERO, derivarAlertasTablero } from '@/utils/hatoAlertasTablero';
@@ -36,29 +38,6 @@ import type { ChipEstilo } from '@/utils/hatoUi';
 import { formatNumber } from '@/utils/format';
 import { diferenciaEnDias } from '@/utils/fechas';
 import type { HatoProduccionQuincenal } from '@/types/hato';
-
-// ---------------------------------------------------------------------------
-// "Vacas por estado" -- partición del hato activo (sin terneras) en 5
-// grupos. JUICIO DE DISEÑO (documentar para revisión, ver reporte):
-//   - Novillas / Secas (horro) = directo de `categoria` (ya derivada).
-//   - Dentro de `categoria === 'hato'` (en ordeño), se separan las dos
-//     señales reproductivas que el dueño ya usa como listas de acción --
-//     Preñadas (`preñada` + `proxima_a_secar`, gestación tardía) y Por servir
-//     (`estado === 'vacia_por_servir'`) -- y "En leche" es el RESTO de
-//     `hato` (servida/parida reciente/indeterminado): vacas
-//     lecheras sin ninguna de esas dos señales para destacar. Es decir,
-//     "En leche" NO es "toda vaca ordeñando" -- una preñada o vacía por
-//     servir también está ordeñando, pero se cuenta en su propio grupo para
-//     que el panel sea útil como lista de prioridades, no solo un conteo.
-// Total = novillas + hato + horro (excluye terneras y estados terminales,
-// que `clasificarCategoriaHato` ya excluye devolviendo `null`).
-// ---------------------------------------------------------------------------
-interface BucketEstado {
-  key: string;
-  label: string;
-  count: number;
-  color: string;
-}
 
 export function HatoDashboard() {
   const { animales, loading, error } = useHatoAnimales();
@@ -85,19 +64,22 @@ export function HatoDashboard() {
   const {
     enOrdeno,
     proximasASecar, proximasAParir, rechequeoPendiente, vaciasPorServir, filasAlertas,
-    bucketsEstado, totalVacasPorEstado, prenadasCount, servidasCount, vaciasReproCount, plPromedio,
+    horroCount, novillasCount, terneras, prenadasCount, servidasCount, vaciasReproCount, plPromedio,
   } = useMemo(() => {
     const enOrdeno = animales.filter((a) => a.categoria === 'hato');
     const horro = animales.filter((a) => a.categoria === 'horro');
     const novillas = animales.filter((a) => a.categoria === 'novilla');
+    const terneras = animales.filter((a) => a.categoria === 'ternera');
     // Las 4 señales de alerta y su aplanado en filas viven en
     // `utils/hatoAlertas.ts` -- ÚNICA fuente, compartida con
     // `AlertasView.tsx` (Cola de alertas), para que nunca puedan divergir.
     const { proximasASecar, proximasAParir, rechequeoPendiente, vaciasPorServir, filas: filasAlertas } =
       derivarAlertasTablero(animales);
-    // Desglose reproductivo del hato en ordeño (3 KPIs, decisión del dueño:
-    // reemplaza la métrica única "% Preñez" por Preñadas/Servidas/Vacías).
-    // Particiona el ordeño al 100%:
+    // Desglose reproductivo del hato en ordeño (E3.3: alimenta TANTO
+    // `HatoReproCard` -- % Preñadas/Servidas/Vacías del hato en ordeño --
+    // COMO la barra "Reproducción" (nominal) de `VacasPorEstadoCard`, que
+    // reusa `prenadasCount`/`vaciasPorServir.length` para que ambos paneles
+    // nunca puedan divergir en el mismo conteo).
     //   - Preñadas: confirmadas ('preñada') + próximas a secar (gestación
     //     tardía, inequívocamente gestantes).
     //   - Servidas: montadas ('servida'), aún SIN confirmación de preñez
@@ -106,22 +88,16 @@ export function HatoDashboard() {
     //     indeterminado) -- abiertas: ni preñadas ni montadas.
     // `servida` deliberadamente NO cuenta como preñada: contar solo 'preñada'
     // daba 0% con vacas claramente gestantes, y contar 'servida' inflaría con
-    // montas no confirmadas.
+    // montas no confirmadas. La barra "Reproducción" (nominal) de
+    // `VacasPorEstadoCard` deja `servida` fuera de sus dos extremos por el
+    // mismo motivo (no es "preñada" ni "por servir todavía") -- por eso
+    // `HatoReproCard` se conserva: es el único panel que sigue mostrando esa
+    // vaca en algún conteo.
     const prenadasCount = enOrdeno.filter(
       (a) => a.derivado.estado === 'preñada' || a.derivado.estado === 'proxima_a_secar',
     ).length;
     const servidasCount = enOrdeno.filter((a) => a.derivado.estado === 'servida').length;
     const vaciasReproCount = enOrdeno.length - prenadasCount - servidasCount;
-    const enLecheCount = enOrdeno.length - vaciasPorServir.length - prenadasCount;
-
-    const bucketsEstado: BucketEstado[] = [
-      { key: 'en_leche', label: 'En leche', count: enLecheCount, color: 'var(--primary)' },
-      { key: 'prenadas', label: 'Preñadas', count: prenadasCount, color: 'var(--secondary)' },
-      { key: 'novillas', label: 'Novillas', count: novillas.length, color: 'var(--foreground)' },
-      { key: 'secas', label: 'Secas (horro)', count: horro.length, color: 'var(--sidebar-accent)' },
-      { key: 'por_servir', label: 'Por servir', count: vaciasPorServir.length, color: 'var(--brand-brown)' },
-    ];
-    const totalVacasPorEstado = novillas.length + enOrdeno.length + horro.length;
 
     const plValores = enOrdeno.map((a) => a.pl).filter((pl): pl is number => pl != null);
     const plPromedio = plValores.length > 0 ? plValores.reduce((s, v) => s + v, 0) / plValores.length : null;
@@ -129,7 +105,8 @@ export function HatoDashboard() {
     return {
       enOrdeno,
       proximasASecar, proximasAParir, rechequeoPendiente, vaciasPorServir, filasAlertas,
-      bucketsEstado, totalVacasPorEstado, prenadasCount, servidasCount, vaciasReproCount, plPromedio,
+      horroCount: horro.length, novillasCount: novillas.length, terneras,
+      prenadasCount, servidasCount, vaciasReproCount, plPromedio,
     };
   }, [animales]);
 
@@ -189,30 +166,15 @@ export function HatoDashboard() {
 
             {/* Row 2 -- Vacas por estado + Tablero de alertas */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-              <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-                <h3 className="text-sm font-semibold text-gray-900 mb-1">Vacas por estado</h3>
-                <p className="text-xs text-gray-500 mb-4">{formatNumber(totalVacasPorEstado)} cabezas en total</p>
-                <div className="space-y-3">
-                  {bucketsEstado.map((b) => {
-                    const pct = totalVacasPorEstado > 0 ? (b.count / totalVacasPorEstado) * 100 : 0;
-                    return (
-                      <div key={b.key} className="flex items-center gap-3">
-                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: b.color }} />
-                        <span className="w-28 flex-shrink-0 text-sm text-gray-700">{b.label}</span>
-                        <div className="flex-1 min-w-0 h-2 rounded-full bg-gray-200 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${b.key === 'secas' ? 'border border-gray-300' : ''}`}
-                            style={{ width: `${pct}%`, backgroundColor: b.color }}
-                          />
-                        </div>
-                        <span className="w-8 flex-shrink-0 text-right text-sm font-semibold text-gray-900">
-                          {formatNumber(b.count)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+              <VacasPorEstadoCard
+                ordeno={enOrdeno.length}
+                horro={horroCount}
+                prenadas={prenadasCount}
+                porServir={vaciasPorServir.length}
+                vacas={enOrdeno.length + horroCount}
+                novillas={novillasCount}
+                terneras={terneras.length}
+              />
 
               <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-1">

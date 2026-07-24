@@ -234,6 +234,36 @@ describe('construirFilasVacas', () => {
     expect(vaca.fecha_servicio).toBe('2026-05-20');
   });
 
+  // ==========================================================================
+  // meses_prenez (F/U 2, CLAUDE.md "Known follow-ups" #2) -- deriva con el
+  // MISMO motor (`calcularMesesPrenez`) que ya usa el resto del módulo para
+  // SECAR/PP, nunca una segunda fórmula.
+  // ==========================================================================
+  it('meses_prenez se deriva de fecha_servicio vigente + chequeoFecha (calcularMesesPrenez)', () => {
+    const fila = filaBase({ fechasServicio: ['2026-01-10'], chequeoFecha: '2026-07-09' });
+    const [vaca] = construirFilasVacas([{ fila, animalId: 'a1' }]);
+    // 2026-01-10 -> 2026-07-09: 5 meses completos (el día 9 < 10, se resta 1 al conteo de 6).
+    expect(vaca.meses_prenez).toBe(5);
+  });
+
+  it('meses_prenez es null sin fecha de servicio vigente (nunca 0 inventado)', () => {
+    const fila = filaBase({ fechasServicio: [], chequeoFecha: '2026-07-09' });
+    const [vaca] = construirFilasVacas([{ fila, animalId: 'a1' }]);
+    expect(vaca.meses_prenez).toBeNull();
+  });
+
+  it('meses_prenez es null sin chequeoFecha (sin referencia temporal)', () => {
+    const fila = filaBase({ fechasServicio: ['2026-01-10'], chequeoFecha: null });
+    const [vaca] = construirFilasVacas([{ fila, animalId: 'a1' }]);
+    expect(vaca.meses_prenez).toBeNull();
+  });
+
+  it('usa la ÚLTIMA fecha de servicio (V7), no la primera, para meses_prenez', () => {
+    const fila = filaBase({ fechasServicio: ['2025-10-01', '2026-06-01'], chequeoFecha: '2026-07-09' });
+    const [vaca] = construirFilasVacas([{ fila, animalId: 'a1' }]);
+    expect(vaca.meses_prenez).toBe(1); // desde 2026-06-01, no desde 2025-10-01
+  });
+
   it('propaga issues de normalización a normalizacion_issues, o null si no hay ninguno', () => {
     const conIssues = filaBase({ issues: [{ crudo: 'xx', motivo: 'no interpretable' }] });
     const [vacaConIssues] = construirFilasVacas([{ fila: conIssues, animalId: 'a1' }]);

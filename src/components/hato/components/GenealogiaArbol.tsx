@@ -5,14 +5,25 @@
 // registrar" cuando falta el padre (~60% de las terneras del histórico no
 // lo traen) -- NUNCA en blanco, blanco no implica "sin padre" (regla
 // explícita del plan).
+//
+// Render de `numero` unificado con el resto del módulo (F/U4,
+// docs/hato/sesiones-b5-d7-e3.md): null -> "Sin caravana" (nunca "—" ni en
+// blanco), provisional (800-999) -> chip reusado de `hatoUi.ts` (nunca un
+// texto ámbar inline propio) -- mismos helpers que `AnimalLabel.tsx`.
 
 import { Link } from 'react-router-dom';
+import { EstadoChip } from './EstadoChip';
+import { chipNumeroProvisional } from '@/utils/hatoUi';
 import { esNumeroProvisional } from '@/utils/importHato/overridesChapeta';
 
 export interface NodoGenealogia {
   id: string | null;
   numero: number | null;
   nombre: string | null;
+}
+
+function etiquetaNumero(numero: number | null): string {
+  return numero != null ? `#${numero}` : 'Sin caravana';
 }
 
 function CajaAnimal({
@@ -36,12 +47,12 @@ function CajaAnimal({
   const contenido = (
     <div className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-center min-w-[120px] hover:border-primary transition-colors">
       <p className="text-xs text-gray-500 uppercase tracking-wide">{rol}</p>
-      <p className="text-sm font-medium text-gray-900">
-        {nodo.numero != null ? `#${nodo.numero}` : '—'}
-        {nodo.numero != null && esNumeroProvisional(nodo.numero) && (
-          <span className="text-amber-600"> (prov.)</span>
-        )}
-      </p>
+      <p className="text-sm font-medium text-gray-900">{etiquetaNumero(nodo.numero)}</p>
+      {nodo.numero != null && esNumeroProvisional(nodo.numero) && (
+        <div className="mt-1 flex justify-center">
+          <EstadoChip chip={chipNumeroProvisional()} />
+        </div>
+      )}
       {nodo.nombre && <p className="text-xs text-gray-500">{nodo.nombre}</p>}
     </div>
   );
@@ -83,9 +94,10 @@ export function GenealogiaArbol({
       <div className="flex justify-center">
         <div className="rounded-lg border-2 border-primary bg-white px-4 py-2 text-center min-w-[120px]">
           <p className="text-xs text-primary uppercase tracking-wide">Esta vaca</p>
-          <p className="text-sm font-semibold text-gray-900">
-            {actual.numero != null ? `#${actual.numero}` : '—'}
-          </p>
+          {/* El chip "provisional" de este animal ya se muestra en el header
+              de HojaDeVida.tsx (fila de badges) -- no se repite aquí para no
+              duplicarlo dentro del mismo árbol. */}
+          <p className="text-sm font-semibold text-gray-900">{etiquetaNumero(actual.numero)}</p>
           {actual.nombre && <p className="text-xs text-gray-600">{actual.nombre}</p>}
         </div>
       </div>

@@ -129,7 +129,10 @@ export function HojaDeVida() {
             <FranjaEstadisticas
               pl={pl}
               numPartos={numPartos}
+              estado={derivado.estado}
               diasAbiertos={derivado.dias_abiertos}
+              tiempoPrenezDias={derivado.tiempo_prenez_dias}
+              tiempoSecadaDias={derivado.tiempo_secada_dias}
               fechaSecar={derivado.fecha_secar}
               fechaProbableParto={derivado.fecha_probable_parto}
             />
