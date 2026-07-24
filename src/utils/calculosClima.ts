@@ -108,18 +108,48 @@ function nonNull(rows: LecturaClima[], field: keyof LecturaClima): number[] {
     .filter((v): v is number => v !== null && typeof v === 'number');
 }
 
+function masReciente(rows: LecturaClima[]): LecturaClima {
+  return rows.reduce((latest, r) => (new Date(r.timestamp) > new Date(latest.timestamp) ? r : latest));
+}
+
+// El acumulado diario de Ecowitt (lluvia_diaria_mm) es un contador que se
+// supone se reinicia a medianoche. Si el sensor no lo reinicia, el valor se
+// congela en el total de días anteriores — mismo bug que corrige la
+// migración 068 en el rollup nocturno. Aquí aplicamos el mismo criterio a
+// lecturas en vivo: solo confiamos en el acumulado de un bucket (día u hora)
+// si Ecowitt reporta haberlo actualizado dentro de ese mismo día calendario,
+// o si no tenemos esa señal en absoluto (lecturas previas a esta corrección
+// — mismo comportamiento que antes, no podemos hacerlo mejor sin el dato).
+function lluviaConfiableDelBucket(lecturas: LecturaClima[], diaKey: string): number | null {
+  const conLluvia = lecturas.filter(r => r.lluvia_diaria_mm !== null);
+  if (conLluvia.length === 0) return null;
+  const ultima = masReciente(conLluvia);
+  const sinSenalDeFrescura = ultima.lluvia_diaria_actualizada_en == null;
+  const actualizadaHoy = !sinSenalDeFrescura && getBogotaDateKey(ultima.lluvia_diaria_actualizada_en!) === diaKey;
+  if (!sinSenalDeFrescura && !actualizadaHoy) return null; // contador sin renovar — no confiable
+  return round2(ultima.lluvia_diaria_mm!);
+}
+
 function calcularLluviaPorPeriodo(rows: LecturaClima[]): number | null {
   const lluviaRows = rows.filter(r => r.lluvia_diaria_mm !== null);
   if (lluviaRows.length === 0) return null;
-  const porDia = new Map<string, number>();
+  const porDia = new Map<string, LecturaClima[]>();
   for (const row of lluviaRows) {
     const dayKey = getBogotaDateKey(row.timestamp);
-    const current = porDia.get(dayKey) ?? 0;
-    porDia.set(dayKey, Math.max(current, row.lluvia_diaria_mm!));
+    const bucket = porDia.get(dayKey) ?? [];
+    bucket.push(row);
+    porDia.set(dayKey, bucket);
   }
   let total = 0;
-  for (const maxDia of porDia.values()) total += maxDia;
-  return round2(total);
+  let huboDatoConfiable = false;
+  for (const [dayKey, lecturas] of porDia) {
+    const confiable = lluviaConfiableDelBucket(lecturas, dayKey);
+    if (confiable !== null) {
+      total += confiable;
+      huboDatoConfiable = true;
+    }
+  }
+  return huboDatoConfiable ? round2(total) : null;
 }
 
 export function calcularResumen24h(rows: LecturaClima[]): ResumenClima {
@@ -164,7 +194,12 @@ export function resumenDiarioToAgregada(rows: ResumenDiario[], desde: string, ha
       humedad_pct_promedio: r.humedad_pct_avg,
       viento_kmh_promedio: r.viento_kmh_avg,
       rafaga_kmh_max: r.rafaga_kmh_max,
-      lluvia_diaria_mm: r.lluvia_total_mm,
+      // El rollup (migración 068) ya deja lluvia_total_mm en NULL cuando
+      // lluvia_confianza es 'contador_congelado'; este check es solo una
+      // salvaguarda extra para que el gráfico nunca renderice un dato que
+      // sabemos no confiable, aunque la fila llegue desincronizada.
+      lluvia_diaria_mm: r.lluvia_confianza === 'contador_congelado' ? null : r.lluvia_total_mm,
+      lluvia_confianza: r.lluvia_confianza,
       radiacion_wm2_promedio: r.radiacion_wm2_avg,
     }))
     .sort((a, b) => a.fecha.localeCompare(b.fecha));
@@ -245,7 +280,6 @@ export function lecturas24hToHorario(rows: LecturaClima[]): LecturaClimaAgregada
     const humedad = nonNull(lecturas, 'humedad_pct');
     const viento = nonNull(lecturas, 'viento_kmh');
     const rafaga = nonNull(lecturas, 'rafaga_kmh');
-    const lluvia = nonNull(lecturas, 'lluvia_diaria_mm');
     const radiacion = nonNull(lecturas, 'radiacion_wm2');
 
     result.push({
@@ -256,7 +290,7 @@ export function lecturas24hToHorario(rows: LecturaClima[]): LecturaClimaAgregada
       humedad_pct_promedio: humedad.length > 0 ? round2(avg(humedad)) : null,
       viento_kmh_promedio: viento.length > 0 ? round2(avg(viento)) : null,
       rafaga_kmh_max: rafaga.length > 0 ? round2(safeMax(rafaga)) : null,
-      lluvia_diaria_mm: lluvia.length > 0 ? round2(safeMax(lluvia)) : null,
+      lluvia_diaria_mm: lluviaConfiableDelBucket(lecturas, fecha.slice(0, 10)),
       radiacion_wm2_promedio: radiacion.length > 0 ? round2(avg(radiacion)) : null,
     });
   }

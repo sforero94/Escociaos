@@ -74,9 +74,16 @@ export function GraficoPrecipitacion({ data, dataAnual }: GraficoPrecipitacionPr
     );
   }
 
+  const diasSinDatoConfiable = data.filter(d => d.lluvia_confianza === 'contador_congelado').length;
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Precipitación Acumulada</h3>
+      <h3 className={`text-lg font-semibold text-gray-900 ${diasSinDatoConfiable > 0 ? 'mb-1' : 'mb-4'}`}>Precipitación Acumulada</h3>
+      {diasSinDatoConfiable > 0 && (
+        <p className="text-xs text-amber-600 mb-3">
+          {diasSinDatoConfiable} día{diasSinDatoConfiable > 1 ? 's' : ''} sin dato confiable de lluvia (el sensor no reinició su contador diario) — no se {diasSinDatoConfiable > 1 ? 'muestran' : 'muestra'} en el gráfico.
+        </p>
+      )}
       <ResponsiveContainer width="100%" height={300}>
         <BarChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />

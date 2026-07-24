@@ -10,10 +10,22 @@ export interface LecturaClima {
   lluvia_tasa_mm_hr: number | null;
   lluvia_evento_mm: number | null;
   lluvia_diaria_mm: number | null;
+  // Última actualización que Ecowitt reporta para el contador acumulado
+  // diario (rain.daily.time). Null si la API no la envió. Usado para
+  // detectar cuando el contador no se reinició a medianoche — ver
+  // migración 068 y calculosClima.ts.
+  lluvia_diaria_actualizada_en: string | null;
   radiacion_wm2: number | null;
   uv_index: number | null;
   created_at: string;
 }
+
+// 'ok' = contador de lluvia verificado fresco ese día.
+// 'contador_congelado' = el contador de Ecowitt no se reinició; lluvia_total_mm
+//   viene NULL (sin dato, nunca un duplicado fabricado) — ver migración 068.
+// 'sin_time_piezo' = Ecowitt no envió la señal de frescura; se confía en el
+//   valor crudo (comportamiento previo a la migración 068).
+export type LluviaConfianza = 'ok' | 'contador_congelado' | 'sin_time_piezo';
 
 export interface ResumenDiario {
   fecha: string;
@@ -25,6 +37,7 @@ export interface ResumenDiario {
   humedad_pct_max: number | null;
   humedad_pct_avg: number | null;
   lluvia_total_mm: number | null;
+  lluvia_confianza: LluviaConfianza;
   viento_kmh_avg: number | null;
   rafaga_kmh_max: number | null;
   viento_dir_predominante: number | null;
@@ -60,6 +73,9 @@ export interface LecturaClimaAgregada {
   viento_kmh_promedio: number | null;
   rafaga_kmh_max: number | null;
   lluvia_diaria_mm: number | null;
+  // Solo poblado cuando el punto viene de un resumen diario persistido
+  // (resumenDiarioToAgregada); ausente en agregaciones horarias/mensuales.
+  lluvia_confianza?: LluviaConfianza | null;
   radiacion_wm2_promedio: number | null;
 }
 

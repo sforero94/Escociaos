@@ -50,6 +50,12 @@ function inToMm(inches: number): number {
   return round2(inches * 25.4);
 }
 
+function epochSecondsToIso(s: string | undefined): string | null {
+  if (!s) return null;
+  const n = parseInt(s, 10);
+  return isNaN(n) ? null : new Date(n * 1000).toISOString();
+}
+
 function parseEcowittObservation(data: EcowittData, time: string, stationId: string) {
   const tempF = safeFloat(data.outdoor?.temperature?.value);
   const windMph = safeFloat(data.wind?.wind_speed?.value);
@@ -71,6 +77,7 @@ function parseEcowittObservation(data: EcowittData, time: string, stationId: str
     lluvia_tasa_mm_hr: rainRateIn != null ? inToMm(rainRateIn) : null,
     lluvia_evento_mm: rainEventIn != null ? inToMm(rainEventIn) : null,
     lluvia_diaria_mm: rainDailyIn != null ? inToMm(rainDailyIn) : null,
+    lluvia_diaria_actualizada_en: epochSecondsToIso(rain?.daily?.time),
     radiacion_wm2: safeFloat(data.solar_and_uvi?.solar?.value),
     uv_index: (() => {
       const v = safeFloat(data.solar_and_uvi?.uvi?.value);
@@ -226,6 +233,26 @@ describe('parseEcowittObservation', () => {
     const r = parseEcowittObservation(data, sampleTime, sampleMac);
     expect(r.lluvia_diaria_mm).toBeCloseTo(12.7, 1); // 0.50 * 25.4
   });
+
+  it('captures the daily rain counter freshness timestamp from Ecowitt', () => {
+    const r = parseEcowittObservation(sampleData, sampleTime, sampleMac);
+    const expected = new Date(1773961642 * 1000).toISOString();
+    expect(r.lluvia_diaria_actualizada_en).toBe(expected);
+  });
+
+  it('freshness timestamp is null when rain data is absent', () => {
+    const data: EcowittData = { outdoor: sampleData.outdoor };
+    const r = parseEcowittObservation(data, sampleTime, sampleMac);
+    expect(r.lluvia_diaria_actualizada_en).toBeNull();
+  });
+
+  it('freshness timestamp is null when Ecowitt omits daily.time', () => {
+    const data: EcowittData = {
+      rainfall_piezo: { daily: { value: '0.20', unit: 'in', time: undefined as unknown as string } },
+    };
+    const r = parseEcowittObservation(data, sampleTime, sampleMac);
+    expect(r.lluvia_diaria_actualizada_en).toBeNull();
+  });
 });
 
 describe('unit conversion helpers', () => {
@@ -239,4 +266,12 @@ describe('unit conversion helpers', () => {
   it('safeFloat: invalid string', () => expect(safeFloat('abc')).toBeNull());
   it('safeFloat: zero', () => expect(safeFloat('0')).toBe(0));
   it('safeFloat: negative', () => expect(safeFloat('-5.2')).toBe(-5.2));
+});
+
+describe('epochSecondsToIso', () => {
+  it('converts a unix epoch seconds string to ISO', () => {
+    expect(epochSecondsToIso('1773961642')).toBe(new Date(1773961642 * 1000).toISOString());
+  });
+  it('returns null for undefined', () => expect(epochSecondsToIso(undefined)).toBeNull());
+  it('returns null for a non-numeric string', () => expect(epochSecondsToIso('not-a-number')).toBeNull());
 });

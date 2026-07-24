@@ -1,20 +1,34 @@
 // ARCHIVO: components/hato/AnimalesList.tsx
 // DESCRIPCIÓN: Ruta `/hato-lechero/hato` (S4, plan §7.5). Lista del hato con
-// las TRES categorías que pidió el dueño (decisión 2026-07-22, ver
-// `utils/hatoCategorias.ts`): terneras, hato (en ordeño), horro (secas). El
-// sub-nav horizontal del mock NO se implementa (resuelto por el sidebar de
-// producción, ver plan §7.6 "Decisiones que el prototipo no resuelve" #1) --
-// las 3 categorías se navegan con tabs internos de esta vista.
+// las CUATRO categorías que pidió el dueño (decisión 2026-07-22, tercera
+// ronda -- ver `utils/hatoCategorias.ts`): terneras, novillas, hato (en
+// ordeño), horro (secas). El sub-nav horizontal del mock NO se implementa
+// (resuelto por el sidebar de producción, ver plan §7.6 "Decisiones que el
+// prototipo no resuelve" #1) -- las 4 categorías se navegan con tabs
+// internos de esta vista.
+//
+// Figma alignment spec §4 (Wave 2a) agrega: `HatoPageHeader` compartido,
+// encabezados de columna ordenables A-Z (N.º/Nombre/Estado/PL/Próximo
+// evento) y el botón "+ Registrar" gateado a Administrador/Gerencia.
 
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, AlertTriangle, Search } from 'lucide-react';
+import { Loader2, AlertTriangle, Search, Plus, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
 import { EstadoChip } from './components/EstadoChip';
+import { HatoPageHeader } from './components/HatoPageHeader';
+import { CrearAnimalDialog } from './components/CrearAnimalDialog';
 import { useHatoAnimales, type AnimalHatoDerivado } from './hooks/useHatoAnimales';
 import { chipEstadoReproductivo, chipProximaAReemplazo, chipNumeroProvisional } from '@/utils/hatoUi';
 import { LABEL_CATEGORIA_HATO, type CategoriaHato } from '@/utils/hatoCategorias';
+import {
+  ordenarAnimalesHato,
+  type ColumnaOrdenableAnimales as ColumnaOrdenable,
+  type DireccionOrdenAnimales as DireccionOrden,
+} from '@/utils/ordenarAnimalesHato';
 import { formatNumber, formatShortDate } from '@/utils/format';
 
 function proximoEvento(animal: AnimalHatoDerivado): string {
@@ -27,7 +41,54 @@ function proximoEvento(animal: AnimalHatoDerivado): string {
   return '—';
 }
 
+function CabeceraOrdenable({
+  label,
+  columna,
+  ordenActual,
+  onOrdenar,
+  align = 'left',
+}: {
+  label: string;
+  columna: ColumnaOrdenable;
+  ordenActual: { columna: ColumnaOrdenable; direccion: DireccionOrden };
+  onOrdenar: (columna: ColumnaOrdenable) => void;
+  align?: 'left' | 'right';
+}) {
+  const activa = ordenActual.columna === columna;
+  return (
+    <th className={`px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap ${align === 'right' ? 'text-right' : 'text-left'}`}>
+      <button
+        type="button"
+        onClick={() => onOrdenar(columna)}
+        className={`inline-flex items-center gap-1 hover:text-gray-900 ${activa ? 'text-gray-900' : ''}`}
+      >
+        {label}
+        {activa ? (
+          ordenActual.direccion === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+        ) : (
+          <ChevronsUpDown className="w-3 h-3 text-gray-300" />
+        )}
+      </button>
+    </th>
+  );
+}
+
 function TablaAnimales({ animales }: { animales: AnimalHatoDerivado[] }) {
+  const [orden, setOrden] = useState<{ columna: ColumnaOrdenable; direccion: DireccionOrden }>({
+    columna: 'numero',
+    direccion: 'asc',
+  });
+
+  const handleOrdenar = (columna: ColumnaOrdenable) => {
+    setOrden((prev) =>
+      prev.columna === columna
+        ? { columna, direccion: prev.direccion === 'asc' ? 'desc' : 'asc' }
+        : { columna, direccion: 'asc' },
+    );
+  };
+
+  const animalesOrdenados = useMemo(() => ordenarAnimalesHato(animales, orden.columna, orden.direccion), [animales, orden]);
+
   if (animales.length === 0) {
     return (
       <div className="rounded-xl border border-gray-200 bg-white px-4 py-8 text-center text-sm text-gray-500">
@@ -38,21 +99,21 @@ function TablaAnimales({ animales }: { animales: AnimalHatoDerivado[] }) {
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-      <div className="overflow-auto">
+      <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">N.º</th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Nombre</th>
+              <CabeceraOrdenable label="N.º" columna="numero" ordenActual={orden} onOrdenar={handleOrdenar} />
+              <CabeceraOrdenable label="Nombre" columna="nombre" ordenActual={orden} onOrdenar={handleOrdenar} />
               <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Raza</th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Estado</th>
-              <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">PL</th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Próximo evento</th>
+              <CabeceraOrdenable label="Estado" columna="estado" ordenActual={orden} onOrdenar={handleOrdenar} />
+              <CabeceraOrdenable label="PL" columna="pl" ordenActual={orden} onOrdenar={handleOrdenar} align="right" />
+              <CabeceraOrdenable label="Próximo evento" columna="proximo" ordenActual={orden} onOrdenar={handleOrdenar} />
               <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap" />
             </tr>
           </thead>
           <tbody>
-            {animales.map((animal, i) => (
+            {animalesOrdenados.map((animal, i) => (
               <tr
                 key={animal.animalId}
                 className={`border-t border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
@@ -98,8 +159,11 @@ function TablaAnimales({ animales }: { animales: AnimalHatoDerivado[] }) {
 }
 
 export function AnimalesList() {
-  const { animales, loading, error } = useHatoAnimales();
+  const { animales, loading, error, reload } = useHatoAnimales();
+  const { profile } = useAuth();
+  const canEdit = profile?.rol === 'Administrador' || profile?.rol === 'Gerencia';
   const [busqueda, setBusqueda] = useState('');
+  const [crearOpen, setCrearOpen] = useState(false);
 
   const animalesFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -121,21 +185,30 @@ export function AnimalesList() {
   return (
     <div className="min-h-screen min-h-[100dvh] bg-gray-50 p-4 lg:p-8">
       <div className="max-w-7xl mx-auto w-full">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-          <div>
-            <h1 className="text-foreground mb-1">Hato</h1>
-            <p className="text-sm text-gray-500">Terneras, novillas, hato en ordeño y horro (secas) — Finca Subachoque</p>
-          </div>
-          <div className="relative w-full max-w-xs">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <Input
-              value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
-              placeholder="Buscar por número o nombre..."
-              className="pl-9"
-            />
-          </div>
-        </div>
+        <HatoPageHeader
+          breadcrumb="Hato Lechero"
+          section="Animales"
+          title="Hato"
+          subtitle="Terneras, novillas, hato en ordeño y horro (secas) — Finca Subachoque"
+          actions={
+            <>
+              <div className="relative w-full max-w-xs">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <Input
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  placeholder="Buscar por número o nombre..."
+                  className="pl-9"
+                />
+              </div>
+              {canEdit && (
+                <Button onClick={() => setCrearOpen(true)}>
+                  <Plus className="w-4 h-4 mr-1.5" /> Registrar
+                </Button>
+              )}
+            </>
+          }
+        />
 
         {error && (
           <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 mb-6 text-sm text-red-700">
@@ -171,6 +244,10 @@ export function AnimalesList() {
           </Tabs>
         )}
       </div>
+
+      {canEdit && (
+        <CrearAnimalDialog open={crearOpen} onOpenChange={setCrearOpen} onCreado={reload} />
+      )}
     </div>
   );
 }

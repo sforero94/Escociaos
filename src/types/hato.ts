@@ -83,13 +83,32 @@ export interface HatoChequeoRow {
 }
 
 /** `hato_chequeo_vacas` (migración 053 + `estado` de 062) -- una fila por
- * vaca por chequeo, capa normalizada. Las columnas `*_raw` existen en la
- * tabla pero no se listan aquí -- este módulo no las consume todavía (ver
- * limitación documentada en el reporte de S4 sobre el endpoint B0). */
+ * vaca por chequeo. Capa cruda (`*_raw`, texto verbatim de la planilla,
+ * nunca se descarta un valor no interpretable) + capa normalizada
+ * (nullable). Consumida por `useHatoAnimal.ts` (historial de la ficha) y
+ * `useHatoChequeoDetalle.ts` (detalle de chequeo, §5 del Figma spec) --
+ * algunas columnas (`sx_raw`, `tp_raw`, `ultima_cria_raw`) NO tienen
+ * contraparte normalizada (nunca la tendrán: `sx_raw` se descompone en
+ * eventos vía `descomponerSX`, `tp_raw` es una fórmula congelada que el
+ * motor nunca lee -- ver nota "Pure engine" en CLAUDE.md), así que esas
+ * celdas siempre muestran el dato crudo. */
 export interface HatoChequeoVacaRow {
   id: string;
   chequeo_id: string;
   animal_id: string;
+  // Capa cruda
+  pl_raw: string | null;
+  np_raw: string | null;
+  ultima_cria_raw: string | null;
+  sx_raw: string | null;
+  fecha_servicio_raw: string | null;
+  toro_raw: string | null;
+  tp_raw: string | null;
+  estado_raw: string | null;
+  secar_raw: string | null;
+  pp_raw: string | null;
+  ttto_raw: string | null;
+  // Capa normalizada
   pl: number | null;
   num_partos: number | null;
   fecha_servicio: string | null;
