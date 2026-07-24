@@ -100,6 +100,16 @@ function inToMm(inches: number): number {
   return round2(inches * 25.4);
 }
 
+// Ecowitt reports a per-field "last updated" epoch alongside every value
+// (EcowittValueUnit.time). For the daily rain accumulator this is the only
+// signal that tells us whether the counter actually reset at midnight or is
+// serving a stale/cached total — see migration 068.
+function epochSecondsToIso(s: string | undefined): string | null {
+  if (!s) return null;
+  const n = parseInt(s, 10);
+  return isNaN(n) ? null : new Date(n * 1000).toISOString();
+}
+
 // WS90 uses piezo rain gauge; fallback to traditional if piezo not present
 function parseEcowittObservation(data: EcowittData, time: string, stationId: string) {
   const tempF = safeFloat(data.outdoor?.temperature?.value);
@@ -122,6 +132,7 @@ function parseEcowittObservation(data: EcowittData, time: string, stationId: str
     lluvia_tasa_mm_hr: rainRateIn != null ? inToMm(rainRateIn) : null,
     lluvia_evento_mm: rainEventIn != null ? inToMm(rainEventIn) : null,
     lluvia_diaria_mm: rainDailyIn != null ? inToMm(rainDailyIn) : null,
+    lluvia_diaria_actualizada_en: epochSecondsToIso(rain?.daily?.time),
     radiacion_wm2: safeFloat(data.solar_and_uvi?.solar?.value),
     uv_index: (() => {
       const v = safeFloat(data.solar_and_uvi?.uvi?.value);
