@@ -1507,6 +1507,19 @@ export interface EstadoReproductivoDerivado {
   fecha_secar: string | null;
   fecha_probable_parto: string | null;
   dias_abiertos: number | null;
+  /**
+   * Días de preñez transcurridos (último servicio -> `fechaReferencia`).
+   * Solo en preñez confirmada (`preñada`, `proxima_a_secar`); `null` en
+   * cualquier otro estado (E3). Nunca 0 por ausencia de dato.
+   */
+  tiempo_prenez_dias: number | null;
+  /**
+   * Días desde el secado real (`ultimo_secado_real_fecha` -> `fechaReferencia`).
+   * Solo en `seca`; `null` en cualquier otro estado (E3). El "tiempo vacía"
+   * NO tiene campo propio: es `dias_abiertos` (mismo dato), que la UI muestra
+   * según el estado.
+   */
+  tiempo_secada_dias: number | null;
   proxima_a_reemplazo: boolean;
   /**
    * Discriminador "¿esta vaca vacía es normal o es un problema?" (V14,
@@ -1599,6 +1612,8 @@ export function derivarEstadoReproductivo(
       fecha_secar: null,
       fecha_probable_parto: null,
       dias_abiertos: null,
+      tiempo_prenez_dias: null,
+      tiempo_secada_dias: null,
       proxima_a_reemplazo: false,
       vacia_es_problema: null,
       alertas: SIN_ALERTAS,
@@ -1613,6 +1628,8 @@ export function derivarEstadoReproductivo(
       fecha_secar: null,
       fecha_probable_parto: null,
       dias_abiertos: null,
+      tiempo_prenez_dias: null,
+      tiempo_secada_dias: null,
       proxima_a_reemplazo: proximaAReemplazo,
       vacia_es_problema: null,
       alertas: { ...SIN_ALERTAS, rechequeo_due: rechequeoDue },
@@ -1650,6 +1667,8 @@ export function derivarEstadoReproductivo(
       fecha_secar: null,
       fecha_probable_parto: null,
       dias_abiertos: null,
+      tiempo_prenez_dias: null,
+      tiempo_secada_dias: null,
       proxima_a_reemplazo: proximaAReemplazo,
       // Sin parto conocido no hay ancla de tiempo (`diasSinProgreso`) --
       // solo la señal explícita de `ultimo_estado_chequeo` puede decidir.
@@ -1679,6 +1698,8 @@ export function derivarEstadoReproductivo(
       fecha_secar: null,
       fecha_probable_parto: null,
       dias_abiertos: null,
+      tiempo_prenez_dias: null,
+      tiempo_secada_dias: null,
       proxima_a_reemplazo: proximaAReemplazo,
       vacia_es_problema: null,
       alertas: { ...SIN_ALERTAS, rechequeo_due: rechequeoDue },
@@ -1696,6 +1717,8 @@ export function derivarEstadoReproductivo(
       fecha_secar: null,
       fecha_probable_parto: null,
       dias_abiertos: diasAbiertos,
+      tiempo_prenez_dias: null,
+      tiempo_secada_dias: null,
       proxima_a_reemplazo: proximaAReemplazo,
       vacia_es_problema: clasificarVaciaProblema(fila.ultimo_estado_chequeo, diasAbiertos, config),
       alertas: { ...SIN_ALERTAS, rechequeo_due: rechequeoDue },
@@ -1713,6 +1736,8 @@ export function derivarEstadoReproductivo(
       fecha_secar: null,
       fecha_probable_parto: null,
       dias_abiertos: null,
+      tiempo_prenez_dias: null,
+      tiempo_secada_dias: null,
       proxima_a_reemplazo: proximaAReemplazo,
       vacia_es_problema: null,
       alertas: { ...SIN_ALERTAS, rechequeo_due: rechequeoDue },
@@ -1764,11 +1789,24 @@ export function derivarEstadoReproductivo(
       ? diferenciaDias(fila.ultimo_parto_fecha, fila.ultimo_servicio_fecha)
       : null;
 
+  // E3: duraciones dinámicas por estado. Tiempo de preñez solo en preñez
+  // confirmada (preñada/proxima_a_secar), anclado al último servicio (mismo
+  // valor que `diasDesdeServicio`); tiempo secada solo en `seca`, desde el
+  // secado real. `null` fuera de su estado -- nunca 0.
+  const tiempoPrenezDias =
+    estado === 'preñada' || estado === 'proxima_a_secar' ? diasDesdeServicio : null;
+  const tiempoSecadaDias =
+    estado === 'seca' && fila.ultimo_secado_real_fecha
+      ? diferenciaDias(fila.ultimo_secado_real_fecha, fechaReferencia)
+      : null;
+
   return {
     estado,
     fecha_secar: fechaSecar,
     fecha_probable_parto: fechaProbableParto,
     dias_abiertos: diasAbiertos,
+    tiempo_prenez_dias: tiempoPrenezDias,
+    tiempo_secada_dias: tiempoSecadaDias,
     proxima_a_reemplazo: proximaAReemplazo,
     // Preñez activa (confirmada o no) no es un estado "vacía" -- la
     // pregunta "¿normal o problema?" de V14 no aplica aquí; el riesgo de

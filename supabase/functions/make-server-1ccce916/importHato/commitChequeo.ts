@@ -51,7 +51,7 @@
 // sigue viajando con su crudo intacto (los `raw.*` se copian VERBATIM, nunca
 // se reinterpretan aquí).
 
-import { descomponerSX, parseUltimaCria, type EventoDerivado, type ParseIssue } from '../calculos-hato.ts';
+import { calcularMesesPrenez, descomponerSX, parseUltimaCria, type EventoDerivado, type ParseIssue } from '../calculos-hato.ts';
 import type { FilaChequeoNormalizada } from './tipos.ts';
 import type { ClasificacionFilaDiff, ResultadoDiffChequeo } from './diffChequeo.ts';
 
@@ -166,6 +166,12 @@ export interface FilaVacaInsertable {
   tipo_servicio: 'monta' | 'inseminacion' | null;
   fecha_secar: string | null;
   fecha_probable_parto: string | null;
+  /** Meses de preñez transcurridos entre `fecha_servicio` y la fecha de ESTE
+   * chequeo (`calcularMesesPrenez`, calculosHato.ts -- el motor ya existía,
+   * F/U 2 solo lo conecta acá). `null` cuando no hay `fecha_servicio` vigente
+   * -- nunca 0 inventado (columna 053, hoy sin ningún escritor: ni `Load` ni
+   * este commit path la poblaban antes de este cambio). */
+  meses_prenez: number | null;
   estado: EstadoChequeoInsertable;
   normalizacion_issues: ParseIssue[] | null;
 }
@@ -182,29 +188,38 @@ export interface FilaVacaInsertable {
  * dato" nunca se confunde con "vacía apta" (regla dura del módulo).
  */
 export function construirFilasVacas(aprobadas: FilaChequeoAprobada[]): FilaVacaInsertable[] {
-  return aprobadas.map(({ fila, animalId }) => ({
-    animal_id: animalId,
-    pl_raw: fila.raw.pl,
-    np_raw: fila.raw.np,
-    ultima_cria_raw: fila.raw.ultimaCria,
-    sx_raw: fila.raw.sx,
-    fecha_servicio_raw: fila.raw.fechaServicio,
-    toro_raw: fila.raw.toro,
-    tp_raw: fila.raw.tp,
-    estado_raw: fila.raw.estado,
-    secar_raw: fila.raw.secar,
-    pp_raw: fila.raw.pp,
-    ttto_raw: fila.raw.ttto,
-    pl: fila.pl,
-    num_partos: fila.numPartos,
-    fecha_servicio: fila.fechasServicio.at(-1) ?? null,
-    toro: fila.toroNombre,
-    tipo_servicio: fila.tipoServicio,
-    fecha_secar: fila.fechaSecar,
-    fecha_probable_parto: fila.fechaProbableParto,
-    estado: fila.estado === null || fila.estado === 'vacio' ? null : fila.estado,
-    normalizacion_issues: fila.issues.length > 0 ? fila.issues : null,
-  }));
+  return aprobadas.map(({ fila, animalId }) => {
+    const fechaServicioVigente = fila.fechasServicio.at(-1) ?? null;
+    return {
+      animal_id: animalId,
+      pl_raw: fila.raw.pl,
+      np_raw: fila.raw.np,
+      ultima_cria_raw: fila.raw.ultimaCria,
+      sx_raw: fila.raw.sx,
+      fecha_servicio_raw: fila.raw.fechaServicio,
+      toro_raw: fila.raw.toro,
+      tp_raw: fila.raw.tp,
+      estado_raw: fila.raw.estado,
+      secar_raw: fila.raw.secar,
+      pp_raw: fila.raw.pp,
+      ttto_raw: fila.raw.ttto,
+      pl: fila.pl,
+      num_partos: fila.numPartos,
+      fecha_servicio: fechaServicioVigente,
+      toro: fila.toroNombre,
+      tipo_servicio: fila.tipoServicio,
+      fecha_secar: fila.fechaSecar,
+      fecha_probable_parto: fila.fechaProbableParto,
+      // Meses transcurridos entre el servicio VIGENTE y la fecha de ESTE
+      // chequeo -- mismo motor (`calcularMesesPrenez`) que ya usa el resto
+      // del módulo para derivar SECAR/PP, nunca una segunda fórmula. Sin
+      // fecha de servicio o sin fecha de chequeo no hay referencia temporal
+      // -- `null`, nunca 0 (F/U 2, ver CLAUDE.md "Known follow-ups").
+      meses_prenez: fechaServicioVigente && fila.chequeoFecha ? calcularMesesPrenez(fechaServicioVigente, fila.chequeoFecha) : null,
+      estado: fila.estado === null || fila.estado === 'vacio' ? null : fila.estado,
+      normalizacion_issues: fila.issues.length > 0 ? fila.issues : null,
+    };
+  });
 }
 
 // ============================================================================

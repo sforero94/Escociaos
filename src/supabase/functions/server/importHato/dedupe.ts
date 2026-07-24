@@ -108,7 +108,10 @@ function compararFilas(a: FilaChequeoNormalizada, b: FilaChequeoNormalizada): st
  * porque un duplicado real es literalmente la misma planilla copiada entre
  * archivos, nunca reordenada. Si el número de filas difiere, se considera
  * "no comparable" (tratado como diferencia, nunca como duplicado silencioso
- * -- más seguro conservar ambas que asumir alineación). */
+ * -- más seguro conservar ambas que asumir alineación). SOLO se usa hoy como
+ * FALLBACK conservador (ver `reconciliarFilasPorAnimal` más abajo) cuando
+ * alguna de las dos hojas tiene un (numero, nombre) repetido dentro de sí
+ * misma -- ahí no se puede alinear con confianza por identidad de animal. */
 function compararHojas(a: FilaChequeoNormalizada[], b: FilaChequeoNormalizada[]): string[] {
   if (a.length !== b.length) {
     return [`distinto número de filas (${a.length} vs ${b.length}) -- no se pudo alinear automáticamente para comparar`];
@@ -121,6 +124,109 @@ function compararHojas(a: FilaChequeoNormalizada[], b: FilaChequeoNormalizada[])
     }
   }
   return diferencias;
+}
+
+// ============================================================================
+// F/U 5 (CLAUDE.md "Known follow-ups" #1 / docs/hato/runbook-load-historico.md
+// "Seguimiento pendiente") -- reconciliación POR ANIMAL, no por hoja completa.
+//
+// Bug real que esto corrige: `chequeo 21 y 22.xlsx` y
+// `CHEQUEO ACTUALIZADO ENERO 2020.xlsx` traen cada uno una hoja "CHEQUEO
+// JUNIO 9 2020" que resuelve a la MISMA fecha -- casi idéntica, salvo UNA
+// fila (COQUETA #99: PL y última cría distintos). Con la comparación
+// POR HOJA de arriba, `diferencias.length > 0` (1 fila distinta) hacía que
+// se conservaran las filas de AMBAS hojas COMPLETAS -- duplicando ~44
+// animales que en realidad eran idénticos, no solo el que difería. Ese
+// duplicado masivo fue lo que reventó `UNIQUE(chequeo_id, animal_id)` en
+// `hato_chequeo_vacas` durante el primer intento de `Load`, y tuvo que
+// limpiarse ahí con `deduplicarPorChequeoYAnimal` (ver `load.ts` y
+// CLAUDE.md) -- un segundo dedupe, más tosco (por más-campos-no-nulos, sin
+// ver cuál versión es la "correcta"), corriendo DESPUÉS de que el daño ya
+// estaba hecho en la salida de Extract.
+//
+// La reconciliación por animal identifica cada fila por (numero, nombre) --
+// la misma identidad que usa `compararFilas` -- y decide POR FILA, nunca por
+// hoja completa:
+//   - Fila con la MISMA identidad en ambas hojas y contenido idéntico ->
+//     duplicado real, no se emite de nuevo (ya vive en la hoja survivor).
+//   - Fila con la MISMA identidad pero contenido DISTINTO -> se conservan
+//     AMBAS versiones (nunca se elige una "ganadora"), con un issue que
+//     documenta exactamente qué difiere -- mismo espíritu que el resto de
+//     este archivo.
+//   - Fila que solo existe en la hoja candidata (identidad no vista en la
+//     survivor) -> no es un duplicado, se agrega igual.
+//
+// Solo aplica cuando NINGUNA de las dos hojas tiene una identidad
+// (numero, nombre) repetida dentro de sí misma -- si la tuviera (ej. una
+// colisión de chapeta ya presente en la propia hoja, un caso distinto y
+// legítimo), alinear por identidad dejaría de ser confiable, y se cae al
+// comportamiento anterior (`compararHojas`, conservador: si difiere en
+// cualquier punto, se conservan las filas de ambas hojas completas).
+
+function claveAnimalFila(f: FilaChequeoNormalizada): string {
+  return `${f.numero ?? 'SIN_NUMERO'}::${(f.nombre ?? '').trim().toUpperCase()}`;
+}
+
+/** `true` si algún (numero, nombre) se repite dentro de las mismas filas --
+ * en ese caso no se puede alinear por identidad con confianza (ver cabecera
+ * de esta sección). */
+function tieneIdentidadesRepetidas(filas: FilaChequeoNormalizada[]): boolean {
+  const vistas = new Set<string>();
+  for (const f of filas) {
+    const clave = claveAnimalFila(f);
+    if (vistas.has(clave)) return true;
+    vistas.add(clave);
+  }
+  return false;
+}
+
+interface ResultadoReconciliacionFilas {
+  /** Filas de la hoja CANDIDATA que sí deben emitirse: nuevas (identidad no
+   * vista en la survivor) o divergentes (misma identidad, contenido
+   * distinto). Nunca incluye un duplicado exacto de una fila que la hoja
+   * survivor ya aporta. */
+  filasAEmitir: FilaChequeoNormalizada[];
+  /** Una nota legible por cada fila de `filasAEmitir`, para el issue del
+   * manifiesto -- nunca se agrega contenido nuevo en silencio. */
+  notas: string[];
+}
+
+/**
+ * Reconcilia dos hojas que resuelven a la MISMA fecha, animal por animal
+ * (nunca hoja completa) -- ver la nota grande de cabecera de esta sección.
+ * Precondición: ni `filasSurvivor` ni `filasCandidata` tienen una identidad
+ * repetida dentro de sí mismas (verificarlo con `tieneIdentidadesRepetidas`
+ * ANTES de llamar esta función; si no se cumple, usar el fallback
+ * `compararHojas` en su lugar).
+ */
+function reconciliarFilasPorAnimal(
+  filasSurvivor: FilaChequeoNormalizada[],
+  filasCandidata: FilaChequeoNormalizada[],
+): ResultadoReconciliacionFilas {
+  const porClaveSurvivor = new Map<string, FilaChequeoNormalizada>();
+  for (const f of filasSurvivor) porClaveSurvivor.set(claveAnimalFila(f), f);
+
+  const filasAEmitir: FilaChequeoNormalizada[] = [];
+  const notas: string[] = [];
+
+  for (const candidata of filasCandidata) {
+    const clave = claveAnimalFila(candidata);
+    const survivorFila = porClaveSurvivor.get(clave);
+
+    if (!survivorFila) {
+      filasAEmitir.push(candidata);
+      notas.push(`fila #${candidata.numero ?? '?'} ${candidata.nombre ?? ''}: solo presente en esta hoja -- se agrega, no es un duplicado`);
+      continue;
+    }
+
+    const diferencias = compararFilas(survivorFila, candidata);
+    if (diferencias.length === 0) continue; // duplicado real de ESTA fila -- ya vive en la survivor, no se emite de nuevo
+
+    filasAEmitir.push(candidata);
+    notas.push(`fila #${candidata.numero ?? '?'} ${candidata.nombre ?? ''}: ${diferencias.join(', ')} -- se conservan AMBAS versiones`);
+  }
+
+  return { filasAEmitir, notas };
 }
 
 export interface ResultadoDedupe {
@@ -189,12 +295,32 @@ export function aplicarDedupe(procesadas: ProcesadaChequeo[]): ResultadoDedupe {
     }
 
     const claveSurvivor = claveHoja(survivor);
-    const diferencias = compararHojas(survivor.filas, p.filas);
 
-    if (diferencias.length === 0) {
-      // Duplicado real (contenido idéntico ignorando TP): sus filas NO se
-      // emiten -- ya viven bajo `survivor`, emitirlas de nuevo doblaría el
-      // conteo aguas abajo (Resolve/Load).
+    // F/U 5: si CUALQUIERA de las dos hojas tiene una identidad (numero,
+    // nombre) repetida dentro de sí misma, alinear por identidad no es
+    // confiable -- se cae al comportamiento conservador anterior (comparar
+    // la hoja COMPLETA por posición; si difiere en cualquier punto, se
+    // conservan las filas de AMBAS hojas enteras). Este es el único camino
+    // que queda para ese caso raro; el caso común (el que motivó F/U 5) usa
+    // la reconciliación por animal de abajo.
+    if (tieneIdentidadesRepetidas(survivor.filas) || tieneIdentidadesRepetidas(p.filas)) {
+      const diferencias = compararHojas(survivor.filas, p.filas);
+
+      if (diferencias.length === 0) {
+        hojas.push({
+          ...p.manifest,
+          duplicadaDe: claveSurvivor,
+          issues: [
+            ...p.manifest.issues,
+            {
+              crudo: '',
+              motivo: `hoja duplicada de '${claveSurvivor}' (contenido idéntico ignorando TP) -- sus ${p.filas.length} filas no se emiten a chequeos[] para evitar doble conteo`,
+            },
+          ],
+        });
+        continue;
+      }
+
       hojas.push({
         ...p.manifest,
         duplicadaDe: claveSurvivor,
@@ -202,17 +328,44 @@ export function aplicarDedupe(procesadas: ProcesadaChequeo[]): ResultadoDedupe {
           ...p.manifest.issues,
           {
             crudo: '',
-            motivo: `hoja duplicada de '${claveSurvivor}' (contenido idéntico ignorando TP) -- sus ${p.filas.length} filas no se emiten a chequeos[] para evitar doble conteo`,
+            motivo: `hoja resuelve a la MISMA fecha (${fecha}) que '${claveSurvivor}' pero el contenido DIFIERE en ${diferencias.length} punto(s) -- alguna de las dos hojas tiene una identidad (numero, nombre) repetida dentro de sí misma, así que no se pudo reconciliar fila a fila con confianza: se conservan las filas de AMBAS hojas completas, ninguna se descarta ni se elige como ganadora. Diferencias: ${diferencias.join(' | ')}`,
+          },
+        ],
+      });
+      chequeos.push(...p.filas);
+      subtablas.push(...p.subtablas);
+      continue;
+    }
+
+    // Camino normal: reconciliación POR ANIMAL (ver cabecera de la sección
+    // "F/U 5" más arriba) -- nunca hoja completa. Una fila duplicada exacta
+    // en ambas hojas no se emite dos veces; una fila que difiere o que solo
+    // existe en esta hoja SÍ se emite, con procedencia de ESTA hoja.
+    const { filasAEmitir, notas } = reconciliarFilasPorAnimal(survivor.filas, p.filas);
+
+    if (filasAEmitir.length === 0) {
+      // Duplicado real, animal por animal -- cubre tanto el caso histórico
+      // "contenido idéntico" como el caso nuevo "mismo contenido por animal,
+      // pero en distinto orden o cantidad de filas" (que `compararHojas`,
+      // por posición, habría marcado como 'distinto número de filas').
+      hojas.push({
+        ...p.manifest,
+        duplicadaDe: claveSurvivor,
+        issues: [
+          ...p.manifest.issues,
+          {
+            crudo: '',
+            motivo: `hoja duplicada de '${claveSurvivor}' (mismo contenido animal por animal, comparado por numero+nombre) -- sus ${p.filas.length} filas no se emiten a chequeos[] para evitar doble conteo`,
           },
         ],
       });
       continue;
     }
 
-    // Misma fecha resuelta, contenido DIFERENTE: nunca se elige un ganador
-    // por regla (ver cabecera del archivo) -- se conservan las filas de
-    // AMBAS hojas con su procedencia completa, y el issue documenta
-    // exactamente qué difiere para el checkpoint humano.
+    // Duplicado PARCIAL: solo se emiten las filas que realmente aportan
+    // contenido nuevo o divergente -- nunca la hoja completa (ese era
+    // exactamente el bug de F/U 5: 1 fila distinta duplicaba ~44 animales
+    // idénticos, forzando un segundo dedupe más tosco en `load.ts`).
     hojas.push({
       ...p.manifest,
       duplicadaDe: claveSurvivor,
@@ -220,11 +373,11 @@ export function aplicarDedupe(procesadas: ProcesadaChequeo[]): ResultadoDedupe {
         ...p.manifest.issues,
         {
           crudo: '',
-          motivo: `hoja resuelve a la MISMA fecha (${fecha}) que '${claveSurvivor}' pero el contenido DIFIERE en ${diferencias.length} punto(s) -- se conservan las filas de ambas hojas, ninguna se descarta ni se elige como ganadora. Diferencias: ${diferencias.join(' | ')}`,
+          motivo: `hoja resuelve a la MISMA fecha (${fecha}) que '${claveSurvivor}' -- ${p.filas.length - filasAEmitir.length} fila(s) son duplicado exacto de la hoja survivor (no se emiten de nuevo) y ${filasAEmitir.length} fila(s) difieren o son exclusivas de esta hoja (SÍ se emiten, con procedencia de esta hoja). Detalle: ${notas.join(' | ')}`,
         },
       ],
     });
-    chequeos.push(...p.filas);
+    chequeos.push(...filasAEmitir);
     subtablas.push(...p.subtablas);
   }
 
