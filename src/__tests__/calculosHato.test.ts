@@ -5,6 +5,7 @@ import {
   parseFechaChequeo,
   parseValorNumerico,
   parseEstado,
+  parseUltimaCria,
   calcularPartoProbable,
   calcularFechaSecar,
   calcularMesesPrenez,
@@ -16,8 +17,12 @@ import {
   resolverQuincena,
   rangoQuincena,
   quincenaAnterior,
+  agruparPartosPorProximidad,
+  esTipoSxDeParto,
+  DIAS_MINIMOS_ENTRE_PARTOS,
   type HatoConfig,
   type EstadoActualHatoRow,
+  type LecturaUltimaCria,
 } from '@/utils/calculosHato';
 
 /**
@@ -474,6 +479,61 @@ describe('parseEstado', () => {
   });
 });
 
+describe('parseUltimaCria', () => {
+  it('celda vacía o null no produce fecha ni issues', () => {
+    expect(parseUltimaCria('')).toEqual({ fecha: null, issues: [] });
+    expect(parseUltimaCria(null)).toEqual({ fecha: null, issues: [] });
+    expect(parseUltimaCria(undefined)).toEqual({ fecha: null, issues: [] });
+  });
+
+  it('fecha limpia día/mes/año con separador "/"', () => {
+    expect(parseUltimaCria('28/1/2024').fecha).toBe('2024-01-28');
+    expect(parseUltimaCria('9/09/2019').fecha).toBe('2019-09-09');
+  });
+
+  it('año de 2 dígitos se interpreta como 20xx', () => {
+    expect(parseUltimaCria('15/03/24').fecha).toBe('2024-03-15');
+  });
+
+  it("año de 3 dígitos con '2' inicial perdido se recupera con issue de revisión", () => {
+    const r = parseUltimaCria('13/05/019');
+    expect(r.fecha).toBe('2019-05-13');
+    expect(r.issues.length).toBeGreaterThan(0);
+  });
+
+  it('dígitos sobrantes tras la fecha quedan como issue, nunca se inventa una segunda fecha', () => {
+    const r = parseUltimaCria('28/1/2024 5');
+    expect(r.fecha).toBe('2024-01-28');
+    expect(r.issues.some((i) => /adicionales/.test(i.motivo))).toBe(true);
+  });
+
+  it('texto sin ningún dígito no produce fecha, sí issue con el crudo intacto', () => {
+    const r = parseUltimaCria('ok');
+    expect(r.fecha).toBeNull();
+    expect(r.issues).toHaveLength(1);
+    expect(r.issues[0].crudo).toBe('ok');
+  });
+
+  it('menos de un triplete completo de dígitos no produce fecha, sí issue', () => {
+    const r = parseUltimaCria('1/2024');
+    expect(r.fecha).toBeNull();
+    expect(r.issues.length).toBeGreaterThan(0);
+  });
+
+  it('mes fuera de rango no produce fecha, sí issue', () => {
+    const r = parseUltimaCria('15/015/2025');
+    expect(r.fecha).toBeNull();
+    expect(r.issues.some((i) => /mes/i.test(i.motivo))).toBe(true);
+  });
+
+  it('nunca lanza para ningún valor crudo real de Última Cría', () => {
+    const valores = ['28/1/2024', '9/09/2019', '13/05/019', 'ok', '', null, undefined, '1/2024', '15/015/2025', '28/1/2024 ?'];
+    for (const v of valores) {
+      expect(() => parseUltimaCria(v)).not.toThrow();
+    }
+  });
+});
+
 describe('motor de fechas (calcularPartoProbable / calcularFechaSecar / calcularMesesPrenez)', () => {
   it('PP = servicio + meses_gestacion_default', () => {
     expect(calcularPartoProbable('2024-05-14', CONFIG_BASE)).toBe('2025-02-14');
@@ -608,6 +668,371 @@ describe('descomponerSX', () => {
       expect(() =>
         descomponerSX({ chequeoFecha: '2024-08-09', sx: parseSX(raw), fechasServicio: [] }),
       ).not.toThrow();
+    }
+  });
+
+  // ==========================================================================
+  // Deduplicación de parto vía Última Cría -- fix del bug real de producción
+  // (ALINA #157: 3 chequeos consecutivos con la misma Última Cría generaban 3
+  // eventos `parto`, cada uno fechado al chequeo en vez del nacimiento real).
+  // ==========================================================================
+  describe('deduplicación de parto contra Última Cría (ultimaCria/ultimaCriaAnterior)', () => {
+    it('misma Última Cría que el chequeo anterior -- NO emite un segundo evento parto', () => {
+      const r = descomponerSX({
+        chequeoFecha: '2024-05-20',
+        sx: parseSX('OV'),
+        fechasServicio: [],
+        ultimaCria: '2024-01-28',
+        ultimaCriaAnterior: '2024-01-28',
+      });
+      expect(r.eventos).toEqual([]);
+    });
+
+    it('Última Cría distinta -- SÍ emite, con fecha=ultimaCria y confianza exacta', () => {
+      const r = descomponerSX({
+        chequeoFecha: '2024-05-20',
+        sx: parseSX('OV'),
+        fechasServicio: [],
+        ultimaCria: '2024-04-02',
+        ultimaCriaAnterior: '2024-01-28',
+      });
+      expect(r.eventos).toEqual([
+        expect.objectContaining({
+          tipo: 'parto',
+          cria_destino: 'macho_vendido',
+          fecha: '2024-04-02',
+          fecha_confianza: 'exacta',
+        }),
+      ]);
+    });
+
+    it('primer chequeo del animal (ultimaCriaAnterior ausente) con ultimaCria presente -- emite UNA vez', () => {
+      const r = descomponerSX({
+        chequeoFecha: '2024-03-18',
+        sx: parseSX('OV'),
+        fechasServicio: [],
+        ultimaCria: '2024-01-28',
+        ultimaCriaAnterior: undefined,
+      });
+      expect(r.eventos).toEqual([
+        expect.objectContaining({ tipo: 'parto', fecha: '2024-01-28', fecha_confianza: 'exacta' }),
+      ]);
+    });
+
+    it('ultimaCria ausente (celda vacía/no interpretable) -- conserva el comportamiento previo (fecha del chequeo, aproximada) y deja un issue de verificación', () => {
+      const r = descomponerSX({ chequeoFecha: '2024-08-09', sx: parseSX('OV'), fechasServicio: [] });
+      expect(r.eventos).toEqual([
+        expect.objectContaining({ tipo: 'parto', fecha: '2024-08-09', fecha_confianza: 'aproximada' }),
+      ]);
+      expect(r.issues.some((i) => /Última Cría/.test(i.motivo))).toBe(true);
+    });
+
+    it('fechaPartoReal explícita sigue ganando sobre chequeoFecha cuando no hay ultimaCria', () => {
+      const r = descomponerSX({
+        chequeoFecha: '2024-08-09',
+        fechaPartoReal: '2024-08-01',
+        sx: parseSX('OV'),
+        fechasServicio: [],
+      });
+      expect(r.eventos[0]).toMatchObject({ fecha: '2024-08-01', fecha_confianza: 'exacta' });
+    });
+
+    it('aborto explícito (huboPartoConfirmado=false en O+) NUNCA se deduplica -- se emite igual con la misma ultimaCria repetida', () => {
+      const params = {
+        chequeoFecha: '2024-08-09',
+        sx: parseSX('O+'),
+        fechasServicio: [],
+        huboPartoConfirmado: false,
+        ultimaCria: '2024-01-28',
+        ultimaCriaAnterior: '2024-01-28',
+      };
+      const r1 = descomponerSX(params);
+      const r2 = descomponerSX(params);
+      expect(r1.eventos).toEqual([expect.objectContaining({ tipo: 'aborto' })]);
+      expect(r2.eventos).toEqual([expect.objectContaining({ tipo: 'aborto' })]);
+    });
+
+    it('tipo aborto (SX="aborto") tampoco se deduplica -- cada reporte de aborto es un evento propio', () => {
+      const params = {
+        chequeoFecha: '2024-08-09',
+        sx: parseSX('aborto'),
+        fechasServicio: [],
+        ultimaCria: '2024-01-28',
+        ultimaCriaAnterior: '2024-01-28',
+      };
+      expect(descomponerSX(params).eventos).toEqual([expect.objectContaining({ tipo: 'aborto' })]);
+      expect(descomponerSX(params).eventos).toEqual([expect.objectContaining({ tipo: 'aborto' })]);
+    });
+
+    it('gem+ (gemelar) se deduplica igual que el resto de las ramas de parto, y el issue de destino de crías se conserva siempre', () => {
+      const dup = descomponerSX({
+        chequeoFecha: '2024-05-20',
+        sx: parseSX('gem+'),
+        fechasServicio: [],
+        ultimaCria: '2024-01-28',
+        ultimaCriaAnterior: '2024-01-28',
+      });
+      expect(dup.eventos).toEqual([]);
+      expect(dup.issues.some((i) => /GEMELAR/i.test(i.motivo))).toBe(true);
+
+      const nuevo = descomponerSX({
+        chequeoFecha: '2024-05-20',
+        sx: parseSX('gem+'),
+        fechasServicio: [],
+        ultimaCria: '2024-04-02',
+        ultimaCriaAnterior: '2024-01-28',
+      });
+      expect(nuevo.eventos).toEqual([
+        expect.objectContaining({ tipo: 'parto', datos: { gemelar: true }, fecha: '2024-04-02', fecha_confianza: 'exacta' }),
+      ]);
+    });
+
+    it('A{n} (retenida) -- la ausencia de número de cría sigue generando su propio issue aunque el evento se suprima por duplicado', () => {
+      const r = descomponerSX({
+        chequeoFecha: '2024-05-20',
+        sx: parseSX('A'), // sin número -- parseSX ya deja su propio issue
+        fechasServicio: [],
+        ultimaCria: '2024-01-28',
+        ultimaCriaAnterior: '2024-01-28',
+      });
+      expect(r.eventos).toEqual([]);
+      expect(r.issues.some((i) => /sin número de cría/.test(i.motivo))).toBe(true);
+    });
+
+    it('caso real ALINA #157: misma Última Cría (28/1/2024) en 3 chequeos consecutivos -- 1 evento parto, no 3', () => {
+      const chequeos = ['2024-03-18', '2024-05-20', '2024-08-09'];
+      let ultimaCriaAnterior: string | undefined;
+      const todosLosEventos: ReturnType<typeof descomponerSX>['eventos'] = [];
+
+      for (const chequeoFecha of chequeos) {
+        const { eventos } = descomponerSX({
+          chequeoFecha,
+          sx: parseSX('OV'),
+          fechasServicio: [],
+          ultimaCria: '2024-01-28',
+          ultimaCriaAnterior,
+        });
+        todosLosEventos.push(...eventos);
+        ultimaCriaAnterior = '2024-01-28';
+      }
+
+      expect(todosLosEventos).toHaveLength(1);
+      expect(todosLosEventos[0]).toMatchObject({ tipo: 'parto', fecha: '2024-01-28', fecha_confianza: 'exacta' });
+    });
+
+    it('omitir ultimaCria/ultimaCriaAnterior (como en todos los fixtures existentes) preserva el comportamiento previo sin cambios', () => {
+      // Ningún test preexistente de este archivo pasa estos campos -- este
+      // caso documenta explícitamente la compatibilidad hacia atrás que el
+      // resto de la suite ya ejercita implícitamente.
+      const r = descomponerSX({ chequeoFecha: '2024-08-09', sx: parseSX('OV'), fechasServicio: [] });
+      expect(r.eventos).toEqual([
+        expect.objectContaining({ tipo: 'parto', cria_destino: 'macho_vendido', fecha: '2024-08-09', fecha_confianza: 'aproximada' }),
+      ]);
+    });
+  });
+
+  // ==========================================================================
+  // Colapso de partos CERCANOS vía `decidirEventoParto` (single-row wiring,
+  // usado por el commit path B0/V10 -- ver `derivarEventosDeChequeo`). El
+  // fix del bug real: GALLEGA #148, "2/12/2025" (2025-11-25) y "1/11/2025"
+  // (2026-02-25), 31 días de diferencia entre lecturas.
+  // ==========================================================================
+  describe('colapso de partos cercanos (decidirEventoParto vía ultimaCria/ultimaCriaAnterior)', () => {
+    it('caso real GALLEGA #148: lecturas a 31 días -- NO emite un segundo evento, y deja un issue de revisión (a diferencia del exact-repeat)', () => {
+      const anterior = parseUltimaCria('2/12/2025').fecha; // 2025-12-02, chequeo 2025-11-25
+      const nueva = parseUltimaCria('1/11/2025').fecha; // 2025-11-01, chequeo 2026-02-25
+      expect(anterior).toBe('2025-12-02');
+      expect(nueva).toBe('2025-11-01');
+
+      const r = descomponerSX({
+        chequeoFecha: '2026-02-25',
+        sx: parseSX('OV'),
+        fechasServicio: [],
+        ultimaCria: nueva,
+        ultimaCriaAnterior: anterior,
+      });
+      expect(r.eventos).toEqual([]);
+      expect(
+        r.issues.some((i) => /31 día/.test(i.motivo) && /Última Cría/.test(i.motivo)),
+      ).toBe(true);
+    });
+
+    it('lecturas distintas pero a <= 60 días -- se suprime y se deja un issue de revisión (nunca en silencio)', () => {
+      const r = descomponerSX({
+        chequeoFecha: '2024-06-29',
+        sx: parseSX('OV'),
+        fechasServicio: [],
+        ultimaCria: '2024-06-29',
+        ultimaCriaAnterior: '2024-05-01', // 59 días de diferencia
+      });
+      expect(r.eventos).toEqual([]);
+      expect(r.issues.some((i) => /Última Cría/.test(i.motivo))).toBe(true);
+    });
+
+    it('lecturas idénticas (exact-repeat) -- se suprime SIN issue, comportamiento del fix anterior a esta sesión sin cambios', () => {
+      const r = descomponerSX({
+        chequeoFecha: '2024-05-20',
+        sx: parseSX('OV'),
+        fechasServicio: [],
+        ultimaCria: '2024-01-28',
+        ultimaCriaAnterior: '2024-01-28',
+      });
+      expect(r.eventos).toEqual([]);
+      expect(r.issues).toEqual([]);
+    });
+
+    it('lecturas a > 60 días -- SÍ emite un segundo evento (nacimiento genuinamente distinto), sin issue de colapso', () => {
+      const r = descomponerSX({
+        chequeoFecha: '2024-07-01',
+        sx: parseSX('OV'),
+        fechasServicio: [],
+        ultimaCria: '2024-07-01',
+        ultimaCriaAnterior: '2024-05-01', // 61 días de diferencia
+      });
+      expect(r.eventos).toEqual([
+        expect.objectContaining({ tipo: 'parto', fecha: '2024-07-01', fecha_confianza: 'exacta' }),
+      ]);
+      expect(r.issues).toEqual([]);
+    });
+
+    it('frontera exacta de 60 días -- se colapsa (inequívoco: <=umbral)', () => {
+      const r = descomponerSX({
+        chequeoFecha: '2024-06-30',
+        sx: parseSX('OV'),
+        fechasServicio: [],
+        ultimaCria: '2024-06-30',
+        ultimaCriaAnterior: '2024-05-01', // exactamente 60 días
+      });
+      expect(r.eventos).toEqual([]);
+    });
+  });
+});
+
+// ==============================================================================
+// agruparPartosPorProximidad -- motor de clustering puro, BLOQUE 3. Colapso
+// de partos cercanos (decisión del dueño, 2026-07-23): dos o más lecturas de
+// Última Cría del MISMO animal a <= `DIAS_MINIMOS_ENTRE_PARTOS` días entre sí
+// son el MISMO nacimiento real, nunca dos distintos (intervalo real mínimo
+// entre partos ~270+ días).
+// ==============================================================================
+describe('agruparPartosPorProximidad', () => {
+  it('una sola lectura -- un cluster de un solo miembro, sin colapso', () => {
+    const lecturas: LecturaUltimaCria[] = [{ chequeoFecha: '2024-03-18', ultimaCria: '2024-01-28' }];
+    const clusters = agruparPartosPorProximidad(lecturas);
+    expect(clusters).toEqual([
+      { lecturas, fechaEvento: '2024-01-28', fechaConfianza: 'exacta' },
+    ]);
+  });
+
+  it('caso real GALLEGA #148: dos lecturas a 31 días -- UN cluster, fechaEvento = la lectura del chequeo MÁS RECIENTE (2025-11-01), aunque como fecha calendario sea "anterior" a la primera lectura del cluster', () => {
+    const lecturas: LecturaUltimaCria[] = [
+      { chequeoFecha: '2025-11-25', ultimaCria: '2025-12-02' },
+      { chequeoFecha: '2026-02-25', ultimaCria: '2025-11-01' },
+    ];
+    const clusters = agruparPartosPorProximidad(lecturas);
+    expect(clusters).toHaveLength(1);
+    expect(clusters[0].lecturas).toHaveLength(2);
+    expect(clusters[0].fechaEvento).toBe('2025-11-01');
+    expect(clusters[0].fechaConfianza).toBe('exacta');
+  });
+
+  it('oscilación real A -> B -> A: las tres lecturas caen en UN solo cluster, fechaEvento = la fecha del ÚLTIMO chequeo procesado (no se reabre un cluster nuevo solo porque la 3ra "coincide" con la 1ra)', () => {
+    // A=2024-01-01, B=2024-02-15 (45 días de A), A2=2024-01-01 (45 días de B).
+    // A y A2 son idénticas mientras que B es distinta -- si el algoritmo
+    // comparara contra el PRIMER miembro en vez del último del cluster
+    // abierto, A2 seguiría perteneciendo al mismo cluster igual (distancia 0
+    // contra A), así que este test por sí solo no distingue "compara con el
+    // primero" de "compara con el último"; lo que sí lo distingue es el
+    // siguiente test (fechaEvento final).
+    const lecturas: LecturaUltimaCria[] = [
+      { chequeoFecha: '2024-01-05', ultimaCria: '2024-01-01' },
+      { chequeoFecha: '2024-03-01', ultimaCria: '2024-02-15' },
+      { chequeoFecha: '2024-05-01', ultimaCria: '2024-01-01' },
+    ];
+    const clusters = agruparPartosPorProximidad(lecturas);
+    expect(clusters).toHaveLength(1);
+    expect(clusters[0].lecturas).toHaveLength(3);
+    expect(clusters[0].fechaEvento).toBe('2024-01-01'); // la Última Cría del chequeo procesado al final (2024-05-01)
+  });
+
+  it('oscilación con la 3ra lectura a > 60 días de la 1ra pero <= 60 de la 2da: SIGUE agrupando con la 2da (encadena contra el ÚLTIMO miembro, no el primero) -- distingue la regla de encadenamiento', () => {
+    // A=2024-01-01. B=2024-02-20 (50 días de A). C=2024-04-05 (45 días de B,
+    // pero 95 días de A -- si el motor comparara contra el PRIMER miembro
+    // del cluster, C abriría un cluster nuevo; comparando contra el ÚLTIMO
+    // (B), C se agrupa correctamente).
+    const lecturas: LecturaUltimaCria[] = [
+      { chequeoFecha: '2024-01-05', ultimaCria: '2024-01-01' },
+      { chequeoFecha: '2024-03-01', ultimaCria: '2024-02-20' },
+      { chequeoFecha: '2024-05-01', ultimaCria: '2024-04-05' },
+    ];
+    expect(Math.abs(new Date('2024-04-05').getTime() - new Date('2024-01-01').getTime()) / 86400000).toBeGreaterThan(60);
+    const clusters = agruparPartosPorProximidad(lecturas);
+    expect(clusters).toHaveLength(1);
+    expect(clusters[0].lecturas).toHaveLength(3);
+    expect(clusters[0].fechaEvento).toBe('2024-04-05');
+  });
+
+  it('dos clusters genuinamente distintos: brecha > 60 días entre el final del primero y el inicio del segundo -- NUNCA se sobre-fusiona', () => {
+    const lecturas: LecturaUltimaCria[] = [
+      { chequeoFecha: '2024-01-05', ultimaCria: '2024-01-01' },
+      { chequeoFecha: '2024-06-01', ultimaCria: '2024-05-15' }, // > 60 días de 2024-01-01
+    ];
+    const clusters = agruparPartosPorProximidad(lecturas);
+    expect(clusters).toHaveLength(2);
+    expect(clusters[0].fechaEvento).toBe('2024-01-01');
+    expect(clusters[1].fechaEvento).toBe('2024-05-15');
+  });
+
+  describe('frontera del umbral (59 / 60 / 61 días)', () => {
+    it('59 días -- se agrupa (dentro del umbral)', () => {
+      const clusters = agruparPartosPorProximidad([
+        { chequeoFecha: '2023-05-02', ultimaCria: '2023-05-01' },
+        { chequeoFecha: '2023-07-01', ultimaCria: '2023-06-29' },
+      ]);
+      expect(clusters).toHaveLength(1);
+    });
+
+    it('60 días exactos -- se agrupa (el umbral es inclusivo: <=, no <)', () => {
+      const clusters = agruparPartosPorProximidad([
+        { chequeoFecha: '2023-05-02', ultimaCria: '2023-05-01' },
+        { chequeoFecha: '2023-07-01', ultimaCria: '2023-06-30' },
+      ]);
+      expect(clusters).toHaveLength(1);
+    });
+
+    it('61 días -- NO se agrupa (fuera del umbral, dos nacimientos distintos)', () => {
+      const clusters = agruparPartosPorProximidad([
+        { chequeoFecha: '2023-05-02', ultimaCria: '2023-05-01' },
+        { chequeoFecha: '2023-07-02', ultimaCria: '2023-07-01' },
+      ]);
+      expect(clusters).toHaveLength(2);
+    });
+  });
+
+  it('respeta un umbralDias custom (no hardcodea DIAS_MINIMOS_ENTRE_PARTOS)', () => {
+    const lecturas: LecturaUltimaCria[] = [
+      { chequeoFecha: '2024-01-05', ultimaCria: '2024-01-01' },
+      { chequeoFecha: '2024-01-15', ultimaCria: '2024-01-10' }, // 9 días
+    ];
+    expect(agruparPartosPorProximidad(lecturas, 10)).toHaveLength(1);
+    expect(agruparPartosPorProximidad(lecturas, 5)).toHaveLength(2);
+  });
+
+  it('DIAS_MINIMOS_ENTRE_PARTOS es 60 (constante técnica del motor, no un valor de hato_config)', () => {
+    expect(DIAS_MINIMOS_ENTRE_PARTOS).toBe(60);
+  });
+});
+
+describe('esTipoSxDeParto', () => {
+  it('ov/av/a_n/a_mas/o_mas/gemelar son tipos de parto', () => {
+    for (const tipo of ['ov', 'av', 'a_n', 'a_mas', 'o_mas', 'gemelar'] as const) {
+      expect(esTipoSxDeParto(tipo)).toBe(true);
+    }
+  });
+
+  it('aborto/vendida/vacia/cero/mv/desconocido/vacio NO son tipos de parto', () => {
+    for (const tipo of ['aborto', 'vendida', 'vacia', 'cero', 'mv', 'desconocido', 'vacio'] as const) {
+      expect(esTipoSxDeParto(tipo)).toBe(false);
     }
   });
 });

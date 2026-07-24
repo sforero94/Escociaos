@@ -10,6 +10,7 @@ import { handleChatMessage } from "./chat.tsx";
 import { handleClimaSync, handleClimaBackfill, handleClimaForecast } from "./clima.tsx";
 import { handleHatoChequeoPreview } from "./hato-chequeo-preview.ts";
 import { handleHatoChequeoCommit } from "./hato-chequeo-commit.ts";
+import { handleHatoAlertasTick } from "./hato-alertas-tick.ts";
 import { handleWebhook } from "./telegram/bot.ts";
 
 const app = new Hono();
@@ -178,6 +179,13 @@ app.post("/make-server-1ccce916/hato/chequeo/preview", async (c) => {
 // fn_hato_commit_chequeo, migración 065). Nunca re-parsea el .xlsx.
 app.post("/make-server-1ccce916/hato/chequeo/commit", async (c) => {
   return await handleHatoChequeoCommit(c);
+});
+
+// Hato Lechero: motor de alertas (S6, plan §7.3) -- tick diario disparado
+// por pg_cron (migración 060). Auth por secreto compartido
+// (x-hato-tick-secret), no JWT de usuario -- ver hato-alertas-tick.ts.
+app.post("/make-server-1ccce916/hato/alertas/tick", async (c) => {
+  return await handleHatoAlertasTick(c);
 });
 
 // Handle preflight OPTIONS at Deno.serve level to ensure CORS works

@@ -12,7 +12,9 @@ import {
   construirFilasVacas,
   derivarEventosDeChequeo,
   construirPayloadCommit,
+  seleccionarUltimaCriaAnteriorPorAnimal,
   type FilaChequeoAprobada,
+  type FilaUltimaCriaHistorico,
 } from '@/utils/importHato/commitChequeo';
 import type { FilaChequeoNormalizada } from '@/utils/importHato/tipos';
 import type { AnimalHatoActual, FilaDiffChequeo, ResultadoDiffChequeo, UltimoChequeoVacaActual } from '@/utils/importHato/diffChequeo';
@@ -329,6 +331,95 @@ describe('derivarEventosDeChequeo', () => {
     const { eventos } = derivarEventosDeChequeo([{ fila, animalId: 'a1' }]);
     expect(eventos.map((e) => e.tipo)).toEqual(['servicio', 'parto']);
     expect(eventos[1]).toMatchObject({ cria_destino: 'retenida', datos: { numero_cria: 2 } });
+  });
+
+  // ==========================================================================
+  // Deduplicación de parto vía Última Cría (fix del bug ALINA #157, ver
+  // calculosHato.test.ts para la cobertura del motor puro). Aquí se prueba
+  // que el WIRING -- parsear `fila.raw.ultimaCria` y consultar el mapa de
+  // `ultimaCriaAnteriorPorAnimal` -- efectivamente llega a `descomponerSX`.
+  // ==========================================================================
+  it('sin ultimaCriaAnteriorPorAnimal (parámetro omitido, como en el resto de esta suite) el comportamiento no cambia', () => {
+    const fila = filaBase({ sx: parseSX('OV'), fechasServicio: [], raw: { ...filaBase().raw, ultimaCria: '28/1/2024' } });
+    const { eventos } = derivarEventosDeChequeo([{ fila, animalId: 'a1' }]);
+    expect(eventos).toEqual([expect.objectContaining({ tipo: 'parto', fecha: '2024-01-28', fecha_confianza: 'exacta' })]);
+  });
+
+  it('con ultimaCriaAnteriorPorAnimal indicando la MISMA Última Cría, el evento se suprime', () => {
+    const fila = filaBase({ sx: parseSX('OV'), fechasServicio: [], raw: { ...filaBase().raw, ultimaCria: '28/1/2024' } });
+    const mapa = new Map([['a1', '2024-01-28']]);
+    const { eventos } = derivarEventosDeChequeo([{ fila, animalId: 'a1' }], mapa);
+    expect(eventos).toEqual([]);
+  });
+
+  it('con ultimaCriaAnteriorPorAnimal indicando OTRA Última Cría, el evento SÍ se emite', () => {
+    const fila = filaBase({ sx: parseSX('OV'), fechasServicio: [], raw: { ...filaBase().raw, ultimaCria: '2/4/2024' } });
+    const mapa = new Map([['a1', '2024-01-28']]);
+    const { eventos } = derivarEventosDeChequeo([{ fila, animalId: 'a1' }], mapa);
+    expect(eventos).toEqual([expect.objectContaining({ tipo: 'parto', fecha: '2024-04-02', fecha_confianza: 'exacta' })]);
+  });
+
+  // Colapso de partos CERCANOS (owner decision 2026-07-23, caso real GALLEGA
+  // #148) -- prueba que el WIRING de este commit path (una lectura anterior
+  // conocida por animal) llega al umbral de proximidad de
+  // `agruparPartosPorProximidad`, no solo a la igualdad exacta.
+  it('con ultimaCriaAnteriorPorAnimal a <= 60 días (distinta, no exacta) el evento se suprime y deja un issue de revisión', () => {
+    const fila = filaBase({ sx: parseSX('OV'), fechasServicio: [], raw: { ...filaBase().raw, ultimaCria: '1/11/2025' } });
+    const mapa = new Map([['a1', '2025-12-02']]); // 31 días de diferencia -- caso real GALLEGA
+    const { eventos, issues } = derivarEventosDeChequeo([{ fila, animalId: 'a1' }], mapa);
+    expect(eventos).toEqual([]);
+    expect(issues.some((i) => /Última Cría/.test(i.motivo))).toBe(true);
+  });
+
+  it('el mapa se consulta por animalId de cada fila, no globalmente', () => {
+    const filaA = filaBase({ fila: 3, numero: 162, sx: parseSX('OV'), fechasServicio: [], raw: { ...filaBase().raw, ultimaCria: '28/1/2024' } });
+    const filaB = filaBase({ fila: 4, numero: 175, sx: parseSX('OV'), fechasServicio: [], raw: { ...filaBase().raw, ultimaCria: '28/1/2024' } });
+    const mapa = new Map([['a-162', '2024-01-28']]); // solo el animal de filaA tiene ese parto ya registrado
+    const { eventos } = derivarEventosDeChequeo(
+      [
+        { fila: filaA, animalId: 'a-162' },
+        { fila: filaB, animalId: 'a-175' },
+      ],
+      mapa,
+    );
+    expect(eventos).toHaveLength(1);
+    expect(eventos[0].vacaIndice).toBe(1); // solo filaB (a-175) emitió
+  });
+});
+
+// ============================================================================
+// seleccionarUltimaCriaAnteriorPorAnimal -- caller del handler I/O
+// ============================================================================
+
+describe('seleccionarUltimaCriaAnteriorPorAnimal', () => {
+  it('reduce el historial al último ultima_cria_raw parseado, estrictamente ANTERIOR a la fecha del chequeo nuevo', () => {
+    const historico: FilaUltimaCriaHistorico[] = [
+      { animalId: 'a1', chequeoFecha: '2024-03-18', ultimaCriaRaw: '28/1/2024' },
+      { animalId: 'a1', chequeoFecha: '2024-05-20', ultimaCriaRaw: '28/1/2024' },
+    ];
+    const mapa = seleccionarUltimaCriaAnteriorPorAnimal(historico, '2024-08-09');
+    expect(mapa.get('a1')).toBe('2024-01-28');
+  });
+
+  it('excluye chequeos en o después de la fecha nueva (estrictamente anterior)', () => {
+    const historico: FilaUltimaCriaHistorico[] = [
+      { animalId: 'a1', chequeoFecha: '2024-08-09', ultimaCriaRaw: '2/4/2024' },
+    ];
+    const mapa = seleccionarUltimaCriaAnteriorPorAnimal(historico, '2024-08-09');
+    expect(mapa.has('a1')).toBe(false);
+  });
+
+  it('animal sin ningún chequeo anterior no aparece en el mapa (nunca se inventa un valor)', () => {
+    const mapa = seleccionarUltimaCriaAnteriorPorAnimal([], '2024-08-09');
+    expect(mapa.size).toBe(0);
+  });
+
+  it('ultima_cria_raw no interpretable se resuelve a null (celda vacía o rota), nunca se descarta el animal del mapa', () => {
+    const historico: FilaUltimaCriaHistorico[] = [
+      { animalId: 'a1', chequeoFecha: '2024-05-20', ultimaCriaRaw: 'ok' },
+    ];
+    const mapa = seleccionarUltimaCriaAnteriorPorAnimal(historico, '2024-08-09');
+    expect(mapa.get('a1')).toBeNull();
   });
 });
 

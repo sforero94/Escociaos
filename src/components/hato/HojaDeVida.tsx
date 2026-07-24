@@ -6,7 +6,7 @@
 
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Loader2, AlertTriangle, ArrowLeft, Pencil } from 'lucide-react';
+import { Loader2, AlertTriangle, ArrowLeft, Pencil, HandCoins, Skull } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHatoAnimal } from './hooks/useHatoAnimal';
 import { EstadoChip } from './components/EstadoChip';
@@ -14,6 +14,8 @@ import { FranjaEstadisticas } from './components/FranjaEstadisticas';
 import { EventoTimeline } from './components/EventoTimeline';
 import { GenealogiaArbol } from './components/GenealogiaArbol';
 import { EditarAnimalDialog } from './components/EditarAnimalDialog';
+import { VentaAnimalDialog } from './components/VentaAnimalDialog';
+import { MuerteAnimalDialog } from './components/MuerteAnimalDialog';
 import { Button } from '@/components/ui/button';
 import { chipEstadoReproductivo, chipVaciaEsProblema, chipProximaAReemplazo, chipNumeroProvisional } from '@/utils/hatoUi';
 import { formatShortDate, formatNumber, capitalize } from '@/utils/format';
@@ -24,6 +26,8 @@ export function HojaDeVida() {
   const { profile } = useAuth();
   const canEdit = profile?.rol === 'Administrador' || profile?.rol === 'Gerencia';
   const [editOpen, setEditOpen] = useState(false);
+  const [ventaOpen, setVentaOpen] = useState(false);
+  const [muerteOpen, setMuerteOpen] = useState(false);
 
   if (loading) {
     return (
@@ -51,6 +55,9 @@ export function HojaDeVida() {
 
   const { animal, derivado, eventos, chequeos, madre, padreToro, padreAnimal, crias, nombresToroPorId, numeroEsProvisional, pl, numPartos } = detalle;
   const hoy = new Date().toISOString().slice(0, 10);
+  // Venta/muerte (S9) solo aplican a un animal todavía activo -- uno ya
+  // vendido/muerto/descartado no puede volver a salir del hato por esta vía.
+  const puedeRegistrarSalida = canEdit && animal.estado === 'activa';
 
   const proyectados = [
     ...(derivado.fecha_secar ? [{ tipo: 'secar' as const, fecha: derivado.fecha_secar }] : []),
@@ -91,11 +98,23 @@ export function HojaDeVida() {
                 {derivado.proxima_a_reemplazo && <EstadoChip chip={chipProximaAReemplazo()} />}
                 {numeroEsProvisional && <EstadoChip chip={chipNumeroProvisional()} />}
               </div>
-              {canEdit && (
-                <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
-                  <Pencil className="w-3.5 h-3.5 mr-1.5" /> Editar
-                </Button>
-              )}
+              <div className="flex flex-wrap items-center gap-2 justify-end">
+                {canEdit && (
+                  <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+                    <Pencil className="w-3.5 h-3.5 mr-1.5" /> Editar
+                  </Button>
+                )}
+                {puedeRegistrarSalida && (
+                  <>
+                    <Button variant="outline" size="sm" onClick={() => setVentaOpen(true)}>
+                      <HandCoins className="w-3.5 h-3.5 mr-1.5" /> Registrar venta
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setMuerteOpen(true)}>
+                      <Skull className="w-3.5 h-3.5 mr-1.5" /> Registrar muerte
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
@@ -174,6 +193,29 @@ export function HojaDeVida() {
           animal={animal}
           onGuardado={reload}
         />
+      )}
+
+      {/* Gateados por `canEdit`, no por `puedeRegistrarSalida`: ese último
+          depende de `animal.estado`, que el propio guardado exitoso cambia
+          -- condicionar el montaje del diálogo a él lo desmontaría a medio
+          cerrar justo después de un guardado. El botón que los abre sí usa
+          `puedeRegistrarSalida` (no tiene sentido ofrecer la acción sobre un
+          animal ya vendido/muerto). */}
+      {canEdit && (
+        <>
+          <VentaAnimalDialog
+            open={ventaOpen}
+            onOpenChange={setVentaOpen}
+            animalId={animal.id}
+            onGuardado={reload}
+          />
+          <MuerteAnimalDialog
+            open={muerteOpen}
+            onOpenChange={setMuerteOpen}
+            animalId={animal.id}
+            onGuardado={reload}
+          />
+        </>
       )}
     </div>
   );
