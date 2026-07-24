@@ -82,6 +82,16 @@ function esRuidoDeRango(encabezadoNormalizado: string): boolean {
   return /[A-Z]+\d+:[A-Z]+\d+/.test(encabezadoNormalizado);
 }
 
+// Los alias marcados "B5.3" son el vocabulario de NUESTRO PROPIO formato de
+// exportación (planilla pre-llenada/record-keeping, ver
+// `src/utils/hato/exportarPlanillaChequeo.ts` y
+// docs/hato/sesiones-b5-d7-e3.md) -- headers con la abreviatura desarrollada
+// en vez de la sigla histórica (`# Partos` en vez de `#P2`, `Fecha Servicio`
+// en vez de `F Servicio`, etc.), para que un chequeo exportado por la app y
+// vuelto a subir sin cambios (B5.3, round-trip) reconozca sus propias
+// columnas. Se AGREGAN como alias adicionales, nunca reemplazando los de las
+// 3 generaciones históricas -- ningún alias existente se quita ni se
+// renombra.
 const ALIAS_ANCLA: Record<
   Exclude<ColumnaLogicaChequeo, 'tp' | 'estado' | 'secar' | 'pp'>,
   string[]
@@ -89,22 +99,26 @@ const ALIAS_ANCLA: Record<
   numero: ['#'],
   nombre: ['NOMBRE'],
   pl: ['PL'],
-  np: ['#P2'],
-  ultimaCria: ['UC', 'ULTIMA CRIA'],
-  sx: ['SX'],
-  fechaServicio: ['F SERVICIO'],
+  np: ['#P2', '# PARTOS'], // '# Partos' es B5.3
+  ultimaCria: ['UC', 'ULTIMA CRIA', 'ÚLTIMA CRÍA'], // 'Última Cría' (con acento) es B5.3
+  sx: ['SX', 'SEXO CRÍA'], // 'Sexo cría' es B5.3
+  fechaServicio: ['F SERVICIO', 'FECHA SERVICIO'], // 'Fecha Servicio' es B5.3
   toro: ['T', 'TORO'],
-  ttto: ['TTTO'],
+  ttto: ['TTTO', 'TRATAMIENTO'], // 'Tratamiento' es B5.3
 };
 
 /** Alias del grupo final, cada uno con su generación de origen documentada
  * (doc S2 §2): Gen1/Gen2 usan OBS/F Secar/F parto, Gen3 usa
- * ESTADO/SECAR/PP. */
+ * ESTADO/SECAR/PP. `PARTO PROBABLE` es B5.3 (ver nota de `ALIAS_ANCLA`
+ * arriba) -- el template de exportación además ELIMINA la columna `TP` por
+ * completo (fórmula `TODAY()` congelada que el motor nunca lee), así que
+ * ningún header de nuestro propio formato se agrega a `tp`: su ausencia deja
+ * `colmap.tp = null`, que es exactamente el comportamiento deseado. */
 const ALIAS_GRUPO_FINAL: Record<'tp' | 'estado' | 'secar' | 'pp', string[]> = {
   tp: ['TP'],
   estado: ['ESTADO', 'OBS'],
   secar: ['SECAR', 'F SECAR'],
-  pp: ['PP', 'F PARTO'],
+  pp: ['PP', 'F PARTO', 'PARTO PROBABLE'],
 };
 
 export type GeneracionEncabezado = 1 | 2 | 3 | 'sin_encabezado';

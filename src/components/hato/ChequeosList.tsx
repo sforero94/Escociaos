@@ -19,16 +19,84 @@
 
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, AlertTriangle, Upload, FileSpreadsheet, ChevronRight } from 'lucide-react';
+import { Loader2, AlertTriangle, Upload, FileSpreadsheet, ChevronRight, FileDown } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useHatoChequeos } from './hooks/useHatoChequeos';
+import { useAnimalesParaPlanillaChequeo } from './hooks/useAnimalesParaPlanillaChequeo';
 import { SubirChequeoExcel } from './components/SubirChequeoExcel';
 import { HatoPageHeader } from './components/HatoPageHeader';
 import { formatShortDate, formatNumber } from '@/utils/format';
+import {
+  descargarPlanillaChequeo,
+  construirTituloHojaChequeo,
+  construirNombreHojaChequeo,
+  isoATextoDDMMYYYY,
+  type FilaPlanillaChequeo,
+} from '@/utils/hato/exportarPlanillaChequeo';
+
+/**
+ * B5.1 -- planilla PRE-LLENADA para el PRÓXIMO chequeo (aún sin fecha real:
+ * D-4, no hay internet en la finca, así que el chequeo nunca se agenda en la
+ * app). El título/nombre de hoja usan la fecha de HOY como placeholder --
+ * quien transcriba las notas del veterinario debe corregir la celda del
+ * título a la fecha real del examen antes de volver a subir el archivo
+ * (misma columna que gobierna la fecha de cualquier chequeo, ver
+ * `parseFechaChequeo`). Las columnas que el veterinario actualiza (Sexo
+ * cría, Fecha Servicio, Toro, Estado, Tratamiento) quedan en blanco;
+ * identidad + PL/#Partos/Última Cría + Secar/Parto Probable (referencia de
+ * solo lectura, ya derivados por el motor) se pre-llenan.
+ */
+function filaPlanillaPrellenada(animal: {
+  numero: number | null;
+  nombre: string | null;
+  pl: number | null;
+  numPartos: number;
+  ultimoPartoFecha: string | null;
+  fechaSecar: string | null;
+  fechaProbableParto: string | null;
+}): FilaPlanillaChequeo {
+  return {
+    numero: animal.numero,
+    nombre: animal.nombre,
+    pl: animal.pl,
+    numPartos: animal.numPartos,
+    ultimaCria: isoATextoDDMMYYYY(animal.ultimoPartoFecha),
+    sexoCria: null,
+    fechaServicio: null,
+    toro: null,
+    estado: null,
+    secar: isoATextoDDMMYYYY(animal.fechaSecar),
+    partoProbable: isoATextoDDMMYYYY(animal.fechaProbableParto),
+    tratamiento: null,
+  };
+}
 
 export function ChequeosList() {
   const { chequeos, loading, error, reload } = useHatoChequeos();
+  const { animales: animalesParaPlanilla, loading: cargandoAnimales } = useAnimalesParaPlanillaChequeo();
   const [mostrarSubida, setMostrarSubida] = useState(false);
+  const [exportando, setExportando] = useState(false);
+
+  const handleExportarPlanilla = async () => {
+    setExportando(true);
+    try {
+      const hoy = new Date().toISOString().slice(0, 10);
+      await descargarPlanillaChequeo(
+        {
+          tituloHoja: construirTituloHojaChequeo(hoy),
+          nombreHoja: construirNombreHojaChequeo(hoy),
+          filas: animalesParaPlanilla.map(filaPlanillaPrellenada),
+        },
+        `planilla-proximo-chequeo-${hoy}.xlsx`,
+      );
+      toast.success('Planilla exportada. Actualiza la fecha del título con la del chequeo real antes de subirla.');
+    } catch {
+      toast.error('No se pudo exportar la planilla.');
+    } finally {
+      setExportando(false);
+    }
+  };
 
   return (
     <div className="min-h-screen min-h-[100dvh] bg-gray-50 p-4 lg:p-8">
@@ -39,10 +107,24 @@ export function ChequeosList() {
           title="Chequeos"
           subtitle="Chequeo veterinario bimestral — sube el Excel que Martha ya diligencia"
           actions={
-            <Button onClick={() => setMostrarSubida(true)}>
-              <Upload className="w-4 h-4 mr-2" />
-              Subir chequeo (.xlsx)
-            </Button>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="outline"
+                onClick={handleExportarPlanilla}
+                disabled={exportando || cargandoAnimales}
+              >
+                {exportando ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <FileDown className="w-4 h-4 mr-2" />
+                )}
+                Exportar planilla para el próximo chequeo
+              </Button>
+              <Button onClick={() => setMostrarSubida(true)}>
+                <Upload className="w-4 h-4 mr-2" />
+                Subir chequeo (.xlsx)
+              </Button>
+            </div>
           }
         />
 

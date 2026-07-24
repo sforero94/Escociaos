@@ -13,13 +13,49 @@
 // contraparte normalizada en el esquema (ver `types/hato.ts`) -- siempre
 // muestran el dato crudo.
 
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Loader2, AlertTriangle, ArrowLeft, FileSpreadsheet } from 'lucide-react';
+import { Loader2, AlertTriangle, ArrowLeft, FileSpreadsheet, FileDown } from 'lucide-react';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
 import { useHatoChequeoDetalle, type ChequeoVacaDetalle } from './hooks/useHatoChequeoDetalle';
 import { HatoPageHeader } from './components/HatoPageHeader';
 import { EstadoChip } from './components/EstadoChip';
 import { chipTipoEstado, chipNumeroProvisional } from '@/utils/hatoUi';
 import { formatShortDate, formatNumber } from '@/utils/format';
+import {
+  descargarPlanillaChequeo,
+  construirTituloHojaChequeo,
+  construirNombreHojaChequeo,
+  isoATextoDDMMYYYY,
+  type FilaPlanillaChequeo,
+} from '@/utils/hato/exportarPlanillaChequeo';
+
+/**
+ * B5.2 -- export de un chequeo YA CARGADO, para record-keeping. Totalmente
+ * poblado usando la capa CRUDA (`*_raw`) de cada campo -- el texto verbatim
+ * que ya se normalizó una vez al cargar este chequeo, así que reparsearlo
+ * (B5.3) reproduce EXACTAMENTE los mismos valores normalizados, sin
+ * necesidad de reconstruir texto a partir de los normalizados. Identidad
+ * (`#`/`Nombre`) sale del animal (`hato_animales`, vía el join de
+ * `useHatoChequeoDetalle`), no tiene columna `_raw` propia.
+ */
+function filaPlanillaDesdeChequeoVaca(fila: ChequeoVacaDetalle): FilaPlanillaChequeo {
+  return {
+    numero: fila.numero,
+    nombre: fila.nombre,
+    pl: fila.pl_raw,
+    numPartos: fila.np_raw,
+    ultimaCria: fila.ultima_cria_raw,
+    sexoCria: fila.sx_raw,
+    fechaServicio: fila.fecha_servicio_raw,
+    toro: fila.toro_raw,
+    estado: fila.estado_raw,
+    secar: isoATextoDDMMYYYY(fila.fecha_secar),
+    partoProbable: isoATextoDDMMYYYY(fila.fecha_probable_parto),
+    tratamiento: fila.ttto_raw,
+  };
+}
 
 function Celda({
   valor,
@@ -104,6 +140,28 @@ function FilaChequeoVaca({ fila }: { fila: ChequeoVacaDetalle }) {
 export function ChequeoDetalle() {
   const { id } = useParams<{ id: string }>();
   const { detalle, loading, error } = useHatoChequeoDetalle(id);
+  const [exportando, setExportando] = useState(false);
+
+  const handleExportar = async () => {
+    if (!detalle) return;
+    setExportando(true);
+    try {
+      const { chequeo, vacas } = detalle;
+      await descargarPlanillaChequeo(
+        {
+          tituloHoja: construirTituloHojaChequeo(chequeo.fecha),
+          nombreHoja: construirNombreHojaChequeo(chequeo.fecha),
+          filas: vacas.map(filaPlanillaDesdeChequeoVaca),
+        },
+        `chequeo-${chequeo.fecha}.xlsx`,
+      );
+      toast.success('Chequeo exportado a Excel.');
+    } catch {
+      toast.error('No se pudo exportar el chequeo.');
+    } finally {
+      setExportando(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -144,6 +202,18 @@ export function ChequeoDetalle() {
           section={formatShortDate(chequeo.fecha)}
           title={`Chequeo del ${formatShortDate(chequeo.fecha)}`}
           subtitle={subtitulo}
+          actions={
+            vacas.length > 0 && (
+              <Button variant="outline" onClick={handleExportar} disabled={exportando}>
+                {exportando ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <FileDown className="w-4 h-4 mr-2" />
+                )}
+                Exportar a Excel
+              </Button>
+            )
+          }
         />
 
         {vacas.length === 0 ? (
