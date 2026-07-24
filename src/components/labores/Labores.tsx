@@ -19,8 +19,8 @@ import RegistrarTrabajoDialog from './RegistrarTrabajoDialog';
 import CatalogoTiposDialog from './CatalogoTiposDialog';
 import TareaDetalleDialog from './TareaDetalleDialog';
 import ReportesView from './ReportesView';
-import KanbanBoard from './KanbanBoard';
-import type { ColumnActions } from './kanban-types';
+import TareasTable, { type EstadoFiltro } from './TareasTable';
+import type { TareaRowActions } from './tareas-types';
 import type { Empleado, Contratista, Lote, Sublote, Trabajador } from '../../types/shared';
 export type { Empleado, Contratista, Lote, Sublote, Trabajador };
 
@@ -91,6 +91,7 @@ const Labores: React.FC = () => {
   const [lotes, setLotes] = useState<Lote[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [estadoFiltro, setEstadoFiltro] = useState<EstadoFiltro>('Todos');
 
   // Estados de diálogos
   const [showCrearDialog, setShowCrearDialog] = useState(false);
@@ -109,9 +110,9 @@ const Labores: React.FC = () => {
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleteTargetTarea, setDeleteTargetTarea] = useState<Tarea | null>(null);
 
-  // Vista activa (Kanban | Reportes), controlada por el subnav vía ?vista=
+  // Vista activa (Tabla | Reportes), controlada por el subnav vía ?vista=
   const [searchParams] = useSearchParams();
-  const vista = searchParams.get('vista') === 'reportes' ? 'reportes' : 'kanban';
+  const vista = searchParams.get('vista') === 'reportes' ? 'reportes' : 'tabla';
 
   // Cargar datos al montar
   useEffect(() => {
@@ -336,19 +337,22 @@ const Labores: React.FC = () => {
     }
   };
 
-  // Filtrar tareas por búsqueda
+  // Filtrar tareas por búsqueda + estado (única derivación para tabla y reportes)
   const tareasFiltradas = tareas.filter((tarea) => {
     const searchLower = searchTerm.toLowerCase();
-    return (
+    const coincideBusqueda =
       tarea.nombre.toLowerCase().includes(searchLower) ||
       tarea.codigo_tarea.toLowerCase().includes(searchLower) ||
       tarea.tipo_tarea?.nombre.toLowerCase().includes(searchLower) ||
-      tarea.lote?.nombre.toLowerCase().includes(searchLower)
-    );
+      tarea.lote?.nombre.toLowerCase().includes(searchLower);
+
+    const coincideEstado = estadoFiltro === 'Todos' || tarea.estado === estadoFiltro;
+
+    return coincideBusqueda && coincideEstado;
   });
 
-  // Actions bundle for Kanban cards
-  const columnActions: ColumnActions = useMemo(() => ({
+  // Actions bundle for table rows / mobile cards
+  const rowActions: TareaRowActions = useMemo(() => ({
     onVerDetalles: handleVerDetalles,
     onEditar: handleEditarTarea,
     onRegistrarTrabajo: handleRegistrarTrabajo,
@@ -379,14 +383,17 @@ const Labores: React.FC = () => {
 
       {/* Tabs (selección controlada por LaboresSubNav vía ?vista=) */}
       <Tabs value={vista}>
-        {/* Tab: Tablero Kanban */}
-        <TabsContent value="kanban">
-          <KanbanBoard
-            tareasFiltradas={tareasFiltradas}
+        {/* Tab: Tabla de tareas */}
+        <TabsContent value="tabla">
+          <TareasTable
+            tareas={tareasFiltradas}
+            totalTareas={tareas.length}
             searchTerm={searchTerm}
             onSearchChange={setSearchTerm}
-            actions={columnActions}
-            onNuevaTarea={handleNuevaTarea}
+            estadoFiltro={estadoFiltro}
+            onEstadoFiltroChange={setEstadoFiltro}
+            actions={rowActions}
+            onNuevaTarea={() => handleNuevaTarea()}
             onOpenCatalogo={() => setShowCatalogoDialog(true)}
             loading={loading}
           />
