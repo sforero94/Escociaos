@@ -18,7 +18,7 @@
 // alterarlo (V1 del plan -- los componentes nuevos del mock no tocan
 // definiciones globales del sistema de diseño).
 
-import type { EstadoReproductivo } from '@/utils/calculosHato';
+import type { EstadoReproductivo, TipoEstado } from '@/utils/calculosHato';
 import type { ClasificacionFilaDiff } from '@/utils/importHato/diffChequeo';
 import type { CategoriaHato } from '@/utils/hatoCategorias';
 
@@ -110,6 +110,91 @@ export function chipClasificacionDiff(clasificacion: ClasificacionFilaDiff): Chi
       return { label: 'No reconocido', className: ROJO };
     default: {
       const _exhaustivo: never = clasificacion;
+      return { label: String(_exhaustivo), className: GRIS };
+    }
+  }
+}
+
+/** `fechaISO - hoyISO` en días enteros, matemática de día simple en UTC
+ * (mismo criterio que la `diferenciaDias` interna de calculosHato.ts -- no
+ * se puede importar esa función porque no está exportada, así que se
+ * duplica la FÓRMULA, nunca el criterio: comparar por componentes de fecha,
+ * no por `Date` con huso horario). Positivo = `fechaISO` es futura;
+ * negativo = ya pasó. */
+function diasHastaFecha(fechaISO: string, hoyISO: string): number {
+  const [ah, mh, dh] = hoyISO.split('-').map(Number);
+  const [af, mf, df] = fechaISO.split('-').map(Number);
+  const hoy = Date.UTC(ah, mh - 1, dh);
+  const fecha = Date.UTC(af, mf - 1, df);
+  return Math.round((fecha - hoy) / 86400000);
+}
+
+/** Pill de urgencia por días restantes hasta `fechaISO` (p. ej. SECAR o PP),
+ * comparado contra `hoyISO` (ambos `YYYY-MM-DD`). Solo colorea una
+ * diferencia de días ya calculada -- NO decide ningún umbral de negocio
+ * (esos viven en `calculosHato.ts`/`hato_config`); `umbralUrgenteDias` es un
+ * corte puramente visual (ámbar vs. gris), no un parámetro del motor.
+ * Vencido (rojo) si `fechaISO` ya pasó; "Hoy" (ámbar) si es hoy; ámbar si
+ * faltan <= `umbralUrgenteDias` días; gris si falta más. */
+export function chipDiasRestantes(fechaISO: string, hoyISO: string, umbralUrgenteDias = 7): ChipEstilo {
+  const dias = diasHastaFecha(fechaISO, hoyISO);
+  if (dias < 0) return { label: 'Vencido', className: ROJO };
+  if (dias === 0) return { label: 'Hoy', className: AMBAR };
+  if (dias <= umbralUrgenteDias) return { label: `${dias} d`, className: AMBAR };
+  return { label: `${dias} d`, className: GRIS };
+}
+
+/** Pill para un signal que el caller YA sabe que está vencido (p. ej.
+ * "rechequeo pendiente": la vista no expone una fecha de vencimiento, solo
+ * `ultimo_chequeo_fecha` en el pasado -- el motor ya decidió que el umbral
+ * se cumplió). Siempre rojo; `diasTranscurridos` es solo informativo
+ * (`null` cuando no hay fecha ancla, nunca se inventa un número). */
+export function chipVencimiento(diasTranscurridos: number | null): ChipEstilo {
+  return {
+    label: diasTranscurridos != null ? `Vencido (${diasTranscurridos} d)` : 'Vencido',
+    className: ROJO,
+  };
+}
+
+/** Chip para `hato_chequeo_vacas.estado` (`parseEstado`, migración 062) --
+ * columna ESTADO/OBS normalizada del detalle de chequeo (§5 del Figma
+ * spec). `'vacio'` no debería llegar a la BD (el import escribe `NULL`
+ * cuando la celda está vacía, ver migración 062) pero se cubre para que el
+ * switch siga exhaustivo. */
+export function chipTipoEstado(estado: TipoEstado): ChipEstilo {
+  switch (estado) {
+    case 'vacia_apta':
+      return { label: 'Vacía apta', className: VERDE };
+    case 'vacia_problema':
+      return { label: 'Vacía problema', className: ROJO };
+    case 'fecha_heredada':
+      return {
+        label: 'Fecha heredada',
+        className: GRIS,
+        title: 'La celda ESTADO/OBS trae una fecha de un ciclo reproductivo anterior, no un código',
+      };
+    case 'desconocido':
+      return { label: 'Desconocido', className: AMBAR, title: 'Código no reconocido en la planilla' };
+    case 'vacio':
+      return { label: 'Sin dato', className: GRIS };
+    default: {
+      const _exhaustivo: never = estado;
+      return { label: String(_exhaustivo), className: GRIS };
+    }
+  }
+}
+
+/** Chip para `hato_tratamientos.estado` (migración 055). */
+export function chipEstadoTratamiento(estado: 'activo' | 'completado' | 'cancelado'): ChipEstilo {
+  switch (estado) {
+    case 'activo':
+      return { label: 'Activo', className: AZUL };
+    case 'completado':
+      return { label: 'Completado', className: VERDE };
+    case 'cancelado':
+      return { label: 'Cancelado', className: GRIS };
+    default: {
+      const _exhaustivo: never = estado;
       return { label: String(_exhaustivo), className: GRIS };
     }
   }
