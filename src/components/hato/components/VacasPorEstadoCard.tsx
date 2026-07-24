@@ -27,19 +27,33 @@
 // una barra continua es más calmada/legible (baseline de diseño, "tie-break
 // hacia lo más calmado").
 //
-// Colores alineados con la paleta semántica YA establecida en
-// `hatoUi.ts::chipCategoriaHato`/`chipEstadoReproductivo` (verde = en
-// ordeño/preñada, ámbar = novilla/vacía por servir, azul = ternera) para que
-// esta card nunca contradiga el color que un chip ya usa en otra pantalla
-// para el mismo concepto.
+// Color: cada eje cuenta una historia DISTINTA, así que cada barra usa su
+// propia familia de color para que se distingan de un vistazo (decisión del
+// dueño 2026-07-24 -- revierte el alineamiento previo con la paleta de chips,
+// que reusaba el mismo verde en las tres barras y las hacía ver como una sola
+// historia):
+//   - Producción (binaria): dos tonos de VERDE (ordeño / horro).
+//   - Reproducción (binaria): dos tonos de CAFÉ (preñadas / por servir).
+//   - Etapa (categórica, 3 grupos de ciclo de vida): tres tokens distintos --
+//     verde oscuro / ámbar / café.
+// TODOS los colores salen de la paleta del app (variables CSS de globals.css:
+// --primary, --secondary, --brand-brown, --foreground, --warning) -- ningún
+// hex hardcodeado. La paleta tiene un solo café, así que el segundo tono se
+// deriva del MISMO token --brand-brown con color-mix: sigue siendo de la paleta.
 
 import { formatNumber } from '@/utils/format';
 import { calcularProporcionesDosValores, calcularProporcionesN } from '@/utils/hatoVacasPorEstado';
 
-const VERDE = 'var(--primary)';
-const AMBAR = '#d97706';
-const AZUL = '#2563eb';
-const GRIS = 'var(--muted-foreground)';
+// Producción -- dos tonos de verde de la paleta
+const ORDENO = 'var(--primary)';
+const HORRO = 'var(--secondary)';
+// Reproducción -- dos tonos de café (--brand-brown y una versión aclarada del mismo token)
+const PRENADAS_COLOR = 'var(--brand-brown)';
+const POR_SERVIR_COLOR = 'color-mix(in srgb, var(--brand-brown) 50%, white)';
+// Etapa -- categórica: verde oscuro / ámbar / café (todos tokens de la paleta)
+const ETAPA_VACAS = 'var(--foreground)';
+const ETAPA_NOVILLAS = 'var(--warning)';
+const ETAPA_TERNERAS = 'var(--brand-brown)';
 
 interface BarraNominalProps {
   leftLabel: string;
@@ -88,9 +102,9 @@ interface SegmentoEtapa {
 
 function BarraEtapa({ vacas, novillas, terneras }: { vacas: number; novillas: number; terneras: number }) {
   const segmentos: SegmentoEtapa[] = [
-    { key: 'vacas', label: 'Vacas', value: vacas, color: VERDE },
-    { key: 'novillas', label: 'Novillas', value: novillas, color: AMBAR },
-    { key: 'terneras', label: 'Terneras', value: terneras, color: AZUL },
+    { key: 'vacas', label: 'Vacas', value: vacas, color: ETAPA_VACAS },
+    { key: 'novillas', label: 'Novillas', value: novillas, color: ETAPA_NOVILLAS },
+    { key: 'terneras', label: 'Terneras', value: terneras, color: ETAPA_TERNERAS },
   ];
   const pcts = calcularProporcionesN(segmentos.map((s) => s.value));
   const total = vacas + novillas + terneras;
@@ -152,18 +166,18 @@ export function VacasPorEstadoCard({
         <BarraNominal
           leftLabel="Ordeño"
           leftValue={ordeno}
-          leftColor={VERDE}
+          leftColor={ORDENO}
           rightLabel="Horro"
           rightValue={horro}
-          rightColor={GRIS}
+          rightColor={HORRO}
         />
         <BarraNominal
           leftLabel="Preñadas"
           leftValue={prenadas}
-          leftColor={VERDE}
+          leftColor={PRENADAS_COLOR}
           rightLabel="Por servir"
           rightValue={porServir}
-          rightColor={AMBAR}
+          rightColor={POR_SERVIR_COLOR}
         />
       </div>
       <div className="mt-4 border-t border-gray-100 pt-4">
