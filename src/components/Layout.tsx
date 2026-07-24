@@ -27,6 +27,7 @@ import {
   TrendingDown,
   FileBarChart,
   Target,
+  Syringe,
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { useAuth } from '../contexts/AuthContext';
@@ -79,6 +80,7 @@ const NAV: NavEntry[] = [
       { id: 'hato-hato', label: 'Hato', icon: Beef, path: '/hato-lechero/hato' },
       { id: 'hato-chequeos', label: 'Chequeos', icon: ClipboardCheck, path: '/hato-lechero/chequeos' },
       { id: 'hato-alertas', label: 'Alertas', icon: Bell, path: '/hato-lechero/alertas' },
+      { id: 'hato-pajillas', label: 'Pajillas', icon: Syringe, path: '/hato-lechero/pajillas' },
     ],
   },
   { id: 'ganado', label: 'Ganado', icon: Beef, path: '/ganado', modulo: 'ganado' },

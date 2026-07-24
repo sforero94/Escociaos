@@ -53,6 +53,7 @@ const ChequeosList = lazy(() => import('./components/hato/ChequeosList').then(m 
 const ChequeoDetalle = lazy(() => import('./components/hato/ChequeoDetalle').then(m => ({ default: m.ChequeoDetalle })));
 const HatoProduccionView = lazy(() => import('./components/hato/ProduccionView').then(m => ({ default: m.ProduccionView })));
 const AlertasView = lazy(() => import('./components/hato/AlertasView').then(m => ({ default: m.AlertasView })));
+const PajillasView = lazy(() => import('./components/hato/PajillasView').then(m => ({ default: m.PajillasView })));
 const GanadoDashboard = lazy(() => import('./components/ganado/GanadoDashboard').then(m => ({ default: m.GanadoDashboard })));
 const GanadoMovimientos = lazy(() => import('./components/ganado/GanadoMovimientos').then(m => ({ default: m.GanadoMovimientos })));
 const ReportesDashboard = lazy(() => import('./components/reportes/ReportesDashboard').then(m => ({ default: m.ReportesDashboard })));
@@ -153,6 +154,7 @@ function LayoutRoutes() {
                 <Route path=":id" element={<ChequeoDetalle />} />
               </Route>
               <Route path="alertas" element={<AlertasView />} />
+              <Route path="pajillas" element={<PajillasView />} />
             </Route>
           </Route>
 

@@ -3,13 +3,13 @@
 // Ficha completa de un animal: identidad + franja de estadísticas + timeline
 // reproductiva (A3, TODOS los servicios, V7) + genealogía (madre Y padre,
 // A5/V8) + historial de chequeos. Figma alignment spec §3 (Wave 2a) agrega:
-// `HatoPageHeader` compartido, acciones rápidas "Registrar parto"/"Marcar
-// vendida / muerta" gateadas a Administrador/Gerencia, la curva de PL por
-// chequeo y la card de Tratamientos.
+// `HatoPageHeader` compartido, la acción rápida "Registrar parto", la curva
+// de PL por chequeo y la card de Tratamientos. La venta/muerte la aportó S9
+// (`VentaAnimalDialog`/`MuerteAnimalDialog`), integrada aquí en el header.
 
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Loader2, AlertTriangle, ArrowLeft, Pencil, Baby, ArrowRightLeft } from 'lucide-react';
+import { Loader2, AlertTriangle, ArrowLeft, Pencil, Baby, HandCoins, Skull } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHatoAnimal } from './hooks/useHatoAnimal';
 import { useHatoTratamientos } from './hooks/useHatoTratamientos';
@@ -19,10 +19,11 @@ import { EventoTimeline } from './components/EventoTimeline';
 import { GenealogiaArbol } from './components/GenealogiaArbol';
 import { EditarAnimalDialog } from './components/EditarAnimalDialog';
 import { RegistrarPartoDialog } from './components/RegistrarPartoDialog';
-import { MarcarSalidaDialog } from './components/MarcarSalidaDialog';
 import { CurvaProduccionLeche } from './components/CurvaProduccionLeche';
 import { TratamientosCard } from './components/TratamientosCard';
 import { HatoPageHeader } from './components/HatoPageHeader';
+import { VentaAnimalDialog } from './components/VentaAnimalDialog';
+import { MuerteAnimalDialog } from './components/MuerteAnimalDialog';
 import { Button } from '@/components/ui/button';
 import { chipEstadoReproductivo, chipVaciaEsProblema, chipProximaAReemplazo, chipNumeroProvisional } from '@/utils/hatoUi';
 import { formatShortDate, formatNumber, capitalize } from '@/utils/format';
@@ -35,7 +36,8 @@ export function HojaDeVida() {
   const canEdit = profile?.rol === 'Administrador' || profile?.rol === 'Gerencia';
   const [editOpen, setEditOpen] = useState(false);
   const [partoOpen, setPartoOpen] = useState(false);
-  const [salidaOpen, setSalidaOpen] = useState(false);
+  const [ventaOpen, setVentaOpen] = useState(false);
+  const [muerteOpen, setMuerteOpen] = useState(false);
 
   if (loading) {
     return (
@@ -63,6 +65,9 @@ export function HojaDeVida() {
 
   const { animal, derivado, eventos, chequeos, madre, padreToro, padreAnimal, crias, nombresToroPorId, numeroEsProvisional, pl, numPartos } = detalle;
   const hoy = new Date().toISOString().slice(0, 10);
+  // Venta/muerte (S9) solo aplican a un animal todavía activo -- uno ya
+  // vendido/muerto/descartado no puede volver a salir del hato por esta vía.
+  const puedeRegistrarSalida = canEdit && animal.estado === 'activa';
 
   const proyectados = [
     ...(derivado.fecha_secar ? [{ tipo: 'secar' as const, fecha: derivado.fecha_secar }] : []),
@@ -94,9 +99,16 @@ export function HojaDeVida() {
                 <Button variant="outline" size="sm" onClick={() => setPartoOpen(true)}>
                   <Baby className="w-4 h-4 mr-1.5" /> Registrar parto
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => setSalidaOpen(true)}>
-                  <ArrowRightLeft className="w-4 h-4 mr-1.5" /> Marcar vendida / muerta
-                </Button>
+                {puedeRegistrarSalida && (
+                  <>
+                    <Button variant="outline" size="sm" onClick={() => setVentaOpen(true)}>
+                      <HandCoins className="w-4 h-4 mr-1.5" /> Registrar venta
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setMuerteOpen(true)}>
+                      <Skull className="w-4 h-4 mr-1.5" /> Registrar muerte
+                    </Button>
+                  </>
+                )}
                 <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
                   <Pencil className="w-4 h-4 mr-1.5" /> Editar
                 </Button>
@@ -200,11 +212,28 @@ export function HojaDeVida() {
             animalId={animal.id}
             onRegistrado={reload}
           />
-          <MarcarSalidaDialog
-            open={salidaOpen}
-            onOpenChange={setSalidaOpen}
+        </>
+      )}
+
+      {/* Gateados por `canEdit`, no por `puedeRegistrarSalida`: ese último
+          depende de `animal.estado`, que el propio guardado exitoso cambia
+          -- condicionar el montaje del diálogo a él lo desmontaría a medio
+          cerrar justo después de un guardado. El botón que los abre sí usa
+          `puedeRegistrarSalida` (no tiene sentido ofrecer la acción sobre un
+          animal ya vendido/muerto). */}
+      {canEdit && (
+        <>
+          <VentaAnimalDialog
+            open={ventaOpen}
+            onOpenChange={setVentaOpen}
             animalId={animal.id}
-            onRegistrado={reload}
+            onGuardado={reload}
+          />
+          <MuerteAnimalDialog
+            open={muerteOpen}
+            onOpenChange={setMuerteOpen}
+            animalId={animal.id}
+            onGuardado={reload}
           />
         </>
       )}

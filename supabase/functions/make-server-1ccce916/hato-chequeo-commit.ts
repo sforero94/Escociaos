@@ -48,6 +48,8 @@ import {
   construirFilasVacas,
   derivarEventosDeChequeo,
   construirPayloadCommit,
+  seleccionarUltimaCriaAnteriorPorAnimal,
+  type FilaUltimaCriaHistorico,
 } from './importHato/commitChequeo.ts';
 import { construirHatoConfigDesdeFilas, type FilaHatoConfig } from './hato-config-desde-tabla.ts';
 
@@ -231,10 +233,15 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
 
   const animalIds = animales.map((a) => a.id);
   let historico: FilaChequeoVacaHistorico[] = [];
+  // Paralelo a `historico`, mismo fetch -- solo agrega `ultima_cria_raw`
+  // (irrelevante para el diff, ver `compararFila` en diffChequeo.ts, pero es
+  // justo lo que necesita `seleccionarUltimaCriaAnteriorPorAnimal` para
+  // deduplicar el `parto` que `descomponerSX` deriva más abajo).
+  let historicoUltimaCria: FilaUltimaCriaHistorico[] = [];
   if (animalIds.length > 0) {
     const { data, error } = await supabase
       .from('hato_chequeo_vacas')
-      .select('animal_id, pl, num_partos, fecha_servicio, toro, tipo_servicio, fecha_secar, fecha_probable_parto, estado, created_at, hato_chequeos(fecha)')
+      .select('animal_id, pl, num_partos, fecha_servicio, toro, tipo_servicio, fecha_secar, fecha_probable_parto, estado, ultima_cria_raw, created_at, hato_chequeos(fecha)')
       .in('animal_id', animalIds);
     if (error) return respuestaError(c, 500, { error: `No se pudo leer hato_chequeo_vacas: ${error.message}` });
     historico = (data ?? []).map((fila: Record<string, unknown>) => {
@@ -254,10 +261,22 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
         estado: fila.estado as FilaChequeoVacaHistorico['estado'],
       };
     });
+    historicoUltimaCria = (data ?? [])
+      .map((fila: Record<string, unknown>) => {
+        const chequeoRow = fila.hato_chequeos as { fecha: string } | { fecha: string }[] | null;
+        const fecha = Array.isArray(chequeoRow) ? chequeoRow[0]?.fecha : chequeoRow?.fecha;
+        return {
+          animalId: fila.animal_id as string,
+          chequeoFecha: fecha ?? null,
+          ultimaCriaRaw: fila.ultima_cria_raw as string | null,
+        };
+      })
+      .filter((f): f is FilaUltimaCriaHistorico => f.chequeoFecha !== null);
   }
 
   const ultimosChequeos = seleccionarUltimoChequeoPorAnimal(historico);
   const diffFresco = construirDiffChequeo(filas, animales, ultimosChequeos);
+  const ultimaCriaAnteriorPorAnimal = seleccionarUltimaCriaAnteriorPorAnimal(historicoUltimaCria, chequeo.fecha);
 
   // --- 4. Revalidar el ALCANCE contra el diff fresco --------------------
   const { aceptadas, rechazadas } = validarFilasCommit(filas, diffFresco);
@@ -270,7 +289,7 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
 
   // --- 5. Derivar eventos + resolver toro_id (I/O: SELECT-o-INSERT) ----
   const vacas = construirFilasVacas(aceptadas);
-  const { eventos } = derivarEventosDeChequeo(aceptadas);
+  const { eventos } = derivarEventosDeChequeo(aceptadas, ultimaCriaAnteriorPorAnimal);
 
   const nombresToro = [...new Set(eventos.map((e) => e.toro_nombre).filter((n): n is string => !!n && n.trim() !== ''))];
   const toroCache = new Map<string, string>();

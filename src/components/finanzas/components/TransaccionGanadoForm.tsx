@@ -19,21 +19,42 @@ interface TransaccionGanadoFormProps {
   transaccion?: TransaccionGanado | null;
   defaultTipo?: 'compra' | 'venta';
   onSuccess: () => void;
+  /**
+   * Prefill hato lechero (S9, plan §7.2/§8): abre el formulario compartido
+   * desde la ficha de un animal (`VentaAnimalDialog`) en vez de duplicarlo.
+   * `undefined` en todo lo demás de la app (Ganado ceba) -- el comportamiento
+   * sin estas dos props es byte-a-byte el mismo de antes de S9.
+   */
+  hatoAnimalId?: string;
+  hatoCantidadCabezasDefault?: number;
+  /**
+   * Se llama justo después de un INSERT exitoso (nunca en edición) cuando
+   * `hatoAnimalId` está presente, con la fila recién creada -- el caller
+   * (`VentaAnimalDialog`) lo usa para registrar el evento `venta` en
+   * `hato_eventos` y marcar el animal `vendida`. Un fallo ahí no bloquea el
+   * cierre del diálogo: la transacción financiera ya quedó guardada y
+   * reabrir el formulario para reintentar duplicaría el dinero -- el caller
+   * decide cómo avisar del a-medias (ver `useRegistrarSalidaHato`).
+   */
+  onGuardadoTransaccion?: (transaccion: { id: string; fecha: string; tipo: 'compra' | 'venta' }) => void | Promise<void>;
 }
 
 const selectClass = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-primary/20';
 
-export function TransaccionGanadoForm({ open, onOpenChange, transaccion, defaultTipo = 'compra', onSuccess }: TransaccionGanadoFormProps) {
+export function TransaccionGanadoForm({ open, onOpenChange, transaccion, defaultTipo = 'compra', onSuccess, hatoAnimalId, hatoCantidadCabezasDefault, onGuardadoTransaccion }: TransaccionGanadoFormProps) {
   const isEditing = !!transaccion;
 
   const [formData, setFormData, clearFormData, wasRestored] = useFormPersistence({
-    key: transaccion?.id ? `ganado-edit-${transaccion.id}` : 'ganado-new-v1',
+    // Un `hatoAnimalId` distinto usa una key de borrador propia -- evita que
+    // el flujo de venta de una vaca puntual choque con un borrador de ganado
+    // de ceba sin relación guardado bajo la key genérica 'ganado-new-v1'.
+    key: transaccion?.id ? `ganado-edit-${transaccion.id}` : hatoAnimalId ? `ganado-hato-venta-${hatoAnimalId}` : 'ganado-new-v1',
     initialState: {
       fecha: new Date().toISOString().split('T')[0],
       tipo: defaultTipo as 'compra' | 'venta',
       finca: '',
       cliente_proveedor: '',
-      cantidad_cabezas: '',
+      cantidad_cabezas: hatoCantidadCabezasDefault != null ? String(hatoCantidadCabezasDefault) : '',
       kilos_pagados: '',
       precio_kilo: '',
       valor_total: '',
@@ -154,6 +175,9 @@ export function TransaccionGanadoForm({ open, onOpenChange, transaccion, default
         precio_kilo: formData.precio_kilo ? Number(formData.precio_kilo) : null,
         valor_total: Number(formData.valor_total),
         observaciones: formData.observaciones || null,
+        // Vínculo hato lechero (migración 059) -- solo al crear, nunca al
+        // editar: una transacción ya existente no cambia de dueño de módulo.
+        ...(hatoAnimalId && !isEditing ? { es_hato: true, hato_animal_id: hatoAnimalId } : {}),
       };
 
       const supabase = getSupabase() as any;
@@ -182,6 +206,30 @@ export function TransaccionGanadoForm({ open, onOpenChange, transaccion, default
           .eq('id', transaccion!.id);
         if (error) throw error;
         toast.success('Transaccion actualizada');
+      } else if (hatoAnimalId) {
+        // Necesitamos la fila insertada (id + fecha) para que el caller pueda
+        // registrar el evento `venta` en hato_eventos con el vínculo
+        // financiero correcto -- el `.insert()` plano de abajo no la trae.
+        const { data, error } = await supabase
+          .from('fin_transacciones_ganado')
+          .insert(payload)
+          .select('id, fecha, tipo')
+          .single();
+        if (error) throw error;
+        toast.success('Transaccion registrada');
+        if (onGuardadoTransaccion) {
+          // Fallo aquí no debe bloquear el cierre del diálogo: la
+          // transacción financiera ya se guardó, y dejar el formulario
+          // abierto invita a un reintento que duplicaría la transacción. El
+          // caller (VentaAnimalDialog) es responsable de avisar del a-medias.
+          try {
+            await onGuardadoTransaccion(data as { id: string; fecha: string; tipo: 'compra' | 'venta' });
+          } catch {
+            // onGuardadoTransaccion ya debe manejar y reportar sus propios
+            // errores (ver useRegistrarSalidaHato) -- este catch solo evita
+            // que una excepción no controlada interrumpa el cierre normal.
+          }
+        }
       } else {
         const { error } = await supabase
           .from('fin_transacciones_ganado')

@@ -13,6 +13,7 @@ import {
   chipVencimiento,
   chipTipoEstado,
   chipEstadoTratamiento,
+  chipStockPajillas,
 } from '../utils/hatoUi';
 import type { EstadoReproductivo, TipoEstado } from '../utils/calculosHato';
 import type { ClasificacionFilaDiff } from '../utils/importHato/diffChequeo';
@@ -165,5 +166,31 @@ describe('chipEstadoTratamiento', () => {
 
   it('colorea verde "completado"', () => {
     expect(chipEstadoTratamiento('completado').className).toContain('green');
+  });
+});
+
+describe('chipStockPajillas (G3, S10)', () => {
+  it('devuelve null cuando el stock es positivo -- no se muestra ningún chip', () => {
+    expect(chipStockPajillas(5)).toBeNull();
+    expect(chipStockPajillas(1)).toBeNull();
+  });
+
+  it('advierte en ámbar (nunca rojo/bloqueante) cuando el stock llega a 0', () => {
+    const chip = chipStockPajillas(0);
+    expect(chip).not.toBeNull();
+    expect(chip?.className).toContain('amber');
+    expect(chip?.label).toBe('Sin stock');
+  });
+
+  it('advierte en ámbar cuando el stock queda negativo, mostrando el número', () => {
+    const chip = chipStockPajillas(-3);
+    expect(chip).not.toBeNull();
+    expect(chip?.className).toContain('amber');
+    expect(chip?.label).toContain('-3');
+  });
+
+  it('nunca usa rojo -- el stock en 0/negativo advierte pero nunca bloquea (G3)', () => {
+    expect(chipStockPajillas(0)?.className).not.toContain('red');
+    expect(chipStockPajillas(-5)?.className).not.toContain('red');
   });
 });

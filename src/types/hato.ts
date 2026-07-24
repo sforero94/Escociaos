@@ -207,3 +207,39 @@ export interface ProduccionQuincenalFormData {
   num_vacas_ordeno: number | undefined;
   notas: string;
 }
+
+// ============================================================================
+// Pajillas de inseminación (S10 — Épica G, `hato_toros`/`hato_pajillas`/
+// `hato_pajillas_uso`, migraciones 053 + 057)
+// ============================================================================
+
+/** Fila de `v_hato_pajillas_stock` (migración 057) — una fila por lote de
+ * pajillas (`hato_pajillas`), NUNCA agregada por toro: un mismo toro puede
+ * tener varios lotes/compras. `cantidad_actual` puede ir a 0 o negativo —
+ * la UI advierte, nunca bloquea registrar un uso (G3). */
+export interface HatoPajillaStockRow {
+  pajilla_id: string;
+  toro_id: string;
+  cantidad_inicial: number;
+  usos: number;
+  cantidad_actual: number;
+}
+
+/** Fila de `hato_pajillas_uso` (migración 057) — log append-only, `animal_id`
+ * es opcional (G2: mejor registrar el uso sin la vaca que no registrarlo). */
+export interface HatoPajillaUsoRow {
+  id: string;
+  pajilla_id: string;
+  fecha_uso: string;
+  animal_id: string | null;
+  created_at: string;
+}
+
+/** Animal activo candidato al selector opcional de "vaca servida" (G2) —
+ * mismo subconjunto mínimo que `HatoVacaActiva`, pero sin restringir por
+ * etapa: una novilla también puede recibir un servicio. */
+export interface HatoAnimalActivoPicker {
+  id: string;
+  numero: number | null;
+  nombre: string | null;
+}

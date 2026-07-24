@@ -1,57 +1,88 @@
 // ARCHIVO: components/hato/AlertasView.tsx
-// DESCRIPCIÓN: Ruta `/hato-lechero/alertas` (Figma alignment spec Wave 2b,
-// §7). Reemplaza el `ComingSoon`. El mock de Figma "⑥ Cola de alertas" es
-// en realidad la cola de ENTREGA por Telegram del backend de S6 (columnas
-// Tipo/Animal/Programada/Estado/Destinatario/Intentos/Respuesta, estados
-// Enviada→Respondida→Confirmada→Escalada→Expirada) -- ese tick endpoint +
-// cron NO está construido todavía (MAJOR DEVIATION frente al mock, a
-// reportar).
+// DESCRIPCIÓN: Ruta `/hato-lechero/alertas` (S6, plan §7.5 "AlertasView --
+// cola con estados y respuestas"). Reemplaza el `ComingSoon` de la tabla de
+// rutas -- ver docs/plan_hato_lechero_module.md §6 Épica C.
 //
-// Esta vista es, en cambio, un tablero DERIVADO: las mismas 4 señales que
-// ya alimentan el "Tablero de alertas" del Dashboard, calculadas por la
-// MISMA función pura (`utils/hatoAlertas.ts::derivarAlertasHato`) para que
-// las dos pantallas nunca puedan divergir sobre el mismo animal/señal.
-// Solo se muestran las columnas que se pueden llenar honestamente: Tipo,
-// Animal, Señal/fecha, Urgencia. Las columnas de entrega (Destinatario/
-// Estado/Intentos/Respuesta) NUNCA se renderizan vacías simulando datos
-// reales -- en su lugar, un banner explícito avisa que llegan con S6.
+// V11 (decisión del dueño, §6 C4): "para arrancar, el control se revisa una
+// vez por semana directamente en la Cola de alertas del sistema" -- no hay
+// resumen diario a Martha todavía, así que esta vista ES el mecanismo de
+// supervisión. Dos secciones:
+//   1. "Revisión semanal" -- alertas que exigen una decisión humana
+//      (`respondida`, `escalada`, `expirada` -- ver
+//      `requiereRevisionSemanal` en hatoAlertasUi.ts), con acciones
+//      Confirmar/Descartar gateadas a Administrador/Gerencia (RLS 056).
+//   2. "Cola completa" -- todas las alertas, filtrables por tipo/estado,
+//      para que Martha pueda auditar cualquier cosa que el motor generó.
+//
+// El tick diario (migración 060, pg_cron 05:45) todavía no tiene endpoint
+// (`/hato/alertas/tick` llega en una sesión posterior) -- hasta entonces
+// `hato_alertas` está vacía en producción, y el estado vacío de esta vista
+// lo explica en vez de mostrar un muro de KPIs en cero (regla "sin dato,
+// nunca 0").
 
-import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
-import { Loader2, AlertTriangle, Bell, Info } from 'lucide-react';
-import { useHatoAnimales } from './hooks/useHatoAnimales';
-import { HatoPageHeader } from './components/HatoPageHeader';
-import { EstadoChip } from './components/EstadoChip';
-import { AnimalLabel } from './components/AnimalLabel';
-import { ALERTA_META, PILL_ALERTA, derivarAlertasHato, fechaSenalAlerta } from '@/utils/hatoAlertas';
-import { formatShortDate, formatNumber, capitalize } from '@/utils/format';
+import { useMemo, useState } from 'react';
+import { Loader2, AlertTriangle, BellRing, Inbox } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
+import { useHatoAlertas, type AlertaHatoEnriquecida } from './hooks/useHatoAlertas';
+import { AlertaFila } from './components/AlertaFila';
+import {
+  TIPOS_ALERTA_HATO,
+  ESTADOS_ALERTA_HATO,
+  LABEL_TIPO_ALERTA_HATO,
+  LABEL_ESTADO_ALERTA_HATO,
+  ordenarAlertasHato,
+  filtrarAlertasHato,
+  contarAlertasPorEstado,
+  requiereRevisionSemanal,
+  type EstadoAlertaHato,
+  type TipoAlertaHato,
+} from '@/utils/hatoAlertasUi';
+import { formatNumber } from '@/utils/format';
+
+const selectClass = 'px-2 py-1.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary min-w-0';
 
 export function AlertasView() {
-  const { animales, loading, error } = useHatoAnimales();
-  const hoy = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const { filas } = useMemo(() => derivarAlertasHato(animales), [animales]);
+  const { profile } = useAuth();
+  const canWrite = profile?.rol === 'Administrador' || profile?.rol === 'Gerencia';
+
+  const { alertas, loading, error, actualizarEstadoAlerta } = useHatoAlertas();
+  const [tipoFiltro, setTipoFiltro] = useState<TipoAlertaHato | ''>('');
+  const [estadoFiltro, setEstadoFiltro] = useState<EstadoAlertaHato | ''>('');
+  const [idActuando, setIdActuando] = useState<string | null>(null);
+
+  const revisionSemanal = useMemo(
+    () => ordenarAlertasHato(alertas.filter((a) => requiereRevisionSemanal(a.estado))),
+    [alertas],
+  );
+
+  const colaFiltrada = useMemo(
+    () => ordenarAlertasHato(filtrarAlertasHato(alertas, { tipo: tipoFiltro, estado: estadoFiltro })),
+    [alertas, tipoFiltro, estadoFiltro],
+  );
+
+  const conteoPorEstado = useMemo(() => contarAlertasPorEstado(alertas), [alertas]);
+
+  const handleCambiarEstado = async (id: string, estado: EstadoAlertaHato) => {
+    setIdActuando(id);
+    try {
+      await actualizarEstadoAlerta(id, { estado, respondidaPor: profile?.nombre ?? null });
+      toast.success(estado === 'confirmada' ? 'Alerta confirmada' : 'Alerta descartada');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error desconocido';
+      toast.error('Error actualizando la alerta: ' + message);
+    } finally {
+      setIdActuando(null);
+    }
+  };
 
   return (
-    <div className="min-h-screen-safe bg-gray-50 p-4 lg:p-8">
-      <div className="max-w-7xl mx-auto w-full">
-        <HatoPageHeader
-          breadcrumb="Hato Lechero"
-          section="Alertas"
-          title="Cola de alertas"
-          subtitle="Señales reproductivas y de manejo derivadas del hato"
-          actions={
-            <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
-              {formatNumber(filas.length)} activas
-            </span>
-          }
-        />
-
-        <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 mb-6 text-sm text-blue-700">
-          <Info className="w-4 h-4 flex-shrink-0 mt-1" />
-          <p>
-            Este tablero muestra las señales ya derivadas del hato (secado, parto, rechequeo, servicio). El
-            seguimiento de envío por Telegram — Enviada / Confirmada / Escalada, con destinatario e intentos —
-            llega con el backend de S6, que todavía no está construido, así que esas columnas no se muestran aquí.
+    <div className="min-h-screen min-h-[100dvh] bg-gray-50 p-4 lg:p-8">
+      <div className="max-w-5xl mx-auto w-full">
+        <div className="mb-6">
+          <h1 className="text-foreground mb-1">Alertas — Hato Lechero</h1>
+          <p className="text-sm text-gray-500">
+            Cola con estados y respuestas · revisión semanal, no diaria (Fernando responde por Telegram)
           </p>
         </div>
 
@@ -63,63 +94,102 @@ export function AlertasView() {
         )}
 
         {loading ? (
-          <div className="flex items-center justify-center py-12">
+          <div className="flex items-center justify-center py-16">
             <Loader2 className="w-6 h-6 animate-spin text-primary" />
           </div>
-        ) : filas.length === 0 ? (
+        ) : alertas.length === 0 ? (
           <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
-            <Bell className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-sm text-gray-500">Sin alertas activas por ahora.</p>
+            <Inbox className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+            <p className="text-sm text-gray-500 max-w-md mx-auto">
+              Todavía no hay alertas en la cola. El motor las genera automáticamente cada día a las 5:45 a.m.
+              (secado, tratamientos, rechequeos, servicios sin confirmar y partos próximos) — aparecerán aquí
+              apenas el primer tick encuentre una condición que las dispare.
+            </p>
           </div>
         ) : (
-          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Tipo</th>
-                    <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Animal</th>
-                    <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Señal / fecha</th>
-                    <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Urgencia</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filas.map((fila, i) => {
-                    const meta = ALERTA_META[fila.tipo];
-                    const Icon = meta.icon;
-                    const fecha = fechaSenalAlerta(fila);
-                    return (
-                      <tr
-                        key={`${fila.tipo}-${fila.animal.animalId}-${i}`}
-                        className="border-t border-gray-100 hover:bg-gray-50"
-                      >
-                        <td className="px-3 py-2.5 whitespace-nowrap">
-                          <span className="inline-flex items-center gap-2">
-                            <span className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${meta.tono}`}>
-                              <Icon className="w-4 h-4" />
-                            </span>
-                            <span className="font-medium text-gray-900">{meta.tipoLabel}</span>
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <Link to={`/hato-lechero/hato/${fila.animal.animalId}`} className="hover:text-gray-900">
-                            <AnimalLabel animal={fila.animal} />
-                          </Link>
-                        </td>
-                        <td className="px-3 py-2.5 whitespace-nowrap text-gray-600">
-                          {capitalize(meta.mensaje)}
-                          {fecha ? ` — ${formatShortDate(fecha)}` : ''}
-                        </td>
-                        <td className="px-3 py-2.5 whitespace-nowrap">
-                          <EstadoChip chip={PILL_ALERTA[fila.tipo](fila.animal, hoy)} />
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <>
+            {conteoPorEstado && Object.keys(conteoPorEstado).length > 0 && (
+              <div className="flex flex-wrap gap-3 mb-6">
+                {ESTADOS_ALERTA_HATO.filter((e) => conteoPorEstado[e]).map((estado) => (
+                  <div key={estado} className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm">
+                    <span className="text-gray-500">{LABEL_ESTADO_ALERTA_HATO[estado]}: </span>
+                    <span className="font-semibold text-gray-900">{formatNumber(conteoPorEstado[estado] ?? 0)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <section className="mb-8">
+              <div className="flex items-center gap-2 mb-3">
+                <BellRing className="w-4 h-4 text-amber-600" />
+                <h2 className="text-sm font-semibold text-gray-900">
+                  Revisión semanal ({revisionSemanal.length})
+                </h2>
+              </div>
+              {revisionSemanal.length === 0 ? (
+                <div className="rounded-xl border border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">
+                  Nada pendiente de revisión: sin alertas respondidas, escaladas o expiradas por ahora.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {revisionSemanal.map((alerta) => (
+                    <AlertaFila
+                      key={alerta.id}
+                      alerta={alerta}
+                      canWrite={canWrite}
+                      actuando={idActuando === alerta.id}
+                      onCambiarEstado={handleCambiarEstado}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section>
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                <h2 className="text-sm font-semibold text-gray-900">Cola completa ({colaFiltrada.length})</h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={tipoFiltro}
+                    onChange={(e) => setTipoFiltro(e.target.value as TipoAlertaHato | '')}
+                    className={selectClass}
+                  >
+                    <option value="">Todos los tipos</option>
+                    {TIPOS_ALERTA_HATO.map((tipo) => (
+                      <option key={tipo} value={tipo}>{LABEL_TIPO_ALERTA_HATO[tipo]}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={estadoFiltro}
+                    onChange={(e) => setEstadoFiltro(e.target.value as EstadoAlertaHato | '')}
+                    className={selectClass}
+                  >
+                    <option value="">Todos los estados</option>
+                    {ESTADOS_ALERTA_HATO.map((estado) => (
+                      <option key={estado} value={estado}>{LABEL_ESTADO_ALERTA_HATO[estado]}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              {colaFiltrada.length === 0 ? (
+                <div className="rounded-xl border border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">
+                  Ninguna alerta coincide con los filtros actuales.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {colaFiltrada.map((alerta: AlertaHatoEnriquecida) => (
+                    <AlertaFila
+                      key={alerta.id}
+                      alerta={alerta}
+                      canWrite={canWrite}
+                      actuando={idActuando === alerta.id}
+                      onCambiarEstado={handleCambiarEstado}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          </>
         )}
       </div>
     </div>

@@ -31,7 +31,7 @@ import { HatoKpiCard } from './components/HatoKpiCard';
 import { HatoReproCard } from './components/HatoReproCard';
 import { EstadoChip } from './components/EstadoChip';
 import { AnimalLabel } from './components/AnimalLabel';
-import { ALERTA_META, PILL_ALERTA, derivarAlertasHato } from '@/utils/hatoAlertas';
+import { ALERTA_META_TABLERO, PILL_ALERTA_TABLERO, derivarAlertasTablero } from '@/utils/hatoAlertasTablero';
 import type { ChipEstilo } from '@/utils/hatoUi';
 import { formatNumber } from '@/utils/format';
 import { diferenciaEnDias } from '@/utils/fechas';
@@ -94,7 +94,7 @@ export function HatoDashboard() {
     // `utils/hatoAlertas.ts` -- ÚNICA fuente, compartida con
     // `AlertasView.tsx` (Cola de alertas), para que nunca puedan divergir.
     const { proximasASecar, proximasAParir, rechequeoPendiente, vaciasPorServir, filas: filasAlertas } =
-      derivarAlertasHato(animales);
+      derivarAlertasTablero(animales);
     // Desglose reproductivo del hato en ordeño (3 KPIs, decisión del dueño:
     // reemplaza la métrica única "% Preñez" por Preñadas/Servidas/Vacías).
     // Particiona el ordeño al 100%:
@@ -229,7 +229,7 @@ export function HatoDashboard() {
                 ) : (
                   <ul className="divide-y divide-gray-100">
                     {filasAlertas.slice(0, 8).map((fila, i) => {
-                      const meta = ALERTA_META[fila.tipo];
+                      const meta = ALERTA_META_TABLERO[fila.tipo];
                       const Icon = meta.icon;
                       return (
                         <li key={`${fila.tipo}-${fila.animal.animalId}-${i}`} className="py-2">
@@ -244,7 +244,7 @@ export function HatoDashboard() {
                               <AnimalLabel animal={fila.animal} />
                               <span className="text-gray-500">— {meta.mensaje}</span>
                             </span>
-                            <EstadoChip chip={PILL_ALERTA[fila.tipo](fila.animal, hoy)} className="flex-shrink-0" />
+                            <EstadoChip chip={PILL_ALERTA_TABLERO[fila.tipo](fila.animal, hoy)} className="flex-shrink-0" />
                           </Link>
                         </li>
                       );
@@ -262,25 +262,25 @@ export function HatoDashboard() {
               <ListaAccion
                 titulo="Próximas a secar"
                 animales={proximasASecar}
-                pill={(a) => PILL_ALERTA.secado(a, hoy)}
+                pill={(a) => PILL_ALERTA_TABLERO.secado(a, hoy)}
                 vacio="Ninguna vaca próxima a secar."
               />
               <ListaAccion
                 titulo="Próximas a parir"
                 animales={proximasAParir}
-                pill={(a) => PILL_ALERTA.parto(a, hoy)}
+                pill={(a) => PILL_ALERTA_TABLERO.parto(a, hoy)}
                 vacio="Ninguna vaca próxima a parir."
               />
               <ListaAccion
                 titulo="Rechequeo pendiente"
                 animales={rechequeoPendiente}
-                pill={(a) => PILL_ALERTA.rechequeo(a, hoy)}
+                pill={(a) => PILL_ALERTA_TABLERO.rechequeo(a, hoy)}
                 vacio="Sin rechequeos pendientes."
               />
               <ListaAccion
                 titulo="Vacías por servir"
                 animales={vaciasPorServir}
-                pill={(a) => PILL_ALERTA.servir(a, hoy)}
+                pill={(a) => PILL_ALERTA_TABLERO.servir(a, hoy)}
                 vacio="Ninguna vacía por servir."
               />
             </div>

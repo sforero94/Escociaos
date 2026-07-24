@@ -21,6 +21,7 @@
 import type { EstadoReproductivo, TipoEstado } from '@/utils/calculosHato';
 import type { ClasificacionFilaDiff } from '@/utils/importHato/diffChequeo';
 import type { CategoriaHato } from '@/utils/hatoCategorias';
+import type { EstadoAlertaHato } from '@/utils/hatoAlertas';
 
 export interface ChipEstilo {
   label: string;
@@ -198,6 +199,48 @@ export function chipEstadoTratamiento(estado: 'activo' | 'completado' | 'cancela
       return { label: String(_exhaustivo), className: GRIS };
     }
   }
+}
+
+/** Chip para el estado de una fila de `hato_alertas` (S6/V11, cola de
+ * alertas -- `AlertasView.tsx`). Verde = ya resuelta a favor (confirmada),
+ * ámbar = en curso normal (pendiente/enviada), azul = requiere lectura de
+ * Martha (respondida), rojo = requiere decisión urgente (escalada), gris =
+ * cerrada sin acción positiva (descartada/expirada). */
+export function chipEstadoAlerta(estado: EstadoAlertaHato): ChipEstilo {
+  switch (estado) {
+    case 'pendiente':
+      return { label: 'Pendiente', className: AMBAR };
+    case 'enviada':
+      return { label: 'Enviada', className: AMBAR };
+    case 'respondida':
+      return { label: 'Respondida', className: AZUL };
+    case 'confirmada':
+      return { label: 'Confirmada', className: VERDE };
+    case 'descartada':
+      return { label: 'Descartada', className: GRIS };
+    case 'escalada':
+      return { label: 'Escalada', className: ROJO };
+    case 'expirada':
+      return { label: 'Expirada', className: GRIS };
+    default: {
+      const _exhaustivo: never = estado;
+      return { label: String(_exhaustivo), className: GRIS };
+    }
+  }
+}
+
+/** Chip de advertencia para el stock de un lote de pajillas (G3, S10). `null`
+ * = stock positivo, no se muestra ningún chip. Nunca bloquea registrar un
+ * uso nuevo cuando llega a 0 o negativo (Épica G, "es más importante que
+ * quede el evento reproductivo que la exactitud del conteo") -- este chip
+ * solo informa. */
+export function chipStockPajillas(cantidadActual: number): ChipEstilo | null {
+  if (cantidadActual > 0) return null;
+  return {
+    label: cantidadActual < 0 ? `Stock negativo (${cantidadActual})` : 'Sin stock',
+    className: AMBAR,
+    title: 'El conteo no bloquea registrar un uso nuevo — prioriza que quede el evento reproductivo.',
+  };
 }
 
 /** Chip para las 4 categorías de inventario (terneras/novillas/hato/horro). */

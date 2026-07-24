@@ -10,11 +10,11 @@
 
 import { EstadoChip } from './EstadoChip';
 import { chipNumeroProvisional } from '@/utils/hatoUi';
-import { nombreAnimalAlerta } from '@/utils/hatoAlertas';
+import { nombreAnimalTablero } from '@/utils/hatoAlertasTablero';
 import type { AnimalHatoDerivado } from '../hooks/useHatoAnimales';
 
 export function AnimalLabel({ animal }: { animal: AnimalHatoDerivado }) {
-  const { principal, secundario } = nombreAnimalAlerta(animal);
+  const { principal, secundario } = nombreAnimalTablero(animal);
   return (
     <span className="inline-flex flex-wrap items-center gap-1.5 min-w-0">
       <span className="font-medium text-gray-900 truncate">{principal}</span>
