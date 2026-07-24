@@ -13,7 +13,7 @@ export interface LecturaClima {
   // Última actualización que Ecowitt reporta para el contador acumulado
   // diario (rain.daily.time). Null si la API no la envió. Usado para
   // detectar cuando el contador no se reinició a medianoche — ver
-  // migración 067 y calculosClima.ts.
+  // migración 068 y calculosClima.ts.
   lluvia_diaria_actualizada_en: string | null;
   radiacion_wm2: number | null;
   uv_index: number | null;
@@ -22,9 +22,9 @@ export interface LecturaClima {
 
 // 'ok' = contador de lluvia verificado fresco ese día.
 // 'contador_congelado' = el contador de Ecowitt no se reinició; lluvia_total_mm
-//   viene NULL (sin dato, nunca un duplicado fabricado) — ver migración 067.
+//   viene NULL (sin dato, nunca un duplicado fabricado) — ver migración 068.
 // 'sin_time_piezo' = Ecowitt no envió la señal de frescura; se confía en el
-//   valor crudo (comportamiento previo a la migración 067).
+//   valor crudo (comportamiento previo a la migración 068).
 export type LluviaConfianza = 'ok' | 'contador_congelado' | 'sin_time_piezo';
 
 export interface ResumenDiario {

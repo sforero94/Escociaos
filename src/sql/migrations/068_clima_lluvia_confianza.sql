@@ -1,4 +1,4 @@
--- Migration 067: staleness-aware rainfall aggregation for clima
+-- Migration 068: staleness-aware rainfall aggregation for clima
 --
 -- Bug: Ecowitt's rainfall_piezo.daily.value is a cumulative counter that is
 -- supposed to reset to 0 at the station's local midnight. When the sensor
@@ -155,7 +155,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION fn_clima_rollup_diario IS
-  'Rollup nocturno de clima_lecturas -> clima_resumen_diario con detección de contador de lluvia congelado (migración 067). p_fecha por defecto: ayer (Bogotá).';
+  'Rollup nocturno de clima_lecturas -> clima_resumen_diario con detección de contador de lluvia congelado (migración 068). p_fecha por defecto: ayer (Bogotá).';
 
 -- ============================================================================
 -- Step 4: reschedule the cron job to call the new function

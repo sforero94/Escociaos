@@ -15,7 +15,7 @@ function lectura(overrides: Partial<LecturaClima> & { timestamp: string }): Lect
     lluvia_evento_mm: null,
     lluvia_diaria_mm: null,
     // null = sin señal de frescura de Ecowitt (comportamiento previo a la
-    // migración 067: se confía en el valor crudo). Tests que simulan el
+    // migración 068: se confía en el valor crudo). Tests que simulan el
     // bug del contador congelado deben fijar este campo explícitamente.
     lluvia_diaria_actualizada_en: null,
     radiacion_wm2: null,
@@ -135,7 +135,7 @@ describe('calcularResumen24h', () => {
     expect(r.humedad_promedio_pct).toBe(50);
   });
 
-  // Regression coverage for the frozen Ecowitt rain-counter bug (migración 067):
+  // Regression coverage for the frozen Ecowitt rain-counter bug (migración 068):
   // 2026-07-20/21 both showed 15.75mm because the daily accumulator never reset.
   it('ignores rain value when the daily counter never updated today (frozen)', () => {
     const now = new Date();
@@ -280,7 +280,7 @@ describe('resumenDiarioToAgregada', () => {
     expect(result[0].fecha).toBe('2026-04-01');
   });
 
-  // Regression coverage for the frozen Ecowitt rain-counter bug (migración 067).
+  // Regression coverage for the frozen Ecowitt rain-counter bug (migración 068).
   it('renders lluvia_diaria_mm as null when the day is flagged contador_congelado', () => {
     const rows = [
       resumenDia({ fecha: '2026-07-21', lluvia_total_mm: 15.75, lluvia_confianza: 'contador_congelado' }),
@@ -339,7 +339,7 @@ describe('lecturas24hToHorario', () => {
     expect(bucket!.humedad_pct_promedio).toBe(70);
   });
 
-  // Regression coverage for the frozen Ecowitt rain-counter bug (migración 067).
+  // Regression coverage for the frozen Ecowitt rain-counter bug (migración 068).
   it('nulls hourly rain when the counter is frozen from a prior day', () => {
     const now = new Date();
     const staleUpdate = new Date(now.getTime() - 25 * 60 * 60 * 1000).toISOString();

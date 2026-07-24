@@ -103,7 +103,7 @@ function inToMm(inches: number): number {
 // Ecowitt reports a per-field "last updated" epoch alongside every value
 // (EcowittValueUnit.time). For the daily rain accumulator this is the only
 // signal that tells us whether the counter actually reset at midnight or is
-// serving a stale/cached total — see migration 067.
+// serving a stale/cached total — see migration 068.
 function epochSecondsToIso(s: string | undefined): string | null {
   if (!s) return null;
   const n = parseInt(s, 10);

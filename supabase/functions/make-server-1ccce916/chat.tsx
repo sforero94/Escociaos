@@ -2000,7 +2000,7 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
   // Rainfall: trust only the freshest reading of each day (Ecowitt's rain
   // counter is cumulative and only resets at local midnight if the sensor
   // behaves — a stuck counter otherwise re-reports a prior day's total
-  // forever; see migration 067 and clima.tsx). `readings` comes ordered
+  // forever; see migration 068 and clima.tsx). `readings` comes ordered
   // timestamp.desc, so the first reading seen for a given day is already
   // its most recent one.
   const lluviaEsFresca = (actualizadaEn: unknown, day: string): boolean =>

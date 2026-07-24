@@ -115,7 +115,7 @@ function masReciente(rows: LecturaClima[]): LecturaClima {
 // El acumulado diario de Ecowitt (lluvia_diaria_mm) es un contador que se
 // supone se reinicia a medianoche. Si el sensor no lo reinicia, el valor se
 // congela en el total de días anteriores — mismo bug que corrige la
-// migración 067 en el rollup nocturno. Aquí aplicamos el mismo criterio a
+// migración 068 en el rollup nocturno. Aquí aplicamos el mismo criterio a
 // lecturas en vivo: solo confiamos en el acumulado de un bucket (día u hora)
 // si Ecowitt reporta haberlo actualizado dentro de ese mismo día calendario,
 // o si no tenemos esa señal en absoluto (lecturas previas a esta corrección
@@ -194,7 +194,7 @@ export function resumenDiarioToAgregada(rows: ResumenDiario[], desde: string, ha
       humedad_pct_promedio: r.humedad_pct_avg,
       viento_kmh_promedio: r.viento_kmh_avg,
       rafaga_kmh_max: r.rafaga_kmh_max,
-      // El rollup (migración 067) ya deja lluvia_total_mm en NULL cuando
+      // El rollup (migración 068) ya deja lluvia_total_mm en NULL cuando
       // lluvia_confianza es 'contador_congelado'; este check es solo una
       // salvaguarda extra para que el gráfico nunca renderice un dato que
       // sabemos no confiable, aunque la fila llegue desincronizada.

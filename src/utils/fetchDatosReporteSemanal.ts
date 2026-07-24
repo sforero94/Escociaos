@@ -1820,7 +1820,7 @@ async function fetchClimaLecturasFaltantes(fechasFaltantes: string[]): Promise<a
 
   // lluvia_diaria_mm es un acumulado de Ecowitt que se supone se reinicia a
   // medianoche; si el sensor no lo reinicia, sigue reportando el total de un
-  // dia anterior (mismo bug que corrige la migracion 067 en el rollup
+  // dia anterior (mismo bug que corrige la migracion 068 en el rollup
   // nocturno). Aqui aplicamos el mismo criterio: solo confiar en el valor de
   // la lectura mas reciente del dia si Ecowitt reporta haberla actualizado
   // ese mismo dia (o si no tenemos esa senal en absoluto).
