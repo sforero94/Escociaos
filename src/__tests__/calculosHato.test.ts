@@ -906,6 +906,80 @@ describe('descomponerSX', () => {
       expect(r.eventos).toEqual([]);
     });
   });
+
+  // ==========================================================================
+  // Deduplicación de `servicio` contra `fechasServicioConocidas` -- mismo
+  // root que el bug de arriba, pero en F Servicio en vez de Última Cría.
+  // Caso real de producción: CAMILA (#154), 4 chequeos DISTINTOS con la
+  // MISMA F Servicio '2022-08-26' y el mismo toro generaban 4 eventos
+  // `servicio` en la base para un solo servicio real.
+  // ==========================================================================
+  describe('deduplicación de servicio contra fechas ya conocidas (fechasServicioConocidas)', () => {
+    it('caso real CAMILA #154: la misma F Servicio en 2 chequeos consecutivos -- el segundo NO emite un evento duplicado', () => {
+      const primerChequeo = descomponerSX({
+        chequeoFecha: '2022-08-26',
+        sx: parseSX('vacia'),
+        fechasServicio: ['2022-08-26'],
+        tipoServicio: 'monta',
+        toroNombre: 'Toro X',
+      });
+      expect(primerChequeo.eventos).toEqual([
+        expect.objectContaining({ tipo: 'servicio', fecha: '2022-08-26' }),
+      ]);
+
+      const segundoChequeo = descomponerSX({
+        chequeoFecha: '2022-10-20',
+        sx: parseSX('vacia'),
+        fechasServicio: ['2022-08-26'], // la fuente re-copia la misma F Servicio, sin confirmar todavía
+        fechasServicioConocidas: ['2022-08-26'],
+        tipoServicio: 'monta',
+        toroNombre: 'Toro X',
+      });
+      expect(segundoChequeo.eventos).toEqual([]);
+    });
+
+    it('una fecha de servicio genuinamente NUEVA (re-servicio) SÍ se emite aunque haya fechas conocidas de un chequeo anterior', () => {
+      const r = descomponerSX({
+        chequeoFecha: '2022-10-20',
+        sx: parseSX('vacia'),
+        fechasServicio: ['2022-10-20'],
+        fechasServicioConocidas: ['2022-08-26'],
+        tipoServicio: 'monta',
+        toroNombre: 'Toro X',
+      });
+      expect(r.eventos).toEqual([
+        expect.objectContaining({ tipo: 'servicio', fecha: '2022-10-20' }),
+      ]);
+    });
+
+    it('V7 (varias fechas en la MISMA celda) nunca se deduplica entre sí, solo contra fechasServicioConocidas', () => {
+      const r = descomponerSX({
+        chequeoFecha: '2024-08-09',
+        sx: parseSX('vacia'),
+        fechasServicio: ['2024-03-14', '2024-04-18', '2024-06-01'],
+        fechasServicioConocidas: ['2024-03-14'], // ya conocida de un chequeo anterior
+        tipoServicio: 'monta',
+        toroNombre: 'Toro X',
+      });
+      const servicios = r.eventos.filter((e) => e.tipo === 'servicio');
+      // '2024-03-14' se filtra (ya conocida); las otras dos, DISTINTAS entre
+      // sí dentro de la misma celda, se emiten ambas -- V7 nunca se toca.
+      expect(servicios.map((e) => e.fecha)).toEqual(['2024-04-18', '2024-06-01']);
+    });
+
+    it('omitir fechasServicioConocidas (como en todos los fixtures existentes) preserva el comportamiento previo sin cambios', () => {
+      const r = descomponerSX({
+        chequeoFecha: '2022-08-26',
+        sx: parseSX('vacia'),
+        fechasServicio: ['2022-08-26'],
+        tipoServicio: 'monta',
+        toroNombre: 'Toro X',
+      });
+      expect(r.eventos).toEqual([
+        expect.objectContaining({ tipo: 'servicio', fecha: '2022-08-26' }),
+      ]);
+    });
+  });
 });
 
 // ==============================================================================

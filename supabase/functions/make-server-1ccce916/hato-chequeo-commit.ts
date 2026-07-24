@@ -49,6 +49,7 @@ import {
   derivarEventosDeChequeo,
   construirPayloadCommit,
   seleccionarUltimaCriaAnteriorPorAnimal,
+  seleccionarFechasServicioConocidasPorAnimal,
   type FilaUltimaCriaHistorico,
 } from './importHato/commitChequeo.ts';
 import { construirHatoConfigDesdeFilas, type FilaHatoConfig } from './hato-config-desde-tabla.ts';
@@ -277,6 +278,12 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
   const ultimosChequeos = seleccionarUltimoChequeoPorAnimal(historico);
   const diffFresco = construirDiffChequeo(filas, animales, ultimosChequeos);
   const ultimaCriaAnteriorPorAnimal = seleccionarUltimaCriaAnteriorPorAnimal(historicoUltimaCria, chequeo.fecha);
+  // Fechas de servicio ya conocidas por animal, de chequeos ESTRICTAMENTE
+  // ANTERIORES al que se está aprobando -- reusa el mismo `historico` que ya
+  // trae `fechaServicio` por fila (ver `FilaChequeoVacaHistorico`), sin una
+  // consulta adicional. Ver `derivarEventosDeChequeo`/`descomponerSX` para el
+  // bug real que corrige (CAMILA #154).
+  const fechasServicioConocidasPorAnimal = seleccionarFechasServicioConocidasPorAnimal(historico, chequeo.fecha);
 
   // --- 4. Revalidar el ALCANCE contra el diff fresco --------------------
   const { aceptadas, rechazadas } = validarFilasCommit(filas, diffFresco);
@@ -289,7 +296,7 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
 
   // --- 5. Derivar eventos + resolver toro_id (I/O: SELECT-o-INSERT) ----
   const vacas = construirFilasVacas(aceptadas);
-  const { eventos } = derivarEventosDeChequeo(aceptadas, ultimaCriaAnteriorPorAnimal);
+  const { eventos } = derivarEventosDeChequeo(aceptadas, ultimaCriaAnteriorPorAnimal, fechasServicioConocidasPorAnimal);
 
   const nombresToro = [...new Set(eventos.map((e) => e.toro_nombre).filter((n): n is string => !!n && n.trim() !== ''))];
   const toroCache = new Map<string, string>();

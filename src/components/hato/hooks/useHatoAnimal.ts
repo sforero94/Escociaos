@@ -152,12 +152,21 @@ export function useHatoAnimal(animalId: string | undefined) {
       const vista = estadoRes.data as EstadoActualHatoViewRow | null;
       const derivado = derivarEstadoReproductivo(filaFactRow(animalRow, vista), config, hoy);
 
+      // Ordenado explícitamente por `chequeoFecha` DESCENDENTE (más reciente
+      // primero) -- el `.order('created_at', ...)` de la query de arriba NO
+      // sirve para esto: `created_at` es cuándo se insertó la fila (la carga
+      // histórica masiva comparte timestamps casi idénticos entre todas las
+      // filas), no cuándo ocurrió el chequeo real. `chequeoFecha` viene del
+      // join a `hato_chequeos.fecha`, al que Supabase no permite ordenar
+      // limpiamente aquí -- de ahí el sort explícito post-fetch.
       const chequeos: ChequeoHistorialItem[] = ((chequeoVacasRes.data ?? []) as (HatoChequeoVacaRow & {
         hato_chequeos: HatoChequeoRow | HatoChequeoRow[] | null;
-      })[]).map(({ hato_chequeos, ...resto }) => {
-        const chequeo = Array.isArray(hato_chequeos) ? hato_chequeos[0] : hato_chequeos;
-        return { ...resto, chequeoFecha: chequeo?.fecha ?? '' };
-      });
+      })[])
+        .map(({ hato_chequeos, ...resto }) => {
+          const chequeo = Array.isArray(hato_chequeos) ? hato_chequeos[0] : hato_chequeos;
+          return { ...resto, chequeoFecha: chequeo?.fecha ?? '' };
+        })
+        .sort((a, b) => b.chequeoFecha.localeCompare(a.chequeoFecha));
 
       setDetalle({
         animal: animalRow,
