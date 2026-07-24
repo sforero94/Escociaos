@@ -22,7 +22,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useActualizarHatoAnimal, type HatoAnimalEdicion } from '../hooks/useActualizarHatoAnimal';
 import type { HatoAnimalRow, EtapaHato, EstadoAnimalHato } from '@/types/hato';
 
-const ETAPAS: { value: EtapaHato; label: string }[] = [
+// Exportado para que `CrearAnimalDialog.tsx` (§4 del Figma spec) use el
+// mismo catálogo de etapas -- una sola fuente, nunca dos listas que puedan
+// desalinearse.
+export const ETAPAS: { value: EtapaHato; label: string }[] = [
   { value: 'ternera', label: 'Ternera' },
   { value: 'novilla', label: 'Novilla' },
   { value: 'vaca', label: 'Vaca' },

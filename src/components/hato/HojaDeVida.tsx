@@ -2,18 +2,26 @@
 // DESCRIPCIÓN: Ruta `/hato-lechero/hato/:id` (S4, plan §7.5 pantalla ③).
 // Ficha completa de un animal: identidad + franja de estadísticas + timeline
 // reproductiva (A3, TODOS los servicios, V7) + genealogía (madre Y padre,
-// A5/V8) + historial de chequeos.
+// A5/V8) + historial de chequeos. Figma alignment spec §3 (Wave 2a) agrega:
+// `HatoPageHeader` compartido, la acción rápida "Registrar parto", la curva
+// de PL por chequeo y la card de Tratamientos. La venta/muerte la aportó S9
+// (`VentaAnimalDialog`/`MuerteAnimalDialog`), integrada aquí en el header.
 
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Loader2, AlertTriangle, ArrowLeft, Pencil, HandCoins, Skull } from 'lucide-react';
+import { Loader2, AlertTriangle, ArrowLeft, Pencil, Baby, HandCoins, Skull } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHatoAnimal } from './hooks/useHatoAnimal';
+import { useHatoTratamientos } from './hooks/useHatoTratamientos';
 import { EstadoChip } from './components/EstadoChip';
 import { FranjaEstadisticas } from './components/FranjaEstadisticas';
 import { EventoTimeline } from './components/EventoTimeline';
 import { GenealogiaArbol } from './components/GenealogiaArbol';
 import { EditarAnimalDialog } from './components/EditarAnimalDialog';
+import { RegistrarPartoDialog } from './components/RegistrarPartoDialog';
+import { CurvaProduccionLeche } from './components/CurvaProduccionLeche';
+import { TratamientosCard } from './components/TratamientosCard';
+import { HatoPageHeader } from './components/HatoPageHeader';
 import { VentaAnimalDialog } from './components/VentaAnimalDialog';
 import { MuerteAnimalDialog } from './components/MuerteAnimalDialog';
 import { Button } from '@/components/ui/button';
@@ -23,9 +31,11 @@ import { formatShortDate, formatNumber, capitalize } from '@/utils/format';
 export function HojaDeVida() {
   const { id } = useParams<{ id: string }>();
   const { detalle, loading, error, reload } = useHatoAnimal(id);
+  const { tratamientos, loading: tratamientosLoading, error: tratamientosError } = useHatoTratamientos(id);
   const { profile } = useAuth();
   const canEdit = profile?.rol === 'Administrador' || profile?.rol === 'Gerencia';
   const [editOpen, setEditOpen] = useState(false);
+  const [partoOpen, setPartoOpen] = useState(false);
   const [ventaOpen, setVentaOpen] = useState(false);
   const [muerteOpen, setMuerteOpen] = useState(false);
 
@@ -66,6 +76,11 @@ export function HojaDeVida() {
 
   const vaciaChip = chipVaciaEsProblema(derivado.vacia_es_problema);
 
+  const identidad = `${animal.numero != null ? `#${animal.numero}` : 'Sin caravana'}${animal.nombre ? ` ${animal.nombre}` : ''}`;
+  const subtitulo = `${capitalize(animal.etapa)}${animal.raza ? ` · ${capitalize(animal.raza)}` : ''}${
+    animal.fecha_nacimiento ? ` · Nació ${formatShortDate(animal.fecha_nacimiento)}` : ''
+  }`;
+
   return (
     <div className="min-h-screen min-h-[100dvh] bg-gray-50 p-4 lg:p-8">
       <div className="max-w-5xl mx-auto w-full space-y-6">
@@ -73,49 +88,41 @@ export function HojaDeVida() {
           <ArrowLeft className="w-4 h-4" /> Volver al hato
         </Link>
 
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-foreground">
-                  {animal.numero != null ? (
-                    `#${animal.numero}`
-                  ) : (
-                    <span className="text-gray-400 italic">sin caravana</span>
-                  )}{' '}
-                  {animal.nombre ?? ''}
-                </h1>
-              </div>
-              <p className="text-sm text-gray-500 mt-1">
-                {capitalize(animal.etapa)}{animal.raza ? ` · ${capitalize(animal.raza)}` : ''}
-                {animal.fecha_nacimiento ? ` · Nació ${formatShortDate(animal.fecha_nacimiento)}` : ''}
-              </p>
-            </div>
-            <div className="flex flex-col items-end gap-2">
-              <div className="flex flex-wrap items-center gap-1.5 justify-end">
-                <EstadoChip chip={chipEstadoReproductivo(derivado.estado)} />
-                {vaciaChip && <EstadoChip chip={vaciaChip} />}
-                {derivado.proxima_a_reemplazo && <EstadoChip chip={chipProximaAReemplazo()} />}
-                {numeroEsProvisional && <EstadoChip chip={chipNumeroProvisional()} />}
-              </div>
-              <div className="flex flex-wrap items-center gap-2 justify-end">
-                {canEdit && (
-                  <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
-                    <Pencil className="w-3.5 h-3.5 mr-1.5" /> Editar
-                  </Button>
-                )}
+        <HatoPageHeader
+          breadcrumb="Animales"
+          section={identidad}
+          title={identidad}
+          subtitle={subtitulo}
+          actions={
+            canEdit && (
+              <>
+                <Button variant="outline" size="sm" onClick={() => setPartoOpen(true)}>
+                  <Baby className="w-4 h-4 mr-1.5" /> Registrar parto
+                </Button>
                 {puedeRegistrarSalida && (
                   <>
                     <Button variant="outline" size="sm" onClick={() => setVentaOpen(true)}>
-                      <HandCoins className="w-3.5 h-3.5 mr-1.5" /> Registrar venta
+                      <HandCoins className="w-4 h-4 mr-1.5" /> Registrar venta
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => setMuerteOpen(true)}>
-                      <Skull className="w-3.5 h-3.5 mr-1.5" /> Registrar muerte
+                      <Skull className="w-4 h-4 mr-1.5" /> Registrar muerte
                     </Button>
                   </>
                 )}
-              </div>
-            </div>
+                <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+                  <Pencil className="w-4 h-4 mr-1.5" /> Editar
+                </Button>
+              </>
+            )
+          }
+        />
+
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <EstadoChip chip={chipEstadoReproductivo(derivado.estado)} />
+            {vaciaChip && <EstadoChip chip={vaciaChip} />}
+            {derivado.proxima_a_reemplazo && <EstadoChip chip={chipProximaAReemplazo()} />}
+            {numeroEsProvisional && <EstadoChip chip={chipNumeroProvisional()} />}
           </div>
 
           <div className="mt-4">
@@ -151,12 +158,17 @@ export function HojaDeVida() {
           </div>
         </div>
 
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <CurvaProduccionLeche chequeos={chequeos} />
+          <TratamientosCard tratamientos={tratamientos} loading={tratamientosLoading} error={tratamientosError} />
+        </div>
+
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           <h2 className="text-sm font-semibold text-gray-900 mb-4">Historial de chequeos</h2>
           {chequeos.length === 0 ? (
             <p className="text-sm text-gray-500">Sin chequeos registrados todavía.</p>
           ) : (
-            <div className="overflow-auto">
+            <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
@@ -187,12 +199,20 @@ export function HojaDeVida() {
       </div>
 
       {canEdit && (
-        <EditarAnimalDialog
-          open={editOpen}
-          onOpenChange={setEditOpen}
-          animal={animal}
-          onGuardado={reload}
-        />
+        <>
+          <EditarAnimalDialog
+            open={editOpen}
+            onOpenChange={setEditOpen}
+            animal={animal}
+            onGuardado={reload}
+          />
+          <RegistrarPartoDialog
+            open={partoOpen}
+            onOpenChange={setPartoOpen}
+            animalId={animal.id}
+            onRegistrado={reload}
+          />
+        </>
       )}
 
       {/* Gateados por `canEdit`, no por `puedeRegistrarSalida`: ese último
