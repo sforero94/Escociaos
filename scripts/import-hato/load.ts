@@ -538,6 +538,20 @@ async function cargarChequeos(
  * fila hermana del MISMO chequeo que sí se cargó (mismo `chequeo_id`,
  * `deduplicarPorChequeoYAnimal` agrupa por eso), así que excluirla del
  * clustering no cambia el resultado real.
+ *
+ * Bug real #3, misma forma que el #1 pero en `servicio` en vez de `parto`
+ * (verificado en producción, animal CAMILA #154): mientras el resultado de
+ * un servicio sigue sin confirmarse, la fuente re-copia la F Servicio
+ * vigente VERBATIM en cada chequeo bimensual siguiente -- 4 chequeos
+ * distintos con la MISMA F Servicio '2022-08-26' y el mismo toro generaban 4
+ * eventos `servicio` para un solo servicio real. Se corrige con el mismo
+ * patrón "un valor anterior, fila por fila" del bug #1 (no hace falta el
+ * clustering del #2 -- una F Servicio no tiene la ambigüedad de fecha
+ * "re-estimada de memoria" que sí tiene Última Cría): el Paso 2 lleva un
+ * `Set` por animal con las fechas de servicio YA VISTAS en chequeos
+ * anteriores del mismo animal, y se lo pasa a `descomponerSX` como
+ * `fechasServicioConocidas` en cada iteración -- ver
+ * `calculosHato.ts::InputDescomposicionSX.fechasServicioConocidas`.
  */
 async function cargarEventos(
   supabase: ReturnType<typeof createClient>,
@@ -605,8 +619,14 @@ async function cargarEventos(
     // ------------------------------------------------------------------
     // Paso 2: recorrido cronológico normal -- servicio/aborto/otros eventos
     // se derivan como siempre; el evento `parto` de una candidata SOLO se
-    // conserva si es el último miembro de su cluster (paso 1).
+    // conserva si es el último miembro de su cluster (paso 1). Bug real #3
+    // (ver encabezado de la función, CAMILA #154): `fechasServicioConocidas`
+    // lleva las fechas de servicio YA VISTAS en chequeos anteriores de ESTE
+    // animal, acumuladas a medida que se recorre en orden cronológico -- una
+    // F Servicio repetida verbatim en varios chequeos consecutivos no genera
+    // un evento `servicio` nuevo cada vez.
     // ------------------------------------------------------------------
+    const fechasServicioConocidas = new Set<string>();
     for (const fila of filasOrdenadas) {
       const chequeoVacaId = chequeoVacaIdPorClave.get(`${fila.archivo}::${fila.hoja}::${fila.fila}`);
       if (!chequeoVacaId) continue; // no genera eventos propios, ver Paso 1
@@ -621,6 +641,7 @@ async function cargarEventos(
         chequeoFecha: fila.chequeoFecha as string,
         sx: sxResuelto,
         fechasServicio: fila.fechasServicio,
+        fechasServicioConocidas: Array.from(fechasServicioConocidas),
         toroNombre: fila.toroNombre ?? undefined,
         tipoServicio: fila.tipoServicio ?? undefined,
         ultimaCria: ultimaCriaFila,
@@ -637,6 +658,7 @@ async function cargarEventos(
         // para ese caso (ver calculosHato.ts), consistente con la regla de
         // nunca resolver una ambigüedad en silencio.
       });
+      for (const fecha of fila.fechasServicio) fechasServicioConocidas.add(fecha);
 
       for (const evento of eventos as EventoDerivado[]) {
         if (evento.tipo === 'parto' && esCandidataDeParto && !sobrevive.has(chequeoVacaId)) continue; // colapsado, ver advertencia del Paso 1

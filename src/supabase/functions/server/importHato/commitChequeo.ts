@@ -53,7 +53,7 @@
 
 import { calcularMesesPrenez, descomponerSX, parseUltimaCria, type EventoDerivado, type ParseIssue } from '../calculos-hato.ts';
 import type { FilaChequeoNormalizada } from './tipos.ts';
-import type { ClasificacionFilaDiff, ResultadoDiffChequeo } from './diffChequeo.ts';
+import type { ClasificacionFilaDiff, FilaChequeoVacaHistorico, ResultadoDiffChequeo } from './diffChequeo.ts';
 
 // ============================================================================
 // 1. Validación de alcance -- regla dura, ver cabecera del archivo.
@@ -283,6 +283,33 @@ export function seleccionarUltimaCriaAnteriorPorAnimal(
 }
 
 /**
+ * Reduce el historial de `hato_chequeo_vacas` de varios animales al conjunto
+ * de fechas de servicio YA CONOCIDAS de cada animal -- el `fechaServicio`
+ * VIGENTE (última fecha de F Servicio de esa fila, ver `construirFilasVacas`)
+ * de cada chequeo ESTRICTAMENTE ANTERIOR a `chequeoNuevoFecha` -- lo que
+ * `descomponerSX` necesita como `fechasServicioConocidas` para no volver a
+ * emitir un evento `servicio` nuevo cuando la fuente re-copia la misma F
+ * Servicio de un chequeo a otro mientras el resultado sigue sin confirmarse
+ * (ver `calculosHato.ts::InputDescomposicionSX.fechasServicioConocidas`,
+ * caso real CAMILA #154). Un animal sin ningún chequeo anterior a esa fecha,
+ * o cuyos chequeos anteriores no traen `fechaServicio`, resuelve a un `Set`
+ * vacío -- nunca se inventa una fecha.
+ */
+export function seleccionarFechasServicioConocidasPorAnimal(
+  historico: FilaChequeoVacaHistorico[],
+  chequeoNuevoFecha: string,
+): Map<string, Set<string>> {
+  const resultado = new Map<string, Set<string>>();
+  for (const fila of historico) {
+    if (fila.chequeoFecha >= chequeoNuevoFecha) continue; // solo estrictamente ANTERIOR
+    if (!fila.fechaServicio) continue;
+    if (!resultado.has(fila.animalId)) resultado.set(fila.animalId, new Set());
+    resultado.get(fila.animalId)!.add(fila.fechaServicio);
+  }
+  return resultado;
+}
+
+/**
  * Deriva los eventos de `hato_eventos` de cada fila aprobada, reusando
  * `descomponerSX` (mismo motor que `Load` y la captura en vivo). Una fila
  * sin `sx` interpretable (`fila.sx === null`, celda vacía) o sin
@@ -316,10 +343,24 @@ export function seleccionarUltimaCriaAnteriorPorAnimal(
  * que el commit pudiera actualizar un evento de un chequeo distinto al que
  * se está aprobando -- un cambio de contrato de `fn_hato_commit_chequeo`,
  * decisión de CTO, fuera del alcance de este fix.
+ *
+ * Deduplicación de `servicio` contra chequeos ANTERIORES (mismo bug real que
+ * el de arriba, ver `calculosHato.ts::InputDescomposicionSX.fechasServicioConocidas`
+ * -- caso real CAMILA #154, la misma F Servicio repetida en 4 chequeos
+ * distintos generaba 4 eventos): `fechasServicioConocidasPorAnimal` (default
+ * vacío -- compatible con llamadas existentes) es el conjunto de fechas de
+ * servicio ya conocidas del animal, provisto por el handler (ver
+ * `hato-chequeo-commit.ts`, que las arma a partir del MISMO histórico de
+ * `hato_chequeo_vacas` que ya usa para `ultimaCriaAnteriorPorAnimal`). Como
+ * este commit procesa UN chequeo nuevo a la vez (no un historial completo),
+ * este mapa representa las fechas de chequeos ESTRICTAMENTE ANTERIORES al
+ * que se está aprobando -- no hace falta acumular nada dentro de esta
+ * función misma.
  */
 export function derivarEventosDeChequeo(
   aprobadas: FilaChequeoAprobada[],
   ultimaCriaAnteriorPorAnimal: Map<string, string | null> = new Map(),
+  fechasServicioConocidasPorAnimal: Map<string, Set<string>> = new Map(),
 ): ResultadoDerivacionEventos {
   const eventos: EventoConIndice[] = [];
   const issues: ParseIssue[] = [];
@@ -331,6 +372,7 @@ export function derivarEventosDeChequeo(
       chequeoFecha: fila.chequeoFecha,
       sx: fila.sx,
       fechasServicio: fila.fechasServicio,
+      fechasServicioConocidas: Array.from(fechasServicioConocidasPorAnimal.get(animalId) ?? []),
       toroNombre: fila.toroNombre ?? undefined,
       tipoServicio: fila.tipoServicio ?? undefined,
       ultimaCria: parseUltimaCria(fila.raw.ultimaCria).fecha,

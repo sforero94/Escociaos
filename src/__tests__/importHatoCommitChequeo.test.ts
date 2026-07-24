@@ -13,11 +13,12 @@ import {
   derivarEventosDeChequeo,
   construirPayloadCommit,
   seleccionarUltimaCriaAnteriorPorAnimal,
+  seleccionarFechasServicioConocidasPorAnimal,
   type FilaChequeoAprobada,
   type FilaUltimaCriaHistorico,
 } from '@/utils/importHato/commitChequeo';
 import type { FilaChequeoNormalizada } from '@/utils/importHato/tipos';
-import type { AnimalHatoActual, FilaDiffChequeo, ResultadoDiffChequeo, UltimoChequeoVacaActual } from '@/utils/importHato/diffChequeo';
+import type { AnimalHatoActual, FilaChequeoVacaHistorico, FilaDiffChequeo, ResultadoDiffChequeo, UltimoChequeoVacaActual } from '@/utils/importHato/diffChequeo';
 import { construirDiffChequeo } from '@/utils/importHato/diffChequeo';
 
 // ============================================================================
@@ -415,6 +416,47 @@ describe('derivarEventosDeChequeo', () => {
     expect(eventos).toHaveLength(1);
     expect(eventos[0].vacaIndice).toBe(1); // solo filaB (a-175) emitió
   });
+
+  // ==========================================================================
+  // Deduplicación de `servicio` vía `fechasServicioConocidasPorAnimal` -- el
+  // mismo WIRING que `ultimaCriaAnteriorPorAnimal`, pero para el bug real
+  // CAMILA #154 (ver calculosHato.test.ts para la cobertura del motor puro).
+  // ==========================================================================
+  it('sin fechasServicioConocidasPorAnimal (parámetro omitido) el comportamiento no cambia', () => {
+    const fila = filaBase({ sx: parseSX('vacia'), fechasServicio: ['2022-08-26'] });
+    const { eventos } = derivarEventosDeChequeo([{ fila, animalId: 'a1' }]);
+    expect(eventos).toEqual([expect.objectContaining({ tipo: 'servicio', fecha: '2022-08-26' })]);
+  });
+
+  it('con fechasServicioConocidasPorAnimal indicando la MISMA F Servicio, el evento se suprime (caso real CAMILA #154)', () => {
+    const fila = filaBase({ sx: parseSX('vacia'), fechasServicio: ['2022-08-26'] });
+    const mapa = new Map([['a1', new Set(['2022-08-26'])]]);
+    const { eventos } = derivarEventosDeChequeo([{ fila, animalId: 'a1' }], new Map(), mapa);
+    expect(eventos).toEqual([]);
+  });
+
+  it('con fechasServicioConocidasPorAnimal indicando OTRA fecha, el servicio nuevo SÍ se emite', () => {
+    const fila = filaBase({ sx: parseSX('vacia'), fechasServicio: ['2022-10-20'] });
+    const mapa = new Map([['a1', new Set(['2022-08-26'])]]);
+    const { eventos } = derivarEventosDeChequeo([{ fila, animalId: 'a1' }], new Map(), mapa);
+    expect(eventos).toEqual([expect.objectContaining({ tipo: 'servicio', fecha: '2022-10-20' })]);
+  });
+
+  it('el mapa de fechasServicioConocidas se consulta por animalId de cada fila, no globalmente', () => {
+    const filaA = filaBase({ fila: 3, numero: 162, sx: parseSX('vacia'), fechasServicio: ['2022-08-26'] });
+    const filaB = filaBase({ fila: 4, numero: 175, sx: parseSX('vacia'), fechasServicio: ['2022-08-26'] });
+    const mapa = new Map([['a-162', new Set(['2022-08-26'])]]); // solo el animal de filaA ya tiene esa fecha conocida
+    const { eventos } = derivarEventosDeChequeo(
+      [
+        { fila: filaA, animalId: 'a-162' },
+        { fila: filaB, animalId: 'a-175' },
+      ],
+      new Map(),
+      mapa,
+    );
+    expect(eventos).toHaveLength(1);
+    expect(eventos[0].vacaIndice).toBe(1); // solo filaB (a-175) emitió
+  });
 });
 
 // ============================================================================
@@ -450,6 +492,68 @@ describe('seleccionarUltimaCriaAnteriorPorAnimal', () => {
     ];
     const mapa = seleccionarUltimaCriaAnteriorPorAnimal(historico, '2024-08-09');
     expect(mapa.get('a1')).toBeNull();
+  });
+});
+
+// ============================================================================
+// seleccionarFechasServicioConocidasPorAnimal -- caller del handler I/O
+// (caso real CAMILA #154, ver commitChequeo.ts para el porqué)
+// ============================================================================
+
+describe('seleccionarFechasServicioConocidasPorAnimal', () => {
+  function historico(datos: Partial<FilaChequeoVacaHistorico> & { animalId: string; chequeoFecha: string }): FilaChequeoVacaHistorico {
+    return {
+      animalId: datos.animalId,
+      chequeoFecha: datos.chequeoFecha,
+      createdAt: datos.createdAt ?? `${datos.chequeoFecha}T10:00:00Z`,
+      pl: datos.pl ?? null,
+      numPartos: datos.numPartos ?? null,
+      fechaServicio: datos.fechaServicio ?? null,
+      toro: datos.toro ?? null,
+      tipoServicio: datos.tipoServicio ?? null,
+      fechaSecar: datos.fechaSecar ?? null,
+      fechaProbableParto: datos.fechaProbableParto ?? null,
+      estado: datos.estado ?? null,
+    };
+  }
+
+  it('reduce el historial al conjunto de fecha_servicio de chequeos estrictamente ANTERIORES a la fecha del chequeo nuevo', () => {
+    const historicoFilas: FilaChequeoVacaHistorico[] = [
+      historico({ animalId: 'a1', chequeoFecha: '2022-08-26', fechaServicio: '2022-08-26' }),
+      historico({ animalId: 'a1', chequeoFecha: '2022-10-20', fechaServicio: '2022-08-26' }),
+    ];
+    const mapa = seleccionarFechasServicioConocidasPorAnimal(historicoFilas, '2022-12-15');
+    expect(mapa.get('a1')).toEqual(new Set(['2022-08-26']));
+  });
+
+  it('excluye chequeos en o después de la fecha nueva (estrictamente anterior)', () => {
+    const historicoFilas: FilaChequeoVacaHistorico[] = [
+      historico({ animalId: 'a1', chequeoFecha: '2024-08-09', fechaServicio: '2024-08-09' }),
+    ];
+    const mapa = seleccionarFechasServicioConocidasPorAnimal(historicoFilas, '2024-08-09');
+    expect(mapa.has('a1')).toBe(false);
+  });
+
+  it('animal sin ningún chequeo anterior no aparece en el mapa (nunca se inventa una fecha)', () => {
+    const mapa = seleccionarFechasServicioConocidasPorAnimal([], '2024-08-09');
+    expect(mapa.size).toBe(0);
+  });
+
+  it('chequeos anteriores sin fecha_servicio no aportan al conjunto (nunca inventa una fecha)', () => {
+    const historicoFilas: FilaChequeoVacaHistorico[] = [
+      historico({ animalId: 'a1', chequeoFecha: '2024-05-20', fechaServicio: null }),
+    ];
+    const mapa = seleccionarFechasServicioConocidasPorAnimal(historicoFilas, '2024-08-09');
+    expect(mapa.has('a1')).toBe(false);
+  });
+
+  it('acumula MÁS de una fecha de servicio distinta entre varios chequeos anteriores (re-servicio real, no un carry-forward)', () => {
+    const historicoFilas: FilaChequeoVacaHistorico[] = [
+      historico({ animalId: 'a1', chequeoFecha: '2022-08-26', fechaServicio: '2022-08-26' }),
+      historico({ animalId: 'a1', chequeoFecha: '2022-11-01', fechaServicio: '2022-10-20' }),
+    ];
+    const mapa = seleccionarFechasServicioConocidasPorAnimal(historicoFilas, '2023-01-01');
+    expect(mapa.get('a1')).toEqual(new Set(['2022-08-26', '2022-10-20']));
   });
 });
 

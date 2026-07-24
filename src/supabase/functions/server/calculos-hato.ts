@@ -988,6 +988,31 @@ export interface InputDescomposicionSX {
    * la planilla; la cadena de servicios ya deja visible el patrón en la
    * timeline (A3). */
   fechasServicio: string[];
+  /**
+   * Fechas de servicio YA REGISTRADAS como evento `servicio` para este
+   * animal, provenientes de chequeos ESTRICTAMENTE ANTERIORES a este --
+   * responsabilidad del caller (este motor no tiene acceso a la base para
+   * buscar los chequeos previos de un animal, mismo contrato que
+   * `ultimaCriaAnterior`). `undefined`/vacío (default) preserva el
+   * comportamiento anterior sin cambios -- compatibilidad hacia atrás con
+   * todos los fixtures existentes.
+   *
+   * Root del bug que corrige (verificado en producción, misma forma que el
+   * de `ultimaCria`/parto: CAMILA #154, 4 chequeos DISTINTOS con la MISMA
+   * F Servicio '2022-08-26' y el mismo toro generaban 4 eventos `servicio`
+   * en la base para un solo servicio real): mientras el resultado de un
+   * servicio sigue sin confirmarse, la fuente re-copia la F Servicio
+   * vigente VERBATIM en cada chequeo bimensual siguiente -- es un marcador
+   * de ESTADO, igual que SX/Última Cría, no un evento nuevo por visita.
+   *
+   * Filtra `fechasServicio` contra ESTE conjunto ANTES de emitir --
+   * cualquier fecha que ya aparezca aquí no genera un segundo evento. Nunca
+   * deduplica fechas dentro del MISMO arreglo `fechasServicio` entre sí:
+   * eso es V7 (una fila puede traer 2-3 intentos de servicio DISTINTOS en
+   * una sola celda -- servicio que no cuajó -> re-servicio -- cada fecha es
+   * un evento propio) y sigue sin tocarse, sea cual sea `fechasServicioConocidas`.
+   */
+  fechasServicioConocidas?: readonly string[];
   /** Fecha de parto real, si la planilla la trae explícita (columna `F
    * parto`/`SEC REAL` de Gen 1 -- Gen 2/3 no siempre la tienen, ver doc S2 §2). */
   fechaPartoReal?: string;
@@ -1241,7 +1266,18 @@ export function descomponerSX(input: InputDescomposicionSX): ResultadoDescomposi
   const eventos: EventoDerivado[] = [];
   const issues: ParseIssue[] = [...input.sx.issues];
 
+  // Bug real de producción (CAMILA #154, ver `fechasServicioConocidas`): una
+  // F Servicio sin confirmar se re-copia VERBATIM en cada chequeo siguiente
+  // -- sin este filtro, cada chequeo donde la fecha sigue ahí generaba un
+  // evento `servicio` NUEVO para el mismo servicio real. El filtro es SOLO
+  // contra fechas conocidas de chequeos ANTERIORES (`fechasServicioConocidas`)
+  // -- las fechas DENTRO de este mismo `fechasServicio` nunca se deduplican
+  // entre sí (V7: varios intentos DISTINTOS en una sola celda son eventos
+  // propios), por eso el índice `i` de `procedencia` sigue anclado a la
+  // posición original en el arreglo, no a la posición tras filtrar.
+  const fechasServicioConocidas = new Set(input.fechasServicioConocidas ?? []);
   input.fechasServicio.forEach((fecha, i) => {
+    if (fechasServicioConocidas.has(fecha)) return; // ya registrado en un chequeo anterior -- no es un servicio nuevo
     eventos.push({
       tipo: 'servicio',
       fecha,

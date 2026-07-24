@@ -3,20 +3,37 @@
 // vertical de eventos reproductivos/de vida de un animal (A3). Debe mostrar
 // TODOS los intentos de servicio, incluidos los que no cuajaron (V7): cada
 // `hato_eventos` de tipo `servicio` es su propia entrada, en orden
-// cronológico, con toro y tipo (monta/inseminación) cuando existen.
+// DESCENDENTE (más reciente primero) -- ver nota más abajo, "orden y ventana
+// visible" --, con toro y tipo (monta/inseminación) cuando existen.
 //
 // Punto sólido = evento pasado (ya ocurrió); punto hueco = evento
 // proyectado (fecha_secar/parto_probable derivadas, que NO son filas de
 // `hato_eventos` -- ver nota en calculosHato.ts, "secado_planificado/
 // parto_probable NO son eventos"). Entrada "HOY" resaltable cuando cae
 // dentro del rango visible.
+//
+// Orden y ventana visible: entradas ordenadas DESCENDENTE por fecha (más
+// reciente arriba). Por defecto solo se muestran los últimos
+// `MESES_VISIBLES_TIMELINE` meses relativos a `fechaHoy` (prop, NUNCA
+// `Date.now()` -- mismo patrón que el resto del engine de hato: la fecha de
+// referencia siempre entra como parámetro para que el componente quede puro
+// y testeable). Las entradas más antiguas no se descartan -- quedan detrás
+// de un `Collapsible` "Ver eventos anteriores (N)" que las revela en el
+// mismo orden descendente. Los proyectados (`proyectados`) son fechas
+// futuras relativas a `fechaHoy`, así que caen naturalmente dentro de la
+// ventana visible y nunca quedan escondidos detrás del colapsable.
 
+import { useState } from 'react';
 import {
   Syringe, HeartPulse, Baby, Skull, ArrowRightLeft, ShoppingCart,
-  Stethoscope, RefreshCcw, CircleDot, Circle,
+  Stethoscope, RefreshCcw, CircleDot, Circle, ChevronDown, ChevronUp,
 } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { formatShortDate } from '@/utils/format';
 import type { HatoEventoRow, TipoEventoHato } from '@/types/hato';
+
+/** Ventana visible por defecto del timeline, en meses relativos a `fechaHoy`. */
+const MESES_VISIBLES_TIMELINE = 12;
 
 const ICONO_POR_TIPO: Record<TipoEventoHato, typeof Syringe> = {
   servicio: Syringe,
@@ -70,6 +87,69 @@ interface EventoProyectado {
   fecha: string;
 }
 
+type EntradaTimeline =
+  | { tipo: 'real'; fecha: string; evento: HatoEventoRow }
+  | { tipo: 'proyectado'; fecha: string; proyectado: EventoProyectado };
+
+/** Fecha de corte (`YYYY-MM-DD`) de la ventana visible: `MESES_VISIBLES_TIMELINE`
+ * meses antes de `fechaHoy`. Puramente derivada del parámetro -- nunca lee el
+ * reloj -- para que el componente siga siendo testeable con una fecha fija. */
+function fechaCorteTimeline(fechaHoy: string): string {
+  const corte = new Date(`${fechaHoy}T00:00:00Z`);
+  corte.setUTCMonth(corte.getUTCMonth() - MESES_VISIBLES_TIMELINE);
+  return corte.toISOString().slice(0, 10);
+}
+
+function EntradaItem({
+  entrada,
+  nombresToroPorId,
+  fechaHoy,
+}: {
+  entrada: EntradaTimeline;
+  nombresToroPorId: Record<string, string>;
+  fechaHoy: string;
+}) {
+  const esHoy = entrada.fecha === fechaHoy;
+
+  if (entrada.tipo === 'proyectado') {
+    const label = entrada.proyectado.tipo === 'secar' ? 'Secado proyectado' : 'Parto probable (proyectado)';
+    return (
+      <li className="relative">
+        <span className="absolute -left-4 top-1 flex items-center justify-center w-3 h-3 rounded-full border-2 border-amber-500 bg-white">
+          <Circle className="w-2 h-2 text-amber-500" />
+        </span>
+        <p className="text-sm font-medium text-amber-700">{label}</p>
+        <p className="text-xs text-gray-500">{formatShortDate(entrada.fecha)} — proyectado, aún no ocurre</p>
+      </li>
+    );
+  }
+
+  const evento = entrada.evento;
+  const Icono = ICONO_POR_TIPO[evento.tipo] ?? CircleDot;
+  const nombreToro = evento.toro_id ? nombresToroPorId[evento.toro_id] ?? null : null;
+  const descripcion = descripcionEvento(evento, nombreToro);
+
+  return (
+    <li className="relative">
+      <span className="absolute -left-4 top-1 flex items-center justify-center w-3 h-3 rounded-full bg-primary">
+        <Icono className="w-2 h-2 text-white" />
+      </span>
+      <div className="flex items-center gap-2 flex-wrap">
+        <p className="text-sm font-medium text-gray-900">{LABEL_POR_TIPO[evento.tipo]}</p>
+        {esHoy && (
+          <span className="inline-flex items-center rounded-full bg-green-50 text-green-700 border border-green-200 text-xs font-medium px-2 py-0.5">
+            HOY
+          </span>
+        )}
+        {evento.fecha_confianza === 'aproximada' && (
+          <span className="text-xs text-gray-400">(fecha aproximada)</span>
+        )}
+      </div>
+      <p className="text-xs text-gray-500">{formatShortDate(evento.fecha)}{descripcion ? ` — ${descripcion}` : ''}</p>
+    </li>
+  );
+}
+
 export function EventoTimeline({
   eventos,
   nombresToroPorId,
@@ -81,61 +161,69 @@ export function EventoTimeline({
   proyectados?: EventoProyectado[];
   fechaHoy: string;
 }) {
-  type EntradaTimeline =
-    | { tipo: 'real'; fecha: string; evento: HatoEventoRow }
-    | { tipo: 'proyectado'; fecha: string; proyectado: EventoProyectado };
+  const [expandido, setExpandido] = useState(false);
 
   const entradas: EntradaTimeline[] = [
     ...eventos.map((evento): EntradaTimeline => ({ tipo: 'real', fecha: evento.fecha, evento })),
     ...proyectados.map((proyectado): EntradaTimeline => ({ tipo: 'proyectado', fecha: proyectado.fecha, proyectado })),
-  ].sort((a, b) => a.fecha.localeCompare(b.fecha));
+  ].sort((a, b) => b.fecha.localeCompare(a.fecha));
 
   if (entradas.length === 0) {
     return <p className="text-sm text-gray-500">Sin eventos registrados todavía.</p>;
   }
 
+  const corte = fechaCorteTimeline(fechaHoy);
+  // Los proyectados son fechas futuras relativas a `fechaHoy` (>= hoy > corte),
+  // así que siempre caen aquí -- nunca detrás del colapsable.
+  const visibles = entradas.filter((entrada) => entrada.fecha >= corte);
+  const antiguas = entradas.filter((entrada) => entrada.fecha < corte);
+
   return (
-    <ol className="relative border-l-4 border-gray-200 space-y-6 pl-8">
-      {entradas.map((entrada, i) => {
-        const esHoy = entrada.fecha === fechaHoy;
-        if (entrada.tipo === 'proyectado') {
-          const label = entrada.proyectado.tipo === 'secar' ? 'Secado proyectado' : 'Parto probable (proyectado)';
-          return (
-            <li key={`proj-${i}`} className="relative">
-              <span className="absolute -left-4 top-1 flex items-center justify-center w-3 h-3 rounded-full border-2 border-amber-500 bg-white">
-                <Circle className="w-2 h-2 text-amber-500" />
-              </span>
-              <p className="text-sm font-medium text-amber-700">{label}</p>
-              <p className="text-xs text-gray-500">{formatShortDate(entrada.fecha)} — proyectado, aún no ocurre</p>
-            </li>
-          );
-        }
+    <div>
+      {visibles.length > 0 && (
+        <ol className="relative border-l-4 border-gray-200 space-y-6 pl-8">
+          {visibles.map((entrada, i) => (
+            <EntradaItem
+              key={entrada.tipo === 'real' ? entrada.evento.id : `proj-${i}`}
+              entrada={entrada}
+              nombresToroPorId={nombresToroPorId}
+              fechaHoy={fechaHoy}
+            />
+          ))}
+        </ol>
+      )}
 
-        const evento = entrada.evento;
-        const Icono = ICONO_POR_TIPO[evento.tipo] ?? CircleDot;
-        const nombreToro = evento.toro_id ? nombresToroPorId[evento.toro_id] ?? null : null;
-        const descripcion = descripcionEvento(evento, nombreToro);
-
-        return (
-          <li key={evento.id} className="relative">
-            <span className="absolute -left-4 top-1 flex items-center justify-center w-3 h-3 rounded-full bg-primary">
-              <Icono className="w-2 h-2 text-white" />
-            </span>
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-sm font-medium text-gray-900">{LABEL_POR_TIPO[evento.tipo]}</p>
-              {esHoy && (
-                <span className="inline-flex items-center rounded-full bg-green-50 text-green-700 border border-green-200 text-xs font-medium px-2 py-0.5">
-                  HOY
-                </span>
+      {antiguas.length > 0 && (
+        <Collapsible open={expandido} onOpenChange={setExpandido} className="mt-4">
+          <CollapsibleTrigger asChild>
+            <button className="w-full text-xs text-gray-500 hover:text-gray-900 py-2 flex items-center justify-center gap-1 transition-colors">
+              {expandido ? (
+                <>
+                  <ChevronUp className="w-3 h-3" />
+                  Ocultar
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="w-3 h-3" />
+                  Ver eventos anteriores ({antiguas.length})
+                </>
               )}
-              {evento.fecha_confianza === 'aproximada' && (
-                <span className="text-xs text-gray-400">(fecha aproximada)</span>
-              )}
-            </div>
-            <p className="text-xs text-gray-500">{formatShortDate(evento.fecha)}{descripcion ? ` — ${descripcion}` : ''}</p>
-          </li>
-        );
-      })}
-    </ol>
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <ol className="relative border-l-4 border-gray-200 space-y-6 pl-8 mt-4">
+              {antiguas.map((entrada, i) => (
+                <EntradaItem
+                  key={entrada.tipo === 'real' ? entrada.evento.id : `proj-antigua-${i}`}
+                  entrada={entrada}
+                  nombresToroPorId={nombresToroPorId}
+                  fechaHoy={fechaHoy}
+                />
+              ))}
+            </ol>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
+    </div>
   );
 }
