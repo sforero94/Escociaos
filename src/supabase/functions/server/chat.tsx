@@ -1974,7 +1974,7 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
   const to = validated.date_to || now.toISOString().split('T')[0];
 
   // Fetch readings
-  let query = `select=timestamp,temp_c,humedad_pct,viento_kmh,rafaga_kmh,viento_dir,lluvia_diaria_mm,lluvia_tasa_mm_hr,radiacion_wm2,uv_index`;
+  let query = `select=timestamp,temp_c,humedad_pct,viento_kmh,rafaga_kmh,viento_dir,lluvia_diaria_mm,lluvia_diaria_actualizada_en,lluvia_tasa_mm_hr,radiacion_wm2,uv_index`;
   query += `&timestamp=gte.${e(from)}T00:00:00&timestamp=lte.${e(to)}T23:59:59`;
   query += `&order=timestamp.desc&limit=5000`;
 
@@ -1997,14 +1997,24 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
   const radiacion = nums('radiacion_wm2');
   const uv = nums('uv_index');
 
-  // Rainfall: MAX per calendar day, then SUM
+  // Rainfall: trust only the freshest reading of each day (Ecowitt's rain
+  // counter is cumulative and only resets at local midnight if the sensor
+  // behaves — a stuck counter otherwise re-reports a prior day's total
+  // forever; see migration 067 and clima.tsx). `readings` comes ordered
+  // timestamp.desc, so the first reading seen for a given day is already
+  // its most recent one.
+  const lluviaEsFresca = (actualizadaEn: unknown, day: string): boolean =>
+    actualizadaEn == null || String(actualizadaEn).split('T')[0] === day;
+
   const lluviaMap = new Map<string, number>();
+  const lluviaDiaVisto = new Set<string>();
   for (const r of readings) {
-    if (r.lluvia_diaria_mm != null) {
-      const day = String(r.timestamp).split('T')[0];
-      const cur = lluviaMap.get(day) ?? 0;
-      lluviaMap.set(day, Math.max(cur, r.lluvia_diaria_mm as number));
-    }
+    if (r.lluvia_diaria_mm == null) continue;
+    const day = String(r.timestamp).split('T')[0];
+    if (lluviaDiaVisto.has(day)) continue;
+    lluviaDiaVisto.add(day);
+    if (!lluviaEsFresca(r.lluvia_diaria_actualizada_en, day)) continue; // contador sin reiniciar — no confiable
+    lluviaMap.set(day, r.lluvia_diaria_mm as number);
   }
   const lluviaTotal = Array.from(lluviaMap.values()).reduce((s, v) => s + v, 0);
 
@@ -2036,16 +2046,21 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
   };
 
   // Daily breakdown (for charts or detail)
-  const porDia = new Map<string, { temps: number[]; humedad: number[]; viento: number[]; lluvia: number; radiacion: number[] }>();
+  const porDia = new Map<string, { temps: number[]; humedad: number[]; viento: number[]; lluvia: number | null; lluviaAsignada: boolean; radiacion: number[] }>();
   for (const r of readings) {
     const day = String(r.timestamp).split('T')[0];
-    if (!porDia.has(day)) porDia.set(day, { temps: [], humedad: [], viento: [], lluvia: 0, radiacion: [] });
+    if (!porDia.has(day)) porDia.set(day, { temps: [], humedad: [], viento: [], lluvia: null, lluviaAsignada: false, radiacion: [] });
     const d = porDia.get(day)!;
     if (r.temp_c != null) d.temps.push(r.temp_c as number);
     if (r.humedad_pct != null) d.humedad.push(r.humedad_pct as number);
     if (r.viento_kmh != null) d.viento.push(r.viento_kmh as number);
     if (r.radiacion_wm2 != null) d.radiacion.push(r.radiacion_wm2 as number);
-    d.lluvia = Math.max(d.lluvia, (r.lluvia_diaria_mm as number) ?? 0);
+    // readings viene ordenado timestamp.desc — la primera lectura de lluvia
+    // que vemos por día es la más reciente; solo esa decide el total.
+    if (!d.lluviaAsignada && r.lluvia_diaria_mm != null) {
+      d.lluviaAsignada = true;
+      d.lluvia = lluviaEsFresca(r.lluvia_diaria_actualizada_en, day) ? (r.lluvia_diaria_mm as number) : null;
+    }
   }
 
   const detalle_diario = Array.from(porDia.entries())
@@ -2057,7 +2072,7 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
       temp_min: min(d.temps),
       humedad_avg: avg(d.humedad),
       viento_avg: avg(d.viento),
-      lluvia_mm: Math.round(d.lluvia * 10) / 10,
+      lluvia_mm: d.lluvia != null ? Math.round(d.lluvia * 10) / 10 : null,
       radiacion_avg: avg(d.radiacion),
       radiacion_max: max(d.radiacion),
     }));

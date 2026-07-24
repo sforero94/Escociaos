@@ -14,6 +14,10 @@ function lectura(overrides: Partial<LecturaClima> & { timestamp: string }): Lect
     lluvia_tasa_mm_hr: null,
     lluvia_evento_mm: null,
     lluvia_diaria_mm: null,
+    // null = sin señal de frescura de Ecowitt (comportamiento previo a la
+    // migración 067: se confía en el valor crudo). Tests que simulan el
+    // bug del contador congelado deben fijar este campo explícitamente.
+    lluvia_diaria_actualizada_en: null,
     radiacion_wm2: null,
     uv_index: null,
     created_at: new Date().toISOString(),
@@ -32,6 +36,7 @@ function resumenDia(overrides: Partial<ResumenDiario> & { fecha: string }): Resu
     humedad_pct_max: null,
     humedad_pct_avg: null,
     lluvia_total_mm: null,
+    lluvia_confianza: 'ok',
     viento_kmh_avg: null,
     rafaga_kmh_max: null,
     viento_dir_predominante: null,
@@ -128,6 +133,36 @@ describe('calcularResumen24h', () => {
     const r = calcularResumen24h(rows);
     expect(r.temp_promedio_c).toBe(20);
     expect(r.humedad_promedio_pct).toBe(50);
+  });
+
+  // Regression coverage for the frozen Ecowitt rain-counter bug (migración 067):
+  // 2026-07-20/21 both showed 15.75mm because the daily accumulator never reset.
+  it('ignores rain value when the daily counter never updated today (frozen)', () => {
+    const now = new Date();
+    const staleUpdate = new Date(now.getTime() - 25 * 60 * 60 * 1000).toISOString(); // >24h back — guaranteed prior Bogotá day
+    const rows = [
+      lectura({ timestamp: now.toISOString(), lluvia_diaria_mm: 15.75, lluvia_diaria_actualizada_en: staleUpdate }),
+    ];
+    const r = calcularResumen24h(rows);
+    expect(r.lluvia_total_mm).toBeNull();
+  });
+
+  it('trusts rain value when the daily counter updated within today', () => {
+    const now = new Date();
+    const rows = [
+      lectura({ timestamp: now.toISOString(), lluvia_diaria_mm: 4.2, lluvia_diaria_actualizada_en: now.toISOString() }),
+    ];
+    const r = calcularResumen24h(rows);
+    expect(r.lluvia_total_mm).toBe(4.2);
+  });
+
+  it('trusts rain value when Ecowitt sends no freshness signal (legacy behavior)', () => {
+    const now = new Date();
+    const rows = [
+      lectura({ timestamp: now.toISOString(), lluvia_diaria_mm: 3, lluvia_diaria_actualizada_en: null }),
+    ];
+    const r = calcularResumen24h(rows);
+    expect(r.lluvia_total_mm).toBe(3);
   });
 });
 
@@ -244,6 +279,24 @@ describe('resumenDiarioToAgregada', () => {
     expect(result).toHaveLength(1);
     expect(result[0].fecha).toBe('2026-04-01');
   });
+
+  // Regression coverage for the frozen Ecowitt rain-counter bug (migración 067).
+  it('renders lluvia_diaria_mm as null when the day is flagged contador_congelado', () => {
+    const rows = [
+      resumenDia({ fecha: '2026-07-21', lluvia_total_mm: 15.75, lluvia_confianza: 'contador_congelado' }),
+    ];
+    const result = resumenDiarioToAgregada(rows, '2026-07-01', '2026-07-31');
+    expect(result[0].lluvia_diaria_mm).toBeNull();
+    expect(result[0].lluvia_confianza).toBe('contador_congelado');
+  });
+
+  it('passes through lluvia_diaria_mm when confianza is ok', () => {
+    const rows = [
+      resumenDia({ fecha: '2026-07-20', lluvia_total_mm: 15.75, lluvia_confianza: 'ok' }),
+    ];
+    const result = resumenDiarioToAgregada(rows, '2026-07-01', '2026-07-31');
+    expect(result[0].lluvia_diaria_mm).toBe(15.75);
+  });
 });
 
 describe('lecturas24hToHorario', () => {
@@ -284,5 +337,25 @@ describe('lecturas24hToHorario', () => {
     expect(bucket).toBeDefined();
     expect(bucket!.temp_c_promedio).toBe(22);
     expect(bucket!.humedad_pct_promedio).toBe(70);
+  });
+
+  // Regression coverage for the frozen Ecowitt rain-counter bug (migración 067).
+  it('nulls hourly rain when the counter is frozen from a prior day', () => {
+    const now = new Date();
+    const staleUpdate = new Date(now.getTime() - 25 * 60 * 60 * 1000).toISOString();
+    const rows = [
+      lectura({ timestamp: now.toISOString(), lluvia_diaria_mm: 15.75, lluvia_diaria_actualizada_en: staleUpdate }),
+    ];
+    const result = lecturas24hToHorario(rows);
+    expect(result[0].lluvia_diaria_mm).toBeNull();
+  });
+
+  it('keeps hourly rain when the counter updated within the same day', () => {
+    const now = new Date();
+    const rows = [
+      lectura({ timestamp: now.toISOString(), lluvia_diaria_mm: 4.2, lluvia_diaria_actualizada_en: now.toISOString() }),
+    ];
+    const result = lecturas24hToHorario(rows);
+    expect(result[0].lluvia_diaria_mm).toBe(4.2);
   });
 });

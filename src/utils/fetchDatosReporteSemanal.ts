@@ -1798,7 +1798,7 @@ async function fetchClimaLecturasFaltantes(fechasFaltantes: string[]): Promise<a
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from('clima_lecturas' as any)
-    .select('timestamp, temp_c, humedad_pct, lluvia_diaria_mm, radiacion_wm2')
+    .select('timestamp, temp_c, humedad_pct, lluvia_diaria_mm, lluvia_diaria_actualizada_en, radiacion_wm2')
     .order('timestamp', { ascending: true });
 
   if (error || !data || data.length === 0) return [];
@@ -1818,11 +1818,30 @@ async function fetchClimaLecturasFaltantes(fechasFaltantes: string[]): Promise<a
   const promedio = (nums: number[]): number | null =>
     nums.length > 0 ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
 
+  // lluvia_diaria_mm es un acumulado de Ecowitt que se supone se reinicia a
+  // medianoche; si el sensor no lo reinicia, sigue reportando el total de un
+  // dia anterior (mismo bug que corrige la migracion 067 en el rollup
+  // nocturno). Aqui aplicamos el mismo criterio: solo confiar en el valor de
+  // la lectura mas reciente del dia si Ecowitt reporta haberla actualizado
+  // ese mismo dia (o si no tenemos esa senal en absoluto).
+  const lluviaConfiableDelDia = (lecturas: any[], fecha: string): number | null => {
+    const conLluvia = lecturas.filter((l) => l.lluvia_diaria_mm != null);
+    if (conLluvia.length === 0) return null;
+    const ultima = conLluvia.reduce((latest, l) =>
+      new Date(l.timestamp) > new Date(latest.timestamp) ? l : latest
+    );
+    const actualizadaEn = ultima.lluvia_diaria_actualizada_en;
+    const sinSenalDeFrescura = actualizadaEn == null;
+    const actualizadaHoy = !sinSenalDeFrescura &&
+      new Date(actualizadaEn).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }) === fecha;
+    if (!sinSenalDeFrescura && !actualizadaHoy) return null; // contador sin renovar — no confiable
+    return Number(ultima.lluvia_diaria_mm);
+  };
+
   const resultado: any[] = [];
   for (const [fecha, lecturas] of porDia) {
     const temps = soloNumeros(lecturas, 'temp_c');
     const humedades = soloNumeros(lecturas, 'humedad_pct');
-    const lluvias = soloNumeros(lecturas, 'lluvia_diaria_mm');
     const radiaciones = soloNumeros(lecturas, 'radiacion_wm2');
 
     resultado.push({
@@ -1831,8 +1850,7 @@ async function fetchClimaLecturasFaltantes(fechasFaltantes: string[]): Promise<a
       temp_c_max: temps.length > 0 ? Math.max(...temps) : null,
       temp_c_avg: promedio(temps),
       humedad_pct_avg: promedio(humedades),
-      // lluvia_diaria_mm es un acumulado del dia; el maximo del dia = total del dia
-      lluvia_total_mm: lluvias.length > 0 ? Math.max(...lluvias) : 0,
+      lluvia_total_mm: lluviaConfiableDelDia(lecturas, fecha),
       radiacion_wm2_max: radiaciones.length > 0 ? Math.max(...radiaciones) : null,
       radiacion_wm2_avg: promedio(radiaciones),
     });
