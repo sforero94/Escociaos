@@ -13,11 +13,11 @@ export function LaboresSubNav() {
 
   const tabs = [
     {
-      id: 'kanban',
-      label: 'Kanban',
-      subtitle: 'Tablero de tareas',
+      id: 'tareas',
+      label: 'Tareas',
+      subtitle: 'Tabla de tareas',
       icon: ListTodo,
-      path: '/labores?vista=kanban',
+      path: '/labores?vista=tabla',
       isActive: () => location.pathname === '/labores' && vista !== 'reportes',
     },
     {
