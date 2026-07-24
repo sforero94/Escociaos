@@ -659,14 +659,12 @@ input[type='number'] {
   .tabla-financiera td { padding: 0.5rem; font-size: 0.8125rem; }
 }
 
-/* Tablero Hato Lechero: 5 KPIs (4 categorías del hato + próximas a
-   reemplazo). La build congelada de Tailwind no trae lg:grid-cols-5, así
-   que la regla vive aquí (misma razón que .filtros-toggle etc.). */
-.kpi-grid-hato {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
-}
-@media (min-width: 1024px) {
-  .kpi-grid-hato { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-}
+/* NOTA (Figma alignment spec §2): el tablero de Hato Lechero rediseñado
+   bajó de 5 KPIs a 4 (se retiró "Próximas a reemplazo", que no está en el
+   rediseño de Figma -- el dato sigue disponible vía
+   `derivado.proxima_a_reemplazo` para otras pantallas). La regla
+   `.kpi-grid-hato` que vivía aquí para sortear `lg:grid-cols-5` (ausente en
+   el build congelado de Tailwind) ya no hace falta: `grid-cols-2` y
+   `lg:grid-cols-4` SÍ están compilados, así que `HatoDashboard.tsx` usa
+   Tailwind puro directamente.
+*/

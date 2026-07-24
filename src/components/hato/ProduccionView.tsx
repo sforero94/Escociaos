@@ -3,8 +3,10 @@ import { Droplets, Users, Gauge, CalendarClock } from 'lucide-react';
 import { formatNumber, formatLongDate } from '@/utils/format';
 import { calcularProductividad, calcularFechaUltimoDiaPesaje } from '@/utils/calculosHato';
 import { useProduccionHato } from './hooks/useProduccionHato';
+import { HatoPageHeader } from './components/HatoPageHeader';
 import { PesajeSemanalGrid } from './components/PesajeSemanalGrid';
 import { ProduccionQuincenalForm } from './components/ProduccionQuincenalForm';
+import { GraficoLitrosQuincenal } from './components/GraficoLitrosQuincenal';
 import type { HatoProduccionQuincenal } from '@/types/hato';
 
 interface KPICardProps {
@@ -41,11 +43,16 @@ function KPICard({ titulo, valor, subtitulo, icono: Icono, colorClase }: KPICard
 export function ProduccionView() {
   const hook = useProduccionHato();
   const [ultimaQuincena, setUltimaQuincena] = useState<HatoProduccionQuincenal | null>(null);
+  const [historialQuincenal, setHistorialQuincenal] = useState<HatoProduccionQuincenal[]>([]);
   const [promedioPesajeSemana, setPromedioPesajeSemana] = useState<{ promedio: number; conteo: number; fecha: string } | null>(null);
 
   const cargarKPIs = useCallback(async () => {
     try {
-      const historial = await hook.fetchHistorialQuincenal(1);
+      // Se piden 8 quincenas (4 meses) para el gráfico de barras -- la
+      // última del lote (más reciente) también alimenta las KPIs de
+      // arriba, así que no hace falta una segunda consulta.
+      const historial = await hook.fetchHistorialQuincenal(8);
+      setHistorialQuincenal(historial);
       setUltimaQuincena(historial[0] ?? null);
     } catch (err: unknown) {
       console.error('Error cargando KPIs de producción quincenal:', err);
@@ -78,12 +85,12 @@ export function ProduccionView() {
   return (
     <div className="min-h-screen bg-gray-50 p-4 lg:p-8">
       <div className="max-w-7xl mx-auto w-full">
-        <div className="mb-6">
-          <h1 className="text-foreground mb-1">Producción</h1>
-          <p className="text-sm text-gray-600">
-            Pesaje semanal por vaca y producción quincenal del hato lechero
-          </p>
-        </div>
+        <HatoPageHeader
+          breadcrumb="Hato Lechero"
+          section="Producción"
+          title="Producción"
+          subtitle="Pesaje semanal por vaca y producción quincenal del hato lechero"
+        />
 
         {/* KPIs */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -132,6 +139,7 @@ export function ProduccionView() {
         </div>
 
         <div className="space-y-6">
+          <GraficoLitrosQuincenal historial={historialQuincenal} />
           <PesajeSemanalGrid onSaved={cargarKPIs} />
           <ProduccionQuincenalForm onSaved={cargarKPIs} />
         </div>
