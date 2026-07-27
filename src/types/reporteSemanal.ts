@@ -42,7 +42,9 @@ export const SECCIONES_DEFAULT: SeccionesReporte = {
 
 export interface DiaClima {
   fecha: string;           // YYYY-MM-DD
-  lluviaMm: number;
+  // null = sin dato confiable de lluvia ese día (contador de Ecowitt
+  // congelado, ver migración 068). Nunca 0 — 0 significa "no llovió".
+  lluviaMm: number | null;
   radiacionMaxWm2: number;
   tempMax: number | null;
   tempMin: number | null;
@@ -71,6 +73,9 @@ export interface DatosClimaSemanal {
   tempMax: number | null;
   tempPromedio: number | null;
   lluviaTotal: number | null;
+  // Días de la semana descartados por contador de lluvia congelado; el total
+  // de arriba los excluye y el reporte lo advierte.
+  diasSinDatoLluvia?: number;
   humedadPromedio: number | null;
   radiacionPromedio: number | null;
   radiacionMax: number | null;
