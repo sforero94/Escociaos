@@ -42,6 +42,7 @@ import type {
 import { SECCIONES_DEFAULT } from '../types/reporteSemanal';
 import { calcularDistribucionCE } from './calculosMonitoreoV2';
 import { aggregateRadiation, getRadiationStatus } from './calculosRadiacion';
+import { lluviaConfiableDeResumen } from './calculosClima';
 import type { LecturaCE } from '../types/monitoreo';
 import type { Insight } from '../types/monitoreo';
 
@@ -1869,7 +1870,7 @@ async function fetchClimaResumenSemanal(
   // clima_lecturas (rolling 24h window pruned by cron).
   const { data, error } = await supabase
     .from('clima_resumen_diario' as any)
-    .select('fecha, temp_c_min, temp_c_max, temp_c_avg, humedad_pct_avg, lluvia_total_mm, radiacion_wm2_max, radiacion_wm2_avg')
+    .select('fecha, temp_c_min, temp_c_max, temp_c_avg, humedad_pct_avg, lluvia_total_mm, lluvia_confianza, radiacion_wm2_max, radiacion_wm2_avg')
     .gte('fecha', inicio)
     .lte('fecha', fin)
     .order('fecha', { ascending: true });
@@ -1891,11 +1892,37 @@ async function fetchClimaResumenSemanal(
 
   if (rows.length === 0) return undefined;
 
+  // Fetch 4-week historical averages from clima_resumen_diario
+  const histInicio = new Date(inicio);
+  histInicio.setDate(histInicio.getDate() - 28);
+  const histInicioStr = histInicio.toISOString().slice(0, 10);
+
+  const { data: histData } = await supabase
+    .from('clima_resumen_diario' as any)
+    .select('fecha, temp_c_avg, humedad_pct_avg, lluvia_total_mm, lluvia_confianza, radiacion_wm2_avg')
+    .gte('fecha', histInicioStr)
+    .lt('fecha', inicio)
+    .order('fecha', { ascending: true });
+
+  return construirDatosClimaSemanal(rows, (histData as any[]) ?? []);
+}
+
+// Parte pura de fetchClimaResumenSemanal: recibe las filas diarias de la
+// semana (ya con el backfill en vivo aplicado) y las de las 4 semanas
+// previas, y arma el bloque de clima del reporte. Exportada para poder
+// probar las reglas de agregacion sin tocar Supabase.
+export function construirDatosClimaSemanal(
+  rows: any[],
+  histData: any[]
+): DatosClimaSemanal | undefined {
+  if (rows.length === 0) return undefined;
+
   // Aggregate weekly KPIs from daily summaries
   let tempMin = Infinity, tempMax = -Infinity, tempSuma = 0, tempCount = 0;
   let humSuma = 0, humCount = 0;
   let radMax = 0, radSuma = 0, radCount = 0;
   let lluviaTotal = 0;
+  let diasSinDatoLluvia = 0;
 
   for (const d of rows) {
     if (d.temp_c_min != null) {
@@ -1922,47 +1949,48 @@ async function fetchClimaResumenSemanal(
       radSuma += Number(d.radiacion_wm2_avg);
       radCount++;
     }
-    if (d.lluvia_total_mm != null) {
-      lluviaTotal += Number(d.lluvia_total_mm);
+    const lluviaDia = lluviaConfiableDeResumen(d);
+    if (lluviaDia != null) {
+      lluviaTotal += Number(lluviaDia);
+    } else {
+      diasSinDatoLluvia++;
     }
   }
 
   // Daily breakdown — already one row per day, no grouping needed
-  const diario: DiaClima[] = rows.map((d: any) => ({
-    fecha: d.fecha,
-    lluviaMm: d.lluvia_total_mm != null ? +Number(d.lluvia_total_mm).toFixed(1) : 0,
-    radiacionMaxWm2: d.radiacion_wm2_max != null ? +Number(d.radiacion_wm2_max).toFixed(0) : 0,
-    tempMax: d.temp_c_max != null ? +Number(d.temp_c_max).toFixed(1) : null,
-    tempMin: d.temp_c_min != null ? +Number(d.temp_c_min).toFixed(1) : null,
-  }));
-
-  // Fetch 4-week historical averages from clima_resumen_diario
-  const histInicio = new Date(inicio);
-  histInicio.setDate(histInicio.getDate() - 28);
-  const histInicioStr = histInicio.toISOString().slice(0, 10);
-
-  const { data: histData } = await supabase
-    .from('clima_resumen_diario' as any)
-    .select('fecha, temp_c_avg, humedad_pct_avg, lluvia_total_mm, radiacion_wm2_avg')
-    .gte('fecha', histInicioStr)
-    .lt('fecha', inicio)
-    .order('fecha', { ascending: true });
+  const diario: DiaClima[] = rows.map((d: any) => {
+    const lluviaDia = lluviaConfiableDeResumen(d);
+    return {
+      fecha: d.fecha,
+      lluviaMm: lluviaDia != null ? +Number(lluviaDia).toFixed(1) : null,
+      radiacionMaxWm2: d.radiacion_wm2_max != null ? +Number(d.radiacion_wm2_max).toFixed(0) : 0,
+      tempMax: d.temp_c_max != null ? +Number(d.temp_c_max).toFixed(1) : null,
+      tempMin: d.temp_c_min != null ? +Number(d.temp_c_min).toFixed(1) : null,
+    };
+  });
 
   let historico: DatosClimaSemanal['historico'];
   if (histData && histData.length > 0) {
     let hTemp = 0, hTempC = 0, hHum = 0, hHumC = 0, hRad = 0, hRadC = 0;
-    let totalLluviaHist = 0;
-    for (const d of histData as any[]) {
+    let totalLluviaHist = 0, diasConLluviaHist = 0;
+    for (const d of histData) {
       if (d.temp_c_avg != null) { hTemp += Number(d.temp_c_avg); hTempC++; }
       if (d.humedad_pct_avg != null) { hHum += Number(d.humedad_pct_avg); hHumC++; }
       if (d.radiacion_wm2_avg != null) { hRad += Number(d.radiacion_wm2_avg); hRadC++; }
-      if (d.lluvia_total_mm != null) { totalLluviaHist += Number(d.lluvia_total_mm); }
+      const lluviaHist = lluviaConfiableDeResumen(d);
+      if (lluviaHist != null) { totalLluviaHist += Number(lluviaHist); diasConLluviaHist++; }
     }
     const numSemanas = 4;
 
     historico = {
       tempPromedio: hTempC > 0 ? +(hTemp / hTempC).toFixed(1) : null,
-      lluviaPromSemanal: +(totalLluviaHist / numSemanas).toFixed(1),
+      // Promedio por dia con dato x 7, no total/4: los dias descartados por
+      // contador congelado (y los que nunca se agregaron) dejarian el
+      // promedio semanal artificialmente bajo si se dividiera por 4 semanas
+      // fijas, exagerando cualquier comparacion contra la semana actual.
+      lluviaPromSemanal: diasConLluviaHist > 0
+        ? +((totalLluviaHist / diasConLluviaHist) * 7).toFixed(1)
+        : null,
       humedadPromedio: hHumC > 0 ? +(hHum / hHumC).toFixed(0) : null,
       radiacionPromedio: hRadC > 0 ? +(hRad / hRadC).toFixed(0) : null,
       semanasAnalizadas: numSemanas,
@@ -1971,7 +1999,7 @@ async function fetchClimaResumenSemanal(
 
   // Compute sun-hours context for the week vs prior 4 weeks
   const weekRows = rows.map((d: any) => ({ fecha: d.fecha as string, radiacion_wm2_avg: d.radiacion_wm2_avg != null ? Number(d.radiacion_wm2_avg) : null }));
-  const priorRows = (histData as any[] ?? []).map((d: any) => ({ fecha: d.fecha as string, radiacion_wm2_avg: d.radiacion_wm2_avg != null ? Number(d.radiacion_wm2_avg) : null }));
+  const priorRows = histData.map((d: any) => ({ fecha: d.fecha as string, radiacion_wm2_avg: d.radiacion_wm2_avg != null ? Number(d.radiacion_wm2_avg) : null }));
 
   const weekAgg = aggregateRadiation(weekRows);
   const priorAgg = aggregateRadiation(priorRows);
@@ -1984,7 +2012,10 @@ async function fetchClimaResumenSemanal(
     tempMin: tempCount > 0 ? +tempMin.toFixed(1) : null,
     tempMax: tempCount > 0 ? +tempMax.toFixed(1) : null,
     tempPromedio: tempCount > 0 ? +(tempSuma / tempCount).toFixed(1) : null,
-    lluviaTotal: +lluviaTotal.toFixed(1),
+    // Si ningun dia de la semana tiene lluvia confiable el total es "sin
+    // dato" (—), nunca 0: 0 mm significa "no llovio", y eso no lo sabemos.
+    lluviaTotal: diasSinDatoLluvia === rows.length ? null : +lluviaTotal.toFixed(1),
+    diasSinDatoLluvia,
     humedadPromedio: humCount > 0 ? +(humSuma / humCount).toFixed(0) : null,
     radiacionPromedio: radCount > 0 ? +(radSuma / radCount).toFixed(0) : null,
     radiacionMax: radMax > 0 ? +radMax.toFixed(0) : null,

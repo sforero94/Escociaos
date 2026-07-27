@@ -17,6 +17,23 @@ function safeMin(values: number[]): number {
   return values.reduce((min, v) => (v < min ? v : min), Infinity);
 }
 
+// ============================================================================
+// Lluvia confiable (migración 068)
+// ============================================================================
+
+// El rollup nocturno guarda lluvia_total_mm = NULL cuando detecta el contador
+// congelado, pero el backfill historico de la 068 solo marca lluvia_confianza
+// y deja el valor crudo intacto (a proposito, para auditoria). Por eso TODO
+// consumidor de clima_resumen_diario debe pasar por aqui: sumar
+// lluvia_total_mm directo revive el duplicado que la migracion detecto.
+// "Sin dato" es NULL, nunca 0.
+export function lluviaConfiableDeResumen(
+  fila: { lluvia_total_mm: number | null; lluvia_confianza?: string | null }
+): number | null {
+  if (fila.lluvia_confianza === 'contador_congelado') return null;
+  return fila.lluvia_total_mm;
+}
+
 // Cardinal direction from degrees (0-360)
 const CARDINALS = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'] as const;
 
@@ -72,7 +89,7 @@ function buildResumenFromDaily(rows: ResumenDiario[]): ResumenClima {
   const viento = rows.map(r => r.viento_kmh_avg).filter((v): v is number => v !== null);
   const rafaga = rows.map(r => r.rafaga_kmh_max).filter((v): v is number => v !== null);
   const radiacion = rows.map(r => r.radiacion_wm2_avg).filter((v): v is number => v !== null);
-  const lluvia = rows.map(r => r.lluvia_total_mm).filter((v): v is number => v !== null);
+  const lluvia = rows.map(lluviaConfiableDeResumen).filter((v): v is number => v !== null);
 
   return {
     lluvia_total_mm: lluvia.length > 0 ? round2(lluvia.reduce((s, v) => s + v, 0)) : null,
@@ -194,11 +211,7 @@ export function resumenDiarioToAgregada(rows: ResumenDiario[], desde: string, ha
       humedad_pct_promedio: r.humedad_pct_avg,
       viento_kmh_promedio: r.viento_kmh_avg,
       rafaga_kmh_max: r.rafaga_kmh_max,
-      // El rollup (migración 068) ya deja lluvia_total_mm en NULL cuando
-      // lluvia_confianza es 'contador_congelado'; este check es solo una
-      // salvaguarda extra para que el gráfico nunca renderice un dato que
-      // sabemos no confiable, aunque la fila llegue desincronizada.
-      lluvia_diaria_mm: r.lluvia_confianza === 'contador_congelado' ? null : r.lluvia_total_mm,
+      lluvia_diaria_mm: lluviaConfiableDeResumen(r),
       lluvia_confianza: r.lluvia_confianza,
       radiacion_wm2_promedio: r.radiacion_wm2_avg,
     }))
@@ -226,7 +239,7 @@ export function resumenDiarioToMensual(rows: ResumenDiario[], desde: string, has
     const humedad = dias.map(d => d.humedad_pct_avg).filter((v): v is number => v !== null);
     const viento = dias.map(d => d.viento_kmh_avg).filter((v): v is number => v !== null);
     const rafaga = dias.map(d => d.rafaga_kmh_max).filter((v): v is number => v !== null);
-    const lluvia = dias.map(d => d.lluvia_total_mm).filter((v): v is number => v !== null);
+    const lluvia = dias.map(lluviaConfiableDeResumen).filter((v): v is number => v !== null);
     const radiacion = dias.map(d => d.radiacion_wm2_avg).filter((v): v is number => v !== null);
 
     result.push({
@@ -330,7 +343,7 @@ export function resumenDiarioToAnual(rows: ResumenDiario[], desde: string, hasta
     const temps = dias.map(d => d.temp_c_avg).filter((v): v is number => v !== null);
     const humedad = dias.map(d => d.humedad_pct_avg).filter((v): v is number => v !== null);
     const viento = dias.map(d => d.viento_kmh_avg).filter((v): v is number => v !== null);
-    const lluvia = dias.map(d => d.lluvia_total_mm).filter((v): v is number => v !== null);
+    const lluvia = dias.map(lluviaConfiableDeResumen).filter((v): v is number => v !== null);
 
     aggregated.set(key, {
       temp: temps.length > 0 ? round2(avg(temps)) : null,

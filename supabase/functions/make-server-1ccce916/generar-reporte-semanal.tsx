@@ -551,13 +551,13 @@ ${fechaInfo}${mon.avisoFechaDesactualizada ? `\n${mon.avisoFechaDesactualizada}`
     const c = datos.clima;
     partes.push(`## RESUMEN DEL CLIMA — SEMANA ACTUAL
 - Temperatura: min ${c.tempMin ?? '—'}°C, max ${c.tempMax ?? '—'}°C, promedio ${c.tempPromedio ?? '—'}°C
-- Lluvia total: ${c.lluviaTotal ?? '—'} mm
+- Lluvia total: ${c.lluviaTotal ?? '—'} mm${c.diasSinDatoLluvia ? ` (${c.diasSinDatoLluvia} dia(s) sin dato confiable de lluvia, EXCLUIDOS del total — el pluviometro no reinicio su contador. No afirmes que no llovio esos dias ni sumes ese faltante.)` : ''}
 - Humedad promedio: ${c.humedadPromedio ?? '—'}%
 - Radiacion solar: promedio ${c.radiacionPromedio ?? '—'} W/m2, max ${c.radiacionMax ?? '—'} W/m2
 
 ### Lluvia y radiacion diaria`);
     for (const d of (c.diario || [])) {
-      partes.push(`  - ${d.fecha}: lluvia ${d.lluviaMm}mm, rad max ${d.radiacionMaxWm2} W/m2, temp ${d.tempMin ?? '—'}–${d.tempMax ?? '—'}°C`);
+      partes.push(`  - ${d.fecha}: lluvia ${d.lluviaMm != null ? `${d.lluviaMm}mm` : 'sin dato'}, rad max ${d.radiacionMaxWm2} W/m2, temp ${d.tempMin ?? '—'}–${d.tempMax ?? '—'}°C`);
     }
 
     // Historical comparison data
@@ -1734,7 +1734,7 @@ function construirSlideClima(datos: any, analisis: AnalisisGemini): string {
     kpiCard(`${fmtN(c.tempMin, 1)}°`, 'Temp Mín', '°C', '#4D240F'),
     kpiCard(`${fmtN(c.tempMax, 1)}°`, 'Temp Máx', '°C', '#dc2626'),
     kpiCard(`${fmtN(c.tempPromedio, 1)}°`, 'Temp Prom', '°C', '#73991C'),
-    kpiCard(`${fmtN(c.lluviaTotal, 1)}`, 'Lluvia', 'mm total', '#4D240F'),
+    kpiCard(`${fmtN(c.lluviaTotal, 1)}`, 'Lluvia', c.diasSinDatoLluvia ? `mm · ${c.diasSinDatoLluvia}d sin dato` : 'mm total', '#4D240F'),
     kpiCard(`${fmtN(c.humedadPromedio, 0)}%`, 'Humedad', 'promedio', '#6b7280'),
     kpiCard(`${sunHoursLabel}`, 'Horas-Sol', `h/día${sunStatusLabel ? ' · ' + sunStatusLabel : ''}`, '#b45309'),
   ].join('');
@@ -1750,12 +1750,17 @@ function construirSlideClima(datos: any, analisis: AnalisisGemini): string {
     const barW = Math.min(60, plotW / diario.length * 0.6);
     const gap = plotW / diario.length;
 
-    const maxLluvia = Math.max(...diario.map((d: any) => d.lluviaMm), 1);
+    const maxLluvia = Math.max(...diario.map((d: any) => d.lluviaMm ?? 0), 1);
     const maxRad = Math.max(...diario.map((d: any) => d.radiacionMaxWm2), 1);
 
-    // Bars (rainfall)
+    // Bars (rainfall). lluviaMm null = sin dato confiable (contador del
+    // pluviometro congelado): no se dibuja barra y se rotula "s/d", nunca
+    // una barra en cero — eso se leeria como "no llovio".
     const bars = diario.map((d: any, i: number) => {
       const x = padL + i * gap + (gap - barW) / 2;
+      if (d.lluviaMm == null) {
+        return `<text x="${x + barW / 2}" y="${padT + plotH - 4}" text-anchor="middle" font-size="9" fill="#9ca3af">s/d</text>`;
+      }
       const h = (d.lluviaMm / maxLluvia) * plotH;
       const y = padT + plotH - h;
       return `<rect x="${x}" y="${y}" width="${barW}" height="${h}" fill="#BFD97D" rx="3"/>`;
@@ -1797,10 +1802,16 @@ function construirSlideClima(datos: any, analisis: AnalisisGemini): string {
       <rect x="${padL + 100}" y="${chartH + 4}" width="12" height="12" fill="#f59e0b" rx="2"/>
       <text x="${padL + 116}" y="${chartH + 14}" font-size="10" fill="#6b7280">Radiación máx (W/m²)</text>`;
 
+    const diasSinDato = diario.filter((d: any) => d.lluviaMm == null).length;
+    const notaSinDato = diasSinDato > 0
+      ? `<div style="font-size:10px;color:#b45309;text-align:center;margin-top:2px;">${diasSinDato} día(s) sin dato confiable de lluvia (el pluviómetro no reinició su contador) — excluidos del total.</div>`
+      : '';
+
     chartHTML = `<div style="margin-top:12px;">
       <svg width="${chartW}" height="${chartH + 24}" viewBox="0 0 ${chartW} ${chartH + 24}" style="display:block;margin:0 auto;">
         ${bars}${polyline}${dots}${xLabels}${yLeft}${yRight}${legend}
       </svg>
+      ${notaSinDato}
     </div>`;
   }
 
