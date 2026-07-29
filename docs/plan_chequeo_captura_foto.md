@@ -329,8 +329,21 @@ motor intacta, y commit propio. Una fase no arranca hasta que la anterior pasó 
   escribir el valor nuevo — el pre-llenado y la escritura a mano habrían estado en conflicto directo.
 - **Anchos medidos, no estimados**: se midió con `doc.getTextWidth` el contenido real más largo de cada
   columna a 11pt. La aritmética previa del main loop (~217mm) era **optimista**; el ancho real es
-  **254,5mm de 259,4 útiles**. Cabe, pero con 4,9mm de holgura: **una 13ª columna no entra** a 11pt en
+  **257,5mm de 259,4 útiles**. Cabe, pero con 1,9mm de holgura: **una 13ª columna no entra** a 11pt en
   carta horizontal. Hay un test que re-mide y falla si alguien angosta una columna.
+- **D-F (dueño, 2026-07-29) — el reparto de ancho se corrigió contra datos, no contra intuición.** La
+  primera versión daba 44mm a `Sexo cría` (la columna más ancha de la hoja, para la etiqueta legible) y
+  21mm a `Tratamiento` (la más angosta de las que se diligencian). Medido sobre el histórico de
+  `hato_chequeo_vacas`: en SX Martha escribe **3 caracteres en promedio** (máx. 11) y en TTTO **12 en
+  promedio, hasta 54**. Estaba exactamente al revés de la necesidad de escritura. Como la tabla ya no
+  tenía holgura, la salida fue **etiqueta compacta**: `H retenida #206` en vez de
+  `Hembra (retenida #206)` (40,86 → 27,40mm), liberando `Sexo cría` 44→31mm y `Tratamiento` 21→**37mm**.
+  Sigue siendo lenguaje legible —lo que D-E exige— y no el código crudo. Cuando se conoce el sexo pero
+  no el destino se escribe la palabra completa: la inicial sola sería críptica.
+- **Los fixtures de ancho y de conteo de páginas DERIVAN la etiqueta de `etiquetaSexoCria`**, nunca la
+  hardcodean. Con literales se desincronizan en silencio: al acortar la etiqueta, el fixture seguía
+  pidiendo 43,86mm, la celda envolvía a dos líneas y el PDF se iba a **3 páginas** — precisamente el
+  fallo que el cambio debía evitar. Es la lección de layout de esta fase.
 - **Encabezados a 9pt bold, datos a 11pt.** Desviación deliberada del "≥11pt" literal: a 11pt los
   rótulos `# Partos`/`Fecha Servicio`/`Parto Probable` no caben sin partirse, y el requisito de
   legibilidad es sobre las celdas de datos, que es lo que se lee en el corral.
