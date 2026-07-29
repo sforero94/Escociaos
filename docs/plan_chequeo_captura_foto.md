@@ -296,7 +296,7 @@ motor intacta, y commit propio. Una fase no arranca hasta que la anterior pasó 
 |---|---|---|
 | **0** — Spike OCR | ⛔ **Bloqueada por insumo externo** | Necesita 2–3 fotos de planillas reales ya diligenciadas por Martha. No se puede simular: el objeto de medición ES su letra. **No bloquea 1–4**, que el plan ya declara independientes del resultado. |
 | **1** — Contenido de la planilla | ✅ **cerrada** (2026-07-29) | Gate verificado en el main loop, no solo reportado por el agente: **1618 tests verdes** (68 archivos), `tsc --noEmit` exit 0, paridad del motor verde tras regenerar. Las 4 columnas se pre-llenan; `derivarSexoCria` es pura y cubre las 6 ramas de `TipoSX`. Ver notas de cierre abajo. |
-| **2** — PDF imprimible | 🔄 siguiente | 12 columnas / 35 filas / ≥11pt / ~2 páginas horizontal. Aritmética verificada: ~217mm de ancho necesario contra 259mm útiles en carta horizontal; 35 filas a ~8mm → 2 páginas. |
+| **2** — PDF imprimible | ✅ **cerrada** (2026-07-29) | Gate verificado en el main loop: **1644 tests verdes** (69 archivos), `tsc` exit 0, lint 0 errores (= base). PDF renderizado e **inspeccionado visualmente**, no solo contado: 35 filas → **2 páginas exactas**, carta horizontal, datos a 11pt, encabezado repetido, recuadro en toda celda. Ver notas de cierre abajo. |
 | **3** — Foto + ventana de corrección | ⏸ | Endpoint + confianza por celda + anti-row-drift + revisión editable. **Se entrega como código + tests con fixtures, no verificada end-to-end**: este contenedor no tiene `OPENROUTER_API_KEY` ni service-role, así que la llamada real al modelo de visión solo se puede ejercitar tras `deploy make-server-1ccce916` y con una foto real. Mismo precedente que el endpoint de alertas S6, que se desplegó antes de tener destinatarios configurados. La **ventana de corrección** sí es verificable aquí (es frontend puro + diff ya existente) y conviene cerrarla como sub-gate propio (3a) antes del endpoint (3b). |
 | **4** — Round-trip | ⏸ | Exportar → diligenciar → cargar → aprobar → re-exportar sin eventos duplicados. |
 
@@ -319,5 +319,26 @@ motor intacta, y commit propio. Una fase no arranca hasta que la anterior pasó 
   haría que el diff lo leyera como cambio real.
 - **`regenerar-copias-servidor.py` no soporta `--check`**: ignora el flag y escribe siempre. El
   chequeo real de paridad es el test `calculosHatoParidad`, no el script.
+
+### Notas de cierre — Fase 2
+
+- **Dos artefactos, dos botones**: "Planilla para imprimir (PDF)" y "Respaldo editable (.xlsx)". El
+  `.xlsx` no se tocó: sigue emitiendo códigos crudos re-parseables.
+- **El texto de referencia va alineado ARRIBA en las columnas que Martha diligencia**, dejando ~5mm
+  libres abajo dentro del recuadro. Sin eso, pre-llenar la celda le habría quitado el espacio para
+  escribir el valor nuevo — el pre-llenado y la escritura a mano habrían estado en conflicto directo.
+- **Anchos medidos, no estimados**: se midió con `doc.getTextWidth` el contenido real más largo de cada
+  columna a 11pt. La aritmética previa del main loop (~217mm) era **optimista**; el ancho real es
+  **254,5mm de 259,4 útiles**. Cabe, pero con 4,9mm de holgura: **una 13ª columna no entra** a 11pt en
+  carta horizontal. Hay un test que re-mide y falla si alguien angosta una columna.
+- **Encabezados a 9pt bold, datos a 11pt.** Desviación deliberada del "≥11pt" literal: a 11pt los
+  rótulos `# Partos`/`Fecha Servicio`/`Parto Probable` no caben sin partirse, y el requisito de
+  legibilidad es sobre las celdas de datos, que es lo que se lee en el corral.
+- **El wrapping es lo que rompe las 2 páginas**: un intento con `Sexo cría` a 42mm partía la etiqueta
+  en dos líneas, subía el alto de fila y producía **3** páginas. La corrección fue ensanchar la
+  columna, nunca bajar la letra.
+- **El código corto por página (`E7A3-p2`) NO se implementó**, a propósito: su único consumidor es la
+  validación anti-página-faltante de la Fase 3. Entra con ella, como un parámetro opcional.
+- ⚠️ **Deuda de layout detectada con datos, pendiente de decisión del dueño** — ver §10.
 
 ## 10. Preguntas abiertas
