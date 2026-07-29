@@ -17,9 +17,10 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useRegistrarSalidaHato } from '../hooks/useRegistrarSalidaHato';
 import { esFechaFutura } from '@/utils/hatoSalida';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 function hoyISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return obtenerFechaHoy();
 }
 
 export function MuerteAnimalDialog({

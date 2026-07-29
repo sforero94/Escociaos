@@ -21,6 +21,11 @@ interface IngresoDetalleDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Resuelve created_by → nombre del usuario que registró el ingreso. */
   nombreUsuario?: string;
+  /** `true` cuando este ingreso tiene una quincena del Hato enlazada
+   * (migración 070, `hato_produccion_quincenal.fin_ingreso_id`) -- avisa
+   * antes de editar/eliminar (ese último bloqueado por FK, ver
+   * `IngresosList.tsx`). */
+  esQuincenaHato?: boolean;
   onEdit: () => void;
   onEliminar: () => void;
 }
@@ -41,6 +46,7 @@ export function IngresoDetalleDialog({
   open,
   onOpenChange,
   nombreUsuario,
+  esQuincenaHato,
   onEdit,
   onEliminar,
 }: IngresoDetalleDialogProps) {
@@ -90,6 +96,11 @@ export function IngresoDetalleDialog({
             {esGanado && (
               <span className="px-2 py-1 text-xs font-semibold rounded-lg bg-amber-100 text-amber-700">
                 Ganado
+              </span>
+            )}
+            {esQuincenaHato && (
+              <span className="px-2 py-1 text-xs font-semibold rounded-lg bg-blue-100 text-blue-700">
+                Quincena Hato
               </span>
             )}
           </div>

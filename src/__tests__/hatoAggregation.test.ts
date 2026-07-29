@@ -24,7 +24,8 @@ import {
   type HatoEventoRow,
   type HatoChequeoVacaDetalleRow,
   type HatoPesajeRow,
-  type HatoProduccionQuincenalRow,
+  type HatoProduccionQuincenalDbRow,
+  resolverLitrosQuincenal,
 } from '../supabase/functions/server/hato-aggregation';
 import type { HatoConfig } from '../supabase/functions/server/calculos-hato';
 
@@ -311,15 +312,18 @@ describe('buildProduccionSummary', () => {
     expect(summary.pesajes_semanales.por_vaca.find((v) => v.numero === 48)).toBeUndefined();
   });
 
-  it('calcula litros_por_vaca vía calcularProductividad y marca pendiente de conciliación cuando falta el Pomar', () => {
-    const quincenas: HatoProduccionQuincenalRow[] = [
-      { anio: 2024, mes: 8, quincena: 1, fecha_inicio: '2024-08-01', fecha_fin: '2024-08-15', litros_total: 900, litros_pomar_confirmado: 890, num_vacas_ordeno: 30, notas: null },
-      { anio: 2024, mes: 7, quincena: 2, fecha_inicio: '2024-07-16', fecha_fin: '2024-07-31', litros_total: 850, litros_pomar_confirmado: null, num_vacas_ordeno: 28, notas: null },
+  it('calcula litros_por_vaca vía calcularProductividad y marca pendiente de conciliación cuando falta el Pomar — lee los litros de una fila medida vía el ingreso enlazado, nunca de litros_total', () => {
+    const quincenas: HatoProduccionQuincenalDbRow[] = [
+      // origen_dato='medido': litros_total es NULL en la tabla a propósito
+      // (migración 070) -- los litros reales vienen del embed fin_ingreso.
+      { anio: 2024, mes: 8, quincena: 1, fecha_inicio: '2024-08-01', fecha_fin: '2024-08-15', litros_total: null, origen_dato: 'medido', litros_pomar_confirmado: 890, num_vacas_ordeno: 30, notas: null, fin_ingreso: { cantidad: 900 } },
+      { anio: 2024, mes: 7, quincena: 2, fecha_inicio: '2024-07-16', fecha_fin: '2024-07-31', litros_total: null, origen_dato: 'medido', litros_pomar_confirmado: null, num_vacas_ordeno: 28, notas: null, fin_ingreso: { cantidad: 850 } },
     ];
     const summary = buildProduccionSummary({ periodo: { desde: '2024-07-01', hasta: '2024-08-15' }, pesajes: [], produccionQuincenal: quincenas });
     expect(summary.produccion_quincenal).toHaveLength(2);
     // Orden desc: agosto Q1 primero.
     expect(summary.produccion_quincenal[0].mes).toBe(8);
+    expect(summary.produccion_quincenal[0].litros_total).toBe(900);
     expect(summary.produccion_quincenal[0].litros_por_vaca).toBeCloseTo(30);
     expect(summary.produccion_quincenal[0].pendiente_conciliacion).toBe(false);
     expect(summary.produccion_quincenal[0].diferencia_pomar).toBe(-10);
@@ -329,11 +333,36 @@ describe('buildProduccionSummary', () => {
   });
 
   it('litros_por_vaca es null (nunca 0) cuando falta num_vacas_ordeno', () => {
-    const quincenas: HatoProduccionQuincenalRow[] = [
-      { anio: 2024, mes: 8, quincena: 1, fecha_inicio: null, fecha_fin: null, litros_total: 900, litros_pomar_confirmado: null, num_vacas_ordeno: null, notas: null },
+    const quincenas: HatoProduccionQuincenalDbRow[] = [
+      { anio: 2024, mes: 8, quincena: 1, fecha_inicio: null, fecha_fin: null, litros_total: null, origen_dato: 'medido', litros_pomar_confirmado: null, num_vacas_ordeno: null, notas: null, fin_ingreso: { cantidad: 900 } },
     ];
     const summary = buildProduccionSummary({ periodo: { desde: '2024-08-01', hasta: '2024-08-15' }, pesajes: [], produccionQuincenal: quincenas });
     expect(summary.produccion_quincenal[0].litros_por_vaca).toBeNull();
+  });
+
+  it('una fila derivado_mensual (backfill) lee los litros de litros_total, nunca del ingreso mensual enlazado', () => {
+    const quincenas: HatoProduccionQuincenalDbRow[] = [
+      { anio: 2023, mes: 3, quincena: 1, fecha_inicio: '2023-03-01', fecha_fin: '2023-03-15', litros_total: 3145, origen_dato: 'derivado_mensual', litros_pomar_confirmado: null, num_vacas_ordeno: null, notas: 'backfill', fin_ingreso: { cantidad: 6291 } },
+    ];
+    const summary = buildProduccionSummary({ periodo: { desde: '2023-03-01', hasta: '2023-03-15' }, pesajes: [], produccionQuincenal: quincenas });
+    expect(summary.produccion_quincenal[0].litros_total).toBe(3145);
+  });
+});
+
+describe('resolverLitrosQuincenal', () => {
+  it('fila medida: lee del embed fin_ingreso.cantidad, nunca de litros_total', () => {
+    const fila: HatoProduccionQuincenalDbRow = { anio: 2024, mes: 8, quincena: 1, fecha_inicio: null, fecha_fin: null, litros_total: null, origen_dato: 'medido', litros_pomar_confirmado: null, num_vacas_ordeno: null, notas: null, fin_ingreso: { cantidad: 1234 } };
+    expect(resolverLitrosQuincenal(fila)).toBe(1234);
+  });
+
+  it('fila medida sin embed (ingreso ausente o consulta sin join): null, nunca 0', () => {
+    const fila: HatoProduccionQuincenalDbRow = { anio: 2024, mes: 8, quincena: 1, fecha_inicio: null, fecha_fin: null, litros_total: null, origen_dato: 'medido', litros_pomar_confirmado: null, num_vacas_ordeno: null, notas: null, fin_ingreso: null };
+    expect(resolverLitrosQuincenal(fila)).toBeNull();
+  });
+
+  it('fila derivado_mensual: lee de litros_total, ignora el embed', () => {
+    const fila: HatoProduccionQuincenalDbRow = { anio: 2023, mes: 3, quincena: 1, fecha_inicio: null, fecha_fin: null, litros_total: 3145, origen_dato: 'derivado_mensual', litros_pomar_confirmado: null, num_vacas_ordeno: null, notas: null, fin_ingreso: { cantidad: 6291 } };
+    expect(resolverLitrosQuincenal(fila)).toBe(3145);
   });
 });
 

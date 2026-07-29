@@ -193,10 +193,13 @@ export function GastosList({ onEdit }: GastosListProps) {
       let ganadoResult: TransaccionGanado[] = [];
 
       if (incluirGanado) {
+        // `es_hato=false`: excluye las compras del Hato Lechero (migración
+        // 059) -- no son compras de ceba y no deben sumarse ni listarse aquí.
         let ganadoQuery = getSupabase()
           .from('fin_transacciones_ganado' as any)
           .select('*')
-          .eq('tipo', 'compra');
+          .eq('tipo', 'compra')
+          .eq('es_hato', false);
         if (fechaDesde) ganadoQuery = ganadoQuery.gte('fecha', fechaDesde);
         if (fechaHasta) ganadoQuery = ganadoQuery.lte('fecha', fechaHasta);
         if (filtros.usuario_id === SIN_USUARIO) ganadoQuery = ganadoQuery.is('created_by', null);

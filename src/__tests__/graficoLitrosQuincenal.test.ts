@@ -23,6 +23,15 @@ function quincena(overrides: Partial<HatoProduccionQuincenal> = {}): HatoProducc
     num_vacas_ordeno: null,
     notas: null,
     fuente: null,
+    // Migración 070: vínculo financiero -- irrelevante para estas pruebas
+    // (preparación pura del gráfico), fijado a valores de una quincena
+    // 'medido' típica para que el fixture siga compilando contra el tipo
+    // real.
+    fin_ingreso_id: overrides.fin_ingreso_id ?? crypto.randomUUID(),
+    origen_dato: 'medido',
+    num_vacas_ordeno_origen: null,
+    updated_at: null,
+    updated_by: null,
     ...overrides,
   };
 }
@@ -62,6 +71,27 @@ describe('prepararPuntosLitrosQuincenal', () => {
     const historial = [quincena({ id: 'a', mes: 6 }), quincena({ id: 'b', mes: 7 })];
     prepararPuntosLitrosQuincenal(historial);
     expect(historial.map((h) => h.id)).toEqual(['a', 'b']);
+  });
+
+  it('omite quincenas con litros_total null (embed fin_ingreso no resuelto) -- nunca una barra en 0', () => {
+    const historial = [
+      quincena({ id: 'con-dato', anio: 2026, mes: 7, quincena: 1, litros_total: 900 }),
+      quincena({ id: 'sin-dato', anio: 2026, mes: 6, quincena: 2, litros_total: null }),
+    ];
+    const puntos = prepararPuntosLitrosQuincenal(historial);
+    expect(puntos).toHaveLength(1);
+    expect(puntos[0].clave).toBe('con-dato');
+  });
+
+  it('marca esDerivado SOLO para origen_dato derivado_mensual (SOW 5)', () => {
+    const historial = [
+      quincena({ id: 'medida', origen_dato: 'medido' }),
+      quincena({ id: 'backfill', origen_dato: 'derivado_mensual' }),
+    ];
+    const puntos = prepararPuntosLitrosQuincenal(historial);
+    const porClave = Object.fromEntries(puntos.map((p) => [p.clave, p.esDerivado]));
+    expect(porClave.medida).toBe(false);
+    expect(porClave.backfill).toBe(true);
   });
 });
 

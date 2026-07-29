@@ -53,8 +53,9 @@ export interface HatoToroRow {
   activo: boolean;
 }
 
-/** `hato_eventos` (migración 053) -- capa append-only, fuente de verdad
- * del ciclo reproductivo/de vida (A3/V7). */
+/** `hato_eventos` (migración 053, extendida por 070 con `fin_ingreso_id`)
+ * -- capa append-only, fuente de verdad del ciclo reproductivo/de vida
+ * (A3/V7). */
 export interface HatoEventoRow {
   id: string;
   animal_id: string;
@@ -66,6 +67,12 @@ export interface HatoEventoRow {
   cria_id: string | null;
   cria_destino: CriaDestino | null;
   sx_raw: string | null;
+  /** `fin_ingreso_id` (migración 070) -- vínculo N:1 hacia la fila de
+   * `fin_ingresos` de una venta de animales del hato (terneros/descarte).
+   * `ON DELETE SET NULL`: corregir el registro financiero no borra el
+   * hecho de que el animal salió del hato. `null` para todo evento que no
+   * sea `venta`, o para una venta sin ingreso enlazado. */
+  fin_ingreso_id: string | null;
   datos: Record<string, unknown> | null;
   fuente: 'web' | 'telegram' | 'importacion' | 'alerta' | 'chequeo' | null;
   created_at: string;
@@ -176,11 +183,32 @@ export interface HatoPesajeLeche {
   fuente: string | null;
 }
 
-/** Fila de `hato_produccion_quincenal` (migración 054): litros al camión
- * por quincena (V3/D2) — dato distinto y sin atribución cruzada con el
- * pesaje semanal por vaca (decisión del dueño, segunda ronda 2026-07-22:
+/** Origen del dato de una quincena (migración 070): `medido` -- capturada
+ * quincena a quincena vía `fn_hato_guardar_quincena_venta`, editable y
+ * enlazada 1:1 a su propio `fin_ingresos`; `derivado_mensual` -- partida
+ * desde una de las 44 filas mensuales históricas por el backfill (SOW 4),
+ * read-only en la UI, enlazada N:1 al ingreso mensual intacto. */
+export type OrigenDatoProduccionQuincenal = 'medido' | 'derivado_mensual';
+
+/** Procedencia de `num_vacas_ordeno` (migración 070): `medido` -- lo
+ * digitó Gerencia al capturar la quincena; `derivado_chequeos` -- lo
+ * calculó `reconstruirEstadoAFecha`/`contarVacasEnOrdenoAFecha` a partir
+ * del histórico de chequeos bimestrales (SOW 2/4). `null` cuando
+ * `num_vacas_ordeno` también es `null` (CHECK
+ * `hato_prod_quincenal_vacas_origen_coherente`) -- nunca un número sin
+ * procedencia declarada. */
+export type OrigenNumVacasOrdeno = 'medido' | 'derivado_chequeos';
+
+/** Fila de `hato_produccion_quincenal` (migración 054, extendida por 070
+ * con el vínculo financiero + procedencia del dato): litros al camión por
+ * quincena (V3/D2) — dato distinto y sin atribución cruzada con el pesaje
+ * semanal por vaca (decisión del dueño, segunda ronda 2026-07-22:
  * "litros al camión mide producción del hato (venta); el pesaje por vaca
- * mide productividad individual"). */
+ * mide productividad individual"). NUNCA guarda dinero (plan
+ * `docs/plan_hato_produccion_rework.md` §2.0) -- el valor/precio/comprador
+ * viven en el `fin_ingresos` referenciado por `fin_ingreso_id`; esta tabla
+ * tiene SELECT abierto a todo `authenticated`, `fin_ingresos` es
+ * Gerencia-only, y Postgres no tiene RLS por columna. */
 export interface HatoProduccionQuincenal {
   id: string;
   anio: number;
@@ -188,16 +216,42 @@ export interface HatoProduccionQuincenal {
   quincena: 1 | 2;
   fecha_inicio: string | null;
   fecha_fin: string | null;
-  litros_total: number;
+  /** CAMBIA DE SIGNIFICADO según `origen_dato` (migración 070, decisión
+   * del dueño sobre el trigger inverso retirado -- "un solo registro" es
+   * ahora estructural, no sincronizado). `null` cuando
+   * `origen_dato === 'medido'`: los litros reales viven en
+   * `fin_ingresos.cantidad`, leídos a través de `fin_ingreso_id` -- NUNCA
+   * una segunda copia que pueda divergir. NO-null (la partición del
+   * backfill) cuando `origen_dato === 'derivado_mensual'`: esa fila
+   * referencia un `fin_ingresos` MENSUAL sin contraparte de quincena
+   * propia, así que su reparto debe guardarse aquí. CHECK
+   * `hato_prod_quincenal_litros_origen_coherente` en la base impone
+   * exactamente esta correspondencia. **Un consumidor que necesite "los
+   * litros de esta quincena" para una fila `medido` debe leer a través
+   * del FK (`fin_ingresos.cantidad`), nunca esta columna directamente.** */
+  litros_total: number | null;
   litros_pomar_confirmado: number | null;
   num_vacas_ordeno: number | null;
   notas: string | null;
   fuente: string | null;
+  /** `fin_ingreso_id` (070) -- vínculo duro, NOT NULL en la tabla. 1:1 con
+   * `fin_ingresos` cuando `origen_dato='medido'` (índice único parcial
+   * `hato_prod_quincenal_ingreso_medido_unico`); N:1 (varias quincenas al
+   * mismo mensual) cuando `origen_dato='derivado_mensual'`. */
+  fin_ingreso_id: string;
+  origen_dato: OrigenDatoProduccionQuincenal;
+  num_vacas_ordeno_origen: OrigenNumVacasOrdeno | null;
+  updated_at: string | null;
+  updated_by: string | null;
 }
 
 /** Payload editable del formulario de producción quincenal — subconjunto
  * de `HatoProduccionQuincenal` sin campos derivados/de sistema (`id`,
- * `fuente`). */
+ * `fuente`, `fin_ingreso_id`, `origen_dato`, `updated_at`/`updated_by`),
+ * más los campos financieros NOT NULL de `fin_ingresos` (R5) que el RPC
+ * `fn_hato_guardar_quincena_venta` (070) requiere para el ingreso
+ * enlazado -- ver `docs/plan_hato_produccion_rework.md` §3.2 para el
+ * shape exacto del payload jsonb que el RPC espera. */
 export interface ProduccionQuincenalFormData {
   anio: number;
   mes: number;
@@ -206,6 +260,37 @@ export interface ProduccionQuincenalFormData {
   litros_pomar_confirmado: number | undefined;
   num_vacas_ordeno: number | undefined;
   notas: string;
+  fin_ingreso: {
+    fecha: string;
+    valor: number | undefined;
+    region_id: string;
+    medio_pago_id: string;
+    comprador_id: string | null;
+    nombre: string | null;
+  };
+}
+
+/** Tipo de venta de animales del hato (decisión 7 del dueño, plan §0):
+ * el Hato tiene TRES flujos de ingreso -- leche · terneros · descarte.
+ * Ambos enrutan a `fin_ingresos` (nunca a `fin_transacciones_ganado`,
+ * reservado a compras/muerte -- ver SOW 0) vía
+ * `fn_hato_registrar_venta_animales` (070). */
+export type TipoVentaAnimalesHato = 'terneros' | 'descarte';
+
+/** Payload del diálogo de venta de animales del hato -- espejo del jsonb
+ * que consume `fn_hato_registrar_venta_animales`. `animal_ids` es
+ * OPCIONAL (decisión 6 del dueño): cabezas + valor son obligatorios,
+ * enlazar animales específicos no. */
+export interface VentaAnimalesHatoPayload {
+  tipo: TipoVentaAnimalesHato;
+  cabezas: number;
+  valor: number;
+  fecha: string;
+  region_id: string;
+  medio_pago_id: string;
+  comprador_id: string | null;
+  nombre: string | null;
+  animal_ids: string[];
 }
 
 // ============================================================================

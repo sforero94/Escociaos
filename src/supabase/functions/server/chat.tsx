@@ -58,7 +58,7 @@ import {
   type HatoEstadoActualRow,
   type HatoChequeoVacaDetalleRow,
   type HatoPesajeRow,
-  type HatoProduccionQuincenalRow,
+  type HatoProduccionQuincenalDbRow,
 } from './hato-aggregation.ts';
 
 // ============================================================================
@@ -1165,8 +1165,11 @@ async function execFinancialSummary(args: Record<string, unknown>): Promise<stri
   }
 
   if (!type || type === 'ganado') {
+    // es_hato=eq.false: excluye las transacciones del Hato Lechero (migración
+    // 059) -- una venta de vaca del hato no es una venta de ceba. Ver
+    // CLAUDE.md raíz, SOW 0 de docs/plan_hato_produccion_rework.md.
     const ganado = await supabaseQuery('fin_transacciones_ganado',
-      `select=id,fecha,tipo,cantidad_cabezas,kilos_pagados,precio_kilo,valor_total,finca,cliente_proveedor,observaciones&fecha=gte.${e(date_from)}&fecha=lte.${e(date_to)}&order=fecha.desc&limit=2000`);
+      `select=id,fecha,tipo,cantidad_cabezas,kilos_pagados,precio_kilo,valor_total,finca,cliente_proveedor,observaciones&es_hato=eq.false&fecha=gte.${e(date_from)}&fecha=lte.${e(date_to)}&order=fecha.desc&limit=2000`);
 
     let totalCompras = 0, totalVentas = 0;
     const byFinca: Record<string, { compras: number; ventas: number }> = {};
@@ -2633,7 +2636,12 @@ async function execPygFlujoCaja(args: Record<string, unknown>): Promise<string> 
       ),
       supabaseQueryAll('fin_ingresos', 'select=id,fecha,negocio_id,valor,categoria_id,cosecha,cantidad&order=id'),
       // Histórico COMPLETO: el costo promedio móvil del ganado es path-dependent.
-      supabaseQueryAll('fin_transacciones_ganado', 'select=id,fecha,tipo,cantidad_cabezas,kilos_pagados,valor_total&order=id'),
+      // es_hato=eq.false: excluye las transacciones del Hato Lechero
+      // (migración 059) de la costeo de ventas de ganado -- una vaca del
+      // hato nunca se compró, así que costearla al promedio ponderado de
+      // compra de la ceba infla el COGS. Ver SOW 0 de
+      // docs/plan_hato_produccion_rework.md.
+      supabaseQueryAll('fin_transacciones_ganado', 'select=id,fecha,tipo,cantidad_cabezas,kilos_pagados,valor_total&es_hato=eq.false&order=id'),
       supabaseQuery('fin_parametros', 'select=clave,anio,valor'),
     ]);
 
@@ -2903,8 +2911,13 @@ async function execHatoProduccion(args: Record<string, unknown>): Promise<string
     supabaseQuery('hato_pesajes_leche', pesajesQuery) as Promise<HatoPesajeRow[]>,
     supabaseQuery(
       'hato_produccion_quincenal',
-      `select=anio,mes,quincena,fecha_inicio,fecha_fin,litros_total,litros_pomar_confirmado,num_vacas_ordeno,notas&order=anio.desc,mes.desc,quincena.desc&limit=${limiteQuincenas}`
-    ) as Promise<HatoProduccionQuincenalRow[]>,
+      // `origen_dato` + el embed `fin_ingreso:fin_ingresos(cantidad)`
+      // (migración 070, FK fin_ingreso_id) son obligatorios aquí: para
+      // origen_dato='medido' `litros_total` es NULL en la tabla a
+      // propósito -- resolverLitrosQuincenal() los lee del ingreso
+      // enlazado, nunca de la columna directa (ver hato-aggregation.ts).
+      `select=anio,mes,quincena,fecha_inicio,fecha_fin,litros_total,origen_dato,litros_pomar_confirmado,num_vacas_ordeno,notas,fin_ingreso:fin_ingresos(cantidad)&order=anio.desc,mes.desc,quincena.desc&limit=${limiteQuincenas}`
+    ) as Promise<HatoProduccionQuincenalDbRow[]>,
   ]);
 
   const summary = buildProduccionSummary({

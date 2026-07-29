@@ -20,6 +20,7 @@ import { getSupabase } from '@/utils/supabase/client';
 import { construirHatoConfigDesdeFilas, type FilaHatoConfig } from '@/utils/hatoConfigDesdeTabla';
 import { derivarEstadoReproductivo, type EstadoActualHatoRow } from '@/utils/calculosHato';
 import type { EstadoActualHatoViewRow } from '@/types/hato';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 export interface AnimalParaPlanillaChequeo {
   numero: number | null;
@@ -81,7 +82,7 @@ export function useAnimalesParaPlanillaChequeo() {
       if (estadoError) throw estadoError;
 
       const config = construirHatoConfigDesdeFilas((configRows ?? []) as FilaHatoConfig[]);
-      const hoy = new Date().toISOString().slice(0, 10);
+      const hoy = obtenerFechaHoy();
 
       const filas: AnimalParaPlanillaChequeo[] = ((estadoRows ?? []) as EstadoActualHatoViewRow[])
         .filter(esCandidataAPlanilla)

@@ -13,6 +13,7 @@ import { derivarEstadoReproductivo, type EstadoActualHatoRow, type EstadoReprodu
 import { clasificarCategoriaHato, type CategoriaHato } from '@/utils/hatoCategorias';
 import { esNumeroProvisional } from '@/utils/importHato/overridesChapeta';
 import type { EstadoActualHatoViewRow, EtapaHato, EstadoAnimalHato } from '@/types/hato';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 export interface AnimalHatoDerivado {
   animalId: string;
@@ -69,7 +70,7 @@ export function useHatoAnimales() {
       if (estadoError) throw estadoError;
 
       const config = construirHatoConfigDesdeFilas((configRows ?? []) as FilaHatoConfig[]);
-      const hoy = new Date().toISOString().slice(0, 10);
+      const hoy = obtenerFechaHoy();
 
       const filas: AnimalHatoDerivado[] = ((estadoRows ?? []) as EstadoActualHatoViewRow[]).map((fila) => {
         const derivado = derivarEstadoReproductivo(filaVistaAFactRow(fila), config, hoy);

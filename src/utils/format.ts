@@ -69,11 +69,43 @@ export function formatWeight(kg: number): string {
 }
 
 /**
+ * `true` si `value` es un string de fecha SIN hora, `YYYY-MM-DD` -- el
+ * único shape para el que `new Date(string)` se interpreta como UTC
+ * medianoche y por tanto puede desplazarse un día al renderizarse en la
+ * zona horaria de Bogotá (UTC-5). Un ISO con hora (`...T...`) no matchea
+ * esta regex y sigue el camino normal, sin cambios de comportamiento.
+ */
+function esFechaSolaISO(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+/**
+ * Parsea `date` preservando el día calendario cuando es un string
+ * `YYYY-MM-DD` puro, construyendo la fecha en hora LOCAL en vez de UTC.
+ *
+ * Bug repo-wide (docs/hato/qa-produccion-rework.md, FIX 1): `new
+ * Date('2026-07-22')` es UTC medianoche; en Bogotá (UTC-5) eso renderiza
+ * como "21 de julio" -- un día antes, y en frontera de año/mes puede
+ * incluso mover el año (`'2026-01-01'` -> "31 de diciembre de 2025").
+ * Cualquier otro shape (objeto `Date` ya construido, o un string con hora)
+ * sigue exactamente el mismo camino que antes -- NO se le agrega
+ * `timeZone: 'UTC'` al `Intl` que consume el resultado, eso cambiaría
+ * también cómo se renderizan timestamps reales, que hoy son correctos.
+ */
+function parsearFecha(date: Date | string): Date {
+  if (typeof date === 'string' && esFechaSolaISO(date)) {
+    const [anio, mes, dia] = date.split('-').map(Number);
+    return new Date(anio, mes - 1, dia);
+  }
+  return typeof date === 'string' ? new Date(date) : date;
+}
+
+/**
  * Formatea una fecha como tiempo relativo en español
- * 
+ *
  * @param date - Fecha a formatear (Date object o string ISO)
  * @returns String formateado como "hace X minutos/horas/días/semanas"
- * 
+ *
  * @example
  * formatRelativeTime(new Date()) // "hace unos segundos"
  * formatRelativeTime(new Date('2024-01-10')) // "hace 3 días"
@@ -81,7 +113,7 @@ export function formatWeight(kg: number): string {
  */
 export function formatRelativeTime(date: Date | string): string {
   const now = new Date();
-  const then = typeof date === 'string' ? new Date(date) : date;
+  const then = parsearFecha(date);
   
   const diffMs = now.getTime() - then.getTime();
   const diffSeconds = Math.floor(diffMs / 1000);
@@ -142,7 +174,7 @@ export function formatRelativeTime(date: Date | string): string {
  * formatShortDate(new Date('2024-01-15')) // "15 ene 2024"
  */
 export function formatShortDate(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
+  const d = parsearFecha(date);
   return new Intl.DateTimeFormat('es-CO', {
     day: 'numeric',
     month: 'short',
@@ -160,7 +192,7 @@ export function formatShortDate(date: Date | string): string {
  * formatLongDate(new Date('2024-01-15')) // "15 de enero de 2024"
  */
 export function formatLongDate(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
+  const d = parsearFecha(date);
   return new Intl.DateTimeFormat('es-CO', {
     day: 'numeric',
     month: 'long',
@@ -233,8 +265,13 @@ export function formatHectares(ha: number): string {
  * // "10 ene - 20 ene 2024"
  */
 export function formatDateRange(startDate: Date | string, endDate: Date | string): string {
-  const start = typeof startDate === 'string' ? new Date(startDate) : startDate;
-  const end = typeof endDate === 'string' ? new Date(endDate) : endDate;
+  // `parsearFecha`, no `new Date(string)`: una fecha sola 'YYYY-MM-DD' se
+  // interpreta como medianoche UTC y al renderizarse en Bogotá (UTC-5)
+  // retrocede un día. Se detectó en vivo: la quincena 2026-05-01 → 2026-05-15
+  // se mostraba como "30 de abr - 14 de may". Misma corrección que
+  // formatRelativeTime/formatShortDate/formatLongDate.
+  const start = parsearFecha(startDate);
+  const end = parsearFecha(endDate);
   
   const startFormatted = new Intl.DateTimeFormat('es-CO', {
     day: 'numeric',

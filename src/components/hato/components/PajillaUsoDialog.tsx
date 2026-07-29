@@ -17,9 +17,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { EstadoChip } from './EstadoChip';
 import { chipStockPajillas } from '@/utils/hatoUi';
 import type { PajillaConToro, AnimalPickerPajillas } from '../hooks/useHatoPajillas';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 function hoyISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  return obtenerFechaHoy();
 }
 
 export function PajillaUsoDialog({

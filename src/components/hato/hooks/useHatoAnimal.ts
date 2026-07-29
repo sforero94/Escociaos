@@ -11,6 +11,7 @@ import { getSupabase } from '@/utils/supabase/client';
 import { construirHatoConfigDesdeFilas, type FilaHatoConfig } from '@/utils/hatoConfigDesdeTabla';
 import { derivarEstadoReproductivo, type EstadoActualHatoRow, type EstadoReproductivoDerivado } from '@/utils/calculosHato';
 import { esNumeroProvisional } from '@/utils/importHato/overridesChapeta';
+import { obtenerFechaHoy } from '@/utils/fechas';
 import type {
   EstadoActualHatoViewRow,
   HatoAnimalRow,
@@ -148,7 +149,7 @@ export function useHatoAnimal(animalId: string | undefined) {
       if (torosRes.error) throw torosRes.error;
 
       const config = construirHatoConfigDesdeFilas((configRes.data ?? []) as FilaHatoConfig[]);
-      const hoy = new Date().toISOString().slice(0, 10);
+      const hoy = obtenerFechaHoy();
       const vista = estadoRes.data as EstadoActualHatoViewRow | null;
       const derivado = derivarEstadoReproductivo(filaFactRow(animalRow, vista), config, hoy);
 

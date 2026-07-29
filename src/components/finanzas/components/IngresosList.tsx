@@ -72,6 +72,12 @@ export function IngresosList({ onEdit }: IngresosListProps) {
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
   const [detalleItem, setDetalleItem] = useState<UnifiedFinanceItem | null>(null);
   const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
+  // `fin_ingresos.id` -> enlazado a una quincena del Hato (migración 070,
+  // `hato_produccion_quincenal.fin_ingreso_id`, ON DELETE RESTRICT) --
+  // alimenta el chip "Quincena Hato" y el mensaje de 23503 al borrar.
+  // `hato_produccion_quincenal` no está en `src/types/database.ts`
+  // (generado) -- mismo workaround `as any` que el resto del módulo hato.
+  const [ingresosConQuincenaHato, setIngresosConQuincenaHato] = useState<Set<string>>(new Set());
 
   // Catalogs
   const [negocios, setNegocios] = useState<Negocio[]>([]);
@@ -177,10 +183,13 @@ export function IngresosList({ onEdit }: IngresosListProps) {
       let ganadoResult: TransaccionGanado[] = [];
 
       if (incluirGanado) {
+        // `es_hato=false`: excluye las ventas del Hato Lechero (migración
+        // 059) -- no son ventas de ceba y no deben sumarse ni listarse aquí.
         let ganadoQuery = getSupabase()
           .from('fin_transacciones_ganado' as any)
           .select('*')
-          .eq('tipo', 'venta');
+          .eq('tipo', 'venta')
+          .eq('es_hato', false);
         if (fechaDesde) ganadoQuery = ganadoQuery.gte('fecha', fechaDesde);
         if (fechaHasta) ganadoQuery = ganadoQuery.lte('fecha', fechaHasta);
         if (filtros.usuario_id === SIN_USUARIO) ganadoQuery = ganadoQuery.is('created_by', null);
@@ -207,6 +216,25 @@ export function IngresosList({ onEdit }: IngresosListProps) {
 
       setIngresos(result as Ingreso[]);
       setGanadoItems(ganadoResult);
+
+      // Marca qué ingresos tienen una quincena del Hato enlazada (migración
+      // 070) -- una consulta aparte, nunca un join en la query principal: el
+      // resto de la app no debe cargar hato_produccion_quincenal, y el `*`
+      // de arriba tampoco lo trae. Fallo silencioso a propósito (mismo
+      // patrón que el resto de este catch): el chip es informativo, no debe
+      // tumbar el listado si la consulta de refuerzo falla.
+      const ids = (result as Ingreso[]).map((i) => i.id);
+      if (ids.length > 0) {
+        const { data: quincenas } = await (getSupabase() as any)
+          .from('hato_produccion_quincenal')
+          .select('fin_ingreso_id')
+          .in('fin_ingreso_id', ids);
+        setIngresosConQuincenaHato(
+          new Set(((quincenas ?? []) as { fin_ingreso_id: string }[]).map((q) => q.fin_ingreso_id)),
+        );
+      } else {
+        setIngresosConQuincenaHato(new Set());
+      }
     } catch {
       // silent
     } finally {
@@ -234,8 +262,18 @@ export function IngresosList({ onEdit }: IngresosListProps) {
       }
       toast.success(deleteTargetSource === 'ganado' ? 'Transaccion ganado eliminada' : 'Ingreso eliminado');
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Error desconocido';
-      toast.error('Error: ' + message);
+      // 23503 = violación de FK -- el único caso real hoy es
+      // `hato_produccion_quincenal.fin_ingreso_id` (ON DELETE RESTRICT,
+      // migración 070): el ingreso tiene una quincena del Hato enlazada y
+      // el único camino de borrado es desde Producción
+      // (`fn_hato_eliminar_quincena_venta`), nunca desde aquí.
+      const code = (error as { code?: string } | null)?.code;
+      if (code === '23503') {
+        toast.error('Este ingreso tiene una quincena de producción del Hato enlazada -- elimínala desde Hato Lechero → Producción, no desde aquí.');
+      } else {
+        const message = error instanceof Error ? error.message : 'Error desconocido';
+        toast.error('Error: ' + message);
+      }
     } finally {
       setEliminando(null);
       setDeleteTargetId(null);
@@ -474,6 +512,18 @@ export function IngresosList({ onEdit }: IngresosListProps) {
                   </span>
                 )}
 
+                {/* Quincena Hato badge (migración 070) -- avisa antes de
+                    editar/eliminar que esta fila tiene una contraparte de
+                    producción enlazada. `px-1.5`/`py-0.5`/`text-[10px]`
+                    (usados por el badge "Ganado" de arriba) están AUSENTES
+                    del Tailwind congelado (CLAUDE.md, caución "Frozen
+                    classes") -- se usan aquí solo clases verificadas vivas. */}
+                {item.source === 'ingreso' && ingresosConQuincenaHato.has(item.id) && (
+                  <span className="px-2 py-1 text-xs font-semibold rounded-md bg-blue-100 text-blue-700 flex-shrink-0">
+                    Quincena Hato
+                  </span>
+                )}
+
                 {/* Date — own column on desktop; on mobile it moves to the meta line below */}
                 <span className="hidden sm:block text-xs text-gray-400 w-[70px] flex-shrink-0">
                   {formatearFechaCorta(item.fecha)}
@@ -576,6 +626,7 @@ export function IngresosList({ onEdit }: IngresosListProps) {
         open={!!detalleItem}
         onOpenChange={(open) => { if (!open) setDetalleItem(null); }}
         nombreUsuario={nombreCreadoPor(detalleItem)}
+        esQuincenaHato={!!detalleItem && detalleItem.source === 'ingreso' && ingresosConQuincenaHato.has(detalleItem.id)}
         onEdit={() => {
           if (!detalleItem) return;
           if (detalleItem.source === 'ganado') setEditingGanado(detalleItem.raw as TransaccionGanado);

@@ -8,6 +8,7 @@ import { formatNumber, formatLongDate } from '@/utils/format';
 import { calcularFechaUltimoDiaPesaje } from '@/utils/calculosHato';
 import { useProduccionHato } from '../hooks/useProduccionHato';
 import type { HatoVacaActiva, HatoPesajeLeche } from '@/types/hato';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 interface FilaPesaje {
   animal: HatoVacaActiva;
@@ -46,7 +47,7 @@ export function PesajeSemanalGrid({ onSaved }: { onSaved?: () => void }) {
       ]);
       setDiaPesajeNombre(config.nombre || `día ISO ${config.iso}`);
 
-      const hoyIso = new Date().toISOString().slice(0, 10);
+      const hoyIso = obtenerFechaHoy();
       const fechaUsar = fechaObjetivo ?? calcularFechaUltimoDiaPesaje(hoyIso, config.iso);
       setFecha(fechaUsar);
 

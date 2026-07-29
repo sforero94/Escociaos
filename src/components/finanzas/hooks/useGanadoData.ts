@@ -44,11 +44,16 @@ export function useGanadoData() {
   const [loading, setLoading] = useState(false);
   const supabase = getSupabase();
 
+  // `es_hato = false` en las 5 consultas de este archivo: excluye las
+  // transacciones del Hato Lechero (migración 059) de los KPIs y reportes
+  // de Ganado -- una venta de vaca del hato no es una venta de ceba. Ver
+  // CLAUDE.md raíz, SOW 0 de `docs/plan_hato_produccion_rework.md`.
   async function sumTransacciones(desde: string, hasta: string, tipo: 'compra' | 'venta', field: 'valor_total' | 'kilos_pagados' = 'valor_total', finca?: string) {
     let q: any = supabase
       .from('fin_transacciones_ganado')
       .select(field)
       .eq('tipo', tipo)
+      .eq('es_hato', false)
       .gte('fecha', desde)
       .lte('fecha', hasta);
     if (finca) q = q.ilike('finca', finca);
@@ -137,7 +142,7 @@ export function useGanadoData() {
     setLoading(true);
     try {
       const { fecha_desde, fecha_hasta } = resolveFechas(filtros);
-      let q: any = supabase.from('fin_transacciones_ganado').select('tipo, finca, valor_total, kilos_pagados');
+      let q: any = supabase.from('fin_transacciones_ganado').select('tipo, finca, valor_total, kilos_pagados').eq('es_hato', false);
       if (fecha_desde) q = q.gte('fecha', fecha_desde);
       if (fecha_hasta) q = q.lte('fecha', fecha_hasta);
       if (finca) q = q.ilike('finca', finca);
@@ -173,6 +178,7 @@ export function useGanadoData() {
       let q: any = supabase
         .from('fin_transacciones_ganado')
         .select('fecha, tipo, cantidad_cabezas')
+        .eq('es_hato', false)
         .gte('fecha', `${year - 1}-01-01`)
         .lte('fecha', `${year}-12-31`);
       if (finca) q = q.ilike('finca', finca);
@@ -204,6 +210,7 @@ export function useGanadoData() {
       let q: any = supabase
         .from('fin_transacciones_ganado')
         .select('*')
+        .eq('es_hato', false)
         .order('fecha', { ascending: false });
       if (tipo) q = q.eq('tipo', tipo);
       if (finca) q = q.ilike('finca', finca);
@@ -230,7 +237,8 @@ export function useGanadoData() {
   const getFincas = async (): Promise<string[]> => {
     const { data } = await (supabase
       .from('fin_transacciones_ganado')
-      .select('finca') as any);
+      .select('finca')
+      .eq('es_hato', false) as any);
     if (!data) return [];
     // Deduplicate case-insensitively, keeping the first occurrence
     const seen = new Map<string, string>();
