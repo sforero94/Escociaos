@@ -49,12 +49,30 @@ tres elementos necesarios — `chequeo_vaca_id` (333/333), `sx_raw` de esa fila 
 Distribución: 174 macho vendido · 83 hembra retenida · 20 hembra vendida · 23 muerta/ambigua · el
 resto otros códigos.
 
+**Regla de sexo confirmada por el dueño (2026-07-29): `A` = hembra, `O` = macho, `+` = murió (por la
+cruz), y el número es la chapeta asignada a esa cría.** La letra inicial define el sexo en **toda** la
+familia `A*`/`O*` — `OV` (macho vendido), `AV` (hembra vendida), `A{n}` (hembra retenida, `{n}` =
+chapeta de la cría), `A+`/`O+` (murió) — sin excepción y sin ambigüedad. Esto **desacopla** dos
+preguntas que el código traía mezcladas en un mismo comentario: la ambigüedad real de `O+`/`A+` que
+señala `descomponerSX` (`calculosHato.ts:1382-1415`) es si el evento fue **parto o aborto** (una vaca
+puede reportar "cría muerta" sin que haya habido parto) — nunca el sexo, que ya viene resuelto por la
+letra. Cuando esa ambigüedad se resuelve como aborto, no hay cría que registrar, así que no hay sexo
+que persistir — coherente, no es un caso perdido.
+
+**No es una columna nueva.** `Sexo cría` ya existe en el template (`ENCABEZADOS_PLANILLA_CHEQUEO`,
+`FilaPlanillaChequeo.sexoCria`) — hoy está clasificada junto con Fecha Servicio/Toro/Estado/Tratamiento
+como columna "que el veterinario actualiza, queda en blanco" (`exportarPlanillaChequeo.ts:46-49`). El
+pedido del dueño cambia su tratamiento: pasa a comportarse como **Última Cría** — prefill con el
+último valor conocido, editable si Martha registra un parto nuevo en este chequeo. Es el mismo cambio
+de patrón que Fecha Servicio/Toro/Estado, no una pieza aparte.
+
 **Cierre en dos movimientos:**
 
 1. **Persistir el sexo/destino en el evento `parto`**, que es a donde pertenece (no a la fila de
-   chequeo): `datos.cria_sexo` + `datos.cria_destino`, derivados con `parseSX` — nunca un segundo
-   parser. Backfill de los 333 vía `chequeo_vaca_id → sx_raw`, y derivación en vivo en el commit path
-   para los que vengan. Lo que `parseSX` no resuelva queda **sin dato, nunca inventado**.
+   chequeo): `datos.cria_sexo` (`hembra`/`macho`, de la letra) + `datos.cria_destino` (`vendida`/
+   `retenida`/`muerta`, ya lo resuelve `parseSX`) + `datos.cria_numero` (la chapeta, ya existe como
+   `numero_cria`). Derivado con `parseSX` — nunca un segundo parser. Backfill de los 333 vía
+   `chequeo_vaca_id → sx_raw`, y derivación en vivo en el commit path para los que vengan.
 2. **Imprimirlo legible** (petición del dueño: "limpiar esa información para que sea más clara a la
    hora de leer"): en vez de reimprimir `OV` / `A 206`, la planilla dice **"Macho (vendido)"** /
    **"Hembra (retenida #206)"**.
@@ -65,10 +83,6 @@ resto otros códigos.
 > escribe a mano — la etiqueta legible ya no compromete el parseo. La ruta `.xlsx` de respaldo sí
 > necesita el alias; es un mapa chico y va con la Fase 1.
 
-**Pregunta abierta:** en `A+` / `O+` (cría muerta), ¿`A` y `O` siguen significando hembra y macho, o
-el código solo dice "murió"? Si es lo segundo, esas 23 filas quedan con destino conocido y **sexo sin
-dato** — no se asume.
-
 ---
 
 ## 3. Jobs to be done
@@ -76,7 +90,7 @@ dato** — no se asume.
 | # | Job | Quién | Estado |
 |---|---|---|---|
 | 1 | Llegar al corral con una hoja legible y escribible a mano | Martha | ❌ |
-| 2 | No re-preguntar lo que el sistema ya sabe — ver el último estado y solo anotar cambios | Martha / veterinario | ❌ falta sexo de la cría, fecha de servicio, toro, estado |
+| 2 | No re-preguntar lo que el sistema ya sabe — ver el último estado y solo anotar cambios | Martha / veterinario | ❌ falta sexo de la cría, fecha de servicio, toro; **Estado sí debe seguir pre-llenado** (confirmado por el dueño — "es el punto") |
 | 3 | Que lo impreso se **entienda de un vistazo**, sin descifrar códigos | Martha | ❌ `OV`/`A 206` sin traducir |
 | 4 | Pasar del papel al sistema sin transcribir a mano | Martha | ❌ hoy exige retipear en Excel |
 | 5 | Aprobar con confianza: ver qué va a cambiar y resolver lo ambiguo sin salir del flujo | Martha | ❌ diff de solo lectura |
@@ -179,7 +193,11 @@ Un día de trabajo que decide el orden de todo lo demás. No construir el endpoi
 - Exponer `ultimo_servicio_fecha`, `ultimo_servicio_toro_id`, `ultimo_tipo_servicio` y
   `ultimo_estado_chequeo` en `useAnimalesParaPlanillaChequeo` y mapearlos en la fila del export. El
   texto de la celda `Toro` se reconstruye con `textoCeldaToro`, **que ya existe** y antepone
-  `Toro `/`Ins ` — el prefijo exacto que `parseToro` reconoce.
+  `Toro `/`Ins ` — el prefijo exacto que `parseToro` reconoce. **`Estado` se pre-llena siempre**
+  (confirmado por el dueño: es el punto de arrastrar el chequeo anterior) — hoy solo 5 de 35 vacas
+  activas tienen `ultimo_estado_chequeo`, así que la mayoría de esa columna sale en blanco al
+  arrancar; eso es correcto ("sin dato, nunca inventado"), no un bug, y se va llenando chequeo a
+  chequeo a medida que el motor la deriva.
 - Universo: **sin cambios**, solo vacas adultas activas (D-A).
 - Alias de las etiquetas legibles en el parser `.xlsx` de respaldo.
 - Regla intacta: `null` → celda vacía, nunca `0` ni un valor inventado.
@@ -195,6 +213,11 @@ Requisitos de layout, que son también los que hacen viable el OCR:
 
 - Una fila por vaca, alto fijo, **cada celda escribible con recuadro visible** (el recuadro ancla la
   celda para el modelo).
+- **Letra ≥11pt** (confirmado por el dueño — es lo que hoy hace legible la planilla en papel) y
+  **35 filas en ~2 páginas** horizontal, que es el punto de referencia real: mismo orden de magnitud
+  que la planilla actual, así que el layout nuevo no debe alejarse de ahí sin una razón. Si con el
+  sexo de la cría y las columnas ampliadas de la Fase 1 el ancho ya no cabe en 2 páginas a esa letra,
+  la salida es **más páginas, nunca letra más chica** — la legibilidad manda sobre el conteo de hojas.
 - Columnas pre-llenadas en gris tenue; columnas a diligenciar en blanco con borde marcado.
 - Encabezado repetido, número de página, y un **código corto por página** (p. ej. `E7A3-p2`) que
   amarra la foto a este export específico.
@@ -246,11 +269,15 @@ descarta en silencio; ninguna fila ambigua se adjudica sola; toda escritura pasa
 
 ---
 
-## 8. Preguntas abiertas
+## 8. Preguntas cerradas (2026-07-29)
 
-1. En `A+` / `O+` (cría muerta): ¿`A`/`O` siguen significando hembra/macho, o el código solo dice que
-   murió? Determina si esas 23 filas llevan sexo o quedan sin dato (§2).
-2. ¿La planilla debe seguir mostrando la columna `Estado` pre-llenada? Hoy solo 5 de 35 vacas activas
-   tienen `ultimo_estado_chequeo`, así que saldría casi toda vacía — puede confundir más que ayudar.
-3. ¿Cuántas páginas salen a 35 filas con el alto de fila necesario para escribir a mano? Define si el
-   código de página es imprescindible o un lujo.
+1. **Sexo en `A+`/`O+`:** `A` = hembra, `O` = macho, `+` = murió, el número es la chapeta de la cría.
+   La letra siempre define el sexo, en toda la familia `A*`/`O*` — ver §2, ya reflejado en el diseño
+   del backfill.
+2. **Columna `Estado` pre-llenada:** sí, es el punto del arrastre incremental. Sale en blanco para las
+   30 vacas sin `ultimo_estado_chequeo` hoy — correcto, no es un bug — y se va llenando con el uso.
+3. **Tamaño de página:** ~2 páginas a letra ≥11pt es el punto de referencia. Fija el presupuesto de
+   ancho de columna de la Fase 2; si las columnas nuevas no caben ahí, se agregan páginas antes que
+   reducir la letra.
+
+## 9. Preguntas abiertas
