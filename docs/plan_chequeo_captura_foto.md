@@ -204,7 +204,9 @@ Un día de trabajo que decide el orden de todo lo demás. No construir el endpoi
   arrancar; eso es correcto ("sin dato, nunca inventado"), no un bug, y se va llenando chequeo a
   chequeo a medida que el motor la deriva.
 - Universo: **sin cambios**, solo vacas adultas activas (D-A).
-- Alias de las etiquetas legibles en el parser `.xlsx` de respaldo.
+- ~~Alias de las etiquetas legibles en el parser `.xlsx` de respaldo.~~ **No hace falta**: el `.xlsx`
+  emite formas crudas re-parseables (`sx_raw` verbatim, `textoCeldaToro`, `textoCeldaEstado`), así que
+  el parser queda intacto. La etiqueta legible es exclusiva del PDF (Fase 2).
 - Regla intacta: `null` → celda vacía, nunca `0` ni un valor inventado.
 
 Requiere una migración chica (o script de backfill) + desplegar el edge function.
@@ -293,9 +295,29 @@ motor intacta, y commit propio. Una fase no arranca hasta que la anterior pasó 
 | Fase | Estado | Gate |
 |---|---|---|
 | **0** — Spike OCR | ⛔ **Bloqueada por insumo externo** | Necesita 2–3 fotos de planillas reales ya diligenciadas por Martha. No se puede simular: el objeto de medición ES su letra. **No bloquea 1–4**, que el plan ya declara independientes del resultado. |
-| **1** — Contenido de la planilla | 🔄 en ejecución | 4 columnas pre-llenadas (sexo cría, fecha servicio, toro, estado) + función pura de sexo + paridad regenerada. |
-| **2** — PDF imprimible | ⏸ pendiente de Fase 1 | 12 columnas / 35 filas / ≥11pt / ~2 páginas horizontal. Aritmética verificada: ~217mm de ancho necesario contra 259mm útiles en carta horizontal; 35 filas a ~8mm → 2 páginas. |
+| **1** — Contenido de la planilla | ✅ **cerrada** (2026-07-29) | Gate verificado en el main loop, no solo reportado por el agente: **1618 tests verdes** (68 archivos), `tsc --noEmit` exit 0, paridad del motor verde tras regenerar. Las 4 columnas se pre-llenan; `derivarSexoCria` es pura y cubre las 6 ramas de `TipoSX`. Ver notas de cierre abajo. |
+| **2** — PDF imprimible | 🔄 siguiente | 12 columnas / 35 filas / ≥11pt / ~2 páginas horizontal. Aritmética verificada: ~217mm de ancho necesario contra 259mm útiles en carta horizontal; 35 filas a ~8mm → 2 páginas. |
 | **3** — Foto + ventana de corrección | ⏸ | Endpoint + confianza por celda + anti-row-drift + revisión editable. |
 | **4** — Round-trip | ⏸ | Exportar → diligenciar → cargar → aprobar → re-exportar sin eventos duplicados. |
+
+### Notas de cierre — Fase 1
+
+- **`derivarSexoCria` resuelve 332 de 333 partos.** `sx_raw` está en 333/333, así que el camino
+  autoritativo casi nunca necesita el respaldo. El único `null` es el parto `gem+` (gemelar): la
+  planilla no dice el sexo de cada gemelo, así que no hay nada que derivar — correcto, no una falla.
+- **El respaldo por `cria_destino` se validó contra los datos, no se supuso.** 103/103 `retenida` con
+  letra `A`, 27/27 `hembra_vendida` con `A`, 179/179 `macho_vendido` con `O`. Y `'muerta'` está
+  **mezclado** (16 `O` / 7 `A`), que es exactamente por lo que ese valor devuelve `null` en vez de
+  adivinar. Una justificación inventada ("la planilla TERNERAS solo registra hembras") se reemplazó
+  por esta evidencia en el docstring.
+- **Coherencia fecha↔sexo garantizada por construcción**: el hook solo usa el sexo si la fecha del
+  parto encontrado coincide con `ultimo_parto_fecha` de la vista. Si no coinciden, celda vacía — la
+  planilla nunca puede mostrar la fecha de una cría con el sexo de otra.
+- **`Estado` solo emite forma cruda cuando existe y round-trippea:** `vacia_apta`→`ok`,
+  `vacia_problema`→`rech` (verificado contra `parseEstado` en test). `fecha_heredada` y `desconocido`
+  salen **vacíos**: su significado vive en `estado_raw`, que la vista no expone, y fabricar un texto
+  haría que el diff lo leyera como cambio real.
+- **`regenerar-copias-servidor.py` no soporta `--check`**: ignora el flag y escribe siempre. El
+  chequeo real de paridad es el test `calculosHatoParidad`, no el script.
 
 ## 10. Preguntas abiertas

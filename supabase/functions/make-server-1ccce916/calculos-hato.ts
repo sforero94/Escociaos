@@ -1529,9 +1529,13 @@ function sexoDesdeTipoSX(tipo: TipoSX): SexoCria | null {
  * (conserva la letra, así que resuelve incluso los casos que `cria_destino`
  * ya no puede distinguir); si ese camino no determina nada, se cae a
  * `cria_destino`, que basta para `macho_vendido`/`hembra_vendida`/`retenida`
- * (esta última es hembra por definición: la planilla TERNERAS solo registra
- * hembras) pero no para `muerta` -- ahí `A+` y `O+` colapsan en el mismo
- * valor y la letra ya no está disponible.
+ * pero no para `muerta`. El respaldo es sólido porque esos tres valores solo
+ * pueden provenir de una letra: `retenida` siempre viene de un código `A{n}`
+ * (verificado contra los 333 partos de producción el 2026-07-29: 103/103
+ * `retenida` con letra `A`, 27/27 `hembra_vendida` con `A`, 179/179
+ * `macho_vendido` con `O`). `'muerta'` es el único que NO se puede resolver
+ * así: recibe tanto `A+` como `O+` (16 con `O` y 7 con `A` en producción), de
+ * modo que la letra ya se perdió y el sexo queda sin dato.
  */
 export function derivarSexoCria(input: InputSexoCria): SexoCria | null {
   const sxRaw = input.sxRaw;
