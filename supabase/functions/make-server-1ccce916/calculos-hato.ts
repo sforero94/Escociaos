@@ -1459,6 +1459,108 @@ export function descomponerSX(input: InputDescomposicionSX): ResultadoDescomposi
   return { eventos, issues };
 }
 
+// ----------------------------------------------------------------------------
+// 3.b Sexo de la cría -- se DERIVA en lectura, nunca se persiste.
+//
+// POR QUÉ NO HAY COLUMNA: el sexo ya está contenido dos veces en lo que
+// `hato_eventos` guarda de cada parto -- en `sx_raw` (la celda SX verbatim) y,
+// de forma parcial, en `cria_destino`. Agregar una tercera copia obligaría a
+// mantener sincronizados tres campos que salen del MISMO parser; una columna
+// nueva solo puede desincronizarse. Derivar en lectura no puede.
+//
+// REGLA DEL DUEÑO (2026-07-29): en el código SX la LETRA define el sexo en
+// toda la familia -- `A` = hembra, `O` = macho -- y `+` significa que la cría
+// murió. La ambigüedad que `descomponerSX` documenta para `O+`/`A+` es si el
+// evento fue parto o aborto, NUNCA cuál era el sexo.
+// ----------------------------------------------------------------------------
+
+export type SexoCria = 'hembra' | 'macho';
+
+export interface InputSexoCria {
+  /** `hato_eventos.sx_raw` del evento `parto` -- la celda SX de la planilla
+   * verbatim. Fuente AUTORITATIVA: es la única que conserva la letra, y se
+   * lee con el `parseSX` que ya existe (jamás un segundo intérprete de SX,
+   * regla dura del módulo). */
+  sxRaw?: string | null;
+  /** `hato_eventos.cria_destino` -- respaldo cuando `sx_raw` falta o su tipo
+   * no determina un sexo. Solo alcanza para 3 de sus 5 valores: la letra ya
+   * se perdió en `'muerta'` (viene tanto de `A+` como de `O+`) y `'aborto'`
+   * no tiene cría. */
+  criaDestino?: CriaDestino | null;
+}
+
+/** Sexo que implica cada `TipoSX`, siguiendo la letra inicial. Los tipos que
+ * no son un parto con cría identificable (aborto, gemelar -- dos crías, la
+ * planilla no dice sus sexos --, estados, basura) no determinan sexo: `null`,
+ * nunca un valor por defecto. */
+function sexoDesdeTipoSX(tipo: TipoSX): SexoCria | null {
+  switch (tipo) {
+    case 'ov': // O = macho, vendido
+    case 'o_mas': // O = macho, murió
+      return 'macho';
+    case 'av': // A = hembra, vendida
+    case 'a_n': // A = hembra, retenida (el número es la chapeta de la cría)
+    case 'a_mas': // A = hembra, murió
+      return 'hembra';
+    case 'aborto':
+    case 'gemelar':
+    case 'vacia':
+    case 'vendida':
+    case 'cero':
+    case 'mv':
+    case 'desconocido':
+    case 'vacio':
+      return null;
+    default: {
+      const _exhaustivo: never = tipo;
+      void _exhaustivo;
+      return null;
+    }
+  }
+}
+
+/**
+ * Sexo de la cría del último parto conocido, o `null` cuando el dato no es
+ * determinable -- nunca se inventa (misma regla de "sin dato, nunca 0" del
+ * resto del módulo: una cría sin sexo legible se imprime en blanco, no como
+ * "macho por defecto").
+ *
+ * Orden de precedencia, no acumulativo: primero `sx_raw` vía `parseSX`
+ * (conserva la letra, así que resuelve incluso los casos que `cria_destino`
+ * ya no puede distinguir); si ese camino no determina nada, se cae a
+ * `cria_destino`, que basta para `macho_vendido`/`hembra_vendida`/`retenida`
+ * (esta última es hembra por definición: la planilla TERNERAS solo registra
+ * hembras) pero no para `muerta` -- ahí `A+` y `O+` colapsan en el mismo
+ * valor y la letra ya no está disponible.
+ */
+export function derivarSexoCria(input: InputSexoCria): SexoCria | null {
+  const sxRaw = input.sxRaw;
+  if (sxRaw !== null && sxRaw !== undefined && String(sxRaw).trim() !== '') {
+    const sexo = sexoDesdeTipoSX(parseSX(sxRaw).tipo);
+    if (sexo) return sexo;
+  }
+
+  switch (input.criaDestino) {
+    case 'macho_vendido':
+      return 'macho';
+    case 'hembra_vendida':
+    case 'retenida':
+      return 'hembra';
+    // `'muerta'` viene de `A+` Y de `O+`: la letra ya se perdió. `'aborto'`
+    // no tiene cría. Ninguno de los dos determina sexo.
+    case 'muerta':
+    case 'aborto':
+    case null:
+    case undefined:
+      return null;
+    default: {
+      const _exhaustivo: never = input.criaDestino;
+      void _exhaustivo;
+      return null;
+    }
+  }
+}
+
 // ============================================================================
 // BLOQUE 4 — Derivación de estado reproductivo (v_hato_estado_actual + config)
 // ============================================================================

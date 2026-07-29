@@ -16,6 +16,13 @@
 // Figma alignment spec §5 (Wave 2a) agrega: `HatoPageHeader` compartido y
 // filas clicables -> `/hato-lechero/chequeos/:id` (`ChequeoDetalle.tsx`) --
 // "de lo contrario es una lista inútil" (palabras del dueño).
+//
+// Fase 1 de `docs/plan_chequeo_captura_foto.md` (2026-07-29): la planilla
+// exportada desde acá pasa a ser INCREMENTAL. `filaPlanillaPrellenada` ya no
+// manda `null` fijo en Sexo cría / Fecha Servicio / Toro / Estado -- las
+// cuatro se arrastran del último chequeo conocido (`ultimo_estado_chequeo`
+// hoy solo existe para una minoría de vacas, así que esa columna sale mayormente
+// en blanco al arrancar: es correcto, se llena chequeo a chequeo).
 
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -32,8 +39,11 @@ import {
   construirTituloHojaChequeo,
   construirNombreHojaChequeo,
   isoATextoDDMMYYYY,
+  textoCeldaToro,
+  textoCeldaEstado,
   type FilaPlanillaChequeo,
 } from '@/utils/hato/exportarPlanillaChequeo';
+import type { AnimalParaPlanillaChequeo } from './hooks/useAnimalesParaPlanillaChequeo';
 import { obtenerFechaHoy } from '@/utils/fechas';
 
 /**
@@ -43,30 +53,35 @@ import { obtenerFechaHoy } from '@/utils/fechas';
  * quien transcriba las notas del veterinario debe corregir la celda del
  * título a la fecha real del examen antes de volver a subir el archivo
  * (misma columna que gobierna la fecha de cualquier chequeo, ver
- * `parseFechaChequeo`). Las columnas que el veterinario actualiza (Sexo
- * cría, Fecha Servicio, Toro, Estado, Tratamiento) quedan en blanco;
- * identidad + PL/#Partos/Última Cría + Secar/Parto Probable (referencia de
- * solo lectura, ya derivados por el motor) se pre-llenan.
+ * `parseFechaChequeo`).
+ *
+ * Fase 1 de `docs/plan_chequeo_captura_foto.md`: la planilla es INCREMENTAL
+ * -- se pre-llena TODO lo que el sistema ya sabe, incluidas Sexo cría, Fecha
+ * Servicio, Toro y Estado, que antes salían en `null` fijo desde acá aunque
+ * la vista ya expusiera tres de las cuatro. Ese arrastre es el punto: Martha
+ * solo anota lo que cambió, no vuelve a transcribir el chequeo anterior.
+ * Único campo que sigue siempre vacío: `Tratamiento` (no hay de dónde
+ * arrastrarlo -- vive en `hato_tratamientos`, otro flujo).
+ *
+ * Los valores se escriben en su forma CRUDA, re-parseable (`sx_raw`
+ * verbatim, `Toro `/`Ins ` vía `textoCeldaToro`, `ok`/`rech` vía
+ * `textoCeldaEstado`): este `.xlsx` es el artefacto de máquina, la etiqueta
+ * legible es del PDF de la Fase 2. `null` -> celda vacía SIEMPRE, nunca `0`
+ * ni un valor inventado.
  */
-function filaPlanillaPrellenada(animal: {
-  numero: number | null;
-  nombre: string | null;
-  pl: number | null;
-  numPartos: number;
-  ultimoPartoFecha: string | null;
-  fechaSecar: string | null;
-  fechaProbableParto: string | null;
-}): FilaPlanillaChequeo {
+function filaPlanillaPrellenada(animal: AnimalParaPlanillaChequeo): FilaPlanillaChequeo {
   return {
     numero: animal.numero,
     nombre: animal.nombre,
     pl: animal.pl,
     numPartos: animal.numPartos,
     ultimaCria: isoATextoDDMMYYYY(animal.ultimoPartoFecha),
-    sexoCria: null,
-    fechaServicio: null,
-    toro: null,
-    estado: null,
+    // `sexoCriaRaw` (no `sexoCria`): el código SX crudo del MISMO parto del
+    // que sale `ultimaCria`, así que fecha y sexo nunca se contradicen.
+    sexoCria: animal.sexoCriaRaw,
+    fechaServicio: isoATextoDDMMYYYY(animal.ultimoServicioFecha),
+    toro: textoCeldaToro(animal.toroNombre, animal.tipoServicio),
+    estado: textoCeldaEstado(animal.ultimoEstadoChequeo),
     secar: isoATextoDDMMYYYY(animal.fechaSecar),
     partoProbable: isoATextoDDMMYYYY(animal.fechaProbableParto),
     tratamiento: null,
