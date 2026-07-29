@@ -54,45 +54,45 @@ function fila(overrides: Partial<FilaPlanillaChequeo> & { numero: number; nombre
 }
 
 describe('etiquetaSexoCria (D-E: el PDF imprime lenguaje claro, no el código crudo)', () => {
-  it('macho vendido -> "Macho (vendido)" (el crudo era `OV`)', () => {
+  it('macho vendido -> "M vendido" (el crudo era `OV`)', () => {
     expect(
       etiquetaSexoCria({ sexoCria: 'macho', criaDestino: 'macho_vendido', sexoCriaRaw: 'OV' }),
-    ).toBe('Macho (vendido)');
+    ).toBe('M vendido');
   });
 
-  it('hembra retenida con chapeta -> "Hembra (retenida #206)" (el crudo era `A 206`)', () => {
+  it('hembra retenida con chapeta -> "H retenida #206" (el crudo era `A 206`)', () => {
     expect(
       etiquetaSexoCria({ sexoCria: 'hembra', criaDestino: 'retenida', sexoCriaRaw: 'A 206' }),
-    ).toBe('Hembra (retenida #206)');
+    ).toBe('H retenida #206');
   });
 
   it('hembra retenida SIN número en la celda SX -> omite la chapeta, jamás la inventa', () => {
     expect(etiquetaSexoCria({ sexoCria: 'hembra', criaDestino: 'retenida', sexoCriaRaw: 'A' })).toBe(
-      'Hembra (retenida)',
+      'H retenida',
     );
     expect(etiquetaSexoCria({ sexoCria: 'hembra', criaDestino: 'retenida', sexoCriaRaw: null })).toBe(
-      'Hembra (retenida)',
+      'H retenida',
     );
   });
 
-  it('hembra vendida -> "Hembra (vendida)" (el crudo era `AV`)', () => {
+  it('hembra vendida -> "H vendida" (el crudo era `AV`)', () => {
     expect(
       etiquetaSexoCria({ sexoCria: 'hembra', criaDestino: 'hembra_vendida', sexoCriaRaw: 'AV' }),
-    ).toBe('Hembra (vendida)');
+    ).toBe('H vendida');
   });
 
-  it('cría muerta CON sexo legible (`A+` -> la letra sí dice hembra) -> "Hembra (murió)"', () => {
+  it('cría muerta CON sexo legible (`A+` -> la letra sí dice hembra) -> "H murió"', () => {
     expect(etiquetaSexoCria({ sexoCria: 'hembra', criaDestino: 'muerta', sexoCriaRaw: 'A+' })).toBe(
-      'Hembra (murió)',
+      'H murió',
     );
     expect(etiquetaSexoCria({ sexoCria: 'macho', criaDestino: 'muerta', sexoCriaRaw: 'O+' })).toBe(
-      'Macho (murió)',
+      'M murió',
     );
   });
 
-  it('cría muerta SIN sexo legible -> "Cría muerta" (es el caso real: `cria_destino=muerta` viene tanto de A+ como de O+)', () => {
+  it('cría muerta SIN sexo legible -> "Cría murió" (es el caso real: `cria_destino=muerta` viene tanto de A+ como de O+)', () => {
     expect(etiquetaSexoCria({ sexoCria: null, criaDestino: 'muerta', sexoCriaRaw: null })).toBe(
-      'Cría muerta',
+      'Cría murió',
     );
   });
 
@@ -253,7 +253,16 @@ describe('layout del PDF -- presupuesto de ancho y clasificación de columnas', 
       PL: '18',
       '# Partos': '12',
       'Última Cría': '22/12/2026',
-      'Sexo cría': 'Hembra (retenida #206)',
+      // Derivada de la función REAL, nunca un literal: si alguien cambia la
+      // redacción de la etiqueta, el ancho requerido se recalcula solo y este
+      // test sigue midiendo la salida verdadera. Con un literal, la etiqueta y
+      // su presupuesto de ancho se desincronizan en silencio (pasó al acortar
+      // la etiqueta el 2026-07-29: el fixture seguía pidiendo 43,86mm).
+      'Sexo cría': etiquetaSexoCria({
+        sexoCria: 'hembra',
+        criaDestino: 'retenida',
+        sexoCriaRaw: 'A 206',
+      })!,
       'Fecha Servicio': '22/12/2026',
       Toro: 'Ins Holstein',
       Estado: 'rech',
@@ -272,9 +281,23 @@ describe('layout del PDF -- presupuesto de ancho y clasificación de columnas', 
 });
 
 describe('construirDocumentoPlanillaChequeoPDF -- documento real con jspdf + jspdf-autotable', () => {
-  /** 35 vacas activas: el universo real de la planilla (D-A del plan). Se
-   * intercala la etiqueta LARGA de `Sexo cría` para que la medición de páginas
-   * refleje el peor caso realista (esas celdas se envuelven a dos líneas). */
+  /** 35 vacas activas: el universo real de la planilla (D-A del plan).
+   *
+   * Las etiquetas de `Sexo cría` se DERIVAN de `etiquetaSexoCria`, nunca se
+   * escriben a mano: se intercala la más larga (`retenida` con chapeta) con una
+   * corta para que la medición de páginas refleje el peor caso REAL. Con
+   * literales, este fixture medía una etiqueta que la función ya no produce y
+   * el conteo de páginas dejaba de significar nada. */
+  const etiquetaLarga = etiquetaSexoCria({
+    sexoCria: 'hembra',
+    criaDestino: 'retenida',
+    sexoCriaRaw: 'A 206',
+  })!;
+  const etiquetaCorta = etiquetaSexoCria({
+    sexoCria: 'macho',
+    criaDestino: 'macho_vendido',
+    sexoCriaRaw: 'OV',
+  })!;
   const filas35: FilaPlanillaChequeo[] = Array.from({ length: 35 }, (_, i) =>
     fila({
       numero: 100 + i,
@@ -282,7 +305,7 @@ describe('construirDocumentoPlanillaChequeoPDF -- documento real con jspdf + jsp
       pl: 18,
       numPartos: 4,
       ultimaCria: '22/7/2026',
-      sexoCria: i % 3 === 0 ? 'Hembra (retenida #206)' : 'Macho (vendido)',
+      sexoCria: i % 3 === 0 ? etiquetaLarga : etiquetaCorta,
       fechaServicio: '5/1/2026',
       toro: 'Ins Nitro',
       estado: 'ok',

@@ -59,10 +59,26 @@ export interface InputEtiquetaSexoCria {
   sexoCriaRaw: string | null;
 }
 
-/** "Macho"/"Hembra" -- el sexo ya derivado por el motor, nunca inferido acá. */
+/** `'M'`/`'H'` -- el sexo ya derivado por el motor, nunca inferido acá.
+ *
+ * POR QUÉ LA INICIAL Y NO LA PALABRA COMPLETA (decisión del dueño 2026-07-29):
+ * el ancho de la planilla estaba asignado al revés de lo que Martha realmente
+ * escribe. Medido sobre el histórico de `hato_chequeo_vacas`: en la celda SX
+ * escribe **3 caracteres en promedio** (máx. 11), mientras en `Tratamiento`
+ * escribe **12 en promedio y hasta 54** (p. ej. "gestar/estr y 7 dias
+ * cefalexina lavadorepetir fertagil"). Con `Hembra (retenida #206)` la columna
+ * `Sexo cría` se llevaba 44mm -- la más ancha de la hoja -- y `Tratamiento`
+ * quedaba con 21mm, la más angosta de las que se diligencian.
+ *
+ * La tabla ya consumía 254,5 de los 259,4mm útiles, así que ensanchar
+ * `Tratamiento` obligaba a quitar de algún lado. `M`/`H` sigue siendo lenguaje
+ * legible (no el código crudo `OV`/`A 206`, que es lo que D-E prohíbe
+ * imprimir) y libera el ancho sin tocar ninguno de los tres requisitos duros:
+ * 11pt en los datos, 2 páginas, y nada de códigos en el PDF. La columna se
+ * titula "Sexo cría", así que la inicial no es ambigua en su contexto. */
 function textoSexo(sexo: SexoCria | null): string | null {
-  if (sexo === 'macho') return 'Macho';
-  if (sexo === 'hembra') return 'Hembra';
+  if (sexo === 'macho') return 'M';
+  if (sexo === 'hembra') return 'H';
   return null;
 }
 
@@ -112,12 +128,13 @@ function textoDestino(destino: CriaDestino | null, numeroCria: number | null): s
  *
  * | sexo | destino | etiqueta |
  * |---|---|---|
- * | Macho | vendido | `Macho (vendido)` |
- * | Hembra | retenida + chapeta | `Hembra (retenida #206)` |
- * | Hembra | vendida | `Hembra (vendida)` |
- * | Hembra | murió | `Hembra (murió)` |
- * | Macho/Hembra | — | `Macho` / `Hembra` (el sexo sí es dato) |
- * | — | murió | `Cría muerta` (es el caso real: `cria_destino='muerta'` NO
+ * | Macho | vendido | `M vendido` |
+ * | Hembra | retenida + chapeta | `H retenida #206` |
+ * | Hembra | vendida | `H vendida` |
+ * | Hembra | murió | `H murió` |
+ * | Macho/Hembra | — | `Macho` / `Hembra` (sin destino que lo acompañe, la
+ * |   |   | inicial sola sería críptica: aquí sí va la palabra completa) |
+ * | — | murió | `Cría murió` (es el caso real: `cria_destino='muerta'` NO
  * |   |   | determina el sexo, viene tanto de `A+` como de `O+`) |
  * | — | retenida/vendida | `Cría retenida #206` / `Cría vendida` |
  * | — | (SX = `gem+`) | `Parto gemelar` (la planilla no dice el sexo de cada
@@ -136,9 +153,11 @@ export function etiquetaSexoCria(input: InputEtiquetaSexoCria): string | null {
   const sexo = textoSexo(input.sexoCria);
   const destino = textoDestino(input.criaDestino, numeroCria);
 
-  if (sexo && destino) return `${sexo} (${destino})`;
-  if (sexo) return sexo;
-  if (destino === 'murió') return 'Cría muerta';
+  // Sin paréntesis: con el sexo abreviado a inicial, `H retenida #206` se lee
+  // igual de claro que `Hembra (retenida #206)` y ahorra dos caracteres más.
+  if (sexo && destino) return `${sexo} ${destino}`;
+  if (sexo) return sexo === 'M' ? 'Macho' : 'Hembra';
+  if (destino === 'murió') return 'Cría murió';
   if (destino) return `Cría ${destino}`;
   // Parto gemelar: no hay sexo (son dos crías) ni destino registrado, pero el
   // código SX sí dice que fue gemelar -- dato real, leído por el único parser
@@ -233,12 +252,20 @@ export function construirFilasPlanillaPDF(filas: readonly FilaPlanillaChequeo[])
  * - `Nombre`: `BRILLANTINA` (el nombre más largo del hato) mide 24,87mm -> 28mm.
  * - `Toro`: `Ins Holstein` (raza-como-nombre-de-toro, el caso más largo) mide
  *   20,18mm -> 24mm.
- * - `Sexo cría` es la más ancha (44mm) porque es la única que lleva una FRASE:
- *   `Hembra (retenida #206)` mide 40,86mm. Es consecuencia directa de D-E, y
- *   por eso se le dio el ancho antes que bajar la letra (la legibilidad manda
- *   sobre el conteo de hojas, plan §6).
+ * - `Sexo cría` lleva una FRASE, no un dato corto: `H retenida #206` (el caso
+ *   real más largo) mide 27,40mm -> 31mm de columna.
+ * - `Tratamiento` es la columna donde Martha MÁS escribe y por eso recibe el
+ *   ancho liberado por la etiqueta compacta: 37mm. El reparto no se eligió a
+ *   ojo sino midiendo el histórico de `hato_chequeo_vacas` (2026-07-29): SX
+ *   promedia 3 caracteres escritos a mano y `TTTO` promedia 12 con máximos de
+ *   54. La versión anterior asignaba 44mm a SX y 21mm a TTTO -- exactamente al
+ *   revés de la necesidad real. Ver la nota de `textoSexo`.
  * - Las de referencia pura (`#`, `# Partos`) llevan lo justo para su contenido
  *   conocido: nadie escribe ahí.
+ *
+ * El total queda en 257,5mm de los 259,4 útiles: 1,9mm de holgura. Cualquier
+ * columna nueva o más ancha exige quitar de otra, ir a oficio, o aceptar una
+ * 3ª página -- no hay margen escondido.
  */
 export const ANCHOS_COLUMNAS_PDF_MM: readonly number[] = [
   10, // #
@@ -246,13 +273,13 @@ export const ANCHOS_COLUMNAS_PDF_MM: readonly number[] = [
   10, // PL
   13.5, // # Partos
   22.5, // Última Cría
-  44, // Sexo cría
+  31, // Sexo cría
   22.5, // Fecha Servicio
   24, // Toro
   14, // Estado
   22.5, // Secar
   22.5, // Parto Probable
-  21, // Tratamiento
+  37, // Tratamiento
 ];
 
 /** Ancho total de la tabla = suma exacta de los anchos de columna. Se le pasa
