@@ -402,13 +402,53 @@ export interface HatoPesajeRow {
   animal: { numero: number | null; nombre: string | null } | null;
 }
 
+/**
+ * Fila cruda de `hato_produccion_quincenal` tal como la devuelve PostgREST,
+ * con el embed `fin_ingreso:fin_ingresos(cantidad)` (migración 070, FK
+ * `fin_ingreso_id`). `litros_total` es la columna de la tabla — para
+ * `origen_dato='medido'` es `NULL` A PROPÓSITO (los litros reales viven en
+ * `fin_ingresos.cantidad`, ver `COMMENT ON COLUMN` de la migración 070);
+ * solo para `origen_dato='derivado_mensual'` (backfill) es la partición
+ * real. Ningún consumidor debe leer `litros_total` directo — usar
+ * `resolverLitrosQuincenal`.
+ */
+export interface HatoProduccionQuincenalDbRow {
+  anio: number;
+  mes: number;
+  quincena: number;
+  fecha_inicio: string | null;
+  fecha_fin: string | null;
+  litros_total: number | null;
+  origen_dato: 'medido' | 'derivado_mensual';
+  litros_pomar_confirmado: number | null;
+  num_vacas_ordeno: number | null;
+  notas: string | null;
+  fin_ingreso: { cantidad: number | null } | null;
+}
+
+/**
+ * Litros reales de una quincena, sin importar `origen_dato` (migración
+ * 070): 'medido' los lee del ingreso enlazado (`fin_ingresos.cantidad`,
+ * vía el embed `fin_ingreso`); 'derivado_mensual' los lee de la columna
+ * `litros_total` (la partición del backfill, que no tiene otro lugar
+ * donde vivir). Único punto de lectura de "litros de esta quincena" en
+ * este archivo — nunca `fila.litros_total` directo.
+ */
+export function resolverLitrosQuincenal(fila: HatoProduccionQuincenalDbRow): number | null {
+  return fila.origen_dato === 'medido' ? (fila.fin_ingreso?.cantidad ?? null) : fila.litros_total;
+}
+
+/** Fila de producción quincenal YA con los litros resueltos (ver
+ * `resolverLitrosQuincenal`) — la forma que consume el resto de este
+ * archivo (y que ve Esco). `litros_total` es `null` solo si el dato
+ * subyacente está genuinamente ausente (nunca 0 fabricado). */
 export interface HatoProduccionQuincenalRow {
   anio: number;
   mes: number;
   quincena: number;
   fecha_inicio: string | null;
   fecha_fin: string | null;
-  litros_total: number;
+  litros_total: number | null;
   litros_pomar_confirmado: number | null;
   num_vacas_ordeno: number | null;
   notas: string | null;
@@ -448,7 +488,7 @@ export interface ProduccionSummary {
     anio: number;
     mes: number;
     quincena: number;
-    litros_total: number;
+    litros_total: number | null;
     litros_por_vaca: number | null;
   } | null;
 }
@@ -463,7 +503,7 @@ export interface ProduccionSummary {
 export function buildProduccionSummary(params: {
   periodo: { desde: string; hasta: string };
   pesajes: HatoPesajeRow[];
-  produccionQuincenal: HatoProduccionQuincenalRow[];
+  produccionQuincenal: HatoProduccionQuincenalDbRow[];
 }): ProduccionSummary {
   const { periodo, pesajes, produccionQuincenal } = params;
 
@@ -491,12 +531,27 @@ export function buildProduccionSummary(params: {
   const promedioLitrosPorPesaje = pesajes.length > 0 ? Math.round((sumaTotalPesajes / pesajes.length) * 10) / 10 : null;
 
   const quincenas: ProduccionQuincenalConProductividad[] = produccionQuincenal
-    .map((q) => ({
-      ...q,
-      litros_por_vaca: calcularProductividad(q.litros_total, q.num_vacas_ordeno),
-      pendiente_conciliacion: q.litros_pomar_confirmado == null,
-      diferencia_pomar: q.litros_pomar_confirmado != null ? q.litros_pomar_confirmado - q.litros_total : null,
-    }))
+    .map((qDb) => {
+      const litrosTotal = resolverLitrosQuincenal(qDb);
+      const q: HatoProduccionQuincenalRow = {
+        anio: qDb.anio,
+        mes: qDb.mes,
+        quincena: qDb.quincena,
+        fecha_inicio: qDb.fecha_inicio,
+        fecha_fin: qDb.fecha_fin,
+        litros_total: litrosTotal,
+        litros_pomar_confirmado: qDb.litros_pomar_confirmado,
+        num_vacas_ordeno: qDb.num_vacas_ordeno,
+        notas: qDb.notas,
+      };
+      return {
+        ...q,
+        litros_por_vaca: calcularProductividad(litrosTotal, q.num_vacas_ordeno),
+        pendiente_conciliacion: q.litros_pomar_confirmado == null,
+        diferencia_pomar:
+          q.litros_pomar_confirmado != null && litrosTotal != null ? q.litros_pomar_confirmado - litrosTotal : null,
+      };
+    })
     .sort((a, b) => (a.anio !== b.anio ? b.anio - a.anio : a.mes !== b.mes ? b.mes - a.mes : b.quincena - a.quincena));
 
   const masReciente = quincenas[0] ?? null;

@@ -784,3 +784,740 @@ describe('contrato de esquema — Hato Lechero S1 (053-060)', () => {
     ).toEqual([]);
   });
 });
+
+/**
+ * Contrato de esquema — SOW 1 del rework de Producción (Hato Lechero),
+ * migraciones 070/071 (`docs/plan_hato_produccion_rework.md` §2/§3/§6
+ * "SOW 1"). Mismo estilo que el bloque 053-060 de arriba: test estático
+ * puro sobre el TEXTO de los archivos, sin conexión a DB.
+ *
+ * Test surface exigido explícitamente por el brief (§6, SOW 1): el índice
+ * único PARCIAL (no global) sobre `fin_ingreso_id`, `ON DELETE RESTRICT`
+ * en `hato_produccion_quincenal.fin_ingreso_id` vs. `SET NULL` en
+ * `hato_eventos.fin_ingreso_id`, la AUSENCIA de `SECURITY DEFINER` en los
+ * 3 RPC, la PRESENCIA de `SECURITY DEFINER` en el trigger inverso, y que
+ * 071 NO contenga ningún `UPDATE` a `valor`/`fecha`/`cantidad` de
+ * `fin_ingresos`.
+ */
+describe('contrato de esquema — SOW 1 Producción Hato (070/071)', () => {
+  const FILES_070_071 = {
+    '070': '070_hato_produccion_venta_link.sql',
+    '071': '071_fin_categoria_venta_descarte.sql',
+  } as const;
+
+  const c070 = readIfExists(FILES_070_071['070']);
+  const c071 = readIfExists(FILES_070_071['071']);
+
+  it('070_hato_produccion_venta_link.sql y 071_fin_categoria_venta_descarte.sql existen', () => {
+    expect(c070, 'Falta 070_hato_produccion_venta_link.sql').not.toBeNull();
+    expect(c071, 'Falta 071_fin_categoria_venta_descarte.sql').not.toBeNull();
+  });
+
+  it('070 y 071 son los únicos archivos con esos prefijos (sin colisión de numeración, R1 del brief)', () => {
+    const allSqlFiles = readdirSync(MIGRATIONS_DIR).filter((f) => /^\d{3}_.*\.sql$/.test(f));
+    for (const prefix of ['070', '071']) {
+      const matches = allSqlFiles.filter((f) => f.startsWith(prefix));
+      expect(
+        matches,
+        `El prefijo ${prefix} debe tener exactamente un archivo (colisión de numeración: ya ocurrió 4 veces en este repo, R1 del brief). Encontrado: [${matches.join(', ')}]`,
+      ).toEqual([Object.values(FILES_070_071).find((f) => f.startsWith(prefix))]);
+    }
+  });
+
+  // ---------------------------------------------------------------------
+  // 070 — columnas nuevas + índices/CHECKs (plan §2.1)
+  // ---------------------------------------------------------------------
+
+  describe('070 — hato_produccion_quincenal: enlace + procedencia del dato', () => {
+    it('agrega fin_ingreso_id UUID REFERENCES fin_ingresos(id) de forma idempotente', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      expect(
+        /ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+fin_ingreso_id\s+UUID\s*\n?\s*REFERENCES\s+fin_ingresos\s*\(\s*id\s*\)/i.test(
+          c070,
+        ),
+        'Falta "ADD COLUMN IF NOT EXISTS fin_ingreso_id UUID REFERENCES fin_ingresos(id)" en hato_produccion_quincenal — sin esta columna no existe el vínculo duro que la decisión 3 del dueño exige ("un solo registro").',
+      ).toBe(true);
+    });
+
+    it('fin_ingreso_id usa ON DELETE RESTRICT (no SET NULL ni CASCADE)', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      const idx = c070.search(/ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+fin_ingreso_id\s+UUID/i);
+      expect(idx, 'No se ubicó la declaración de fin_ingreso_id en hato_produccion_quincenal.').toBeGreaterThan(-1);
+      if (idx === -1) return;
+      const nearby = c070.slice(idx, idx + 200);
+      expect(
+        /ON\s+DELETE\s+RESTRICT/i.test(nearby),
+        'hato_produccion_quincenal.fin_ingreso_id no declara ON DELETE RESTRICT — sin él, borrar un ingreso enlazado desde /finanzas/ingresos dejaría una quincena "enlazada" a un ingreso inexistente (o, con SET NULL, una quincena medida sin su contraparte financiera), exactamente la divergencia silenciosa que el brief prohíbe (plan §2.1, tabla "Semántica de DELETE").',
+      ).toBe(true);
+      expect(
+        /ON\s+DELETE\s+(SET\s+NULL|CASCADE)/i.test(nearby),
+        'hato_produccion_quincenal.fin_ingreso_id declara SET NULL o CASCADE en vez de RESTRICT — el borrado debe tener UN SOLO camino (el RPC fn_hato_eliminar_quincena_venta), nunca dejar una fila huérfana o desaparecer en cascada.',
+      ).toBe(false);
+    });
+
+    it('el índice único sobre fin_ingreso_id es PARCIAL (WHERE origen_dato = \'medido\'), nunca global', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      const m = /CREATE\s+UNIQUE\s+INDEX[\s\S]*?hato_prod_quincenal_ingreso_medido_unico[\s\S]*?;/i.exec(c070);
+      expect(
+        m,
+        'No se encontró el índice único hato_prod_quincenal_ingreso_medido_unico sobre hato_produccion_quincenal(fin_ingreso_id) — sin él, dos quincenas medidas podrían compartir el mismo ingreso, violando el vínculo 1:1 hacia adelante (Decisión 3 del dueño).',
+      ).not.toBeNull();
+      if (!m) return;
+      expect(
+        /WHERE\s+origen_dato\s*=\s*'medido'/i.test(m[0]),
+        'El índice hato_prod_quincenal_ingreso_medido_unico no es PARCIAL (falta "WHERE origen_dato = \'medido\'") — un índice único GLOBAL sobre fin_ingreso_id rompería el vínculo muchos-a-uno de las quincenas derivadas del backfill (SOW 4), que deben poder compartir el mismo ingreso mensual histórico (mismo mecanismo que 066 usó para la chapeta).',
+      ).toBe(true);
+
+      // Ninguna OTRA declaración de UNIQUE llano (no parcial) sobre la
+      // columna, que anularía la intención del índice parcial de arriba.
+      const bareUnique =
+        /fin_ingreso_id\s+UUID[^,]*\bUNIQUE\b(?!\s*\()/i.test(c070) ||
+        /UNIQUE\s*\(\s*fin_ingreso_id\s*\)(?!\s*WHERE)/i.test(c070);
+      expect(
+        bareUnique,
+        'Se encontró una declaración de UNIQUE llano (no parcial) sobre fin_ingreso_id en algún otro punto del archivo — eso bloquearía el enlace muchos-a-uno de las filas derivado_mensual.',
+      ).toBe(false);
+    });
+
+    it('agrega un índice llano (no parcial) sobre fin_ingreso_id para la búsqueda inversa ingreso -> quincenas', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      expect(
+        /CREATE\s+INDEX\s+IF\s+NOT\s+EXISTS\s+idx_hato_prod_quincenal_ingreso\s+ON\s+hato_produccion_quincenal\s*\(\s*fin_ingreso_id\s*\)/i.test(
+          c070,
+        ),
+        'Falta el índice llano idx_hato_prod_quincenal_ingreso — sin él, la verificación del FK ON DELETE RESTRICT (que SÍ debe recorrer las filas derivadas, no solo las medidas) y cualquier búsqueda ingreso->quincenas hacen table scan.',
+      ).toBe(true);
+    });
+
+    it('fin_ingreso_id termina como NOT NULL', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      expect(
+        /ALTER\s+COLUMN\s+fin_ingreso_id\s+SET\s+NOT\s+NULL/i.test(c070),
+        'Falta "ALTER COLUMN fin_ingreso_id SET NOT NULL" — sin este NOT NULL, una quincena podría guardarse sin su ingreso enlazado, exactamente la divergencia que la decisión 3 del dueño ("un solo registro") prohíbe.',
+      ).toBe(true);
+    });
+
+    it('origen_dato es TEXT NOT NULL DEFAULT \'medido\' con CHECK IN (\'medido\', \'derivado_mensual\')', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      expect(
+        /origen_dato\s+TEXT\s+NOT\s+NULL\s+DEFAULT\s+'medido'\s*\n?\s*CHECK\s*\(\s*origen_dato\s+IN\s*\(\s*'medido'\s*,\s*'derivado_mensual'\s*\)\s*\)/i.test(
+          c070,
+        ),
+        'Falta origen_dato TEXT NOT NULL DEFAULT \'medido\' CHECK (origen_dato IN (\'medido\', \'derivado_mensual\')) — sin este flag la UI no puede distinguir una quincena capturada en vivo de una derivada del backfill mensual (read-only), y el trigger inverso (sección 6) no tiene sobre qué filtrar.',
+      ).toBe(true);
+    });
+
+    it('num_vacas_ordeno_origen es TEXT con CHECK IN (\'medido\', \'derivado_chequeos\')', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      expect(
+        /num_vacas_ordeno_origen\s+TEXT\s*\n?\s*CHECK\s*\(\s*num_vacas_ordeno_origen\s+IN\s*\(\s*'medido'\s*,\s*'derivado_chequeos'\s*\)\s*\)/i.test(
+          c070,
+        ),
+        'Falta num_vacas_ordeno_origen TEXT CHECK (num_vacas_ordeno_origen IN (\'medido\', \'derivado_chequeos\')) — sin esta columna la UI no puede cumplir la decisión 16 del dueño ("num_vacas_ordeno derivado del histórico de chequeos, marcado como derivado, no medido").',
+      ).toBe(true);
+    });
+
+    it('CHECK hato_prod_quincenal_vacas_origen_coherente: num_vacas_ordeno_origen es obligatorio si num_vacas_ordeno no es NULL', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      expect(
+        /ADD\s+CONSTRAINT\s+hato_prod_quincenal_vacas_origen_coherente\s+CHECK\s*\(\s*num_vacas_ordeno\s+IS\s+NULL\s+OR\s+num_vacas_ordeno_origen\s+IS\s+NOT\s+NULL\s*\)/i.test(
+          c070,
+        ),
+        'Falta el CHECK hato_prod_quincenal_vacas_origen_coherente — sin él, num_vacas_ordeno podría tener un valor sin que num_vacas_ordeno_origen declare cómo se obtuvo, violando la regla del módulo "ningún número sin procedencia declarada".',
+      ).toBe(true);
+    });
+
+    it('agrega updated_at TIMESTAMPTZ y updated_by UUID REFERENCES auth.users(id)', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      expect(
+        /ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+updated_at\s+TIMESTAMPTZ/i.test(c070),
+        'Falta ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ — la fila ahora es un registro financiero editable por dos caminos (Producción y Finanzas); sin autoría de la última edición, un descuadre contra el Pomar es inauditable.',
+      ).toBe(true);
+      expect(
+        /ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+updated_by\s+UUID\s+REFERENCES\s+auth\.users\s*\(\s*id\s*\)/i.test(c070),
+        'Falta ADD COLUMN IF NOT EXISTS updated_by UUID REFERENCES auth.users(id).',
+      ).toBe(true);
+    });
+
+    it('NO agrega ninguna columna GENERATED (lección de la 061)', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      expect(
+        /GENERATED\s+ALWAYS\s+AS/i.test(c070),
+        'Se encontró una columna GENERATED en 070 — la migración 061 tuvo que hacerle DROP EXPRESSION a hato_pesajes_leche.litros_total por exactamente este patrón (una suposición falsa sobre cómo se mide el dato); el brief prohíbe explícitamente repetir el error en este rework.',
+      ).toBe(false);
+    });
+
+    it('NO agrega ninguna columna de dinero (valor/precio/monto) — los litros son del Hato, los pesos son de Finanzas (plan §2.0)', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      // hato_produccion_quincenal no se CREATE aquí (ya existe desde 054),
+      // así que se revisa el archivo completo por columnas de dinero
+      // nuevas — cualquier ADD COLUMN con esos nombres sería la fuga de
+      // RLS que el plan §2.0 prohíbe explícitamente (hato_produccion_
+      // quincenal es SELECT abierto a todo authenticated; fin_ingresos es
+      // Gerencia-only; Postgres no tiene RLS por columna).
+      const dineroNuevo = /ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+(valor|precio_unitario|precio|monto)\b/i.test(c070);
+      expect(
+        dineroNuevo,
+        'Se encontró un ADD COLUMN de una columna de dinero (valor/precio_unitario/precio/monto) en 070 — hato_produccion_quincenal tiene SELECT abierto a TODO usuario authenticated (patrón 054); copiar una cifra de dinero ahí filtraría los ingresos del Hato a Administrador y a cualquier rol con el módulo hato_lechero, violando la decisión 5 del dueño ("cero cambios de RLS en fin_ingresos") por la puerta de atrás.',
+      ).toBe(false);
+    });
+  });
+
+  describe('070 — hato_eventos.fin_ingreso_id', () => {
+    it('agrega fin_ingreso_id UUID REFERENCES fin_ingresos(id) con ON DELETE SET NULL', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      const idx = c070.search(/ALTER\s+TABLE\s+hato_eventos[\s\S]*?ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+fin_ingreso_id/i);
+      expect(idx, 'No se encontró ALTER TABLE hato_eventos ... ADD COLUMN IF NOT EXISTS fin_ingreso_id.').toBeGreaterThan(-1);
+      if (idx === -1) return;
+      const nearby = c070.slice(idx, idx + 300);
+      expect(
+        /REFERENCES\s+fin_ingresos\s*\(\s*id\s*\)/i.test(nearby),
+        'hato_eventos.fin_ingreso_id no referencia fin_ingresos(id).',
+      ).toBe(true);
+      expect(
+        /ON\s+DELETE\s+SET\s+NULL/i.test(nearby),
+        'hato_eventos.fin_ingreso_id no usa ON DELETE SET NULL — a diferencia de hato_produccion_quincenal.fin_ingreso_id (RESTRICT), aquí el animal ya salió del hato como hecho biológico; borrar el registro financiero no debe borrar ni bloquear ese hecho (mismo precedente que transaccion_ganado_id, 053).',
+      ).toBe(true);
+      expect(
+        /ON\s+DELETE\s+RESTRICT/i.test(nearby),
+        'hato_eventos.fin_ingreso_id usa ON DELETE RESTRICT — debería ser SET NULL (ver el test anterior): con RESTRICT, borrar un ingreso de venta de animales quedaría bloqueado para siempre por el evento histórico, algo que el brief no pide para esta tabla (solo para hato_produccion_quincenal).',
+      ).toBe(false);
+    });
+
+    it('agrega el índice parcial idx_hato_eventos_fin_ingreso (WHERE fin_ingreso_id IS NOT NULL)', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      expect(
+        /CREATE\s+INDEX\s+IF\s+NOT\s+EXISTS\s+idx_hato_eventos_fin_ingreso\s+ON\s+hato_eventos\s*\(\s*fin_ingreso_id\s*\)\s+WHERE\s+fin_ingreso_id\s+IS\s+NOT\s+NULL/i.test(
+          c070,
+        ),
+        'Falta el índice idx_hato_eventos_fin_ingreso — la mayoría de hato_eventos no tiene fin_ingreso_id (solo las ventas), así que el índice debe ser parcial.',
+      ).toBe(true);
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // 070 — los 3 RPC son SECURITY INVOKER (ausencia de SECURITY DEFINER),
+  // el trigger inverso SÍ es SECURITY DEFINER (plan §3.2/§3.3)
+  // ---------------------------------------------------------------------
+
+  /** Extrae el bloque REAL de una función: desde su CREATE OR REPLACE
+   * FUNCTION hasta el "$$;" que cierra su propio cuerpo dollar-quoted --
+   * nunca "hasta la próxima función", que se comería cualquier comentario
+   * de prosa entre dos funciones (este archivo describe el trigger de la
+   * sección 6 en un comentario que literalmente dice "SECURITY DEFINER"
+   * ANTES de su CREATE OR REPLACE FUNCTION -- comprobado con un test de
+   * mutación: sin este límite exacto, ese comentario se filtraba dentro
+   * del bloque de fn_hato_registrar_venta_animales, el mismo tipo de
+   * falso-verde que 060 ya documenta más arriba para net.http_post). */
+  function extractFunctionRegion(sql: string, fnName: string): string {
+    const re = new RegExp(
+      `CREATE\\s+OR\\s+REPLACE\\s+FUNCTION\\s+${fnName}\\s*\\([^)]*\\)[\\s\\S]*?AS\\s*\\$\\$[\\s\\S]*?\\$\\$\\s*;`,
+      'i',
+    );
+    const m = re.exec(sql);
+    return m ? m[0] : '';
+  }
+
+  const RPC_NAMES = [
+    'fn_hato_guardar_quincena_venta',
+    'fn_hato_eliminar_quincena_venta',
+    'fn_hato_registrar_venta_animales',
+  ];
+
+  describe('070 — los 3 RPC de escritura son SECURITY INVOKER, nunca SECURITY DEFINER', () => {
+    for (const fnName of RPC_NAMES) {
+      it(`${fnName}: existe y NO contiene SECURITY DEFINER en su propio bloque`, () => {
+        expect(c070, '070 no existe todavía.').not.toBeNull();
+        if (!c070) return;
+        const region = extractFunctionRegion(c070, fnName);
+        expect(region, `No se encontró CREATE OR REPLACE FUNCTION ${fnName} en 070.`).not.toBe('');
+        expect(
+          /SECURITY\s+DEFINER/i.test(region),
+          `${fnName} contiene SECURITY DEFINER — el brief (plan §3.2) exige que los 3 RPC de escritura sean SECURITY INVOKER: el llamador es un navegador Gerencia ya autenticado con escritura RLS en las dos tablas, y un DEFINER bypasearía esa RLS, obligando a reimplementar "es Gerencia" adentro de la función (dos fuentes de verdad para una sola política).`,
+        ).toBe(false);
+      });
+
+      it(`${fnName}: revoca EXECUTE de PUBLIC/anon y lo concede a authenticated (no a service_role)`, () => {
+        expect(c070, '070 no existe todavía.').not.toBeNull();
+        if (!c070) return;
+        expect(
+          new RegExp(`REVOKE\\s+EXECUTE\\s+ON\\s+FUNCTION\\s+${fnName}\\s*\\([^)]*\\)\\s+FROM\\s+PUBLIC\\s*,\\s*anon`, 'i').test(
+            c070,
+          ),
+          `Falta REVOKE EXECUTE ... FROM PUBLIC, anon para ${fnName}.`,
+        ).toBe(true);
+        expect(
+          new RegExp(`GRANT\\s+EXECUTE\\s+ON\\s+FUNCTION\\s+${fnName}\\s*\\([^)]*\\)\\s+TO\\s+authenticated`, 'i').test(
+            c070,
+          ),
+          `Falta GRANT EXECUTE ... TO authenticated para ${fnName} — a diferencia de fn_hato_commit_chequeo (065, service_role-only porque su endpoint YA verificó el rol), estos RPC los invoca DIRECTO el navegador de un usuario Gerencia vía supabase-js .rpc(), así que authenticated debe poder ejecutarlos (la RLS de las tablas hace el resto).`,
+        ).toBe(true);
+      });
+    }
+  });
+
+  describe('DELETED — el trigger inverso fn_hato_sync_quincena_desde_ingreso YA NO EXISTE (decisión final del dueño)', () => {
+    it('070 NO declara CREATE (OR REPLACE) FUNCTION fn_hato_sync_quincena_desde_ingreso', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      expect(
+        /CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+fn_hato_sync_quincena_desde_ingreso/i.test(c070),
+        'Se encontró CREATE (OR REPLACE) FUNCTION fn_hato_sync_quincena_desde_ingreso en 070 — el dueño decidió eliminar por completo el trigger inverso (no solo su policía de fecha): (a) es AFTER UPDATE y nunca cubrió el requisito real ("agrego un ingreso en Finanzas y aparece en Producción", un CREATE); (b) la premisa de seguridad original ("filtraría a Martha, Administrador") era fácticamente incorrecta -- Martha es Gerencia; (c) decisión explícita "simple, clean is always best", sin mecanismo de sincronización. La garantía de "un solo registro" es ahora estructural (FK NOT NULL + litros_total NULL para filas medidas), no sincronizada.',
+      ).toBe(false);
+    });
+
+    it('070 NO declara CREATE TRIGGER trg_hato_sync_quincena_desde_ingreso', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      expect(
+        /CREATE\s+TRIGGER\s+trg_hato_sync_quincena_desde_ingreso/i.test(c070),
+        'Se encontró CREATE TRIGGER trg_hato_sync_quincena_desde_ingreso en 070 — no debe existir ningún trigger sobre fin_ingresos (ver test anterior para la justificación).',
+      ).toBe(false);
+    });
+
+    it('070 SÍ incluye DROP TRIGGER IF EXISTS + DROP FUNCTION IF EXISTS -- limpieza segura si una revisión anterior con el trigger ya se aplicó en algún ambiente', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      expect(
+        /DROP\s+TRIGGER\s+IF\s+EXISTS\s+trg_hato_sync_quincena_desde_ingreso\s+ON\s+fin_ingresos/i.test(c070),
+        'Falta "DROP TRIGGER IF EXISTS trg_hato_sync_quincena_desde_ingreso ON fin_ingresos" — sin este DROP, un ambiente donde una revisión anterior de 070 (con el trigger) ya se aplicó quedaría con un trigger huérfano que esta migración debería haber retirado; re-aplicar 070 no sería seguro en ese ambiente.',
+      ).toBe(true);
+      expect(
+        /DROP\s+FUNCTION\s+IF\s+EXISTS\s+fn_hato_sync_quincena_desde_ingreso\s*\(\s*\)/i.test(c070),
+        'Falta "DROP FUNCTION IF EXISTS fn_hato_sync_quincena_desde_ingreso()" — mismo argumento que el DROP TRIGGER: limpieza idempotente para cualquier ambiente donde la función ya exista.',
+      ).toBe(true);
+    });
+  });
+
+  it('070 no declara ninguna CREATE POLICY nueva (plan §2.1: "RLS — ninguna política nueva")', () => {
+    expect(c070, '070 no existe todavía.').not.toBeNull();
+    if (!c070) return;
+    expect(
+      /CREATE\s+POLICY/i.test(c070),
+      '070 contiene una CREATE POLICY — el brief es explícito (plan §2.1): "ninguna política nueva". La restricción "solo Gerencia captura quincenales" debe EMERGER de la intersección de las policies ya existentes (054 en hato_produccion_quincenal, create_finanzas_tables.sql en fin_ingresos) dentro de los RPC SECURITY INVOKER, no de una policy inventada aquí.',
+    ).toBe(false);
+  });
+
+  it('070: el ÚNICO ALTER TABLE contra fin_ingresos es la columna aditiva y nullable `cabezas` — relajación documentada, coordinada explícitamente, no una excepción libre', () => {
+    expect(c070, '070 no existe todavía.').not.toBeNull();
+    if (!c070) return;
+    // La regla original del encargo ("070 no toca fin_ingresos en
+    // absoluto") se relajó a propósito, en coordinación explícita, para
+    // que fn_hato_registrar_venta_animales use un INSERT estático (que
+    // Postgres valida al aplicar la migración) en vez de SQL dinámico
+    // (que convierte un error de migración en un error de runtime a
+    // mitad de un formulario). La intención original -- P&G, Flujo de
+    // Caja y el port Deno byte-idénticos por construcción -- se preserva
+    // porque ninguno de los tres selecciona `cabezas`; lo que este test
+    // fuerza es que la relajación se quede EXACTAMENTE en eso, nunca se
+    // ensanche a otra columna, a RLS, o a un tipo/CHECK distinto.
+    const alterBlocks = c070.match(/ALTER\s+TABLE\s+fin_ingresos[\s\S]*?;/gi) ?? [];
+    expect(
+      alterBlocks.length,
+      `Se esperaba EXACTAMENTE un ALTER TABLE fin_ingresos en 070 (la columna cabezas). Encontrados: ${alterBlocks.length}.`,
+    ).toBe(1);
+    const block = alterBlocks[0] ?? '';
+    expect(
+      /ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+cabezas\s+INTEGER\s+CHECK\s*\(\s*cabezas\s*>\s*0\s*\)/i.test(block),
+      `El único ALTER TABLE fin_ingresos permitido en 070 debe ser exactamente "ADD COLUMN IF NOT EXISTS cabezas INTEGER CHECK (cabezas > 0)" — cualquier otra forma (otra columna, otro tipo, DROP, RLS) excede la relajación acordada. Bloque encontrado: ${block}`,
+    ).toBe(true);
+    expect(
+      /DROP|RENAME|ALTER\s+COLUMN|ENABLE\s+ROW|DISABLE\s+ROW|NOT\s+NULL(?!\s+DEFAULT)/i.test(block.replace('ADD COLUMN IF NOT EXISTS', '')),
+      `El ALTER TABLE fin_ingresos en 070 contiene algo más que un ADD COLUMN aditivo (DROP/RENAME/ALTER COLUMN/RLS/NOT NULL sobre una columna preexistente) — la relajación acordada es estrictamente "una columna nueva, nullable, aditiva". Bloque: ${block}`,
+    ).toBe(false);
+
+    // Fuera de esa única columna, cero policies y cero DML de migración
+    // (INSERT/UPDATE/DELETE a nivel de archivo, fuera del cuerpo de los
+    // RPC) contra fin_ingresos: los RPC SÍ escriben fin_ingresos en
+    // tiempo de EJECUCIÓN (esa es su función), pero eso es distinto de
+    // que la MIGRACIÓN misma toque filas o políticas al aplicarse.
+    expect(
+      /CREATE\s+POLICY[\s\S]{0,120}fin_ingresos|fin_ingresos[\s\S]{0,40}ENABLE\s+ROW\s+LEVEL\s+SECURITY/i.test(c070),
+      '070 contiene una policy o un cambio de RLS que menciona fin_ingresos — fuera del alcance de la relajación acordada (solo la columna cabezas).',
+    ).toBe(false);
+  });
+
+  // ---------------------------------------------------------------------
+  // 071 — categoría + recategorización acotada por id (plan §2.2)
+  // ---------------------------------------------------------------------
+
+  describe('071 — categoría "Venta de Vacas de Descarte" + recategorización', () => {
+    it('crea la categoría bajo el negocio "Hato Lechero", resuelto por NOMBRE (nunca UUID hardcodeado)', () => {
+      expect(c071, '071 no existe todavía.').not.toBeNull();
+      if (!c071) return;
+      expect(
+        /INSERT\s+INTO\s+fin_categorias_ingresos[\s\S]*?'Venta de Vacas de Descarte'/i.test(c071),
+        'No se encontró el INSERT de la categoría "Venta de Vacas de Descarte" en fin_categorias_ingresos.',
+      ).toBe(true);
+      expect(
+        /WHERE\s+n\.nombre\s*=\s*'Hato Lechero'/i.test(c071),
+        'La resolución del negocio no filtra por n.nombre = \'Hato Lechero\' — el brief exige resolver por NOMBRE, nunca UUID hardcodeado (precedente NEGOCIO_GANADO, IngresosList.tsx).',
+      ).toBe(true);
+    });
+
+    it('el INSERT de la categoría es idempotente (NOT EXISTS / ON CONFLICT)', () => {
+      expect(c071, '071 no existe todavía.').not.toBeNull();
+      if (!c071) return;
+      expect(
+        /NOT\s+EXISTS\s*\(/i.test(c071) || /ON\s+CONFLICT/i.test(c071),
+        'El INSERT de la categoría no es idempotente (falta NOT EXISTS u ON CONFLICT) — re-aplicar 071 en un ambiente donde ya corrió crearía una segunda fila "Venta de Vacas de Descarte" duplicada para el mismo negocio.',
+      ).toBe(true);
+    });
+
+    it('el nombre de la categoría NO contiene la subcadena "leche" (no debe capturar el denominador $/litro)', () => {
+      expect(c071, '071 no existe todavía.').not.toBeNull();
+      if (!c071) return;
+      expect(
+        /leche/i.test('Venta de Vacas de Descarte'),
+        'Guard de fixture: si este assert falla, el nombre elegido en el propio test ya no es válido.',
+      ).toBe(false);
+    });
+
+    it('NUNCA usa un WHERE genérico "categoria = \'Otro\'" para el UPDATE de recategorización', () => {
+      expect(c071, '071 no existe todavía.').not.toBeNull();
+      if (!c071) return;
+      const updateBlocks = c071.match(/UPDATE\s+fin_ingresos[\s\S]*?;/gi) ?? [];
+      const genericWhere = updateBlocks.some((b) => /WHERE[\s\S]*categoria[\s\S]*?=\s*'Otro'/i.test(b));
+      expect(
+        genericWhere,
+        'Se encontró un UPDATE fin_ingresos con WHERE categoria = \'Otro\' (u órdenes de texto equivalentes) — el brief lo prohíbe explícitamente (plan §2.2): recategorizaría CUALQUIER fila "Otro" que alguien agregue después, no solo las 6 históricas confirmadas por el dueño.',
+      ).toBe(false);
+    });
+
+    it('el UPDATE de recategorización solo modifica categoria_id — nunca valor/fecha/cantidad de fin_ingresos', () => {
+      expect(c071, '071 no existe todavía.').not.toBeNull();
+      if (!c071) return;
+      const updateBlocks = c071.match(/UPDATE\s+fin_ingresos\b[\s\S]*?;/gi) ?? [];
+      expect(
+        updateBlocks.length,
+        'No se encontró ningún UPDATE fin_ingresos en 071 (aunque sea guardado/pendiente detrás de un guard) — sin él, las 6 filas históricas nunca se recategorizan.',
+      ).toBeGreaterThan(0);
+      for (const block of updateBlocks) {
+        // Aísla la cláusula SET (entre "SET" y el primer "WHERE" real de esa
+        // sentencia) para no confundir un WHERE con un SET.
+        const setMatch = /SET\s+([\s\S]*?)\s+WHERE/i.exec(block);
+        const setClause = setMatch ? setMatch[1] : block;
+        expect(
+          /\bvalor\s*=/i.test(setClause),
+          `Un UPDATE fin_ingresos en 071 asigna "valor" — el brief exige que 071 NO cambie ningún valor (plan §2.2: "NO cambia ningún valor, fecha ni cantidad"). Bloque: ${block.slice(0, 200)}`,
+        ).toBe(false);
+        expect(
+          /\bfecha\s*=/i.test(setClause),
+          `Un UPDATE fin_ingresos en 071 asigna "fecha" — mismo requisito: solo la ETIQUETA (categoria_id) puede cambiar. Bloque: ${block.slice(0, 200)}`,
+        ).toBe(false);
+        expect(
+          /\bcantidad\s*=/i.test(setClause),
+          `Un UPDATE fin_ingresos en 071 asigna "cantidad" — mismo requisito. Bloque: ${block.slice(0, 200)}`,
+        ).toBe(false);
+        expect(
+          /\bcategoria_id\s*=/i.test(setClause),
+          `El UPDATE fin_ingresos de 071 no asigna categoria_id — es la ÚNICA columna que esta migración debe tocar. Bloque: ${block.slice(0, 200)}`,
+        ).toBe(true);
+      }
+    });
+
+    it('los 6 ids de v_ids_descarte son los reales (verificados contra producción), no el UUID centinela de una revisión anterior', () => {
+      expect(c071, '071 no existe todavía.').not.toBeNull();
+      if (!c071) return;
+      expect(
+        /00000000-0000-0000-0000-000000000000/.test(c071),
+        '071 todavía contiene el UUID centinela — se esperaba que estuviera reemplazado por los 6 id reales, verificados de forma independiente contra producción (proyecto ywhtjwawnkeqlwxbvgup) el 2026-07-28.',
+      ).toBe(false);
+      const idsReales = [
+        'ce95f40c-c789-49c1-a6da-5312461571f5',
+        '49a9a49d-71de-4db0-96db-3a60969cbdb1',
+        '8034f4f8-d7f1-4719-8ba8-33a26350e028',
+        '694968b0-1f64-4f10-9fb9-0531613e0105',
+        '1784490c-b264-42d9-ba3f-32974bf3fdfa',
+        '89401376-44b7-4439-b1d7-06415fe5d845',
+      ];
+      for (const id of idsReales) {
+        expect(c071.includes(id), `Falta el id ${id} en v_ids_descarte.`).toBe(true);
+      }
+    });
+
+    it('el guard de la sección 2 verifica que cada fila objetivo esté ACTUALMENTE bajo "Otro" antes del UPDATE (no solo cuenta filas) y aborta si la base divergió', () => {
+      expect(c071, '071 no existe todavía.').not.toBeNull();
+      if (!c071) return;
+      // El guard debe resolver el id de la categoría "Otro" del negocio
+      // Hato Lechero por nombre (nunca UUID hardcodeado, mismo patrón que
+      // el resto del archivo) y contar cuántas de las 6 filas objetivo
+      // siguen bajo esa categoría ANTES de tocar nada.
+      expect(
+        /lower\s*\(\s*nombre\s*\)\s*=\s*'otro'/i.test(c071),
+        'No se encontró la resolución de la categoría "Otro" (lower(nombre) = \'otro\') bajo Hato Lechero — el guard debe comparar contra el id real de esa categoría, no contra el texto \'Otro\' inline en cada fila (mismo argumento del test "NUNCA usa un WHERE genérico").',
+      ).toBe(true);
+
+      const doIdx = c071.search(/DO\s*\$\$/i);
+      expect(doIdx, 'No se encontró el bloque DO $$ de la sección 2.').toBeGreaterThan(-1);
+      const doBlock = c071.slice(doIdx);
+
+      // El guard debe ser un SELECT count(*) sobre fin_ingresos filtrado
+      // por (id = ANY(...) AND categoria_id = <Otro>) que corre ANTES del
+      // UPDATE, y un RAISE EXCEPTION si ese conteo no es 6 -- así una
+      // fila ya movida/borrada/reasignada desde la verificación aborta
+      // ruidosamente en vez de recategorizar silenciosamente lo que
+      // encuentre.
+      const countIdx = doBlock.search(/SELECT\s+count\s*\(\s*\*\s*\)\s+INTO\s+\w+[\s\S]*?FROM\s+fin_ingresos/i);
+      const updateIdx = doBlock.search(/UPDATE\s+fin_ingresos/i);
+      expect(countIdx, 'No se encontró un SELECT count(*) ... FROM fin_ingresos (el guard de categoría-previa) dentro del bloque DO.').toBeGreaterThan(-1);
+      expect(updateIdx, 'No se encontró el UPDATE fin_ingresos dentro del bloque DO.').toBeGreaterThan(-1);
+      expect(
+        countIdx,
+        'El SELECT count(*) del guard de categoría-previa aparece DESPUÉS del UPDATE — el guard debe correr ANTES para poder abortar sin haber escrito nada.',
+      ).toBeLessThan(updateIdx);
+
+      const guardWindow = doBlock.slice(countIdx, updateIdx);
+      expect(
+        /<>\s*6/.test(guardWindow) || /!=\s*6/.test(guardWindow),
+        'El guard de categoría-previa no compara el conteo contra 6 antes del UPDATE — sin esta comparación, una base que ya divergió (menos de 6 filas siguen bajo "Otro") pasaría de largo hacia un UPDATE parcial en vez de abortar.',
+      ).toBe(true);
+      expect(
+        /RAISE\s+EXCEPTION/i.test(guardWindow),
+        'El guard de categoría-previa no aborta con RAISE EXCEPTION cuando el conteo no es 6.',
+      ).toBe(true);
+
+      // El propio UPDATE también debe llevar el filtro de categoría
+      // (defensa en profundidad: el guard de arriba ya lo comprobó, pero
+      // el UPDATE no debe confiar ciegamente en eso entre el SELECT y el
+      // UPDATE dentro de la misma transacción).
+      const updateBlock = /UPDATE\s+fin_ingresos[\s\S]*?;/i.exec(doBlock.slice(updateIdx))?.[0] ?? '';
+      expect(
+        /categoria_id\s*=\s*v_categoria_otro_id/i.test(updateBlock),
+        'El UPDATE fin_ingresos de la sección 2 no filtra también por categoria_id = v_categoria_otro_id — sin ese filtro en el propio UPDATE (no solo en el guard previo), el UPDATE recategorizaría los 6 ids sin importar en qué categoría estén en ese instante.',
+      ).toBe(true);
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // Correcciones sobre el esbozo del brief señaladas por QA (ver el
+  // mensaje de QA en el hilo de esta sesión) -- las tres se verifican
+  // aquí para que una futura regresión de alguna de ellas falle en rojo,
+  // no solo se documente en un comentario.
+  // ---------------------------------------------------------------------
+
+  describe('Owner decision (final) — litros_total es NULL para filas medidas: "un solo registro" es estructural, no sincronizado', () => {
+    it('litros_total pierde su NOT NULL (heredado de 054) -- debe poder ser NULL para origen_dato=\'medido\'', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      expect(
+        /ALTER\s+COLUMN\s+litros_total\s+DROP\s+NOT\s+NULL/i.test(c070),
+        'Falta "ALTER COLUMN litros_total DROP NOT NULL" — la columna nació NOT NULL en 054 (litros=medido siempre); ahora una fila medida no guarda litros ahí (viven en fin_ingresos.cantidad), así que debe poder quedar NULL o el propio INSERT del RPC de captura fallaría.',
+      ).toBe(true);
+    });
+
+    it('CHECK hato_prod_quincenal_litros_origen_coherente impone la correspondencia exacta origen_dato <-> litros_total NULL/NOT NULL', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      const m = /ADD\s+CONSTRAINT\s+hato_prod_quincenal_litros_origen_coherente\s+CHECK\s*\(([\s\S]*?)\)\s*;/i.exec(c070);
+      expect(
+        m,
+        'No se encontró "ADD CONSTRAINT hato_prod_quincenal_litros_origen_coherente CHECK (...)" — sin este CHECK, nada impide que una fila medida guarde litros_total (una segunda copia que puede divergir de fin_ingresos.cantidad) o que una fila derivado_mensual se quede sin su reparto del backfill.',
+      ).not.toBeNull();
+      if (!m) return;
+      const body = m[1];
+      expect(
+        /origen_dato\s*=\s*'medido'[\s\S]*?litros_total\s+IS\s+NULL/i.test(body),
+        'El CHECK no exige litros_total IS NULL cuando origen_dato = \'medido\'.',
+      ).toBe(true);
+      expect(
+        /origen_dato\s*=\s*'derivado_mensual'[\s\S]*?litros_total\s+IS\s+NOT\s+NULL/i.test(body),
+        'El CHECK no exige litros_total IS NOT NULL cuando origen_dato = \'derivado_mensual\'.',
+      ).toBe(true);
+    });
+
+    it('COMMENT ON COLUMN hato_produccion_quincenal.litros_total documenta el cambio de significado (no es "los litros de la quincena" para toda fila)', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      const m = /COMMENT\s+ON\s+COLUMN\s+hato_produccion_quincenal\.litros_total\s+IS([\s\S]*?);/i.exec(c070);
+      expect(m, 'No se encontró COMMENT ON COLUMN hato_produccion_quincenal.litros_total.').not.toBeNull();
+      if (!m) return;
+      const texto = m[1];
+      expect(
+        /fin_ingresos\.cantidad/i.test(texto),
+        'El comentario de columna no menciona fin_ingresos.cantidad como la fuente real de los litros para una fila medida — sin esa referencia, un futuro lector no sabría dónde leer el dato real.',
+      ).toBe(true);
+    });
+
+    it('fn_hato_guardar_quincena_venta ya NO escribe litros_total en hato_produccion_quincenal (ni en el INSERT de alta ni en el UPDATE de edición)', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      const region = extractFunctionRegion(c070, 'fn_hato_guardar_quincena_venta');
+      expect(region, 'No se encontró fn_hato_guardar_quincena_venta en 070.').not.toBe('');
+
+      const insertMatch = /INSERT\s+INTO\s+hato_produccion_quincenal\s*\(([^)]*)\)/i.exec(region);
+      expect(insertMatch, 'No se encontró el INSERT INTO hato_produccion_quincenal de la rama de alta.').not.toBeNull();
+      if (insertMatch) {
+        expect(
+          /\blitros_total\b/i.test(insertMatch[1]),
+          `El INSERT INTO hato_produccion_quincenal incluye litros_total en su lista de columnas — toda fila que este RPC crea es origen_dato='medido', y el CHECK exige litros_total IS NULL para esas filas; escribirlo aquí violaría el CHECK. Columnas encontradas: ${insertMatch[1]}`,
+        ).toBe(false);
+      }
+
+      const updateMatch = /UPDATE\s+hato_produccion_quincenal\s*\n?\s*SET\s+([\s\S]*?)\s+WHERE\s+id\s*=\s*v_quincena_id/i.exec(
+        region,
+      );
+      expect(updateMatch, 'No se encontró el UPDATE hato_produccion_quincenal de la rama de edición.').not.toBeNull();
+      if (updateMatch) {
+        expect(
+          /\blitros_total\s*=/i.test(updateMatch[1]),
+          `El UPDATE hato_produccion_quincenal asigna litros_total — mismo argumento: una fila 'medido' no debe guardar litros ahí (viven en fin_ingresos.cantidad). SET encontrado: ${updateMatch[1]}`,
+        ).toBe(false);
+      }
+    });
+
+    it('fn_hato_guardar_quincena_venta SIGUE validando litros_total en el payload (lo necesita para cantidad/precio_unitario de fin_ingresos)', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      const region = extractFunctionRegion(c070, 'fn_hato_guardar_quincena_venta');
+      expect(
+        /v_litros_total\s+IS\s+NULL\s+OR\s+v_litros_total\s*<\s*0/i.test(region),
+        'fn_hato_guardar_quincena_venta ya no valida que payload.litros_total exista y sea >= 0 — aunque ya no se persista en hato_produccion_quincenal, sigue siendo obligatorio: es la fuente de fin_ingresos.cantidad y del cálculo de precio_unitario.',
+      ).toBe(true);
+      expect(
+        /cantidad\s*=\s*v_litros_total/i.test(region),
+        'fn_hato_guardar_quincena_venta no usa v_litros_total para fin_ingresos.cantidad — sin eso, los litros capturados no quedarían en ningún lado.',
+      ).toBe(true);
+    });
+  });
+
+  describe('Owner decision (post-QA #1) — fn_hato_guardar_quincena_venta permite mover el periodo de una quincena existente, con guard de colisión contra OTRA fila', () => {
+    it('la rama de edición YA NO compara anio/mes/quincena del payload contra la fila existente para rechazar un cambio de periodo', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      const region = extractFunctionRegion(c070, 'fn_hato_guardar_quincena_venta');
+      expect(region, 'No se encontró fn_hato_guardar_quincena_venta en 070.').not.toBe('');
+      expect(
+        /v_anio\s+IS\s+DISTINCT\s+FROM\s+v_existente\.anio/i.test(region) &&
+          /v_mes\s+IS\s+DISTINCT\s+FROM\s+v_existente\.mes/i.test(region) &&
+          /v_quincena\s+IS\s+DISTINCT\s+FROM\s+v_existente\.quincena/i.test(region),
+        'fn_hato_guardar_quincena_venta todavía compara anio/mes/quincena del payload contra v_existente para bloquear un cambio de periodo — el dueño confirmó que el periodo de producción SÍ es editable (la fecha de pago no lo determina); esa comparación bloquearía correcciones legítimas de quincena.',
+      ).toBe(false);
+    });
+
+    it('agrega un guard de colisión: rechaza mover a un periodo (anio, mes, quincena) que YA ocupa OTRA fila (id distinto)', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      const region = extractFunctionRegion(c070, 'fn_hato_guardar_quincena_venta');
+      const collisionCheck =
+        /WHERE\s+anio\s*=\s*v_anio\s+AND\s+mes\s*=\s*v_mes\s+AND\s+quincena\s*=\s*v_quincena\s+AND\s+id\s*<>\s*v_quincena_id/i.test(
+          region,
+        );
+      expect(
+        collisionCheck,
+        'No se encontró el guard "WHERE anio = v_anio AND mes = v_mes AND quincena = v_quincena AND id <> v_quincena_id" — sin él, mover una quincena al mismo periodo de OTRA fila existente fallaría solo con el 23505 crudo de UNIQUE(anio, mes, quincena) en vez de un mensaje legible que nombre el conflicto.',
+      ).toBe(true);
+      // El guard debe estar dentro de un EXISTS(...) seguido de un
+      // RAISE EXCEPTION -- nunca un chequeo decorativo sin efecto.
+      const existsIdx = region.search(/IF\s+EXISTS\s*\(/i);
+      expect(existsIdx, 'El guard de colisión no está envuelto en IF EXISTS (...).').toBeGreaterThan(-1);
+      const afterExists = region.slice(existsIdx, existsIdx + 500);
+      expect(
+        /RAISE\s+EXCEPTION/i.test(afterExists),
+        'El IF EXISTS (...) del guard de colisión no va seguido de un RAISE EXCEPTION cercano — sin él, detectar la colisión no tiene ningún efecto.',
+      ).toBe(true);
+    });
+
+    it('la rama de edición SÍ reescribe anio/mes/quincena en el UPDATE de hato_produccion_quincenal (el periodo se mueve de verdad)', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      const region = extractFunctionRegion(c070, 'fn_hato_guardar_quincena_venta');
+      // Aísla el UPDATE hacia hato_produccion_quincenal (el segundo UPDATE
+      // de la rama de edición, después del UPDATE fin_ingresos) para no
+      // confundirlo con el INSERT de la rama de alta.
+      const updateMatch = /UPDATE\s+hato_produccion_quincenal\s*\n?\s*SET\s+([\s\S]*?)\s+WHERE\s+id\s*=\s*v_quincena_id/i.exec(
+        region,
+      );
+      expect(updateMatch, 'No se encontró el UPDATE hato_produccion_quincenal de la rama de edición.').not.toBeNull();
+      if (!updateMatch) return;
+      const setClause = updateMatch[1];
+      expect(/\banio\s*=\s*v_anio\b/i.test(setClause), 'El UPDATE de edición no reescribe anio — el periodo no se movería de verdad.').toBe(true);
+      expect(/\bmes\s*=\s*v_mes\b/i.test(setClause), 'El UPDATE de edición no reescribe mes.').toBe(true);
+      expect(/\bquincena\s*=\s*v_quincena\b/i.test(setClause), 'El UPDATE de edición no reescribe quincena.').toBe(true);
+    });
+  });
+
+  describe('QA #3 — el conteo de cabezas de una venta de animales tiene columna propia, nunca sobrecarga `cantidad`', () => {
+    it('070 agrega fin_ingresos.cabezas de forma idempotente y nullable, ANTES de las funciones que la usan (no en 071)', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      const idx = c070.search(/ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+cabezas\s+INTEGER/i);
+      expect(
+        idx,
+        'Falta "ADD COLUMN IF NOT EXISTS cabezas INTEGER" en 070 — sin esta columna, fn_hato_registrar_venta_animales no tiene dónde guardar el conteo de cabezas sin sobrecargar `cantidad` (que ya significa litros/kg según negocio), exactamente el bug señalado por QA #3.',
+      ).toBeGreaterThan(-1);
+      if (idx === -1) return;
+      const nearby = c070.slice(idx, idx + 120);
+      // NOT NULL explícito rompería toda fila existente (leche/aguacate/
+      // ganado) que hoy no tiene cabezas -- debe quedar nullable.
+      expect(
+        /NOT\s+NULL/i.test(nearby),
+        'fin_ingresos.cabezas se declaró NOT NULL — esa columna es NULL para toda fila que no sea una venta de animales del hato (leche, aguacate, ganado de ceba); un NOT NULL rompería el INSERT de cualquiera de esos caminos existentes.',
+      ).toBe(false);
+
+      // Debe preceder a fn_hato_registrar_venta_animales en el archivo --
+      // si no, el INSERT estático de esa función fallaría al aplicar la
+      // migración (columna todavía no existe en ese punto del archivo).
+      const fnIdx = c070.search(/CREATE\s+OR\s+REPLACE\s+FUNCTION\s+fn_hato_registrar_venta_animales/i);
+      expect(fnIdx, 'No se encontró fn_hato_registrar_venta_animales en 070.').toBeGreaterThan(-1);
+      expect(
+        idx,
+        'ADD COLUMN IF NOT EXISTS cabezas aparece DESPUÉS de CREATE FUNCTION fn_hato_registrar_venta_animales en 070 — el INSERT estático de esa función referencia la columna "cabezas", así que la columna debe existir ANTES en el mismo archivo o el propio CREATE FUNCTION falla al aplicar la migración (Postgres valida las columnas referenciadas con check_function_bodies=on, el default).',
+      ).toBeLessThan(fnIdx);
+    });
+
+    it('071 NO agrega fin_ingresos.cabezas (se movió a 070 tras la corrección de QA #3/coordinación) — evita una doble declaración', () => {
+      expect(c071, '071 no existe todavía.').not.toBeNull();
+      if (!c071) return;
+      expect(
+        /ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+cabezas/i.test(c071),
+        '071 todavía agrega la columna cabezas — se decidió moverla a 070 (junto a fn_hato_registrar_venta_animales, que la necesita con un INSERT estático) para evitar SQL dinámico. Declararla en los dos archivos no rompe nada por sí solo (ambos son IF NOT EXISTS), pero dispersa la fuente de verdad de un solo cambio de esquema en dos migraciones.',
+      ).toBe(false);
+    });
+
+    it('fn_hato_registrar_venta_animales (070) usa un INSERT ESTÁTICO (no EXECUTE/SQL dinámico) e inserta en la columna cabezas, nunca en cantidad', () => {
+      expect(c070, '070 no existe todavía.').not.toBeNull();
+      if (!c070) return;
+      const region = extractFunctionRegion(c070, 'fn_hato_registrar_venta_animales');
+      expect(region, 'No se encontró fn_hato_registrar_venta_animales en 070.').not.toBe('');
+      expect(
+        /\bcabezas\b/i.test(region),
+        'fn_hato_registrar_venta_animales no menciona la columna "cabezas" — el conteo de cabezas de la decisión 6 del dueño no tiene dónde aterrizar en fin_ingresos.',
+      ).toBe(true);
+      expect(
+        /\bEXECUTE\b/i.test(region),
+        'fn_hato_registrar_venta_animales todavía usa EXECUTE (SQL dinámico) — se corrigió específicamente para NO depender de eso: con `cabezas` ahora declarada en 070 antes de esta función, el INSERT hacia fin_ingresos debe ser estático (Postgres lo valida al aplicar la migración, no en el primer llamado real del RPC a mitad de un formulario).',
+      ).toBe(false);
+      // La lista de columnas del INSERT estático no debe incluir
+      // "cantidad" -- v_cabezas nunca se escribe ahí (QA #3).
+      const insertListMatch = /INSERT\s+INTO\s+fin_ingresos\s*\(([^)]*)\)/i.exec(region);
+      expect(
+        insertListMatch,
+        'No se encontró la lista de columnas del INSERT estático hacia fin_ingresos dentro de fn_hato_registrar_venta_animales.',
+      ).not.toBeNull();
+      if (!insertListMatch) return;
+      const columnas = insertListMatch[1];
+      expect(
+        /\bcantidad\b/i.test(columnas),
+        `fn_hato_registrar_venta_animales inserta en la columna "cantidad" de fin_ingresos — esa columna ya significa litros (leche) o kg (aguacate) según el negocio; escribir cabezas ahí es una tercera unidad no declarada, la misma clase de bug que calculosCostoKg.ts:41 (QA #3). Lista de columnas encontrada: ${columnas}`,
+      ).toBe(false);
+      expect(
+        /\bcabezas\b/i.test(columnas),
+        `La lista de columnas del INSERT hacia fin_ingresos en fn_hato_registrar_venta_animales no incluye "cabezas". Lista encontrada: ${columnas}`,
+      ).toBe(true);
+    });
+  });
+});

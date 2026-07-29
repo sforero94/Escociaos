@@ -36,7 +36,7 @@ import { AnimalLabel } from './components/AnimalLabel';
 import { ALERTA_META_TABLERO, PILL_ALERTA_TABLERO, derivarAlertasTablero } from '@/utils/hatoAlertasTablero';
 import type { ChipEstilo } from '@/utils/hatoUi';
 import { formatNumber } from '@/utils/format';
-import { diferenciaEnDias } from '@/utils/fechas';
+import { diferenciaEnDias, obtenerFechaHoy } from '@/utils/fechas';
 import type { HatoProduccionQuincenal } from '@/types/hato';
 
 export function HatoDashboard() {
@@ -59,7 +59,9 @@ export function HatoDashboard() {
     cargarQuincena();
   }, [cargarQuincena]);
 
-  const hoy = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  // `obtenerFechaHoy()` -- NUNCA `new Date().toISOString().slice(0, 10)`,
+  // que es UTC y ya es "mañana" en Bogotá después de las 19:00.
+  const hoy = useMemo(() => obtenerFechaHoy(), []);
 
   const {
     enOrdeno,
@@ -111,7 +113,14 @@ export function HatoDashboard() {
   }, [animales]);
 
   const litrosDia = useMemo(() => {
-    if (!ultimaQuincena?.fecha_inicio || !ultimaQuincena.fecha_fin) return null;
+    // `litros_total` es `null` para una quincena `origen_dato='medido'`
+    // cuyo `fin_ingreso` no se pudo leer (migración 070 -- `fin_ingresos`
+    // es Gerencia-only; `useProduccionHato` ya intenta resolverlo vía el
+    // embed, ver `resolverLitrosQuincenal`). Para un rol sin acceso a
+    // Finanzas esta card queda en "—" hasta que SOW 5 la reemplace por el
+    // tracker bottom-up (basado en `hato_pesajes_leche`, sin esta
+    // dependencia) -- "sin dato, nunca 0" aplica igual aquí.
+    if (!ultimaQuincena?.fecha_inicio || !ultimaQuincena.fecha_fin || ultimaQuincena.litros_total == null) return null;
     const dias = diferenciaEnDias(ultimaQuincena.fecha_inicio, ultimaQuincena.fecha_fin) + 1;
     if (dias <= 0) return null;
     return ultimaQuincena.litros_total / dias;

@@ -22,6 +22,8 @@ import type { EstadoReproductivo, TipoEstado } from '@/utils/calculosHato';
 import type { ClasificacionFilaDiff } from '@/utils/importHato/diffChequeo';
 import type { CategoriaHato } from '@/utils/hatoCategorias';
 import type { EstadoAlertaHato } from '@/utils/hatoAlertas';
+import type { VejezPesajes } from '@/utils/hatoProduccion';
+import { formatShortDate } from '@/utils/format';
 
 export interface ChipEstilo {
   label: string;
@@ -240,6 +242,27 @@ export function chipStockPajillas(cantidadActual: number): ChipEstilo | null {
     label: cantidadActual < 0 ? `Stock negativo (${cantidadActual})` : 'Sin stock',
     className: AMBAR,
     title: 'El conteo no bloquea registrar un uso nuevo — prioriza que quede el evento reproductivo.',
+  };
+}
+
+/** Chip PERMANENTE de vejez del pesaje semanal (decisión 17 del dueño, plan
+ * `docs/plan_hato_produccion_rework.md` §4.2d/§4.3/§6 SOW 5) -- se muestra
+ * SIEMPRE en el tablero de Producción, no solo cuando hay backlog. Solo
+ * colorea/formatea el nivel que YA decidió `vejezPesajes` (`hatoProduccion.ts`,
+ * `ok` <= 1 semana · `atrasado` 2-3 · `critico` >= 4); riesgo R-7. */
+export function chipVejezPesajes(vejez: VejezPesajes): ChipEstilo {
+  if (vejez.ultimaFecha === null || vejez.semanas === null) {
+    return {
+      label: 'Sin pesajes registrados',
+      className: ROJO,
+      title: 'Nunca se ha registrado un pesaje semanal para el hato.',
+    };
+  }
+  const clase = vejez.nivel === 'ok' ? VERDE : vejez.nivel === 'atrasado' ? AMBAR : ROJO;
+  const relativo = vejez.semanas <= 0 ? 'esta semana' : `hace ${vejez.semanas} semana${vejez.semanas === 1 ? '' : 's'}`;
+  return {
+    label: `Último pesaje: ${relativo} (${formatShortDate(vejez.ultimaFecha)})`,
+    className: clase,
   };
 }
 

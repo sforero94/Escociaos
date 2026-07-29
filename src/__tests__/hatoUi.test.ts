@@ -14,6 +14,7 @@ import {
   chipTipoEstado,
   chipEstadoTratamiento,
   chipStockPajillas,
+  chipVejezPesajes,
 } from '../utils/hatoUi';
 import type { EstadoReproductivo, TipoEstado } from '../utils/calculosHato';
 import type { ClasificacionFilaDiff } from '../utils/importHato/diffChequeo';
@@ -192,5 +193,53 @@ describe('chipStockPajillas (G3, S10)', () => {
   it('nunca usa rojo -- el stock en 0/negativo advierte pero nunca bloquea (G3)', () => {
     expect(chipStockPajillas(0)?.className).not.toContain('red');
     expect(chipStockPajillas(-5)?.className).not.toContain('red');
+  });
+});
+
+describe('chipVejezPesajes (decisión 17, SOW 5)', () => {
+  it('sin ningún pesaje registrado: rojo, mensaje explícito', () => {
+    const chip = chipVejezPesajes({ ultimaFecha: null, semanas: null, nivel: 'critico' });
+    expect(chip.className).toContain('red');
+    expect(chip.label).toBe('Sin pesajes registrados');
+  });
+
+  it('nivel ok: verde, "hace N semanas"', () => {
+    const chip = chipVejezPesajes({ ultimaFecha: '2026-07-21', semanas: 1, nivel: 'ok' });
+    expect(chip.className).toContain('green');
+    expect(chip.label).toContain('hace 1 semana');
+    expect(chip.label).not.toContain('semanas');
+  });
+
+  it('nivel atrasado: ámbar', () => {
+    const chip = chipVejezPesajes({ ultimaFecha: '2026-07-10', semanas: 3, nivel: 'atrasado' });
+    expect(chip.className).toContain('amber');
+    expect(chip.label).toContain('hace 3 semanas');
+  });
+
+  it('nivel critico con fecha (backlog real, no arranque): rojo, sigue mostrando la fecha', () => {
+    const chip = chipVejezPesajes({ ultimaFecha: '2026-06-24', semanas: 4, nivel: 'critico' });
+    expect(chip.className).toContain('red');
+    expect(chip.label).toContain('hace 4 semanas');
+  });
+
+  it('el día calendario embebido en el label es el MISMO que ultimaFecha, nunca el día anterior (FIX 1)', () => {
+    // Caso real del brief: la pantalla de pesaje decía "21 de julio" para
+    // un `ultimaFecha` de 2026-07-22 (formatShortDate parseando el string
+    // ISO como UTC medianoche y renderizándolo en Bogotá, UTC-5).
+    const chip = chipVejezPesajes({ ultimaFecha: '2026-07-22', semanas: 1, nivel: 'ok' });
+    expect(chip.label).toContain('22 de jul de 2026');
+    expect(chip.label).not.toContain('21 de jul');
+  });
+
+  it('frontera de año: ultimaFecha 2026-01-01 nunca renderiza como diciembre de 2025 (FIX 1)', () => {
+    const chip = chipVejezPesajes({ ultimaFecha: '2026-01-01', semanas: 1, nivel: 'ok' });
+    expect(chip.label).toContain('1 de ene de 2026');
+    expect(chip.label).not.toContain('2025');
+  });
+
+  it('semanas <= 0: "esta semana", nunca "hace 0 semanas"', () => {
+    const chip = chipVejezPesajes({ ultimaFecha: '2026-07-28', semanas: 0, nivel: 'ok' });
+    expect(chip.label).toContain('esta semana');
+    expect(chip.label).not.toContain('hace 0');
   });
 });

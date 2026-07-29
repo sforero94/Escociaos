@@ -138,6 +138,14 @@ export interface Ingreso {
   alianza?: string;
   cliente?: string;
   finca?: string;
+  /** `cabezas` (migración 071) -- conteo de animales de una venta del
+   * Hato Lechero (terneros/descarte, `fn_hato_registrar_venta_animales`,
+   * migración 070). NUNCA se reutiliza `cantidad` para esto: esa columna
+   * ya significa litros (leche) o kg (aguacate) según el negocio, y una
+   * tercera unidad no declarada ahí sería la misma clase de bug que
+   * `calculosCostoKg.ts:41`. `null`/`undefined` en cualquier fila que no
+   * sea una venta de animales del hato. */
+  cabezas?: number | null;
   created_at: string;
   updated_at: string;
   // Relations

@@ -34,6 +34,7 @@ import {
   isoATextoDDMMYYYY,
   type FilaPlanillaChequeo,
 } from '@/utils/hato/exportarPlanillaChequeo';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 /**
  * B5.1 -- planilla PRE-LLENADA para el PRÓXIMO chequeo (aún sin fecha real:
@@ -81,7 +82,9 @@ export function ChequeosList() {
   const handleExportarPlanilla = async () => {
     setExportando(true);
     try {
-      const hoy = new Date().toISOString().slice(0, 10);
+      // `obtenerFechaHoy()` -- NUNCA `new Date().toISOString().slice(0, 10)`,
+      // que es UTC y ya es "mañana" en Bogotá después de las 19:00.
+      const hoy = obtenerFechaHoy();
       await descargarPlanillaChequeo(
         {
           tituloHoja: construirTituloHojaChequeo(hoy),

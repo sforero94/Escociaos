@@ -80,7 +80,17 @@ export interface DatosReportes {
   negocios: NegocioRow[];
   ingresos: IngresoRow[];
   gastos: GastoRow[];
-  /** Histórico COMPLETO: el costo promedio móvil es path-dependent. */
+  /**
+   * Histórico COMPLETO: el costo promedio móvil es path-dependent.
+   *
+   * Este módulo es lógica pura (sin acceso a Supabase) -- la exclusión de
+   * `es_hato = true` (migración 059, SOW 0 de
+   * `docs/plan_hato_produccion_rework.md`) se aplica en el fetch que
+   * construye este arreglo, NO aquí. Ver `execPygFlujoCaja` en `chat.tsx`
+   * (ambos árboles). Sin ese filtro, una venta del Hato Lechero se costea
+   * al promedio ponderado de compra de la ceba -- una vaca del hato nunca
+   * se compró.
+   */
   ganado: GanadoRow[];
   parametros: { clave: string; anio: number | null; valor: number }[];
 }

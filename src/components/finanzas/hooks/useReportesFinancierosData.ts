@@ -150,9 +150,14 @@ export function useReportesFinancierosData(anio: number): EstadoReportesData {
           ),
           // Histórico COMPLETO: el costo promedio móvil del ganado es
           // path-dependent y recortar la serie cambiaría el costo de venta.
+          // `es_hato=false` excluye las transacciones del Hato Lechero
+          // (migración 059): una vaca del hato nunca se compró, así que
+          // costearla al promedio ponderado de compra de la ceba infla el
+          // COGS. Ver CLAUDE.md raíz, SOW 0 de `docs/plan_hato_produccion_rework.md`.
           fetchAll<FilaGanado>((desde, hasta) =>
             (supabase.from('fin_transacciones_ganado') as any)
               .select('id, fecha, tipo, cantidad_cabezas, kilos_pagados, valor_total')
+              .eq('es_hato', false)
               .order('id')
               .range(desde, hasta)
           ),

@@ -6,33 +6,58 @@
 // `HatoPageHeader` compartido, la acción rápida "Registrar parto", la curva
 // de PL por chequeo y la card de Tratamientos. La venta/muerte la aportó S9
 // (`VentaAnimalDialog`/`MuerteAnimalDialog`), integrada aquí en el header.
+// SOW 3 de `docs/plan_hato_produccion_rework.md` repuntó "Registrar venta"
+// a `VentaAnimalesHatoDialog` (decisión 7 del dueño: terneros/descarte son
+// flujos de `fin_ingresos`, no de `fin_transacciones_ganado` -- ver SOW 0
+// del mismo plan). `MuerteAnimalDialog` no cambia: la muerte nunca fue una
+// transacción financiera.
+//
+// SOW 5 (§4.4, decisión 9 del dueño): la curva SEMANAL
+// (`CurvaSemanalProduccion`, `hato_pesajes_leche`) pasa a ser la curva
+// PRINCIPAL de producción; la curva por chequeo (`CurvaProduccionLeche`,
+// PL bimestral) se APARCA -- NO se borra, queda en un acordeón secundario
+// rotulado "Estimación anterior".
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Loader2, AlertTriangle, ArrowLeft, Pencil, Baby, HandCoins, Skull } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHatoAnimal } from './hooks/useHatoAnimal';
 import { useHatoTratamientos } from './hooks/useHatoTratamientos';
+import { usePesajesVaca } from './hooks/usePesajesVaca';
 import { EstadoChip } from './components/EstadoChip';
 import { FranjaEstadisticas } from './components/FranjaEstadisticas';
 import { EventoTimeline } from './components/EventoTimeline';
 import { GenealogiaArbol } from './components/GenealogiaArbol';
 import { EditarAnimalDialog } from './components/EditarAnimalDialog';
 import { RegistrarPartoDialog } from './components/RegistrarPartoDialog';
+import { CurvaSemanalProduccion } from './components/CurvaSemanalProduccion';
 import { CurvaProduccionLeche } from './components/CurvaProduccionLeche';
 import { TratamientosCard } from './components/TratamientosCard';
 import { HatoPageHeader } from './components/HatoPageHeader';
-import { VentaAnimalDialog } from './components/VentaAnimalDialog';
+import { VentaAnimalesHatoDialog } from './components/VentaAnimalesHatoDialog';
 import { MuerteAnimalDialog } from './components/MuerteAnimalDialog';
 import { Button } from '@/components/ui/button';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { chipEstadoReproductivo, chipVaciaEsProblema, chipProximaAReemplazo, chipNumeroProvisional } from '@/utils/hatoUi';
 import { formatShortDate, formatNumber, capitalize } from '@/utils/format';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 export function HojaDeVida() {
   const { id } = useParams<{ id: string }>();
   const { detalle, loading, error, reload } = useHatoAnimal(id);
   const { tratamientos, loading: tratamientosLoading, error: tratamientosError } = useHatoTratamientos(id);
+  const { pesajes } = usePesajesVaca(id);
   const { profile } = useAuth();
+  // Fecha del último `parto` de `detalle.eventos` (ya trae TODOS los
+  // eventos del animal, V7) -- decisión 11: sin ningún parto conocido, la
+  // curva semanal cae al fallback de eje calendario, NUNCA se le imputa
+  // una fecha. Hook llamado incondicionalmente (regla de React) aunque
+  // `detalle` todavía sea `null` mientras carga.
+  const fechaUltimoParto = useMemo(() => {
+    const fechasParto = (detalle?.eventos ?? []).filter((e) => e.tipo === 'parto').map((e) => e.fecha);
+    return fechasParto.length === 0 ? null : fechasParto.reduce((max, f) => (f > max ? f : max));
+  }, [detalle]);
   const canEdit = profile?.rol === 'Administrador' || profile?.rol === 'Gerencia';
   const [editOpen, setEditOpen] = useState(false);
   const [partoOpen, setPartoOpen] = useState(false);
@@ -41,7 +66,7 @@ export function HojaDeVida() {
 
   if (loading) {
     return (
-      <div className="min-h-screen min-h-[100dvh] bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Loader2 className="w-6 h-6 animate-spin text-primary" />
       </div>
     );
@@ -49,7 +74,7 @@ export function HojaDeVida() {
 
   if (error || !detalle) {
     return (
-      <div className="min-h-screen min-h-[100dvh] bg-gray-50 p-4 lg:p-8">
+      <div className="min-h-screen bg-gray-50 p-4 lg:p-8">
         <div className="max-w-4xl mx-auto">
           <Link to="/hato-lechero/hato" className="inline-flex items-center gap-1 text-sm text-primary hover:underline mb-4">
             <ArrowLeft className="w-4 h-4" /> Volver al hato
@@ -64,7 +89,9 @@ export function HojaDeVida() {
   }
 
   const { animal, derivado, eventos, chequeos, madre, padreToro, padreAnimal, crias, nombresToroPorId, numeroEsProvisional, pl, numPartos } = detalle;
-  const hoy = new Date().toISOString().slice(0, 10);
+  // `obtenerFechaHoy()` -- NUNCA `new Date().toISOString().slice(0, 10)`,
+  // que es UTC y ya es "mañana" en Bogotá después de las 19:00.
+  const hoy = obtenerFechaHoy();
   // Venta/muerte (S9) solo aplican a un animal todavía activo -- uno ya
   // vendido/muerto/descartado no puede volver a salir del hato por esta vía.
   const puedeRegistrarSalida = canEdit && animal.estado === 'activa';
@@ -82,7 +109,7 @@ export function HojaDeVida() {
   }`;
 
   return (
-    <div className="min-h-screen min-h-[100dvh] bg-gray-50 p-4 lg:p-8">
+    <div className="min-h-screen bg-gray-50 p-4 lg:p-8">
       <div className="max-w-5xl mx-auto w-full space-y-6">
         <Link to="/hato-lechero/hato" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
           <ArrowLeft className="w-4 h-4" /> Volver al hato
@@ -162,9 +189,24 @@ export function HojaDeVida() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <CurvaProduccionLeche chequeos={chequeos} />
+          <CurvaSemanalProduccion pesajes={pesajes} fechaUltimoParto={fechaUltimoParto} />
           <TratamientosCard tratamientos={tratamientos} loading={tratamientosLoading} error={tratamientosError} />
         </div>
+
+        {/* Curva por chequeo (PL bimestral) -- APARCADA, no borrada
+            (decisión 9 del dueño, plan §4.4): la curva semanal de arriba es
+            ahora la principal. Colapsada por defecto para no competir
+            visualmente con la curva vigente. */}
+        <Accordion type="single" collapsible>
+          <AccordionItem value="curva-pl-chequeo" className="rounded-xl border border-gray-200 bg-white px-5">
+            <AccordionTrigger className="text-sm font-semibold text-gray-900">
+              Estimación anterior — PL por chequeo (bimestral)
+            </AccordionTrigger>
+            <AccordionContent>
+              <CurvaProduccionLeche chequeos={chequeos} />
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
 
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
           <h2 className="text-sm font-semibold text-gray-900 mb-4">Historial de chequeos</h2>
@@ -226,10 +268,10 @@ export function HojaDeVida() {
           animal ya vendido/muerto). */}
       {canEdit && (
         <>
-          <VentaAnimalDialog
+          <VentaAnimalesHatoDialog
             open={ventaOpen}
             onOpenChange={setVentaOpen}
-            animalId={animal.id}
+            animalIdPreseleccionado={animal.id}
             onGuardado={reload}
           />
           <MuerteAnimalDialog
