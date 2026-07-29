@@ -66,22 +66,27 @@ pedido del dueño cambia su tratamiento: pasa a comportarse como **Última Cría
 último valor conocido, editable si Martha registra un parto nuevo en este chequeo. Es el mismo cambio
 de patrón que Fecha Servicio/Toro/Estado, no una pieza aparte.
 
-**Cierre en dos movimientos:**
+### Corrección al alcance (2026-07-29, al arrancar la ejecución)
 
-1. **Persistir el sexo/destino en el evento `parto`**, que es a donde pertenece (no a la fila de
-   chequeo): `datos.cria_sexo` (`hembra`/`macho`, de la letra) + `datos.cria_destino` (`vendida`/
-   `retenida`/`muerta`, ya lo resuelve `parseSX`) + `datos.cria_numero` (la chapeta, ya existe como
-   `numero_cria`). Derivado con `parseSX` — nunca un segundo parser. Backfill de los 333 vía
-   `chequeo_vaca_id → sx_raw`, y derivación en vivo en el commit path para los que vengan.
+Al ir a implementar se verificó que **`cria_destino` NO es una clave de `datos`: es una columna real de
+`hato_eventos`, y está poblada** — 179 `macho_vendido` · 103 `retenida` · 27 `hembra_vendida` · 23
+`muerta` · 1 null, sobre 333 partos. Además `sx_raw` está en 333/333. Consecuencia: **el sexo ya es
+recuperable sin escribir nada**, así que la Fase 1 **no lleva migración ni backfill** (el plan original
+pedía ambos):
+
+1. **Derivar en lectura, no persistir.** Una función pura en `calculosHato.ts` mapea el último parto a
+   sexo: fuente autoritativa `sx_raw` vía el `parseSX` que ya existe (`ov`→macho, `av`/`a_n`/`a_mas`→
+   hembra, `o_mas`→macho), con `cria_destino` como respaldo (`macho_vendido`→macho, `hembra_vendida`/
+   `retenida`→hembra, `muerta`→sin dato, porque ahí la letra es la única fuente). No determinable →
+   `null`, nunca inventado. Cero cambios al camino de escritura, cero riesgo sobre datos de producción.
 2. **Imprimirlo legible** (petición del dueño: "limpiar esa información para que sea más clara a la
-   hora de leer"): en vez de reimprimir `OV` / `A 206`, la planilla dice **"Macho (vendido)"** /
-   **"Hembra (retenida #206)"**.
+   hora de leer"): **"Macho (vendido)"** / **"Hembra (retenida #206)"** en vez de `OV` / `A 206`.
 
-> ⚠️ **Tensión de round-trip, resuelta por el cambio a foto.** Mientras la subida era `.xlsx`, todo lo
-> impreso tenía que ser re-parseable, así que la etiqueta amigable habría obligado a enseñarle al
-> parser un alias nuevo. Con la foto, lo impreso es **para leer** y lo que se carga es lo que Martha
-> escribe a mano — la etiqueta legible ya no compromete el parseo. La ruta `.xlsx` de respaldo sí
-> necesita el alias; es un mapa chico y va con la Fase 1.
+> ✅ **La tensión de round-trip se resuelve con la separación de artefactos, sin tocar el parser.**
+> El `.xlsx` es el artefacto de **máquina** y conserva los códigos **crudos** (`A 206` verbatim), así
+> que sigue siendo re-parseable sin enseñarle ningún alias nuevo a `importHato/`. El PDF es el
+> artefacto **humano** y ahí van las etiquetas legibles. Por eso la etiqueta legible es trabajo de la
+> **Fase 2**, no de la 1, y el mapa de alias que el plan preveía **no hace falta en absoluto**.
 
 ---
 
@@ -187,9 +192,9 @@ Un día de trabajo que decide el orden de todo lo demás. No construir el endpoi
 
 ### Fase 1 — Contenido de la planilla
 
-- **Sexo/destino de la cría** (§2): persistir en `hato_eventos.datos` (`cria_sexo`/`cria_destino`)
-  derivándolo con `parseSX`, backfill de los 333 partos vía `chequeo_vaca_id → sx_raw`, y derivación
-  en vivo en el commit path. Exponerlo en la vista y **imprimirlo en lenguaje claro** (D-E).
+- **Sexo de la cría** (§2): función pura de derivación en `calculosHato.ts` (`parseSX` autoritativo,
+  `cria_destino` de respaldo). **Sin migración, sin backfill, sin tocar el camino de escritura** — ver
+  "Corrección al alcance" en §2. El `.xlsx` emite el `sx_raw` crudo; la etiqueta legible es Fase 2.
 - Exponer `ultimo_servicio_fecha`, `ultimo_servicio_toro_id`, `ultimo_tipo_servicio` y
   `ultimo_estado_chequeo` en `useAnimalesParaPlanillaChequeo` y mapearlos en la fila del export. El
   texto de la celda `Toro` se reconstruye con `textoCeldaToro`, **que ya existe** y antepone
@@ -280,4 +285,17 @@ descarta en silencio; ninguna fila ambigua se adjudica sola; toda escritura pasa
    ancho de columna de la Fase 2; si las columnas nuevas no caben ahí, se agregan páginas antes que
    reducir la letra.
 
-## 9. Preguntas abiertas
+## 9. Registro de ejecución (stage gating)
+
+Cada fase cierra con: suite verde, `tsc --noEmit` limpio, `lint` sin nuevos hallazgos, paridad del
+motor intacta, y commit propio. Una fase no arranca hasta que la anterior pasó su gate.
+
+| Fase | Estado | Gate |
+|---|---|---|
+| **0** — Spike OCR | ⛔ **Bloqueada por insumo externo** | Necesita 2–3 fotos de planillas reales ya diligenciadas por Martha. No se puede simular: el objeto de medición ES su letra. **No bloquea 1–4**, que el plan ya declara independientes del resultado. |
+| **1** — Contenido de la planilla | 🔄 en ejecución | 4 columnas pre-llenadas (sexo cría, fecha servicio, toro, estado) + función pura de sexo + paridad regenerada. |
+| **2** — PDF imprimible | ⏸ pendiente de Fase 1 | 12 columnas / 35 filas / ≥11pt / ~2 páginas horizontal. Aritmética verificada: ~217mm de ancho necesario contra 259mm útiles en carta horizontal; 35 filas a ~8mm → 2 páginas. |
+| **3** — Foto + ventana de corrección | ⏸ | Endpoint + confianza por celda + anti-row-drift + revisión editable. |
+| **4** — Round-trip | ⏸ | Exportar → diligenciar → cargar → aprobar → re-exportar sin eventos duplicados. |
+
+## 10. Preguntas abiertas
