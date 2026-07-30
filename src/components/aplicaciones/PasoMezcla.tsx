@@ -58,10 +58,15 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
     try {
       // 🚨 CARGAR SOLO PRODUCTOS DE AGROINSUMOS (como blancos biológicos)
       
+      // `estado` lo deriva la BD de las existencias (migración 073): un insumo
+      // agotado queda en 'Sin existencias'. Aquí se planea ANTES de comprar
+      // — el paso de Lista de Compras existe justo para eso — así que el
+      // saldo en cero NO puede sacar al producto del selector; lo que se
+      // excluye es sólo el producto inservible (Vencido/Perdido).
       const { data, error } = await supabase
         .from('productos')
         .select('*')
-        .eq('estado', 'OK')
+        .in('estado', ['OK', 'Sin existencias'])
         .eq('activo', true)
         .eq('grupo', 'Agroinsumos') // 🚨 FILTRAR POR GRUPO
         .order('nombre');

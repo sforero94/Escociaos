@@ -444,6 +444,10 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                       <option value="Vencido">Vencido</option>
                       <option value="Perdido">Perdido</option>
                     </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Si la cantidad actual es 0, el sistema lo pone en "Sin
+                      existencias" automáticamente.
+                    </p>
                   </div>
                 </div>
 

@@ -28,6 +28,18 @@ interface Product {
   permitido_gerencia: boolean | null;
 }
 
+/**
+ * Modificador de color del chip de Estado. `estado` lo deriva la BD de las
+ * existencias (migración 073): cantidad_actual = 0 => 'Sin existencias'. Los
+ * estados de calidad (Vencido / Perdido / Próximo a vencer) sólo sobreviven
+ * con saldo positivo y sí piden atención.
+ */
+function estadoChipModifier(estado: string | null): string {
+  if (estado === 'OK') return 'inv-estado-chip--ok';
+  if (!estado || estado === 'Sin existencias') return 'inv-estado-chip--sin-existencias';
+  return 'inv-estado-chip--alerta';
+}
+
 export function InventoryList({ onNavigate }: InventoryListProps) {
   const navigate = useNavigate();
   const { isSafeModeEnabled } = useSafeMode();
@@ -401,14 +413,8 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs ${
-                          product.estado === 'Disponible'
-                            ? 'bg-success-alt/10 text-success-alt'
-                            : 'bg-warning/10 text-warning'
-                        }`}
-                      >
-                        {product.estado || 'Disponible'}
+                      <span className={`inv-estado-chip ${estadoChipModifier(product.estado)}`}>
+                        {product.estado || 'Sin existencias'}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right text-foreground">

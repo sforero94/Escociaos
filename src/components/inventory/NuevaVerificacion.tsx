@@ -14,14 +14,24 @@ interface Producto {
   unidad_medida: string;
   precio_unitario: number | null;
   activo: boolean | null;
+  estado: string | null;
 }
+
+const tieneExistencias = (p: Producto) => (p.cantidad_actual ?? 0) > 0;
 
 /**
  * Componente para iniciar una nueva verificación física de inventario
- * Carga todos los productos activos y crea el registro inicial
+ * Carga los productos activos y crea el registro inicial.
+ *
+ * El alcance por defecto son los insumos CON EXISTENCIAS, no todo el catálogo:
+ * la BD marca en 'Sin existencias' todo producto con cantidad_actual = 0
+ * (migración 073), y contar físicamente un saldo que ya se sabe en cero sólo
+ * infla la planilla. Queda la casilla para incluirlos cuando se quiera un
+ * conteo exhaustivo (p. ej. buscar saldos que el sistema perdió).
  */
 export function NuevaVerificacion() {
   const [productos, setProductos] = useState<Producto[]>([]);
+  const [incluirSinExistencias, setIncluirSinExistencias] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [observaciones, setObservaciones] = useState('');
@@ -42,14 +52,14 @@ export function NuevaVerificacion() {
       // Consultar productos - sin filtro de activo para verificar todos
       const { data, error } = await supabase
         .from('productos')
-        .select('id, nombre, categoria, cantidad_actual, unidad_medida, precio_unitario, activo')
+        .select('id, nombre, categoria, cantidad_actual, unidad_medida, precio_unitario, activo, estado')
         .order('nombre');
 
       if (error) throw error;
 
       // Filtrar solo productos activos, pero si activo es null, incluirlos también
       const productosActivos = (data || []).filter(p => p.activo !== false);
-      
+
       setProductos(productosActivos);
     } catch (err: any) {
       setError('Error al cargar productos: ' + err.message);
@@ -58,8 +68,16 @@ export function NuevaVerificacion() {
     }
   };
 
+  // Alcance efectivo de la verificación: lo que se muestra en la tabla es
+  // exactamente lo que se insertará en verificaciones_detalle.
+  const productosAVerificar = incluirSinExistencias
+    ? productos
+    : productos.filter(tieneExistencias);
+
+  const totalSinExistencias = productos.filter((p) => !tieneExistencias(p)).length;
+
   const handleCrearVerificacion = async () => {
-    if (productos.length === 0) {
+    if (productosAVerificar.length === 0) {
       setError('No hay productos activos para verificar');
       return;
     }
@@ -85,7 +103,7 @@ export function NuevaVerificacion() {
       if (errorVerificacion) throw errorVerificacion;
 
       // 2. Crear registros de detalle para cada producto
-      const detalles = productos.map((producto) => ({
+      const detalles = productosAVerificar.map((producto) => ({
         verificacion_id: verificacion.id,
         producto_id: producto.id,
         cantidad_teorica: producto.cantidad_actual || 0,
@@ -120,7 +138,7 @@ export function NuevaVerificacion() {
   };
 
   const calcularValorTotal = () => {
-    return productos.reduce(
+    return productosAVerificar.reduce(
       (sum, p) => sum + (p.cantidad_actual || 0) * (p.precio_unitario || 0),
       0
     );
@@ -138,7 +156,7 @@ export function NuevaVerificacion() {
   }
 
   // Estado vacío - Sin productos
-  if (productos.length === 0) {
+  if (productosAVerificar.length === 0) {
     return (
       <div className="space-y-6">
         <VerificacionesNav />
@@ -170,16 +188,34 @@ export function NuevaVerificacion() {
           <h2 className="text-2xl text-foreground mb-2">
             No hay productos para verificar
           </h2>
-          <p className="text-brand-brown/70 mb-4">
-            No se encontraron productos activos en el inventario
-          </p>
-          <button
-            onClick={() => navigate('/inventario/nueva-compra')}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:from-primary-dark hover:to-secondary-dark transition-all"
-          >
-            <Package className="w-5 h-5" />
-            Agregar Productos
-          </button>
+          {totalSinExistencias > 0 && !incluirSinExistencias ? (
+            <>
+              <p className="text-brand-brown/70 mb-4">
+                Los {totalSinExistencias} insumos activos del catálogo están sin
+                existencias, así que no hay nada que contar.
+              </p>
+              <button
+                onClick={() => setIncluirSinExistencias(true)}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:from-primary-dark hover:to-secondary-dark transition-all"
+              >
+                <ClipboardCheck className="w-5 h-5" />
+                Verificar de todas formas
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-brand-brown/70 mb-4">
+                No se encontraron productos activos en el inventario
+              </p>
+              <button
+                onClick={() => navigate('/inventario/nueva-compra')}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:from-primary-dark hover:to-secondary-dark transition-all"
+              >
+                <Package className="w-5 h-5" />
+                Agregar Productos
+              </button>
+            </>
+          )}
         </div>
       </div>
     );
@@ -224,7 +260,7 @@ export function NuevaVerificacion() {
             <ol className="space-y-2 text-sm text-brand-brown/80">
               <li className="flex gap-2">
                 <span className="flex-shrink-0 text-blue-600">1.</span>
-                <span>El sistema cargará todos los productos activos con sus cantidades teóricas actuales</span>
+                <span>El sistema cargará los insumos activos <strong>con existencias</strong> y sus cantidades teóricas actuales</span>
               </li>
               <li className="flex gap-2">
                 <span className="flex-shrink-0 text-blue-600">2.</span>
@@ -260,8 +296,22 @@ export function NuevaVerificacion() {
             <div className="bg-gradient-to-r from-muted/50 to-muted/30 px-6 py-4 border-b border-primary/10">
               <h3 className="text-lg text-foreground flex items-center gap-2">
                 <Package className="w-5 h-5 text-primary" />
-                Productos a Verificar ({productos.length})
+                Productos a Verificar ({productosAVerificar.length})
               </h3>
+              {totalSinExistencias > 0 && (
+                <label className="flex items-center gap-2 mt-3 text-sm text-brand-brown/70 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={incluirSinExistencias}
+                    onChange={(e) => setIncluirSinExistencias(e.target.checked)}
+                    className="w-4 h-4 rounded border-primary/30 text-primary"
+                  />
+                  <span>
+                    Incluir los {totalSinExistencias} insumos sin existencias
+                    {incluirSinExistencias ? '' : ' (excluidos del conteo)'}
+                  </span>
+                </label>
+              )}
             </div>
             <div className="max-h-[400px] overflow-y-auto">
               <table className="w-full">
@@ -274,7 +324,7 @@ export function NuevaVerificacion() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-primary/5">
-                  {productos.map((producto) => (
+                  {productosAVerificar.map((producto) => (
                     <tr
                       key={producto.id}
                       className="hover:bg-muted/20 transition-colors"
@@ -308,7 +358,12 @@ export function NuevaVerificacion() {
             <div className="space-y-4 mb-6">
               <div>
                 <p className="text-sm text-brand-brown/60 mb-1">Total Productos</p>
-                <p className="text-primary">{productos.length}</p>
+                <p className="text-primary">{productosAVerificar.length}</p>
+                {totalSinExistencias > 0 && !incluirSinExistencias && (
+                  <p className="text-xs text-brand-brown/60 mt-1">
+                    {totalSinExistencias} sin existencias, excluidos
+                  </p>
+                )}
               </div>
 
               <div className="pt-4 border-t border-primary/10">
@@ -336,7 +391,7 @@ export function NuevaVerificacion() {
             {/* Botón de Iniciar */}
             <button
               onClick={handleCrearVerificacion}
-              disabled={isCreating || productos.length === 0}
+              disabled={isCreating || productosAVerificar.length === 0}
               className="w-full px-6 py-4 bg-gradient-to-r from-primary to-secondary text-white hover:from-primary-dark hover:to-secondary-dark rounded-xl transition-all duration-200 font-medium shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isCreating ? (

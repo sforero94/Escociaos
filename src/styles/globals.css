@@ -781,3 +781,41 @@ input[type='number'] {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ============================================================
+   INVENTARIO — chip de Estado del producto
+   ============================================================ */
+
+/* El estado del insumo lo deriva la BD de las existencias (migración 073), así
+   que la columna por fin distingue "OK" de "Sin existencias" y el chip tiene
+   que leerse de un vistazo. El marcado anterior comparaba contra 'Disponible'
+   —valor que no existe en el enum `estado_producto`— y pintaba con
+   `bg-success-alt/10` / `bg-warning/10` / `px-2.5` / `py-0.5`, ninguna de las
+   cuales está en el build congelado de Tailwind: el chip no tenía ni fondo ni
+   forma. Aquí va la geometría y el color completos, sin depender de él. */
+.inv-estado-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.625rem;
+  border-radius: 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  white-space: nowrap;
+}
+
+.inv-estado-chip--ok {
+  background-color: rgba(115, 153, 28, 0.12); /* primary #73991C */
+  color: #4d6612;
+}
+
+/* Sin existencias no es un error, es una ausencia: gris neutro, no rojo. */
+.inv-estado-chip--sin-existencias {
+  background-color: rgba(120, 113, 108, 0.12);
+  color: #57534e;
+}
+
+/* Vencido / Perdido / Próximo a vencer sí piden atención. */
+.inv-estado-chip--alerta {
+  background-color: rgba(217, 119, 6, 0.12);
+  color: #b45309;
+}
