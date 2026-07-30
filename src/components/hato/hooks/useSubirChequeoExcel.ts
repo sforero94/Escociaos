@@ -9,11 +9,14 @@
 // El paso "Aprobar" (`commit`) llama a
 // `POST /make-server-1ccce916/hato/chequeo/commit`
 // (`src/supabase/functions/server/hato-chequeo-commit.ts`) con SOLO las
-// filas de `filasNormalizadas` cuya clasificación en `diffChequeos.filas` es
-// `sin_cambio`/`cambio` -- `nuevo` y `no_reconocido` NUNCA se envían, ese es
-// el mismo alcance duro que el endpoint revalida del lado del servidor
-// (`validarFilasCommit`, `src/utils/importHato/commitChequeo.ts`) antes de
-// escribir una sola fila.
+// filas cuya clasificación en el diff VIGENTE es `sin_cambio`/`cambio` --
+// `nuevo` y `no_reconocido` NUNCA se envían, ese es el mismo alcance duro que
+// el endpoint revalida del lado del servidor (`validarFilasCommit`,
+// `src/utils/importHato/commitChequeo.ts`) antes de escribir una sola fila.
+//
+// Desde la Fase 3a (`docs/plan_chequeo_captura_foto.md`, ventana de
+// corrección) las filas y la fecha pueden venir CORREGIDAS por un humano: ver
+// `comprometer` y `useRevisionChequeo.ts`.
 //
 // Mismo patrón de auth que `ClimaCard.tsx`: `Authorization: Bearer
 // <session.access_token>` (JWT del usuario, no el anon key -- ambos
@@ -121,22 +124,37 @@ export function useSubirChequeoExcel() {
 
   /**
    * Aprueba el diff actual (`resultado`): envía SOLO las filas
-   * `sin_cambio`/`cambio` de `filasNormalizadas` al commit path. Filas
-   * `nuevo` (sin ficha todavía) y `no_reconocido` nunca se incluyen -- la UI
-   * las señala aparte (ver `ChequeoDiffReview`), no se aprueban en silencio.
+   * `sin_cambio`/`cambio` al commit path. Filas `nuevo` (sin ficha todavía) y
+   * `no_reconocido` nunca se incluyen -- la UI las señala aparte (ver
+   * `ChequeoDiffReview`), no se aprueban en silencio.
+   *
+   * `opciones.filas` y `opciones.fecha` son la vía de la VENTANA DE CORRECCIÓN
+   * (Fase 3a, `useRevisionChequeo`): las filas CORREGIDAS y la fecha del
+   * chequeo fijada a mano. Sin ellas se cae al comportamiento original --
+   * filas tal como salieron del archivo y la fecha que el parser resolvió del
+   * título. Esto es seguro por construcción: el commit revalida las filas que
+   * recibe corriendo `construirDiffChequeo` contra el estado fresco de la BD
+   * (`hato-chequeo-commit.ts`), no re-parsea el `.xlsx`, así que un valor
+   * corregido solo puede cambiar la clasificación entre `sin_cambio` y
+   * `cambio` -- ambas escribibles -- y cualquier fila degradada vuelve como
+   * 409 sin escribir nada.
    */
   const comprometer = useCallback(
-    async (veterinario?: string) => {
+    async (opciones?: { veterinario?: string; fecha?: string; filas?: FilaChequeoNormalizada[] }) => {
       if (!resultado) throw new Error('No hay una vista previa cargada para aprobar.');
-      if (!resultado.chequeoFecha) {
+      const veterinario = opciones?.veterinario;
+      const fechaChequeo = opciones?.fecha ?? resultado.chequeoFecha;
+      if (!fechaChequeo) {
         throw new Error('No se pudo resolver la fecha del chequeo desde el archivo -- no se puede aprobar sin fecha.');
       }
 
       const filasPorNumero = new Map(resultado.filasNormalizadas.map((f) => [f.fila, f]));
-      const filasAprobables = resultado.diffChequeos.filas
-        .filter((f) => f.clasificacion === 'sin_cambio' || f.clasificacion === 'cambio')
-        .map((f) => filasPorNumero.get(f.fila))
-        .filter((f): f is FilaChequeoNormalizada => f !== undefined);
+      const filasAprobables =
+        opciones?.filas ??
+        resultado.diffChequeos.filas
+          .filter((f) => f.clasificacion === 'sin_cambio' || f.clasificacion === 'cambio')
+          .map((f) => filasPorNumero.get(f.fila))
+          .filter((f): f is FilaChequeoNormalizada => f !== undefined);
 
       if (filasAprobables.length === 0) {
         throw new Error('No hay filas sin_cambio/cambio para aprobar en este diff.');
@@ -154,7 +172,7 @@ export function useSubirChequeoExcel() {
           body: JSON.stringify({
             archivo: resultado.archivo,
             generadoEn: resultado.generadoEn,
-            chequeo: { fecha: resultado.chequeoFecha, veterinario: veterinario ?? null },
+            chequeo: { fecha: fechaChequeo, veterinario: veterinario ?? null },
             filas: filasAprobables,
           }),
         });
