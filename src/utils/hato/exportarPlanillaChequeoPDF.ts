@@ -37,6 +37,7 @@
 // tests pueden armar el PDF real en memoria y medirlo.
 
 import { parseSX, type CriaDestino, type SexoCria } from '@/utils/calculosHato';
+import { esNumeroProvisional } from '@/utils/importHato/overridesChapeta';
 import {
   ENCABEZADOS_PLANILLA_CHEQUEO,
   type FilaPlanillaChequeo,
@@ -212,10 +213,46 @@ export const INDICES_COLUMNAS_A_DILIGENCIAR: readonly number[] = ENCABEZADOS_PLA
  * llamador es quien decide qué artefacto está produciendo, igual que decide
  * escribir el `sx_raw` crudo cuando lo que arma es el `.xlsx`.
  */
+/** Marca que acompaña a un número provisional (banda 800-999) en la columna
+ * `#`. Ver `textoCeldaNumero`. */
+export const MARCA_NUMERO_PROVISIONAL = '*';
+
+/** Nota al pie que explica la marca. Solo se imprime si la planilla LLEVA al
+ * menos una fila provisional -- una nota sobre algo que no aparece es ruido. */
+export const NOTA_NUMEROS_PROVISIONALES =
+  '* Número provisional: NO es la caravana física. Identifique ese animal por su NOMBRE.';
+
+/**
+ * Texto de la celda `#`. Un número de la banda provisional (800-999) sale
+ * marcado con un asterisco.
+ *
+ * POR QUÉ: esos números son de TRABAJO, no caravanas físicas -- se asignaron
+ * durante la importación histórica para desempatar chapetas repetidas
+ * (`overridesChapeta.ts`, cuyo propio docstring dice "para que nadie salga a
+ * buscar la caravana 999 en el potrero"). Una planilla impresa es exactamente
+ * ese caso: quien la lleva al corral buscaría una caravana que no existe. El
+ * módulo ya aplica esta regla en las alertas de Telegram (S6, que lideran con
+ * el NOMBRE para animales de número provisional); el papel la necesita igual o
+ * más, porque ahí no hay tooltip que aclare.
+ *
+ * El número se CONSERVA junto a la marca, no se reemplaza: sigue siendo el
+ * ancla de fila con la que el OCR de la Fase 3 cotejará contra el roster.
+ */
+export function textoCeldaNumero(numero: number | null): string {
+  if (numero === null) return '';
+  return esNumeroProvisional(numero) ? `${numero}${MARCA_NUMERO_PROVISIONAL}` : String(numero);
+}
+
+/** `true` si alguna fila lleva número provisional -- decide si se imprime la
+ * nota al pie. */
+export function hayNumerosProvisionales(filas: readonly FilaPlanillaChequeo[]): boolean {
+  return filas.some((f) => esNumeroProvisional(f.numero));
+}
+
 export function construirFilasPlanillaPDF(filas: readonly FilaPlanillaChequeo[]): string[][] {
   return filas.map((f) => {
     const celdas: (string | number | null)[] = [
-      f.numero,
+      textoCeldaNumero(f.numero),
       f.nombre,
       f.pl,
       f.numPartos,
@@ -268,7 +305,7 @@ export function construirFilasPlanillaPDF(filas: readonly FilaPlanillaChequeo[])
  * 3ª página -- no hay margen escondido.
  */
 export const ANCHOS_COLUMNAS_PDF_MM: readonly number[] = [
-  10, // #
+  12, // # (cabe `999*`: la marca de provisional suma un carácter)
   28, // Nombre
   10, // PL
   13.5, // # Partos
@@ -279,7 +316,7 @@ export const ANCHOS_COLUMNAS_PDF_MM: readonly number[] = [
   14, // Estado
   22.5, // Secar
   22.5, // Parto Probable
-  37, // Tratamiento
+  35, // Tratamiento
 ];
 
 /** Ancho total de la tabla = suma exacta de los anchos de columna. Se le pasa
@@ -380,7 +417,7 @@ function dibujarEncabezadoPagina(doc: DocumentoPDF, opciones: OpcionesPlanillaCh
  * páginas solo se conoce cuando la tabla ya se dibujó (mismo patrón que
  * `generarPDFListaCompras.ts`).
  */
-function estamparPiesDePagina(doc: DocumentoPDF): void {
+function estamparPiesDePagina(doc: DocumentoPDF, conNumerosProvisionales: boolean): void {
   const total = doc.getNumberOfPages();
   const altoPagina = doc.internal.pageSize.getHeight();
   const anchoPagina = doc.internal.pageSize.getWidth();
@@ -392,6 +429,11 @@ function estamparPiesDePagina(doc: DocumentoPDF): void {
     doc.setFontSize(8);
     doc.setTextColor(...COLOR_TEXTO_TENUE);
     doc.text(NOTA_OPERATIVA_PLANILLA, MARGENES_PDF_MM.left, y);
+    // La nota de provisionales va ENCIMA de la operativa y solo si aplica: es
+    // una advertencia de identificación en el corral, no decoración.
+    if (conNumerosProvisionales) {
+      doc.text(NOTA_NUMEROS_PROVISIONALES, MARGENES_PDF_MM.left, y - 4);
+    }
     doc.setFont('helvetica', 'normal');
     doc.text(`Página ${i} de ${total}`, anchoPagina - MARGENES_PDF_MM.right, y, { align: 'right' });
   }
@@ -477,7 +519,7 @@ export function construirDocumentoPlanillaChequeoPDF(
     didDrawPage: () => dibujarEncabezadoPagina(doc, opciones),
   });
 
-  estamparPiesDePagina(doc);
+  estamparPiesDePagina(doc, hayNumerosProvisionales(opciones.filas));
   return doc;
 }
 

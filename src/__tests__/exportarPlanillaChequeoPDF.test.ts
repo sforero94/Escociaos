@@ -25,6 +25,8 @@ import {
 import {
   etiquetaSexoCria,
   construirFilasPlanillaPDF,
+  textoCeldaNumero,
+  hayNumerosProvisionales,
   construirDocumentoPlanillaChequeoPDF,
   ANCHOS_COLUMNAS_PDF_MM,
   ANCHO_UTIL_CARTA_HORIZONTAL_MM,
@@ -248,7 +250,9 @@ describe('layout del PDF -- presupuesto de ancho y clasificación de columnas', 
     // que usa jsPDF al maquetar. Si alguien angosta una columna, esto falla
     // antes de que salga un PDF con dos líneas por celda.
     const contenidoMasLargo: Record<string, string> = {
-      '#': '442', // chapeta real más alta del corpus
+      // El caso más largo NO es la chapeta más alta del corpus (442) sino un
+      // número provisional CON su marca: `999*`. Se deriva de la función real.
+      '#': textoCeldaNumero(999),
       Nombre: 'BRILLANTINA',
       PL: '18',
       '# Partos': '12',
@@ -277,6 +281,38 @@ describe('layout del PDF -- presupuesto de ancho y clasificación de columnas', 
         `la columna "${encabezado}" necesita ${necesario.toFixed(2)}mm`,
       ).toBeGreaterThanOrEqual(necesario);
     });
+  });
+});
+
+describe('números provisionales (800-999): la planilla NUNCA los presenta como caravana física', () => {
+  it('marca el número provisional con asterisco y conserva el número (sigue siendo el ancla de fila del OCR)', () => {
+    expect(textoCeldaNumero(984)).toBe('984*');
+    expect(textoCeldaNumero(800)).toBe('800*');
+    expect(textoCeldaNumero(999)).toBe('999*');
+  });
+
+  it('un número real sale limpio, sin marca', () => {
+    expect(textoCeldaNumero(154)).toBe('154');
+    expect(textoCeldaNumero(799)).toBe('799');
+  });
+
+  it('sin caravana -> celda vacía, nunca "0" ni "sin número"', () => {
+    expect(textoCeldaNumero(null)).toBe('');
+  });
+
+  it('la nota al pie solo aparece si la planilla LLEVA alguna fila provisional', () => {
+    const camila = fila({ numero: 154, nombre: 'CAMILA' });
+    const ricarena = fila({ numero: 88, nombre: 'RICARENA' });
+    const fabiola = fila({ numero: 984, nombre: 'FABIOLA' });
+    expect(hayNumerosProvisionales([camila, ricarena])).toBe(false);
+    expect(hayNumerosProvisionales([camila, fabiola])).toBe(true);
+    // Una vaca sin caravana tampoco dispara la nota: "sin número" no es lo
+    // mismo que "número provisional".
+    expect(hayNumerosProvisionales([{ ...camila, numero: null }])).toBe(false);
+  });
+
+  it('la marca llega a la celda armada de la fila', () => {
+    expect(construirFilasPlanillaPDF([fila({ numero: 986, nombre: 'MONA' })])[0][0]).toBe('986*');
   });
 });
 
