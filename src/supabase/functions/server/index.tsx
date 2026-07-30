@@ -10,6 +10,7 @@ import { handleChatMessage } from "./chat.tsx";
 import { handleClimaSync, handleClimaBackfill, handleClimaForecast } from "./clima.tsx";
 import { handleHatoChequeoPreview } from "./hato-chequeo-preview.ts";
 import { handleHatoChequeoCommit } from "./hato-chequeo-commit.ts";
+import { handleHatoChequeoFoto } from "./hato-chequeo-foto.ts";
 import { handleHatoAlertasTick } from "./hato-alertas-tick.ts";
 import { handleWebhook } from "./telegram/bot.ts";
 
@@ -179,6 +180,14 @@ app.post("/make-server-1ccce916/hato/chequeo/preview", async (c) => {
 // fn_hato_commit_chequeo, migración 065). Nunca re-parsea el .xlsx.
 app.post("/make-server-1ccce916/hato/chequeo/commit", async (c) => {
   return await handleHatoChequeoCommit(c);
+});
+
+// Hato Lechero: Fase 3b -- carga del chequeo POR FOTO (OCR con modelo de
+// visión). Gemelo del preview: el OCR reemplaza SOLO la lectura de la grilla,
+// el resto del pipeline (normalizar + diff) es el mismo. Nunca escribe en
+// tablas de dominio; sí guarda las fotos en Storage (capa cruda).
+app.post("/make-server-1ccce916/hato/chequeo/foto", async (c) => {
+  return await handleHatoChequeoFoto(c);
 });
 
 // Hato Lechero: motor de alertas (S6, plan §7.3) -- tick diario disparado
