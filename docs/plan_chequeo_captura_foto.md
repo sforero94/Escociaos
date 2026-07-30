@@ -354,4 +354,42 @@ motor intacta, y commit propio. Una fase no arranca hasta que la anterior pasó 
   validación anti-página-faltante de la Fase 3. Entra con ella, como un parámetro opcional.
 - ⚠️ **Deuda de layout detectada con datos, pendiente de decisión del dueño** — ver §10.
 
-## 10. Preguntas abiertas
+## 10. Preparación de la prueba end-to-end con Martha (2026-07-30)
+
+Decisión del dueño: hacer la prueba **en caliente** con datos reales en vez de un spike sintético —
+da más información y **es** la Fase 0 que no se podía correr sin su letra. Despliegue acordado:
+**PR con preview de Vercel** (aislado de producción) + **deploy del edge function verificando que el
+cambio sea puramente aditivo** (esa función es compartida: ahí viven también Esco, el bot de Telegram,
+las alertas y los reportes).
+
+**Hallazgos de generar la planilla con datos REALES** (los sintéticos los ocultaban):
+
+- **7 de 35 vacas activas llevan número provisional** (984, 986, 990, 993, 997, 998, 999). Ya se
+  marcan con `*` + nota al pie — ver notas de cierre de la Fase 2. Sin eso, Martha buscaría en el
+  corral una caravana que no existe. **Es también la oportunidad de la reunión**: son exactamente los
+  animales cuya renumeración real está pendiente (`EditarAnimalDialog` ya existe para eso).
+- **Dos vacas se llaman FABIOLA** (#984 y #993). El ancla de fila del OCR es el número impreso, así
+  que no rompe nada, pero conviene que Martha lo sepa.
+- **FABIOLA #993 parece un registro fantasma**: 0 partos, sin servicio, último chequeo **2022-05-25**.
+  Sale como fila casi vacía. Preguntarle a Martha si el animal existe o debe cerrarse.
+- **El catálogo de toros tiene duplicados que solo Martha puede adjudicar**, y los verá impresos en la
+  columna `Toro`: `laredo`(5) vs `loredo`(1) · `marquez`(4) vs `marq`(2) · y las variantes de Jersey
+  `Jersey`(37) / `T jers`(2) / `t j`(2) / `in jer`(2) / `jers 7 M`(1). El commit path hace
+  SELECT-o-INSERT sobre `lower(nombre)`, así que **cada variante nueva crea un toro nuevo**: si no se
+  consolidan, el catálogo sigue creciendo con alias.
+
+**Qué vigilar durante la prueba** (esto es la medición de la Fase 0):
+1. **Row drift**: que ningún dato caiga en la fila de otra vaca. Es el fallo más caro y el que el
+   cotejo `#`+`Nombre` contra el roster debe atrapar.
+2. **Exactitud por celda escrita**, sobre todo en `Tratamiento` (prosa libre) y `Toro` (nombres
+   cortos y ambiguos).
+3. **Si la hoja funciona en la mano**: ancho de las casillas, alto de fila, si 11pt alcanza en papel.
+4. Cuántas correcciones tiene que hacer en la ventana antes de aprobar — es la métrica real de si el
+   OCR sirve o solo estorba.
+
+**Red de seguridad**: `fn_hato_commit_chequeo` (065) hace limpieza idempotente **acotada a ese
+chequeo**, así que aprobar un chequeo con datos malos **se corrige re-aprobando** el mismo archivo
+corregido, sin tocar otros chequeos ni eventos capturados a mano. Un error en la prueba no es
+permanente.
+
+## 11. Preguntas abiertas
