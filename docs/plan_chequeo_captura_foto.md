@@ -362,21 +362,45 @@ da más información y **es** la Fase 0 que no se podía correr sin su letra. De
 cambio sea puramente aditivo** (esa función es compartida: ahí viven también Esco, el bot de Telegram,
 las alertas y los reportes).
 
+### D-G — El identificador es el NOMBRE, no la chapeta (dueño, repetido; cerrado 2026-07-30)
+
+La planilla se ordena **alfabéticamente por nombre**. La evidencia que zanjó el punto es la hoja real
+de Martha (`CHEQUEO VETE 29 ABRIL 2026`, revisada en esta sesión): **viene ordenada A–Z por nombre**,
+con la chapeta como columna secundaria. Ordenar por número —como se hacía— obligaba a leerla en un
+orden que ella no tiene interiorizado, y además mandaba al final, fuera de contexto, justo a los
+animales de número provisional, que son los que hay que identificar por nombre sí o sí. Implementado
+en `useAnimalesParaPlanillaChequeo::ordenarPorNombreDeVaca` (`localeCompare` es, para Ñ y tildes);
+aplica a los DOS artefactos, PDF y `.xlsx`. Coherente con la migración 066, que ya había degradado
+`numero` a "chapeta actual" mutable: la identidad siempre fue `hato_animales.id`.
+
 **Hallazgos de generar la planilla con datos REALES** (los sintéticos los ocultaban):
 
-- **7 de 35 vacas activas llevan número provisional** (984, 986, 990, 993, 997, 998, 999). Ya se
-  marcan con `*` + nota al pie — ver notas de cierre de la Fase 2. Sin eso, Martha buscaría en el
-  corral una caravana que no existe. **Es también la oportunidad de la reunión**: son exactamente los
-  animales cuya renumeración real está pendiente (`EditarAnimalDialog` ya existe para eso).
-- **Dos vacas se llaman FABIOLA** (#984 y #993). El ancla de fila del OCR es el número impreso, así
-  que no rompe nada, pero conviene que Martha lo sepa.
-- **FABIOLA #993 parece un registro fantasma**: 0 partos, sin servicio, último chequeo **2022-05-25**.
-  Sale como fila casi vacía. Preguntarle a Martha si el animal existe o debe cerrarse.
-- **El catálogo de toros tiene duplicados que solo Martha puede adjudicar**, y los verá impresos en la
-  columna `Toro`: `laredo`(5) vs `loredo`(1) · `marquez`(4) vs `marq`(2) · y las variantes de Jersey
-  `Jersey`(37) / `T jers`(2) / `t j`(2) / `in jer`(2) / `jers 7 M`(1). El commit path hace
-  SELECT-o-INSERT sobre `lower(nombre)`, así que **cada variante nueva crea un toro nuevo**: si no se
-  consolidan, el catálogo sigue creciendo con alias.
+- **7 de 35 vacas activas llevan número provisional** (984, 986, 990, 993, 997, 998, 999), y la hoja
+  de abril confirma que sus chapetas reales son otras (CUÑA es **#43**, ESMERALDA **#162**, FABIOLA
+  **#176**). Se marcan con `*` + nota al pie que remite al nombre. Con D-G, esto es una salvaguarda
+  secundaria: el orden alfabético ya hace que el número no sea necesario para encontrar la fila.
+- ~~**FABIOLA #993 parece un registro fantasma**~~ — **corrección (2026-07-30): esa lectura era
+  engañosa.** Se miró #993 y se habló de "FABIOLA" en general. La FABIOLA de las planillas es
+  **#984**, con **17 filas de chequeo** y presente hasta 2026-07-09, incluido el chequeo de abril.
+  #993 no es un animal fantasma sino **un fragmento partido de la misma vaca**: aparece en
+  **exactamente un** chequeo (2022-05-25) y #984 aparece en los otros 17 — **nunca coexisten en una
+  hoja**, que es la firma de un registro dividido por el importador, no de dos animales. Decisión del
+  dueño: **dejarla así por ahora**, no fusionar.
+- **Catálogo de toros: unificado en producción** (autorizado por el dueño, 2026-07-30). `loredo`→
+  `laredo` (transcripción), `marq`→`marquez` (abreviatura), y las cuatro variantes raza-como-nombre
+  `in jer`/`jers 7 M`/`t j`/`T jers`→`Jersey` (lo que `parseToro` ya canonicaliza). 10 eventos
+  reasignados, 6 toros duplicados eliminados; sin huérfanos (0 hijos, 0 pajillas apuntaban a ellos).
+  Resultado: Jersey 37→44, laredo 5→6, marquez 4→6. **`jjerico` se dejó intacto** — no estaba entre
+  los tres casos autorizados. Ojo: el commit path hace SELECT-o-INSERT sobre `lower(nombre)`, así que
+  cada variante nueva vuelve a crear un toro; la consolidación es recurrente, no definitiva.
+- ⚠️ **`v_hato_estado_actual` desempata de forma NO determinista el último servicio.** El `DISTINCT
+  ON (animal_id) … ORDER BY animal_id, fecha DESC` no tiene criterio de desempate, así que cuando un
+  animal tiene dos eventos `servicio` en la misma fecha, cuál gana depende del plan de ejecución —
+  se observó cambiar de `(sin toro)` a `laredo` entre dos consultas idénticas. Blast radius medido
+  para la planilla: **una sola fila, COPITA (#166)**, cuyo último servicio (2026-02-13) tiene dos
+  registros. Los otros 25 empates son de servicios viejos que no llegan al papel. **No se resolvió**:
+  la regla del módulo es que una misma fecha con toro distinto nunca se colapsa sola (es el balde
+  `conflictosToroDistinto`, para Martha). Corregir la vista es trabajo aparte.
 
 **Qué vigilar durante la prueba** (esto es la medición de la Fase 0):
 1. **Row drift**: que ningún dato caiga en la fila de otra vaca. Es el fallo más caro y el que el

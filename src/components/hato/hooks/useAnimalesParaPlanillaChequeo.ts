@@ -151,6 +151,29 @@ function filaVistaAFactRow(fila: EstadoActualHatoViewRow): EstadoActualHatoRow {
   };
 }
 
+/**
+ * Orden de la planilla: **alfabético por NOMBRE**, no por chapeta.
+ *
+ * POR QUÉ: el nombre es el identificador real del animal, no el número
+ * (decisión del dueño, repetida; y `hato_animales.id` siempre fue la
+ * identidad, con `numero` degradado a "chapeta actual" mutable en la
+ * migración 066). La evidencia decisiva es la planilla que Martha ya usa: sus
+ * hojas vienen ordenadas A-Z por nombre. Ordenar por número obligaría a leerla
+ * en un orden distinto al que ella tiene interiorizado, y además pondría al
+ * final —fuera de contexto— justo a los animales con número provisional
+ * (800-999), que son los que hay que identificar por nombre sí o sí.
+ *
+ * `localeCompare` con locale español para que Ñ y las tildes ordenen bien
+ * (CUÑA, MAGNÍFICA). Una vaca sin nombre va al final: es la excepción, no
+ * merece encabezar la hoja.
+ */
+function ordenarPorNombreDeVaca(a: AnimalParaPlanillaChequeo, b: AnimalParaPlanillaChequeo): number {
+  if (!a.nombre && !b.nombre) return 0;
+  if (!a.nombre) return 1;
+  if (!b.nombre) return -1;
+  return a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' });
+}
+
 /** Solo vacas adultas activas (etapa `vaca`, estado `activa`) -- ordeño y
  * horro por igual, terneras/novillas quedan fuera: la planilla de chequeo
  * histórica es específicamente el ciclo reproductivo de vacas adultas
@@ -234,12 +257,7 @@ export function useAnimalesParaPlanillaChequeo() {
             fechaProbableParto: derivado.fecha_probable_parto,
           };
         })
-        .sort((a, b) => {
-          if (a.numero == null && b.numero == null) return 0;
-          if (a.numero == null) return 1;
-          if (b.numero == null) return -1;
-          return a.numero - b.numero;
-        });
+        .sort(ordenarPorNombreDeVaca);
 
       setAnimales(filas);
     } catch (err) {
