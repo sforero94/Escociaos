@@ -1,4 +1,19 @@
 // ARCHIVO: components/hato/components/SubirChequeoExcel.tsx
+//
+// Fase 3b -- DOS RUTAS DE ENTRADA, un solo flujo. El modo por defecto es
+// **foto**: Martha fotografía la planilla impresa que llenó a mano y las
+// imágenes van a `POST /hato/chequeo/foto`. El `.xlsx` queda como respaldo.
+// Ambos endpoints devuelven la MISMA forma de respuesta, así que de la vista
+// previa en adelante (corrección, fecha, aprobación) el código no distingue de
+// dónde vino el chequeo -- el OCR reemplaza la lectura de la grilla, no el
+// pipeline. El `<input capture="environment">` abre la cámara trasera en el
+// celular; las fotos se ACUMULAN (una por página) porque la cámara móvil
+// devuelve una a la vez.
+//
+// El bloque `resultado.ocr` se renderiza SIEMPRE que venga: sin él, una vaca
+// que el OCR no encontró se vería idéntica a una vaca sin cambios, que es
+// exactamente el fallo silencioso que el módulo prohíbe.
+//
 // DESCRIPCIÓN: Diálogo B0/V10 -- sube el .xlsx del chequeo, lo envía a
 // `POST /hato/chequeo/preview` y muestra la VENTANA DE CORRECCIÓN
 // (`ChequeoDiffReview`, editable desde la Fase 3a de
@@ -24,7 +39,7 @@
 //      el motivo dicho en pantalla -- nunca un botón que falla con 403.
 
 import { useRef, useState } from 'react';
-import { Upload, FileSpreadsheet, Loader2, AlertTriangle, CheckCircle2, X } from 'lucide-react';
+import { Upload, FileSpreadsheet, Loader2, AlertTriangle, CheckCircle2, X, Camera } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,6 +50,11 @@ import { useRevisionChequeo } from '../hooks/useRevisionChequeo';
 import { ChequeoDiffReview } from './ChequeoDiffReview';
 import { CrearAnimalDialog } from './CrearAnimalDialog';
 import type { FilaDiffChequeo } from '@/utils/importHato/diffChequeo';
+
+/** Tope de fotos por chequeo -- el MISMO que valida el servidor
+ * (`hato-chequeo-foto.ts`). Duplicarlo aquí es a propósito: así el usuario se
+ * entera antes de subir 20MB para recibir un rechazo. */
+const MAX_FOTOS = 6;
 
 export function SubirChequeoExcel({
   open,
@@ -47,6 +67,7 @@ export function SubirChequeoExcel({
 }) {
   const {
     subir,
+    subirFotos,
     comprometer,
     limpiar,
     loading,
@@ -68,10 +89,19 @@ export function SubirChequeoExcel({
   const [veterinario, setVeterinario] = useState('');
   const [filaParaFicha, setFilaParaFicha] = useState<FilaDiffChequeo | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Fase 3b -- ruta por FOTO. `foto` es el modo por defecto: es el camino que
+  // el flujo nuevo quiere (Martha fotografía la planilla que llenó a mano) y
+  // el `.xlsx` queda como respaldo, no al revés.
+  const [modo, setModo] = useState<'foto' | 'excel'>('foto');
+  const [fotos, setFotos] = useState<File[]>([]);
+  const [avisoFotos, setAvisoFotos] = useState<string | null>(null);
+  const fotoInputRef = useRef<HTMLInputElement>(null);
 
   const handleClose = (nextOpen: boolean) => {
     if (!nextOpen) {
       setArchivo(null);
+      setFotos([]);
+      setAvisoFotos(null);
       setVeterinario('');
       setFilaParaFicha(null);
       limpiar();
@@ -124,13 +154,38 @@ export function SubirChequeoExcel({
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
+    if (modo === 'foto') {
+      const imagenes = Array.from(e.dataTransfer.files ?? []).filter((f) => f.type.startsWith('image/'));
+      if (imagenes.length > 0) agregarFotos(imagenes);
+      return;
+    }
     const file = e.dataTransfer.files?.[0];
     if (file) seleccionarArchivo(file);
   };
 
+  /** Acumula en vez de reemplazar: en el celular la cámara devuelve UNA foto
+   * por vez, así que la planilla de 2 páginas se arma con dos toques. El tope
+   * de 6 es el mismo del servidor -- se avisa en vez de descartar en silencio. */
+  const agregarFotos = (nuevas: File[]) => {
+    setFotos((previas) => {
+      const total = [...previas, ...nuevas];
+      if (total.length > MAX_FOTOS) {
+        setAvisoFotos(`Solo se envían las primeras ${MAX_FOTOS} fotos; descarta alguna si necesitas otra.`);
+        return total.slice(0, MAX_FOTOS);
+      }
+      setAvisoFotos(null);
+      return total;
+    });
+  };
+
   const handleSubir = async () => {
-    if (!archivo) return;
     try {
+      if (modo === 'foto') {
+        if (fotos.length === 0) return;
+        await subirFotos(fotos);
+        return;
+      }
+      if (!archivo) return;
       await subir(archivo);
     } catch {
       // El error ya queda en el hook (`error`), se muestra abajo.
@@ -146,6 +201,80 @@ export function SubirChequeoExcel({
           </DialogHeader>
           <DialogBody className="space-y-4">
             {!resultado && (
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  variant={modo === 'foto' ? 'default' : 'outline'}
+                  onClick={() => { setModo('foto'); setArchivo(null); }}
+                >
+                  <Camera className="w-4 h-4 mr-2" />
+                  Foto de la planilla
+                </Button>
+                <Button
+                  type="button"
+                  variant={modo === 'excel' ? 'default' : 'outline'}
+                  onClick={() => { setModo('excel'); setFotos([]); setAvisoFotos(null); }}
+                >
+                  <FileSpreadsheet className="w-4 h-4 mr-2" />
+                  Archivo .xlsx
+                </Button>
+              </div>
+            )}
+
+            {!resultado && modo === 'foto' && (
+              <div
+                onDragEnter={(e) => { e.preventDefault(); setDragActive(true); }}
+                onDragOver={(e) => e.preventDefault()}
+                onDragLeave={() => setDragActive(false)}
+                onDrop={handleDrop}
+                className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
+                  dragActive ? 'border-green-200 bg-green-50' : 'border-gray-300'
+                }`}
+              >
+                <Camera className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                <p className="text-sm text-gray-600 mb-3">
+                  Toma una foto por página de la planilla diligenciada, o arrastra las imágenes aquí.
+                </p>
+                <input
+                  ref={fotoInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    const nuevas = Array.from(e.target.files ?? []);
+                    if (nuevas.length > 0) agregarFotos(nuevas);
+                    // Permite volver a elegir la MISMA foto tras descartarla.
+                    e.target.value = '';
+                  }}
+                />
+                <Button type="button" variant="outline" onClick={() => fotoInputRef.current?.click()}>
+                  {fotos.length === 0 ? 'Tomar o elegir fotos' : 'Agregar otra página'}
+                </Button>
+
+                {fotos.length > 0 && (
+                  <ul className="mt-4 space-y-1">
+                    {fotos.map((f, i) => (
+                      <li key={`${f.name}-${i}`} className="flex items-center justify-center gap-3">
+                        <span className="text-sm text-gray-900">Página {i + 1}</span>
+                        <span className="text-xs text-gray-500">{(f.size / 1024).toFixed(0)} KB</span>
+                        <button
+                          type="button"
+                          onClick={() => setFotos((p) => p.filter((_, j) => j !== i))}
+                          className="text-gray-400 hover:text-gray-900"
+                          aria-label={`Quitar página ${i + 1}`}
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            {!resultado && modo === 'excel' && (
               <div
                 onDragEnter={(e) => { e.preventDefault(); setDragActive(true); }}
                 onDragOver={(e) => e.preventDefault()}
@@ -193,10 +322,76 @@ export function SubirChequeoExcel({
               </div>
             )}
 
+            {avisoFotos && (
+              <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                {avisoFotos}
+              </div>
+            )}
+
             {error && (
               <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                 {error}
+              </div>
+            )}
+
+            {/* Calidad de la lectura por foto. Se muestra SIEMPRE que venga,
+                antes del diff: una vaca que el OCR no encontró se vería
+                idéntica a una vaca sin cambios, y ese es justo el fallo
+                silencioso que el módulo prohíbe. */}
+            {resultado?.ocr && (
+              <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
+                <p className="font-medium text-gray-900">
+                  Lectura de {resultado.ocr.resumen.fotosLeidas} de {resultado.ocr.resumen.fotosRecibidas} foto(s):{' '}
+                  {resultado.ocr.resumen.filasConfirmadas} de {resultado.ocr.resumen.vacasEnRoster} vacas reconocidas
+                </p>
+
+                {resultado.ocr.resumen.celdasNoConfiables > 0 && (
+                  <p className="text-xs text-amber-700 mt-1">
+                    {resultado.ocr.resumen.celdasNoConfiables} celda(s) quedaron vacías por letra dudosa — revísalas y
+                    escríbelas a mano abajo.
+                  </p>
+                )}
+
+                {resultado.ocr.vacasSinLeer.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-xs font-medium text-red-700">
+                      No aparecieron en ninguna foto ({resultado.ocr.vacasSinLeer.length}) — ¿falta fotografiar una
+                      página?
+                    </p>
+                    <p className="text-xs text-gray-600">
+                      {resultado.ocr.vacasSinLeer.map((v) => v.nombre ?? `#${v.numero ?? '?'}`).join(' · ')}
+                    </p>
+                  </div>
+                )}
+
+                {resultado.ocr.filasNoLeidas.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-xs font-medium text-red-700">
+                      Filas que no se pudieron identificar ({resultado.ocr.filasNoLeidas.length}) — no se asignan a
+                      ninguna vaca
+                    </p>
+                    <ul className="text-xs text-gray-600 space-y-1 mt-1">
+                      {resultado.ocr.filasNoLeidas.map((f, i) => (
+                        <li key={i}>
+                          Página {f.pagina}: leyó &quot;{f.nombreImpreso ?? '—'}&quot; / #{f.numeroImpreso ?? '—'} ({f.motivo})
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {resultado.ocr.paginasNoLeidas.map((p, i) => (
+                  <p key={i} className="text-xs text-red-700 mt-1">{p}</p>
+                ))}
+
+                {!resultado.ocr.almacenamiento.ok && (
+                  <p className="text-xs text-amber-700 mt-1">
+                    Las fotos no se pudieron guardar como respaldo — puedes continuar, pero no quedará la evidencia de
+                    lo que decía el papel.
+                  </p>
+                )}
               </div>
             )}
 
@@ -284,9 +479,17 @@ export function SubirChequeoExcel({
                 <Button type="button" variant="outline" onClick={() => handleClose(false)} disabled={loading}>
                   Cancelar
                 </Button>
-                <Button type="button" onClick={handleSubir} disabled={!archivo || loading}>
+                <Button
+                  type="button"
+                  onClick={handleSubir}
+                  disabled={loading || (modo === 'foto' ? fotos.length === 0 : !archivo)}
+                >
                   {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  {loading ? 'Procesando...' : 'Subir y revisar'}
+                  {loading
+                    ? modo === 'foto'
+                      ? 'Leyendo las fotos...'
+                      : 'Procesando...'
+                    : 'Subir y revisar'}
                 </Button>
               </>
             ) : commitResultado ? (
