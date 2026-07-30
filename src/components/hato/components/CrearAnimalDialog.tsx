@@ -52,6 +52,7 @@ export function CrearAnimalDialog({
   open,
   onOpenChange,
   onCreado,
+  prellenado,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -59,6 +60,12 @@ export function CrearAnimalDialog({
    * decide cómo refrescar (`AnimalesList` vuelve a llamar `reload()` de
    * `useHatoAnimales`). */
   onCreado: () => void;
+  /** Valores iniciales opcionales. Los usa la ventana de corrección del
+   * chequeo (Fase 3a) para crear la ficha de una fila `nuevo` con la caravana
+   * y el nombre que ya trae la planilla, sin que nadie los retipee. Ausente =
+   * comportamiento original, byte por byte (formulario en blanco desde
+   * `AnimalesList`). Sigue siendo un alta editable: nada se guarda solo. */
+  prellenado?: { numero?: number | null; nombre?: string | null; etapa?: EtapaHato };
 }) {
   const { crear, guardando } = useCrearHatoAnimal();
   const [form, setForm] = useState<FormState>(FORM_INICIAL);
@@ -68,9 +75,17 @@ export function CrearAnimalDialog({
   // sin guardar de una apertura anterior.
   useEffect(() => {
     if (open) {
-      setForm(FORM_INICIAL);
+      setForm({
+        ...FORM_INICIAL,
+        numero: prellenado?.numero ?? FORM_INICIAL.numero,
+        nombre: prellenado?.nombre ?? FORM_INICIAL.nombre,
+        etapa: prellenado?.etapa ?? FORM_INICIAL.etapa,
+      });
       setErrorNumero(null);
     }
+    // `prellenado` es un objeto literal del caller: se lee al ABRIR, no en cada
+    // render (dependerlo re-crearía el formulario y borraría lo tecleado).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const actualizarCampo = <K extends keyof FormState>(campo: K, valor: FormState[K]) => {

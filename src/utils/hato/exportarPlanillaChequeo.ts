@@ -6,10 +6,25 @@
 // parsea/diffea/aprueba", el flujo B0/V10 ya existente):
 //
 //   B5.1 -- planilla del PRÓXIMO chequeo, pre-llenada con identidad +
-//           último estado conocido; las columnas que el veterinario
-//           actualiza quedan en blanco.
+//           último estado conocido. Desde la Fase 1 de
+//           `docs/plan_chequeo_captura_foto.md` eso incluye Sexo cría,
+//           Fecha Servicio, Toro y Estado -- ya NO quedan en blanco: la
+//           planilla es INCREMENTAL, arrastra lo que el sistema sabe para
+//           que Martha solo anote lo que cambió. La única columna que sigue
+//           saliendo siempre vacía es `Tratamiento` (no hay de dónde
+//           arrastrarla: los tratamientos viven en `hato_tratamientos`, otro
+//           flujo). Una celda sin dato previo sale vacía, nunca con un valor
+//           inventado.
 //   B5.2 -- planilla de un chequeo YA CARGADO, totalmente poblada
 //           (record-keeping).
+//
+// Las celdas pre-llenadas se escriben en la MISMA forma CRUDA que el parser
+// de subida reconoce (`textoCeldaToro` reconstruye el prefijo `Toro `/`Ins `,
+// `textoCeldaEstado` devuelve `ok`/`rech`, `Sexo cría` lleva el `sx_raw`
+// verbatim): este `.xlsx` es el artefacto de MÁQUINA y debe seguir siendo
+// re-parseable sin enseñarle alias nuevos a `importHato/`. Las etiquetas
+// legibles ("Hembra (retenida #206)") son del PDF imprimible, otro artefacto
+// y otra fase del plan.
 //
 // Las 13 columnas históricas menos `TP` (fórmula `TODAY()` congelada que el
 // motor nunca lee, ver `calculosHato.ts`) -- decisión del dueño
@@ -39,6 +54,8 @@
 // espera leer), fila 1 = encabezado, fila 2+ = datos, una sola tabla
 // continua (requisito duro de B5.1: "nunca repetir el header, rompe la
 // extracción del parser de subida").
+
+import type { TipoEstado } from '@/utils/calculosHato';
 
 /** Las 12 columnas del template (13 históricas menos `TP`), en orden, con
  * las abreviaturas desarrolladas (decisión del dueño). Única fuente de
@@ -185,6 +202,33 @@ export function textoCeldaToro(nombre: string | null, tipoServicio: 'monta' | 'i
   if (tipoServicio === 'inseminacion') return `Ins ${nombre}`;
   if (tipoServicio === 'monta') return `Toro ${nombre}`;
   return nombre;
+}
+
+/**
+ * Reconstruye el texto de la celda `Estado` a partir del `tipo` NORMALIZADO
+ * que guarda `hato_chequeo_vacas.estado` (migración 062) y que
+ * `v_hato_estado_actual` expone como `ultimo_estado_chequeo` -- inverso
+ * PARCIAL de `parseEstado`, y el "parcial" es deliberado:
+ *
+ * - `vacia_apta` -> `'ok'` y `vacia_problema` -> `'rech'` vuelven a parsear
+ *   exactamente a su mismo tipo, así que el round-trip es exacto.
+ * - `fecha_heredada` NO se puede reconstruir: el tipo normalizado no guarda
+ *   la fecha (vive solo en `estado_raw`, que la vista no expone). Escribir
+ *   cualquier fecha acá sería inventarla.
+ * - `desconocido` tampoco: por definición su significado está solo en el
+ *   crudo, que aquí no está disponible. Cualquier texto que se escribiera
+ *   volvería a parsear como `desconocido`, pero con un crudo FABRICADO --
+ *   peor que la celda vacía, porque el diff lo leería como un cambio real.
+ *
+ * En esos dos casos se devuelve `null` (celda vacía). Es la misma regla de
+ * "sin dato antes que dato inventado" del resto del módulo: Martha ve la
+ * celda en blanco y la escribe, que es exactamente lo que la planilla espera
+ * de una columna sin información previa.
+ */
+export function textoCeldaEstado(tipo: TipoEstado | null | undefined): string | null {
+  if (tipo === 'vacia_apta') return 'ok';
+  if (tipo === 'vacia_problema') return 'rech';
+  return null;
 }
 
 /** Anchos de columna (`!cols`, caracteres) -- angostos a propósito: 12

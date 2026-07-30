@@ -16,10 +16,25 @@
 // Figma alignment spec §5 (Wave 2a) agrega: `HatoPageHeader` compartido y
 // filas clicables -> `/hato-lechero/chequeos/:id` (`ChequeoDetalle.tsx`) --
 // "de lo contrario es una lista inútil" (palabras del dueño).
+//
+// Fase 1 de `docs/plan_chequeo_captura_foto.md` (2026-07-29): la planilla
+// exportada desde acá pasa a ser INCREMENTAL. `filaPlanillaPrellenada` ya no
+// manda `null` fijo en Sexo cría / Fecha Servicio / Toro / Estado -- las
+// cuatro se arrastran del último chequeo conocido (`ultimo_estado_chequeo`
+// hoy solo existe para una minoría de vacas, así que esa columna sale mayormente
+// en blanco al arrancar: es correcto, se llena chequeo a chequeo).
+//
+// Fase 2 del mismo plan: son DOS artefactos con dos trabajos, y por eso hay
+// DOS botones (nunca un menú de "formato", que esconde la diferencia):
+//   - **PDF** = para IMPRIMIR y escribir a mano en el corral. Horizontal,
+//     letra 11pt, recuadro por celda, etiquetas legibles ("Hembra (retenida
+//     #206)"). No se re-parsea nunca.
+//   - **.xlsx** = respaldo de MÁQUINA. Conserva los códigos crudos (`A 206`)
+//     y es el que se vuelve a subir por el flujo B0/V10.
 
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, AlertTriangle, Upload, FileSpreadsheet, ChevronRight, FileDown } from 'lucide-react';
+import { Loader2, AlertTriangle, Upload, FileSpreadsheet, ChevronRight, FileDown, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useHatoChequeos } from './hooks/useHatoChequeos';
@@ -32,8 +47,15 @@ import {
   construirTituloHojaChequeo,
   construirNombreHojaChequeo,
   isoATextoDDMMYYYY,
+  textoCeldaToro,
+  textoCeldaEstado,
   type FilaPlanillaChequeo,
 } from '@/utils/hato/exportarPlanillaChequeo';
+import {
+  descargarPlanillaChequeoPDF,
+  etiquetaSexoCria,
+} from '@/utils/hato/exportarPlanillaChequeoPDF';
+import type { AnimalParaPlanillaChequeo } from './hooks/useAnimalesParaPlanillaChequeo';
 import { obtenerFechaHoy } from '@/utils/fechas';
 
 /**
@@ -43,33 +65,59 @@ import { obtenerFechaHoy } from '@/utils/fechas';
  * quien transcriba las notas del veterinario debe corregir la celda del
  * título a la fecha real del examen antes de volver a subir el archivo
  * (misma columna que gobierna la fecha de cualquier chequeo, ver
- * `parseFechaChequeo`). Las columnas que el veterinario actualiza (Sexo
- * cría, Fecha Servicio, Toro, Estado, Tratamiento) quedan en blanco;
- * identidad + PL/#Partos/Última Cría + Secar/Parto Probable (referencia de
- * solo lectura, ya derivados por el motor) se pre-llenan.
+ * `parseFechaChequeo`).
+ *
+ * Fase 1 de `docs/plan_chequeo_captura_foto.md`: la planilla es INCREMENTAL
+ * -- se pre-llena TODO lo que el sistema ya sabe, incluidas Sexo cría, Fecha
+ * Servicio, Toro y Estado, que antes salían en `null` fijo desde acá aunque
+ * la vista ya expusiera tres de las cuatro. Ese arrastre es el punto: Martha
+ * solo anota lo que cambió, no vuelve a transcribir el chequeo anterior.
+ * Único campo que sigue siempre vacío: `Tratamiento` (no hay de dónde
+ * arrastrarlo -- vive en `hato_tratamientos`, otro flujo).
+ *
+ * Los valores se escriben en su forma CRUDA, re-parseable (`sx_raw`
+ * verbatim, `Toro `/`Ins ` vía `textoCeldaToro`, `ok`/`rech` vía
+ * `textoCeldaEstado`): este `.xlsx` es el artefacto de máquina, la etiqueta
+ * legible es del PDF de la Fase 2. `null` -> celda vacía SIEMPRE, nunca `0`
+ * ni un valor inventado.
  */
-function filaPlanillaPrellenada(animal: {
-  numero: number | null;
-  nombre: string | null;
-  pl: number | null;
-  numPartos: number;
-  ultimoPartoFecha: string | null;
-  fechaSecar: string | null;
-  fechaProbableParto: string | null;
-}): FilaPlanillaChequeo {
+function filaPlanillaPrellenada(animal: AnimalParaPlanillaChequeo): FilaPlanillaChequeo {
   return {
     numero: animal.numero,
     nombre: animal.nombre,
     pl: animal.pl,
     numPartos: animal.numPartos,
     ultimaCria: isoATextoDDMMYYYY(animal.ultimoPartoFecha),
-    sexoCria: null,
-    fechaServicio: null,
-    toro: null,
-    estado: null,
+    // `sexoCriaRaw` (no `sexoCria`): el código SX crudo del MISMO parto del
+    // que sale `ultimaCria`, así que fecha y sexo nunca se contradicen.
+    sexoCria: animal.sexoCriaRaw,
+    fechaServicio: isoATextoDDMMYYYY(animal.ultimoServicioFecha),
+    toro: textoCeldaToro(animal.toroNombre, animal.tipoServicio),
+    estado: textoCeldaEstado(animal.ultimoEstadoChequeo),
     secar: isoATextoDDMMYYYY(animal.fechaSecar),
     partoProbable: isoATextoDDMMYYYY(animal.fechaProbableParto),
     tratamiento: null,
+  };
+}
+
+/**
+ * MISMA fila que el `.xlsx` (misma fuente de datos, mismo orden de columnas),
+ * cambiando UNA cosa: `Sexo cría` lleva la etiqueta legible en vez del código
+ * crudo. Es la única diferencia de CONTENIDO entre los dos artefactos, y vive
+ * acá -- en el llamador, que es quien sabe qué artefacto está produciendo --
+ * para que ninguno de los dos exportadores tenga que conocer al otro.
+ *
+ * `etiquetaSexoCria` devuelve `null` cuando no hay sexo NI destino: la celda
+ * sale vacía, nunca con un texto que parezca dato.
+ */
+function filaPlanillaPdf(animal: AnimalParaPlanillaChequeo): FilaPlanillaChequeo {
+  return {
+    ...filaPlanillaPrellenada(animal),
+    sexoCria: etiquetaSexoCria({
+      sexoCria: animal.sexoCria,
+      criaDestino: animal.criaDestino,
+      sexoCriaRaw: animal.sexoCriaRaw,
+    }),
   };
 }
 
@@ -78,6 +126,30 @@ export function ChequeosList() {
   const { animales: animalesParaPlanilla, loading: cargandoAnimales } = useAnimalesParaPlanillaChequeo();
   const [mostrarSubida, setMostrarSubida] = useState(false);
   const [exportando, setExportando] = useState(false);
+  const [exportandoPdf, setExportandoPdf] = useState(false);
+
+  const handleImprimirPlanillaPDF = async () => {
+    setExportandoPdf(true);
+    try {
+      // Misma fecha placeholder y mismo título que el `.xlsx`
+      // (`construirTituloHojaChequeo`): el PDF y el respaldo NUNCA pueden
+      // mostrar fechas distintas del mismo chequeo.
+      const hoy = obtenerFechaHoy();
+      await descargarPlanillaChequeoPDF(
+        {
+          tituloDocumento: construirTituloHojaChequeo(hoy),
+          subtitulo: `${animalesParaPlanilla.length} vacas activas · las columnas en gris son de referencia, escriba solo en las blancas`,
+          filas: animalesParaPlanilla.map(filaPlanillaPdf),
+        },
+        `planilla-proximo-chequeo-${hoy}.pdf`,
+      );
+      toast.success('Planilla lista para imprimir. Corrija la fecha del título si el chequeo es otro día.');
+    } catch {
+      toast.error('No se pudo generar el PDF de la planilla.');
+    } finally {
+      setExportandoPdf(false);
+    }
+  };
 
   const handleExportarPlanilla = async () => {
     setExportando(true);
@@ -113,15 +185,29 @@ export function ChequeosList() {
             <div className="flex flex-wrap items-center gap-3">
               <Button
                 variant="outline"
+                onClick={handleImprimirPlanillaPDF}
+                disabled={exportandoPdf || cargandoAnimales}
+                title="Hoja horizontal, letra grande y una casilla por dato: para imprimir y escribir a mano en el corral"
+              >
+                {exportandoPdf ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Printer className="w-4 h-4 mr-2" />
+                )}
+                Planilla para imprimir (PDF)
+              </Button>
+              <Button
+                variant="outline"
                 onClick={handleExportarPlanilla}
                 disabled={exportando || cargandoAnimales}
+                title="Respaldo editable con los códigos originales -- es el archivo que se vuelve a subir al sistema"
               >
                 {exportando ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 ) : (
                   <FileDown className="w-4 h-4 mr-2" />
                 )}
-                Exportar planilla para el próximo chequeo
+                Respaldo editable (.xlsx)
               </Button>
               <Button onClick={() => setMostrarSubida(true)}>
                 <Upload className="w-4 h-4 mr-2" />

@@ -9,11 +9,14 @@
 // El paso "Aprobar" (`commit`) llama a
 // `POST /make-server-1ccce916/hato/chequeo/commit`
 // (`src/supabase/functions/server/hato-chequeo-commit.ts`) con SOLO las
-// filas de `filasNormalizadas` cuya clasificación en `diffChequeos.filas` es
-// `sin_cambio`/`cambio` -- `nuevo` y `no_reconocido` NUNCA se envían, ese es
-// el mismo alcance duro que el endpoint revalida del lado del servidor
-// (`validarFilasCommit`, `src/utils/importHato/commitChequeo.ts`) antes de
-// escribir una sola fila.
+// filas cuya clasificación en el diff VIGENTE es `sin_cambio`/`cambio` --
+// `nuevo` y `no_reconocido` NUNCA se envían, ese es el mismo alcance duro que
+// el endpoint revalida del lado del servidor (`validarFilasCommit`,
+// `src/utils/importHato/commitChequeo.ts`) antes de escribir una sola fila.
+//
+// Desde la Fase 3a (`docs/plan_chequeo_captura_foto.md`, ventana de
+// corrección) las filas y la fecha pueden venir CORREGIDAS por un humano: ver
+// `comprometer` y `useRevisionChequeo.ts`.
 //
 // Mismo patrón de auth que `ClimaCard.tsx`: `Authorization: Bearer
 // <session.access_token>` (JWT del usuario, no el anon key -- ambos
@@ -44,6 +47,38 @@ export interface PreviewChequeoRespuesta {
   filasNormalizadas: FilaChequeoNormalizada[];
   terneras: FilaTerneraNormalizada[];
   subtablas: FilaSubtablaNormalizada[];
+  /** SOLO en la ruta por FOTO (Fase 3b). Ausente cuando el chequeo vino de un
+   * `.xlsx`. Es el reporte de calidad de la lectura: qué no se pudo leer y qué
+   * se leyó con poca confianza. **Debe mostrarse siempre** -- sin esto, una
+   * vaca que el OCR no encontró se ve idéntica a una vaca sin cambios, que es
+   * exactamente el modo de fallo silencioso que el módulo prohíbe. */
+  ocr?: ReporteOcrChequeo;
+}
+
+/** Reporte de calidad del OCR. Se tipa solo lo que la UI consume; el endpoint
+ * devuelve más detalle (recortes por celda) que hoy nadie renderiza. */
+export interface ReporteOcrChequeo {
+  modelo: string;
+  fotos: { pagina: number; nombre: string; bytes: number }[];
+  almacenamiento: { bucket: string; ok: boolean; errores: string[] };
+  /** Páginas cuya lectura falló entera (timeout, rechazo del proveedor…). */
+  paginasNoLeidas: string[];
+  /** Filas que el modelo leyó pero NO se pudieron anclar a una vaca del
+   * roster: nunca se desplazan, se reportan. */
+  filasNoLeidas: { pagina: number; numeroImpreso: string | null; nombreImpreso: string | null; motivo: string }[];
+  /** Vacas activas que no aparecieron en ninguna foto -- así una página
+   * faltante o una foto cortada se detecta sola. */
+  vacasSinLeer: { numero: number | null; nombre: string | null; motivo: string }[];
+  advertencias: string[];
+  resumen: {
+    vacasEnRoster: number;
+    fotosRecibidas: number;
+    fotosLeidas: number;
+    filasConfirmadas: number;
+    filasNoLeidas: number;
+    vacasSinLeer: number;
+    celdasNoConfiables: number;
+  };
 }
 
 export interface CommitChequeoRespuesta {
@@ -120,23 +155,92 @@ export function useSubirChequeoExcel() {
   }, []);
 
   /**
+   * Fase 3b -- misma vista previa, pero desde FOTOS de la planilla impresa y
+   * diligenciada a mano, en vez del `.xlsx`.
+   *
+   * Es deliberadamente un gemelo de `subir`: el endpoint `/hato/chequeo/foto`
+   * devuelve la MISMA forma de respuesta que `/preview` (más un bloque `ocr`
+   * con la confianza por celda y las filas que no ancló), justamente para que
+   * la ventana de corrección, el commit y todo lo que sigue no distingan de
+   * qué ruta vino el chequeo. El OCR reemplaza la lectura de la grilla, no el
+   * pipeline.
+   *
+   * `fecha` es opcional y va cuando el usuario ya la fijó: la foto no trae
+   * título parseable, así que sin ella el servidor devuelve `chequeoFecha:
+   * null` y la ventana de corrección obliga a escribirla antes de aprobar
+   * (nunca se inventa una fecha leída de la imagen).
+   */
+  const subirFotos = useCallback(async (fotos: File[], fecha?: string) => {
+    setLoading(true);
+    setError(null);
+    setResultado(null);
+    setCommitResultado(null);
+    setErrorCommit(null);
+    setFilasRechazadas(null);
+    try {
+      const token = await obtenerTokenSesion();
+
+      const formData = new FormData();
+      // El campo se repite una vez por foto -- el servidor lee `fotos` como
+      // lista (1..6, una por página de la planilla).
+      fotos.forEach((f) => formData.append('fotos', f));
+      if (fecha) formData.append('fecha', fecha);
+
+      const res = await fetch(`${EDGE_FUNCTION_BASE}/make-server-1ccce916/hato/chequeo/foto`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      const body = await res.json();
+      if (!res.ok || !body?.success) {
+        throw new Error(body?.error || `El servidor respondió ${res.status} al leer las fotos.`);
+      }
+
+      setResultado(body as PreviewChequeoRespuesta);
+      return body as PreviewChequeoRespuesta;
+    } catch (err) {
+      const mensaje = err instanceof Error ? err.message : 'Error desconocido leyendo las fotos del chequeo';
+      setError(mensaje);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
    * Aprueba el diff actual (`resultado`): envía SOLO las filas
-   * `sin_cambio`/`cambio` de `filasNormalizadas` al commit path. Filas
-   * `nuevo` (sin ficha todavía) y `no_reconocido` nunca se incluyen -- la UI
-   * las señala aparte (ver `ChequeoDiffReview`), no se aprueban en silencio.
+   * `sin_cambio`/`cambio` al commit path. Filas `nuevo` (sin ficha todavía) y
+   * `no_reconocido` nunca se incluyen -- la UI las señala aparte (ver
+   * `ChequeoDiffReview`), no se aprueban en silencio.
+   *
+   * `opciones.filas` y `opciones.fecha` son la vía de la VENTANA DE CORRECCIÓN
+   * (Fase 3a, `useRevisionChequeo`): las filas CORREGIDAS y la fecha del
+   * chequeo fijada a mano. Sin ellas se cae al comportamiento original --
+   * filas tal como salieron del archivo y la fecha que el parser resolvió del
+   * título. Esto es seguro por construcción: el commit revalida las filas que
+   * recibe corriendo `construirDiffChequeo` contra el estado fresco de la BD
+   * (`hato-chequeo-commit.ts`), no re-parsea el `.xlsx`, así que un valor
+   * corregido solo puede cambiar la clasificación entre `sin_cambio` y
+   * `cambio` -- ambas escribibles -- y cualquier fila degradada vuelve como
+   * 409 sin escribir nada.
    */
   const comprometer = useCallback(
-    async (veterinario?: string) => {
+    async (opciones?: { veterinario?: string; fecha?: string; filas?: FilaChequeoNormalizada[] }) => {
       if (!resultado) throw new Error('No hay una vista previa cargada para aprobar.');
-      if (!resultado.chequeoFecha) {
+      const veterinario = opciones?.veterinario;
+      const fechaChequeo = opciones?.fecha ?? resultado.chequeoFecha;
+      if (!fechaChequeo) {
         throw new Error('No se pudo resolver la fecha del chequeo desde el archivo -- no se puede aprobar sin fecha.');
       }
 
       const filasPorNumero = new Map(resultado.filasNormalizadas.map((f) => [f.fila, f]));
-      const filasAprobables = resultado.diffChequeos.filas
-        .filter((f) => f.clasificacion === 'sin_cambio' || f.clasificacion === 'cambio')
-        .map((f) => filasPorNumero.get(f.fila))
-        .filter((f): f is FilaChequeoNormalizada => f !== undefined);
+      const filasAprobables =
+        opciones?.filas ??
+        resultado.diffChequeos.filas
+          .filter((f) => f.clasificacion === 'sin_cambio' || f.clasificacion === 'cambio')
+          .map((f) => filasPorNumero.get(f.fila))
+          .filter((f): f is FilaChequeoNormalizada => f !== undefined);
 
       if (filasAprobables.length === 0) {
         throw new Error('No hay filas sin_cambio/cambio para aprobar en este diff.');
@@ -154,7 +258,7 @@ export function useSubirChequeoExcel() {
           body: JSON.stringify({
             archivo: resultado.archivo,
             generadoEn: resultado.generadoEn,
-            chequeo: { fecha: resultado.chequeoFecha, veterinario: veterinario ?? null },
+            chequeo: { fecha: fechaChequeo, veterinario: veterinario ?? null },
             filas: filasAprobables,
           }),
         });
@@ -197,6 +301,7 @@ export function useSubirChequeoExcel() {
 
   return {
     subir,
+    subirFotos,
     comprometer,
     limpiar,
     loading,

@@ -54,6 +54,10 @@ MODULOS = [
     'overridesChapeta.ts',
     'diffChequeo.ts',
     'commitChequeo.ts',
+    # Fase 3b de docs/plan_chequeo_captura_foto.md: la ruta de carga POR FOTO
+    # (`hato-chequeo-foto.ts`) necesita la lógica pura de roster/ancla/matriz
+    # cruda del mismo lado que el resto del pipeline.
+    'ocrChequeo.ts',
 ]
 
 DESTINOS = [

@@ -10,6 +10,7 @@ import {
   calcularFechaSecar,
   calcularMesesPrenez,
   descomponerSX,
+  derivarSexoCria,
   derivarEstadoReproductivo,
   calcularProductividad,
   detectarColisionesChapeta,
@@ -1108,6 +1109,62 @@ describe('esTipoSxDeParto', () => {
     for (const tipo of ['aborto', 'vendida', 'vacia', 'cero', 'mv', 'desconocido', 'vacio'] as const) {
       expect(esTipoSxDeParto(tipo)).toBe(false);
     }
+  });
+});
+
+describe('derivarSexoCria (Fase 1 de docs/plan_chequeo_captura_foto.md)', () => {
+  it('lee la LETRA del código SX: O = macho, A = hembra, en toda la familia (regla del dueño 2026-07-29)', () => {
+    expect(derivarSexoCria({ sxRaw: 'OV' })).toBe('macho'); // macho vendido
+    expect(derivarSexoCria({ sxRaw: 'O+' })).toBe('macho'); // macho muerto
+    expect(derivarSexoCria({ sxRaw: 'AV' })).toBe('hembra'); // hembra vendida
+    expect(derivarSexoCria({ sxRaw: 'A 206' })).toBe('hembra'); // hembra retenida, 206 = chapeta de la cría
+    expect(derivarSexoCria({ sxRaw: 'A+' })).toBe('hembra'); // hembra muerta
+  });
+
+  it('reutiliza parseSX, así que hereda sus variantes reales (minúsculas, typo oc, sufijo de raza)', () => {
+    expect(derivarSexoCria({ sxRaw: 'ov' })).toBe('macho');
+    expect(derivarSexoCria({ sxRaw: 'oc' })).toBe('macho');
+    expect(derivarSexoCria({ sxRaw: 'ov gir' })).toBe('macho');
+    expect(derivarSexoCria({ sxRaw: 'a190hol' })).toBe('hembra');
+  });
+
+  it('un SX que no es un parto con cría identificable NO determina sexo -- null, nunca un valor por defecto', () => {
+    // gemelar: dos crías y la planilla no dice sus sexos (misma razón por la
+    // que `descomponerSX` tampoco inventa `cria_destino` ahí).
+    for (const crudo of ['gem+', 'aborto', 'vacia', 'vendida', '0', 'Mv', 'CARLA', '']) {
+      expect(derivarSexoCria({ sxRaw: crudo })).toBeNull();
+    }
+  });
+
+  it('cae a cria_destino cuando sx_raw falta o no determina nada', () => {
+    expect(derivarSexoCria({ sxRaw: null, criaDestino: 'macho_vendido' })).toBe('macho');
+    expect(derivarSexoCria({ criaDestino: 'hembra_vendida' })).toBe('hembra');
+    // TERNERAS solo registra hembras: una cría retenida es hembra por definición.
+    expect(derivarSexoCria({ sxRaw: '   ', criaDestino: 'retenida' })).toBe('hembra');
+    expect(derivarSexoCria({ sxRaw: 'gem+', criaDestino: 'retenida' })).toBe('hembra');
+  });
+
+  it("cria_destino 'muerta' NO determina sexo: A+ y O+ colapsan en el mismo valor y la letra ya se perdió", () => {
+    expect(derivarSexoCria({ sxRaw: null, criaDestino: 'muerta' })).toBeNull();
+    // …pero si el crudo sobrevive, la letra manda y sí hay sexo.
+    expect(derivarSexoCria({ sxRaw: 'A+', criaDestino: 'muerta' })).toBe('hembra');
+    expect(derivarSexoCria({ sxRaw: 'O+', criaDestino: 'muerta' })).toBe('macho');
+  });
+
+  it("cria_destino 'aborto' no tiene cría, así que no hay sexo que derivar", () => {
+    expect(derivarSexoCria({ sxRaw: null, criaDestino: 'aborto' })).toBeNull();
+  });
+
+  it('sin sx_raw y sin cria_destino no es determinable -- null (regla "sin dato, nunca inventado")', () => {
+    expect(derivarSexoCria({})).toBeNull();
+    expect(derivarSexoCria({ sxRaw: null, criaDestino: null })).toBeNull();
+    expect(derivarSexoCria({ sxRaw: undefined, criaDestino: undefined })).toBeNull();
+  });
+
+  it('el sx_raw manda sobre cria_destino cuando ambos están presentes (conserva la letra)', () => {
+    // Caso patológico defensivo: destino desalineado con el crudo. El crudo es
+    // la fuente autoritativa porque es lo que Martha escribió.
+    expect(derivarSexoCria({ sxRaw: 'OV', criaDestino: 'hembra_vendida' })).toBe('macho');
   });
 });
 

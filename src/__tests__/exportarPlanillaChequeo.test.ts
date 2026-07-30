@@ -9,6 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import * as XLSX from 'xlsx';
 import { construirColmapConEncabezado } from '@/utils/importHato/grilla';
+import { parseEstado } from '@/utils/calculosHato';
 import {
   ENCABEZADOS_PLANILLA_CHEQUEO,
   FILA_ENCABEZADO_PLANILLA,
@@ -17,6 +18,7 @@ import {
   construirNombreHojaChequeo,
   isoATextoDDMMYYYY,
   textoCeldaToro,
+  textoCeldaEstado,
   construirLibroPlanillaChequeo,
   type FilaPlanillaChequeo,
 } from '@/utils/hato/exportarPlanillaChequeo';
@@ -76,6 +78,26 @@ describe('textoCeldaToro', () => {
 
   it('sin nombre de toro, la celda queda vacía', () => {
     expect(textoCeldaToro(null, 'monta')).toBeNull();
+  });
+});
+
+describe('textoCeldaEstado (Fase 1 de docs/plan_chequeo_captura_foto.md)', () => {
+  it('vacia_apta/vacia_problema vuelven a parsear al MISMO tipo -- round-trip exacto con parseEstado', () => {
+    expect(textoCeldaEstado('vacia_apta')).toBe('ok');
+    expect(textoCeldaEstado('vacia_problema')).toBe('rech');
+    expect(parseEstado(textoCeldaEstado('vacia_apta')).tipo).toBe('vacia_apta');
+    expect(parseEstado(textoCeldaEstado('vacia_problema')).tipo).toBe('vacia_problema');
+  });
+
+  it('fecha_heredada y desconocido dejan la celda vacía -- su significado vive solo en el crudo, que la vista no expone', () => {
+    expect(textoCeldaEstado('fecha_heredada')).toBeNull();
+    expect(textoCeldaEstado('desconocido')).toBeNull();
+  });
+
+  it('vacio/null/undefined -> celda vacía, nunca un código inventado', () => {
+    expect(textoCeldaEstado('vacio')).toBeNull();
+    expect(textoCeldaEstado(null)).toBeNull();
+    expect(textoCeldaEstado(undefined)).toBeNull();
   });
 });
 
