@@ -8,7 +8,7 @@ import { ConfirmDialog } from '../ui/confirm-dialog';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import { getSupabase } from '../../utils/supabase/client';
-import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { projectId } from '../../utils/supabase/info';
 import { Users, Plus, Edit, Trash2, Eye, EyeOff, Shield, CheckCircle2, XCircle } from 'lucide-react';
 import { useFormDraft } from '@/hooks/useFormDraft';
 import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
@@ -45,6 +45,18 @@ export function UsuariosConfig() {
   const [usuarioParaEliminar, setUsuarioParaEliminar] = useState<Usuario | null>(null);
 
   const draft = useFormDraft('usuarios-form-v1', { nombreCompleto, email, rol, activo });
+
+  // Los endpoints de administración de usuarios exigen el JWT de sesión del
+  // usuario logueado (rol Gerencia) -- no el anon key. Mismo patrón que
+  // `useSubirChequeoExcel.ts`/`ClimaCard.tsx`.
+  async function obtenerTokenSesion(): Promise<string> {
+    const supabase = getSupabase();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      throw new Error('Sesión no válida -- vuelve a iniciar sesión e intenta de nuevo.');
+    }
+    return session.access_token;
+  }
 
   function handleRestoreDraft() {
     if (!draft.draftData) return;
@@ -124,8 +136,9 @@ export function UsuariosConfig() {
     }
 
     try {
+      const token = await obtenerTokenSesion();
       const url = `https://${projectId}.supabase.co/functions/v1/make-server-1ccce916/usuarios/${modalMode === 'crear' ? 'crear' : 'editar'}`;
-      
+
       const body: any = {
         email,
         nombre_completo: nombreCompleto,
@@ -147,7 +160,7 @@ export function UsuariosConfig() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify(body),
       });
@@ -180,13 +193,14 @@ export function UsuariosConfig() {
   const confirmarEliminarUsuario = async () => {
     if (!usuarioParaEliminar) return;
     try {
+      const token = await obtenerTokenSesion();
       const url = `https://${projectId}.supabase.co/functions/v1/make-server-1ccce916/usuarios/eliminar`;
 
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ id: usuarioParaEliminar.id }),
       });
