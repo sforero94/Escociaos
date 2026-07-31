@@ -487,6 +487,7 @@ Two module contracts live as **nested `CLAUDE.md` files** rather than in this on
 | Document | Location | Purpose |
 |----------|----------|---------|
 | Hato Lechero contract | `src/components/hato/CLAUDE.md` | Full module contract (auto-loads under that dir) |
+| PO maintenance operation | `escociaos-po/CLAUDE.md` | Scheduled audit operation: agent roster, run protocol, memory layer |
 | Finanzas view contracts | `src/components/finanzas/CLAUDE.md` | Gastos/Ingresos historial, ganado merge, table CSS (auto-loads under that dir) |
 | Database schema | `docs/supabase_tablas.md` | Schema reference; validate against migrations |
 | Financial-report rules | `docs/plan_reportes_finanzas.md` | Approved P&G and cash-flow accounting contract |

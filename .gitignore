@@ -37,3 +37,7 @@ supabase/.temp/
 # Hato Lechero — datos reales, NUNCA commitear
 *.xlsx
 scripts/import-hato/out/
+
+# Claude Code local state
+.claude/worktrees/
+.claude/settings.local.json
