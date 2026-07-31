@@ -66,47 +66,19 @@ app.post("/make-server-1ccce916/inventario/importar-productos", async (c) => {
   }
 });
 
-// Rutas para usuarios
+// Rutas para usuarios -- exclusivas de Gerencia (ver `verificarAccesoGerencia`
+// en usuarios.tsx). Los handlers reciben el Context completo (no solo el
+// body) porque el gate necesita leer el encabezado Authorization.
 app.post("/make-server-1ccce916/usuarios/crear", async (c) => {
-  try {
-    const body = await c.req.json();
-    const resultado = await crearUsuario(body);
-    return c.json(resultado);
-  } catch (error: any) {
-    console.error('Error en endpoint de creación de usuario:', error);
-    return c.json({
-      success: false,
-      error: error.message || 'Error al procesar la solicitud'
-    }, 500);
-  }
+  return await crearUsuario(c);
 });
 
 app.post("/make-server-1ccce916/usuarios/editar", async (c) => {
-  try {
-    const body = await c.req.json();
-    const resultado = await editarUsuario(body);
-    return c.json(resultado);
-  } catch (error: any) {
-    console.error('Error en endpoint de edición de usuario:', error);
-    return c.json({
-      success: false,
-      error: error.message || 'Error al procesar la solicitud'
-    }, 500);
-  }
+  return await editarUsuario(c);
 });
 
 app.post("/make-server-1ccce916/usuarios/eliminar", async (c) => {
-  try {
-    const body = await c.req.json();
-    const resultado = await eliminarUsuario(body);
-    return c.json(resultado);
-  } catch (error: any) {
-    console.error('Error en endpoint de eliminación de usuario:', error);
-    return c.json({
-      success: false,
-      error: error.message || 'Error al procesar la solicitud'
-    }, 500);
-  }
+  return await eliminarUsuario(c);
 });
 
 // Rutas para productos
