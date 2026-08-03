@@ -163,6 +163,7 @@ export function PasoCierreDatos({
               <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-brand-brown/40" />
               <input
                 type="number"
+                onWheel={(e) => e.currentTarget.blur()}
                 value={valorJornal}
                 onChange={(e) => onValorJornalChange(Number(e.target.value))}
                 min="0"
@@ -187,6 +188,7 @@ export function PasoCierreDatos({
                 </div>
                 <input
                   type="number"
+                  onWheel={(e) => e.currentTarget.blur()}
                   value={jornales.aplicacion}
                   onChange={(e) =>
                     onJornalesChange({ ...jornales, aplicacion: Number(e.target.value) })
@@ -205,6 +207,7 @@ export function PasoCierreDatos({
                 </div>
                 <input
                   type="number"
+                  onWheel={(e) => e.currentTarget.blur()}
                   value={jornales.mezcla}
                   onChange={(e) =>
                     onJornalesChange({ ...jornales, mezcla: Number(e.target.value) })
@@ -223,6 +226,7 @@ export function PasoCierreDatos({
                 </div>
                 <input
                   type="number"
+                  onWheel={(e) => e.currentTarget.blur()}
                   value={jornales.transporte}
                   onChange={(e) =>
                     onJornalesChange({ ...jornales, transporte: Number(e.target.value) })
@@ -241,6 +245,7 @@ export function PasoCierreDatos({
                 </div>
                 <input
                   type="number"
+                  onWheel={(e) => e.currentTarget.blur()}
                   value={jornales.otros || 0}
                   onChange={(e) =>
                     onJornalesChange({ ...jornales, otros: Number(e.target.value) })
@@ -324,6 +329,7 @@ export function PasoCierreDatos({
                           </label>
                           <input
                             type="number"
+                            onWheel={(e) => e.currentTarget.blur()}
                             value={jornalesLote.aplicacion}
                             onChange={(e) => {
                               const updated = {
@@ -348,6 +354,7 @@ export function PasoCierreDatos({
                           </label>
                           <input
                             type="number"
+                            onWheel={(e) => e.currentTarget.blur()}
                             value={jornalesLote.mezcla}
                             onChange={(e) => {
                               const updated = {
@@ -372,6 +379,7 @@ export function PasoCierreDatos({
                           </label>
                           <input
                             type="number"
+                            onWheel={(e) => e.currentTarget.blur()}
                             value={jornalesLote.transporte}
                             onChange={(e) => {
                               const updated = {
@@ -396,6 +404,7 @@ export function PasoCierreDatos({
                           </label>
                           <input
                             type="number"
+                            onWheel={(e) => e.currentTarget.blur()}
                             value={jornalesLote.otros || 0}
                             onChange={(e) => {
                               const updated = {

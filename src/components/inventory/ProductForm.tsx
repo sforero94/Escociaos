@@ -456,6 +456,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                     </label>
                     <input
                       type="number"
+                      onWheel={(e) => e.currentTarget.blur()}
                       name="presentacion_kg_l"
                       value={formData.presentacion_kg_l}
                       onChange={handleChange}
@@ -473,6 +474,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                     </label>
                     <input
                       type="number"
+                      onWheel={(e) => e.currentTarget.blur()}
                       name="precio_por_presentacion"
                       value={formData.precio_por_presentacion}
                       onChange={handleChange}
@@ -490,6 +492,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                     </label>
                     <input
                       type="number"
+                      onWheel={(e) => e.currentTarget.blur()}
                       name="precio_unitario"
                       value={formData.precio_unitario}
                       readOnly
@@ -508,6 +511,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                     </label>
                     <input
                       type="number"
+                      onWheel={(e) => e.currentTarget.blur()}
                       name="cantidad_actual"
                       value={formData.cantidad_actual}
                       onChange={handleChange}
@@ -525,6 +529,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                     </label>
                     <input
                       type="number"
+                      onWheel={(e) => e.currentTarget.blur()}
                       name="stock_minimo"
                       value={formData.stock_minimo}
                       onChange={handleChange}
@@ -602,6 +607,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                         </label>
                         <input
                           type="number"
+                          onWheel={(e) => e.currentTarget.blur()}
                           name="concentracion_ia_1"
                           value={formData.concentracion_ia_1}
                           onChange={handleChange}
@@ -634,6 +640,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                         </label>
                         <input
                           type="number"
+                          onWheel={(e) => e.currentTarget.blur()}
                           name="concentracion_ia_2"
                           value={formData.concentracion_ia_2}
                           onChange={handleChange}
@@ -666,6 +673,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                         </label>
                         <input
                           type="number"
+                          onWheel={(e) => e.currentTarget.blur()}
                           name="concentracion_ia_3"
                           value={formData.concentracion_ia_3}
                           onChange={handleChange}
@@ -722,6 +730,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                         </label>
                         <input
                           type="number"
+                          onWheel={(e) => e.currentTarget.blur()}
                           name="periodo_reingreso_horas"
                           value={formData.periodo_reingreso_horas}
                           onChange={handleChange}
@@ -738,6 +747,7 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                         </label>
                         <input
                           type="number"
+                          onWheel={(e) => e.currentTarget.blur()}
                           name="periodo_carencia_dias"
                           value={formData.periodo_carencia_dias}
                           onChange={handleChange}
@@ -790,27 +800,27 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Nitrógeno (N)</label>
-                        <input type="number" name="nitrogeno" value={formData.nitrogeno} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
+                        <input type="number" onWheel={(e) => e.currentTarget.blur()} name="nitrogeno" value={formData.nitrogeno} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Fósforo (P)</label>
-                        <input type="number" name="fosforo" value={formData.fosforo} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
+                        <input type="number" onWheel={(e) => e.currentTarget.blur()} name="fosforo" value={formData.fosforo} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Potasio (K)</label>
-                        <input type="number" name="potasio" value={formData.potasio} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
+                        <input type="number" onWheel={(e) => e.currentTarget.blur()} name="potasio" value={formData.potasio} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Calcio (Ca)</label>
-                        <input type="number" name="calcio" value={formData.calcio} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
+                        <input type="number" onWheel={(e) => e.currentTarget.blur()} name="calcio" value={formData.calcio} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Magnesio (Mg)</label>
-                        <input type="number" name="magnesio" value={formData.magnesio} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
+                        <input type="number" onWheel={(e) => e.currentTarget.blur()} name="magnesio" value={formData.magnesio} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Azufre (S)</label>
-                        <input type="number" name="azufre" value={formData.azufre} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
+                        <input type="number" onWheel={(e) => e.currentTarget.blur()} name="azufre" value={formData.azufre} onChange={handleChange} step="0.01" min="0" max="100" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
                       </div>
                     </div>
 
@@ -818,27 +828,27 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Hierro (Fe)</label>
-                        <input type="number" name="hierro" value={formData.hierro} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="ppm" />
+                        <input type="number" onWheel={(e) => e.currentTarget.blur()} name="hierro" value={formData.hierro} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="ppm" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Manganeso (Mn)</label>
-                        <input type="number" name="manganeso" value={formData.manganeso} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="ppm" />
+                        <input type="number" onWheel={(e) => e.currentTarget.blur()} name="manganeso" value={formData.manganeso} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="ppm" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Zinc (Zn)</label>
-                        <input type="number" name="zinc" value={formData.zinc} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="ppm" />
+                        <input type="number" onWheel={(e) => e.currentTarget.blur()} name="zinc" value={formData.zinc} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="ppm" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Cobre (Cu)</label>
-                        <input type="number" name="cobre" value={formData.cobre} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="ppm" />
+                        <input type="number" onWheel={(e) => e.currentTarget.blur()} name="cobre" value={formData.cobre} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="ppm" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Boro (B)</label>
-                        <input type="number" name="boro" value={formData.boro} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="ppm" />
+                        <input type="number" onWheel={(e) => e.currentTarget.blur()} name="boro" value={formData.boro} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="ppm" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Molibdeno (Mo)</label>
-                        <input type="number" name="molibdeno" value={formData.molibdeno} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="ppm" />
+                        <input type="number" onWheel={(e) => e.currentTarget.blur()} name="molibdeno" value={formData.molibdeno} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="ppm" />
                       </div>
                     </div>
 
@@ -846,15 +856,15 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Carbono Orgánico (%)</label>
-                        <input type="number" name="carbono_organico" value={formData.carbono_organico} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
+                        <input type="number" onWheel={(e) => e.currentTarget.blur()} name="carbono_organico" value={formData.carbono_organico} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Silicio (Si)</label>
-                        <input type="number" name="silicio" value={formData.silicio} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
+                        <input type="number" onWheel={(e) => e.currentTarget.blur()} name="silicio" value={formData.silicio} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
                       </div>
                       <div>
                         <label className="block text-sm text-gray-700 mb-1">Sodio (Na)</label>
-                        <input type="number" name="sodio" value={formData.sodio} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
+                        <input type="number" onWheel={(e) => e.currentTarget.blur()} name="sodio" value={formData.sodio} onChange={handleChange} step="0.01" min="0" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary" placeholder="%" />
                       </div>
                     </div>
                   </>

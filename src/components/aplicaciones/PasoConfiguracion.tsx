@@ -823,6 +823,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
                     </label>
                     <input
                       type="number"
+                      onWheel={(e) => e.currentTarget.blur()}
                       step="0.1"
                       value={lote.calibracion_litros_arbol || ''}
                       onChange={(e) =>
@@ -864,6 +865,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
                     </label>
                     <input
                       type="number"
+                      onWheel={(e) => e.currentTarget.blur()}
                       step="0.1"
                       value={lote.calibracion_litros_arbol || ''}
                       onChange={(e) =>
