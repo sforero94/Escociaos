@@ -475,7 +475,7 @@ export function DashboardMonitoreoV3() {
         const rondaMap = plagasPorRondaPlaga.get(r.id);
         if (rondaMap) {
           for (const [plaga, stats] of rondaMap) {
-            row[plaga] = stats.monitoreados > 0 ? +((stats.afectados / stats.monitoreados) * 100).toFixed(1) : 0;
+            row[plaga] = +calcularIncidencia(stats.afectados, stats.monitoreados).toFixed(1);
           }
         }
         // Per-lote data stored separately
@@ -485,7 +485,7 @@ export function DashboardMonitoreoV3() {
             const loteId = key.split('|')[1];
             const loteData: Record<string, number> = {};
             for (const [plaga, stats] of loteMap) {
-              loteData[plaga] = stats.monitoreados > 0 ? +((stats.afectados / stats.monitoreados) * 100).toFixed(1) : 0;
+              loteData[plaga] = +calcularIncidencia(stats.afectados, stats.monitoreados).toFixed(1);
             }
             row._porLote.set(loteId, loteData);
           }
@@ -546,6 +546,15 @@ export function DashboardMonitoreoV3() {
   const rondaActual = rondas.find(r => r.id === rondaSeleccionada);
   const esRondaAbierta = rondaActual?.fecha_fin == null;
 
+  // Mismos cortes (10% / 30%) que el resto del módulo de monitoreo, vía
+  // `clasificarGravedad` -- igual que `MapaCalorIncidencias.obtenerColorIncidencia`.
+  // Antes estaban escritos a mano aquí (`>= 30 ? 'rojo' : >= 10 ? 'amarillo'`),
+  // que es exactamente cómo `CargaMasiva.tsx` acabó con un corte distinto (15%).
+  function semaforoDeIncidencia(incidencia: number): EstadoSemaforo {
+    const { numerica } = clasificarGravedad(incidencia);
+    return numerica === 3 ? 'rojo' : numerica === 2 ? 'amarillo' : 'verde';
+  }
+
   // Top 5 plagas by average incidencia in the ronda
   function calcularTopPlagas(): { nombre: string; incidenciaProm: number; estado: EstadoSemaforo }[] {
     if (monitoreos.length === 0) return [];
@@ -566,7 +575,7 @@ export function DashboardMonitoreoV3() {
         return {
           nombre,
           incidenciaProm: prom,
-          estado: (prom >= 30 ? 'rojo' : prom >= 10 ? 'amarillo' : 'verde') as EstadoSemaforo,
+          estado: semaforoDeIncidencia(prom),
         };
       })
       .sort((a, b) => b.incidenciaProm - a.incidenciaProm)
@@ -574,9 +583,9 @@ export function DashboardMonitoreoV3() {
   }
 
   const topPlagas = calcularTopPlagas();
-  const plagasEstado: EstadoSemaforo = topPlagas.length === 0 ? 'sin_datos'
-    : topPlagas[0].incidenciaProm >= 30 ? 'rojo'
-    : topPlagas[0].incidenciaProm >= 10 ? 'amarillo' : 'verde';
+  const plagasEstado: EstadoSemaforo = topPlagas.length === 0
+    ? 'sin_datos'
+    : semaforoDeIncidencia(topPlagas[0].incidenciaProm);
 
   function calcularSemaforoFloracion(): SemaforoCard {
     const flor = calcularEstadoFloracion(monitoreos);

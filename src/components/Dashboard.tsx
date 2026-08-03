@@ -14,6 +14,7 @@ import {
 } from './dashboard/index';
 import { useGanadoInventario } from './ganado/hooks/useGanadoInventario';
 import { calcularKPIsInventario, calcularVariacion } from '../utils/calculosGanado';
+import { calcularIncidencia } from '../utils/calculosMonitoreo';
 
 interface KPIsDashboard {
   plagas: PlagaKPI[];
@@ -139,7 +140,7 @@ export function Dashboard() {
         }
         const resultado = new Map<string, number>();
         for (const [nombre, { afectados, monitoreados }] of acumulado) {
-          resultado.set(nombre, monitoreados > 0 ? (afectados / monitoreados) * 100 : 0);
+          resultado.set(nombre, calcularIncidencia(afectados, monitoreados));
         }
         return resultado;
       };
@@ -326,7 +327,10 @@ export function Dashboard() {
 
         const alertas: Alerta[] = [];
         for (const [nombre, { afectados, monitoreados }] of Object.entries(porPlaga)) {
-          const avg = monitoreados > 0 ? (afectados / monitoreados) * 100 : 0;
+          const avg = calcularIncidencia(afectados, monitoreados);
+          // OJO: `> 10` es el umbral de ALERTA de este tablero, no el corte de
+          // gravedad de `clasificarGravedad` (que es `>= 10`). Se deja tal cual
+          // a propósito: cambiarlo movería qué alertas se muestran.
           if (avg > 10) {
             alertas.push({
               id: `monitoreo-${nombre}`,
