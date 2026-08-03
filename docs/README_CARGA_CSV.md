@@ -40,8 +40,10 @@ La incidencia y la severidad se calculan automáticamente a partir de los conteo
 
 ## Referencias técnicas
 
-- UI e importación: `src/components/monitoreo/CargaMasiva.tsx`
-- Parser CSV heredado: `src/utils/csvMonitoreo.ts`
+- UI e importación: `src/components/monitoreo/CargaMasiva.tsx` — **única ruta viva**.
+  El parser heredado (`src/utils/csvMonitoreo.ts` + `CargaCSV.tsx`) fue eliminado
+  en 2026-08: llevaba desde 2026-05 sin ninguna ruta que lo alcanzara. Sigue en
+  el historial de git si alguna vez hace falta consultarlo.
 - Tipos: `src/types/monitoreo.ts`
 - Gestión de lotes y sublotes: [`GUIA_CONFIGURACION_LOTES_SUBLOTES.md`](./GUIA_CONFIGURACION_LOTES_SUBLOTES.md)
 - Configuración histórica y guías de una sola vez: [`archive/csv/`](./archive/csv/)
