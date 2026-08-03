@@ -4,46 +4,61 @@ Hechos que aplican a mas de un agente. Mismas reglas de escritura que el resto
 (`README.md`): solo el orquestador escribe aqui.
 
 ## Entorno y acceso
-- ~~El rol del MCP de Supabase ve el esquema completo pero algunas tablas se leen
-  como vacias por RLS.~~ **CORREGIDO en 2026-07-31-dryrun-lunes**: `execute_sql`
-  corre como rol `postgres` con `rolbypassrls = true` (verificado:
-  `SELECT current_user, (SELECT rolbypassrls FROM pg_roles WHERE rolname=current_user)`).
-  Un `count(*)` por SQL directo **SI es autoritativo**. Lo enganoso son los
-  row-estimates de `list_tables`, que mostraban 0 en tablas con datos
-  (`lotes`=9, `fin_negocios`=7, `plagas_enfermedades_catalogo`=33) y 5 en
-  `usuarios`, que tiene 7. **Regla: nunca clasificar una tabla por `list_tables`;
-  siempre `count(*)` explicito, con un control en la misma sentencia.**
-- Los reads del PostgREST cap-ean en 1.000 filas; para agregados usar SQL directo
-  con `count(*)`/`group by`, nunca paginar a mano a menos que se necesiten las
-  filas. [seed 2026-07-31]
-- **Vercel MCP inutilizable**: el conector autentica contra el team
-  `Santiago's projects` (`team_Ov5b46sLrIUWwVlkuCfdCgdG`), que tiene 0 proyectos.
-  El proyecto real vive en `santiago-foreros-projects-da8a20e8`. Hasta que se
-  re-autorice, los deploys se verifican con
-  `gh api repos/sforero94/Escociaos/commits/<sha>/status` (context 'Vercel'), que
-  prueba exito/fallo por commit pero no expone logs ni errores de runtime.
-  **Si sigue asi en la siguiente corrida, es P1 contra la operacion (§7).**
-  [corrida: 2026-07-31-dryrun-lunes]
-- `get_advisors` devuelve salidas enormes (security ~111k chars, performance
-  ~614k) que revientan el limite de tokens. Guardar y resumir con python.
-  [corrida: 2026-07-31-dryrun-lunes]
+- `execute_sql` del MCP corre como rol `postgres` con `rolbypassrls = true`
+  (verificado). Un `count(*)` por SQL directo **SI es autoritativo**. Lo enganoso
+  son los row-estimates de `list_tables`. **Regla: nunca clasificar una tabla por
+  `list_tables`; siempre `count(*)` explicito.** [corrida: 2026-08-03-lunes]
+- Los reads del PostgREST cap-ean en 1.000 filas. Triangulado esta corrida: 0 de
+  900 formas de consulta en `pg_stat_statements` usan `LIMIT ALL` (PostgREST lo
+  emite cuando NO hay tope), `fetchAll` pagina en bloques de 1.000 y funciona, y
+  `docs/plan_reportes_finanzas.md:193` lo midio contra esta misma base. El tope
+  NO es legible por SQL: vive en el fichero de PostgREST, no en la BD.
+  [corrida: 2026-08-03-lunes]
+- **Vercel MCP sigue inutilizable, 2a corrida consecutiva** — `list_teams` solo
+  devuelve `team_Ov5b46sLrIUWwVlkuCfdCgdG` (0 proyectos); `list_projects` contra
+  el scope real da 403. El proyecto real es `prj_r9z59zKKLqZo64RgecbEB8lXyYCd`
+  bajo `team_hQ3EH5CL5DQFmWLo3VceWeE6` (slug `santiago-foreros-projects-da8a20e8`),
+  dato obtenido del comentario de vercel[bot] en el PR #98. **Ya filado como P1
+  contra la operacion (§7); no re-diagnosticar, solo declarar bajo NO CORRIO.**
+  [corrida: 2026-08-03-lunes]
+- `get_advisors` (security ~111k chars, performance ~614k) y `get_edge_function`
+  (~999k chars en v197) revientan el limite de tokens. Guardar a archivo con
+  python y leer por partes. El JSON de `get_edge_function` trae
+  `files: [{name, content}]`. [corrida: 2026-08-03-lunes]
+- **Verificar un deploy de frontend SIN Vercel**: `curl https://escociaos.vercel.app/`,
+  extraer `/assets/*.js` del index.html y hacer grep en el chunk lazy relevante de
+  una cadena que solo exista despues del commit bajo prueba. Prueba por contenido,
+  mejor que un check verde de CI. [corrida: 2026-08-03-lunes]
 
 ## Racha del jueves (regla de auto-poda)
 | Corrida | Hallazgos nuevos |
 |---|---|
 
 ## Estado de la operacion
-- Ultima corrida completada: **2026-07-31-dryrun-lunes** (ensayo, solo lectura;
-  no escribio en Notion ni abrio PRs). Reporte:
-  `escociaos-po/reports/2026-07-31-dryrun-lunes.md`
-- Modo: dry run. Roster: los 6 semanales. 6 verificadores adversariales.
-- Resultado: 1 P0 + 3 P1 + 5 P2 + 3 P3 confirmados; 2 hallazgos refutados, 1
-  bajado de severidad, 1 subido, 1 reducido de alcance.
-- Primera corrida programada real: **2026-08-03** (lunes).
-- **Pendientes heredados a la primera corrida real**: (a) verificar si el P0 del
-  endpoint `/usuarios/*` ya fue cerrado — si sigue abierto, re-archivar como P0
-  sin re-investigar desde cero; (b) verificar si `hato_alertas_config` ya tiene
-  destinatario; (c) confirmar si el conector Vercel fue re-autorizado.
+- Ultima corrida: **2026-08-03-lunes** (primera corrida programada REAL; primer
+  lunes de mes, roster completo de 8). Modo: **full write**.
+- Resultado: 12 hallazgos filados en Notion (5 P1 + 7 P2), 4 PRs abiertos y en
+  verde (#98 #99 #100 #101), 4 verificaciones adversariales.
+- **Rendimiento de la fase de verificacion**: 4 de 4 confirmadas en el mecanismo,
+  pero 2 bajadas de severidad (P1->P2) y 2 con el impacto corregido. Ninguna
+  murio entera. Ademas Feature Strategy evito un falso positivo (el escalamiento
+  a 48h no es defecto: el umbral se cumple justo en el tick siguiente).
+- Pendientes heredados de la corrida en seco: (a) P0 de `/usuarios/*` **CERRADO**
+  y verificado en el bundle v197; (b) `hato_alertas_config` **YA tiene
+  destinatario** (se resolvio entre corridas); (c) conector Vercel **sigue roto**.
+
+## Riesgo operativo detectado esta corrida
+- **Todos los agentes comparten UN solo checkout.** Bug Triage hizo `checkout` de
+  una rama de trabajo y movio el arbol bajo los pies de los demas: los agentes que
+  leyeron archivos despues de ese momento estaban leyendo una rama, no `main`.
+  Code Quality si uso worktrees aislados y no tuvo el problema.
+  **Regla para la proxima corrida: todo agente que escriba codigo debe usar
+  `isolation: worktree`, y los de solo lectura deben leer via `git show main:<path>`
+  en vez de confiar en el arbol de trabajo.** [corrida: 2026-08-03-lunes]
+- `escociaos-po/CHANGELOG.md` quedo fuera del commit de memoria a proposito: §6
+  solo permite `escociaos-po/memory/**` y `escociaos-po/reports/**`. Su contenido
+  se absorbio en el reporte de la corrida. Si se quiere un CHANGELOG.md propio,
+  necesita su propio PR. [corrida: 2026-08-03-lunes]
 
 ## Archivo
 (vacio)
