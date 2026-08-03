@@ -12,11 +12,12 @@ import { RefreshCw } from 'lucide-react';
 import { Button } from '../ui/button';
 import { usePriorizacionMonitoreo } from './hooks/usePriorizacionMonitoreo';
 import { PriorizacionScoutingView } from './PriorizacionScoutingView';
-import type { PriorizacionEntry } from '../../utils/priorizacionMonitoreo';
+import type { PriorizacionEntry, CoberturaRonda } from '../../utils/priorizacionMonitoreo';
 
 export function PriorizacionScouting() {
   const { loading, error, cargarPriorizacion } = usePriorizacionMonitoreo();
   const [entradas, setEntradas] = useState<PriorizacionEntry[]>([]);
+  const [cobertura, setCobertura] = useState<CoberturaRonda | null>(null);
   // `usePriorizacionMonitoreo().loading` arranca en `false` (sólo se pone en
   // `true` dentro de `cargarPriorizacion`), así que sin esta bandera la vista
   // mostraría un instante el estado "vacío" antes de que el efecto inicial
@@ -27,7 +28,8 @@ export function PriorizacionScouting() {
   const recargar = useCallback(() => {
     cargarPriorizacion()
       .then((resultado) => {
-        setEntradas(resultado);
+        setEntradas(resultado.entries);
+        setCobertura(resultado.cobertura);
       })
       .catch(() => {
         // El error ya queda expuesto vía `error` del hook; nada más que hacer aquí.
@@ -52,7 +54,12 @@ export function PriorizacionScouting() {
         </Button>
       </div>
 
-      <PriorizacionScoutingView entries={entradas} loading={loading || primeraCargaPendiente} error={error} />
+      <PriorizacionScoutingView
+        entries={entradas}
+        cobertura={cobertura}
+        loading={loading || primeraCargaPendiente}
+        error={error}
+      />
     </div>
   );
 }

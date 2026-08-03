@@ -1,0 +1,37 @@
+-- =============================================================================
+-- 079_drop_compra_a_gasto_trigger.sql
+--
+-- ARCHIVO DE REGISTRO -- NO APLICAR. Reconstruido el 2026-08-03 (item 9 del
+-- issue 96).
+--
+-- Esta migracion se aplico a produccion el 2026-07-02 17:39:45 UTC SIN que su
+-- archivo existiera en el repo. Se registro en el ledger de Supabase como
+-- version `20260702173945`, name `drop_compra_a_gasto_trigger`. El cuerpo de
+-- abajo se recupero literal de
+-- `supabase_migrations.schema_migrations.statements`.
+--
+-- El numero 079 es solo el siguiente hueco libre del repo; NO refleja el orden
+-- cronologico. Cronologicamente esta migracion va despues de la 045 y antes de
+-- la 047 (077 y 078 estaban ocupados al momento de reconstruirla).
+--
+-- QUE HIZO: elimino el camino automatico compra -> gasto pendiente que habian
+-- montado `src/sql/trigger_compra_a_gasto.sql` y endurecido la migracion 038.
+-- Desde el 2026-07-02 registrar una compra NO crea ninguna fila en
+-- `fin_gastos`; el gasto se captura a mano en el modulo de Finanzas.
+--
+-- Verificado 2026-08-03 contra produccion:
+--   select proname from pg_proc where proname='crear_gasto_pendiente_de_compra';
+--     -> 0 filas.
+--   select tgname from pg_trigger t join pg_class c on c.oid=t.tgrelid
+--    where not t.tgisinternal and c.relname='compras';
+--     -> solo `set_updated_at_compras`; `trigger_compra_a_gasto` no existe.
+--   select count(*), count(compra_id) from fin_gastos;  -> 4.426 / 0.
+--
+-- NO re-aplicar: los objetos que borra ya no existen (el `IF EXISTS` lo haria
+-- inocuo, pero el archivo esta aqui para el ledger, no para correrse).
+-- =============================================================================
+
+-- ------------- CUERPO RECUPERADO (no ejecutar) -------------------------------
+DROP TRIGGER IF EXISTS trigger_compra_a_gasto ON compras;
+DROP FUNCTION IF EXISTS crear_gasto_pendiente_de_compra();
+-- ------------- FIN DEL CUERPO RECUPERADO -------------------------------------

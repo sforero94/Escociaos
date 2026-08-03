@@ -27,16 +27,25 @@
 //   por `fecha_inicio` desc) como `rondaActualId`: `priorizarMonitoreo` excluye
 //   cualquier (sublote, plaga) sin lectura en esa ronda, para no mostrar una
 //   lectura vieja como si fuera el estado actual.
+// - Cobertura de la ronda (issue #96, item 4): además de priorizar, este hook
+//   arma el universo `sublotesEnAlcance` -- todo sublote cuyo lote padre tiene
+//   `lotes.activo = true` (`sublotes` no tiene columna `activo` propia, así
+//   que el filtro sale de `lotes` y se propaga por `lote_id`) -- y se lo pasa
+//   a `calcularCoberturaRonda` junto con el mismo `historiales` que ya se
+//   cargó para priorizar. No hardcodea ningún lote: si el dueño cambia qué
+//   lotes están activos, la próxima carga simplemente ve una lista distinta.
 
 import { useState, useCallback } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
-import { priorizarMonitoreo } from '@/utils/priorizacionMonitoreo';
+import { priorizarMonitoreo, calcularCoberturaRonda } from '@/utils/priorizacionMonitoreo';
 import type {
   HistorialSublotePlaga,
   UmbralEconomico,
   PerfilEstacional,
   EventoFumigacion,
   PriorizacionEntry,
+  SubloteEnAlcance,
+  CoberturaRonda,
 } from '@/utils/priorizacionMonitoreo';
 
 const LOOKBACK_MONITOREOS_DIAS = 200; // ~6.5 meses
@@ -110,25 +119,35 @@ function agruparHistoriales(rows: MonitoreoRawRow[]): HistorialSublotePlaga[] {
   return Array.from(grupos.values());
 }
 
+/** Resultado de una carga: la lista priorizada (ver `bracket` en
+ * PriorizacionEntry para el criterio de orden) más el resumen de cobertura
+ * de la ronda actual sobre el universo de sublotes en producción.
+ * `cobertura` es `null` únicamente cuando todavía no existe ninguna ronda
+ * registrada en la finca (nada que priorizar ni que cubrir). */
+export interface ResultadoPriorizacion {
+  entries: PriorizacionEntry[];
+  cobertura: CoberturaRonda | null;
+}
+
 export interface UsePriorizacionMonitoreoReturn {
   loading: boolean;
   error: string | null;
-  /** Ejecuta el fetch completo + llama a `priorizarMonitoreo`. Devuelve la lista
-   * ya ordenada (ver `bracket` en PriorizacionEntry para el criterio de orden). */
-  cargarPriorizacion: () => Promise<PriorizacionEntry[]>;
+  /** Ejecuta el fetch completo + llama a `priorizarMonitoreo` y a
+   * `calcularCoberturaRonda`. */
+  cargarPriorizacion: () => Promise<ResultadoPriorizacion>;
 }
 
 export function usePriorizacionMonitoreo(): UsePriorizacionMonitoreoReturn {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const cargarPriorizacion = useCallback(async (): Promise<PriorizacionEntry[]> => {
+  const cargarPriorizacion = useCallback(async (): Promise<ResultadoPriorizacion> => {
     const supabase = getSupabase() as any;
     setLoading(true);
     setError(null);
 
     try {
-      const [monitoreosRes, umbralesRes, perfilesRes, movimientosRes, rondaActualRes] = await Promise.all([
+      const [monitoreosRes, umbralesRes, perfilesRes, movimientosRes, rondaActualRes, lotesActivosRes] = await Promise.all([
         supabase
           .from('monitoreos')
           .select(
@@ -149,9 +168,13 @@ export function usePriorizacionMonitoreo(): UsePriorizacionMonitoreoReturn {
           .gte('fecha_movimiento', fechaHaceNDias(LOOKBACK_FUMIGACIONES_DIAS)),
         supabase
           .from('rondas_monitoreo')
-          .select('id')
+          .select('id, nombre')
           .order('fecha_inicio', { ascending: false })
           .limit(1),
+        // Universo de cobertura (issue #96, item 4): sólo lotes EN PRODUCCIÓN.
+        // `sublotes` no tiene columna `activo` propia -- el filtro sale de
+        // `lotes` y se propaga por `lote_id` más abajo.
+        supabase.from('lotes').select('id, nombre').eq('activo', true),
       ]);
 
       if (monitoreosRes.error) throw new Error(`Monitoreos: ${monitoreosRes.error.message}`);
@@ -159,10 +182,12 @@ export function usePriorizacionMonitoreo(): UsePriorizacionMonitoreoReturn {
       if (perfilesRes.error) throw new Error(`Perfil estacional: ${perfilesRes.error.message}`);
       if (movimientosRes.error) throw new Error(`Movimientos diarios: ${movimientosRes.error.message}`);
       if (rondaActualRes.error) throw new Error(`Ronda actual: ${rondaActualRes.error.message}`);
+      if (lotesActivosRes.error) throw new Error(`Lotes en producción: ${lotesActivosRes.error.message}`);
 
-      // Sin ninguna ronda registrada todavía: nada que priorizar.
+      // Sin ninguna ronda registrada todavía: nada que priorizar ni que cubrir.
       const rondaActualId: string | undefined = rondaActualRes.data?.[0]?.id;
-      if (!rondaActualId) return [];
+      if (!rondaActualId) return { entries: [], cobertura: null };
+      const rondaActualNombre: string | null = rondaActualRes.data?.[0]?.nombre ?? null;
 
       const historiales = agruparHistoriales((monitoreosRes.data ?? []) as MonitoreoRawRow[]);
 
@@ -186,13 +211,43 @@ export function usePriorizacionMonitoreo(): UsePriorizacionMonitoreoReturn {
         fecha: m.fecha_movimiento,
       }));
 
-      return priorizarMonitoreo({
+      // Sublotes en alcance: todo sublote cuyo lote padre está en `lotesActivosRes`.
+      // Consulta dependiente (necesita los ids de lotes activos), así que va
+      // después del Promise.all en vez de dentro de él.
+      const lotesActivos = ((lotesActivosRes.data ?? []) as Array<{ id: string; nombre: string }>);
+      const loteIdsActivos = lotesActivos.map((l) => l.id);
+      const loteNombrePorId = new Map(lotesActivos.map((l) => [l.id, l.nombre]));
+
+      let sublotesEnAlcance: SubloteEnAlcance[] = [];
+      if (loteIdsActivos.length > 0) {
+        const sublotesActivosRes = await supabase
+          .from('sublotes')
+          .select('id, nombre, lote_id')
+          .in('lote_id', loteIdsActivos);
+        if (sublotesActivosRes.error) {
+          throw new Error(`Sublotes en producción: ${sublotesActivosRes.error.message}`);
+        }
+        sublotesEnAlcance = ((sublotesActivosRes.data ?? []) as Array<{ id: string; nombre: string; lote_id: string }>).map(
+          (s) => ({
+            sublote_id: s.id,
+            sublote_nombre: s.nombre,
+            lote_id: s.lote_id,
+            lote_nombre: loteNombrePorId.get(s.lote_id),
+          })
+        );
+      }
+
+      const entries = priorizarMonitoreo({
         historiales,
         umbrales,
         perfilesEstacionales,
         ultimasFumigaciones,
         rondaActualId,
       });
+
+      const cobertura = calcularCoberturaRonda(sublotesEnAlcance, historiales, rondaActualId, rondaActualNombre);
+
+      return { entries, cobertura };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg);

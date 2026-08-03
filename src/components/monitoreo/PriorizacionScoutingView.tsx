@@ -35,6 +35,7 @@ import {
   BarChart3,
   ChevronDown,
   CircleCheck,
+  EyeOff,
   Flame,
   Info,
   Minus,
@@ -44,7 +45,13 @@ import {
   TrendingUp,
 } from 'lucide-react';
 
-import type { PriorizacionEntry, Tendencia, TierPriorizacion } from '../../utils/priorizacionMonitoreo';
+import type {
+  CoberturaRonda,
+  PriorizacionEntry,
+  SubloteNoRevisado,
+  Tendencia,
+  TierPriorizacion,
+} from '../../utils/priorizacionMonitoreo';
 import { formatPercentage } from '../../utils/format';
 import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
@@ -984,6 +991,148 @@ function ZoneSection({ titulo, descripcion, icono, entries, tono, defaultOpen, v
 }
 
 // ============================================================================
+// Cobertura de la ronda actual (issue #96, item 4) — expone el denominador
+// que antes quedaba implícito: cuántos sublotes EN PRODUCCIÓN tienen lectura
+// en la ronda más reciente, y cuáles no. Deliberadamente en tono NEUTRO (gris,
+// nunca rojo/ámbar): "no revisado" es una brecha de cobertura, no una señal
+// de severidad -- mezclar los dos lenguajes visuales confundiría "todavía no
+// se visitó" con "hay una plaga grave", que es justo la distinción que este
+// item del issue pide hacer explícita.
+// ============================================================================
+
+/** Línea de resumen ("12 de 12 sublotes revisados en la Ronda 28") — vive
+ * siempre visible bajo el encabezado, sin depender de que haya combinaciones
+ * priorizadas ese día (a diferencia de `resumen`, que sí depende de `entries`). */
+function CoberturaResumen({ cobertura }: { cobertura: CoberturaRonda }) {
+  const completo = cobertura.noRevisados.length === 0;
+  const rondaTxt = cobertura.rondaNombre ? `en la ${cobertura.rondaNombre}` : 'en la ronda más reciente';
+
+  return (
+    <div
+      className="flex items-center gap-2 rounded-md border text-xs text-muted-foreground"
+      style={{ borderColor: 'var(--border)', backgroundColor: 'var(--muted)', padding: '0.5rem 0.75rem' }}
+    >
+      {completo ? (
+        <CircleCheck className="size-3.5 shrink-0" aria-hidden="true" />
+      ) : (
+        <EyeOff className="size-3.5 shrink-0" aria-hidden="true" />
+      )}
+      <span>
+        {cobertura.revisados} de {cobertura.totalEnAlcance} sublotes revisados {rondaTxt}
+        {completo ? '' : ` — ${cobertura.noRevisados.length} sin revisar todavía`}.
+      </span>
+    </div>
+  );
+}
+
+interface LoteNoRevisadoGrupo {
+  lote_id: string;
+  lote_nombre: string;
+  sublotes: SubloteNoRevisado[];
+}
+
+function agruparNoRevisadosPorLote(noRevisados: SubloteNoRevisado[]): LoteNoRevisadoGrupo[] {
+  const mapa = new Map<string, LoteNoRevisadoGrupo>();
+  for (const sublote of noRevisados) {
+    let grupo = mapa.get(sublote.lote_id);
+    if (!grupo) {
+      grupo = { lote_id: sublote.lote_id, lote_nombre: sublote.lote_nombre ?? sublote.lote_id, sublotes: [] };
+      mapa.set(sublote.lote_id, grupo);
+    }
+    grupo.sublotes.push(sublote);
+  }
+  return Array.from(mapa.values());
+}
+
+/** Fila hoja de un sublote no revisado — misma disposición que `FilaFoco`
+ * (nombre a la izquierda, valor a la derecha) para que el "—" quede en la
+ * MISMA posición donde el resto de filas muestra el % de incidencia: la señal
+ * visual de "acá no hay dato" depende de que el lugar del dato sea reconocible. */
+function FilaSubloteNoRevisado({ sublote }: { sublote: SubloteNoRevisado }) {
+  return (
+    <div
+      className="flex items-center gap-2"
+      style={{ padding: '0.4rem 0.75rem 0.4rem 1.75rem', borderTop: '1px solid var(--border)' }}
+    >
+      <span className="min-w-0 flex-1 truncate text-xs text-foreground">{sublote.sublote_nombre ?? sublote.sublote_id}</span>
+      <span
+        className="shrink-0 text-sm font-semibold text-muted-foreground"
+        aria-label="Sin lectura en la ronda actual"
+      >
+        —
+      </span>
+    </div>
+  );
+}
+
+/** Sección colapsable "No revisado" — deliberadamente FUERA de `ZoneSection`
+ * (que está tipada sobre `PriorizacionEntry[]`, con campos de plaga/incidencia
+ * que este bucket no tiene) para no forzar campos ficticios sólo para encajar
+ * en ese tipo. Colapsada por defecto, igual que Atención/En orden: informativa,
+ * no urgente. */
+function SeccionNoRevisado({ noRevisados }: { noRevisados: SubloteNoRevisado[] }) {
+  const [open, setOpen] = useState(false);
+  const grupos = useMemo(() => agruparNoRevisadosPorLote(noRevisados), [noRevisados]);
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="overflow-hidden rounded-lg border" style={{ borderColor: 'var(--border)' }}>
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className="flex w-full items-start gap-3 text-left"
+          style={{ padding: '0.625rem 0.75rem', backgroundColor: 'var(--muted)', color: 'var(--foreground)' }}
+        >
+          <span
+            className="mt-0.5 flex shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"
+            style={{ width: '1.75rem', height: '1.75rem' }}
+          >
+            <EyeOff className="size-4" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-2">
+              <span className="font-semibold">No revisado</span>
+              <span
+                className="inline-flex items-center justify-center rounded-full bg-muted py-0.5 text-xs font-semibold leading-none text-muted-foreground"
+                style={{ minWidth: '1.25rem', paddingLeft: '0.375rem', paddingRight: '0.375rem' }}
+              >
+                {noRevisados.length}
+              </span>
+            </span>
+            <span className="mt-0.5 block text-xs font-normal">
+              Sin ninguna lectura en la ronda más reciente — no significa que no haya plagas, sólo que
+              todavía no se visitó.
+            </span>
+          </span>
+          <ChevronDown
+            className="mt-1 size-4 shrink-0 transition-transform"
+            style={{ transform: open ? 'rotate(180deg)' : undefined }}
+          />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="flex flex-col gap-1.5 bg-card p-2">
+          {grupos.map((grupo) => (
+            <div key={grupo.lote_id} className="overflow-hidden rounded-lg border" style={{ borderColor: 'var(--border)' }}>
+              <div className="flex items-center gap-2" style={{ padding: '0.5rem 0.75rem' }}>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{grupo.lote_nombre}</span>
+                <span className="shrink-0 text-muted-foreground" style={{ fontSize: '10.5px' }}>
+                  {grupo.sublotes.length} {grupo.sublotes.length === 1 ? 'sublote' : 'sublotes'}
+                </span>
+              </div>
+              <div className="flex flex-col">
+                {grupo.sublotes.map((sublote) => (
+                  <FilaSubloteNoRevisado key={sublote.sublote_id} sublote={sublote} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+// ============================================================================
 // Popover de ayuda general — explica Tier A/B y cómo usar el dashboard, para
 // alguien que nunca lo vio. Popover en vez de Tooltip para que funcione con
 // un toque en móvil, no sólo con hover.
@@ -1043,11 +1192,14 @@ function InfoGeneral() {
 
 export interface PriorizacionScoutingViewProps {
   entries: PriorizacionEntry[];
+  /** Resumen de cobertura de la ronda actual (issue #96, item 4). `null`
+   * mientras no haya ninguna ronda registrada todavía en la finca. */
+  cobertura: CoberturaRonda | null;
   loading: boolean;
   error: string | null;
 }
 
-export function PriorizacionScoutingView({ entries, loading, error }: PriorizacionScoutingViewProps) {
+export function PriorizacionScoutingView({ entries, cobertura, loading, error }: PriorizacionScoutingViewProps) {
   const [loteActivo, setLoteActivo] = useState<string | null>(null);
 
   const rankPorClave = useMemo(() => {
@@ -1119,15 +1271,6 @@ export function PriorizacionScoutingView({ entries, loading, error }: Priorizaci
     );
   }
 
-  if (entries.length === 0) {
-    return (
-      <div className="py-12 text-center text-sm text-muted-foreground">
-        Ninguna combinación sublote/plaga tiene todavía una lectura de la ronda más reciente (o no hay
-        suficiente historial de monitoreo en los últimos ~6 meses) para calcular una priorización.
-      </div>
-    );
-  }
-
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 p-3">
       <div className="flex items-start justify-between gap-3">
@@ -1138,9 +1281,18 @@ export function PriorizacionScoutingView({ entries, loading, error }: Priorizaci
         <InfoGeneral />
       </div>
 
-      <LotesGrid entries={entries} activo={loteActivo} onToggle={handleToggleLote} />
+      {cobertura ? <CoberturaResumen cobertura={cobertura} /> : null}
+
+      {entries.length > 0 ? <LotesGrid entries={entries} activo={loteActivo} onToggle={handleToggleLote} /> : null}
 
       <div className="flex flex-col gap-3">
+        {entries.length === 0 ? (
+          <div className="py-12 text-center text-sm text-muted-foreground">
+            Ninguna combinación sublote/plaga tiene todavía una lectura de la ronda más reciente (o no hay
+            suficiente historial de monitoreo en los últimos ~6 meses) para calcular una priorización.
+          </div>
+        ) : (
+        <>
         <ZoneSection
           titulo="Crítico"
           descripcion={descripcionCritico}
@@ -1206,6 +1358,10 @@ export function PriorizacionScoutingView({ entries, loading, error }: Priorizaci
         >
           {(filtradas) => <HierarquiaEntradas entries={filtradas} rankPorClave={rankPorClave} mostrarEstado />}
         </ZoneSection>
+        </>
+        )}
+
+        {cobertura && cobertura.noRevisados.length > 0 ? <SeccionNoRevisado noRevisados={cobertura.noRevisados} /> : null}
       </div>
     </div>
   );

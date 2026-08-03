@@ -13,21 +13,23 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { priorizarMonitoreo as priorizarFrontend } from '@/utils/priorizacionMonitoreo';
+import { priorizarMonitoreo as priorizarFrontend, calcularCoberturaRonda as coberturaFrontend } from '@/utils/priorizacionMonitoreo';
 import type {
   HistorialSublotePlaga as HistorialFrontend,
   UmbralEconomico as UmbralFrontend,
   PerfilEstacional as PerfilFrontend,
   EventoFumigacion as EventoFrontend,
   RondaHistorica as RondaFrontend,
+  SubloteEnAlcance as SubloteEnAlcanceFrontend,
 } from '@/utils/priorizacionMonitoreo';
-import { priorizarMonitoreo as priorizarEdge } from '../supabase/functions/server/priorizacion-scouting';
+import { priorizarMonitoreo as priorizarEdge, calcularCoberturaRonda as coberturaEdge } from '../supabase/functions/server/priorizacion-scouting';
 import type {
   HistorialSublotePlaga as HistorialEdge,
   UmbralEconomico as UmbralEdge,
   PerfilEstacional as PerfilEdge,
   EventoFumigacion as EventoEdge,
   RondaHistorica as RondaEdge,
+  SubloteEnAlcance as SubloteEnAlcanceEdge,
 } from '../supabase/functions/server/priorizacion-scouting';
 
 // Fecha de referencia fija (misma que priorizacionMonitoreo.test.ts) para
@@ -418,5 +420,60 @@ describe('Paridad frontend <-> edge function (priorizacion-scouting.ts)', () => 
       });
       expect(resultadoEdge.map((e) => e.why)).toEqual(resultadoFrontend.map((e) => e.why));
     }
+  });
+});
+
+// ============================================================================
+// Paridad de calcularCoberturaRonda (issue #96, item 4) — mismo patrón:
+// alimentar ambas copias con las mismas fixtures y comparar campo a campo.
+// ============================================================================
+describe('Paridad frontend <-> edge function (calcularCoberturaRonda)', () => {
+  const sublotesEnAlcance: Array<SubloteEnAlcanceFrontend & SubloteEnAlcanceEdge> = [
+    { sublote_id: 'sub-revisado', sublote_nombre: 'Revisado', lote_id: 'lote-1', lote_nombre: 'Lote 1' },
+    { sublote_id: 'sub-viejo', sublote_nombre: 'Con dato viejo', lote_id: 'lote-1', lote_nombre: 'Lote 1' },
+    { sublote_id: 'sub-nunca', sublote_nombre: 'Nunca visitado', lote_id: 'lote-2', lote_nombre: 'Lote 2' },
+  ];
+
+  const historiales: Array<HistorialFrontend & HistorialEdge> = [
+    historial({
+      sublote_id: 'sub-revisado',
+      lote_id: 'lote-1',
+      pest_id: 'pest-x',
+      rondas: rondas([['2026-06-15', 6]]),
+    }),
+    historial({
+      sublote_id: 'sub-viejo',
+      lote_id: 'lote-1',
+      pest_id: 'pest-x',
+      rondas: rondas([['2026-05-01', 40]]), // ronda anterior, no cuenta
+    }),
+    // sub-inactivo: fuera de sublotesEnAlcance por completo (lote fuera de
+    // producción) -- no debe afectar los conteos en ninguna de las dos copias.
+    historial({
+      sublote_id: 'sub-inactivo',
+      lote_id: 'lote-3',
+      pest_id: 'pest-x',
+      rondas: rondas([['2026-06-15', 90]]),
+    }),
+  ];
+
+  it('produce el mismo resumen de cobertura en ambas implementaciones', () => {
+    const resultadoFrontend = coberturaFrontend(
+      sublotesEnAlcance as SubloteEnAlcanceFrontend[],
+      historiales as HistorialFrontend[],
+      RONDA_ACTUAL_ID,
+      'Ronda 28'
+    );
+    const resultadoEdge = coberturaEdge(
+      sublotesEnAlcance as SubloteEnAlcanceEdge[],
+      historiales as HistorialEdge[],
+      RONDA_ACTUAL_ID,
+      'Ronda 28'
+    );
+
+    expect(resultadoEdge).toEqual(resultadoFrontend);
+    expect(resultadoFrontend.totalEnAlcance).toBe(3);
+    expect(resultadoFrontend.revisados).toBe(1);
+    expect(resultadoFrontend.noRevisados.map((s) => s.sublote_id).sort()).toEqual(['sub-nunca', 'sub-viejo']);
   });
 });
