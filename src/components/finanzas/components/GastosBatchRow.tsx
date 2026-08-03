@@ -57,6 +57,7 @@ export function GastosBatchRow({ row, index, catalogs, errors, onChange, onRemov
       <td className={cellClass}>
         <input
           type="number"
+          onWheel={(e) => e.currentTarget.blur()}
           value={row.valor}
           onChange={(e) => onChange(index, 'valor', e.target.value)}
           className={cls('valor')}

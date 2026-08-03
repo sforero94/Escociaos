@@ -455,6 +455,7 @@ export function ConteoFisico() {
               <div className="flex gap-3">
                 <input
                   type="number"
+                  onWheel={(e) => e.currentTarget.blur()}
                   value={cantidadFisica}
                   onChange={(e) => setCantidadFisica(e.target.value)}
                   step="0.01"

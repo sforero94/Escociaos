@@ -588,7 +588,9 @@ export function ReporteSemanalWizard() {
               <div key={item.label}>
                 <label className="block text-sm font-medium text-brand-brown mb-1">{item.label}</label>
                 <input
-                  type="number" min="0" value={item.value}
+                  type="number"
+                  onWheel={(e) => e.currentTarget.blur()}
+                  min="0" value={item.value}
                   onChange={(e) => item.setter(Math.max(0, parseInt(e.target.value) || 0))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none"
                 />

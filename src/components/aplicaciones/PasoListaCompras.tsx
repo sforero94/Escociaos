@@ -502,6 +502,7 @@ export function PasoListaCompras({
                         {modoEdicion ? (
                           <input
                             type="number"
+                            onWheel={(e) => e.currentTarget.blur()}
                             step="0.01"
                             value={item.cantidad_faltante}
                             onChange={(e) =>
@@ -524,6 +525,7 @@ export function PasoListaCompras({
                           <div className="flex items-center justify-center gap-1">
                             <input
                               type="number"
+                              onWheel={(e) => e.currentTarget.blur()}
                               min="0"
                               value={item.unidades_a_comprar}
                               onChange={(e) =>
@@ -559,6 +561,7 @@ export function PasoListaCompras({
                             <span className="text-xs text-brand-brown/70">$</span>
                             <input
                               type="number"
+                              onWheel={(e) => e.currentTarget.blur()}
                               step="1000"
                               min="0"
                               value={item.precio_presentacion || 0}

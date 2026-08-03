@@ -679,6 +679,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                           </label>
                           <input
                             type="number"
+                            onWheel={(e) => e.currentTarget.blur()}
                             value={producto.dosis_por_caneca || ''}
                             onChange={(e) =>
                               actualizarDosis(
@@ -712,6 +713,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                           </label>
                           <input
                             type="number"
+                            onWheel={(e) => e.currentTarget.blur()}
                             value={producto.dosis_por_caneca || ''}
                             onChange={(e) =>
                               actualizarDosis(
@@ -747,6 +749,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                           </label>
                           <input
                             type="number"
+                            onWheel={(e) => e.currentTarget.blur()}
                             value={producto.dosis_grandes || ''}
                             onChange={(e) =>
                               actualizarDosis(
@@ -768,6 +771,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                           </label>
                           <input
                             type="number"
+                            onWheel={(e) => e.currentTarget.blur()}
                             value={producto.dosis_medianos || ''}
                             onChange={(e) =>
                               actualizarDosis(
@@ -789,6 +793,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                           </label>
                           <input
                             type="number"
+                            onWheel={(e) => e.currentTarget.blur()}
                             value={producto.dosis_pequenos || ''}
                             onChange={(e) =>
                               actualizarDosis(
@@ -810,6 +815,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                           </label>
                           <input
                             type="number"
+                            onWheel={(e) => e.currentTarget.blur()}
                             value={producto.dosis_clonales || ''}
                             onChange={(e) =>
                               actualizarDosis(
