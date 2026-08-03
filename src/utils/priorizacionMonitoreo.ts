@@ -153,6 +153,116 @@ export interface PriorizacionEntry {
 }
 
 // ============================================================================
+// Cobertura de ronda (issue #96, item 4) — universo de sublotes EN PRODUCCIÓN
+// vs. lo que efectivamente tiene lectura en la ronda más reciente.
+//
+// Problema que resuelve: `priorizarMonitoreo` (más abajo) descarta en
+// silencio cualquier (sublote, plaga) sin lectura en `rondaActualId` -- regla
+// necesaria (ver comentario en `PriorizacionInput.rondaActualId`), pero que
+// como efecto secundario hace indistinguible "este sublote no tiene presión
+// de plagas" de "a este sublote nadie lo visitó esta ronda". Estas funciones
+// exponen esa segunda pregunta por separado, sin tocar la regla dura de
+// `priorizarMonitoreo`.
+//
+// Aclaración del dueño del producto (2026-08, no reabrir): la finca pasó de 8
+// lotes productivos a 4 -- un lote que ya no produce NO es un hueco de
+// cobertura, es finca reducida. Por eso el universo de "en alcance" lo define
+// `sublotesEnAlcance` (que el caller arma a partir de `lotes.activo`, ver el
+// hook `usePriorizacionMonitoreo.ts` -- `sublotes` no tiene columna `activo`
+// propia), nunca "todo lo que alguna vez tuvo una fila en `monitoreos`". Si el
+// dueño cambia qué lotes están activos, el caller simplemente pasa una lista
+// distinta; este módulo no hardcodea ningún lote/id/conteo.
+// ============================================================================
+
+/** Un sublote EN PRODUCCIÓN (su lote padre tiene `lotes.activo = true`) --
+ * universo con el que se mide cobertura de la ronda. Ya resuelto por el
+ * caller (join con `lotes.activo`), no se deriva ni se infiere aquí. */
+export interface SubloteEnAlcance {
+  sublote_id: string;
+  sublote_nombre?: string;
+  lote_id: string;
+  lote_nombre?: string;
+}
+
+/** Sublote en alcance (lote en producción) SIN ninguna lectura -- de ninguna
+ * plaga -- en la ronda más reciente (`rondaActualId`). Estado explícito y
+ * distinto tanto de "sin presión" (una lectura real con incidencia baja o
+ * cero) como de una fila de prioridad viva: por eso esta interfaz NO tiene
+ * ningún campo de incidencia -- no hay número que mostrar. El consumidor debe
+ * renderizar `—`, nunca `0%`, mismo criterio ya documentado para el Mapa de
+ * Calor en CLAUDE.md ("ausencia de fila = no revisado, nunca 0%"). */
+export interface SubloteNoRevisado {
+  sublote_id: string;
+  sublote_nombre?: string;
+  lote_id: string;
+  lote_nombre?: string;
+}
+
+/** Resumen de cobertura de la ronda más reciente sobre el universo de
+ * sublotes en producción -- ver `calcularCoberturaRonda`. */
+export interface CoberturaRonda {
+  rondaActualId: string;
+  /** Nombre legible de la ronda (columna `rondas_monitoreo.nombre`, p. ej.
+   * "Ronda 28"), si el caller lo tiene disponible -- puro passthrough, esta
+   * función no lo calcula. `null` cuando no hay dato. */
+  rondaNombre: string | null;
+  totalEnAlcance: number;
+  revisados: number;
+  noRevisados: SubloteNoRevisado[];
+}
+
+/**
+ * Calcula la cobertura de la ronda más reciente sobre el universo de
+ * sublotes EN PRODUCCIÓN. Puro: reutiliza el mismo `historiales` ya cargado
+ * que consume `priorizarMonitoreo` -- no hace ningún fetch adicional ni
+ * reimplementa el agrupamiento por (sublote, plaga).
+ *
+ * Regla dura idéntica a `priorizarMonitoreo`: un sublote sólo cuenta como
+ * "revisado" si tiene al menos una lectura (de cualquier plaga individual o
+ * pooled -- el pooling del complejo de ácaros es indiferente aquí, basta con
+ * que ronda_id coincida) en `rondaActualId`. Una lectura de una ronda
+ * anterior NUNCA cuenta como cobertura de la ronda actual -- la misma razón
+ * por la que `priorizarMonitoreo` nunca muestra una incidencia vieja como si
+ * fuera vigente.
+ */
+export function calcularCoberturaRonda(
+  sublotesEnAlcance: SubloteEnAlcance[],
+  historiales: HistorialSublotePlaga[],
+  rondaActualId: string,
+  rondaNombre: string | null = null
+): CoberturaRonda {
+  const revisadosSet = new Set<string>();
+  for (const hist of historiales) {
+    if (hist.rondas.some((r) => r.ronda_id === rondaActualId)) {
+      revisadosSet.add(hist.sublote_id);
+    }
+  }
+
+  const noRevisados: SubloteNoRevisado[] = [];
+  let revisados = 0;
+  for (const sublote of sublotesEnAlcance) {
+    if (revisadosSet.has(sublote.sublote_id)) {
+      revisados += 1;
+    } else {
+      noRevisados.push({
+        sublote_id: sublote.sublote_id,
+        sublote_nombre: sublote.sublote_nombre,
+        lote_id: sublote.lote_id,
+        lote_nombre: sublote.lote_nombre,
+      });
+    }
+  }
+
+  return {
+    rondaActualId,
+    rondaNombre,
+    totalEnAlcance: sublotesEnAlcance.length,
+    revisados,
+    noRevisados,
+  };
+}
+
+// ============================================================================
 // Constantes / decisiones documentadas
 // ============================================================================
 

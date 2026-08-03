@@ -174,6 +174,88 @@ export interface PriorizacionEntry {
 }
 
 // ============================================================================
+// Cobertura de ronda (issue #96, item 4) — idéntico a priorizacionMonitoreo.ts.
+// Ver el comentario de cabecera de esa sección en el frontend para el
+// contexto completo (universo definido por `lotes.activo`, aclaración del
+// dueño del producto sobre la reducción de 8 a 4 lotes productivos).
+// ============================================================================
+
+/** Un sublote EN PRODUCCIÓN (su lote padre tiene `lotes.activo = true`) --
+ * universo con el que se mide cobertura de la ronda. Ya resuelto por el
+ * caller, no se deriva ni se infiere aquí. */
+export interface SubloteEnAlcance {
+  sublote_id: string;
+  sublote_nombre?: string;
+  lote_id: string;
+  lote_nombre?: string;
+}
+
+/** Sublote en alcance (lote en producción) SIN ninguna lectura en la ronda
+ * más reciente (`rondaActualId`). Sin campo de incidencia a propósito -- no
+ * hay número que mostrar; el consumidor renderiza `—`, nunca `0%`. */
+export interface SubloteNoRevisado {
+  sublote_id: string;
+  sublote_nombre?: string;
+  lote_id: string;
+  lote_nombre?: string;
+}
+
+/** Resumen de cobertura de la ronda más reciente sobre el universo de
+ * sublotes en producción -- ver `calcularCoberturaRonda`. */
+export interface CoberturaRonda {
+  rondaActualId: string;
+  rondaNombre: string | null;
+  totalEnAlcance: number;
+  revisados: number;
+  noRevisados: SubloteNoRevisado[];
+}
+
+/**
+ * Calcula la cobertura de la ronda más reciente sobre el universo de
+ * sublotes EN PRODUCCIÓN -- port de `calcularCoberturaRonda` en
+ * `src/utils/priorizacionMonitoreo.ts`. Puro, reutiliza `historiales`.
+ *
+ * Regla dura idéntica a `priorizarMonitoreo`: un sublote sólo cuenta como
+ * "revisado" si tiene al menos una lectura en `rondaActualId`.
+ */
+export function calcularCoberturaRonda(
+  sublotesEnAlcance: SubloteEnAlcance[],
+  historiales: HistorialSublotePlaga[],
+  rondaActualId: string,
+  rondaNombre: string | null = null
+): CoberturaRonda {
+  const revisadosSet = new Set<string>();
+  for (const hist of historiales) {
+    if (hist.rondas.some((r) => r.ronda_id === rondaActualId)) {
+      revisadosSet.add(hist.sublote_id);
+    }
+  }
+
+  const noRevisados: SubloteNoRevisado[] = [];
+  let revisados = 0;
+  for (const sublote of sublotesEnAlcance) {
+    if (revisadosSet.has(sublote.sublote_id)) {
+      revisados += 1;
+    } else {
+      noRevisados.push({
+        sublote_id: sublote.sublote_id,
+        sublote_nombre: sublote.sublote_nombre,
+        lote_id: sublote.lote_id,
+        lote_nombre: sublote.lote_nombre,
+      });
+    }
+  }
+
+  return {
+    rondaActualId,
+    rondaNombre,
+    totalEnAlcance: sublotesEnAlcance.length,
+    revisados,
+    noRevisados,
+  };
+}
+
+// ============================================================================
 // Constantes / decisiones documentadas (idénticas a priorizacionMonitoreo.ts)
 // ============================================================================
 

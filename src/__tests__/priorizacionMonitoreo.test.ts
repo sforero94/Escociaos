@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { priorizarMonitoreo } from '@/utils/priorizacionMonitoreo';
+import { priorizarMonitoreo, calcularCoberturaRonda } from '@/utils/priorizacionMonitoreo';
 import type {
   HistorialSublotePlaga,
   UmbralEconomico,
   PerfilEstacional,
   EventoFumigacion,
   RondaHistorica,
+  SubloteEnAlcance,
 } from '@/utils/priorizacionMonitoreo';
 
 // Fecha de referencia fija para todos los tests -> resultados determinísticos.
@@ -517,5 +518,139 @@ describe('priorizarMonitoreo', () => {
     });
 
     expect(resultado[0].diasDesdeUltimaFumigacion).toBe(5);
+  });
+});
+
+// ============================================================================
+// calcularCoberturaRonda — issue #96, item 4: "no revisado en la ronda
+// actual" debe ser un estado explícito, distinto de "sin presión" (una
+// lectura real de incidencia baja/0) y distinto de un lote fuera de
+// producción (que no forma parte del universo `sublotesEnAlcance` en
+// absoluto -- no es un hueco de cobertura, ver comentario de cabecera en
+// priorizacionMonitoreo.ts).
+// ============================================================================
+describe('calcularCoberturaRonda', () => {
+  function subloteEnAlcance(overrides: Partial<SubloteEnAlcance> & { sublote_id: string }): SubloteEnAlcance {
+    return {
+      lote_id: 'lote-1',
+      lote_nombre: 'Lote 1',
+      ...overrides,
+    };
+  }
+
+  it('un sublote con lectura (de cualquier plaga) en la ronda actual cuenta como revisado', () => {
+    const sublotesEnAlcance: SubloteEnAlcance[] = [
+      subloteEnAlcance({ sublote_id: 'sub-1', sublote_nombre: 'Sublote 1' }),
+    ];
+    const historiales: HistorialSublotePlaga[] = [
+      historial({
+        sublote_id: 'sub-1',
+        pest_id: 'pest-x',
+        rondas: rondas([
+          ['2026-06-01', 5],
+          ['2026-06-15', 6],
+        ]),
+      }),
+    ];
+
+    const cobertura = calcularCoberturaRonda(sublotesEnAlcance, historiales, RONDA_ACTUAL_ID);
+
+    expect(cobertura.totalEnAlcance).toBe(1);
+    expect(cobertura.revisados).toBe(1);
+    expect(cobertura.noRevisados).toEqual([]);
+  });
+
+  it('un sublote en alcance sin NINGÚN historial cae en no revisado, sin ningún campo de incidencia', () => {
+    const sublotesEnAlcance: SubloteEnAlcance[] = [
+      subloteEnAlcance({ sublote_id: 'sub-nunca-visitado', sublote_nombre: 'Sublote Fantasma' }),
+    ];
+
+    const cobertura = calcularCoberturaRonda(sublotesEnAlcance, [], RONDA_ACTUAL_ID);
+
+    expect(cobertura.totalEnAlcance).toBe(1);
+    expect(cobertura.revisados).toBe(0);
+    expect(cobertura.noRevisados).toEqual([
+      { sublote_id: 'sub-nunca-visitado', sublote_nombre: 'Sublote Fantasma', lote_id: 'lote-1', lote_nombre: 'Lote 1' },
+    ]);
+    // La interfaz SubloteNoRevisado no tiene campo de incidencia -- comprobación
+    // en tiempo de ejecución de que nadie coló uno vía spread/`as any`.
+    expect(cobertura.noRevisados[0]).not.toHaveProperty('incidenciaActual');
+  });
+
+  it('regla dura: una lectura de una ronda ANTERIOR nunca cuenta como cobertura de la ronda actual (no confundir "no revisado" con dato viejo)', () => {
+    const sublotesEnAlcance: SubloteEnAlcance[] = [
+      subloteEnAlcance({ sublote_id: 'sub-viejo', sublote_nombre: 'Sublote con dato viejo' }),
+    ];
+    const historiales: HistorialSublotePlaga[] = [
+      historial({
+        sublote_id: 'sub-viejo',
+        pest_id: 'pest-x',
+        // Sólo rondas anteriores -- ninguna coincide con RONDA_ACTUAL_ID.
+        rondas: rondas([
+          ['2026-05-01', 40],
+          ['2026-05-15', 35],
+        ]),
+      }),
+    ];
+
+    const cobertura = calcularCoberturaRonda(sublotesEnAlcance, historiales, RONDA_ACTUAL_ID);
+
+    expect(cobertura.revisados).toBe(0);
+    expect(cobertura.noRevisados.map((s) => s.sublote_id)).toEqual(['sub-viejo']);
+  });
+
+  it('un sublote fuera de alcance (ej. su lote ya no produce) no aparece ni en revisados ni en noRevisados -- no es un hueco de cobertura', () => {
+    // Universo de alcance sólo incluye sub-activo; sub-inactivo NO se pasa,
+    // simulando un lote con `activo = false` que el caller ya filtró antes
+    // de construir sublotesEnAlcance.
+    const sublotesEnAlcance: SubloteEnAlcance[] = [
+      subloteEnAlcance({ sublote_id: 'sub-activo', sublote_nombre: 'Sublote activo' }),
+    ];
+    const historiales: HistorialSublotePlaga[] = [
+      historial({
+        sublote_id: 'sub-activo',
+        pest_id: 'pest-x',
+        rondas: rondas([['2026-06-15', 6]]),
+      }),
+      // Lectura de un sublote que pertenece a un lote fuera de producción --
+      // no forma parte del universo, así que no debe alterar los conteos.
+      historial({
+        sublote_id: 'sub-inactivo',
+        pest_id: 'pest-x',
+        rondas: rondas([['2026-06-15', 90]]),
+      }),
+    ];
+
+    const cobertura = calcularCoberturaRonda(sublotesEnAlcance, historiales, RONDA_ACTUAL_ID);
+
+    expect(cobertura.totalEnAlcance).toBe(1);
+    expect(cobertura.revisados).toBe(1);
+    expect(cobertura.noRevisados).toEqual([]);
+  });
+
+  it('totalEnAlcance/revisados: cobertura parcial cuenta sólo los sublotes efectivamente en alcance', () => {
+    const sublotesEnAlcance: SubloteEnAlcance[] = [
+      subloteEnAlcance({ sublote_id: 'sub-a', sublote_nombre: 'A' }),
+      subloteEnAlcance({ sublote_id: 'sub-b', sublote_nombre: 'B' }),
+      subloteEnAlcance({ sublote_id: 'sub-c', sublote_nombre: 'C' }),
+    ];
+    const historiales: HistorialSublotePlaga[] = [
+      historial({ sublote_id: 'sub-a', pest_id: 'pest-x', rondas: rondas([['2026-06-15', 6]]) }),
+      historial({ sublote_id: 'sub-b', pest_id: 'pest-y', rondas: rondas([['2026-06-01', 4]]) }), // ronda vieja
+    ];
+
+    const cobertura = calcularCoberturaRonda(sublotesEnAlcance, historiales, RONDA_ACTUAL_ID);
+
+    expect(cobertura.totalEnAlcance).toBe(3);
+    expect(cobertura.revisados).toBe(1);
+    expect(cobertura.noRevisados.map((s) => s.sublote_id).sort()).toEqual(['sub-b', 'sub-c']);
+  });
+
+  it('pasa a través rondaNombre tal cual (no lo calcula, sólo lo expone)', () => {
+    const cobertura = calcularCoberturaRonda([], [], RONDA_ACTUAL_ID, 'Ronda 28');
+    expect(cobertura.rondaNombre).toBe('Ronda 28');
+
+    const sinNombre = calcularCoberturaRonda([], [], RONDA_ACTUAL_ID);
+    expect(sinNombre.rondaNombre).toBeNull();
   });
 });
