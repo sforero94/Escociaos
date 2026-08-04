@@ -28,6 +28,7 @@ import type {
 import { PasoConfiguracion } from './PasoConfiguracion';
 import { PasoMezcla } from './PasoMezcla';
 import { PasoListaCompras } from './PasoListaCompras';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 // ============================================================================
 // CONFIGURACIÓN DE PASOS
@@ -247,7 +248,7 @@ export function CalculadoraAplicaciones() {
       const configuracion: ConfiguracionAplicacion = {
         nombre: aplicacion.nombre_aplicacion || '',
         tipo: tipoAplicacion,
-        fecha_inicio_planeada: aplicacion.fecha_inicio_planeada || new Date().toISOString().split('T')[0],
+        fecha_inicio_planeada: aplicacion.fecha_inicio_planeada || obtenerFechaHoy(),
         fecha_fin_planeada: aplicacion.fecha_fin_planeada || undefined,
         fecha_recomendacion: aplicacion.fecha_recomendacion || undefined,
         proposito: aplicacion.proposito || undefined,

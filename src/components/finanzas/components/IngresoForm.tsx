@@ -35,6 +35,7 @@ import type {
   MedioPago
 } from '../../../types/finanzas';
 import { toast } from 'sonner';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 interface IngresoFormProps {
   open: boolean;
@@ -49,7 +50,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
   const [formData, setFormData, clearFormData, wasRestored] = useFormPersistence<IngresoFormData>({
     key: ingreso?.id ? `ingreso-edit-${ingreso.id}` : 'ingreso-new-v2',
     initialState: {
-      fecha: new Date().toISOString().split('T')[0],
+      fecha: obtenerFechaHoy(),
       negocio_id: '',
       region_id: '',
       categoria_id: '',
@@ -124,7 +125,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
     } else {
       // Reset form for new ingreso
       setFormData({
-        fecha: new Date().toISOString().split('T')[0],
+        fecha: obtenerFechaHoy(),
         negocio_id: '',
         region_id: '',
         categoria_id: '',

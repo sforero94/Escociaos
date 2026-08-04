@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from '../ui/select';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 // Vendor interface
 interface Proveedor {
@@ -97,7 +98,7 @@ export function NewPurchase({ onSuccess }: { onSuccess?: () => void }) {
 
   // Estados principales
   const [datosCompra, setDatosCompra] = useState<DatosCompra>({
-    fecha: new Date().toISOString().split('T')[0],
+    fecha: obtenerFechaHoy(),
     proveedor_id: '',
     numero_factura: '',
     url_factura: '',

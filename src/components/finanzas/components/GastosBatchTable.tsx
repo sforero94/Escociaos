@@ -7,6 +7,7 @@ import { GastosBatchRow } from './GastosBatchRow';
 import { ProveedorDialog } from '@/components/shared/ProveedorDialog';
 import type { BatchRowData } from '@/types/finanzas';
 import type { GastosCatalogs } from '../hooks/useGastosCatalogs';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 const DRAFT_KEY = 'gastos_batch_draft';
 
@@ -18,7 +19,7 @@ interface GastosBatchTableProps {
 function createEmptyRow(): BatchRowData {
   return {
     id: crypto.randomUUID(),
-    fecha: new Date().toISOString().split('T')[0],
+    fecha: obtenerFechaHoy(),
     nombre: '',
     valor: '',
     negocio_id: '',

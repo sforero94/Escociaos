@@ -3,6 +3,7 @@
 
 import type { ListaCompras, ConfiguracionAplicacion } from '../types/aplicaciones';
 import { formatearMoneda, formatearNumero } from './format';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 interface DatosEmpresa {
   nombre: string;
@@ -413,7 +414,7 @@ export async function generarPDFListaCompras(
   // ========================================
   
   const nombreArchivo = `Lista_Compras_${configuracion.nombre.replace(/\s+/g, '_')}_${
-    new Date().toISOString().split('T')[0]
+    obtenerFechaHoy()
   }.pdf`;
   
   doc.save(nombreArchivo);

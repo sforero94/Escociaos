@@ -3,6 +3,7 @@ import { Button } from '../ui/button';
 import { MonitoreoSubNav } from './MonitoreoSubNav';
 import { useState } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 interface ResultadoCarga {
   exito: boolean;
@@ -65,7 +66,7 @@ export function CargaMasiva() {
     worksheet['!cols'] = columnWidths;
 
     // Generar el archivo y descargarlo
-    const fecha = new Date().toISOString().split('T')[0];
+    const fecha = obtenerFechaHoy();
     XLSX.writeFile(workbook, `plantilla_monitoreos_${fecha}.xlsx`);
   };
 

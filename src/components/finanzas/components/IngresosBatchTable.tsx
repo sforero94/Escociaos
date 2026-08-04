@@ -7,6 +7,7 @@ import { IngresosBatchRow } from './IngresosBatchRow';
 import { CompradorDialog } from './CompradorDialog';
 import type { BatchRowDataIngreso } from '@/types/finanzas';
 import type { IngresosCatalogs } from '../hooks/useIngresosCatalogs';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 const DRAFT_KEY = 'ingresos_batch_draft';
 
@@ -18,7 +19,7 @@ interface IngresosBatchTableProps {
 function createEmptyRow(): BatchRowDataIngreso {
   return {
     id: crypto.randomUUID(),
-    fecha: new Date().toISOString().split('T')[0],
+    fecha: obtenerFechaHoy(),
     nombre: '',
     valor: '',
     negocio_id: '',

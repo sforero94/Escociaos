@@ -10,6 +10,7 @@ import type {
   MovimientoConContexto,
   GanMovimiento,
 } from '@/types/ganado';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 // PostgREST devuelve embeds one-to-one como objeto o array según detecte
 // la constraint UNIQUE — normalizamos ambos casos.
@@ -227,7 +228,7 @@ export function useGanadoInventario() {
       potreroPorFinca[fincaId] = (creado as { id: string }).id;
     }
 
-    const fecha = new Date().toISOString().split('T')[0];
+    const fecha = obtenerFechaHoy();
     const movimientos = construirMovimientosCargaInicial(conCabezas, potreroPorFinca, fecha, nota);
     const { error: errorMovs } = await supabase.from('gan_movimientos').insert(movimientos);
     if (errorMovs) throw errorMovs;
@@ -235,7 +236,7 @@ export function useGanadoInventario() {
   }, []);
 
   const ajusteMasivo = useCallback(async (filas: AjusteMasivoFila[], nota: string) => {
-    const fecha = new Date().toISOString().split('T')[0];
+    const fecha = obtenerFechaHoy();
     const movimientos = construirAjustesMasivos(filas, fecha, nota).map((m) => ({ ...m, estado: 'confirmado' }));
     if (movimientos.length === 0) return 0;
     const { error } = await supabase.from('gan_movimientos').insert(movimientos);

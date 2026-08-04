@@ -43,7 +43,7 @@ import {
 } from 'recharts';
 import { toast } from 'sonner';
 import { getSupabase } from '../../utils/supabase/client';
-import { formatearFechaCorta } from '../../utils/fechas';
+import { formatearFechaCorta, obtenerFechaHoy } from '../../utils/fechas';
 import {
   calcularEstadoFloracion,
   calcularFloracionPorLote,
@@ -932,7 +932,7 @@ export function DashboardMonitoreoV3() {
     try {
       const { error } = await supabase
         .from('rondas_monitoreo')
-        .update({ fecha_fin: new Date().toISOString().split('T')[0] })
+        .update({ fecha_fin: obtenerFechaHoy() })
         .eq('id', rondaActual.id);
       if (error) throw error;
       toast.success('Ronda cerrada');

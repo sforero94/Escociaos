@@ -23,12 +23,27 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { obtenerFechaHoy } from '@/utils/fechas';
+import { obtenerFechaHoy, calcularRangoFechasPorPeriodo } from '@/utils/fechas';
 
-const RAIZ_HATO = join(process.cwd(), 'src', 'components', 'hato');
+/** Árboles de código de NAVEGADOR cubiertos por el guard. Las edge functions
+ * (`src/supabase/functions/`) quedan FUERA a propósito: corren en Deno sobre un
+ * servidor en UTC, donde `obtenerFechaHoy()` -- que lee getFullYear/getMonth/
+ * getDate LOCALES -- devolvería igualmente UTC. Ahí el arreglo no es este
+ * helper sino convertir explícitamente a America/Bogota. */
+const RAICES_CUBIERTAS = [
+  join(process.cwd(), 'src', 'components'),
+  join(process.cwd(), 'src', 'utils'),
+];
 
-/** Patrón prohibido: tomar "hoy" del reloj en UTC. */
-const PATRON_UTC_HOY = /new Date\(\)\.toISOString\(\)\.slice\(0,\s*10\)/;
+/** Patrón prohibido: tomar "hoy" del reloj en UTC.
+ *
+ * Cubre las TRES formas de recortar el `toISOString()` a `AAAA-MM-DD`. El
+ * guard original solo miraba `.slice(0, 10)` -- la forma que usaba el módulo
+ * hato -- y por eso no vio nunca las 36 apariciones de `.split('T')[0]` que
+ * vivían en finanzas, monitoreo, inventario, labores, ganado y aplicaciones.
+ * Un guard que solo conoce una sintaxis del mismo bug no es un guard. */
+const PATRON_UTC_HOY =
+  /new Date\(\)\.toISOString\(\)\.(?:slice\(0,\s*10\)|split\('T'\)\[0\]|substring\(0,\s*10\))/;
 
 /** Quita comentarios antes de buscar el patrón. Varios archivos DOCUMENTAN el
  * antipatrón en prosa ("NUNCA `new Date().toISOString().slice(0, 10)`") y esas
@@ -109,20 +124,71 @@ describe('obtenerFechaHoy — contrato de fecha LOCAL', () => {
   });
 });
 
-describe('guard estático: el módulo hato nunca toma "hoy" en UTC', () => {
-  it('ningún archivo bajo src/components/hato/ usa new Date().toISOString().slice(0,10)', () => {
-    const infractores = archivosTs(RAIZ_HATO).filter((ruta) =>
+// ============================================================================
+// Regresión del caso Consuelito (2026-08-03, 21:13 Bogotá).
+//
+// El bug NO era que un lado estuviera mal en abstracto: era que los dos lados
+// de la misma pantalla usaban relojes DISTINTOS. El formulario de gasto ponía
+// la fecha por defecto con `toISOString()` (UTC -> 2026-08-04) y el historial
+// filtraba con el periodo `ytd`, cuyo `fecha_hasta` sale de `obtenerFechaHoy()`
+// (LOCAL -> 2026-08-03). El `.lte('fecha', fecha_hasta)` dejaba fuera los 5
+// gastos recién guardados: quedaban en la base (confirmado en producción) e
+// invisibles en pantalla.
+//
+// Este test fija el invariante real: la fecha que el formulario propone SIEMPRE
+// tiene que caer dentro de la ventana que la lista abre por defecto.
+// ============================================================================
+describe('regresión: el default del formulario cae dentro de la ventana por defecto de la lista', () => {
+  const TZ_ORIGINAL = process.env.TZ;
+
+  beforeEach(() => {
+    process.env.TZ = 'America/Bogota';
+    vi.useFakeTimers();
+    // El instante exacto en que Consuelito guardó el primero de los 5 gastos.
+    vi.setSystemTime(new Date('2026-08-03T21:13:25-05:00'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    process.env.TZ = TZ_ORIGINAL;
+  });
+
+  it('un gasto capturado a las 21:13 de Bogotá es visible en el periodo `ytd`', () => {
+    const fechaPorDefectoDelFormulario = obtenerFechaHoy();
+    const { fecha_desde, fecha_hasta } = calcularRangoFechasPorPeriodo('ytd');
+
+    expect(fechaPorDefectoDelFormulario).toBe('2026-08-03');
+    expect(fechaPorDefectoDelFormulario >= fecha_desde).toBe(true);
+    // Este es el assert que fallaba: el default era 2026-08-04 y el tope 2026-08-03.
+    expect(fechaPorDefectoDelFormulario <= fecha_hasta).toBe(true);
+  });
+
+  it('el antipatrón UTC habría quedado FUERA de la ventana -- prueba de que el bug era real', () => {
+    const defaultViejoEnUTC = new Date().toISOString().split('T')[0];
+    const { fecha_hasta } = calcularRangoFechasPorPeriodo('ytd');
+
+    expect(defaultViejoEnUTC).toBe('2026-08-04');
+    expect(defaultViejoEnUTC <= fecha_hasta).toBe(false);
+  });
+});
+
+describe('guard estático: el código de navegador nunca toma "hoy" en UTC', () => {
+  it('ningún archivo bajo src/components/ ni src/utils/ toma "hoy" del reloj en UTC', () => {
+    const infractores = RAICES_CUBIERTAS.flatMap(archivosTs).filter((ruta) =>
       PATRON_UTC_HOY.test(sinComentarios(readFileSync(ruta, 'utf-8'))),
     );
 
     expect(
       infractores.map((r) => r.replace(process.cwd() + '/', '')),
       'Estos archivos toman "hoy" del reloj en UTC, así que después de las 19:00 en ' +
-        'Bogotá devuelven MAÑANA. Los formularios que guardan esa fecha (pesaje, venta, ' +
-        'muerte, uso de pajilla) persisten un día futuro. Usa `obtenerFechaHoy()` de ' +
-        '`@/utils/fechas` -- ya existe y ya es local-correcto. Si de verdad necesitas un ' +
-        'instante UTC (no un día calendario), constrúyelo explícitamente desde un string ' +
-        '`YYYY-MM-DDT00:00:00Z` como hace `fechaCorteTimeline` en EventoTimeline.tsx.',
+        'Bogotá devuelven MAÑANA. Un formulario que guarda esa fecha persiste un día ' +
+        'futuro, y la lista que lo muestra filtra por `fecha <= hoy` LOCAL -- así que el ' +
+        'registro se guarda bien y desaparece de la pantalla (ver el caso Consuelito, ' +
+        '2026-08-03 21:13 Bogotá: 5 gastos guardados con fecha 2026-08-04). Usa ' +
+        '`obtenerFechaHoy()` de `@/utils/fechas` -- ya existe y ya es local-correcto. Si ' +
+        'de verdad necesitas un instante UTC (no un día calendario), constrúyelo ' +
+        'explícitamente desde un string `YYYY-MM-DDT00:00:00Z` como hace ' +
+        '`fechaCorteTimeline` en EventoTimeline.tsx.',
     ).toEqual([]);
   });
 });
