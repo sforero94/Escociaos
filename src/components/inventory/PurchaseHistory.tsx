@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { formatearFecha, formatearFechaHora } from '../../utils/fechas';
+import { formatearFecha, formatearFechaHora, obtenerFechaHoy } from '../../utils/fechas';
 import { toast } from 'sonner';
 
 interface Purchase {
@@ -384,7 +384,7 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
       const { error: movementAjusteError } = await supabase
         .from('movimientos_inventario')
         .insert({
-            fecha_movimiento: new Date().toISOString().split('T')[0],
+            fecha_movimiento: obtenerFechaHoy(),
             producto_id: purchaseToDelete.producto_id,
             tipo_movimiento: 'Salida' as any,
             cantidad: purchaseToDelete.cantidad,

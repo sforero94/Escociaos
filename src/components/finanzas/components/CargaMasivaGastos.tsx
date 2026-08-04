@@ -21,7 +21,7 @@ import {
   Loader2,
   X
 } from 'lucide-react';
-import { parsearFechaFlexible } from '../../../utils/fechas';
+import { parsearFechaFlexible, obtenerFechaHoy } from '../../../utils/fechas';
 import type { Negocio, Region, CategoriaGasto, ConceptoGasto, Proveedor, MedioPago } from '../../../types/finanzas';
 
 interface CargaMasivaGastosProps {
@@ -237,7 +237,7 @@ export function CargaMasivaGastos({
       XLSX.utils.book_append_sheet(wb, ws, 'Plantilla Gastos');
 
       // Generate file
-      const fileName = `plantilla_gastos_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const fileName = `plantilla_gastos_${obtenerFechaHoy()}.xlsx`;
       XLSX.writeFile(wb, fileName);
 
     } catch (error: any) {

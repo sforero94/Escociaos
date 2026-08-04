@@ -22,6 +22,7 @@ import type { Lote } from '../../types/shared';
 import type { LecturaCE } from '../../types/monitoreo';
 import { useFormDraft } from '@/hooks/useFormDraft';
 import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 interface RegistroConductividadProps {
   open: boolean;
@@ -33,7 +34,7 @@ export function RegistroConductividad({ open, onClose, onSuccess }: RegistroCond
   const supabase = getSupabase();
 
   const [lotes, setLotes] = useState<Lote[]>([]);
-  const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
+  const [fecha, setFecha] = useState(obtenerFechaHoy());
   const [loteId, setLoteId] = useState('');
   const [numArboles, setNumArboles] = useState(30);
   const [lecturas, setLecturas] = useState<LecturaCE[]>([]);
@@ -268,7 +269,7 @@ export function RegistroConductividad({ open, onClose, onSuccess }: RegistroCond
   function limpiar() {
     setLoteId('');
     setObservaciones('');
-    setFecha(new Date().toISOString().split('T')[0]);
+    setFecha(obtenerFechaHoy());
     setNumArboles(30);
     setLecturas([]);
     setInputStrings({});

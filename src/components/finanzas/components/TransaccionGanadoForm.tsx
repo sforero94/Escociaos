@@ -12,6 +12,7 @@ import { ProveedorDialog } from '@/components/shared/ProveedorDialog';
 import { CompradorDialog } from './CompradorDialog';
 import type { TransaccionGanado, Proveedor, Comprador } from '@/types/finanzas';
 import { toast } from 'sonner';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 interface TransaccionGanadoFormProps {
   open: boolean;
@@ -50,7 +51,7 @@ export function TransaccionGanadoForm({ open, onOpenChange, transaccion, default
     // de ceba sin relación guardado bajo la key genérica 'ganado-new-v1'.
     key: transaccion?.id ? `ganado-edit-${transaccion.id}` : hatoAnimalId ? `ganado-hato-venta-${hatoAnimalId}` : 'ganado-new-v1',
     initialState: {
-      fecha: new Date().toISOString().split('T')[0],
+      fecha: obtenerFechaHoy(),
       tipo: defaultTipo as 'compra' | 'venta',
       finca: '',
       cliente_proveedor: '',

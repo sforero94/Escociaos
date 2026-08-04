@@ -8,6 +8,7 @@ import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useGanadoInventario } from '../hooks/useGanadoInventario';
 import type { GanFinca, GanPotrero } from '@/types/ganado';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 interface MovimientoFormDialogProps {
   open: boolean;
@@ -40,7 +41,7 @@ export function MovimientoFormDialog({ open, onOpenChange, fincas, potreros, onS
   useEffect(() => {
     if (!open) return;
     setTipo('muerte');
-    setFecha(new Date().toISOString().split('T')[0]);
+    setFecha(obtenerFechaHoy());
     setPotreroOrigen('');
     setPotreroDestino('');
     setNovillos('');

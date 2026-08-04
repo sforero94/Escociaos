@@ -24,6 +24,7 @@ import { calcularIncidencia, clasificarGravedad } from '../../utils/calculosMoni
 import { asignarRonda } from '../../utils/calculosMonitoreoV2';
 
 import type { Lote, Sublote } from '../../types/shared';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 interface Plaga {
   id: string;
@@ -55,7 +56,7 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
   const [plagas, setPlagas] = useState<Plaga[]>([]);
   
   // Formulario - Datos del evento
-  const [fecha, setFecha] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [fecha, setFecha] = useState<string>(obtenerFechaHoy());
   const [monitores, setMonitores] = useState<string[]>([]);
   const [loteId, setLoteId] = useState<string>('');
   const [subloteId, setSubloteId] = useState<string>('');
@@ -122,7 +123,7 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
       if (!sessionStr) return;
 
       const session = JSON.parse(sessionStr);
-      const hoy = new Date().toISOString().split('T')[0];
+      const hoy = obtenerFechaHoy();
 
       // Solo restaurar si es el mismo día
       if (session.fecha === hoy && session.monitores?.length > 0) {
@@ -315,7 +316,7 @@ export function RegistroMonitoreo({ open, onClose, onSuccess }: RegistroMonitore
   }
 
   function limpiarFormulario() {
-    setFecha(new Date().toISOString().split('T')[0]);
+    setFecha(obtenerFechaHoy());
     setMonitores([]);
     setLoteId('');
     setSubloteId('');

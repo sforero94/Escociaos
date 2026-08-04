@@ -9,6 +9,7 @@ import { GraficoTemperatura } from './components/GraficoTemperatura';
 import { GraficoPrecipitacion } from './components/GraficoPrecipitacion';
 import { GraficoHumedadRadiacion } from './components/GraficoHumedadRadiacion';
 import { GraficoViento } from './components/GraficoViento';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 type RangoPreset = '24h' | '7d' | '30d' | '90d' | '365d' | '3y' | 'custom';
 
@@ -88,7 +89,7 @@ export function ClimaHistorico() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `clima-historico-${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `clima-historico-${obtenerFechaHoy()}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };

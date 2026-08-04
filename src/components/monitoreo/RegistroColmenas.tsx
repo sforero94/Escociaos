@@ -23,6 +23,7 @@ import { AlertTriangle } from 'lucide-react';
 import { useFormDraft } from '@/hooks/useFormDraft';
 import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 import type { Apiario } from '../../types/monitoreo';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 interface RegistroColmenasProps {
   open: boolean;
@@ -34,7 +35,7 @@ export function RegistroColmenas({ open, onClose, onSuccess }: RegistroColmenasP
   const supabase = getSupabase();
 
   const [apiarios, setApiarios] = useState<Apiario[]>([]);
-  const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
+  const [fecha, setFecha] = useState(obtenerFechaHoy());
   const [apiarioId, setApiarioId] = useState('');
   const [fuertes, setFuertes] = useState(0);
   const [debiles, setDebiles] = useState(0);
@@ -117,7 +118,7 @@ export function RegistroColmenas({ open, onClose, onSuccess }: RegistroColmenasP
     setMuertas(0);
     setConReina(0);
     setObservaciones('');
-    setFecha(new Date().toISOString().split('T')[0]);
+    setFecha(obtenerFechaHoy());
   }
 
   function handleClose() {

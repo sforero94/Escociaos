@@ -6,6 +6,7 @@ import { Input } from '../ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter } from '../ui/dialog';
 import { useFormDraft } from '@/hooks/useFormDraft';
 import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 interface Product {
   id: string;
@@ -133,7 +134,7 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
       const { error: movError } = await supabase
         .from('movimientos_inventario')
         .insert({
-          fecha_movimiento: new Date().toISOString().split('T')[0],
+          fecha_movimiento: obtenerFechaHoy(),
           producto_id: selectedProduct.id,
           tipo_movimiento: tipoMovimiento,
           cantidad: cantidadMovimiento,

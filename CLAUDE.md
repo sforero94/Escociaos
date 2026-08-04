@@ -471,6 +471,21 @@ See `src/guidelines/Guidelines.md` for the full design system.
 - **There is no purchases → expenses trigger.** `crear_gasto_pendiente_de_compra()` and `trigger_compra_a_gasto` were dropped from production on 2026-07-02 (migration 079); a compra posts nothing to `fin_gastos`. `src/sql/trigger_compra_a_gasto.sql`, `src/sql/update_trigger_compra_a_gasto.sql` and migration 038 are historical — do not re-run them. New triggers that touch cross-role tables should still use SECURITY DEFINER (the 038/039 precedent).
 - The `fn_cleanup_compra_dependencies()` RPC function uses SECURITY DEFINER for the same reason (migration 039). Purchase deletion calls this via `.rpc()` instead of direct `fin_gastos.delete()`.
 
+### ⚠️ "Hoy" siempre se toma en hora LOCAL, nunca en UTC
+
+`new Date().toISOString().split('T')[0]` (o `.slice(0, 10)`) is **not** today — it is the **UTC** day. Bogotá is UTC-5, so from 19:00 to midnight it already returns **tomorrow**. Always use `obtenerFechaHoy()` from `@/utils/fechas`, which builds the string from local `getFullYear`/`getMonth`/`getDate`.
+
+This is a data-corrupting trap, not a rendering nit, and it bites twice over:
+
+- The **form** defaults `fecha` to the UTC day and persists a future date.
+- The **list** filters with `fecha <= obtenerFechaHoy()` (local) — `periodo: 'ytd'` via `calcularRangoFechasPorPeriodo` (`fechas.ts`) is the default in Gastos/Ingresos and the Finanzas dashboard.
+
+So the record saves correctly and then **vanishes from the screen**, which reads as data loss to the user. Verified live 2026-08-03: Consuelito captured 5 gastos at 21:13–21:18 Bogotá, all stored `Confirmado` with `fecha = 2026-08-04`, none visible in the historial. 12 rows in `fin_gastos` carry this desfase historically — all 12 created after 19:00 Bogotá.
+
+Fixed across all 36 browser call sites (finanzas, monitoreo, inventario, labores, ganado, aplicaciones, clima, PDF filenames). `src/__tests__/hatoFechaLocalGuard.test.ts` is the static guard — it now covers **all of `src/components/` and `src/utils/`** (it previously only watched `src/components/hato/`, and only the `.slice(0, 10)` spelling, which is why the 36 `.split('T')[0]` sites went unseen) plus a fixed-clock regression asserting the form default falls inside the list's default window.
+
+**Edge functions are deliberately out of scope.** `src/supabase/functions/` runs on Deno servers already in UTC, where `obtenerFechaHoy()` reads local = UTC and fixes nothing; those sites need an explicit `America/Bogota` conversion instead. Still open: `chat.tsx`, `generar-reporte-semanal.tsx`, `telegram/bot.ts`, `telegram/conversations/{pesajeLeche,ingreso}.ts`.
+
 ### Dialog Size System (`src/components/ui/dialog.tsx`)
 All dialogs use a fixed-size tier via the `size` prop on `DialogContent`: `sm` (448×384px), `md` (576×512px), `lg` (768×640px), `xl` (1024×704px). These are max dimensions in rem — they never fill the screen. The base `DialogContent` enforces `overflow-hidden`, so scrollable content MUST go inside `<DialogBody>`. Never put `overflow-y-auto` on `DialogContent` directly. `StandardDialog` was removed — use `Dialog` + `DialogContent` + `DialogHeader` + `DialogBody` + `DialogFooter` directly.
 

@@ -43,7 +43,9 @@ const SUPABASE_FUNCTIONS = join(REPO_ROOT, 'supabase/functions');
  * relativas a la raíz del repo.
  */
 const ALLOWLIST_FROM = new Set([
-  'src/components/finanzas/components/TransaccionGanadoForm.tsx:87',
+  // Selector de fincas (solo lee la columna `finca`, sin agregación financiera).
+  // Corrido de 87 a 88 al importar `obtenerFechaHoy` en el arreglo de fecha local.
+  'src/components/finanzas/components/TransaccionGanadoForm.tsx:88',
   'src/supabase/functions/server/telegram/conversations/ingreso.ts:275',
   'src/supabase/functions/server/telegram/conversations/gasto.ts:290',
   // Árbol espejo (supabase/functions/make-server-1ccce916) — mismo motivo.

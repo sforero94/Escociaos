@@ -37,6 +37,7 @@ import type {
   MedioPago
 } from '../../../types/finanzas';
 import { toast } from 'sonner';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 interface GastoFormProps {
   open: boolean;
@@ -51,7 +52,7 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
   const [formData, setFormData, clearFormData, wasRestored] = useFormPersistence<GastoFormData>({
     key: gasto?.id ? `gasto-edit-${gasto.id}` : 'gasto-new-v1',
     initialState: {
-      fecha: new Date().toISOString().split('T')[0],
+      fecha: obtenerFechaHoy(),
       negocio_id: '',
       region_id: '',
       categoria_id: '',
@@ -105,7 +106,7 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
     } else {
       // Reset form for new gasto
       setFormData({
-        fecha: new Date().toISOString().split('T')[0],
+        fecha: obtenerFechaHoy(),
         negocio_id: '',
         region_id: '',
         categoria_id: '',

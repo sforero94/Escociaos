@@ -21,7 +21,7 @@ import {
   Loader2,
   X
 } from 'lucide-react';
-import { parsearFechaFlexible } from '../../../utils/fechas';
+import { parsearFechaFlexible, obtenerFechaHoy } from '../../../utils/fechas';
 import type { Negocio, Region, CategoriaIngreso, Comprador, MedioPago } from '../../../types/finanzas';
 
 interface CargaMasivaIngresosProps {
@@ -218,7 +218,7 @@ export function CargaMasivaIngresos({
       XLSX.utils.book_append_sheet(wb, ws, 'Plantilla Ingresos');
 
       // Generate file
-      const fileName = `plantilla_ingresos_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const fileName = `plantilla_ingresos_${obtenerFechaHoy()}.xlsx`;
       XLSX.writeFile(wb, fileName);
 
     } catch (error: any) {

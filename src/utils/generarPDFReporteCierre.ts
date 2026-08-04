@@ -2,6 +2,7 @@
 // Genera PDF del reporte de cierre de una aplicación
 
 import { formatearMoneda, formatearNumero } from './format';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 export interface DatosReporteCierre {
   nombre: string;
@@ -428,7 +429,7 @@ export async function generarPDFReporteCierre(datos: DatosReporteCierre): Promis
   // ========================================
 
   const nombreArchivo = `Reporte_Cierre_${datos.nombre.replace(/\s+/g, '_')}_${
-    new Date().toISOString().split('T')[0]
+    obtenerFechaHoy()
   }.pdf`;
 
   doc.save(nombreArchivo);

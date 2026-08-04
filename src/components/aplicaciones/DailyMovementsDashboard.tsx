@@ -27,6 +27,7 @@ import type {
   AlertaMovimiento,
   ProductoEnMezcla
 } from '../../types/aplicaciones';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 interface DailyMovementsDashboardProps {
   aplicacion: Aplicacion;
@@ -429,7 +430,7 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `movimientos_diarios_${aplicacion.nombre_aplicacion}_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `movimientos_diarios_${aplicacion.nombre_aplicacion}_${obtenerFechaHoy()}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();

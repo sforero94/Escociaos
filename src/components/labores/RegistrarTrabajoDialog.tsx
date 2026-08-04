@@ -3,7 +3,7 @@ import { getSupabase } from '../../utils/supabase/client';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { formatearFecha } from '../../utils/fechas';
+import { formatearFecha, obtenerFechaHoy } from '../../utils/fechas';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter } from '../ui/dialog';
 import { CalendarIcon, Clock } from 'lucide-react';
 import { useFormDraft } from '@/hooks/useFormDraft';
@@ -45,7 +45,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
 }) => {
   // Multi-step form state
   const [currentStep, setCurrentStep] = useState(1);
-  const [fechaTrabajo, setFechaTrabajo] = useState(new Date().toISOString().split('T')[0]);
+  const [fechaTrabajo, setFechaTrabajo] = useState(obtenerFechaHoy());
   const [selectedTrabajadores, setSelectedTrabajadores] = useState<Trabajador[]>([]);
   const [workMatrix, setWorkMatrix] = useState<WorkMatrix>({}); // Use shared WorkMatrix type
   const [observaciones, setObservaciones] = useState<ObservacionesMatrix>({}); // Use shared ObservacionesMatrix type
@@ -71,7 +71,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
   useEffect(() => {
     if (open) {
       setCurrentStep(1);
-      setFechaTrabajo(new Date().toISOString().split('T')[0]);
+      setFechaTrabajo(obtenerFechaHoy());
       setSelectedTrabajadores([]);
       setWorkMatrix({});
       setObservaciones({});
@@ -401,7 +401,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
                     value={fechaTrabajo}
                     onChange={(e) => setFechaTrabajo(e.target.value)}
                     disabled={loading}
-                    max={new Date().toISOString().split('T')[0]}
+                    max={obtenerFechaHoy()}
                     className="text-center text-lg"
                   />
                 </div>

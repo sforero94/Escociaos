@@ -4,7 +4,7 @@ import { ClipboardCheck, Loader2, AlertTriangle, Package } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { VerificacionesNav } from './VerificacionesNav';
-import { formatearFecha } from '../../utils/fechas';
+import { formatearFecha, obtenerFechaHoy } from '../../utils/fechas';
 
 interface Producto {
   id: string;
@@ -73,7 +73,7 @@ export function NuevaVerificacion() {
         .from('verificaciones_inventario')
         .insert([
           {
-            fecha_inicio: new Date().toISOString().split('T')[0],
+            fecha_inicio: obtenerFechaHoy(),
             estado: 'En proceso',
             usuario_verificador: profile?.nombre || profile?.email || 'Usuario',
             observaciones_generales: observaciones || null,
@@ -328,7 +328,7 @@ export function NuevaVerificacion() {
               <div className="pt-4 border-t border-primary/10">
                 <p className="text-sm text-brand-brown/60 mb-1">Fecha de Inicio</p>
                 <p className="text-sm text-foreground">
-                  {formatearFecha(new Date().toISOString().split('T')[0])}
+                  {formatearFecha(obtenerFechaHoy())}
                 </p>
               </div>
             </div>

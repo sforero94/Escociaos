@@ -5,6 +5,7 @@ import { getSupabase } from '../../utils/supabase/client';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import type { Aplicacion } from '../../types/aplicaciones';
+import { obtenerFechaHoy } from '@/utils/fechas';
 
 interface IniciarEjecucionModalProps {
   aplicacion: Aplicacion;
@@ -26,7 +27,7 @@ export function IniciarEjecucionModal({
 }: IniciarEjecucionModalProps) {
   const supabase = getSupabase();
   const [fechaInicio, setFechaInicio] = useState<string>(
-    new Date().toISOString().split('T')[0]
+    obtenerFechaHoy()
   );
   const [loading, setLoading] = useState(false);
   const [validandoStock, setValidandoStock] = useState(false);
@@ -267,7 +268,7 @@ export function IniciarEjecucionModal({
               type="date"
               value={fechaInicio}
               onChange={(e) => setFechaInicio(e.target.value)}
-              max={new Date().toISOString().split('T')[0]}
+              max={obtenerFechaHoy()}
               className="w-full"
             />
             <p className="text-xs text-brand-brown/60 mt-1">
