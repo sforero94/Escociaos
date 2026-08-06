@@ -43,6 +43,7 @@ function animal(overrides: Partial<AnimalHatoDerivado> = {}): AnimalHatoDerivado
     pl: null,
     numPartos: 0,
     ultimoChequeoFecha: null,
+    ultimoPartoFecha: null,
     derivado: derivado(),
     categoria: 'hato',
     categoriaOrigen: 'calculado',

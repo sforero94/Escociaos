@@ -171,7 +171,12 @@ export function VentaAnimalesHatoDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="md">
+      {/* `lg`, no `md`: 5 filas de campos (tipo/fecha, cabezas/valor,
+          región/medio de pago, comprador/nombre) más el picker de animales
+          enlazados (hasta 256px de lista propia) es el formulario más largo
+          del módulo -- en `md` (512px de alto) el picker quedaba casi
+          entero fuera de la vista inicial (auditoría de UI). */}
+      <DialogContent size="lg">
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 gap-4">
           <DialogHeader>
             <DialogTitle>Registrar venta</DialogTitle>

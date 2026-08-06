@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { Loader2, Save, Trash2, Lock, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -665,9 +666,9 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
                       <td className="px-3 py-1.5 whitespace-nowrap">
                         {MESES[h.mes - 1]} {h.anio} · {h.quincena}ª
                         {h.origen_dato === 'derivado_mensual' && (
-                          <span className="ml-2 px-2 py-1 text-xs font-medium rounded-md bg-amber-100 text-amber-700">
+                          <Badge variant="outline" className="ml-2 bg-amber-50 text-amber-700 border-amber-200">
                             derivado de mensual
-                          </span>
+                          </Badge>
                         )}
                       </td>
                       <td className="px-3 py-1.5 text-right whitespace-nowrap">

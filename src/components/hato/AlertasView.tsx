@@ -42,6 +42,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useHatoAlertas, type AlertaHatoEnriquecida } from './hooks/useHatoAlertas';
 import { AlertaFila } from './components/AlertaFila';
 import {
@@ -59,8 +60,6 @@ import {
 } from '@/utils/hatoAlertasUi';
 import { formatNumber } from '@/utils/format';
 import { obtenerFechaHoy } from '@/utils/fechas';
-
-const selectClass = 'px-2 py-1.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary min-w-0';
 
 export function AlertasView() {
   const { profile } = useAuth();
@@ -286,26 +285,38 @@ export function AlertasView() {
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    value={tipoFiltro}
-                    onChange={(e) => setTipoFiltro(e.target.value as TipoAlertaHato | '')}
-                    className={selectClass}
+                  {/* Radix `Select.Item` no admite `value=""` -- `'todos'` es
+                      el centinela (mismo patrón que `'sin_vaca'` en
+                      `PajillaUsoDialog.tsx`), traducido de vuelta a `''` al
+                      guardar el filtro. */}
+                  <Select
+                    value={tipoFiltro || 'todos'}
+                    onValueChange={(v) => setTipoFiltro(v === 'todos' ? '' : (v as TipoAlertaHato))}
                   >
-                    <option value="">Todos los tipos</option>
-                    {TIPOS_ALERTA_HATO.map((tipo) => (
-                      <option key={tipo} value={tipo}>{LABEL_TIPO_ALERTA_HATO[tipo]}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={estadoFiltro}
-                    onChange={(e) => setEstadoFiltro(e.target.value as EstadoAlertaHato | '')}
-                    className={selectClass}
+                    <SelectTrigger className="w-auto">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todos">Todos los tipos</SelectItem>
+                      {TIPOS_ALERTA_HATO.map((tipo) => (
+                        <SelectItem key={tipo} value={tipo}>{LABEL_TIPO_ALERTA_HATO[tipo]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={estadoFiltro || 'todos'}
+                    onValueChange={(v) => setEstadoFiltro(v === 'todos' ? '' : (v as EstadoAlertaHato))}
                   >
-                    <option value="">Todos los estados</option>
-                    {ESTADOS_ALERTA_HATO.map((estado) => (
-                      <option key={estado} value={estado}>{LABEL_ESTADO_ALERTA_HATO[estado]}</option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="w-auto">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todos">Todos los estados</SelectItem>
+                      {ESTADOS_ALERTA_HATO.map((estado) => (
+                        <SelectItem key={estado} value={estado}>{LABEL_ESTADO_ALERTA_HATO[estado]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               {colaFiltrada.length === 0 ? (

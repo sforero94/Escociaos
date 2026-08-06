@@ -81,12 +81,20 @@ describe('Tailwind congelado -- S3 (ciclo manual + override, T4a/T4b)', () => {
     });
   }
 
-  it('AnimalesList.tsx: las clases NUEVAS que S3 agregó (botón "Marcar ciclo") existen -- deuda preexistente fuera de alcance, no re-verificada', () => {
+  it('AnimalesList.tsx: las clases de la celda "Acciones" (columna Marcar ciclo/Ver ficha) existen -- deuda preexistente fuera de alcance, no re-verificada', () => {
     const source = readFileSync(join(ROOT, 'src/components/hato/AnimalesList.tsx'), 'utf-8');
-    // Solo las líneas del bloque nuevo (acción "Marcar ciclo" por fila) --
-    // el resto del archivo es de S4/S8 y ya carga deuda documentada
-    // (`hover:text-primary`, `min-h-[100dvh]`, `py-16`) que este PR no toca.
-    const bloqueNuevo = source.slice(source.indexOf('canMarcarCiclo && ('), source.indexOf('canMarcarCiclo && (') + 400);
+    // Ronda agosto 2026 (2026-08-06): "Marcar ciclo"/"Ver ficha" pasaron de
+    // `<button>`/`<a>` con className hardcodeado a `Button` de
+    // `ui/button.tsx` (pedido del dueño) -- el componente ya no toma un
+    // className arbitrario para sus variantes, así que ya no hay nada que
+    // extraer DENTRO de los botones mismos. Lo que sí sigue siendo
+    // className literal, y sigue mereciendo la guarda, es el wrapper de la
+    // celda "Acciones" que los contiene. El resto del archivo es de S4/S8
+    // y ya carga deuda documentada (`hover:text-primary`, `min-h-[100dvh]`,
+    // `py-16`) que este PR no toca.
+    const anclaAcciones = source.indexOf('<div className="flex items-center justify-end gap-2">');
+    expect(anclaAcciones).toBeGreaterThan(-1);
+    const bloqueNuevo = source.slice(anclaAcciones, anclaAcciones + 400);
     const clases = extraerClases(bloqueNuevo);
     expect(clases.length).toBeGreaterThan(0);
     const faltantes = clases.filter((c) => !claseExisteEnCssCongelado(c));

@@ -152,7 +152,11 @@ export function EditarEventoDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent size="sm">
+        {/* `md`, no `sm`: aviso de caducidad + fecha/confianza + (servicio:
+            tipo+toro, o parto: destino) + nota + motivo + el pie con
+            "Eliminar evento" no cabían en `sm` (384px de alto) sin dejar el
+            último campo pegado al pie (auditoría de UI). */}
+        <DialogContent size="md">
           <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 gap-4">
             <DialogHeader>
               <DialogTitle>Corregir {LABEL_TIPO_EVENTO[evento.tipo] ?? evento.tipo}</DialogTitle>

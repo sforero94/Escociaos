@@ -24,10 +24,12 @@ import {
   calcularEdadMeses,
   calcularSubetapaTernera,
   calcularEtapaHato,
+  clasificarAnimalHato,
   construirUmbralesCategoriaHatoDesdeFilas,
   type UmbralesCategoriaHato,
+  type FilaClasificacionHato,
 } from '../utils/hatoCategorias';
-import type { EstadoReproductivo } from '../utils/calculosHato';
+import type { EstadoReproductivo, HatoConfig } from '../utils/calculosHato';
 
 describe('clasificarCategoriaHato', () => {
   it('clasifica una ternera como "ternera" sin importar el estado reproductivo', () => {
@@ -226,5 +228,112 @@ describe('calcularEtapaHato', () => {
   it('etapaForzada=false se comporta EXACTAMENTE igual que antes de la corrección (regresión)', () => {
     const conForzadaFalse = calcularEtapaHato('ternera', false, 0, '2026-02-06', umbrales, HOY);
     expect(conForzadaFalse).toEqual({ etapa: 'ternera', origen: 'calculado', subetapaTernera: 'concentrado' });
+  });
+});
+
+// ============================================================================
+// Bugfix (2026-08-06, /hato-lechero/hato, "Terneras (12)"): reconciliación
+// chip/pestaña -- `clasificarAnimalHato`. Seis animales calculados como
+// terneras por edad, con `etapa` manual todavía en "novilla" sin corregir,
+// mostraban el chip "Novilla" DENTRO de la pestaña Terneras porque el motor
+// se alimentaba con la etapa cruda para el chip pero con la calculada para
+// la pestaña. Este bloque prueba el reconciliador -- debe FALLAR si algún
+// día alguien vuelve a alimentar `derivarEstadoReproductivo` con
+// `fila.etapa` sin pasar antes por `calcularEtapaHato`.
+// ============================================================================
+
+describe('clasificarAnimalHato', () => {
+  const umbrales: UmbralesCategoriaHato = { meses_ternera_leche_max: 3, meses_ternera_max: 12 };
+  const HOY = '2026-08-06';
+
+  const CONFIG_BASE: HatoConfig = {
+    razas: ['jersey', 'holstein', 'normanda'],
+    meses_secado_por_raza: { jersey: 2, holstein: 2, normanda: 3, _default: 2 },
+    meses_gestacion_default: 9,
+    umbral_partos_reemplazo: 9,
+    ventana_proxima_secar_dias: 30,
+    ventana_proximo_parir_dias: 30,
+    dias_parto_proximo_alerta: 14,
+    dias_servicio_sin_confirmacion: 45,
+    dias_espera_voluntaria_post_parto: 60,
+    dias_rechequeo_due: 60,
+  };
+
+  function filaBase(overrides: Partial<FilaClasificacionHato> = {}): FilaClasificacionHato {
+    return {
+      etapa: 'novilla',
+      raza: 'jersey',
+      estado: 'activa',
+      num_partos: 0,
+      ultimo_chequeo_fecha: null,
+      ultimo_servicio_fecha: null,
+      ultimo_parto_fecha: null,
+      ultimo_secado_real_fecha: null,
+      ultima_confirmacion_prenez_fecha: null,
+      ultimo_evento_fecha: null,
+      ultimo_estado_chequeo: null,
+      fecha_nacimiento: null,
+      etapa_forzada: false,
+      ...overrides,
+    };
+  }
+
+  it('bug reportado: etapa manual "novilla" sin corregir + edad calculada de ternera -- el chip (derivado.estado) NUNCA puede decir "novilla" mientras la pestaña (categoria) diga "ternera"', () => {
+    // 2 meses a 2026-08-06 (< meses_ternera_max=12): el cálculo por edad
+    // manda (D-13) y la categoría es "ternera" -- pero la etapa MANUAL
+    // (columna `etapa` de hato_animales) todavía dice "novilla", sin
+    // corregir. Alimentar el motor con esa etapa cruda (el bug) produce
+    // `derivado.estado === 'novilla'`; alimentarlo con la calculada (el
+    // arreglo) produce `derivado.estado === 'cria'`.
+    const fila = filaBase({ etapa: 'novilla', fecha_nacimiento: '2026-06-06' });
+    const resultado = clasificarAnimalHato(fila, CONFIG_BASE, umbrales, HOY);
+
+    expect(resultado.categoria).toBe('ternera');
+    expect(resultado.derivado.estado).toBe('cria');
+    expect(resultado.derivado.estado).not.toBe('novilla');
+  });
+
+  it('el mismo caso pero SIN ningún candidato de ciclo (sin servicio/parto/etc): sigue sin poder decir "novilla" -- es la rama exacta que produjo el bug (calculosHato.ts, "sin candidatos")', () => {
+    const fila = filaBase({
+      etapa: 'novilla',
+      fecha_nacimiento: '2026-07-01', // 1 mes -> ternera/leche calculada
+      ultimo_servicio_fecha: null,
+      ultimo_parto_fecha: null,
+      ultimo_secado_real_fecha: null,
+      ultima_confirmacion_prenez_fecha: null,
+    });
+    const resultado = clasificarAnimalHato(fila, CONFIG_BASE, umbrales, HOY);
+
+    expect(resultado.categoria).toBe('ternera');
+    expect(resultado.subetapaTernera).toBe('leche');
+    expect(resultado.derivado.estado).toBe('cria');
+  });
+
+  it('etapa_forzada=true: chip y pestaña coinciden en el valor FORZADO (D-25), aunque la edad calcularía otra cosa', () => {
+    // Sin forzar, esto calcularía "ternera" (2 meses) -- forzada, gana
+    // "novilla" en las dos cosas a la vez, nunca solo en una.
+    const fila = filaBase({ etapa: 'novilla', etapa_forzada: true, fecha_nacimiento: '2026-06-06' });
+    const resultado = clasificarAnimalHato(fila, CONFIG_BASE, umbrales, HOY);
+
+    expect(resultado.categoria).toBe('novilla');
+    expect(resultado.derivado.estado).toBe('novilla');
+  });
+
+  it('vaca con num_partos >= 1 y etapa manual desactualizada ("novilla"): categoría y chip coinciden en "vaca" -- nunca "cría" ni "novilla"', () => {
+    const fila = filaBase({ etapa: 'novilla', num_partos: 1, ultimo_servicio_fecha: '2026-05-01' });
+    const resultado = clasificarAnimalHato(fila, CONFIG_BASE, umbrales, HOY);
+
+    expect(resultado.categoria).toBe('hato');
+    expect(resultado.derivado.estado).not.toBe('cria');
+    expect(resultado.derivado.estado).not.toBe('novilla');
+  });
+
+  it('sin fecha_nacimiento utilizable (cálculo falla): cae al override manual en las DOS cosas, coherentes entre sí', () => {
+    const fila = filaBase({ etapa: 'novilla', fecha_nacimiento: null });
+    const resultado = clasificarAnimalHato(fila, CONFIG_BASE, umbrales, HOY);
+
+    expect(resultado.categoria).toBe('novilla');
+    expect(resultado.categoriaOrigen).toBe('override_manual');
+    expect(resultado.derivado.estado).toBe('novilla');
   });
 });

@@ -184,7 +184,12 @@ export function MarcarCicloDialog({ open, onOpenChange, animalId, onGuardado }: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="sm">
+      {/* `md`, no `sm`: con la marca "Preñada"/"Confirmada" y una vaca sin
+          ancla de servicio conocida, el formulario suma el bloque "¿Desde
+          cuándo está servida?" a fecha+checkbox+nota -- en `sm` (384px de
+          alto) ese campo quedaba pegado al pie del diálogo (auditoría de
+          UI). */}
+      <DialogContent size="md">
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 gap-4">
           <DialogHeader>
             <DialogTitle>Marcar ciclo reproductivo</DialogTitle>

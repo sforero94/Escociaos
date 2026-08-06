@@ -17,6 +17,7 @@ import { useState } from 'react';
 import { Loader2, Printer, Camera } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useProduccionHato } from '../hooks/useProduccionHato';
 import { SubirPesajeFoto } from './SubirPesajeFoto';
@@ -75,12 +76,12 @@ export function CargaPesajeMensual({ onGuardado }: { onGuardado?: () => void }) 
           <Label htmlFor="mes-planilla-pesaje" className="text-xs text-gray-500">
             Mes
           </Label>
-          <input
+          <Input
             id="mes-planilla-pesaje"
             type="month"
             value={mesSeleccionado}
             onChange={(e) => setMesSeleccionado(e.target.value)}
-            className="px-2 py-1 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2"
+            className="w-auto"
           />
         </div>
 

@@ -409,6 +409,37 @@ describe('buildReproduccionSummary', () => {
     const summary = buildReproduccionSummary(filas, CONFIG_BASE, UMBRALES_CATEGORIA_BASE, '2024-12-01');
     expect(summary.categorias.horro).toBe(1);
   });
+
+  // ==========================================================================
+  // Bugfix (2026-08-06, reconciliación chip/pestaña, mismo bug corregido en
+  // hatoCategorias.ts::clasificarAnimalHato -- ver ese archivo para el
+  // reporte original). `por_estado_reproductivo` venía de alimentar
+  // `derivarEstadoReproductivo` con `fila.etapa` CRUDA mientras `categorias`
+  // ya usaba la etapa CALCULADA -- un animal calculado como "terneras" por
+  // edad, con `etapa` manual todavía en "novilla" sin corregir, contaba
+  // como `novilla` en `por_estado_reproductivo` mientras `categorias.terneras`
+  // ya lo tenía bien. Esco no puede reportar ese mismo desacuerdo.
+  // ==========================================================================
+
+  it('por_estado_reproductivo usa la MISMA etapa calculada que categorias -- una ternera calculada por edad (etapa manual "novilla" sin corregir) nunca cuenta como "novilla"', () => {
+    const filas: HatoEstadoActualRow[] = [
+      estadoBase({
+        animal_id: 't2',
+        numero: 500,
+        nombre: 'TERNERANOVILLA',
+        etapa: 'novilla', // manual, todavía sin corregir
+        num_partos: 0,
+        fecha_nacimiento: '2024-10-01', // 2 meses a 2024-12-01 -> ternera
+        etapa_forzada: false,
+      }),
+    ];
+    const summary = buildReproduccionSummary(filas, CONFIG_BASE, UMBRALES_CATEGORIA_BASE, '2024-12-01');
+
+    expect(summary.categorias.terneras).toBe(1);
+    expect(summary.categorias.novillas).toBe(0);
+    expect(summary.por_estado_reproductivo.novilla).toBeUndefined();
+    expect(summary.por_estado_reproductivo.cria).toBe(1);
+  });
 });
 
 // ============================================================================

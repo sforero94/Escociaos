@@ -63,6 +63,15 @@ S2 construyó el complemento (`alertasVencidasParaExpirar`) pero como **botón m
 automática entra al tick en S6**, justo después de que T3b haga el descarte deliberado — así el
 `descartada` que pidió el dueño ocurre primero y la regla mantiene limpio de ahí en adelante.
 
+Decisiones tomadas tras la prueba visual en local (2026-08-06, misma fecha):
+
+| # | Decisión | Consecuencia |
+|---|---|---|
+| D-26 | **La categoría la decide UNA sola función** (`clasificarAnimalHato`): calcula la etapa efectiva primero y con esa alimenta a `derivarEstadoReproductivo`. | Cierra la contradicción en que la pestaña agrupaba por etapa calculada y el chip salía de la etapa manual — seis terneras aparecían con chip "Novilla". Chip, pestaña y Esco ya no pueden discrepar: salen del mismo valor. |
+| D-27 | **Terneras se diferencian por sub-etapa**: `Leche (0–3 m)` · `Concentrado (3–12 m)` · `Sin dato de edad`, con chip por fila y barra de conteos. Los umbrales salen de `hato_config`. | "Sin dato de edad" es un balde propio: una ternera sin fecha de nacimiento **no** se mete a la fuerza en leche ni en concentrado. Es la regla de "ausencia de dato ≠ 0" aplicada a un conteo que después va a alimentar la proyección de concentrado. |
+| D-28 | La columna **Producción** de la tabla de animales usa el **promedio móvil de 4 semanas** (`rendimientoPorVaca.actual`), no la última pesada suelta. | Es la misma cifra que ya muestra el Ranking de Vacas, así que el módulo no tiene dos números para lo mismo. La ventana se ancla al último pesaje real, no a "hoy", o el atraso de junio→agosto la vaciaría. |
+| D-29 | **Orden de columnas**: `#` · Nombre · Estado · Último parto · Próximo evento · Raza · Producción · Acciones. Las acciones son botones, no texto. | `Raza` baja al final: está vacía en las 179 fichas y ocupaba el tercer lugar de la tabla sin aportar. |
+
 **Fuera de alcance de esta ronda** (acordado explícitamente): la herramienta de Esco para proyectar
 consumo de concentrado. Se apunta como idea, no se construye.
 

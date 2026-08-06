@@ -20,7 +20,7 @@
 
 import type { EstadoReproductivo, TipoEstado } from '@/utils/calculosHato';
 import type { ClasificacionFilaDiff } from '@/utils/importHato/diffChequeo';
-import type { CategoriaHato } from '@/utils/hatoCategorias';
+import type { CategoriaHato, SubetapaTernera } from '@/utils/hatoCategorias';
 import type { EstadoAlertaHato } from '@/utils/hatoAlertas';
 import type { VejezPesajes } from '@/utils/hatoProduccion';
 import { formatShortDate } from '@/utils/format';
@@ -264,6 +264,28 @@ export function chipVejezPesajes(vejez: VejezPesajes): ChipEstilo {
     label: `Último pesaje: ${relativo} (${formatShortDate(vejez.ultimaFecha)})`,
     className: clase,
   };
+}
+
+/** Chip para el subgrupo contable de una ternera (D-13, S6, ronda agosto
+ * 2026): leche (0-3 meses) / concentrado (3-12 meses) -- Santiago los quiere
+ * poder contar por separado para proyectar consumo de concentrado más
+ * adelante. `null` = la edad no se pudo calcular (`fecha_nacimiento`
+ * ausente o mala): NUNCA se muestra como "leche" ni se omite -- es su
+ * propio balde ("sin dato de edad"), misma regla de "ausencia de dato ≠ 0"
+ * del módulo. Solo tiene sentido para animales cuya `categoria` YA es
+ * `'ternera'` (mismo `subetapaTernera` que decidió esa categoría, nunca un
+ * segundo cálculo -- así el chip nunca puede contradecir la pestaña). */
+export function chipSubetapaTernera(subetapa: SubetapaTernera | null): ChipEstilo {
+  if (subetapa === null) {
+    return {
+      label: 'Sin dato de edad',
+      className: AMBAR,
+      title: 'No se pudo calcular la edad (falta fecha de nacimiento o no es válida) -- no se asume leche ni concentrado.',
+    };
+  }
+  return subetapa === 'leche'
+    ? { label: 'Leche (0-3 m)', className: AZUL }
+    : { label: 'Concentrado (3-12 m)', className: GRIS };
 }
 
 /** Chip para las 4 categorías de inventario (terneras/novillas/hato/horro). */

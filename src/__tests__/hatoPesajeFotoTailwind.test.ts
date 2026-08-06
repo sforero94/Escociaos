@@ -4,13 +4,21 @@
 // -- carga de la planilla mensual de pesaje por foto). `src/index.css` es un
 // build precompilado -- una clase ausente NO falla en runtime, simplemente
 // no hace nada. Mismo mecanismo que `hatoProduccionTableroTailwind.test.ts`.
+//
+// También admite `src/styles/globals.css` como fuente válida (patrón de
+// `hatoCicloManualTailwind.test.ts`, más reciente): es una hoja VIVA
+// importada después de `index.css` (gana la cascada), y la auditoría de UI
+// 2026-08-06 agregó `.w-auto` ahí (`CargaPesajeMensual.tsx`) -- comprobarla
+// solo contra `index.css` la habría marcado como muerta por error.
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
 const ROOT = join(__dirname, '..', '..');
-const INDEX_CSS = readFileSync(join(ROOT, 'src', 'index.css'), 'utf-8');
+const INDEX_CSS =
+  readFileSync(join(ROOT, 'src', 'index.css'), 'utf-8') +
+  readFileSync(join(ROOT, 'src', 'styles', 'globals.css'), 'utf-8');
 
 const ARCHIVOS_S5_PESAJE_FOTO = [
   'src/components/hato/components/CargaPesajeMensual.tsx',

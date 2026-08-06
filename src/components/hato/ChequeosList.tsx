@@ -41,6 +41,7 @@ import { useHatoChequeos, type ChequeoListItem } from './hooks/useHatoChequeos';
 import { ordenarPorValor, type DireccionOrdenAnimales as DireccionOrden } from '@/utils/ordenarAnimalesHato';
 import { useAnimalesParaPlanillaChequeo } from './hooks/useAnimalesParaPlanillaChequeo';
 import { SubirChequeoExcel } from './components/SubirChequeoExcel';
+import { CapturaArchivo } from './components/CapturaArchivo';
 import { HatoPageHeader } from './components/HatoPageHeader';
 import { formatShortDate, formatNumber } from '@/utils/format';
 import {
@@ -166,6 +167,15 @@ export function ChequeosList() {
   const { chequeos, loading, error, reload } = useHatoChequeos();
   const { animales: animalesParaPlanilla, loading: cargandoAnimales } = useAnimalesParaPlanillaChequeo();
   const [mostrarSubida, setMostrarSubida] = useState(false);
+  // UI audit (2026-08-06): antes el botón exterior solo abría el diálogo
+  // VACÍO, y recién ADENTRO se repetía la misma elección "¿foto o archivo?"
+  // -- un paso intermedio redundante. Ahora el botón exterior ES el
+  // desplegable (D-8), y lo elegido aquí se pasa como selección inicial al
+  // diálogo. Se limpian al cerrar para que "Subir el primer chequeo" (el
+  // botón del estado vacío, que no pasa por acá) siga abriendo el diálogo
+  // en blanco como antes.
+  const [fotosParaSubir, setFotosParaSubir] = useState<File[]>([]);
+  const [archivoParaSubir, setArchivoParaSubir] = useState<File | null>(null);
   const [exportando, setExportando] = useState(false);
   const [exportandoPdf, setExportandoPdf] = useState(false);
   // Más reciente primero por defecto -- mismo orden que ya traía la query
@@ -267,10 +277,21 @@ export function ChequeosList() {
                 )}
                 Respaldo editable (.xlsx)
               </Button>
-              <Button onClick={() => setMostrarSubida(true)}>
-                <Upload className="w-4 h-4 mr-2" />
-                Subir chequeo (.xlsx)
-              </Button>
+              <CapturaArchivo
+                label="Subir chequeo"
+                acceptArchivo=".xlsx,.xls"
+                labelOpcionArchivo="Subir archivo .xlsx"
+                onFotos={(files) => {
+                  setArchivoParaSubir(null);
+                  setFotosParaSubir(files);
+                  setMostrarSubida(true);
+                }}
+                onArchivo={(files) => {
+                  setFotosParaSubir([]);
+                  setArchivoParaSubir(files[0]);
+                  setMostrarSubida(true);
+                }}
+              />
             </div>
           }
         />
@@ -290,7 +311,14 @@ export function ChequeosList() {
           <div className="rounded-xl border border-gray-200 bg-white p-8 text-center">
             <FileSpreadsheet className="w-10 h-10 text-gray-300 mx-auto mb-3" />
             <p className="text-sm text-gray-500 mb-4">Todavía no se ha cargado ningún chequeo.</p>
-            <Button onClick={() => setMostrarSubida(true)} variant="outline">
+            <Button
+              onClick={() => {
+                setFotosParaSubir([]);
+                setArchivoParaSubir(null);
+                setMostrarSubida(true);
+              }}
+              variant="outline"
+            >
               <Upload className="w-4 h-4 mr-2" />
               Subir el primer chequeo
             </Button>
@@ -337,7 +365,15 @@ export function ChequeosList() {
 
         <SubirChequeoExcel
           open={mostrarSubida}
-          onOpenChange={setMostrarSubida}
+          onOpenChange={(abierto) => {
+            setMostrarSubida(abierto);
+            if (!abierto) {
+              setFotosParaSubir([]);
+              setArchivoParaSubir(null);
+            }
+          }}
+          fotosIniciales={fotosParaSubir}
+          archivoInicial={archivoParaSubir}
           onCompletado={reload}
         />
       </div>

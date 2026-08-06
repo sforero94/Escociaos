@@ -372,39 +372,76 @@ export function calcularSubetapaTernera(edadMeses: number, umbrales: UmbralesCat
   return edadMeses < umbrales.meses_ternera_leche_max ? 'leche' : 'concentrado';
 }
 
-function categorizarAnimal(
+// ----------------------------------------------------------------------------
+// Bugfix (2026-08-06, reportado en /hato-lechero/hato, reconciliación
+// chip/pestaña) -- replicado acá para que Esco nunca discrepe del mismo
+// bug corregido en `hatoCategorias.ts` (frontend). Causa raíz: esta función
+// YA categorizaba correctamente por edad calculada (D-13), pero
+// `buildReproduccionSummary` alimentaba `derivarEstadoReproductivo` con
+// `fila.etapa` CRUDA (manual) para decidir `por_estado_reproductivo` --
+// esa función también lee `fila.etapa` en dos puntos internos (corto-
+// circuito "ternera" -> `cria`, y "sin candidatos" -> `novilla`), así que
+// un animal cuya `etapa` manual todavía decía "novilla" pero cuya edad
+// calculada ya lo clasificaba como "terneras" contaba como `novilla` en
+// `por_estado_reproductivo` mientras `categorias.terneras` ya lo tenía
+// bien. `resolverEtapaEfectiva` extrae la MISMA resolución de etapa que
+// `categorizarAnimal` ya hacía inline, para que `buildReproduccionSummary`
+// pueda alimentar `derivarEstadoReproductivo` con ella también -- una sola
+// fuente para las dos cosas.
+// ----------------------------------------------------------------------------
+
+interface EtapaEfectivaHato {
+  etapa: 'ternera' | 'novilla' | 'vaca' | 'toro';
+  subetapaTernera: SubetapaTernera | null;
+}
+
+/** Resuelve la etapa EFECTIVA de un animal (D-13, corregida 2026-08-06) --
+ * réplica independiente de `calcularEtapaHato` (`hatoCategorias.ts`,
+ * frontend), misma lógica, nunca el mismo import (cruzaría la frontera del
+ * árbol de despliegue de Deno, mismo criterio que el resto de este
+ * archivo). Alimenta TANTO `categorizarAnimal` (categoría/pestaña) COMO
+ * `derivarEstadoReproductivo` (estado reproductivo) en
+ * `buildReproduccionSummary` -- las dos nunca pueden discrepar porque
+ * salen de la misma llamada. */
+function resolverEtapaEfectiva(
   fila: HatoEstadoActualRow,
-  estado: EstadoReproductivo,
   umbrales: UmbralesCategoriaHato,
   fechaReferencia: string,
-): CategoriaHato | 'toro' | null {
-  if (fila.estado !== 'activa') return null;
-  if (fila.etapa === 'toro') return 'toro';
+): EtapaEfectivaHato {
+  if (fila.etapa === 'toro') return { etapa: 'toro', subetapaTernera: null };
 
   if (fila.etapa_forzada) {
     // Override explícito (migración 092): gana SIEMPRE, sin mirar
     // num_partos ni fecha_nacimiento -- mismo criterio que
     // `calcularEtapaHato` (hatoCategorias.ts).
-    if (fila.etapa === 'ternera') return 'terneras';
-    if (fila.etapa === 'novilla') return 'novillas';
-    if (estado === 'seca') return 'horro';
-    return 'hato_ordeno';
+    return { etapa: fila.etapa, subetapaTernera: null };
   }
 
-  if (fila.num_partos < 1) {
-    const edadMeses = calcularEdadMeses(fila.fecha_nacimiento, fechaReferencia);
-    if (edadMeses !== null) {
-      if (edadMeses < umbrales.meses_ternera_max) return 'terneras';
-      return 'novillas';
-    }
+  if (fila.num_partos >= 1) return { etapa: 'vaca', subetapaTernera: null };
+
+  const edadMeses = calcularEdadMeses(fila.fecha_nacimiento, fechaReferencia);
+  if (edadMeses === null) {
     // El cálculo no puede resolver la edad (D-13: "fecha de nacimiento
     // ausente o mala") -- override manual fácil: se respeta `fila.etapa`
     // tal como está guardado.
-    if (fila.etapa === 'ternera') return 'terneras';
-    if (fila.etapa === 'novilla') return 'novillas';
+    return { etapa: fila.etapa, subetapaTernera: null };
   }
-  // num_partos >= 1, o etapa manual 'vaca' cuando el cálculo no pudo
-  // resolver la edad (D-13: las vacas se definen por el 1er parto).
+
+  if (edadMeses < umbrales.meses_ternera_max) {
+    return { etapa: 'ternera', subetapaTernera: calcularSubetapaTernera(edadMeses, umbrales) };
+  }
+  return { etapa: 'novilla', subetapaTernera: null };
+}
+
+function categorizarAnimal(
+  fila: HatoEstadoActualRow,
+  etapaEfectiva: EtapaEfectivaHato['etapa'],
+  estado: EstadoReproductivo,
+): CategoriaHato | 'toro' | null {
+  if (fila.estado !== 'activa') return null;
+  if (etapaEfectiva === 'toro') return 'toro';
+  if (etapaEfectiva === 'ternera') return 'terneras';
+  if (etapaEfectiva === 'novilla') return 'novillas';
   if (estado === 'seca') return 'horro';
   return 'hato_ordeno';
 }
@@ -499,10 +536,14 @@ export function buildReproduccionSummary(
     else if (fila.estado === 'muerta') inactivos.muertas += 1;
     else if (fila.estado === 'descartada') inactivos.descartadas += 1;
 
-    const derivado = derivarEstadoReproductivo(fila, config, fechaReferencia);
+    // Resuelta UNA vez, alimenta tanto el estado reproductivo (chip) como
+    // la categoría (pestaña/conteo) -- nunca `fila.etapa` cruda directo a
+    // `derivarEstadoReproductivo` (ver nota de `resolverEtapaEfectiva`).
+    const etapaEfectiva = resolverEtapaEfectiva(fila, umbralesCategoria, fechaReferencia);
+    const derivado = derivarEstadoReproductivo({ ...fila, etapa: etapaEfectiva.etapa }, config, fechaReferencia);
     porEstado[derivado.estado] = (porEstado[derivado.estado] || 0) + 1;
 
-    const categoria = categorizarAnimal(fila, derivado.estado, umbralesCategoria, fechaReferencia);
+    const categoria = categorizarAnimal(fila, etapaEfectiva.etapa, derivado.estado);
     if (categoria === 'terneras') {
       categorias.terneras += 1;
       const edadMeses = calcularEdadMeses(fila.fecha_nacimiento, fechaReferencia);

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Loader2, Save, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NumberInput } from '@/components/ui/number-input';
 import { formatNumber, formatLongDate } from '@/utils/format';
@@ -180,12 +181,12 @@ export function PesajeSemanalGrid({ onSaved }: { onSaved?: () => void }) {
           <Label htmlFor="fecha-pesaje" className="text-xs text-gray-500">
             Fecha
           </Label>
-          <input
+          <Input
             id="fecha-pesaje"
             type="date"
             value={fecha ?? ''}
             onChange={(e) => cargar(e.target.value)}
-            className="px-2 py-1.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2"
+            className="w-auto"
           />
           <Button variant="outline" size="sm" disabled={cargando} onClick={() => cargar(fecha ?? undefined)}>
             {cargando ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}

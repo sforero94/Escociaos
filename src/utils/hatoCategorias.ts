@@ -37,7 +37,13 @@
 // ambas copias de `hato-aggregation.ts`.
 
 import type { EtapaHato } from '@/types/hato';
-import type { EstadoReproductivo } from '@/utils/calculosHato';
+import {
+  derivarEstadoReproductivo,
+  type EstadoActualHatoRow,
+  type EstadoReproductivo,
+  type EstadoReproductivoDerivado,
+  type HatoConfig,
+} from '@/utils/calculosHato';
 
 export type CategoriaHato = 'ternera' | 'novilla' | 'hato' | 'horro';
 
@@ -291,4 +297,88 @@ export function calcularEtapaHato(
   }
 
   return { etapa: 'novilla', origen: 'calculado', subetapaTernera: null };
+}
+
+// ============================================================================
+// Bugfix (2026-08-06, reportado en /hato-lechero/hato) -- reconciliación
+// chip/pestaña.
+//
+// Causa raíz verificada: `useHatoAnimales.ts` llamaba
+// `derivarEstadoReproductivo` con la fila CRUDA de la vista (`fila.etapa`,
+// el campo MANUAL) para decidir el chip de estado, pero recién DESPUÉS
+// calculaba `calcularEtapaHato(...)` para decidir en qué pestaña
+// (terneras/novillas/hato/horro) cae el animal. Como
+// `derivarEstadoReproductivo` también lee `fila.etapa` en dos puntos (el
+// corto-circuito "ternera" -> `cria`, y "sin candidatos" -> `novilla`), un
+// animal con `etapa` manual todavía en "novilla" pero cuya edad calculada
+// (D-13) ya lo pone en "ternera" mostraba el chip "Novilla" DENTRO de la
+// pestaña "Terneras" -- seis animales así, verificados en producción.
+//
+// Arreglo: calcular la etapa EFECTIVA primero y alimentar el motor con
+// ESA, nunca con la cruda -- `derivarEstadoReproductivo` en sí NO se toca
+// (protegido por paridad byte-idéntica con el servidor, S2); lo único que
+// cambia es qué etapa se le pasa, exactamente igual que ya hacía
+// `clasificarCategoriaHato(etapaCalculada.etapa, ...)`.
+//
+// `clasificarAnimalHato` es el ÚNICO punto de entrada que
+// `useHatoAnimales.ts` debe usar de ahora en adelante -- nunca llamar
+// `derivarEstadoReproductivo` directo con una fila de
+// `v_hato_estado_actual` sin pasar antes por acá. El mismo arreglo se
+// replicó, independientemente (nunca el mismo import, cruzaría la
+// frontera del árbol de despliegue de Deno), en `categorizarAnimal` /
+// `buildReproduccionSummary` de las DOS copias de `hato-aggregation.ts`
+// (Esco) -- la UI y Esco no pueden discrepar en el mismo conteo.
+// ============================================================================
+
+/** Fila de hechos que necesita `clasificarAnimalHato`: el subconjunto que
+ * consume `derivarEstadoReproductivo` (`EstadoActualHatoRow`,
+ * `calculosHato.ts`) más las dos columnas que gobiernan D-13
+ * (`fecha_nacimiento`, `etapa_forzada`). `EstadoActualHatoViewRow` (la fila
+ * cruda de `v_hato_estado_actual`, `types/hato.ts`) ya cumple esta forma
+ * sin conversión -- se le puede pasar directo. */
+export type FilaClasificacionHato = EstadoActualHatoRow & {
+  fecha_nacimiento: string | null;
+  etapa_forzada: boolean;
+};
+
+export interface AnimalHatoClasificado {
+  /** Estado reproductivo derivado con la etapa YA EFECTIVA (D-13) -- nunca
+   * con la etapa manual cruda. Es lo que alimenta el chip de estado. */
+  derivado: EstadoReproductivoDerivado;
+  /** Categoría de inventario (pestaña). Misma etapa efectiva que decidió
+   * `derivado`, así que las dos NUNCA pueden discrepar. */
+  categoria: CategoriaHato | null;
+  categoriaOrigen: 'calculado' | 'override_manual' | null;
+  subetapaTernera: SubetapaTernera | null;
+}
+
+/**
+ * Reconciliación única chip/pestaña: resuelve la etapa EFECTIVA
+ * (`calcularEtapaHato`) y alimenta `derivarEstadoReproductivo` con esa
+ * misma etapa -- nunca con `fila.etapa` cruda. El estado reproductivo
+ * (chip) y la categoría de inventario (pestaña) siempre salen de la misma
+ * fuente, así que nunca pueden contradecirse.
+ */
+export function clasificarAnimalHato(
+  fila: FilaClasificacionHato,
+  config: HatoConfig,
+  umbrales: UmbralesCategoriaHato,
+  fechaReferencia: string,
+): AnimalHatoClasificado {
+  const etapaCalculada = calcularEtapaHato(
+    fila.etapa,
+    fila.etapa_forzada,
+    fila.num_partos,
+    fila.fecha_nacimiento,
+    umbrales,
+    fechaReferencia,
+  );
+  const derivado = derivarEstadoReproductivo({ ...fila, etapa: etapaCalculada.etapa }, config, fechaReferencia);
+  const categoria = clasificarCategoriaHato(etapaCalculada.etapa, derivado.estado);
+  return {
+    derivado,
+    categoria,
+    categoriaOrigen: categoria === null ? null : etapaCalculada.origen,
+    subetapaTernera: categoria === 'ternera' ? etapaCalculada.subetapaTernera : null,
+  };
 }

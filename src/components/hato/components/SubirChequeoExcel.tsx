@@ -17,6 +17,15 @@
 // en un ÚNICO drop zone que huele el tipo de archivo soltado (imagen ->
 // fotos, `.xlsx` -> archivo) en vez de dos zonas separadas por modo.
 //
+// UI audit (2026-08-06): ese dropdown vivía DOS VECES -- una vez en el botón
+// exterior de `ChequeosList.tsx` (que solo abría este diálogo vacío) y otra
+// vez acá adentro, obligando a elegir "¿foto o archivo?" dos veces para una
+// sola decisión. Ahora `ChequeosList.tsx` ES el dropdown y pasa lo elegido
+// como `fotosIniciales`/`archivoInicial`: el diálogo abre con la selección
+// ya cargada, lista para "Subir y revisar". El `CapturaArchivo` de acá adentro
+// se conserva -- sigue haciendo falta para agregar páginas de más a un
+// chequeo de varias hojas, o para cambiar de opinión sin cerrar el diálogo.
+//
 // El bloque `resultado.ocr` se renderiza SIEMPRE que venga: sin él, una vaca
 // que el OCR no encontró se vería idéntica a una vaca sin cambios, que es
 // exactamente el fallo silencioso que el módulo prohíbe.
@@ -45,7 +54,7 @@
 //      migración 053). Otros roles ven la revisión completa en solo lectura, con
 //      el motivo dicho en pantalla -- nunca un botón que falla con 403.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FileSpreadsheet, Loader2, AlertTriangle, CheckCircle2, X, Camera } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -68,10 +77,17 @@ export function SubirChequeoExcel({
   open,
   onOpenChange,
   onCompletado,
+  fotosIniciales,
+  archivoInicial,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCompletado?: () => void;
+  /** Selección ya hecha por el disparador exterior (`ChequeosList.tsx`, D-8
+   * de la ronda agosto 2026): si viene con contenido, el diálogo abre
+   * directo con esa página lista en vez de pedir la misma elección otra vez. */
+  fotosIniciales?: File[];
+  archivoInicial?: File | null;
 }) {
   const {
     subir,
@@ -174,6 +190,17 @@ export function SubirChequeoExcel({
       return total;
     });
   };
+
+  // Selección ya hecha por el disparador exterior -- se siembra UNA vez por
+  // apertura (nunca en cada render, o reabrir con el mismo `open` re-agregaría
+  // las mismas fotos). `handleClose` ya deja el formulario en blanco al
+  // cerrar, así que esto solo corre sobre un estado limpio.
+  useEffect(() => {
+    if (!open) return;
+    if (archivoInicial) seleccionarArchivo(archivoInicial);
+    else if (fotosIniciales && fotosIniciales.length > 0) agregarFotos(fotosIniciales);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   /** Drop zone ÚNICA (D-8): huele el tipo de lo soltado en vez de exigir que
    * el usuario haya elegido antes un modo -- imagen -> fotos, `.xlsx` ->
