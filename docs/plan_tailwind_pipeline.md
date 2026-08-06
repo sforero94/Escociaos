@@ -231,23 +231,73 @@ Rama `spike/tailwind-medicion`, **no se mergea nunca**. Protocolo detallado en �
 
 ### F1 · Encender el pipeline — 1 sesión
 
-Rama larga `feat/tailwind-pipeline` (T-2: nada sale a producción hasta el final).
+> **Listo para ejecutar.** F0 ya hizo este cambio completo en `spike/tailwind-medicion` y lo verificó.
+> F1 lo repite sobre la rama larga y añade la limpieza que el spike deliberadamente NO hizo.
+> Informe: `docs/tailwind-spike/informe-f0.md`.
 
-- `tailwindcss@4` + `@tailwindcss/vite` como devDependencies; plugin en `vite.config.ts`.
-- `src/index.css` pasa de 5.577 líneas compiladas a un archivo fuente que importa `tailwindcss` y
-  después `globals.css`; `main.tsx` deja de importar `globals.css` por separado.
-- Auditar los tokens de `@theme inline`, que cobran vida por primera vez — **conservando los valores
-  actuales** (T-5). Si un token estaba mal escrito y ahora sí aplica, se corrige al valor que la app
-  muestra hoy, no a uno nuevo.
-- Retirar los 4 guards estáticos y limpiar las ~116 reglas duplicadas de `globals.css`.
-- Reescribir la caution zone del `CLAUDE.md` y las menciones en los 10 documentos.
-- Verificar que `npm run build` produce un CSS de tamaño razonable (hoy son 136 KB congelados).
-- **Verificar que `ui/button.tsx` conserva su `forwardRef`** tras cualquier limpieza.
+Rama larga `feat/tailwind-pipeline`, **partiendo de un `main` al día** (T-2: nada sale a producción
+hasta el final).
 
-### F2 · Contener la regresión — N sesiones, alcance según T-6
+**Paso 0 — antes de nada, un `git rebase` sobre `main`.** F0 corrió sobre una base del 2026-08-06;
+si hay trabajo mergeado después, la limpieza de `globals.css` puede chocar con clases nuevas.
 
-Módulo por módulo, con verificación visual obligatoria en cada uno. El orden y la profundidad los
-decide el informe de F0, no la intuición.
+**Lo ya validado por F0 (repetir tal cual, sin re-investigar):**
+
+- `tailwindcss@4.3.3` + `@tailwindcss/vite@4.3.3` como devDependencies; `tailwindcss()` en
+  `vite.config.ts` después de `react()`.
+- `src/index.css` pasa a dos líneas: `@import "tailwindcss";` + `@import "./styles/globals.css";`
+  y `main.tsx` deja de importar `globals.css` por separado. **Sin esto los tokens no compilan**
+  (§3.4).
+- **Arreglar `globals.css:686` primero**: la secuencia `*/` dentro del comentario en prosa
+  (`bg-*/border-*/text-*,`) cierra el comentario a mitad de frase y **bloquea el 100% del build**
+  con Lightning CSS. El navegador venía tolerándolo en silencio. Es la única ocurrencia del patrón
+  en el archivo (verificado).
+- **Reiniciar el dev server tras cambiar `vite.config.ts`.** Vite intenta recargar la config solo y
+  puede quedar en un estado roto que sirve la app sin CSS. Si las sondas dan `bg-primary`
+  transparente, el problema es el server, no el pipeline — reiniciar antes de diagnosticar nada.
+
+**La limpieza que F0 NO hizo, y que es el trabajo propio de F1:**
+
+- Retirar los 4 guards estáticos (**retirar, no reconvertir** — con el compilador activo su premisa
+  desaparece y un reemplazo con la misma forma sería un test que siempre pasa).
+  `dialogScrollContract.test.ts` es estructural y **se queda**.
+- Limpiar las ~116 reglas a mano de `globals.css`, **empezando por las dos bombas**: `.shadow-none` y
+  `.data-[variant=outline]:shadow-xs` anulan cualquier `focus-visible:ring-*`. Recordar que esas
+  reglas están **fuera de toda capa** y por lo tanto **ganan siempre** sobre `@layer utilities`
+  (H-5): borrarlas o envolverlas, no basta con cambiarlas.
+- Reescribir la caution zone del `CLAUDE.md` raíz y las menciones en los **11 documentos** restantes
+  (lista exacta con líneas en `auditoria-infraestructura.md`).
+- Borrar `ui/sidebar.tsx` — no lo importa nadie y tiene el mayor conteo bruto de clases muertas del
+  repo.
+- **Decidir explícitamente `tw-animate-css`**: no se instaló en F0, así que las animaciones de
+  entrada/salida de `Sheet`/`Drawer` son un punto abierto.
+
+**Criterios de aceptación (medidos, no "se ve bien"):**
+
+| Criterio | Valor de referencia de F0 |
+|---|---|
+| `--color-primary` resuelve en el navegador | `#73991C` |
+| `text-brand-brown/70` aplica opacidad real | `oklab(… / 0.7)`, no el verde heredado |
+| `tabular-nums` activo | `font-variant-numeric: tabular-nums` |
+| `h1` conserva su tamaño | 24 px / peso 500 |
+| `npm test` | 1.975 verdes; los 18 rojos desaparecen al retirar las guardas |
+| CSS del build | ~174 KB raw / ~25,6 KB gzip |
+| `ui/button.tsx` conserva `forwardRef` | sí |
+
+### F2 · Contener la regresión — **2 a 3 sesiones** (T-6 resuelto por F0)
+
+Orden fijado por la evidencia, no por intuición:
+
+1. **El sidebar, primero y solo.** Su contenido crece de 622 px a 948 px y el pie tapa 18 px del ítem
+   activo. Es una corrección única que beneficia **todas** las pantallas, y por eso va **antes** que
+   la limpieza de F1 si hiciera falta priorizar.
+2. **Barrido del patrón `truncate`** — clases que estaban muertas, ahora funcionan, y lo que dicen
+   está mal. Buscar `truncate`, `line-clamp-*`, `overflow-hidden`, `whitespace-nowrap` y `max-w-*` en
+   componentes que muestran nombres propios o texto de longitud variable. **Es análisis estático: se
+   delega completo a subagentes**, no requiere navegador.
+3. Las 3 regresiones puntuales restantes: selector de estado en `/labores` móvil, desborde de
+   `/monitoreo` móvil, color del subtítulo de `/finanzas/gastos`.
+4. Lo cosmético, al final o directamente en F4.
 
 ### F3 · Consolidar los tokens — puede solaparse con F2
 
