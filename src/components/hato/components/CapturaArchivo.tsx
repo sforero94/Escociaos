@@ -21,9 +21,18 @@
 // drop adicional, previsualización, acumulación de páginas, límites de
 // cantidad) sigue siendo responsabilidad de quien lo consume -- mismo
 // reparto que ya tenía `SubirChequeoExcel.tsx` antes de esta sesión.
+//
+// UI rework de Producción (2026-08-06, `Registrar` de
+// `/hato-lechero/produccion`): tercera opción OPCIONAL "Ingresar a mano"
+// (`onManual`) -- no abre ningún `<input type="file">`, solo dispara el
+// callback. Decisión del dueño: el ingreso manual no se elimina, baja a ser
+// la tercera opción de este MISMO desplegable en vez de escribirse aparte.
+// `onManual` es opcional a propósito -- los otros dos consumidores
+// (chequeo, liquidación) no lo pasan y siguen viendo el menú de dos
+// opciones de siempre.
 
 import { useRef } from 'react';
-import { Camera, Upload, ChevronDown } from 'lucide-react';
+import { Camera, Upload, ChevronDown, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -40,6 +49,11 @@ export interface CapturaArchivoProps {
   /** Archivos elegidos por "Subir archivo". El tipo lo decide cada flujo
    * consumidor (`.xlsx` para chequeo, imagen/PDF para liquidación...). */
   onArchivo: (files: File[]) => void;
+  /** Tercera opción OPCIONAL del desplegable: "Ingresar a mano". Cuando se
+   * pasa, aparece como tercer ítem y NO abre ningún selector de archivo --
+   * solo dispara este callback (quien consume decide qué hacer, p. ej.
+   * abrir el mismo diálogo de revisión pero con la grilla en blanco). */
+  onManual?: () => void;
   /** MIME/extensiones que acepta "Subir archivo" (ej. `.xlsx,.xls`). */
   acceptArchivo: string;
   /** La cámara del celular entrega una foto a la vez -- por defecto se
@@ -52,12 +66,14 @@ export interface CapturaArchivoProps {
   label?: string;
   labelOpcionFoto?: string;
   labelOpcionArchivo?: string;
+  labelOpcionManual?: string;
   className?: string;
 }
 
 export function CapturaArchivo({
   onFotos,
   onArchivo,
+  onManual,
   acceptArchivo,
   multipleFotos = true,
   multipleArchivo = false,
@@ -65,6 +81,7 @@ export function CapturaArchivo({
   label = 'Cargar archivo',
   labelOpcionFoto = 'Tomar foto',
   labelOpcionArchivo = 'Subir archivo',
+  labelOpcionManual = 'Ingresar a mano',
   className,
 }: CapturaArchivoProps) {
   const fotoInputRef = useRef<HTMLInputElement>(null);
@@ -92,6 +109,12 @@ export function CapturaArchivo({
             <Upload className="w-4 h-4" />
             {labelOpcionArchivo}
           </DropdownMenuItem>
+          {onManual && (
+            <DropdownMenuItem onClick={onManual}>
+              <Pencil className="w-4 h-4" />
+              {labelOpcionManual}
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 

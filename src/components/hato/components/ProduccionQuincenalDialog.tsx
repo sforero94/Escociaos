@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Loader2, Save, Trash2, Lock, AlertTriangle } from 'lucide-react';
+import { Loader2, Save, Trash2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -15,7 +16,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { RoleGuard } from '@/components/auth/RoleGuard';
 import { formatNumber, formatShortDate, formatCurrency } from '@/utils/format';
 import { resolverQuincena, rangoQuincena, calcularProductividad } from '@/utils/calculosHato';
 import {
@@ -49,28 +49,16 @@ const MESES = [
 // es UTC y ya es "mañana" en Bogotá después de las 19:00.
 const hoyIso = () => obtenerFechaHoy();
 
-interface ProduccionQuincenalFormProps {
+export interface ProduccionQuincenalDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onSaved?: () => void;
-}
-
-/**
- * Tarjeta que reemplaza el formulario para un rol sin permisos de Gerencia
- * (plan §4.3: "el gate es el ROL, no el resultado de la consulta" -- RLS
- * de `fin_ingresos` devuelve `[]` sin error, indistinguible de "no hay
- * ventas"). Mismo criterio que el bloque de Ventas del tablero (SOW 5).
- */
-function CandadoGerencia() {
-  return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 flex items-center gap-3">
-      <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
-        <Lock className="w-4 h-4 text-amber-600" />
-      </div>
-      <div>
-        <p className="text-sm font-semibold text-foreground">Producción quincenal (litros al camión)</p>
-        <p className="text-xs text-gray-500">La captura de la venta quincenal requiere permisos de Gerencia.</p>
-      </div>
-    </div>
-  );
+  /** Selección ya hecha por el disparador exterior (`VentaQuincenalCard.tsx`,
+   * mismo patrón que `SubirChequeoExcel.tsx`/`SubirPesajeFoto.tsx`): si
+   * viene con contenido, el OCR de la liquidación corre solo, sin que el
+   * usuario tenga que volver a elegir "Cargar liquidación" dentro del
+   * diálogo. */
+  fotosIniciales?: File[];
 }
 
 /**
@@ -91,8 +79,15 @@ function CandadoGerencia() {
  * Una quincena `origen_dato='derivado_mensual'` (backfill, SOW 4) es
  * read-only aquí: el RPC la rechaza explícitamente, así que el formulario
  * ni siquiera intenta editarla — se corrige desde `/finanzas/ingresos`.
+ *
+ * UI rework de Producción (2026-08-06): antes vivía siempre visible e
+ * inline en la pestaña Registrar; ahora es un diálogo que `VentaQuincenalCard`
+ * mantiene SIEMPRE montado (mismo patrón que `SubirChequeoExcel.tsx`) y
+ * abre/cierra vía `open`/`onOpenChange` -- los refs frágiles de más abajo
+ * (`ocrPendiente`, `defaultsIngresoRef`) NUNCA se recrean al abrir/cerrar el
+ * diálogo porque el componente no se desmonta con él, solo con la pestaña.
  */
-function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps) {
+export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIniciales }: ProduccionQuincenalDialogProps) {
   const hook = useProduccionHato();
   const catalogos = useFinCatalogosVenta();
   const ocr = useOcrLiquidacionPomar();
@@ -486,6 +481,21 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
     [ocr, anio, mes, quincena, cargarRegistro],
   );
 
+  // Selección ya hecha por el disparador exterior (`VentaQuincenalCard.tsx`)
+  // -- se siembra UNA vez por apertura, mismo patrón que
+  // `SubirChequeoExcel.tsx`/`SubirPesajeFoto.tsx` (`[open]` como única
+  // dependencia: nunca en cada render, o reabrir con el mismo `open`
+  // relanzaría el mismo OCR). El componente NUNCA se desmonta al cerrar el
+  // diálogo (`VentaQuincenalCard` lo mantiene siempre montado), así que esto
+  // reutiliza `handleOcrLeido` tal cual -- la secuencia de `ocrPendiente`
+  // sigue siendo la misma que si el usuario hubiera hecho clic en "Cargar
+  // liquidación" con el diálogo ya abierto.
+  useEffect(() => {
+    if (!open) return;
+    if (fotosIniciales && fotosIniciales.length > 0) void handleOcrLeido(fotosIniciales);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   const productividad = calcularProductividad(litrosTotal ?? null, numVacasOrdeno ?? null);
   // ICA/neto (D-11/D-12) -- SOLO preview del cliente; lo que persiste
   // siempre sale del RPC. `aplicaRetencionIcaLeche` decide si el periodo
@@ -499,36 +509,39 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
   const precioUnitario = calcularPrecioUnitarioQuincena(netoConIca?.neto ?? null, litrosTotal ?? null);
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-      <div className="p-4 border-b border-gray-200 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="font-semibold text-foreground">Producción quincenal (litros al camión)</h3>
-          <p className="text-xs text-gray-500">
-            Total que recoge el Pomar en la quincena — un solo registro con la venta enlazada.
-          </p>
-        </div>
-        {!soloLectura && (
-          <div className="flex flex-col items-end gap-1.5">
-            <CapturaArchivo
-              label="Cargar liquidación"
-              acceptArchivo="image/*"
-              multipleFotos={false}
-              multipleArchivo={false}
-              disabled={ocr.loading || guardando}
-              onFotos={(files) => handleOcrLeido(files)}
-              onArchivo={(files) => handleOcrLeido(files)}
-            />
-            {ocr.loading && (
-              <p className="text-xs text-gray-400 flex items-center gap-1">
-                <Loader2 className="w-4 h-4 animate-spin" /> Leyendo liquidación…
-              </p>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="lg">
+        <DialogHeader>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <DialogTitle>Producción quincenal (litros al camión)</DialogTitle>
+              <DialogDescription>
+                Total que recoge el Pomar en la quincena — un solo registro con la venta enlazada.
+              </DialogDescription>
+            </div>
+            {!soloLectura && (
+              <div className="flex flex-col items-end gap-1.5">
+                <CapturaArchivo
+                  label="Cargar liquidación"
+                  acceptArchivo="image/*"
+                  multipleFotos={false}
+                  multipleArchivo={false}
+                  disabled={ocr.loading || guardando}
+                  onFotos={(files) => handleOcrLeido(files)}
+                  onArchivo={(files) => handleOcrLeido(files)}
+                />
+                {ocr.loading && (
+                  <p className="text-xs text-gray-400 flex items-center gap-1">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Leyendo liquidación…
+                  </p>
+                )}
+                {ocr.error && <p className="text-xs text-red-600 max-w-[200px] text-right">{ocr.error}</p>}
+              </div>
             )}
-            {ocr.error && <p className="text-xs text-red-600 max-w-[200px] text-right">{ocr.error}</p>}
           </div>
-        )}
-      </div>
-
-      <div className="p-4 space-y-4">
+        </DialogHeader>
+        <DialogBody className="space-y-4">
+        <div className="space-y-4">
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1.5">
             <Label htmlFor="q-anio">Año</Label>
@@ -724,23 +737,6 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
                 rows={2}
               />
             </div>
-
-            <div className="flex justify-between">
-              {registroId ? (
-                <Button
-                  variant="outline"
-                  className="border-red-200 text-red-600 hover:bg-red-50"
-                  onClick={() => setConfirmEliminarOpen(true)}
-                  disabled={guardando || cargando || eliminando}
-                >
-                  <Trash2 className="w-4 h-4 mr-2" /> Eliminar
-                </Button>
-              ) : <span />}
-              <Button onClick={handleGuardar} disabled={guardando || cargando || eliminando}>
-                {guardando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                {registroId ? 'Actualizar quincena' : 'Registrar quincena'}
-              </Button>
-            </div>
           </>
         )}
       </div>
@@ -811,6 +807,36 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
           </div>
         </div>
       )}
+        </DialogBody>
+        <DialogFooter className="sm:justify-between">
+          {cargando || soloLectura ? (
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cerrar
+            </Button>
+          ) : (
+            <>
+              {registroId ? (
+                <Button
+                  variant="outline"
+                  className="border-red-200 text-red-600 hover:bg-red-50"
+                  onClick={() => setConfirmEliminarOpen(true)}
+                  disabled={guardando || cargando || eliminando}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" /> Eliminar
+                </Button>
+              ) : (
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={guardando}>
+                  Cancelar
+                </Button>
+              )}
+              <Button onClick={handleGuardar} disabled={guardando || cargando || eliminando}>
+                {guardando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                {registroId ? 'Actualizar quincena' : 'Registrar quincena'}
+              </Button>
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
 
       <ConfirmDialog
         open={confirmEliminarOpen}
@@ -821,14 +847,6 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
         onConfirm={handleEliminar}
         destructive
       />
-    </div>
-  );
-}
-
-export function ProduccionQuincenalForm(props: ProduccionQuincenalFormProps) {
-  return (
-    <RoleGuard allowedRoles={['Gerencia']} fallback={<CandadoGerencia />}>
-      <ProduccionQuincenalFormInner {...props} />
-    </RoleGuard>
+    </Dialog>
   );
 }

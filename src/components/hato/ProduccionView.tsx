@@ -29,9 +29,8 @@ import { ChipVejezPesajes } from './components/ChipVejezPesajes';
 import { TrackerProductividad } from './components/TrackerProductividad';
 import { RankingVacas } from './components/RankingVacas';
 import { KpisVentaHato } from './components/KpisVentaHato';
-import { PesajeSemanalGrid } from './components/PesajeSemanalGrid';
-import { CargaPesajeMensual } from './components/CargaPesajeMensual';
-import { ProduccionQuincenalForm } from './components/ProduccionQuincenalForm';
+import { PesajeLecheCard } from './components/PesajeLecheCard';
+import { VentaQuincenalCard } from './components/VentaQuincenalCard';
 import { GraficoLitrosQuincenal } from './components/GraficoLitrosQuincenal';
 import { VentaAnimalesHatoDialog } from './components/VentaAnimalesHatoDialog';
 
@@ -160,12 +159,6 @@ export function ProduccionView() {
           </TabsList>
 
           <TabsContent value="produccion" className="mt-6 space-y-6">
-            <div className="flex justify-end">
-              <Button variant="outline" size="sm" onClick={() => setActiveTab('registrar')}>
-                <ClipboardList className="w-4 h-4 mr-1.5" /> Registrar pesaje
-              </Button>
-            </div>
-
             {/* 1. Tracker de productividad (decisión 13) -- todos los roles. */}
             <TrackerProductividad
               pesajes={datos.pesajes}
@@ -204,19 +197,28 @@ export function ProduccionView() {
             />
           </TabsContent>
 
-          <TabsContent value="registrar" className="mt-6 space-y-6">
-            <PesajeSemanalGrid onSaved={recargarTodo} />
-            <CargaPesajeMensual onGuardado={recargarTodo} />
-            <ProduccionQuincenalForm onSaved={cargarHistorial} />
+          <TabsContent value="registrar" className="mt-6">
+            {/* Tres tarjetas uniformes y pequeñas, siempre -- reemplazan el
+                apilado de bloques siempre-expandidos que tenía antes esta
+                pestaña (grilla de pesaje + PDF/foto + formulario quincenal +
+                tarjeta de venta). Cada acción real vive en un `Dialog`
+                (`size` según su contenido: `xl` la grilla de pesaje --
+                35 vacas x 5 semanas x AM/PM --, `lg` el formulario
+                quincenal, `lg` la venta de animales) para que esta pestaña
+                nunca crezca. */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <PesajeLecheCard ultimaCarga={vejez.ultimaFecha} onGuardado={recargarTodo} />
+              <VentaQuincenalCard historialQuincenal={historialQuincenal} onSaved={cargarHistorial} />
 
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-gray-900">Venta de animales</h3>
-              <p className="text-xs text-gray-500 mb-3">
-                Terneros o vacas de descarte -- registra la venta y, opcionalmente, enlázala a animales puntuales del hato.
-              </p>
-              <Button variant="outline" size="sm" onClick={() => setVentaOpen(true)}>
-                <HandCoins className="w-4 h-4 mr-1.5" /> Registrar venta
-              </Button>
+              <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                <h3 className="text-sm font-semibold text-gray-900">Venta de animales</h3>
+                <p className="text-xs text-gray-500 mb-3">
+                  Terneros o vacas de descarte -- registra la venta y, opcionalmente, enlázala a animales puntuales del hato.
+                </p>
+                <Button variant="outline" size="sm" onClick={() => setVentaOpen(true)}>
+                  <HandCoins className="w-4 h-4 mr-1.5" /> Registrar venta
+                </Button>
+              </div>
             </div>
           </TabsContent>
         </Tabs>

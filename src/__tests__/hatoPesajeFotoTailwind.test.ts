@@ -8,8 +8,16 @@
 // También admite `src/styles/globals.css` como fuente válida (patrón de
 // `hatoCicloManualTailwind.test.ts`, más reciente): es una hoja VIVA
 // importada después de `index.css` (gana la cascada), y la auditoría de UI
-// 2026-08-06 agregó `.w-auto` ahí (`CargaPesajeMensual.tsx`) -- comprobarla
-// solo contra `index.css` la habría marcado como muerta por error.
+// 2026-08-06 agregó `.w-auto` ahí (`CargaPesajeMensual.tsx`, renombrado a
+// `PesajeLecheCard.tsx` en la sesión de rediseño de la pestaña Registrar
+// del mismo día) -- comprobarla solo contra `index.css` la habría marcado
+// como muerta por error.
+//
+// Rediseño de la pestaña Registrar (2026-08-06, `/hato-lechero/producción`):
+// suma los archivos nuevos/tocados de esa sesión (`PesajeLecheCard.tsx` es
+// el renombre de `CargaPesajeMensual.tsx`; `ProduccionQuincenalDialog.tsx`
+// es el renombre-a-diálogo de `ProduccionQuincenalForm.tsx`;
+// `VentaQuincenalCard.tsx` y `CapturaArchivo.tsx` son nuevos/tocados).
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
@@ -21,9 +29,12 @@ const INDEX_CSS =
   readFileSync(join(ROOT, 'src', 'styles', 'globals.css'), 'utf-8');
 
 const ARCHIVOS_S5_PESAJE_FOTO = [
-  'src/components/hato/components/CargaPesajeMensual.tsx',
+  'src/components/hato/components/PesajeLecheCard.tsx',
   'src/components/hato/components/SubirPesajeFoto.tsx',
   'src/components/hato/components/RevisionPesajeFoto.tsx',
+  'src/components/hato/components/ProduccionQuincenalDialog.tsx',
+  'src/components/hato/components/VentaQuincenalCard.tsx',
+  'src/components/hato/components/CapturaArchivo.tsx',
 ];
 
 function escaparParaCss(clase: string): string {
