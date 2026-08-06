@@ -17,9 +17,11 @@ import {
   requiereRevisionSemanal,
   chipRespuestaAlerta,
   chipEstadoAlerta,
+  alertasVencidasParaExpirar,
   type EstadoAlertaHato,
   type TipoAlertaHato,
 } from '../utils/hatoAlertasUi';
+import { DIAS_EXPIRACION_ALERTA } from '../utils/hatoAlertas';
 
 describe('LABEL_TIPO_ALERTA_HATO / LABEL_ESTADO_ALERTA_HATO', () => {
   it('tiene una etiqueta no vacía para cada uno de los 5 tipos', () => {
@@ -147,5 +149,64 @@ describe('chipEstadoAlerta (re-exportado desde hatoUi.ts)', () => {
     for (const estado of ESTADOS_ALERTA_HATO) {
       expect(chipEstadoAlerta(estado).label.length).toBeGreaterThan(0);
     }
+  });
+});
+
+// T3a (ronda agosto 2026): la regla de expiración automática que
+// `AlertasView.tsx` ofrece como acción explícita (nunca dispara sola) para
+// que `escalada`/`respondida` no se acumulen para siempre -- el tick solo
+// cubre `pendiente`/`enviada`.
+describe('alertasVencidasParaExpirar', () => {
+  const HOY = '2026-08-06T10:00:00.000Z';
+
+  it('marca una `escalada` cuya escalada_at supera el umbral', () => {
+    const alertas = [
+      { id: 'a', estado: 'escalada' as EstadoAlertaHato, escalada_at: '2026-07-01T00:00:00.000Z', updated_at: '2026-07-01T00:00:00.000Z' },
+    ];
+    expect(alertasVencidasParaExpirar(alertas, HOY).map((a) => a.id)).toEqual(['a']);
+  });
+
+  it('NO marca una `escalada` reciente (dentro del umbral)', () => {
+    const alertas = [
+      { id: 'a', estado: 'escalada' as EstadoAlertaHato, escalada_at: '2026-08-01T00:00:00.000Z', updated_at: '2026-08-01T00:00:00.000Z' },
+    ];
+    expect(alertasVencidasParaExpirar(alertas, HOY)).toEqual([]);
+  });
+
+  it('para `respondida` usa `updated_at` como ancla (no tiene escalada_at)', () => {
+    const alertas = [
+      { id: 'a', estado: 'respondida' as EstadoAlertaHato, escalada_at: null, updated_at: '2026-07-01T00:00:00.000Z' },
+    ];
+    expect(alertasVencidasParaExpirar(alertas, HOY).map((a) => a.id)).toEqual(['a']);
+  });
+
+  it('ignora pendiente/enviada/confirmada/descartada/expirada -- esos son terreno del tick, no de esta regla', () => {
+    const viejo = '2026-01-01T00:00:00.000Z';
+    const alertas = (['pendiente', 'enviada', 'confirmada', 'descartada', 'expirada'] as EstadoAlertaHato[]).map((estado, i) => ({
+      id: `id-${i}`,
+      estado,
+      escalada_at: viejo,
+      updated_at: viejo,
+    }));
+    expect(alertasVencidasParaExpirar(alertas, HOY)).toEqual([]);
+  });
+
+  it('respeta un umbral distinto al default cuando se lo pasan', () => {
+    const alertas = [
+      { id: 'a', estado: 'escalada' as EstadoAlertaHato, escalada_at: '2026-08-01T00:00:00.000Z', updated_at: '2026-08-01T00:00:00.000Z' },
+    ];
+    // 5 días desde 08-01 hasta 08-06 -- por debajo del default (14) pero por
+    // encima de un umbral de 3.
+    expect(alertasVencidasParaExpirar(alertas, HOY, 3).map((a) => a.id)).toEqual(['a']);
+    expect(alertasVencidasParaExpirar(alertas, HOY, DIAS_EXPIRACION_ALERTA)).toEqual([]);
+  });
+
+  it('no muta el arreglo original', () => {
+    const alertas = [
+      { id: 'a', estado: 'escalada' as EstadoAlertaHato, escalada_at: '2026-07-01T00:00:00.000Z', updated_at: '2026-07-01T00:00:00.000Z' },
+    ];
+    const copia = [...alertas];
+    alertasVencidasParaExpirar(alertas, HOY);
+    expect(alertas).toEqual(copia);
   });
 });

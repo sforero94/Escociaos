@@ -15,6 +15,7 @@ import {
   calcularProductividad,
   detectarColisionesChapeta,
   calcularFechaUltimoDiaPesaje,
+  fechasPesajeMensuales,
   resolverQuincena,
   rangoQuincena,
   quincenaAnterior,
@@ -25,6 +26,7 @@ import {
   type EstadoActualHatoRow,
   type LecturaUltimaCria,
 } from '@/utils/calculosHato';
+import { clasificarCategoriaHato } from '@/utils/hatoCategorias';
 
 /**
  * Fixtures crudas verbatim de las 8 planillas reales del hato (2019-2026),
@@ -1496,6 +1498,156 @@ describe('derivarEstadoReproductivo', () => {
       expect(() => derivarEstadoReproductivo(fila, CONFIG_BASE, '2024-08-09')).not.toThrow();
     }
   });
+
+  describe('S3 §2.1 -- desempate determinista por avance de ciclo cuando dos eventos comparten fecha', () => {
+    // docs/plan_hato_ciclo_manual_override.md §2.1: en empate de fecha gana
+    // el evento MÁS avanzado (parto > secado_real > confirmacion > servicio),
+    // nunca "el insertado primero" (que era el comportamiento viejo, por
+    // `Array.prototype.sort` estable) ni `created_at`. Las cuatro
+    // combinaciones de empate adyacentes en la escala de prioridad, probadas
+    // una por una.
+
+    it('empate servicio/confirmacion en la misma fecha: gana confirmacion, no servicio (antes ganaba servicio)', () => {
+      const fila: EstadoActualHatoRow = {
+        ...filaBase,
+        ultimo_servicio_fecha: '2026-08-10',
+        ultima_confirmacion_prenez_fecha: '2026-08-10',
+      };
+      const r = derivarEstadoReproductivo(fila, CONFIG_BASE, '2026-08-10');
+      expect(r.estado).toBe('preñada');
+      expect(r.estado).not.toBe('servida');
+    });
+
+    it('empate servicio/secado_real en la misma fecha: gana secado_real -> estado seca (antes daba servida)', () => {
+      // Caso literal del criterio de aceptación #1 del diseño de S3: Martha
+      // marca "seca" hoy y el mismo día un chequeo deriva un `servicio` con
+      // esa fecha -- la vaca no puede seguir apareciendo en ordeño.
+      const fila: EstadoActualHatoRow = {
+        ...filaBase,
+        ultimo_servicio_fecha: '2026-08-10',
+        ultimo_secado_real_fecha: '2026-08-10',
+      };
+      const r = derivarEstadoReproductivo(fila, CONFIG_BASE, '2026-08-10');
+      expect(r.estado).toBe('seca');
+    });
+
+    it('empate confirmacion/secado_real en la misma fecha: gana secado_real', () => {
+      const fila: EstadoActualHatoRow = {
+        ...filaBase,
+        ultimo_servicio_fecha: '2024-05-14', // ancla anterior, no participa del empate
+        ultima_confirmacion_prenez_fecha: '2024-12-10',
+        ultimo_secado_real_fecha: '2024-12-10',
+      };
+      const r = derivarEstadoReproductivo(fila, CONFIG_BASE, '2024-12-20');
+      expect(r.estado).toBe('seca');
+    });
+
+    it('empate secado_real/parto en la misma fecha: gana parto -> estado parida_reciente', () => {
+      const fila: EstadoActualHatoRow = {
+        ...filaBase,
+        ultimo_secado_real_fecha: '2026-06-15',
+        ultimo_parto_fecha: '2026-06-15',
+      };
+      const r = derivarEstadoReproductivo(fila, CONFIG_BASE, '2026-06-15');
+      expect(r.estado).toBe('parida_reciente');
+      expect(r.dias_abiertos).toBe(0);
+    });
+  });
+
+  describe('S3 §2.2 -- confirmacion/secado_real sin servicio ancla ya no cae en indeterminado', () => {
+    // docs/plan_hato_ciclo_manual_override.md §2.2: antes, si el evento más
+    // reciente era confirmacion_prenez o secado_real y el animal no tenía
+    // NINGÚN servicio registrado, la función devolvía 'indeterminado', que
+    // `clasificarCategoriaHato` cuenta como `hato` (en ordeño) -- así que
+    // marcar `seca` no cerraba el lazo para esas vacas. Ahora se devuelve el
+    // estado real con las proyecciones (fecha_secar/fecha_probable_parto) en
+    // `null`, nunca una fecha inventada.
+
+    it('secado_real sin ancla de servicio: estado seca, proyecciones null, tiempo_secada_dias sí calculado, sin alertas basura (criterio 2)', () => {
+      const fila: EstadoActualHatoRow = {
+        ...filaBase,
+        ultimo_parto_fecha: '2026-01-15',
+        ultimo_servicio_fecha: null,
+        ultimo_secado_real_fecha: '2026-08-06',
+      };
+      const r = derivarEstadoReproductivo(fila, CONFIG_BASE, '2026-08-06');
+      expect(r.estado).toBe('seca');
+      expect(r.fecha_secar).toBeNull();
+      expect(r.fecha_probable_parto).toBeNull();
+      expect(r.tiempo_secada_dias).toBe(0);
+      expect(r.tiempo_prenez_dias).toBeNull();
+      expect(r.dias_abiertos).toBeNull();
+      expect(r.alertas.secado_due).toBe(false);
+      expect(r.alertas.parto_proximo).toBe(false);
+      expect(r.alertas.servicio_sin_confirmacion).toBe(false);
+      expect(r.vacia_es_problema).toBeNull();
+    });
+
+    it('confirmacion_prenez sin ancla de servicio: estado preñada, ambas fechas null, tiempo_prenez_dias null (criterio 3)', () => {
+      const fila: EstadoActualHatoRow = {
+        ...filaBase,
+        ultimo_servicio_fecha: null,
+        ultima_confirmacion_prenez_fecha: '2026-08-01',
+      };
+      const r = derivarEstadoReproductivo(fila, CONFIG_BASE, '2026-08-06');
+      expect(r.estado).toBe('preñada');
+      expect(r.fecha_secar).toBeNull();
+      expect(r.fecha_probable_parto).toBeNull();
+      expect(r.tiempo_prenez_dias).toBeNull();
+      expect(r.tiempo_secada_dias).toBeNull();
+      expect(r.alertas.secado_due).toBe(false);
+      expect(r.alertas.parto_proximo).toBe(false);
+    });
+
+    it('un evento posterior sin tipificar sigue ganando aunque no haya servicio ancla (el indeterminado legítimo no se pierde, criterio 4)', () => {
+      const fila: EstadoActualHatoRow = {
+        ...filaBase,
+        ultimo_servicio_fecha: null,
+        ultimo_secado_real_fecha: '2026-06-01',
+        ultimo_evento_fecha: '2026-06-15', // aborto/venta/muerte posterior, sin tipificar
+      };
+      const r = derivarEstadoReproductivo(fila, CONFIG_BASE, '2026-08-06');
+      expect(r.estado).toBe('indeterminado');
+    });
+  });
+
+  describe('S3 criterio 5 -- "cierra el lazo, medido": inyectar secado_real baja el conteo de categoria=hato exactamente en N', () => {
+    // docs/plan_hato_ciclo_manual_override.md §7, criterio 5. `hatoCategorias.ts`
+    // (UI) y `hato-aggregation.ts::categorizarAnimal` (Esco) NUNCA
+    // reimplementan este cálculo -- ambos clasifican 'horro' únicamente por
+    // `estadoReproductivo === 'seca'`, que sale de ESTA función. Como
+    // `hato-aggregation.ts` importa `derivarEstadoReproductivo` de la copia
+    // regenerada de `calculos-hato.ts` (byte-idéntica, ver
+    // calculosHatoParidad.test.ts), el fix de §2.2 propaga a Esco SIN tocar
+    // ese archivo -- por eso este test ejercita solo el motor + la
+    // clasificación de producto, no una copia paralela de la lógica.
+    it('N vacas sin servicio ancla, antes indeterminado (categoria=hato) -> tras marcar secado_real, categoria=horro en las N', () => {
+      const totalVacas = 5;
+      const marcadasSeca = new Set([1, 3]); // N=2 de las 5 reciben la marca manual
+      const vacas: EstadoActualHatoRow[] = Array.from({ length: totalVacas }, (_, i) => ({
+        ...filaBase,
+        // Sin ultimo_servicio_fecha (el caso real: producción tiene 1 de 35
+        // vacas activas en esta situación) y sin ningún candidato del ciclo
+        // -> hoy 'vacia_por_servir', ya categoría 'hato' antes de la marca.
+      }));
+
+      const categoriaAntes = vacas.map(
+        (fila) => clasificarCategoriaHato('vaca', derivarEstadoReproductivo(fila, CONFIG_BASE, '2026-08-06').estado),
+      );
+      expect(categoriaAntes.filter((c) => c === 'hato').length).toBe(totalVacas);
+      expect(categoriaAntes.filter((c) => c === 'horro').length).toBe(0);
+
+      const vacasConMarca = vacas.map((fila, i) =>
+        marcadasSeca.has(i) ? { ...fila, ultimo_secado_real_fecha: '2026-08-06' } : fila,
+      );
+      const categoriaDespues = vacasConMarca.map(
+        (fila) => clasificarCategoriaHato('vaca', derivarEstadoReproductivo(fila, CONFIG_BASE, '2026-08-06').estado),
+      );
+
+      expect(categoriaDespues.filter((c) => c === 'hato').length).toBe(totalVacas - marcadasSeca.size);
+      expect(categoriaDespues.filter((c) => c === 'horro').length).toBe(marcadasSeca.size);
+    });
+  });
 });
 
 describe('calcularProductividad', () => {
@@ -1587,6 +1739,50 @@ describe('calcularFechaUltimoDiaPesaje (S5 -- V2/D1, día de pesaje leído de ha
   it('cruza el límite de mes correctamente', () => {
     // 2026-08-01 es sábado; el miércoles anterior es 2026-07-29.
     expect(calcularFechaUltimoDiaPesaje('2026-08-01', 3)).toBe('2026-07-29');
+  });
+});
+
+describe('fechasPesajeMensuales (S5 ronda agosto 2026, D-9 -- planilla mensual de pesaje)', () => {
+  it('devuelve las 5 fechas de un mes con 5 miércoles (julio 2026)', () => {
+    expect(fechasPesajeMensuales(2026, 7, 3)).toEqual([
+      '2026-07-01',
+      '2026-07-08',
+      '2026-07-15',
+      '2026-07-22',
+      '2026-07-29',
+    ]);
+  });
+
+  it('devuelve solo 4 fechas en un mes con 4 miércoles (agosto 2026) -- nunca inventa una 5ª', () => {
+    expect(fechasPesajeMensuales(2026, 8, 3)).toEqual([
+      '2026-08-05',
+      '2026-08-12',
+      '2026-08-19',
+      '2026-08-26',
+    ]);
+  });
+
+  it('funciona con cualquier día configurado, no solo miércoles (nunca hardcodea el día)', () => {
+    // Enero 2026: el primer lunes es el día 5.
+    expect(fechasPesajeMensuales(2026, 1, 1)).toEqual([
+      '2026-01-05',
+      '2026-01-12',
+      '2026-01-19',
+      '2026-01-26',
+    ]);
+  });
+
+  it('respeta maxSemanas cuando se pide un tope menor a las ocurrencias reales', () => {
+    expect(fechasPesajeMensuales(2026, 7, 3, 4)).toEqual([
+      '2026-07-01',
+      '2026-07-08',
+      '2026-07-15',
+      '2026-07-22',
+    ]);
+  });
+
+  it('nunca cruza al mes siguiente, aunque maxSemanas pida más de las que existen', () => {
+    expect(fechasPesajeMensuales(2026, 8, 3, 10)).toHaveLength(4);
   });
 });
 

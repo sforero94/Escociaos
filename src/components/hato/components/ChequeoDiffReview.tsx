@@ -34,6 +34,7 @@
 
 import { useState } from 'react';
 import { AlertTriangle, Info, PencilLine, RotateCcw, UserPlus, Loader2 } from 'lucide-react';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { EstadoChip } from './EstadoChip';
 import { chipClasificacionDiff, chipNumeroProvisional } from '@/utils/hatoUi';
 import {
@@ -503,22 +504,18 @@ export function ChequeoDiffReview({
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
+        <ToggleGroup
+          type="single"
+          variant="outline"
+          value={filtro}
+          onValueChange={(v) => v && setFiltro(v as FiltroFilas)}
+        >
           {FILTROS.map((f) => (
-            <button
-              key={f.valor}
-              type="button"
-              onClick={() => setFiltro(f.valor)}
-              className={`px-3 py-1 text-xs rounded border ${
-                filtro === f.valor
-                  ? 'border-gray-300 text-gray-900 bg-green-50'
-                  : 'border-gray-200 text-gray-600 bg-white hover:bg-gray-50'
-              }`}
-            >
+            <ToggleGroupItem key={f.valor} value={f.valor} className="text-xs px-3">
               {f.etiqueta}
-            </button>
+            </ToggleGroupItem>
           ))}
-        </div>
+        </ToggleGroup>
         <p className="text-xs text-gray-500">
           {filasVisibles.length} de {resumen.totalFilas} fila(s)
           {resumenCorrecciones.camposCorregidos > 0 && (

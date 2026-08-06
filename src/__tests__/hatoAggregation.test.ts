@@ -18,6 +18,9 @@ import {
   buildAnimalFicha,
   buildReproduccionSummary,
   buildProduccionSummary,
+  calcularEdadMeses,
+  calcularSubetapaTernera,
+  construirUmbralesCategoriaHatoDesdeFilas,
   type HatoAnimalRow,
   type HatoToroRow,
   type HatoEstadoActualRow,
@@ -25,6 +28,7 @@ import {
   type HatoChequeoVacaDetalleRow,
   type HatoPesajeRow,
   type HatoProduccionQuincenalDbRow,
+  type UmbralesCategoriaHato,
   resolverLitrosQuincenal,
 } from '../supabase/functions/server/hato-aggregation';
 import type { HatoConfig } from '../supabase/functions/server/calculos-hato';
@@ -40,6 +44,13 @@ const CONFIG_BASE: HatoConfig = {
   dias_servicio_sin_confirmacion: 45,
   dias_espera_voluntaria_post_parto: 60,
   dias_rechequeo_due: 60,
+};
+
+// S6 (D-13): umbrales de edad para las categorías calculadas, fuera de
+// HatoConfig a propósito (ver cabecera de hato-aggregation.ts).
+const UMBRALES_CATEGORIA_BASE: UmbralesCategoriaHato = {
+  meses_ternera_leche_max: 3,
+  meses_ternera_max: 12,
 };
 
 function animalBase(overrides: Partial<HatoAnimalRow> = {}): HatoAnimalRow {
@@ -81,6 +92,15 @@ function estadoBase(overrides: Partial<HatoEstadoActualRow> = {}): HatoEstadoAct
     ultima_confirmacion_prenez_fecha: null,
     ultimo_evento_fecha: null,
     ultimo_estado_chequeo: null,
+    // Irrelevante para las filas con num_partos >= 1 (la regla D-13 las
+    // clasifica "vaca" por el 1er parto, nunca por edad) -- mismo default
+    // que `animalBase()`. Las filas que SÍ ejercitan el cálculo por edad
+    // (ternera/novilla, num_partos: 0) traen su propio override explícito.
+    fecha_nacimiento: '2019-03-01',
+    // Corrección de precedencia (092, 2026-08-06): false por defecto -- el
+    // cálculo manda, mismo comportamiento que antes de la corrección. Las
+    // filas que SÍ ejercitan el override forzado lo traen explícito.
+    etapa_forzada: false,
     ...overrides,
   };
 }
@@ -213,18 +233,46 @@ describe('buildAnimalFicha', () => {
 
 describe('buildReproduccionSummary', () => {
   it('hato vacío: totales y listas en cero/vacío, nunca undefined', () => {
-    const summary = buildReproduccionSummary([], CONFIG_BASE, '2024-08-09');
+    const summary = buildReproduccionSummary([], CONFIG_BASE, UMBRALES_CATEGORIA_BASE, '2024-08-09');
     expect(summary.total_animales).toBe(0);
-    expect(summary.categorias).toEqual({ terneras: 0, novillas: 0, hato_ordeno: 0, horro: 0, toros: 0 });
+    expect(summary.categorias).toEqual({
+      terneras: 0,
+      terneras_leche: 0,
+      terneras_concentrado: 0,
+      terneras_edad_sin_calcular: 0,
+      novillas: 0,
+      hato_ordeno: 0,
+      horro: 0,
+      toros: 0,
+    });
     expect(summary.proximos_partos).toEqual([]);
     expect(summary.proximas_a_secar).toEqual([]);
     expect(summary.inactivos).toEqual({ vendidas: 0, muertas: 0, descartadas: 0 });
   });
 
-  it('categoriza terneras, novillas, hato en ordeño (incl. próxima a secar), horro (solo secas) y toros por separado', () => {
+  it('categoriza terneras (CALCULADA por edad, D-13), novillas, hato en ordeño (incl. próxima a secar), horro (solo secas) y toros por separado', () => {
     const filas: HatoEstadoActualRow[] = [
-      estadoBase({ animal_id: 't1', numero: 200, nombre: 'TERNERA1', etapa: 'ternera', num_partos: 0 }),
-      estadoBase({ animal_id: 'n1', numero: 201, nombre: 'NOVILLA1', etapa: 'novilla', num_partos: 0 }),
+      // Ternera: sin partos, 2 meses (< meses_ternera_leche_max=3) referida
+      // a 2024-12-01 -> ternera/leche. etapa='vaca' A PROPÓSITO: D-13
+      // manda que el cálculo por edad gane sobre el campo manual cuando
+      // SÍ se puede resolver la edad.
+      estadoBase({
+        animal_id: 't1',
+        numero: 200,
+        nombre: 'TERNERA1',
+        etapa: 'vaca',
+        num_partos: 0,
+        fecha_nacimiento: '2024-10-01',
+      }),
+      // Novilla: sin partos, ~23 meses (>= meses_ternera_max=12) -> novilla.
+      estadoBase({
+        animal_id: 'n1',
+        numero: 201,
+        nombre: 'NOVILLA1',
+        etapa: 'vaca',
+        num_partos: 0,
+        fecha_nacimiento: '2023-01-01',
+      }),
       // servida (ordeño): servicio reciente, lejos de secar
       estadoBase({ animal_id: 'o1', numero: 47, nombre: 'MONA', ultimo_servicio_fecha: '2024-08-01' }),
       // próxima a secar: sigue en ordeño -> cuenta en "hato", no en "horro"
@@ -243,14 +291,32 @@ describe('buildReproduccionSummary', () => {
       // vendida: no cuenta en categorías activas
       estadoBase({ animal_id: 'v1', numero: 99, nombre: 'VENDIDA', estado: 'vendida' }),
     ];
-    const summary = buildReproduccionSummary(filas, CONFIG_BASE, '2024-12-01');
+    const summary = buildReproduccionSummary(filas, CONFIG_BASE, UMBRALES_CATEGORIA_BASE, '2024-12-01');
     expect(summary.total_animales).toBe(7);
     expect(summary.categorias.terneras).toBe(1);
+    expect(summary.categorias.terneras_leche).toBe(1);
+    expect(summary.categorias.terneras_concentrado).toBe(0);
     expect(summary.categorias.novillas).toBe(1);
     expect(summary.categorias.hato_ordeno).toBe(2);
     expect(summary.categorias.horro).toBe(1);
     expect(summary.categorias.toros).toBe(1);
     expect(summary.inactivos.vendidas).toBe(1);
+  });
+
+  it('D-13: sin partos y sin fecha_nacimiento utilizable, cae al override manual (etapa) -- nunca se inventa una edad', () => {
+    const filas: HatoEstadoActualRow[] = [
+      estadoBase({
+        animal_id: 'o1',
+        numero: 300,
+        nombre: 'SINFECHA',
+        etapa: 'novilla',
+        num_partos: 0,
+        fecha_nacimiento: null,
+      }),
+    ];
+    const summary = buildReproduccionSummary(filas, CONFIG_BASE, UMBRALES_CATEGORIA_BASE, '2024-12-01');
+    expect(summary.categorias.novillas).toBe(1);
+    expect(summary.categorias.terneras).toBe(0);
   });
 
   it('próximos partos y próximas a secar respetan las ventanas del tablero, ordenados por días restantes', () => {
@@ -260,7 +326,7 @@ describe('buildReproduccionSummary', () => {
       // PP ~2025-05-01 (servicio 2024-08-01); con la misma referencia quedan ~100 días -> fuera de la ventana
       estadoBase({ animal_id: 'p2', numero: 2, nombre: 'LEJOS', ultimo_servicio_fecha: '2024-08-01' }),
     ];
-    const summary = buildReproduccionSummary(filas, CONFIG_BASE, '2025-01-20');
+    const summary = buildReproduccionSummary(filas, CONFIG_BASE, UMBRALES_CATEGORIA_BASE, '2025-01-20');
     const numerosPartos = summary.proximos_partos.map((p) => p.numero);
     expect(numerosPartos).toContain(1);
     expect(numerosPartos).not.toContain(2);
@@ -273,15 +339,140 @@ describe('buildReproduccionSummary', () => {
       // vacía con último chequeo explícito "vacia_problema"
       estadoBase({ animal_id: 'w1', numero: 11, ultimo_estado_chequeo: 'vacia_problema' }),
     ];
-    const summary = buildReproduccionSummary(filas, CONFIG_BASE, '2024-08-09');
+    const summary = buildReproduccionSummary(filas, CONFIG_BASE, UMBRALES_CATEGORIA_BASE, '2024-08-09');
     expect(summary.alertas_activas.servicio_sin_confirmacion).toBeGreaterThanOrEqual(1);
     expect(summary.vacias_problema).toContainEqual({ numero: 11, nombre: 'MONA', estado_reproductivo: 'vacia_por_servir' });
   });
 
   it('próxima a reemplazo cuando num_partos alcanza el umbral de config', () => {
     const filas: HatoEstadoActualRow[] = [estadoBase({ animal_id: 'r1', numero: 20, num_partos: 9 })];
-    const summary = buildReproduccionSummary(filas, CONFIG_BASE, '2024-08-09');
+    const summary = buildReproduccionSummary(filas, CONFIG_BASE, UMBRALES_CATEGORIA_BASE, '2024-08-09');
     expect(summary.proximas_a_reemplazo).toEqual([{ numero: 20, nombre: 'MONA', num_partos: 9 }]);
+  });
+
+  // ==========================================================================
+  // Corrección de precedencia (2026-08-06, migración 092): etapa_forzada
+  // gana SIEMPRE sobre el cálculo -- mismo criterio que hatoCategorias.ts.
+  // ==========================================================================
+
+  it('etapa_forzada=true gana aunque fecha_nacimiento sea perfectamente calculable', () => {
+    const filas: HatoEstadoActualRow[] = [
+      // Sin la marca, esto calcularía "terneras" (2 meses referida a
+      // 2024-12-01) -- exactamente el caso que la corrección arregla: una
+      // fecha_nacimiento presente pero mal digitada.
+      estadoBase({
+        animal_id: 'f1',
+        numero: 400,
+        nombre: 'FORZADA1',
+        etapa: 'novilla',
+        num_partos: 0,
+        fecha_nacimiento: '2024-10-01',
+        etapa_forzada: true,
+      }),
+    ];
+    const summary = buildReproduccionSummary(filas, CONFIG_BASE, UMBRALES_CATEGORIA_BASE, '2024-12-01');
+    expect(summary.categorias.novillas).toBe(1);
+    expect(summary.categorias.terneras).toBe(0);
+  });
+
+  it('etapa_forzada=true gana incluso con num_partos >= 1 (que sin forzar SIEMPRE sería "vaca")', () => {
+    const filas: HatoEstadoActualRow[] = [
+      estadoBase({
+        animal_id: 'f2',
+        numero: 401,
+        nombre: 'FORZADA2',
+        etapa: 'ternera',
+        num_partos: 3,
+        etapa_forzada: true,
+      }),
+    ];
+    const summary = buildReproduccionSummary(filas, CONFIG_BASE, UMBRALES_CATEGORIA_BASE, '2024-12-01');
+    expect(summary.categorias.terneras).toBe(1);
+    expect(summary.categorias.hato_ordeno).toBe(0);
+    expect(summary.categorias.horro).toBe(0);
+  });
+
+  it('etapa_forzada=true con etapa manual "vaca" cae en hato_ordeno u horro según el estado reproductivo, igual que un animal no forzado', () => {
+    const filas: HatoEstadoActualRow[] = [
+      estadoBase({
+        animal_id: 'f3',
+        numero: 402,
+        nombre: 'FORZADA3',
+        etapa: 'vaca',
+        num_partos: 0,
+        fecha_nacimiento: null,
+        etapa_forzada: true,
+        ultimo_servicio_fecha: '2024-05-14',
+        ultimo_secado_real_fecha: '2024-11-25',
+      }),
+    ];
+    const summary = buildReproduccionSummary(filas, CONFIG_BASE, UMBRALES_CATEGORIA_BASE, '2024-12-01');
+    expect(summary.categorias.horro).toBe(1);
+  });
+
+  // ==========================================================================
+  // Bugfix (2026-08-06, reconciliación chip/pestaña, mismo bug corregido en
+  // hatoCategorias.ts::clasificarAnimalHato -- ver ese archivo para el
+  // reporte original). `por_estado_reproductivo` venía de alimentar
+  // `derivarEstadoReproductivo` con `fila.etapa` CRUDA mientras `categorias`
+  // ya usaba la etapa CALCULADA -- un animal calculado como "terneras" por
+  // edad, con `etapa` manual todavía en "novilla" sin corregir, contaba
+  // como `novilla` en `por_estado_reproductivo` mientras `categorias.terneras`
+  // ya lo tenía bien. Esco no puede reportar ese mismo desacuerdo.
+  // ==========================================================================
+
+  it('por_estado_reproductivo usa la MISMA etapa calculada que categorias -- una ternera calculada por edad (etapa manual "novilla" sin corregir) nunca cuenta como "novilla"', () => {
+    const filas: HatoEstadoActualRow[] = [
+      estadoBase({
+        animal_id: 't2',
+        numero: 500,
+        nombre: 'TERNERANOVILLA',
+        etapa: 'novilla', // manual, todavía sin corregir
+        num_partos: 0,
+        fecha_nacimiento: '2024-10-01', // 2 meses a 2024-12-01 -> ternera
+        etapa_forzada: false,
+      }),
+    ];
+    const summary = buildReproduccionSummary(filas, CONFIG_BASE, UMBRALES_CATEGORIA_BASE, '2024-12-01');
+
+    expect(summary.categorias.terneras).toBe(1);
+    expect(summary.categorias.novillas).toBe(0);
+    expect(summary.por_estado_reproductivo.novilla).toBeUndefined();
+    expect(summary.por_estado_reproductivo.cria).toBe(1);
+  });
+});
+
+// ============================================================================
+// S6 (D-13) -- calcularEdadMeses / calcularSubetapaTernera /
+// construirUmbralesCategoriaHatoDesdeFilas (implementación independiente de
+// `hatoCategorias.ts`, mismo contrato)
+// ============================================================================
+
+describe('calcularEdadMeses (hato-aggregation)', () => {
+  it('null si fecha_nacimiento es null, no parseable, o futura', () => {
+    expect(calcularEdadMeses(null, '2026-08-06')).toBeNull();
+    expect(calcularEdadMeses('no es una fecha', '2026-08-06')).toBeNull();
+    expect(calcularEdadMeses('2027-01-01', '2026-08-06')).toBeNull();
+  });
+
+  it('calcula meses completos, nunca negativo', () => {
+    expect(calcularEdadMeses('2026-05-06', '2026-08-06')).toBe(3);
+    expect(calcularEdadMeses('2026-08-06', '2026-08-06')).toBe(0);
+  });
+});
+
+describe('calcularSubetapaTernera (hato-aggregation)', () => {
+  it('respeta el corte de meses_ternera_leche_max, estrictamente menor que', () => {
+    expect(calcularSubetapaTernera(2, UMBRALES_CATEGORIA_BASE)).toBe('leche');
+    expect(calcularSubetapaTernera(3, UMBRALES_CATEGORIA_BASE)).toBe('concentrado');
+  });
+});
+
+describe('construirUmbralesCategoriaHatoDesdeFilas (hato-aggregation)', () => {
+  it('lanza si falta una clave -- nunca un default inventado', () => {
+    expect(() => construirUmbralesCategoriaHatoDesdeFilas([{ clave: 'meses_ternera_max', valor: 12 }])).toThrow(
+      /meses_ternera_leche_max/,
+    );
   });
 });
 

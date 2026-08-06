@@ -20,7 +20,12 @@
 // divergir.
 
 import { chipEstadoAlerta, type ChipEstilo } from '@/utils/hatoUi';
-import type { TipoAlertaHato, EstadoAlertaHato } from '@/utils/hatoAlertas';
+import {
+  DIAS_EXPIRACION_ALERTA,
+  decidirExpiracionTerminal,
+  type TipoAlertaHato,
+  type EstadoAlertaHato,
+} from '@/utils/hatoAlertas';
 
 export type { TipoAlertaHato, EstadoAlertaHato };
 
@@ -152,3 +157,51 @@ export function chipRespuestaAlerta(respuesta: string | null): ChipEstilo | null
 }
 
 export { chipEstadoAlerta };
+
+// ============================================================================
+// Expiración automática de alertas "atascadas" (T3a, ronda agosto 2026;
+// S6/D-24 llevó la MISMA regla al tick diario -- ver nota abajo)
+// ============================================================================
+//
+// Hasta S6, el motor del tick (`decidirAccionEscalamiento`, `hatoAlertas.ts`)
+// solo podía escalar o expirar alertas en `pendiente`/`enviada` -- una vez
+// que una alerta llegaba a `escalada` (48h sin respuesta) o `respondida`
+// (Fernando contestó "no"/"otro"), NINGÚN mecanismo automático volvía a
+// tocarla; se quedaba ahí para siempre salvo que un humano la cerrara a mano
+// desde "Revisión semanal". Con `hato_alertas_config.destinatario_telegram_id`
+// en NULL desde julio (CLAUDE.md, "LAZO ABIERTO"), eso es exactamente lo que
+// pasó: 39 alertas `escalada` acumuladas sin que nadie las revisara.
+//
+// Esta regla identifica esas alertas "vencidas" para que la vista pueda
+// ofrecer "Expirar automáticamente" como una ACCIÓN EXPLÍCITA y reversible
+// -- reversible en el sentido de que requiere una confirmación humana antes
+// de escribir nada, nunca se dispara sola al cargar la página.
+//
+// D-24 (docs/plan_hato_ronda_agosto_2026.md §0, S6): la MISMA regla ahora
+// también corre sola en el tick diario -- `decidirExpiracionTerminal`
+// (`hatoAlertas.ts`, el motor protegido por paridad de 3 copias). Esta
+// función DELEGA en esa (una sola definición de "atascada" en todo el
+// módulo, nunca dos que puedan divergir) en vez de reimplementar el cálculo
+// de días como antes de D-24 -- el botón manual de esta vista sigue
+// existiendo para lo que el tick automático deje pendiente entre corridas
+// (o para adelantarse a la próxima), pero ya no es el ÚNICO camino.
+
+export interface AlertaParaExpiracionAutomatica {
+  id: string;
+  estado: EstadoAlertaHato;
+  escalada_at: string | null;
+  updated_at: string;
+}
+
+/** Alertas `escalada`/`respondida` que llevan más de `diasUmbral` días
+ * (default `DIAS_EXPIRACION_ALERTA`, el mismo del motor) sin que nadie las
+ * cierre. `pendiente`/`enviada` quedan fuera a propósito: esas SÍ las cubre
+ * el tick diario (`decidirAccionEscalamiento`) -- esta regla es solo para
+ * los dos estados terminales. */
+export function alertasVencidasParaExpirar<T extends AlertaParaExpiracionAutomatica>(
+  alertas: readonly T[],
+  fechaHoraReferencia: string,
+  diasUmbral: number = DIAS_EXPIRACION_ALERTA,
+): T[] {
+  return alertas.filter((a) => decidirExpiracionTerminal(a, fechaHoraReferencia, diasUmbral));
+}

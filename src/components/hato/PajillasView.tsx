@@ -14,8 +14,8 @@
 // tablas `hato_*`, patrón 044) -- otros roles ven las mismas tablas en
 // solo-lectura, igual que `GanadoDashboard.tsx`/`GanadoMovimientos.tsx`.
 
-import { useEffect, useState } from 'react';
-import { Loader2, AlertTriangle, Plus, Pencil, Syringe } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Loader2, AlertTriangle, Plus, Pencil, Syringe, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EstadoChip } from './components/EstadoChip';
 import { chipStockPajillas } from '@/utils/hatoUi';
@@ -25,11 +25,50 @@ import { useHatoPajillas } from './hooks/useHatoPajillas';
 import { ToroFormDialog } from './components/ToroFormDialog';
 import { PajillaCompraDialog } from './components/PajillaCompraDialog';
 import { PajillaUsoDialog } from './components/PajillaUsoDialog';
+import { ordenarPorValor, type DireccionOrdenAnimales as DireccionOrden } from '@/utils/ordenarAnimalesHato';
 import type { HatoToroRow } from '@/types/hato';
+
+type ColumnaOrdenableToros = 'nombre' | 'tipo' | 'raza';
+
+function CabeceraOrdenableToro({
+  label,
+  columna,
+  ordenActual,
+  onOrdenar,
+}: {
+  label: string;
+  columna: ColumnaOrdenableToros;
+  ordenActual: { columna: ColumnaOrdenableToros; direccion: DireccionOrden };
+  onOrdenar: (columna: ColumnaOrdenableToros) => void;
+}) {
+  const activa = ordenActual.columna === columna;
+  return (
+    <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">
+      <button
+        type="button"
+        onClick={() => onOrdenar(columna)}
+        className={`inline-flex items-center gap-1 hover:text-gray-900 ${activa ? 'text-gray-900' : ''}`}
+      >
+        {label}
+        {activa ? (
+          ordenActual.direccion === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+        ) : (
+          <ChevronsUpDown className="w-3 h-3 text-gray-300" />
+        )}
+      </button>
+    </th>
+  );
+}
 
 const LABEL_TIPO: Record<string, string> = {
   monta: 'Monta',
   inseminacion: 'Inseminación',
+};
+
+const EXTRACTORES_TORO: Record<ColumnaOrdenableToros, (t: HatoToroRow) => string | null> = {
+  nombre: (t) => t.nombre,
+  tipo: (t) => t.tipo,
+  raza: (t) => t.raza,
 };
 
 export function PajillasView() {
@@ -51,6 +90,25 @@ export function PajillasView() {
   const [dialogToro, setDialogToro] = useState<{ open: boolean; toro: HatoToroRow | null }>({ open: false, toro: null });
   const [dialogCompra, setDialogCompra] = useState(false);
   const [dialogUso, setDialogUso] = useState<{ open: boolean; pajillaId: string | null }>({ open: false, pajillaId: null });
+
+  // Alfabético por defecto (T2, ronda agosto 2026); `useHatoToros` ya trae
+  // el catálogo ordenado por `nombre`, este estado solo habilita reordenar
+  // desde la UI sin volver a pedir los datos.
+  const [ordenToros, setOrdenToros] = useState<{ columna: ColumnaOrdenableToros; direccion: DireccionOrden }>({
+    columna: 'nombre',
+    direccion: 'asc',
+  });
+  const handleOrdenarToros = (columna: ColumnaOrdenableToros) => {
+    setOrdenToros((prev) =>
+      prev.columna === columna
+        ? { columna, direccion: prev.direccion === 'asc' ? 'desc' : 'asc' }
+        : { columna, direccion: 'asc' },
+    );
+  };
+  const torosOrdenados = useMemo(
+    () => ordenarPorValor(toros, EXTRACTORES_TORO[ordenToros.columna], ordenToros.direccion),
+    [toros, ordenToros],
+  );
 
   useEffect(() => {
     recargarToros();
@@ -108,15 +166,15 @@ export function PajillasView() {
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Nombre</th>
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Tipo</th>
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Raza</th>
+                        <CabeceraOrdenableToro label="Nombre" columna="nombre" ordenActual={ordenToros} onOrdenar={handleOrdenarToros} />
+                        <CabeceraOrdenableToro label="Tipo" columna="tipo" ordenActual={ordenToros} onOrdenar={handleOrdenarToros} />
+                        <CabeceraOrdenableToro label="Raza" columna="raza" ordenActual={ordenToros} onOrdenar={handleOrdenarToros} />
                         <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Estado</th>
                         {puedeEscribir && <th className="px-3 py-2.5" />}
                       </tr>
                     </thead>
                     <tbody>
-                      {toros.map((t, i) => (
+                      {torosOrdenados.map((t, i) => (
                         <tr key={t.id} className={`border-t border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                           <td className="px-3 py-2.5 whitespace-nowrap font-medium">{t.nombre}</td>
                           <td className="px-3 py-2.5 whitespace-nowrap text-gray-600">{t.tipo ? LABEL_TIPO[t.tipo] ?? t.tipo : '—'}</td>

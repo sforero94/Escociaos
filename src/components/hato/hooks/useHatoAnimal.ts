@@ -15,6 +15,7 @@ import { obtenerFechaHoy } from '@/utils/fechas';
 import type {
   EstadoActualHatoViewRow,
   HatoAnimalRow,
+  HatoCorreccionRow,
   HatoEventoRow,
   HatoChequeoVacaRow,
   HatoChequeoRow,
@@ -49,6 +50,12 @@ export interface HatoAnimalDetalle {
    * solo el `padre_toro_id` de la ficha. Catálogo pequeño (G4/V12), se trae
    * completo sin paginar. */
   nombresToroPorId: Record<string, string>;
+  /** Traza de `hato_correcciones` (migración 084, S3 T4b) para ESTE animal,
+   * `corregido_en DESC` (hay índice para ese orden) -- `HistorialCorreccionesCard`. */
+  correcciones: HatoCorreccionRow[];
+  /** `usuarios.id -> nombre_completo`, para resolver `corregido_por` en el
+   * historial de correcciones (mismo patrón que `GastosList.tsx`). */
+  nombrePorUsuarioId: Record<string, string>;
 }
 
 function filaFactRow(
@@ -119,6 +126,8 @@ export function useHatoAnimal(animalId: string | undefined) {
         madreRes,
         padreToroRes,
         padreAnimalRes,
+        correccionesRes,
+        usuariosRes,
       ] = await Promise.all([
         supabase.from('hato_config').select('clave, valor'),
         supabase.from('v_hato_estado_actual').select('*').eq('animal_id', animalId).maybeSingle(),
@@ -139,6 +148,17 @@ export function useHatoAnimal(animalId: string | undefined) {
         animalRow.padre_id
           ? supabase.from('hato_animales').select('id, numero, nombre').eq('id', animalRow.padre_id).maybeSingle()
           : Promise.resolve({ data: null, error: null }),
+        // T4b (S3, migración 084) -- traza de correcciones de este animal,
+        // más reciente primero (índice (animal_id, corregido_en DESC)).
+        supabase
+          .from('hato_correcciones')
+          .select('*')
+          .eq('animal_id', animalId)
+          .order('corregido_en', { ascending: false }),
+        // Resuelve `corregido_por` a un nombre -- mismo patrón que
+        // `GastosList.tsx`. Sin filtrar por `activo`: un corrector desde
+        // entonces desactivado igual debe verse en el historial.
+        supabase.from('usuarios').select('id, nombre_completo'),
       ]);
 
       if (configRes.error) throw configRes.error;
@@ -147,6 +167,11 @@ export function useHatoAnimal(animalId: string | undefined) {
       if (chequeoVacasRes.error) throw chequeoVacasRes.error;
       if (criasRes.error) throw criasRes.error;
       if (torosRes.error) throw torosRes.error;
+      // Correcciones/usuarios se degradan a "sin historial" en vez de
+      // tumbar toda la ficha -- el historial de correcciones es información
+      // secundaria, no debe bloquear ver la ficha del animal.
+      if (correccionesRes.error) console.error('Error cargando hato_correcciones:', correccionesRes.error);
+      if (usuariosRes.error) console.error('Error cargando usuarios:', usuariosRes.error);
 
       const config = construirHatoConfigDesdeFilas((configRes.data ?? []) as FilaHatoConfig[]);
       const hoy = obtenerFechaHoy();
@@ -183,6 +208,10 @@ export function useHatoAnimal(animalId: string | undefined) {
         crias: (criasRes.data ?? []) as AnimalRelacionado[],
         nombresToroPorId: Object.fromEntries(
           ((torosRes.data ?? []) as { id: string; nombre: string }[]).map((t) => [t.id, t.nombre]),
+        ),
+        correcciones: (correccionesRes.data ?? []) as HatoCorreccionRow[],
+        nombrePorUsuarioId: Object.fromEntries(
+          ((usuariosRes.data ?? []) as { id: string; nombre_completo: string }[]).map((u) => [u.id, u.nombre_completo]),
         ),
       });
     } catch (err) {

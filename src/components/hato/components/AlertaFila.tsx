@@ -10,9 +10,15 @@
 // el corral, y un número provisional no es esa caravana. Con número
 // definitivo, número + nombre van juntos (plan §6 Épica C: "número +
 // nombre siempre juntos").
+//
+// `seleccionable`/`seleccionada`/`onToggleSeleccion` (T3a, ronda agosto
+// 2026): checkbox opcional para el descarte masivo de `AlertasView.tsx` --
+// solo se renderiza cuando el padre lo pasa (canWrite), mismo patrón de
+// gating que las acciones Confirmar/Descartar de abajo.
 
 import { Loader2, Droplet, Syringe, Repeat, HelpCircle, Baby } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { EstadoChip } from './EstadoChip';
 import { chipEstadoAlerta } from '@/utils/hatoUi';
 import {
@@ -56,28 +62,52 @@ export interface AlertaFilaProps {
   canWrite: boolean;
   actuando: boolean;
   onCambiarEstado?: (id: string, estado: EstadoAlertaHato) => void;
+  /** T3a -- descarte masivo. Los tres vienen juntos: sin `onToggleSeleccion`
+   * no se renderiza checkbox, ni siquiera si `seleccionable` es `true`. */
+  seleccionable?: boolean;
+  seleccionada?: boolean;
+  onToggleSeleccion?: (id: string) => void;
 }
 
-export function AlertaFila({ alerta, canWrite, actuando, onCambiarEstado }: AlertaFilaProps) {
+export function AlertaFila({
+  alerta,
+  canWrite,
+  actuando,
+  onCambiarEstado,
+  seleccionable = false,
+  seleccionada = false,
+  onToggleSeleccion,
+}: AlertaFilaProps) {
   const chipRespuesta = chipRespuestaAlerta(alerta.respuesta);
   const puedeResolver = canWrite && (alerta.estado === 'respondida' || alerta.estado === 'escalada' || alerta.estado === 'expirada');
   const IconoTipo = ICONO_TIPO_ALERTA[alerta.tipo];
+  const mostrarCheckbox = seleccionable && canWrite && !!onToggleSeleccion;
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2 mb-1">
-          <IconoTipo className="w-4 h-4 text-gray-400 flex-shrink-0" aria-hidden="true" />
-          <span className="text-sm font-semibold text-gray-900">{LABEL_TIPO_ALERTA_HATO[alerta.tipo]}</span>
-          <EstadoChip chip={chipEstadoAlerta(alerta.estado)} />
-          {chipRespuesta && <EstadoChip chip={chipRespuesta} />}
+      <div className="flex items-start gap-3 min-w-0">
+        {mostrarCheckbox && (
+          <Checkbox
+            checked={seleccionada}
+            onCheckedChange={() => onToggleSeleccion?.(alerta.id)}
+            aria-label={`Seleccionar alerta de ${identidadAnimal(alerta)}`}
+            className="mt-1 flex-shrink-0"
+          />
+        )}
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2 mb-1">
+            <IconoTipo className="w-4 h-4 text-gray-400 flex-shrink-0" aria-hidden="true" />
+            <span className="text-sm font-semibold text-gray-900">{LABEL_TIPO_ALERTA_HATO[alerta.tipo]}</span>
+            <EstadoChip chip={chipEstadoAlerta(alerta.estado)} />
+            {chipRespuesta && <EstadoChip chip={chipRespuesta} />}
+          </div>
+          <p className="text-sm text-gray-600 truncate">{identidadAnimal(alerta)}</p>
+          <p className="text-xs text-gray-500 mt-1">
+            Programada: {formatearFecha(alerta.fecha_programada)}
+            {alerta.intentos > 0 && ` · Intentos: ${alerta.intentos}`}
+            {alerta.respondida_por && ` · Resuelta por: ${alerta.respondida_por}`}
+          </p>
         </div>
-        <p className="text-sm text-gray-600 truncate">{identidadAnimal(alerta)}</p>
-        <p className="text-xs text-gray-500 mt-1">
-          Programada: {formatearFecha(alerta.fecha_programada)}
-          {alerta.intentos > 0 && ` · Intentos: ${alerta.intentos}`}
-          {alerta.respondida_por && ` · Resuelta por: ${alerta.respondida_por}`}
-        </p>
       </div>
 
       {puedeResolver && onCambiarEstado && (

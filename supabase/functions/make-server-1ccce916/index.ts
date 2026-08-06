@@ -11,6 +11,9 @@ import { handleClimaSync, handleClimaBackfill, handleClimaForecast } from "./cli
 import { handleHatoChequeoPreview } from "./hato-chequeo-preview.ts";
 import { handleHatoChequeoCommit } from "./hato-chequeo-commit.ts";
 import { handleHatoChequeoFoto } from "./hato-chequeo-foto.ts";
+import { handleHatoProduccionQuincenaFoto } from "./hato-produccion-quincena-foto.ts";
+import { handleHatoPesajeFoto } from "./hato-pesaje-foto.ts";
+import { handleHatoPesajeCommit } from "./hato-pesaje-commit.ts";
 import { handleHatoAlertasTick } from "./hato-alertas-tick.ts";
 import { handleWebhook } from "./telegram/bot.ts";
 
@@ -160,6 +163,33 @@ app.post("/make-server-1ccce916/hato/chequeo/commit", async (c) => {
 // tablas de dominio; sí guarda las fotos en Storage (capa cruda).
 app.post("/make-server-1ccce916/hato/chequeo/foto", async (c) => {
   return await handleHatoChequeoFoto(c);
+});
+
+// Hato Lechero: S4 (ronda agosto 2026, D-8) -- carga de la liquidación
+// quincenal de El Pomar POR FOTO (OCR con modelo de visión). Nunca escribe
+// en tablas de dominio; devuelve los campos interpretados para que el
+// formulario de Producción los revise/corrija antes de guardar por
+// fn_hato_guardar_quincena_venta (migración 085).
+app.post("/make-server-1ccce916/hato/produccion/quincena/foto", async (c) => {
+  return await handleHatoProduccionQuincenaFoto(c);
+});
+
+// Hato Lechero: S5 (ronda agosto 2026) -- carga de la planilla MENSUAL de
+// pesaje POR FOTO (OCR con modelo de visión, ancla por NOMBRE -- D-1, esta
+// planilla nunca llevó chapeta). Nunca escribe en tablas de dominio; devuelve
+// un diff por (vaca, semana) para revisión. Guarda las fotos en Storage
+// (capa cruda).
+app.post("/make-server-1ccce916/hato/pesaje/foto", async (c) => {
+  return await handleHatoPesajeFoto(c);
+});
+
+// Hato Lechero: S5 commit path -- "Aprobar" el diff de arriba. Revalida cada
+// celda (vaca sigue activa, fecha sigue siendo una semana de pesaje real)
+// contra el estado fresco y escribe en hato_pesajes_leche (UPDATE-por-id +
+// INSERT). Cada celda es un hecho independiente: una inválida no bota a las
+// demás.
+app.post("/make-server-1ccce916/hato/pesaje/commit", async (c) => {
+  return await handleHatoPesajeCommit(c);
 });
 
 // Hato Lechero: motor de alertas (S6, plan §7.3) -- tick diario disparado

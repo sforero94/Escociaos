@@ -781,3 +781,105 @@ input[type='number'] {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ============================================================
+   Toggle / ToggleGroup (src/components/ui/toggle.tsx,
+   src/components/ui/toggle-group.tsx) — UI audit, hato/MarcarCicloDialog.tsx
+   (selector "Marca": Preñada/Confirmada/Seca/Parida).
+   El primitivo compartido depende de varias utilidades que faltan en el
+   build congelado (verificado con grep, CLAUDE.md "Caution Zones"):
+   `bg-transparent`, `data-[state=on]:bg-accent` / `:text-accent-foreground`,
+   `data-[variant=outline]:*`, `first:rounded-l-md` / `last:rounded-r-md`,
+   `focus:z-10` / `focus-visible:z-10`, `min-w-8/9/10`, `px-1.5`,
+   `rounded-none`, `shadow-none`. Sin ellas un `<ToggleGroup>` no tiene fondo
+   de estado "presionado" ni separación entre opciones — exactamente el
+   aspecto de "texto plano" que motivó la auditoría.
+   `src/components/monitoreo/PriorizacionScoutingView.tsx` ya había
+   diagnosticado esta misma causa raíz y la sorteó con un control
+   autocontenido (`FiltroTierSegmentado`) porque arreglar el primitivo
+   compartido excedía el alcance de esa sesión — esto es ese arreglo, una
+   sola vez para todos los usos presentes y futuros. CSS real; ninguna regla
+   toca `ui/toggle.tsx`/`ui/toggle-group.tsx`, ni redefine clases ya
+   compiladas en `index.css`. `--radius` se referencia en crudo
+   (`calc(var(--radius) - 2px)`), no `var(--radius-md)`: ese alias solo
+   existe dentro del bloque `@theme inline`, que el navegador ignora por
+   completo sin el compilador de Tailwind corriendo (mismo motivo por el que
+   `.lista-financiera` más arriba reescribe `calc(var(--radius) + 4px)` en
+   vez de usar `var(--radius-xl)`). */
+.bg-transparent {
+  background-color: transparent;
+}
+
+.data-\[state\=on\]\:bg-accent[data-state="on"] {
+  background-color: var(--accent);
+}
+
+.data-\[state\=on\]\:text-accent-foreground[data-state="on"] {
+  color: var(--accent-foreground);
+}
+
+.data-\[variant\=outline\]\:shadow-xs[data-variant="outline"] {
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.data-\[variant\=outline\]\:border-l-0[data-variant="outline"] {
+  border-left-width: 0px;
+}
+
+.data-\[variant\=outline\]\:first\:border-l[data-variant="outline"]:first-child {
+  border-left-width: 1px;
+}
+
+.first\:rounded-l-md:first-child {
+  border-top-left-radius: calc(var(--radius) - 2px);
+  border-bottom-left-radius: calc(var(--radius) - 2px);
+}
+
+.last\:rounded-r-md:last-child {
+  border-top-right-radius: calc(var(--radius) - 2px);
+  border-bottom-right-radius: calc(var(--radius) - 2px);
+}
+
+.focus\:z-10:focus {
+  z-index: 10;
+}
+
+.focus-visible\:z-10:focus-visible {
+  z-index: 10;
+}
+
+.rounded-none {
+  border-radius: 0;
+}
+
+.shadow-none {
+  box-shadow: none;
+}
+
+.min-w-8 {
+  min-width: 2rem;
+}
+
+.min-w-9 {
+  min-width: 2.25rem;
+}
+
+.min-w-10 {
+  min-width: 2.5rem;
+}
+
+.px-1\.5 {
+  padding-left: 0.375rem;
+  padding-right: 0.375rem;
+}
+
+/* Utilidad genérica, no presente en el build congelado (mismo caso que
+   `.min-h-0` más arriba) — deja que un elemento en un contenedor flex se
+   encoja a su contenido en vez de estirarse. Primer uso: los `<Select>` de
+   filtro de `hato/AlertasView.tsx` (el trigger es `w-full` por defecto).
+   Beneficio colateral: dos usos preexistentes y silenciosamente rotos,
+   `ganado/GanadoMovimientos.tsx` y `clima/ClimaHistorico.tsx`, empiezan a
+   funcionar sin tocar esos archivos. */
+.w-auto {
+  width: auto;
+}

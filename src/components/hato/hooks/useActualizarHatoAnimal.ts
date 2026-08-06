@@ -26,6 +26,11 @@ export interface HatoAnimalEdicion {
   estado: EstadoAnimalHato;
   raza: string | null;
   fecha_nacimiento: string | null;
+  /** Corrección de precedencia D-13 (migración 092, 2026-08-06): cuando es
+   * `true`, `etapa` gana siempre sobre el cálculo por
+   * fecha_nacimiento/num_partos. Se fija desde el mismo diálogo -- ver
+   * `EditarAnimalDialog.tsx`. */
+  etapa_forzada: boolean;
 }
 
 export interface ResultadoActualizarHatoAnimal {
@@ -58,6 +63,7 @@ export function useActualizarHatoAnimal() {
             estado: edicion.estado,
             raza: edicion.raza,
             fecha_nacimiento: edicion.fecha_nacimiento,
+            etapa_forzada: edicion.etapa_forzada,
           })
           .eq('id', animalId);
 

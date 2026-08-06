@@ -6,7 +6,7 @@
 // negativo: se muestra el chip de advertencia (`chipStockPajillas`) pero
 // NUNCA se deshabilita el lote ni se bloquea el envío (G3).
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { EstadoChip } from './EstadoChip';
 import { chipStockPajillas } from '@/utils/hatoUi';
+import { ordenarPorValor } from '@/utils/ordenarAnimalesHato';
 import type { PajillaConToro, AnimalPickerPajillas } from '../hooks/useHatoPajillas';
 import { obtenerFechaHoy } from '@/utils/fechas';
 
@@ -59,6 +60,11 @@ export function PajillaUsoDialog({
 
   const pajillaSeleccionada = pajillas.find((p) => p.pajilla_id === pajillaId);
   const chipStock = pajillaSeleccionada ? chipStockPajillas(pajillaSeleccionada.cantidad_actual) : null;
+
+  // Alfabético por nombre (T2, ronda agosto 2026) -- `useHatoPajillas` trae
+  // los animales ordenados por `numero` (el orden que le sirve al fetch),
+  // pero Martha ubica por nombre en un selector largo.
+  const animalesOrdenados = useMemo(() => ordenarPorValor(animales, (a) => a.nombre, 'asc'), [animales]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -121,7 +127,7 @@ export function PajillaUsoDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="sin_vaca">Sin especificar</SelectItem>
-                  {animales.map((a) => (
+                  {animalesOrdenados.map((a) => (
                     <SelectItem key={a.id} value={a.id}>
                       {a.numero != null ? `#${a.numero}` : 'sin caravana'}
                       {a.numeroEsProvisional ? ' (provisional)' : ''}

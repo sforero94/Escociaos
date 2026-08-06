@@ -22,6 +22,15 @@
 // mismo orden descendente. Los proyectados (`proyectados`) son fechas
 // futuras relativas a `fechaHoy`, así que caen naturalmente dentro de la
 // ventana visible y nunca quedan escondidos detrás del colapsable.
+//
+// T4b (S3, docs/plan_hato_ciclo_manual_override.md §4.4/§5.5) agrega, por
+// evento REAL: el chip "Del chequeo del {fecha}" cuando `chequeo_vaca_id`
+// no es nulo (una corrección sobre ese evento caduca si Martha vuelve a
+// aprobar ese chequeo -- 065 lo borra y re-inserta) y, si `puedeEditar`, el
+// enlace "Corregir" que abre `EditarEventoDialog` (gateado por el caller a
+// Administrador/Gerencia, mismo criterio que el resto de ediciones del
+// módulo). El chip no requiere una query nueva: `chequeoFechaPorId` lo arma
+// el caller a partir de `detalle.chequeos`, que ya trae `hato_chequeos.fecha`.
 
 import { useState } from 'react';
 import {
@@ -104,10 +113,16 @@ function EntradaItem({
   entrada,
   nombresToroPorId,
   fechaHoy,
+  chequeoFechaPorId,
+  puedeEditar,
+  onEditar,
 }: {
   entrada: EntradaTimeline;
   nombresToroPorId: Record<string, string>;
   fechaHoy: string;
+  chequeoFechaPorId: Record<string, string>;
+  puedeEditar: boolean;
+  onEditar: (evento: HatoEventoRow) => void;
 }) {
   const esHoy = entrada.fecha === fechaHoy;
 
@@ -115,7 +130,10 @@ function EntradaItem({
     const label = entrada.proyectado.tipo === 'secar' ? 'Secado proyectado' : 'Parto probable (proyectado)';
     return (
       <li className="relative">
-        <span className="absolute -left-4 top-1 flex items-center justify-center w-3 h-3 rounded-full border-2 border-amber-500 bg-white">
+        {/* `border-amber-500` no existe en el build congelado (solo
+            `border-amber-200`) -- clase muerta preexistente, corregida
+            aquí porque T4b tocó este componente a fondo. */}
+        <span className="absolute -left-4 top-1 flex items-center justify-center w-3 h-3 rounded-full border-2 border-amber-200 bg-white">
           <Circle className="w-2 h-2 text-amber-500" />
         </span>
         <p className="text-sm font-medium text-amber-700">{label}</p>
@@ -128,6 +146,7 @@ function EntradaItem({
   const Icono = ICONO_POR_TIPO[evento.tipo] ?? CircleDot;
   const nombreToro = evento.toro_id ? nombresToroPorId[evento.toro_id] ?? null : null;
   const descripcion = descripcionEvento(evento, nombreToro);
+  const chequeoFecha = evento.chequeo_vaca_id ? chequeoFechaPorId[evento.chequeo_vaca_id] ?? null : null;
 
   return (
     <li className="relative">
@@ -144,6 +163,23 @@ function EntradaItem({
         {evento.fecha_confianza === 'aproximada' && (
           <span className="text-xs text-gray-400">(fecha aproximada)</span>
         )}
+        {evento.chequeo_vaca_id && (
+          <span
+            className="inline-flex items-center rounded-full bg-gray-100 text-gray-500 border border-gray-200 text-xs font-medium px-2 py-0.5"
+            title="Este evento viene de un chequeo -- se puede regenerar si ese chequeo se vuelve a aprobar"
+          >
+            {chequeoFecha ? `Del chequeo del ${formatShortDate(chequeoFecha)}` : 'Viene de un chequeo'}
+          </span>
+        )}
+        {puedeEditar && (
+          <button
+            type="button"
+            onClick={() => onEditar(evento)}
+            className="text-xs text-primary hover:underline ml-auto"
+          >
+            Corregir
+          </button>
+        )}
       </div>
       <p className="text-xs text-gray-500">{formatShortDate(evento.fecha)}{descripcion ? ` — ${descripcion}` : ''}</p>
     </li>
@@ -155,11 +191,22 @@ export function EventoTimeline({
   nombresToroPorId,
   proyectados = [],
   fechaHoy,
+  chequeoFechaPorId,
+  puedeEditar,
+  onEditar,
 }: {
   eventos: HatoEventoRow[];
   nombresToroPorId: Record<string, string>;
   proyectados?: EventoProyectado[];
   fechaHoy: string;
+  /** `chequeo_vaca_id -> hato_chequeos.fecha`, construido por el caller a
+   * partir de `detalle.chequeos` (T4b) -- sin esto, el chip cae al genérico
+   * "Viene de un chequeo" sin fecha. */
+  chequeoFechaPorId: Record<string, string>;
+  /** T4b (S3): gateado por el caller a Administrador/Gerencia (mismo
+   * criterio que el resto de ediciones del módulo). */
+  puedeEditar: boolean;
+  onEditar: (evento: HatoEventoRow) => void;
 }) {
   const [expandido, setExpandido] = useState(false);
 
@@ -188,6 +235,9 @@ export function EventoTimeline({
               entrada={entrada}
               nombresToroPorId={nombresToroPorId}
               fechaHoy={fechaHoy}
+              chequeoFechaPorId={chequeoFechaPorId}
+              puedeEditar={puedeEditar}
+              onEditar={onEditar}
             />
           ))}
         </ol>
@@ -218,6 +268,9 @@ export function EventoTimeline({
                   entrada={entrada}
                   nombresToroPorId={nombresToroPorId}
                   fechaHoy={fechaHoy}
+                  chequeoFechaPorId={chequeoFechaPorId}
+                  puedeEditar={puedeEditar}
+                  onEditar={onEditar}
                 />
               ))}
             </ol>

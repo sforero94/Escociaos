@@ -462,3 +462,57 @@ export function decidirAccionEscalamiento(
 
   return 'ninguna';
 }
+
+// ============================================================================
+// BLOQUE 7 — Expiración de alertas atascadas en un estado terminal (D-24,
+// docs/plan_hato_ronda_agosto_2026.md §0, hallazgo al cerrar S2)
+// ============================================================================
+
+/** Subconjunto de columnas de `hato_alertas` que la regla de "atascada"
+ * necesita: el estado y las dos anclas de tiempo que la S2 manual
+ * (`alertasVencidasParaExpirar`, `hatoAlertasUi.ts`) ya usaba. */
+export interface AlertaTerminalEnCola {
+  estado: EstadoAlertaHato;
+  /** `hato_alertas.escalada_at` -- el tick la fija al momento exacto de la
+   * transición a `escalada` (ver `hato-alertas-tick.ts`). */
+  escalada_at: string | null;
+  /** `hato_alertas.updated_at` -- fuente de respaldo cuando `escalada_at`
+   * falta, y la única ancla real disponible para `respondida` (esa
+   * transición no tiene columna dedicada). */
+  updated_at: string;
+}
+
+/**
+ * Decide si una alerta atascada en un estado TERMINAL (`escalada` o
+ * `respondida`) lleva más de `diasUmbral` (default `DIAS_EXPIRACION_ALERTA`,
+ * el mismo umbral que ya usa `decidirAccionEscalamiento` para
+ * `pendiente`/`enviada`) sin que nadie la cierre, y por lo tanto debe
+ * marcarse `expirada`.
+ *
+ * `decidirAccionEscalamiento` (arriba) SOLO puede actuar sobre
+ * `pendiente`/`enviada` -- devuelve `'ninguna'` para cualquier otro estado a
+ * propósito (esos casos ya se resolvieron o ya escalaron). Ese es
+ * exactamente el hueco que dejó 39 alertas `escalada` atascadas para
+ * siempre desde julio (`hato_alertas_config.destinatario_telegram_id` en
+ * NULL significaba que nadie las respondía nunca, y nada volvía a tocarlas).
+ * Esta función NO reemplaza a `decidirAccionEscalamiento` ni le agrega
+ * casos -- es un chequeo INDEPENDIENTE que el caller aplica sobre las
+ * alertas `escalada`/`respondida`, la misma regla que S2 construyó primero
+ * como botón manual (`alertasVencidasParaExpirar`, `hatoAlertasUi.ts`, que
+ * ahora DELEGA en esta función en vez de reimplementarla -- una sola
+ * definición de "atascada" en todo el módulo).
+ *
+ * Ancla: `escalada_at` para `escalada` (con `updated_at` como respaldo si
+ * faltara); `updated_at` para `respondida` (la única columna que se
+ * actualiza en esa transición -- trigger `update_hato_alertas_updated_at`,
+ * migración 056).
+ */
+export function decidirExpiracionTerminal(
+  alerta: AlertaTerminalEnCola,
+  fechaHoraReferencia: string,
+  diasUmbral: number = DIAS_EXPIRACION_ALERTA,
+): boolean {
+  if (alerta.estado !== 'escalada' && alerta.estado !== 'respondida') return false;
+  const ancla = alerta.escalada_at ?? alerta.updated_at;
+  return diferenciaDiasIso(ancla, fechaHoraReferencia) > diasUmbral;
+}

@@ -12,6 +12,7 @@ import {
   validarAjustesHatoParaMotor,
   formularioDesdeFilas,
   CLAVE_DIA_PESAJE_SEMANAL,
+  CLAVE_RETENCION_ICA_LECHE,
   type AjustesHatoForm,
 } from '../utils/ajustesHatoValidacion';
 import type { FilaHatoConfig } from '../utils/hatoConfigDesdeTabla';
@@ -28,12 +29,13 @@ const FORM_VALIDO: AjustesHatoForm = {
   diasRechequeoDue: 60,
   diasEsperaVoluntariaPostParto: 60,
   diaPesajeSemanal: { iso: 3, nombre: 'miercoles' },
+  retencionIcaLechePorcentaje: 2.25,
 };
 
 describe('serializarAjustesHato', () => {
-  it('produce 11 filas, una por clave de hato_config (058+062+064)', () => {
+  it('produce 12 filas, una por clave de hato_config (058+062+064+085)', () => {
     const filas = serializarAjustesHato(FORM_VALIDO);
-    expect(filas).toHaveLength(11);
+    expect(filas).toHaveLength(12);
     expect(filas.map((f) => f.clave).sort()).toEqual(
       [
         'razas',
@@ -47,6 +49,7 @@ describe('serializarAjustesHato', () => {
         'dias_rechequeo_due',
         'dias_espera_voluntaria_post_parto',
         CLAVE_DIA_PESAJE_SEMANAL,
+        CLAVE_RETENCION_ICA_LECHE,
       ].sort(),
     );
   });
@@ -55,6 +58,12 @@ describe('serializarAjustesHato', () => {
     const filas = serializarAjustesHato(FORM_VALIDO);
     const fila = filas.find((f) => f.clave === CLAVE_DIA_PESAJE_SEMANAL);
     expect(fila?.valor).toEqual({ iso: 3, nombre: 'miercoles' });
+  });
+
+  it('serializa retencion_ica_leche como FRACCIÓN (0.0225), no como porcentaje (2.25)', () => {
+    const filas = serializarAjustesHato(FORM_VALIDO);
+    const fila = filas.find((f) => f.clave === CLAVE_RETENCION_ICA_LECHE);
+    expect(fila?.valor).toBeCloseTo(0.0225, 10);
   });
 });
 
@@ -84,6 +93,12 @@ describe('validarAjustesHatoParaMotor — round-trip contra construirHatoConfigD
 
   it('excluye dia_pesaje_semanal de la validación del motor -- una forma inválida ahí no rompe el guardado', () => {
     const form: AjustesHatoForm = { ...FORM_VALIDO, diaPesajeSemanal: { iso: NaN, nombre: '' } };
+    const filas = serializarAjustesHato(form);
+    expect(() => validarAjustesHatoParaMotor(filas)).not.toThrow();
+  });
+
+  it('excluye retencion_ica_leche de la validación del motor -- pertenece a fn_hato_guardar_quincena_venta (085), no al motor de fechas', () => {
+    const form: AjustesHatoForm = { ...FORM_VALIDO, retencionIcaLechePorcentaje: NaN };
     const filas = serializarAjustesHato(form);
     expect(() => validarAjustesHatoParaMotor(filas)).not.toThrow();
   });

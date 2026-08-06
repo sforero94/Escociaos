@@ -58,6 +58,12 @@ MODULOS = [
     # (`hato-chequeo-foto.ts`) necesita la lógica pura de roster/ancla/matriz
     # cruda del mismo lado que el resto del pipeline.
     'ocrChequeo.ts',
+    # S5 de docs/plan_hato_ronda_agosto_2026.md: la ruta de carga de la
+    # planilla MENSUAL de pesaje POR FOTO (`hato-pesaje-foto.ts`,
+    # `hato-pesaje-commit.ts`). Importa `distanciaEdicionAcotada` de
+    # `ocrChequeo.ts` (import relativo `./ocrChequeo`), por eso va DESPUÉS
+    # en esta lista -- orden de dependencia, solo por legibilidad del log.
+    'ocrPesaje.ts',
 ]
 
 DESTINOS = [

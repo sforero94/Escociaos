@@ -6,7 +6,7 @@
 // grande" en desc.
 
 import { describe, it, expect } from 'vitest';
-import { ordenarAnimalesHato } from '../utils/ordenarAnimalesHato';
+import { ordenarAnimalesHato, ordenarPorValor } from '../utils/ordenarAnimalesHato';
 import type { AnimalHatoDerivado } from '../components/hato/hooks/useHatoAnimales';
 import type { EstadoReproductivoDerivado } from '../utils/calculosHato';
 
@@ -37,8 +37,11 @@ function animal(overrides: Partial<AnimalHatoDerivado> = {}): AnimalHatoDerivado
     pl: null,
     numPartos: 0,
     ultimoChequeoFecha: null,
+    ultimoPartoFecha: null,
     derivado: derivado(),
     categoria: 'hato',
+    categoriaOrigen: 'calculado',
+    subetapaTernera: null,
     ...overrides,
   };
 }
@@ -130,5 +133,43 @@ describe('ordenarAnimalesHato — columna proximo', () => {
     ];
     const resultado = ordenarAnimalesHato(animales, 'proximo', 'desc').map((a) => a.animalId);
     expect(resultado).toEqual(['b', 'a']);
+  });
+});
+
+// `ordenarPorValor` (S2, ronda agosto 2026): extracción genérica que
+// reusan ChequeoDetalle/PesajeSemanalGrid/PajillaUsoDialog/RankingVacas/
+// HojaDeVida/ChequeosList en vez de reimplementar el comparador cada uno.
+describe('ordenarPorValor', () => {
+  it('ordena texto alfabéticamente con locale español, insensible a mayúsculas', () => {
+    const items = [{ nombre: 'zulema' }, { nombre: 'Abundantia' }, { nombre: 'estrella' }];
+    const resultado = ordenarPorValor(items, (i) => i.nombre, 'asc').map((i) => i.nombre);
+    expect(resultado).toEqual(['Abundantia', 'estrella', 'zulema']);
+  });
+
+  it('ordena correctamente nombres con tildes y Ñ (locale español, no orden binario)', () => {
+    // En orden binario/ASCII "Ñ" cae después de "Z"; en español "Ñ" va
+    // entre "N" y "O" -- y una vocal acentuada compara junto a su base
+    // (verificado contra el motor real, no asumido).
+    const items = [{ nombre: 'Ñata' }, { nombre: 'Nube' }, { nombre: 'Óscar' }, { nombre: 'Oveja' }];
+    const resultado = ordenarPorValor(items, (i) => i.nombre, 'asc').map((i) => i.nombre);
+    expect(resultado).toEqual(['Nube', 'Ñata', 'Óscar', 'Oveja']);
+  });
+
+  it('null y undefined van siempre al final, sea cual sea la dirección', () => {
+    const items = [{ v: 'b' }, { v: undefined }, { v: 'a' }, { v: null }];
+    expect(ordenarPorValor(items, (i) => i.v ?? null, 'asc').map((i) => i.v)).toEqual(['a', 'b', undefined, null]);
+    expect(ordenarPorValor(items, (i) => i.v ?? null, 'desc').map((i) => i.v)).toEqual(['b', 'a', undefined, null]);
+  });
+
+  it('ordena numéricamente cuando el extractor devuelve números', () => {
+    const items = [{ n: 30 }, { n: 5 }, { n: 12 }];
+    expect(ordenarPorValor(items, (i) => i.n, 'asc').map((i) => i.n)).toEqual([5, 12, 30]);
+  });
+
+  it('no muta el arreglo original', () => {
+    const items = [{ nombre: 'z' }, { nombre: 'a' }];
+    const copia = [...items];
+    ordenarPorValor(items, (i) => i.nombre, 'asc');
+    expect(items).toEqual(copia);
   });
 });

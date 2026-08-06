@@ -125,5 +125,27 @@ export function useHatoAlertas() {
     [reload],
   );
 
-  return { alertas, loading, error, reload, actualizarEstadoAlerta };
+  /** T3a (ronda agosto 2026) -- descarte masivo / expiración automática: UN
+   * `.update().in('id', ids)` en vez de N requests secuenciales, mismo
+   * cambio para todas las filas seleccionadas. La RLS de escritura
+   * (Administrador/Gerencia, migración 056) es la misma que ya cubre
+   * `actualizarEstadoAlerta`; este hook no la duplica. */
+  const actualizarEstadoAlertas = useCallback(
+    async (ids: string[], cambios: { estado: EstadoAlertaHato; respondidaPor?: string | null }) => {
+      if (ids.length === 0) return;
+      const supabase = getSupabase() as any;
+      const { error: updateError } = await supabase
+        .from('hato_alertas')
+        .update({
+          estado: cambios.estado,
+          ...(cambios.respondidaPor !== undefined ? { respondida_por: cambios.respondidaPor } : {}),
+        })
+        .in('id', ids);
+      if (updateError) throw updateError;
+      await reload();
+    },
+    [reload],
+  );
+
+  return { alertas, loading, error, reload, actualizarEstadoAlerta, actualizarEstadoAlertas };
 }

@@ -34,6 +34,9 @@ import {
   filtrarIngresosPorPeriodo,
   fechaAnclaVentasHato,
   rangoPeriodoVentaHato,
+  aplicaRetencionIcaLeche,
+  calcularNetoConIca,
+  calcularPrecioBrutoLitro,
   type PesajeLecheVaca,
   type AnimalHistorico,
   type EventoHistorico,
@@ -1219,5 +1222,57 @@ describe('fechaAnclaVentasHato', () => {
 
   it('sin ningún dato: devuelve "hoy" tal cual', () => {
     expect(fechaAnclaVentasHato([], [], '2026-07-28')).toBe('2026-07-28');
+  });
+});
+
+// ============================================================================
+// S4 (docs/plan_hato_ronda_agosto_2026.md) -- ICA de la quincenal del Pomar
+// (D-11/D-12): bruto capturado, ICA y neto calculados.
+// ============================================================================
+
+describe('aplicaRetencionIcaLeche', () => {
+  it('D-12: no aplica antes de julio 2026', () => {
+    expect(aplicaRetencionIcaLeche(2026, 6)).toBe(false);
+    expect(aplicaRetencionIcaLeche(2025, 12)).toBe(false);
+  });
+
+  it('D-12: aplica desde julio 2026 en adelante', () => {
+    expect(aplicaRetencionIcaLeche(2026, 7)).toBe(true);
+    expect(aplicaRetencionIcaLeche(2026, 12)).toBe(true);
+    expect(aplicaRetencionIcaLeche(2027, 1)).toBe(true);
+  });
+});
+
+describe('calcularNetoConIca', () => {
+  it('caso real: bruto $11.876.000 con ICA 2,25% -> neto $11.608.790 (fórmula del dueño)', () => {
+    const { neto, ica } = calcularNetoConIca(11876000, 0.0225);
+    expect(neto).toBe(11608790);
+    expect(ica).toBe(267210);
+  });
+
+  it('sin retención (0), el neto es igual al bruto y el ica es 0', () => {
+    expect(calcularNetoConIca(2000000, 0)).toEqual({ ica: 0, neto: 2000000 });
+  });
+
+  it('redondea a 2 decimales', () => {
+    const { neto, ica } = calcularNetoConIca(1000, 0.0225);
+    expect(neto).toBe(977.5);
+    expect(ica).toBe(22.5);
+  });
+});
+
+describe('calcularPrecioBrutoLitro', () => {
+  it('caso real: $11.876.000 / 5.938 L = $2.000/L', () => {
+    expect(calcularPrecioBrutoLitro(11876000, 5938)).toBe(2000);
+  });
+
+  it('sin litros positivos, null -- nunca una división por cero disfrazada de precio', () => {
+    expect(calcularPrecioBrutoLitro(11876000, 0)).toBeNull();
+    expect(calcularPrecioBrutoLitro(11876000, null)).toBeNull();
+  });
+
+  it('sin bruto, null', () => {
+    expect(calcularPrecioBrutoLitro(null, 5938)).toBeNull();
+    expect(calcularPrecioBrutoLitro(0, 5938)).toBeNull();
   });
 });

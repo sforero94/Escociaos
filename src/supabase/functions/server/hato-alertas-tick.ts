@@ -83,6 +83,7 @@ import {
   generarAlertasPendientes,
   debeReenviar,
   decidirAccionEscalamiento,
+  decidirExpiracionTerminal,
   type AnimalHatoParaAlertas,
   type PasoTratamientoPendienteInput,
   type AlertaGenerada,
@@ -138,6 +139,16 @@ interface FilaAlertaActiva {
   intentos: number;
   destinatario_telegram_id: string | null;
   datos: Record<string, unknown> | null;
+  updated_at: string;
+}
+
+/** Fila mínima para la fase (d) -- D-24, docs/plan_hato_ronda_agosto_2026.md
+ * §0. Distinta de `FilaAlertaActiva`: esta consulta trae `escalada`/
+ * `respondida`, nunca `pendiente`/`enviada` (esas las cubre la fase (c)). */
+interface FilaAlertaTerminal {
+  id: string;
+  estado: EstadoAlertaHato;
+  escalada_at: string | null;
   updated_at: string;
 }
 
@@ -387,6 +398,42 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
     else console.error(`[hato-alertas-tick] no se pudo escalar la alerta ${alerta.id}:`, error.message);
   }
 
+  // =========================================================================
+  // (d) EXPIRAR ALERTAS ATASCADAS EN UN ESTADO TERMINAL (D-24,
+  //     docs/plan_hato_ronda_agosto_2026.md §0, hallazgo al cerrar S2)
+  //
+  // `decidirAccionEscalamiento` (fase c) solo puede actuar sobre alertas que
+  // llegaron a esta fase en `pendiente`/`enviada` -- una vez que una alerta
+  // pasa a `escalada` (48h sin respuesta) o `respondida` (Fernando contestó
+  // "no"/"otro"), NINGÚN paso anterior de este tick vuelve a tocarla. Sin
+  // esta fase, eso es exactamente lo que dejó 39 alertas `escalada`
+  // atascadas para siempre desde julio (`destinatario_telegram_id` en NULL
+  // -> nadie las respondía -> nada las cerraba). Migración 090 (T3b) ya
+  // descartó el backlog viejo antes de que este fix llegara a producción --
+  // esta fase mantiene la cola limpia de ahí en adelante, para alertas
+  // nuevas. Consulta e INDEPENDIENTE de `activas` (fase b/c): esas dos filtran
+  // por `pendiente`/`enviada`, esta por `escalada`/`respondida`, así que no
+  // hay solapamiento posible entre las dos.
+  // =========================================================================
+
+  const { data: filasTerminales, error: errorTerminales } = await supabase
+    .from('hato_alertas')
+    .select('id, estado, escalada_at, updated_at')
+    .in('estado', ['escalada', 'respondida']);
+
+  let expiradasAtascadas = 0;
+
+  if (errorTerminales) {
+    console.error(`[hato-alertas-tick] no se pudieron leer las alertas escalada/respondida (fase d, D-24): ${errorTerminales.message}`);
+  } else {
+    for (const alerta of (filasTerminales ?? []) as FilaAlertaTerminal[]) {
+      if (!decidirExpiracionTerminal(alerta, fechaHoraReferencia)) continue;
+      const { error } = await supabase.from('hato_alertas').update({ estado: 'expirada' }).eq('id', alerta.id);
+      if (!error) expiradasAtascadas += 1;
+      else console.error(`[hato-alertas-tick] no se pudo expirar la alerta atascada ${alerta.id} (fase d, D-24):`, error.message);
+    }
+  }
+
   return c.json({
     success: true,
     fechaReferencia,
@@ -394,6 +441,7 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
     enviadas,
     saltadas_sin_destinatario: saltadasSinDestinatario,
     escaladas,
-    expiradas,
+    expiradas: expiradas + expiradasAtascadas,
+    expiradas_atascadas: expiradasAtascadas,
   });
 }
