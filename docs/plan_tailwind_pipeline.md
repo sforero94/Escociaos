@@ -50,15 +50,74 @@ tests, lint ni typecheck; los dos aparecieron mirando la pantalla:
 
 ### Tres hallazgos de la verificación del 2026-08-06 (no estaban en la versión original)
 
-**H-1 · `@apply` también está muerto, y alcanza a `*` y `body`.**
-`globals.css:179-186` declara `@layer base { * { @apply border-border outline-ring/50 } body { @apply
-bg-background text-foreground } }`. Hoy **ninguna de las dos corre**. Encender el compilador cambia el
-color de borde por defecto de *todo elemento de la app* y el fondo del `body` en la primera pantalla.
-No es una regresión de un módulo: es el cambio de mayor alcance de todo F1, y hay que verlo primero.
+**H-1 · ~~`@apply` está muerto y alcanza a `*` y `body`~~ — RETRACTADO. Era falso.**
+
+La afirmación original decía que `globals.css:179-186` (`@layer base { * { @apply border-border … }
+body { @apply bg-background … } }`) no corría, y que encender el compilador cambiaría el borde de
+todo elemento y el fondo del `body`. **Verificado en pantalla el 2026-08-06: es falso.** Esas reglas
+ya están compiladas dentro de `index.css:449-465`, literalmente:
+
+```css
+body { background-color: var(--background); color: var(--foreground) }
+*    { border-color: var(--border); outline-color: var(--ring) }
+```
+
+El error de razonamiento: es cierto que el navegador ignora `@apply`, pero no se comprobó si la
+**salida compilada ya contenía el resultado equivalente**. Sí lo contiene.
+
+**Lo que sí se aprendió, y vale más que el hallazgo falso:** `index.css` es la compilación de una
+versión ANTERIOR de `globals.css`. Casi todo lo que hoy está en `globals.css` ya quedó horneado ahí
+—incluidos `@theme`, `@apply` y `@layer base`— porque en su momento sí pasaron por el compilador.
+
+**Corolario, y es el que reordena el diagnóstico:** lo verdaderamente muerto no es "todo lo que use
+directivas de Tailwind", sino la **diferencia** entre lo que se compiló entonces y lo que el código
+usa ahora. Eso explica el apéndice `!important` del final de `index.css` (ver H-4): alguien necesitó
+clases que el build viejo no traía y las escribió a mano ahí.
+
+**H-1bis · Lo que sí es CSS nativo y sí corre hoy: `@layer`.**
+`@layer` no es una directiva de Tailwind, es CSS estándar desde 2022, y el navegador la aplica. Por
+eso el **segundo** bloque `@layer base` de `globals.css:192-245` (tipografía de `h1`–`h4`, `p`,
+`label`, `button`, `input`) **está activo en producción hoy**. Comprobado en pantalla: `--text-2xl`
+resuelve a `1.5rem` (definida en `index.css:165`, dentro de `@layer theme`) y el `h1` del Dashboard
+computa exactamente `24px` con `font-weight: 500`.
+
+Esto importa para F1: esa tipografía base **no es una novedad que vaya a aparecer**, es
+comportamiento actual que hay que **conservar** (T-5). Si F1 borra el cuerpo de `index.css` sin
+reponer esas variables, la jerarquía tipográfica de toda la app cambia de golpe.
 
 **H-2 · Son ~53 pantallas, no ~25.**
 `App.tsx` declara **45 rutas estáticas** y **8 dinámicas** (`:id` de producto, aplicación, animal,
 chequeo, verificación). En escritorio + móvil eso son ~200 capturas por corrida, no 50.
+
+**H-4 · `src/index.css` NO es un artefacto congelado intacto: ya fue editado a mano, dos veces.**
+Contradice su propio contrato (`CLAUDE.md`: *"do not edit it manually"*). Verificado 2026-08-06:
+
+1. **Líneas ~5006–5158** — una copia casi duplicada de `globals.css` (mismos `@font-face`,
+   `:root`/`.dark`, `.scrollbar-hide`, `@keyframes fadeIn`), insertada sin `@layer` en medio de la
+   salida real del compilador.
+2. **Líneas 5548–5577** — un bloque `/* Custom utility classes for Escocia OS */` con **16 clases
+   marcadas `!important`**: `.text-brand-brown`, `.bg-primary`, `.text-white`, `.bg-background`,
+   `.bg-gradient-to-r`, `.hover\:bg-primary-dark`, `.to-secondary-dark`… `text-brand-brown` sola se
+   usa en **98 archivos `.tsx`**.
+
+**Consecuencia para F1, y es delicada:** el plan dice que `index.css` pasa de build compilado a
+archivo fuente — o sea, se borra su cuerpo. Ese borrado se lleva por delante este apéndice. Los
+tokens `brand-brown`, `primary-dark` y `secondary-dark` sí están declarados en el `@theme inline` de
+`globals.css`, así que **en teoría** el compilador regenera el mismo juego de clases. Pero es una
+hipótesis, no un hecho, y toca 98 archivos. Es el punto de verificación número uno de la pasada
+ANTES/DESPUÉS.
+
+**H-5 · La cascada no es ambigua: es determinista, y siempre gana la regla a mano.**
+`index.css` usa **capas nativas** (`@layer properties/theme/base/utilities`). Las ~116 reglas
+escritas a mano en `globals.css` **no están en ninguna capa**. Por especificación CSS, una regla sin
+capa gana *siempre* sobre cualquier regla dentro de `@layer utilities`, sin importar especificidad ni
+orden. No es "pueden pelear" como decía la versión anterior de §3.2 — es que la regla a mano gana
+mientras no se borre o no se envuelva en `@layer utilities`.
+
+Dos son bombas reales (mismo nombre que una utilidad, resultado distinto): `.shadow-none` y
+`.data-[variant=outline]:shadow-xs`, ambas en `globals.css`. Escriben `box-shadow` de forma literal
+en vez de por capas `--tw-*`, lo que **anula cualquier `focus-visible:ring-*` combinado** — la misma
+categoría de daño de accesibilidad que ya señala la familia de 155 apariciones de `focus:*`.
 
 **H-3 · Capturar solo rutas subestima el daño justo donde está concentrado.**
 Los dos bugs de arriba estaban en **diálogos y controles**, no en layout de página. Buena parte de la
@@ -106,12 +165,27 @@ la limitación que deja de tener sentido, y si no se retira, sabotea el trabajo 
    repo** — aparece en 10 documentos. Mientras siga escrita, cada sesión futura seguirá evitando
    clases válidas y agregando CSS a mano. Reescribirla es parte del trabajo, no un adorno.
 4. **`main.tsx` importa `index.css` y después `globals.css` como dos entradas separadas.**
-   ⚠️ **Esto no es solo un tema de cascada — es la trampa técnica de F1.** En Tailwind v4, `@theme`
-   solo lo procesa el compilador si el archivo entra por la cadena de `@import "tailwindcss"`. Si F1
-   se limita a instalar el plugin sin reencadenar (`index.css` haciendo `@import "tailwindcss"` y
-   luego `@import "./styles/globals.css"`, y `main.tsx` importando solo `index.css`), **los tokens
-   siguen muertos y va a parecer que el pipeline funciona**. Es el modo de fallo silencioso más
-   probable de toda la fase.
+   ⚠️ **Esto no es solo un tema de cascada — es la trampa técnica de F1.**
+   **Verificado contra la documentación oficial de Tailwind v4** (`tailwindcss.com/docs/theme`,
+   consultada 2026-08-06), que lo dice sin ambigüedad: *Tailwind no genera clases de utilidad a
+   partir de bloques `@theme` que estén en archivos importados únicamente por JavaScript.* Y eso es
+   exactamente lo que hace `main.tsx` hoy con `globals.css`.
+
+   La razón es que `@theme` no declara solo variables CSS: **le instruye al compilador que fabrique
+   utilidades**. Si el archivo no entra por la cadena de `@import "tailwindcss"`, el compilador nunca
+   lo lee. Lo mismo aplica a `@custom-variant dark` (l.1) y al `@layer base { @apply … }` (l.179).
+
+   Estructura correcta, y criterio de aceptación de F1:
+   ```css
+   /* src/index.css */
+   @import "tailwindcss";
+   @import "./styles/globals.css";   /* aquí viven @theme, @custom-variant y @layer base */
+   ```
+   con `main.tsx` importando **solo** `index.css`.
+
+   Si F1 se limita a instalar el plugin sin reencadenar, **los tokens siguen muertos y va a parecer
+   que el pipeline funciona**: el build pasa, el CSS se genera, y `bg-primary` sigue sin pintar. Es
+   el modo de fallo silencioso más probable de toda la fase.
 
 ---
 
@@ -186,11 +260,36 @@ Identidad visual sin cambios.
 
 ## 6. Reparto por agentes
 
+### ⚠️ Restricción del entorno, verificada 2026-08-06 — **los subagentes NO pueden manejar el navegador**
+
+Se comprobó en dos intentos, no se asumió:
+
+1. El roster de `~/.claude/agents` declara `take_screenshot`, `navigate_page`, `click`, `fill` para
+   `frontend`, `usertest` y `qa`. **Esa declaración no se materializa en ejecución**: el subagente
+   recibe únicamente Read/Bash/Edit/Write.
+2. En esta sesión las herramientas de `chrome-devtools` están **diferidas** (hay que cargarlas con
+   `ToolSearch`), así que se probó esa vía. El subagente respondió textualmente
+   *"No such tool available: ToolSearch. ToolSearch exists but is not enabled in this context."*
+   Sin `ToolSearch` no hay forma de cargarlas.
+3. El Chrome autenticado corre con `--remote-debugging-pipe`, **sin puerto TCP**, así que tampoco es
+   alcanzable por CDP desde Bash.
+
+**Consecuencia para el reparto:** todo lo que requiera navegador vive en el **loop principal**. Los
+subagentes siguen siendo útiles — y siguen siendo la mayor parte del trabajo con criterio — porque
+las capturas quedan **en disco** y `Read` renderiza imágenes: un subagente puede *analizar* las
+pantallas aunque no pueda *producirlas*.
+
+| Tipo de trabajo | Quién |
+|---|---|
+| Navegar, capturar, verificar en pantalla | **Solo el loop principal** |
+| Editar código, instalar, correr tests y builds | `frontend`, `qa` |
+| Leer los PNG del disco y juzgarlos | `usertest`, `qa` |
+| Reescribir contratos y documentación | `cto` |
+
 ### Reglas que aplican a todas las fases
 
-1. **El navegador tiene un solo dueño a la vez.** `chrome-devtools` maneja una instancia de Chrome;
-   dos agentes navegando en paralelo se pisan las páginas. Las tareas de navegación van en serie; el
-   paralelismo se reserva para el análisis, que solo lee archivos del disco.
+1. **El navegador tiene un solo dueño a la vez, y es el loop principal.** `chrome-devtools` maneja
+   una sola instancia de Chrome. Ninguna tarea de navegación se delega.
 2. **`usertest` no puede escribir archivos** (solo Read/Grep/Glob/Bash + navegador). Su salida vuelve
    como informe de texto y el orquestador la consolida. No se le pide que redacte documentos.
 3. **Agentes en paralelo sobre la misma rama = directorios disjuntos.** Si dos tienen que tocar el
@@ -204,16 +303,17 @@ Identidad visual sin cambios.
 
 | Paso | Quién | Qué hace | Qué entrega |
 |---|---|---|---|
-| 0 | Orquestador | Levanta el dev server; **Santiago inicia sesión a mano** (T-7). Verifica que hay sesión activa. | Server en `:3000` con sesión abierta |
-| 1 | `frontend` #1 | **Captura ANTES.** Recorre las 45 rutas + la muestra dinámica + los diálogos de alto tráfico, en 1280×800 y 375×812. **No edita ni un archivo.** | PNGs en `docs/tailwind-spike/antes/` + inventario de lo capturado y lo que falló |
-| 2 | `frontend` #2 | **Enciende el pipeline** en `spike/tailwind-medicion`: instala, cablea el plugin, reencadena los `@import`. **No toca ningún componente.** Verifica que `bg-primary` pinta verde antes de declarar éxito. | Pipeline vivo + diff de configuración |
-| 3 | `frontend` #3 | **Captura DESPUÉS.** Exactamente el mismo recorrido, mismos viewports, mismos nombres de archivo. | PNGs en `docs/tailwind-spike/despues/` |
-| 4a | `usertest` ×3 (paralelo) | Cada uno un grupo de módulos (Aguacate / Hato+Ganado / Finanzas+Config). Compara los pares antes/después **como usuaria**: ¿Martha puede seguir usando esta pantalla? Nada de leer código. | Informe por pantalla con veredicto de usabilidad |
-| 4b | `qa` (paralelo con 4a) | Clasificación por severidad, checklist de regresión que F2 tendrá que pasar, y **destino de las 4 guardas estáticas** (retirar vs. reconvertir). | Matriz de severidad + checklist + recomendación sobre las guardas |
-| 5 | Orquestador | Consolida todo en `docs/tailwind-spike/informe-f0.md` y da **el número de F2**. | El informe y la decisión de T-6 |
+| 0 | Loop principal | Levanta el dev server (`:3100`); **Santiago inicia sesión a mano** (T-7). Verifica sesión y rol Gerencia. | Server con sesión abierta |
+| 1 | **Loop principal** | **Captura ANTES** según `rutas.md`. No se delega: requiere navegador. | PNGs en `docs/tailwind-spike/antes/` + inventario |
+| 2 | `frontend` | **Enciende el pipeline** en `spike/tailwind-medicion`: instala `tailwindcss@4` + `@tailwindcss/vite`, cablea el plugin, reencadena los `@import`. **No toca ningún componente.** Es trabajo de archivos y npm: sí se delega. | Pipeline vivo + diff de configuración |
+| 2b | **Loop principal** | Verifica en pantalla que los tokens resolvieron (`bg-primary` pinta verde, `--color-primary` existe). Sin esto, el paso 2 no se da por bueno — es la trampa de §3.4. | Confirmación visual |
+| 3 | **Loop principal** | **Captura DESPUÉS.** Mismo recorrido, mismos viewports, mismos nombres. | PNGs en `docs/tailwind-spike/despues/` |
+| 4a | `usertest` ×3 (paralelo) | Cada uno un grupo de módulos (Aguacate / Hato+Ganado / Finanzas+Config). **Lee los pares de PNG del disco con `Read`** y los juzga como usuaria: ¿Martha puede seguir usando esta pantalla? Nada de leer código. | Informe por pantalla con veredicto de usabilidad |
+| 4b | `qa` (paralelo con 4a) | Clasificación por severidad, checklist de regresión que F2 tendrá que pasar, y **destino de las 4 guardas estáticas** (retirar vs. reconvertir). Lee PNGs y código. | Matriz de severidad + checklist + recomendación |
+| 5 | Loop principal | Consolida en `docs/tailwind-spike/informe-f0.md` y da **el número de F2**. | El informe y la decisión de T-6 |
 
-Los pasos 1→2→3 son estrictamente secuenciales (regla 1). El 4a y 4b sí corren en paralelo: a esa
-altura nadie toca el navegador.
+Los pasos 1→2→2b→3 son estrictamente secuenciales. El 4a y 4b sí corren en paralelo: a esa altura
+nadie toca el navegador y todo el insumo está en disco.
 
 ### F1 — encender en la rama larga
 
