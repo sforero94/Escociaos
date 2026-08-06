@@ -22,24 +22,42 @@ compilación.**
 Viene del scaffold de Figma Make: exportó el CSS ya compilado y el pipeline nunca se cableó. Desde
 entonces, **una clase que no esté en ese archivo no falla — no hace nada.** Sin error, sin aviso.
 
-### El costo medido (2026-08-06)
+### El costo medido — **cifras corregidas 2026-08-06**
 
-Barrido de todos los `className` de `src/**/*.tsx` contra `index.css` + `globals.css`:
+> ⚠️ **Las cifras originales de este plan (~845 clases / ~4.400 apariciones) estaban infladas por un
+> error de método.** El barrido inicial comprobaba pertenencia por *substring*, así que daba por viva
+> cualquier clase cuyo nombre fuera prefijo de otra, y por muerta a otras que sí existían. Se rehízo
+> con comparación exacta contra el conjunto de selectores servidos. **Las cifras de abajo son las
+> buenas.**
 
-- **1.448** clases distintas usadas en el código
-- **~845** no existen en el build → **muertas**
-- **~4.400** apariciones de clases muertas
+Barrido exacto de los `className` de los **300** archivos `.tsx` (incluye `cn()`, ternarios, arrays,
+objetos clsx, `cva(...)` y el prop `classNames={{…}}` de `react-day-picker`) contra
+`index.css` + `globals.css`:
 
-Las familias que más duelen:
+- **608** clases distintas muertas
+- **2.895** apariciones de clases muertas
+- `dark:*` → **0**. No hay interruptor de modo oscuro en ninguna parte de la app; todo el bloque
+  `.dark` de `globals.css` es código muerto.
 
-| Familia | Apariciones | Qué se pierde hoy |
+| Familia | Apariciones muertas | Qué se pierde hoy |
 |---|---|---|
-| `text-brand-brown/*` | ~640 | Los textos de marca no toman su color; heredan el del padre |
-| `space-y-*` | ~380 | Espaciado vertical entre elementos — por eso muchas pantallas se ven apretadas |
-| `border-primary/*`, `border-secondary/*` | ~260 | Bordes sin color |
-| `focus:ring-primary`, `focus:border-primary` | ~155 | **Estados de foco: navegación por teclado prácticamente a ciegas** |
-| `tabular-nums` | 71 | Números que no alinean en las tablas |
-| resto | ~2.900 | Separadores, tamaños, tipografías, variantes responsive |
+| `text-brand-brown/<opacidad>` | **650** | La familia más dañada, y es real. `text-brand-brown` **a secas está viva** (43 usos) gracias al hack `!important` de H-4; lo que muere son las 650 variantes con opacidad (`/70` ×307, `/60` ×184, `/50` ×107, `/40` ×47…). Esos textos heredan el color del padre |
+| ALTO — mueve layout | **530** (191 distintas) | Tamaños y posiciones. Es lo que puede romper una pantalla |
+| MEDIO — interacción y estado | **492** (102 distintas) | `focus:*`, `hover:*`, `disabled:*`, `data-[state=*]`. Incluye la navegación por teclado |
+| BAJO — cosmético | **1.873** (315 distintas) | Colores, tipografía, redondeos, sombras |
+| ~~`space-y-*`~~ | ~~380~~ → **~13** | **Corregido.** `space-y-1` … `space-y-8` **sí existen** en el build congelado; la única muerta es `space-y-0`. El espaciado vertical NO está roto, al contrario de lo que decía la versión anterior de este plan |
+
+**Tres focos que ningún ranking por ruta encuentra**, y que hay que mirar aparte:
+
+- **`ChatPanel.tsx`** (el chat de Esco) es el segundo peor archivo del repo en clases ALTO (25, casi
+  todas `lg:*`) y está montado **globalmente, fuera de cualquier ruta**: es ancestro, no descendiente,
+  así que no aparece en ninguna tabla por pantalla.
+- **`ui/sidebar.tsx`** tiene el mayor conteo bruto de clases muertas del repo y **no lo importa
+  nadie** (verificado: cero importadores; `Layout.tsx` trae su propio sidebar a mano). Código
+  inalcanzable — no se toca en F2, se borra cuando toque.
+- **115 clases candidatas más en 33 archivos** viven dentro de mapas de color/estado indexados
+  dinámicamente (peor caso: `PriorizacionScoutingView.tsx`, 15). Quedan fuera del conteo principal
+  por ser de menor confianza — declaradas, no escondidas.
 
 **Dos bugs reales de esta misma familia, encontrados el 2026-08-06** — ninguno detectado por 1.993
 tests, lint ni typecheck; los dos aparecieron mirando la pantalla:
