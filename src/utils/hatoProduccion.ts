@@ -93,6 +93,61 @@ export function calcularPrecioUnitarioQuincena(
 }
 
 /**
+ * Umbral de la retención de ICA sobre la leche (D-11/D-12,
+ * `docs/plan_hato_ronda_agosto_2026.md` §0): el ICA aplica SOLO a periodos
+ * de julio 2026 en adelante -- lo histórico (jun 2026 y anterior) queda en
+ * bruto, sin retención. Es la MISMA comparación que hace
+ * `fn_hato_guardar_quincena_venta` en SQL (migración 085) -- duplicada a
+ * propósito: un booleano de una línea no justifica el generador de
+ * paridad de `calculosHato.ts`/`hatoAlertas.ts`, pero si el umbral cambia
+ * hay que tocar los dos lados en el mismo commit. Esta función SOLO
+ * alimenta el preview del formulario antes de guardar -- lo que se
+ * persiste siempre sale de la RPC, nunca de este cálculo del cliente.
+ */
+const ANIO_DESDE_ICA_LECHE = 2026;
+const MES_DESDE_ICA_LECHE = 7; // julio
+
+export function aplicaRetencionIcaLeche(anio: number, mes: number): boolean {
+  return anio > ANIO_DESDE_ICA_LECHE || (anio === ANIO_DESDE_ICA_LECHE && mes >= MES_DESDE_ICA_LECHE);
+}
+
+export interface NetoConIca {
+  /** Monto retenido, en pesos (bruto − neto) -- no el porcentaje, que vive
+   * en `hato_config.retencion_ica_leche` y nunca se hardcodea acá. */
+  ica: number;
+  neto: number;
+}
+
+/**
+ * `neto = bruto × (1 − retencionIca)` (D-11), confirmado contra la fórmula
+ * del propio dueño `=IF(ISBLANK(D3),"",D3*0.9775)` para
+ * `retencionIca=0.0225`. Redondea a 2 decimales -- misma precisión que
+ * `fin_ingresos.valor` (`NUMERIC(15,2)`) -- espejo del redondeo que hace
+ * `fn_hato_guardar_quincena_venta` (migración 085) del lado SQL para el
+ * mismo cálculo. `retencionIca` SIEMPRE lo trae el caller (leído en vivo de
+ * `hato_config.retencion_ica_leche`); esta función no tiene default ni lee
+ * la tabla -- es la regla dura del módulo: ninguna constante de negocio
+ * vive en código.
+ */
+export function calcularNetoConIca(bruto: number, retencionIca: number): NetoConIca {
+  const neto = Math.round(bruto * (1 - retencionIca) * 100) / 100;
+  return { ica: Math.round((bruto - neto) * 100) / 100, neto };
+}
+
+/**
+ * Precio bruto por litro -- espejo de `calcularPrecioUnitarioQuincena` pero
+ * sobre el valor BRUTO (antes de ICA). `null` sin litros positivos, nunca
+ * una división por cero disfrazada de precio.
+ */
+export function calcularPrecioBrutoLitro(
+  bruto: number | null | undefined,
+  litrosTotal: number | null | undefined,
+): number | null {
+  if (bruto == null || bruto <= 0 || litrosTotal == null || litrosTotal <= 0) return null;
+  return bruto / litrosTotal;
+}
+
+/**
  * Valida `cabezas` para `VentaAnimalesHatoDialog` (decisión 6 del dueño:
  * cabezas + valor obligatorios, `fn_hato_registrar_venta_animales` exige
  * `>= 1`). Devuelve el mensaje de error, o `null` si es válido -- mismo

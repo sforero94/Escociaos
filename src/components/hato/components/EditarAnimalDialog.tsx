@@ -9,6 +9,15 @@
 // el botón "Editar" existe, no si el diálogo se puede abrir sin permiso).
 //
 // NO crea animales nuevos -- fuera de alcance de este diálogo.
+//
+// "Forzar esta etapa" (migración 092, corrección de precedencia D-13,
+// 2026-08-06): la categoría de un animal (ternera/novilla/vaca) se CALCULA
+// de fecha_nacimiento + num_partos (`calcularEtapaHato`, hatoCategorias.ts)
+// -- editar `etapa` acá SOLO tiene efecto en la categoría mostrada cuando
+// `etapa_forzada` está en TRUE. Es el override de "el cálculo se equivocó"
+// (típicamente una fecha de nacimiento mal digitada) -- de fácil entrada
+// (el switch) y de fácil salida (apagarlo vuelve al cálculo automático,
+// sin perder el valor de `etapa` que quedó guardado).
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { Loader2 } from 'lucide-react';
@@ -19,6 +28,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NumberInput } from '@/components/ui/number-input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { useActualizarHatoAnimal, type HatoAnimalEdicion } from '../hooks/useActualizarHatoAnimal';
 import type { HatoAnimalRow, EtapaHato, EstadoAnimalHato } from '@/types/hato';
 
@@ -49,6 +59,7 @@ interface FormState {
   estado: EstadoAnimalHato;
   raza: string;
   fecha_nacimiento: string;
+  etapaForzada: boolean;
 }
 
 function formDesdeAnimal(animal: HatoAnimalRow): FormState {
@@ -59,6 +70,7 @@ function formDesdeAnimal(animal: HatoAnimalRow): FormState {
     estado: animal.estado,
     raza: animal.raza ?? '',
     fecha_nacimiento: animal.fecha_nacimiento ?? '',
+    etapaForzada: animal.etapa_forzada,
   };
 }
 
@@ -70,6 +82,7 @@ function edicionDesdeForm(form: FormState): HatoAnimalEdicion {
     estado: form.estado,
     raza: form.raza.trim() || null,
     fecha_nacimiento: form.fecha_nacimiento || null,
+    etapa_forzada: form.etapaForzada,
   };
 }
 
@@ -170,6 +183,22 @@ export function EditarAnimalDialog({
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
+              <div className="space-y-1">
+                <Label htmlFor="editar-animal-etapa-forzada">Forzar esta etapa</Label>
+                <p className="text-xs text-gray-500">
+                  {form.etapaForzada
+                    ? 'Etapa forzada manualmente -- el cálculo automático (fecha de nacimiento y partos) no la va a cambiar hasta que apagues esto.'
+                    : 'La etapa se calcula sola a partir de la fecha de nacimiento y los partos. Actívalo solo si ese cálculo está mal (ej. una fecha de nacimiento equivocada).'}
+                </p>
+              </div>
+              <Switch
+                id="editar-animal-etapa-forzada"
+                checked={form.etapaForzada}
+                onCheckedChange={(v) => actualizarCampo('etapaForzada', v)}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">

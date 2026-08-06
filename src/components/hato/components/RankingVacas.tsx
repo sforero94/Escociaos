@@ -19,6 +19,7 @@ import { ChevronUp, ChevronDown, ChevronsUpDown, Loader2, TrendingDown, Trending
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { EstadoChip } from './EstadoChip';
 import { chipNumeroProvisional } from '@/utils/hatoUi';
+import { ordenarPorValor } from '@/utils/ordenarAnimalesHato';
 import { formatNumber } from '@/utils/format';
 import {
   rendimientoPorVaca,
@@ -31,7 +32,13 @@ import {
 } from '@/utils/hatoProduccion';
 import type { IdentidadAnimalHato } from '../hooks/useDatosProduccionPorVaca';
 
-type ColumnaRanking = 'actual' | 'potencial';
+// `nombre` se suma a las columnas ordenables (T2, ronda agosto 2026) para
+// que Martha pueda ubicar una vaca puntual por nombre en este ranking --
+// pero el DEFAULT de la tabla sigue siendo `actual` desc: este ranking
+// existe justamente para que Punteras/Rezagadas salten a la vista sin que
+// nadie tenga que invertir el orden a mano (docstring de arriba, decisión
+// SOW 5). Forzar alfabético por defecto aquí anularía ese propósito.
+type ColumnaRanking = 'nombre' | 'actual' | 'potencial';
 
 const VENTANAS: Array<{ value: VentanaRanking; label: string }> = [
   { value: 'semana', label: 'Semana' },
@@ -51,15 +58,17 @@ function CabeceraOrdenable({
   columna,
   ordenActual,
   onOrdenar,
+  align = 'right',
 }: {
   label: string;
   columna: ColumnaRanking;
   ordenActual: { columna: ColumnaRanking; direccion: DireccionOrden };
   onOrdenar: (columna: ColumnaRanking) => void;
+  align?: 'left' | 'right';
 }) {
   const activa = ordenActual.columna === columna;
   return (
-    <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">
+    <th className={`px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap ${align === 'right' ? 'text-right' : 'text-left'}`}>
       <button
         type="button"
         onClick={() => onOrdenar(columna)}
@@ -144,10 +153,17 @@ export function RankingVacas({ pesajes, partos, identidadPorAnimal, fechaReferen
     [pesajes, partos, fechaReferencia, ventana],
   );
 
-  const filasOrdenadas = useMemo(
-    () => ordenarConNulosAlFinal(filas, (f) => f[orden.columna], orden.direccion),
-    [filas, orden],
-  );
+  const filasOrdenadas = useMemo(() => {
+    if (orden.columna === 'nombre') {
+      return ordenarPorValor(filas, (f) => identidadPorAnimal.get(f.animalId)?.nombre ?? null, orden.direccion);
+    }
+    // Narrowing explícito: TS no propaga el `if` de arriba dentro del
+    // closure que recibe `ordenarConNulosAlFinal` (indexar por una unión
+    // capturada en una función anidada no hereda el control-flow narrowing
+    // del scope que la define).
+    const columnaNumerica: 'actual' | 'potencial' = orden.columna;
+    return ordenarConNulosAlFinal(filas, (f) => f[columnaNumerica], orden.direccion);
+  }, [filas, orden, identidadPorAnimal]);
 
   const punteras = useMemo(
     () => ordenarConNulosAlFinal(filas, (f) => f.actual, 'desc').filter((f) => f.actual != null).slice(0, TOP_N_DESTACADAS),
@@ -162,7 +178,10 @@ export function RankingVacas({ pesajes, partos, identidadPorAnimal, fechaReferen
     setOrden((prev) =>
       prev.columna === columna
         ? { columna, direccion: prev.direccion === 'asc' ? 'desc' : 'asc' }
-        : { columna, direccion: 'desc' },
+        // Columnas numéricas arrancan desc (lo más alto primero, coherente
+        // con Punteras/Rezagadas); `nombre` arranca asc (A-Z), la
+        // convención del resto del módulo.
+        : { columna, direccion: columna === 'nombre' ? 'asc' : 'desc' },
     );
   };
 
@@ -217,7 +236,7 @@ export function RankingVacas({ pesajes, partos, identidadPorAnimal, fechaReferen
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Vaca</th>
+                  <CabeceraOrdenable label="Vaca" columna="nombre" ordenActual={orden} onOrdenar={handleOrdenar} align="left" />
                   <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Sem. desde parto</th>
                   <CabeceraOrdenable label="Actual (L/día)" columna="actual" ordenActual={orden} onOrdenar={handleOrdenar} />
                   <CabeceraOrdenable label="Potencial (L/día)" columna="potencial" ordenActual={orden} onOrdenar={handleOrdenar} />

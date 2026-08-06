@@ -30,6 +30,7 @@ import { TrackerProductividad } from './components/TrackerProductividad';
 import { RankingVacas } from './components/RankingVacas';
 import { KpisVentaHato } from './components/KpisVentaHato';
 import { PesajeSemanalGrid } from './components/PesajeSemanalGrid';
+import { CargaPesajeMensual } from './components/CargaPesajeMensual';
 import { ProduccionQuincenalForm } from './components/ProduccionQuincenalForm';
 import { GraficoLitrosQuincenal } from './components/GraficoLitrosQuincenal';
 import { VentaAnimalesHatoDialog } from './components/VentaAnimalesHatoDialog';
@@ -205,6 +206,7 @@ export function ProduccionView() {
 
           <TabsContent value="registrar" className="mt-6 space-y-6">
             <PesajeSemanalGrid onSaved={recargarTodo} />
+            <CargaPesajeMensual onGuardado={recargarTodo} />
             <ProduccionQuincenalForm onSaved={cargarHistorial} />
 
             <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">

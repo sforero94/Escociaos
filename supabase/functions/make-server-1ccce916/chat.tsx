@@ -52,6 +52,7 @@ import {
   buildAnimalFicha,
   buildReproduccionSummary,
   buildProduccionSummary,
+  construirUmbralesCategoriaHatoDesdeFilas,
   type HatoAnimalRow,
   type HatoToroRow,
   type HatoEventoRow,
@@ -537,7 +538,7 @@ const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'get_hato_reproduccion',
-    description: 'Panorama reproductivo del Hato Lechero completo: conteo de animales por las 4 categorías del hato (terneras, novillas, hato en ordeño, horro = vacas YA secas esperando el parto; una próxima a secar sigue contando en el hato hasta el secado real), conteo por estado reproductivo detallado, cuántas alertas de secado/rechequeo/servicio-sin-confirmar/parto-próximo están activas HOY, listas ordenadas de próximos partos y próximas a secar (con días restantes), vacas próximas a reemplazo (cerca del umbral de partos) y vacas vacías marcadas como "problema" (necesitan rechequeo, no es normal que sigan vacías). Todos los umbrales salen de hato_config, nunca son fijos. Usar para "cómo va el hato", "cuántas vacas están próximas a parir/secar", "cuántas vacas necesitan atención". Para UN animal puntual usa get_hato_animal.',
+    description: 'Panorama reproductivo del Hato Lechero completo: conteo de animales por las 4 categorías del hato (terneras, novillas, hato en ordeño, horro = vacas YA secas esperando el parto; una próxima a secar sigue contando en el hato hasta el secado real; terneras y novillas se CALCULAN de num_partos/fecha_nacimiento, no del campo etapa capturado a mano -- terneras además se subdivide en terneras_leche/terneras_concentrado por edad, y terneras_edad_sin_calcular son las que no tienen fecha de nacimiento utilizable), conteo por estado reproductivo detallado, cuántas alertas de secado/rechequeo/servicio-sin-confirmar/parto-próximo están activas HOY, listas ordenadas de próximos partos y próximas a secar (con días restantes), vacas próximas a reemplazo (cerca del umbral de partos) y vacas vacías marcadas como "problema" (necesitan rechequeo, no es normal que sigan vacías). Todos los umbrales salen de hato_config, nunca son fijos. Usar para "cómo va el hato", "cuántas vacas están próximas a parir/secar", "cuántas vacas necesitan atención". Para UN animal puntual usa get_hato_animal.',
     parameters: {
       type: 'object',
       properties: {},
@@ -2780,6 +2781,18 @@ async function fetchHatoConfig(): Promise<HatoConfig> {
   return construirHatoConfigDesdeFilas(filas);
 }
 
+/** Igual que `fetchHatoConfig`, pero también arma `UmbralesCategoriaHato`
+ * (D-13, S6, migración 089) de la MISMA consulta -- esas 2 claves viven
+ * fuera de `HatoConfig` a propósito (ver `hato-aggregation.ts`), así que no
+ * se puede reutilizar `fetchHatoConfig()` sin una segunda ida a la base. */
+async function fetchHatoConfigConUmbralesCategoria() {
+  const filas = (await supabaseQuery('hato_config', 'select=clave,valor')) as FilaHatoConfig[];
+  return {
+    config: construirHatoConfigDesdeFilas(filas),
+    umbralesCategoria: construirUmbralesCategoriaHatoDesdeFilas(filas),
+  };
+}
+
 async function execHatoAnimal(args: Record<string, unknown>): Promise<string> {
   const { numero, nombre } = args as { numero?: number; nombre?: string };
   if (numero == null && !nombre) {
@@ -2874,12 +2887,17 @@ async function execHatoAnimal(args: Record<string, unknown>): Promise<string> {
 
 async function execHatoReproduccion(_args: Record<string, unknown>): Promise<string> {
   const fechaReferencia = new Date().toISOString().split('T')[0];
-  const [config, filas] = await Promise.all([
-    fetchHatoConfig(),
+  const [{ config, umbralesCategoria }, filas] = await Promise.all([
+    fetchHatoConfigConUmbralesCategoria(),
     supabaseQuery('v_hato_estado_actual', 'select=*') as Promise<Array<Record<string, unknown>>>,
   ]);
 
-  const summary = buildReproduccionSummary(filas as unknown as HatoEstadoActualRow[], config, fechaReferencia);
+  const summary = buildReproduccionSummary(
+    filas as unknown as HatoEstadoActualRow[],
+    config,
+    umbralesCategoria,
+    fechaReferencia,
+  );
 
   return JSON.stringify(summary);
 }

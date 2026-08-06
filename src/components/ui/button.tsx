@@ -34,25 +34,33 @@ const buttonVariants = cva(
   },
 );
 
-function Button({
-  className,
-  variant,
-  size,
-  asChild = false,
-  ...props
-}: React.ComponentProps<"button"> &
+type ButtonProps = React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean;
-  }) {
-  const Comp = asChild ? Slot : "button";
+  };
 
-  return (
-    <Comp
-      data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
-      {...props}
-    />
-  );
-}
+// forwardRef es obligatorio en React 18: sin el, cualquier padre que use
+// `asChild` (Radix Slot) pierde la referencia al nodo real. Radix la necesita
+// para anclar y controlar sus overlays, asi que un DropdownMenuTrigger o un
+// TooltipTrigger envolviendo <Button> queda inerte -- el menu simplemente no
+// abre, sin error visible mas alla de un warning en consola. Detectado
+// 2026-08-06 en `CapturaArchivo`, el disparador comun de los tres flujos de
+// carga por foto del modulo Hato. No quitar.
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : "button";
+
+    return (
+      <Comp
+        ref={ref}
+        data-slot="button"
+        className={cn(buttonVariants({ variant, size, className }))}
+        {...props}
+      />
+    );
+  },
+);
+
+Button.displayName = "Button";
 
 export { Button, buttonVariants };

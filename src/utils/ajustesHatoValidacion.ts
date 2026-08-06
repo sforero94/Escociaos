@@ -12,11 +12,13 @@
 //      nunca dejar que la UI de Ajustes escriba algo que el motor no pueda
 //      volver a leer.
 //
-// `dia_pesaje_semanal` se serializa como una fila más de `hato_config` pero
-// se EXCLUYE de la validación contra el motor: `construirHatoConfigDesdeFilas`
-// no la conoce a propósito (ver cabecera de `hatoConfigDesdeTabla.ts` -- esa
-// clave sirve al backfill de leche/S5, no al motor de fechas). Validarla ahí
-// haría fallar el guardado por una clave que el motor nunca reclama.
+// `dia_pesaje_semanal` y `retencion_ica_leche` se serializan como filas más
+// de `hato_config` pero se EXCLUYEN de la validación contra el motor:
+// `construirHatoConfigDesdeFilas` no las conoce a propósito (ver cabecera de
+// `hatoConfigDesdeTabla.ts` -- `dia_pesaje_semanal` sirve al backfill de
+// leche/S5, `retencion_ica_leche` sirve a `fn_hato_guardar_quincena_venta`
+// migración 085, D-11 -- ninguna de las dos al motor de fechas). Validarlas
+// ahí haría fallar el guardado por una clave que el motor nunca reclama.
 //
 // Regla dura heredada de `hatoConfigDesdeTabla.ts`: ninguna clave faltante o
 // mal tipada se guarda en silencio -- `validarAjustesHatoParaMotor` relanza el
@@ -49,17 +51,26 @@ export interface AjustesHatoForm {
   diasRechequeoDue: number;
   diasEsperaVoluntariaPostParto: number;
   diaPesajeSemanal: DiaPesajeSemanal;
+  /** Retención de ICA sobre la venta de leche (D-11, migración 085),
+   * expresada como PORCENTAJE (2.25, no 0.0225) -- más legible en el
+   * formulario. `serializarAjustesHato` la convierte a fracción antes de
+   * guardar en `hato_config` (donde `fn_hato_guardar_quincena_venta` la
+   * lee como fracción). */
+  retencionIcaLechePorcentaje: number;
 }
 
-/** Clave reservada para `dia_pesaje_semanal` -- la única fila serializada que
- * NO participa en `validarAjustesHatoParaMotor` (ver cabecera del archivo). */
+/** Clave reservada para `dia_pesaje_semanal` -- ninguna de las dos fila
+ * serializadas de esta constante y `CLAVE_RETENCION_ICA_LECHE` participa en
+ * `validarAjustesHatoParaMotor` (ver cabecera del archivo). */
 export const CLAVE_DIA_PESAJE_SEMANAL = 'dia_pesaje_semanal' as const;
+export const CLAVE_RETENCION_ICA_LECHE = 'retencion_ica_leche' as const;
 
 /**
- * Traduce `AjustesHatoForm` a las 11 filas `{clave, valor}` que se persisten
+ * Traduce `AjustesHatoForm` a las 12 filas `{clave, valor}` que se persisten
  * en `hato_config` (UPDATE-por-clave, nunca upsert -- ver
  * `useAjustesHato.ts`). El orden no importa para el guardado, pero se
- * mantiene el mismo orden de las migraciones 058/062/064 por legibilidad.
+ * mantiene el mismo orden de las migraciones 058/062/064/085 por
+ * legibilidad.
  */
 export function serializarAjustesHato(form: AjustesHatoForm): FilaHatoConfig[] {
   return [
@@ -74,6 +85,7 @@ export function serializarAjustesHato(form: AjustesHatoForm): FilaHatoConfig[] {
     { clave: 'dias_rechequeo_due', valor: form.diasRechequeoDue },
     { clave: 'dias_espera_voluntaria_post_parto', valor: form.diasEsperaVoluntariaPostParto },
     { clave: CLAVE_DIA_PESAJE_SEMANAL, valor: form.diaPesajeSemanal },
+    { clave: CLAVE_RETENCION_ICA_LECHE, valor: form.retencionIcaLechePorcentaje / 100 },
   ];
 }
 
@@ -85,7 +97,9 @@ export function serializarAjustesHato(form: AjustesHatoForm): FilaHatoConfig[] {
  * guardado y mostrar el mensaje, nunca persistir de todas formas.
  */
 export function validarAjustesHatoParaMotor(filas: FilaHatoConfig[]): HatoConfig {
-  const filasParaMotor = filas.filter((f) => f.clave !== CLAVE_DIA_PESAJE_SEMANAL);
+  const filasParaMotor = filas.filter(
+    (f) => f.clave !== CLAVE_DIA_PESAJE_SEMANAL && f.clave !== CLAVE_RETENCION_ICA_LECHE,
+  );
   return construirHatoConfigDesdeFilas(filasParaMotor);
 }
 
@@ -128,6 +142,13 @@ export function formularioDesdeFilas(filas: FilaHatoConfig[]): AjustesHatoForm {
       ? { iso: diaPesajeValor.iso, nombre: typeof diaPesajeValor.nombre === 'string' ? diaPesajeValor.nombre : '' }
       : { iso: 3, nombre: 'miercoles' };
 
+  const retencionIcaValor = porClave.get(CLAVE_RETENCION_ICA_LECHE);
+  // Guardada como fracción (0.0225); el formulario la muestra como
+  // porcentaje (2.25) -- default 2.25% si la clave no existe todavía en
+  // este entorno (migración 085 no aplicada).
+  const retencionIcaLechePorcentaje =
+    typeof retencionIcaValor === 'number' && Number.isFinite(retencionIcaValor) ? retencionIcaValor * 100 : 2.25;
+
   return {
     razas,
     mesesSecadoPorRaza,
@@ -140,5 +161,6 @@ export function formularioDesdeFilas(filas: FilaHatoConfig[]): AjustesHatoForm {
     diasRechequeoDue: numero('dias_rechequeo_due', 60),
     diasEsperaVoluntariaPostParto: numero('dias_espera_voluntaria_post_parto', 60),
     diaPesajeSemanal,
+    retencionIcaLechePorcentaje,
   };
 }

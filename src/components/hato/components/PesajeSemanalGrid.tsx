@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
-import { Loader2, Save, RefreshCw } from 'lucide-react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
+import { Loader2, Save, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -9,6 +9,41 @@ import { calcularFechaUltimoDiaPesaje } from '@/utils/calculosHato';
 import { useProduccionHato } from '../hooks/useProduccionHato';
 import type { HatoVacaActiva, HatoPesajeLeche } from '@/types/hato';
 import { obtenerFechaHoy } from '@/utils/fechas';
+import { ordenarPorValor, type DireccionOrdenAnimales as DireccionOrden } from '@/utils/ordenarAnimalesHato';
+
+type ColumnaOrdenablePesaje = 'numero' | 'nombre';
+
+function CabeceraOrdenable({
+  label,
+  columna,
+  ordenActual,
+  onOrdenar,
+  align = 'left',
+}: {
+  label: string;
+  columna: ColumnaOrdenablePesaje;
+  ordenActual: { columna: ColumnaOrdenablePesaje; direccion: DireccionOrden };
+  onOrdenar: (columna: ColumnaOrdenablePesaje) => void;
+  align?: 'left' | 'right';
+}) {
+  const activa = ordenActual.columna === columna;
+  return (
+    <th className={`px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide ${align === 'right' ? 'text-right' : 'text-left'}`}>
+      <button
+        type="button"
+        onClick={() => onOrdenar(columna)}
+        className={`inline-flex items-center gap-1 hover:text-gray-900 ${activa ? 'text-gray-900' : ''}`}
+      >
+        {label}
+        {activa ? (
+          ordenActual.direccion === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+        ) : (
+          <ChevronsUpDown className="w-3 h-3 text-gray-300" />
+        )}
+      </button>
+    </th>
+  );
+}
 
 interface FilaPesaje {
   animal: HatoVacaActiva;
@@ -36,6 +71,27 @@ export function PesajeSemanalGrid({ onSaved }: { onSaved?: () => void }) {
   const [cargando, setCargando] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [errorConfig, setErrorConfig] = useState<string | null>(null);
+  // Alfabético por defecto (T2, ronda agosto 2026) -- Martha ubica los
+  // animales por nombre, no por número; la query trae las filas por
+  // `numero` (fetchVacasActivas) solo porque necesita un orden estable de
+  // origen, el orden de PANTALLA lo decide este estado.
+  const [orden, setOrden] = useState<{ columna: ColumnaOrdenablePesaje; direccion: DireccionOrden }>({
+    columna: 'nombre',
+    direccion: 'asc',
+  });
+
+  const handleOrdenar = (columna: ColumnaOrdenablePesaje) => {
+    setOrden((prev) =>
+      prev.columna === columna
+        ? { columna, direccion: prev.direccion === 'asc' ? 'desc' : 'asc' }
+        : { columna, direccion: 'asc' },
+    );
+  };
+
+  const filasOrdenadas = useMemo(() => {
+    const extractor = orden.columna === 'nombre' ? (f: FilaPesaje) => f.animal.nombre : (f: FilaPesaje) => f.animal.numero;
+    return ordenarPorValor(filas, extractor, orden.direccion);
+  }, [filas, orden]);
 
   const cargar = useCallback(async (fechaObjetivo?: string) => {
     setCargando(true);
@@ -151,13 +207,13 @@ export function PesajeSemanalGrid({ onSaved }: { onSaved?: () => void }) {
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-gray-50">
                 <tr>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">#</th>
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Nombre</th>
+                  <CabeceraOrdenable label="#" columna="numero" ordenActual={orden} onOrdenar={handleOrdenar} />
+                  <CabeceraOrdenable label="Nombre" columna="nombre" ordenActual={orden} onOrdenar={handleOrdenar} />
                   <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide w-32">Litros</th>
                 </tr>
               </thead>
               <tbody>
-                {filas.map((f, i) => (
+                {filasOrdenadas.map((f, i) => (
                   <tr key={f.animal.id} className={`border-t border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
                     <td className="px-3 py-1.5 whitespace-nowrap text-gray-600">{f.animal.numero ?? '—'}</td>
                     <td className="px-3 py-1.5 whitespace-nowrap">{f.animal.nombre ?? 'Sin nombre'}</td>

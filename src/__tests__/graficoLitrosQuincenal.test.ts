@@ -21,6 +21,10 @@ function quincena(overrides: Partial<HatoProduccionQuincenal> = {}): HatoProducc
     litros_total: 1000,
     litros_pomar_confirmado: null,
     num_vacas_ordeno: null,
+    // Migración 085: bruto de la liquidación (D-11/D-12) -- irrelevante
+    // para estas pruebas (preparación pura del gráfico), `null` como
+    // cualquier fixture anterior a esa migración.
+    precio_bruto_litro: null,
     notas: null,
     fuente: null,
     // Migración 070: vínculo financiero -- irrelevante para estas pruebas

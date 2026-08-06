@@ -13,15 +13,16 @@
 // contraparte normalizada en el esquema (ver `types/hato.ts`) -- siempre
 // muestran el dato crudo.
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Loader2, AlertTriangle, ArrowLeft, FileSpreadsheet, FileDown } from 'lucide-react';
+import { Loader2, AlertTriangle, ArrowLeft, FileSpreadsheet, FileDown, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useHatoChequeoDetalle, type ChequeoVacaDetalle } from './hooks/useHatoChequeoDetalle';
 import { HatoPageHeader } from './components/HatoPageHeader';
 import { EstadoChip } from './components/EstadoChip';
 import { chipTipoEstado, chipNumeroProvisional } from '@/utils/hatoUi';
+import { ordenarPorValor, type DireccionOrdenAnimales as DireccionOrden } from '@/utils/ordenarAnimalesHato';
 import { formatShortDate, formatNumber } from '@/utils/format';
 import {
   descargarPlanillaChequeo,
@@ -30,6 +31,40 @@ import {
   isoATextoDDMMYYYY,
   type FilaPlanillaChequeo,
 } from '@/utils/hato/exportarPlanillaChequeo';
+
+type ColumnaOrdenableChequeo = 'numero' | 'nombre';
+
+function CabeceraOrdenable({
+  label,
+  columna,
+  ordenActual,
+  onOrdenar,
+  align = 'left',
+}: {
+  label: string;
+  columna: ColumnaOrdenableChequeo;
+  ordenActual: { columna: ColumnaOrdenableChequeo; direccion: DireccionOrden };
+  onOrdenar: (columna: ColumnaOrdenableChequeo) => void;
+  align?: 'left' | 'right';
+}) {
+  const activa = ordenActual.columna === columna;
+  return (
+    <th className={`px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap ${align === 'right' ? 'text-right' : 'text-left'}`}>
+      <button
+        type="button"
+        onClick={() => onOrdenar(columna)}
+        className={`inline-flex items-center gap-1 hover:text-gray-900 ${activa ? 'text-gray-900' : ''}`}
+      >
+        {label}
+        {activa ? (
+          ordenActual.direccion === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+        ) : (
+          <ChevronsUpDown className="w-3 h-3 text-gray-300" />
+        )}
+      </button>
+    </th>
+  );
+}
 
 /**
  * B5.2 -- export de un chequeo YA CARGADO, para record-keeping. Totalmente
@@ -141,6 +176,26 @@ export function ChequeoDetalle() {
   const { id } = useParams<{ id: string }>();
   const { detalle, loading, error } = useHatoChequeoDetalle(id);
   const [exportando, setExportando] = useState(false);
+  // Alfabético por defecto (T2, ronda agosto 2026) -- Martha ubica los
+  // animales por nombre, no por número.
+  const [orden, setOrden] = useState<{ columna: ColumnaOrdenableChequeo; direccion: DireccionOrden }>({
+    columna: 'nombre',
+    direccion: 'asc',
+  });
+
+  const handleOrdenar = (columna: ColumnaOrdenableChequeo) => {
+    setOrden((prev) =>
+      prev.columna === columna
+        ? { columna, direccion: prev.direccion === 'asc' ? 'desc' : 'asc' }
+        : { columna, direccion: 'asc' },
+    );
+  };
+
+  const vacasOrdenadas = useMemo(() => {
+    if (!detalle) return [];
+    const extractor = orden.columna === 'nombre' ? (f: ChequeoVacaDetalle) => f.nombre : (f: ChequeoVacaDetalle) => f.numero;
+    return ordenarPorValor(detalle.vacas, extractor, orden.direccion);
+  }, [detalle, orden]);
 
   const handleExportar = async () => {
     if (!detalle) return;
@@ -227,8 +282,8 @@ export function ChequeoDetalle() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">#</th>
-                    <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Nombre</th>
+                    <CabeceraOrdenable label="#" columna="numero" ordenActual={orden} onOrdenar={handleOrdenar} />
+                    <CabeceraOrdenable label="Nombre" columna="nombre" ordenActual={orden} onOrdenar={handleOrdenar} />
                     <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">PL</th>
                     <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">#P</th>
                     <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Últ. cría</th>
@@ -242,7 +297,7 @@ export function ChequeoDetalle() {
                   </tr>
                 </thead>
                 <tbody>
-                  {vacas.map((fila) => (
+                  {vacasOrdenadas.map((fila) => (
                     <FilaChequeoVaca key={fila.id} fila={fila} />
                   ))}
                 </tbody>

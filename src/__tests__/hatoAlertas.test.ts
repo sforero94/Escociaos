@@ -16,6 +16,7 @@ import {
   nombrePresentacionAnimal,
   debeReenviar,
   decidirAccionEscalamiento,
+  decidirExpiracionTerminal,
   HORAS_MINIMAS_REENVIO,
   INTENTOS_MAXIMOS_REENVIO,
   DIAS_EXPIRACION_ALERTA,
@@ -129,6 +130,36 @@ describe('generarAlertasPendientes — parto_proximo', () => {
     const fila = animalBase({ ultimo_servicio_fecha: '2026-07-01', ultimo_evento_fecha: '2026-07-01' });
     const alertas = generarAlertasPendientes([fila], [], CONFIG, new Set(), FECHA_REF);
     expect(alertas.find((a) => a.tipo === 'parto_proximo')).toBeUndefined();
+  });
+});
+
+describe('generarAlertasPendientes — S3 §2.2, sin regresión con secado_real/confirmacion sin servicio ancla', () => {
+  // docs/plan_hato_ciclo_manual_override.md §2.1: el cambio en
+  // `derivarEstadoReproductivo` que hace que estas filas dejen de ser
+  // 'indeterminado' no debe generar NINGUNA alerta nueva (criterio de
+  // aceptación #7). `secado_due`/`parto_proximo`/`servicio_sin_confirmacion`
+  // ya exigen `fila.ultimo_servicio_fecha` en este mismo archivo -- estas
+  // filas nunca lo tienen -- pero se prueba el resultado observable, no la
+  // guarda interna, para que un refactor futuro no lo pierda en silencio.
+  it('secado_real sin servicio ancla: sin alerta secado_due (aunque el estado ahora sea "seca")', () => {
+    const fila = animalBase({
+      ultimo_chequeo_fecha: '2026-07-09',
+      ultimo_servicio_fecha: null,
+      ultimo_secado_real_fecha: '2026-07-20',
+    });
+    const alertas = generarAlertasPendientes([fila], [], CONFIG, new Set(), FECHA_REF);
+    expect(alertas.find((a) => a.tipo === 'secado_due')).toBeUndefined();
+  });
+
+  it('confirmacion_prenez sin servicio ancla: sin alerta parto_proximo ni servicio_sin_confirmacion (aunque el estado ahora sea "preñada")', () => {
+    const fila = animalBase({
+      ultimo_chequeo_fecha: '2026-07-09',
+      ultimo_servicio_fecha: null,
+      ultima_confirmacion_prenez_fecha: '2026-07-10',
+    });
+    const alertas = generarAlertasPendientes([fila], [], CONFIG, new Set(), FECHA_REF);
+    expect(alertas.find((a) => a.tipo === 'parto_proximo')).toBeUndefined();
+    expect(alertas.find((a) => a.tipo === 'servicio_sin_confirmacion')).toBeUndefined();
   });
 });
 
@@ -477,5 +508,70 @@ describe('decidirAccionEscalamiento — escalamiento y expiración', () => {
       AHORA,
     );
     expect(accion).toBe('ninguna');
+  });
+});
+
+describe('decidirExpiracionTerminal — D-24 (docs/plan_hato_ronda_agosto_2026.md §0)', () => {
+  // Lleva al tick la misma regla que S2 construyó como botón manual
+  // (`alertasVencidasParaExpirar`, hatoAlertasUi.ts): decidirAccionEscalamiento
+  // devuelve 'ninguna' para CUALQUIER estado terminal, incluida 'escalada'
+  // -- por eso hay alertas escaladas atascadas para siempre sin esta regla.
+  const AHORA = '2026-07-23T10:00:00.000Z';
+
+  it('no hace nada sobre pendiente/enviada -- esas las cubre decidirAccionEscalamiento, no esta función', () => {
+    for (const estado of ['pendiente', 'enviada'] as const) {
+      expect(
+        decidirExpiracionTerminal({ estado, escalada_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z' }, AHORA),
+      ).toBe(false);
+    }
+  });
+
+  it('no hace nada sobre confirmada/descartada/expirada -- ya están resueltas o ya expiraron', () => {
+    for (const estado of ['confirmada', 'descartada', 'expirada'] as const) {
+      expect(
+        decidirExpiracionTerminal({ estado, escalada_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z' }, AHORA),
+      ).toBe(false);
+    }
+  });
+
+  it('expira una escalada vieja (más de 14 días desde escalada_at)', () => {
+    const escaladaHace20Dias = '2026-07-03T10:00:00.000Z';
+    expect(
+      decidirExpiracionTerminal({ estado: 'escalada', escalada_at: escaladaHace20Dias, updated_at: escaladaHace20Dias }, AHORA),
+    ).toBe(true);
+  });
+
+  it('no expira una escalada reciente (menos de 14 días)', () => {
+    const escaladaHace5Dias = '2026-07-18T10:00:00.000Z';
+    expect(
+      decidirExpiracionTerminal({ estado: 'escalada', escalada_at: escaladaHace5Dias, updated_at: escaladaHace5Dias }, AHORA),
+    ).toBe(false);
+  });
+
+  it('no expira exactamente al límite de 14 días (el corte es estrictamente >14, mismo criterio que decidirAccionEscalamiento)', () => {
+    const escaladaHaceExacto14Dias = '2026-07-09T10:00:00.000Z';
+    expect(
+      decidirExpiracionTerminal({ estado: 'escalada', escalada_at: escaladaHaceExacto14Dias, updated_at: escaladaHaceExacto14Dias }, AHORA),
+    ).toBe(false);
+  });
+
+  it('expira una respondida vieja (más de 14 días desde updated_at)', () => {
+    const respondidaHace20Dias = '2026-07-03T10:00:00.000Z';
+    expect(
+      decidirExpiracionTerminal({ estado: 'respondida', escalada_at: null, updated_at: respondidaHace20Dias }, AHORA),
+    ).toBe(true);
+  });
+
+  it('usa updated_at como respaldo si escalada_at falta (fila tocada a mano, no debería pasar pero no debe reventar)', () => {
+    const hace20Dias = '2026-07-03T10:00:00.000Z';
+    expect(decidirExpiracionTerminal({ estado: 'escalada', escalada_at: null, updated_at: hace20Dias }, AHORA)).toBe(true);
+  });
+
+  it('el umbral es configurable (parámetro diasUmbral), default DIAS_EXPIRACION_ALERTA', () => {
+    const escaladaHace5Dias = '2026-07-18T10:00:00.000Z';
+    expect(
+      decidirExpiracionTerminal({ estado: 'escalada', escalada_at: escaladaHace5Dias, updated_at: escaladaHace5Dias }, AHORA, 3),
+    ).toBe(true);
+    expect(DIAS_EXPIRACION_ALERTA).toBe(14);
   });
 });

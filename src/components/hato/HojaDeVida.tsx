@@ -17,10 +17,18 @@
 // PRINCIPAL de producción; la curva por chequeo (`CurvaProduccionLeche`,
 // PL bimestral) se APARCA -- NO se borra, queda en un acordeón secundario
 // rotulado "Estimación anterior".
+//
+// S3 T4a+T4b (docs/plan_hato_ciclo_manual_override.md): "Marcar ciclo"
+// reemplaza el antiguo botón "Registrar parto" (`RegistrarPartoDialog`,
+// borrado -- absorbido en la marca "parida" de `MarcarCicloDialog`).
+// Gateado a Gerencia SOLA (D-7), distinto de `canEdit`
+// (Administrador+Gerencia) que sigue gobernando editar/venta/muerte. La
+// línea de tiempo gana acciones "Corregir" por evento (T4b, gateadas a
+// `canEdit`) y la ficha gana la tarjeta de historial de correcciones.
 
 import { useMemo, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Loader2, AlertTriangle, ArrowLeft, Pencil, Baby, HandCoins, Skull } from 'lucide-react';
+import { Loader2, AlertTriangle, ArrowLeft, Pencil, HandCoins, RefreshCw, Skull, ChevronUp, ChevronDown } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useHatoAnimal } from './hooks/useHatoAnimal';
 import { useHatoTratamientos } from './hooks/useHatoTratamientos';
@@ -30,7 +38,9 @@ import { FranjaEstadisticas } from './components/FranjaEstadisticas';
 import { EventoTimeline } from './components/EventoTimeline';
 import { GenealogiaArbol } from './components/GenealogiaArbol';
 import { EditarAnimalDialog } from './components/EditarAnimalDialog';
-import { RegistrarPartoDialog } from './components/RegistrarPartoDialog';
+import { MarcarCicloDialog } from './components/MarcarCicloDialog';
+import { EditarEventoDialog } from './components/EditarEventoDialog';
+import { HistorialCorreccionesCard } from './components/HistorialCorreccionesCard';
 import { CurvaSemanalProduccion } from './components/CurvaSemanalProduccion';
 import { CurvaProduccionLeche } from './components/CurvaProduccionLeche';
 import { TratamientosCard } from './components/TratamientosCard';
@@ -40,8 +50,36 @@ import { MuerteAnimalDialog } from './components/MuerteAnimalDialog';
 import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { chipEstadoReproductivo, chipVaciaEsProblema, chipProximaAReemplazo, chipNumeroProvisional } from '@/utils/hatoUi';
+import { ordenarPorValor, type DireccionOrdenAnimales as DireccionOrden } from '@/utils/ordenarAnimalesHato';
 import { formatShortDate, formatNumber, capitalize } from '@/utils/format';
 import { obtenerFechaHoy } from '@/utils/fechas';
+import type { ChequeoHistorialItem } from './hooks/useHatoAnimal';
+import type { HatoEventoRow } from '@/types/hato';
+
+/** T2 (ronda agosto 2026): encabezado ordenable de la tabla de chequeos de
+ * la Hoja de Vida. Sin columna de nombre (una sola ficha por página), así
+ * que "ordenable" acá es Fecha asc/desc -- el default (desc, más reciente
+ * primero) reproduce el orden que ya traía `useHatoAnimal` de fábrica. */
+function CabeceraOrdenableChequeo({
+  label,
+  ordenActual,
+  onOrdenar,
+  align = 'left',
+}: {
+  label: string;
+  ordenActual: DireccionOrden;
+  onOrdenar: () => void;
+  align?: 'left' | 'right';
+}) {
+  return (
+    <th className={`px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 ${align === 'right' ? 'text-right' : 'text-left'}`}>
+      <button type="button" onClick={onOrdenar} className="inline-flex items-center gap-1 hover:text-gray-900 text-gray-900">
+        {label}
+        {ordenActual === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+      </button>
+    </th>
+  );
+}
 
 export function HojaDeVida() {
   const { id } = useParams<{ id: string }>();
@@ -59,10 +97,23 @@ export function HojaDeVida() {
     return fechasParto.length === 0 ? null : fechasParto.reduce((max, f) => (f > max ? f : max));
   }, [detalle]);
   const canEdit = profile?.rol === 'Administrador' || profile?.rol === 'Gerencia';
+  // D-7 (docs/plan_hato_ronda_agosto_2026.md §0): solo Gerencia marca el
+  // ciclo reproductivo -- el gate es el ROL, nunca el resultado de una
+  // consulta. Distinto de `canEdit`, que sigue siendo Administrador+Gerencia
+  // para el resto de acciones (editar/venta/muerte/correcciones).
+  const canMarcarCiclo = profile?.rol === 'Gerencia';
   const [editOpen, setEditOpen] = useState(false);
-  const [partoOpen, setPartoOpen] = useState(false);
+  const [marcarCicloOpen, setMarcarCicloOpen] = useState(false);
+  const [eventoSeleccionado, setEventoSeleccionado] = useState<HatoEventoRow | null>(null);
   const [ventaOpen, setVentaOpen] = useState(false);
   const [muerteOpen, setMuerteOpen] = useState(false);
+  // Desc por defecto (más reciente primero) -- mismo orden que ya traía
+  // `useHatoAnimal` (T2, ronda agosto 2026: encabezado ahora interactivo).
+  const [ordenChequeos, setOrdenChequeos] = useState<DireccionOrden>('desc');
+  const chequeosOrdenados = useMemo(
+    () => ordenarPorValor(detalle?.chequeos ?? [], (c: ChequeoHistorialItem) => c.chequeoFecha || null, ordenChequeos),
+    [detalle, ordenChequeos],
+  );
 
   if (loading) {
     return (
@@ -103,6 +154,14 @@ export function HojaDeVida() {
 
   const vaciaChip = chipVaciaEsProblema(derivado.vacia_es_problema);
 
+  // T4b: `chequeo_vaca_id -> hato_chequeos.fecha`, para el chip "Del
+  // chequeo del {fecha}" de EventoTimeline y el aviso de caducidad de
+  // EditarEventoDialog -- reusa `detalle.chequeos` (ya trae la fecha vía
+  // join), sin una query nueva.
+  const chequeoFechaPorChequeoVacaId = Object.fromEntries(
+    chequeos.filter((c) => c.chequeoFecha).map((c) => [c.id, c.chequeoFecha]),
+  );
+
   const identidad = `${animal.numero != null ? `#${animal.numero}` : 'Sin caravana'}${animal.nombre ? ` ${animal.nombre}` : ''}`;
   const subtitulo = `${capitalize(animal.etapa)}${animal.raza ? ` · ${capitalize(animal.raza)}` : ''}${
     animal.fecha_nacimiento ? ` · Nació ${formatShortDate(animal.fecha_nacimiento)}` : ''
@@ -121,26 +180,30 @@ export function HojaDeVida() {
           title={identidad}
           subtitle={subtitulo}
           actions={
-            canEdit && (
-              <>
-                <Button variant="outline" size="sm" onClick={() => setPartoOpen(true)}>
-                  <Baby className="w-4 h-4 mr-1.5" /> Registrar parto
+            <>
+              {canMarcarCiclo && (
+                <Button variant="outline" size="sm" onClick={() => setMarcarCicloOpen(true)}>
+                  <RefreshCw className="w-4 h-4 mr-1.5" /> Marcar ciclo
                 </Button>
-                {puedeRegistrarSalida && (
-                  <>
-                    <Button variant="outline" size="sm" onClick={() => setVentaOpen(true)}>
-                      <HandCoins className="w-4 h-4 mr-1.5" /> Registrar venta
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => setMuerteOpen(true)}>
-                      <Skull className="w-4 h-4 mr-1.5" /> Registrar muerte
-                    </Button>
-                  </>
-                )}
-                <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
-                  <Pencil className="w-4 h-4 mr-1.5" /> Editar
-                </Button>
-              </>
-            )
+              )}
+              {canEdit && (
+                <>
+                  {puedeRegistrarSalida && (
+                    <>
+                      <Button variant="outline" size="sm" onClick={() => setVentaOpen(true)}>
+                        <HandCoins className="w-4 h-4 mr-1.5" /> Registrar venta
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => setMuerteOpen(true)}>
+                        <Skull className="w-4 h-4 mr-1.5" /> Registrar muerte
+                      </Button>
+                    </>
+                  )}
+                  <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+                    <Pencil className="w-4 h-4 mr-1.5" /> Editar
+                  </Button>
+                </>
+              )}
+            </>
           }
         />
 
@@ -173,7 +236,15 @@ export function HojaDeVida() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
             <h2 className="text-sm font-semibold text-gray-900 mb-4">Línea de tiempo reproductiva</h2>
-            <EventoTimeline eventos={eventos} nombresToroPorId={nombresToroPorId} proyectados={proyectados} fechaHoy={hoy} />
+            <EventoTimeline
+              eventos={eventos}
+              nombresToroPorId={nombresToroPorId}
+              proyectados={proyectados}
+              fechaHoy={hoy}
+              chequeoFechaPorId={chequeoFechaPorChequeoVacaId}
+              puedeEditar={canEdit}
+              onEditar={setEventoSeleccionado}
+            />
           </div>
 
           <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -217,7 +288,11 @@ export function HojaDeVida() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Fecha</th>
+                    <CabeceraOrdenableChequeo
+                      label="Fecha"
+                      ordenActual={ordenChequeos}
+                      onOrdenar={() => setOrdenChequeos((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
+                    />
                     <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">PL</th>
                     <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Servicio</th>
                     <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Toro</th>
@@ -226,7 +301,7 @@ export function HojaDeVida() {
                   </tr>
                 </thead>
                 <tbody>
-                  {chequeos.map((c, i) => (
+                  {chequeosOrdenados.map((c, i) => (
                     <tr key={c.id} className={`border-t border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                       <td className="px-3 py-2 whitespace-nowrap">{c.chequeoFecha ? formatShortDate(c.chequeoFecha) : '—'}</td>
                       <td className="px-3 py-2 text-right whitespace-nowrap">{c.pl != null ? formatNumber(c.pl, 1) : '—'}</td>
@@ -241,6 +316,13 @@ export function HojaDeVida() {
             </div>
           )}
         </div>
+
+        <HistorialCorreccionesCard
+          correcciones={detalle.correcciones}
+          nombrePorUsuarioId={detalle.nombrePorUsuarioId}
+          loading={false}
+          error={null}
+        />
       </div>
 
       {canEdit && (
@@ -251,13 +333,30 @@ export function HojaDeVida() {
             animal={animal}
             onGuardado={reload}
           />
-          <RegistrarPartoDialog
-            open={partoOpen}
-            onOpenChange={setPartoOpen}
-            animalId={animal.id}
-            onRegistrado={reload}
+          <EditarEventoDialog
+            open={!!eventoSeleccionado}
+            onOpenChange={(o) => {
+              if (!o) setEventoSeleccionado(null);
+            }}
+            evento={eventoSeleccionado}
+            chequeoFecha={
+              eventoSeleccionado?.chequeo_vaca_id
+                ? chequeoFechaPorChequeoVacaId[eventoSeleccionado.chequeo_vaca_id] ?? null
+                : null
+            }
+            nombresToroPorId={nombresToroPorId}
+            onGuardado={reload}
           />
         </>
+      )}
+
+      {canMarcarCiclo && (
+        <MarcarCicloDialog
+          open={marcarCicloOpen}
+          onOpenChange={setMarcarCicloOpen}
+          animalId={animal.id}
+          onGuardado={reload}
+        />
       )}
 
       {/* Gateados por `canEdit`, no por `puedeRegistrarSalida`: ese último

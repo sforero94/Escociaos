@@ -10,7 +10,13 @@ import { useState, useCallback, useEffect } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
 import { construirHatoConfigDesdeFilas, type FilaHatoConfig } from '@/utils/hatoConfigDesdeTabla';
 import { derivarEstadoReproductivo, type EstadoActualHatoRow, type EstadoReproductivoDerivado } from '@/utils/calculosHato';
-import { clasificarCategoriaHato, type CategoriaHato } from '@/utils/hatoCategorias';
+import {
+  clasificarCategoriaHato,
+  calcularEtapaHato,
+  construirUmbralesCategoriaHatoDesdeFilas,
+  type CategoriaHato,
+  type SubetapaTernera,
+} from '@/utils/hatoCategorias';
 import { esNumeroProvisional } from '@/utils/importHato/overridesChapeta';
 import type { EstadoActualHatoViewRow, EtapaHato, EstadoAnimalHato } from '@/types/hato';
 import { obtenerFechaHoy } from '@/utils/fechas';
@@ -28,6 +34,20 @@ export interface AnimalHatoDerivado {
   ultimoChequeoFecha: string | null;
   derivado: EstadoReproductivoDerivado;
   categoria: CategoriaHato | null;
+  /** De dónde salió la etapa que decidió `categoria` (S6, D-13, corregido
+   * por la migración 092): `calculado` (num_partos/fecha_nacimiento) u
+   * `override_manual` -- este último cubre TANTO `etapa_forzada = true`
+   * (el usuario forzó la etapa a mano desde `EditarAnimalDialog`, gana
+   * siempre) COMO el fallback de siempre cuando el cálculo no pudo
+   * resolver la edad. Si algún consumidor necesita distinguir cuál de los
+   * dos ocurrió, la fuente de esa distinción es `etapa_forzada` en la fila
+   * cruda, no este campo. `null` cuando `categoria` también es `null`
+   * (estado terminal, no aplica ninguna de las dos). */
+  categoriaOrigen: 'calculado' | 'override_manual' | null;
+  /** Subgrupo contable dentro de "ternera" (D-13: leche/concentrado),
+   * `null` para toda categoría que no sea `ternera` o cuando la edad no se
+   * pudo calcular. */
+  subetapaTernera: SubetapaTernera | null;
 }
 
 function filaVistaAFactRow(fila: EstadoActualHatoViewRow): EstadoActualHatoRow {
@@ -70,10 +90,22 @@ export function useHatoAnimales() {
       if (estadoError) throw estadoError;
 
       const config = construirHatoConfigDesdeFilas((configRows ?? []) as FilaHatoConfig[]);
+      // Mismas filas crudas de `hato_config` que ya se pidieron arriba --
+      // sin una segunda consulta (S6, D-13).
+      const umbralesCategoria = construirUmbralesCategoriaHatoDesdeFilas((configRows ?? []) as FilaHatoConfig[]);
       const hoy = obtenerFechaHoy();
 
       const filas: AnimalHatoDerivado[] = ((estadoRows ?? []) as EstadoActualHatoViewRow[]).map((fila) => {
         const derivado = derivarEstadoReproductivo(filaVistaAFactRow(fila), config, hoy);
+        const etapaCalculada = calcularEtapaHato(
+          fila.etapa,
+          fila.etapa_forzada,
+          fila.num_partos,
+          fila.fecha_nacimiento,
+          umbralesCategoria,
+          hoy,
+        );
+        const categoria = clasificarCategoriaHato(etapaCalculada.etapa, derivado.estado);
         return {
           animalId: fila.animal_id,
           numero: fila.numero,
@@ -86,7 +118,9 @@ export function useHatoAnimales() {
           numPartos: fila.num_partos,
           ultimoChequeoFecha: fila.ultimo_chequeo_fecha,
           derivado,
-          categoria: clasificarCategoriaHato(fila.etapa, derivado.estado),
+          categoria,
+          categoriaOrigen: categoria === null ? null : etapaCalculada.origen,
+          subetapaTernera: categoria === 'ternera' ? etapaCalculada.subetapaTernera : null,
         };
       });
 

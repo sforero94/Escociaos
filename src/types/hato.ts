@@ -22,7 +22,7 @@ export type ConfianzaIdentidad = 'alta' | 'media' | 'baja';
 export type TipoServicioHato = 'monta' | 'inseminacion';
 export type OrigenAnimalHato = 'nacimiento' | 'compra' | 'importacion_historica';
 
-/** `hato_animales` (migración 053). */
+/** `hato_animales` (migración 053, extendida por 092 con `etapa_forzada`). */
 export interface HatoAnimalRow {
   id: string;
   numero: number | null;
@@ -41,6 +41,14 @@ export interface HatoAnimalRow {
   origen: OrigenAnimalHato | null;
   confianza: ConfianzaIdentidad;
   notas: string | null;
+  /** Corrección de precedencia de las categorías calculadas (migración 092,
+   * S6 D-13, 2026-08-06): cuando es `true`, `etapa` (fijada a mano desde
+   * `EditarAnimalDialog`) GANA sobre el cálculo por
+   * `fecha_nacimiento`/número de partos, incluso si el cálculo SÍ puede
+   * resolver la edad. `false` por defecto -- el cálculo manda mientras
+   * nadie fuerce la etapa explícitamente. Ver `calcularEtapaHato`
+   * (`hatoCategorias.ts`). */
+  etapa_forzada: boolean;
   created_at: string;
 }
 
@@ -73,9 +81,38 @@ export interface HatoEventoRow {
    * hecho de que el animal salió del hato. `null` para todo evento que no
    * sea `venta`, o para una venta sin ingreso enlazado. */
   fin_ingreso_id: string | null;
+  /** `chequeo_vaca_id` (migración 053) -- `NULL` para un evento manual
+   * (marca de T4a, S9 venta/muerte); apunta a `hato_chequeo_vacas(id)`
+   * cuando el evento lo derivó `fn_hato_commit_chequeo` (065) de UN
+   * chequeo puntual. Ese vínculo es lo que hace que una corrección manual
+   * sobre este evento CADUQUE si Martha vuelve a aprobar ese mismo
+   * chequeo -- 065 borra y re-inserta solo los eventos de su propio
+   * `chequeo_id` (S3 T4b, docs/plan_hato_ciclo_manual_override.md §4.4). */
+  chequeo_vaca_id: string | null;
   datos: Record<string, unknown> | null;
   fuente: 'web' | 'telegram' | 'importacion' | 'alerta' | 'chequeo' | null;
   created_at: string;
+}
+
+/** Fila de `hato_correcciones` (migración 084, S3 T4b) -- traza append-only
+ * de UPDATE/DELETE humanos sobre 5 tablas del módulo. Escrita
+ * EXCLUSIVAMENTE por el trigger `fn_hato_registrar_correccion()`; esta app
+ * solo la LEE (SELECT-only para `authenticated`, sin política de
+ * escritura). `tabla` está acotado a las mismas 5 del CHECK de la
+ * migración. */
+export interface HatoCorreccionRow {
+  id: string;
+  tabla: 'hato_eventos' | 'hato_pesajes_leche' | 'hato_produccion_quincenal' | 'hato_animales' | 'hato_chequeo_vacas';
+  fila_id: string;
+  operacion: 'update' | 'delete';
+  datos_anteriores: Record<string, unknown>;
+  /** `NULL` en `operacion === 'delete'` -- no hay valor "nuevo" cuando la
+   * fila desaparece. */
+  datos_nuevos: Record<string, unknown> | null;
+  animal_id: string | null;
+  motivo: string | null;
+  corregido_por: string | null;
+  corregido_en: string;
 }
 
 /** `hato_chequeos` (migración 053) -- cabecera de ronda. */
@@ -155,6 +192,17 @@ export interface EstadoActualHatoViewRow {
   ultima_confirmacion_prenez_fecha: string | null;
   ultimo_evento_fecha: string | null;
   ultimo_estado_chequeo: TipoEstado | null;
+  /** `fecha_nacimiento` de `hato_animales` (migración 089, S6 D-13) --
+   * columna nueva AL FINAL: `CREATE OR REPLACE VIEW` no admite reordenar ni
+   * insertar en medio (mismo patrón que `ultimo_estado_chequeo`, 062).
+   * Alimenta `calcularEtapaHato` (`hatoCategorias.ts`) para las categorías
+   * calculadas -- `null` cuando el dato nunca se capturó. */
+  fecha_nacimiento: string | null;
+  /** `etapa_forzada` de `hato_animales` (migración 092, corrección de
+   * precedencia D-13, 2026-08-06) -- columna nueva AL FINAL, después de
+   * `fecha_nacimiento`. Cuando es `true`, `etapa` gana SIEMPRE sobre el
+   * cálculo en `calcularEtapaHato`. */
+  etapa_forzada: boolean;
 }
 
 // ============================================================================
@@ -232,6 +280,13 @@ export interface HatoProduccionQuincenal {
   litros_total: number | null;
   litros_pomar_confirmado: number | null;
   num_vacas_ordeno: number | null;
+  /** Precio bruto por litro de la liquidación de El Pomar, ANTES de la
+   * retención de ICA (D-11/D-12, migración 085) -- `null` para toda fila
+   * anterior a esa migración ("sin dato, nunca 0"). El precio NETO se
+   * deriva en el render (`fin_ingreso.valor / litros`), igual que siempre;
+   * este campo es la única forma de recuperar el bruto de una fila ya
+   * guardada, para que la liquidación siga siendo auditable. */
+  precio_bruto_litro: number | null;
   notas: string | null;
   fuente: string | null;
   /** `fin_ingreso_id` (070) -- vínculo duro, NOT NULL en la tabla. 1:1 con
@@ -262,7 +317,11 @@ export interface ProduccionQuincenalFormData {
   notas: string;
   fin_ingreso: {
     fecha: string;
-    valor: number | undefined;
+    /** Bruto de la liquidación de El Pomar (D-11, migración 085) -- el RPC
+     * calcula el neto (lo que se guarda en `fin_ingresos.valor`) y el ICA
+     * a partir de este valor. Nunca el neto capturado a mano: eso era el
+     * contrato anterior a la migración 085. */
+    valor_bruto: number | undefined;
     region_id: string;
     medio_pago_id: string;
     comprador_id: string | null;

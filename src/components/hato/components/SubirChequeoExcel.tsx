@@ -10,6 +10,13 @@
 // celular; las fotos se ACUMULAN (una por página) porque la cámara móvil
 // devuelve una a la vez.
 //
+// D-8 (ronda agosto 2026, S2): la elección "¿foto o archivo?" pasó de DOS
+// botones sueltos a UN botón con dropdown (`CapturaArchivo.tsx`, compartido
+// con S4/S5) -- pedido explícito de Santiago ("solo uno para cargar chequeo
+// que abra un dropdown"). El drag & drop se conserva como atajo de escritorio
+// en un ÚNICO drop zone que huele el tipo de archivo soltado (imagen ->
+// fotos, `.xlsx` -> archivo) en vez de dos zonas separadas por modo.
+//
 // El bloque `resultado.ocr` se renderiza SIEMPRE que venga: sin él, una vaca
 // que el OCR no encontró se vería idéntica a una vaca sin cambios, que es
 // exactamente el fallo silencioso que el módulo prohíbe.
@@ -38,8 +45,8 @@
 //      migración 053). Otros roles ven la revisión completa en solo lectura, con
 //      el motivo dicho en pantalla -- nunca un botón que falla con 403.
 
-import { useRef, useState } from 'react';
-import { Upload, FileSpreadsheet, Loader2, AlertTriangle, CheckCircle2, X, Camera } from 'lucide-react';
+import { useState } from 'react';
+import { FileSpreadsheet, Loader2, AlertTriangle, CheckCircle2, X, Camera } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -49,6 +56,7 @@ import { useSubirChequeoExcel } from '../hooks/useSubirChequeoExcel';
 import { useRevisionChequeo } from '../hooks/useRevisionChequeo';
 import { ChequeoDiffReview } from './ChequeoDiffReview';
 import { CrearAnimalDialog } from './CrearAnimalDialog';
+import { CapturaArchivo } from './CapturaArchivo';
 import type { FilaDiffChequeo } from '@/utils/importHato/diffChequeo';
 
 /** Tope de fotos por chequeo -- el MISMO que valida el servidor
@@ -88,14 +96,13 @@ export function SubirChequeoExcel({
   const [dragActive, setDragActive] = useState(false);
   const [veterinario, setVeterinario] = useState('');
   const [filaParaFicha, setFilaParaFicha] = useState<FilaDiffChequeo | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
   // Fase 3b -- ruta por FOTO. `foto` es el modo por defecto: es el camino que
   // el flujo nuevo quiere (Martha fotografía la planilla que llenó a mano) y
-  // el `.xlsx` queda como respaldo, no al revés.
-  const [modo, setModo] = useState<'foto' | 'excel'>('foto');
+  // el `.xlsx` queda como respaldo, no al revés. `null` = todavía no eligió
+  // nada (recién abierto el diálogo, ver `CapturaArchivo`/D-8).
+  const [modo, setModo] = useState<'foto' | 'excel' | null>('foto');
   const [fotos, setFotos] = useState<File[]>([]);
   const [avisoFotos, setAvisoFotos] = useState<string | null>(null);
-  const fotoInputRef = useRef<HTMLInputElement>(null);
 
   const handleClose = (nextOpen: boolean) => {
     if (!nextOpen) {
@@ -104,6 +111,7 @@ export function SubirChequeoExcel({
       setAvisoFotos(null);
       setVeterinario('');
       setFilaParaFicha(null);
+      setModo('foto');
       limpiar();
       onCompletado?.();
     }
@@ -147,26 +155,15 @@ export function SubirChequeoExcel({
 
   const seleccionarArchivo = (file: File) => {
     if (!/\.xlsx?$/i.test(file.name)) return;
+    setModo('excel');
     setArchivo(file);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    if (modo === 'foto') {
-      const imagenes = Array.from(e.dataTransfer.files ?? []).filter((f) => f.type.startsWith('image/'));
-      if (imagenes.length > 0) agregarFotos(imagenes);
-      return;
-    }
-    const file = e.dataTransfer.files?.[0];
-    if (file) seleccionarArchivo(file);
   };
 
   /** Acumula en vez de reemplazar: en el celular la cámara devuelve UNA foto
    * por vez, así que la planilla de 2 páginas se arma con dos toques. El tope
    * de 6 es el mismo del servidor -- se avisa en vez de descartar en silencio. */
   const agregarFotos = (nuevas: File[]) => {
+    setModo('foto');
     setFotos((previas) => {
       const total = [...previas, ...nuevas];
       if (total.length > MAX_FOTOS) {
@@ -176,6 +173,25 @@ export function SubirChequeoExcel({
       setAvisoFotos(null);
       return total;
     });
+  };
+
+  /** Drop zone ÚNICA (D-8): huele el tipo de lo soltado en vez de exigir que
+   * el usuario haya elegido antes un modo -- imagen -> fotos, `.xlsx` ->
+   * archivo. Lo que no matchea ninguno de los dos se ignora en silencio
+   * (mismo criterio que `seleccionarArchivo`, que ya descartaba extensiones
+   * no-`.xlsx`). */
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    const soltados = Array.from(e.dataTransfer.files ?? []);
+    const imagenes = soltados.filter((f) => f.type.startsWith('image/'));
+    if (imagenes.length > 0) {
+      agregarFotos(imagenes);
+      return;
+    }
+    const archivoSoltado = soltados.find((f) => /\.xlsx?$/i.test(f.name));
+    if (archivoSoltado) seleccionarArchivo(archivoSoltado);
   };
 
   const handleSubir = async () => {
@@ -202,79 +218,22 @@ export function SubirChequeoExcel({
           <DialogBody className="space-y-4">
             {!resultado && (
               <div className="flex items-center gap-3">
-                <Button
-                  type="button"
-                  variant={modo === 'foto' ? 'default' : 'outline'}
-                  onClick={() => { setModo('foto'); setArchivo(null); }}
-                >
-                  <Camera className="w-4 h-4 mr-2" />
-                  Foto de la planilla
-                </Button>
-                <Button
-                  type="button"
-                  variant={modo === 'excel' ? 'default' : 'outline'}
-                  onClick={() => { setModo('excel'); setFotos([]); setAvisoFotos(null); }}
-                >
-                  <FileSpreadsheet className="w-4 h-4 mr-2" />
-                  Archivo .xlsx
-                </Button>
-              </div>
-            )}
-
-            {!resultado && modo === 'foto' && (
-              <div
-                onDragEnter={(e) => { e.preventDefault(); setDragActive(true); }}
-                onDragOver={(e) => e.preventDefault()}
-                onDragLeave={() => setDragActive(false)}
-                onDrop={handleDrop}
-                className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
-                  dragActive ? 'border-green-200 bg-green-50' : 'border-gray-300'
-                }`}
-              >
-                <Camera className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-                <p className="text-sm text-gray-600 mb-3">
-                  Toma una foto por página de la planilla diligenciada, o arrastra las imágenes aquí.
-                </p>
-                <input
-                  ref={fotoInputRef}
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => {
-                    const nuevas = Array.from(e.target.files ?? []);
-                    if (nuevas.length > 0) agregarFotos(nuevas);
-                    // Permite volver a elegir la MISMA foto tras descartarla.
-                    e.target.value = '';
-                  }}
+                <CapturaArchivo
+                  onFotos={agregarFotos}
+                  onArchivo={(files) => seleccionarArchivo(files[0])}
+                  acceptArchivo=".xlsx,.xls"
+                  label="Cargar chequeo"
+                  labelOpcionArchivo="Subir archivo .xlsx"
                 />
-                <Button type="button" variant="outline" onClick={() => fotoInputRef.current?.click()}>
-                  {fotos.length === 0 ? 'Tomar o elegir fotos' : 'Agregar otra página'}
-                </Button>
-
-                {fotos.length > 0 && (
-                  <ul className="mt-4 space-y-1">
-                    {fotos.map((f, i) => (
-                      <li key={`${f.name}-${i}`} className="flex items-center justify-center gap-3">
-                        <span className="text-sm text-gray-900">Página {i + 1}</span>
-                        <span className="text-xs text-gray-500">{(f.size / 1024).toFixed(0)} KB</span>
-                        <button
-                          type="button"
-                          onClick={() => setFotos((p) => p.filter((_, j) => j !== i))}
-                          className="text-gray-400 hover:text-gray-900"
-                          aria-label={`Quitar página ${i + 1}`}
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                {modo === 'foto' && fotos.length > 0 && (
+                  <span className="text-xs text-gray-500">
+                    {fotos.length} página{fotos.length > 1 ? 's' : ''} lista{fotos.length > 1 ? 's' : ''}
+                  </span>
                 )}
               </div>
             )}
 
-            {!resultado && modo === 'excel' && (
+            {!resultado && (
               <div
                 onDragEnter={(e) => { e.preventDefault(); setDragActive(true); }}
                 onDragOver={(e) => e.preventDefault()}
@@ -284,25 +243,7 @@ export function SubirChequeoExcel({
                   dragActive ? 'border-green-200 bg-green-50' : 'border-gray-300'
                 }`}
               >
-                {!archivo ? (
-                  <>
-                    <Upload className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-                    <p className="text-sm text-gray-600 mb-3">Arrastra el .xlsx del chequeo aquí o selecciónalo</p>
-                    <input
-                      ref={inputRef}
-                      type="file"
-                      accept=".xlsx,.xls"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) seleccionarArchivo(file);
-                      }}
-                    />
-                    <Button type="button" variant="outline" onClick={() => inputRef.current?.click()}>
-                      Seleccionar archivo
-                    </Button>
-                  </>
-                ) : (
+                {modo === 'excel' && archivo ? (
                   <div className="flex items-center justify-center gap-3">
                     <FileSpreadsheet className="w-8 h-8 text-primary" />
                     <div className="text-left">
@@ -318,6 +259,30 @@ export function SubirChequeoExcel({
                       <X className="w-4 h-4" />
                     </button>
                   </div>
+                ) : fotos.length > 0 ? (
+                  <ul className="space-y-1">
+                    {fotos.map((f, i) => (
+                      <li key={`${f.name}-${i}`} className="flex items-center justify-center gap-3">
+                        <span className="text-sm text-gray-900">Página {i + 1}</span>
+                        <span className="text-xs text-gray-500">{(f.size / 1024).toFixed(0)} KB</span>
+                        <button
+                          type="button"
+                          onClick={() => setFotos((p) => p.filter((_, j) => j !== i))}
+                          className="text-gray-400 hover:text-gray-900"
+                          aria-label={`Quitar página ${i + 1}`}
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <>
+                    <Camera className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                    <p className="text-sm text-gray-600">
+                      Elige "Cargar chequeo" arriba, o arrastra las fotos de la planilla (o el .xlsx de respaldo) aquí.
+                    </p>
+                  </>
                 )}
               </div>
             )}

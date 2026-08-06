@@ -1666,6 +1666,27 @@ const SIN_ALERTAS: AlertasReproductivas = {
   parto_proximo: false,
 };
 
+type EventoCiclo = 'servicio' | 'confirmacion' | 'secado_real' | 'parto';
+
+/** Prioridad de avance del ciclo, usada SOLO para desempatar cuando dos
+ * eventos de `hato_eventos` comparten la misma `fecha` (S3, marcas manuales
+ * del ciclo -- ver docs/plan_hato_ciclo_manual_override.md §2.1). Dentro de
+ * un mismo día la secuencia solo puede avanzar: no se sirve una vaca que
+ * parió ese día, no se seca una que se confirmó ese día y luego se
+ * re-sirvió. En empate gana el evento MÁS avanzado (`parto` > `secado_real`
+ * > `confirmacion` > `servicio`), nunca "el insertado primero" (el orden
+ * estable de `Array.prototype.sort` sobre los `candidatos.push(...)` de
+ * abajo) y JAMÁS `created_at`: el commit de un chequeo borra y re-inserta
+ * sus eventos derivados (migración 065), así que su `created_at` siempre es
+ * el más nuevo y ganaría todos los empates contra una marca manual
+ * anterior -- exactamente el bug que este desempate evita. */
+const PRIORIDAD_EMPATE_CICLO: Record<EventoCiclo, number> = {
+  servicio: 0,
+  confirmacion: 1,
+  secado_real: 2,
+  parto: 3,
+};
+
 function calcularRechequeoDue(fila: EstadoActualHatoRow, config: HatoConfig, fechaReferencia: string): boolean {
   if (!fila.ultimo_chequeo_fecha) return false;
   return diferenciaDias(fila.ultimo_chequeo_fecha, fechaReferencia) >= config.dias_rechequeo_due;
@@ -1766,7 +1787,6 @@ export function derivarEstadoReproductivo(
   // "parida_reciente", no "vacía por servir" genérico, solo porque le falta
   // el dato de servicio. Antes esta función bifurcaba primero por
   // `!ultimo_servicio_fecha` y perdía ese caso -- corregido.
-  type EventoCiclo = 'servicio' | 'confirmacion' | 'secado_real' | 'parto';
   const candidatos: Array<{ tipo: EventoCiclo; fecha: string }> = [];
   if (fila.ultimo_servicio_fecha) {
     candidatos.push({ tipo: 'servicio', fecha: fila.ultimo_servicio_fecha });
@@ -1802,7 +1822,10 @@ export function derivarEstadoReproductivo(
     };
   }
 
-  candidatos.sort((a, b) => (a.fecha === b.fecha ? 0 : a.fecha < b.fecha ? 1 : -1));
+  candidatos.sort((a, b) => {
+    if (a.fecha !== b.fecha) return a.fecha < b.fecha ? 1 : -1;
+    return PRIORIDAD_EMPATE_CICLO[b.tipo] - PRIORIDAD_EMPATE_CICLO[a.tipo];
+  });
   const masReciente = candidatos[0].tipo;
 
   // Salvaguarda: `v_hato_estado_actual` no expone una columna dedicada de
@@ -1850,19 +1873,38 @@ export function derivarEstadoReproductivo(
 
   if (!fila.ultimo_servicio_fecha) {
     // `masReciente` es 'confirmacion' o 'secado_real' sin ningún
-    // `ultimo_servicio_fecha` que los ancle -- dato incompleto (no debería
-    // ocurrir en la práctica: confirmación/secado real siempre derivan de un
-    // servicio), pero no hay desde dónde proyectar PP/Secar sin inventar una
-    // fecha ancla. Se marca indeterminado en vez de asumir.
+    // `ultimo_servicio_fecha` que los ancle. Antes de S3 esto caía siempre a
+    // 'indeterminado' -- pero eso rompía el objetivo entero de la sesión: el
+    // efecto colateral buscado de D-5 es que la primera marca manual `seca`
+    // desinfle el conteo de vacas en ordeño, y `indeterminado` clasifica
+    // como `hato` (en ordeño) igual que antes de la marca (ver
+    // docs/plan_hato_ciclo_manual_override.md §2.2). Sin ancla no hay desde
+    // dónde proyectar PP/Secar -- eso sigue en `null`, nunca una fecha
+    // inventada -- pero el ESTADO real (`seca`/`preñada`) sí se conoce y se
+    // devuelve. `tiempo_secada_dias` sí se puede calcular en `seca` porque
+    // `ultimo_secado_real_fecha` es un dato real, no una proyección.
+    const estadoSinAncla: EstadoReproductivo = masReciente === 'secado_real' ? 'seca' : 'preñada';
+    const tiempoSecadaDiasSinAncla =
+      estadoSinAncla === 'seca' && fila.ultimo_secado_real_fecha
+        ? diferenciaDias(fila.ultimo_secado_real_fecha, fechaReferencia)
+        : null;
     return {
-      estado: 'indeterminado',
+      estado: estadoSinAncla,
       fecha_secar: null,
       fecha_probable_parto: null,
       dias_abiertos: null,
       tiempo_prenez_dias: null,
-      tiempo_secada_dias: null,
+      tiempo_secada_dias: tiempoSecadaDiasSinAncla,
       proxima_a_reemplazo: proximaAReemplazo,
+      // Ni preñez activa ni `seca` son un estado "vacía" (V14) -- la
+      // pregunta "¿normal o problema?" no aplica aquí, igual que en la rama
+      // con ancla más abajo.
       vacia_es_problema: null,
+      // Sin ancla no hay `fecha_secar` que comparar, así que `secado_due` y
+      // `parto_proximo` quedan en `false` (SIN_ALERTAS) -- no hay fecha
+      // basura contra la que compararlas. `hatoAlertas.ts` además exige
+      // `fila.ultimo_servicio_fecha` para emitir la alerta `secado_due`, así
+      // que este caso nunca genera una alerta aunque `secado_due` cambiara.
       alertas: { ...SIN_ALERTAS, rechequeo_due: rechequeoDue },
     };
   }
@@ -2078,6 +2120,36 @@ export function rangoQuincena(anio: number, mes: number, quincena: 1 | 2): { fec
   }
   const ultimoDia = new Date(Date.UTC(anio, mes, 0)).getUTCDate();
   return { fechaInicio: `${anio}-${mm}-16`, fechaFin: `${anio}-${mm}-${String(ultimoDia).padStart(2, '0')}` };
+}
+
+/**
+ * Todas las fechas ISO de un mes en las que cae el día ISO de semana
+ * `diaPesajeIso` (1=lunes…7=domingo), hasta `maxSemanas` (5 por defecto --
+ * ningún mes gregoriano tiene una 6ª ocurrencia del mismo día de semana).
+ * S5, D-9 (ronda agosto 2026): la planilla mensual de pesaje imprime
+ * SIEMPRE 5 columnas de semana -- la de junio traía 4 y los meses de 5
+ * miércoles se desbordaban. Un mes con solo 4 ocurrencias de ese día
+ * (p. ej. agosto 2026, que solo tiene 4 miércoles) simplemente devuelve un
+ * arreglo de 4 fechas -- nunca se inventa una 5ª. Nunca asume el día de la
+ * semana: lo recibe como parámetro, igual que `calcularFechaUltimoDiaPesaje`
+ * lee `hato_config.dia_pesaje_semanal` en vez de asumir miércoles.
+ */
+export function fechasPesajeMensuales(
+  anio: number,
+  mes: number,
+  diaPesajeIso: number,
+  maxSemanas = 5,
+): string[] {
+  const mm = String(mes).padStart(2, '0');
+  const primerDiaIso = diaIsoSemana(`${anio}-${mm}-01`);
+  const primeraOcurrencia = 1 + ((diaPesajeIso - primerDiaIso + 7) % 7);
+  const ultimoDiaMes = new Date(Date.UTC(anio, mes, 0)).getUTCDate();
+
+  const fechas: string[] = [];
+  for (let dia = primeraOcurrencia; dia <= ultimoDiaMes && fechas.length < maxSemanas; dia += 7) {
+    fechas.push(`${anio}-${mm}-${String(dia).padStart(2, '0')}`);
+  }
+  return fechas;
 }
 
 /**

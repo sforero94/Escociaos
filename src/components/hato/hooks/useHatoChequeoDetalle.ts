@@ -52,8 +52,11 @@ export function useHatoChequeoDetalle(chequeoId: string | undefined) {
       if (vacasError) throw vacasError;
       if (!chequeo) throw new Error('No se encontró el chequeo solicitado.');
 
-      const filas: ChequeoVacaDetalle[] = ((vacas ?? []) as FilaChequeoVacaSupabase[])
-        .map(({ hato_animales, ...resto }) => {
+      // Sin ordenar acá -- `ChequeoDetalle.tsx` ordena en cliente (T2, ronda
+      // agosto 2026) para que los encabezados sean interactivos; el default
+      // alfabético vive en el componente, no en el fetch.
+      const filas: ChequeoVacaDetalle[] = ((vacas ?? []) as FilaChequeoVacaSupabase[]).map(
+        ({ hato_animales, ...resto }) => {
           const animal = Array.isArray(hato_animales) ? hato_animales[0] : hato_animales;
           return {
             ...resto,
@@ -61,15 +64,8 @@ export function useHatoChequeoDetalle(chequeoId: string | undefined) {
             nombre: animal?.nombre ?? null,
             numeroEsProvisional: esNumeroProvisional(animal?.numero ?? null),
           };
-        })
-        // Sin caravana al final, cualquiera sea el orden -- mismo criterio
-        // "null al final" que la lista de Animales (§4).
-        .sort((a, b) => {
-          if (a.numero == null && b.numero == null) return 0;
-          if (a.numero == null) return 1;
-          if (b.numero == null) return -1;
-          return a.numero - b.numero;
-        });
+        },
+      );
 
       setDetalle({ chequeo: chequeo as HatoChequeoRow, vacas: filas });
     } catch (err) {

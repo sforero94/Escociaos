@@ -32,12 +32,13 @@
 //   - **.xlsx** = respaldo de MÁQUINA. Conserva los códigos crudos (`A 206`)
 //     y es el que se vuelve a subir por el flujo B0/V10.
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, AlertTriangle, Upload, FileSpreadsheet, ChevronRight, FileDown, Printer } from 'lucide-react';
+import { Loader2, AlertTriangle, Upload, FileSpreadsheet, ChevronRight, FileDown, Printer, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { useHatoChequeos } from './hooks/useHatoChequeos';
+import { useHatoChequeos, type ChequeoListItem } from './hooks/useHatoChequeos';
+import { ordenarPorValor, type DireccionOrdenAnimales as DireccionOrden } from '@/utils/ordenarAnimalesHato';
 import { useAnimalesParaPlanillaChequeo } from './hooks/useAnimalesParaPlanillaChequeo';
 import { SubirChequeoExcel } from './components/SubirChequeoExcel';
 import { HatoPageHeader } from './components/HatoPageHeader';
@@ -121,12 +122,69 @@ function filaPlanillaPdf(animal: AnimalParaPlanillaChequeo): FilaPlanillaChequeo
   };
 }
 
+type ColumnaOrdenableChequeos = 'fecha' | 'veterinario' | 'totalVacas';
+
+function CabeceraOrdenableChequeos({
+  label,
+  columna,
+  ordenActual,
+  onOrdenar,
+  align = 'left',
+}: {
+  label: string;
+  columna: ColumnaOrdenableChequeos;
+  ordenActual: { columna: ColumnaOrdenableChequeos; direccion: DireccionOrden };
+  onOrdenar: (columna: ColumnaOrdenableChequeos) => void;
+  align?: 'left' | 'right';
+}) {
+  const activa = ordenActual.columna === columna;
+  return (
+    <th className={`px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500 ${align === 'right' ? 'text-right' : 'text-left'}`}>
+      <button
+        type="button"
+        onClick={() => onOrdenar(columna)}
+        className={`inline-flex items-center gap-1 hover:text-gray-900 ${activa ? 'text-gray-900' : ''}`}
+      >
+        {label}
+        {activa ? (
+          ordenActual.direccion === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+        ) : (
+          <ChevronsUpDown className="w-3 h-3 text-gray-300" />
+        )}
+      </button>
+    </th>
+  );
+}
+
+const EXTRACTORES_CHEQUEOS: Record<ColumnaOrdenableChequeos, (c: ChequeoListItem) => string | number | null> = {
+  fecha: (c) => c.fecha,
+  veterinario: (c) => c.veterinario,
+  totalVacas: (c) => c.totalVacas,
+};
+
 export function ChequeosList() {
   const { chequeos, loading, error, reload } = useHatoChequeos();
   const { animales: animalesParaPlanilla, loading: cargandoAnimales } = useAnimalesParaPlanillaChequeo();
   const [mostrarSubida, setMostrarSubida] = useState(false);
   const [exportando, setExportando] = useState(false);
   const [exportandoPdf, setExportandoPdf] = useState(false);
+  // Más reciente primero por defecto -- mismo orden que ya traía la query
+  // (T2, ronda agosto 2026: encabezados ahora interactivos).
+  const [orden, setOrden] = useState<{ columna: ColumnaOrdenableChequeos; direccion: DireccionOrden }>({
+    columna: 'fecha',
+    direccion: 'desc',
+  });
+  const handleOrdenar = (columna: ColumnaOrdenableChequeos) => {
+    setOrden((prev) =>
+      prev.columna === columna
+        ? { columna, direccion: prev.direccion === 'asc' ? 'desc' : 'asc' }
+        : { columna, direccion: columna === 'veterinario' ? 'asc' : 'desc' },
+    );
+  };
+  const chequeosOrdenados = useMemo(
+    () => ordenarPorValor(chequeos, EXTRACTORES_CHEQUEOS[orden.columna], orden.direccion),
+    [chequeos, orden],
+  );
 
   const handleImprimirPlanillaPDF = async () => {
     setExportandoPdf(true);
@@ -242,16 +300,16 @@ export function ChequeosList() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Fecha</th>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Veterinario</th>
+                  <CabeceraOrdenableChequeos label="Fecha" columna="fecha" ordenActual={orden} onOrdenar={handleOrdenar} />
+                  <CabeceraOrdenableChequeos label="Veterinario" columna="veterinario" ordenActual={orden} onOrdenar={handleOrdenar} />
                   <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Fuente</th>
-                  <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">Vacas</th>
+                  <CabeceraOrdenableChequeos label="Vacas" columna="totalVacas" ordenActual={orden} onOrdenar={handleOrdenar} align="right" />
                   <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Estado</th>
                   <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500" />
                 </tr>
               </thead>
               <tbody>
-                {chequeos.map((c, i) => (
+                {chequeosOrdenados.map((c, i) => (
                   <tr key={c.id} className={`border-t border-gray-100 hover:bg-gray-50 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                     <td className="px-3 py-2.5 whitespace-nowrap font-medium">
                       <Link to={`/hato-lechero/chequeos/${c.id}`} className="hover:text-primary">

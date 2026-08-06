@@ -54,6 +54,9 @@ interface FilaQuincenalDb {
   litros_total: number | null;
   litros_pomar_confirmado: number | null;
   num_vacas_ordeno: number | null;
+  /** Precio bruto por litro (D-11/D-12, migración 085) -- `null` para
+   * filas anteriores a esa migración. */
+  precio_bruto_litro: number | null;
   notas: string | null;
   fuente: string | null;
   origen_dato: OrigenDatoProduccionQuincenal;
@@ -75,7 +78,7 @@ export interface HatoProduccionQuincenalConIngreso extends HatoProduccionQuincen
 }
 
 const SELECT_QUINCENA =
-  'id, anio, mes, quincena, fecha_inicio, fecha_fin, litros_total, litros_pomar_confirmado, num_vacas_ordeno, notas, fuente, origen_dato, num_vacas_ordeno_origen, fin_ingreso_id, updated_at, updated_by, fin_ingreso:fin_ingresos(fecha,valor,region_id,medio_pago_id,comprador_id,nombre,cantidad)';
+  'id, anio, mes, quincena, fecha_inicio, fecha_fin, litros_total, litros_pomar_confirmado, num_vacas_ordeno, precio_bruto_litro, notas, fuente, origen_dato, num_vacas_ordeno_origen, fin_ingreso_id, updated_at, updated_by, fin_ingreso:fin_ingresos(fecha,valor,region_id,medio_pago_id,comprador_id,nombre,cantidad)';
 
 function mapFilaConIngreso(fila: FilaQuincenalDb): HatoProduccionQuincenalConIngreso {
   return {
@@ -88,6 +91,7 @@ function mapFilaConIngreso(fila: FilaQuincenalDb): HatoProduccionQuincenalConIng
     litros_total: resolverLitrosQuincenal(fila),
     litros_pomar_confirmado: fila.litros_pomar_confirmado,
     num_vacas_ordeno: fila.num_vacas_ordeno,
+    precio_bruto_litro: fila.precio_bruto_litro,
     notas: fila.notas,
     fuente: fila.fuente,
     fin_ingreso_id: fila.fin_ingreso_id,
@@ -116,12 +120,28 @@ export interface GuardarQuincenaVentaParams {
   notas: string | null;
   finIngreso: {
     fecha: string;
-    valor: number;
+    /** Bruto de la liquidación de El Pomar (D-11, migración 085) -- el RPC
+     * calcula el neto y el ICA a partir de este valor; nunca el neto
+     * capturado a mano. */
+    valorBruto: number;
     regionId: string;
     medioPagoId: string;
     compradorId: string | null;
     nombre: string | null;
   };
+}
+
+/** Resultado de `guardarQuincena` -- incluye lo que el RPC calculó
+ * (migración 085) para que el formulario confirme en pantalla el ICA/neto
+ * REALES sin tener que recalcularlos ni releer la fila. */
+export interface ResultadoGuardarQuincenaVenta {
+  quincenaId: string;
+  finIngresoId: string;
+  /** `false` cuando el periodo capturado es anterior a julio 2026 (D-12) --
+   * el ICA no se retuvo y `neto === valorBruto`. */
+  icaAplicada: boolean;
+  ica: number;
+  neto: number;
 }
 
 export function useProduccionHato() {
@@ -149,6 +169,29 @@ export function useProduccionHato() {
       );
     }
     return { iso: valor.iso, nombre: typeof valor.nombre === 'string' ? valor.nombre : '' };
+  }, [supabase]);
+
+  /** Lee `hato_config.retencion_ica_leche` (migración 085) en vivo -- D-11:
+   * "nunca una constante en código". Lanza un error explícito si falta o
+   * está mal tipada, mismo contrato que `fetchDiaPesajeSemanal`. Es SOLO
+   * para el preview del formulario antes de guardar (D-11/D-12): el ICA
+   * que realmente se persiste siempre lo calcula el RPC del lado del
+   * servidor, leyendo la MISMA clave en el mismo instante del guardado. */
+  const fetchRetencionIcaLeche = useCallback(async (): Promise<number> => {
+    const { data, error } = await supabase
+      .from('hato_config')
+      .select('valor')
+      .eq('clave', 'retencion_ica_leche')
+      .maybeSingle();
+    if (error) throw error;
+    const valor = data?.valor;
+    if (typeof valor !== 'number' || valor < 0 || valor >= 1) {
+      throw new Error(
+        'hato_config.retencion_ica_leche no está configurada o tiene un valor inválido (migración 085). ' +
+          'Verifica que la migración se aplicó en este entorno.',
+      );
+    }
+    return valor;
   }, [supabase]);
 
   /** Vacas activas en etapa `vaca` -- universo de la grilla de pesaje
@@ -254,7 +297,7 @@ export function useProduccionHato() {
    * un Administrador recibe el error de política de Postgres tal cual,
    * nunca un bypass. Devuelve los ids del registro (alta o edición). */
   const guardarQuincena = useCallback(
-    async (params: GuardarQuincenaVentaParams): Promise<{ quincenaId: string; finIngresoId: string }> => {
+    async (params: GuardarQuincenaVentaParams): Promise<ResultadoGuardarQuincenaVenta> => {
       const { data, error } = await supabase.rpc('fn_hato_guardar_quincena_venta', {
         payload: {
           quincena_id: params.quincenaId,
@@ -269,7 +312,7 @@ export function useProduccionHato() {
           notas: params.notas,
           fin_ingreso: {
             fecha: params.finIngreso.fecha,
-            valor: params.finIngreso.valor,
+            valor_bruto: params.finIngreso.valorBruto,
             region_id: params.finIngreso.regionId,
             medio_pago_id: params.finIngreso.medioPagoId,
             comprador_id: params.finIngreso.compradorId,
@@ -278,7 +321,7 @@ export function useProduccionHato() {
         },
       });
       if (error) throw error;
-      return data as { quincenaId: string; finIngresoId: string };
+      return data as ResultadoGuardarQuincenaVenta;
     },
     [supabase],
   );
@@ -299,6 +342,7 @@ export function useProduccionHato() {
   return {
     loading,
     fetchDiaPesajeSemanal,
+    fetchRetencionIcaLeche,
     fetchVacasActivas,
     fetchPesajesPorFecha,
     guardarPesajes,

@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
-import { Loader2, Save, Trash2, Lock } from 'lucide-react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { Loader2, Save, Trash2, Lock, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -17,10 +17,27 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { RoleGuard } from '@/components/auth/RoleGuard';
 import { formatNumber, formatShortDate, formatCurrency } from '@/utils/format';
 import { resolverQuincena, rangoQuincena, calcularProductividad } from '@/utils/calculosHato';
-import { calcularPrecioUnitarioQuincena } from '@/utils/hatoProduccion';
+import {
+  calcularPrecioUnitarioQuincena,
+  calcularPrecioBrutoLitro,
+  calcularNetoConIca,
+  aplicaRetencionIcaLeche,
+} from '@/utils/hatoProduccion';
 import { useProduccionHato, type HatoProduccionQuincenalConIngreso } from '../hooks/useProduccionHato';
 import { useFinCatalogosVenta } from '../hooks/useFinCatalogosVenta';
+import { useOcrLiquidacionPomar } from '../hooks/useOcrLiquidacionPomar';
+import { CapturaArchivo } from './CapturaArchivo';
 import { obtenerFechaHoy } from '@/utils/fechas';
+
+// Defaults del dueño para la venta quincenal a El Pomar (D-8,
+// docs/plan_hato_ronda_agosto_2026.md §4 S4) -- resueltos por NOMBRE contra
+// los catálogos ya cargados (`fin_compradores`/`fin_medios_pago`/
+// `fin_regiones`), nunca un id hardcodeado. Si el catálogo no tiene el
+// nombre esperado, se REPORTA (toast) y el campo queda para elegir a mano
+// -- nunca se crea la fila del catálogo en silencio.
+const COMPRADOR_DEFAULT = 'El Pomar';
+const MEDIO_PAGO_DEFAULT = 'Cuenta Fovemsa';
+const REGION_DEFAULT = 'Subachoque';
 
 const MESES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
@@ -77,6 +94,7 @@ function CandadoGerencia() {
 function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps) {
   const hook = useProduccionHato();
   const catalogos = useFinCatalogosVenta();
+  const ocr = useOcrLiquidacionPomar();
 
   const inicial = resolverQuincena(hoyIso());
   const [anio, setAnio] = useState(inicial.anio);
@@ -92,12 +110,22 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
 
   // Campos del `fin_ingresos` enlazado — NOT NULL en la tabla (CLAUDE.md R5)
   // salvo comprador. `fechaIngreso` es la fecha de PAGO del Pomar, no el
-  // periodo de producción — se captura por separado a propósito.
+  // periodo de producción — se captura por separado a propósito. Default =
+  // fecha de carga (decisión del dueño, D-8/S4).
   const [fechaIngreso, setFechaIngreso] = useState(hoyIso());
-  const [valor, setValor] = useState<number | undefined>(undefined);
+  // Bruto de la liquidación (D-11) -- el neto/ICA se calculan, nunca se
+  // capturan directamente. Antes de la migración 085 este campo se llamaba
+  // "valor" y era el neto capturado a mano; ver hatoProduccion.ts.
+  const [valorBruto, setValorBruto] = useState<number | undefined>(undefined);
   const [regionId, setRegionId] = useState('');
   const [medioPagoId, setMedioPagoId] = useState('');
   const [compradorId, setCompradorId] = useState('');
+
+  // Retención de ICA (D-11) -- SIEMPRE leída en vivo de `hato_config`,
+  // nunca hardcodeada. Solo alimenta el PREVIEW antes de guardar; el valor
+  // que se persiste sale del RPC, que lee la misma clave en el servidor.
+  const [retencionIca, setRetencionIca] = useState<number | null>(null);
+  const [retencionIcaError, setRetencionIcaError] = useState<string | null>(null);
 
   const [cargando, setCargando] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -110,11 +138,57 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
 
   const resetIngreso = () => {
     setFechaIngreso(hoyIso());
-    setValor(undefined);
+    setValorBruto(undefined);
     setRegionId('');
     setMedioPagoId('');
     setCompradorId('');
   };
+
+  // Retención de ICA -- una sola vez al montar (no depende del periodo
+  // seleccionado, es una tasa global de hato_config).
+  useEffect(() => {
+    hook
+      .fetchRetencionIcaLeche()
+      .then(setRetencionIca)
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : 'Error desconocido';
+        setRetencionIcaError(msg);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Defaults del dueño (comprador/medio de pago/región) -- SOLO para un
+  // registro NUEVO (nunca pisa lo que ya está guardado ni lo que Gerencia
+  // ya haya elegido a mano) y solo una vez que los catálogos cargaron.
+  // Resueltos por NOMBRE; si un nombre no existe en el catálogo, se
+  // reporta (nunca se crea en silencio) y ese campo queda vacío para
+  // elegir a mano.
+  const defaultsAplicados = useRef(false);
+  useEffect(() => {
+    if (defaultsAplicados.current) return;
+    if (catalogos.loading || registroId) return;
+    defaultsAplicados.current = true;
+
+    const porNombre = <T extends { id: string; nombre: string }>(lista: T[], nombre: string) =>
+      lista.find((x) => x.nombre.trim().toLowerCase() === nombre.trim().toLowerCase());
+
+    const faltantes: string[] = [];
+    const comprador = porNombre(catalogos.compradores, COMPRADOR_DEFAULT);
+    if (comprador) setCompradorId((prev) => prev || comprador.id);
+    else faltantes.push(`comprador "${COMPRADOR_DEFAULT}"`);
+
+    const medioPago = porNombre(catalogos.mediosPago, MEDIO_PAGO_DEFAULT);
+    if (medioPago) setMedioPagoId((prev) => prev || medioPago.id);
+    else faltantes.push(`medio de pago "${MEDIO_PAGO_DEFAULT}"`);
+
+    const region = porNombre(catalogos.regiones, REGION_DEFAULT);
+    if (region) setRegionId((prev) => prev || region.id);
+    else faltantes.push(`región "${REGION_DEFAULT}"`);
+
+    if (faltantes.length > 0) {
+      toast.warning(`No se encontraron en el catálogo: ${faltantes.join(', ')} -- selecciónalos a mano.`);
+    }
+  }, [catalogos.loading, catalogos.compradores, catalogos.mediosPago, catalogos.regiones, registroId]);
 
   const cargarRegistro = useCallback(async () => {
     setCargando(true);
@@ -129,7 +203,16 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
         setNotas(existente.notas ?? '');
         if (existente.finIngreso) {
           setFechaIngreso(existente.finIngreso.fecha);
-          setValor(existente.finIngreso.valor);
+          // El bruto no se guarda directo -- se reconstruye desde
+          // precio_bruto_litro × litros (migración 085). Una fila 'medido'
+          // guardada por este RPC SIEMPRE trae precio_bruto_litro; el
+          // fallback al neto es defensivo (fila teórica sin esa columna).
+          const litros = existente.litros_total;
+          const brutoReconstruido =
+            existente.precio_bruto_litro != null && litros != null
+              ? existente.precio_bruto_litro * litros
+              : existente.finIngreso.valor;
+          setValorBruto(brutoReconstruido);
           setRegionId(existente.finIngreso.region_id);
           setMedioPagoId(existente.finIngreso.medio_pago_id);
           setCompradorId(existente.finIngreso.comprador_id ?? '');
@@ -180,8 +263,8 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
       toast.error('Ingresa los litros totales de la quincena');
       return;
     }
-    if (!valor || valor <= 0) {
-      toast.error('Ingresa el valor de la venta');
+    if (!valorBruto || valorBruto <= 0) {
+      toast.error('Ingresa el valor bruto de la liquidación');
       return;
     }
     if (!regionId) {
@@ -195,7 +278,7 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
 
     setGuardando(true);
     try {
-      await hook.guardarQuincena({
+      const resultado = await hook.guardarQuincena({
         quincenaId: registroId,
         anio,
         mes,
@@ -208,14 +291,20 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
         notas: notas.trim() || null,
         finIngreso: {
           fecha: fechaIngreso,
-          valor,
+          valorBruto,
           regionId,
           medioPagoId,
           compradorId: compradorId || null,
           nombre: null,
         },
       });
-      toast.success(registroId ? 'Quincena actualizada' : 'Quincena registrada');
+      // El toast confirma lo que el SERVIDOR calculó (RPC, migración 085),
+      // nunca el preview del cliente -- son dos cálculos independientes
+      // que deben coincidir, pero solo uno de los dos persiste.
+      const mensajeIca = resultado.icaAplicada
+        ? ` (ICA retenida: ${formatCurrency(resultado.ica)}, neto: ${formatCurrency(resultado.neto)})`
+        : ' (sin retención de ICA -- periodo anterior a julio 2026)';
+      toast.success(`${registroId ? 'Quincena actualizada' : 'Quincena registrada'}${mensajeIca}`);
       await Promise.all([cargarRegistro(), cargarHistorial()]);
       onSaved?.();
     } catch (err: unknown) {
@@ -247,16 +336,82 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
     }
   };
 
+  const handleOcrLeido = useCallback(
+    async (fotos: File[]) => {
+      try {
+        const respuesta = await ocr.leerFotos(fotos);
+        const doc = respuesta.documento;
+
+        if (doc.mes != null) setMes(doc.mes);
+        if (doc.quincena != null) setQuincena(doc.quincena);
+        const anioDetectado = doc.periodoInicio?.slice(0, 4) ?? doc.periodoFin?.slice(0, 4) ?? null;
+        if (anioDetectado) setAnio(parseInt(anioDetectado, 10));
+        if (doc.cantidadLitros != null) setLitrosTotal(doc.cantidadLitros);
+        // Preferimos el subtotal leído (es el bruto real de la
+        // liquidación); si el modelo no lo pudo leer pero sí precio y
+        // cantidad, lo derivamos -- nunca al revés (el subtotal impreso es
+        // el dato de la fila, precio×cantidad es una reconstrucción).
+        if (doc.subtotal != null) setValorBruto(doc.subtotal);
+        else if (doc.precioPromedioLitro != null && doc.cantidadLitros != null) {
+          setValorBruto(doc.precioPromedioLitro * doc.cantidadLitros);
+        }
+
+        const advertencias = [...respuesta.ocr.advertencias];
+        if (doc.camposNoConfiables.length > 0) {
+          advertencias.push(`revisa a mano: ${doc.camposNoConfiables.join(', ')} (lectura de baja confianza)`);
+        }
+        if (advertencias.length > 0) {
+          toast.warning(`Liquidación leída con observaciones -- ${advertencias.join(' · ')}`);
+        } else {
+          toast.success('Liquidación leída -- revisa los valores antes de guardar');
+        }
+      } catch {
+        // El hook ya deja el mensaje en `ocr.error`, mostrado en la UI.
+      }
+    },
+    [ocr],
+  );
+
   const productividad = calcularProductividad(litrosTotal ?? null, numVacasOrdeno ?? null);
-  const precioUnitario = calcularPrecioUnitarioQuincena(valor ?? null, litrosTotal ?? null);
+  // ICA/neto (D-11/D-12) -- SOLO preview del cliente; lo que persiste
+  // siempre sale del RPC. `aplicaRetencionIcaLeche` decide si el periodo
+  // seleccionado cae en o después de julio 2026; antes de esa fecha el
+  // preview no retiene nada (ica=0, neto=bruto), igual que hará el RPC.
+  const netoConIca =
+    valorBruto != null && valorBruto > 0 && retencionIca != null
+      ? calcularNetoConIca(valorBruto, aplicaRetencionIcaLeche(anio, mes) ? retencionIca : 0)
+      : null;
+  const precioBrutoLitro = calcularPrecioBrutoLitro(valorBruto ?? null, litrosTotal ?? null);
+  const precioUnitario = calcularPrecioUnitarioQuincena(netoConIca?.neto ?? null, litrosTotal ?? null);
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-      <div className="p-4 border-b border-gray-200">
-        <h3 className="font-semibold text-foreground">Producción quincenal (litros al camión)</h3>
-        <p className="text-xs text-gray-500">
-          Total que recoge el Pomar en la quincena — un solo registro con la venta enlazada.
-        </p>
+      <div className="p-4 border-b border-gray-200 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="font-semibold text-foreground">Producción quincenal (litros al camión)</h3>
+          <p className="text-xs text-gray-500">
+            Total que recoge el Pomar en la quincena — un solo registro con la venta enlazada.
+          </p>
+        </div>
+        {!soloLectura && (
+          <div className="flex flex-col items-end gap-1.5">
+            <CapturaArchivo
+              label="Cargar liquidación"
+              acceptArchivo="image/*"
+              multipleFotos={false}
+              multipleArchivo={false}
+              disabled={ocr.loading || guardando}
+              onFotos={(files) => handleOcrLeido(files)}
+              onArchivo={(files) => handleOcrLeido(files)}
+            />
+            {ocr.loading && (
+              <p className="text-xs text-gray-400 flex items-center gap-1">
+                <Loader2 className="w-4 h-4 animate-spin" /> Leyendo liquidación…
+              </p>
+            )}
+            {ocr.error && <p className="text-xs text-red-600 max-w-[200px] text-right">{ocr.error}</p>}
+          </div>
+        )}
       </div>
 
       <div className="p-4 space-y-4">
@@ -357,14 +512,48 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Valor total *</Label>
-                  <NumberInput value={valor} onChange={setValor} decimals={0} placeholder="0" />
+                  <Label>Valor bruto (liquidación) *</Label>
+                  <NumberInput value={valorBruto} onChange={setValorBruto} decimals={0} placeholder="0" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Precio bruto (calculado)</Label>
+                  <div className="flex items-center h-9 px-3 rounded-md border bg-muted text-sm text-muted-foreground">
+                    {precioBrutoLitro != null ? `${formatCurrency(precioBrutoLitro)} / L` : '—'}
+                  </div>
                 </div>
                 <div className="space-y-1.5">
                   <Label>Precio neto (calculado)</Label>
                   <div className="flex items-center h-9 px-3 rounded-md border bg-muted text-sm text-muted-foreground">
                     {precioUnitario != null ? `${formatCurrency(precioUnitario)} / L` : '—'}
                   </div>
+                </div>
+              </div>
+
+              {/* ICA (D-11/D-12) — ambos campos son SOLO PREVIEW: lo que
+                  persiste sale del RPC, que recalcula del lado del
+                  servidor con hato_config.retencion_ica_leche leída en el
+                  mismo instante del guardado. */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <Label>ICA retenida (calculado)</Label>
+                  <div className="flex items-center h-9 px-3 rounded-md border bg-muted text-sm text-muted-foreground">
+                    {netoConIca != null ? formatCurrency(netoConIca.ica) : '—'}
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Valor neto (calculado)</Label>
+                  <div className="flex items-center h-9 px-3 rounded-md border bg-muted text-sm text-muted-foreground">
+                    {netoConIca != null ? formatCurrency(netoConIca.neto) : '—'}
+                  </div>
+                </div>
+                <div className="space-y-1.5 flex items-end">
+                  {retencionIcaError ? (
+                    <p className="text-xs text-red-600 flex items-center gap-1">
+                      <AlertTriangle className="w-4 h-4 flex-shrink-0" /> No se pudo leer la retención de ICA
+                    </p>
+                  ) : !aplicaRetencionIcaLeche(anio, mes) ? (
+                    <p className="text-xs text-gray-400">Periodo anterior a julio 2026 — sin retención de ICA (D-12).</p>
+                  ) : null}
                 </div>
               </div>
 
@@ -453,11 +642,24 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
                   <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Pomar</th>
                   <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Vacas</th>
                   <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">L/vaca</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Bruto</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">ICA</th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Neto</th>
                 </tr>
               </thead>
               <tbody>
                 {historial.map((h, i) => {
                   const prod = calcularProductividad(h.litros_total, h.num_vacas_ordeno);
+                  // Bruto/ICA (D-11/D-12, migración 085) -- `null` para toda
+                  // fila anterior a esa migración ("sin dato, nunca 0"): ni
+                  // derivado_mensual (nunca tuvo bruto) ni una fila medido
+                  // capturada antes de que existiera precio_bruto_litro.
+                  const bruto =
+                    h.precio_bruto_litro != null && h.litros_total != null
+                      ? h.precio_bruto_litro * h.litros_total
+                      : null;
+                  const neto = h.finIngreso?.valor ?? null;
+                  const ica = bruto != null && neto != null ? bruto - neto : null;
                   return (
                     <tr key={h.id} className={`border-t border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
                       <td className="px-3 py-1.5 whitespace-nowrap">
@@ -477,6 +679,15 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
                       <td className="px-3 py-1.5 text-right whitespace-nowrap">{h.num_vacas_ordeno ?? '—'}</td>
                       <td className="px-3 py-1.5 text-right whitespace-nowrap">
                         {prod !== null ? formatNumber(prod, 1) : '—'}
+                      </td>
+                      <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                        {bruto != null ? formatCurrency(bruto) : '—'}
+                      </td>
+                      <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                        {ica != null ? formatCurrency(ica) : '—'}
+                      </td>
+                      <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                        {neto != null ? formatCurrency(neto) : '—'}
                       </td>
                     </tr>
                   );

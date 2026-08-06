@@ -10,10 +10,14 @@
 // Figma alignment spec §4 (Wave 2a) agrega: `HatoPageHeader` compartido,
 // encabezados de columna ordenables A-Z (N.º/Nombre/Estado/PL/Próximo
 // evento) y el botón "+ Registrar" gateado a Administrador/Gerencia.
+//
+// S3 T4a (docs/plan_hato_ciclo_manual_override.md §3.5) agrega la acción
+// por fila "Marcar ciclo" (Gerencia sola, D-7) -- Martha necesita marcar
+// varias vacas seca de un tirón (S6) sin abrir 9 fichas.
 
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Loader2, AlertTriangle, Search, Plus, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
+import { Loader2, AlertTriangle, Search, Plus, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -21,6 +25,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { EstadoChip } from './components/EstadoChip';
 import { HatoPageHeader } from './components/HatoPageHeader';
 import { CrearAnimalDialog } from './components/CrearAnimalDialog';
+import { MarcarCicloDialog } from './components/MarcarCicloDialog';
 import { useHatoAnimales, type AnimalHatoDerivado } from './hooks/useHatoAnimales';
 import { chipEstadoReproductivo, chipProximaAReemplazo, chipNumeroProvisional } from '@/utils/hatoUi';
 import { LABEL_CATEGORIA_HATO, type CategoriaHato } from '@/utils/hatoCategorias';
@@ -73,9 +78,19 @@ function CabeceraOrdenable({
   );
 }
 
-function TablaAnimales({ animales }: { animales: AnimalHatoDerivado[] }) {
+function TablaAnimales({
+  animales,
+  canMarcarCiclo,
+  onMarcarCiclo,
+}: {
+  animales: AnimalHatoDerivado[];
+  canMarcarCiclo: boolean;
+  onMarcarCiclo: (animalId: string) => void;
+}) {
+  // Alfabético por defecto (T2, ronda agosto 2026): Martha ubica los
+  // animales por nombre, no por número -- ver CLAUDE.md del módulo.
   const [orden, setOrden] = useState<{ columna: ColumnaOrdenable; direccion: DireccionOrden }>({
-    columna: 'numero',
+    columna: 'nombre',
     direccion: 'asc',
   });
 
@@ -145,9 +160,20 @@ function TablaAnimales({ animales }: { animales: AnimalHatoDerivado[] }) {
                 </td>
                 <td className="px-3 py-2.5 whitespace-nowrap text-gray-600">{proximoEvento(animal)}</td>
                 <td className="px-3 py-2.5 whitespace-nowrap text-right">
-                  <Link to={`/hato-lechero/hato/${animal.animalId}`} className="text-xs text-primary hover:underline">
-                    Ver ficha
-                  </Link>
+                  <div className="flex items-center justify-end gap-3">
+                    {canMarcarCiclo && (
+                      <button
+                        type="button"
+                        onClick={() => onMarcarCiclo(animal.animalId)}
+                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                      >
+                        <RefreshCw className="w-3 h-3" /> Marcar ciclo
+                      </button>
+                    )}
+                    <Link to={`/hato-lechero/hato/${animal.animalId}`} className="text-xs text-primary hover:underline">
+                      Ver ficha
+                    </Link>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -162,8 +188,19 @@ export function AnimalesList() {
   const { animales, loading, error, reload } = useHatoAnimales();
   const { profile } = useAuth();
   const canEdit = profile?.rol === 'Administrador' || profile?.rol === 'Gerencia';
+  // D-7: solo Gerencia marca el ciclo reproductivo -- el gate es el ROL
+  // (MarcarCicloDialog lo vuelve a comprobar internamente, defensa en
+  // profundidad, mismo criterio que HojaDeVida.tsx).
+  const canMarcarCiclo = profile?.rol === 'Gerencia';
   const [busqueda, setBusqueda] = useState('');
   const [crearOpen, setCrearOpen] = useState(false);
+  const [marcarCicloOpen, setMarcarCicloOpen] = useState(false);
+  const [animalCicloId, setAnimalCicloId] = useState<string | undefined>(undefined);
+
+  const abrirMarcarCiclo = (animalId: string) => {
+    setAnimalCicloId(animalId);
+    setMarcarCicloOpen(true);
+  };
 
   const animalesFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -230,16 +267,16 @@ export function AnimalesList() {
               <TabsTrigger value="ternera">{LABEL_CATEGORIA_HATO.ternera} ({porCategoria.ternera.length})</TabsTrigger>
             </TabsList>
             <TabsContent value="hato" className="mt-4">
-              <TablaAnimales animales={porCategoria.hato} />
+              <TablaAnimales animales={porCategoria.hato} canMarcarCiclo={canMarcarCiclo} onMarcarCiclo={abrirMarcarCiclo} />
             </TabsContent>
             <TabsContent value="horro" className="mt-4">
-              <TablaAnimales animales={porCategoria.horro} />
+              <TablaAnimales animales={porCategoria.horro} canMarcarCiclo={canMarcarCiclo} onMarcarCiclo={abrirMarcarCiclo} />
             </TabsContent>
             <TabsContent value="novilla" className="mt-4">
-              <TablaAnimales animales={porCategoria.novilla} />
+              <TablaAnimales animales={porCategoria.novilla} canMarcarCiclo={canMarcarCiclo} onMarcarCiclo={abrirMarcarCiclo} />
             </TabsContent>
             <TabsContent value="ternera" className="mt-4">
-              <TablaAnimales animales={porCategoria.ternera} />
+              <TablaAnimales animales={porCategoria.ternera} canMarcarCiclo={canMarcarCiclo} onMarcarCiclo={abrirMarcarCiclo} />
             </TabsContent>
           </Tabs>
         )}
@@ -247,6 +284,15 @@ export function AnimalesList() {
 
       {canEdit && (
         <CrearAnimalDialog open={crearOpen} onOpenChange={setCrearOpen} onCreado={reload} />
+      )}
+
+      {canMarcarCiclo && (
+        <MarcarCicloDialog
+          open={marcarCicloOpen}
+          onOpenChange={setMarcarCicloOpen}
+          animalId={animalCicloId}
+          onGuardado={reload}
+        />
       )}
     </div>
   );

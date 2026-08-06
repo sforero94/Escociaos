@@ -87,6 +87,19 @@ export interface HatoEstadoActualRow extends EstadoActualHatoRow {
   numero: number | null;
   nombre: string | null;
   ultimo_chequeo_vaca_id: string | null;
+  /** `fecha_nacimiento` de `hato_animales` (migración 089, S6 D-13) --
+   * columna nueva de `v_hato_estado_actual`, agregada AL FINAL del SELECT
+   * (`CREATE OR REPLACE VIEW` no admite reordenar ni insertar en medio,
+   * mismo patrón que `ultimo_estado_chequeo`, 062). Alimenta
+   * `calcularEtapaHato` para las categorías calculadas. */
+  fecha_nacimiento: string | null;
+  /** `etapa_forzada` de `hato_animales` (migración 092, corrección de
+   * precedencia D-13, 2026-08-06) -- columna nueva de
+   * `v_hato_estado_actual`, agregada AL FINAL del SELECT, después de
+   * `fecha_nacimiento`. Cuando es `true`, `fila.etapa` (el override manual)
+   * gana SIEMPRE sobre el cálculo por num_partos/fecha_nacimiento en
+   * `categorizarAnimal`. */
+  etapa_forzada: boolean;
 }
 
 export interface HatoChequeoVacaDetalleRow {
@@ -243,12 +256,155 @@ export function buildAnimalFicha(params: {
  * aparecen. */
 export type CategoriaHato = 'terneras' | 'novillas' | 'hato_ordeno' | 'horro';
 
-function categorizarAnimal(fila: HatoEstadoActualRow, estado: EstadoReproductivo): CategoriaHato | 'toro' | null {
+// ----------------------------------------------------------------------------
+// S6 (D-13, docs/plan_hato_ronda_agosto_2026.md §0/§4) -- categorías
+// CALCULADAS con override manual fácil.
+//
+// Hasta acá `categorizarAnimal` confiaba en `fila.etapa` (campo manual de
+// `hato_animales`) directo. D-13 pide que ternera/novilla/vaca se DERIVEN
+// de `fecha_nacimiento` + `num_partos`, con `etapa` como override manual
+// cuando el cálculo no puede resolver la edad (fecha ausente o imposible).
+// Implementación INDEPENDIENTE de `hatoCategorias.ts` (misma lógica, nunca
+// el mismo import -- cruzaría la frontera del árbol de despliegue de Deno,
+// igual que `resolverLitrosQuincenal` en `hatoProduccion.ts`/
+// `hato-aggregation.ts`). Cambiar un límite exige tocar AMBOS archivos, en
+// las DOS copias de este.
+//
+// CORRECCIÓN DE PRECEDENCIA (2026-08-06, decisión del dueño, migración
+// 092): la primera versión hacía que el cálculo mandara SIEMPRE que se
+// pudiera calcular, y el override manual solo se usara cuando la edad no
+// se podía resolver -- eso deja sin arreglo el caso más probable de falla
+// (una `fecha_nacimiento` presente pero mal digitada). Ahora, si
+// `fila.etapa_forzada` es `true`, `fila.etapa` GANA siempre, sin importar
+// num_partos ni fecha_nacimiento -- mismo criterio invertido que
+// `calcularEtapaHato` en `hatoCategorias.ts`.
+// ----------------------------------------------------------------------------
+
+/** Los 2 umbrales de edad (meses) que gobiernan D-13, sembrados por la
+ * migración 089. Vive fuera de `HatoConfig` a propósito -- agregar una
+ * clave aquí no debe tocar `calculos-hato.ts` (protegido por paridad). */
+export interface UmbralesCategoriaHato {
+  /** Techo (EXCLUSIVO) de meses para que una ternera cuente como "leche" en
+   * vez de "concentrado". */
+  meses_ternera_leche_max: number;
+  /** Techo (EXCLUSIVO) de meses para que un animal sin partos siga siendo
+   * "ternera" en vez de pasar a "novilla". */
+  meses_ternera_max: number;
+}
+
+const CLAVES_UMBRALES_CATEGORIA: ReadonlyArray<keyof UmbralesCategoriaHato> = [
+  'meses_ternera_leche_max',
+  'meses_ternera_max',
+];
+
+/** Fila cruda de `hato_config`: `clave text`, `valor jsonb`. */
+export interface FilaConfigClaveValor {
+  clave: string;
+  valor: unknown;
+}
+
+/** Construye `UmbralesCategoriaHato` desde las filas de `hato_config`.
+ * Mismo contrato duro que `construirHatoConfigDesdeFilas`
+ * (`hato-config-desde-tabla.ts`): lanza un único error listando TODAS las
+ * claves faltantes/mal tipadas, nunca un default inventado. */
+export function construirUmbralesCategoriaHatoDesdeFilas(
+  filas: FilaConfigClaveValor[],
+): UmbralesCategoriaHato {
+  const porClave = new Map<string, unknown>(filas.map((f) => [f.clave, f.valor]));
+  const errores: string[] = [];
+
+  const clavesFaltantes = CLAVES_UMBRALES_CATEGORIA.filter((c) => !porClave.has(c));
+  if (clavesFaltantes.length > 0) {
+    throw new Error(
+      `hato_config no trae ${clavesFaltantes.length} clave(s) requerida(s) para categorías calculadas (D-13): ${clavesFaltantes.join(', ')}. ` +
+        'Verificar que la migración 089 se aplicó en este entorno.',
+    );
+  }
+
+  const resultado = {} as Record<(typeof CLAVES_UMBRALES_CATEGORIA)[number], number>;
+  for (const clave of CLAVES_UMBRALES_CATEGORIA) {
+    const valor = porClave.get(clave);
+    if (typeof valor !== 'number' || !Number.isFinite(valor)) {
+      errores.push(`hato_config.${clave} debería ser numérico, llegó: ${JSON.stringify(valor)}`);
+      continue;
+    }
+    resultado[clave] = valor;
+  }
+
+  if (errores.length > 0) {
+    throw new Error(`hato_config tiene valores inválidos:\n- ${errores.join('\n- ')}`);
+  }
+
+  return resultado as UmbralesCategoriaHato;
+}
+
+/** Edad en meses COMPLETOS entre `fechaNacimiento` y `fechaReferencia`
+ * (ambas `yyyy-mm-dd`). `null` si `fechaNacimiento` está ausente, no se
+ * puede parsear, o es una fecha FUTURA respecto a `fechaReferencia` (dato
+ * imposible). Nunca negativo, nunca inventa una edad. */
+export function calcularEdadMeses(fechaNacimiento: string | null, fechaReferencia: string): number | null {
+  if (!fechaNacimiento) return null;
+  const nac = /^(\d{4})-(\d{2})-(\d{2})/.exec(fechaNacimiento);
+  const ref = /^(\d{4})-(\d{2})-(\d{2})/.exec(fechaReferencia);
+  if (!nac || !ref) return null;
+
+  const anioNac = Number(nac[1]);
+  const mesNac = Number(nac[2]);
+  const diaNac = Number(nac[3]);
+  const anioRef = Number(ref[1]);
+  const mesRef = Number(ref[2]);
+  const diaRef = Number(ref[3]);
+
+  const nacUTC = Date.UTC(anioNac, mesNac - 1, diaNac);
+  const refUTC = Date.UTC(anioRef, mesRef - 1, diaRef);
+  if (Number.isNaN(nacUTC) || Number.isNaN(refUTC)) return null;
+  if (nacUTC > refUTC) return null;
+
+  let meses = (anioRef - anioNac) * 12 + (mesRef - mesNac);
+  if (diaRef < diaNac) meses -= 1;
+  return Math.max(0, meses);
+}
+
+export type SubetapaTernera = 'leche' | 'concentrado';
+
+/** Subgrupo contable de una ternera cuya edad SÍ se pudo calcular (D-13). */
+export function calcularSubetapaTernera(edadMeses: number, umbrales: UmbralesCategoriaHato): SubetapaTernera {
+  return edadMeses < umbrales.meses_ternera_leche_max ? 'leche' : 'concentrado';
+}
+
+function categorizarAnimal(
+  fila: HatoEstadoActualRow,
+  estado: EstadoReproductivo,
+  umbrales: UmbralesCategoriaHato,
+  fechaReferencia: string,
+): CategoriaHato | 'toro' | null {
   if (fila.estado !== 'activa') return null;
   if (fila.etapa === 'toro') return 'toro';
-  if (fila.etapa === 'ternera') return 'terneras';
-  if (fila.etapa === 'novilla') return 'novillas';
-  // etapa === 'vaca'
+
+  if (fila.etapa_forzada) {
+    // Override explícito (migración 092): gana SIEMPRE, sin mirar
+    // num_partos ni fecha_nacimiento -- mismo criterio que
+    // `calcularEtapaHato` (hatoCategorias.ts).
+    if (fila.etapa === 'ternera') return 'terneras';
+    if (fila.etapa === 'novilla') return 'novillas';
+    if (estado === 'seca') return 'horro';
+    return 'hato_ordeno';
+  }
+
+  if (fila.num_partos < 1) {
+    const edadMeses = calcularEdadMeses(fila.fecha_nacimiento, fechaReferencia);
+    if (edadMeses !== null) {
+      if (edadMeses < umbrales.meses_ternera_max) return 'terneras';
+      return 'novillas';
+    }
+    // El cálculo no puede resolver la edad (D-13: "fecha de nacimiento
+    // ausente o mala") -- override manual fácil: se respeta `fila.etapa`
+    // tal como está guardado.
+    if (fila.etapa === 'ternera') return 'terneras';
+    if (fila.etapa === 'novilla') return 'novillas';
+  }
+  // num_partos >= 1, o etapa manual 'vaca' cuando el cálculo no pudo
+  // resolver la edad (D-13: las vacas se definen por el 1er parto).
   if (estado === 'seca') return 'horro';
   return 'hato_ordeno';
 }
@@ -266,6 +422,19 @@ export interface ReproduccionSummary {
   total_animales: number;
   categorias: {
     terneras: number;
+    /** Subgrupo contable de `terneras` (D-13, S6): edad < meses_ternera_leche_max.
+     * Solo cuenta terneras cuya edad SÍ se pudo calcular -- una ternera por
+     * override manual (fecha de nacimiento ausente/mala) no entra en
+     * ninguno de los dos subgrupos, ver `terneras_edad_sin_calcular`. */
+    terneras_leche: number;
+    /** Subgrupo contable de `terneras` (D-13, S6): meses_ternera_leche_max
+     * <= edad < meses_ternera_max. */
+    terneras_concentrado: number;
+    /** Terneras (por override manual) cuya edad no se pudo calcular --
+     * ninguna herramienta de concentrado debe asumir que estas 3 cifras
+     * (leche + concentrado + esta) no suman `terneras`: si suman menos, la
+     * diferencia son estas. */
+    terneras_edad_sin_calcular: number;
     novillas: number;
     hato_ordeno: number;
     horro: number;
@@ -304,9 +473,19 @@ function diferenciaDiasIso(desde: string, hasta: string): number {
 export function buildReproduccionSummary(
   filas: HatoEstadoActualRow[],
   config: HatoConfig,
+  umbralesCategoria: UmbralesCategoriaHato,
   fechaReferencia: string,
 ): ReproduccionSummary {
-  const categorias = { terneras: 0, novillas: 0, hato_ordeno: 0, horro: 0, toros: 0 };
+  const categorias = {
+    terneras: 0,
+    terneras_leche: 0,
+    terneras_concentrado: 0,
+    terneras_edad_sin_calcular: 0,
+    novillas: 0,
+    hato_ordeno: 0,
+    horro: 0,
+    toros: 0,
+  };
   const porEstado: Partial<Record<EstadoReproductivo, number>> = {};
   const alertas = { secado_due: 0, rechequeo_due: 0, servicio_sin_confirmacion: 0, parto_proximo: 0 };
   const proximosPartos: AnimalResumenReproductivo[] = [];
@@ -323,9 +502,14 @@ export function buildReproduccionSummary(
     const derivado = derivarEstadoReproductivo(fila, config, fechaReferencia);
     porEstado[derivado.estado] = (porEstado[derivado.estado] || 0) + 1;
 
-    const categoria = categorizarAnimal(fila, derivado.estado);
-    if (categoria === 'terneras') categorias.terneras += 1;
-    else if (categoria === 'novillas') categorias.novillas += 1;
+    const categoria = categorizarAnimal(fila, derivado.estado, umbralesCategoria, fechaReferencia);
+    if (categoria === 'terneras') {
+      categorias.terneras += 1;
+      const edadMeses = calcularEdadMeses(fila.fecha_nacimiento, fechaReferencia);
+      if (edadMeses === null) categorias.terneras_edad_sin_calcular += 1;
+      else if (calcularSubetapaTernera(edadMeses, umbralesCategoria) === 'leche') categorias.terneras_leche += 1;
+      else categorias.terneras_concentrado += 1;
+    } else if (categoria === 'novillas') categorias.novillas += 1;
     else if (categoria === 'hato_ordeno') categorias.hato_ordeno += 1;
     else if (categoria === 'horro') categorias.horro += 1;
     else if (categoria === 'toro') categorias.toros += 1;

@@ -136,6 +136,10 @@ export function AjustesHato() {
     setLocal((prev) => (prev ? { ...prev, diaPesajeSemanal: { iso: dia.iso, nombre: dia.nombre } } : prev));
   };
 
+  const actualizarRetencionIca = (valor: number | undefined) => {
+    setLocal((prev) => (prev ? { ...prev, retencionIcaLechePorcentaje: valor ?? 0 } : prev));
+  };
+
   const handleGuardar = async () => {
     if (!local) return;
     const resultado = await guardar(local, user?.id);
@@ -265,6 +269,25 @@ export function AjustesHato() {
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-primary/10 p-4 lg:p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
+        <h3 className="text-lg text-foreground mb-1">Retención de ICA — venta de leche a El Pomar</h3>
+        <p className="text-sm text-gray-500 mb-4">
+          Porcentaje que El Pomar retiene de la liquidación quincenal (D-11). El neto que se registra en Finanzas es
+          bruto × (1 − esta retención). Solo aplica a periodos de julio 2026 en adelante (D-12); lo histórico queda en
+          bruto.
+        </p>
+        <div className="space-y-1.5 max-w-xs">
+          <Label htmlFor="retencion-ica-leche">Retención (%)</Label>
+          <NumberInput
+            id="retencion-ica-leche"
+            value={local.retencionIcaLechePorcentaje}
+            onChange={actualizarRetencionIca}
+            decimals={2}
+            onWheel={(e) => e.currentTarget.blur()}
+          />
+        </div>
       </div>
 
       <div className="flex justify-end">
