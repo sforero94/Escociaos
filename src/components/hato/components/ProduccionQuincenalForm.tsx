@@ -137,12 +137,27 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
   const rango = rangoQuincena(anio, mes, quincena);
   const soloLectura = origenDato === 'derivado_mensual';
 
+  // Defaults del dueño ya resueltos a id, mantenidos en una referencia para
+  // que `resetIngreso` los pueda leer sin capturarlos en un cierre viejo
+  // (`cargarRegistro` tiene sus dependencias fijadas a mano en
+  // [anio, mes, quincena]). Se rellenan en el efecto de más abajo.
+  const defaultsIngresoRef = useRef<{ compradorId: string; medioPagoId: string; regionId: string }>({
+    compradorId: '',
+    medioPagoId: '',
+    regionId: '',
+  });
+
+  // Limpiar el bloque financiero al cambiar de periodo NO significa dejarlo
+  // en blanco: la venta quincenal siempre es a El Pomar, por Cuenta Fovemsa y
+  // en Subachoque. Antes esto vaciaba los tres campos y los defaults solo se
+  // aplicaban una vez al montar, así que después de la primera navegación
+  // había que volver a elegirlos a mano en cada quincena.
   const resetIngreso = () => {
     setFechaIngreso(hoyIso());
     setValorBruto(undefined);
-    setRegionId('');
-    setMedioPagoId('');
-    setCompradorId('');
+    setRegionId(defaultsIngresoRef.current.regionId);
+    setMedioPagoId(defaultsIngresoRef.current.medioPagoId);
+    setCompradorId(defaultsIngresoRef.current.compradorId);
   };
 
   // Retención de ICA -- una sola vez al montar (no depende del periodo
@@ -164,32 +179,70 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
   // Resueltos por NOMBRE; si un nombre no existe en el catálogo, se
   // reporta (nunca se crea en silencio) y ese campo queda vacío para
   // elegir a mano.
-  const defaultsAplicados = useRef(false);
+  const defaultsAvisados = useRef(false);
   useEffect(() => {
-    if (defaultsAplicados.current) return;
-    if (catalogos.loading || registroId) return;
-    defaultsAplicados.current = true;
+    if (catalogos.loading) return;
 
     const porNombre = <T extends { id: string; nombre: string }>(lista: T[], nombre: string) =>
       lista.find((x) => x.nombre.trim().toLowerCase() === nombre.trim().toLowerCase());
 
     const faltantes: string[] = [];
     const comprador = porNombre(catalogos.compradores, COMPRADOR_DEFAULT);
-    if (comprador) setCompradorId((prev) => prev || comprador.id);
-    else faltantes.push(`comprador "${COMPRADOR_DEFAULT}"`);
-
+    if (!comprador) faltantes.push(`comprador "${COMPRADOR_DEFAULT}"`);
     const medioPago = porNombre(catalogos.mediosPago, MEDIO_PAGO_DEFAULT);
-    if (medioPago) setMedioPagoId((prev) => prev || medioPago.id);
-    else faltantes.push(`medio de pago "${MEDIO_PAGO_DEFAULT}"`);
-
+    if (!medioPago) faltantes.push(`medio de pago "${MEDIO_PAGO_DEFAULT}"`);
     const region = porNombre(catalogos.regiones, REGION_DEFAULT);
-    if (region) setRegionId((prev) => prev || region.id);
-    else faltantes.push(`región "${REGION_DEFAULT}"`);
+    if (!region) faltantes.push(`región "${REGION_DEFAULT}"`);
 
-    if (faltantes.length > 0) {
+    // La referencia se mantiene fresca siempre: es la que `resetIngreso` lee
+    // en cada cambio de periodo.
+    defaultsIngresoRef.current = {
+      compradorId: comprador?.id ?? '',
+      medioPagoId: medioPago?.id ?? '',
+      regionId: region?.id ?? '',
+    };
+
+    // Aplicar sobre un registro NUEVO y solo donde el usuario no haya elegido
+    // ya algo a mano (`prev ||`). Nunca pisa lo que se cargó de un registro
+    // existente.
+    if (!registroId) {
+      if (comprador) setCompradorId((prev) => prev || comprador.id);
+      if (medioPago) setMedioPagoId((prev) => prev || medioPago.id);
+      if (region) setRegionId((prev) => prev || region.id);
+    }
+
+    // El aviso de catálogo incompleto se da UNA vez por sesión del
+    // formulario: el efecto ahora corre en cada cambio de periodo y repetirlo
+    // sería ruido.
+    if (faltantes.length > 0 && !defaultsAvisados.current) {
+      defaultsAvisados.current = true;
       toast.warning(`No se encontraron en el catálogo: ${faltantes.join(', ')} -- selecciónalos a mano.`);
     }
   }, [catalogos.loading, catalogos.compradores, catalogos.mediosPago, catalogos.regiones, registroId]);
+
+  // Valores leídos por OCR que todavía no se pueden escribir en el formulario.
+  //
+  // El problema que resuelve: `cargarRegistro` se re-dispara cada vez que
+  // cambian anio/mes/quincena, y para un periodo que aún no existe en la base
+  // limpia litros y el bloque financiero. Como leer una liquidación SIEMPRE
+  // cambia el periodo (es justo el dato que trae el papel), las tres llamadas
+  // del OCR entraban en el mismo lote de render y la recarga posterior --
+  // asíncrona, y por lo tanto siempre después -- borraba lo recién escrito.
+  // El síntoma era exacto: el aviso de "liquidación leída" salía y los campos
+  // quedaban vacíos.
+  //
+  // La solución NO es dejar de limpiar al cambiar de periodo: eso es correcto
+  // y evita que los valores de una quincena se filtren a otra cuando el
+  // usuario navega a mano. Lo que se hace es dejar la lectura en espera y
+  // aplicarla DESPUÉS de que la recarga del periodo destino termine.
+  const ocrPendiente = useRef<{
+    anio: number;
+    mes: number;
+    quincena: 1 | 2;
+    litros: number | null;
+    bruto: number | null;
+    fechaPago: string | null;
+  } | null>(null);
 
   const cargarRegistro = useCallback(async () => {
     setCargando(true);
@@ -231,6 +284,34 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
         setNumVacasOrdeno(undefined);
         setNotas('');
         resetIngreso();
+      }
+
+      // Aplicación de la lectura OCR en espera -- va DESPUÉS de la limpieza
+      // (o de la carga del registro existente), que es exactamente lo que el
+      // orden anterior no garantizaba. Solo se aplica si la lectura es para
+      // ESTE periodo: si el usuario ya navegó a otro mientras el OCR corría,
+      // se descarta en vez de contaminar una quincena que no le corresponde.
+      const pendiente = ocrPendiente.current;
+      if (pendiente && pendiente.anio === anio && pendiente.mes === mes && pendiente.quincena === quincena) {
+        ocrPendiente.current = null;
+        if (existente?.origen_dato === 'derivado_mensual') {
+          // Fila de backfill: es de solo lectura y el RPC rechaza editarla.
+          // Escribir aquí los valores del papel daría la impresión de que se
+          // pueden guardar, y no se pueden.
+          toast.warning(
+            'Esa quincena es un registro derivado del histórico mensual y es de solo lectura -- la liquidación no se aplicó.',
+          );
+        } else {
+          if (pendiente.litros != null) {
+            setLitrosTotal(pendiente.litros);
+            // La liquidación LA EMITE El Pomar: su "cantidad" es, por
+            // definición, el litraje que el Pomar confirma. Capturarlo dos
+            // veces a mano invitaría a que los dos números se separen.
+            setLitrosPomar(pendiente.litros);
+          }
+          if (pendiente.bruto != null) setValorBruto(pendiente.bruto);
+          if (pendiente.fechaPago) setFechaIngreso(pendiente.fechaPago);
+        }
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -343,18 +424,46 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
         const respuesta = await ocr.leerFotos(fotos);
         const doc = respuesta.documento;
 
-        if (doc.mes != null) setMes(doc.mes);
-        if (doc.quincena != null) setQuincena(doc.quincena);
         const anioDetectado = doc.periodoInicio?.slice(0, 4) ?? doc.periodoFin?.slice(0, 4) ?? null;
-        if (anioDetectado) setAnio(parseInt(anioDetectado, 10));
-        if (doc.cantidadLitros != null) setLitrosTotal(doc.cantidadLitros);
+        const anioDestino = anioDetectado ? parseInt(anioDetectado, 10) : anio;
+        const mesDestino = doc.mes ?? mes;
+        const quincenaDestino = doc.quincena ?? quincena;
+
         // Preferimos el subtotal leído (es el bruto real de la
         // liquidación); si el modelo no lo pudo leer pero sí precio y
         // cantidad, lo derivamos -- nunca al revés (el subtotal impreso es
         // el dato de la fila, precio×cantidad es una reconstrucción).
-        if (doc.subtotal != null) setValorBruto(doc.subtotal);
-        else if (doc.precioPromedioLitro != null && doc.cantidadLitros != null) {
-          setValorBruto(doc.precioPromedioLitro * doc.cantidadLitros);
+        const brutoLeido =
+          doc.subtotal ??
+          (doc.precioPromedioLitro != null && doc.cantidadLitros != null
+            ? doc.precioPromedioLitro * doc.cantidadLitros
+            : null);
+
+        // Los valores NO se escriben aquí: cambiar el periodo dispara la
+        // recarga, que limpia el formulario y borraría lo que se escriba en
+        // este mismo lote. Quedan en espera y `cargarRegistro` los aplica
+        // cuando termina de cargar el periodo destino. Ver el comentario de
+        // `ocrPendiente`.
+        ocrPendiente.current = {
+          anio: anioDestino,
+          mes: mesDestino,
+          quincena: quincenaDestino,
+          litros: doc.cantidadLitros,
+          bruto: brutoLeido,
+          // Fecha de pago: el fin del periodo liquidado es la referencia real
+          // del documento. Si el papel no lo trae, `resetIngreso` ya deja hoy.
+          fechaPago: doc.periodoFin ?? null,
+        };
+
+        setAnio(anioDestino);
+        setMes(mesDestino);
+        setQuincena(quincenaDestino);
+
+        // Si el periodo leído es el que ya está en pantalla, el efecto de
+        // recarga no se re-dispara (las tres dependencias quedan iguales) y
+        // nadie aplicaría la lectura -- se fuerza la recarga a mano.
+        if (anioDestino === anio && mesDestino === mes && quincenaDestino === quincena) {
+          void cargarRegistro();
         }
 
         const advertencias = [...respuesta.ocr.advertencias];
@@ -370,7 +479,11 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
         // El hook ya deja el mensaje en `ocr.error`, mostrado en la UI.
       }
     },
-    [ocr],
+    // `anio`/`mes`/`quincena` se leen para decidir el periodo destino cuando
+    // el papel no lo trae, y para saber si hay que forzar la recarga: sin
+    // ellas en las dependencias la función capturaría valores viejos si el
+    // usuario cambia de periodo entre renders.
+    [ocr, anio, mes, quincena, cargarRegistro],
   );
 
   const productividad = calcularProductividad(litrosTotal ?? null, numVacasOrdeno ?? null);
