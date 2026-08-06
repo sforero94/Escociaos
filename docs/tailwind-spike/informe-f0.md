@@ -73,26 +73,73 @@ Es el resultado más tranquilizador del spike, y no depende del criterio de nadi
 
 ## 4. Juicio de usabilidad (evaluación a ciegas, sin leer código)
 
+Dos evaluadoras independientes, cada una con su lote, sin acceso al código.
+
 | Par | Veredicto | ¿Impide trabajar? |
 |---|---|---|
+| `hato-animales--mobile` | **IDÉNTICO** (diff 0,03% = ruido de compresión) | No |
+| `hato-animales--desktop` | IGUAL (zona de contenido pixel-idéntica) | No |
 | `dashboard--desktop` | IGUAL | No |
 | `monitoreo--desktop` | IGUAL | No |
+| `finanzas-presupuesto--desktop` | **MEJOR** | No — *gana* funcionalidad |
 | `dashboard--mobile` | PEOR | No — la fila de pronóstico queda descuadrada |
+| `finanzas-gastos--mobile` | PEOR | No — puramente cosmético |
+| `finanzas-gastos--desktop` | PEOR | No — se reacomoda la barra de filtros |
 | `labores--mobile` | PEOR | No, pero el área táctil del selector de estado cae a ~40% |
 | `monitoreo--mobile` | PEOR | No — la píldora "Ronda abierta" queda casi ilegible |
 | `dlg-tarea-detalle--desktop` | PEOR | No — ver abajo |
 
 **Ninguna pantalla resultó `ROTO`.**
 
-### Las tres regresiones que sí hay que arreglar
+### Lo que se GANA (no todo es regresión)
 
-1. **`truncate` cobró vida y corta el nombre del responsable.** En el diálogo de detalle de tarea,
-   "DAVID JOVANY GARCIA MANCERA" pasa a "DAVID JOVANY GARCIA MANC…". La clase estaba muerta y ahora
-   funciona: es exactamente el patrón que F2 tiene que buscar — no "se rompió", sino *"empezó a hacer
-   lo que decía, y lo que decía estaba mal"*.
-2. **El selector de estado en `/labores` móvil** pasó de píldora de ancho completo (~680px) a ~264px.
-   Es la acción que más toca Martha en campo, con dedos y al sol.
-3. **`/monitoreo` móvil empeoró su desborde** (390→446px) y empuja contenido real fuera de pantalla.
+**`/finanzas/presupuesto` mejora de verdad.** Aparecen puntos de estado por fila y una leyenda
+`≤80% / 80-100% / >100%` **que hoy no existe en producción**. Estaba escrita en el código y no se veía
+porque las clases no compilaban. Es el ejemplo más claro de que parte del "daño" acumulado es
+funcionalidad que el equipo escribió y nunca llegó a ver.
+
+### Las regresiones que sí hay que arreglar
+
+**1. El sidebar desborda y el pie tapa el ítem de navegación activo. ⬅ la más grave, y afecta TODAS
+las pantallas.**
+Una evaluadora la reportó marcándola con duda (podía ser artefacto de cómo se navegó). **Se verificó
+midiendo, y es real.** Con los mismos dos grupos abiertos en ambos estados:
+
+| | Congelado | Compilado |
+|---|---|---|
+| Alto del contenido del nav | 622 px | **948 px** |
+| Alto del contenedor | 622 px | 622 px |
+| ¿Desborda? | No | **Sí, 326 px** |
+| Ítem activo ("Hato") termina en | 377 px | **713 px** |
+| Pie del sidebar empieza en | 695 px | 695 px |
+| **¿Se superponen?** | No (318 px de holgura) | **Sí, 18 px** |
+
+Cada ítem del menú crece ~16 px al activarse las clases de espaciado, y ~20 ítems suman 326 px.
+**Atenuante medido:** el nav tiene `overflow-y: auto` y **sí se desplaza** (alcanza los 326 px), así
+que ninguna opción queda inalcanzable. Pero el ítem activo aparece parcialmente tapado por el bloque
+de perfil, y un clic ahí puede caer en el pie en vez del enlace.
+
+**2. `truncate` cobró vida y corta el nombre del responsable.** En el diálogo de detalle de tarea,
+"DAVID JOVANY GARCIA MANCERA" pasa a "DAVID JOVANY GARCIA MANC…". La clase estaba muerta y ahora
+funciona: es exactamente el patrón que F2 tiene que buscar — no "se rompió", sino *"empezó a hacer lo
+que decía, y lo que decía estaba mal"*. En la misma pantalla, "Historial de Tareas" dejó de asomarse
+sin scroll.
+
+**3. El selector de estado en `/labores` móvil** pasó de píldora de ancho completo (~680 px) a
+~264 px. Es la acción que más toca Martha en campo, con dedos y al sol.
+
+**4. `/monitoreo` móvil empeoró su desborde** (390→446 px) y empuja contenido real fuera de pantalla.
+
+**5. El subtítulo de `/finanzas/gastos` cambia de verde de marca a café/taupe** — `rgb(23,46,8)` →
+`rgb(128,100,84)`, confirmado por muestreo de píxel. Es puntual de ese componente, no general: el gris
+estándar de Presupuesto y Hato no se mueve. Es la pantalla que Consuelo y Efraín usan a diario.
+
+### `tabular-nums`: verificado, no rompió nada
+
+Se revisó con zoom 4x y diff de píxeles sobre las columnas de dinero. **El borde derecho de cada monto
+cae exactamente en la misma posición** antes y después: la alineación que importa para leer una columna
+financiera está intacta. Hay un desplazamiento de ~12 px en 2.560 px en el inicio del texto, compatible
+con que los dígitos angostos ahora ocupan ancho uniforme — invisible sin herramientas de medición.
 
 ### Daño preexistente que el spike destapó (no es culpa del cambio)
 
@@ -157,15 +204,26 @@ el barrido capturándola a medio cargar.
 
 **F2 es pequeño.** Sobre la evidencia:
 
-- 0 pantallas rotas de 11 pares evaluados.
-- 2 de 6 pares de escritorio: cambio nulo a efectos de trabajo.
-- 1 sola regresión de desborde en 45 rutas.
-- 3 regresiones concretas identificadas, todas con arreglo evidente.
+- **0 pantallas rotas** de 11 pares evaluados por dos personas independientes.
+- 4 pares con cambio nulo a efectos de trabajo; 1 con mejora funcional real.
+- **1 sola regresión de desborde en 45 rutas** (`/monitoreo`).
+- 5 regresiones concretas identificadas, todas con arreglo evidente y acotado.
 
-Estimación: **2 a 3 sesiones**, no las "N sesiones" abiertas del plan original. El trabajo real de F2
-no es reparar destrozos — es **buscar el patrón de la regresión #1**: clases que estaban muertas,
-ahora funcionan, y lo que dicen está mal (`truncate` es el caso testigo). Ese barrido es
-mayoritariamente estático y se puede delegar.
+Estimación: **2 a 3 sesiones**, no las "N sesiones" abiertas del plan original.
+
+El trabajo de F2 se ordena así:
+
+1. **El sidebar primero** — es una sola corrección y beneficia todas las pantallas.
+2. **Después, el barrido del patrón `truncate`**: clases que estaban muertas, ahora funcionan, y lo
+   que dicen está mal. Ese barrido es mayoritariamente **estático y sí se puede delegar** a
+   subagentes (no requiere navegador): buscar `truncate`, `line-clamp-*`, `overflow-hidden`,
+   `max-w-*` y `whitespace-nowrap` en componentes que muestran nombres propios o texto de longitud
+   variable.
+3. **Lo cosmético al final**, o directamente en F4.
+
+**La regresión #1 refuta el orden que traía el plan.** F1 decía "retirar guardas y limpiar
+`globals.css`" antes de tocar nada visual; pero el sidebar roto afecta cada pantalla y hay que
+arreglarlo apenas se encienda el pipeline, no después de la limpieza.
 
 **Lo que queda sin medir y hay que declarar:** solo se capturaron 11 pares de las ~53 pantallas.
 La muestra se eligió por riesgo (ranking de clases muertas + desborde medido), no al azar, así que
