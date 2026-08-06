@@ -36,10 +36,38 @@ prompt del agente en cada corrida.
   (20260702173945) no tiene archivo en el repo. **Verificar siempre consultando el objeto
   vivo del catalogo, nunca la fila del ledger.** [corrida: 2026-08-03-lunes]
 
+- **Probar un PR de frontend por contenido: el chunk lazy lleva el nombre del
+  componente RUTA, no del archivo tocado.** `GastoForm.tsx` vive dentro de
+  `GastosView-*.js` (se confirma buscando la etiqueta "Nuevo Gasto"). Metodo que
+  funciono: identificar un literal que EXISTIA antes del PR y ya no
+  (`toISOString().split("T")[0]`, `>=30?"rojo"`) y contarlo en el chunk — **la
+  ausencia prueba mas que la presencia**, porque los nombres de funcion se minifican
+  pero los literales y los nombres de propiedad sobreviven. [corrida: 2026-08-06-jueves]
+- **Los guards estaticos con regex de patron literal se evaden aliaseando.**
+  `hatoFechaLocalGuard.test.ts` exige `new Date().toISOString()` pegado;
+  `const now = new Date(); now.toISOString()` pasa limpio. **Al verificar que un PR
+  cerro una clase de bug, correr el grep de la CLASE, no el del guard.**
+  [corrida: 2026-08-06-jueves]
+- **Numeros de migracion duplicados entre PRs son invisibles para git y para el CI**
+  (archivos con nombre distinto ⇒ sin conflicto). Antes de reportar sobre un PR
+  abierto con migracion, comparar su numero contra `ls src/sql/migrations/` en main,
+  ademas de simular el merge. [corrida: 2026-08-06-jueves]
+- **Los respaldos `backup_*` desaparecen sin dejar rastro en el ledger.** Verificar
+  su existencia con `information_schema.tables` sobre TODOS los esquemas; no confiar
+  en lo que digan la migracion ni el CLAUDE.md. [corrida: 2026-08-06-jueves]
+- La edge function puede figurar con `updated_at` unos minutos ANTERIOR al timestamp
+  de autoria del commit que contiene su cambio: el flujo real es desplegar y despues
+  commitear. **No es evidencia de que falte redesplegar.** Antes de reportarlo,
+  comprobar si el archivo tocado tiene consumidor del lado edge — los espejos de
+  paridad (`priorizacion-scouting.ts`, `calculosHato.ts`, `hatoAlertas.ts`,
+  `importHato/*`) a menudo no lo tienen. [corrida: 2026-08-06-jueves]
+
 ## Baselines
 | Metrica | Valor | Corrida |
 |---|---|---|
-| Estado de despliegue | HEAD main **7c232f6** (2026-07-31 19:12:45Z) · edge function **v197** desplegada 2026-07-31T19:11:40Z, posterior al ultimo commit de su arbol (f6fdfa2, 17:27:24Z) — nada pendiente de deploy manual · migraciones 001-076 aplicadas, hueco deliberado en el repo en 067 · frontend de produccion verificado POR CONTENIDO | 2026-08-03-lunes |
+| Estado de despliegue | HEAD main **d797b3f** · edge function **v198** desplegada 2026-08-03T17:04:25Z · migraciones **001-082** aplicadas y verificadas contra el catalogo VIVO (067 y 079 son archivos de registro, no huecos) · frontend de produccion verificado POR CONTENIDO en `index-B_XkmZw2.js` · **nada pendiente de desplegar** | 2026-08-06-jueves |
+| Lints de seguridad Supabase | **11** (bajo desde 51 tras 082). Composicion estable y esperada — **no re-diagnosticar como hallazgos nuevos** | 2026-08-06-jueves |
+| Estado de despliegue (anterior) | HEAD main 7c232f6 · edge function v197 · migraciones 001-076 | 2026-08-03-lunes |
 | Cadencia (primera medicion, ventana 2026-06-08→2026-08-03, 8 semanas) | 22,9 commits/sem · 6,4 aterrizajes first-parent/sem · fix share **46,8%** de feat+fix (bajando: 68,8% 1a mitad → 41,0% 2a, **pero la 2a esta sesgada por el build-out del hato**) · lag de deploy del edge function ~1h44m, frontend automatico. **No existe ventana previa comparable: la historia del repo empieza efectivamente el 2026-06-09** — tratar como primera medicion, NO como tendencia | 2026-08-03-lunes |
 
 ## Archivo
