@@ -82,6 +82,39 @@ táctil**.
 
 ---
 
+## 5. La trampa: el tamaño va en el elemento de texto, no en su contenedor
+
+**Poner `text-sm` en un `<td>` o un `<div>` NO dimensiona el `<p>` que lleva adentro.**
+
+`globals.css` tiene un bloque `@layer base` que fija un tamaño a los elementos semánticos
+(`p`, `h1`–`h4`, `label`, `button`, `input`). Trae un guardián que *pretende* excluir a los que ya
+viven bajo una clase de texto, pero **ese selector está mal formado y no excluye nada** (comprobado
+2026-08-07):
+
+| Caso | Resultado |
+|---|---|
+| `<span>` dentro de `.text-sm` | **14 px** — hereda, correcto |
+| `<p>` dentro de `.text-sm` | **16 px** — la regla base gana |
+
+No es un bug del navegador: **una regla directa siempre gana sobre un valor heredado**, sin importar
+la especificidad. El `<p>` tiene su propia regla; el `text-sm` del padre solo se hereda.
+
+**Es el origen medido de la inconsistencia que motivó D-2**: el cuerpo de `/inventario` renderizaba a
+16 px con 1.024 elementos afectados. Nadie lo eligió — se lo impuso esta regla.
+
+### La regla
+
+> **Si un texto necesita un tamaño, la clase va en el elemento que contiene el texto.** Ponerla en un
+> ancestro funciona con `<span>` y `<div>`, y falla en silencio con `<p>`, `<h1>`–`<h4>`, `<label>`,
+> `<button>` e `<input>`.
+
+**Deuda conocida**: hay ~169 `<p>` en `src/components` sin clase de tamaño propia. No todos están mal
+—muchos deben ser 16 px— pero cualquiera que esté dentro de un contenedor con `text-sm`/`text-xs`
+está renderizando más grande de lo que su autor creía. Barrerlos es trabajo aparte; esta regla evita
+que el número siga creciendo.
+
+---
+
 ## 4. Lo que este documento NO decide
 
 - **Color.** La paleta no cambia (T-5). Los tokens viven en `src/styles/globals.css`.

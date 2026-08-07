@@ -521,7 +521,7 @@ export function IngresosList({ onEdit }: IngresosListProps) {
 
                 {/* Ganado badge */}
                 {item.source === 'ganado' && (
-                  <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-md bg-amber-100 text-amber-700 flex-shrink-0">
+                  <span className="px-1.5 py-0.5 text-sm sm:text-xs font-semibold rounded-md bg-amber-100 text-amber-700 flex-shrink-0">
                     Ganado
                   </span>
                 )}
@@ -533,7 +533,7 @@ export function IngresosList({ onEdit }: IngresosListProps) {
                     del Tailwind congelado (CLAUDE.md, caución "Frozen
                     classes") -- se usan aquí solo clases verificadas vivas. */}
                 {item.source === 'ingreso' && ingresosConQuincenaHato.has(item.id) && (
-                  <span className="px-2 py-1 text-xs font-semibold rounded-md bg-blue-100 text-blue-700 flex-shrink-0">
+                  <span className="px-2 py-1 text-sm sm:text-xs font-semibold rounded-md bg-blue-100 text-blue-700 flex-shrink-0">
                     Quincena Hato
                   </span>
                 )}
@@ -557,7 +557,7 @@ export function IngresosList({ onEdit }: IngresosListProps) {
                     auditoría de recorte 2026-08-06, caso 2. */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="gasto-nombre text-sm font-medium text-gray-900 truncate min-w-0 flex-1">
+                    <span className="gasto-nombre text-base sm:text-sm font-medium text-gray-900 truncate min-w-0 flex-1">
                       {item.nombre}
                     </span>
                     {(item.detailsMovil ?? item.details) && (
@@ -568,15 +568,17 @@ export function IngresosList({ onEdit }: IngresosListProps) {
                   </div>
                   {/* Misma cadena que arriba — antes de D-5 esta línea (móvil)
                       y el span de arriba (escritorio) mostraban cosas
-                      distintas; ahora ambos son `detailsMovil ?? details`. */}
-                  <div className="gasto-meta-movil text-xs text-gray-400 truncate">
+                      distintas; ahora ambos son `detailsMovil ?? details`.
+                      `.gasto-meta-movil` es SOLO móvil (ver GastosList.tsx) --
+                      metadato, D-2 lo sube de 12 a 14px sin variante `sm:`. */}
+                  <div className="gasto-meta-movil text-sm text-gray-400 truncate">
                     {formatearFechaCorta(item.fecha)}
                     {(item.detailsMovil ?? item.details) ? ` · ${item.detailsMovil ?? item.details}` : ''}
                   </div>
                 </div>
 
-                {/* Value */}
-                <span className="text-sm font-semibold text-green-700 flex-shrink-0">
+                {/* Value — mismo rol "cuerpo" que el nombre */}
+                <span className="text-base sm:text-sm font-semibold text-green-700 flex-shrink-0">
                   +${formatNumber(item.valor)}
                 </span>
 

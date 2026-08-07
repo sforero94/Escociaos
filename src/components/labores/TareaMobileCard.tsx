@@ -50,14 +50,14 @@ const TareaMobileCard: React.FC<TareaMobileCardProps> = ({ tarea, actions }) => 
       className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 cursor-pointer"
     >
       <div className="flex items-start justify-between gap-2">
-        <h4 className="font-semibold text-sm text-foreground flex-1 min-w-0">{tarea.nombre}</h4>
+        <h4 className="font-semibold text-base text-foreground flex-1 min-w-0">{tarea.nombre}</h4>
         <div
           className="flex items-center gap-1 flex-shrink-0"
           onClick={(e) => e.stopPropagation()}
         >
           <span
             className={cn(
-              'inline-flex rounded-md border px-2 py-1 text-xs font-semibold',
+              'inline-flex rounded-md border px-2 py-1 text-sm font-semibold',
               PRIORIDAD_CONFIGS[tarea.prioridad].chipClassName,
             )}
           >
@@ -76,7 +76,7 @@ const TareaMobileCard: React.FC<TareaMobileCardProps> = ({ tarea, actions }) => 
       {/* Tipo · lotes · fecha en su propia línea: con el <Select> dentro de esta
           misma fila el chip ocupaba todo el ancho y empujaba el primer "·" al
           renglón siguiente, dejándolo huérfano al inicio de la línea. */}
-      <div className="flex flex-wrap items-center gap-1 mt-2 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-1 mt-2 text-sm text-muted-foreground">
         <span>{tarea.tipo_tarea?.nombre || 'Sin tipo'}</span>
         <span>·</span>
         <span>{loteResumen}</span>
@@ -88,7 +88,7 @@ const TareaMobileCard: React.FC<TareaMobileCardProps> = ({ tarea, actions }) => 
         className="flex items-center justify-between gap-2 mt-3 pt-3 border-t"
         onClick={(e) => e.stopPropagation()}
       >
-        <span className="text-xs font-medium tareas-jornales">
+        <span className="text-sm font-medium tareas-jornales">
           {(tarea.jornales_reales ?? 0).toFixed(1)}
           <span className="text-muted-foreground"> / </span>
           {tarea.jornales_estimados != null ? tarea.jornales_estimados.toFixed(1) : '—'}
@@ -101,7 +101,7 @@ const TareaMobileCard: React.FC<TareaMobileCardProps> = ({ tarea, actions }) => 
           <button
             type="button"
             onClick={() => actions.onVerDetalles(tarea)}
-            className="text-xs text-muted-foreground"
+            className="text-sm text-muted-foreground"
           >
             Ver detalles →
           </button>

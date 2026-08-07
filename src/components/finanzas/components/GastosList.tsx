@@ -529,7 +529,7 @@ export function GastosList({ onEdit }: GastosListProps) {
 
                 {/* Estado icon or Ganado badge */}
                 {item.source === 'ganado' ? (
-                  <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-md bg-amber-100 text-amber-700 flex-shrink-0">
+                  <span className="px-1.5 py-0.5 text-sm sm:text-xs font-semibold rounded-md bg-amber-100 text-amber-700 flex-shrink-0">
                     Ganado
                   </span>
                 ) : item.source === 'gasto' ? (
@@ -572,7 +572,7 @@ export function GastosList({ onEdit }: GastosListProps) {
                     caer a casi cero. */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="gasto-nombre text-sm font-medium text-gray-900 truncate min-w-0 flex-1">
+                    <span className="gasto-nombre text-base sm:text-sm font-medium text-gray-900 truncate min-w-0 flex-1">
                       {item.nombre}
                     </span>
                     {(item.detailsMovil ?? item.details) && (
@@ -583,15 +583,19 @@ export function GastosList({ onEdit }: GastosListProps) {
                   </div>
                   {/* Misma cadena que arriba — antes de D-5 esta línea (móvil)
                       y el span de arriba (escritorio) mostraban cosas
-                      distintas; ahora ambos son `detailsMovil ?? details`. */}
-                  <div className="gasto-meta-movil text-xs text-gray-400 truncate">
+                      distintas; ahora ambos son `detailsMovil ?? details`.
+                      `.gasto-meta-movil` es SOLO móvil (display:none desde
+                      `sm`, ver globals.css) — texto metadato, D-2 lo sube de
+                      12 a 14px ahí, sin variante `sm:` porque en escritorio
+                      ni siquiera se renderiza. */}
+                  <div className="gasto-meta-movil text-sm text-gray-400 truncate">
                     {formatearFechaCorta(item.fecha)}
                     {(item.detailsMovil ?? item.details) ? ` · ${item.detailsMovil ?? item.details}` : ''}
                   </div>
                 </div>
 
-                {/* Value */}
-                <span className="text-sm font-semibold text-gray-900 flex-shrink-0 tabular-nums">
+                {/* Value — mismo rol "cuerpo" que el nombre: 16px en móvil, 14 en escritorio */}
+                <span className="text-base sm:text-sm font-semibold text-gray-900 flex-shrink-0 tabular-nums">
                   ${formatNumber(item.valor)}
                 </span>
 

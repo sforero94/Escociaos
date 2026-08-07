@@ -324,53 +324,53 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
           <table className="w-full">
             <thead className="bg-gradient-to-r from-muted/50 to-muted/30 border-b border-primary/10">
               <tr>
-                <th 
+                <th
                   onClick={() => handleSort('nombre')}
-                  className="text-left px-6 py-4 text-sm text-brand-brown/70 tracking-wide uppercase cursor-pointer hover:bg-muted/50 transition-colors"
+                  className="text-left px-6 py-2.5 text-sm text-brand-brown/70 tracking-wide uppercase cursor-pointer hover:bg-muted/50 transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     Producto
                     <SortIcon column="nombre" />
                   </div>
                 </th>
-                <th 
+                <th
                   onClick={() => handleSort('categoria')}
-                  className="text-left px-6 py-4 text-sm text-brand-brown/70 tracking-wide uppercase cursor-pointer hover:bg-muted/50 transition-colors"
+                  className="text-left px-6 py-2.5 text-sm text-brand-brown/70 tracking-wide uppercase cursor-pointer hover:bg-muted/50 transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     Categoría
                     <SortIcon column="categoria" />
                   </div>
                 </th>
-                <th 
+                <th
                   onClick={() => handleSort('estado')}
-                  className="text-left px-6 py-4 text-sm text-brand-brown/70 tracking-wide uppercase cursor-pointer hover:bg-muted/50 transition-colors"
+                  className="text-left px-6 py-2.5 text-sm text-brand-brown/70 tracking-wide uppercase cursor-pointer hover:bg-muted/50 transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     Estado
                     <SortIcon column="estado" />
                   </div>
                 </th>
-                <th 
+                <th
                   onClick={() => handleSort('cantidad_actual')}
-                  className="text-right px-6 py-4 text-sm text-brand-brown/70 tracking-wide uppercase cursor-pointer hover:bg-muted/50 transition-colors"
+                  className="text-right px-6 py-2.5 text-sm text-brand-brown/70 tracking-wide uppercase cursor-pointer hover:bg-muted/50 transition-colors"
                 >
                   <div className="flex items-center justify-end gap-2">
                     Cantidad Actual
                     <SortIcon column="cantidad_actual" />
                   </div>
                 </th>
-                <th 
-                  className="text-right px-6 py-4 text-sm text-brand-brown/70 tracking-wide uppercase"
+                <th
+                  className="text-right px-6 py-2.5 text-sm text-brand-brown/70 tracking-wide uppercase"
                 >
                   Valor Total
                 </th>
-                <th 
-                  className="text-center px-6 py-4 text-sm text-brand-brown/70 tracking-wide uppercase"
+                <th
+                  className="text-center px-6 py-2.5 text-sm text-brand-brown/70 tracking-wide uppercase"
                 >
                   Activo
                 </th>
-                <th className="text-center px-6 py-4 text-sm text-brand-brown/70 tracking-wide uppercase">
+                <th className="text-center px-6 py-2.5 text-sm text-brand-brown/70 tracking-wide uppercase">
                   Acciones
                 </th>
               </tr>
@@ -390,17 +390,23 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
                     className="hover:bg-muted/20 cursor-pointer transition-all duration-200"
                     onClick={() => onNavigate && onNavigate('inventory-detail', product.id)}
                   >
-                    <td className="px-6 py-4">
-                      <p className={`${!product.permitido_gerencia ? 'text-red-600 font-bold' : 'text-foreground'}`}>
+                    <td className="px-6 py-1.5 text-sm">
+                      {/* El `text-sm` va aquí y no solo en el <td>: el bloque de
+                          tipografía base de globals.css fija `p { font-size:
+                          var(--text-base) }`, y una regla directa gana sobre el
+                          valor heredado del contenedor. Sin esta clase el nombre
+                          renderiza a 16 px aunque su <td> diga `text-sm`.
+                          Ver docs/sistema-visual.md §5. */}
+                      <p className={`text-sm ${!product.permitido_gerencia ? 'text-red-600 font-bold' : 'text-foreground'}`}>
                         {product.nombre}
                       </p>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-1.5">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-primary/10 text-primary text-xs">
                         {product.categoria}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-1.5">
                       <span
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs ${
                           product.estado === 'Disponible'
@@ -411,13 +417,13 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
                         {product.estado || 'Disponible'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-right text-foreground">
+                    <td className="px-6 py-1.5 text-right text-sm text-foreground">
                       {product.cantidad_actual} {product.unidad_medida}
                     </td>
-                    <td className="px-6 py-4 text-right text-foreground">
+                    <td className="px-6 py-1.5 text-right text-sm text-foreground">
                       {formatCurrency((product.cantidad_actual ?? 0) * (product.precio_unitario || 0))}
                     </td>
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-6 py-1.5 text-center">
                       <button
                         onClick={(e) => handleToggleActivo(product.id, product.activo, e)}
                         className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${
@@ -432,7 +438,7 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
                         />
                       </button>
                     </td>
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-6 py-1.5 text-center">
                       <div className="flex items-center justify-center gap-2">
                         <Button
                           onClick={(e) => {

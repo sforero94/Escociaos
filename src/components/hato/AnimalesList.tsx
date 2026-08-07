@@ -83,7 +83,7 @@ function CabeceraOrdenable({
 }) {
   const activa = ordenActual.columna === columna;
   return (
-    <th className={`px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap ${align === 'right' ? 'text-right' : 'text-left'}`}>
+    <th className={`px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap ${align === 'right' ? 'text-right' : 'text-left'}`}>
       <button
         type="button"
         onClick={() => onOrdenar(columna)}
@@ -139,17 +139,17 @@ function TablaAnimales({
   return (
     <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-base sm:text-sm">
           <thead className="bg-gray-50">
             <tr>
               <CabeceraOrdenable label="N.º" columna="numero" ordenActual={orden} onOrdenar={handleOrdenar} />
               <CabeceraOrdenable label="Nombre" columna="nombre" ordenActual={orden} onOrdenar={handleOrdenar} />
               <CabeceraOrdenable label="Estado" columna="estado" ordenActual={orden} onOrdenar={handleOrdenar} />
-              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Último parto</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Último parto</th>
               <CabeceraOrdenable label="Próximo evento" columna="proximo" ordenActual={orden} onOrdenar={handleOrdenar} />
-              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Raza</th>
-              <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Producción</th>
-              <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Acciones</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Raza</th>
+              <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Producción</th>
+              <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -158,7 +158,7 @@ function TablaAnimales({
                 key={animal.animalId}
                 className={`border-t border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
               >
-                <td className="px-3 py-2.5 whitespace-nowrap font-medium">
+                <td className="px-3 py-1.5 whitespace-nowrap font-medium">
                   <Link to={`/hato-lechero/hato/${animal.animalId}`} className="hover:text-primary">
                     {animal.numero != null ? (
                       `#${animal.numero}`
@@ -167,12 +167,12 @@ function TablaAnimales({
                     )}
                   </Link>
                 </td>
-                <td className="px-3 py-2.5 whitespace-nowrap">
+                <td className="px-3 py-1.5 whitespace-nowrap">
                   <Link to={`/hato-lechero/hato/${animal.animalId}`} className="hover:text-primary">
                     {animal.nombre ?? '—'}
                   </Link>
                 </td>
-                <td className="px-3 py-2.5 whitespace-nowrap">
+                <td className="px-3 py-1.5 whitespace-nowrap">
                   <div className="flex flex-wrap items-center gap-1">
                     <EstadoChip chip={chipEstadoReproductivo(animal.derivado.estado)} />
                     {animal.categoria === 'ternera' && (
@@ -182,15 +182,15 @@ function TablaAnimales({
                     {animal.derivado.proxima_a_reemplazo && <EstadoChip chip={chipProximaAReemplazo()} />}
                   </div>
                 </td>
-                <td className="px-3 py-2.5 whitespace-nowrap text-gray-600">
+                <td className="px-3 py-1.5 whitespace-nowrap text-gray-600">
                   {animal.ultimoPartoFecha ? formatShortDate(animal.ultimoPartoFecha) : '—'}
                 </td>
-                <td className="px-3 py-2.5 whitespace-nowrap text-gray-600">{proximoEvento(animal)}</td>
-                <td className="px-3 py-2.5 whitespace-nowrap text-gray-600">{animal.raza ?? '—'}</td>
-                <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                <td className="px-3 py-1.5 whitespace-nowrap text-gray-600">{proximoEvento(animal)}</td>
+                <td className="px-3 py-1.5 whitespace-nowrap text-gray-600">{animal.raza ?? '—'}</td>
+                <td className="px-3 py-1.5 text-right whitespace-nowrap">
                   {produccionTexto(animal, rendimientoPorAnimal)}
                 </td>
-                <td className="px-3 py-2.5 whitespace-nowrap text-right">
+                <td className="px-3 py-1.5 whitespace-nowrap text-right">
                   <div className="flex items-center justify-end gap-2">
                     {canMarcarCiclo && (
                       <Button
