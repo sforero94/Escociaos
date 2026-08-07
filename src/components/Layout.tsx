@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 import type { LucideIcon } from 'lucide-react';
@@ -32,6 +32,7 @@ import {
 import { Button } from './ui/button';
 import { useAuth } from '../contexts/AuthContext';
 import { puedeAccederModulo } from '@/utils/modulosAcceso';
+import { calcularScrollNearest } from '@/utils/scrollNearest';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 
 interface LayoutProps {
@@ -150,6 +151,14 @@ export function Layout({ onNavigate, children }: LayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Refs for the scroll-into-view fix below. Only one entry can be active at
+  // a time, so the same ref is safely reused across the branches of
+  // renderDesktopEntry/renderMobileEntry that could render "the" active item.
+  const desktopNavRef = useRef<HTMLElement>(null);
+  const desktopActiveRef = useRef<HTMLButtonElement>(null);
+  const mobileNavRef = useRef<HTMLElement>(null);
+  const mobileActiveRef = useRef<HTMLButtonElement>(null);
+
   // Accordion groups open state — initialized so the group containing the active route is open.
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
     const activeId = getActiveGroupId(location.pathname);
@@ -167,6 +176,36 @@ export function Layout({ onNavigate, children }: LayoutProps) {
       return next;
     });
   }, [location.pathname]);
+
+  // Keep the active nav item visible inside its own scroll container.
+  // Regression from turning the Tailwind compiler on (plan_tailwind_pipeline.md,
+  // fase F2 #1): nav items grew from ~31px to 44-48px real padding, so with
+  // several groups open the nav's content can be taller than the container —
+  // the container already scrolls, but nothing was moving that scroll to the
+  // active item, so it could render clipped behind the profile block.
+  // `calcularScrollNearest` returns null when the item is already visible, so
+  // this never causes a jump on a navigation that didn't need one. Depends on
+  // openGroups/collapsed/mobileMenuOpen too (not just pathname) because a
+  // group can still be closed — or the sidebar collapsed, or the mobile menu
+  // just opened — at the exact moment the route changes; this re-checks once
+  // the layout settles instead of racing the group auto-open effect above.
+  useEffect(() => {
+    const ajustar = (contenedor: HTMLElement | null, item: HTMLElement | null) => {
+      if (!contenedor || !item) return;
+      const contRect = contenedor.getBoundingClientRect();
+      const itemRect = item.getBoundingClientRect();
+      const nuevoScrollTop = calcularScrollNearest(
+        { top: contRect.top, height: contRect.height, scrollTop: contenedor.scrollTop },
+        { top: itemRect.top, height: itemRect.height },
+      );
+      if (nuevoScrollTop !== null) {
+        contenedor.scrollTop = nuevoScrollTop;
+      }
+    };
+
+    ajustar(desktopNavRef.current, desktopActiveRef.current);
+    ajustar(mobileNavRef.current, mobileActiveRef.current);
+  }, [location.pathname, openGroups, collapsed, mobileMenuOpen]);
 
   // Lock body scroll when mobile menu is open
   useEffect(() => {
@@ -251,6 +290,7 @@ export function Layout({ onNavigate, children }: LayoutProps) {
         return (
           <SidebarTooltip key={entry.id} label={entry.label} collapsed={collapsed}>
             <button
+              ref={groupActive ? desktopActiveRef : undefined}
               onClick={() => handleGroupIconClick(entry.id)}
               className={`w-full flex items-center justify-center px-0 py-3 rounded-xl transition-all duration-200 ${
                 groupActive ? 'nav-item-active font-semibold' : 'text-foreground hover:bg-muted/50'
@@ -282,6 +322,7 @@ export function Layout({ onNavigate, children }: LayoutProps) {
                 return (
                   <button
                     key={child.id}
+                    ref={childActive ? desktopActiveRef : undefined}
                     onClick={() => handleNavigateClick(child.path, child.id)}
                     className={`w-full flex items-center gap-3 pl-9 pr-4 py-2.5 rounded-xl transition-all duration-200 ${
                       childActive
@@ -305,6 +346,7 @@ export function Layout({ onNavigate, children }: LayoutProps) {
     return (
       <SidebarTooltip key={entry.id} label={entry.label} collapsed={collapsed}>
         <button
+          ref={active ? desktopActiveRef : undefined}
           onClick={() => handleNavigateClick(entry.path, entry.id)}
           className={`w-full flex items-center rounded-xl transition-all duration-200 ${
             collapsed ? 'justify-center px-0 py-3' : 'gap-3 px-4 py-3'
@@ -348,6 +390,7 @@ export function Layout({ onNavigate, children }: LayoutProps) {
                 return (
                   <button
                     key={child.id}
+                    ref={childActive ? mobileActiveRef : undefined}
                     onClick={() => handleNavigateClick(child.path, child.id)}
                     className={`w-full flex items-center gap-3 pl-9 pr-4 py-3 rounded-xl transition-all duration-200 ${
                       childActive
@@ -371,6 +414,7 @@ export function Layout({ onNavigate, children }: LayoutProps) {
     return (
       <button
         key={entry.id}
+        ref={active ? mobileActiveRef : undefined}
         onClick={() => handleNavigateClick(entry.path, entry.id)}
         className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
           active
@@ -420,7 +464,7 @@ export function Layout({ onNavigate, children }: LayoutProps) {
           }`}
         >
           <div className="flex flex-col h-full">
-            <nav className="flex-1 p-4 space-y-2 overflow-y-auto overscroll-contain">
+            <nav ref={mobileNavRef} className="flex-1 p-4 space-y-2 overflow-y-auto overscroll-contain">
               {visible.map((entry) => renderMobileEntry(entry))}
             </nav>
 
@@ -485,7 +529,7 @@ export function Layout({ onNavigate, children }: LayoutProps) {
           )}
 
           {/* Navigation */}
-          <nav className={`flex-1 overflow-y-auto overflow-x-hidden space-y-1 ${collapsed ? 'px-2 py-2' : 'p-2'}`}>
+          <nav ref={desktopNavRef} className={`flex-1 overflow-y-auto overflow-x-hidden space-y-1 ${collapsed ? 'px-2 py-2' : 'p-2'}`}>
             {visible.map((entry) => renderDesktopEntry(entry))}
           </nav>
 
