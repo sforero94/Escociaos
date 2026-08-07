@@ -12,7 +12,8 @@ to hide latency in, so a slow query is a slow screen.
 
 **Read the repo's root `CLAUDE.md`** — *Deployment* and *Edge Function
 Deployment*. Note `vercel.json` rewrites everything to `index.html`, the build
-outputs to `/build` not `dist`, and Tailwind does not run at build time.
+outputs to `/build` not `dist`, and Tailwind now compiles during the build
+(`@tailwindcss/vite`), so CSS size and build time are real metrics again.
 
 ## Sweep
 

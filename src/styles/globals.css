@@ -274,14 +274,6 @@ input[type='number'] {
   max-height: 100dvh;
 }
 
-/* Not present in the frozen index.css build, but referenced across the app.
-   Lets a flex item shrink below its content height — required on wrappers that
-   are NOT scroll containers themselves (e.g. a <form> holding a DialogBody),
-   since `overflow: visible` keeps the automatic minimum size at min-content. */
-.min-h-0 {
-  min-height: 0;
-}
-
 /* Dialog size tiers — fixed rem values, capped by viewport via min() */
 .dialog-viewport-cap {
   max-height: calc(100vh - 2rem);
@@ -301,11 +293,6 @@ input[type='number'] {
     min-height: 44px;
     min-width: 44px;
   }
-}
-
-/* Mobile overscroll prevention for fixed panels */
-.overscroll-contain {
-  overscroll-behavior: contain;
 }
 
 /* Ensure safe area padding for notched devices */
@@ -339,15 +326,17 @@ input[type='number'] {
   animation: fadeIn 0.2s ease-out;
 }
 
-/* Missing Tailwind v4 utilities for Sheet/Drawer components */
-.inset-y-0 {
-  top: 0;
-  bottom: 0;
-}
-.inset-x-0 {
-  left: 0;
-  right: 0;
-}
+/* Sheet enter/exit slide vars — `tw-animate-css` (installed by F1, see
+   src/index.css) now compiles the exact same selectors with identical
+   `--tw-enter-translate-*`/`--tw-exit-translate-*` values (verified against
+   the build output 2026-08-06), so this block is redundant duplication as of
+   this session — classified (C) "dudosa" in docs/tailwind-spike/
+   auditoria-infraestructura.md, pending the tw-animate-css decision it
+   flagged. Left untouched per that classification (F1 does not resolve type
+   (C) rules); safe to delete in a follow-up now that the dependency question
+   is settled. `.inset-y-0`/`.inset-x-0`, which used to live here, were type
+   (A) and were removed: real Tailwind utilities, now compiled like any
+   other. */
 .data-\[state\=closed\]\:slide-out-to-right[data-state="closed"] {
   --tw-exit-translate-x: 100%;
 }
@@ -683,7 +672,7 @@ input[type='number'] {
    del trigger de ancho/alto completo por defecto (`w-full`, `data-[size=sm]:h-8`).
    Ni `w-auto`/`h-auto` ni el paso de espaciado de 0.375rem (`gap-1.5`) existen
    en el build congelado, así que la geometría se fija aquí; el color por
-   estado sigue llegando por clases Tailwind normales (bg-*/border-*/text-*,
+   estado sigue llegando por clases Tailwind normales (bg-*, border-*, text-*,
    ya confirmadas presentes) vía `cn()` en ESTADO_CONFIGS. */
 .tareas-estado-chip {
   display: inline-flex;
@@ -782,104 +771,18 @@ input[type='number'] {
   white-space: nowrap;
 }
 
-/* ============================================================
-   Toggle / ToggleGroup (src/components/ui/toggle.tsx,
-   src/components/ui/toggle-group.tsx) — UI audit, hato/MarcarCicloDialog.tsx
-   (selector "Marca": Preñada/Confirmada/Seca/Parida).
-   El primitivo compartido depende de varias utilidades que faltan en el
-   build congelado (verificado con grep, CLAUDE.md "Caution Zones"):
-   `bg-transparent`, `data-[state=on]:bg-accent` / `:text-accent-foreground`,
-   `data-[variant=outline]:*`, `first:rounded-l-md` / `last:rounded-r-md`,
-   `focus:z-10` / `focus-visible:z-10`, `min-w-8/9/10`, `px-1.5`,
-   `rounded-none`, `shadow-none`. Sin ellas un `<ToggleGroup>` no tiene fondo
-   de estado "presionado" ni separación entre opciones — exactamente el
-   aspecto de "texto plano" que motivó la auditoría.
-   `src/components/monitoreo/PriorizacionScoutingView.tsx` ya había
-   diagnosticado esta misma causa raíz y la sorteó con un control
-   autocontenido (`FiltroTierSegmentado`) porque arreglar el primitivo
-   compartido excedía el alcance de esa sesión — esto es ese arreglo, una
-   sola vez para todos los usos presentes y futuros. CSS real; ninguna regla
-   toca `ui/toggle.tsx`/`ui/toggle-group.tsx`, ni redefine clases ya
-   compiladas en `index.css`. `--radius` se referencia en crudo
-   (`calc(var(--radius) - 2px)`), no `var(--radius-md)`: ese alias solo
-   existe dentro del bloque `@theme inline`, que el navegador ignora por
-   completo sin el compilador de Tailwind corriendo (mismo motivo por el que
-   `.lista-financiera` más arriba reescribe `calc(var(--radius) + 4px)` en
-   vez de usar `var(--radius-xl)`). */
-.bg-transparent {
-  background-color: transparent;
-}
-
-.data-\[state\=on\]\:bg-accent[data-state="on"] {
-  background-color: var(--accent);
-}
-
-.data-\[state\=on\]\:text-accent-foreground[data-state="on"] {
-  color: var(--accent-foreground);
-}
-
-.data-\[variant\=outline\]\:shadow-xs[data-variant="outline"] {
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-}
-
-.data-\[variant\=outline\]\:border-l-0[data-variant="outline"] {
-  border-left-width: 0px;
-}
-
-.data-\[variant\=outline\]\:first\:border-l[data-variant="outline"]:first-child {
-  border-left-width: 1px;
-}
-
-.first\:rounded-l-md:first-child {
-  border-top-left-radius: calc(var(--radius) - 2px);
-  border-bottom-left-radius: calc(var(--radius) - 2px);
-}
-
-.last\:rounded-r-md:last-child {
-  border-top-right-radius: calc(var(--radius) - 2px);
-  border-bottom-right-radius: calc(var(--radius) - 2px);
-}
-
-.focus\:z-10:focus {
-  z-index: 10;
-}
-
-.focus-visible\:z-10:focus-visible {
-  z-index: 10;
-}
-
-.rounded-none {
-  border-radius: 0;
-}
-
-.shadow-none {
-  box-shadow: none;
-}
-
-.min-w-8 {
-  min-width: 2rem;
-}
-
-.min-w-9 {
-  min-width: 2.25rem;
-}
-
-.min-w-10 {
-  min-width: 2.5rem;
-}
-
-.px-1\.5 {
-  padding-left: 0.375rem;
-  padding-right: 0.375rem;
-}
-
-/* Utilidad genérica, no presente en el build congelado (mismo caso que
-   `.min-h-0` más arriba) — deja que un elemento en un contenedor flex se
-   encoja a su contenido en vez de estirarse. Primer uso: los `<Select>` de
-   filtro de `hato/AlertasView.tsx` (el trigger es `w-full` por defecto).
-   Beneficio colateral: dos usos preexistentes y silenciosamente rotos,
-   `ganado/GanadoMovimientos.tsx` y `clima/ClimaHistorico.tsx`, empiezan a
-   funcionar sin tocar esos archivos. */
-.w-auto {
-  width: auto;
-}
+/* Toggle / ToggleGroup (src/components/ui/toggle.tsx,
+   src/components/ui/toggle-group.tsx) and the standalone `.w-auto` utility
+   that used to live here were removed by F1 (2026-08-06, tailwind pipeline
+   activation): every rule in this block was either an exact duplicate of a
+   real Tailwind utility (`bg-transparent`, `data-[state=on]:bg-accent`,
+   `data-[variant=outline]:border-l-0`, `first:rounded-l-md`,
+   `last:rounded-r-md`, `focus:z-10`, `focus-visible:z-10`, `rounded-none`,
+   `min-w-8/9/10`, `px-1.5`, `w-auto` — verified value-for-value against the
+   compiled build) or one of the two "bombs" the F0 audit flagged
+   (`.shadow-none` and `.data-[variant=outline]:shadow-xs`): both wrote a
+   final `box-shadow` value directly instead of composing it from the
+   `--tw-*` shadow/ring layers Tailwind uses, which silently killed
+   `focus-visible:ring-*` on every `ToggleGroupItem`. With the compiler
+   live, the real utilities are generated from the classes already present
+   in `ui/toggle.tsx`/`ui/toggle-group.tsx` — no component change needed. */

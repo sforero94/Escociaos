@@ -21,7 +21,7 @@ re-sync.
 |---|---|
 | **App** | Escocia OS — farm management for Escocia Hass (Hass avocado, GlobalGAP) plus livestock: Hato Lechero (dairy) and Ganado (cattle) |
 | **Repo** | `https://github.com/sforero94/Escociaos` (public) — branch `main` |
-| **Stack** | React 18 + TypeScript (strict) + Vite, Radix UI, Tailwind 4.1 **pre-compiled/frozen**, Supabase Postgres 17, Vercel |
+| **Stack** | React 18 + TypeScript (strict) + Vite, Radix UI, Tailwind 4.3 (compiles on every build via `@tailwindcss/vite`), Supabase Postgres 17, Vercel |
 | **Supabase project** | `Escocia OS` — ref `ywhtjwawnkeqlwxbvgup`, region us-east-1. **This is production. There is no staging.** |
 | **Users** | ~5 real users (`usuarios` table). Roles: Gerencia, Administrador, Verificador, Monitor. Field capture also arrives via a Telegram bot. |
 | **Findings DB** | Notion → *Escocia OS — Mantenimiento* → `https://app.notion.com/p/c52d9258fed7466d8e700fa92980d3df` (data source `collection://b22d2385-a812-4d4a-8094-cefa9d080f60`) |
@@ -236,9 +236,11 @@ this bar, it must lower Confianza to `Baja` and say what it would need.
   rollback. Title in English, prefixed `fix:`/`chore:`/`refactor:`.
 - Before opening any PR: `npm run lint`, `npm run typecheck`, `npm test` must all
   pass. A red PR is worse than no PR.
-- **Never edit `src/index.css`** — frozen pre-compiled Tailwind. New styles go in
-  `src/styles/globals.css`. Verify class existence the way the repo CLAUDE.md
-  documents before using an unfamiliar utility.
+- **Never edit `src/index.css`** — it is the CSS entry point (three `@import`s),
+  not a stylesheet. Tailwind compiles on every build, so any valid utility works
+  and there is no class list to check first. Hand-written CSS goes in
+  `src/styles/globals.css` **wrapped in `@layer`**. See the CSS caution zone in
+  the repo CLAUDE.md.
 - Keep `src/supabase/functions/server/` and
   `supabase/functions/make-server-1ccce916/` in sync; note in the PR if an edge
   function needs redeploying.

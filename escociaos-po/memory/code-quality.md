@@ -4,9 +4,14 @@ Escrita solo por el orquestador (ver `README.md`). Inyectada completa en el
 prompt del agente en cada corrida. **Solo corre el primer lunes de cada mes.**
 
 ## Estados aceptados
-- Varias clases Tailwind escritas en JSX no existen en el build congelado de
-  `src/index.css` y silenciosamente no hacen nada. Deuda conocida — proponer limpieza
-  solo si un fix la toca de paso.
+- ~~Varias clases Tailwind escritas en JSX no existen en el build congelado de
+  `src/index.css` y silenciosamente no hacen nada.~~ **CERRADO por F1 de
+  `docs/plan_tailwind_pipeline.md`** — ⚠️ **efectivo solo cuando `feat/tailwind-pipeline`
+  se mergee a `main`; hasta entonces lo de arriba sigue siendo cierto para el código que
+  corre en producción**: `tailwindcss` + `@tailwindcss/vite` son
+  dependencias reales y el compilador corre en cada build; `index.css` es un entry
+  point de dos `@import`. Ya no hay clases muertas por ausencia en el build, y las
+  4 guardas estáticas que lo verificaban se retiraron. **No re-reportar esta deuda.**
 - **Paridad de archivos espejo VERIFICADA LIMPIA; no re-auditarla desde cero cada
   mes.** Los 3 generadores de `docs/hato/` pasan (`regenerar-copias-importhato.py
   --check` = "OK: 24 copias al dia"; `regenerar-copias-hato-alertas.py --check` = "OK:
@@ -53,7 +58,7 @@ prompt del agente en cada corrida. **Solo corre el primer lunes de cada mes.**
 | Metrica | Valor | Corrida |
 |---|---|---|
 | Salud del repo | npm test 72 archivos / 1.725 tests · lint 0 errores / 1.031 warnings (715 no-explicit-any, 195 no-unused-vars, 86 exhaustive-deps, 35 react-compiler) · tsc limpio · vite build: grafo de **367 archivos src/**. **Identico al 2026-07-31 — el baseline NO se esta degradando** | 2026-08-03-lunes |
-| Dependencias | `npm audit` 18 vulnerabilidades (1 low, 1 moderate, 13 high, 3 critical). Runtime directas: jspdf, jspdf-autotable, xlsx 0.18.5 (**sin fix disponible**), react-router-dom. Solo desarrollo: vitest, vite, ws. ~40 paquetes atrasados, 24 Radix menores, @supabase/supabase-js 2.86.0 vs 2.112.0. **NO TOCAR Tailwind: congelado y fuera del build a proposito** | 2026-08-03-lunes |
+| Dependencias | `npm audit` 18 vulnerabilidades (1 low, 1 moderate, 13 high, 3 critical). Runtime directas: jspdf, jspdf-autotable, xlsx 0.18.5 (**sin fix disponible**), react-router-dom. Solo desarrollo: vitest, vite, ws. ~40 paquetes atrasados, 24 Radix menores, @supabase/supabase-js 2.86.0 vs 2.112.0. ~~**NO TOCAR Tailwind: congelado y fuera del build a proposito**~~ → **al mergear `feat/tailwind-pipeline` (F1), Tailwind 4.3 pasa a estar en el build; un major sigue siendo trabajo propio con pasada antes/despues, no un bump de rutina. Mientras no se mergee, sigue vigente el "no tocar"** | 2026-08-03-lunes |
 | Asimetria de tipos | `@types/react` 19.2.14 con `react` 18.3.1. Probado: codigo exclusivo de React 19 (`<Ctx value={}>` como provider) pasa `tsc --noEmit` sin un error. Nada roto hoy, pero la red de seguridad no esta | 2026-08-03-lunes |
 
 ## Archivo
