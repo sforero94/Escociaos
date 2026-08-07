@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { formatCompact } from '@/utils/format';
 import { EjecucionBadge, VariacionBadge, StatusDot } from './EjecucionBadge';
+import { TableRow, TableCell } from '@/components/ui/table';
 import type { PresupuestoRow } from '@/types/finanzas';
 
 interface PresupuestoConceptoRowProps {
@@ -38,10 +39,12 @@ export function PresupuestoConceptoRow({ row, showPct, editable, onBudgetChange,
   const fmt = (v: number) => (v > 0 ? '$' + formatCompact(v) : '');
 
   return (
-    <tr className="border-b border-gray-100 hover:bg-green-100 text-xs">
+    <TableRow className="text-xs hover:bg-green-100">
       {/* Columna que identifica la fila (dot de estado + nombre del
-          concepto), congelada — mismo patrón que PresupuestoCategoriaRow. */}
-      <td className="sticky left-0 z-10 bg-white pl-7 pr-3 py-1.5">
+          concepto), congelada — mismo patrón que PresupuestoCategoriaRow.
+          El fondo blanco ya es el default de `sticky`, así que no hace
+          falta repetirlo por className. */}
+      <TableCell sticky className="pl-7 py-1.5">
         <div className="flex items-center gap-1.5 min-w-0">
           <StatusDot ejecucion={row.ejecucion_vs_q} />
           <span
@@ -53,10 +56,10 @@ export function PresupuestoConceptoRow({ row, showPct, editable, onBudgetChange,
             {row.concepto_nombre}
           </span>
         </div>
-      </td>
+      </TableCell>
 
       {/* Actual Q — abre el detalle de gastos que suman esta cifra */}
-      <td className="px-3 py-1.5 text-center tabular-nums">
+      <TableCell className="py-1.5 text-center tabular-nums">
         {row.actual_q > 0 ? (
           <button
             type="button"
@@ -69,16 +72,16 @@ export function PresupuestoConceptoRow({ row, showPct, editable, onBudgetChange,
         ) : (
           fmt(row.actual_q)
         )}
-      </td>
+      </TableCell>
 
       {/* Act % (toggleable) */}
-      {showPct && <td className="px-2 py-1.5 text-center text-gray-400 tabular-nums">{row.pct_actual > 0 ? Math.round(row.pct_actual) + '%' : ''}</td>}
+      {showPct && <TableCell className="px-2 py-1.5 text-center text-gray-400 tabular-nums">{row.pct_actual > 0 ? Math.round(row.pct_actual) + '%' : ''}</TableCell>}
 
       {/* Group separator + Ppto Q */}
-      <td className="px-3 py-1.5 text-center border-l border-gray-100 tabular-nums">{fmt(row.monto_trimestral)}</td>
+      <TableCell className="py-1.5 text-center border-l border-gray-100 tabular-nums">{fmt(row.monto_trimestral)}</TableCell>
 
       {/* Ppto Año (editable only in modo presupuesto) */}
-      <td className="px-2 py-1.5 text-center" onClick={editable && !editing ? handleStartEdit : undefined}>
+      <TableCell className="px-2 py-1.5 text-center" onClick={editable && !editing ? handleStartEdit : undefined}>
         {editing ? (
           <input
             ref={inputRef}
@@ -98,29 +101,29 @@ export function PresupuestoConceptoRow({ row, showPct, editable, onBudgetChange,
         ) : (
           <span className="tabular-nums">{fmt(row.monto_anual) || '—'}</span>
         )}
-      </td>
+      </TableCell>
 
       {/* Ppto % (toggleable) */}
-      {showPct && <td className="px-2 py-1.5 text-center text-gray-400 tabular-nums">{row.pct_presupuesto > 0 ? Math.round(row.pct_presupuesto) + '%' : ''}</td>}
+      {showPct && <TableCell className="px-2 py-1.5 text-center text-gray-400 tabular-nums">{row.pct_presupuesto > 0 ? Math.round(row.pct_presupuesto) + '%' : ''}</TableCell>}
 
       {/* Ejecución vs Q */}
-      <td className="px-3 py-1.5 text-center">
+      <TableCell className="py-1.5 text-center">
         <EjecucionBadge value={row.ejecucion_vs_q} />
-      </td>
+      </TableCell>
 
       {/* Ejec vs Año (toggleable) */}
-      {showPct && <td className="px-3 py-1.5 text-center"><EjecucionBadge value={row.ejecucion_vs_anio} /></td>}
+      {showPct && <TableCell className="py-1.5 text-center"><EjecucionBadge value={row.ejecucion_vs_anio} /></TableCell>}
 
       {/* Group separator + Q Anterior */}
-      <td className="px-3 py-1.5 text-center border-l border-gray-100 tabular-nums">{fmt(row.actual_q_anterior)}</td>
+      <TableCell className="py-1.5 text-center border-l border-gray-100 tabular-nums">{fmt(row.actual_q_anterior)}</TableCell>
 
       {/* Var YoY */}
-      <td className="px-2 py-1.5 text-center">
+      <TableCell className="px-2 py-1.5 text-center">
         <VariacionBadge value={row.variacion_yoy} />
-      </td>
+      </TableCell>
 
       {/* Total Anterior */}
-      <td className="px-3 py-1.5 text-center tabular-nums">{fmt(row.actual_anio_anterior)}</td>
-    </tr>
+      <TableCell className="py-1.5 text-center tabular-nums">{fmt(row.actual_anio_anterior)}</TableCell>
+    </TableRow>
   );
 }
