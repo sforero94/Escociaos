@@ -410,16 +410,21 @@ export function InventoryMovements() {
                       </span>
                     </div>
                     
-                    {/* Info secundaria en una sola línea */}
-                    <div className="flex items-center gap-3 text-xs text-brand-brown/60">
+                    {/* Info secundaria en una sola línea. `observaciones` es la
+                        única pieza de longitud variable (Apl/Lote son
+                        etiquetas cortas de ancho fijo), así que es la que
+                        recibe `flex-1 min-w-0` para usar TODO el espacio que
+                        el `max-w-[200px]` desperdiciaba — ver auditoría de
+                        recorte 2026-08-06, caso 1. */}
+                    <div className="flex items-center gap-3 text-xs text-brand-brown/60 min-w-0">
                       {movement.aplicacion_id && (
-                        <span>Apl: #{movement.aplicacion_id.substring(0, 6)}</span>
+                        <span className="flex-shrink-0">Apl: #{movement.aplicacion_id.substring(0, 6)}</span>
                       )}
                       {movement.lote_aplicacion && (
-                        <span>Lote: {movement.lote_aplicacion}</span>
+                        <span className="flex-shrink-0">Lote: {movement.lote_aplicacion}</span>
                       )}
                       {movement.observaciones && (
-                        <span className="truncate max-w-[200px]">{movement.observaciones}</span>
+                        <span className="truncate min-w-0 flex-1">{movement.observaciones}</span>
                       )}
                     </div>
                   </div>

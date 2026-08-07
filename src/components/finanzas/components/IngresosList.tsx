@@ -529,14 +529,19 @@ export function IngresosList({ onEdit }: IngresosListProps) {
                   {formatearFechaCorta(item.fecha)}
                 </span>
 
-                {/* Name (+ details inline on desktop, stacked below on mobile) */}
+                {/* Name (+ details inline on desktop, stacked below on mobile).
+                    Mismo reparto que GastosList.tsx — mantener en sync
+                    (finanzas/CLAUDE.md): `gasto-nombre` prioriza el espacio
+                    (`flex-1 min-w-0`), `details` queda topado a `max-w-[45%]`
+                    para no llevarse más de la mitad de la fila. Ver auditoría
+                    de recorte 2026-08-06, caso 2. */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="gasto-nombre text-sm font-medium text-gray-900 truncate">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="gasto-nombre text-sm font-medium text-gray-900 truncate min-w-0 flex-1">
                       {item.nombre}
                     </span>
                     {item.details && (
-                      <span className="hidden sm:inline text-xs text-gray-400 truncate">
+                      <span className="hidden sm:inline text-xs text-gray-400 truncate flex-shrink-0 max-w-[45%]">
                         {item.details}
                       </span>
                     )}

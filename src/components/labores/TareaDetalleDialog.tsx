@@ -381,14 +381,19 @@ const TareaDetalleDialog: React.FC<TareaDetalleDialogProps> = ({
                   </div>
                 </div>
 
-                {/* Responsable */}
+                {/* Responsable — el valor pasa de `truncate` a `break-words`:
+                    es un nombre de persona, no se puede leer a medias, y esta
+                    celda del grid no tiene altura fija (la de Ubicación ya
+                    crece cuando hay varios lotes), así que envolver a una
+                    segunda línea es seguro. Ver auditoría de recorte
+                    2026-08-06, caso testigo. */}
                 <div className="flex gap-4">
-                  <div className="mt-1 p-1.5 bg-gray-50 rounded-md h-fit">
+                  <div className="mt-1 p-1.5 bg-gray-50 rounded-md h-fit flex-shrink-0">
                     <User className="h-4 w-4 text-gray-500" />
                   </div>
                   <div className="space-y-1 min-w-0">
                     <p className="text-sm font-medium text-gray-500">Responsable</p>
-                    <p className="text-base font-medium text-gray-900 truncate">
+                    <p className="text-base font-medium text-gray-900 break-words">
                       {empleados.find(e => e.id === tarea.responsable_id)?.nombre || 'Sin asignar'}
                     </p>
                   </div>
