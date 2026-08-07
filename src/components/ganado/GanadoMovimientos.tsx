@@ -157,10 +157,13 @@ export function GanadoMovimientos() {
             <option value="">Todas las fincas</option>
             {fincas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}
           </select>
-          <div className="flex items-center gap-2">
-            <Input type="date" value={fechaDesde} onChange={(e) => setFechaDesde(e.target.value)} className="w-auto" />
-            <span className="text-sm text-gray-500">a</span>
-            <Input type="date" value={fechaHasta} onChange={(e) => setFechaHasta(e.target.value)} className="w-auto" />
+          <div className="flex items-center gap-1.5">
+            <label htmlFor="ganado-fecha-desde" className="text-sm text-gray-500">Desde</label>
+            <Input id="ganado-fecha-desde" type="date" value={fechaDesde} onChange={(e) => setFechaDesde(e.target.value)} className="w-auto" />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <label htmlFor="ganado-fecha-hasta" className="text-sm text-gray-500">Hasta</label>
+            <Input id="ganado-fecha-hasta" type="date" value={fechaHasta} onChange={(e) => setFechaHasta(e.target.value)} className="w-auto" />
           </div>
         </div>
 
