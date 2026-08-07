@@ -82,6 +82,47 @@ táctil**.
 
 ---
 
+## 3-bis. Móvil: dos patrones obligatorios
+
+Decidido por Santiago el 2026-08-07, después de recorrer la app en un teléfono. Los dos salen de la
+misma observación: **en móvil, desplazarse en horizontal es una falla, no una solución.**
+
+### Patrón A · Una tabla no se muestra como tabla en móvil
+
+> **Debajo de 640 px, una tabla de datos se presenta como lista de tarjetas, no como tabla con scroll
+> horizontal.**
+
+Una tabla obliga a desplazarse en dos ejes a la vez, esconde el encabezado al desplazar, y en una
+mano no se puede comparar una fila con otra. **La app ya resuelve esto bien en dos sitios** — no hay
+que inventar nada, hay que generalizarlo:
+
+- `src/components/labores/TareaMobileCard.tsx` — la tabla de tareas se vuelve tarjeta en móvil.
+- `.gasto-meta-movil` en Gastos/Ingresos — la fila apila su metadato bajo el nombre.
+
+La forma de la tarjeta: **el dato que identifica arriba** (nombre, número, chapeta), **el valor que se
+busca destacado**, y el resto como línea de metadatos secundaria. Las acciones, al pie.
+
+**Excepción declarada:** una matriz de verdad —donde el valor solo significa algo en el cruce de fila
+y columna, como el mapa de calor de plagas por lote— no se puede aplanar en tarjetas. Ahí el scroll
+horizontal es legítimo, pero **la columna que identifica la fila va congelada** (`position: sticky`) y
+ocupa lo mínimo, no 250 px.
+
+### Patrón B · Los filtros y las pestañas se colapsan en un desplegable
+
+> **Si una fila de chips, pestañas o filtros no cabe en una sola línea a 375 px, en móvil se convierte
+> en un `<Select>`.**
+
+Envolver a dos filas descuadra el layout y desperdicia alto; desplazar en horizontal esconde opciones
+que el usuario no sabe que existen. Un desplegable muestra **cuál está activo** y da acceso a todos
+sin ocupar espacio.
+
+Regla práctica: **a lo sumo 2 controles visibles en una fila**; el resto va al desplegable. Aplica a
+selectores de negocio, ventanas de tiempo, pestañas de configuración y filtros de vista.
+
+En escritorio se quedan como están: ahí sí caben y se ven de un vistazo.
+
+---
+
 ## 5. La trampa: el tamaño va en el elemento de texto, no en su contenedor
 
 **Poner `text-sm` en un `<td>` o un `<div>` NO dimensiona el `<p>` que lleva adentro.**

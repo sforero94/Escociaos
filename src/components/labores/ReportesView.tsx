@@ -424,14 +424,20 @@ const ReportesView: React.FC<ReportesViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Header con filtros */}
-      <div className="flex flex-col md:flex-row gap-4 items-end justify-between">
+      {/* Header con filtros. `items-end` sin prefijo alineaba este bloque (y el
+          título) al borde derecho también en móvil, donde el contenedor es
+          flex-col — con la fila de filtros sin envolver (648px de contenido
+          real en ~340px disponibles), eso empujaba "Fecha Inicio" fuera del
+          borde izquierdo mientras "Actualizar"/"Exportar PDF" quedaban
+          visibles a la derecha. Alineación al borde solo desde md: (donde sí
+          es una sola fila) + flex-wrap en el filtro resuelve ambas causas. */}
+      <div className="flex flex-col md:flex-row gap-4 items-start md:items-end justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Reportes y Analytics</h2>
           <p className="text-gray-600">Análisis de costos y productividad laboral</p>
         </div>
 
-        <div className="flex gap-4">
+        <div className="flex flex-wrap gap-3 sm:gap-4 items-end">
           <div className="space-y-2">
             <label className="text-sm font-medium">Fecha Inicio</label>
             <input

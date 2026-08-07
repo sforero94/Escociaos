@@ -84,10 +84,12 @@ const TareaMobileCard: React.FC<TareaMobileCardProps> = ({ tarea, actions }) => 
         <span>{fechaLabel}</span>
       </div>
 
-      <div
-        className="flex items-center justify-between gap-2 mt-3 pt-3 border-t"
-        onClick={(e) => e.stopPropagation()}
-      >
+      {/* Jornales y acciones van en filas separadas, no en la misma fila con
+          justify-between: con el piso táctil de 44px (src/components/ui/button.tsx)
+          dos botones ("Registrar" + "Completar") ya no caben junto al texto de
+          jornales sin apretarse. Acciones a ancho completo evita que floten a
+          tamaños distintos o se monten una sobre otra. */}
+      <div className="flex flex-col gap-3 mt-3 pt-3 border-t" onClick={(e) => e.stopPropagation()}>
         <span className="text-sm font-medium tareas-jornales">
           {(tarea.jornales_reales ?? 0).toFixed(1)}
           <span className="text-muted-foreground"> / </span>
@@ -96,7 +98,7 @@ const TareaMobileCard: React.FC<TareaMobileCardProps> = ({ tarea, actions }) => 
         </span>
 
         {tieneAcciones ? (
-          <TareaAccionesButtons tarea={tarea} actions={actions} />
+          <TareaAccionesButtons tarea={tarea} actions={actions} stretch />
         ) : (
           <button
             type="button"

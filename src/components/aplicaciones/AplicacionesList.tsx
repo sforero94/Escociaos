@@ -502,7 +502,14 @@ export function AplicacionesList() {
                       {/* Información */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <h3 className="text-foreground truncate text-sm lg:text-base">
+                          {/* `truncate` (white-space: nowrap) needs `min-w-0` to actually
+                              shrink inside a flex row — without it, a flex item's default
+                              min-width is its own content width, so a long nombre_aplicacion
+                              refuses to shrink and pushes the estado badge past the edge of
+                              the list's `overflow-hidden` card, where it gets clipped. Same
+                              flex-1 + min-w-0 pairing already used for this exact purpose in
+                              TareaMobileCard.tsx. */}
+                          <h3 className="text-foreground truncate text-sm lg:text-base flex-1 min-w-0">
                             {aplicacion.nombre_aplicacion}
                           </h3>
                           <span
