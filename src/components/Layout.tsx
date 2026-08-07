@@ -451,9 +451,14 @@ export function Layout({ onNavigate, children }: LayoutProps) {
             </div>
             <span className="text-foreground">Escocia Hass</span>
           </div>
+          {/* `size="icon"` y no `sm`: solo contiene un ícono, y esa variante da
+              44x44 en móvil (piso táctil de docs/sistema-visual.md). Con `sm` el
+              alto llegaba a 44 pero el ancho se quedaba en 36, y este es el
+              control que más se toca en toda la app móvil. */}
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
+            aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="hover:bg-muted/50 rounded-xl"
           >

@@ -24,6 +24,13 @@ import { IniciarEjecucionModal } from './IniciarEjecucionModal';
 import { DetalleAplicacion } from './DetalleAplicacion';
 import type { Aplicacion, TipoAplicacion, EstadoAplicacion } from '../../types/aplicaciones';
 import { toast } from 'sonner';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu';
 
 const TIPOS_LABELS: Record<TipoAplicacion, string> = {
   'Fumigación': 'Fumigación',
@@ -548,8 +555,11 @@ export function AplicacionesList() {
                       </div>
                     </div>
 
-                    {/* Acciones */}
-                    <div className="flex items-center gap-2">
+                    {/* Acciones — escritorio (≥640px): botón principal por estado + menú
+                        ⋮ con Editar/Eliminar. Sin cambios de comportamiento; solo se
+                        ocultó por completo debajo de 640px (ver bloque `sm:hidden` más
+                        abajo) — en esa columna es donde vivía el problema de fondo. */}
+                    <div className="hidden sm:flex items-center gap-2">
                       {/* Botón principal según estado */}
                       {aplicacion.estado === 'Calculada' && (
                         <button
@@ -644,6 +654,66 @@ export function AplicacionesList() {
                           </div>
                         )}
                       </div>
+                    </div>
+
+                    {/* Acciones — móvil (<640px): decisión del dueño tras la tercera
+                        vuelta, "esconde todas las acciones detrás de los 3 puntos".
+                        La causa de fondo (medida en las dos vueltas anteriores) era que
+                        esta columna nunca se ocultaba y le robaba ancho real a la fila
+                        sin importar cuánto encogiera el nombre — cada botón que se
+                        agregaba volvía a cortar la descripción y los badges. Un único
+                        ⋮ de 44px reemplaza tanto el botón principal como el menú
+                        Editar/Eliminar; la condición por estado se conserva idéntica,
+                        solo cambia dónde se muestra cada acción. Rótulos de texto
+                        (no solo ícono) porque dentro de un menú un ▶ suelto no se
+                        entiende por contexto. */}
+                    <div className="sm:hidden flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          className="touch-target inline-flex items-center justify-center rounded-lg hover:bg-gray-200 transition-colors"
+                          aria-label={`Más acciones para "${aplicacion.nombre_aplicacion}"`}
+                        >
+                          <MoreVertical className="w-5 h-5 text-brand-brown/70" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {aplicacion.estado === 'Calculada' && (
+                            <DropdownMenuItem onClick={() => setIniciarEjecucionId(aplicacion.id)}>
+                              <Play className="w-4 h-4" />
+                              Iniciar Ejecución
+                            </DropdownMenuItem>
+                          )}
+
+                          {aplicacion.estado === 'En ejecución' && (
+                            <DropdownMenuItem
+                              onClick={() => navigate(`/aplicaciones/${aplicacion.id}/movimientos`)}
+                            >
+                              <ClipboardList className="w-4 h-4" />
+                              Registrar Movimientos
+                            </DropdownMenuItem>
+                          )}
+
+                          {aplicacion.estado === 'Cerrada' && (
+                            <DropdownMenuItem onClick={() => navigate(`/aplicaciones/${aplicacion.id}/reporte`)}>
+                              <FileText className="w-4 h-4" />
+                              Ver Reporte
+                            </DropdownMenuItem>
+                          )}
+
+                          <DropdownMenuSeparator />
+
+                          <DropdownMenuItem
+                            onClick={() => navigate(`/aplicaciones/calculadora/${aplicacion.id}`)}
+                          >
+                            <Edit2 className="w-4 h-4 text-gray-500" />
+                            Editar
+                          </DropdownMenuItem>
+
+                          <DropdownMenuItem variant="destructive" onClick={() => setEliminando(aplicacion.id)}>
+                            <Trash2 className="w-4 h-4" />
+                            Eliminar
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                 </div>
