@@ -208,6 +208,16 @@ export function InventoryMovements() {
     });
   };
 
+  // Signo + magnitud + unidad de un movimiento, usado tanto por la fila de
+  // escritorio como por la tarjeta móvil — una sola fuente para no repetir la
+  // regla de signo (entrada suma, "salida otros" resta, el resto no lleva signo).
+  const getCantidadTexto = (movement: Movement): string => {
+    const tipoNormalizado = movement.tipo_movimiento?.toLowerCase()?.trim();
+    const signo = tipoNormalizado === 'entrada' ? '+' : tipoNormalizado === 'salida otros' ? '-' : '';
+    const unidad = movement.producto?.unidad_medida ?? '';
+    return `${signo}${formatNumber(Math.abs(movement.cantidad), 2)} ${unidad}`.trim();
+  };
+
   const hasActiveFilters = selectedProduct || selectedType || startDate || endDate;
 
   if (loading) {
@@ -393,13 +403,76 @@ export function InventoryMovements() {
               key={movement.id}
               className={`bg-white/80 backdrop-blur-sm rounded-xl border ${getMovementColor(movement.tipo_movimiento)} px-4 py-3 shadow-sm hover:shadow-md transition-all duration-200`}
             >
-              <div className="flex items-center justify-between gap-4">
+              {/* Móvil (<640 px): Patrón A de docs/sistema-visual.md §3-bis. Un
+                  movimiento trae datos de distinta naturaleza (producto, tipo,
+                  cantidad, stock antes/después, fecha, aplicación, lote,
+                  observaciones) — comprimirlos en una fila horizontal es lo
+                  que producía los 42 recortes de la auditoría 2026-08-06. Los
+                  dos arreglos anteriores en este archivo intentaron resolverlo
+                  con topes de ancho (`max-w-[200px]`, luego `max-w-[50%]`) y
+                  cada uno solo desplazó el recorte a otro campo — el problema
+                  nunca fue el tope, fue apretar demasiados datos en una fila.
+                  Aquí se apila como tarjeta: nada se trunca, todo envuelve. */}
+              <div className="sm:hidden">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 mt-0.5">
+                    {getMovementIcon(movement.tipo_movimiento)}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start gap-2">
+                      <h3 className="min-w-0 flex-1 text-base text-foreground break-words">
+                        {movement.producto?.nombre || 'Producto eliminado'}
+                      </h3>
+                      <span className={`px-2 py-0.5 rounded text-sm uppercase tracking-wide flex-shrink-0 ${getMovementBadgeColor(movement.tipo_movimiento)}`}>
+                        {movement.tipo_movimiento}
+                      </span>
+                    </div>
+                    <p className="text-sm text-brand-brown/60 mt-0.5">
+                      {formatearFechaHora(movement.created_at)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-3 pt-3 border-t border-primary/10">
+                  <p className="text-sm text-brand-brown/50 uppercase tracking-wide mb-0.5">Cantidad</p>
+                  <p className="text-base text-foreground">
+                    {getCantidadTexto(movement)}
+                  </p>
+                </div>
+
+                <div className="mt-2">
+                  <p className="text-sm text-brand-brown/50 uppercase tracking-wide mb-0.5">Stock</p>
+                  <p className="text-base text-brand-brown/70 break-words">
+                    {formatNumber(movement.saldo_anterior, 2)} → {formatNumber(movement.saldo_nuevo, 2)} {movement.producto?.unidad_medida}
+                  </p>
+                </div>
+
+                {(movement.aplicacion_id || movement.lote_aplicacion || movement.observaciones) && (
+                  <div className="mt-2 space-y-1 text-sm text-brand-brown/60">
+                    {movement.aplicacion_id && (
+                      <p>Aplicación: #{movement.aplicacion_id.substring(0, 6)}</p>
+                    )}
+                    {movement.lote_aplicacion && (
+                      <p className="break-words">Lote: {movement.lote_aplicacion}</p>
+                    )}
+                    {movement.observaciones && (
+                      <p className="break-words">{movement.observaciones}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Escritorio (≥640 px): la fila horizontal compacta de siempre,
+                  sin cambios — solo envuelta en `hidden sm:flex` para cederle
+                  el móvil a la tarjeta de arriba. */}
+              <div className="hidden sm:flex items-center justify-between gap-4">
                 {/* Icono y Producto */}
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className="flex-shrink-0">
                     {getMovementIcon(movement.tipo_movimiento)}
                   </div>
-                  
+
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 mb-0.5">
                       <h3 className="text-sm text-foreground truncate">
@@ -409,23 +482,11 @@ export function InventoryMovements() {
                         {movement.tipo_movimiento}
                       </span>
                     </div>
-                    
-                    {/* Info secundaria en una sola línea. `observaciones` es la
-                        única pieza de longitud variable (Apl/Lote son
-                        etiquetas cortas de ancho fijo), así que es la que
-                        recibe `flex-1 min-w-0` para usar TODO el espacio que
-                        el `max-w-[200px]` desperdiciaba — ver auditoría de
-                        recorte 2026-08-06, caso 1. */}
+
                     <div className="flex items-center gap-3 text-xs text-brand-brown/60 min-w-0">
                       {movement.aplicacion_id && (
                         <span className="flex-shrink-0">Apl: #{movement.aplicacion_id.substring(0, 6)}</span>
                       )}
-                      {/* `Apl:` es de largo fijo (6 caracteres) y puede quedarse
-                          rígida, pero `Lote:` trae la lista completa de lotes y
-                          llega a 394 px. Con `flex-shrink-0` no cedía y empujaba
-                          la fila: medido 2026-08-06, la página desbordaba a
-                          549 px en un viewport de 375. Cede y se recorta, con
-                          techo para que la observación conserve espacio. */}
                       {movement.lote_aplicacion && (
                         <span className="truncate min-w-0 max-w-[50%]">Lote: {movement.lote_aplicacion}</span>
                       )}
@@ -440,14 +501,12 @@ export function InventoryMovements() {
                 <div className="text-center flex-shrink-0">
                   <p className="text-xs text-brand-brown/50 uppercase tracking-wide mb-0.5">Cantidad</p>
                   <p className="text-sm text-foreground">
-                    {movement.tipo_movimiento?.toLowerCase()?.trim() === 'entrada' ? '+' : ''}
-                    {movement.tipo_movimiento?.toLowerCase()?.trim() === 'salida otros' ? '-' : ''}
-                    {formatNumber(Math.abs(movement.cantidad), 2)} {movement.producto?.unidad_medida}
+                    {getCantidadTexto(movement)}
                   </p>
                 </div>
 
                 {/* Stock Anterior */}
-                <div className="text-center flex-shrink-0 hidden sm:block">
+                <div className="text-center flex-shrink-0">
                   <p className="text-xs text-brand-brown/50 uppercase tracking-wide mb-0.5">Stock Anterior</p>
                   <p className="text-sm text-brand-brown/70">
                     {formatNumber(movement.saldo_anterior, 2)} {movement.producto?.unidad_medida}
