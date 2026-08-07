@@ -39,16 +39,20 @@ export function PresupuestoConceptoRow({ row, showPct, editable, onBudgetChange,
 
   return (
     <tr className="border-b border-gray-100 hover:bg-green-100 text-xs">
-      {/* Status dot */}
-      <td className="px-2 py-1.5 text-center">
-        <StatusDot ejecucion={row.ejecucion_vs_q} />
-      </td>
-
-      {/* Concepto name */}
-      <td className="pl-7 pr-3 py-1.5 truncate">
-        <span className={row.is_principal ? 'font-semibold text-foreground' : 'text-foreground'}>
-          {row.concepto_nombre}
-        </span>
+      {/* Columna que identifica la fila (dot de estado + nombre del
+          concepto), congelada — mismo patrón que PresupuestoCategoriaRow. */}
+      <td className="sticky left-0 z-10 bg-white pl-7 pr-3 py-1.5">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <StatusDot ejecucion={row.ejecucion_vs_q} />
+          <span
+            className={
+              'truncate flex-1 min-w-0 ' +
+              (row.is_principal ? 'font-semibold text-foreground' : 'text-foreground')
+            }
+          >
+            {row.concepto_nombre}
+          </span>
+        </div>
       </td>
 
       {/* Actual Q — abre el detalle de gastos que suman esta cifra */}

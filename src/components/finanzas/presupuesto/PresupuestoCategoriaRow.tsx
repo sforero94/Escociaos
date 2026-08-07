@@ -31,16 +31,17 @@ export function PresupuestoCategoriaRow({ categoria, expanded, onToggle, showPct
       className={cn('border-b border-gray-200 cursor-pointer text-xs font-semibold', bgColor, 'hover:!bg-green-100')}
       onClick={onToggle}
     >
-      {/* Status dot */}
-      <td className="px-2 py-2.5 text-center">
-        <StatusDot ejecucion={exec} />
-      </td>
-
-      {/* Categoria name */}
-      <td className="pl-2 pr-3 py-2.5 truncate">
-        <div className="flex items-center gap-1.5">
+      {/* Columna que identifica la fila (dot de estado + chevron + nombre),
+          congelada (sticky) para que siga visible al hacer scroll horizontal
+          en móvil — Patrón A de docs/sistema-visual.md §3-bis. Ancho real
+          viene del <colgroup> (170px en móvil, flexible en escritorio). El
+          fondo replica el de la fila para que no se transparente el
+          contenido de las columnas que scrollean por debajo. */}
+      <td className={cn('sticky left-0 z-10 pl-2 pr-3 py-2.5', bgColor)}>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <StatusDot ejecucion={exec} />
           <Chevron className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
-          <span className="truncate">{categoria.categoria_nombre}</span>
+          <span className="truncate flex-1 min-w-0">{categoria.categoria_nombre}</span>
         </div>
       </td>
 

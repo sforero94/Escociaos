@@ -39,12 +39,17 @@ export function PresupuestoTable({ data, showPct, anio, quarters, negocioId, mod
 
   return (
     <>
-    <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
+    <div className="bg-white rounded-lg border border-gray-200 tabla-scroll">
       <table className="w-full table-fixed text-left">
-        {/* Column widths: concepto gets remaining space, numerics are fixed */}
+        {/* Anchos de columna: el concepto (identidad de la fila) usa lo que
+            necesita para leerse en móvil y vuelve a ser flexible en escritorio
+            (`sm:w-auto`, igual que el `<col />` original). Las numéricas son
+            fijas en ambos anchos — la matriz scrollea en horizontal por
+            debajo de 640px, que es la excepción declarada en
+            docs/sistema-visual.md §3-bis Patrón A para una tabla que solo
+            significa algo en el cruce de fila y columna. */}
         <colgroup>
-          <col className="w-7" />
-          <col />
+          <col className="w-[170px] sm:w-auto" />
           <col className="w-[108px]" />
           {showPct && <col className="w-[56px]" />}
           <col className="w-[108px]" />
@@ -60,10 +65,14 @@ export function PresupuestoTable({ data, showPct, anio, quarters, negocioId, mod
         {/* Column group headers */}
         <thead>
           <tr className="bg-gray-50/80 text-[10px] font-semibold tracking-wider uppercase">
-            <th colSpan={showPct ? 4 : 3} className="px-3 py-1.5 text-gray-400">
+            <th className="sticky left-0 z-10 bg-gray-50/80 px-3 py-1.5"></th>
+            <th colSpan={showPct ? 2 : 1} className="px-3 py-1.5 text-gray-400">
               Ejecución
             </th>
-            <th colSpan={showPct ? 4 : 3} className="px-3 py-1.5 text-primary border-l border-gray-100">
+            {/* Incluye "Ejec Año" (col. condicional) — antes de este ajuste el
+                colSpan se quedaba corto en 1 columna cuando showPct=true y
+                "Ejec Año" quedaba sin encabezado de grupo. */}
+            <th colSpan={showPct ? 5 : 3} className="px-3 py-1.5 text-primary border-l border-gray-100">
               Presupuesto
             </th>
             <th colSpan={3} className="px-3 py-1.5 text-gray-400 border-l border-gray-100">
@@ -73,8 +82,7 @@ export function PresupuestoTable({ data, showPct, anio, quarters, negocioId, mod
 
           {/* Column headers */}
           <tr className="bg-gray-50 text-[11px] font-semibold text-gray-500 border-b border-gray-200">
-            <th className="px-2 py-2"></th>
-            <th className="px-3 py-2">Concepto</th>
+            <th className="sticky left-0 z-10 bg-gray-50 px-3 py-2 text-left">Concepto</th>
             <th className="px-3 py-2 text-center">Ejecución {formatQuarterLabel(quarters)}</th>
             {showPct && <th className="px-2 py-2 text-center">Ejec %</th>}
             <th className="px-3 py-2 text-center border-l border-gray-100">Ppto {formatQuarterLabel(quarters)}</th>
@@ -91,8 +99,7 @@ export function PresupuestoTable({ data, showPct, anio, quarters, negocioId, mod
         <tbody>
           {/* Grand total row */}
           <tr className="bg-primary text-white text-xs font-semibold">
-            <td className="px-2 py-2.5"></td>
-            <td className="px-3 py-2.5">Suma Total</td>
+            <td className="sticky left-0 z-10 bg-primary px-3 py-2.5">Suma Total</td>
             <td className="px-3 py-2.5 text-center tabular-nums">{fmt(t.actual_q)}</td>
             {showPct && <td className="px-2 py-2.5 text-center">100%</td>}
             <td className="px-3 py-2.5 text-center tabular-nums">{fmt(t.monto_trimestral)}</td>
