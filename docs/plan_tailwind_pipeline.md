@@ -311,6 +311,35 @@ Orden fijado por la evidencia, no por intuición:
    Sigue siendo análisis estático y delegable, pero **con un límite declarado**: la liveness del
    selector sola no basta, porque el daño depende del ancho real en pantalla. Los casos dudosos hay
    que verlos en el navegador.
+
+   ### El caso testigo, resuelto en el DOM — y la lección que generaliza
+
+   Hubo **tres atribuciones equivocadas** del mismo defecto antes de medirlo:
+
+   | Quién | Dijo | Veredicto |
+   |---|---|---|
+   | Informe F0 | `truncate` revivió | ❌ `.truncate` está en el CSS congelado, línea 1570 |
+   | Corrección del orquestador | revivió `max-w-full md:max-w-[75%]` del contenedor | ❌ esa clase envuelve el encabezado del título, no el campo Responsable |
+   | Segundo barrido | el grid del Responsable ya estaba vivo, la atribución es dudosa | ✅ correcto al dudar, pero no halló la causa |
+
+   **La causa real, medida en el DOM:** la fila es `flex gap-4` de 287 px. El texto recibe 243 px y
+   necesita 259 — le faltan 16. Al lado vive el chip del ícono, `mt-1 p-1.5 bg-gray-50 rounded-md
+   h-fit`, que hoy ocupa **28 px**. En el CSS congelado **`p-1.5` y `h-fit` dan 0**: el chip no tenía
+   relleno y medía ~16 px. Esos ~12 px salieron del bloque de texto.
+
+   > **La clase que causa el recorte no estaba en el texto ni en ninguno de sus ancestros. Estaba en
+   > su HERMANO.** Un elemento vecino engordó dentro de un contenedor flex y le quitó espacio al
+   > texto.
+
+   **Consecuencia para el método:** un barrido que recorra "los ancestros del texto recortado" **no
+   puede encontrar esto**, por bien hecho que esté. Hay que mirar también los **hermanos dentro de
+   contenedores flex/grid** cuyas clases de tamaño (`p-*`, `w-*`, `h-*`, `gap-*`, `size-*`)
+   revivieron. Y aun así, **el veredicto final es una medición en el navegador**: `scrollWidth >
+   clientWidth` sobre el nodo real. El análisis estático prioriza dónde mirar; no decide.
+
+   *Nota lateral que retrata la deuda:* alguien había escrito `.px-1\.5` **a mano** en `globals.css`
+   porque la necesitaba. Pero el chip usa `p-1.5`, no `px-1.5` — el parche nunca lo cubrió. Es
+   exactamente el patrón que la caution zone vieja incentivaba y que F1 desmontó.
 3. Las 3 regresiones puntuales restantes: selector de estado en `/labores` móvil, desborde de
    `/monitoreo` móvil, color del subtítulo de `/finanzas/gastos`.
 4. Lo cosmético, al final o directamente en F4.
