@@ -123,6 +123,52 @@ En escritorio se quedan como están: ahí sí caben y se ven de un vistazo.
 
 ---
 
+## 3-ter. La tabla es UN recurso, no 46
+
+Pregunta del dueño el 2026-08-07, mirando Presupuesto y Monitoreo: *"tienen un formato diferente
+—encabezados de otros colores, líneas rectas y no curvas— ¿qué podemos hacer para que el recurso
+tabla sea el mismo siempre?"*
+
+**Lo medido:**
+
+| | |
+|---|---|
+| `src/components/ui/table.tsx` (el primitivo compartido) | **existe**, 116 líneas |
+| Archivos que lo importan | **0** |
+| Archivos con `<table>` escrito a mano | **46** |
+| Sistemas de estilo conviviendo | `.tabla-financiera`, `.tabla-scroll`, y 46 tablas independientes |
+
+**El primitivo ya está construido y nadie lo usa.** Es el mismo patrón que `.touch-target` (regla
+correcta, cero consumidores) y que el apéndice `!important` de `index.css`: alguien resolvió el
+problema y la solución quedó invisible. Por eso no hay "un formato de tabla" — hay 46, y cada una se
+ve como el día en que se escribió.
+
+### La regla
+
+> **`src/components/ui/table.tsx` es el recurso tabla. Una tabla nueva lo usa. Una tabla que se toque
+> a fondo migra a él.**
+
+Trae `Table` / `TableHeader` / `TableBody` / `TableRow` / `TableHead` / `TableCell` / `TableFooter`,
+y ya envuelve en `overflow-x-auto`. Lo que hay que añadirle —una vez, ahí— es el comportamiento móvil
+del **Patrón A**: la variante de matriz con columna identificadora congelada.
+
+### Cómo se migra sin romper nada
+
+**No se migran las 46 de golpe.** El orden:
+
+1. **El primitivo primero**: que soporte los dos casos reales (lista simple y matriz con columna
+   fija) antes de mover ninguna pantalla.
+2. **Las que el dueño señaló**: Presupuesto y Monitoreo, que son las que se ven distintas.
+3. **Trinquete**: una guarda que impida `<table>` crudo **nuevo**, sin exigir migrar los existentes.
+   Así el número deja de crecer aunque la migración tarde.
+4. El resto, cuando se toquen por otra razón.
+
+**Lo que NO se toca al migrar**: `.tabla-financiera`/`.col-etiqueta` resuelven la columna congelada de
+P&G y Flujo de Caja y **funcionan**; `src/components/finanzas/CLAUDE.md` las documenta como decisión
+deliberada. Migrarlas es trabajo aparte, no un efecto colateral.
+
+---
+
 ## 5. La trampa: el tamaño va en el elemento de texto, no en su contenedor
 
 **Poner `text-sm` en un `<td>` o un `<div>` NO dimensiona el `<p>` que lleva adentro.**
