@@ -588,7 +588,7 @@ export function GastosList({ onEdit }: GastosListProps) {
                       `sm`, ver globals.css) — texto metadato, D-2 lo sube de
                       12 a 14px ahí, sin variante `sm:` porque en escritorio
                       ni siquiera se renderiza. */}
-                  <div className="gasto-meta-movil text-sm text-gray-400 truncate">
+                  <div className="gasto-meta-movil text-sm text-gray-400">
                     {formatearFechaCorta(item.fecha)}
                     {(item.detailsMovil ?? item.details) ? ` · ${item.detailsMovil ?? item.details}` : ''}
                   </div>
