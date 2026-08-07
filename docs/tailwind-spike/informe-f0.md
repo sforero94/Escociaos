@@ -119,11 +119,20 @@ Cada ítem del menú crece ~16 px al activarse las clases de espaciado, y ~20 í
 que ninguna opción queda inalcanzable. Pero el ítem activo aparece parcialmente tapado por el bloque
 de perfil, y un clic ahí puede caer en el pie en vez del enlace.
 
-**2. `truncate` cobró vida y corta el nombre del responsable.** En el diálogo de detalle de tarea,
-"DAVID JOVANY GARCIA MANCERA" pasa a "DAVID JOVANY GARCIA MANC…". La clase estaba muerta y ahora
-funciona: es exactamente el patrón que F2 tiene que buscar — no "se rompió", sino *"empezó a hacer lo
-que decía, y lo que decía estaba mal"*. En la misma pantalla, "Historial de Tareas" dejó de asomarse
-sin scroll.
+**2. El nombre del responsable se corta.** En el diálogo de detalle de tarea, "DAVID JOVANY GARCIA
+MANCERA" pasa a "DAVID JOVANY GARCIA MANC…". En la misma pantalla, "Historial de Tareas" dejó de
+asomarse sin scroll.
+
+> **Corrección 2026-08-06 sobre la causa.** Este informe decía que *"`truncate` cobró vida"*. **Es
+> falso**, verificado contra el `index.css` congelado: `.truncate` existe ahí desde siempre (línea
+> 1570). Lo que estaba muerto eran las **restricciones de ancho** — `.max-w-full` y `.md:max-w-*` dan
+> **0** apariciones en el build congelado, y son justo las que usa
+> `TareaDetalleDialog.tsx:248` (`max-w-full md:max-w-[75%]`).
+>
+> **`truncate` no cambió: cambió su contenedor.** Al estrecharse, el recorte preexistente por fin
+> tuvo algo que recortar. El patrón que F2 debe cazar no es "clases de recorte que revivieron" sino
+> **restricciones de ancho recién vivas que estrechan un contenedor con texto adentro**. Buscar las
+> clases de recorte encuentra síntomas, no causas.
 
 **3. El selector de estado en `/labores` móvil** pasó de píldora de ancho completo (~680 px) a
 ~264 px. Es la acción que más toca Martha en campo, con dedos y al sol.

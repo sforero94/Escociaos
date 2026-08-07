@@ -291,10 +291,26 @@ Orden fijado por la evidencia, no por intuición:
 1. **El sidebar, primero y solo.** Su contenido crece de 622 px a 948 px y el pie tapa 18 px del ítem
    activo. Es una corrección única que beneficia **todas** las pantallas, y por eso va **antes** que
    la limpieza de F1 si hiciera falta priorizar.
-2. **Barrido del patrón `truncate`** — clases que estaban muertas, ahora funcionan, y lo que dicen
-   está mal. Buscar `truncate`, `line-clamp-*`, `overflow-hidden`, `whitespace-nowrap` y `max-w-*` en
-   componentes que muestran nombres propios o texto de longitud variable. **Es análisis estático: se
-   delega completo a subagentes**, no requiere navegador.
+2. **Barrido del recorte de texto.** ⚠️ **La formulación original de este punto era incorrecta y se
+   corrigió el 2026-08-06 tras el primer barrido.**
+
+   Decía: *"clases de recorte que estaban muertas y ahora funcionan"*. **Falso, verificado contra el
+   `index.css` congelado**: `.truncate` (línea 1570) y `.whitespace-nowrap` **siempre estuvieron
+   vivas**. Lo que estaba muerto eran las **restricciones de ancho** — `.max-w-full` y `.md:max-w-*`
+   dan **0** apariciones en el build congelado.
+
+   **El mecanismo real:** `truncate` no cambió. Cambió su contenedor. Al activarse las clases de
+   ancho, el contenedor se estrechó y el `truncate` preexistente por fin tuvo algo que recortar. El
+   caso testigo (`TareaDetalleDialog.tsx:248`, `max-w-full md:max-w-[75%]`) lo confirma.
+
+   **Consecuencia para el barrido**: buscar clases de recorte encuentra los síntomas, no las causas, y
+   **no predice dónde aparecerá recorte nuevo**. El objetivo correcto son las **restricciones de
+   ancho y layout recién vivas** (`max-w-*`, `w-*`, `min-w-0`, `flex-1`, `grid-cols-*` y sus variantes
+   responsive) que estrechen un contenedor con texto adentro.
+
+   Sigue siendo análisis estático y delegable, pero **con un límite declarado**: la liveness del
+   selector sola no basta, porque el daño depende del ancho real en pantalla. Los casos dudosos hay
+   que verlos en el navegador.
 3. Las 3 regresiones puntuales restantes: selector de estado en `/labores` móvil, desborde de
    `/monitoreo` móvil, color del subtítulo de `/finanzas/gastos`.
 4. Lo cosmético, al final o directamente en F4.
