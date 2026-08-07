@@ -515,8 +515,11 @@ export function MapaCalorIncidencias({
         <table className="w-full border-separate border-spacing-0 table-fixed" style={{ minWidth: `${200 + datosMapaCalor.columnas.length * 180}px` }}>
           <thead>
             <tr>
-              <th className="p-3 border border-gray-300 text-left w-[200px]" style={{ backgroundColor: '#f0f4e8', position: 'sticky', left: 0, top: 0, zIndex: 30 }}>
-                <div className="font-bold text-foreground">Plaga / Lote</div>
+              <th
+                className="p-2 sm:p-3 border border-gray-300 text-left w-[112px] sm:w-[200px]"
+                style={{ backgroundColor: '#f0f4e8', position: 'sticky', left: 0, top: 0, zIndex: 30 }}
+              >
+                <div className="font-bold text-foreground truncate">Plaga / Lote</div>
               </th>
               {datosMapaCalor.columnas.map(columna => (
                 <th
@@ -534,9 +537,18 @@ export function MapaCalorIncidencias({
           <tbody>
             {datosMapaCalor.filas.map(fila => (
               <tr key={fila.plagaId}>
-                <th className="p-3 border border-gray-300 text-left font-medium w-[200px]" style={{ backgroundColor: '#ffffff', position: 'sticky', left: 0, zIndex: 10 }}>
-                  <div className="text-foreground">{fila.plagaNombre}</div>
-                  <div className="text-xs text-gray-600 mt-1">
+                <th
+                  className="p-2 sm:p-3 border border-gray-300 text-left font-medium w-[112px] sm:w-[200px]"
+                  style={{ backgroundColor: '#ffffff', position: 'sticky', left: 0, zIndex: 10 }}
+                >
+                  <div className="text-foreground truncate" title={fila.plagaNombre}>{fila.plagaNombre}</div>
+                  {/* "Prom: X%" ensanchaba la columna congelada exactamente lo
+                      que el dueño reportó -- en móvil se oculta (el promedio
+                      de la fila sigue disponible en escritorio y dentro del
+                      detalle de cada celda); la columna solo necesita
+                      identificar la plaga, no repetir un número que ya está
+                      en cada celda de la fila. */}
+                  <div className="hidden sm:block text-xs text-gray-600 mt-1">
                     Prom: {Math.round(fila.incidenciaPromedioTotal)}%
                   </div>
                 </th>

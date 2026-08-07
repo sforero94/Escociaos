@@ -220,7 +220,7 @@ export function ChequeoDetalle() {
 
   if (loading) {
     return (
-      <div className="min-h-screen-safe bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen-safe bg-background flex items-center justify-center">
         <Loader2 className="w-6 h-6 animate-spin text-primary" />
       </div>
     );
@@ -228,7 +228,7 @@ export function ChequeoDetalle() {
 
   if (error || !detalle) {
     return (
-      <div className="min-h-screen-safe bg-gray-50 p-4 lg:p-8">
+      <div className="min-h-screen-safe bg-background p-4 lg:p-8">
         <div className="max-w-4xl mx-auto">
           <Link to="/hato-lechero/chequeos" className="inline-flex items-center gap-1 text-sm text-primary hover:underline mb-4">
             <ArrowLeft className="w-4 h-4" /> Volver a chequeos
@@ -246,7 +246,7 @@ export function ChequeoDetalle() {
   const subtitulo = `${chequeo.veterinario ?? 'Sin veterinario registrado'} · Fuente: ${chequeo.fuente} · Estado: ${chequeo.estado} · ${formatNumber(vacas.length)} vacas`;
 
   return (
-    <div className="min-h-screen-safe bg-gray-50 p-4 lg:p-8">
+    <div className="min-h-screen-safe bg-background p-4 lg:p-8">
       <div className="max-w-7xl mx-auto w-full space-y-6">
         <Link to="/hato-lechero/chequeos" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
           <ArrowLeft className="w-4 h-4" /> Volver a chequeos

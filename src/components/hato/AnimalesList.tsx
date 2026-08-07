@@ -28,6 +28,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, AlertTriangle, Search, Plus, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
@@ -271,6 +272,12 @@ export function AnimalesList() {
   const [crearOpen, setCrearOpen] = useState(false);
   const [marcarCicloOpen, setMarcarCicloOpen] = useState(false);
   const [animalCicloId, setAnimalCicloId] = useState<string | undefined>(undefined);
+  // Patrón B (docs/sistema-visual.md §3-bis): las 4 pestañas de vista se
+  // salían por la derecha a 375px. En móvil se leen y se cambian desde un
+  // `<Select>` (`vistaSelect` abajo); en escritorio siguen siendo el
+  // `TabsList` de siempre -- MISMO estado controlado para que nunca puedan
+  // desincronizarse entre los dos controles.
+  const [vista, setVista] = useState<CategoriaHato>('hato');
 
   const abrirMarcarCiclo = (animalId: string) => {
     setAnimalCicloId(animalId);
@@ -318,7 +325,7 @@ export function AnimalesList() {
   const errorCombinado = error ?? errorPesajes;
 
   return (
-    <div className="min-h-screen min-h-[100dvh] bg-gray-50 p-4 lg:p-8">
+    <div className="min-h-screen min-h-[100dvh] bg-background p-4 lg:p-8">
       <div className="max-w-7xl mx-auto w-full">
         <HatoPageHeader
           breadcrumb="Hato Lechero"
@@ -362,13 +369,31 @@ export function AnimalesList() {
               <span>Columna &quot;Producción&quot;:</span>
               <ChipVejezPesajes vejez={vejez} />
             </div>
-            <Tabs defaultValue="hato">
-              <TabsList>
+            <Tabs value={vista} onValueChange={(v) => setVista(v as CategoriaHato)}>
+              {/* Patrón B (docs/sistema-visual.md §3-bis): "Hato (en ordeño)
+                  (35) · Horro (secas) (0) · Novillas (21) · Terneras (12)" se
+                  salía por la derecha a 375px. Debajo de 640px la vista activa
+                  se lee y se cambia desde el `<Select>` de abajo; el
+                  `TabsList` de siempre sigue intacto en escritorio -- los dos
+                  controles comparten el mismo estado `vista`, así que nunca
+                  pueden mostrar una vista distinta a la que está renderizada. */}
+              <TabsList className="hidden sm:inline-flex">
                 <TabsTrigger value="hato">{LABEL_CATEGORIA_HATO.hato} ({porCategoria.hato.length})</TabsTrigger>
                 <TabsTrigger value="horro">{LABEL_CATEGORIA_HATO.horro} ({porCategoria.horro.length})</TabsTrigger>
                 <TabsTrigger value="novilla">{LABEL_CATEGORIA_HATO.novilla} ({porCategoria.novilla.length})</TabsTrigger>
                 <TabsTrigger value="ternera">{LABEL_CATEGORIA_HATO.ternera} ({porCategoria.ternera.length})</TabsTrigger>
               </TabsList>
+              <Select value={vista} onValueChange={(v) => setVista(v as CategoriaHato)}>
+                <SelectTrigger className="w-full sm:hidden">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="hato">{LABEL_CATEGORIA_HATO.hato} ({porCategoria.hato.length})</SelectItem>
+                  <SelectItem value="horro">{LABEL_CATEGORIA_HATO.horro} ({porCategoria.horro.length})</SelectItem>
+                  <SelectItem value="novilla">{LABEL_CATEGORIA_HATO.novilla} ({porCategoria.novilla.length})</SelectItem>
+                  <SelectItem value="ternera">{LABEL_CATEGORIA_HATO.ternera} ({porCategoria.ternera.length})</SelectItem>
+                </SelectContent>
+              </Select>
               <TabsContent value="hato" className="mt-4">
                 <TablaAnimales
                   animales={porCategoria.hato}

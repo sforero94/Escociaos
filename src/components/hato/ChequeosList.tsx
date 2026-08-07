@@ -242,7 +242,7 @@ export function ChequeosList() {
   };
 
   return (
-    <div className="min-h-screen min-h-[100dvh] bg-gray-50 p-4 lg:p-8">
+    <div className="min-h-screen min-h-[100dvh] bg-background p-4 lg:p-8">
       <div className="max-w-5xl mx-auto w-full">
         <HatoPageHeader
           breadcrumb="Hato Lechero"

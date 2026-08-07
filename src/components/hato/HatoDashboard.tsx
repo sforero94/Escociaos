@@ -127,7 +127,7 @@ export function HatoDashboard() {
   }, [ultimaQuincena]);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 lg:p-8">
+    <div className="min-h-screen bg-background p-4 lg:p-8">
       <div className="max-w-7xl mx-auto w-full">
         <HatoPageHeader breadcrumb="Hato Lechero" section="Dashboard" title="Resumen del hato" subtitle="Finca Subachoque" />
 

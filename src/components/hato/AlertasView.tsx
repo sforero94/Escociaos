@@ -148,7 +148,7 @@ export function AlertasView() {
   };
 
   return (
-    <div className="min-h-screen min-h-[100dvh] bg-gray-50 p-4 lg:p-8">
+    <div className="min-h-screen min-h-[100dvh] bg-background p-4 lg:p-8">
       <div className="max-w-5xl mx-auto w-full">
         <div className="mb-6">
           <h1 className="text-foreground mb-1">Alertas — Hato Lechero</h1>
