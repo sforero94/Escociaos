@@ -42,7 +42,10 @@ export function PlagasKPICard({ plagas, fecha, onClick }: PlagasKPICardProps) {
 
             return (
               <div key={p.nombre} className="flex items-center justify-between gap-2">
-                <span className="text-xs text-foreground truncate flex-1" title={p.nombre}>
+                {/* Cuerpo (sistema-visual.md §1): el nombre de la plaga es el dato que se busca —
+                    envuelve en vez de recortar. min-w-0 es necesario para que un flex-1 pueda
+                    encogerse por debajo de su contenido y envolver el texto. */}
+                <span className="text-base sm:text-sm text-foreground flex-1 min-w-0">
                   {p.nombre}
                 </span>
                 <span className="text-sm font-bold text-foreground shrink-0">{p.incidencia.toFixed(1)}%</span>
@@ -61,7 +64,7 @@ export function PlagasKPICard({ plagas, fecha, onClick }: PlagasKPICardProps) {
       )}
 
       {fecha && (
-        <p className="text-xs text-brand-brown/60 mt-2 truncate">
+        <p className="text-sm sm:text-xs text-brand-brown/60 mt-2">
           {/* fecha_monitoreo llega como timestamp ISO completo; formatearFechaCorta espera YYYY-MM-DD */}
           Último monitoreo: {formatearFechaCorta(fecha.slice(0, 10))}
         </p>
