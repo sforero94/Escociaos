@@ -325,41 +325,43 @@ export function ChequeosList() {
           </div>
         ) : (
           <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <CabeceraOrdenableChequeos label="Fecha" columna="fecha" ordenActual={orden} onOrdenar={handleOrdenar} />
-                  <CabeceraOrdenableChequeos label="Veterinario" columna="veterinario" ordenActual={orden} onOrdenar={handleOrdenar} />
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Fuente</th>
-                  <CabeceraOrdenableChequeos label="Vacas" columna="totalVacas" ordenActual={orden} onOrdenar={handleOrdenar} align="right" />
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Estado</th>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500" />
-                </tr>
-              </thead>
-              <tbody>
-                {chequeosOrdenados.map((c, i) => (
-                  <tr key={c.id} className={`border-t border-gray-100 hover:bg-gray-50 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-                    <td className="px-3 py-2.5 whitespace-nowrap font-medium">
-                      <Link to={`/hato-lechero/chequeos/${c.id}`} className="hover:text-primary">
-                        {formatShortDate(c.fecha)}
-                      </Link>
-                    </td>
-                    <td className="px-3 py-2.5 whitespace-nowrap">{c.veterinario ?? '—'}</td>
-                    <td className="px-3 py-2.5 whitespace-nowrap capitalize">{c.fuente}</td>
-                    <td className="px-3 py-2.5 text-right whitespace-nowrap">{formatNumber(c.totalVacas)}</td>
-                    <td className="px-3 py-2.5 whitespace-nowrap capitalize">{c.estado}</td>
-                    <td className="px-3 py-2.5 whitespace-nowrap text-right">
-                      <Link
-                        to={`/hato-lechero/chequeos/${c.id}`}
-                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                      >
-                        Ver detalle <ChevronRight className="w-3 h-3" />
-                      </Link>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <CabeceraOrdenableChequeos label="Fecha" columna="fecha" ordenActual={orden} onOrdenar={handleOrdenar} />
+                    <CabeceraOrdenableChequeos label="Veterinario" columna="veterinario" ordenActual={orden} onOrdenar={handleOrdenar} />
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Fuente</th>
+                    <CabeceraOrdenableChequeos label="Vacas" columna="totalVacas" ordenActual={orden} onOrdenar={handleOrdenar} align="right" />
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Estado</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {chequeosOrdenados.map((c, i) => (
+                    <tr key={c.id} className={`border-t border-gray-100 hover:bg-gray-50 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                      <td className="px-3 py-2.5 whitespace-nowrap font-medium">
+                        <Link to={`/hato-lechero/chequeos/${c.id}`} className="hover:text-primary">
+                          {formatShortDate(c.fecha)}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">{c.veterinario ?? '—'}</td>
+                      <td className="px-3 py-2.5 whitespace-nowrap capitalize">{c.fuente}</td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap">{formatNumber(c.totalVacas)}</td>
+                      <td className="px-3 py-2.5 whitespace-nowrap capitalize">{c.estado}</td>
+                      <td className="px-3 py-2.5 whitespace-nowrap text-right">
+                        <Link
+                          to={`/hato-lechero/chequeos/${c.id}`}
+                          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                        >
+                          Ver detalle <ChevronRight className="w-3 h-3" />
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 

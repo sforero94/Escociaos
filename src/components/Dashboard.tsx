@@ -594,7 +594,6 @@ export function Dashboard() {
       <ClimaCard />
 
       {/* KPI scoreboard */}
-      {/* index.css es salida Tailwind precompilada: usar solo clases ya presentes (existe lg:col-span-1, no md:col-span-1) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {isLoading ? (
           <>

@@ -242,8 +242,6 @@ export function MarcarCicloDialog({ open, onOpenChange, animalId, onGuardado }: 
                       required
                     />
                   </div>
-                  {/* `pb-2` no existe en el build congelado (solo pb-3/4/6
-                      para ese eje) -- se usa `pb-3`, el más cercano. */}
                   <div className="flex items-end pb-3">
                     <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
                       <Checkbox checked={fechaAproximada} onCheckedChange={(v) => setFechaAproximada(v === true)} />

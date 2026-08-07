@@ -144,10 +144,7 @@ export function HatoDashboard() {
           </div>
         ) : (
           <>
-            {/* KPI row -- 4 cards (grid-cols-2/lg:grid-cols-4 ya están
-                compilados en el build congelado de Tailwind, así que no
-                hace falta la regla custom .kpi-grid-hato que usaba el
-                dashboard de 5 KPIs). */}
+            {/* KPI row -- 4 cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
               <HatoKpiCard icon={Milk} tone="green" label="Vacas en ordeño" value={formatNumber(enOrdeno.length)} />
               <HatoKpiCard

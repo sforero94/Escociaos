@@ -7,9 +7,7 @@
 // desglose es la foto reproductiva completa, no tres métricas sueltas.
 //
 // Mismo contenedor/insignia que `HatoKpiCard` (Figma alignment spec §1b).
-// Clases verificadas contra `src/index.css` (build de Tailwind congelado);
-// los colores de punto van por `style` inline (var(--primary)/hex), nunca
-// como clases arbitrarias que no compilarían.
+// Los colores de punto van por `style` inline (var(--primary)/hex).
 
 import { Heart } from 'lucide-react';
 import { formatNumber, formatPercentage } from '@/utils/format';

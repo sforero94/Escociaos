@@ -216,10 +216,6 @@ export function AlertasView() {
                   {seleccionadas.size} alerta{seleccionadas.size > 1 ? 's' : ''} seleccionada{seleccionadas.size > 1 ? 's' : ''}
                 </span>
                 <div className="flex items-center gap-3">
-                  {/* `hover:text-gray-600` no existe en el build congelado
-                      (verificado: solo `hover:text-gray-200`/`-900`) --
-                      GastosList.tsx lo usa igual y por eso ese hover no
-                      hace nada; acá se usa el que sí existe. */}
                   <button
                     type="button"
                     onClick={() => setSeleccionadas(new Set())}

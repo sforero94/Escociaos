@@ -968,9 +968,15 @@ export function DashboardMonitoreoV3() {
 
         {/* RONDA SELECTOR */}
         <div className="flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
+          {/* `w-80` (320 px fijos) estaba MUERTA en el build congelado: el
+              desplegable tomaba el ancho disponible. Al revivir con F1, 320 +
+              la píldora "Ronda abierta" (~110) + gap-3 no caben en 375 px, y
+              esta fila —que no envolvía— empujaba la página entera a 446 px.
+              Era la única de las 45 rutas que EMPEORÓ con F1. El ancho fijo se
+              conserva desde `sm` hacia arriba, que es donde sí cabe. */}
+          <div className="flex items-center gap-3 flex-wrap min-w-0">
             <Select value={rondaSeleccionada} onValueChange={setRondaSeleccionada}>
-              <SelectTrigger className="w-80">
+              <SelectTrigger className="w-full sm:w-80">
                 <SelectValue placeholder="Seleccionar ronda" />
               </SelectTrigger>
               <SelectContent>

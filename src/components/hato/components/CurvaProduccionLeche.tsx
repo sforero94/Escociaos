@@ -31,12 +31,7 @@ export function CurvaProduccionLeche({ chequeos }: { chequeos: ChequeoHistorialI
       {puntos.length < 2 ? (
         <p className="text-sm text-gray-500">Sin datos suficientes.</p>
       ) : (
-        // `h-[220px]` no está compilado en el build congelado de Tailwind
-        // (verificado -- solo existen arbitrarios ya usados en otras
-        // pantallas, como `h-[400px]`) -- se usa `style` directo en vez de
-        // sumar un valor arbitrario más al build, ver CLAUDE.md "Caution
-        // Zones".
-        <div style={{ height: 220 }}>
+        <div className="h-[220px]">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={puntos} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />

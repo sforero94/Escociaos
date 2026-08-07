@@ -289,22 +289,34 @@ export function GastosList({ onEdit }: GastosListProps) {
 
   // Build unified list sorted by date
   const unifiedItems: UnifiedFinanceItem[] = [
-    ...gastos.map((g) => ({
-      source: 'gasto' as const,
-      id: g.id,
-      fecha: g.fecha,
-      nombre: g.nombre,
-      valor: g.valor,
-      details: [(g as any).fin_negocios?.nombre, (g as any).fin_categorias_gastos?.nombre, (g as any).fin_conceptos_gastos?.nombre].filter(Boolean).join(' · '),
-      estado: g.estado,
-      raw: g,
-    })),
+    ...gastos.map((g) => {
+      const conceptoNombre = (g as any).fin_conceptos_gastos?.nombre as string | undefined;
+      return {
+        source: 'gasto' as const,
+        id: g.id,
+        fecha: g.fecha,
+        nombre: g.nombre,
+        valor: g.valor,
+        details: [(g as any).fin_negocios?.nombre, (g as any).fin_categorias_gastos?.nombre, conceptoNombre].filter(Boolean).join(' · '),
+        // Móvil: solo el concepto (decisión del dueño 2026-08-06). Sin negocio ni
+        // categoría — son la parte de la cadena que menos importa y son las que
+        // se comían el ancho, dejando el concepto (la parte que sí importa,
+        // porque va al final) recortado por `.gasto-meta-movil`/`truncate`.
+        detailsMovil: conceptoNombre || undefined,
+        estado: g.estado,
+        raw: g,
+      };
+    }),
     ...ganadoItems.map((g) => ({
       source: 'ganado' as const,
       id: g.id,
       fecha: g.fecha,
       nombre: `Compra Ganado${g.finca ? ` - ${g.finca}` : ''}`,
       valor: g.valor_total,
+      // Sin `detailsMovil`: a diferencia de gasto/ingreso, esta cadena no tiene
+      // un nivel de clasificación amplio (negocio/categoría) que recortar — ya
+      // son los datos puntuales de la transacción (cabezas · kg · cliente), así
+      // que el mismo texto sirve en escritorio y en móvil.
       details: [g.cantidad_cabezas ? `${g.cantidad_cabezas} cabezas` : null, g.kilos_pagados ? `${g.kilos_pagados} kg` : null, g.cliente_proveedor].filter(Boolean).join(' · '),
       raw: g,
     })),
@@ -559,9 +571,13 @@ export function GastosList({ onEdit }: GastosListProps) {
                       </span>
                     )}
                   </div>
+                  {/* Móvil: `fecha · concepto`, nunca la cadena completa de
+                      `details` (decisión del dueño 2026-08-06). `detailsMovil`
+                      cae de vuelta a `details` para las filas de ganado, que
+                      no tienen nada que recortar (ver arriba). */}
                   <div className="gasto-meta-movil text-xs text-gray-400 truncate">
                     {formatearFechaCorta(item.fecha)}
-                    {item.details ? ` · ${item.details}` : ''}
+                    {(item.detailsMovil ?? item.details) ? ` · ${item.detailsMovil ?? item.details}` : ''}
                   </div>
                 </div>
 

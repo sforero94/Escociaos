@@ -302,21 +302,35 @@ export function IngresosList({ onEdit }: IngresosListProps) {
 
   // Build unified list sorted by date
   const unifiedItems: UnifiedFinanceItem[] = [
-    ...ingresos.map((i) => ({
-      source: 'ingreso' as const,
-      id: i.id,
-      fecha: i.fecha,
-      nombre: i.nombre,
-      valor: i.valor,
-      details: [(i as any).fin_negocios?.nombre, (i as any).fin_categorias_ingresos?.nombre, (i as any).fin_compradores?.nombre].filter(Boolean).join(' · '),
-      raw: i,
-    })),
+    ...ingresos.map((i) => {
+      const categoriaNombre = (i as any).fin_categorias_ingresos?.nombre as string | undefined;
+      return {
+        source: 'ingreso' as const,
+        id: i.id,
+        fecha: i.fecha,
+        nombre: i.nombre,
+        valor: i.valor,
+        details: [(i as any).fin_negocios?.nombre, categoriaNombre, (i as any).fin_compradores?.nombre].filter(Boolean).join(' · '),
+        // Móvil: solo la categoría (mismo principio que GastosList — decisión del
+        // dueño 2026-08-06, "Concepto es suficiente en móvil, sin categoría").
+        // Ingresos no tiene concepto (finanzas/CLAUDE.md: "No concepto — la
+        // categoría no tiene cascada"), así que categoría ES el nivel de
+        // clasificación más específico que existe aquí — juega el mismo rol que
+        // concepto en Gastos. `comprador` se deja fuera: es una contraparte, no
+        // un nivel de clasificación, y por eso no es el análogo correcto.
+        detailsMovil: categoriaNombre || undefined,
+        raw: i,
+      };
+    }),
     ...ganadoItems.map((g) => ({
       source: 'ganado' as const,
       id: g.id,
       fecha: g.fecha,
       nombre: `Venta Ganado${g.finca ? ` - ${g.finca}` : ''}`,
       valor: g.valor_total,
+      // Sin `detailsMovil` — mismo motivo que en GastosList: esta cadena ya es
+      // el detalle puntual de la transacción (cabezas · kg · cliente), sin un
+      // nivel de clasificación amplio que recortar.
       details: [g.cantidad_cabezas ? `${g.cantidad_cabezas} cabezas` : null, g.kilos_pagados ? `${g.kilos_pagados} kg` : null, g.cliente_proveedor].filter(Boolean).join(' · '),
       raw: g,
     })),
@@ -546,9 +560,13 @@ export function IngresosList({ onEdit }: IngresosListProps) {
                       </span>
                     )}
                   </div>
+                  {/* Móvil: `fecha · categoría` (el análogo de "concepto" en
+                      Gastos, ver arriba), nunca la cadena completa de
+                      `details`. `detailsMovil` cae de vuelta a `details` para
+                      las filas de ganado. */}
                   <div className="gasto-meta-movil text-xs text-gray-400 truncate">
                     {formatearFechaCorta(item.fecha)}
-                    {item.details ? ` · ${item.details}` : ''}
+                    {(item.detailsMovil ?? item.details) ? ` · ${item.detailsMovil ?? item.details}` : ''}
                   </div>
                 </div>
 
