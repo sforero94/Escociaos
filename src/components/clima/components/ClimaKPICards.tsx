@@ -48,11 +48,16 @@ export function ClimaKPICards({ lecturaActual, todasLecturas, loading }: ClimaKP
     color: string;
   }) => (
     <div className="bg-white rounded-xl border border-gray-200 hover:shadow-lg transition-shadow p-4">
-      <div className="flex items-start justify-between mb-3">
-        <div className={`w-12 h-12 bg-gradient-to-br ${color} rounded-lg flex items-center justify-center text-white`}>
+      <div className="flex items-start justify-between gap-2 mb-3">
+        {/* `shrink-0`: sin esto el ícono (ancho fijo w-12) es un flex item
+            encogible como cualquier otro, así que si `secondary` alguna vez
+            necesita más espacio del que sobra, el ícono se comprime en vez del
+            texto — mismo defecto de "nada protegido de encogerse" que ya se
+            corrigió en AplicacionesList/VacasPorEstadoCard en esta sesión. */}
+        <div className={`w-12 h-12 bg-gradient-to-br ${color} rounded-lg flex items-center justify-center text-white shrink-0`}>
           {Icon}
         </div>
-        {secondary && <span className="text-xs text-gray-500 font-medium">{secondary}</span>}
+        {secondary && <span className="text-xs text-gray-500 font-medium text-right">{secondary}</span>}
       </div>
 
       <h3 className="text-sm text-gray-600 font-medium mb-1">{label}</h3>
@@ -99,7 +104,7 @@ export function ClimaKPICards({ lecturaActual, todasLecturas, loading }: ClimaKP
       {/* Viento */}
       <div className="bg-white rounded-xl border border-gray-200 hover:shadow-lg transition-shadow p-4">
         <div className="flex items-start justify-between mb-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-teal-400 to-green-500 rounded-lg flex items-center justify-center text-white">
+          <div className="w-12 h-12 bg-gradient-to-br from-teal-400 to-green-500 rounded-lg flex items-center justify-center text-white shrink-0">
             <Wind className="w-6 h-6" />
           </div>
         </div>
@@ -136,12 +141,12 @@ export function ClimaKPICards({ lecturaActual, todasLecturas, loading }: ClimaKP
 
       {/* Radiación Solar — with sun-hours estimate + status badge */}
       <div className="bg-white rounded-xl border border-gray-200 hover:shadow-lg transition-shadow p-4">
-        <div className="flex items-start justify-between mb-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-amber-500 rounded-lg flex items-center justify-center text-white">
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <div className="w-12 h-12 bg-gradient-to-br from-yellow-400 to-amber-500 rounded-lg flex items-center justify-center text-white shrink-0">
             <Sun className="w-6 h-6" />
           </div>
           {sunStatus && (
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${sunStatus.bgColor} ${sunStatus.textColor}`}>
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full text-right ${sunStatus.bgColor} ${sunStatus.textColor}`}>
               {sunStatus.label}
             </span>
           )}
