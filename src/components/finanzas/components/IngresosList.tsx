@@ -544,26 +544,31 @@ export function IngresosList({ onEdit }: IngresosListProps) {
                 </span>
 
                 {/* Name (+ details inline on desktop, stacked below on mobile).
-                    Mismo reparto que GastosList.tsx — mantener en sync
-                    (finanzas/CLAUDE.md): `gasto-nombre` prioriza el espacio
-                    (`flex-1 min-w-0`), `details` queda topado a `max-w-[45%]`
-                    para no llevarse más de la mitad de la fila. Ver auditoría
-                    de recorte 2026-08-06, caso 2. */}
+                    D-5 (2026-08-07, F4) — mismo cambio que GastosList.tsx,
+                    mantener en sync (finanzas/CLAUDE.md): la fila muestra la
+                    categoría (el análogo de "concepto" aquí, ver comentario en
+                    la construcción de `unifiedItems`) también en escritorio,
+                    no la ruta `negocio · categoría · comprador`. `details`
+                    sigue construyéndose igual y sigue siendo el fallback para
+                    ganado; solo cambió qué se pinta. Ver el comentario largo
+                    de GastosList.tsx para el porqué de no renombrar
+                    `detailsMovil`. `gasto-nombre` en `flex-1 min-w-0`
+                    (prioridad), detalle en `max-w-[45%]` (techo) — ver
+                    auditoría de recorte 2026-08-06, caso 2. */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="gasto-nombre text-sm font-medium text-gray-900 truncate min-w-0 flex-1">
                       {item.nombre}
                     </span>
-                    {item.details && (
+                    {(item.detailsMovil ?? item.details) && (
                       <span className="hidden sm:inline text-xs text-gray-400 truncate flex-shrink-0 max-w-[45%]">
-                        {item.details}
+                        {item.detailsMovil ?? item.details}
                       </span>
                     )}
                   </div>
-                  {/* Móvil: `fecha · categoría` (el análogo de "concepto" en
-                      Gastos, ver arriba), nunca la cadena completa de
-                      `details`. `detailsMovil` cae de vuelta a `details` para
-                      las filas de ganado. */}
+                  {/* Misma cadena que arriba — antes de D-5 esta línea (móvil)
+                      y el span de arriba (escritorio) mostraban cosas
+                      distintas; ahora ambos son `detailsMovil ?? details`. */}
                   <div className="gasto-meta-movil text-xs text-gray-400 truncate">
                     {formatearFechaCorta(item.fecha)}
                     {(item.detailsMovil ?? item.details) ? ` · ${item.detailsMovil ?? item.details}` : ''}

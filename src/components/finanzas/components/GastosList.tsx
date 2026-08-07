@@ -549,32 +549,41 @@ export function GastosList({ onEdit }: GastosListProps) {
                 </span>
 
                 {/* Name (+ details inline on desktop, stacked below on mobile).
-                    Sin flex utilities explícitas, `.gasto-nombre` (el dato
-                    principal) y `.details` (negocio · categoría · concepto,
-                    secundario) se repartían el ancho en flex-basis:auto —
-                    proporcional al largo NATURAL de cada uno, no a su
-                    importancia. Como `details` suele ser la cadena más larga,
-                    se quedaba con hasta 2/3 de la fila y el nombre, que es el
-                    dato que hay que poder leer, terminaba más recortado que
-                    él. `gasto-nombre` pasa a `flex-1 min-w-0` (prioridad: se
-                    queda con todo el espacio que `details` no use) y
-                    `details` a `max-w-[45%]` (techo: nunca más de ~mitad de
-                    la fila) — ver auditoría de recorte 2026-08-06, caso 2. */}
+                    D-5 (2026-08-07, F4, decisión del dueño): la fila muestra el
+                    CONCEPTO también en escritorio, no `negocio · categoría ·
+                    concepto` — negocio y categoría ya son columnas filtrables.
+                    Explícitamente abierto a revisión, así que el cambio es
+                    mínimo y reversible: `details` (la ruta completa) se sigue
+                    construyendo igual arriba y sigue siendo el fallback para
+                    ganado (que no tiene `detailsMovil`, ver comentario en la
+                    construcción de `unifiedItems`); solo cambió CUÁL de los
+                    dos se pinta en el span de escritorio. Revertir D-5 es
+                    volver este span a `item.details`. No se renombró
+                    `detailsMovil` aunque ahora también lo use escritorio: el
+                    nombre sigue siendo honesto (es la forma compacta, con
+                    "móvil" como origen histórico — mismo criterio que el
+                    prefijo `gasto-` de `.gasto-nombre`/`.gasto-meta-movil`,
+                    compartido con Ingresos a propósito) y renombrarlo obligaría
+                    a deshacer el rename también al revertir, sin ganar
+                    claridad real. `gasto-nombre` sigue en `flex-1 min-w-0`
+                    (prioridad) y el detalle en `max-w-[45%]` (techo) — ver
+                    auditoría de recorte 2026-08-06, caso 2; con el concepto
+                    (más corto que la ruta completa) el recorte medido debería
+                    caer a casi cero. */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="gasto-nombre text-sm font-medium text-gray-900 truncate min-w-0 flex-1">
                       {item.nombre}
                     </span>
-                    {item.details && (
+                    {(item.detailsMovil ?? item.details) && (
                       <span className="hidden sm:inline text-xs text-gray-400 truncate flex-shrink-0 max-w-[45%]">
-                        {item.details}
+                        {item.detailsMovil ?? item.details}
                       </span>
                     )}
                   </div>
-                  {/* Móvil: `fecha · concepto`, nunca la cadena completa de
-                      `details` (decisión del dueño 2026-08-06). `detailsMovil`
-                      cae de vuelta a `details` para las filas de ganado, que
-                      no tienen nada que recortar (ver arriba). */}
+                  {/* Misma cadena que arriba — antes de D-5 esta línea (móvil)
+                      y el span de arriba (escritorio) mostraban cosas
+                      distintas; ahora ambos son `detailsMovil ?? details`. */}
                   <div className="gasto-meta-movil text-xs text-gray-400 truncate">
                     {formatearFechaCorta(item.fecha)}
                     {(item.detailsMovil ?? item.details) ? ` · ${item.detailsMovil ?? item.details}` : ''}

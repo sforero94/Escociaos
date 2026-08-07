@@ -315,6 +315,13 @@ export function Layout({ onNavigate, children }: LayoutProps) {
             <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
           </button>
           {open && (
+            // D-3 (2026-08-07, F4): hijos bajan a 38px de alto renderizado en escritorio,
+            // el primer nivel se queda en 48px (py-3 arriba) — la jerarquía deja de
+            // depender solo de la sangría. `py-[7px]` no es un capricho: sin clase
+            // `text-*` propia, el botón hereda el reset base `text-base`/`leading-1.5`
+            // (24px de caja de línea, ver @layer base en globals.css), así que
+            // 7px + 24px + 7px = 38px exacto. Escritorio-only a propósito: en el
+            // drawer móvil (renderMobileEntry) el mínimo táctil sigue siendo 44px.
             <div className="space-y-1 mt-1">
               {entry.children.map((child) => {
                 const ChildIcon = child.icon;
@@ -324,7 +331,7 @@ export function Layout({ onNavigate, children }: LayoutProps) {
                     key={child.id}
                     ref={childActive ? desktopActiveRef : undefined}
                     onClick={() => handleNavigateClick(child.path, child.id)}
-                    className={`w-full flex items-center gap-3 pl-9 pr-4 py-2.5 rounded-xl transition-all duration-200 ${
+                    className={`w-full flex items-center gap-3 pl-9 pr-4 py-[7px] rounded-xl transition-all duration-200 ${
                       childActive
                         ? 'nav-item-active font-semibold'
                         : 'text-foreground hover:bg-muted/50'
@@ -383,6 +390,11 @@ export function Layout({ onNavigate, children }: LayoutProps) {
             <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
           </button>
           {open && (
+            // D-3 (2026-08-07, F4): el drawer móvil se toca con el dedo, así que los
+            // hijos NO bajan a 38px como en escritorio — se quedan en el piso táctil
+            // de 44px (`py-2.5`: 10px + 24px de caja de línea de `text-base` + 10px).
+            // El primer nivel (arriba, py-3) sigue en 48px, así que la jerarquía
+            // también se distingue aquí, solo que con menos margen que en escritorio.
             <div className="space-y-1 mt-1">
               {entry.children.map((child) => {
                 const ChildIcon = child.icon;
@@ -392,7 +404,7 @@ export function Layout({ onNavigate, children }: LayoutProps) {
                     key={child.id}
                     ref={childActive ? mobileActiveRef : undefined}
                     onClick={() => handleNavigateClick(child.path, child.id)}
-                    className={`w-full flex items-center gap-3 pl-9 pr-4 py-3 rounded-xl transition-all duration-200 ${
+                    className={`w-full flex items-center gap-3 pl-9 pr-4 py-2.5 rounded-xl transition-all duration-200 ${
                       childActive
                         ? 'nav-item-active font-semibold'
                         : 'text-foreground hover:bg-muted/50'
