@@ -81,6 +81,43 @@ caso a resolver.
 
 ---
 
+---
+
+## Los tres puntuales de F0, diagnosticados en el DOM (2026-08-06)
+
+### `/labores` móvil — el selector de estado se encogió
+
+El control es un `SelectTrigger` de Radix con `inline-flex`: mide **108 px dentro de un padre de
+277 px**, o sea se encoge al contenido en vez de ocupar la fila. La evaluadora lo reportó como el
+cambio más grave de su lote, y con razón: **es la acción que más toca Martha en campo**, con dedos y
+al sol. 108 px de ancho táctil es poco.
+
+### `/monitoreo` móvil — la fila de acciones no envuelve
+
+Viewport 375 px, `scrollWidth` 446. Los culpables medidos son los botones de acción, que se salen:
+"Carga Masiva" termina en **462 px** y "Modificar catálogo" en **638 px**. La fila es
+`flex items-center gap-2 px-3 lg:px-4 …` sin envoltura ni scroll horizontal propio, así que empuja
+toda la página.
+
+### `/finanzas/gastos` — el subtítulo café **NO es una regresión**
+
+La evaluadora lo marcó `PEOR` (verde `rgb(23,46,8)` → café `rgb(128,100,84)`). Medido: la clase del
+elemento es literalmente **`text-brand-brown/70`**, y `--brand-brown` es **`#4D240F`**. **El código
+siempre pidió café**; la clase estaba muerta y el texto heredaba `--foreground` (`#172E08`, el verde
+oscuro).
+
+O sea: no cambió la paleta, **se empezó a aplicar la paleta**. Y no es un caso aislado — son las
+**650 apariciones de `text-brand-brown/<opacidad>`** que F0 identificó como la familia muerta más
+grande de la app. Es, con diferencia, el cambio visual más extendido de todo el proyecto, y es
+intencional.
+
+Interpretación de T-5 ("conservar la paleta actual") que se aplica aquí: `brand-brown` **es** parte
+de la paleta — está declarado en `@theme inline` de `globals.css` desde siempre. Conservar la paleta
+significa no inventar colores nuevos, no impedir que los que ya existen se apliquen donde el código
+los pide. **No se revierte.**
+
+---
+
 ## Lo que esta auditoría NO cubre — declararlo es parte del entregable
 
 - **Solo escritorio (1280 px).** En móvil las reglas de `@media` cambian el juego por completo — es
