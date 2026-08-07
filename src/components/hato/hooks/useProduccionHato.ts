@@ -212,51 +212,6 @@ export function useProduccionHato() {
     }
   }, [supabase]);
 
-  /** Pesajes existentes para una fecha, indexados por `animal_id` -- una
-   * vaca sin entrada en el mapa significa "no pesada ese día" (nunca 0). */
-  const fetchPesajesPorFecha = useCallback(async (fecha: string): Promise<Map<string, HatoPesajeLeche>> => {
-    const { data, error } = await supabase
-      .from('hato_pesajes_leche')
-      .select('id, animal_id, fecha, litros_total, litros_am, litros_pm, fuente')
-      .eq('fecha', fecha);
-    if (error) throw error;
-    const mapa = new Map<string, HatoPesajeLeche>();
-    for (const fila of (data ?? []) as HatoPesajeLeche[]) {
-      mapa.set(fila.animal_id, fila);
-    }
-    return mapa;
-  }, [supabase]);
-
-  /** Guarda pesajes de una jornada: UPDATE-por-id para filas existentes,
-   * INSERT para nuevas (UNIQUE(animal_id, fecha) ya lo garantiza, pero
-   * evitamos upsert de PostgREST por consistencia con el resto del
-   * módulo). Solo se guardan entradas con `litros_total` definido -- una
-   * vaca sin valor digitado no genera fila (ausencia = no pesada). */
-  const guardarPesajes = useCallback(async (
-    fecha: string,
-    entradas: Array<{ animal_id: string; litros_total: number; existenteId?: string }>,
-  ): Promise<{ guardados: number }> => {
-    const existentes = entradas.filter((e) => e.existenteId);
-    const nuevas = entradas.filter((e) => !e.existenteId);
-
-    for (const e of existentes) {
-      const { error } = await supabase
-        .from('hato_pesajes_leche')
-        .update({ litros_total: e.litros_total })
-        .eq('id', e.existenteId!);
-      if (error) throw error;
-    }
-
-    if (nuevas.length > 0) {
-      const { error } = await supabase.from('hato_pesajes_leche').insert(
-        nuevas.map((e) => ({ animal_id: e.animal_id, fecha, litros_total: e.litros_total, fuente: 'web' })),
-      );
-      if (error) throw error;
-    }
-
-    return { guardados: entradas.length };
-  }, [supabase]);
-
   /** Historial de producción quincenal, más reciente primero, con
    * `litros_total` ya resuelto (medido -> `fin_ingreso.cantidad`;
    * derivado_mensual -> la columna). */
@@ -344,8 +299,6 @@ export function useProduccionHato() {
     fetchDiaPesajeSemanal,
     fetchRetencionIcaLeche,
     fetchVacasActivas,
-    fetchPesajesPorFecha,
-    guardarPesajes,
     fetchHistorialQuincenal,
     fetchQuincena,
     guardarQuincena,

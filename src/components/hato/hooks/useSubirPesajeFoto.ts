@@ -21,6 +21,7 @@ import { useState, useCallback } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
 import { projectId } from '@/utils/supabase/info.tsx';
 import type { CeldaDiffPesaje, SemanaPesaje } from '@/utils/importHato/ocrPesaje';
+import { construirDiffPesajeManual, type AnimalPesajeManual } from '@/utils/hato/pesajeManual';
 
 const EDGE_FUNCTION_BASE = `https://${projectId}.supabase.co/functions/v1`;
 
@@ -174,6 +175,45 @@ export function useSubirPesajeFoto() {
     }
   }, []);
 
+  /** Modo "Ingresar a mano" (UI rework de Producción, 2026-08-06) -- arma la
+   * MISMA forma de `resultado` que devuelve `subirFotos`, pero con el diff
+   * en blanco (`construirDiffPesajeManual`) y SIN llamar al endpoint de OCR.
+   * `ocr.resumen.fotosRecibidas` queda en 0 a propósito: es lo que usa
+   * `SubirPesajeFoto.tsx` para no mostrar el resumen de "lectura de fotos"
+   * cuando no hubo ninguna. */
+  const iniciarManual = useCallback((anio: number, mes: number, animales: AnimalPesajeManual[], fechasPorSemana: Record<SemanaPesaje, string | null>) => {
+    setError(null);
+    setCommitResultado(null);
+    setErrorCommit(null);
+    const diff = construirDiffPesajeManual(animales, fechasPorSemana);
+    setResultado({
+      success: true,
+      generadoEn: new Date().toISOString(),
+      anio,
+      mes,
+      fechasPorSemana,
+      diff,
+      ocr: {
+        modelo: 'manual',
+        fotos: [],
+        almacenamiento: { bucket: '', ok: true, errores: [] },
+        paginasNoLeidas: [],
+        filasNoLeidas: [],
+        vacasSinLeer: [],
+        advertencias: [],
+        resumen: {
+          vacasEnRoster: animales.length,
+          fotosRecibidas: 0,
+          fotosLeidas: 0,
+          filasConfirmadas: animales.length,
+          filasNoLeidas: 0,
+          vacasSinLeer: 0,
+          celdasNoConfiables: 0,
+        },
+      },
+    });
+  }, []);
+
   const limpiar = useCallback(() => {
     setResultado(null);
     setError(null);
@@ -183,6 +223,7 @@ export function useSubirPesajeFoto() {
 
   return {
     subirFotos,
+    iniciarManual,
     comprometer,
     limpiar,
     loading,

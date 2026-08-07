@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Loader2, Save, Trash2, Lock, AlertTriangle } from 'lucide-react';
+import { Loader2, Save, Trash2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -15,7 +16,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { RoleGuard } from '@/components/auth/RoleGuard';
 import { formatNumber, formatShortDate, formatCurrency } from '@/utils/format';
 import { resolverQuincena, rangoQuincena, calcularProductividad } from '@/utils/calculosHato';
 import {
@@ -49,28 +49,16 @@ const MESES = [
 // es UTC y ya es "mañana" en Bogotá después de las 19:00.
 const hoyIso = () => obtenerFechaHoy();
 
-interface ProduccionQuincenalFormProps {
+export interface ProduccionQuincenalDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onSaved?: () => void;
-}
-
-/**
- * Tarjeta que reemplaza el formulario para un rol sin permisos de Gerencia
- * (plan §4.3: "el gate es el ROL, no el resultado de la consulta" -- RLS
- * de `fin_ingresos` devuelve `[]` sin error, indistinguible de "no hay
- * ventas"). Mismo criterio que el bloque de Ventas del tablero (SOW 5).
- */
-function CandadoGerencia() {
-  return (
-    <div className="rounded-xl border border-gray-200 bg-white p-5 flex items-center gap-3">
-      <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
-        <Lock className="w-4 h-4 text-amber-600" />
-      </div>
-      <div>
-        <p className="text-sm font-semibold text-foreground">Producción quincenal (litros al camión)</p>
-        <p className="text-xs text-gray-500">La captura de la venta quincenal requiere permisos de Gerencia.</p>
-      </div>
-    </div>
-  );
+  /** Selección ya hecha por el disparador exterior (`VentaQuincenalCard.tsx`,
+   * mismo patrón que `SubirChequeoExcel.tsx`/`SubirPesajeFoto.tsx`): si
+   * viene con contenido, el OCR de la liquidación corre solo, sin que el
+   * usuario tenga que volver a elegir "Cargar liquidación" dentro del
+   * diálogo. */
+  fotosIniciales?: File[];
 }
 
 /**
@@ -91,8 +79,15 @@ function CandadoGerencia() {
  * Una quincena `origen_dato='derivado_mensual'` (backfill, SOW 4) es
  * read-only aquí: el RPC la rechaza explícitamente, así que el formulario
  * ni siquiera intenta editarla — se corrige desde `/finanzas/ingresos`.
+ *
+ * UI rework de Producción (2026-08-06): antes vivía siempre visible e
+ * inline en la pestaña Registrar; ahora es un diálogo que `VentaQuincenalCard`
+ * mantiene SIEMPRE montado (mismo patrón que `SubirChequeoExcel.tsx`) y
+ * abre/cierra vía `open`/`onOpenChange` -- los refs frágiles de más abajo
+ * (`ocrPendiente`, `defaultsIngresoRef`) NUNCA se recrean al abrir/cerrar el
+ * diálogo porque el componente no se desmonta con él, solo con la pestaña.
  */
-function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps) {
+export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIniciales }: ProduccionQuincenalDialogProps) {
   const hook = useProduccionHato();
   const catalogos = useFinCatalogosVenta();
   const ocr = useOcrLiquidacionPomar();
@@ -137,12 +132,27 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
   const rango = rangoQuincena(anio, mes, quincena);
   const soloLectura = origenDato === 'derivado_mensual';
 
+  // Defaults del dueño ya resueltos a id, mantenidos en una referencia para
+  // que `resetIngreso` los pueda leer sin capturarlos en un cierre viejo
+  // (`cargarRegistro` tiene sus dependencias fijadas a mano en
+  // [anio, mes, quincena]). Se rellenan en el efecto de más abajo.
+  const defaultsIngresoRef = useRef<{ compradorId: string; medioPagoId: string; regionId: string }>({
+    compradorId: '',
+    medioPagoId: '',
+    regionId: '',
+  });
+
+  // Limpiar el bloque financiero al cambiar de periodo NO significa dejarlo
+  // en blanco: la venta quincenal siempre es a El Pomar, por Cuenta Fovemsa y
+  // en Subachoque. Antes esto vaciaba los tres campos y los defaults solo se
+  // aplicaban una vez al montar, así que después de la primera navegación
+  // había que volver a elegirlos a mano en cada quincena.
   const resetIngreso = () => {
     setFechaIngreso(hoyIso());
     setValorBruto(undefined);
-    setRegionId('');
-    setMedioPagoId('');
-    setCompradorId('');
+    setRegionId(defaultsIngresoRef.current.regionId);
+    setMedioPagoId(defaultsIngresoRef.current.medioPagoId);
+    setCompradorId(defaultsIngresoRef.current.compradorId);
   };
 
   // Retención de ICA -- una sola vez al montar (no depende del periodo
@@ -164,32 +174,70 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
   // Resueltos por NOMBRE; si un nombre no existe en el catálogo, se
   // reporta (nunca se crea en silencio) y ese campo queda vacío para
   // elegir a mano.
-  const defaultsAplicados = useRef(false);
+  const defaultsAvisados = useRef(false);
   useEffect(() => {
-    if (defaultsAplicados.current) return;
-    if (catalogos.loading || registroId) return;
-    defaultsAplicados.current = true;
+    if (catalogos.loading) return;
 
     const porNombre = <T extends { id: string; nombre: string }>(lista: T[], nombre: string) =>
       lista.find((x) => x.nombre.trim().toLowerCase() === nombre.trim().toLowerCase());
 
     const faltantes: string[] = [];
     const comprador = porNombre(catalogos.compradores, COMPRADOR_DEFAULT);
-    if (comprador) setCompradorId((prev) => prev || comprador.id);
-    else faltantes.push(`comprador "${COMPRADOR_DEFAULT}"`);
-
+    if (!comprador) faltantes.push(`comprador "${COMPRADOR_DEFAULT}"`);
     const medioPago = porNombre(catalogos.mediosPago, MEDIO_PAGO_DEFAULT);
-    if (medioPago) setMedioPagoId((prev) => prev || medioPago.id);
-    else faltantes.push(`medio de pago "${MEDIO_PAGO_DEFAULT}"`);
-
+    if (!medioPago) faltantes.push(`medio de pago "${MEDIO_PAGO_DEFAULT}"`);
     const region = porNombre(catalogos.regiones, REGION_DEFAULT);
-    if (region) setRegionId((prev) => prev || region.id);
-    else faltantes.push(`región "${REGION_DEFAULT}"`);
+    if (!region) faltantes.push(`región "${REGION_DEFAULT}"`);
 
-    if (faltantes.length > 0) {
+    // La referencia se mantiene fresca siempre: es la que `resetIngreso` lee
+    // en cada cambio de periodo.
+    defaultsIngresoRef.current = {
+      compradorId: comprador?.id ?? '',
+      medioPagoId: medioPago?.id ?? '',
+      regionId: region?.id ?? '',
+    };
+
+    // Aplicar sobre un registro NUEVO y solo donde el usuario no haya elegido
+    // ya algo a mano (`prev ||`). Nunca pisa lo que se cargó de un registro
+    // existente.
+    if (!registroId) {
+      if (comprador) setCompradorId((prev) => prev || comprador.id);
+      if (medioPago) setMedioPagoId((prev) => prev || medioPago.id);
+      if (region) setRegionId((prev) => prev || region.id);
+    }
+
+    // El aviso de catálogo incompleto se da UNA vez por sesión del
+    // formulario: el efecto ahora corre en cada cambio de periodo y repetirlo
+    // sería ruido.
+    if (faltantes.length > 0 && !defaultsAvisados.current) {
+      defaultsAvisados.current = true;
       toast.warning(`No se encontraron en el catálogo: ${faltantes.join(', ')} -- selecciónalos a mano.`);
     }
   }, [catalogos.loading, catalogos.compradores, catalogos.mediosPago, catalogos.regiones, registroId]);
+
+  // Valores leídos por OCR que todavía no se pueden escribir en el formulario.
+  //
+  // El problema que resuelve: `cargarRegistro` se re-dispara cada vez que
+  // cambian anio/mes/quincena, y para un periodo que aún no existe en la base
+  // limpia litros y el bloque financiero. Como leer una liquidación SIEMPRE
+  // cambia el periodo (es justo el dato que trae el papel), las tres llamadas
+  // del OCR entraban en el mismo lote de render y la recarga posterior --
+  // asíncrona, y por lo tanto siempre después -- borraba lo recién escrito.
+  // El síntoma era exacto: el aviso de "liquidación leída" salía y los campos
+  // quedaban vacíos.
+  //
+  // La solución NO es dejar de limpiar al cambiar de periodo: eso es correcto
+  // y evita que los valores de una quincena se filtren a otra cuando el
+  // usuario navega a mano. Lo que se hace es dejar la lectura en espera y
+  // aplicarla DESPUÉS de que la recarga del periodo destino termine.
+  const ocrPendiente = useRef<{
+    anio: number;
+    mes: number;
+    quincena: 1 | 2;
+    litros: number | null;
+    bruto: number | null;
+    fechaPago: string | null;
+  } | null>(null);
 
   const cargarRegistro = useCallback(async () => {
     setCargando(true);
@@ -231,6 +279,34 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
         setNumVacasOrdeno(undefined);
         setNotas('');
         resetIngreso();
+      }
+
+      // Aplicación de la lectura OCR en espera -- va DESPUÉS de la limpieza
+      // (o de la carga del registro existente), que es exactamente lo que el
+      // orden anterior no garantizaba. Solo se aplica si la lectura es para
+      // ESTE periodo: si el usuario ya navegó a otro mientras el OCR corría,
+      // se descarta en vez de contaminar una quincena que no le corresponde.
+      const pendiente = ocrPendiente.current;
+      if (pendiente && pendiente.anio === anio && pendiente.mes === mes && pendiente.quincena === quincena) {
+        ocrPendiente.current = null;
+        if (existente?.origen_dato === 'derivado_mensual') {
+          // Fila de backfill: es de solo lectura y el RPC rechaza editarla.
+          // Escribir aquí los valores del papel daría la impresión de que se
+          // pueden guardar, y no se pueden.
+          toast.warning(
+            'Esa quincena es un registro derivado del histórico mensual y es de solo lectura -- la liquidación no se aplicó.',
+          );
+        } else {
+          if (pendiente.litros != null) {
+            setLitrosTotal(pendiente.litros);
+            // La liquidación LA EMITE El Pomar: su "cantidad" es, por
+            // definición, el litraje que el Pomar confirma. Capturarlo dos
+            // veces a mano invitaría a que los dos números se separen.
+            setLitrosPomar(pendiente.litros);
+          }
+          if (pendiente.bruto != null) setValorBruto(pendiente.bruto);
+          if (pendiente.fechaPago) setFechaIngreso(pendiente.fechaPago);
+        }
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -343,18 +419,46 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
         const respuesta = await ocr.leerFotos(fotos);
         const doc = respuesta.documento;
 
-        if (doc.mes != null) setMes(doc.mes);
-        if (doc.quincena != null) setQuincena(doc.quincena);
         const anioDetectado = doc.periodoInicio?.slice(0, 4) ?? doc.periodoFin?.slice(0, 4) ?? null;
-        if (anioDetectado) setAnio(parseInt(anioDetectado, 10));
-        if (doc.cantidadLitros != null) setLitrosTotal(doc.cantidadLitros);
+        const anioDestino = anioDetectado ? parseInt(anioDetectado, 10) : anio;
+        const mesDestino = doc.mes ?? mes;
+        const quincenaDestino = doc.quincena ?? quincena;
+
         // Preferimos el subtotal leído (es el bruto real de la
         // liquidación); si el modelo no lo pudo leer pero sí precio y
         // cantidad, lo derivamos -- nunca al revés (el subtotal impreso es
         // el dato de la fila, precio×cantidad es una reconstrucción).
-        if (doc.subtotal != null) setValorBruto(doc.subtotal);
-        else if (doc.precioPromedioLitro != null && doc.cantidadLitros != null) {
-          setValorBruto(doc.precioPromedioLitro * doc.cantidadLitros);
+        const brutoLeido =
+          doc.subtotal ??
+          (doc.precioPromedioLitro != null && doc.cantidadLitros != null
+            ? doc.precioPromedioLitro * doc.cantidadLitros
+            : null);
+
+        // Los valores NO se escriben aquí: cambiar el periodo dispara la
+        // recarga, que limpia el formulario y borraría lo que se escriba en
+        // este mismo lote. Quedan en espera y `cargarRegistro` los aplica
+        // cuando termina de cargar el periodo destino. Ver el comentario de
+        // `ocrPendiente`.
+        ocrPendiente.current = {
+          anio: anioDestino,
+          mes: mesDestino,
+          quincena: quincenaDestino,
+          litros: doc.cantidadLitros,
+          bruto: brutoLeido,
+          // Fecha de pago: el fin del periodo liquidado es la referencia real
+          // del documento. Si el papel no lo trae, `resetIngreso` ya deja hoy.
+          fechaPago: doc.periodoFin ?? null,
+        };
+
+        setAnio(anioDestino);
+        setMes(mesDestino);
+        setQuincena(quincenaDestino);
+
+        // Si el periodo leído es el que ya está en pantalla, el efecto de
+        // recarga no se re-dispara (las tres dependencias quedan iguales) y
+        // nadie aplicaría la lectura -- se fuerza la recarga a mano.
+        if (anioDestino === anio && mesDestino === mes && quincenaDestino === quincena) {
+          void cargarRegistro();
         }
 
         const advertencias = [...respuesta.ocr.advertencias];
@@ -370,8 +474,27 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
         // El hook ya deja el mensaje en `ocr.error`, mostrado en la UI.
       }
     },
-    [ocr],
+    // `anio`/`mes`/`quincena` se leen para decidir el periodo destino cuando
+    // el papel no lo trae, y para saber si hay que forzar la recarga: sin
+    // ellas en las dependencias la función capturaría valores viejos si el
+    // usuario cambia de periodo entre renders.
+    [ocr, anio, mes, quincena, cargarRegistro],
   );
+
+  // Selección ya hecha por el disparador exterior (`VentaQuincenalCard.tsx`)
+  // -- se siembra UNA vez por apertura, mismo patrón que
+  // `SubirChequeoExcel.tsx`/`SubirPesajeFoto.tsx` (`[open]` como única
+  // dependencia: nunca en cada render, o reabrir con el mismo `open`
+  // relanzaría el mismo OCR). El componente NUNCA se desmonta al cerrar el
+  // diálogo (`VentaQuincenalCard` lo mantiene siempre montado), así que esto
+  // reutiliza `handleOcrLeido` tal cual -- la secuencia de `ocrPendiente`
+  // sigue siendo la misma que si el usuario hubiera hecho clic en "Cargar
+  // liquidación" con el diálogo ya abierto.
+  useEffect(() => {
+    if (!open) return;
+    if (fotosIniciales && fotosIniciales.length > 0) void handleOcrLeido(fotosIniciales);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const productividad = calcularProductividad(litrosTotal ?? null, numVacasOrdeno ?? null);
   // ICA/neto (D-11/D-12) -- SOLO preview del cliente; lo que persiste
@@ -386,36 +509,39 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
   const precioUnitario = calcularPrecioUnitarioQuincena(netoConIca?.neto ?? null, litrosTotal ?? null);
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-      <div className="p-4 border-b border-gray-200 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="font-semibold text-foreground">Producción quincenal (litros al camión)</h3>
-          <p className="text-xs text-gray-500">
-            Total que recoge el Pomar en la quincena — un solo registro con la venta enlazada.
-          </p>
-        </div>
-        {!soloLectura && (
-          <div className="flex flex-col items-end gap-1.5">
-            <CapturaArchivo
-              label="Cargar liquidación"
-              acceptArchivo="image/*"
-              multipleFotos={false}
-              multipleArchivo={false}
-              disabled={ocr.loading || guardando}
-              onFotos={(files) => handleOcrLeido(files)}
-              onArchivo={(files) => handleOcrLeido(files)}
-            />
-            {ocr.loading && (
-              <p className="text-xs text-gray-400 flex items-center gap-1">
-                <Loader2 className="w-4 h-4 animate-spin" /> Leyendo liquidación…
-              </p>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="lg">
+        <DialogHeader>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <DialogTitle>Producción quincenal (litros al camión)</DialogTitle>
+              <DialogDescription>
+                Total que recoge el Pomar en la quincena — un solo registro con la venta enlazada.
+              </DialogDescription>
+            </div>
+            {!soloLectura && (
+              <div className="flex flex-col items-end gap-1.5">
+                <CapturaArchivo
+                  label="Cargar liquidación"
+                  acceptArchivo="image/*"
+                  multipleFotos={false}
+                  multipleArchivo={false}
+                  disabled={ocr.loading || guardando}
+                  onFotos={(files) => handleOcrLeido(files)}
+                  onArchivo={(files) => handleOcrLeido(files)}
+                />
+                {ocr.loading && (
+                  <p className="text-xs text-gray-400 flex items-center gap-1">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Leyendo liquidación…
+                  </p>
+                )}
+                {ocr.error && <p className="text-xs text-red-600 max-w-[200px] text-right">{ocr.error}</p>}
+              </div>
             )}
-            {ocr.error && <p className="text-xs text-red-600 max-w-[200px] text-right">{ocr.error}</p>}
           </div>
-        )}
-      </div>
-
-      <div className="p-4 space-y-4">
+        </DialogHeader>
+        <DialogBody className="space-y-4">
+        <div className="space-y-4">
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1.5">
             <Label htmlFor="q-anio">Año</Label>
@@ -611,23 +737,6 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
                 rows={2}
               />
             </div>
-
-            <div className="flex justify-between">
-              {registroId ? (
-                <Button
-                  variant="outline"
-                  className="border-red-200 text-red-600 hover:bg-red-50"
-                  onClick={() => setConfirmEliminarOpen(true)}
-                  disabled={guardando || cargando || eliminando}
-                >
-                  <Trash2 className="w-4 h-4 mr-2" /> Eliminar
-                </Button>
-              ) : <span />}
-              <Button onClick={handleGuardar} disabled={guardando || cargando || eliminando}>
-                {guardando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                {registroId ? 'Actualizar quincena' : 'Registrar quincena'}
-              </Button>
-            </div>
           </>
         )}
       </div>
@@ -698,6 +807,36 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
           </div>
         </div>
       )}
+        </DialogBody>
+        <DialogFooter className="sm:justify-between">
+          {cargando || soloLectura ? (
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cerrar
+            </Button>
+          ) : (
+            <>
+              {registroId ? (
+                <Button
+                  variant="outline"
+                  className="border-red-200 text-red-600 hover:bg-red-50"
+                  onClick={() => setConfirmEliminarOpen(true)}
+                  disabled={guardando || cargando || eliminando}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" /> Eliminar
+                </Button>
+              ) : (
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={guardando}>
+                  Cancelar
+                </Button>
+              )}
+              <Button onClick={handleGuardar} disabled={guardando || cargando || eliminando}>
+                {guardando ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                {registroId ? 'Actualizar quincena' : 'Registrar quincena'}
+              </Button>
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
 
       <ConfirmDialog
         open={confirmEliminarOpen}
@@ -708,14 +847,6 @@ function ProduccionQuincenalFormInner({ onSaved }: ProduccionQuincenalFormProps)
         onConfirm={handleEliminar}
         destructive
       />
-    </div>
-  );
-}
-
-export function ProduccionQuincenalForm(props: ProduccionQuincenalFormProps) {
-  return (
-    <RoleGuard allowedRoles={['Gerencia']} fallback={<CandadoGerencia />}>
-      <ProduccionQuincenalFormInner {...props} />
-    </RoleGuard>
+    </Dialog>
   );
 }
