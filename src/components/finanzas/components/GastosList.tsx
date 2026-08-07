@@ -562,17 +562,33 @@ export function GastosList({ onEdit }: GastosListProps) {
                     `detailsMovil` aunque ahora también lo use escritorio: el
                     nombre sigue siendo honesto (es la forma compacta, con
                     "móvil" como origen histórico — mismo criterio que el
-                    prefijo `gasto-` de `.gasto-nombre`/`.gasto-meta-movil`,
-                    compartido con Ingresos a propósito) y renombrarlo obligaría
-                    a deshacer el rename también al revertir, sin ganar
-                    claridad real. `gasto-nombre` sigue en `flex-1 min-w-0`
-                    (prioridad) y el detalle en `max-w-[45%]` (techo) — ver
-                    auditoría de recorte 2026-08-06, caso 2; con el concepto
-                    (más corto que la ruta completa) el recorte medido debería
-                    caer a casi cero. */}
+                    prefijo `gasto-` de `.gasto-meta-movil`, compartido con
+                    Ingresos a propósito) y renombrarlo obligaría a deshacer el
+                    rename también al revertir, sin ganar claridad real. El
+                    nombre sigue en `flex-1 min-w-0` (prioridad) y el detalle en
+                    `max-w-[45%]` (techo) — ver auditoría de recorte
+                    2026-08-06, caso 2.
+
+                    Recorte 2026-08-07 (auditoría a 375px, 18 casos, todos aquí):
+                    `item.nombre` es texto libre sin tope — SIEMPRE va a haber
+                    algún nombre que no quepa. `max-sm:line-clamp-3` (antes 2,
+                    en `.gasto-nombre` de globals.css — ya retirada, ver esa
+                    regla) le da ~50% más presupuesto de caracteres SOLO a las
+                    filas que de verdad lo necesitan (line-clamp no crece si el
+                    texto ya cabe en menos líneas), sin inflar las demás 578
+                    filas del historial. `title` es la red de seguridad
+                    aparte — funciona en desktop con mouse y para cualquier
+                    lector de pantalla/herramienta de accesibilidad, aunque no
+                    dispare con un tap; mismo patrón que
+                    `GanadoMovimientos.tsx` (`docs/tailwind-spike/
+                    auditoria-recorte-medida.md`). No sustituye acortar el
+                    recorte, lo complementa. */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="gasto-nombre text-base sm:text-sm font-medium text-gray-900 truncate min-w-0 flex-1">
+                    <span
+                      title={item.nombre}
+                      className="text-base sm:text-sm font-medium text-gray-900 truncate min-w-0 flex-1 max-sm:whitespace-normal max-sm:line-clamp-3"
+                    >
                       {item.nombre}
                     </span>
                     {(item.detailsMovil ?? item.details) && (

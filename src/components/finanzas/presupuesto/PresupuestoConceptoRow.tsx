@@ -47,9 +47,15 @@ export function PresupuestoConceptoRow({ row, showPct, editable, onBudgetChange,
       <TableCell sticky className="pl-7 py-1.5">
         <div className="flex items-center gap-1.5 min-w-0">
           <StatusDot ejecucion={row.ejecucion_vs_q} />
+          {/* Recorte 2026-08-07 — mismo arreglo y misma justificación que
+              PresupuestoCategoriaRow.tsx: envolver a 2 líneas en vez de
+              ensanchar la columna congelada (170px), más `title` de
+              respaldo. Este renglón parte con menos ancho todavía (`pl-7`
+              de sangría), así que el envolver importa más aquí. */}
           <span
+            title={row.concepto_nombre}
             className={
-              'truncate flex-1 min-w-0 ' +
+              'truncate flex-1 min-w-0 max-sm:whitespace-normal max-sm:line-clamp-2 ' +
               (row.is_principal ? 'font-semibold text-foreground' : 'text-foreground')
             }
           >

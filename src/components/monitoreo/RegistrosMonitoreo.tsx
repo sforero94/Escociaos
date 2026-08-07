@@ -1,5 +1,12 @@
 import { useState } from 'react';
 import { Button } from '../ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../ui/select';
 import { Plus, ChevronDown, Bug, Zap, Hexagon } from 'lucide-react';
 import { MonitoreoSubNav } from './MonitoreoSubNav';
 import { TablaMonitoreos } from './TablaMonitoreos';
@@ -62,7 +69,26 @@ export function RegistrosMonitoreo() {
       </div>
 
       {/* Domain tabs */}
-      <div className="flex gap-1 border-b border-secondary/30">
+      {/* Móvil (<640px): "Plagas" + "Conductividad" + "Colmenas" son 3 palabras sin espacio
+          interno (no pueden envolver), y esta fila no tenía scroll ni envoltura propia — el
+          ancho mínimo sin envolver (~392px) no cabe en 375px y empujaba la página entera.
+          Patrón B de docs/sistema-visual.md §3-bis: se colapsan en un <Select> que muestra
+          el dominio activo. */}
+      <div className="sm:hidden">
+        <Select value={tabActiva} onValueChange={(v) => setTabActiva(v as DominioTab)}>
+          <SelectTrigger className="w-full">
+            <SelectValue>{TABS.find(t => t.id === tabActiva)?.label}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {TABS.map(tab => (
+              <SelectItem key={tab.id} value={tab.id}>{tab.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Escritorio: pestañas, sin cambios — ahí sí caben. */}
+      <div className="hidden sm:flex gap-1 border-b border-secondary/30">
         {TABS.map(tab => {
           const Icon = tab.icon;
           const activa = tabActiva === tab.id;

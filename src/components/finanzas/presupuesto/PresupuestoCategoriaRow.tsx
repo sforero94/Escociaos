@@ -45,7 +45,20 @@ export function PresupuestoCategoriaRow({ categoria, expanded, onToggle, showPct
         <div className="flex items-center gap-1.5 min-w-0">
           <StatusDot ejecucion={exec} />
           <Chevron className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
-          <span className="truncate flex-1 min-w-0">{categoria.categoria_nombre}</span>
+          {/* Recorte 2026-08-07 (auditoría a 375px): la columna de identidad
+              congelada mide 170px (<colgroup> de PresupuestoTable.tsx) y a una
+              sola línea solo da para ~16-19 caracteres — nombres reales como
+              "Mano de Obra y Asistencia Técnica" (CLAUDE.md raíz, migración
+              051, 33 caracteres) perdían más de la mitad. Envolver a 2 líneas
+              en vez de ensanchar la columna: sistema-visual.md §3-bis dice
+              explícitamente que la columna identificadora "ocupa lo mínimo,
+              no 250px" — llegar a 250px es justo lo que hubiera hecho falta
+              para no envolver, así que envolver es el camino que respeta esa
+              regla sin recortar. `title` es la red de seguridad aparte (no
+              dispara con un tap, sí con mouse/lector de pantalla). */}
+          <span title={categoria.categoria_nombre} className="truncate flex-1 min-w-0 max-sm:whitespace-normal max-sm:line-clamp-2">
+            {categoria.categoria_nombre}
+          </span>
         </div>
       </TableCell>
 

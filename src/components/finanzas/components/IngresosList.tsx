@@ -552,12 +552,20 @@ export function IngresosList({ onEdit }: IngresosListProps) {
                     sigue construyéndose igual y sigue siendo el fallback para
                     ganado; solo cambió qué se pinta. Ver el comentario largo
                     de GastosList.tsx para el porqué de no renombrar
-                    `detailsMovil`. `gasto-nombre` en `flex-1 min-w-0`
+                    `detailsMovil`. El nombre sigue en `flex-1 min-w-0`
                     (prioridad), detalle en `max-w-[45%]` (techo) — ver
-                    auditoría de recorte 2026-08-06, caso 2. */}
+                    auditoría de recorte 2026-08-06, caso 2.
+
+                    Recorte 2026-08-07 (auditoría a 375px, 4 casos, todos aquí)
+                    — mismo arreglo y misma justificación que GastosList.tsx:
+                    `max-sm:line-clamp-3` (antes 2) + `title` de respaldo.
+                    Mantener ambos archivos en sync si esto cambia. */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="gasto-nombre text-base sm:text-sm font-medium text-gray-900 truncate min-w-0 flex-1">
+                    <span
+                      title={item.nombre}
+                      className="text-base sm:text-sm font-medium text-gray-900 truncate min-w-0 flex-1 max-sm:whitespace-normal max-sm:line-clamp-3"
+                    >
                       {item.nombre}
                     </span>
                     {(item.detailsMovil ?? item.details) && (

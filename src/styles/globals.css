@@ -391,8 +391,11 @@ input[type='number'] {
 /* Historial de Gastos e Ingresos — mobile filter collapse.
    Compartido por GastosList e IngresosList: el prefijo `gasto-` es histórico,
    las reglas no son de un módulo en particular. Definido aquí porque
-   src/index.css es un build precompilado y CONGELADO de Tailwind que no trae
-   utilidades `sm:hidden` / `sm:flex`: escribirlas en el JSX no haría nada.
+   src/index.css era un build precompilado y CONGELADO de Tailwind que no
+   traía utilidades `sm:hidden` / `sm:flex`: escribirlas en el JSX no habría
+   hecho nada. Esa razón ya no aplica en esta rama (F1: el compilador corre en
+   vivo) — sigue aquí porque migrar `.filtros-toggle`/`.filtros-colapsables`
+   no es parte de esta tarea (recorte de texto), no porque haga falta.
    El breakpoint coincide con el `sm` de Tailwind (640px). */
 
 /* Toggle button: only reachable on mobile, where the filters are collapsed. */
@@ -407,18 +410,12 @@ input[type='number'] {
   display: block;
 }
 
-/* On mobile the value column leaves the name too little room to read on one
-   line, so let it wrap to two before ellipsing. Desktop keeps `truncate`. */
-@media (max-width: 639px) {
-  .gasto-nombre {
-    white-space: normal;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-}
+/* `.gasto-nombre` (el nombre libre de gasto/ingreso, recorte 2026-08-07) YA NO
+   vive aquí: el compilador de Tailwind corre en vivo en esta rama, así que su
+   comportamiento móvil (envolver a 3 líneas en vez de 1) se escribe con las
+   utilidades `max-sm:whitespace-normal max-sm:line-clamp-3` directamente en
+   GastosList.tsx/IngresosList.tsx — ni el nombre de clase ni la regla a mano
+   hacían falta ya. Ver el comentario en esos archivos. */
 
 /* Filter group: hidden on mobile until toggled open. From `sm` up it becomes
    `display: contents`, so its children flow into the parent flex row exactly

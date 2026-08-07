@@ -536,7 +536,11 @@ export function MapaCalorIncidencias({
                   sticky
                   className="top-0 z-30 h-auto w-[112px] sm:w-[200px] p-2 sm:p-3 font-normal normal-case tracking-normal border border-gray-200"
                 >
-                  <div className="font-bold text-foreground truncate">Plaga / Lote</div>
+                  {/* Sin `truncate`: a 112px (móvil) el rótulo fijo "Plaga / Lote" no cabe en
+                      una línea (14px bold) y se recortaba a "Plaga / Lo…" en TODAS las cargas,
+                      no solo con nombres largos de datos — es texto estático, no depende de la
+                      ronda. La celda es `h-auto`, así que envolver a dos líneas no rompe nada. */}
+                  <div className="font-bold text-foreground leading-tight">Plaga / Lote</div>
                 </TableHead>
                 {datosMapaCalor.columnas.map(columna => (
                   <TableHead
