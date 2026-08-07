@@ -326,35 +326,14 @@ input[type='number'] {
   animation: fadeIn 0.2s ease-out;
 }
 
-/* Sheet enter/exit slide vars — `tw-animate-css` (installed by F1, see
-   src/index.css) now compiles the exact same selectors with identical
-   `--tw-enter-translate-*`/`--tw-exit-translate-*` values (verified against
-   the build output 2026-08-06), so this block is redundant duplication as of
-   this session — classified (C) "dudosa" in docs/tailwind-spike/
-   auditoria-infraestructura.md, pending the tw-animate-css decision it
-   flagged. Left untouched per that classification (F1 does not resolve type
-   (C) rules); safe to delete in a follow-up now that the dependency question
-   is settled. `.inset-y-0`/`.inset-x-0`, which used to live here, were type
-   (A) and were removed: real Tailwind utilities, now compiled like any
-   other. */
-.data-\[state\=closed\]\:slide-out-to-right[data-state="closed"] {
-  --tw-exit-translate-x: 100%;
-}
-.data-\[state\=open\]\:slide-in-from-right[data-state="open"] {
-  --tw-enter-translate-x: 100%;
-}
-.data-\[state\=closed\]\:slide-out-to-left[data-state="closed"] {
-  --tw-exit-translate-x: -100%;
-}
-.data-\[state\=open\]\:slide-in-from-left[data-state="open"] {
-  --tw-enter-translate-x: -100%;
-}
-.data-\[state\=closed\]\:slide-out-to-bottom[data-state="closed"] {
-  --tw-exit-translate-y: 100%;
-}
-.data-\[state\=open\]\:slide-in-from-bottom[data-state="open"] {
-  --tw-enter-translate-y: 100%;
-}
+/* Las variables de slide de Sheet vivían aquí, escritas a mano porque el build
+   congelado no traía esas utilidades. `tw-animate-css` (instalado en F1, ver
+   src/index.css) compila hoy los mismos selectores con valores idénticos, así
+   que el bloque se borró: era duplicación redundante, y al estar fuera de
+   `@layer` ganaba la cascada de forma incondicional — una futura versión del
+   paquete que cambiara esos valores habría quedado silenciosamente anulada.
+   Lo detectó `globalsCssTailwindCollisionGuard.test.ts`, que existe justo
+   para eso. */
 
 /* Chat markdown styles */
 .chat-markdown {
