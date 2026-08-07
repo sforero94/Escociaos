@@ -1,5 +1,19 @@
 # F4 — decisiones para arrancar
 
+> ## ✅ RESUELTAS por Santiago el 2026-08-07
+>
+> | # | Decisión | Qué implica |
+> |---|---|---|
+> | **D-1** | **Opción C** — dos densidades declaradas | "Lista larga" (~45 px) para Gastos, Inventario y Hato; "tarjeta" (~80 px) para Labores. Se **escribe la regla** de cuál usar y por qué. Inventario baja de 65 y Hato de 53. |
+> | **D-2** | **Opción C** — escala tipográfica explícita, **y en móvil arranca un escalón arriba** | Escala 12/14/16/20/24 con regla de uso. En móvil el escalón más bajo **no se usa**: lo que en escritorio es 12 pasa a 14, y así hacia arriba. Consecuencia: Inventario baja su cuerpo de 16 a 14 (opción A, como derivada). |
+> | **D-3** | **Opción C** — jerarquía en el menú | Hijos de 44 → 38 px; primer nivel se queda en 48. La jerarquía deja de comunicarse solo por sangría. |
+> | **D-4** | **Opción A** — los 650 textos café se quedan | El código siempre pidió `brand-brown`. Si más adelante no convence, se ajusta el token en un solo sitio. |
+> | **D-5** | **Opción A** — solo concepto, también en escritorio | *"pero luego evaluamos si debe regresar"* — se aplica ahora y queda **abierto a revisión** una vez se vea en uso. Negocio y categoría siguen siendo columnas filtrables. |
+>
+> **La justificación de D-2 en móvil es de campo**, no estética: Martha y Consuelo capturan con el
+> celular al sol. 12 px ahí no se lee.
+
+
 Preparado 2026-08-06 sobre `feat/tailwind-pipeline`, con F1 aplicada y F2 cerrada.
 **Todo lo de aquí está medido en la app corriendo**, no estimado.
 
