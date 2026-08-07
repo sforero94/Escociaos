@@ -420,8 +420,14 @@ export function InventoryMovements() {
                       {movement.aplicacion_id && (
                         <span className="flex-shrink-0">Apl: #{movement.aplicacion_id.substring(0, 6)}</span>
                       )}
+                      {/* `Apl:` es de largo fijo (6 caracteres) y puede quedarse
+                          rígida, pero `Lote:` trae la lista completa de lotes y
+                          llega a 394 px. Con `flex-shrink-0` no cedía y empujaba
+                          la fila: medido 2026-08-06, la página desbordaba a
+                          549 px en un viewport de 375. Cede y se recorta, con
+                          techo para que la observación conserve espacio. */}
                       {movement.lote_aplicacion && (
-                        <span className="flex-shrink-0">Lote: {movement.lote_aplicacion}</span>
+                        <span className="truncate min-w-0 max-w-[50%]">Lote: {movement.lote_aplicacion}</span>
                       )}
                       {movement.observaciones && (
                         <span className="truncate min-w-0 flex-1">{movement.observaciones}</span>
