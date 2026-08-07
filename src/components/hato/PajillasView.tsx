@@ -125,7 +125,7 @@ export function PajillasView() {
   const error = errorToros ?? errorPajillas;
 
   return (
-    <div className="min-h-screen min-h-[100dvh] bg-gray-50 p-4 lg:p-8">
+    <div className="min-h-screen min-h-[100dvh] bg-background p-4 lg:p-8">
       <div className="max-w-5xl mx-auto w-full space-y-6">
         <div>
           <h1 className="text-foreground mb-1">Pajillas de inseminación</h1>

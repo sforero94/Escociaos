@@ -64,31 +64,48 @@ interface BarraNominalProps {
   rightColor: string;
 }
 
+// Grid de 5 columnas fija (nunca flex-wrap): etiqueta-izq / valor-izq /
+// barra / valor-der / etiqueta-der quedan en las MISMAS columnas en las dos
+// filas de la card, así que "Ordeño"/"Preñadas" siempre alinean entre sí,
+// igual que los dos valores y las dos barras. Arreglo del bug de móvil
+// (docs/sistema-visual.md §3-bis): la versión anterior era un `flex
+// flex-wrap` con `min-w` fijos por ítem -- a 375px la suma de mínimos
+// superaba el ancho disponible y el `flex-1` de la barra, al crecer para
+// llenar la línea, empujaba valor-der/etiqueta-der a una segunda línea SIN
+// barra (la fila que reportó el dueño: "Ordeño 35 ▮▮▮" / "0 Horro" suelto) --
+// y en viewports más angostos ese mismo `min-w` sumado desbordaba la
+// tarjeta en horizontal. Con `minmax(0, max-content)` en las dos columnas de
+// etiqueta, la fila nunca puede forzar overflow: si el espacio no alcanza,
+// la etiqueta (nunca el valor ni la barra) se trunca -- ver `truncate`
+// abajo -- pero la fila entera sigue siendo UNA línea.
+const GRID_BARRA_NOMINAL =
+  'grid grid-cols-[minmax(0,max-content)_minmax(2rem,max-content)_minmax(2rem,1fr)_minmax(2rem,max-content)_minmax(0,max-content)] items-center gap-2';
+
 function BarraNominal({ leftLabel, leftValue, leftColor, rightLabel, rightValue, rightColor }: BarraNominalProps) {
   const { pctA: pctLeft, pctB: pctRight } = calcularProporcionesDosValores(leftValue, rightValue);
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="min-w-[80px] flex-shrink-0 text-right text-xs font-medium text-gray-500">{leftLabel}</span>
+    <div className={GRID_BARRA_NOMINAL}>
+      <span className="truncate text-right text-xs font-medium text-gray-500">{leftLabel}</span>
       <span
-        className="min-w-[2.5rem] flex-shrink-0 text-right text-sm font-semibold text-gray-900"
+        className="text-right text-sm font-semibold text-gray-900"
         style={{ fontVariantNumeric: 'tabular-nums' }}
       >
         {formatNumber(leftValue)}
       </span>
-      <div className="h-2.5 min-w-[120px] flex-1 overflow-hidden rounded-full bg-gray-100">
+      <div className="h-2.5 overflow-hidden rounded-full bg-gray-100">
         <div className="flex h-full">
           <div className="h-full" style={{ width: `${pctLeft}%`, backgroundColor: leftColor }} />
           <div className="h-full" style={{ width: `${pctRight}%`, backgroundColor: rightColor }} />
         </div>
       </div>
       <span
-        className="min-w-[2.5rem] flex-shrink-0 text-sm font-semibold text-gray-900"
+        className="text-sm font-semibold text-gray-900"
         style={{ fontVariantNumeric: 'tabular-nums' }}
       >
         {formatNumber(rightValue)}
       </span>
-      <span className="min-w-[80px] flex-shrink-0 text-xs font-medium text-gray-500">{rightLabel}</span>
+      <span className="truncate text-xs font-medium text-gray-500">{rightLabel}</span>
     </div>
   );
 }

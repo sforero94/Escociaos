@@ -10,9 +10,7 @@
 //
 // Paleta fija (plan §7.6): verde = saludable/confirmado/en leche, ámbar =
 // requiere atención pronto, azul = en progreso, gris = neutro/inactivo,
-// rojo = vencido/urgente/destructivo. Clases verificadas contra
-// `src/index.css` (build de Tailwind congelado, CLAUDE.md "Caution Zones") --
-// nunca `amber-300`/`amber-800`, que no existen en ese build.
+// rojo = vencido/urgente/destructivo.
 //
 // Scoped al módulo hato: envuelve `src/components/ui/badge.tsx` sin
 // alterarlo (V1 del plan -- los componentes nuevos del mock no tocan

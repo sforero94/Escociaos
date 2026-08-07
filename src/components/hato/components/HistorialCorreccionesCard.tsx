@@ -50,10 +50,6 @@ export function HistorialCorreccionesCard({
       ) : (
         <ul className="space-y-3">
           {correcciones.map((c, i) => (
-            // `first:border-t-0`/`first:pt-0` no existen en el build
-            // congelado (ninguna variante `first:` compila) -- se decide
-            // por índice, mismo criterio que el zebra-striping (`i % 2`)
-            // que ya usa el resto del módulo.
             <li key={c.id} className={i === 0 ? '' : 'border-t border-gray-100 pt-3'}>
               <div className="flex items-center gap-2 flex-wrap text-xs">
                 {c.operacion === 'delete' ? (

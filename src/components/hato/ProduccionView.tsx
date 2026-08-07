@@ -131,7 +131,7 @@ export function ProduccionView() {
   }, [cargarHistorial]);
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 lg:p-8">
+    <div className="min-h-screen bg-background p-4 lg:p-8">
       <div className="max-w-7xl mx-auto w-full space-y-6">
         <HatoPageHeader
           breadcrumb="Hato Lechero"

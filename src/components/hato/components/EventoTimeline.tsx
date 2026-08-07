@@ -130,9 +130,6 @@ function EntradaItem({
     const label = entrada.proyectado.tipo === 'secar' ? 'Secado proyectado' : 'Parto probable (proyectado)';
     return (
       <li className="relative">
-        {/* `border-amber-500` no existe en el build congelado (solo
-            `border-amber-200`) -- clase muerta preexistente, corregida
-            aquí porque T4b tocó este componente a fondo. */}
         <span className="absolute -left-4 top-1 flex items-center justify-center w-3 h-3 rounded-full border-2 border-amber-200 bg-white">
           <Circle className="w-2 h-2 text-amber-500" />
         </span>

@@ -60,9 +60,16 @@ function DeltaBadge({ delta }: { delta: number | null }) {
 
 function PeriodRow({ label, ctx }: { label: string; ctx: RadiationPeriodContext }) {
   return (
-    <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-      <span className="text-sm text-gray-600">{label}</span>
-      <div className="flex items-center gap-3">
+    // `flex-wrap` + `min-w-0` en la etiqueta: la fila junta hasta cuatro piezas de
+    // texto/badge de ancho variable (etiqueta de período, valor, badge de estado,
+    // badge de delta) en una sola línea sin `flex-wrap`, cuatro elementos que hoy
+    // encogen solo hasta el ancho de su palabra más larga -- con margen de sobra
+    // para los datos actuales, pero sin ningún piso si el texto crece. Envolver a
+    // dos líneas en vez de forzar el ajuste es el mismo criterio que ya se aplicó
+    // en esta sesión a AplicacionesList/VacasPorEstadoCard para esta forma de fila.
+    <div className="flex items-center justify-between flex-wrap gap-x-3 gap-y-1 py-2 border-b border-gray-100 last:border-0">
+      <span className="text-sm text-gray-600 min-w-0">{label}</span>
+      <div className="flex items-center flex-wrap gap-x-3 gap-y-1">
         {ctx.current.avgSunHours !== null ? (
           <>
             <span className="text-sm font-semibold text-gray-900">
@@ -100,8 +107,8 @@ export function ContextoSolar({ resumenesDiarios, loading }: ContextoSolarProps)
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <Sun className="w-4 h-4 text-amber-500" />
+      <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mb-3">
+        <Sun className="w-4 h-4 text-amber-500 shrink-0" />
         <h3 className="text-sm font-semibold text-gray-900">Contexto Solar</h3>
         <span className="text-xs text-gray-400">(horas-sol equivalentes/día)</span>
       </div>

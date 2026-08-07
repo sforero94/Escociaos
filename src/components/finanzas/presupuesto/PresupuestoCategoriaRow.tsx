@@ -2,6 +2,7 @@ import { formatCompact } from '@/utils/format';
 import { EjecucionBadge, VariacionBadge, StatusDot } from './EjecucionBadge';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/components/ui/utils';
+import { TableRow, TableCell } from '@/components/ui/table';
 import type { PresupuestoCategoriaRow as CatRow } from '@/types/finanzas';
 
 interface PresupuestoCategoriaRowProps {
@@ -27,25 +28,42 @@ export function PresupuestoCategoriaRow({ categoria, expanded, onToggle, showPct
   const Chevron = expanded ? ChevronDown : ChevronRight;
 
   return (
-    <tr
-      className={cn('border-b border-gray-200 cursor-pointer text-xs font-semibold', bgColor, 'hover:!bg-green-100')}
+    <TableRow
+      className={cn('cursor-pointer text-xs font-semibold', bgColor, 'hover:bg-green-100')}
       onClick={onToggle}
     >
-      {/* Status dot */}
-      <td className="px-2 py-2.5 text-center">
-        <StatusDot ejecucion={exec} />
-      </td>
-
-      {/* Categoria name */}
-      <td className="pl-2 pr-3 py-2.5 truncate">
-        <div className="flex items-center gap-1.5">
+      {/* Columna que identifica la fila (dot de estado + chevron + nombre),
+          congelada (sticky) para que siga visible al hacer scroll horizontal
+          en móvil — Patrón A de docs/sistema-visual.md §3-bis. Ancho real
+          viene del <colgroup> (170px en móvil, flexible en escritorio). El
+          fondo (`bgColor`, calculado arriba por nivel de ejecución) se pasa
+          por `className` y le gana al `bg-white` que trae `sticky` por
+          defecto -- es exactamente la jerarquía de fondos por fila que el
+          primitivo no automatiza, resuelta por composición, sin tocar
+          ui/table.tsx. */}
+      <TableCell sticky className={cn('pl-2 py-2.5', bgColor)}>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <StatusDot ejecucion={exec} />
           <Chevron className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
-          <span className="truncate">{categoria.categoria_nombre}</span>
+          {/* Recorte 2026-08-07 (auditoría a 375px): la columna de identidad
+              congelada mide 170px (<colgroup> de PresupuestoTable.tsx) y a una
+              sola línea solo da para ~16-19 caracteres — nombres reales como
+              "Mano de Obra y Asistencia Técnica" (CLAUDE.md raíz, migración
+              051, 33 caracteres) perdían más de la mitad. Envolver a 2 líneas
+              en vez de ensanchar la columna: sistema-visual.md §3-bis dice
+              explícitamente que la columna identificadora "ocupa lo mínimo,
+              no 250px" — llegar a 250px es justo lo que hubiera hecho falta
+              para no envolver, así que envolver es el camino que respeta esa
+              regla sin recortar. `title` es la red de seguridad aparte (no
+              dispara con un tap, sí con mouse/lector de pantalla). */}
+          <span title={categoria.categoria_nombre} className="truncate flex-1 min-w-0 max-sm:whitespace-normal max-sm:line-clamp-2">
+            {categoria.categoria_nombre}
+          </span>
         </div>
-      </td>
+      </TableCell>
 
       {/* Actual Q — abre el detalle de gastos; el clic no debe plegar la fila */}
-      <td className="px-3 py-2.5 text-center tabular-nums">
+      <TableCell className="py-2.5 text-center tabular-nums">
         {categoria.actual_q > 0 ? (
           <button
             type="button"
@@ -61,38 +79,38 @@ export function PresupuestoCategoriaRow({ categoria, expanded, onToggle, showPct
         ) : (
           fmt(categoria.actual_q)
         )}
-      </td>
+      </TableCell>
 
       {/* Act % */}
-      {showPct && <td className="px-2 py-2.5 text-center text-gray-500 tabular-nums">{categoria.pct_actual > 0 ? Math.round(categoria.pct_actual) + '%' : ''}</td>}
+      {showPct && <TableCell className="px-2 py-2.5 text-center text-gray-500 tabular-nums">{categoria.pct_actual > 0 ? Math.round(categoria.pct_actual) + '%' : ''}</TableCell>}
 
       {/* Ppto Q */}
-      <td className="px-3 py-2.5 text-center border-l border-gray-200/60 tabular-nums">{fmt(categoria.monto_trimestral)}</td>
+      <TableCell className="py-2.5 text-center border-l border-gray-200/60 tabular-nums">{fmt(categoria.monto_trimestral)}</TableCell>
 
       {/* Ppto Año */}
-      <td className="px-3 py-2.5 text-center tabular-nums">{fmt(categoria.monto_anual)}</td>
+      <TableCell className="py-2.5 text-center tabular-nums">{fmt(categoria.monto_anual)}</TableCell>
 
       {/* Ppto % */}
-      {showPct && <td className="px-2 py-2.5 text-center text-gray-500 tabular-nums">{categoria.pct_presupuesto > 0 ? Math.round(categoria.pct_presupuesto) + '%' : ''}</td>}
+      {showPct && <TableCell className="px-2 py-2.5 text-center text-gray-500 tabular-nums">{categoria.pct_presupuesto > 0 ? Math.round(categoria.pct_presupuesto) + '%' : ''}</TableCell>}
 
       {/* Ejecución vs Q */}
-      <td className="px-3 py-2.5 text-center">
+      <TableCell className="py-2.5 text-center">
         <EjecucionBadge value={exec} />
-      </td>
+      </TableCell>
 
       {/* Ejec vs Año */}
-      {showPct && <td className="px-3 py-2.5 text-center"><EjecucionBadge value={categoria.ejecucion_vs_anio} /></td>}
+      {showPct && <TableCell className="py-2.5 text-center"><EjecucionBadge value={categoria.ejecucion_vs_anio} /></TableCell>}
 
       {/* Q Anterior */}
-      <td className="px-3 py-2.5 text-center border-l border-gray-200/60 tabular-nums">{fmt(categoria.actual_q_anterior)}</td>
+      <TableCell className="py-2.5 text-center border-l border-gray-200/60 tabular-nums">{fmt(categoria.actual_q_anterior)}</TableCell>
 
       {/* Var YoY */}
-      <td className="px-2 py-2.5 text-center">
+      <TableCell className="px-2 py-2.5 text-center">
         <VariacionBadge value={categoria.variacion_yoy} />
-      </td>
+      </TableCell>
 
       {/* Total Anterior */}
-      <td className="px-3 py-2.5 text-center tabular-nums">{fmt(categoria.actual_anio_anterior)}</td>
-    </tr>
+      <TableCell className="py-2.5 text-center tabular-nums">{fmt(categoria.actual_anio_anterior)}</TableCell>
+    </TableRow>
   );
 }

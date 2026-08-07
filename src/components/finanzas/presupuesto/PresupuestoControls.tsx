@@ -25,7 +25,11 @@ export function PresupuestoControls({
   const years = [currentYear - 1, currentYear, currentYear + 1];
 
   return (
-    <div className="flex items-center gap-6 bg-white rounded-lg border border-gray-200 px-4 py-3">
+    /* `flex-wrap` y `gap` menor en móvil: son 6 controles en una sola fila sin
+       envoltura, y a 375px la tira de trimestres llegaba a 520px empujando la
+       página entera a 861. En escritorio caben en una línea y se quedan así.
+       Medido 2026-08-07. */
+    <div className="flex flex-wrap items-center gap-3 sm:gap-6 bg-white rounded-lg border border-gray-200 px-4 py-3">
       {/* Year selector */}
       <div className="flex items-center gap-2">
         <span className="text-sm text-gray-500 font-medium">Año</span>
@@ -49,7 +53,9 @@ export function PresupuestoControls({
               key={q}
               onClick={() => onToggleQuarter(q)}
               className={cn(
-                'px-5 py-1.5 rounded-md text-sm font-semibold transition-colors',
+                /* `px-3` en móvil: con `px-5` los cuatro trimestres sumaban
+                   381px y la tira seguía saliéndose de una pantalla de 375. */
+                'px-3 sm:px-5 py-1.5 rounded-md text-sm font-semibold transition-colors',
                 quarters.includes(q)
                   ? 'bg-primary text-white'
                   : 'bg-gray-100 text-gray-500 hover:bg-gray-200',

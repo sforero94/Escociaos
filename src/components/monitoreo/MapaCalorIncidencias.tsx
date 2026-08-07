@@ -13,6 +13,7 @@ import {
   TooltipTrigger,
   TooltipContent
 } from '../ui/tooltip';
+import { TableHeader, TableBody, TableRow, TableHead } from '../ui/table';
 import {
   MonitoreoConRelaciones,
   DatosMapaCalor,
@@ -510,50 +511,83 @@ export function MapaCalorIncidencias({
         )}
       </div>
 
-      {/* TABLA DEL MAPA DE CALOR */}
-      <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '70vh' }}>
-        <table className="w-full border-separate border-spacing-0 table-fixed" style={{ minWidth: `${200 + datosMapaCalor.columnas.length * 180}px` }}>
-          <thead>
-            <tr>
-              <th className="p-3 border border-gray-300 text-left w-[200px]" style={{ backgroundColor: '#f0f4e8', position: 'sticky', left: 0, top: 0, zIndex: 30 }}>
-                <div className="font-bold text-foreground">Plaga / Lote</div>
-              </th>
-              {datosMapaCalor.columnas.map(columna => (
-                <th
-                  key={columna.loteId}
-                  className="p-3 border border-gray-300 text-center w-[180px]" style={{ backgroundColor: '#f0f4e8', position: 'sticky', top: 0, zIndex: 20 }}
+      {/* TABLA DEL MAPA DE CALOR — contenedor canónico (esquinas redondeadas,
+          borde y fondo neutros, docs/sistema-visual.md §3-ter) envolviendo el
+          scroll de la matriz. No se usa el wrapper `<Table>` del recurso
+          porque este mapa necesita scroll VERTICAL con encabezado pegado
+          (`max-h-[70vh]` + `sticky top-0`) además del horizontal con columna
+          congelada -- el recurso hoy solo resuelve el eje horizontal
+          (`overflow-x-auto`), y forzarlo habría significado perder el
+          encabezado fijo al recorrer muchas plagas, justo lo que se advirtió
+          que sería "peor que no migrar". Los átomos (`TableHeader`,
+          `TableRow`, `TableHead`) sí se reutilizan para que el color de
+          encabezado (`bg-gray-50`, no el `#f0f4e8` de marca) sea el mismo en
+          toda la app. */}
+      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+        <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '70vh' }}>
+          <table className="w-full border-separate border-spacing-0 table-fixed" style={{ minWidth: `${200 + datosMapaCalor.columnas.length * 180}px` }}>
+            <TableHeader>
+              <TableRow>
+                {/* Esquina: congelada en los DOS ejes (columna + encabezado).
+                    `sticky` de TableHead solo resuelve `left-0` (uso
+                    "matriz" normal); `top-0` y el z-index más alto se
+                    añaden aquí porque esta celda es además el encabezado. */}
+                <TableHead
+                  sticky
+                  className="top-0 z-30 h-auto w-[112px] sm:w-[200px] p-2 sm:p-3 font-normal normal-case tracking-normal border border-gray-200"
                 >
-                  <div className="font-bold text-foreground text-sm truncate">{columna.loteNombre}</div>
-                  <div className="text-xs text-gray-600 mt-1">
-                    Prom: {Math.round(columna.incidenciaPromedio)}%
-                  </div>
-                </th>
+                  {/* Sin `truncate`: a 112px (móvil) el rótulo fijo "Plaga / Lote" no cabe en
+                      una línea (14px bold) y se recortaba a "Plaga / Lo…" en TODAS las cargas,
+                      no solo con nombres largos de datos — es texto estático, no depende de la
+                      ronda. La celda es `h-auto`, así que envolver a dos líneas no rompe nada. */}
+                  <div className="font-bold text-foreground leading-tight">Plaga / Lote</div>
+                </TableHead>
+                {datosMapaCalor.columnas.map(columna => (
+                  <TableHead
+                    key={columna.loteId}
+                    className="sticky top-0 z-20 h-auto w-[180px] p-3 text-center font-normal normal-case tracking-normal bg-gray-50 border border-gray-200"
+                  >
+                    <div className="font-bold text-foreground text-sm truncate">{columna.loteNombre}</div>
+                    <div className="text-xs text-gray-600 mt-1">
+                      Prom: {Math.round(columna.incidenciaPromedio)}%
+                    </div>
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {datosMapaCalor.filas.map(fila => (
+                <TableRow key={fila.plagaId}>
+                  <TableHead
+                    sticky
+                    className="z-10 h-auto w-[112px] sm:w-[200px] p-2 sm:p-3 text-left font-medium normal-case tracking-normal bg-white border border-gray-200"
+                  >
+                    <div className="text-foreground truncate" title={fila.plagaNombre}>{fila.plagaNombre}</div>
+                    {/* "Prom: X%" ensanchaba la columna congelada exactamente lo
+                        que el dueño reportó -- en móvil se oculta (el promedio
+                        de la fila sigue disponible en escritorio y dentro del
+                        detalle de cada celda); la columna solo necesita
+                        identificar la plaga, no repetir un número que ya está
+                        en cada celda de la fila. */}
+                    <div className="hidden sm:block text-xs text-gray-600 mt-1">
+                      Prom: {Math.round(fila.incidenciaPromedioTotal)}%
+                    </div>
+                  </TableHead>
+                  {datosMapaCalor.columnas.map(columna => {
+                    const celda = fila.celdas.get(columna.loteId) || null;
+                    return (
+                      <CeldaMultiple
+                        key={`${fila.plagaId}-${columna.loteId}`}
+                        celda={celda}
+                        onClick={() => celda && handleCeldaClick(celda)}
+                      />
+                    );
+                  })}
+                </TableRow>
               ))}
-            </tr>
-          </thead>
-          <tbody>
-            {datosMapaCalor.filas.map(fila => (
-              <tr key={fila.plagaId}>
-                <th className="p-3 border border-gray-300 text-left font-medium w-[200px]" style={{ backgroundColor: '#ffffff', position: 'sticky', left: 0, zIndex: 10 }}>
-                  <div className="text-foreground">{fila.plagaNombre}</div>
-                  <div className="text-xs text-gray-600 mt-1">
-                    Prom: {Math.round(fila.incidenciaPromedioTotal)}%
-                  </div>
-                </th>
-                {datosMapaCalor.columnas.map(columna => {
-                  const celda = fila.celdas.get(columna.loteId) || null;
-                  return (
-                    <CeldaMultiple
-                      key={`${fila.plagaId}-${columna.loteId}`}
-                      celda={celda}
-                      onClick={() => celda && handleCeldaClick(celda)}
-                    />
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            </TableBody>
+          </table>
+        </div>
       </div>
 
       {/* MODAL DE DETALLES */}

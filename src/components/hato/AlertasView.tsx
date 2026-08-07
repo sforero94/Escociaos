@@ -148,7 +148,7 @@ export function AlertasView() {
   };
 
   return (
-    <div className="min-h-screen min-h-[100dvh] bg-gray-50 p-4 lg:p-8">
+    <div className="min-h-screen min-h-[100dvh] bg-background p-4 lg:p-8">
       <div className="max-w-5xl mx-auto w-full">
         <div className="mb-6">
           <h1 className="text-foreground mb-1">Alertas — Hato Lechero</h1>
@@ -216,10 +216,6 @@ export function AlertasView() {
                   {seleccionadas.size} alerta{seleccionadas.size > 1 ? 's' : ''} seleccionada{seleccionadas.size > 1 ? 's' : ''}
                 </span>
                 <div className="flex items-center gap-3">
-                  {/* `hover:text-gray-600` no existe en el build congelado
-                      (verificado: solo `hover:text-gray-200`/`-900`) --
-                      GastosList.tsx lo usa igual y por eso ese hover no
-                      hace nada; acá se usa el que sí existe. */}
                   <button
                     type="button"
                     onClick={() => setSeleccionadas(new Set())}

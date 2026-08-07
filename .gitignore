@@ -41,3 +41,7 @@ scripts/import-hato/out/
 # Claude Code local state
 .claude/worktrees/
 .claude/settings.local.json
+
+# F0 spike Tailwind: capturas locales, no se versionan
+docs/tailwind-spike/antes/
+docs/tailwind-spike/despues/

@@ -314,10 +314,17 @@ export interface NegocioDashboardConfig {
 
 export type GanadoChartMode = 'dinero' | 'kilos';
 
+// `details` is the desktop line (full negocio · categoría · concepto/comprador chain — there is
+// room for it there). `detailsMovil` is what the two-line mobile row shows instead: owner
+// decision 2026-08-06 ("Concepto es suficiente en móvil, sin categoría") — mobile shows only the
+// single most specific field, never the full chain, because on a narrow screen the chain's least
+// useful parts (negocio, categoría) were pushing the one that matters (concepto) off the edge.
+// Optional: when absent, the row falls back to `details` (the ganado rows, which have no
+// negocio/categoría to strip in the first place — see GastosList.tsx/IngresosList.tsx).
 export type UnifiedFinanceItem =
-  | { source: 'gasto'; id: string; fecha: string; nombre: string; valor: number; details: string; estado: string; raw: Gasto }
-  | { source: 'ingreso'; id: string; fecha: string; nombre: string; valor: number; details: string; raw: Ingreso }
-  | { source: 'ganado'; id: string; fecha: string; nombre: string; valor: number; details: string; raw: TransaccionGanado };
+  | { source: 'gasto'; id: string; fecha: string; nombre: string; valor: number; details: string; detailsMovil?: string; estado: string; raw: Gasto }
+  | { source: 'ingreso'; id: string; fecha: string; nombre: string; valor: number; details: string; detailsMovil?: string; raw: Ingreso }
+  | { source: 'ganado'; id: string; fecha: string; nombre: string; valor: number; details: string; detailsMovil?: string; raw: TransaccionGanado };
 
 // Batch registration — Gastos
 export interface BatchRowData {

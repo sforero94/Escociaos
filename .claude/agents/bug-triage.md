@@ -21,10 +21,12 @@ the nested `CLAUDE.md` under `src/components/hato/` or
 - `npm run lint`, `npm run typecheck`, and `npm test` must all pass before you
   open a PR. If you cannot get them green, open no PR — file the diagnosis and
   the proposed diff as a finding instead.
-- **Never edit `src/index.css`.** Tailwind is frozen and pre-compiled: any class
-  not already in that file silently does nothing. Verify a class exists the way
-  the repo `CLAUDE.md` documents (including the escaped-variant caveat) before
-  you use it. New styles go in `src/styles/globals.css`.
+- **Never edit `src/index.css`.** It is the CSS entry point (three `@import`s), not
+  a stylesheet. Tailwind compiles on every build, so any valid utility works —
+  there is no class list to check first. If a fix genuinely needs hand-written
+  CSS, it goes in `src/styles/globals.css` **wrapped in `@layer`**; an unlayered
+  rule silently overrides the real utility forever. See the CSS caution zone in
+  the repo `CLAUDE.md`.
 - Never modify an existing migration. New migration = next sequential number,
   shipped in the PR, **not applied** — Santiago applies it.
 - Never run DML/DDL against production. Data-repair SQL goes in the finding with

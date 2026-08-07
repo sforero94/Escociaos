@@ -59,7 +59,9 @@ export function DashboardKPICard({
           </span>
         </div>
       )}
-      {contexto && <p className="text-xs text-brand-brown/60 mt-1 truncate">{contexto}</p>}
+      {/* Metadato (D-2, sistema-visual.md §1): envuelve en vez de recortar — "Mayor: <categoría>"
+          es un dato operativo (qué categoría domina el gasto), no un adorno. */}
+      {contexto && <p className="text-sm sm:text-xs text-brand-brown/60 mt-1">{contexto}</p>}
     </div>
   );
 }

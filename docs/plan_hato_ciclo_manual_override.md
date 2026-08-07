@@ -35,8 +35,11 @@ Reglas del módulo que gobiernan todo lo de abajo (`src/components/hato/CLAUDE.m
    **regeneran con su script**, jamás a mano.
 4. La UI y Esco nunca pueden discrepar en el mismo conteo (`hatoCategorias.ts` ↔ `categorizarAnimal`).
 5. "Hoy" siempre en hora local (`obtenerFechaHoy()`), nunca `toISOString().slice(0,10)`.
-6. Tailwind congelado: toda clase nueva debe existir en `src/index.css` o entrar como regla real en
-   `src/styles/globals.css`.
+6. ~~Tailwind congelado: toda clase nueva debe existir en `src/index.css` o entrar como regla real en
+   `src/styles/globals.css`.~~ **Superado el 2026-08-06 por F1 de `docs/plan_tailwind_pipeline.md`**:
+   el compilador corre en cada build, cualquier utilidad válida funciona y no hay que comprobar nada.
+   CSS a mano en `globals.css` solo como excepción y **siempre dentro de `@layer`**. Aplica a todas
+   las menciones de "Tailwind congelado" de este documento (criterio 28 y riesgo R-8 incluidos).
 
 ---
 

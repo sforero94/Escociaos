@@ -80,52 +80,32 @@
   --chart-4: #4D240F;
   --chart-5: #E7EDDD;
   --radius: 1rem;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #172E08;
-  --sidebar-primary: #73991C;
-  --sidebar-primary-foreground: #ffffff;
+  /* F3: --sidebar, --sidebar-foreground, --sidebar-primary, --sidebar-primary-foreground,
+     --sidebar-accent-foreground, --sidebar-border y --sidebar-ring se borraron — huérfanos
+     comprobados: 0 apariciones como utilidad Tailwind (`bg-sidebar`, `text-sidebar-foreground`…)
+     y 0 apariciones como `var(--sidebar-…)` en todo `src/`. Son el contrato de color del
+     componente shadcn `ui/sidebar.tsx`, que este repo no tiene — Layout.tsx trae su propio
+     sidebar a mano (ver CLAUDE.md raíz, sección F0 de este mismo plan). `--sidebar-accent` SÍ
+     se conserva: es el único de los ocho con un consumidor real, `.nav-item-active` más abajo. */
   --sidebar-accent: #E7EDDD;
-  --sidebar-accent-foreground: #172E08;
-  --sidebar-border: rgba(115, 153, 28, 0.1);
-  --sidebar-ring: #73991C;
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  --ring: oklch(0.439 0 0);
-  --font-weight-medium: 500;
-  --font-weight-normal: 400;
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
-  --sidebar-ring: oklch(0.439 0 0);
-}
+/* F3 (2026-08-07, tailwind pipeline): el bloque `.dark { … }` (35 variables) se borró.
+   Verificado antes de borrar, no asumido: `dark:` no tiene 0 usos como se creía (hay 20
+   apariciones reales en 15 primitivas de src/components/ui/, ej. button.tsx, badge.tsx,
+   input.tsx — boilerplate de shadcn), pero NADA en el repo añade la clase `dark` al DOM
+   — sin `classList.add('dark')`, sin ThemeProvider/next-themes, sin lectura de
+   `prefers-color-scheme`. El selector que activa esas variantes es
+   `@custom-variant dark (&:is(.dark *))` (línea 1 de este archivo): SOLO dispara si un
+   ancestro real lleva `class="dark"`, y eso nunca ocurre, así que las 20 apariciones de
+   `dark:*` compilan pero nunca se aplican. El bloque de variables que solo alimentaba ese
+   selector muerto es código muerto de verdad.
+
+   La línea 1 (`@custom-variant dark …`) SE CONSERVA a propósito, no es un descuido: si se
+   borra, Tailwind v4 vuelve a su variante `dark:` por defecto, que dispara por
+   `@media (prefers-color-scheme: dark)` — una condición que SÍ puede cumplirse hoy (el
+   sistema operativo de cualquier usuaria). Borrar la línea 1 habría cambiado la pantalla
+   para cualquiera con modo oscuro activo en el SO, justo lo que F3 tiene prohibido. */
 
 @theme inline {
   --color-background: var(--background);
@@ -166,14 +146,9 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  /* F3: --color-sidebar / -foreground / -primary / -primary-foreground / -accent-foreground /
+     -border / -ring se borraron junto con sus variables de :root (ver el comentario ahí). */
   --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
 }
 
 @layer base {
@@ -274,14 +249,6 @@ input[type='number'] {
   max-height: 100dvh;
 }
 
-/* Not present in the frozen index.css build, but referenced across the app.
-   Lets a flex item shrink below its content height — required on wrappers that
-   are NOT scroll containers themselves (e.g. a <form> holding a DialogBody),
-   since `overflow: visible` keeps the automatic minimum size at min-content. */
-.min-h-0 {
-  min-height: 0;
-}
-
 /* Dialog size tiers — fixed rem values, capped by viewport via min() */
 .dialog-viewport-cap {
   max-height: calc(100vh - 2rem);
@@ -301,11 +268,6 @@ input[type='number'] {
     min-height: 44px;
     min-width: 44px;
   }
-}
-
-/* Mobile overscroll prevention for fixed panels */
-.overscroll-contain {
-  overscroll-behavior: contain;
 }
 
 /* Ensure safe area padding for notched devices */
@@ -339,33 +301,14 @@ input[type='number'] {
   animation: fadeIn 0.2s ease-out;
 }
 
-/* Missing Tailwind v4 utilities for Sheet/Drawer components */
-.inset-y-0 {
-  top: 0;
-  bottom: 0;
-}
-.inset-x-0 {
-  left: 0;
-  right: 0;
-}
-.data-\[state\=closed\]\:slide-out-to-right[data-state="closed"] {
-  --tw-exit-translate-x: 100%;
-}
-.data-\[state\=open\]\:slide-in-from-right[data-state="open"] {
-  --tw-enter-translate-x: 100%;
-}
-.data-\[state\=closed\]\:slide-out-to-left[data-state="closed"] {
-  --tw-exit-translate-x: -100%;
-}
-.data-\[state\=open\]\:slide-in-from-left[data-state="open"] {
-  --tw-enter-translate-x: -100%;
-}
-.data-\[state\=closed\]\:slide-out-to-bottom[data-state="closed"] {
-  --tw-exit-translate-y: 100%;
-}
-.data-\[state\=open\]\:slide-in-from-bottom[data-state="open"] {
-  --tw-enter-translate-y: 100%;
-}
+/* Las variables de slide de Sheet vivían aquí, escritas a mano porque el build
+   congelado no traía esas utilidades. `tw-animate-css` (instalado en F1, ver
+   src/index.css) compila hoy los mismos selectores con valores idénticos, así
+   que el bloque se borró: era duplicación redundante, y al estar fuera de
+   `@layer` ganaba la cascada de forma incondicional — una futura versión del
+   paquete que cambiara esos valores habría quedado silenciosamente anulada.
+   Lo detectó `globalsCssTailwindCollisionGuard.test.ts`, que existe justo
+   para eso. */
 
 /* Chat markdown styles */
 .chat-markdown {
@@ -448,8 +391,11 @@ input[type='number'] {
 /* Historial de Gastos e Ingresos — mobile filter collapse.
    Compartido por GastosList e IngresosList: el prefijo `gasto-` es histórico,
    las reglas no son de un módulo en particular. Definido aquí porque
-   src/index.css es un build precompilado y CONGELADO de Tailwind que no trae
-   utilidades `sm:hidden` / `sm:flex`: escribirlas en el JSX no haría nada.
+   src/index.css era un build precompilado y CONGELADO de Tailwind que no
+   traía utilidades `sm:hidden` / `sm:flex`: escribirlas en el JSX no habría
+   hecho nada. Esa razón ya no aplica en esta rama (F1: el compilador corre en
+   vivo) — sigue aquí porque migrar `.filtros-toggle`/`.filtros-colapsables`
+   no es parte de esta tarea (recorte de texto), no porque haga falta.
    El breakpoint coincide con el `sm` de Tailwind (640px). */
 
 /* Toggle button: only reachable on mobile, where the filters are collapsed. */
@@ -464,18 +410,12 @@ input[type='number'] {
   display: block;
 }
 
-/* On mobile the value column leaves the name too little room to read on one
-   line, so let it wrap to two before ellipsing. Desktop keeps `truncate`. */
-@media (max-width: 639px) {
-  .gasto-nombre {
-    white-space: normal;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-}
+/* `.gasto-nombre` (el nombre libre de gasto/ingreso, recorte 2026-08-07) YA NO
+   vive aquí: el compilador de Tailwind corre en vivo en esta rama, así que su
+   comportamiento móvil (envolver a 3 líneas en vez de 1) se escribe con las
+   utilidades `max-sm:whitespace-normal max-sm:line-clamp-3` directamente en
+   GastosList.tsx/IngresosList.tsx — ni el nombre de clase ni la regla a mano
+   hacían falta ya. Ver el comentario en esos archivos. */
 
 /* Filter group: hidden on mobile until toggled open. From `sm` up it becomes
    `display: contents`, so its children flow into the parent flex row exactly
@@ -566,7 +506,7 @@ input[type='number'] {
   position: sticky;
   left: 0;
   z-index: 2;
-  background: #fff;
+  background: var(--card); /* F3: era #fff a mano — #ffffff exacto, mismo valor por token */
   text-align: left;
   width: 250px;
   min-width: 250px;
@@ -609,7 +549,7 @@ input[type='number'] {
 
 .fila-resultado {
   background: #eef4e4;
-  border-top: 2px solid #73991c;
+  border-top: 2px solid var(--primary); /* F3: era #73991c a mano — coincide exacto con --primary */
   border-bottom: 1px solid #d5e0bd;
 }
 .fila-resultado > .col-etiqueta { background: #eef4e4; }
@@ -681,16 +621,35 @@ input[type='number'] {
 
 /* El <Select> inline de Estado se renderiza como un "chip" de color en vez
    del trigger de ancho/alto completo por defecto (`w-full`, `data-[size=sm]:h-8`).
-   Ni `w-auto`/`h-auto` ni el paso de espaciado de 0.375rem (`gap-1.5`) existen
-   en el build congelado, así que la geometría se fija aquí; el color por
-   estado sigue llegando por clases Tailwind normales (bg-*/border-*/text-*,
-   ya confirmadas presentes) vía `cn()` en ESTADO_CONFIGS. */
+   Tailwind ya compila `w-auto`/`h-auto`/`gap-1.5` desde F1 (2026-08-06), así
+   que esto ya no suple una utilidad ausente — el motivo que queda, y por el
+   que la regla se conserva, es que el chip compacto es una decisión de
+   diseño real para la celda de tabla de escritorio (`TareaTableRow.tsx`), no
+   un parche. El color por estado sigue llegando por clases Tailwind normales
+   (bg-*, border-*, text-*) vía `cn()` en ESTADO_CONFIGS. */
 .tareas-estado-chip {
   display: inline-flex;
   width: auto;
   height: auto;
   padding: 0.25rem 0.5rem 0.25rem 0.625rem;
   gap: 0.375rem;
+}
+
+/* Móvil (`TareaMobileCard.tsx`, mismo <Select> compartido): el chip compacto
+   de arriba deja de tener sentido — es la acción que más toca Martha en
+   campo y un control de 108px de ancho es un objetivo táctil pobre (medido
+   2026-08-06, docs/tailwind-spike/auditoria-recorte-medida.md). Se resuelve
+   aquí, no en `ui/select.tsx` ni con una prop nueva en `TareaEstadoSelect`,
+   porque el mismo componente sirve ambas superficies (tabla de escritorio +
+   tarjeta móvil) y la diferencia es puramente de viewport — cambiar
+   `ui/select.tsx` afectaría TODOS los <Select> de la app por un problema que
+   es de este chip, no del primitivo. Alineado con el breakpoint `sm` (639px)
+   que ya usa el resto de este bloque. */
+@media (max-width: 639px) {
+  .tareas-estado-chip {
+    width: 100%;
+    min-height: 2.75rem; /* 44px — piso táctil mínimo (Accesibilidad) */
+  }
 }
 
 /* El <Select> de "Estado: …" en la barra de filtros y el de "Filas por
@@ -700,16 +659,24 @@ input[type='number'] {
   width: auto;
 }
 
-/* Hover/selección de fila — `hover:bg-muted/50` (utilidad con modificador de
-   opacidad) no existe en el build congelado, así que la clase que trae
-   TableRow por defecto no hace nada. `data-selected` lo pone TareaTableRow
-   directamente (no es el `data-state=selected` de Radix). */
+/* Hover/selección de fila. `data-selected` lo pone TareaTableRow directamente
+   (no es el `data-state=selected` de Radix). F3: los valores eran
+   rgba(231,237,221,0.45)/rgba(191,217,125,0.18) escritos a mano — expansión
+   RGB de --muted/--secondary al 45%/18%, calculada porque el build congelado
+   no traía el modificador de opacidad (`hover:bg-muted/50`). Con Tailwind
+   compilando de verdad esas variantes ya funcionarían como clase, pero eso
+   implicaría tocar TareaTableRow.tsx — fuera del alcance de F3 (solo
+   globals.css). `color-mix(… X%, transparent)` da el mismo resultado exacto
+   que `rgba(X.r, X.g, X.b, X%)` (mezclar con "transparent" conserva el canal
+   de color y solo escala el alfa, por especificación — el mismo mecanismo que
+   usa Tailwind v4 para compilar sus propios modificadores `/opacidad`), pero
+   leyendo el color de --muted/--secondary en vez de duplicarlo a mano. */
 .tareas-table-row:hover {
-  background-color: rgba(231, 237, 221, 0.45); /* var(--muted) al ~45% */
+  background-color: color-mix(in oklab, var(--muted) 45%, transparent);
 }
 
 .tareas-table-row[data-selected='true'] {
-  background-color: rgba(191, 217, 125, 0.18); /* var(--secondary) al ~18% */
+  background-color: color-mix(in oklab, var(--secondary) 18%, transparent);
 }
 
 /* Columna "Jornales (Ejec. / Plan.)" — `tabular-nums` no existe en el build
@@ -782,104 +749,18 @@ input[type='number'] {
   white-space: nowrap;
 }
 
-/* ============================================================
-   Toggle / ToggleGroup (src/components/ui/toggle.tsx,
-   src/components/ui/toggle-group.tsx) — UI audit, hato/MarcarCicloDialog.tsx
-   (selector "Marca": Preñada/Confirmada/Seca/Parida).
-   El primitivo compartido depende de varias utilidades que faltan en el
-   build congelado (verificado con grep, CLAUDE.md "Caution Zones"):
-   `bg-transparent`, `data-[state=on]:bg-accent` / `:text-accent-foreground`,
-   `data-[variant=outline]:*`, `first:rounded-l-md` / `last:rounded-r-md`,
-   `focus:z-10` / `focus-visible:z-10`, `min-w-8/9/10`, `px-1.5`,
-   `rounded-none`, `shadow-none`. Sin ellas un `<ToggleGroup>` no tiene fondo
-   de estado "presionado" ni separación entre opciones — exactamente el
-   aspecto de "texto plano" que motivó la auditoría.
-   `src/components/monitoreo/PriorizacionScoutingView.tsx` ya había
-   diagnosticado esta misma causa raíz y la sorteó con un control
-   autocontenido (`FiltroTierSegmentado`) porque arreglar el primitivo
-   compartido excedía el alcance de esa sesión — esto es ese arreglo, una
-   sola vez para todos los usos presentes y futuros. CSS real; ninguna regla
-   toca `ui/toggle.tsx`/`ui/toggle-group.tsx`, ni redefine clases ya
-   compiladas en `index.css`. `--radius` se referencia en crudo
-   (`calc(var(--radius) - 2px)`), no `var(--radius-md)`: ese alias solo
-   existe dentro del bloque `@theme inline`, que el navegador ignora por
-   completo sin el compilador de Tailwind corriendo (mismo motivo por el que
-   `.lista-financiera` más arriba reescribe `calc(var(--radius) + 4px)` en
-   vez de usar `var(--radius-xl)`). */
-.bg-transparent {
-  background-color: transparent;
-}
-
-.data-\[state\=on\]\:bg-accent[data-state="on"] {
-  background-color: var(--accent);
-}
-
-.data-\[state\=on\]\:text-accent-foreground[data-state="on"] {
-  color: var(--accent-foreground);
-}
-
-.data-\[variant\=outline\]\:shadow-xs[data-variant="outline"] {
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-}
-
-.data-\[variant\=outline\]\:border-l-0[data-variant="outline"] {
-  border-left-width: 0px;
-}
-
-.data-\[variant\=outline\]\:first\:border-l[data-variant="outline"]:first-child {
-  border-left-width: 1px;
-}
-
-.first\:rounded-l-md:first-child {
-  border-top-left-radius: calc(var(--radius) - 2px);
-  border-bottom-left-radius: calc(var(--radius) - 2px);
-}
-
-.last\:rounded-r-md:last-child {
-  border-top-right-radius: calc(var(--radius) - 2px);
-  border-bottom-right-radius: calc(var(--radius) - 2px);
-}
-
-.focus\:z-10:focus {
-  z-index: 10;
-}
-
-.focus-visible\:z-10:focus-visible {
-  z-index: 10;
-}
-
-.rounded-none {
-  border-radius: 0;
-}
-
-.shadow-none {
-  box-shadow: none;
-}
-
-.min-w-8 {
-  min-width: 2rem;
-}
-
-.min-w-9 {
-  min-width: 2.25rem;
-}
-
-.min-w-10 {
-  min-width: 2.5rem;
-}
-
-.px-1\.5 {
-  padding-left: 0.375rem;
-  padding-right: 0.375rem;
-}
-
-/* Utilidad genérica, no presente en el build congelado (mismo caso que
-   `.min-h-0` más arriba) — deja que un elemento en un contenedor flex se
-   encoja a su contenido en vez de estirarse. Primer uso: los `<Select>` de
-   filtro de `hato/AlertasView.tsx` (el trigger es `w-full` por defecto).
-   Beneficio colateral: dos usos preexistentes y silenciosamente rotos,
-   `ganado/GanadoMovimientos.tsx` y `clima/ClimaHistorico.tsx`, empiezan a
-   funcionar sin tocar esos archivos. */
-.w-auto {
-  width: auto;
-}
+/* Toggle / ToggleGroup (src/components/ui/toggle.tsx,
+   src/components/ui/toggle-group.tsx) and the standalone `.w-auto` utility
+   that used to live here were removed by F1 (2026-08-06, tailwind pipeline
+   activation): every rule in this block was either an exact duplicate of a
+   real Tailwind utility (`bg-transparent`, `data-[state=on]:bg-accent`,
+   `data-[variant=outline]:border-l-0`, `first:rounded-l-md`,
+   `last:rounded-r-md`, `focus:z-10`, `focus-visible:z-10`, `rounded-none`,
+   `min-w-8/9/10`, `px-1.5`, `w-auto` — verified value-for-value against the
+   compiled build) or one of the two "bombs" the F0 audit flagged
+   (`.shadow-none` and `.data-[variant=outline]:shadow-xs`): both wrote a
+   final `box-shadow` value directly instead of composing it from the
+   `--tw-*` shadow/ring layers Tailwind uses, which silently killed
+   `focus-visible:ring-*` on every `ToggleGroupItem`. With the compiler
+   live, the real utilities are generated from the classes already present
+   in `ui/toggle.tsx`/`ui/toggle-group.tsx` — no component change needed. */

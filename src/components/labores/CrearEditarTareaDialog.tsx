@@ -348,7 +348,10 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
                 )}
               </div>
 
-              <div className="border rounded-lg p-2 space-y-1 bg-gray-50 max-h-[150px] overflow-y-auto">
+              {/* En móvil la lista es más alta porque sus filas también lo son
+                  (ver el `min-h-11` de cada fila): con el alto de escritorio
+                  cabrían menos de 3 lotes y habría que desplazar para todo. */}
+              <div className="border rounded-lg p-2 space-y-1 bg-gray-50 max-h-[220px] sm:max-h-[150px] overflow-y-auto">
                 {lotes.length === 0 ? (
                   <p className="text-xs text-gray-500 text-center py-3">
                     No hay lotes disponibles
@@ -359,7 +362,12 @@ const CrearEditarTareaDialog: React.FC<CrearEditarTareaDialogProps> = ({
                     return (
                       <div
                         key={lote.id}
-                        className="flex items-center justify-between p-1.5 hover:bg-gray-100 rounded-md transition-colors"
+                        /* `min-h-11` (44px) solo en móvil: el Switch tiene un área
+                           de toque invisible de 44px alrededor, y con las filas a
+                           34px de separación las zonas de lotes vecinos se
+                           solapaban — un toque en el borde marcaba el lote
+                           equivocado. Medido 2026-08-07. */
+                        className="flex items-center justify-between p-1.5 min-h-11 sm:min-h-0 hover:bg-gray-100 rounded-md transition-colors"
                       >
                         <div className="flex-1">
                           <Label

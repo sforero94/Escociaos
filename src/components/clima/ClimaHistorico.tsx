@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useClimaData } from '@/hooks/useClimaData';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ClimaSubNav } from './ClimaSubNav';
 import { GraficoTemperatura } from './components/GraficoTemperatura';
 import { GraficoPrecipitacion } from './components/GraficoPrecipitacion';
@@ -99,29 +100,60 @@ export function ClimaHistorico() {
       <ClimaSubNav />
 
       {/* Selector de Rango */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex gap-2 flex-wrap">
-          {PRESETS.map((preset) => (
-            <Button
-              key={preset.key}
-              variant={rangoSeleccionado === preset.key ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => handlePresetChange(preset)}
-            >
-              {preset.label}
-            </Button>
-          ))}
+      <div className="flex items-center justify-between gap-2 mb-6 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Escritorio: los 6 chips de siempre -- a ese ancho caben en una
+              línea (Patrón B no aplica). */}
+          <div className="hidden sm:flex gap-2 flex-wrap">
+            {PRESETS.map((preset) => (
+              <Button
+                key={preset.key}
+                variant={rangoSeleccionado === preset.key ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => handlePresetChange(preset)}
+              >
+                {preset.label}
+              </Button>
+            ))}
+          </div>
+
+          {/* Móvil (<640px, Patrón B, docs/sistema-visual.md §3-bis): 6
+              botones + "Personalizado" en tres filas se salían de 375px.
+              Colapsan a lo sumo 2 controles visibles -- un `<Select>` con
+              los 6 presets, y el mismo botón "Personalizado" de al lado
+              (icono solo en móvil para que el par quepa en una línea). */}
+          <Select
+            // `rangoSeleccionado` puede ser 'custom', que a propósito no
+            // tiene `SelectItem` -- Radix cae solo al `placeholder` cuando
+            // el valor no matchea ningún item, sin necesidad de pasar
+            // `undefined` (evita el salto controlado/no-controlado que Radix
+            // hace cuando `value` deja de estar definido).
+            value={rangoSeleccionado}
+            onValueChange={(v) => {
+              const preset = PRESETS.find((p) => p.key === v);
+              if (preset) handlePresetChange(preset);
+            }}
+          >
+            <SelectTrigger className="sm:hidden flex-1 min-w-0">
+              <SelectValue placeholder={rangoSeleccionado === 'custom' ? 'Personalizado' : 'Rango de tiempo'} />
+            </SelectTrigger>
+            <SelectContent>
+              {PRESETS.map((preset) => (
+                <SelectItem key={preset.key} value={preset.key}>{preset.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
             <PopoverTrigger
-              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors flex-shrink-0 ${
                 rangoSeleccionado === 'custom'
                   ? 'bg-primary text-primary-foreground'
                   : 'border border-input bg-background hover:bg-accent hover:text-accent-foreground'
               }`}
             >
               <Calendar className="w-4 h-4" />
-              Personalizado
+              <span className="hidden sm:inline">Personalizado</span>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-4" align="start">
               <div className="flex flex-col gap-3">

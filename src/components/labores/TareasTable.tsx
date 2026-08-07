@@ -339,7 +339,7 @@ const TareasTable: React.FC<TareasTableProps> = ({
         </div>
 
         {pagedTareas.length === 0 ? (
-          <div className="text-center text-muted-foreground py-8 text-sm">
+          <div className="text-center text-muted-foreground py-8 text-base">
             No hay tareas que coincidan con los filtros.
           </div>
         ) : (
@@ -351,7 +351,7 @@ const TareasTable: React.FC<TareasTableProps> = ({
         )}
 
         <div className="flex items-center justify-between mt-4 pt-4 border-t">
-          <div className="text-xs whitespace-nowrap">
+          <div className="text-sm whitespace-nowrap">
             Página {effectivePageIndex + 1} de {totalPages}
           </div>
           <div className="flex gap-1">

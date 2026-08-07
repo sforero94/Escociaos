@@ -1,10 +1,18 @@
 import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { ProveedoresConfig } from './components/ProveedoresConfig';
 import { CompradoresConfig } from './components/CompradoresConfig';
 import { MediosPagoConfig } from './components/MediosPagoConfig';
 import { ConfigReportesFinancieros } from './components/ConfigReportesFinancieros';
 import { Building2, Users, CreditCard, SlidersHorizontal } from 'lucide-react';
+
+const TABS_CONFIG = [
+  { value: 'proveedores', label: 'Proveedores', Icon: Building2 },
+  { value: 'compradores', label: 'Compradores', Icon: Users },
+  { value: 'medios-pago', label: 'Medios de Pago', Icon: CreditCard },
+  { value: 'reportes', label: 'Reportes', Icon: SlidersHorizontal },
+] as const;
 
 /**
  * Vista de Configuración Financiera
@@ -12,6 +20,7 @@ import { Building2, Users, CreditCard, SlidersHorizontal } from 'lucide-react';
  */
 export function ConfiguracionFinanzas() {
   const [activeTab, setActiveTab] = useState('proveedores');
+  const activeConfig = TABS_CONFIG.find((t) => t.value === activeTab) ?? TABS_CONFIG[0];
 
   return (
     <div className="space-y-6">
@@ -30,26 +39,39 @@ export function ConfiguracionFinanzas() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        {/* grid-cols-5 no existe en el build congelado de Tailwind: por eso la
-            clasificación de costos y los parámetros contables comparten una
-            sola pestaña «Reportes» en vez de tener una cada uno. */}
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="proveedores" className="flex items-center gap-2">
-            <Building2 className="w-4 h-4" />
-            Proveedores
-          </TabsTrigger>
-          <TabsTrigger value="compradores" className="flex items-center gap-2">
-            <Users className="w-4 h-4" />
-            Compradores
-          </TabsTrigger>
-          <TabsTrigger value="medios-pago" className="flex items-center gap-2">
-            <CreditCard className="w-4 h-4" />
-            Medios de Pago
-          </TabsTrigger>
-          <TabsTrigger value="reportes" className="flex items-center gap-2">
-            <SlidersHorizontal className="w-4 h-4" />
-            Reportes
-          </TabsTrigger>
+        {/* Móvil (<640px): las 4 pestañas se superponían icono-sobre-rótulo a
+            375px — Patrón B de docs/sistema-visual.md §3-bis: se colapsan en
+            un <Select> que muestra la pestaña activa. */}
+        <div className="sm:hidden">
+          <Select value={activeTab} onValueChange={setActiveTab}>
+            <SelectTrigger className="w-full">
+              <SelectValue>
+                <span className="flex items-center gap-2">
+                  <activeConfig.Icon className="w-4 h-4" />
+                  {activeConfig.label}
+                </span>
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {TABS_CONFIG.map(({ value, label }) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Escritorio: pestañas, sin cambios. La clasificación de costos y
+            los parámetros contables comparten la pestaña «Reportes»;
+            separarlos es una decisión de producto. */}
+        <TabsList className="hidden sm:grid w-full grid-cols-4">
+          {TABS_CONFIG.map(({ value, label, Icon }) => (
+            <TabsTrigger key={value} value={value} className="flex items-center gap-2">
+              <Icon className="w-4 h-4" />
+              {label}
+            </TabsTrigger>
+          ))}
         </TabsList>
 
         <TabsContent value="proveedores" className="mt-6">

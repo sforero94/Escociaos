@@ -93,8 +93,7 @@ export function RevisionPesajeFoto({ resultado, valores, onEditarCelda, editable
                 const bgFila = i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50';
                 return (
                   <tr key={fila.animalId} className={`border-t border-gray-100 ${bgFila}`}>
-                    {/* `bg-inherit` está muerto en el build de Tailwind congelado --
-                        se repite explícitamente el mismo color de la fila para que
+                    {/* Se repite explícitamente el mismo color de la fila para que
                         la columna sticky no se vea transparente al desplazar. */}
                     <td className={`px-3 py-1 whitespace-nowrap sticky left-0 ${bgFila}`}>{fila.nombre}</td>
                     {semanasConFecha.map((s) => {

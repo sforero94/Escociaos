@@ -28,6 +28,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, AlertTriangle, Search, Plus, RefreshCw, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
@@ -83,7 +84,7 @@ function CabeceraOrdenable({
 }) {
   const activa = ordenActual.columna === columna;
   return (
-    <th className={`px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap ${align === 'right' ? 'text-right' : 'text-left'}`}>
+    <th className={`px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap ${align === 'right' ? 'text-right' : 'text-left'}`}>
       <button
         type="button"
         onClick={() => onOrdenar(columna)}
@@ -139,17 +140,17 @@ function TablaAnimales({
   return (
     <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-base sm:text-sm">
           <thead className="bg-gray-50">
             <tr>
               <CabeceraOrdenable label="N.º" columna="numero" ordenActual={orden} onOrdenar={handleOrdenar} />
               <CabeceraOrdenable label="Nombre" columna="nombre" ordenActual={orden} onOrdenar={handleOrdenar} />
               <CabeceraOrdenable label="Estado" columna="estado" ordenActual={orden} onOrdenar={handleOrdenar} />
-              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Último parto</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Último parto</th>
               <CabeceraOrdenable label="Próximo evento" columna="proximo" ordenActual={orden} onOrdenar={handleOrdenar} />
-              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Raza</th>
-              <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Producción</th>
-              <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Acciones</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Raza</th>
+              <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Producción</th>
+              <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -158,7 +159,7 @@ function TablaAnimales({
                 key={animal.animalId}
                 className={`border-t border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
               >
-                <td className="px-3 py-2.5 whitespace-nowrap font-medium">
+                <td className="px-3 py-1.5 whitespace-nowrap font-medium">
                   <Link to={`/hato-lechero/hato/${animal.animalId}`} className="hover:text-primary">
                     {animal.numero != null ? (
                       `#${animal.numero}`
@@ -167,12 +168,12 @@ function TablaAnimales({
                     )}
                   </Link>
                 </td>
-                <td className="px-3 py-2.5 whitespace-nowrap">
+                <td className="px-3 py-1.5 whitespace-nowrap">
                   <Link to={`/hato-lechero/hato/${animal.animalId}`} className="hover:text-primary">
                     {animal.nombre ?? '—'}
                   </Link>
                 </td>
-                <td className="px-3 py-2.5 whitespace-nowrap">
+                <td className="px-3 py-1.5 whitespace-nowrap">
                   <div className="flex flex-wrap items-center gap-1">
                     <EstadoChip chip={chipEstadoReproductivo(animal.derivado.estado)} />
                     {animal.categoria === 'ternera' && (
@@ -182,15 +183,15 @@ function TablaAnimales({
                     {animal.derivado.proxima_a_reemplazo && <EstadoChip chip={chipProximaAReemplazo()} />}
                   </div>
                 </td>
-                <td className="px-3 py-2.5 whitespace-nowrap text-gray-600">
+                <td className="px-3 py-1.5 whitespace-nowrap text-gray-600">
                   {animal.ultimoPartoFecha ? formatShortDate(animal.ultimoPartoFecha) : '—'}
                 </td>
-                <td className="px-3 py-2.5 whitespace-nowrap text-gray-600">{proximoEvento(animal)}</td>
-                <td className="px-3 py-2.5 whitespace-nowrap text-gray-600">{animal.raza ?? '—'}</td>
-                <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                <td className="px-3 py-1.5 whitespace-nowrap text-gray-600">{proximoEvento(animal)}</td>
+                <td className="px-3 py-1.5 whitespace-nowrap text-gray-600">{animal.raza ?? '—'}</td>
+                <td className="px-3 py-1.5 text-right whitespace-nowrap">
                   {produccionTexto(animal, rendimientoPorAnimal)}
                 </td>
-                <td className="px-3 py-2.5 whitespace-nowrap text-right">
+                <td className="px-3 py-1.5 whitespace-nowrap text-right">
                   <div className="flex items-center justify-end gap-2">
                     {canMarcarCiclo && (
                       <Button
@@ -271,6 +272,12 @@ export function AnimalesList() {
   const [crearOpen, setCrearOpen] = useState(false);
   const [marcarCicloOpen, setMarcarCicloOpen] = useState(false);
   const [animalCicloId, setAnimalCicloId] = useState<string | undefined>(undefined);
+  // Patrón B (docs/sistema-visual.md §3-bis): las 4 pestañas de vista se
+  // salían por la derecha a 375px. En móvil se leen y se cambian desde un
+  // `<Select>` (`vistaSelect` abajo); en escritorio siguen siendo el
+  // `TabsList` de siempre -- MISMO estado controlado para que nunca puedan
+  // desincronizarse entre los dos controles.
+  const [vista, setVista] = useState<CategoriaHato>('hato');
 
   const abrirMarcarCiclo = (animalId: string) => {
     setAnimalCicloId(animalId);
@@ -318,7 +325,7 @@ export function AnimalesList() {
   const errorCombinado = error ?? errorPesajes;
 
   return (
-    <div className="min-h-screen min-h-[100dvh] bg-gray-50 p-4 lg:p-8">
+    <div className="min-h-screen min-h-[100dvh] bg-background p-4 lg:p-8">
       <div className="max-w-7xl mx-auto w-full">
         <HatoPageHeader
           breadcrumb="Hato Lechero"
@@ -362,13 +369,31 @@ export function AnimalesList() {
               <span>Columna &quot;Producción&quot;:</span>
               <ChipVejezPesajes vejez={vejez} />
             </div>
-            <Tabs defaultValue="hato">
-              <TabsList>
+            <Tabs value={vista} onValueChange={(v) => setVista(v as CategoriaHato)}>
+              {/* Patrón B (docs/sistema-visual.md §3-bis): "Hato (en ordeño)
+                  (35) · Horro (secas) (0) · Novillas (21) · Terneras (12)" se
+                  salía por la derecha a 375px. Debajo de 640px la vista activa
+                  se lee y se cambia desde el `<Select>` de abajo; el
+                  `TabsList` de siempre sigue intacto en escritorio -- los dos
+                  controles comparten el mismo estado `vista`, así que nunca
+                  pueden mostrar una vista distinta a la que está renderizada. */}
+              <TabsList className="hidden sm:inline-flex">
                 <TabsTrigger value="hato">{LABEL_CATEGORIA_HATO.hato} ({porCategoria.hato.length})</TabsTrigger>
                 <TabsTrigger value="horro">{LABEL_CATEGORIA_HATO.horro} ({porCategoria.horro.length})</TabsTrigger>
                 <TabsTrigger value="novilla">{LABEL_CATEGORIA_HATO.novilla} ({porCategoria.novilla.length})</TabsTrigger>
                 <TabsTrigger value="ternera">{LABEL_CATEGORIA_HATO.ternera} ({porCategoria.ternera.length})</TabsTrigger>
               </TabsList>
+              <Select value={vista} onValueChange={(v) => setVista(v as CategoriaHato)}>
+                <SelectTrigger className="w-full sm:hidden">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="hato">{LABEL_CATEGORIA_HATO.hato} ({porCategoria.hato.length})</SelectItem>
+                  <SelectItem value="horro">{LABEL_CATEGORIA_HATO.horro} ({porCategoria.horro.length})</SelectItem>
+                  <SelectItem value="novilla">{LABEL_CATEGORIA_HATO.novilla} ({porCategoria.novilla.length})</SelectItem>
+                  <SelectItem value="ternera">{LABEL_CATEGORIA_HATO.ternera} ({porCategoria.ternera.length})</SelectItem>
+                </SelectContent>
+              </Select>
               <TabsContent value="hato" className="mt-4">
                 <TablaAnimales
                   animales={porCategoria.hato}

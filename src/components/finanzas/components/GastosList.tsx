@@ -289,22 +289,34 @@ export function GastosList({ onEdit }: GastosListProps) {
 
   // Build unified list sorted by date
   const unifiedItems: UnifiedFinanceItem[] = [
-    ...gastos.map((g) => ({
-      source: 'gasto' as const,
-      id: g.id,
-      fecha: g.fecha,
-      nombre: g.nombre,
-      valor: g.valor,
-      details: [(g as any).fin_negocios?.nombre, (g as any).fin_categorias_gastos?.nombre, (g as any).fin_conceptos_gastos?.nombre].filter(Boolean).join(' · '),
-      estado: g.estado,
-      raw: g,
-    })),
+    ...gastos.map((g) => {
+      const conceptoNombre = (g as any).fin_conceptos_gastos?.nombre as string | undefined;
+      return {
+        source: 'gasto' as const,
+        id: g.id,
+        fecha: g.fecha,
+        nombre: g.nombre,
+        valor: g.valor,
+        details: [(g as any).fin_negocios?.nombre, (g as any).fin_categorias_gastos?.nombre, conceptoNombre].filter(Boolean).join(' · '),
+        // Móvil: solo el concepto (decisión del dueño 2026-08-06). Sin negocio ni
+        // categoría — son la parte de la cadena que menos importa y son las que
+        // se comían el ancho, dejando el concepto (la parte que sí importa,
+        // porque va al final) recortado por `.gasto-meta-movil`/`truncate`.
+        detailsMovil: conceptoNombre || undefined,
+        estado: g.estado,
+        raw: g,
+      };
+    }),
     ...ganadoItems.map((g) => ({
       source: 'ganado' as const,
       id: g.id,
       fecha: g.fecha,
       nombre: `Compra Ganado${g.finca ? ` - ${g.finca}` : ''}`,
       valor: g.valor_total,
+      // Sin `detailsMovil`: a diferencia de gasto/ingreso, esta cadena no tiene
+      // un nivel de clasificación amplio (negocio/categoría) que recortar — ya
+      // son los datos puntuales de la transacción (cabezas · kg · cliente), así
+      // que el mismo texto sirve en escritorio y en móvil.
       details: [g.cantidad_cabezas ? `${g.cantidad_cabezas} cabezas` : null, g.kilos_pagados ? `${g.kilos_pagados} kg` : null, g.cliente_proveedor].filter(Boolean).join(' · '),
       raw: g,
     })),
@@ -517,7 +529,7 @@ export function GastosList({ onEdit }: GastosListProps) {
 
                 {/* Estado icon or Ganado badge */}
                 {item.source === 'ganado' ? (
-                  <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-md bg-amber-100 text-amber-700 flex-shrink-0">
+                  <span className="px-1.5 py-0.5 text-sm sm:text-xs font-semibold rounded-md bg-amber-100 text-amber-700 flex-shrink-0">
                     Ganado
                   </span>
                 ) : item.source === 'gasto' ? (
@@ -536,26 +548,70 @@ export function GastosList({ onEdit }: GastosListProps) {
                   {formatearFechaCorta(item.fecha)}
                 </span>
 
-                {/* Name (+ details inline on desktop, stacked below on mobile) */}
+                {/* Name (+ details inline on desktop, stacked below on mobile).
+                    D-5 (2026-08-07, F4, decisión del dueño): la fila muestra el
+                    CONCEPTO también en escritorio, no `negocio · categoría ·
+                    concepto` — negocio y categoría ya son columnas filtrables.
+                    Explícitamente abierto a revisión, así que el cambio es
+                    mínimo y reversible: `details` (la ruta completa) se sigue
+                    construyendo igual arriba y sigue siendo el fallback para
+                    ganado (que no tiene `detailsMovil`, ver comentario en la
+                    construcción de `unifiedItems`); solo cambió CUÁL de los
+                    dos se pinta en el span de escritorio. Revertir D-5 es
+                    volver este span a `item.details`. No se renombró
+                    `detailsMovil` aunque ahora también lo use escritorio: el
+                    nombre sigue siendo honesto (es la forma compacta, con
+                    "móvil" como origen histórico — mismo criterio que el
+                    prefijo `gasto-` de `.gasto-meta-movil`, compartido con
+                    Ingresos a propósito) y renombrarlo obligaría a deshacer el
+                    rename también al revertir, sin ganar claridad real. El
+                    nombre sigue en `flex-1 min-w-0` (prioridad) y el detalle en
+                    `max-w-[45%]` (techo) — ver auditoría de recorte
+                    2026-08-06, caso 2.
+
+                    Recorte 2026-08-07 (auditoría a 375px, 18 casos, todos aquí):
+                    `item.nombre` es texto libre sin tope — SIEMPRE va a haber
+                    algún nombre que no quepa. `max-sm:line-clamp-3` (antes 2,
+                    en `.gasto-nombre` de globals.css — ya retirada, ver esa
+                    regla) le da ~50% más presupuesto de caracteres SOLO a las
+                    filas que de verdad lo necesitan (line-clamp no crece si el
+                    texto ya cabe en menos líneas), sin inflar las demás 578
+                    filas del historial. `title` es la red de seguridad
+                    aparte — funciona en desktop con mouse y para cualquier
+                    lector de pantalla/herramienta de accesibilidad, aunque no
+                    dispare con un tap; mismo patrón que
+                    `GanadoMovimientos.tsx` (`docs/tailwind-spike/
+                    auditoria-recorte-medida.md`). No sustituye acortar el
+                    recorte, lo complementa. */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="gasto-nombre text-sm font-medium text-gray-900 truncate">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span
+                      title={item.nombre}
+                      className="text-base sm:text-sm font-medium text-gray-900 truncate min-w-0 flex-1 max-sm:whitespace-normal max-sm:line-clamp-3"
+                    >
                       {item.nombre}
                     </span>
-                    {item.details && (
-                      <span className="hidden sm:inline text-xs text-gray-400 truncate">
-                        {item.details}
+                    {(item.detailsMovil ?? item.details) && (
+                      <span className="hidden sm:inline text-xs text-gray-400 truncate flex-shrink-0 max-w-[45%]">
+                        {item.detailsMovil ?? item.details}
                       </span>
                     )}
                   </div>
-                  <div className="gasto-meta-movil text-xs text-gray-400 truncate">
+                  {/* Misma cadena que arriba — antes de D-5 esta línea (móvil)
+                      y el span de arriba (escritorio) mostraban cosas
+                      distintas; ahora ambos son `detailsMovil ?? details`.
+                      `.gasto-meta-movil` es SOLO móvil (display:none desde
+                      `sm`, ver globals.css) — texto metadato, D-2 lo sube de
+                      12 a 14px ahí, sin variante `sm:` porque en escritorio
+                      ni siquiera se renderiza. */}
+                  <div className="gasto-meta-movil text-sm text-gray-400">
                     {formatearFechaCorta(item.fecha)}
-                    {item.details ? ` · ${item.details}` : ''}
+                    {(item.detailsMovil ?? item.details) ? ` · ${item.detailsMovil ?? item.details}` : ''}
                   </div>
                 </div>
 
-                {/* Value */}
-                <span className="text-sm font-semibold text-gray-900 flex-shrink-0 tabular-nums">
+                {/* Value — mismo rol "cuerpo" que el nombre: 16px en móvil, 14 en escritorio */}
+                <span className="text-base sm:text-sm font-semibold text-gray-900 flex-shrink-0 tabular-nums">
                   ${formatNumber(item.valor)}
                 </span>
 

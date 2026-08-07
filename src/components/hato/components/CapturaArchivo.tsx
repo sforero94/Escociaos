@@ -94,9 +94,7 @@ export function CapturaArchivo({
           <Button type="button" variant="outline" disabled={disabled} className={className}>
             <Upload className="w-4 h-4 mr-2" />
             {label}
-            {/* Sin margen propio -- el `gap-2` del `Button` ya separa los
-                hijos; `ml-1.5` no existe en el build congelado de Tailwind
-                (`src/index.css`) y no habría hecho nada. */}
+            {/* Sin margen propio -- el `gap-2` del `Button` ya separa los hijos. */}
             <ChevronDown className="w-4 h-4" />
           </Button>
         </DropdownMenuTrigger>

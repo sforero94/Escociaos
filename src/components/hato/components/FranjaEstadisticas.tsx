@@ -63,18 +63,12 @@ export function FranjaEstadisticas({
     { label: 'Parto probable', value: fechaOGuion(fechaProbableParto) },
   ];
 
-  // Nota de layout: el build de Tailwind congelado (`src/index.css`, CLAUDE.md
-  // "Caution Zones") NO trae `grid-cols-5` ni `sm:grid-cols-5` en ninguna
-  // combinación -- se usa `flex flex-wrap` con `min-w-[120px]` (SÍ presente
-  // en el build) en vez de una grilla fija de 5 columnas.
   return (
     <div className="flex flex-wrap gap-4 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
       {items.map((item) => (
         <div key={item.label} className="min-w-[120px] flex-1 sm:text-left text-center">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{item.label}</p>
-          {/* `tabular-nums` no existe en el build congelado -- se usa la
-              propiedad CSS directa. */}
-          <p className="text-sm font-semibold text-gray-900" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          <p className="text-sm font-semibold text-gray-900 tabular-nums">
             {item.value}
           </p>
         </div>

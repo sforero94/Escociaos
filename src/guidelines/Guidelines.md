@@ -1,33 +1,29 @@
 # Escocia OS — Design System Guidelines
 
-Reference for building UI in this codebase. Read the **Critical constraint** first — it silently breaks styling if ignored.
+Reference for building UI in this codebase. Read **how CSS is built here** first — the cascade rule it describes silently breaks styling if ignored.
 
 ---
 
-## ⚠️ Critical constraint: `src/index.css` is a FROZEN pre-compiled Tailwind build
+## ⚠️ How CSS is built here: Tailwind compiles, `index.css` is just the entry point
 
-`src/index.css` is a **checked-in, pre-compiled Tailwind v4.1.3 output** (~5.5k lines). Tailwind does **not** run during `vite build` — it is not a build dependency (only `tailwind-merge` is in `package.json`, and there is no Tailwind plugin in `vite.config.ts`).
+`src/index.css` is **three lines** — `@import "tailwindcss";`, `@import "tw-animate-css";`, `@import "./styles/globals.css";` — and it is the only stylesheet `main.tsx` imports. Tailwind 4.3 runs on every `vite dev` / `vite build` through `@tailwindcss/vite`.
 
-**Consequence: the set of usable Tailwind utility classes is fixed.** Any class not already present in `src/index.css` is silently ignored — no error, no warning, the style just doesn't apply.
+**Consequence: there is no closed list of usable classes.** Any valid utility works, arbitrary values (`bg-[#E7EDDD]`) and opacity modifiers (`bg-primary/10`) included. The `grep -cF '<class>' src/index.css` check this file used to prescribe is obsolete — it verified membership in a compiled file that no longer exists.
 
-Real example that shipped broken: `bg-sidebar-accent` and `bg-primary/10` are **not** in `index.css`, so the sidebar's active item rendered with green text but a fully transparent background.
-
-**Before using a Tailwind class you haven't seen elsewhere in this codebase, verify it exists:**
-
-```bash
-grep -cF 'bg-sidebar-accent' src/index.css   # 0 = the class does NOT exist, it will do nothing
-```
-
-**When a needed utility doesn't exist**, define a real CSS rule in `src/styles/globals.css` (which IS a live stylesheet and is imported *after* `index.css`, so it wins the cascade):
+**Use the Tailwind utility.** Hand-written CSS in `src/styles/globals.css` is now the exception, not the workaround of first resort: it is for what utilities genuinely cannot express — domain selectors such as `.tabla-financiera`, `.chat-markdown`, `.kpi-grid-hato`, `.nav-item-active`:
 
 ```css
-.nav-item-active {
-  background-color: var(--sidebar-accent);
-  color: var(--primary);
+@layer utilities {
+  .nav-item-active {
+    background-color: var(--sidebar-accent);
+    color: var(--primary);
+  }
 }
 ```
 
-Never hand-edit `src/index.css`. Arbitrary values (`bg-[#E7EDDD]`) and opacity modifiers (`bg-primary/10`) are **not** generated on demand — they fail the same way.
+**Wrap hand-written rules in `@layer`.** An unlayered rule beats every rule inside `@layer utilities`, whatever the specificity or order, so it silently and permanently overrides the real utility. That is how `.shadow-none` and `.data-[variant=outline]:shadow-xs` ended up killing the focus ring on `Toggle`/`ToggleGroup`. Never redefine a Tailwind utility name by hand.
+
+**Never hand-edit `src/index.css`.** The old compiled version was amended by hand twice — a duplicated copy of `globals.css` plus 16 `!important` overrides — and untangling that was its own piece of work.
 
 ---
 

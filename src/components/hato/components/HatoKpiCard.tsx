@@ -4,9 +4,7 @@
 // métrica (nunca un círculo sólido plano), valor grande, sufijo de unidad
 // opcional, y línea de delta opcional (↑/↓) -- SOLO se renderiza cuando el
 // caller provee un delta real (regla "sin dato, nunca 0"/nunca una
-// tendencia inventada, spec §0b). Clases verificadas contra
-// `src/index.css` (build de Tailwind congelado) -- ninguna nueva se
-// necesitó en `globals.css` para este componente.
+// tendencia inventada, spec §0b).
 
 import type { LucideIcon } from 'lucide-react';
 import { ArrowUp, ArrowDown } from 'lucide-react';

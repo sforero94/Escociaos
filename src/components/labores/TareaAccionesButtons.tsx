@@ -10,6 +10,14 @@ interface TareaAccionesButtonsProps {
   /** Tighter horizontal padding + gap so both buttons fit the desktop
    *  table's narrow Acciones column. Mobile cards keep the roomier default. */
   compact?: boolean;
+  /**
+   * Mobile card footer: buttons get their own full-width row (see
+   * TareaMobileCard) instead of sharing a row with the jornales figure.
+   * Two buttons become equal-width grid columns — same height (44px touch
+   * floor), same width, never wrapping into mismatched stacked sizes; one
+   * button fills the row. Desktop's compact table column never sets this.
+   */
+  stretch?: boolean;
 }
 
 /**
@@ -25,8 +33,9 @@ const TareaAccionesButtons: React.FC<TareaAccionesButtonsProps> = ({
   tarea,
   actions,
   compact = false,
+  stretch = false,
 }) => {
-  const buttonClassName = compact ? 'px-2' : undefined;
+  const buttonClassName = cn(compact && 'px-2', stretch && 'w-full');
 
   if (tarea.estado === 'Programada') {
     return (
@@ -38,7 +47,12 @@ const TareaAccionesButtons: React.FC<TareaAccionesButtonsProps> = ({
 
   if (tarea.estado === 'En Proceso') {
     return (
-      <div className={cn('flex flex-wrap', compact ? 'gap-1' : 'gap-2')}>
+      <div
+        className={cn(
+          stretch ? 'grid grid-cols-2' : 'flex flex-wrap',
+          compact ? 'gap-1' : 'gap-2',
+        )}
+      >
         <Button size="sm" className={buttonClassName} onClick={() => actions.onRegistrarTrabajo(tarea)}>
           Registrar
         </Button>

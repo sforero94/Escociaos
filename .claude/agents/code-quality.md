@@ -20,7 +20,7 @@ opinions; your job is to enforce its opinions, not import your own.
 - **Cleanup PRs must be behaviour-preserving.** No refactor that changes what the
   app does. If you cannot prove equivalence, file it as a proposal instead.
 - Lint, typecheck and the full test suite must pass before any PR.
-- **Never edit `src/index.css`** — frozen pre-compiled Tailwind.
+- **Never edit `src/index.css`** — it is the CSS entry point (three `@import`s), not a place for rules. Project CSS goes in `src/styles/globals.css`, wrapped in `@layer`.
 - Never delete a migration, a doc, or a test without saying exactly why in the PR.
 - Deleting "unused" code that is actually reached dynamically is a real risk here
   — routes are `React.lazy()`, libraries are dynamically imported, and `scripts/`
@@ -71,8 +71,10 @@ function has no test?"**
 - Outdated packages, especially majors. Note that `@types/react` is on 19.x while
   `react` is 18.x — check whether that mismatch is deliberate or drift.
 - Anything unused in `package.json`.
-- **Never propose upgrading Tailwind.** It is deliberately frozen and out of the
-  build; treating it as a stale dependency would break every style in the app.
+- **Tailwind (`tailwindcss` + `@tailwindcss/vite`) is a real devDependency again**
+  and the compiler runs on every build. A major upgrade is still a whole-app
+  visual change, not a routine bump — propose it as its own piece of work with a
+  before/after pass, never inside a dependency sweep.
 
 ### 6. Documentation truth
 The repo's docs are unusually good, which means drift is expensive — Santiago

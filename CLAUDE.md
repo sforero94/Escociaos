@@ -16,8 +16,8 @@ The system manages: inventory, phytosanitary applications (fumigation/fertilizat
 
 See `package.json` for the full dependency list. The three facts it does **not** tell you:
 
-- **Tailwind CSS 4.1 does not run at build time.** It is not a dependency and there is no Vite plugin — `src/index.css` is a checked-in pre-compiled build. See the frozen-Tailwind caution zone below.
-- There is no `tailwind.config.js`; theme customization lives in `src/styles/globals.css`.
+- **Tailwind CSS 4.3 compiles at build time** via `@tailwindcss/vite`. `src/index.css` is a three-line entry point, not a compiled artifact. See the CSS caution zone below.
+- There is no `tailwind.config.js` (CSS-first config); theme lives in `src/styles/globals.css`, which reaches the compiler through `index.css`, not through a JS import.
 - TypeScript runs in strict mode with `@/*` aliased to `./src/*`.
 
 ## Quick Reference Commands
@@ -359,13 +359,14 @@ Note: The local source in `src/supabase/functions/server/` must be kept in sync 
 
 ## Styling & Theming
 
-- **Tailwind CSS 4.1** — utility-first, using the **CSS-first configuration** approach (no `tailwind.config.js` or `postcss.config.js`). Tailwind is not listed as an explicit `package.json` dependency; it is embedded in the build pipeline via Vite.
-- **CSS Variables** — theming via `:root` custom properties (green/agricultural palette) using `@theme inline` in `globals.css`
+- **Tailwind CSS 4.3** — `tailwindcss` + `@tailwindcss/vite` are real devDependencies and the compiler runs on every build. Utility-first, **CSS-first configuration**: no `tailwind.config.js`, no `postcss.config.js`; the plugin sits in `vite.config.ts` after `react()`.
+- **CSS Variables** — theming via `:root` custom properties (green/agricultural palette), re-exported to Tailwind through `@theme inline` in `globals.css`
 - **Primary color**: `#73991C` (olive green)
 - **Font**: Visby CF (loaded from CDN in globals.css)
 - **UI components**: Radix UI primitives wrapped in `src/components/ui/` with Tailwind + `cn()` utility (`clsx` + `tailwind-merge`)
-- **`index.css`** is the compiled Tailwind output — do not edit it manually
-- **`src/styles/globals.css`** is the source of truth for theme customizations, `@font-face` declarations, and Tailwind directives (`@custom-variant`, `@theme`, `@layer`)
+- **`tw-animate-css`** supplies the `animate-in` / `slide-in-from-*` / `fade-out-*` utilities that `Sheet`, `Drawer` and the Radix overlays use. They are **not** Tailwind core — if it is ever dropped, those transitions disappear silently
+- **`index.css`** is the entry point (three `@import`s: `tailwindcss`, `tw-animate-css`, `./styles/globals.css`) — nothing else belongs in it, and it is never hand-edited
+- **`src/styles/globals.css`** is the source of truth for tokens, `@font-face` declarations, base typography and the project's own CSS. It carries the Tailwind directives (`@custom-variant`, `@theme`, `@layer`) and only works because `index.css` imports it
 
 ---
 
@@ -442,22 +443,23 @@ npm run lint
 
 ## Caution Zones
 
-### ⚠️ Tailwind classes are FROZEN (`src/index.css`)
+### ⚠️ CSS: `src/index.css` is an entry point, not a build artifact
 
-`src/index.css` is a **checked-in, pre-compiled Tailwind v4.1.3 build**. Tailwind does **not** run during `vite build` (it is not a dependency in `package.json`; there is no Tailwind plugin in `vite.config.ts`). **The set of usable utility classes is therefore fixed** — any class not already present in `index.css` is silently ignored (no error, the style simply never applies). This includes arbitrary values (`bg-[#E7EDDD]`) and opacity modifiers (`bg-primary/10`).
+Tailwind 4.3 **compiles on every `vite dev` / `vite build`** (`@tailwindcss/vite`, wired in `vite.config.ts`). **There is no closed list of usable classes** — any valid utility works, including arbitrary values (`bg-[#E7EDDD]`) and opacity modifiers (`bg-primary/10`). The old `grep -cF '<class>' src/index.css` check verified membership in a frozen compiled file; that file no longer exists. Do not reintroduce it, and treat any doc still describing it as stale.
 
-Before using an unfamiliar utility, check it exists:
-```bash
-grep -cF 'bg-sidebar-accent' src/index.css   # 0 = does not exist, will do nothing
-```
-⚠️ That plain form only works for classes **without a `:`**. Variants (`sm:`, `hover:`, `focus:`) are written escaped in the CSS (`.sm\:inline`), so `grep -F 'sm:inline'` returns 0 even when the class exists — a false negative. Search the escaped form instead:
-```bash
-grep -oF 'sm\:inline' src/index.css | wc -l      # variant classes
-grep -oE '\.sm\\:[a-z0-9\\:.\[\]-]+' src/index.css | sort -u   # list every sm: variant present
-```
-Beware substring matches: `sm\:flex` also matches inside `sm\:flex-row`. Verified **absent** as of migration 050 work: `sm:hidden`, `sm:flex`, `sm:w-auto`, `sm:text-right`, `sm:gap-*`, `tabular-nums`, `break-words`, `text-[10px]`, `px-1.5`/`py-1.5`, `w-[70px]` — several of these are already written in existing JSX and silently do nothing.
+| File | Role |
+|---|---|
+| `src/index.css` | The CSS entry point — three lines: `@import "tailwindcss";`, `@import "tw-animate-css";`, `@import "./styles/globals.css";`. The **only** stylesheet `main.tsx` imports. Never hand-edit |
+| `src/styles/globals.css` | Source of truth for tokens (`:root`, `@theme inline`), `@font-face`, base typography, and the project's own CSS rules |
+| `src/components/finanzas/dashboard/components/dashboardTables.css` | Plain CSS imported directly by 4 finance table components. No Tailwind directives, so it does not depend on the import chain |
 
-If it doesn't exist, add a real CSS rule to `src/styles/globals.css` (a live stylesheet, imported *after* `index.css`, so it wins the cascade) — e.g. `.nav-item-active`, or the `.filtros-toggle` / `.filtros-colapsables` / `.gasto-meta-movil` / `.gasto-nombre` rules that give the Gastos historial its mobile layout. Never hand-edit `index.css`.
+**The import chain is load-bearing.** `globals.css` must enter through `index.css`, never through a JavaScript `import`. Tailwind only reads `@theme`, `@custom-variant` and `@layer base` from files reachable via the `@import "tailwindcss"` chain — import `globals.css` from `main.tsx` instead and the build still passes, CSS is still emitted, and every token silently stops existing.
+
+**The rule that replaced "check before you use":** need a style → **use the Tailwind utility**. Hand-written CSS in `globals.css` is the exception, reserved for what utilities genuinely cannot express — domain selectors like `.tabla-financiera`, `.chat-markdown`, `.kpi-grid-hato`, `.filtros-colapsables`. It is no longer the way to work around a missing class, because no class is missing.
+
+**If you do hand-write a rule, wrap it in `@layer`.** An unlayered rule beats *every* rule inside `@layer utilities` — regardless of specificity or source order — so an unlayered hand rule silently overrides the real utility forever. That is exactly how `.shadow-none` and `.data-[variant=outline]:shadow-xs` came to live in `globals.css`, and why they killed the `focus-visible:ring-*` outline on every `Toggle`/`ToggleGroup`: they wrote a final `box-shadow` value instead of composing the `--tw-*` layers the focus ring lives in. **Never redefine a Tailwind utility name by hand.**
+
+**`index.css` is not edited by hand — the last time it was, it cost a whole phase.** The old compiled file had been amended twice against its own contract: a near-duplicate copy of `globals.css` in the middle, and 16 `!important` overrides at the end (`.text-brand-brown`, `.bg-primary`, `.bg-gradient-to-r`, `.hover\:bg-primary-dark`…). `text-brand-brown` was alive across ~100 files *only* because of that appendix, while all ~650 uses of `text-brand-brown/<opacity>` were dead — a hand-written class cannot cover opacity variants. Both edits are gone; the compiler regenerates those utilities from `@theme`, opacity modifiers included.
 
 See `src/guidelines/Guidelines.md` for the full design system.
 

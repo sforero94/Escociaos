@@ -302,21 +302,35 @@ export function IngresosList({ onEdit }: IngresosListProps) {
 
   // Build unified list sorted by date
   const unifiedItems: UnifiedFinanceItem[] = [
-    ...ingresos.map((i) => ({
-      source: 'ingreso' as const,
-      id: i.id,
-      fecha: i.fecha,
-      nombre: i.nombre,
-      valor: i.valor,
-      details: [(i as any).fin_negocios?.nombre, (i as any).fin_categorias_ingresos?.nombre, (i as any).fin_compradores?.nombre].filter(Boolean).join(' · '),
-      raw: i,
-    })),
+    ...ingresos.map((i) => {
+      const categoriaNombre = (i as any).fin_categorias_ingresos?.nombre as string | undefined;
+      return {
+        source: 'ingreso' as const,
+        id: i.id,
+        fecha: i.fecha,
+        nombre: i.nombre,
+        valor: i.valor,
+        details: [(i as any).fin_negocios?.nombre, categoriaNombre, (i as any).fin_compradores?.nombre].filter(Boolean).join(' · '),
+        // Móvil: solo la categoría (mismo principio que GastosList — decisión del
+        // dueño 2026-08-06, "Concepto es suficiente en móvil, sin categoría").
+        // Ingresos no tiene concepto (finanzas/CLAUDE.md: "No concepto — la
+        // categoría no tiene cascada"), así que categoría ES el nivel de
+        // clasificación más específico que existe aquí — juega el mismo rol que
+        // concepto en Gastos. `comprador` se deja fuera: es una contraparte, no
+        // un nivel de clasificación, y por eso no es el análogo correcto.
+        detailsMovil: categoriaNombre || undefined,
+        raw: i,
+      };
+    }),
     ...ganadoItems.map((g) => ({
       source: 'ganado' as const,
       id: g.id,
       fecha: g.fecha,
       nombre: `Venta Ganado${g.finca ? ` - ${g.finca}` : ''}`,
       valor: g.valor_total,
+      // Sin `detailsMovil` — mismo motivo que en GastosList: esta cadena ya es
+      // el detalle puntual de la transacción (cabezas · kg · cliente), sin un
+      // nivel de clasificación amplio que recortar.
       details: [g.cantidad_cabezas ? `${g.cantidad_cabezas} cabezas` : null, g.kilos_pagados ? `${g.kilos_pagados} kg` : null, g.cliente_proveedor].filter(Boolean).join(' · '),
       raw: g,
     })),
@@ -507,7 +521,7 @@ export function IngresosList({ onEdit }: IngresosListProps) {
 
                 {/* Ganado badge */}
                 {item.source === 'ganado' && (
-                  <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-md bg-amber-100 text-amber-700 flex-shrink-0">
+                  <span className="px-1.5 py-0.5 text-sm sm:text-xs font-semibold rounded-md bg-amber-100 text-amber-700 flex-shrink-0">
                     Ganado
                   </span>
                 )}
@@ -519,7 +533,7 @@ export function IngresosList({ onEdit }: IngresosListProps) {
                     del Tailwind congelado (CLAUDE.md, caución "Frozen
                     classes") -- se usan aquí solo clases verificadas vivas. */}
                 {item.source === 'ingreso' && ingresosConQuincenaHato.has(item.id) && (
-                  <span className="px-2 py-1 text-xs font-semibold rounded-md bg-blue-100 text-blue-700 flex-shrink-0">
+                  <span className="px-2 py-1 text-sm sm:text-xs font-semibold rounded-md bg-blue-100 text-blue-700 flex-shrink-0">
                     Quincena Hato
                   </span>
                 )}
@@ -529,26 +543,50 @@ export function IngresosList({ onEdit }: IngresosListProps) {
                   {formatearFechaCorta(item.fecha)}
                 </span>
 
-                {/* Name (+ details inline on desktop, stacked below on mobile) */}
+                {/* Name (+ details inline on desktop, stacked below on mobile).
+                    D-5 (2026-08-07, F4) — mismo cambio que GastosList.tsx,
+                    mantener en sync (finanzas/CLAUDE.md): la fila muestra la
+                    categoría (el análogo de "concepto" aquí, ver comentario en
+                    la construcción de `unifiedItems`) también en escritorio,
+                    no la ruta `negocio · categoría · comprador`. `details`
+                    sigue construyéndose igual y sigue siendo el fallback para
+                    ganado; solo cambió qué se pinta. Ver el comentario largo
+                    de GastosList.tsx para el porqué de no renombrar
+                    `detailsMovil`. El nombre sigue en `flex-1 min-w-0`
+                    (prioridad), detalle en `max-w-[45%]` (techo) — ver
+                    auditoría de recorte 2026-08-06, caso 2.
+
+                    Recorte 2026-08-07 (auditoría a 375px, 4 casos, todos aquí)
+                    — mismo arreglo y misma justificación que GastosList.tsx:
+                    `max-sm:line-clamp-3` (antes 2) + `title` de respaldo.
+                    Mantener ambos archivos en sync si esto cambia. */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="gasto-nombre text-sm font-medium text-gray-900 truncate">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span
+                      title={item.nombre}
+                      className="text-base sm:text-sm font-medium text-gray-900 truncate min-w-0 flex-1 max-sm:whitespace-normal max-sm:line-clamp-3"
+                    >
                       {item.nombre}
                     </span>
-                    {item.details && (
-                      <span className="hidden sm:inline text-xs text-gray-400 truncate">
-                        {item.details}
+                    {(item.detailsMovil ?? item.details) && (
+                      <span className="hidden sm:inline text-xs text-gray-400 truncate flex-shrink-0 max-w-[45%]">
+                        {item.detailsMovil ?? item.details}
                       </span>
                     )}
                   </div>
-                  <div className="gasto-meta-movil text-xs text-gray-400 truncate">
+                  {/* Misma cadena que arriba — antes de D-5 esta línea (móvil)
+                      y el span de arriba (escritorio) mostraban cosas
+                      distintas; ahora ambos son `detailsMovil ?? details`.
+                      `.gasto-meta-movil` es SOLO móvil (ver GastosList.tsx) --
+                      metadato, D-2 lo sube de 12 a 14px sin variante `sm:`. */}
+                  <div className="gasto-meta-movil text-sm text-gray-400">
                     {formatearFechaCorta(item.fecha)}
-                    {item.details ? ` · ${item.details}` : ''}
+                    {(item.detailsMovil ?? item.details) ? ` · ${item.detailsMovil ?? item.details}` : ''}
                   </div>
                 </div>
 
-                {/* Value */}
-                <span className="text-sm font-semibold text-green-700 flex-shrink-0">
+                {/* Value — mismo rol "cuerpo" que el nombre */}
+                <span className="text-base sm:text-sm font-semibold text-green-700 flex-shrink-0">
                   +${formatNumber(item.valor)}
                 </span>
 

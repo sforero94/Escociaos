@@ -117,7 +117,7 @@ export function HojaDeVida() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="w-6 h-6 animate-spin text-primary" />
       </div>
     );
@@ -125,7 +125,7 @@ export function HojaDeVida() {
 
   if (error || !detalle) {
     return (
-      <div className="min-h-screen bg-gray-50 p-4 lg:p-8">
+      <div className="min-h-screen bg-background p-4 lg:p-8">
         <div className="max-w-4xl mx-auto">
           <Link to="/hato-lechero/hato" className="inline-flex items-center gap-1 text-sm text-primary hover:underline mb-4">
             <ArrowLeft className="w-4 h-4" /> Volver al hato
@@ -168,7 +168,7 @@ export function HojaDeVida() {
   }`;
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 lg:p-8">
+    <div className="min-h-screen bg-background p-4 lg:p-8">
       <div className="max-w-5xl mx-auto w-full space-y-6">
         <Link to="/hato-lechero/hato" className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
           <ArrowLeft className="w-4 h-4" /> Volver al hato

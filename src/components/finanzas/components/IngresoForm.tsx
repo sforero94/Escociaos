@@ -551,7 +551,7 @@ export function IngresoForm({ open, onOpenChange, ingreso, onSuccess, onCancel }
     {/* Modal para crear nuevo comprador */}
     {showNewComprador && (
       <Dialog open={showNewComprador} onOpenChange={setShowNewComprador}>
-        <DialogContent className="max-w-md">
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>Crear Nuevo Comprador</DialogTitle>
             <DialogDescription>

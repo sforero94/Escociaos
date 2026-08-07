@@ -349,8 +349,10 @@ y verificar que `esNumeroProvisional()` no marque `5xxx` como provisional.
 3. **Alertas** (T3a): descarte masivo (selección múltiple + acción) y regla de expiración automática.
    La limpieza de las 62 existentes **no** va aquí — va en S6, después de que S3 arregle la causa.
 
-Ojo: Tailwind está congelado. Cualquier clase nueva debe existir en `src/index.css` o entrar como regla
-real en `src/styles/globals.css`. Hay un guard estático por si acaso.
+Ojo: ~~Tailwind está congelado~~ — **desde el 2026-08-06 (F1 de `docs/plan_tailwind_pipeline.md`)
+Tailwind compila en cada build**: cualquier utilidad válida funciona, no hay lista que comprobar y las
+guardas estáticas se retiraron. CSS a mano en `src/styles/globals.css` solo como excepción y **dentro
+de `@layer`**.
 
 ---
 

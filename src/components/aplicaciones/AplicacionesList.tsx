@@ -24,6 +24,13 @@ import { IniciarEjecucionModal } from './IniciarEjecucionModal';
 import { DetalleAplicacion } from './DetalleAplicacion';
 import type { Aplicacion, TipoAplicacion, EstadoAplicacion } from '../../types/aplicaciones';
 import { toast } from 'sonner';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu';
 
 const TIPOS_LABELS: Record<TipoAplicacion, string> = {
   'Fumigación': 'Fumigación',
@@ -501,12 +508,23 @@ export function AplicacionesList() {
 
                       {/* Información */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="text-foreground truncate text-sm lg:text-base">
+                        {/* `flex-1 min-w-0` on the <h3> alone was not enough: on mobile the
+                            "Acciones" column (main button + menú ⋮) never hides, so it keeps
+                            eating into this row's width regardless of how far the name
+                            shrinks — the badge (flex-shrink-0) has nowhere left to go and
+                            gets clipped by the list's `overflow-hidden` card. Verified this
+                            was estado-independent (the shortest label "Cerrada" was cut too),
+                            so it isn't about badge width, it's about the shared line running
+                            out of room. Below `lg` the badge drops to its own line, under the
+                            name — same "identidad arriba, resto abajo" shape Patrón A already
+                            uses (`TareaMobileCard.tsx`), so its width no longer competes with
+                            the name's and both render in full regardless of label length. */}
+                        <div className="flex flex-col gap-1 mb-1 lg:flex-row lg:items-center lg:gap-2">
+                          <h3 className="text-foreground truncate text-sm lg:text-base lg:flex-1 lg:min-w-0">
                             {aplicacion.nombre_aplicacion}
                           </h3>
                           <span
-                            className={`px-2 py-0.5 text-xs rounded-lg border whitespace-nowrap flex-shrink-0 ${
+                            className={`self-start px-2 py-0.5 text-xs rounded-lg border whitespace-nowrap flex-shrink-0 lg:self-auto ${
                               ESTADO_COLORS[(aplicacion.estado ?? 'Calculada') as EstadoAplicacion]
                             }`}
                           >
@@ -537,8 +555,11 @@ export function AplicacionesList() {
                       </div>
                     </div>
 
-                    {/* Acciones */}
-                    <div className="flex items-center gap-2">
+                    {/* Acciones — escritorio (≥640px): botón principal por estado + menú
+                        ⋮ con Editar/Eliminar. Sin cambios de comportamiento; solo se
+                        ocultó por completo debajo de 640px (ver bloque `sm:hidden` más
+                        abajo) — en esa columna es donde vivía el problema de fondo. */}
+                    <div className="hidden sm:flex items-center gap-2">
                       {/* Botón principal según estado */}
                       {aplicacion.estado === 'Calculada' && (
                         <button
@@ -633,6 +654,66 @@ export function AplicacionesList() {
                           </div>
                         )}
                       </div>
+                    </div>
+
+                    {/* Acciones — móvil (<640px): decisión del dueño tras la tercera
+                        vuelta, "esconde todas las acciones detrás de los 3 puntos".
+                        La causa de fondo (medida en las dos vueltas anteriores) era que
+                        esta columna nunca se ocultaba y le robaba ancho real a la fila
+                        sin importar cuánto encogiera el nombre — cada botón que se
+                        agregaba volvía a cortar la descripción y los badges. Un único
+                        ⋮ de 44px reemplaza tanto el botón principal como el menú
+                        Editar/Eliminar; la condición por estado se conserva idéntica,
+                        solo cambia dónde se muestra cada acción. Rótulos de texto
+                        (no solo ícono) porque dentro de un menú un ▶ suelto no se
+                        entiende por contexto. */}
+                    <div className="sm:hidden flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          className="touch-target inline-flex items-center justify-center rounded-lg hover:bg-gray-200 transition-colors"
+                          aria-label={`Más acciones para "${aplicacion.nombre_aplicacion}"`}
+                        >
+                          <MoreVertical className="w-5 h-5 text-brand-brown/70" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {aplicacion.estado === 'Calculada' && (
+                            <DropdownMenuItem onClick={() => setIniciarEjecucionId(aplicacion.id)}>
+                              <Play className="w-4 h-4" />
+                              Iniciar Ejecución
+                            </DropdownMenuItem>
+                          )}
+
+                          {aplicacion.estado === 'En ejecución' && (
+                            <DropdownMenuItem
+                              onClick={() => navigate(`/aplicaciones/${aplicacion.id}/movimientos`)}
+                            >
+                              <ClipboardList className="w-4 h-4" />
+                              Registrar Movimientos
+                            </DropdownMenuItem>
+                          )}
+
+                          {aplicacion.estado === 'Cerrada' && (
+                            <DropdownMenuItem onClick={() => navigate(`/aplicaciones/${aplicacion.id}/reporte`)}>
+                              <FileText className="w-4 h-4" />
+                              Ver Reporte
+                            </DropdownMenuItem>
+                          )}
+
+                          <DropdownMenuSeparator />
+
+                          <DropdownMenuItem
+                            onClick={() => navigate(`/aplicaciones/calculadora/${aplicacion.id}`)}
+                          >
+                            <Edit2 className="w-4 h-4 text-gray-500" />
+                            Editar
+                          </DropdownMenuItem>
+
+                          <DropdownMenuItem variant="destructive" onClick={() => setEliminando(aplicacion.id)}>
+                            <Trash2 className="w-4 h-4" />
+                            Eliminar
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                 </div>
