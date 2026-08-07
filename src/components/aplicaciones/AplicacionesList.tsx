@@ -501,19 +501,23 @@ export function AplicacionesList() {
 
                       {/* Información */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          {/* `truncate` (white-space: nowrap) needs `min-w-0` to actually
-                              shrink inside a flex row — without it, a flex item's default
-                              min-width is its own content width, so a long nombre_aplicacion
-                              refuses to shrink and pushes the estado badge past the edge of
-                              the list's `overflow-hidden` card, where it gets clipped. Same
-                              flex-1 + min-w-0 pairing already used for this exact purpose in
-                              TareaMobileCard.tsx. */}
-                          <h3 className="text-foreground truncate text-sm lg:text-base flex-1 min-w-0">
+                        {/* `flex-1 min-w-0` on the <h3> alone was not enough: on mobile the
+                            "Acciones" column (main button + menú ⋮) never hides, so it keeps
+                            eating into this row's width regardless of how far the name
+                            shrinks — the badge (flex-shrink-0) has nowhere left to go and
+                            gets clipped by the list's `overflow-hidden` card. Verified this
+                            was estado-independent (the shortest label "Cerrada" was cut too),
+                            so it isn't about badge width, it's about the shared line running
+                            out of room. Below `lg` the badge drops to its own line, under the
+                            name — same "identidad arriba, resto abajo" shape Patrón A already
+                            uses (`TareaMobileCard.tsx`), so its width no longer competes with
+                            the name's and both render in full regardless of label length. */}
+                        <div className="flex flex-col gap-1 mb-1 lg:flex-row lg:items-center lg:gap-2">
+                          <h3 className="text-foreground truncate text-sm lg:text-base lg:flex-1 lg:min-w-0">
                             {aplicacion.nombre_aplicacion}
                           </h3>
                           <span
-                            className={`px-2 py-0.5 text-xs rounded-lg border whitespace-nowrap flex-shrink-0 ${
+                            className={`self-start px-2 py-0.5 text-xs rounded-lg border whitespace-nowrap flex-shrink-0 lg:self-auto ${
                               ESTADO_COLORS[(aplicacion.estado ?? 'Calculada') as EstadoAplicacion]
                             }`}
                           >

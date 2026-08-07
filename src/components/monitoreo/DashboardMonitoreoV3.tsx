@@ -173,6 +173,12 @@ const CHART_COLORS = ['#73991C', '#E6A817', '#D94F00', '#2563EB', '#7C3AED', '#E
 
 const MESES_CORTOS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
+const PLAGAS_TAB_LABELS: Record<string, string> = {
+  heatmap: 'Mapa de Calor',
+  tendencias: 'Tendencias',
+  priorizacion: 'Priorización',
+};
+
 function generarEtiquetasRondas(rondas: { fecha_inicio: string }[]): string[] {
   // Count rondas per month
   const conteoMes = new Map<string, number>();
@@ -1189,7 +1195,25 @@ export function DashboardMonitoreoV3() {
 
         <Card className="p-4">
           <Tabs value={plagasTab} onValueChange={setPlagasTab}>
-            <TabsList className="grid w-full grid-cols-3 mb-4">
+            {/* Móvil (<640px): los 3 chips de vista miden 101px cada uno mientras
+                su rótulo es más ancho — se invaden entre sí. Patrón B de
+                docs/sistema-visual.md §3-bis: se colapsan en un <Select> que
+                muestra la vista activa. */}
+            <div className="mb-4 sm:hidden">
+              <Select value={plagasTab} onValueChange={setPlagasTab}>
+                <SelectTrigger className="w-full">
+                  <SelectValue>{PLAGAS_TAB_LABELS[plagasTab] ?? plagasTab}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="heatmap">Mapa de Calor</SelectItem>
+                  <SelectItem value="tendencias">Tendencias</SelectItem>
+                  <SelectItem value="priorizacion">Priorización</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Escritorio: chips, sin cambios — ahí sí caben. */}
+            <TabsList className="hidden w-full grid-cols-3 mb-4 sm:grid">
               <TabsTrigger value="heatmap" className="flex items-center gap-2">
                 <Grid3X3 className="h-4 w-4" />
                 Mapa de Calor

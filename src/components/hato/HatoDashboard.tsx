@@ -144,8 +144,16 @@ export function HatoDashboard() {
           </div>
         ) : (
           <>
-            {/* KPI row -- 4 cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            {/* KPI row -- 4 cards. 2-up on mobile (<640px) squeezed HatoReproCard's
+                3-line breakdown into a 148px-wide cell (measured overflow: 365px of
+                content, 22px past the card's own edge) while the other three cards,
+                each a single value, fit fine at that width -- so a per-card fix would
+                have left Reproducción visually inconsistent with its siblings. Single
+                column below `sm` keeps all four the SAME width and lets each one read
+                fully; 2-up returns at `sm` (640px) once there's enough room for
+                Reproducción's three lines -- same `sm` (640px) breakpoint
+                `docs/sistema-visual.md` §3-bis already anchors Patrón A/B to. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
               <HatoKpiCard icon={Milk} tone="green" label="Vacas en ordeño" value={formatNumber(enOrdeno.length)} />
               <HatoKpiCard
                 icon={Droplet}
