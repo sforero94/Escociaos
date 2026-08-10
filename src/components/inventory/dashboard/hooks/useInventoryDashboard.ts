@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
-import { calcularRangoFechasPorPeriodo } from '@/utils/fechas';
+import { calcularRangoFechasPorPeriodo, fechaAISODate } from '@/utils/fechas';
 import type { DashboardPeriodo, KPIConVariacion } from '@/types/finanzas';
 
 export interface TreemapCategoriaItem {
@@ -112,14 +112,14 @@ export function useInventoryDashboard() {
       const now = new Date();
       const mesAnteriorFin = new Date(now.getFullYear(), now.getMonth(), 0); // ultimo dia mes anterior
       const mesAnteriorInicio = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      const mesAnteriorFinStr = mesAnteriorFin.toISOString().split('T')[0];
+      const mesAnteriorFinStr = fechaAISODate(mesAnteriorFin);
 
       // Calculate approximate previous month valuation by subtracting this month's movements
       const { data: movEsteMes } = await supabase
         .from('movimientos_inventario')
         .select('tipo_movimiento, valor_movimiento')
         .gte('fecha_movimiento', `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`)
-        .lte('fecha_movimiento', now.toISOString().split('T')[0]);
+        .lte('fecha_movimiento', fechaAISODate(now));
 
       let deltaEsteMes = 0;
       (movEsteMes as any[])?.forEach((m: any) => {
@@ -211,8 +211,8 @@ export function useInventoryDashboard() {
     const hoy = new Date();
     const limite = new Date();
     limite.setDate(limite.getDate() + 60);
-    const limiteStr = limite.toISOString().split('T')[0];
-    const hoyStr = hoy.toISOString().split('T')[0];
+    const limiteStr = fechaAISODate(limite);
+    const hoyStr = fechaAISODate(hoy);
 
     const { data } = await supabase
       .from('compras')

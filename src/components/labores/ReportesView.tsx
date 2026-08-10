@@ -3,7 +3,7 @@ import { getSupabase } from '../../utils/supabase/client';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
-import { formatearFecha, formatearFechaCorta } from '../../utils/fechas';
+import { formatearFecha, formatearFechaCorta, fechaAISODate } from '../../utils/fechas';
 import {
   Select,
   SelectContent,
@@ -120,14 +120,14 @@ const ReportesView: React.FC<ReportesViewProps> = ({
     const day = now.getDay();
     const monday = new Date(now);
     monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
-    return monday.toISOString().split('T')[0];
+    return fechaAISODate(monday);
   });
   const [fechaFin, setFechaFin] = useState(() => {
     const now = new Date();
     const day = now.getDay();
     const sunday = new Date(now);
     sunday.setDate(now.getDate() + (day === 0 ? 0 : 7 - day));
-    return sunday.toISOString().split('T')[0];
+    return fechaAISODate(sunday);
   });
 
   // Estados de datos

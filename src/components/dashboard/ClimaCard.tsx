@@ -5,6 +5,7 @@ import { useClimaData } from '@/hooks/useClimaData';
 import { getSupabase } from '@/utils/supabase/client';
 import { projectId } from '@/utils/supabase/info.tsx';
 import { aggregateRadiation } from '@/utils/calculosRadiacion';
+import { fechaAISODate } from '@/utils/fechas';
 
 interface DiaPronostico {
   date: string;
@@ -16,7 +17,7 @@ interface DiaPronostico {
 const EDGE_FUNCTION_BASE = `https://${projectId}.supabase.co/functions/v1`;
 
 function sunHoursUltimos7Dias(resumenesDiarios: { fecha: string; radiacion_wm2_avg: number | null }[]): number | null {
-  const cutoffStr = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const cutoffStr = fechaAISODate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
   const rows = resumenesDiarios.filter((r) => r.fecha >= cutoffStr);
   return aggregateRadiation(rows).avgSunHours;
 }

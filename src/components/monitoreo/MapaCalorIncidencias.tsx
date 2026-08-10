@@ -21,7 +21,7 @@ import {
   FilaMapaCalor,
   RondaMonitoreo
 } from '../../types/monitoreo';
-import { formatearFecha } from '../../utils/fechas';
+import { formatearFecha, fechaAISODate } from '../../utils/fechas';
 import { calcularIncidencia, clasificarGravedad } from '../../utils/calculosMonitoreo';
 
 // ============================================
@@ -42,7 +42,7 @@ interface MapaCalorIncidenciasProps {
 const DIAS_VIGENCIA_LOTE = 30;
 
 function obtenerFecha(fecha: Date | string): string {
-  return typeof fecha === 'string' ? fecha : fecha.toISOString().split('T')[0];
+  return typeof fecha === 'string' ? fecha : fechaAISODate(fecha);
 }
 
 // "Beneficos"/"Benéficos" (con o sin tilde, cualquier capitalización) no son una

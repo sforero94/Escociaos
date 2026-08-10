@@ -23,7 +23,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { obtenerFechaHoy, calcularRangoFechasPorPeriodo } from '@/utils/fechas';
+import { obtenerFechaHoy, calcularRangoFechasPorPeriodo, fechaAISODate } from '@/utils/fechas';
 
 /** Árboles de código de NAVEGADOR cubiertos por el guard. Las edge functions
  * (`src/supabase/functions/`) quedan FUERA a propósito: corren en Deno sobre un
@@ -35,15 +35,67 @@ const RAICES_CUBIERTAS = [
   join(process.cwd(), 'src', 'utils'),
 ];
 
-/** Patrón prohibido: tomar "hoy" del reloj en UTC.
+/** Patrón prohibido: recortar un `toISOString()` a `AAAA-MM-DD`.
  *
- * Cubre las TRES formas de recortar el `toISOString()` a `AAAA-MM-DD`. El
- * guard original solo miraba `.slice(0, 10)` -- la forma que usaba el módulo
- * hato -- y por eso no vio nunca las 36 apariciones de `.split('T')[0]` que
- * vivían en finanzas, monitoreo, inventario, labores, ganado y aplicaciones.
- * Un guard que solo conoce una sintaxis del mismo bug no es un guard. */
+ * Cubre las TRES formas de recortar (`slice(0,10)`, `split('T')[0]`,
+ * `substring(0,10)`) y -- desde 2026-08-10 -- **cualquier receptor**, no solo
+ * el literal `new Date()`.
+ *
+ * Historia de los tres modos de falla de este mismo guard:
+ *   1. Solo miraba `.slice(0, 10)` -> no vio 36 `.split('T')[0]`.
+ *   2. Exigía el literal `new Date().toISOString()` -> salió VERDE con 29
+ *      apariciones vivas escritas como `now.toISOString().split('T')[0]`,
+ *      `hace30.toISOString()...`, `new Date(Date.now() - N).toISOString()...`
+ *      Un `const now = new Date()` una línea antes bastaba para esconder el bug.
+ *   3. (este) Ya no mira quién llama: prohíbe el recorte en sí.
+ *
+ * `toISOString()` SIEMPRE devuelve UTC. Recortarlo a 10 caracteres da el día
+ * calendario UTC, que en Bogotá (UTC-5) es MAÑANA desde las 19:00 -- da igual
+ * si la Date venía del reloj directo o de una variable. Por eso el patrón ya
+ * no intenta adivinar el receptor: los pocos usos legítimos van en la lista
+ * blanca de abajo, cerrada y contada. */
 const PATRON_UTC_HOY =
-  /new Date\(\)\.toISOString\(\)\.(?:slice\(0,\s*10\)|split\('T'\)\[0\]|substring\(0,\s*10\))/;
+  /\.toISOString\(\)\s*\.\s*(?:slice\(0,\s*10\)|split\('T'\)\[0\]|substring\(0,\s*10\))/g;
+
+/** Lista blanca CERRADA Y CONTADA de usos legítimos del recorte.
+ *
+ * No basta con nombrar el archivo: se declara cuántas apariciones puede tener.
+ * Si alguien agrega una línea nueva al archivo el conteo deja de cuadrar y el
+ * guard falla igual -- que es justo lo que un whitelist por archivo suelto no
+ * consigue en un archivo de 1.900 líneas.
+ *
+ * El caso legítimo es SIEMPRE el mismo: una Date construida en UTC a
+ * propósito (`new Date('AAAA-MM-DDT00:00:00Z')`, o `new Date('AAAA-MM-DD')`,
+ * que el motor parsea como medianoche UTC) sobre la que se hace aritmética y
+ * se vuelve a leer en UTC. Ahí el ida y vuelta se cancela y `toISOString()` es
+ * el lector CORRECTO -- pasarlas a `fechaAISODate()` (que lee getters LOCALES)
+ * les correría un día hacia atrás en UTC-5. */
+const LISTA_BLANCA_UTC: { archivo: string; ocurrencias: number; razon: string }[] = [
+  {
+    archivo: 'src/components/hato/components/EventoTimeline.tsx',
+    ocurrencias: 1,
+    razon:
+      'fechaCorteTimeline() construye la Date desde `${fechaHoy}T00:00:00Z` y hace ' +
+      'setUTCMonth(); el recorte UTC es la lectura correcta y el mensaje de error de ' +
+      'este mismo guard ya lo citaba como el patrón a imitar.',
+  },
+  {
+    archivo: 'src/utils/fetchDatosReporteSemanal.ts',
+    ocurrencias: 3,
+    razon:
+      'restarDias() y el cálculo de histInicio parsean `new Date(fechaISO)` -> medianoche ' +
+      'UTC; enumerarFechas() itera con cursor. Los tres son ida y vuelta UTC coherente.',
+  },
+  {
+    archivo: 'src/components/monitoreo/TablaMonitoreos.tsx',
+    ocurrencias: 2,
+    razon:
+      'agruparPorSemana() mezcla `new Date(fecha_monitoreo)` (UTC) con getDay()/getDate() ' +
+      'LOCALES. Está mal, pero el arreglo es la aritmética de semana entera, no el ' +
+      'recorte -- cambiar solo la lectura movería las etiquetas sin corregir el cálculo. ' +
+      'Congelado aquí a propósito para que no se cuele un sitio nuevo mientras tanto.',
+  },
+];
 
 /** Quita comentarios antes de buscar el patrón. Varios archivos DOCUMENTAN el
  * antipatrón en prosa ("NUNCA `new Date().toISOString().slice(0, 10)`") y esas
@@ -172,23 +224,101 @@ describe('regresión: el default del formulario cae dentro de la ventana por def
   });
 });
 
+// ============================================================================
+// Regresión del sitio con impacto VISIBLE de la barrida 2026-08-10.
+//
+// `useInventoryDashboard.getAlertasVencimiento()` marcaba
+// `vencido: fecha_vencimiento <= hoyStr`, con `hoyStr` recortado de
+// `hoy.toISOString()`. `hoy` es `new Date()` (hora de pared), así que desde las
+// 19:00 en Bogotá el string era el día SIGUIENTE y un producto que vence MAÑANA
+// aparecía como YA VENCIDO en el tablero de Inventario.
+//
+// El guard estático no alcanzaba a ver este sitio: estaba escrito como
+// `hoy.toISOString()`, con la Date en una variable, y el patrón viejo exigía el
+// literal `new Date().toISOString()`.
+// ============================================================================
+describe('regresión: un producto que vence MAÑANA no se marca vencido de noche', () => {
+  const TZ_ORIGINAL = process.env.TZ;
+
+  beforeEach(() => {
+    process.env.TZ = 'America/Bogota';
+    vi.useFakeTimers();
+    // 2026-08-03T21:13:25-05:00 (Bogotá) == 2026-08-04T02:13:25Z (UTC).
+    vi.setSystemTime(new Date('2026-08-03T21:13:25-05:00'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    process.env.TZ = TZ_ORIGINAL;
+  });
+
+  it('fechaAISODate(new Date()) da el día LOCAL, así que `vence mañana` sigue vigente', () => {
+    const hoy = new Date();
+    const hoyStr = fechaAISODate(hoy);
+    const venceManana = '2026-08-04';
+
+    expect(hoyStr).toBe('2026-08-03');
+    expect(venceManana <= hoyStr).toBe(false); // vigente, que es lo correcto
+  });
+
+  it('el antipatrón lo habría marcado vencido -- prueba de que el bug era real', () => {
+    const hoyStrViejo = new Date().toISOString().split('T')[0];
+    const venceManana = '2026-08-04';
+
+    expect(hoyStrViejo).toBe('2026-08-04');
+    expect(venceManana <= hoyStrViejo).toBe(true); // falso positivo de "vencido"
+  });
+
+  it('fechaAISODate coincide con obtenerFechaHoy() cuando la Date es el reloj', () => {
+    expect(fechaAISODate(new Date())).toBe(obtenerFechaHoy());
+  });
+});
+
+/** Cuenta apariciones del patrón en un archivo, ignorando comentarios. */
+function contarInfracciones(ruta: string): number {
+  const fuente = sinComentarios(readFileSync(ruta, 'utf-8'));
+  return fuente.match(new RegExp(PATRON_UTC_HOY.source, 'g'))?.length ?? 0;
+}
+
 describe('guard estático: el código de navegador nunca toma "hoy" en UTC', () => {
   it('ningún archivo bajo src/components/ ni src/utils/ toma "hoy" del reloj en UTC', () => {
-    const infractores = RAICES_CUBIERTAS.flatMap(archivosTs).filter((ruta) =>
-      PATRON_UTC_HOY.test(sinComentarios(readFileSync(ruta, 'utf-8'))),
-    );
+    const permitidos = new Map(LISTA_BLANCA_UTC.map((e) => [e.archivo, e.ocurrencias]));
+
+    const infractores = RAICES_CUBIERTAS.flatMap(archivosTs)
+      .map((ruta) => ({ rel: ruta.replace(process.cwd() + '/', ''), n: contarInfracciones(ruta) }))
+      .filter(({ rel, n }) => n > 0 && n !== (permitidos.get(rel) ?? 0))
+      .map(({ rel, n }) => `${rel} (${n} apariciones, permitidas ${permitidos.get(rel) ?? 0})`);
 
     expect(
-      infractores.map((r) => r.replace(process.cwd() + '/', '')),
+      infractores,
       'Estos archivos toman "hoy" del reloj en UTC, así que después de las 19:00 en ' +
         'Bogotá devuelven MAÑANA. Un formulario que guarda esa fecha persiste un día ' +
         'futuro, y la lista que lo muestra filtra por `fecha <= hoy` LOCAL -- así que el ' +
         'registro se guarda bien y desaparece de la pantalla (ver el caso Consuelito, ' +
         '2026-08-03 21:13 Bogotá: 5 gastos guardados con fecha 2026-08-04). Usa ' +
-        '`obtenerFechaHoy()` de `@/utils/fechas` -- ya existe y ya es local-correcto. Si ' +
-        'de verdad necesitas un instante UTC (no un día calendario), constrúyelo ' +
-        'explícitamente desde un string `YYYY-MM-DDT00:00:00Z` como hace ' +
-        '`fechaCorteTimeline` en EventoTimeline.tsx.',
+        '`obtenerFechaHoy()` de `@/utils/fechas` para "hoy", o `fechaAISODate(d)` para ' +
+        'cualquier Date derivada -- los dos ya existen y ya son local-correctos. Si de ' +
+        'verdad necesitas un día calendario UTC, construye la Date explícitamente desde ' +
+        'un string `AAAA-MM-DDT00:00:00Z` como hace `fechaCorteTimeline` en ' +
+        'EventoTimeline.tsx, y agrega el archivo a LISTA_BLANCA_UTC con su conteo.',
+    ).toEqual([]);
+  });
+
+  // Una lista blanca que se queda vieja es peor que no tenerla: sigue tapando
+  // el archivo aunque el uso legítimo ya no exista. Este caso la obliga a
+  // describir la realidad exacta.
+  it('la lista blanca está viva: cada entrada existe y tiene EXACTAMENTE las apariciones declaradas', () => {
+    const desfases = LISTA_BLANCA_UTC.filter(
+      ({ archivo, ocurrencias }) => contarInfracciones(join(process.cwd(), archivo)) !== ocurrencias,
+    ).map(
+      ({ archivo, ocurrencias }) =>
+        `${archivo}: declaradas ${ocurrencias}, reales ${contarInfracciones(join(process.cwd(), archivo))}`,
+    );
+
+    expect(
+      desfases,
+      'LISTA_BLANCA_UTC quedó desactualizada. Si eliminaste un uso legítimo, baja el ' +
+        'conteo o borra la entrada; nunca la subas para silenciar un sitio nuevo.',
     ).toEqual([]);
   });
 });

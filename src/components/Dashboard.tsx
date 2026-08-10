@@ -15,6 +15,7 @@ import {
 import { useGanadoInventario } from './ganado/hooks/useGanadoInventario';
 import { calcularKPIsInventario, calcularVariacion } from '../utils/calculosGanado';
 import { calcularIncidencia } from '../utils/calculosMonitoreo';
+import { fechaAISODate } from '../utils/fechas';
 
 interface KPIsDashboard {
   plagas: PlagaKPI[];
@@ -181,11 +182,11 @@ export function Dashboard() {
           contratista_id,
           tareas!inner(tipo_tarea_id, tipos_tareas(nombre))
         `)
-        .gte('fecha_trabajo', lunesAnterior.toISOString().split('T')[0])
-        .lte('fecha_trabajo', now.toISOString().split('T')[0]);
+        .gte('fecha_trabajo', fechaAISODate(lunesAnterior))
+        .lte('fecha_trabajo', fechaAISODate(now));
       if (error || !data) return { jornalesSemana: 0, variacion: undefined, sparkline: [], contexto: null };
 
-      const fechaLunesActual = lunesActual.toISOString().split('T')[0];
+      const fechaLunesActual = fechaAISODate(lunesActual);
       let jornalesSemana = 0;
       let jornalesSemanaAnterior = 0;
       const porDia = new Map<string, number>();
@@ -212,7 +213,7 @@ export function Dashboard() {
 
       const sparkline: number[] = [];
       for (const d = new Date(lunesActual); d <= now; d.setDate(d.getDate() + 1)) {
-        sparkline.push(porDia.get(d.toISOString().split('T')[0]) || 0);
+        sparkline.push(porDia.get(fechaAISODate(d)) || 0);
       }
 
       const topActividad = Array.from(actividadMap.entries()).sort((a, b) => b[1] - a[1])[0];
@@ -224,16 +225,16 @@ export function Dashboard() {
     };
 
     const loadGasto = async (): Promise<{ gastoMes: number; variacion: number | undefined; contexto: string | null }> => {
-      const inicioMesActual = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-      const inicioMesAnterior = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
-      const finMesAnterior = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
+      const inicioMesActual = fechaAISODate(new Date(now.getFullYear(), now.getMonth(), 1));
+      const inicioMesAnterior = fechaAISODate(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+      const finMesAnterior = fechaAISODate(new Date(now.getFullYear(), now.getMonth(), 0));
 
       const { data, error } = await supabase
         .from('fin_gastos')
         .select('valor, fecha, categoria_id, fin_categorias_gastos(nombre)')
         .eq('estado', 'Confirmado')
         .gte('fecha', inicioMesAnterior)
-        .lte('fecha', now.toISOString().split('T')[0]);
+        .lte('fecha', fechaAISODate(now));
       if (error || !data) return { gastoMes: 0, variacion: undefined, contexto: null };
 
       let gastoMes = 0;
@@ -264,7 +265,7 @@ export function Dashboard() {
         const kpisGanado = calcularKPIsInventario(rows);
         const hace30Dias = new Date(now);
         hace30Dias.setDate(hace30Dias.getDate() - 30);
-        const variacionCabezas = calcularVariacion(movimientos, hace30Dias.toISOString().split('T')[0]);
+        const variacionCabezas = calcularVariacion(movimientos, fechaAISODate(hace30Dias));
         const contexto = variacionCabezas.entradas > 0 || variacionCabezas.salidas > 0
           ? `${variacionCabezas.entradas} entran · ${variacionCabezas.salidas} salen (30d)`
           : 'Sin movimientos en 30 días';
@@ -376,7 +377,7 @@ export function Dashboard() {
       const loadPresupuestoAlertas = async (): Promise<Alerta[]> => {
         const anioActual = now.getFullYear();
         const inicioAnio = `${anioActual}-01-01`;
-        const hoyStr = now.toISOString().split('T')[0];
+        const hoyStr = fechaAISODate(now);
         // Q1..Q4 según el mes actual (0-11) — ej. julio (mes 6) -> Q3
         const trimestreActual = Math.floor(now.getMonth() / 3) + 1;
 

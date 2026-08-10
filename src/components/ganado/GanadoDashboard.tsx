@@ -7,6 +7,7 @@ import { AjusteMasivoDialog } from './components/AjusteMasivoDialog';
 import { InventarioInicialDialog } from './components/InventarioInicialDialog';
 import { calcularKPIsInventario, calcularVariacion, cabezasPorHaFinca } from '@/utils/calculosGanado';
 import { formatNumber } from '@/utils/format';
+import { fechaAISODate } from '@/utils/fechas';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, SlidersHorizontal, Loader2, TrendingUp, TrendingDown, ClipboardPlus } from 'lucide-react';
 import { toast } from 'sonner';
@@ -45,7 +46,7 @@ export function GanadoDashboard() {
     try {
       const hace30 = new Date();
       hace30.setDate(hace30.getDate() - 30);
-      const fechaDesde = hace30.toISOString().split('T')[0];
+      const fechaDesde = fechaAISODate(hace30);
 
       const [inv, estructura, pend, movs] = await Promise.all([
         fetchInventario(),

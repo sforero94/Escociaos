@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Sun, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import type { ResumenDiario } from '@/types/clima';
 import { buildRadiationPeriodContext, type RadiationPeriodContext } from '@/utils/calculosRadiacion';
+import { fechaAISODate } from '@/utils/fechas';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface ContextoSolarProps {
@@ -24,8 +25,8 @@ function splitRowsByPeriod(rows: ResumenDiario[], days: number) {
   const now = new Date();
   const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
   const priorCutoff = new Date(cutoff.getTime() - days * 24 * 60 * 60 * 1000);
-  const cutoffStr = cutoff.toISOString().slice(0, 10);
-  const priorStr = priorCutoff.toISOString().slice(0, 10);
+  const cutoffStr = fechaAISODate(cutoff);
+  const priorStr = fechaAISODate(priorCutoff);
 
   const current = rows.filter(r => r.fecha >= cutoffStr);
   const prior = rows.filter(r => r.fecha >= priorStr && r.fecha < cutoffStr);
