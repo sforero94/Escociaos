@@ -10,6 +10,8 @@ prompt del agente en cada corrida.
   fases en `escociaos-po/CLAUDE.md` antes de filar un "el lazo esta roto". Las corridas
   en seco (sufijo `-dryrun-`) no escriben nada en Notion por diseno.
   [corrida: 2026-08-03-lunes]
+- **No existe cron de reportes semanales, y nunca existio.** `cron.job` tiene exactamente 3 trabajos: `clima-sync-wu`, `clima-daily-rollup`, `hato-alertas-tick`. `git grep cron.schedule -- src/sql/migrations/` da solo 030, 036, 060 y 068. `019_auto_reporte_semanal.sql` NO programa nada — solo agrega `html_storage` y `generado_automaticamente`, columnas del boton de generacion rapida. **Una semana sin reporte es cadencia humana, no un defecto de Reportes.** Al 2026-08-10 el ultimo es la S31/2026 (2026-08-01); la S32 no se genero. [corrida: 2026-08-10-lunes]
+- **`hato_correcciones` (084) con 0 filas es el estado correcto.** El trigger arranca con `IF auth.uid() IS NULL THEN RETURN`, asi que solo traza sesiones humanas de navegador; migraciones, `service_role` y el bot no dejan rastro por diseño. Verificar los 5 triggers en `pg_trigger` antes de concluir nada del conteo. [corrida: 2026-08-10-lunes]
 
 ## Refutaciones
 | Fingerprint | Afirmacion | Por que murio | Corrida |
@@ -61,6 +63,11 @@ prompt del agente en cada corrida.
   comprobar si el archivo tocado tiene consumidor del lado edge — los espejos de
   paridad (`priorizacion-scouting.ts`, `calculosHato.ts`, `hatoAlertas.ts`,
   `importHato/*`) a menudo no lo tienen. [corrida: 2026-08-06-jueves]
+- **Sonda de contenido para un cambio de BUILD, no de componente**: el banner del CSS servido lleva la version del compilador. `curl .../assets/index-*.css | head -c 80` da `/*! tailwindcss v4.3.3 */`; el artefacto congelado del commit anterior decia `v4.1.3`. **Una version de herramienta en el artefacto servido prueba un cambio de pipeline que ninguna sonda de literal alcanza**, porque el cambio no agrega texto de UI. Guardar tambien el conteo de `@property` (91 hoy). [corrida: 2026-08-10-lunes]
+- **Como distinguir "desplegaron y despues commitearon" (benigno) de "commit varado" (real) sin leer el bundle**: convertir `list_edge_functions.updated_at` (ms epoch) a UTC y compararlo contra `git log --format=%aI` de CADA commit que toca el arbol edge. Si el despliegue cae a **segundos** de un commit y el siguiente queda minutos u horas despues, el despliegue ES ese commit y el posterior esta varado. Caso 2026-08-06: v200 a las 21:37:29Z, `ddc62cb` +25 s, `23baf4d` +41 min afuera. Esto **acota** la nota del jueves sobre el falso positivo: esa nota aplica cuando el despliegue precede al commit DEL MISMO cambio. [corrida: 2026-08-10-lunes]
+- **`pg_policies` renderiza el predicado NORMALIZADO, no como se escribio.** Un `(SELECT es_usuario_gerencia())` sale como `( SELECT es_usuario_gerencia() AS es_usuario_gerencia)` — con espacio tras el parentesis y con alias. Un `LIKE '%(SELECT es_usuario_gerencia())%'` da 0 aciertos y hace parecer que 093 no se aplico. Buscar `'%( SELECT es_usuario_gerencia()%'`. [corrida: 2026-08-10-lunes]
+- **No adivinar el id de un bucket de Storage por el nombre del archivo de migracion.** `086_storage_pesajes_fotos.sql` crea `hato-pesajes-fotos`, no `pesajes-fotos`; `085` crea `hato-liquidaciones-fotos`. Consultar `select id, public, created_at from storage.buckets`; un `count(*) = 0` sobre un id inventado se lee igual que "la migracion no se aplico". [corrida: 2026-08-10-lunes]
+- **El ledger de migraciones del `CLAUDE.md` raiz tambien se queda atras, no solo el de Supabase.** Al 2026-08-10 documenta 084 y 093 pero le faltan 083, 083b, 085, 086, 089, 090, 091 y 092, y la entrada de 093 dice "Not applied yet" estandolo. **Para elegir el proximo numero de migracion, `ls src/sql/migrations/`, nunca el CLAUDE.md ni `list_migrations`.** Proximo libre: **094**; 087 y 088 son huecos deliberados. [corrida: 2026-08-10-lunes]
 
 ## Baselines
 | Metrica | Valor | Corrida |
@@ -69,6 +76,9 @@ prompt del agente en cada corrida.
 | Lints de seguridad Supabase | **11** (bajo desde 51 tras 082). Composicion estable y esperada — **no re-diagnosticar como hallazgos nuevos** | 2026-08-06-jueves |
 | Estado de despliegue (anterior) | HEAD main 7c232f6 · edge function v197 · migraciones 001-076 | 2026-08-03-lunes |
 | Cadencia (primera medicion, ventana 2026-06-08→2026-08-03, 8 semanas) | 22,9 commits/sem · 6,4 aterrizajes first-parent/sem · fix share **46,8%** de feat+fix (bajando: 68,8% 1a mitad → 41,0% 2a, **pero la 2a esta sesgada por el build-out del hato**) · lag de deploy del edge function ~1h44m, frontend automatico. **No existe ventana previa comparable: la historia del repo empieza efectivamente el 2026-06-09** — tratar como primera medicion, NO como tendencia | 2026-08-03-lunes |
+| Estado de despliegue | HEAD main **b32585b** · edge function **v200** (2026-08-06T21:37:29Z = `ddc62cb`+25s), **1 commit atrasada** (`23baf4d`) · migraciones **001-093** aplicadas y verificadas contra el catalogo VIVO (067/079 son archivos de registro; 087/088 huecos deliberados; el ledger de Supabase se congelo en 80 filas y NO registro ninguna de las 10 de agosto) · frontend verificado POR CONTENIDO, sirviendo b32585b | 2026-08-10-lunes |
+| Cadencia (2a medicion, 9 semanas al 2026-08-10) | 23,8 commits/sem · 6,1 aterrizajes first-parent/sem · fix share **53,5%** (46 fix / 40 feat), SUBIENDO desde 46,8% · lag de deploy: frontend automatico, edge `ddc62cb` 25 s pero `23baf4d` 4+ dias. **El alza del fix share esta sesgada por UNA campaña**: el PR #109 (pipeline de Tailwind + recorrida de movil) aporta los 17 `fix` de la semana. Es amortizacion de deuda de UI, no calidad degradandose. La medicion limpia es la de Code Quality del 2026-09-07 | 2026-08-10-lunes |
+| Crons | 3/3 sanos, **0 fallos**: clima-sync 41.582 corridas, rollup 125, hato-alertas-tick 19/19 (ultima 2026-08-10) | 2026-08-10-lunes |
 
 ## Archivo
 (vacio)
