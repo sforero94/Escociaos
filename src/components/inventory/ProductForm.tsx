@@ -116,6 +116,41 @@ const initialFormData: ProductData = {
   link_hoja_seguridad: '',
 };
 
+/**
+ * Arma el objeto que viaja a `productos` en INSERT o UPDATE.
+ *
+ * `cantidad_actual` es SALDO DE INVENTARIO, no un atributo del producto: solo
+ * puede cambiar junto con la fila que lo explica en `movimientos_inventario`.
+ * En modo EDICIÓN se saca del payload, porque el formulario mandaba el valor
+ * del input con un `{ ...formData }` y sobrescribía el saldo sin dejar
+ * movimiento -- una mutación de stock sin rastro, justo lo que el módulo de
+ * inventario existe para impedir. Para corregir un saldo está
+ * `NuevoMovimientoModal` con `tipo = 'Ajuste'`, que inserta el movimiento
+ * ANTES de tocar `productos`.
+ *
+ * En modo CREACIÓN sí viaja: es el saldo de apertura del producto, y no hay
+ * nada anterior que un movimiento pudiera explicar.
+ */
+export function prepararDatosProducto(
+  formData: ProductData,
+  esEdicion: boolean,
+): Record<string, unknown> {
+  const datos: Record<string, unknown> = { ...formData };
+
+  // Los strings vacíos de los inputs numéricos son "sin valor", no 0.
+  Object.keys(datos).forEach((key) => {
+    if (datos[key] === '') datos[key] = null;
+  });
+
+  if (esEdicion) {
+    delete datos.cantidad_actual;
+  } else {
+    datos.activo = true;
+  }
+
+  return datos;
+}
+
 export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFormProps) {
   const { profile } = useAuth();
   const [formData, setFormData, clearFormData, wasRestored] = useFormPersistence<ProductData>({
@@ -236,20 +271,10 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
     try {
       const supabase = getSupabase();
       
-      // Preparar datos para insertar/actualizar
-      const dataToSave: any = { ...formData };
-      
-      // Convertir strings vacíos a null para campos numéricos
-      Object.keys(dataToSave).forEach(key => {
-        if (dataToSave[key] === '') {
-          dataToSave[key] = null;
-        }
-      });
-
-      // Agregar campo activo si es creación
-      if (!productId) {
-        dataToSave.activo = true;
-      }
+      // Preparar datos para insertar/actualizar. En edición NO incluye
+      // `cantidad_actual` -- ver prepararDatosProducto().
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- el builder tipado de Supabase no acepta un Record genérico; este objeto ya era `any` antes de extraer el helper
+      const dataToSave = prepararDatosProducto(formData, Boolean(productId)) as any;
 
       if (productId) {
         // MODO EDICIÓN
@@ -504,10 +529,13 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
 
                 <h4 className="text-md text-gray-800 mt-6 mb-3">Inventario</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Cantidad Actual */}
+                  {/* Cantidad Actual — solo editable al CREAR (saldo de
+                      apertura). En edición es de solo lectura: el saldo se
+                      corrige con un movimiento de Ajuste, que deja rastro. */}
                   <div>
                     <label className="block text-sm text-gray-700 mb-1">
                       Cantidad Actual
+                      {productId && <span className="text-xs text-primary"> ✓ Solo movimientos</span>}
                     </label>
                     <input
                       type="number"
@@ -515,11 +543,22 @@ export function ProductForm({ isOpen, onClose, productId, onSuccess }: ProductFo
                       name="cantidad_actual"
                       value={formData.cantidad_actual}
                       onChange={handleChange}
+                      readOnly={Boolean(productId)}
                       step="0.01"
                       min="0"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                      className={
+                        productId
+                          ? 'w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed'
+                          : 'w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent'
+                      }
                       placeholder="Cantidad en inventario"
                     />
+                    {productId && (
+                      <p className="mt-1 text-xs text-gray-500">
+                        El saldo solo cambia con un movimiento. Para corregirlo usa
+                        Movimientos → Nuevo movimiento → Ajuste.
+                      </p>
+                    )}
                   </div>
 
                   {/* Stock Mínimo */}
