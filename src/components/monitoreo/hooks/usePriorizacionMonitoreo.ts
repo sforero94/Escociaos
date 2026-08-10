@@ -37,6 +37,7 @@
 
 import { useState, useCallback } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
+import { fechaAISODate } from '@/utils/fechas';
 import { priorizarMonitoreo, calcularCoberturaRonda } from '@/utils/priorizacionMonitoreo';
 import type {
   HistorialSublotePlaga,
@@ -61,7 +62,7 @@ function uno<T>(v: T | T[] | null | undefined): T | null {
 function fechaHaceNDias(dias: number): string {
   const d = new Date();
   d.setDate(d.getDate() - dias);
-  return d.toISOString().split('T')[0];
+  return fechaAISODate(d);
 }
 
 interface MonitoreoRawRow {

@@ -1,4 +1,5 @@
 import type { LecturaClima, ResumenClima, ResumenDiario, LecturaClimaAgregada, DatoAnualOverlay, SerieAnual } from '@/types/clima';
+import { fechaAISODate } from '@/utils/fechas';
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -57,7 +58,7 @@ export function lecturaActual(rows: LecturaClima[]): LecturaClima | null {
 
 export function calcularResumenPeriodoDiario(rows: ResumenDiario[], dias: number): ResumenClima {
   const cutoff = new Date(Date.now() - dias * 24 * 60 * 60 * 1000);
-  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  const cutoffStr = fechaAISODate(cutoff);
   const filtered = rows.filter(r => r.fecha >= cutoffStr);
   return buildResumenFromDaily(filtered);
 }
