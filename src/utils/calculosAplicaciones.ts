@@ -12,8 +12,30 @@ import type {
 } from '../types/aplicaciones';
 
 /**
+ * ¿Esta aplicación se mide en canecas (mezcla líquida) o en bultos (sólido)?
+ *
+ * Solo Fertilización trabaja con bultos/kilos. Fumigación y Drench comparten la
+ * misma lógica de mezcla líquida, así que ambas se miden en canecas/litros.
+ *
+ * Esta es la MISMA regla que aplica la calculadora al guardar
+ * (`CalculadoraAplicaciones.tsx`): para fumigación y drench escribe
+ * `numero_canecas`/`litros_mezcla` y deja `numero_bultos`/`kilos_totales` en NULL.
+ * Todo consumidor de `aplicaciones_calculos` o `movimientos_diarios` debe usar
+ * esta función y NUNCA preguntar `tipo === 'Fumigación'`: eso clasifica Drench
+ * como fertilización y lee columnas que siempre están vacías, produciendo ceros.
+ */
+export function usaCanecas(tipo: string | null | undefined): boolean {
+  return tipo !== 'Fertilización';
+}
+
+/** Unidad de recipiente correspondiente al tipo de aplicación. */
+export function unidadAplicacion(tipo: string | null | undefined): 'canecas' | 'bultos' {
+  return usaCanecas(tipo) ? 'canecas' : 'bultos';
+}
+
+/**
  * CÁLCULOS PARA FUMIGACIÓN Y DRENCH
- * 
+ *
  * IMPORTANTE: Fumigación y Drench usan LA MISMA LÓGICA de cálculo:
  * - Fumigación: Aplicación foliar (spray sobre hojas)
  * - Drench: Aplicación edáfica (directo al suelo/raíz)
