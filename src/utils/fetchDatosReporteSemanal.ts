@@ -4,6 +4,7 @@
 
 import { getSupabase } from './supabase/client';
 import { fetchDatosRealesAplicacion, fetchJornalesRealesPorLote } from './aplicacionesReales';
+import { usaCanecas, unidadAplicacion } from './calculosAplicaciones';
 import type {
   RangoSemana,
   DatosPersonal,
@@ -543,7 +544,7 @@ export async function fetchAplicacionesPlaneadas(): Promise<AplicacionPlaneada[]
     });
     
     ((app as any).aplicaciones_calculos || []).forEach((ac: any) => {
-      if (app.tipo_aplicacion === 'Fumigación') {
+      if (usaCanecas(app.tipo_aplicacion)) {
         totalLitrosKg += Number(ac.litros_mezcla) || 0;
       } else {
         totalLitrosKg += Number(ac.kilos_totales) || 0;
@@ -608,15 +609,15 @@ export async function fetchAplicacionesActivas(): Promise<AplicacionActiva[]> {
   const resultado: AplicacionActiva[] = [];
 
   for (const app of aplicaciones || []) {
-    const esFumigacion = app.tipo_aplicacion === 'Fumigación';
-    const unidad: 'canecas' | 'bultos' = esFumigacion ? 'canecas' : 'bultos';
+    const enCanecas = usaCanecas(app.tipo_aplicacion);
+    const unidad = unidadAplicacion(app.tipo_aplicacion);
 
     const movimientos = (app as any).movimientos_diarios || [];
 
     const planeadoPorLote = new Map<string, { nombre: string; planeado: number }>();
     ((app as any).aplicaciones_calculos || []).forEach((calc: any) => {
       const loteNombre = calc.lotes?.nombre || 'Sin lote';
-      const planeado = esFumigacion
+      const planeado = enCanecas
         ? (Number(calc.numero_canecas) || 0)
         : (Number(calc.numero_bultos) || 0);
       planeadoPorLote.set(calc.lote_id, { nombre: loteNombre, planeado });
@@ -624,7 +625,7 @@ export async function fetchAplicacionesActivas(): Promise<AplicacionActiva[]> {
 
     const ejecutadoPorLote = new Map<string, number>();
     movimientos.forEach((mov: any) => {
-      const ejecutado = esFumigacion
+      const ejecutado = enCanecas
         ? (Number(mov.numero_canecas) || 0)
         : (Number(mov.numero_bultos) || 0);
       ejecutadoPorLote.set(
@@ -714,8 +715,8 @@ export async function fetchAplicacionesCerradas(
 
       if (appError || !app) continue;
 
-      const esFumigacion = app.tipo_aplicacion === 'Fumigación';
-      const unidad: 'canecas' | 'bultos' = esFumigacion ? 'canecas' : 'bultos';
+      const enCanecas = usaCanecas(app.tipo_aplicacion);
+      const unidad = unidadAplicacion(app.tipo_aplicacion);
 
       const fechaInicio = app.fecha_inicio_ejecucion || '';
       const fechaFin = app.fecha_fin_ejecucion || app.fecha_cierre || '';
@@ -847,7 +848,7 @@ export async function fetchAplicacionesCerradas(
       let totalCanecasAnt = 0;
       if (prevApp && prevApp.movimientos_diarios) {
         prevApp.movimientos_diarios.forEach((m: any) => {
-          totalCanecasAnt += Number(esFumigacion ? m.numero_canecas : m.numero_bultos) || 0;
+          totalCanecasAnt += Number(enCanecas ? m.numero_canecas : m.numero_bultos) || 0;
         });
       }
       
@@ -885,7 +886,7 @@ export async function fetchAplicacionesCerradas(
       let totalJornalesPlan = 0;
       let totalJornalesReal = 0;
       const totalPlannedApp = Array.from(calcMap.values()).reduce(
-        (sum, c) => sum + (esFumigacion ? (Number(c.litros_mezcla) || 0) : (Number(c.kilos_totales) || 0)),
+        (sum, c) => sum + (enCanecas ? (Number(c.litros_mezcla) || 0) : (Number(c.kilos_totales) || 0)),
         0
       );
       const totalJornalesRealesPorLote = Array.from(jornalesMap.values()).reduce(
@@ -903,15 +904,15 @@ export async function fetchAplicacionesCerradas(
         const mov = movMap.get(loteId) || { canecas: 0, bultos: 0 };
         const jornales = jornalesMap.get(loteId) || { jornales: 0, costo: 0 };
         const arboles = loteInfo.arboles || 1;
-        const totalPlannedQuantity = esFumigacion
+        const totalPlannedQuantity = enCanecas
           ? (Number(calc.litros_mezcla) || 0)
           : (Number(calc.kilos_totales) || 0);
         const quantityRatio = totalPlannedApp > 0 ? totalPlannedQuantity / totalPlannedApp : 0;
 
-        const canecasPlan = esFumigacion ? (Number(calc.numero_canecas) || 0) : (Number(calc.numero_bultos) || 0);
-        const canecasReal = esFumigacion ? mov.canecas : mov.bultos;
+        const canecasPlan = enCanecas ? (Number(calc.numero_canecas) || 0) : (Number(calc.numero_bultos) || 0);
+        const canecasReal = enCanecas ? mov.canecas : mov.bultos;
         const canecasDesv = canecasPlan > 0 ? ((canecasReal - canecasPlan) / canecasPlan) * 100 : 0;
-        const tamanoRecipiente = esFumigacion
+        const tamanoRecipiente = enCanecas
           ? (
             canecasPlan > 0
               ? (Number(calc.litros_mezcla) || 0) / canecasPlan
@@ -966,7 +967,7 @@ export async function fetchAplicacionesCerradas(
           insumosPlaneados: insumosPlaneados > 0 ? Math.round(insumosPlaneados) : undefined,
           insumosReales: insumosReales > 0 ? Math.round(insumosReales) : undefined,
           insumosDesviacion: Math.round(insumosDesv * 10) / 10,
-          insumosUnidad: esFumigacion ? 'L' : 'Kg',
+          insumosUnidad: enCanecas ? 'L' : 'Kg',
           jornalesPlaneados: Math.round(jornalesPlan * 10) / 10 || undefined,
           jornalesReales: jornalesReal || undefined,
           jornalesDesviacion: Math.round(jornalesDesv * 10) / 10,

@@ -675,6 +675,51 @@ describe('fetchAplicacionesActivas', () => {
     expect(loteST!.porcentaje).toBeCloseTo(53.3, 0);
   });
 
+  // Regresión: el reporte leía numero_bultos para todo lo que no fuera 'Fumigación',
+  // así que Drench (que sólo escribe numero_canecas/litros_mezcla) salía en 0%.
+  // Caso real: "Drench agosto" 2026 — 634,7 canecas planeadas, 97 ejecutadas,
+  // se reportaba 0 de 0.
+  it('calcula progreso en canecas para drench, no en bultos', async () => {
+    const MOCK_DRENCH = [{
+      id: 'app-drench',
+      nombre_aplicacion: 'Drench agosto',
+      tipo_aplicacion: 'Drench',
+      proposito: 'Nutrición radicular',
+      estado: 'En ejecución',
+      fecha_inicio_ejecucion: '2026-08-04',
+      aplicaciones_calculos: [
+        { lote_id: 'lote-1', numero_canecas: 400, numero_bultos: null, lotes: { nombre: 'Lote PP' } },
+        { lote_id: 'lote-2', numero_canecas: 234.7, numero_bultos: null, lotes: { nombre: 'Lote ST' } },
+      ],
+      movimientos_diarios: [
+        { lote_id: 'lote-1', numero_canecas: 60, numero_bultos: null },
+        { lote_id: 'lote-1', numero_canecas: 25, numero_bultos: null },
+        { lote_id: 'lote-2', numero_canecas: 12, numero_bultos: null },
+      ],
+    }];
+
+    const appChain = createChainableMock({ data: MOCK_DRENCH, error: null });
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'aplicaciones') return appChain;
+      return createChainableMock();
+    });
+
+    const resultado = await fetchAplicacionesActivas();
+
+    expect(resultado.length).toBe(1);
+    const app = resultado[0];
+    expect(app.unidad).toBe('canecas');
+    expect(app.totalPlaneado).toBeCloseTo(634.7, 1);
+    expect(app.totalEjecutado).toBe(97);
+    expect(app.porcentajeGlobal).toBeGreaterThan(0);
+    expect(app.porcentajeGlobal).toBeCloseTo(15.3, 1);
+
+    const lotePP = app.progresoPorLote.find(l => l.loteNombre === 'Lote PP');
+    expect(lotePP!.planeado).toBe(400);
+    expect(lotePP!.ejecutado).toBe(85);
+    expect(lotePP!.unidad).toBe('canecas');
+  });
+
   it('retorna lista vacía cuando no hay aplicaciones activas', async () => {
     const appChain = createChainableMock({ data: [], error: null });
     mockFrom.mockReturnValue(appChain);

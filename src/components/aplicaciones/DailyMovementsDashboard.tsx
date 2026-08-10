@@ -28,6 +28,7 @@ import type {
   ProductoEnMezcla
 } from '../../types/aplicaciones';
 import { obtenerFechaHoy } from '@/utils/fechas';
+import { usaCanecas } from '@/utils/calculosAplicaciones';
 
 interface DailyMovementsDashboardProps {
   aplicacion: Aplicacion;
@@ -493,7 +494,9 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
       </div>
 
       {/* Resumen de Canecas/Bultos Totales */}
-      {aplicacion.tipo_aplicacion === 'Fumigación' && canecasTotales && (
+      {/* Drench se mide en canecas igual que Fumigación: loadCanecasPlaneadas() lee
+          numero_canecas, que es justamente lo que la calculadora escribe para ambos. */}
+      {usaCanecas(aplicacion.tipo_aplicacion) && canecasTotales && (
         <div className="bg-gradient-to-br from-primary/10 to-secondary/10 rounded-2xl border border-primary/20 p-6">
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 bg-primary/20 rounded-xl flex items-center justify-center">
