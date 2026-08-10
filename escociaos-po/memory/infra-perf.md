@@ -40,6 +40,10 @@ prompt del agente en cada corrida.
   con la funcion en 200. Costo: 9 lecturas de 288 (3%), auto-sanado. **Si se repite,
   dejar de tratarlo como aislado y poner un AbortController de ~15 s en el fetch a
   Ecowitt.** [corrida: 2026-08-06-jueves]
+- **El 502 de `/clima/sync` del 2026-08-06 NO se repitio — evento aislado, NO poner el AbortController todavia.** Medido con `clima_resumen_diario.lecturas_count` (288 = dia completo): 08-06 = **279** (las 9 lecturas perdidas, exactamente), 08-07 = 287, 08-08 = 288, 08-09 = 288. Perdidas de 1 a 6/dia son ruido normal. Una segunda ocurrencia de ~9 seguidas si cambia la recomendacion. [corrida: 2026-08-10-lunes]
+- **El contador de lluvia congelado es hardware del sensor y su tasa es plana**: 5 de 30 dias (17%) contra 5/6/6 en ventanas anteriores. La guarda de 068 opera como se diseno. No refilar. [corrida: 2026-08-10-lunes]
+- **La migracion 093 SI esta aplicada a produccion — el CLAUDE.md dice "Not applied yet" y esta desactualizado.** 47 policies llaman `es_usuario_gerencia()` y 50 `get_user_role()`, las 97 envueltas como `(SELECT ...)`, 0 desnudas. El efecto ya se ve: ninguna consulta de aplicacion aparece en el top-20 de pg_stat_statements, y `v_hato_estado_actual` (antes la mas lenta, 126,0 ms) ya no figura. [corrida: 2026-08-10-lunes]
+- **La regla de 081 (respaldos fuera de `public`) se esta siguiendo.** Los 3 respaldos vivos (backup_080/083/090) estan en `respaldos`, RLS on, 0 policies, 0 grants para anon/authenticated. 0 tablas `backup_*` en `public`. El `rls_enabled_no_policy` sobre ellas es el estado final buscado. [corrida: 2026-08-10-lunes]
 
 ## Refutaciones
 | Fingerprint | Afirmacion | Por que murio | Corrida |
@@ -94,6 +98,11 @@ prompt del agente en cada corrida.
   17:06:28Z): el flujo real es desplegar y despues commitear, y no hay consecuencia
   en runtime. **No gastar contexto en `get_edge_function` para verificar esto.**
   [corrida: 2026-08-06-jueves]
+- **Para liveness del cron de clima usar `clima_resumen_diario.lecturas_count`, no `net._http_response` ni `cron.job_run_details`.** Columna ya existente, poblada por `fn_clima_rollup_diario`, 288 = dia completo, y sobrevive indefinidamente — mientras `clima_lecturas` se poda a 24h, `net._http_response` a ~7h y `cron.job_run_details` solo prueba que se encolo el POST. Una consulta da semanas: `select fecha, lecturas_count, 288 - lecturas_count as faltantes, lluvia_confianza from clima_resumen_diario where fecha >= current_date - 21 order by fecha desc`. [corrida: 2026-08-10-lunes]
+- **El drift de edge function que importa NO es entre los dos arboles del repo, es entre `main` y lo desplegado.** Los dos arboles llevan 3 corridas identicos y los tests de paridad ya los cubren. Nadie cubre comparar `list_edge_functions.updated_at` contra `git log -1 --format=%cI -- supabase/functions/make-server-1ccce916`. **Hacer esa comparacion cada corrida — son 10 segundos y ya cazo un hallazgo.** El `entrypoint_path` delata desde que worktree se desplego. [corrida: 2026-08-10-lunes]
+- **Para leer el bundle DESPLEGADO** (la unica prueba real, mejor que cualquier timestamp): `get_edge_function` trae `files: [{name, content}]` y pesa ~1 MB — volcarlo a fichero con python y hacer grep, nunca imprimirlo. Con eso se puede hacer `diff` fichero a fichero contra `git show <ref>:<path>` y aislar exactamente que commit falta. [corrida: 2026-08-10-lunes]
+- **El top de `extensions.pg_stat_statements` por tiempo total esta dominado por pg_net, no por la aplicacion**: `net.http_post` 41.577 llamadas / 1.456.287 ms y el jardinero `DELETE FROM net._http_response` 103.797 / 172.620 ms. Filtrar esos dos ademas de la introspeccion de plataforma y los COPY de pg_dump. Filtrado todo, NO queda ninguna consulta de aplicacion problematica: la mas lenta recurrente es `fn_clima_rollup_diario()` a 100,5 ms de media, 1 vez al dia. [corrida: 2026-08-10-lunes]
+- **El conector Vercel sigue roto — 4a corrida consecutiva**, 403 "must re-authenticate to this scope". Ya filado (Notion #5). Declarar bajo NO CORRIO, no re-diagnosticar. Colateral: no hay forma de saber si Web Analytics esta habilitado. [corrida: 2026-08-10-lunes]
 
 ## Baselines
 | Metrica | Valor | Corrida |
@@ -103,6 +112,9 @@ prompt del agente en cada corrida.
 | Advisors seguridad | **11 total** (eran 51): 5 rls_enabled_no_policy (kv_store, 3 telegram_*, respaldos.backup_080 — todos deny-all buscado) · 2 anon_security_definer (`es_usuario_gerencia`, `get_user_role` — **accept PERMANENTE**, 97 policies los llaman) · 3 authenticated_security_definer · 1 auth_leaked_password_protection. **No re-diagnosticar estos 11 como hallazgos nuevos** | 2026-08-06-jueves |
 | Tamanos de tabla | `net._http_response` 59 MB (72 filas) · reportes_semanales 2.448 kB · clima_lecturas 2.192 kB · monitoreos 1.960 kB · fin_gastos 1.808 kB (4.464) · registros_trabajo 1.560 kB (2.550) · hato_chequeo_vacas 960 kB · hato_eventos 712 kB (735) | 2026-08-06-jueves |
 | Latencia de tableros | Finanzas: 36 round trips por carga (1 + 7 negocios x 5), ~7 ms de DB cada una pero ~130 ms de ida y vuelta = ~5 s de espera puro transporte. Produccion: 7 consultas a una tabla de 205 filas, seq_scan 36.397 / 7,4M tuplas leidas | 2026-08-03-lunes |
+| Infra | DB **111 MB** (1,4% de 8 GB) — 59 MB siguen siendo `net._http_response` (72 filas vivas, **0 dead tuples**: VACUUM normal NO lo recupera, requiere VACUUM FULL). Storage 105 MB / 55 objetos. MAU 6, 7 usuarios auth. Edge function **v200** (2026-08-06T21:37:29Z), **1 commit atrasada respecto de main**. Frontend verificado POR CONTENIDO en >=60ae9fe. 3 pg_cron: **2.030 corridas en 7 dias, 0 fallos**. Payload inicial **386 KB gzip** (359 JS + 25 CSS); 51 rutas React.lazy; jsPDF/xlsx/html2canvas siguen dinamicos | 2026-08-10-lunes |
+| Advisors performance (por SQL) | unindexed_fks **89** (era 88) · unused_index **43** (era 46) · no_primary_key **3** (era 1; los 2 nuevos son respaldos.backup_083 y backup_090, estado final buscado, NO es hallazgo). **El conteo de multiple_permissive_policies NO es comparable con el del advisor** — la consulta SQL agrupa por (tabla, cmd, roles) y da 54; el advisor cuenta pares y reporta ~479. No cruzar las dos cifras | 2026-08-10-lunes |
+| Tamanos de tabla | net._http_response 59 MB (72 filas) · reportes_semanales 2.448 kB · clima_lecturas 2.192 kB · monitoreos 1.960 kB (4.200) · fin_gastos 1.808 kB (4.464) · registros_trabajo 1.576 kB (2.579) · hato_chequeo_vacas 960 kB · hato_eventos 712 kB | 2026-08-10-lunes |
 
 ## Archivo
 (vacio)

@@ -36,19 +36,33 @@ Hechos que aplican a mas de un agente. Mismas reglas de escritura que el resto
 | 2026-08-06-jueves | 5 (racha de ceros: **0**) |
 
 ## Estado de la operacion
-- Ultima corrida: **2026-08-06-jueves** (pulso operativo, roster de 4). Modo:
-  **full write en repo · Notion DEGRADADO** (MCP sin autenticar — los hallazgos
-  quedaron en el reporte, sin filar).
-- Resultado: 5 hallazgos nuevos (0 P0 · 0 P1 · 4 P2 · 1 P3), 1 verificacion
-  adversarial, 0 PRs. **3 hallazgos del lunes CERRADOS** (respaldos sin RLS via
-  081; stock negativo, 12 -> 0; choque #98/#99, ambos fusionados en orden) y
-  1 bajado de P1 a P3 (alertas del hato: el lazo operativo ya funciona).
-- **Notion lleva 1 corrida caida.** Si vuelve a fallar el lunes, son 2 seguidas y
-  eso ya es un hallazgo contra la operacion (§7): los hallazgos del jueves nunca
-  se filaron y solo viven en `reports/2026-08-06-jueves.md`.
-- **El conector Vercel sigue roto — 3a corrida consecutiva.** `list_deployments`
-  contra el proyecto real devuelve 403 "must re-authenticate to this scope".
-  Ya filado como P1 el lunes; NO re-diagnosticar, solo declarar bajo NO CORRIO.
+- Ultima corrida: **2026-08-10-lunes** (barrido semanal, roster de 6). Modo:
+  **full write · Notion OPERATIVO otra vez**.
+- Resultado: **12 hallazgos filados** (1 P1 · 11 P2), **2 PRs verdes** (#110, #111),
+  **5 verificaciones adversariales** y **2 hallazgos del jueves cerrados**.
+- **Notion se recupero y se puso al dia**: se filaron con retraso los 5 hallazgos
+  del jueves que se habian perdido, se cerraron los 3 del lunes que ya estaban
+  resueltos, se bajo #4 a P3 y se corrigio el diagnostico de #2. La base de
+  seguimiento ya no tiene huecos. **No se llego a 2 corridas seguidas caidas**, asi
+  que no hubo hallazgo contra la operacion por ese lado.
+- **El conector Vercel sigue roto — 4a corrida consecutiva.** 403 "must
+  re-authenticate to this scope". Ya filado como P1 (Notion #5); NO re-diagnosticar,
+  solo declarar bajo NO CORRIO y sustituir por la sonda de contenido.
+
+## Leccion de metodo de la corrida 2026-08-10 (la mas cara de olvidar)
+**Cinco de cinco verificaciones adversariales cambiaron el resultado**, y ninguna
+fue ceremonia:
+- El P0 de seguridad sobrevivio pero bajo a P1 (la via de escalamiento al
+  inventario real esta cerrada — funcion muerta por desajuste uuid/integer).
+- Dos P1 del hato quedaron **refutados enteros**, y su remedio habria revertido una
+  decision del dueño de cuatro dias antes (D-14, migracion 091).
+- Un P1 de datos bajo a P2 al probarse falsa su consecuencia economica.
+- El P1 de inventario quedo **refutado con daño evitado**: el remedio propuesto
+  habria fabricado $5,36M de fertilizante inexistente.
+**Regla que se gana el sitio: ninguna cirugia de datos en produccion sin que un
+verificador independiente reproduzca la reconciliacion por un metodo distinto.**
+Dos agentes reconciliaron el mismo inventario y les dio 3 y 5 productos; el
+desempate importaba mas que cualquiera de los dos hallazgos. [corrida: 2026-08-10-lunes]
 
 ## Corrida anterior (2026-08-03-lunes)
 - 12 hallazgos filados en Notion (5 P1 + 7 P2), 4 PRs (#98 #99 #100 #101), todos
@@ -78,6 +92,13 @@ Hechos que aplican a mas de un agente. Mismas reglas de escritura que el resto
   42P01. El top esta dominado por introspeccion de la plataforma (pg_timezone_names,
   listado de extensiones) y los COPY de pg_dump — filtrarlos antes de concluir nada.
   [corrida: 2026-08-06-jueves]
+- **La regla del arbol compartido volvio a funcionar (3a corrida).** Los 5 agentes de
+  barrido leyeron por `git show main:<path>`, nadie movio el arbol, `git status`
+  quedo limpio. Un solo incidente, detectado y revertido por el propio agente:
+  `git -C <repo> worktree add ./ruta-relativa` crea el worktree DENTRO del checkout
+  compartido, porque `-C` resuelve la ruta relativa alli. **El prompt de despacho
+  debe decir "worktree en ruta ABSOLUTA al scratchpad", no solo "worktree aislado".**
+  [corrida: 2026-08-10-lunes]
 - `escociaos-po/CHANGELOG.md` quedo fuera del commit de memoria a proposito: §6
   solo permite `escociaos-po/memory/**` y `escociaos-po/reports/**`. Su contenido
   se absorbio en el reporte de la corrida. Si se quiere un CHANGELOG.md propio,

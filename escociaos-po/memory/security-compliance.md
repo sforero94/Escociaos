@@ -50,11 +50,17 @@ prompt del agente en cada corrida.
   porque el padron es 5 Gerencia + 2 Administrador. **Se convierte en hallazgo el dia
   que exista una cuenta Verificador o Monitor — revisar el padron por rol cada
   corrida antes de descartarlo.** [corrida: 2026-08-03-lunes]
+- Los 3 endpoints hato NUEVOS de la v200 (`/hato/produccion/quincena/foto`, `/hato/pesaje/foto`, `/hato/pesaje/commit`) SI validan con el mismo `verificarAcceso()` de referencia: hato-produccion-quincena-foto.ts:91/267, hato-pesaje-foto.ts:91/257, hato-pesaje-commit.ts:59/160. **6 de 6 endpoints hato gateados.** No re-investigar salvo ruta nueva. [corrida: 2026-08-10-lunes]
+- Los 7 buckets de Storage son `public=false`. Los 2 nuevos (`hato-liquidaciones-fotos`, `hato-pesajes-fotos`, 2026-08-06) traen las 4 politicas del patron 072. `photos` y `monitoreo-fotos` sin politicas = deny-all para el navegador, y esta bien (`monitoreo-fotos` solo lo escribe el bot con service role). Unica anomalia: `reportes-semanales`, ya filada. [corrida: 2026-08-10-lunes]
+- Brecha LATENTE de `contratistas` re-verificada, SIGUE latente: padron 5 Gerencia + 2 Administrador, sin Verificador ni Monitor. **El bucket `reportes-semanales` pertenece a la MISMA clase latente — revisar los dos juntos contra el padron cada corrida.** [corrida: 2026-08-10-lunes]
+- `npm audit --omit=dev`: mismo conjunto de 8 (2 criticas, 5 altas, 1 moderada), filtradas como ruido. Re-chequeada la critica de jspdf que parecia nueva (AcroForm -> ejecucion de JS): `grep -rn AcroForm src/` no devuelve nada, la app no construye formularios PDF. No re-reportar sin cambio de uso. [corrida: 2026-08-10-lunes]
+- Unico token commiteado ademas del anon key esperado: `src/components/Layout.tsx:515`, una URL firmada de Storage para `photos/ehlogo.png` con exp 2035. Es un bearer de lectura de UN png de logo en un bucket privado — **nota permanente, no hallazgo**. [corrida: 2026-08-10-lunes]
 
 ## Refutaciones
 | Fingerprint | Afirmacion | Por que murio | Corrida |
 |---|---|---|---|
 | security/backups/392-filas-globalgap | Las tablas `backup_07*` sin RLS exponen 392 filas de observaciones GlobalGAP y son la unica evidencia de rollback de las 78 borradas | El MECANISMO sobrevivio (y bajo a P2), pero el impacto murio: `backup_075_beneficos_merge` (314 de 392 = 80%) tiene solo 2 columnas de UUID, cero contenido agronomico. Solo 78 filas son observaciones, y un join de tupla completa contra `monitoreos` vivo muestra que 63 de esas 78 tienen gemelo identico vivo. Payload unico real: **15 filas**. Ademas ningun codigo lee esas tablas, asi que filas forjadas serian inertes. Y los grants a anon son el ALTER DEFAULT PRIVILEGES estandar de Supabase heredado por las 91 tablas, NO algo que otorgaran 075/076: lo que faltó fue `ENABLE ROW LEVEL SECURITY`. | 2026-08-03-lunes |
+| security-compliance/advisors/rls-policy-always-true-retirado | "Los advisors bajaron de 112 a 13, luego las politicas always-true se arreglaron" | FALSO. El linter de Supabase **dejo de emitir la categoria `rls_policy_always_true`** (57 filas en la baseline del 2026-08-03, 0 hoy) y las 7 politicas siguen vivas. La bajada se debe a 081/082/093 MAS la retirada de la categoria. **Nunca leer una bajada de advisors como prueba de cierre.** Unico detector que queda, correrlo TODAS las corridas: `SELECT tablename, policyname, cmd, roles::text, coalesce(qual,with_check) FROM pg_policies WHERE schemaname='public' AND (roles::text LIKE '%public%' OR roles::text LIKE '%anon%') AND coalesce(qual,with_check) !~* '(auth\.uid\|get_user_role\|es_usuario_gerencia\|auth\.role\|auth\.jwt)'` | 2026-08-10-lunes |
 
 ## Navegacion
 - `get_advisors('security')` ~111k chars y `('performance')` ~614k revientan el
@@ -66,12 +72,16 @@ prompt del agente en cada corrida.
   coinciden 1:1 con el repo. **OJO: `src/supabase/functions/server/index.ts` NO
   existe** — el arbol espejo no tiene index.ts, las rutas solo estan registradas en
   el arbol desplegado. [corrida: 2026-08-03-lunes]
+- `get_advisors('security')` YA NO revienta el limite: 13 lints, se lee entero. `get_advisors('performance')` (~614k) sigue reventando — no llamarlo; reproducir por SQL y declararlo. **Para grants de tabla usar `aclexplode(pg_class.relacl)`, NUNCA `information_schema.role_table_grants`**: como rol `postgres` esa vista devuelve VACIO para tablas con grants a anon/authenticated y hace parecer que no hay permisos. [corrida: 2026-08-10-lunes]
+- Para politicas, leer `pg_policy` crudo y no solo `pg_policies`: `polroles = {0}` es el pseudo-rol PUBLIC (incluye `anon`), y `polpermissive` es lo unico que dice si existe una politica RESTRICTIVE que cierre el hueco. Una politica UPDATE con `with_check` NULL **cae de vuelta a USING**. [corrida: 2026-08-10-lunes]
 
 ## Baselines
 | Metrica | Valor | Corrida |
 |---|---|---|
 | Advisors | security 112 (57 rls_policy_always_true, 31 function_search_path_mutable, 8+8 security_definer_executable, 4 rls_enabled_no_policy, **3 rls_disabled_in_public ERROR = los backup_07***, 1 leaked_password) | 2026-08-03-lunes |
 | RLS y cuentas | **91 tablas en public, 88 con RLS** (las 3 sin RLS son los backup_07*) · **9 funciones SECURITY DEFINER** (eran 10: 073 borro 3, 074 agrego 2) · usuarios: 5 Gerencia + 2 Administrador, todos activos, **sin Verificador ni Monitor** · `fn_hato_commit_chequeo` conserva EXECUTE solo para service_role · logs_auditoria 0 filas · **edge function v197**, verify_jwt=false | 2026-08-03-lunes |
+| Advisors security | **112 -> 13**. 7 rls_enabled_no_policy (4 conocidas + respaldos.backup_080/083/090, que son el fin deseado); 4 *_security_definer_executable (es_usuario_gerencia + get_user_role = ACEPTE PERMANENTE, y fn_cleanup_compra_dependencies, que SI valida a su llamante — cuerpo verificado, RAISE 42501); 1 auth_leaked_password_protection. Categorias `rls_policy_always_true` y `function_search_path_mutable` desaparecieron del linter (ver refutacion) | 2026-08-10-lunes |
+| RLS y cuentas | **89 tablas en public, 89 con RLS (100%), 267 politicas**. Delta vs 08-03 (91/88): -3 backups movidos a `respaldos`, +1 `hato_correcciones` (mig 084). **10 funciones SECURITY DEFINER** (+fn_hato_registrar_correccion), las 10 con `search_path` fijado; solo 3 alcanzables por roles de navegador. usuarios: 5 Gerencia + 2 Administrador. logs_auditoria 0 filas. hato_correcciones 0 filas, 5 triggers activos. `usuarios` sigue sin grant de UPDATE (073 se sostiene). **Edge function v197 -> v200**, verify_jwt=false. Storage: 7 buckets privados; reportes-semanales 43, facturas 5, hato-liquidaciones-fotos 4, photos 2, monitoreo-fotos 1, chequeos-fotos 0, hato-pesajes-fotos 0 | 2026-08-10-lunes |
 
 ## Archivo
 (vacio)
