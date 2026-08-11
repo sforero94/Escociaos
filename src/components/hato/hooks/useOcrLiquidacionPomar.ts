@@ -1,10 +1,15 @@
 // ARCHIVO: components/hato/hooks/useOcrLiquidacionPomar.ts
-// DESCRIPCIÓN: Sube 1..3 fotos de la liquidación quincenal de El Pomar a
-// `POST /make-server-1ccce916/hato/produccion/quincena/foto` (S4,
-// docs/plan_hato_ronda_agosto_2026.md D-8) y devuelve los campos
+// DESCRIPCIÓN: Sube 1..3 archivos (PDF o imagen) de la liquidación quincenal
+// de El Pomar a `POST /make-server-1ccce916/hato/produccion/quincena/foto`
+// (S4, docs/plan_hato_ronda_agosto_2026.md D-8) y devuelve los campos
 // interpretados para precargar `ProduccionQuincenalForm`. El endpoint NUNCA
 // escribe en tablas de dominio -- el guardado real sigue pasando por
 // `fn_hato_guardar_quincena_venta` cuando Gerencia confirma el formulario.
+//
+// El campo del `FormData` es `archivos` (contrato acordado con el servidor,
+// que lo lee con fallback a `fotos` para no romper llamadas viejas) --
+// Martha en la mayoría de los casos recibe el PDF de El Pomar por correo, no
+// una foto, así que "Cargar factura" acepta PDF e imagen por igual.
 //
 // Mismo patrón de auth que `useSubirChequeoExcel.ts`/`ClimaCard.tsx`:
 // `Authorization: Bearer <session.access_token>`.
@@ -12,6 +17,7 @@
 import { useState, useCallback } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
 import { projectId } from '@/utils/supabase/info.tsx';
+import { leerCuerpoEdgeFunction } from '@/utils/supabase/respuestaEdgeFunction';
 
 const EDGE_FUNCTION_BASE = `https://${projectId}.supabase.co/functions/v1`;
 
@@ -59,7 +65,7 @@ export function useOcrLiquidacionPomar() {
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<RespuestaOcrLiquidacionPomar | null>(null);
 
-  const leerFotos = useCallback(async (fotos: File[]) => {
+  const leerArchivos = useCallback(async (archivos: File[]) => {
     setLoading(true);
     setError(null);
     setResultado(null);
@@ -73,7 +79,7 @@ export function useOcrLiquidacionPomar() {
       }
 
       const formData = new FormData();
-      fotos.forEach((f) => formData.append('fotos', f));
+      archivos.forEach((f) => formData.append('archivos', f));
 
       const res = await fetch(`${EDGE_FUNCTION_BASE}/make-server-1ccce916/hato/produccion/quincena/foto`, {
         method: 'POST',
@@ -81,15 +87,19 @@ export function useOcrLiquidacionPomar() {
         body: formData,
       });
 
-      const body = await res.json();
+      const resultadoCuerpo = await leerCuerpoEdgeFunction<RespuestaOcrLiquidacionPomar & { error?: string }>(res);
+      if (!resultadoCuerpo.ok) {
+        throw new Error(resultadoCuerpo.mensaje);
+      }
+      const body = resultadoCuerpo.body;
       if (!res.ok || !body?.success) {
-        throw new Error(body?.error || `El servidor respondió ${res.status} al leer la liquidación.`);
+        throw new Error(body?.error || `El servidor respondió ${res.status} al leer la factura.`);
       }
 
       setResultado(body as RespuestaOcrLiquidacionPomar);
       return body as RespuestaOcrLiquidacionPomar;
     } catch (err) {
-      const mensaje = err instanceof Error ? err.message : 'Error desconocido leyendo la liquidación';
+      const mensaje = err instanceof Error ? err.message : 'Error desconocido leyendo la factura';
       setError(mensaje);
       throw err;
     } finally {
@@ -102,5 +112,5 @@ export function useOcrLiquidacionPomar() {
     setError(null);
   }, []);
 
-  return { leerFotos, limpiar, loading, error, resultado };
+  return { leerArchivos, limpiar, loading, error, resultado };
 }
