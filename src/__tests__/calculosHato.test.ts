@@ -415,6 +415,69 @@ describe('parseValorNumerico', () => {
   });
 });
 
+// La llave `fracciones` la activan SOLO las celdas de litros (pesaje). Sin
+// ella, "6 1/2" se descartaba entero -- ni siquiera conservaba el 6 -- y la
+// celda desaparecía como si la vaca no se hubiera pesado (bug real reportado
+// por el dueño, 2026-08-11).
+describe('parseValorNumerico -- fracciones manuscritas (opt-in)', () => {
+  describe('con { fracciones: true }', () => {
+    const conFracciones = (raw: unknown) => parseValorNumerico(raw, { fracciones: true });
+
+    it('fracción mixta con espacio o guión', () => {
+      expect(conFracciones('6 1/2')).toEqual({ valor: 6.5, issues: [] });
+      expect(conFracciones('6-1/2').valor).toBe(6.5);
+      expect(conFracciones('12 3/4').valor).toBe(12.75);
+      expect(conFracciones('8 1/4').valor).toBe(8.25);
+    });
+
+    it('fracción sola, sin parte entera', () => {
+      expect(conFracciones('1/2').valor).toBe(0.5);
+      expect(conFracciones('3/4').valor).toBe(0.75);
+    });
+
+    it('símbolo tipográfico, pegado o separado', () => {
+      expect(conFracciones('6½').valor).toBe(6.5);
+      expect(conFracciones('6 ½').valor).toBe(6.5);
+      expect(conFracciones('½').valor).toBe(0.5);
+      expect(conFracciones('7¾').valor).toBe(7.75);
+    });
+
+    it('decimal sin parte entera, con punto o coma', () => {
+      expect(conFracciones('.5').valor).toBe(0.5);
+      expect(conFracciones(',5').valor).toBe(0.5);
+    });
+
+    it('el camino estricto de siempre sigue intacto', () => {
+      expect(conFracciones('7').valor).toBe(7);
+      expect(conFracciones('7,5').valor).toBe(7.5);
+      expect(conFracciones('#VALUE!').valor).toBeNull();
+      expect(conFracciones('').valor).toBeNull();
+    });
+
+    it('denominador que no es medio ni cuarto NO se interpreta -- "6/2" no son 3 litros', () => {
+      const r = conFracciones('6/2');
+      expect(r.valor).toBeNull();
+      expect(r.issues.length).toBeGreaterThan(0);
+    });
+
+    it('numerador >= denominador tampoco -- no es una fracción de ordeño', () => {
+      expect(conFracciones('5/4').valor).toBeNull();
+      expect(conFracciones('2/2').valor).toBeNull();
+    });
+  });
+
+  describe('sin la llave (chequeo: numero, #P2, PL)', () => {
+    it('una fracción sigue siendo un error con issue, nunca 0,5 en silencio', () => {
+      const r = parseValorNumerico('1/2');
+      expect(r.valor).toBeNull();
+      expect(r.issues.length).toBeGreaterThan(0);
+      expect(parseValorNumerico('6 1/2').valor).toBeNull();
+      expect(parseValorNumerico('6½').valor).toBeNull();
+      expect(parseValorNumerico('.5').valor).toBeNull();
+    });
+  });
+});
+
 describe('parseEstado', () => {
   it('celda vacía => tipo vacio, sin issues', () => {
     expect(parseEstado('')).toEqual({ crudo: '', tipo: 'vacio', incierto: false, issues: [] });

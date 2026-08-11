@@ -22,7 +22,9 @@ import {
   construirFilasPesajeInsertables,
   construirPromptOcrPesaje,
   construirRosterPesaje,
+  esCandidataRosterPesaje,
   esquemaJsonOcrPesaje,
+  ETAPAS_ROSTER_PESAJE,
   leerLitrosSemana,
   parsearRespuestaModeloOcrPesaje,
   procesarLecturaOcrPesaje,
@@ -482,5 +484,122 @@ describe('construirPromptOcrPesaje', () => {
     const prompt = construirPromptOcrPesaje();
     expect(prompt).toMatch(/SIN número de chapeta/i);
     expect(prompt).toMatch(/no debes transcribirla/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Roster de la planilla (decisión del dueño, 2026-08-11). Una sola definición
+// para el PDF, el roster del OCR y la revalidación del commit -- si estos
+// tres se desalinean, una vaca impresa sale "no leída" o sus litros se
+// pierden después de que Martha los aprobó.
+// ---------------------------------------------------------------------------
+
+describe('esCandidataRosterPesaje', () => {
+  const base = { etapa: 'vaca', estado: 'activa', ultimoServicioFecha: null };
+
+  it('TODA vaca activa entra -- ordeño y horro por igual', () => {
+    expect(esCandidataRosterPesaje(base)).toBe(true);
+    expect(esCandidataRosterPesaje({ ...base, ultimoServicioFecha: '2026-03-08' })).toBe(true);
+  });
+
+  it('una novilla entra SOLO si ya tiene servicio registrado', () => {
+    expect(esCandidataRosterPesaje({ ...base, etapa: 'novilla' })).toBe(false);
+    expect(esCandidataRosterPesaje({ ...base, etapa: 'novilla', ultimoServicioFecha: '2026-04-09' })).toBe(true);
+  });
+
+  it('las terneras nunca entran, ni con servicio', () => {
+    expect(esCandidataRosterPesaje({ ...base, etapa: 'ternera' })).toBe(false);
+    expect(esCandidataRosterPesaje({ ...base, etapa: 'ternera', ultimoServicioFecha: '2026-04-09' })).toBe(false);
+  });
+
+  it('un animal que ya no está activo nunca entra, cualquiera sea su etapa', () => {
+    for (const estado of ['vendida', 'muerta', null]) {
+      expect(esCandidataRosterPesaje({ ...base, estado })).toBe(false);
+    }
+  });
+
+  it('etapa nula o desconocida no entra -- nunca se asume "es vaca"', () => {
+    expect(esCandidataRosterPesaje({ ...base, etapa: null })).toBe(false);
+    expect(esCandidataRosterPesaje({ ...base, etapa: 'toro' })).toBe(false);
+  });
+
+  it('ETAPAS_ROSTER_PESAJE cubre toda etapa que el predicado puede aceptar', () => {
+    // El `.in('etapa', …)` de las consultas es un filtro ancho: si dejara
+    // fuera una etapa que el predicado acepta, esa fila nunca llegaría a
+    // evaluarse y desaparecería en silencio.
+    for (const etapa of ['vaca', 'novilla']) {
+      expect(ETAPAS_ROSTER_PESAJE).toContain(etapa);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fracciones manuscritas en la celda de litros (reporte del dueño,
+// 2026-08-11: "el OCR no detectó el 1/2").
+// ---------------------------------------------------------------------------
+
+describe('leerLitrosSemana -- fracciones y decimales manuscritos', () => {
+  function filaCon(am: string, pm: string): FilaPesajeConfirmada {
+    const celdas = {} as Record<ColumnaPesajeOcr, CeldaOcrPesaje>;
+    for (const col of COLUMNAS_PESAJE_OCR) celdas[col] = { texto: '', confianza: 'alta' };
+    celdas[claveColumnaPesaje(1, 'am')] = { texto: am, confianza: 'alta' };
+    celdas[claveColumnaPesaje(1, 'pm')] = { texto: pm, confianza: 'alta' };
+    return {
+      pagina: 1,
+      orden: 1,
+      animalId: 'a1',
+      nombre: 'ALINA',
+      nombreImpreso: 'ALINA',
+      celdas,
+      celdasNoConfiables: [],
+      avisos: [],
+    };
+  }
+
+  it('"6 1/2" se lee 6,5 -- antes se descartaba la celda entera', () => {
+    expect(leerLitrosSemana(filaCon('6 1/2', '5 1/2'), 1)).toEqual({ litrosAm: 6.5, litrosPm: 5.5 });
+  });
+
+  it('el símbolo ½ y el decimal sin entero también', () => {
+    expect(leerLitrosSemana(filaCon('7½', '.5'), 1)).toEqual({ litrosAm: 7.5, litrosPm: 0.5 });
+  });
+
+  it('los enteros y decimales de siempre no cambian', () => {
+    expect(leerLitrosSemana(filaCon('7', '6,5'), 1)).toEqual({ litrosAm: 7, litrosPm: 6.5 });
+  });
+
+  it('celda vacía sigue siendo "sin dato", nunca 0', () => {
+    expect(leerLitrosSemana(filaCon('', ''), 1)).toEqual({ litrosAm: null, litrosPm: null });
+  });
+});
+
+describe('construirPromptOcrPesaje -- instrucción de fracciones', () => {
+  it('nombra la fracción explícitamente y prohíbe quedarse con la parte entera', () => {
+    const prompt = construirPromptOcrPesaje();
+    expect(prompt).toContain('1/2');
+    expect(prompt).toContain('½');
+    expect(prompt).toContain("'6 1/2' NO es '6'");
+  });
+});
+
+describe('construirPromptOcrPesaje -- fotos parciales (planilla de una hoja, fotografiada por franjas)', () => {
+  const prompt = construirPromptOcrPesaje();
+
+  it('avisa que la foto puede ser una franja y que el encabezado puede no verse', () => {
+    expect(prompt).toContain('PARTE DE LA PLANILLA');
+    expect(prompt).toMatch(/encabezados.*NO aparezca/s);
+  });
+
+  it('fija el orden posicional de las 10 columnas, que es lo único que queda sin encabezado', () => {
+    expect(prompt).toContain('Semana 1 AM, Semana 1 PM');
+    expect(prompt).toContain('Semana 5 PM');
+  });
+
+  it('prohíbe correr valores a la izquierda cuando el encuadre corta columnas', () => {
+    expect(prompt).toMatch(/NUNCA corras los valores/);
+  });
+
+  it('prohíbe inventar las filas que quedaron fuera del encuadre', () => {
+    expect(prompt).toMatch(/No inventes las filas/);
   });
 });

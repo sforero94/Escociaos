@@ -5,22 +5,27 @@
 // DACOTA -- vendidas hace rato -- y le faltaba VICTORIA, escrita a mano al
 // final por Martha) porque se genera a demanda desde el roster VIGENTE.
 //
-// Contrato del roster (D-A, mismo criterio que la planilla de chequeo):
-// vacas en ordeño VIGENTE -- `etapa='vaca' AND estado='activa'`, la MISMA
-// consulta que ya usa `useProduccionHato.fetchVacasActivas` para el grid
-// semanal. Orden ALFABÉTICO (T2/S2, `ordenarPorValor` de
-// `utils/ordenarAnimalesHato.ts` -- Martha ubica por nombre, no por número;
-// un segundo comparador NO se escribe acá).
+// Contrato del roster: lo decide `esCandidataRosterPesaje`
+// (`utils/importHato/ocrPesaje.ts`) -- todas las vacas activas + las novillas
+// activas con servicio registrado (decisión del dueño, 2026-08-11). Ese
+// predicado vive allá, y no acá, porque es el único módulo que se espeja a
+// los dos árboles de servidor: el PDF, el roster del OCR y la revalidación
+// del commit TIENEN que coincidir, y con tres copias del criterio no
+// coincidirían por mucho tiempo. Orden ALFABÉTICO (T2/S2, `ordenarPorValor`
+// de `utils/ordenarAnimalesHato.ts` -- Martha ubica por nombre, no por
+// número; un segundo comparador NO se escribe acá).
 //
 // D-9 (decisión del dueño): SIEMPRE 5 columnas de semana, cada una con
-// sub-columnas AM y PM más una columna Total de REFERENCIA (grisada, el
-// sistema la calcula -- nunca se le pide a Martha que sume a mano ni se lee
-// del papel, ver `ocrPesaje.ts`). La de junio traía 4 y los meses de 5
-// miércoles (ej. julio 2026) se desbordaban. Las fechas de cada semana salen
-// de `fechasPesajeMensuales` (`calculosHato.ts`) sobre
+// sub-columnas AM y PM. La de junio traía 4 y los meses de 5 miércoles (ej.
+// julio 2026) se desbordaban. Las fechas de cada semana salen de
+// `fechasPesajeMensuales` (`calculosHato.ts`) sobre
 // `hato_config.dia_pesaje_semanal` -- nunca un miércoles hardcodeado; un mes
 // con solo 4 ocurrencias imprime la 5ª columna vacía/sin fecha, nunca una
 // fecha inventada.
+//
+// La tercera sub-columna `Total` de REFERENCIA que traía la primera versión
+// se RETIRÓ el 2026-08-11 a pedido del dueño: nunca se leyó del papel
+// (`litros_total` siempre se deriva de AM+PM) y solo ocupaba ancho.
 //
 // Este archivo es PURO -- prepara título y filas. La construcción real del
 // documento (jsPDF + autoTable, inyectadas) vive en el archivo hermano

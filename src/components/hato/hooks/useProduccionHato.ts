@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
 import { resolverLitrosQuincenal } from '@/utils/hatoProduccion';
+import { ETAPAS_ROSTER_PESAJE, esCandidataRosterPesaje } from '@/utils/importHato/ocrPesaje';
 import type {
   HatoVacaActiva,
   HatoPesajeLeche,
@@ -42,6 +43,18 @@ interface FinIngresoEmbedQuincena {
   comprador_id: string | null;
   nombre: string;
   cantidad: number | null;
+}
+
+/** Fila de `v_hato_estado_actual` tal como la consulta `fetchRosterPesaje` --
+ * solo lo que el predicado del roster y el PDF necesitan. La clave de la
+ * vista es `animal_id`, no `id`. */
+interface FilaRosterPesajeDb {
+  animal_id: string;
+  numero: number | null;
+  nombre: string | null;
+  etapa: string | null;
+  estado: string | null;
+  ultimo_servicio_fecha: string | null;
 }
 
 interface FilaQuincenalDb {
@@ -194,19 +207,37 @@ export function useProduccionHato() {
     return valor;
   }, [supabase]);
 
-  /** Vacas activas en etapa `vaca` -- universo de la grilla de pesaje
-   * semanal (D1/V2). Novillas y terneras no se pesan semanalmente. */
-  const fetchVacasActivas = useCallback(async (): Promise<HatoVacaActiva[]> => {
+  /**
+   * Roster de la planilla mensual de pesaje: todas las vacas activas + las
+   * novillas activas que ya tienen un servicio registrado (decisión del
+   * dueño, 2026-08-11). El criterio NO se escribe acá: vive en
+   * `esCandidataRosterPesaje` (`importHato/ocrPesaje.ts`), el único archivo
+   * que se espeja a los dos árboles de servidor, para que el PDF, el roster
+   * del OCR y la revalidación del commit no puedan divergir.
+   *
+   * Lee de `v_hato_estado_actual` y no de `hato_animales` porque
+   * `ultimo_servicio_fecha` -- lo que decide si una novilla entra -- solo
+   * existe en la vista. El `.in('etapa', …)` es un filtro ancho para no
+   * traerse las terneras; quien decide de verdad es el predicado.
+   */
+  const fetchRosterPesaje = useCallback(async (): Promise<HatoVacaActiva[]> => {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('hato_animales')
-        .select('id, numero, nombre')
-        .eq('etapa', 'vaca')
+        .from('v_hato_estado_actual')
+        .select('animal_id, numero, nombre, etapa, estado, ultimo_servicio_fecha')
         .eq('estado', 'activa')
-        .order('numero', { ascending: true, nullsFirst: false });
+        .in('etapa', ETAPAS_ROSTER_PESAJE as string[]);
       if (error) throw error;
-      return (data ?? []) as HatoVacaActiva[];
+      return ((data ?? []) as FilaRosterPesajeDb[])
+        .filter((f) =>
+          esCandidataRosterPesaje({
+            etapa: f.etapa,
+            estado: f.estado,
+            ultimoServicioFecha: f.ultimo_servicio_fecha,
+          }),
+        )
+        .map((f) => ({ id: f.animal_id, numero: f.numero, nombre: f.nombre }));
     } finally {
       setLoading(false);
     }
@@ -298,7 +329,7 @@ export function useProduccionHato() {
     loading,
     fetchDiaPesajeSemanal,
     fetchRetencionIcaLeche,
-    fetchVacasActivas,
+    fetchRosterPesaje,
     fetchHistorialQuincenal,
     fetchQuincena,
     guardarQuincena,

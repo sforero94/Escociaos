@@ -48,7 +48,11 @@
 import { Context } from 'npm:hono';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { fechasPesajeMensuales } from './calculos-hato.ts';
-import type { CeldaDiffPesaje } from './importHato/ocrPesaje.ts';
+import {
+  esCandidataRosterPesaje,
+  ETAPAS_ROSTER_PESAJE,
+  type CeldaDiffPesaje,
+} from './importHato/ocrPesaje.ts';
 
 const ROLES_PERMITIDOS = new Set(['Administrador', 'Gerencia']); // mismo patrón de escritura que el resto de hato_* (migración 053).
 
@@ -188,17 +192,33 @@ export async function handleHatoPesajeCommit(c: Context): Promise<Response> {
   }
   const fechasValidasHoy = new Set(fechasPesajeMensuales(anio, mes, configValor.iso as number));
 
-  // --- 3. Roster FRESCO -- solo vacas en ordeño ACTIVAS en este instante -
+  // --- 3. Roster FRESCO -- mismo criterio que imprimió la planilla y que usó
+  //    el OCR (`esCandidataRosterPesaje`), nunca uno propio: si acá fuera más
+  //    estrecho, los litros de una fila que Martha vio y aprobó se perderían
+  //    en silencio. Se lee de la VISTA porque el criterio de novillas depende
+  //    de `ultimo_servicio_fecha`.
   const animalIds = [...new Set(celdas.map((c) => c.animalId))];
   const { data: animalesData, error: animalesError } = await supabase
-    .from('hato_animales')
-    .select('id, etapa, estado')
-    .in('id', animalIds);
-  if (animalesError) return respuestaError(c, 500, { error: `No se pudo leer hato_animales: ${animalesError.message}` });
+    .from('v_hato_estado_actual')
+    .select('animal_id, etapa, estado, ultimo_servicio_fecha')
+    .in('animal_id', animalIds)
+    .in('etapa', ETAPAS_ROSTER_PESAJE);
+  if (animalesError) {
+    return respuestaError(c, 500, { error: `No se pudo leer v_hato_estado_actual: ${animalesError.message}` });
+  }
   const activasAhora = new Set(
-    ((animalesData ?? []) as Array<{ id: string; etapa: string; estado: string }>)
-      .filter((a) => a.etapa === 'vaca' && a.estado === 'activa')
-      .map((a) => a.id),
+    (
+      (animalesData ?? []) as Array<{
+        animal_id: string;
+        etapa: string | null;
+        estado: string | null;
+        ultimo_servicio_fecha: string | null;
+      }>
+    )
+      .filter((a) =>
+        esCandidataRosterPesaje({ etapa: a.etapa, estado: a.estado, ultimoServicioFecha: a.ultimo_servicio_fecha }),
+      )
+      .map((a) => a.animal_id),
   );
 
   // --- 4. Filtrar: solo celdas cuya vaca sigue activa y cuya fecha sigue
@@ -208,7 +228,7 @@ export async function handleHatoPesajeCommit(c: Context): Promise<Response> {
   const rechazadas: CeldaRechazada[] = [];
   for (const celda of celdas) {
     if (!activasAhora.has(celda.animalId)) {
-      rechazadas.push({ animalId: celda.animalId, fecha: celda.fecha, motivo: 'La vaca ya no está en ordeño activa -- puede haberse vendido o cambiado de etapa desde la vista previa.' });
+      rechazadas.push({ animalId: celda.animalId, fecha: celda.fecha, motivo: 'El animal ya no está en el roster de la planilla -- puede haberse vendido o cambiado de etapa desde la vista previa.' });
       continue;
     }
     if (!fechasValidasHoy.has(celda.fecha)) {

@@ -44,7 +44,9 @@ import {
   construirDiffPesaje,
   construirPromptOcrPesaje,
   construirRosterPesaje,
+  esCandidataRosterPesaje,
   esquemaJsonOcrPesaje,
+  ETAPAS_ROSTER_PESAJE,
   parsearRespuestaModeloOcrPesaje,
   procesarLecturaOcrPesaje,
   SEMANAS_PESAJE,
@@ -167,6 +169,7 @@ interface LlamadaModeloError {
 
 async function leerFotoConModelo(
   foto: FotoRecibida,
+  totalFotos: number,
   prompt: string,
   esquema: Record<string, unknown>,
   apiKey: string,
@@ -191,7 +194,11 @@ async function leerFotoConModelo(
             content: [
               {
                 type: 'text',
-                text: `Transcribe la página ${foto.pagina} de la planilla de pesaje. Devuelve una entrada por cada fila de vaca visible, en el orden en que aparecen.`,
+                // "foto N de M", no "página N": desde 2026-08-11 la planilla
+                // cabe en UNA hoja y se fotografía por franjas, así que
+                // llamarla página inducía al modelo a esperar una planilla
+                // completa (con encabezados) en cada imagen.
+                text: `Transcribe la foto ${foto.pagina} de ${totalFotos} de la planilla de pesaje. Puede ser una franja de la hoja, no la hoja entera. Devuelve una entrada por cada fila de vaca visible, en el orden en que aparecen.`,
               },
               { type: 'image_url', image_url: { url: dataUrl } },
             ],
@@ -342,13 +349,19 @@ export async function handleHatoPesajeFoto(c: Context): Promise<Response> {
     }
   }
 
-  // --- 3. hato_config.dia_pesaje_semanal + roster (vacas en ordeño VIGENTE) -
+  // --- 3. hato_config.dia_pesaje_semanal + roster VIGENTE de la planilla ----
   const [configRes, rosterRes] = await Promise.all([
     supabase.from('hato_config').select('valor').eq('clave', 'dia_pesaje_semanal').maybeSingle(),
-    // MISMO universo que exporta la planilla (`exportarPlanillaPesaje.ts`,
-    // D-A): etapa='vaca' AND estado='activa'. Igual filtro que
-    // `useProduccionHato.fetchVacasActivas`.
-    supabase.from('hato_animales').select('id, nombre').eq('etapa', 'vaca').eq('estado', 'activa'),
+    // MISMO universo que exporta la planilla (`esCandidataRosterPesaje`,
+    // `importHato/ocrPesaje.ts` -- una sola definición espejada acá y usada
+    // igual por `useProduccionHato.fetchRosterPesaje` y por el commit). Se
+    // lee de la VISTA y no de `hato_animales` porque el criterio de novillas
+    // depende de `ultimo_servicio_fecha`, que solo existe en la vista.
+    supabase
+      .from('v_hato_estado_actual')
+      .select('animal_id, nombre, etapa, estado, ultimo_servicio_fecha')
+      .eq('estado', 'activa')
+      .in('etapa', ETAPAS_ROSTER_PESAJE),
   ]);
 
   if (configRes.error) return respuestaError(c, 500, `No se pudo leer hato_config: ${configRes.error.message}`);
@@ -362,9 +375,20 @@ export async function handleHatoPesajeFoto(c: Context): Promise<Response> {
   }
   const diaPesajeIso = configValor.iso;
 
-  if (rosterRes.error) return respuestaError(c, 500, `No se pudo leer hato_animales: ${rosterRes.error.message}`);
-  const animalesRoster: AnimalRosterPesaje[] = ((rosterRes.data ?? []) as Array<{ id: string; nombre: string | null }>)
-    .map((a) => ({ id: a.id, nombre: a.nombre ?? '' }));
+  if (rosterRes.error) return respuestaError(c, 500, `No se pudo leer v_hato_estado_actual: ${rosterRes.error.message}`);
+  const animalesRoster: AnimalRosterPesaje[] = (
+    (rosterRes.data ?? []) as Array<{
+      animal_id: string;
+      nombre: string | null;
+      etapa: string | null;
+      estado: string | null;
+      ultimo_servicio_fecha: string | null;
+    }>
+  )
+    .filter((a) =>
+      esCandidataRosterPesaje({ etapa: a.etapa, estado: a.estado, ultimoServicioFecha: a.ultimo_servicio_fecha }),
+    )
+    .map((a) => ({ id: a.animal_id, nombre: a.nombre ?? '' }));
   const roster = construirRosterPesaje(animalesRoster);
 
   if (roster.entradas.length === 0) {
@@ -382,7 +406,9 @@ export async function handleHatoPesajeFoto(c: Context): Promise<Response> {
   // --- 4. Lectura con el modelo de visión (una llamada por foto) -----------
   const prompt = construirPromptOcrPesaje();
   const esquema = esquemaJsonOcrPesaje();
-  const resultados = await Promise.all(fotos.map((foto) => leerFotoConModelo(foto, prompt, esquema, apiKey)));
+  const resultados = await Promise.all(
+    fotos.map((foto) => leerFotoConModelo(foto, fotos.length, prompt, esquema, apiKey)),
+  );
 
   const lecturas: LecturaOcrPesajePagina[] = [];
   const erroresLectura: string[] = [];

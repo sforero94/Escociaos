@@ -256,8 +256,10 @@ export function procesarHojaLeche(hoja: HojaCruda, diaPesajeIso: number): Result
     for (const semana of [1, 2, 3, 4] as const) {
       const colAm = COLUMNA_AM_POR_SEMANA[semana];
       const colPm = colAm + 1;
-      const amRes = parseValorNumerico(filaFisica[colAm]);
-      const pmRes = parseValorNumerico(filaFisica[colPm]);
+      // `fracciones: true` -- celda de litros escrita a mano: "6 1/2", "6½",
+      // ".5" son valores válidos acá (nunca en `numero`/`#P2`).
+      const amRes = parseValorNumerico(filaFisica[colAm], { fracciones: true });
+      const pmRes = parseValorNumerico(filaFisica[colPm], { fracciones: true });
       issuesFila.push(...conCampo(`SEMANA ${semana} AM`, amRes.issues));
       issuesFila.push(...conCampo(`SEMANA ${semana} PM`, pmRes.issues));
 

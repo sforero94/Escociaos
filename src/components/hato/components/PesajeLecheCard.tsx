@@ -81,7 +81,7 @@ export function PesajeLecheCard({ ultimaCarga, onGuardado }: { ultimaCarga: stri
   const handleExportarPdf = async () => {
     setExportandoPdf(true);
     try {
-      const [config, vacas] = await Promise.all([hook.fetchDiaPesajeSemanal(), hook.fetchVacasActivas()]);
+      const [config, vacas] = await Promise.all([hook.fetchDiaPesajeSemanal(), hook.fetchRosterPesaje()]);
       const fechasPorSemana = fechasPorSemanaDelMes(anio, mes, config.iso);
       // `HatoVacaActiva.nombre` es `string | null` (columna nullable); una
       // vaca activa sin nombre no puede imprimirse en la planilla (D-1, el
@@ -140,6 +140,10 @@ export function PesajeLecheCard({ ultimaCarga, onGuardado }: { ultimaCarga: stri
           acceptArchivo="image/*"
           labelOpcionArchivo="Subir imagen"
           disabled={!periodoValido}
+          // Ver la nota en `SubirPesajeFoto.tsx`: la planilla es de UNA hoja
+          // pero se fotografía por mitades, así que las dos imágenes tienen
+          // que poder elegirse de una sola vez desde la galería.
+          multipleArchivo
           onFotos={(files) => abrirDialogo('foto', files)}
           onArchivo={(files) => abrirDialogo('foto', files)}
           onManual={() => abrirDialogo('manual', [])}

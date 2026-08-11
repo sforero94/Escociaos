@@ -684,10 +684,76 @@ export interface ResultadoValorNumerico {
   issues: ParseIssue[];
 }
 
-/** Parser genérico para celdas numéricas de la planilla (`PL`, `#P2`).
+export interface OpcionesValorNumerico {
+  /**
+   * Acepta las dos formas manuscritas que aparecen en las celdas de LITROS y
+   * en ninguna otra: fracciones de medio/cuarto (`1/2`, `3/4`, `6 1/2`,
+   * `6-1/2`, `6½`) y decimales sin parte entera (`.5`, `,5`).
+   *
+   * Está detrás de una llave, y no abierto para todos, porque este mismo
+   * parser lee `numero` (chapeta) y `#P2` (número de partos) en la planilla
+   * de chequeo: ahí un `1/2` tiene que seguir siendo un error con issue, no
+   * convertirse en 0,5 en silencio. Solo los dos sitios que leen litros
+   * (`ocrPesaje.ts`, `pesajesLeche.ts`) lo activan.
+   */
+  fracciones?: boolean;
+}
+
+/** Denominadores admitidos en una fracción manuscrita. Deliberadamente solo
+ * medios y cuartos -- es lo que se escribe en una planilla de ordeño. Con
+ * cualquier denominador `6/2` (una fecha mal ubicada, p. ej.) se leería como
+ * 3 litros sin que nadie se entere; acotado así, cae en el issue de "texto no
+ * numérico" y alguien lo mira. */
+const DENOMINADORES_FRACCION_VALIDOS = new Set([2, 4]);
+
+/** Fracciones tipográficas que el modelo de visión puede emitir al transcribir
+ * un "1/2" manuscrito. Mismas dos que `DENOMINADORES_FRACCION_VALIDOS`. */
+const FRACCIONES_UNICODE: Record<string, number> = {
+  '½': 0.5,
+  '¼': 0.25,
+  '¾': 0.75,
+};
+
+/** `6 1/2` / `6-1/2` / `1/2` -- parte entera opcional, luego `n/d`. */
+const RE_FRACCION_ASCII = /^(?:(\d+)[\s-]+)?(\d+)\/(\d+)$/;
+/** `6½` / `½` -- parte entera opcional pegada o separada del símbolo. */
+const RE_FRACCION_UNICODE = /^(\d+)?\s*([½¼¾])$/;
+/** `.5` / `-.5` -- decimal sin parte entera, que el regex estricto rechaza. */
+const RE_DECIMAL_SIN_ENTERO = /^-?\.\d+$/;
+
+/**
+ * Interpreta las formas manuscritas de `opciones.fracciones`. Devuelve
+ * `undefined` cuando el texto no es ninguna de ellas, para que el llamador
+ * siga con el camino estricto de siempre -- nunca decide "no es un número",
+ * esa sigue siendo decisión de `parseValorNumerico`.
+ */
+function parseFraccionManuscrita(normalizado: string): number | undefined {
+  const unicode = normalizado.match(RE_FRACCION_UNICODE);
+  if (unicode) {
+    const entero = unicode[1] ? Number(unicode[1]) : 0;
+    return entero + FRACCIONES_UNICODE[unicode[2]];
+  }
+
+  const ascii = normalizado.match(RE_FRACCION_ASCII);
+  if (ascii) {
+    const entero = ascii[1] ? Number(ascii[1]) : 0;
+    const numerador = Number(ascii[2]);
+    const denominador = Number(ascii[3]);
+    // Un numerador >= denominador no es una fracción manuscrita de ordeño
+    // ("6/2"); se deja caer al issue en vez de leerlo como 3 litros.
+    if (!DENOMINADORES_FRACCION_VALIDOS.has(denominador) || numerador >= denominador) return undefined;
+    return entero + numerador / denominador;
+  }
+
+  if (RE_DECIMAL_SIN_ENTERO.test(normalizado)) return Number(normalizado);
+
+  return undefined;
+}
+
+/** Parser genérico para celdas numéricas de la planilla (`PL`, `#P2`, litros).
  * Nunca lanza: un error de fórmula de Excel (`#VALUE!`, `#N/A`, `#DIV/0!`) o
  * texto no numérico produce `valor: null` + issue, nunca `NaN` ni `0`. */
-export function parseValorNumerico(raw: unknown): ResultadoValorNumerico {
+export function parseValorNumerico(raw: unknown, opciones?: OpcionesValorNumerico): ResultadoValorNumerico {
   if (raw === null || raw === undefined) return { valor: null, issues: [] };
   if (typeof raw === 'number') {
     if (Number.isFinite(raw)) return { valor: raw, issues: [] };
@@ -701,6 +767,10 @@ export function parseValorNumerico(raw: unknown): ResultadoValorNumerico {
   const normalizado = crudo.replace(',', '.');
   if (/^-?\d+(\.\d+)?$/.test(normalizado)) {
     return { valor: Number(normalizado), issues: [] };
+  }
+  if (opciones?.fracciones) {
+    const fraccion = parseFraccionManuscrita(normalizado);
+    if (fraccion !== undefined) return { valor: fraccion, issues: [] };
   }
   return { valor: null, issues: [{ crudo, motivo: 'texto no numérico' }] };
 }
