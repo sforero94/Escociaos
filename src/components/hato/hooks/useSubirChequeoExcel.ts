@@ -25,6 +25,7 @@
 import { useState, useCallback } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
 import { projectId } from '@/utils/supabase/info.tsx';
+import { leerCuerpoEdgeFunction } from '@/utils/supabase/respuestaEdgeFunction';
 import type { ResultadoDiffChequeo } from '@/utils/importHato/diffChequeo';
 import type { FilaChequeoNormalizada, ManifiestoHoja, FilaTerneraNormalizada, FilaSubtablaNormalizada } from '@/utils/importHato/tipos';
 import type { FilaRechazadaCommit } from '@/utils/importHato/commitChequeo';
@@ -138,7 +139,11 @@ export function useSubirChequeoExcel() {
         body: formData,
       });
 
-      const body = await res.json();
+      const resultadoCuerpo = await leerCuerpoEdgeFunction<PreviewChequeoRespuesta & { error?: string }>(res);
+      if (!resultadoCuerpo.ok) {
+        throw new Error(resultadoCuerpo.mensaje);
+      }
+      const body = resultadoCuerpo.body;
       if (!res.ok || !body?.success) {
         throw new Error(body?.error || `El servidor respondió ${res.status} al procesar el archivo.`);
       }
@@ -192,7 +197,11 @@ export function useSubirChequeoExcel() {
         body: formData,
       });
 
-      const body = await res.json();
+      const resultadoCuerpo = await leerCuerpoEdgeFunction<PreviewChequeoRespuesta & { error?: string }>(res);
+      if (!resultadoCuerpo.ok) {
+        throw new Error(resultadoCuerpo.mensaje);
+      }
+      const body = resultadoCuerpo.body;
       if (!res.ok || !body?.success) {
         throw new Error(body?.error || `El servidor respondió ${res.status} al leer las fotos.`);
       }
@@ -263,7 +272,15 @@ export function useSubirChequeoExcel() {
           }),
         });
 
-        const body = await res.json();
+        const resultadoCuerpo = await leerCuerpoEdgeFunction<{
+          success?: boolean;
+          error?: string;
+          filasRechazadas?: FilaRechazadaCommit[];
+        }>(res);
+        if (!resultadoCuerpo.ok) {
+          throw new Error(resultadoCuerpo.mensaje);
+        }
+        const body = resultadoCuerpo.body;
         if (res.status === 409 && Array.isArray(body?.filasRechazadas)) {
           throw new ErrorCommitChequeoRechazado(
             body.error || 'El hato cambió desde la vista previa -- revisa de nuevo antes de aprobar.',

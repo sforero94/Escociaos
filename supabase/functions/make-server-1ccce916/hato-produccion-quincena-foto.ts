@@ -51,9 +51,12 @@ import {
 } from './hato-liquidacion-pomar.ts';
 
 // --- Límites de entrada -----------------------------------------------------
-// El documento es UNA página. Se aceptan hasta 3 fotos para tolerar
+// El documento es UNA página. Se aceptan hasta 3 archivos para tolerar
 // re-tomas (p. ej. una del título recortada y otra de la tabla), y 15MB por
-// foto -- mismo límite que hato-chequeo-foto.ts.
+// archivo -- mismo límite que hato-chequeo-foto.ts. Martha en la mayoría de
+// los casos recibe el PDF de El Pomar directo (le es más fácil subirlo que
+// fotografiarlo), así que además de imagen se acepta PDF -- el mismo
+// documento, dos medios.
 const MAXIMO_FOTOS = 3;
 const TAMANO_MAXIMO_FOTO_BYTES = 15 * 1024 * 1024;
 const TIPOS_ACEPTADOS = new Set([
@@ -63,6 +66,7 @@ const TIPOS_ACEPTADOS = new Set([
   'image/webp',
   'image/heic',
   'image/heif',
+  'application/pdf',
 ]);
 const ROLES_PERMITIDOS = new Set(['Administrador', 'Gerencia']); // mismo set de escritura del módulo (053), igual que chequeo/foto.
 
@@ -168,16 +172,26 @@ interface LlamadaModeloError {
   error: string;
 }
 
-/** Una llamada al modelo POR FOTO -- mismo criterio que chequeo/foto: si el
- * documento viene en 2-3 fotos (título y tabla separados, o re-tomas), cada
- * una se lee independientemente y `combinarLecturasLiquidacion` decide qué
- * hacer si divergen. */
+/** Una llamada al modelo POR ARCHIVO -- mismo criterio que chequeo/foto: si el
+ * documento viene en 2-3 archivos (título y tabla separados, o re-tomas), cada
+ * uno se lee independientemente y `combinarLecturasLiquidacion` decide qué
+ * hacer si divergen.
+ *
+ * Imagen y PDF viajan con formatos distintos según la doc de OpenRouter
+ * (https://openrouter.ai/docs/features/multimodal/pdfs): la imagen sigue
+ * como `image_url` con un data URL, sin cambios. El PDF va como una parte
+ * `file` con `file_data` en base64 y el body de la request agrega
+ * `plugins: [{ id: 'file-parser', pdf: { engine: 'native' } }]` -- `native`
+ * porque Gemini es multimodal y procesa el PDF directo (se cobra como
+ * tokens de entrada, sin costo de parseo adicional). El plugin sólo se
+ * agrega en la llamada del archivo que es PDF; para imágenes no viaja. */
 async function leerFotoConModelo(
   foto: FotoRecibida,
   prompt: string,
   esquema: Record<string, unknown>,
   apiKey: string,
 ): Promise<LlamadaModeloOk | LlamadaModeloError> {
+  const esPdf = foto.tipo === 'application/pdf';
   const dataUrl = `data:${foto.tipo};base64,${bytesABase64(foto.bytes)}`;
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MODELO_MS);
@@ -198,9 +212,11 @@ async function leerFotoConModelo(
             content: [
               {
                 type: 'text',
-                text: `Transcribe la foto ${foto.pagina} del documento de liquidación.`,
+                text: `Transcribe el archivo ${foto.pagina} del documento de liquidación.`,
               },
-              { type: 'image_url', image_url: { url: dataUrl } },
+              esPdf
+                ? { type: 'file', file: { filename: foto.nombre, file_data: dataUrl } }
+                : { type: 'image_url', image_url: { url: dataUrl } },
             ],
           },
         ],
@@ -211,6 +227,7 @@ async function leerFotoConModelo(
           type: 'json_schema',
           json_schema: { name: 'liquidacion_pomar', strict: true, schema: esquema },
         },
+        ...(esPdf ? { plugins: [{ id: 'file-parser', pdf: { engine: 'native' } }] } : {}),
       }),
       signal: controller.signal,
     });
@@ -267,11 +284,15 @@ export async function handleHatoProduccionQuincenaFoto(c: Context): Promise<Resp
   const acceso = await verificarAcceso(c, supabase);
   if (acceso instanceof Response) return acceso;
 
-  // --- 1. Leer las fotos subidas -------------------------------------------
-  let campoFotos: unknown;
+  // --- 1. Leer los archivos subidos -----------------------------------------
+  // El frontend nuevo manda el campo "archivos" (ahora acepta imagen o PDF
+  // por igual); se cae a "fotos" para un bundle viejo que pueda quedar
+  // cacheado en el navegador de Martha durante el despliegue. Contrato
+  // acordado con el agente de frontend -- no cambiar.
+  let campoArchivos: unknown;
   try {
     const body = await c.req.parseBody({ all: true });
-    campoFotos = body['fotos'];
+    campoArchivos = body['archivos'] ?? body['fotos'];
   } catch (err) {
     return respuestaError(
       c,
@@ -280,27 +301,27 @@ export async function handleHatoProduccionQuincenaFoto(c: Context): Promise<Resp
     );
   }
 
-  const archivos = (Array.isArray(campoFotos) ? campoFotos : [campoFotos]).filter(
+  const archivos = (Array.isArray(campoArchivos) ? campoArchivos : [campoArchivos]).filter(
     (v): v is File => v instanceof File,
   );
   if (archivos.length === 0) {
-    return respuestaError(c, 400, 'Falta la foto de la liquidación (multipart/form-data, campo "fotos").');
+    return respuestaError(c, 400, 'Falta el archivo de la liquidación (multipart/form-data, campo "archivos").');
   }
   if (archivos.length > MAXIMO_FOTOS) {
-    return respuestaError(c, 400, `Se aceptan máximo ${MAXIMO_FOTOS} fotos por carga (llegaron ${archivos.length}).`);
+    return respuestaError(c, 400, `Se aceptan máximo ${MAXIMO_FOTOS} archivos por carga (llegaron ${archivos.length}).`);
   }
 
   const fotos: FotoRecibida[] = [];
   for (let i = 0; i < archivos.length; i++) {
     const archivo = archivos[i];
     if (archivo.size === 0) {
-      return respuestaError(c, 400, `La foto ${i + 1} ('${archivo.name}') está vacía.`);
+      return respuestaError(c, 400, `El archivo ${i + 1} ('${archivo.name}') está vacío.`);
     }
     if (archivo.size > TAMANO_MAXIMO_FOTO_BYTES) {
       return respuestaError(
         c,
         400,
-        `La foto ${i + 1} ('${archivo.name}') supera el tamaño máximo de ${TAMANO_MAXIMO_FOTO_BYTES / 1024 / 1024} MB.`,
+        `El archivo ${i + 1} ('${archivo.name}') supera el tamaño máximo de ${TAMANO_MAXIMO_FOTO_BYTES / 1024 / 1024} MB.`,
       );
     }
     const tipo = (archivo.type || '').toLowerCase();
@@ -308,7 +329,7 @@ export async function handleHatoProduccionQuincenaFoto(c: Context): Promise<Resp
       return respuestaError(
         c,
         400,
-        `La foto ${i + 1} ('${archivo.name}') es de tipo '${archivo.type || 'desconocido'}'. Formatos aceptados: JPEG, PNG, WEBP, HEIC.`,
+        `El archivo ${i + 1} ('${archivo.name}') es de tipo '${archivo.type || 'desconocido'}'. Formatos aceptados: JPEG, PNG, WEBP, HEIC, PDF.`,
       );
     }
     fotos.push({
@@ -359,8 +380,8 @@ export async function handleHatoProduccionQuincenaFoto(c: Context): Promise<Resp
     return respuestaError(
       c,
       502,
-      `No se pudo leer ninguna de las fotos. ${erroresLectura.join(' | ')}${
-        rutasStorage.some((r) => r !== null) ? ' La foto sí quedó guardada.' : ''
+      `No se pudo leer ninguno de los archivos. ${erroresLectura.join(' | ')}${
+        rutasStorage.some((r) => r !== null) ? ' El archivo sí quedó guardado.' : ''
       }`,
     );
   }

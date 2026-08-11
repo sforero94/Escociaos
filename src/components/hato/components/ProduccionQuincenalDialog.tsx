@@ -56,7 +56,7 @@ export interface ProduccionQuincenalDialogProps {
   /** Selección ya hecha por el disparador exterior (`VentaQuincenalCard.tsx`,
    * mismo patrón que `SubirChequeoExcel.tsx`/`SubirPesajeFoto.tsx`): si
    * viene con contenido, el OCR de la liquidación corre solo, sin que el
-   * usuario tenga que volver a elegir "Cargar liquidación" dentro del
+   * usuario tenga que volver a elegir "Cargar factura" dentro del
    * diálogo. */
   fotosIniciales?: File[];
 }
@@ -414,9 +414,9 @@ export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIn
   };
 
   const handleOcrLeido = useCallback(
-    async (fotos: File[]) => {
+    async (archivos: File[]) => {
       try {
-        const respuesta = await ocr.leerFotos(fotos);
+        const respuesta = await ocr.leerArchivos(archivos);
         const doc = respuesta.documento;
 
         const anioDetectado = doc.periodoInicio?.slice(0, 4) ?? doc.periodoFin?.slice(0, 4) ?? null;
@@ -522,8 +522,9 @@ export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIn
             {!soloLectura && (
               <div className="flex flex-col items-end gap-1.5">
                 <CapturaArchivo
-                  label="Cargar liquidación"
-                  acceptArchivo="image/*"
+                  label="Cargar factura"
+                  acceptArchivo="application/pdf,image/*"
+                  labelOpcionArchivo="Subir PDF o imagen"
                   multipleFotos={false}
                   multipleArchivo={false}
                   disabled={ocr.loading || guardando}
@@ -535,7 +536,11 @@ export function ProduccionQuincenalDialog({ open, onOpenChange, onSaved, fotosIn
                     <Loader2 className="w-4 h-4 animate-spin" /> Leyendo liquidación…
                   </p>
                 )}
-                {ocr.error && <p className="text-xs text-red-600 max-w-[200px] text-right">{ocr.error}</p>}
+                {/* `max-w-xs` y no 200px: los mensajes de
+                    `respuestaEdgeFunction.ts` son frases accionables
+                    completas ("...avisa a soporte"), no códigos de error --
+                    a 200px se partían en ~8 líneas. */}
+                {ocr.error && <p className="text-xs text-red-600 max-w-xs text-right">{ocr.error}</p>}
               </div>
             )}
           </div>

@@ -81,8 +81,8 @@ function VentaQuincenalCardInner({
 
       <CapturaArchivo
         label="Registrar"
-        acceptArchivo="image/*"
-        labelOpcionArchivo="Subir imagen"
+        acceptArchivo="application/pdf,image/*"
+        labelOpcionArchivo="Subir PDF o imagen"
         onFotos={abrir}
         onArchivo={abrir}
         onManual={() => abrir([])}

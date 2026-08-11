@@ -20,6 +20,7 @@
 import { useState, useCallback } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
 import { projectId } from '@/utils/supabase/info.tsx';
+import { leerCuerpoEdgeFunction } from '@/utils/supabase/respuestaEdgeFunction';
 import type { CeldaDiffPesaje, SemanaPesaje } from '@/utils/importHato/ocrPesaje';
 import { construirDiffPesajeManual, type AnimalPesajeManual } from '@/utils/hato/pesajeManual';
 
@@ -126,7 +127,11 @@ export function useSubirPesajeFoto() {
         body: formData,
       });
 
-      const body = await res.json();
+      const resultadoCuerpo = await leerCuerpoEdgeFunction<PreviewPesajeRespuesta & { error?: string }>(res);
+      if (!resultadoCuerpo.ok) {
+        throw new Error(resultadoCuerpo.mensaje);
+      }
+      const body = resultadoCuerpo.body;
       if (!res.ok || !body?.success) {
         throw new Error(body?.error || `El servidor respondió ${res.status} al leer las fotos.`);
       }
@@ -160,7 +165,11 @@ export function useSubirPesajeFoto() {
         body: JSON.stringify({ anio, mes, celdas }),
       });
 
-      const body = await res.json();
+      const resultadoCuerpo = await leerCuerpoEdgeFunction<CommitPesajeRespuesta & { error?: string }>(res);
+      if (!resultadoCuerpo.ok) {
+        throw new Error(resultadoCuerpo.mensaje);
+      }
+      const body = resultadoCuerpo.body;
       if (!res.ok || !body?.success) {
         throw new Error(body?.error || `El servidor respondió ${res.status} al aprobar el pesaje.`);
       }
