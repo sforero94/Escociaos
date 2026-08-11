@@ -11,8 +11,12 @@
 //      datos (SIEMPRE en blanco -- esta planilla nunca arrastra litros).
 //   4. El documento REAL armado con jspdf + jspdf-autotable (inyectadas,
 //      mismo patrón que `exportarPlanillaChequeoPDF.test.ts`): carta
-//      horizontal, paginación con el universo real (68 vacas activas al
-//      2026-08-06), encabezado y pie en cada página.
+//      VERTICAL, encabezado y pie en cada página.
+//   5. EL TOPE DE 2 PÁGINAS (requisito del dueño, 2026-08-11). Se verifica
+//      contra el documento real, no contra el modelo de
+//      `calcularMetricasFilaPesaje` -- si el cálculo de alto de fila se
+//      desalinea de lo que jspdf-autotable hace de verdad, estos tests son
+//      los que se caen.
 
 import { describe, it, expect } from 'vitest';
 import jsPDF from 'jspdf';
@@ -26,11 +30,16 @@ import {
 } from '@/utils/hato/exportarPlanillaPesaje';
 import {
   ANCHO_TABLA_PESAJE_PDF_MM,
-  ANCHO_UTIL_CARTA_HORIZONTAL_PESAJE_PDF_MM,
+  ANCHO_UTIL_CARTA_VERTICAL_PESAJE_PDF_MM,
+  ALTO_MINIMO_COMODO_FILA_PESAJE_MM,
+  calcularMetricasFilaPesaje,
   construirDocumentoPlanillaPesajePDF,
   construirEncabezadoPlanillaPesajePDF,
   construirFilasPlanillaPesajePDF,
+  FUENTE_DATOS_PESAJE_PT,
+  FUENTE_MINIMA_PESAJE_PT,
   NOTA_OPERATIVA_PLANILLA_PESAJE,
+  PAGINAS_MAXIMAS_PLANILLA_PESAJE,
 } from '@/utils/hato/exportarPlanillaPesajePDF';
 
 describe('construirTituloPlanillaPesaje', () => {
@@ -82,31 +91,32 @@ describe('fechasPorSemanaDelMes', () => {
 });
 
 describe('construirEncabezadoPlanillaPesajePDF', () => {
-  it('la fila de semanas tiene 6 celdas (Nombre + 5 semanas con colSpan 3)', () => {
+  it('la fila de semanas tiene 6 celdas (Nombre + 5 semanas con colSpan 2)', () => {
     const [filaSemanas] = construirEncabezadoPlanillaPesajePDF(fechasPorSemanaDelMes(2026, 7, 3));
     expect(filaSemanas).toHaveLength(6);
-    expect(filaSemanas[1]).toEqual({ content: 'Sem 1 (1/7)', colSpan: 3 });
+    expect(filaSemanas[1]).toEqual({ content: 'Sem 1 (1/7)', colSpan: 2 });
     expect(filaSemanas[0]).toEqual({ content: 'Nombre', colSpan: 1 });
   });
 
   it('una semana sin fecha ese mes muestra el rótulo SIN fecha', () => {
     const [filaSemanas] = construirEncabezadoPlanillaPesajePDF(fechasPorSemanaDelMes(2026, 8, 3));
-    expect(filaSemanas[5]).toEqual({ content: 'Sem 5', colSpan: 3 });
+    expect(filaSemanas[5]).toEqual({ content: 'Sem 5', colSpan: 2 });
   });
 
-  it('la fila de sub-columnas tiene 16 celdas: blanco + (AM,PM,Total) × 5', () => {
+  it('la fila de sub-columnas tiene 11 celdas: blanco + (AM,PM) × 5 -- SIN Total', () => {
     const [, filaSub] = construirEncabezadoPlanillaPesajePDF(fechasPorSemanaDelMes(2026, 7, 3));
-    expect(filaSub).toHaveLength(16);
-    expect(filaSub.slice(1, 4)).toEqual([{ content: 'AM' }, { content: 'PM' }, { content: 'Total' }]);
+    expect(filaSub).toHaveLength(11);
+    expect(filaSub.slice(1, 3)).toEqual([{ content: 'AM' }, { content: 'PM' }]);
+    expect(filaSub.some((c) => c.content === 'Total')).toBe(false);
   });
 });
 
 describe('construirFilasPlanillaPesajePDF', () => {
-  it('cada fila tiene 16 celdas: nombre + 15 vacías -- SIEMPRE en blanco', () => {
+  it('cada fila tiene 11 celdas: nombre + 10 vacías -- SIEMPRE en blanco', () => {
     const animales: AnimalPlanillaPesaje[] = [{ id: '1', nombre: 'ALINA' }];
     const filas = construirFilasPlanillaPesajePDF(animales);
     expect(filas).toHaveLength(1);
-    expect(filas[0]).toHaveLength(16);
+    expect(filas[0]).toHaveLength(11);
     expect(filas[0][0]).toBe('ALINA');
     expect(filas[0].slice(1).every((c) => c === '')).toBe(true);
   });
@@ -118,9 +128,57 @@ describe('construirFilasPlanillaPesajePDF', () => {
   });
 });
 
-describe('presupuesto de ancho: la tabla no desborda la carta horizontal', () => {
+describe('presupuesto de ancho: la tabla no desborda la carta vertical', () => {
   it('el ancho total de columnas cabe dentro del ancho útil', () => {
-    expect(ANCHO_TABLA_PESAJE_PDF_MM).toBeLessThanOrEqual(ANCHO_UTIL_CARTA_HORIZONTAL_PESAJE_PDF_MM);
+    expect(ANCHO_TABLA_PESAJE_PDF_MM).toBeLessThanOrEqual(ANCHO_UTIL_CARTA_VERTICAL_PESAJE_PDF_MM);
+  });
+});
+
+describe('calcularMetricasFilaPesaje', () => {
+  it('el roster de hoy (35) apunta a UNA sola página, a 11pt', () => {
+    const m = calcularMetricasFilaPesaje(35);
+    expect(m.paginasObjetivo).toBe(1);
+    expect(m.filasPorPagina).toBe(35);
+    expect(m.fuentePt).toBe(FUENTE_DATOS_PESAJE_PT);
+    expect(m.altoFila).toBeGreaterThanOrEqual(ALTO_MINIMO_COMODO_FILA_PESAJE_MM);
+    expect(m.cabeEnPaginasMaximas).toBe(true);
+  });
+
+  it('con muy pocas filas no estira más allá del tope de comodidad', () => {
+    const m = calcularMetricasFilaPesaje(5);
+    expect(m.paginasObjetivo).toBe(1);
+    expect(m.altoFila).toBe(12);
+  });
+
+  it('cuando apretar en una hoja dejaría filas no escribibles, gasta la segunda', () => {
+    // 62 = las 35 vacas + las 27 novillas. En una hoja daría filas de ~3,8mm.
+    const m = calcularMetricasFilaPesaje(62);
+    expect(m.paginasObjetivo).toBe(2);
+    expect(m.altoFila).toBeGreaterThanOrEqual(ALTO_MINIMO_COMODO_FILA_PESAJE_MM);
+    expect(m.fuentePt).toBe(FUENTE_DATOS_PESAJE_PT);
+    expect(m.cabeEnPaginasMaximas).toBe(true);
+  });
+
+  it('el salto a 2 páginas ocurre en el límite de comodidad, no antes', () => {
+    expect(calcularMetricasFilaPesaje(39).paginasObjetivo).toBe(1);
+    expect(calcularMetricasFilaPesaje(40).paginasObjetivo).toBe(2);
+  });
+
+  it('entre el límite cómodo y el techo físico aprieta el alto ANTES que la letra', () => {
+    const m = calcularMetricasFilaPesaje(90);
+    expect(m.altoFila).toBeLessThan(ALTO_MINIMO_COMODO_FILA_PESAJE_MM);
+    expect(m.fuentePt).toBeGreaterThanOrEqual(FUENTE_MINIMA_PESAJE_PT);
+    expect(m.cabeEnPaginasMaximas).toBe(true);
+  });
+
+  it('nunca baja de la letra mínima, y lo reporta en vez de comprimir a lo ilegible', () => {
+    const m = calcularMetricasFilaPesaje(400);
+    expect(m.fuentePt).toBe(FUENTE_MINIMA_PESAJE_PT);
+    expect(m.cabeEnPaginasMaximas).toBe(false);
+  });
+
+  it('roster vacío no revienta', () => {
+    expect(calcularMetricasFilaPesaje(0).cabeEnPaginasMaximas).toBe(true);
   });
 });
 
@@ -131,16 +189,16 @@ describe('construirDocumentoPlanillaPesajePDF -- documento real con jspdf + jspd
     return Array.from({ length: n }, (_, i) => ({ id: String(i), nombre: `VACA${String(i).padStart(3, '0')}` }));
   }
 
-  it('carta HORIZONTAL: el ancho de página es mayor que el alto', () => {
+  it('carta VERTICAL: el alto de página es mayor que el ancho', () => {
     const doc = construirDocumentoPlanillaPesajePDF(
       { jsPDF, autoTable },
       { anio: 2026, mes: 7, fechasPorSemana: fechas, animales: animales(1) },
     );
     const ancho = doc.internal.pageSize.getWidth();
     const alto = doc.internal.pageSize.getHeight();
-    expect(ancho).toBeGreaterThan(alto);
-    expect(Math.round(ancho)).toBe(279);
-    expect(Math.round(alto)).toBe(216);
+    expect(alto).toBeGreaterThan(ancho);
+    expect(Math.round(ancho)).toBe(216);
+    expect(Math.round(alto)).toBe(279);
   });
 
   it('una sola vaca cabe en una sola página', () => {
@@ -151,18 +209,50 @@ describe('construirDocumentoPlanillaPesajePDF -- documento real con jspdf + jspd
     expect(doc.getNumberOfPages()).toBe(1);
   });
 
-  it('el universo real del hato (68 vacas activas, 2026-08-06) cabe en 4 páginas a 11pt', () => {
+  // El requisito del dueño (2026-08-11) verificado contra el documento REAL,
+  // en todo el rango que el hato puede alcanzar de forma realista: 35 es el
+  // roster de hoy (solo vacas), 62 sería con las 27 novillas dentro, y 100 es
+  // el techo físico del formato (ver el test siguiente).
+  it.each([1, 20, 35, 50, 62, 80, 100])('%i filas caben en 2 páginas o menos', (n) => {
     const doc = construirDocumentoPlanillaPesajePDF(
       { jsPDF, autoTable },
-      { anio: 2026, mes: 7, fechasPorSemana: fechas, animales: animales(68) },
+      { anio: 2026, mes: 7, fechasPorSemana: fechas, animales: animales(n) },
     );
-    expect(doc.getNumberOfPages()).toBe(4);
+    expect(doc.getNumberOfPages()).toBeLessThanOrEqual(PAGINAS_MAXIMAS_PLANILLA_PESAJE);
+  });
+
+  // Pasado el techo, el contrato es DECIR la verdad, no comprimir hasta lo
+  // ilegible: `cabeEnPaginasMaximas` queda en false y el documento se
+  // desborda a 3 páginas con la letra mínima intacta.
+  it('por encima del techo físico se desborda honestamente, no se comprime', () => {
+    expect(calcularMetricasFilaPesaje(102).cabeEnPaginasMaximas).toBe(false);
+    const doc = construirDocumentoPlanillaPesajePDF(
+      { jsPDF, autoTable },
+      { anio: 2026, mes: 7, fechasPorSemana: fechas, animales: animales(102) },
+    );
+    expect(doc.getNumberOfPages()).toBeGreaterThan(PAGINAS_MAXIMAS_PLANILLA_PESAJE);
+  });
+
+  it('el roster de hoy (35 vacas) sale en UNA sola página', () => {
+    const doc = construirDocumentoPlanillaPesajePDF(
+      { jsPDF, autoTable },
+      { anio: 2026, mes: 7, fechasPorSemana: fechas, animales: animales(35) },
+    );
+    expect(doc.getNumberOfPages()).toBe(1);
+  });
+
+  it.each([1, 20, 35, 39])('%i filas caben en UNA sola página', (n) => {
+    const doc = construirDocumentoPlanillaPesajePDF(
+      { jsPDF, autoTable },
+      { anio: 2026, mes: 7, fechasPorSemana: fechas, animales: animales(n) },
+    );
+    expect(doc.getNumberOfPages()).toBe(1);
   });
 
   it('el título y el pie de página aparecen en TODAS las páginas', () => {
     const doc = construirDocumentoPlanillaPesajePDF(
       { jsPDF, autoTable },
-      { anio: 2026, mes: 7, fechasPorSemana: fechas, animales: animales(68) },
+      { anio: 2026, mes: 7, fechasPorSemana: fechas, animales: animales(62) },
     );
     const total = doc.getNumberOfPages();
     const contenido = doc.output();
@@ -176,7 +266,7 @@ describe('construirDocumentoPlanillaPesajePDF -- documento real con jspdf + jspd
   it('el encabezado de columnas (Sem 1) se repite en cada página (showHead: everyPage)', () => {
     const doc = construirDocumentoPlanillaPesajePDF(
       { jsPDF, autoTable },
-      { anio: 2026, mes: 7, fechasPorSemana: fechas, animales: animales(68) },
+      { anio: 2026, mes: 7, fechasPorSemana: fechas, animales: animales(62) },
     );
     const total = doc.getNumberOfPages();
     const contenido = doc.output();
@@ -186,10 +276,10 @@ describe('construirDocumentoPlanillaPesajePDF -- documento real con jspdf + jspd
   it('ninguna fila de vaca se corta entre dos páginas -- cada nombre aparece exactamente una vez', () => {
     const doc = construirDocumentoPlanillaPesajePDF(
       { jsPDF, autoTable },
-      { anio: 2026, mes: 7, fechasPorSemana: fechas, animales: animales(68) },
+      { anio: 2026, mes: 7, fechasPorSemana: fechas, animales: animales(62) },
     );
     const contenido = doc.output();
     expect(contenido.split('VACA000').length - 1).toBe(1);
-    expect(contenido.split('VACA067').length - 1).toBe(1);
+    expect(contenido.split('VACA061').length - 1).toBe(1);
   });
 });

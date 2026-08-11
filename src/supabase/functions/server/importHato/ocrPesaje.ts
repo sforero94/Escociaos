@@ -46,8 +46,9 @@
 //
 // LAS DOS DEFENSAS QUE SÍ SON RESPONSABILIDAD DE ESTE ARCHIVO:
 //
-// 1. ANTI-ROW-DRIFT POR NOMBRE. El servidor conoce el roster impreso (vacas
-//    en ordeño activas). El modelo dice, por fila, qué NOMBRE lee impreso;
+// 1. ANTI-ROW-DRIFT POR NOMBRE. El servidor conoce el roster impreso
+//    (`esCandidataRosterPesaje`, sección 1.b). El modelo dice, por fila, qué
+//    NOMBRE lee impreso;
 //    acá se coteja contra ese roster. Si no calza -- o calza con MÁS de una
 //    vaca activa homónima -- la fila entera se marca NO LEÍDA, nunca se
 //    adivina ni se desplaza. El roster NO se le pasa al modelo, por el mismo
@@ -64,10 +65,12 @@ import { parseValorNumerico } from '../calculos-hato.ts';
 import { distanciaEdicionAcotada } from './ocrChequeo.ts';
 
 // ---------------------------------------------------------------------------
-// 1. El vocabulario de columnas: 5 semanas × (AM, PM). `Total` es columna de
-//    REFERENCIA impresa (grisada, no diligenciada) en el PDF -- se deriva
-//    siempre de AM+PM, nunca se transcribe ni se lee del papel (una sola
-//    fuente de verdad, el mismo criterio que ya usa el resto del módulo).
+// 1. El vocabulario de columnas: 5 semanas × (AM, PM). `litros_total` se
+//    deriva SIEMPRE de AM+PM, nunca se transcribe ni se lee del papel (una
+//    sola fuente de verdad). El PDF llegó a imprimir una tercera columna
+//    `Total` de referencia (grisada, no diligenciada); se retiró a pedido del
+//    dueño (2026-08-11), pero el prompt sigue advirtiendo que puede haberla
+//    porque las planillas ya impresas con ese formato siguen circulando.
 // ---------------------------------------------------------------------------
 
 export const SEMANAS_PESAJE = [1, 2, 3, 4, 5] as const;
@@ -84,6 +87,55 @@ export const COLUMNAS_PESAJE_OCR: readonly ColumnaPesajeOcr[] = SEMANAS_PESAJE.f
   claveColumnaPesaje(s, 'am'),
   claveColumnaPesaje(s, 'pm'),
 ]);
+
+// ---------------------------------------------------------------------------
+// 1.b Quién va en el roster de la planilla. UNA sola definición, acá, porque
+//     la misma regla se aplica en TRES puntos que no se pueden importar entre
+//     sí (frontend + los dos handlers Deno) y que tienen que coincidir o el
+//     flujo se rompe en silencio: si el PDF imprime una fila que el roster
+//     del OCR no reconoce, esa vaca sale "no leída"; si la reconoce pero el
+//     commit la rechaza, los litros se pierden después de que Martha aprobó.
+//     Este archivo ya se espeja a los dos árboles de servidor
+//     (`docs/hato/regenerar-copias-importhato.py`), así que es el único lugar
+//     donde la regla puede vivir una sola vez.
+// ---------------------------------------------------------------------------
+
+/** Etapas que pueden llegar a estar en el roster. Sirve como filtro ANCHO
+ * para la consulta (`.in('etapa', …)`); el criterio fino es
+ * `esCandidataRosterPesaje`, que es quien decide de verdad. */
+export const ETAPAS_ROSTER_PESAJE: readonly string[] = ['vaca', 'novilla'];
+
+/** Lo mínimo que hay que saber de un animal para decidir si entra al roster.
+ * Campos crudos de `v_hato_estado_actual` -- nada derivado. */
+export interface CandidataRosterPesaje {
+  etapa: string | null;
+  estado: string | null;
+  /** `v_hato_estado_actual.ultimo_servicio_fecha`. */
+  ultimoServicioFecha: string | null;
+}
+
+/**
+ * Regla del roster (decisión del dueño, 2026-08-11):
+ *
+ *   - **Vacas activas: todas.** Orden ordeño y horro por igual. El sistema no
+ *     puede distinguirlas hoy -- no existe un solo evento `secado_real` en
+ *     `hato_eventos` -- y aunque pudiera, Martha deja un paquete de planillas
+ *     en la finca y llena solo las que estén activas: una fila de más es una
+ *     casilla que se queda en blanco, una de menos es un dato que se pierde.
+ *   - **Novillas: solo con servicio registrado.** Es la señal más temprana
+ *     que el sistema tiene de que una novilla va camino a parir; sin ella no
+ *     hay forma de saber cuáles están confirmadas. Consecuencia conocida y
+ *     aceptada: hoy ninguna de las 27 novillas activas tiene servicio, así
+ *     que ninguna se imprime -- van entrando solas a medida que Martha
+ *     registre los servicios.
+ *   - Terneras nunca.
+ */
+export function esCandidataRosterPesaje(animal: CandidataRosterPesaje): boolean {
+  if (animal.estado !== 'activa') return false;
+  if (animal.etapa === 'vaca') return true;
+  if (animal.etapa === 'novilla') return animal.ultimoServicioFecha !== null;
+  return false;
+}
 
 // ---------------------------------------------------------------------------
 // 2. Lo que el modelo devuelve
@@ -473,13 +525,20 @@ export interface LecturaLitrosSemana {
 
 /** Solo la confianza `alta` pasa al pipeline. `baja`/`ilegible` se tratan
  * como ausentes -- "sin dato, nunca 0" aplicado a la lectura. Interpreta con
- * `parseValorNumerico` (`calculosHato.ts`), el único parser numérico. */
+ * `parseValorNumerico` (`calculosHato.ts`), el único parser numérico.
+ *
+ * `fracciones: true` porque la celda de litros es escrita a mano y trae
+ * medios y cuartos verbatim ("6 1/2", "6½", ".5"). Sin esa llave el regex
+ * estricto los descarta ENTEROS -- ni siquiera conserva el 6 -- y la celda
+ * desaparece como si la vaca no se hubiera pesado. La llave NO se abre en los
+ * demás llamadores del parser (`numero`, `#P2`), donde una fracción sigue
+ * siendo un error legítimo. */
 export function leerLitrosSemana(fila: FilaPesajeConfirmada, semana: SemanaPesaje): LecturaLitrosSemana {
   const am = fila.celdas[claveColumnaPesaje(semana, 'am')];
   const pm = fila.celdas[claveColumnaPesaje(semana, 'pm')];
   return {
-    litrosAm: am.confianza === 'alta' ? parseValorNumerico(am.texto).valor : null,
-    litrosPm: pm.confianza === 'alta' ? parseValorNumerico(pm.texto).valor : null,
+    litrosAm: am.confianza === 'alta' ? parseValorNumerico(am.texto, { fracciones: true }).valor : null,
+    litrosPm: pm.confianza === 'alta' ? parseValorNumerico(pm.texto, { fracciones: true }).valor : null,
   };
 }
 
@@ -632,7 +691,8 @@ export function esquemaJsonOcrPesaje(): Record<string, unknown> {
     properties: {
       texto: {
         type: 'string',
-        description: 'Transcripción literal de la celda (número de litros). Cadena vacía si está en blanco o no se puede leer.',
+        description:
+          "Transcripción literal de la celda (número de litros). Puede ser entero ('7'), decimal ('7,5', '.5') o fracción manuscrita ('6 1/2', '6½'); cópiala tal cual, sin convertirla. Cadena vacía si está en blanco o no se puede leer.",
       },
       confianza: {
         type: 'string',
@@ -697,10 +757,15 @@ export function construirPromptOcrPesaje(): string {
     '',
     'La foto es una planilla mensual de pesaje, con una fila por vaca (columna "Nombre", SIN número de chapeta) y 5 bloques de columnas "Semana 1".."Semana 5", cada bloque con dos sub-columnas escritas a mano: AM (ordeño de la mañana) y PM (ordeño de la tarde). Puede haber una tercera columna "Total" por semana -- esa columna es de REFERENCIA y NO debes transcribirla, solo AM y PM.',
     '',
+    'LA FOTO PUEDE SER UNA PARTE DE LA PLANILLA, NO TODA. La planilla se fotografía por franjas horizontales (la mitad de arriba y la de abajo) para que la letra se lea bien, así que es normal que veas solo un grupo de filas y que la fila de encabezados ("Nombre", "Sem 1", "AM/PM") NO aparezca. Eso no cambia nada: las columnas de datos son SIEMPRE las mismas 10, en el mismo orden de izquierda a derecha (Semana 1 AM, Semana 1 PM, Semana 2 AM, ... Semana 5 PM). Ubica cada valor por su POSICIÓN horizontal, y transcribe solo las filas que ves. No inventes las filas que quedaron fuera del encuadre: de esas simplemente no devuelves entrada.',
+    '',
+    'Si en la foto NO alcanzas a ver las 10 columnas de datos completas (por ejemplo porque el encuadre cortó el lado derecho), marca como "ilegible" las columnas que no ves. NUNCA corras los valores hacia la izquierda para rellenar: un número en la semana equivocada es peor que una celda vacía.',
+    '',
     'REGLAS DURAS:',
     "1. Devuelve UNA entrada por cada fila de vaca visible, de arriba hacia abajo, sin saltarte ninguna y sin inventar filas que no estén.",
     "2. En cada fila, 'nombre_impreso' debe salir de LA MISMA fila física que las celdas que reportas. Si no puedes leer con seguridad a qué fila pertenece un número, marca esa celda como 'ilegible'; NUNCA lo pongas en la fila vecina.",
-    "3. Los valores son números de litros (pueden traer coma o punto decimal, ej. '7', '7,5'). Transcribe EXACTAMENTE lo escrito, no redondees ni corrijas.",
+    "3. Los valores son números de litros. Pueden venir como entero ('7'), con coma o punto decimal ('7,5', y también sin parte entera: '.5'), o como FRACCIÓN escrita a mano ('6 1/2', '6-1/2', '1/2', '6½'). Transcribe EXACTAMENTE lo escrito: no redondees, no corrijas, y NO conviertas la fracción a decimal -- de eso se encarga el sistema.",
+    "3.b Una fracción es un valor perfectamente normal en esta planilla, no una rareza: si la lees con seguridad va con confianza 'alta', igual que un entero. Lo que NUNCA debes hacer es transcribir solo la parte entera y descartar el medio ('6 1/2' NO es '6').",
     "4. Confianza obligatoria por celda: 'alta' solo si estás seguro de cada carácter; 'baja' si dudas; 'ilegible' si no se lee. En 'baja' e 'ilegible' deja el texto vacío o lo poco que veas, pero NUNCA adivines un número plausible. Un número mal adivinado es peor que una celda vacía.",
     "5. Una celda genuinamente en blanco (esa vaca no se pesó esa semana, o solo se pesó AM y no PM) es texto vacío con confianza 'alta'. Eso significa 'no hay nada escrito', y es un dato válido -- no es lo mismo que 'no puedo leer la letra'.",
     '',

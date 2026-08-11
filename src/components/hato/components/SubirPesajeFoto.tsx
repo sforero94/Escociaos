@@ -142,7 +142,7 @@ export function SubirPesajeFoto({
     setCargandoManual(true);
     setErrorManual(null);
     try {
-      const [config, vacas] = await Promise.all([produccion.fetchDiaPesajeSemanal(), produccion.fetchVacasActivas()]);
+      const [config, vacas] = await Promise.all([produccion.fetchDiaPesajeSemanal(), produccion.fetchRosterPesaje()]);
       const fechasPorSemana = fechasPorSemanaDelMes(anioSel, mesSel, config.iso);
       // Misma regla que `PesajeLecheCard.tsx`/`construirRosterPlanilla`: una
       // vaca activa sin nombre no puede anclar una fila (D-1, el nombre ES
@@ -251,10 +251,16 @@ export function SubirPesajeFoto({
                   acceptArchivo="image/*"
                   label="Cargar planilla"
                   labelOpcionArchivo="Subir imagen"
+                  // La planilla cabe en UNA hoja, pero se fotografía por
+                  // partes (35 filas en una toma salen ilegibles para el
+                  // modelo). Sin esto, el selector de la galería deja elegir
+                  // UNA sola imagen y la segunda mitad no hay cómo subirla
+                  // salvo repitiendo la operación.
+                  multipleArchivo
                 />
                 {fotos.length > 0 && (
                   <span className="text-xs text-gray-500">
-                    {fotos.length} página{fotos.length > 1 ? 's' : ''} lista{fotos.length > 1 ? 's' : ''}
+                    {fotos.length} foto{fotos.length > 1 ? 's' : ''} lista{fotos.length > 1 ? 's' : ''}
                   </span>
                 )}
               </div>
@@ -263,13 +269,13 @@ export function SubirPesajeFoto({
                 <ul className="space-y-1">
                   {fotos.map((f, i) => (
                     <li key={`${f.name}-${i}`} className="flex items-center gap-3 rounded-xl border border-gray-200 px-3 py-2">
-                      <span className="text-sm text-gray-900">Página {i + 1}</span>
+                      <span className="text-sm text-gray-900">Foto {i + 1}</span>
                       <span className="text-xs text-gray-500">{(f.size / 1024).toFixed(0)} KB</span>
                       <button
                         type="button"
                         onClick={() => setFotos((p) => p.filter((_, j) => j !== i))}
                         className="ml-auto text-gray-400 hover:text-gray-900"
-                        aria-label={`Quitar página ${i + 1}`}
+                        aria-label={`Quitar foto ${i + 1}`}
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -282,6 +288,10 @@ export function SubirPesajeFoto({
                 <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center">
                   <Camera className="w-10 h-10 mx-auto mb-3 text-gray-300" />
                   <p className="text-sm text-gray-600">Elige &quot;Cargar planilla&quot; arriba para tomar o subir las fotos.</p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Puedes subir varias: por ejemplo la mitad de arriba y la de abajo. Si una vaca sale en las dos, el
+                    sistema lo detecta.
+                  </p>
                 </div>
               )}
             </>
