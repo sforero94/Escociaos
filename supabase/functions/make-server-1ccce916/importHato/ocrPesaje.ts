@@ -106,35 +106,33 @@ export const COLUMNAS_PESAJE_OCR: readonly ColumnaPesajeOcr[] = SEMANAS_PESAJE.f
 export const ETAPAS_ROSTER_PESAJE: readonly string[] = ['vaca', 'novilla'];
 
 /** Lo mínimo que hay que saber de un animal para decidir si entra al roster.
- * Campos crudos de `v_hato_estado_actual` -- nada derivado. */
+ * Campos crudos de `hato_animales` -- nada derivado. */
 export interface CandidataRosterPesaje {
   etapa: string | null;
   estado: string | null;
-  /** `v_hato_estado_actual.ultimo_servicio_fecha`. */
-  ultimoServicioFecha: string | null;
 }
 
 /**
- * Regla del roster (decisión del dueño, 2026-08-11):
+ * Regla del roster: **UN SOLO TEMPLATE con todo el hato ordeñable** --
+ * vacas en ordeño, horras y novillas, todas las activas. Terneras nunca.
  *
- *   - **Vacas activas: todas.** Orden ordeño y horro por igual. El sistema no
- *     puede distinguirlas hoy -- no existe un solo evento `secado_real` en
- *     `hato_eventos` -- y aunque pudiera, Martha deja un paquete de planillas
- *     en la finca y llena solo las que estén activas: una fila de más es una
- *     casilla que se queda en blanco, una de menos es un dato que se pierde.
- *   - **Novillas: solo con servicio registrado.** Es la señal más temprana
- *     que el sistema tiene de que una novilla va camino a parir; sin ella no
- *     hay forma de saber cuáles están confirmadas. Consecuencia conocida y
- *     aceptada: hoy ninguna de las 27 novillas activas tiene servicio, así
- *     que ninguna se imprime -- van entrando solas a medida que Martha
- *     registre los servicios.
- *   - Terneras nunca.
+ * Decisión del dueño (2026-08-11, segunda ronda). La primera versión de esta
+ * regla pedía servicio registrado para que una novilla entrara, con la idea
+ * de imprimir solo las "próximas a parir"; se revirtió al comprobar el costo
+ * real de afinar: ninguna de las 27 novillas activas tiene servicio en
+ * `hato_eventos`, así que el filtro imprimía CERO novillas, y una vaca que
+ * falta en el papel es un dato que se pierde en la finca -- donde no hay
+ * internet ni forma de reimprimir.
+ *
+ * El mismo razonamiento explica por qué las horras no se filtran, aunque el
+ * sistema pudiera distinguirlas (hoy no puede: no existe un solo evento
+ * `secado_real`): Martha deja un paquete de planillas en la finca y llena
+ * solo las que estén activas. Una fila de más es una casilla en blanco; una
+ * de menos no tiene arreglo hasta el otro mes.
  */
 export function esCandidataRosterPesaje(animal: CandidataRosterPesaje): boolean {
   if (animal.estado !== 'activa') return false;
-  if (animal.etapa === 'vaca') return true;
-  if (animal.etapa === 'novilla') return animal.ultimoServicioFecha !== null;
-  return false;
+  return animal.etapa === 'vaca' || animal.etapa === 'novilla';
 }
 
 // ---------------------------------------------------------------------------

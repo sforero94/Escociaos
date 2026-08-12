@@ -189,13 +189,18 @@ export function useSubirPesajeFoto() {
    * en blanco (`construirDiffPesajeManual`) y SIN llamar al endpoint de OCR.
    * `ocr.resumen.fotosRecibidas` queda en 0 a propósito: es lo que usa
    * `SubirPesajeFoto.tsx` para no mostrar el resumen de "lectura de fotos"
-   * cuando no hubo ninguna. */
-  const iniciarManual = useCallback((anio: number, mes: number, animales: AnimalPesajeManual[], fechasPorSemana: Record<SemanaPesaje, string | null>) => {
+   * cuando no hubo ninguna.
+   *
+   * DEVUELVE la respuesta además de guardarla en el estado, igual que
+   * `subirFotos`: el llamador necesita el diff en el mismo tick para sembrar
+   * las filas de la grilla, y leerlo del estado obligaría a un `useEffect`
+   * que volvería a sembrarlas cada vez que el usuario las edite. */
+  const iniciarManual = useCallback((anio: number, mes: number, animales: AnimalPesajeManual[], fechasPorSemana: Record<SemanaPesaje, string | null>): PreviewPesajeRespuesta => {
     setError(null);
     setCommitResultado(null);
     setErrorCommit(null);
     const diff = construirDiffPesajeManual(animales, fechasPorSemana);
-    setResultado({
+    const respuesta: PreviewPesajeRespuesta = {
       success: true,
       generadoEn: new Date().toISOString(),
       anio,
@@ -220,7 +225,9 @@ export function useSubirPesajeFoto() {
           celdasNoConfiables: 0,
         },
       },
-    });
+    };
+    setResultado(respuesta);
+    return respuesta;
   }, []);
 
   const limpiar = useCallback(() => {

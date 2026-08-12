@@ -31,6 +31,16 @@ export interface HatoAnimalEdicion {
    * fecha_nacimiento/num_partos. Se fija desde el mismo diálogo -- ver
    * `EditarAnimalDialog.tsx`. */
   etapa_forzada: boolean;
+  /** Genealogía editable (pedido del dueño, 2026-08-11) -- completar lo que
+   * la importación histórica dejó vacío: 94 de 179 animales no tienen madre.
+   * `null` = "no se sabe", que es un valor legítimo y distinto de no haberlo
+   * tocado; por eso el diálogo ofrece explícitamente "Sin registrar" y nunca
+   * deja una madre puesta sin forma de quitarla. */
+  madre_id: string | null;
+  /** `hato_toros` (el catálogo), NO `hato_animales`. `padre_id` -- el otro
+   * camino del esquema, para un toro que sea animal del propio hato -- no se
+   * edita acá: no hay un solo `etapa='toro'` en la tabla. */
+  padre_toro_id: string | null;
 }
 
 export interface ResultadoActualizarHatoAnimal {
@@ -64,6 +74,8 @@ export function useActualizarHatoAnimal() {
             raza: edicion.raza,
             fecha_nacimiento: edicion.fecha_nacimiento,
             etapa_forzada: edicion.etapa_forzada,
+            madre_id: edicion.madre_id,
+            padre_toro_id: edicion.padre_toro_id,
           })
           .eq('id', animalId);
 

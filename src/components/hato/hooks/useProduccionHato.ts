@@ -45,16 +45,14 @@ interface FinIngresoEmbedQuincena {
   cantidad: number | null;
 }
 
-/** Fila de `v_hato_estado_actual` tal como la consulta `fetchRosterPesaje` --
- * solo lo que el predicado del roster y el PDF necesitan. La clave de la
- * vista es `animal_id`, no `id`. */
+/** Fila de `hato_animales` tal como la consulta `fetchRosterPesaje` -- solo
+ * lo que el predicado del roster y el PDF necesitan. */
 interface FilaRosterPesajeDb {
-  animal_id: string;
+  id: string;
   numero: number | null;
   nombre: string | null;
   etapa: string | null;
   estado: string | null;
-  ultimo_servicio_fecha: string | null;
 }
 
 interface FilaQuincenalDb {
@@ -208,36 +206,28 @@ export function useProduccionHato() {
   }, [supabase]);
 
   /**
-   * Roster de la planilla mensual de pesaje: todas las vacas activas + las
-   * novillas activas que ya tienen un servicio registrado (decisión del
-   * dueño, 2026-08-11). El criterio NO se escribe acá: vive en
+   * Roster de la planilla mensual de pesaje: TODO el hato ordeñable -- vacas
+   * en ordeño, horras y novillas, todas las activas (decisión del dueño,
+   * 2026-08-11: un solo template). El criterio NO se escribe acá: vive en
    * `esCandidataRosterPesaje` (`importHato/ocrPesaje.ts`), el único archivo
    * que se espeja a los dos árboles de servidor, para que el PDF, el roster
    * del OCR y la revalidación del commit no puedan divergir.
    *
-   * Lee de `v_hato_estado_actual` y no de `hato_animales` porque
-   * `ultimo_servicio_fecha` -- lo que decide si una novilla entra -- solo
-   * existe en la vista. El `.in('etapa', …)` es un filtro ancho para no
-   * traerse las terneras; quien decide de verdad es el predicado.
+   * El `.in('etapa', …)` es un filtro ancho para no traerse las terneras;
+   * quien decide de verdad es el predicado.
    */
   const fetchRosterPesaje = useCallback(async (): Promise<HatoVacaActiva[]> => {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('v_hato_estado_actual')
-        .select('animal_id, numero, nombre, etapa, estado, ultimo_servicio_fecha')
+        .from('hato_animales')
+        .select('id, numero, nombre, etapa, estado')
         .eq('estado', 'activa')
         .in('etapa', ETAPAS_ROSTER_PESAJE as string[]);
       if (error) throw error;
       return ((data ?? []) as FilaRosterPesajeDb[])
-        .filter((f) =>
-          esCandidataRosterPesaje({
-            etapa: f.etapa,
-            estado: f.estado,
-            ultimoServicioFecha: f.ultimo_servicio_fecha,
-          }),
-        )
-        .map((f) => ({ id: f.animal_id, numero: f.numero, nombre: f.nombre }));
+        .filter((f) => esCandidataRosterPesaje({ etapa: f.etapa, estado: f.estado }))
+        .map((f) => ({ id: f.id, numero: f.numero, nombre: f.nombre }));
     } finally {
       setLoading(false);
     }

@@ -1,10 +1,16 @@
 // ARCHIVO: components/hato/components/RevisionPesajeFoto.tsx
 // DESCRIPCIÓN: S5 de `docs/plan_hato_ronda_agosto_2026.md` -- la grilla de
 // revisión del diff que devuelve `POST /hato/pesaje/foto`: una fila por
-// vaca reconocida, una columna por semana con una fecha real ese mes, dos
-// celdas editables por semana (AM/PM). Presentacional y puro (sin fetch,
-// sin estado propio de red) -- el estado editable vive en
-// `SubirPesajeFoto.tsx`, que es quien arma el payload del commit.
+// vaca, una columna por semana con una fecha real ese mes, dos celdas
+// editables por semana (AM/PM). Presentacional y puro (sin fetch, sin estado
+// propio de red) -- el estado editable vive en `SubirPesajeFoto.tsx`, que es
+// quien arma el payload del commit.
+//
+// Desde el ajuste del dueño de 2026-08-11 la grilla también deja AGREGAR y
+// QUITAR filas, no solo editar celdas: el OCR "funciona de maravilla, pero
+// puede fallar", y sin escape manual la única salida era volver a cargar
+// todo. Las filas ya no se derivan del diff -- llegan por prop desde el
+// contenedor, que es quien las muta (`utils/hato/revisionPesaje.ts`).
 //
 // Contratos que respeta, heredados de `ChequeoDiffReview.tsx` (gemelo del
 // chequeo) y del módulo:
@@ -13,57 +19,92 @@
 //     input vacío, pero solo la primera lleva el ícono de advertencia:
 //     "sin dato, nunca 0" también aplica a NO CONFUNDIR los dos motivos.
 //   - Filas que el modelo leyó pero no se pudieron anclar a ninguna vaca del
-//     roster, y vacas del roster que no aparecieron en ninguna foto, se
-//     muestran SIEMPRE que vengan -- ocultarlas es el fallo silencioso que
-//     el módulo prohíbe.
+//     roster se muestran SIEMPRE que vengan -- ocultarlas es el fallo
+//     silencioso que el módulo prohíbe.
+//   - Las vacas del roster que no llegaron a la grilla NO se listan aparte:
+//     son exactamente las que ofrece el selector "Agregar vaca", que además
+//     de avisar deja hacer algo al respecto. Antes eran un aviso ámbar de
+//     solo lectura, y ese fue el caso MONZA.
 
 import { Fragment } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Plus, X } from 'lucide-react';
 import { NumberInput } from '@/components/ui/number-input';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { formatShortDate } from '@/utils/format';
-import { ordenarPorValor } from '@/utils/ordenarAnimalesHato';
 import { SEMANAS_PESAJE, type SemanaPesaje } from '@/utils/importHato/ocrPesaje';
-import type {
-  FilaNoLeidaPesaje,
-  PreviewPesajeRespuesta,
-  VacaSinLeerPesaje,
-} from '../hooks/useSubirPesajeFoto';
+import { claveCeldaPesaje, type CeldaEditablePesaje, type FilaRevisionPesaje } from '@/utils/hato/revisionPesaje';
+import type { FilaNoLeidaPesaje, PreviewPesajeRespuesta } from '../hooks/useSubirPesajeFoto';
 
-export interface CeldaEditablePesaje {
-  litrosAm: number | undefined;
-  litrosPm: number | undefined;
-  noConfiable: boolean;
-}
-
-/** Clave estable de una celda (vaca, semana) -- misma forma que usa
- * `SubirPesajeFoto.tsx` para indexar su estado editable. */
-export function claveCeldaPesaje(animalId: string, semana: SemanaPesaje): string {
-  return `${animalId}|${semana}`;
-}
-
-interface FilaRevision {
-  animalId: string;
-  nombre: string;
-}
+// Reexportados para no obligar a los consumidores a conocer el módulo puro.
+export { claveCeldaPesaje };
+export type { CeldaEditablePesaje };
 
 export interface RevisionPesajeFotoProps {
   resultado: PreviewPesajeRespuesta;
+  filas: FilaRevisionPesaje[];
+  /** Vacas del roster que NO están en la grilla -- el menú "Agregar vaca". */
+  vacasDisponibles: FilaRevisionPesaje[];
   valores: Map<string, CeldaEditablePesaje>;
   onEditarCelda: (animalId: string, semana: SemanaPesaje, campo: 'am' | 'pm', valor: number | undefined) => void;
+  onAgregarVaca: (vaca: FilaRevisionPesaje) => void;
+  onQuitarVaca: (animalId: string) => void;
   editable: boolean;
 }
 
-export function RevisionPesajeFoto({ resultado, valores, onEditarCelda, editable }: RevisionPesajeFotoProps) {
+export function RevisionPesajeFoto({
+  resultado,
+  filas,
+  vacasDisponibles,
+  valores,
+  onEditarCelda,
+  onAgregarVaca,
+  onQuitarVaca,
+  editable,
+}: RevisionPesajeFotoProps) {
   const semanasConFecha = SEMANAS_PESAJE.filter((s) => resultado.fechasPorSemana[s] !== null);
-
-  const filasMap = new Map<string, FilaRevision>();
-  for (const celda of resultado.diff) {
-    if (!filasMap.has(celda.animalId)) filasMap.set(celda.animalId, { animalId: celda.animalId, nombre: celda.nombre });
-  }
-  const filas = ordenarPorValor([...filasMap.values()], (f) => f.nombre, 'asc');
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-gray-500">
+          {filas.length} vaca{filas.length === 1 ? '' : 's'} en la planilla
+        </p>
+
+        {editable && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline" size="sm" disabled={vacasDisponibles.length === 0}>
+                <Plus className="w-4 h-4 mr-1.5" />
+                Agregar vaca
+                {vacasDisponibles.length > 0 && (
+                  <span className="ml-1.5 text-xs text-gray-500">({vacasDisponibles.length})</span>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="max-h-72 overflow-y-auto">
+              {vacasDisponibles.map((vaca) => (
+                <DropdownMenuItem key={vaca.animalId} onClick={() => onAgregarVaca(vaca)}>
+                  {vaca.nombre}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
+
+      {/* El menú vacío ya se deshabilita solo; este texto explica POR QUÉ no
+          hay nada que agregar, que es lo que responde la duda real ("¿están
+          todas?"). */}
+      {editable && vacasDisponibles.length === 0 && filas.length > 0 && (
+        <p className="text-xs text-gray-500">Están todas las vacas de la planilla.</p>
+      )}
+
       {filas.length > 0 && (
         <div className="rounded-xl border border-gray-200 overflow-x-auto">
           <table className="w-full text-sm">
@@ -77,6 +118,7 @@ export function RevisionPesajeFoto({ resultado, valores, onEditarCelda, editable
                     Sem {s} · {formatShortDate(resultado.fechasPorSemana[s] as string)}
                   </th>
                 ))}
+                <th className="px-2 py-2 border-l border-gray-200" />
               </tr>
               <tr>
                 <th className="sticky left-0 bg-gray-50" />
@@ -86,6 +128,7 @@ export function RevisionPesajeFoto({ resultado, valores, onEditarCelda, editable
                     <th className="px-2 py-1 text-center text-xs font-medium text-gray-400">PM</th>
                   </Fragment>
                 ))}
+                <th className="border-l border-gray-200" />
               </tr>
             </thead>
             <tbody>
@@ -129,6 +172,19 @@ export function RevisionPesajeFoto({ resultado, valores, onEditarCelda, editable
                         </Fragment>
                       );
                     })}
+                    <td className="px-2 py-1 border-l border-gray-100 text-center">
+                      {editable && (
+                        <button
+                          type="button"
+                          onClick={() => onQuitarVaca(fila.animalId)}
+                          className="text-gray-400 hover:text-gray-900"
+                          aria-label={`Quitar a ${fila.nombre} de la planilla`}
+                          title={`Quitar a ${fila.nombre} -- se borran los litros que tenga escritos`}
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
@@ -137,19 +193,20 @@ export function RevisionPesajeFoto({ resultado, valores, onEditarCelda, editable
         </div>
       )}
 
-      {resultado.ocr.vacasSinLeer.length > 0 && (
-        <ListaAvisoPesaje
-          titulo={`No aparecieron en ninguna foto (${resultado.ocr.vacasSinLeer.length})`}
-          items={resultado.ocr.vacasSinLeer}
-          render={(v: VacaSinLeerPesaje) => v.nombre}
-        />
+      {filas.length === 0 && (
+        <div className="rounded-xl border border-dashed border-gray-300 px-4 py-8 text-center">
+          <p className="text-sm text-gray-600">No hay vacas en la planilla.</p>
+          {vacasDisponibles.length > 0 && (
+            <p className="mt-1 text-xs text-gray-500">Usa &quot;Agregar vaca&quot; para armarla a mano.</p>
+          )}
+        </div>
       )}
 
       {resultado.ocr.filasNoLeidas.length > 0 && (
         <ListaAvisoPesaje
           titulo={`Filas que no se pudieron identificar (${resultado.ocr.filasNoLeidas.length})`}
           items={resultado.ocr.filasNoLeidas}
-          render={(f: FilaNoLeidaPesaje) => `Página ${f.pagina}: leyó "${f.nombreImpreso || '—'}" (${f.detalle})`}
+          render={(f: FilaNoLeidaPesaje) => `Foto ${f.pagina}: leyó "${f.nombreImpreso || '—'}" (${f.detalle})`}
         />
       )}
     </div>
