@@ -32,10 +32,21 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSubirPesajeFoto } from '../hooks/useSubirPesajeFoto';
 import type { CeldaParaCommit } from '../hooks/useSubirPesajeFoto';
 import { useProduccionHato } from '../hooks/useProduccionHato';
-import { RevisionPesajeFoto, claveCeldaPesaje, type CeldaEditablePesaje } from './RevisionPesajeFoto';
+import { RevisionPesajeFoto } from './RevisionPesajeFoto';
 import { CapturaArchivo } from './CapturaArchivo';
 import { fechasPorSemanaDelMes } from '@/utils/hato/exportarPlanillaPesaje';
 import { SEMANAS_PESAJE, type CeldaDiffPesaje } from '@/utils/importHato/ocrPesaje';
+import {
+  agregarFilaRevision,
+  celdasParaCommitDesdeGrilla,
+  claveCeldaPesaje,
+  filasInicialesRevision,
+  quitarFilaRevision,
+  rosterCompletoRevision,
+  vacasDisponiblesParaAgregar,
+  type CeldaEditablePesaje,
+  type FilaRevisionPesaje,
+} from '@/utils/hato/revisionPesaje';
 
 const MAX_FOTOS = 6; // mismo tope que valida el servidor (hato-pesaje-foto.ts).
 
@@ -88,6 +99,11 @@ export function SubirPesajeFoto({
   const [fotos, setFotos] = useState<File[]>([]);
   const [avisoFotos, setAvisoFotos] = useState<string | null>(null);
   const [valores, setValores] = useState<Map<string, CeldaEditablePesaje>>(new Map());
+  // Las filas de la grilla son ESTADO, no una derivación del diff: desde el
+  // ajuste de 2026-08-11 se pueden agregar y quitar vacas a mano, así que
+  // recalcularlas desde `resultado.diff` en cada render borraría lo que el
+  // usuario acaba de hacer.
+  const [filas, setFilas] = useState<FilaRevisionPesaje[]>([]);
 
   // Mes editable DENTRO del diálogo -- arranca en lo que trae la tarjeta
   // (`anioInicial`/`mesInicial`, normalmente el mes actual) pero se puede
@@ -109,6 +125,7 @@ export function SubirPesajeFoto({
       setFotos([]);
       setAvisoFotos(null);
       setValores(new Map());
+      setFilas([]);
       setErrorManual(null);
       limpiar();
       onCompletado?.();
@@ -148,7 +165,9 @@ export function SubirPesajeFoto({
       // vaca activa sin nombre no puede anclar una fila (D-1, el nombre ES
       // la identidad de esta planilla) -- se excluye, nunca se imprime en blanco.
       const animales = vacas.filter((v): v is typeof v & { nombre: string } => Boolean(v.nombre?.trim()));
-      iniciarManual(anioSel, mesSel, animales, fechasPorSemana);
+      const resp = iniciarManual(anioSel, mesSel, animales, fechasPorSemana);
+      setValores(valoresIniciales(resp.diff));
+      setFilas(filasInicialesRevision(resp.diff));
     } catch (err) {
       setErrorManual(err instanceof Error ? err.message : 'No se pudo preparar la grilla de pesaje.');
     } finally {
@@ -173,6 +192,7 @@ export function SubirPesajeFoto({
     try {
       const resp = await subirFotos(fotos, anioSel, mesSel);
       setValores(valoresIniciales(resp.diff));
+      setFilas(filasInicialesRevision(resp.diff));
     } catch {
       // El error ya queda en el hook (`error`), se muestra abajo.
     }
@@ -188,18 +208,33 @@ export function SubirPesajeFoto({
     });
   };
 
+  const handleAgregarVaca = (vaca: FilaRevisionPesaje) => {
+    setFilas((prev) => agregarFilaRevision(prev, vaca));
+  };
+
+  // Quitar borra fila Y valores en una sola operación (`quitarFilaRevision`):
+  // separarlas dejaría litros invisibles viajando en el commit. Los dos
+  // `set*` van sueltos (React los agrupa en un solo render) en vez de anidar
+  // uno dentro del updater del otro: un updater tiene que ser puro, y en
+  // StrictMode se invoca dos veces.
+  const handleQuitarVaca = (animalId: string) => {
+    const { filas: filasRestantes, valores: valoresRestantes } = quitarFilaRevision(filas, valores, animalId);
+    setFilas(filasRestantes);
+    setValores(valoresRestantes);
+  };
+
+  // El roster impreso, sin consultar nada: lo que el OCR ancló más lo que el
+  // servidor reportó como no leído (`vacasSinLeer` es justo el complemento).
+  const rosterCompleto = resultado
+    ? rosterCompletoRevision(
+        resultado.diff,
+        resultado.ocr.vacasSinLeer.map((v) => ({ animalId: v.id, nombre: v.nombre })),
+      )
+    : [];
+  const vacasDisponibles = vacasDisponiblesParaAgregar(rosterCompleto, filas);
+
   const celdasParaCommit: CeldaParaCommit[] = resultado
-    ? resultado.diff
-        .map((c) => {
-          const editado = valores.get(claveCeldaPesaje(c.animalId, c.semana));
-          return {
-            animalId: c.animalId,
-            fecha: c.fecha,
-            litrosAm: editado?.litrosAm ?? null,
-            litrosPm: editado?.litrosPm ?? null,
-          };
-        })
-        .filter((c) => c.litrosAm !== null || c.litrosPm !== null)
+    ? celdasParaCommitDesdeGrilla(filas, valores, resultado.fechasPorSemana)
     : [];
 
   const handleAprobar = async () => {
@@ -371,8 +406,12 @@ export function SubirPesajeFoto({
           {resultado && !commitResultado && (
             <RevisionPesajeFoto
               resultado={resultado}
+              filas={filas}
+              vacasDisponibles={vacasDisponibles}
               valores={valores}
               onEditarCelda={handleEditarCelda}
+              onAgregarVaca={handleAgregarVaca}
+              onQuitarVaca={handleQuitarVaca}
               editable={puedeEscribir && !comprometiendo}
             />
           )}

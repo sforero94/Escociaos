@@ -354,14 +354,8 @@ export async function handleHatoPesajeFoto(c: Context): Promise<Response> {
     supabase.from('hato_config').select('valor').eq('clave', 'dia_pesaje_semanal').maybeSingle(),
     // MISMO universo que exporta la planilla (`esCandidataRosterPesaje`,
     // `importHato/ocrPesaje.ts` -- una sola definición espejada acá y usada
-    // igual por `useProduccionHato.fetchRosterPesaje` y por el commit). Se
-    // lee de la VISTA y no de `hato_animales` porque el criterio de novillas
-    // depende de `ultimo_servicio_fecha`, que solo existe en la vista.
-    supabase
-      .from('v_hato_estado_actual')
-      .select('animal_id, nombre, etapa, estado, ultimo_servicio_fecha')
-      .eq('estado', 'activa')
-      .in('etapa', ETAPAS_ROSTER_PESAJE),
+    // igual por `useProduccionHato.fetchRosterPesaje` y por el commit).
+    supabase.from('hato_animales').select('id, nombre, etapa, estado').eq('estado', 'activa').in('etapa', ETAPAS_ROSTER_PESAJE),
   ]);
 
   if (configRes.error) return respuestaError(c, 500, `No se pudo leer hato_config: ${configRes.error.message}`);
@@ -375,20 +369,12 @@ export async function handleHatoPesajeFoto(c: Context): Promise<Response> {
   }
   const diaPesajeIso = configValor.iso;
 
-  if (rosterRes.error) return respuestaError(c, 500, `No se pudo leer v_hato_estado_actual: ${rosterRes.error.message}`);
+  if (rosterRes.error) return respuestaError(c, 500, `No se pudo leer hato_animales: ${rosterRes.error.message}`);
   const animalesRoster: AnimalRosterPesaje[] = (
-    (rosterRes.data ?? []) as Array<{
-      animal_id: string;
-      nombre: string | null;
-      etapa: string | null;
-      estado: string | null;
-      ultimo_servicio_fecha: string | null;
-    }>
+    (rosterRes.data ?? []) as Array<{ id: string; nombre: string | null; etapa: string | null; estado: string | null }>
   )
-    .filter((a) =>
-      esCandidataRosterPesaje({ etapa: a.etapa, estado: a.estado, ultimoServicioFecha: a.ultimo_servicio_fecha }),
-    )
-    .map((a) => ({ id: a.animal_id, nombre: a.nombre ?? '' }));
+    .filter((a) => esCandidataRosterPesaje({ etapa: a.etapa, estado: a.estado }))
+    .map((a) => ({ id: a.id, nombre: a.nombre ?? '' }));
   const roster = construirRosterPesaje(animalesRoster);
 
   if (roster.entradas.length === 0) {

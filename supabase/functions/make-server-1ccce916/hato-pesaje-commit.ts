@@ -195,30 +195,21 @@ export async function handleHatoPesajeCommit(c: Context): Promise<Response> {
   // --- 3. Roster FRESCO -- mismo criterio que imprimió la planilla y que usó
   //    el OCR (`esCandidataRosterPesaje`), nunca uno propio: si acá fuera más
   //    estrecho, los litros de una fila que Martha vio y aprobó se perderían
-  //    en silencio. Se lee de la VISTA porque el criterio de novillas depende
-  //    de `ultimo_servicio_fecha`.
+  //    en silencio. Es también lo que acota el "agregar vaca" manual de la
+  //    grilla de revisión: se puede añadir cualquiera del roster, y nada más.
   const animalIds = [...new Set(celdas.map((c) => c.animalId))];
   const { data: animalesData, error: animalesError } = await supabase
-    .from('v_hato_estado_actual')
-    .select('animal_id, etapa, estado, ultimo_servicio_fecha')
-    .in('animal_id', animalIds)
+    .from('hato_animales')
+    .select('id, etapa, estado')
+    .in('id', animalIds)
     .in('etapa', ETAPAS_ROSTER_PESAJE);
   if (animalesError) {
-    return respuestaError(c, 500, { error: `No se pudo leer v_hato_estado_actual: ${animalesError.message}` });
+    return respuestaError(c, 500, { error: `No se pudo leer hato_animales: ${animalesError.message}` });
   }
   const activasAhora = new Set(
-    (
-      (animalesData ?? []) as Array<{
-        animal_id: string;
-        etapa: string | null;
-        estado: string | null;
-        ultimo_servicio_fecha: string | null;
-      }>
-    )
-      .filter((a) =>
-        esCandidataRosterPesaje({ etapa: a.etapa, estado: a.estado, ultimoServicioFecha: a.ultimo_servicio_fecha }),
-      )
-      .map((a) => a.animal_id),
+    ((animalesData ?? []) as Array<{ id: string; etapa: string | null; estado: string | null }>)
+      .filter((a) => esCandidataRosterPesaje({ etapa: a.etapa, estado: a.estado }))
+      .map((a) => a.id),
   );
 
   // --- 4. Filtrar: solo celdas cuya vaca sigue activa y cuya fecha sigue

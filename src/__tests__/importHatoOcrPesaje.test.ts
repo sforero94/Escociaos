@@ -495,21 +495,18 @@ describe('construirPromptOcrPesaje', () => {
 // ---------------------------------------------------------------------------
 
 describe('esCandidataRosterPesaje', () => {
-  const base = { etapa: 'vaca', estado: 'activa', ultimoServicioFecha: null };
+  const base = { etapa: 'vaca', estado: 'activa' };
 
-  it('TODA vaca activa entra -- ordeño y horro por igual', () => {
+  it('TODA vaca activa entra -- ordeño y horra por igual', () => {
     expect(esCandidataRosterPesaje(base)).toBe(true);
-    expect(esCandidataRosterPesaje({ ...base, ultimoServicioFecha: '2026-03-08' })).toBe(true);
   });
 
-  it('una novilla entra SOLO si ya tiene servicio registrado', () => {
-    expect(esCandidataRosterPesaje({ ...base, etapa: 'novilla' })).toBe(false);
-    expect(esCandidataRosterPesaje({ ...base, etapa: 'novilla', ultimoServicioFecha: '2026-04-09' })).toBe(true);
+  it('TODA novilla activa entra -- un solo template (decisión del dueño)', () => {
+    expect(esCandidataRosterPesaje({ ...base, etapa: 'novilla' })).toBe(true);
   });
 
-  it('las terneras nunca entran, ni con servicio', () => {
+  it('las terneras nunca entran', () => {
     expect(esCandidataRosterPesaje({ ...base, etapa: 'ternera' })).toBe(false);
-    expect(esCandidataRosterPesaje({ ...base, etapa: 'ternera', ultimoServicioFecha: '2026-04-09' })).toBe(false);
   });
 
   it('un animal que ya no está activo nunca entra, cualquiera sea su etapa', () => {
