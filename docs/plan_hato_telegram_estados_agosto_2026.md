@@ -4,7 +4,13 @@
 (vio la vaca en celo y llevó el toro) sin ninguna forma de dejarlo asentado hasta el chequeo
 bimensual. De ahí sale todo este alcance.
 
-**Estado del documento:** grafo de trabajo aprobado. Ninguna tarea ejecutada todavía.
+**Estado del documento:** grafo aprobado y **en ejecución**. Ver §7 (Estado) al final.
+
+> **Dos hechos que bloquean la puesta en producción de lo ya construido:**
+> las migraciones **094 y 095 NO están aplicadas** (el conector de Supabase de
+> la sesión es solo-lectura) y la **edge function no está desplegada**. Hasta
+> que ambas cosas ocurran, la lista del hato no puede leer el método de preñez
+> y `/evento` no existe en el bot.
 
 ---
 
@@ -387,3 +393,25 @@ ve antes de aprobar.
   Telegram, y el flujo web de Martha sigue como está.
 - No se cambia la RLS del módulo ni el gate de módulos por usuario.
 - No se re-ejecuta `load.ts` (backfill único, para siempre).
+
+
+---
+
+## 7. Estado de ejecución (2026-08-13)
+
+| Nodo | Estado | Notas |
+|---|---|---|
+| N1 · Migración 094 | ✅ escrita, **sin aplicar** | Cuerpo validado ejecutándolo como consulta contra producción. |
+| N2 · Motor de 5 estados | ✅ | Espejos regenerados. Un test atrapó que la proyección "quedará" del diálogo no llevaba el método. |
+| N3 · Etiquetas + señal | ✅ | `chipEstadoReproductivo` (5 etiquetas) + `chipSenalRevision`. |
+| N4–N9 · `/evento` en Telegram | ✅ | Monta · inseminación · secado · parto · aborto, con Deshacer. Gateado por el módulo `hato_produccion`, que Fernando ya tiene. |
+| N10 · Dedupe chequeo↔manual | ✅ | `fusionarEventosManualesEnDedupe`, 7 tests. |
+| N11–N13 · Pesaje por foto en Telegram | ⬜ pendiente | Requiere extraer el pipeline de `hato-pesaje-foto.ts` (482 líneas) a una función que compartan el endpoint HTTP y el bot, más el loop de corrección en texto libre (D-C). |
+| N14–N15 · Toros y pajillas | ✅ escrita, **sin aplicar** | Simulada en solo-lectura: 10 borrados, 4 altas, 57 finales, 8 activos, 0 eventos huérfanos. |
+| N16 · UI de selectores | ✅ ya cumplido | `PajillaCompraDialog` ya filtra por `activo`; no hizo falta cambio. |
+| N17–N20 · Display del hato | ✅ | Edad · Partos · Estado · Señal · Última cría · Próximo evento. |
+| N21–N23 · Planilla del chequeo | ⬜ pendiente | La planilla ya es incremental; falta que el pre-llenado venga de la capa de eventos y la columna de Martha (ok/rech/nota). |
+| N24 · Tests | ✅ para lo construido | 2.146 en verde, 0 errores de lint. |
+| N25 · Deploy | ⬜ pendiente | `npx supabase functions deploy make-server-1ccce916` + `curl` a `/evento`. |
+| N26 · Aplicar migraciones | ⬜ pendiente | 094 y 095. |
+| N27 · Destinatarios de alertas | ⬜ pendiente | Cambio de configuración, no de código. |
