@@ -26,6 +26,8 @@ function derivado(overrides: Partial<EstadoReproductivoDerivado> = {}): EstadoRe
   };
 }
 
+const HOY = '2026-08-13';
+
 function animal(overrides: Partial<AnimalHatoDerivado> = {}): AnimalHatoDerivado {
   return {
     animalId: overrides.animalId ?? crypto.randomUUID(),
@@ -39,6 +41,7 @@ function animal(overrides: Partial<AnimalHatoDerivado> = {}): AnimalHatoDerivado
     numPartos: 0,
     ultimoChequeoFecha: null,
     ultimoPartoFecha: null,
+    fechaNacimiento: null,
     derivado: derivado(),
     categoria: 'hato',
     categoriaOrigen: 'calculado',
@@ -50,31 +53,31 @@ function animal(overrides: Partial<AnimalHatoDerivado> = {}): AnimalHatoDerivado
 describe('ordenarAnimalesHato — columna numero', () => {
   it('ordena numéricamente ascendente', () => {
     const animales = [animal({ animalId: 'a', numero: 30 }), animal({ animalId: 'b', numero: 5 }), animal({ animalId: 'c', numero: 12 })];
-    const resultado = ordenarAnimalesHato(animales, 'numero', 'asc').map((a) => a.numero);
+    const resultado = ordenarAnimalesHato(animales, 'numero', 'asc', HOY).map((a) => a.numero);
     expect(resultado).toEqual([5, 12, 30]);
   });
 
   it('ordena numéricamente descendente', () => {
     const animales = [animal({ animalId: 'a', numero: 30 }), animal({ animalId: 'b', numero: 5 }), animal({ animalId: 'c', numero: 12 })];
-    const resultado = ordenarAnimalesHato(animales, 'numero', 'desc').map((a) => a.numero);
+    const resultado = ordenarAnimalesHato(animales, 'numero', 'desc', HOY).map((a) => a.numero);
     expect(resultado).toEqual([30, 12, 5]);
   });
 
   it('deja "sin caravana" (numero null) al final en asc', () => {
     const animales = [animal({ animalId: 'a', numero: null }), animal({ animalId: 'b', numero: 5 })];
-    const resultado = ordenarAnimalesHato(animales, 'numero', 'asc').map((a) => a.numero);
+    const resultado = ordenarAnimalesHato(animales, 'numero', 'asc', HOY).map((a) => a.numero);
     expect(resultado).toEqual([5, null]);
   });
 
   it('deja "sin caravana" (numero null) al final TAMBIÉN en desc -- nunca se trata como "el más grande"', () => {
     const animales = [animal({ animalId: 'a', numero: null }), animal({ animalId: 'b', numero: 5 })];
-    const resultado = ordenarAnimalesHato(animales, 'numero', 'desc').map((a) => a.numero);
+    const resultado = ordenarAnimalesHato(animales, 'numero', 'desc', HOY).map((a) => a.numero);
     expect(resultado).toEqual([5, null]);
   });
 
   it('no muta el arreglo original', () => {
     const animales = [animal({ animalId: 'a', numero: 30 }), animal({ animalId: 'b', numero: 5 })];
-    ordenarAnimalesHato(animales, 'numero', 'asc');
+    ordenarAnimalesHato(animales, 'numero', 'asc', HOY);
     expect(animales.map((a) => a.numero)).toEqual([30, 5]);
   });
 });
@@ -86,8 +89,8 @@ describe('ordenarAnimalesHato — columna nombre', () => {
       animal({ animalId: 'b', nombre: null }),
       animal({ animalId: 'c', nombre: 'Estrella' }),
     ];
-    expect(ordenarAnimalesHato(animales, 'nombre', 'asc').map((a) => a.nombre)).toEqual(['Estrella', 'Zulema', null]);
-    expect(ordenarAnimalesHato(animales, 'nombre', 'desc').map((a) => a.nombre)).toEqual(['Zulema', 'Estrella', null]);
+    expect(ordenarAnimalesHato(animales, 'nombre', 'asc', HOY).map((a) => a.nombre)).toEqual(['Estrella', 'Zulema', null]);
+    expect(ordenarAnimalesHato(animales, 'nombre', 'desc', HOY).map((a) => a.nombre)).toEqual(['Zulema', 'Estrella', null]);
   });
 });
 
@@ -98,8 +101,8 @@ describe('ordenarAnimalesHato — columna pl', () => {
       animal({ animalId: 'b', pl: null }),
       animal({ animalId: 'c', pl: 8.2 }),
     ];
-    expect(ordenarAnimalesHato(animales, 'pl', 'asc').map((a) => a.pl)).toEqual([8.2, 12.5, null]);
-    expect(ordenarAnimalesHato(animales, 'pl', 'desc').map((a) => a.pl)).toEqual([12.5, 8.2, null]);
+    expect(ordenarAnimalesHato(animales, 'pl', 'asc', HOY).map((a) => a.pl)).toEqual([8.2, 12.5, null]);
+    expect(ordenarAnimalesHato(animales, 'pl', 'desc', HOY).map((a) => a.pl)).toEqual([12.5, 8.2, null]);
   });
 });
 
@@ -111,7 +114,7 @@ describe('ordenarAnimalesHato — columna estado', () => {
       animal({ animalId: 'a', derivado: derivado({ estado: 'servida' }) }),
       animal({ animalId: 'b', derivado: derivado({ estado: 'preñada' }) }),
     ];
-    const resultado = ordenarAnimalesHato(animales, 'estado', 'asc').map((a) => a.animalId);
+    const resultado = ordenarAnimalesHato(animales, 'estado', 'asc', HOY).map((a) => a.animalId);
     expect(resultado).toEqual(['b', 'a']);
   });
 });
@@ -123,7 +126,7 @@ describe('ordenarAnimalesHato — columna proximo', () => {
       animal({ animalId: 'b', derivado: derivado({ fecha_secar: '2026-08-01' }) }),
       animal({ animalId: 'c', derivado: derivado() }), // sin ninguna fecha
     ];
-    const resultado = ordenarAnimalesHato(animales, 'proximo', 'asc').map((a) => a.animalId);
+    const resultado = ordenarAnimalesHato(animales, 'proximo', 'asc', HOY).map((a) => a.animalId);
     expect(resultado).toEqual(['b', 'a', 'c']);
   });
 
@@ -132,7 +135,7 @@ describe('ordenarAnimalesHato — columna proximo', () => {
       animal({ animalId: 'a', derivado: derivado() }),
       animal({ animalId: 'b', derivado: derivado({ fecha_probable_parto: '2026-09-01' }) }),
     ];
-    const resultado = ordenarAnimalesHato(animales, 'proximo', 'desc').map((a) => a.animalId);
+    const resultado = ordenarAnimalesHato(animales, 'proximo', 'desc', HOY).map((a) => a.animalId);
     expect(resultado).toEqual(['b', 'a']);
   });
 });
