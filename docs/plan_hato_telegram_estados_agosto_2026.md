@@ -20,8 +20,10 @@ Estas cinco respuestas gobiernan el grafo. Cambiar una cambia la forma del grafo
 | **D-D** | **Cinco estados: vacía · servida · confirmada · por secar · seca.** Servida = preñada por presunción. Confirmada = palpada. | El estado ya no absorbe "aborto/indeterminado": eso vive en una **columna de alertas** aparte que dice qué pasó, y el dato se captura **manualmente**. |
 | **D-E** | **La planilla del chequeo sale pre-impresa con lo registrado** (ej. "servida 10/ago, toro X") y al lado va la columna de Martha (ok / rech / nota manuscrita). | El chequeo deja de ser captura en blanco y pasa a ser **verificación de lo registrado**. Es el mecanismo de sincronía: lo que Fernando marcó en agosto llega al papel de la vet en agosto. |
 
-**Dato abierto que bloquea un solo nodo (N14):** los nombres exactos con los que quieres los 2 toros
-de monta en el catálogo ("Jersey" y "ternero Holstein" son descripciones de raza, no nombres).
+**Nombres de los 2 toros de monta (resuelto 2026-08-13):** los animales todavía no tienen nombre
+propio; se quedan como **`Jersey`** y **`Ternero Holstein`**. Ambas filas **ya existen** en
+`hato_toros`, así que N14 no crea ninguna (ver N14). No queda ningún dato abierto: el grafo está
+listo para ejecutarse completo.
 
 ---
 
@@ -70,7 +72,7 @@ graph TD
   end
 
   subgraph TOROS["Capa 3 · Toros y pajillas"]
-    N14["N14 · Migración 095<br/>limpieza del catálogo<br/>+ alta de los 2 de monta"]
+    N14["N14 · Migración 095<br/>limpieza del catálogo<br/>(los 2 de monta ya existen)"]
     N15["N15 · Seed de pajillas<br/>6 toros / 27 unidades"]
     N16["N16 · UI: selectores sólo<br/>toros activos"]
   end
@@ -253,9 +255,27 @@ rechaza sola. `fuente='telegram'`, `created_by` explícito.
 Guardada igual que 075/080/081: `RAISE EXCEPTION` si los conteos previos y posteriores no cuadran
 exactamente, y respaldo en el esquema **`respaldos`**, nunca en `public` (lección de la alerta
 crítica del linter del 2026-08-03). `DELETE` de los toros sin referencias en `hato_eventos` /
-`hato_animales`; `activo=false` en los referenciados; alta de los 2 toros de monta con
-`tipo='monta'`.
-*Bloqueado por el dato abierto: los nombres de los 2 toros.*
+`hato_animales`; `activo=false` en los referenciados.
+
+**No da de alta ningún toro de monta: los dos ya existen** (verificado en producción 2026-08-13).
+
+| Fila | raza | tipo | activo hoy | eventos | Qué hace N14 |
+|---|---|---|---|---|---|
+| `Jersey` | Jersey | monta | sí | **44** | **Nada** — ya está exactamente como se necesita. Excepción explícita a la regla "desactivar los referenciados". |
+| `Ternero Holstein` | Holstein | monta | **no** | 0 | **Reactivar** (`activo=true`). |
+| `Holstein` *(histórico)* | — | — | sí | **48** | **Desactivar**, como cualquier otro referenciado. |
+
+La tercera fila es la trampa de este nodo. `Holstein` a secas viene de la importación histórica,
+donde la planilla escribía sólo la raza cuando el toro no tenía nombre (`parseToro` canonicaliza
+`hol/hols/HOLST/…` a un único "Holstein"). **No se fusiona con `Ternero Holstein`**: no hay forma
+de saber cuáles de esos 48 servicios corresponden a este ternero, y fusionar sería inventar
+historia. Mismo criterio que la regla del módulo "dos nombres en la misma hoja son dos animales,
+nunca un rename".
+
+Consecuencia para el índice único: `hato_toros` tiene `UNIQUE (lower(nombre))`, así que un
+`INSERT` de "Jersey" o "Ternero Holstein" habría fallado con `23505`. La migración usa
+**SELECT-or-UPDATE por id**, nunca un upsert de PostgREST — mismo patrón que ya usa `PajillasView`.
+*Sin dependencias. Bloquea N15 y N16.*
 
 **N15 · Seed de pajillas**
 6 toros `tipo='inseminacion'` + sus lotes en `hato_pajillas`, **27 unidades en total**:
@@ -338,7 +358,7 @@ ve antes de aprobar.
 
 | Ola | Nodos | Notas |
 |---|---|---|
-| 1 | N1 · N4 · N11 · N18 · **N14** | Cinco frentes sin dependencias entre sí. N14 espera los nombres de los toros. |
+| 1 | N1 · N4 · N11 · N18 · N14 | Cinco frentes sin dependencias entre sí. Nada bloqueado: los 2 toros de monta ya existen en el catálogo. |
 | 2 | N2 · N5 · N6 · N7 · N8 · N12 · N15 | N2 es el cuello de botella real del grafo. |
 | 3 | N3 · N9 · N10 · N13 · N16 · N19 | |
 | 4 | N17 · N20 · N21 | |
