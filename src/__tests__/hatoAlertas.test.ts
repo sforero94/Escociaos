@@ -55,6 +55,8 @@ function animalBase(overrides: Partial<AnimalHatoParaAlertas> = {}): AnimalHatoP
     ultimo_secado_real_fecha: null,
     ultima_confirmacion_prenez_fecha: null,
     ultimo_evento_fecha: null,
+    ultima_confirmacion_prenez_metodo: null,
+    ultimo_aborto_fecha: null,
     ultimo_estado_chequeo: null,
     ...overrides,
   };

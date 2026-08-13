@@ -91,6 +91,8 @@ function estadoBase(overrides: Partial<HatoEstadoActualRow> = {}): HatoEstadoAct
     ultimo_secado_real_fecha: null,
     ultima_confirmacion_prenez_fecha: null,
     ultimo_evento_fecha: null,
+    ultima_confirmacion_prenez_metodo: null,
+    ultimo_aborto_fecha: null,
     ultimo_estado_chequeo: null,
     // Irrelevante para las filas con num_partos >= 1 (la regla D-13 las
     // clasifica "vaca" por el 1er parto, nunca por edad) -- mismo default

@@ -147,6 +147,8 @@ function filaVistaAFactRow(fila: EstadoActualHatoViewRow): EstadoActualHatoRow {
     ultimo_secado_real_fecha: fila.ultimo_secado_real_fecha,
     ultima_confirmacion_prenez_fecha: fila.ultima_confirmacion_prenez_fecha,
     ultimo_evento_fecha: fila.ultimo_evento_fecha,
+    ultima_confirmacion_prenez_metodo: fila.ultima_confirmacion_prenez_metodo,
+    ultimo_aborto_fecha: fila.ultimo_aborto_fecha,
     ultimo_estado_chequeo: fila.ultimo_estado_chequeo,
   };
 }

@@ -199,7 +199,7 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
   const { data: filasEstado, error: errorEstado } = await supabase
     .from('v_hato_estado_actual')
     .select(
-      'animal_id, numero, nombre, etapa, raza, estado, num_partos, ultimo_chequeo_fecha, ultimo_servicio_fecha, ultimo_parto_fecha, ultimo_secado_real_fecha, ultima_confirmacion_prenez_fecha, ultimo_evento_fecha, ultimo_estado_chequeo',
+      'animal_id, numero, nombre, etapa, raza, estado, num_partos, ultimo_chequeo_fecha, ultimo_servicio_fecha, ultimo_parto_fecha, ultimo_secado_real_fecha, ultima_confirmacion_prenez_fecha, ultimo_evento_fecha, ultimo_estado_chequeo, ultima_confirmacion_prenez_metodo, ultimo_aborto_fecha',
     );
   if (errorEstado) {
     return respuestaError(c, 500, `No se pudo leer v_hato_estado_actual: ${errorEstado.message}`);

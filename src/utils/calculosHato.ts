@@ -1658,9 +1658,31 @@ export function derivarSexoCria(input: InputSexoCria): SexoCria | null {
 // BLOQUE 4 — Derivación de estado reproductivo (v_hato_estado_actual + config)
 // ============================================================================
 
-/** Subconjunto de columnas de `v_hato_estado_actual` (migración 056) que
- * este motor consume. La vista expone solo hechos -- todo el cálculo de
- * fechas/umbrales vive aquí, nunca en la vista (plan §7.1, brief S1 Decisión 3). */
+/** Evidencia detrás de una confirmación de preñez (`hato_eventos.datos.metodo`,
+ * escrito por `hatoCicloManual.ts` desde S3). Es la ÚNICA diferencia entre
+ * los estados "servida" y "confirmada" de D-D. */
+export type MetodoConfirmacionPrenez = 'presuncion' | 'palpacion';
+
+/** Motivo por el que una vaca necesita revisión humana, para la columna de
+ * señales de la lista del hato (D-D, 2026-08-13: "el estado ya no absorbe
+ * aborto/indeterminado — eso vive en una columna de alertas aparte que dice
+ * qué pasó"). Nunca se mezcla con `estado`: el estado dice en qué punto del
+ * ciclo está la vaca, la señal dice por qué ese dato puede no ser confiable.
+ *
+ * - `aborto`: el evento más reciente del animal es un aborto. El estado SÍ
+ *   se conoce (queda vacía) -- la señal solo explica el porqué.
+ * - `evento_posterior`: hay un evento más nuevo que los 4 que este motor
+ *   sabe clasificar y NO es un aborto (celo, rechequeo, compra,
+ *   cambio_etapa...). Ahí el estado es genuinamente desconocido. */
+export interface SenalRevisionHato {
+  tipo: 'aborto' | 'evento_posterior';
+  fecha: string;
+}
+
+/** Subconjunto de columnas de `v_hato_estado_actual` (migración 056, ampliada
+ * por 062/089/092/094) que este motor consume. La vista expone solo hechos --
+ * todo el cálculo de fechas/umbrales vive aquí, nunca en la vista
+ * (plan §7.1, brief S1 Decisión 3). */
 export interface EstadoActualHatoRow {
   etapa: 'ternera' | 'novilla' | 'vaca' | 'toro';
   raza: string | null;
@@ -1678,6 +1700,21 @@ export interface EstadoActualHatoRow {
    * o muerte, no se proyecta un ciclo de preñez activo con datos que ese
    * evento puede haber invalidado -- ver `derivarEstadoReproductivo`. */
   ultimo_evento_fecha: string | null;
+  /** `datos->>'metodo'` del ÚLTIMO `confirmacion_prenez` (columna de la
+   * vista desde la migración 094). Decisión del dueño D-D (2026-08-13):
+   * "servida = preñada por presunción, confirmada = palpada", así que este
+   * campo es lo único que separa dos estados distintos a partir del MISMO
+   * tipo de evento. `null` = confirmación sin método registrado
+   * (importación histórica o marca anterior a S3) y se trata como
+   * PRESUNCIÓN: afirmar que un veterinario palpó sin evidencia es la única
+   * lectura de las dos que no se puede deshacer. */
+  ultima_confirmacion_prenez_metodo: MetodoConfirmacionPrenez | null;
+  /** MAX(fecha) de los eventos `aborto` del animal (columna de la vista
+   * desde la migración 094). Permite tipificar el caso que antes caía en
+   * `indeterminado` sin explicación: tras un aborto la vaca está VACÍA (eso
+   * es un hecho biológico, no una suposición) y el motivo viaja en
+   * `senal_revision`, no disfrazado dentro del `estado`. */
+  ultimo_aborto_fecha: string | null;
   /** `tipo` de `parseEstado` sobre el `ESTADO`/`OBS` del último chequeo
    * cerrado (`'vacia_apta' | 'vacia_problema' | 'fecha_heredada' |
    * 'desconocido' | 'vacio'`), o `null` si no hay ninguna señal disponible
@@ -1745,6 +1782,14 @@ export interface EstadoReproductivoDerivado {
    * no hay ninguna señal disponible -- nunca se adivina.
    */
   vacia_es_problema: boolean | null;
+  /**
+   * Motivo por el que este animal necesita una mirada humana (D-D). `null`
+   * = nada que revisar. Es información SEPARADA de `estado` a propósito: el
+   * vocabulario de 5 estados del dueño (vacía · servida · confirmada · por
+   * secar · seca) describe el punto del ciclo, y meter "abortó" o "hay algo
+   * raro" dentro de esa lista obligaría a mentir en uno de los dos ejes.
+   */
+  senal_revision: SenalRevisionHato | null;
   alertas: AlertasReproductivas;
 }
 
@@ -1811,6 +1856,22 @@ function clasificarVaciaProblema(
 }
 
 /**
+ * D-D (dueño, 2026-08-13): una confirmación de preñez vale como `preñada`
+ * (etiqueta "Confirmada") SOLO si viene de una palpación. Una confirmación
+ * por presunción deja a la vaca en `servida` -- que es exactamente lo que
+ * el dueño quiso decir con "servida = preñada por presunción".
+ *
+ * `null` (confirmación sin método: importación histórica o marca anterior a
+ * S3) se lee como presunción. Es la asimetría deliberada: dar por palpada
+ * una vaca que nadie palpó lleva a secarla y dejar de ordeñarla con datos
+ * que nadie verificó; el error contrario solo hace que se la vuelva a
+ * revisar.
+ */
+function estadoDeConfirmacion(fila: EstadoActualHatoRow): EstadoReproductivo {
+  return fila.ultima_confirmacion_prenez_metodo === 'palpacion' ? 'preñada' : 'servida';
+}
+
+/**
  * Deriva el estado reproductivo actual de un animal y las 4 alertas de
  * §7.3 (secado_due, rechequeo_due, servicio_sin_confirmacion, parto_proximo)
  * a partir de los hechos de `v_hato_estado_actual` + `HatoConfig`. Todos los
@@ -1849,6 +1910,7 @@ export function derivarEstadoReproductivo(
       tiempo_secada_dias: null,
       proxima_a_reemplazo: false,
       vacia_es_problema: null,
+      senal_revision: null,
       alertas: SIN_ALERTAS,
     };
   }
@@ -1865,6 +1927,7 @@ export function derivarEstadoReproductivo(
       tiempo_secada_dias: null,
       proxima_a_reemplazo: proximaAReemplazo,
       vacia_es_problema: null,
+      senal_revision: null,
       alertas: { ...SIN_ALERTAS, rechequeo_due: rechequeoDue },
     };
   }
@@ -1907,6 +1970,7 @@ export function derivarEstadoReproductivo(
       // Una novilla nunca ha entrado al ciclo reproductivo: la pregunta
       // "¿normal o problema?" no aplica todavía.
       vacia_es_problema: esNovilla ? null : clasificarVaciaProblema(fila.ultimo_estado_chequeo, null, config),
+      senal_revision: null,
       alertas: { ...SIN_ALERTAS, rechequeo_due: rechequeoDue },
     };
   }
@@ -1917,26 +1981,44 @@ export function derivarEstadoReproductivo(
   });
   const masReciente = candidatos[0].tipo;
 
-  // Salvaguarda: `v_hato_estado_actual` no expone una columna dedicada de
-  // "último aborto" (a diferencia de parto/secado_real/confirmación), pero sí
-  // `ultimo_evento_fecha` (MAX sobre TODO `hato_eventos`, cualquier tipo). Si
-  // hay un evento más reciente que el más nuevo de los 4 que sí sabemos
-  // clasificar, algo pasó que este motor no puede tipificar aquí -- casi
-  // siempre un aborto, venta o muerte -- y proyectar SECAR/PP desde el
-  // servicio viejo sería exactamente el error real encontrado (QA, MONA:
-  // SX='aborto' con SECAR/PP de la fila cruda todavía "vigentes" en la
-  // planilla). Nunca se asume que el ciclo sigue activo cuando hay una señal
-  // de que no es así, aunque no se sepa de qué tipo es.
+  // Salvaguarda: `ultimo_evento_fecha` es MAX sobre TODO `hato_eventos`
+  // (cualquier tipo). Si hay un evento más reciente que el más nuevo de los 4
+  // que este motor sabe clasificar, algo pasó que invalida el ciclo -- y
+  // proyectar SECAR/PP desde el servicio viejo sería exactamente el error
+  // real encontrado (QA, MONA: SX='aborto' con SECAR/PP de la fila cruda
+  // todavía "vigentes" en la planilla). Nunca se asume que el ciclo sigue
+  // activo cuando hay una señal de que no es así.
+  //
+  // Desde la migración 094 esa señal se puede TIPIFICAR en el caso más
+  // frecuente. Si el evento más nuevo es un aborto, el estado no es
+  // desconocido: la vaca quedó VACÍA -- eso es un hecho biológico, no una
+  // suposición -- y el motivo viaja en `senal_revision`, que es justamente
+  // lo que pide D-D ("el estado ya no absorbe aborto/indeterminado"). Solo
+  // cuando el evento posterior NO es un aborto (celo, rechequeo, compra,
+  // cambio_etapa...) el estado sigue siendo genuinamente `indeterminado`.
   if (fila.ultimo_evento_fecha && fila.ultimo_evento_fecha > candidatos[0].fecha) {
+    const esAborto = fila.ultimo_aborto_fecha === fila.ultimo_evento_fecha;
     return {
-      estado: 'indeterminado',
+      estado: esAborto ? 'vacia_por_servir' : 'indeterminado',
       fecha_secar: null,
       fecha_probable_parto: null,
+      // `dias_abiertos` cuenta desde el ÚLTIMO PARTO, no desde cualquier fin
+      // de gestación: un aborto no es un parto y no ancla ese contador.
+      // Queda `null` -- nunca un número inventado desde otra fecha.
       dias_abiertos: null,
       tiempo_prenez_dias: null,
       tiempo_secada_dias: null,
       proxima_a_reemplazo: proximaAReemplazo,
-      vacia_es_problema: null,
+      // Tras un aborto la vaca está vacía y la pregunta "¿normal o
+      // problema?" sí aplica -- pero sin ancla de tiempo utilizable (ver
+      // arriba) solo puede responderla la señal explícita del chequeo.
+      vacia_es_problema: esAborto
+        ? clasificarVaciaProblema(fila.ultimo_estado_chequeo, null, config)
+        : null,
+      senal_revision: {
+        tipo: esAborto ? 'aborto' : 'evento_posterior',
+        fecha: fila.ultimo_evento_fecha,
+      },
       alertas: { ...SIN_ALERTAS, rechequeo_due: rechequeoDue },
     };
   }
@@ -1956,6 +2038,7 @@ export function derivarEstadoReproductivo(
       tiempo_secada_dias: null,
       proxima_a_reemplazo: proximaAReemplazo,
       vacia_es_problema: clasificarVaciaProblema(fila.ultimo_estado_chequeo, diasAbiertos, config),
+      senal_revision: null,
       alertas: { ...SIN_ALERTAS, rechequeo_due: rechequeoDue },
     };
   }
@@ -1972,7 +2055,8 @@ export function derivarEstadoReproductivo(
     // inventada -- pero el ESTADO real (`seca`/`preñada`) sí se conoce y se
     // devuelve. `tiempo_secada_dias` sí se puede calcular en `seca` porque
     // `ultimo_secado_real_fecha` es un dato real, no una proyección.
-    const estadoSinAncla: EstadoReproductivo = masReciente === 'secado_real' ? 'seca' : 'preñada';
+    const estadoSinAncla: EstadoReproductivo =
+      masReciente === 'secado_real' ? 'seca' : estadoDeConfirmacion(fila);
     const tiempoSecadaDiasSinAncla =
       estadoSinAncla === 'seca' && fila.ultimo_secado_real_fecha
         ? diferenciaDias(fila.ultimo_secado_real_fecha, fechaReferencia)
@@ -1989,6 +2073,7 @@ export function derivarEstadoReproductivo(
       // pregunta "¿normal o problema?" no aplica aquí, igual que en la rama
       // con ancla más abajo.
       vacia_es_problema: null,
+      senal_revision: null,
       // Sin ancla no hay `fecha_secar` que comparar, así que `secado_due` y
       // `parto_proximo` quedan en `false` (SIN_ALERTAS) -- no hay fecha
       // basura contra la que compararlas. `hatoAlertas.ts` además exige
@@ -2023,7 +2108,7 @@ export function derivarEstadoReproductivo(
   } else if (dentroVentanaSecar || secadoDue) {
     estado = 'proxima_a_secar';
   } else if (masReciente === 'confirmacion') {
-    estado = 'preñada';
+    estado = estadoDeConfirmacion(fila);
   } else {
     estado = 'servida';
   }
@@ -2067,6 +2152,7 @@ export function derivarEstadoReproductivo(
     // "servicios repetidos sin concepción" ya lo cubre la alerta
     // `servicio_sin_confirmacion` de arriba, sin necesidad de duplicarlo.
     vacia_es_problema: null,
+    senal_revision: null,
     alertas: {
       secado_due: secadoDue,
       rechequeo_due: rechequeoDue,
