@@ -309,6 +309,79 @@ export function seleccionarFechasServicioConocidasPorAnimal(
   return resultado;
 }
 
+/** Un evento del hato registrado A MANO (`chequeo_vaca_id IS NULL`): por
+ * Telegram (`/evento`, fuente `telegram`), por el diálogo de marcar ciclo
+ * (fuente `web`) o por venta/muerte. El caller lo trae ya filtrado. */
+export interface EventoManualHistorico {
+  animalId: string;
+  tipo: string;
+  fecha: string;
+}
+
+/**
+ * **N10 — el nodo que impide que el chequeo duplique lo que ya se registró a
+ * mano.** Fusiona los eventos manuales en los dos mapas de deduplicación que
+ * consume `derivarEventosDeChequeo`.
+ *
+ * Por qué existe: los dos mecanismos anti-duplicado del módulo
+ * (`fechasServicioConocidas` para servicios, `ultimaCriaAnterior` para
+ * partos) se alimentaban EXCLUSIVAMENTE de `hato_chequeo_vacas`, porque
+ * hasta ahora todos los eventos derivados venían de una planilla. Desde que
+ * Fernando registra la monta el mismo día en el corral, ese supuesto es
+ * falso: su monta del 10 de agosto no está en ninguna fila de chequeo, así
+ * que al aprobar el chequeo del 20 —que trae esa misma F Servicio, porque
+ * la veterinaria la copia de lo que ya sabe— el motor emitiría un SEGUNDO
+ * evento de servicio para la misma monta.
+ *
+ * Es exactamente la forma del bug que costó tres rondas de limpieza en julio
+ * de 2026 (385 servicios y 806 partos duplicados en producción). La
+ * diferencia es que aquel se descubrió con los datos ya corrompidos.
+ *
+ * Puro: devuelve mapas NUEVOS, no muta los que recibe.
+ */
+export function fusionarEventosManualesEnDedupe(
+  fechasServicioPorAnimal: Map<string, Set<string>>,
+  ultimaCriaAnteriorPorAnimal: Map<string, string | null>,
+  eventosManuales: EventoManualHistorico[],
+  chequeoNuevoFecha: string,
+): {
+  fechasServicioPorAnimal: Map<string, Set<string>>;
+  ultimaCriaAnteriorPorAnimal: Map<string, string | null>;
+} {
+  const servicios = new Map<string, Set<string>>();
+  for (const [animalId, fechas] of fechasServicioPorAnimal) {
+    servicios.set(animalId, new Set(fechas));
+  }
+  const crias = new Map<string, string | null>(ultimaCriaAnteriorPorAnimal);
+
+  for (const evento of eventosManuales) {
+    // Solo lo ESTRICTAMENTE anterior al chequeo que se aprueba -- mismo
+    // criterio que los dos selectores de arriba. Un evento manual del mismo
+    // día o posterior no es "lo ya conocido", es otro hecho.
+    if (evento.fecha >= chequeoNuevoFecha) continue;
+
+    if (evento.tipo === 'servicio') {
+      if (!servicios.has(evento.animalId)) servicios.set(evento.animalId, new Set());
+      servicios.get(evento.animalId)!.add(evento.fecha);
+      continue;
+    }
+
+    if (evento.tipo === 'parto') {
+      // `ultimaCriaAnterior` es UNA fecha (la última cría conocida), no un
+      // conjunto: `decidirEventoParto` agrupa por proximidad contra ella.
+      // Un parto manual solo la reemplaza si es MÁS RECIENTE que lo que ya
+      // había -- si el chequeo anterior reportó una cría posterior, esa
+      // sigue siendo la última.
+      const actual = crias.get(evento.animalId) ?? null;
+      if (actual === null || evento.fecha > actual) {
+        crias.set(evento.animalId, evento.fecha);
+      }
+    }
+  }
+
+  return { fechasServicioPorAnimal: servicios, ultimaCriaAnteriorPorAnimal: crias };
+}
+
 /**
  * Deriva los eventos de `hato_eventos` de cada fila aprobada, reusando
  * `descomponerSX` (mismo motor que `Load` y la captura en vivo). Una fila

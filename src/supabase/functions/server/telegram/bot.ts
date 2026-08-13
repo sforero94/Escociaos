@@ -18,6 +18,7 @@ import { monitoreoConversation } from "./conversations/monitoreo.ts";
 import { gastoConversation } from "./conversations/gasto.ts";
 import { ingresoConversation } from "./conversations/ingreso.ts";
 import { pesajeLecheConversation } from "./conversations/pesajeLeche.ts";
+import { eventoHatoConversation } from "./conversations/eventoHato.ts";
 // `produccionQuincenal` (litros al camión) se retiró del bot -- SOW 3 de
 // docs/plan_hato_produccion_rework.md §2.3: la quincena pasó a ser un
 // registro financiero (`fin_ingreso_id NOT NULL`, migración 070) y el bot
@@ -140,6 +141,7 @@ function getBot(): Bot<BotContext> {
   bot.use(createConversation(gastoConversation, "gasto"));
   bot.use(createConversation(ingresoConversation, "ingreso"));
   bot.use(createConversation(pesajeLecheConversation, "pesajeLeche"));
+  bot.use(createConversation(eventoHatoConversation, "eventoHato"));
 
   // ==========================================================================
   // HELPERS
@@ -163,6 +165,7 @@ function getBot(): Bot<BotContext> {
     }
     if (mods.includes("hato_produccion")) {
       kb.text("🐄 Pesaje semanal (leche)", "start_pesajeLeche").row();
+      kb.text("📋 Registrar evento del hato", "start_eventoHato").row();
     }
     if (mods.includes("consultas")) {
       kb.text("💬 Preguntarle a Esco", "start_consulta").row();
@@ -301,6 +304,20 @@ function getBot(): Bot<BotContext> {
     await ctx.conversation.enter("pesajeLeche");
   });
 
+  // /evento — registro en campo del ciclo reproductivo (monta, inseminación,
+  // secado, parto, aborto). Se gatea con el MISMO módulo que el pesaje
+  // (`hato_produccion`) a propósito: es el módulo que Fernando ya tiene, así
+  // que el flujo sirve desde el primer despliegue sin tocar configuración.
+  // Separarlo en un módulo propio es un cambio de `modulos_permitidos`, no
+  // de código.
+  bot.command("evento", async (ctx) => {
+    if (!ctx.telegramUser?.modulos_permitidos?.includes("hato_produccion")) {
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
+    await ctx.conversation.enter("eventoHato");
+  });
+
   bot.command("cancelar", async (ctx) => {
     await ctx.conversation.exit();
     await ctx.reply("Operación cancelada.");
@@ -317,6 +334,7 @@ function getBot(): Bot<BotContext> {
         "/gasto — Registrar un gasto",
         "/ingreso — Registrar un ingreso",
         "/pesaje — Pesaje semanal de leche por vaca",
+        "/evento — Registrar monta, inseminación, secado, parto o aborto",
         "/cancelar — Cancelar operación actual",
         "/ayuda — Ver esta ayuda",
         "",
@@ -372,6 +390,15 @@ function getBot(): Bot<BotContext> {
       return;
     }
     await ctx.conversation.enter("pesajeLeche");
+  });
+
+  bot.callbackQuery("start_eventoHato", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!ctx.telegramUser?.modulos_permitidos?.includes("hato_produccion")) {
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
+    await ctx.conversation.enter("eventoHato");
   });
 
   bot.callbackQuery("start_consulta", async (ctx) => {
@@ -470,6 +497,67 @@ function getBot(): Bot<BotContext> {
   // Toda respuesta escribe un evento auditado (quién, cuándo, qué) — plan
   // §6 Épica C "toda respuesta escribe evento auditado".
   // --------------------------------------------------------------------------
+
+  // --------------------------------------------------------------------------
+  // DESHACER un evento recién registrado por /evento (N9).
+  //
+  // Es la contraparte de la decisión D-B (Telegram escribe DIRECTO, sin cola
+  // de aprobación): el error probable en el corral no es inventarse un
+  // evento, es elegir la vaca equivocada de una lista de homónimas — y eso se
+  // ve en el resumen al instante. Sin este botón, corregirlo exigiría entrar
+  // a la app desde una finca sin internet.
+  //
+  // Solo borra eventos de `fuente='telegram'`: el id viaja en el callback, y
+  // un callback puede reenviarse. Nunca puede convertirse en una vía para
+  // borrar un evento derivado de un chequeo aprobado.
+  // --------------------------------------------------------------------------
+
+  bot.callbackQuery(/^hato_ev_undo:([0-9a-f-]+):([0-9a-f-]+|-)$/, async (ctx) => {
+    const eventoId = ctx.match?.[1];
+    const usoId = ctx.match?.[2];
+    if (!eventoId) {
+      await ctx.answerCallbackQuery({ text: "No se pudo procesar." });
+      return;
+    }
+
+    const sb = getSupabaseAdmin();
+    const { data: evento } = await sb
+      .from("hato_eventos")
+      .select("id, fuente")
+      .eq("id", eventoId)
+      .maybeSingle();
+
+    if (!evento) {
+      await ctx.answerCallbackQuery({ text: "Ese registro ya no existe." });
+      return;
+    }
+    if (evento.fuente !== "telegram") {
+      await ctx.answerCallbackQuery({ text: "Ese registro no se puede deshacer desde aquí." });
+      return;
+    }
+
+    // El uso de pajilla se borra PRIMERO: si fallara después del evento, el
+    // inventario quedaría descontado por un servicio que ya no existe.
+    if (usoId && usoId !== "-") {
+      const { error: errorUso } = await sb.from("hato_pajillas_uso").delete().eq("id", usoId);
+      if (errorUso) {
+        await ctx.answerCallbackQuery({ text: "No se pudo devolver la pajilla. No borré nada." });
+        return;
+      }
+    }
+
+    const { error } = await sb.from("hato_eventos").delete().eq("id", eventoId);
+    if (error) {
+      await ctx.answerCallbackQuery({ text: "No se pudo deshacer. Intenta de nuevo." });
+      return;
+    }
+
+    await ctx.answerCallbackQuery({ text: "Deshecho." });
+    // Se edita el mensaje para quitar el botón: un segundo toque sobre un id
+    // ya borrado solo diría "ya no existe", pero deja al usuario dudando de
+    // si borró dos cosas.
+    await ctx.editMessageText("↩️ Registro deshecho. No quedó nada guardado.\n\nUsa /evento para registrarlo de nuevo.");
+  });
 
   bot.callbackQuery(/^hato_alerta:(.+):(si|no|otro)$/, async (ctx) => {
     const alertaId = ctx.match?.[1];

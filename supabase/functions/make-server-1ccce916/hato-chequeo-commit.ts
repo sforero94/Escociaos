@@ -50,6 +50,8 @@ import {
   construirPayloadCommit,
   seleccionarUltimaCriaAnteriorPorAnimal,
   seleccionarFechasServicioConocidasPorAnimal,
+  fusionarEventosManualesEnDedupe,
+  type EventoManualHistorico,
   type FilaUltimaCriaHistorico,
 } from './importHato/commitChequeo.ts';
 import { construirHatoConfigDesdeFilas, type FilaHatoConfig } from './hato-config-desde-tabla.ts';
@@ -283,7 +285,39 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
   // trae `fechaServicio` por fila (ver `FilaChequeoVacaHistorico`), sin una
   // consulta adicional. Ver `derivarEventosDeChequeo`/`descomponerSX` para el
   // bug real que corrige (CAMILA #154).
-  const fechasServicioConocidasPorAnimal = seleccionarFechasServicioConocidasPorAnimal(historico, chequeo.fecha);
+  const fechasServicioBase = seleccionarFechasServicioConocidasPorAnimal(historico, chequeo.fecha);
+
+  // N10 -- Eventos registrados A MANO (`chequeo_vaca_id IS NULL`): la monta
+  // que Fernando marcó por Telegram el 10, el parto que Martha marcó en la
+  // Hoja de Vida. NO están en `hato_chequeo_vacas`, así que sin esta consulta
+  // los dos mapas de deduplicación de arriba no los ven y el chequeo emite un
+  // SEGUNDO evento para el mismo hecho -- la forma exacta del bug que costó
+  // tres rondas de limpieza en julio de 2026.
+  let eventosManuales: EventoManualHistorico[] = [];
+  if (animalIds.length > 0) {
+    const { data, error } = await supabase
+      .from('hato_eventos')
+      .select('animal_id, tipo, fecha')
+      .in('animal_id', animalIds)
+      .in('tipo', ['servicio', 'parto'])
+      .is('chequeo_vaca_id', null)
+      .lt('fecha', chequeo.fecha);
+    if (error) return respuestaError(c, 500, { error: `No se pudo leer hato_eventos: ${error.message}` });
+    eventosManuales = (data ?? []).map((fila: Record<string, unknown>) => ({
+      animalId: fila.animal_id as string,
+      tipo: fila.tipo as string,
+      fecha: fila.fecha as string,
+    }));
+  }
+
+  const fusionado = fusionarEventosManualesEnDedupe(
+    fechasServicioBase,
+    ultimaCriaAnteriorPorAnimal,
+    eventosManuales,
+    chequeo.fecha,
+  );
+  const fechasServicioConocidasPorAnimal = fusionado.fechasServicioPorAnimal;
+  const ultimaCriaAnteriorFusionada = fusionado.ultimaCriaAnteriorPorAnimal;
 
   // --- 4. Revalidar el ALCANCE contra el diff fresco --------------------
   const { aceptadas, rechazadas } = validarFilasCommit(filas, diffFresco);
@@ -296,7 +330,7 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
 
   // --- 5. Derivar eventos + resolver toro_id (I/O: SELECT-o-INSERT) ----
   const vacas = construirFilasVacas(aceptadas);
-  const { eventos } = derivarEventosDeChequeo(aceptadas, ultimaCriaAnteriorPorAnimal, fechasServicioConocidasPorAnimal);
+  const { eventos } = derivarEventosDeChequeo(aceptadas, ultimaCriaAnteriorFusionada, fechasServicioConocidasPorAnimal);
 
   const nombresToro = [...new Set(eventos.map((e) => e.toro_nombre).filter((n): n is string => !!n && n.trim() !== ''))];
   const toroCache = new Map<string, string>();
