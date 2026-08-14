@@ -6,10 +6,13 @@ bimensual. De ahí sale todo este alcance.
 
 **Estado del documento:** grafo aprobado y **en ejecución**. Ver §7 (Estado) al final.
 
-> **Desbloqueado el 2026-08-14.** Las migraciones **094 y 095 están aplicadas a
-> producción** y la **edge function está desplegada** (`/health` responde 200).
-> `/evento` ya existe en el bot y la lista del hato ya puede leer el método de
-> preñez. Lo que queda es N11–N13 y N21–N23 (§8.2).
+> **El grafo está construido (2026-08-14).** Los 26 nodos de código están
+> hechos, las migraciones 094 y 095 aplicadas y la edge function desplegada.
+> **Queda un solo nodo: N27** (destinatarios de alertas), que es configuración y
+> espera decisión del dueño. Lo demás pendiente NO son nodos del grafo sino
+> cierres de campo — imprimir la planilla, probar `/pesaje` por foto en el
+> corral y mezclar a `main` para que el frontend llegue a producción. Todo
+> listado en §8.5.
 
 ---
 
@@ -409,8 +412,8 @@ ve antes de aprobar.
 | N14–N15 · Toros y pajillas | ✅ **aplicada 2026-08-14** | 8 activos / 57 totales, 6 lotes / 27 unidades, 0 eventos huérfanos, Jersey conserva sus 44 servicios, respaldo de 63 filas en `respaldos`. **La primera ejecución abortó por un bug real de la migración** — ver §8.4. |
 | N16 · UI de selectores | ✅ ya cumplido | `PajillaCompraDialog` ya filtra por `activo`; no hizo falta cambio. |
 | N17–N20 · Display del hato | ✅ | Edad · Partos · Estado · Señal · Última cría · Próximo evento. |
-| N21–N23 · Planilla del chequeo | ✅ **2026-08-14** | N21 ya estaba cumplido: el pre-llenado de Fecha Servicio/Toro ya salía de `hato_eventos` vía la vista. Se agrega la columna "Estado registrado" y `conflictoEstadoRegistrado` en el diff. **Falta validación visual impresa** — ver §8.5. |
-| N24 · Tests | ✅ | 2.185 en verde, 0 errores de lint, `tsc` limpio, los 4 generadores de espejos en sincronía. |
+| N21–N23 · Planilla del chequeo | ✅ **2026-08-14** | N21 ya estaba cumplido: el pre-llenado de Fecha Servicio/Toro ya salía de `hato_eventos` vía la vista. Se agrega la columna "Estado registrado" y `conflictoEstadoRegistrado` en el diff. El reparto del PDF se rehízo DOS veces con el dueño a la vista del render (letra 11->9pt, y `Sexo cría` imprimiendo sólo el sexo). **Falta imprimirla en papel** — ver §8.5. |
+| N24 · Tests | ✅ | 2.182 en verde, 0 errores de lint, `tsc` limpio, los 4 generadores de espejos en sincronía. |
 | N25 · Deploy | ✅ **2026-08-14** | Desplegada después de las migraciones (el orden importa: el tick pide las columnas de 094). `/health` → 200. |
 | N26 · Aplicar migraciones | ✅ **2026-08-14** | 094 y 095, verificadas contra el catálogo vivo. |
 | N27 · Destinatarios de alertas | ⬜ pendiente | Cambio de configuración, no de código. **Único nodo del grafo que sigue abierto.** Cambia a quién le llegan mensajes de Telegram, así que espera decisión explícita del dueño. |
