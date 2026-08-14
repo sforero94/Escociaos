@@ -6,11 +6,10 @@ bimensual. De ahí sale todo este alcance.
 
 **Estado del documento:** grafo aprobado y **en ejecución**. Ver §7 (Estado) al final.
 
-> **Dos hechos que bloquean la puesta en producción de lo ya construido:**
-> las migraciones **094 y 095 NO están aplicadas** (el conector de Supabase de
-> la sesión es solo-lectura) y la **edge function no está desplegada**. Hasta
-> que ambas cosas ocurran, la lista del hato no puede leer el método de preñez
-> y `/evento` no existe en el bot.
+> **Desbloqueado el 2026-08-14.** Las migraciones **094 y 095 están aplicadas a
+> producción** y la **edge function está desplegada** (`/health` responde 200).
+> `/evento` ya existe en el bot y la lista del hato ya puede leer el método de
+> preñez. Lo que queda es N11–N13 y N21–N23 (§8.2).
 
 ---
 
@@ -401,19 +400,19 @@ ve antes de aprobar.
 
 | Nodo | Estado | Notas |
 |---|---|---|
-| N1 · Migración 094 | ✅ escrita, **sin aplicar** | Cuerpo validado ejecutándolo como consulta contra producción. |
+| N1 · Migración 094 | ✅ **aplicada 2026-08-14** | 2 columnas nuevas, `security_invoker` intacto, 179 filas. `ultima_confirmacion_prenez_metodo` sale NULL en las 179: ninguna confirmación histórica trae método, y el motor las lee como PRESUNCIÓN (es lo que dice la cabecera de la migración). 7 animales traen `ultimo_aborto_fecha`. |
 | N2 · Motor de 5 estados | ✅ | Espejos regenerados. Un test atrapó que la proyección "quedará" del diálogo no llevaba el método. |
 | N3 · Etiquetas + señal | ✅ | `chipEstadoReproductivo` (5 etiquetas) + `chipSenalRevision`. |
 | N4–N9 · `/evento` en Telegram | ✅ | Monta · inseminación · secado · parto · aborto, con Deshacer. Gateado por el módulo `hato_produccion`, que Fernando ya tiene. |
 | N10 · Dedupe chequeo↔manual | ✅ | `fusionarEventosManualesEnDedupe`, 7 tests. |
 | N11–N13 · Pesaje por foto en Telegram | ⬜ pendiente | Requiere extraer el pipeline de `hato-pesaje-foto.ts` (482 líneas) a una función que compartan el endpoint HTTP y el bot, más el loop de corrección en texto libre (D-C). |
-| N14–N15 · Toros y pajillas | ✅ escrita, **sin aplicar** | Simulada en solo-lectura: 10 borrados, 4 altas, 57 finales, 8 activos, 0 eventos huérfanos. |
+| N14–N15 · Toros y pajillas | ✅ **aplicada 2026-08-14** | 8 activos / 57 totales, 6 lotes / 27 unidades, 0 eventos huérfanos, Jersey conserva sus 44 servicios, respaldo de 63 filas en `respaldos`. **La primera ejecución abortó por un bug real de la migración** — ver §8.4. |
 | N16 · UI de selectores | ✅ ya cumplido | `PajillaCompraDialog` ya filtra por `activo`; no hizo falta cambio. |
 | N17–N20 · Display del hato | ✅ | Edad · Partos · Estado · Señal · Última cría · Próximo evento. |
 | N21–N23 · Planilla del chequeo | ⬜ pendiente | La planilla ya es incremental; falta que el pre-llenado venga de la capa de eventos y la columna de Martha (ok/rech/nota). |
 | N24 · Tests | ✅ para lo construido | 2.146 en verde, 0 errores de lint. |
-| N25 · Deploy | ⬜ pendiente | `npx supabase functions deploy make-server-1ccce916` + `curl` a `/evento`. |
-| N26 · Aplicar migraciones | ⬜ pendiente | 094 y 095. |
+| N25 · Deploy | ✅ **2026-08-14** | Desplegada después de las migraciones (el orden importa: el tick pide las columnas de 094). `/health` → 200. |
+| N26 · Aplicar migraciones | ✅ **2026-08-14** | 094 y 095, verificadas contra el catálogo vivo. |
 | N27 · Destinatarios de alertas | ⬜ pendiente | Cambio de configuración, no de código. |
 
 
@@ -426,27 +425,33 @@ escribió el código, pueda continuar sin volver a decidir nada.
 
 **Rama:** `claude/telegram-workflows-herd-management-g7ffm6` (7 commits, sin PR).
 
-### 8.1 Lo primero: aplicar y desplegar, en este orden
+### 8.1 Lo primero: aplicar y desplegar, en este orden — ✅ HECHO (2026-08-14)
 
 El orden importa. El tick de alertas (`hato-alertas-tick.ts`) ya pide las dos
 columnas nuevas en su `SELECT` explícito: si la función se despliega antes de
-que exista la vista, el cron de las 05:45 falla.
+que exista la vista, el cron de las 05:45 falla. Se respetó: 094 → 095 → deploy.
+
+**Cómo se aplicaron, para la próxima vez.** El conector de Supabase de la sesión
+es **solo-lectura** (`cannot execute CREATE VIEW in a read-only transaction`, y
+su lista de herramientas no trae `apply_migration`). La ruta que sí escribe, sin
+contraseña de base de datos y sin `psql`, es el CLI contra la **Management API**:
 
 ```bash
-git fetch origin claude/telegram-workflows-herd-management-g7ffm6
-git checkout claude/telegram-workflows-herd-management-g7ffm6
-npm install
-
-# 1) Migración 094 — CREATE OR REPLACE VIEW, no toca datos.
-# 2) Migración 095 — borra 10 toros y desactiva 49, con guardas y respaldo.
-#    Ambas por el SQL editor o psql. NO usar `supabase db push`: el repo
-#    versiona las migraciones en src/sql/migrations/, no en supabase/migrations/.
-
-npx supabase functions deploy make-server-1ccce916 --project-ref ywhtjwawnkeqlwxbvgup
+npx supabase db query --linked --project-ref ywhtjwawnkeqlwxbvgup \
+  -f src/sql/migrations/094_hato_estado_actual_metodo_prenez_aborto.sql
 ```
 
+`--linked` es obligatorio junto a `--project-ref` (solos se rechazan entre sí).
+El token vive en el llavero de macOS, no en `~/.supabase/`. Sigue vigente el
+aviso: **nunca `supabase db push`** — el repo versiona en `src/sql/migrations/`,
+que el CLI no mira.
+
+Para ensayar una migración destructiva sin escribir, copiarla cambiando el
+`COMMIT;` final por `ROLLBACK;` y correrla igual: las guardas se ejecutan
+completas contra datos vivos. Es lo que confirmó los 8/57 antes del pase real.
+
 **Verificación después de aplicar** (read-only, se puede hacer desde cualquier
-sesión):
+sesión). Todas dieron el valor esperado:
 
 ```sql
 -- 094
@@ -464,7 +469,10 @@ select count(*) from hato_eventos e
 
 **Verificación del bot:** escribir `/evento` en Telegram y ver que aparezca el
 menú de 5 tipos. No hay ruta HTTP nueva que probar con `curl` — este cambio
-agrega un comando del bot, no un endpoint.
+agrega un comando del bot, no un endpoint. **Esto es lo único de §8.1 que queda
+sin confirmar**: requiere un humano en Telegram. Lo que sí se verificó desde
+aquí es que la función quedó desplegada y viva (`/health` → 200) y que
+`eventoHato` está registrado en el árbol que se subió.
 
 ### 8.2 Lo que queda por construir
 
@@ -492,3 +500,44 @@ Dos bloques, independientes entre sí. Cada uno está especificado en §3.
 El frontend (lista del hato con Edad/Partos/Señal/Próximo evento) **no llega a
 producción hasta que la rama se mezcle a `main`**, que es de donde construye
 Vercel. No se abrió PR por decisión de proceso, no por olvido.
+
+### 8.4 El bug que atrapó la guarda de la 095 (2026-08-14)
+
+Vale la pena dejarlo escrito porque es exactamente el tipo de error que estas
+migraciones existen para no cometer, y porque confirma que la guarda paga.
+
+La primera ejecución abortó con `Migración 095: deberían quedar 8 toros
+activos, quedaron 7.` **La transacción entera se revirtió: producción quedó
+intacta** (63 toros, 61 activos, 0 pajillas, sin tabla de respaldo).
+
+Causa: `toros_vigentes` guarda dos cosas distintas en dos columnas —
+`clave` es **la grafía con la que el toro vive HOY en la base** y `nombre` es
+**la grafía final**. Para siete de los ocho coinciden; para uno no:
+
+| clave (en la base) | nombre final |
+|---|---|
+| `marquez` | `Márquez` |
+
+El paso 4 renombra la fila a `Márquez`. Los pasos 5 y 6 seguían buscando por
+`v.clave`, así que a partir del renombre esa fila **ya no respondía a su propia
+clave**: `lower(btrim('Márquez'))` es `'márquez'`, con tilde. El paso 6, que
+desactiva "todo lo que no sea vigente", desactivaba entonces al toro que el
+paso 4 acababa de normalizar. 8 − 1 = 7.
+
+La corrección es comparar contra **las dos grafías** en los pasos 5 y 6:
+
+```sql
+NOT EXISTS (SELECT 1 FROM toros_vigentes v
+             WHERE lower(btrim(t.nombre)) IN (v.clave, lower(btrim(v.nombre))))
+```
+
+Se editó la 095 en vez de escribir una 096 porque **nunca llegó a aplicarse**:
+la regla "no modificar migraciones existentes" protege lo que ya corrió en
+producción, y aquí no corrió nada. Parchear con una 096 habría dejado en el
+repo una migración que nadie puede ejecutar.
+
+Se agregaron además dos guardas, para que el próximo fallo se diagnostique solo:
+una que **nombra** al vigente que no quedó activo (en vez de dar un conteo), y
+otra que rechaza pajillas colgadas de un toro inactivo — que es la forma en que
+este bug se habría manifestado en la UI: stock real e invisible, porque N16
+filtra los selectores por `activo`.

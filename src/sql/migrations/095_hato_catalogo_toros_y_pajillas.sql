@@ -77,8 +77,14 @@ REVOKE ALL ON SCHEMA respaldos FROM PUBLIC, anon, authenticated;
 --    borrado y para excluir de la desactivación.
 -- ---------------------------------------------------------------------
 
+-- `clave` y `lower(btrim(nombre))` NO siempre coinciden: `marquez` vive en la
+-- base sin tilde y su nombre final es `Márquez`. Después del paso 4 esa fila
+-- ya no responde a su propia clave, así que todo lo que la busque DESPUÉS del
+-- renombre tiene que aceptar las dos grafías — es exactamente lo que hacía el
+-- paso 6 desactivar al toro que el paso 4 acababa de normalizar (7 activos en
+-- vez de 8, la guarda de salida lo atrapó).
 CREATE TEMP TABLE toros_vigentes (
-  clave   TEXT PRIMARY KEY,  -- lower(btrim(nombre)) con el que se busca
+  clave   TEXT PRIMARY KEY,  -- lower(btrim(nombre)) con el que se busca HOY
   nombre  TEXT NOT NULL,     -- nombre de presentación final
   raza    TEXT NOT NULL,
   tipo    TEXT NOT NULL CHECK (tipo IN ('monta', 'inseminacion')),
@@ -162,10 +168,13 @@ WHERE NOT EXISTS (
 -- 5. Borrado de los toros sin uso alguno, EXCLUYENDO a los vigentes.
 --    El orden importa: los vigentes salen primero de la selección, y solo
 --    después se evalúa "no tiene referencias".
+--    Se compara contra las DOS grafías (clave de búsqueda y nombre final)
+--    porque el paso 4 ya renombró: ver la nota de `toros_vigentes`.
 -- ---------------------------------------------------------------------
 
 DELETE FROM hato_toros t
-WHERE NOT EXISTS (SELECT 1 FROM toros_vigentes v WHERE v.clave = lower(btrim(t.nombre)))
+WHERE NOT EXISTS (SELECT 1 FROM toros_vigentes v
+                   WHERE lower(btrim(t.nombre)) IN (v.clave, lower(btrim(v.nombre))))
   AND NOT EXISTS (SELECT 1 FROM hato_eventos   e WHERE e.toro_id = t.id)
   AND NOT EXISTS (SELECT 1 FROM hato_animales  a WHERE a.padre_toro_id = t.id)
   AND NOT EXISTS (SELECT 1 FROM hato_pajillas  p WHERE p.toro_id = t.id);
@@ -173,12 +182,15 @@ WHERE NOT EXISTS (SELECT 1 FROM toros_vigentes v WHERE v.clave = lower(btrim(t.n
 -- ---------------------------------------------------------------------
 -- 6. Desactivación de todo lo demás (los referenciados que ya no se usan).
 --    Se conserva la fila entera: es lo que le da nombre a 232 servicios.
+--    Mismo cuidado que el paso 5 con las dos grafías: sin él, `Márquez`
+--    (renombrado en el paso 4) caía aquí y quedaban 7 activos en vez de 8.
 -- ---------------------------------------------------------------------
 
 UPDATE hato_toros t
 SET activo = FALSE
 WHERE t.activo
-  AND NOT EXISTS (SELECT 1 FROM toros_vigentes v WHERE v.clave = lower(btrim(t.nombre)));
+  AND NOT EXISTS (SELECT 1 FROM toros_vigentes v
+                   WHERE lower(btrim(t.nombre)) IN (v.clave, lower(btrim(v.nombre))));
 
 -- ---------------------------------------------------------------------
 -- 7. Inventario de pajillas: un lote por toro de inseminación.
@@ -202,7 +214,21 @@ DECLARE
   v_unidades INTEGER;
   v_eventos_huerfanos INTEGER;
   v_jersey_eventos INTEGER;
+  v_faltantes TEXT;
+  v_lotes_inactivos TEXT;
 BEGIN
+  -- Primero el diagnóstico preciso: QUÉ vigente no quedó activo. Un conteo
+  -- suelto ("quedaron 7") obliga a reconstruir a mano cuál se perdió.
+  SELECT string_agg(v.nombre, ', ' ORDER BY v.nombre) INTO v_faltantes
+  FROM toros_vigentes v
+  WHERE NOT EXISTS (
+    SELECT 1 FROM hato_toros t
+    WHERE t.activo AND lower(btrim(t.nombre)) = lower(btrim(v.nombre))
+  );
+  IF v_faltantes IS NOT NULL THEN
+    RAISE EXCEPTION 'Migración 095: estos toros vigentes no quedaron activos: %.', v_faltantes;
+  END IF;
+
   SELECT count(*) INTO v_activos FROM hato_toros WHERE activo;
   IF v_activos <> 8 THEN
     RAISE EXCEPTION 'Migración 095: deberían quedar 8 toros activos, quedaron %.', v_activos;
@@ -216,6 +242,16 @@ BEGIN
   SELECT count(*), COALESCE(sum(cantidad_inicial), 0) INTO v_lotes, v_unidades FROM hato_pajillas;
   IF v_lotes <> 6 OR v_unidades <> 27 THEN
     RAISE EXCEPTION 'Migración 095: se esperaban 6 lotes de pajillas por 27 unidades, hay % lotes por % unidades.', v_lotes, v_unidades;
+  END IF;
+
+  -- Un lote colgado de un toro inactivo es stock invisible: N16 filtra los
+  -- selectores por `activo`, así que esas pajillas existirían sin poder
+  -- usarse. Es la forma en que se manifestaba el bug de las dos grafías.
+  SELECT string_agg(t.nombre, ', ' ORDER BY t.nombre) INTO v_lotes_inactivos
+  FROM hato_pajillas p JOIN hato_toros t ON t.id = p.toro_id
+  WHERE NOT t.activo;
+  IF v_lotes_inactivos IS NOT NULL THEN
+    RAISE EXCEPTION 'Migración 095: hay pajillas asignadas a toros inactivos (%). Serían stock invisible.', v_lotes_inactivos;
   END IF;
 
   -- Ningún evento puede haber perdido su toro: el borrado solo alcanzó
