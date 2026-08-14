@@ -333,7 +333,7 @@ function getBot(): Bot<BotContext> {
         "/monitoreo — Registrar monitoreo",
         "/gasto — Registrar un gasto",
         "/ingreso — Registrar un ingreso",
-        "/pesaje — Pesaje semanal de leche por vaca",
+        "/pesaje — Cargar la planilla de pesaje de leche por foto",
         "/evento — Registrar monta, inseminación, secado, parto o aborto",
         "/cancelar — Cancelar operación actual",
         "/ayuda — Ver esta ayuda",
@@ -903,7 +903,8 @@ function getBot(): Bot<BotContext> {
     { command: "monitoreo", description: "Registrar monitoreo" },
     { command: "gasto", description: "Registrar un gasto" },
     { command: "ingreso", description: "Registrar un ingreso" },
-    { command: "pesaje", description: "Pesaje semanal de leche" },
+    { command: "pesaje", description: "Cargar pesaje de leche por foto" },
+    { command: "evento", description: "Registrar evento del hato" },
     { command: "cancelar", description: "Cancelar operación actual" },
     { command: "ayuda", description: "Ver ayuda" },
   ]).catch((err) => console.error("[Telegram] setMyCommands error:", err));

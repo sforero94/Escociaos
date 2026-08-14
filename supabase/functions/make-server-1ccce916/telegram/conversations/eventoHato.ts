@@ -57,6 +57,28 @@ function hoyBogota(): string {
   return bogota.toISOString().slice(0, 10);
 }
 
+/**
+ * ¿El usuario está pidiendo salirse?
+ *
+ * Mientras una conversación está activa, el `bot.command("cancelar")` global de
+ * `bot.ts` **NUNCA se dispara**: el plugin de conversaciones consume el update
+ * antes de que llegue a los handlers de comandos. Así que cada paso que espera
+ * texto libre tiene que reconocer la cancelación por su cuenta, o el usuario
+ * queda encerrado sin más salida que bloquear el bot.
+ *
+ * No es hipotético: el dueño lo encontró el 2026-08-14 en el paso de fecha —
+ * `/cancelar`, `/pesaje` y "Cancelar" respondían "Formato inválido" en bucle.
+ *
+ * Se acepta con y sin barra a propósito. Con barra es lo que el usuario escribe
+ * por instinto (y lo que el propio mensaje del paso de la vaca le promete); sin
+ * barra es lo que escribe quien viene de tocar un botón "❌ Cancelar". Ninguna
+ * de las dos formas puede confundirse con una fecha DD/MM.
+ */
+function esCancelar(texto: string): boolean {
+  const t = texto.trim().toLowerCase();
+  return t === "/cancelar" || t === "cancelar" || t === "/cancel";
+}
+
 function parseDDMM(texto: string): string | null {
   const m = texto.trim().match(/^(\d{1,2})[/\-.](\d{1,2})$/);
   if (!m) return null;
@@ -253,6 +275,10 @@ export async function eventoHatoConversation(
     while (!vaca) {
       const txt = await conversation.waitFor("message:text");
       const consulta = txt.message.text.trim();
+      if (esCancelar(consulta)) {
+        await ctx.reply("Operación cancelada.");
+        return conversation.halt();
+      }
       if (consulta.startsWith("/")) {
         await txt.reply("Escribe el nombre o la chapeta, sin comandos. Usa /cancelar para salir.");
         continue;
@@ -308,15 +334,46 @@ export async function eventoHatoConversation(
 
     let fecha = hoy;
     if (cbFecha.callbackQuery.data === "fecha_otra") {
-      await cbFecha.editMessageText("📅 Escribe la fecha como DD/MM (ej: 12/08)");
+      // El `editMessageText` reemplaza el teclado anterior, así que sin esto el
+      // paso se queda SIN ningún botón de salida y el único escape es acertar
+      // una fecha válida. Se repone el "❌ Cancelar" y además se acepta la
+      // cancelación escrita (ver `esCancelar`).
+      const kbCancelarFecha = new InlineKeyboard().text("❌ Cancelar", "cancel_flow");
+      await cbFecha.editMessageText(
+        "📅 Escribe la fecha como DD/MM (ej: 12/08)\n\nO escribe /cancelar para salir.",
+        { reply_markup: kbCancelarFecha },
+      );
+      // `conversation.wait()` a secas, no un filtro: este paso tiene que poder
+      // atender DOS cosas (el texto de la fecha y el botón de cancelar) y es la
+      // única primitiva que el resto del bot ya usa de forma indiscutible. Lo
+      // que no sea ni una ni otra (una foto, un sticker) se ignora y se vuelve
+      // a preguntar, en vez de romper el flujo.
       while (true) {
-        const t = await conversation.waitFor("message:text");
-        const parsed = parseDDMM(t.message.text);
+        const paso = await conversation.wait();
+
+        const dataBoton = paso.callbackQuery?.data;
+        if (dataBoton) {
+          await paso.answerCallbackQuery();
+          if (dataBoton === "cancel_flow") {
+            await ctx.reply("Operación cancelada.");
+            return conversation.halt();
+          }
+          continue;
+        }
+
+        const texto = paso.message?.text;
+        if (!texto) continue;
+
+        if (esCancelar(texto)) {
+          await ctx.reply("Operación cancelada.");
+          return conversation.halt();
+        }
+        const parsed = parseDDMM(texto);
         if (parsed) {
           fecha = parsed;
           break;
         }
-        await t.reply("Formato inválido. Escribe DD/MM (ej: 12/08).");
+        await paso.reply("Formato inválido. Escribe DD/MM (ej: 12/08), o /cancelar para salir.");
       }
     } else {
       await cbFecha.editMessageText(`📅 Fecha: ${fechaLegible(fecha)}`);
