@@ -415,3 +415,80 @@ ve antes de aprobar.
 | N25 · Deploy | ⬜ pendiente | `npx supabase functions deploy make-server-1ccce916` + `curl` a `/evento`. |
 | N26 · Aplicar migraciones | ⬜ pendiente | 094 y 095. |
 | N27 · Destinatarios de alertas | ⬜ pendiente | Cambio de configuración, no de código. |
+
+
+---
+
+## 8. Arranque de la sesión LOCAL (handoff)
+
+Esta sección existe para que una sesión nueva, sin el contexto de la que
+escribió el código, pueda continuar sin volver a decidir nada.
+
+**Rama:** `claude/telegram-workflows-herd-management-g7ffm6` (7 commits, sin PR).
+
+### 8.1 Lo primero: aplicar y desplegar, en este orden
+
+El orden importa. El tick de alertas (`hato-alertas-tick.ts`) ya pide las dos
+columnas nuevas en su `SELECT` explícito: si la función se despliega antes de
+que exista la vista, el cron de las 05:45 falla.
+
+```bash
+git fetch origin claude/telegram-workflows-herd-management-g7ffm6
+git checkout claude/telegram-workflows-herd-management-g7ffm6
+npm install
+
+# 1) Migración 094 — CREATE OR REPLACE VIEW, no toca datos.
+# 2) Migración 095 — borra 10 toros y desactiva 49, con guardas y respaldo.
+#    Ambas por el SQL editor o psql. NO usar `supabase db push`: el repo
+#    versiona las migraciones en src/sql/migrations/, no en supabase/migrations/.
+
+npx supabase functions deploy make-server-1ccce916 --project-ref ywhtjwawnkeqlwxbvgup
+```
+
+**Verificación después de aplicar** (read-only, se puede hacer desde cualquier
+sesión):
+
+```sql
+-- 094
+select count(*) from information_schema.columns
+ where table_name = 'v_hato_estado_actual'
+   and column_name in ('ultima_confirmacion_prenez_metodo','ultimo_aborto_fecha');  -- 2
+
+-- 095
+select count(*) filter (where activo) as activos, count(*) as total from hato_toros;  -- 8 / 57
+select count(*) as lotes, sum(cantidad_inicial) as unidades from hato_pajillas;       -- 6 / 27
+select count(*) from hato_eventos e
+ where e.toro_id is not null
+   and not exists (select 1 from hato_toros t where t.id = e.toro_id);                -- 0
+```
+
+**Verificación del bot:** escribir `/evento` en Telegram y ver que aparezca el
+menú de 5 tipos. No hay ruta HTTP nueva que probar con `curl` — este cambio
+agrega un comando del bot, no un endpoint.
+
+### 8.2 Lo que queda por construir
+
+Dos bloques, independientes entre sí. Cada uno está especificado en §3.
+
+- **N11–N13 · Pesaje por foto en Telegram.** El trabajo real es extraer el
+  pipeline de `src/supabase/functions/server/hato-pesaje-foto.ts` (482 líneas)
+  a una función que compartan el endpoint HTTP y el bot — hoy la lectura con
+  el modelo (`leerFotoConModelo`) y el armado del roster viven dentro del
+  handler de Hono y no son reutilizables. Encima de eso van el loop de
+  corrección en texto libre (D-C) y la persistencia por celda reusando la
+  revalidación de `hato-pesaje-commit.ts`. **No escribir un segundo lector de
+  celdas**: `importHato/ocrPesaje.ts` ya es el único, y está espejado.
+- **N21–N23 · Planilla del chequeo.** La planilla YA es incremental (arrastra
+  Fecha Servicio, Toro y Estado). Falta: (a) que ese pre-llenado venga de
+  `hato_eventos` y no del último chequeo, para que la monta que Fernando marcó
+  por Telegram salga impresa; (b) la columna nueva "Estado registrado" más la
+  columna de Martha (ok/rech/nota); (c) que el diff marque el conflicto entre
+  lo registrado y lo que dice el papel. Regla dura: los alias del parser
+  (`importHato/grilla.ts`) **se agregan, nunca se reemplazan** — tiene que
+  seguir leyendo las 3 generaciones históricas de planillas.
+
+### 8.3 Decisión pendiente del dueño
+
+El frontend (lista del hato con Edad/Partos/Señal/Próximo evento) **no llega a
+producción hasta que la rama se mezcle a `main`**, que es de donde construye
+Vercel. No se abrió PR por decisión de proceso, no por olvido.
