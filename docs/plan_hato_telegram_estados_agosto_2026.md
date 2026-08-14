@@ -405,15 +405,15 @@ ve antes de aprobar.
 | N3 · Etiquetas + señal | ✅ | `chipEstadoReproductivo` (5 etiquetas) + `chipSenalRevision`. |
 | N4–N9 · `/evento` en Telegram | ✅ | Monta · inseminación · secado · parto · aborto, con Deshacer. Gateado por el módulo `hato_produccion`, que Fernando ya tiene. |
 | N10 · Dedupe chequeo↔manual | ✅ | `fusionarEventosManualesEnDedupe`, 7 tests. |
-| N11–N13 · Pesaje por foto en Telegram | ⬜ pendiente | Requiere extraer el pipeline de `hato-pesaje-foto.ts` (482 líneas) a una función que compartan el endpoint HTTP y el bot, más el loop de corrección en texto libre (D-C). |
+| N11–N13 · Pesaje por foto en Telegram | ✅ **2026-08-14** | Pipeline extraído a `hato-pesaje-pipeline.ts`, compartido por el endpoint HTTP y el bot. Corrección en texto libre con "ok" explícito antes de escribir; nunca se adivina vaca, semana ni AM/PM. Commit por celda. La guarda "sin dato nunca es 0" verificada en los DOS caminos. |
 | N14–N15 · Toros y pajillas | ✅ **aplicada 2026-08-14** | 8 activos / 57 totales, 6 lotes / 27 unidades, 0 eventos huérfanos, Jersey conserva sus 44 servicios, respaldo de 63 filas en `respaldos`. **La primera ejecución abortó por un bug real de la migración** — ver §8.4. |
 | N16 · UI de selectores | ✅ ya cumplido | `PajillaCompraDialog` ya filtra por `activo`; no hizo falta cambio. |
 | N17–N20 · Display del hato | ✅ | Edad · Partos · Estado · Señal · Última cría · Próximo evento. |
-| N21–N23 · Planilla del chequeo | ⬜ pendiente | La planilla ya es incremental; falta que el pre-llenado venga de la capa de eventos y la columna de Martha (ok/rech/nota). |
-| N24 · Tests | ✅ para lo construido | 2.146 en verde, 0 errores de lint. |
+| N21–N23 · Planilla del chequeo | ✅ **2026-08-14** | N21 ya estaba cumplido: el pre-llenado de Fecha Servicio/Toro ya salía de `hato_eventos` vía la vista. Se agrega la columna "Estado registrado" y `conflictoEstadoRegistrado` en el diff. **Falta validación visual impresa** — ver §8.5. |
+| N24 · Tests | ✅ | 2.185 en verde, 0 errores de lint, `tsc` limpio, los 4 generadores de espejos en sincronía. |
 | N25 · Deploy | ✅ **2026-08-14** | Desplegada después de las migraciones (el orden importa: el tick pide las columnas de 094). `/health` → 200. |
 | N26 · Aplicar migraciones | ✅ **2026-08-14** | 094 y 095, verificadas contra el catálogo vivo. |
-| N27 · Destinatarios de alertas | ⬜ pendiente | Cambio de configuración, no de código. |
+| N27 · Destinatarios de alertas | ⬜ pendiente | Cambio de configuración, no de código. **Único nodo del grafo que sigue abierto.** Cambia a quién le llegan mensajes de Telegram, así que espera decisión explícita del dueño. |
 
 
 ---
@@ -474,26 +474,24 @@ sin confirmar**: requiere un humano en Telegram. Lo que sí se verificó desde
 aquí es que la función quedó desplegada y viva (`/health` → 200) y que
 `eventoHato` está registrado en el árbol que se subió.
 
-### 8.2 Lo que queda por construir
+### 8.2 Lo que quedaba por construir — ✅ HECHO (2026-08-14)
 
-Dos bloques, independientes entre sí. Cada uno está especificado en §3.
+Ambos bloques construidos, verificados y desplegados. `npm test` 2.185 en verde,
+0 errores de lint, `tsc --noEmit` limpio, los 4 generadores de espejos en
+sincronía, y las rutas nuevas responden 401 (piden auth), no 404 — que es la
+verificación que pide N25 tras el incidente del 2026-08-11.
 
-- **N11–N13 · Pesaje por foto en Telegram.** El trabajo real es extraer el
-  pipeline de `src/supabase/functions/server/hato-pesaje-foto.ts` (482 líneas)
-  a una función que compartan el endpoint HTTP y el bot — hoy la lectura con
-  el modelo (`leerFotoConModelo`) y el armado del roster viven dentro del
-  handler de Hono y no son reutilizables. Encima de eso van el loop de
-  corrección en texto libre (D-C) y la persistencia por celda reusando la
-  revalidación de `hato-pesaje-commit.ts`. **No escribir un segundo lector de
-  celdas**: `importHato/ocrPesaje.ts` ya es el único, y está espejado.
-- **N21–N23 · Planilla del chequeo.** La planilla YA es incremental (arrastra
-  Fecha Servicio, Toro y Estado). Falta: (a) que ese pre-llenado venga de
-  `hato_eventos` y no del último chequeo, para que la monta que Fernando marcó
-  por Telegram salga impresa; (b) la columna nueva "Estado registrado" más la
-  columna de Martha (ok/rech/nota); (c) que el diff marque el conflicto entre
-  lo registrado y lo que dice el papel. Regla dura: los alias del parser
-  (`importHato/grilla.ts`) **se agregan, nunca se reemplazan** — tiene que
-  seguir leyendo las 3 generaciones históricas de planillas.
+- **N11–N13 · Pesaje por foto.** El pipeline salió de `hato-pesaje-foto.ts` a
+  `hato-pesaje-pipeline.ts`, compartido por el endpoint HTTP y el bot. Se
+  conserva un solo lector de celdas. La corrección en texto libre exige vaca +
+  semana + (AM/PM o "ambos") explícitos: si el modelo no puede extraer alguno de
+  los tres, la corrección se reporta como no entendida en vez de adivinarse —
+  extensión directa de la regla "nunca adivines la vaca" a los otros dos ejes.
+  **`/pesaje` cambia de forma para quien lo usa**: deja de ser vaca-por-vaca
+  semanal y pasa a ser foto de la planilla mensual.
+- **N21–N23 · Planilla del chequeo.** N21 ya estaba cumplido sin que el plan lo
+  supiera (ver la tabla de §7). Lo que faltaba de verdad era exponer el estado
+  derivado y detectar la contradicción, que es lo que se construyó.
 
 ### 8.3 Decisión pendiente del dueño
 
@@ -541,3 +539,38 @@ una que **nombra** al vigente que no quedó activo (en vez de dar un conteo), y
 otra que rechaza pajillas colgadas de un toro inactivo — que es la forma en que
 este bug se habría manifestado en la UI: stock real e invisible, porque N16
 filtra los selectores por `activo`.
+
+### 8.5 Lo que queda abierto (2026-08-14)
+
+Nada de esto bloquea el uso del módulo, pero ninguno se descubre solo.
+
+**1. La planilla impresa no se ha visto en papel.** La 13ª columna ("Estado
+registrado") no cabía: los márgenes bajaron de 10mm a 8mm y **Tratamiento se
+recortó de 35mm a 22,5mm (−36%)**, que es una columna donde Martha escribe a
+mano. El presupuesto quedó en 263,2mm de tabla contra 263,4mm útiles: **0,2mm de
+holgura**. Los tests garantizan que no desborda y que 35 filas siguen cabiendo en
+2 páginas, pero **no** que sea cómodo escribir en ella. Necesita imprimirse una
+vez antes del próximo chequeo. Si Tratamiento quedó corto, el ancho tiene que
+salir de otra columna o la planilla necesita otro formato — no hay más margen.
+
+Se agregó un test con **piso imprimible de 8mm** en los márgenes, porque el
+presupuesto de ancho existente no podía atrapar esto: `ANCHO_UTIL_CARTA_
+HORIZONTAL_MM` se deriva de `MARGENES_PDF_MM`, así que encoger el margen sube el
+techo y el test sigue pasando. Era autorreferencial en ese eje.
+
+**2. Dos huecos menores en el diff del chequeo**, dejados a propósito para no
+ampliar el alcance:
+- `useRevisionChequeo.ts` recalcula el diff en la ventana de corrección pero no
+  `estadosRegistrados`, así que editar cualquier campo ahí borra el indicador de
+  conflicto hasta que se regenere la vista previa.
+- El baseline de "fecha de servicio/toro" en `compararFila` todavía lee sólo
+  `hato_chequeo_vacas`, no los eventos. Es cosmético: N10 ya impide el duplicado
+  en la ESCRITURA, así que lo peor que pasa es un "cambio" espurio en el diff.
+
+**3. N27 sigue abierto** — es el único nodo del grafo que no se tocó. Agregar a
+Fernando como destinatario de `secado_due` y `parto_proximo` cambia a quién le
+llegan mensajes de Telegram, así que espera decisión explícita del dueño.
+
+**4. El frontend no está en producción.** Sigue vigente §8.3: la lista del hato,
+la planilla y el diff sólo llegan cuando la rama se mezcle a `main`. Lo
+desplegado hoy es la edge function (Telegram y los endpoints), que sí está viva.
