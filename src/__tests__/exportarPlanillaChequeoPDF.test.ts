@@ -20,6 +20,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
   ENCABEZADOS_PLANILLA_CHEQUEO,
+  textoCeldaEstadoRegistrado,
   type FilaPlanillaChequeo,
 } from '@/utils/hato/exportarPlanillaChequeo';
 import {
@@ -36,6 +37,7 @@ import {
   FUENTE_DATOS_PT,
   ALTO_MINIMO_FILA_MM,
   NOTA_OPERATIVA_PLANILLA,
+  MARGENES_PDF_MM,
 } from '@/utils/hato/exportarPlanillaChequeoPDF';
 
 function fila(overrides: Partial<FilaPlanillaChequeo> & { numero: number; nombre: string }): FilaPlanillaChequeo {
@@ -48,6 +50,7 @@ function fila(overrides: Partial<FilaPlanillaChequeo> & { numero: number; nombre
     sexoCria: overrides.sexoCria ?? null,
     fechaServicio: overrides.fechaServicio ?? null,
     toro: overrides.toro ?? null,
+    estadoRegistrado: overrides.estadoRegistrado ?? null,
     estado: overrides.estado ?? null,
     secar: overrides.secar ?? null,
     partoProbable: overrides.partoProbable ?? null,
@@ -153,6 +156,7 @@ describe('construirFilasPlanillaPDF', () => {
         sexoCria: 'Hembra (retenida #206)',
         fechaServicio: '5/1/2026',
         toro: 'Ins Nitro',
+        estadoRegistrado: 'Servida',
         estado: 'ok',
         secar: '1/9/2026',
         partoProbable: '1/11/2026',
@@ -171,6 +175,7 @@ describe('construirFilasPlanillaPDF', () => {
       'Hembra (retenida #206)',
       '5/1/2026',
       'Ins Nitro',
+      'Servida',
       'ok',
       '1/9/2026',
       '1/11/2026',
@@ -183,7 +188,7 @@ describe('construirFilasPlanillaPDF', () => {
     expect(celdas[0]).toBe('101');
     expect(celdas[1]).toBe('LUCERO');
     // Todo lo demás sin dato previo: vacío, no cero.
-    expect(celdas.slice(2)).toEqual(['', '', '', '', '', '', '', '', '', '']);
+    expect(celdas.slice(2)).toEqual(['', '', '', '', '', '', '', '', '', '', '']);
     expect(celdas).not.toContain('0');
   });
 
@@ -203,6 +208,23 @@ describe('layout del PDF -- presupuesto de ancho y clasificación de columnas', 
     expect(suma).toBeGreaterThan(215.9 - 20);
   });
 
+  it('los márgenes no bajan del piso imprimible (el presupuesto de ancho NO protege esto)', () => {
+    // El test de arriba compara la suma de anchos contra `ANCHO_UTIL_CARTA_
+    // HORIZONTAL_MM`, que a su vez SE DERIVA de `MARGENES_PDF_MM`. O sea que
+    // encoger el margen sube el techo y el test sigue pasando: es
+    // autorreferencial en ese eje y no puede atrapar "los márgenes quedaron
+    // más chicos de lo que una impresora puede imprimir".
+    //
+    // Pasó de verdad al meter la 13ª columna ("Estado registrado", D-E): los
+    // márgenes bajaron de 10mm a 8mm y quedaron 0,2mm de holgura. 8mm sigue
+    // por encima del área no imprimible típica (~5mm, hasta 6,35mm en las
+    // más restrictivas), pero es el piso: por debajo, la planilla sale
+    // cortada en el papel aunque el PDF se vea bien en pantalla.
+    const PISO_IMPRIMIBLE_MM = 8;
+    expect(MARGENES_PDF_MM.left).toBeGreaterThanOrEqual(PISO_IMPRIMIBLE_MM);
+    expect(MARGENES_PDF_MM.right).toBeGreaterThanOrEqual(PISO_IMPRIMIBLE_MM);
+  });
+
   it('TODA columna del template está clasificada como "se diligencia" o "pre-llenada", sin solapamiento', () => {
     const total = COLUMNAS_A_DILIGENCIAR.size + COLUMNAS_PRELLENADAS.length;
     expect(total).toBe(ENCABEZADOS_PLANILLA_CHEQUEO.length);
@@ -218,8 +240,11 @@ describe('layout del PDF -- presupuesto de ancho y clasificación de columnas', 
       ['Estado', 'Fecha Servicio', 'PL', 'Sexo cría', 'Toro', 'Tratamiento'].sort(),
     );
     // Identidad/referencia: el sistema las calcula, nadie las escribe.
+    // "Estado registrado" (D-E, B5.4) es la más nueva de este grupo: gris,
+    // de solo referencia, nadie la diligencia -- la columna de al lado
+    // ("Estado") sigue siendo la que Martha verifica.
     expect([...COLUMNAS_PRELLENADAS].sort()).toEqual(
-      ['#', '# Partos', 'Nombre', 'Parto Probable', 'Secar', 'Última Cría'].sort(),
+      ['#', '# Partos', 'Estado registrado', 'Nombre', 'Parto Probable', 'Secar', 'Última Cría'].sort(),
     );
   });
 
@@ -269,6 +294,10 @@ describe('layout del PDF -- presupuesto de ancho y clasificación de columnas', 
       })!,
       'Fecha Servicio': '22/12/2026',
       Toro: 'Ins Holstein',
+      // "Confirmada" es la más larga de las 5 etiquetas del vocabulario de
+      // D-D -- derivada de la función REAL (`textoCeldaEstadoRegistrado`),
+      // mismo criterio que 'Sexo cría' arriba: nunca un literal desincronizable.
+      'Estado registrado': textoCeldaEstadoRegistrado('preñada')!,
       Estado: 'rech',
       Secar: '22/12/2026',
       'Parto Probable': '22/12/2026',

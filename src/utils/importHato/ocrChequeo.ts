@@ -62,6 +62,7 @@ export const COLUMNAS_OCR = [
   'sexo_cria',
   'fecha_servicio',
   'toro',
+  'estado_registrado',
   'estado',
   'secar',
   'parto_probable',
@@ -92,6 +93,7 @@ export const ENCABEZADO_POR_COLUMNA_OCR: Record<ColumnaOcr, string> = {
   sexo_cria: 'Sexo cría',
   fecha_servicio: 'Fecha Servicio',
   toro: 'Toro',
+  estado_registrado: 'Estado registrado',
   estado: 'Estado',
   secar: 'Secar',
   parto_probable: 'Parto Probable',
@@ -765,6 +767,21 @@ export const VOCABULARIO_SX: readonly string[] = [
 /** Códigos de la columna Estado que `parseEstado` reconoce. */
 export const VOCABULARIO_ESTADO: readonly string[] = ['ok', 'rech'];
 
+/** Etiquetas que puede traer la columna "Estado registrado" (D-E, B5.4) --
+ * las CINCO del vocabulario del dueño más el guion de "sin clasificar". Es
+ * una columna de REFERENCIA que el sistema pre-imprime; Martha nunca escribe
+ * ahí, así que el modelo solo necesita reconocer una de estas palabras (o
+ * transcribir lo que vea si algo salió distinto -- regla 3 del prompt sigue
+ * mandando). */
+export const VOCABULARIO_ESTADO_REGISTRADO: readonly string[] = [
+  'Vacía',
+  'Servida',
+  'Confirmada',
+  'Por secar',
+  'Seca',
+  '—',
+];
+
 export interface VocabularioOcr {
   /** Nombres de toro reales, de `hato_toros`. */
   toros: readonly string[];
@@ -866,6 +883,7 @@ export function construirPromptOcr(vocabulario: VocabularioOcr): string {
     'VOCABULARIO ESPERADO (úsalo para leer mejor la letra, NO para reemplazar lo que ves):',
     `- Fechas: formato día/mes/año, por ejemplo 5/11/2026. Transcríbelas tal cual estén escritas.`,
     `- Columna 'Sexo cría' (código SX): ${VOCABULARIO_SX.join(', ')}. La letra A es hembra, la O es macho, el signo + significa que la cría murió, y un número después de la letra es la chapeta de la cría.`,
+    `- Columna 'Estado registrado' (letra impresa, GRIS, de referencia -- nunca escrita a mano): una de estas palabras: ${VOCABULARIO_ESTADO_REGISTRADO.join(', ')}.`,
     `- Columna 'Estado': ${VOCABULARIO_ESTADO.join(', ')}.`,
     `- Columna 'Toro': nombres del catálogo real: ${toros}. A veces va precedido de 'Toro ' o 'Ins '. Si el nombre escrito no está en el catálogo, transcríbelo igual tal cual.`,
     `- Columnas 'PL' y '# Partos': números.`,

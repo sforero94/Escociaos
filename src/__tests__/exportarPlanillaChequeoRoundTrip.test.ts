@@ -241,10 +241,80 @@ describe('B5.3 -- round-trip: exportar un chequeo existente y volver a subirlo s
       cambios: 0,
       noReconocidos: 0,
       conIssues: 0,
+      conConflictoEstadoRegistrado: 0,
     });
     for (const fila of diff.filas) {
       expect(fila.clasificacion).toBe('sin_cambio');
       expect(fila.diferencias).toEqual([]);
+      // Sin `estadosRegistrados` (el 4º parámetro, opcional) el diff nunca
+      // fabrica un conflicto -- mismo contrato de "sin dato antes que dato
+      // inventado" del resto del módulo.
+      expect(fila.conflictoEstadoRegistrado).toBeNull();
     }
+  });
+
+  it('D-E/B5.4 -- "Estado registrado" (columna 13) round-tripea VERBATIM: exportar, re-leer, y compararlo contra lo que el sistema cree hoy detecta el conflicto explícito (N23)', () => {
+    const vaca = construirFixture({
+      id: 'animal-vaca',
+      numero: 300,
+      nombre: 'VACA',
+      plRaw: 15,
+      numPartosRaw: 2,
+      fechaServicioRaw: '10/8/2026',
+      toroRaw: 'Toro Jersey',
+      estadoRaw: null,
+      ultimaCriaRaw: null,
+      sxRaw: null,
+      tttoRaw: null,
+    });
+    // "Estado registrado" es la MISMA etiqueta que ve el resto de la app
+    // (chipEstadoReproductivo/etiquetaEstadoReproductivo) -- impresa cuando
+    // se exportó esta planilla.
+    const filaImpresa: FilaPlanillaChequeo = { ...vaca.fila, estadoRegistrado: 'Servida' };
+
+    const libro = construirLibroPlanillaChequeo(XLSX, {
+      tituloHoja: construirTituloHojaChequeo(FECHA_CHEQUEO_ACTUAL),
+      nombreHoja: construirNombreHojaChequeo(FECHA_CHEQUEO_ACTUAL),
+      filas: [filaImpresa],
+    });
+    const buf = XLSX.write(libro, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+    const libroLeido = XLSX.read(buf, { type: 'buffer', cellDates: false });
+    const nombreHojaLeida = libroLeido.SheetNames[0];
+    const hojaCruda: HojaCruda = {
+      archivo: ARCHIVO,
+      hoja: nombreHojaLeida,
+      filas: hojaAMatriz(libroLeido.Sheets[nombreHojaLeida]),
+    };
+
+    const salida = normalizarHojas([hojaCruda], '2026-08-20T00:00:00.000Z', CONFIG);
+    expect(salida.chequeos).toHaveLength(1);
+    // Round-trip VERBATIM: lo que se imprimió vuelve a leerse exactamente igual.
+    expect(salida.chequeos[0].estadoRegistrado).toBe('Servida');
+    expect(salida.chequeos[0].raw.estadoRegistrado).toBe('Servida');
+
+    // El sistema, al momento de aprobar, ahora cree OTRA cosa (p. ej. Martha
+    // ya la confirmó preñada por palpación en el ínterin) -- eso es
+    // exactamente el conflicto que N23 pide mostrar ANTES de aprobar.
+    const diffConConflicto = construirDiffChequeo(
+      salida.chequeos,
+      [vaca.animal],
+      [vaca.ultimo],
+      [{ animalId: 'animal-vaca', estado: 'Confirmada' }],
+    );
+    expect(diffConConflicto.filas[0].conflictoEstadoRegistrado).toEqual({
+      impreso: 'Servida',
+      actual: 'Confirmada',
+    });
+    expect(diffConConflicto.resumen.conConflictoEstadoRegistrado).toBe(1);
+
+    // Si en cambio el sistema sigue creyendo lo mismo que se imprimió, no hay
+    // conflicto que mostrar -- nunca se fabrica una alerta de la nada.
+    const diffSinConflicto = construirDiffChequeo(
+      salida.chequeos,
+      [vaca.animal],
+      [vaca.ultimo],
+      [{ animalId: 'animal-vaca', estado: 'Servida' }],
+    );
+    expect(diffSinConflicto.filas[0].conflictoEstadoRegistrado).toBeNull();
   });
 });

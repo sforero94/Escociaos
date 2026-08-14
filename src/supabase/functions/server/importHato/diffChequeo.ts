@@ -139,6 +139,27 @@ export interface CampoDiffChequeo {
   nuevo: unknown;
 }
 
+/**
+ * Conflicto explícito entre "lo registrado" y "lo impreso" (D-E, N23,
+ * docs/plan_hato_telegram_estados_agosto_2026.md §3 Capa 5). La planilla sale
+ * pre-impresa con la etiqueta del `EstadoReproductivo` que el motor creía
+ * cierta al momento de exportar ("Estado registrado", columna gris de solo
+ * referencia -- Martha nunca escribe ahí). Entre que se imprime y que se
+ * sube de vuelta puede haber pasado CUALQUIER COSA que cambie esa lectura: un
+ * evento de Telegram nuevo, una corrección manual, un chequeo distinto ya
+ * aprobado -- y eso tiene que verse ANTES de aprobar, no descubrirse después
+ * (la contradicción es justo lo que N23 pide mostrar). `actual` se recalcula
+ * SIEMPRE con el estado fresco de la base al momento del diff (mismo
+ * principio que el resto de este archivo: nunca el diff viejo que vio la
+ * pantalla).
+ */
+export interface ConflictoEstadoRegistrado {
+  /** Lo que decía la planilla cuando se exportó/imprimió. */
+  impreso: string;
+  /** Lo que el sistema cree AHORA, recién recalculado. */
+  actual: string;
+}
+
 export interface FilaDiffChequeo {
   fila: number;
   numero: number | null;
@@ -157,6 +178,25 @@ export interface FilaDiffChequeo {
   diferencias: CampoDiffChequeo[];
   motivoNoReconocido: string | null;
   issues: ParseIssue[];
+  /** `null` cuando no hay nada que contrastar: fila `nuevo`/`no_reconocido`
+   * (sin `animalId`), la hoja no trae la columna "Estado registrado" (toda
+   * generación anterior a B5.4), la celda vino vacía, o lo impreso SIGUE
+   * coincidiendo con lo que el sistema cree hoy. Ver `ConflictoEstadoRegistrado`. */
+  conflictoEstadoRegistrado: ConflictoEstadoRegistrado | null;
+}
+
+/** "Lo que el sistema cree HOY" para un animal -- la etiqueta de
+ * `EstadoReproductivo` (`etiquetaEstadoReproductivo`, calculosHato.ts),
+ * recalculada por el handler contra el estado FRESCO de `v_hato_estado_actual`
+ * en el momento del diff, nunca cacheada. El handler arma este arreglo; este
+ * módulo solo lo usa para comparar texto contra texto -- no conoce el motor
+ * de estados ni el vocabulario de 5 estados, mismo principio de capas que el
+ * resto de `importHato/`. */
+export interface AnimalEstadoRegistradoActual {
+  animalId: string;
+  /** Etiqueta YA calculada (`etiquetaEstadoReproductivo`), lista para
+   * comparar texto a texto contra `fila.estadoRegistrado`. */
+  estado: string;
 }
 
 export interface ResumenDiffChequeo {
@@ -169,6 +209,12 @@ export interface ResumenDiffChequeo {
    * clasificación -- independiente de `noReconocidos` (una fila puede tener
    * issues y aun así resolverse a un animal). */
   conIssues: number;
+  /** Filas cuyo "Estado registrado" impreso ya NO coincide con lo que el
+   * sistema cree hoy (N23, D-E) -- la señal que tiene que verse ANTES de
+   * aprobar. Independiente de `cambios`: una fila puede no traer ningún
+   * cambio de campo (Martha no tocó nada) y aun así tener este conflicto,
+   * porque lo que cambió fue el sistema, no el papel. */
+  conConflictoEstadoRegistrado: number;
 }
 
 export interface ResultadoDiffChequeo {
@@ -237,7 +283,33 @@ function filaNoReconocida(fila: FilaChequeoNormalizada, numeroEsProvisional: boo
     diferencias: [],
     motivoNoReconocido: motivo,
     issues: fila.issues,
+    // Sin animal resuelto no hay contra qué contrastar "lo que el sistema
+    // cree hoy" -- nunca se inventa un conflicto para una fila que ni
+    // siquiera se sabe de quién es.
+    conflictoEstadoRegistrado: null,
   };
+}
+
+/**
+ * N23: compara `estadoRegistrado` IMPRESO (crudo, tal como salió en la
+ * planilla) contra lo que el sistema cree AHORA (`estadosRegistrados`,
+ * recién recalculado por el handler). `null` cuando no hay nada que
+ * contrastar -- la hoja no trae la columna (generación anterior a B5.4), la
+ * celda vino vacía, o el animal no aparece en `estadosRegistrados` (no
+ * debería pasar para una fila con `animalId` resuelto, pero un mapa
+ * incompleto no debe fabricar un conflicto falso).
+ */
+function calcularConflictoEstadoRegistrado(
+  estadoRegistradoImpreso: string | null,
+  animalId: string,
+  estadosRegistradosPorAnimalId: Map<string, string>,
+): ConflictoEstadoRegistrado | null {
+  const impreso = estadoRegistradoImpreso?.trim();
+  if (!impreso) return null;
+  const actual = estadosRegistradosPorAnimalId.get(animalId);
+  if (actual === undefined) return null;
+  if (impreso === actual) return null;
+  return { impreso, actual };
 }
 
 /**
@@ -245,17 +317,28 @@ function filaNoReconocida(fila: FilaChequeoNormalizada, numeroEsProvisional: boo
  * actual del hato. `animales`/`ultimosChequeos` son la forma plana que el
  * handler del endpoint arma con dos consultas a Supabase (`hato_animales` +
  * `hato_chequeo_vacas` reducida vía `seleccionarUltimoChequeoPorAnimal`).
+ *
+ * `estadosRegistrados` (N23, D-E) es OPCIONAL y por defecto vacío -- sin él
+ * (llamadas existentes, o un handler que no lo calculó todavía) el diff se
+ * comporta exactamente igual que antes, solo que `conflictoEstadoRegistrado`
+ * sale siempre `null`. El handler lo arma recalculando `derivarEstadoReproductivo`
+ * contra `v_hato_estado_actual` FRESCA para los animales de esta hoja -- nunca
+ * un valor cacheado del momento en que se imprimió la planilla.
  */
 export function construirDiffChequeo(
   filas: FilaChequeoNormalizada[],
   animales: AnimalHatoActual[],
   ultimosChequeos: UltimoChequeoVacaActual[],
+  estadosRegistrados: AnimalEstadoRegistradoActual[] = [],
 ): ResultadoDiffChequeo {
   const animalesPorNumero = new Map<number, AnimalHatoActual>();
   for (const a of animales) animalesPorNumero.set(a.numero, a);
 
   const ultimoPorAnimalId = new Map<string, UltimoChequeoVacaActual>();
   for (const u of ultimosChequeos) ultimoPorAnimalId.set(u.animalId, u);
+
+  const estadosRegistradosPorAnimalId = new Map<string, string>();
+  for (const e of estadosRegistrados) estadosRegistradosPorAnimalId.set(e.animalId, e.estado);
 
   // Colisión DENTRO de la hoja subida (mismo número, nombres distintos) --
   // mismo motor que ya protege el pipeline histórico. `nombre` nunca es
@@ -305,6 +388,9 @@ export function construirDiffChequeo(
         diferencias: [],
         motivoNoReconocido: null,
         issues: fila.issues,
+        // Ficha nueva: no hay animal contra el cual recalcular "lo que el
+        // sistema cree hoy".
+        conflictoEstadoRegistrado: null,
       };
     }
 
@@ -322,6 +408,11 @@ export function construirDiffChequeo(
       diferencias,
       motivoNoReconocido: null,
       issues: fila.issues,
+      conflictoEstadoRegistrado: calcularConflictoEstadoRegistrado(
+        fila.estadoRegistrado,
+        animal.id,
+        estadosRegistradosPorAnimalId,
+      ),
     };
   });
 
@@ -332,6 +423,7 @@ export function construirDiffChequeo(
     cambios: filasDiff.filter((f) => f.clasificacion === 'cambio').length,
     noReconocidos: filasDiff.filter((f) => f.clasificacion === 'no_reconocido').length,
     conIssues: filasDiff.filter((f) => f.issues.length > 0).length,
+    conConflictoEstadoRegistrado: filasDiff.filter((f) => f.conflictoEstadoRegistrado !== null).length,
   };
 
   return { filas: filasDiff, resumen, colisionesEnHoja };

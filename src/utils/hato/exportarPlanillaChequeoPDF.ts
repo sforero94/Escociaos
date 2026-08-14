@@ -251,7 +251,7 @@ export function hayNumerosProvisionales(filas: readonly FilaPlanillaChequeo[]): 
 
 export function construirFilasPlanillaPDF(filas: readonly FilaPlanillaChequeo[]): string[][] {
   return filas.map((f) => {
-    const celdas: (string | number | null)[] = [
+    const celdas: (string | number | null | undefined)[] = [
       textoCeldaNumero(f.numero),
       f.nombre,
       f.pl,
@@ -260,6 +260,7 @@ export function construirFilasPlanillaPDF(filas: readonly FilaPlanillaChequeo[])
       f.sexoCria,
       f.fechaServicio,
       f.toro,
+      f.estadoRegistrado,
       f.estado,
       f.secar,
       f.partoProbable,
@@ -275,48 +276,65 @@ export function construirFilasPlanillaPDF(filas: readonly FilaPlanillaChequeo[])
 
 /**
  * Anchos de columna en MILÍMETROS. Presupuesto real de carta HORIZONTAL:
- * 279,4mm de ancho − 10mm de margen a cada lado = **259,4mm útiles**. La suma
- * de abajo es 254,5mm, con holgura deliberada para que un redondeo de jsPDF
- * nunca empuje la tabla fuera de la página (hay un test que fija el techo).
+ * 279,4mm de ancho − 8mm de margen a cada lado = **263,4mm útiles**. El
+ * margen bajó de 10 a 8mm en D-E/N22 (docs/plan_hato_telegram_estados_agosto_2026.md)
+ * para financiar la columna 13 ("Estado registrado") sin comerse la del
+ * resto -- 8mm sigue siendo un margen imprimible normal en cualquier
+ * impresora de oficina.
  *
  * El reparto NO es uniforme y no se eligió a ojo: cada ancho se midió con
  * `doc.getTextWidth` contra el contenido REAL más largo de esa columna a
- * 11pt, más 3mm de padding horizontal, para que **ninguna celda se envuelva a
- * dos líneas** (una tabla de altos uniformes es más fácil de leer, de escribir
- * y de anclar para el OCR de la Fase 3):
+ * 11pt (datos) O la palabra más larga del encabezado a 9pt bold (lo que sea
+ * mayor) más 3mm de padding horizontal. Las celdas de DATOS nunca se
+ * envuelven a dos líneas (requisito duro); un encabezado de dos palabras SÍ
+ * puede partirse en dos líneas entre palabras (p. ej. "Fecha" / "Servicio"),
+ * pero ninguna palabra individual se parte a la mitad -- por eso el piso de
+ * cada columna es el MAYOR de los dos:
  * - Fechas (`Última Cría`, `Fecha Servicio`, `Secar`, `Parto Probable`):
  *   `22/12/2026` mide 19,25mm -> 22,5mm de columna.
  * - `Nombre`: `BRILLANTINA` (el nombre más largo del hato) mide 24,87mm -> 28mm.
  * - `Toro`: `Ins Holstein` (raza-como-nombre-de-toro, el caso más largo) mide
- *   20,18mm -> 24mm.
+ *   20,18mm -> 23,4mm.
  * - `Sexo cría` lleva una FRASE, no un dato corto: `H retenida #206` (el caso
- *   real más largo) mide 27,40mm -> 31mm de columna.
- * - `Tratamiento` es la columna donde Martha MÁS escribe y por eso recibe el
- *   ancho liberado por la etiqueta compacta: 37mm. El reparto no se eligió a
- *   ojo sino midiendo el histórico de `hato_chequeo_vacas` (2026-07-29): SX
- *   promedia 3 caracteres escritos a mano y `TTTO` promedia 12 con máximos de
- *   54. La versión anterior asignaba 44mm a SX y 21mm a TTTO -- exactamente al
- *   revés de la necesidad real. Ver la nota de `textoSexo`.
- * - Las de referencia pura (`#`, `# Partos`) llevan lo justo para su contenido
- *   conocido: nadie escribe ahí.
+ *   real más largo) mide 27,40mm -> 30,6mm de columna.
+ * - `Estado registrado` (D-E, B5.4, N22): la etiqueta más larga del
+ *   vocabulario de 5 estados es `Confirmada` (19,91mm de dato) -- pero la
+ *   palabra suelta del encabezado, `registrado`, mide 15,46mm a 9pt bold, así
+ *   que el dato manda -> 23,4mm de columna.
+ * - `Estado`/`PL`/`# Partos` son códigos cortos (`ok`/`rech`, números de 1-2
+ *   dígitos), pero cada uno respeta el piso de su propia palabra de
+ *   encabezado ("Estado" 10,51mm, "Partos" 9,81mm) para no partirla:
+ *   `Estado` -> 13,7mm, `PL` -> 7,5mm, `# Partos` -> 13mm.
+ * - `Tratamiento` es la columna donde Martha MÁS escribe y por eso sigue
+ *   recibiendo el resto del presupuesto disponible -- 22,5mm, medido contra
+ *   el histórico de `hato_chequeo_vacas` (2026-07-29): SX promedia 3
+ *   caracteres escritos a mano y TTTO promedia 12 (máx. 54). Encogió frente
+ *   a la versión anterior (35mm) para financiar la columna 13; sigue
+ *   cubriendo con holgura el caso promedio, no el máximo histórico extremo.
+ * - Las de referencia pura (`#`) lleva lo justo para su contenido conocido:
+ *   nadie escribe ahí.
  *
- * El total queda en 257,5mm de los 259,4 útiles: 1,9mm de holgura. Cualquier
- * columna nueva o más ancha exige quitar de otra, ir a oficio, o aceptar una
- * 3ª página -- no hay margen escondido.
+ * El total queda en 263,1mm de los 263,4 útiles: 0,3mm de holgura --
+ * deliberadamente angosta (cada columna ya trae su propio colchón de
+ * redondeo, ver el test que mide contra `doc.getTextWidth` real) para poder
+ * financiar la columna 13 sin ir a tamaño oficio ni sacrificar el requisito
+ * de letra ≥11pt. Cualquier columna nueva o más ancha exige quitar de otra o
+ * aceptar una página más -- no hay margen escondido.
  */
 export const ANCHOS_COLUMNAS_PDF_MM: readonly number[] = [
-  12, // # (cabe `999*`: la marca de provisional suma un carácter)
+  11.1, // # (cabe `999*`: la marca de provisional suma un carácter)
   28, // Nombre
-  10, // PL
-  13.5, // # Partos
+  7.5, // PL
+  13, // # Partos
   22.5, // Última Cría
-  31, // Sexo cría
+  30.6, // Sexo cría
   22.5, // Fecha Servicio
-  24, // Toro
-  14, // Estado
+  23.4, // Toro
+  23.4, // Estado registrado
+  13.7, // Estado
   22.5, // Secar
   22.5, // Parto Probable
-  35, // Tratamiento
+  22.5, // Tratamiento
 ];
 
 /** Ancho total de la tabla = suma exacta de los anchos de columna. Se le pasa
@@ -330,8 +348,10 @@ export const ANCHO_TABLA_PDF_MM = ANCHOS_COLUMNAS_PDF_MM.reduce((a, b) => a + b,
 
 /** Márgenes de la página, en mm. `top` reserva la banda del título, que se
  * redibuja en CADA página (ver `dibujarEncabezadoPagina`); `bottom` reserva la
- * banda del pie (nota operativa + "Página i de N"). */
-export const MARGENES_PDF_MM = { top: 20, right: 10, bottom: 12, left: 10 } as const;
+ * banda del pie (nota operativa + "Página i de N"). `right`/`left` bajaron de
+ * 10 a 8mm en D-E/N22 para financiar la columna 13 ("Estado registrado") --
+ * ver la nota de `ANCHOS_COLUMNAS_PDF_MM`. */
+export const MARGENES_PDF_MM = { top: 20, right: 8, bottom: 12, left: 8 } as const;
 
 /** Ancho útil de una hoja carta horizontal con estos márgenes. Constante
  * explícita para que el test de presupuesto de ancho no repita la aritmética. */

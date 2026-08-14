@@ -28,10 +28,12 @@ import { normalizarHojas } from './importHato/normalizar.ts';
 import { construirDiffChequeo, seleccionarUltimoChequeoPorAnimal } from './importHato/diffChequeo.ts';
 import type {
   AnimalHatoActual,
+  AnimalEstadoRegistradoActual,
   FilaChequeoVacaHistorico,
 } from './importHato/diffChequeo.ts';
 import type { HojaCruda } from './importHato/tipos.ts';
 import { construirHatoConfigDesdeFilas, type FilaHatoConfig } from './hato-config-desde-tabla.ts';
+import { derivarEstadoReproductivo, etiquetaEstadoReproductivo, type EstadoActualHatoRow } from './calculos-hato.ts';
 
 const TAMANO_MAXIMO_BYTES = 20 * 1024 * 1024; // 20 MB -- una planilla real pesa unos pocos cientos de KB.
 const ROLES_PERMITIDOS = new Set(['Administrador', 'Gerencia']); // mismo patrón de escritura que el resto de hato_* (migración 053).
@@ -235,8 +237,40 @@ export async function handleHatoChequeoPreview(c: Context): Promise<Response> {
     });
   }
 
+  // --- 4b. "Estado registrado" (D-E, N21/N23): lo que el motor de 5 estados
+  // cree AHORA para cada animal de la hoja -- recalculado en este mismo
+  // momento contra `v_hato_estado_actual` (que fusiona TODO `hato_eventos`
+  // sin importar `chequeo_vaca_id`, incluidos los eventos manuales de
+  // Telegram), nunca cacheado desde cuando se imprimió la planilla. Es la
+  // pieza que permite al diff marcar el conflicto explícito "registrado vs.
+  // papel" (docs/plan_hato_telegram_estados_agosto_2026.md §3 Capa 5).
+  let estadosRegistrados: AnimalEstadoRegistradoActual[] = [];
+  if (animalIds.length > 0) {
+    const { data, error } = await supabase
+      .from('v_hato_estado_actual')
+      .select(
+        'animal_id, etapa, raza, estado, num_partos, ultimo_chequeo_fecha, ultimo_servicio_fecha, ultimo_parto_fecha, ultimo_secado_real_fecha, ultima_confirmacion_prenez_fecha, ultimo_evento_fecha, ultima_confirmacion_prenez_metodo, ultimo_aborto_fecha, ultimo_estado_chequeo',
+      )
+      .in('animal_id', animalIds);
+    if (error) return respuestaError(c, 500, `No se pudo leer v_hato_estado_actual: ${error.message}`);
+    // Mismo criterio de "hoy" que `hato-alertas-tick.ts` (UTC) -- las edge
+    // functions quedan deliberadamente fuera del arreglo de "hoy en hora
+    // local" (CLAUDE.md, "Hoy siempre se toma en hora LOCAL"): un desfase de
+    // un día en esta comparación de referencia no cambia la CLASIFICACIÓN
+    // reproductiva de una vaca de un día para otro salvo en el borde exacto
+    // de un umbral, y el conflicto que esto detecta ya es de días/semanas.
+    const hoy = new Date().toISOString().slice(0, 10);
+    estadosRegistrados = (data ?? []).map((fila: Record<string, unknown>) => {
+      const derivado = derivarEstadoReproductivo(fila as unknown as EstadoActualHatoRow, config, hoy);
+      return {
+        animalId: fila.animal_id as string,
+        estado: etiquetaEstadoReproductivo(derivado.estado),
+      };
+    });
+  }
+
   const ultimosChequeos = seleccionarUltimoChequeoPorAnimal(historico);
-  const diffChequeos = construirDiffChequeo(salida.chequeos, animales, ultimosChequeos);
+  const diffChequeos = construirDiffChequeo(salida.chequeos, animales, ultimosChequeos, estadosRegistrados);
 
   // Fecha del chequeo, para precargar el campo `chequeo.fecha` del commit
   // (`POST .../hato/chequeo/commit`, `hato-chequeo-commit.ts`) sin que el

@@ -25,6 +25,12 @@ export type ColumnaLogicaChequeo =
   | 'sx'
   | 'fechaServicio'
   | 'toro'
+  /** "Estado registrado" (D-E, plan agosto 2026 N21-N22): columna PRE-LLENADA
+   * y de solo referencia -- lo que el motor de 5 estados cree HOY, impreso
+   * para que la vet lo verifique contra la vaca real. Nunca se le pide nada
+   * a Martha en esta columna (esa es `estado`, la de al lado). Solo existe en
+   * el formato B5.3/B5.4 propio -- ninguna generación histórica la trae. */
+  | 'estadoRegistrado'
   | 'tp'
   | 'estado'
   | 'secar'
@@ -42,6 +48,7 @@ export const COLMAP_VACIO: ColmapChequeo = {
   sx: null,
   fechaServicio: null,
   toro: null,
+  estadoRegistrado: null,
   tp: null,
   estado: null,
   secar: null,
@@ -88,6 +95,10 @@ const ALIAS_ANCLA: Record<
   sx: ['SX', 'SEXO CRÍA'], // 'Sexo cría' es B5.3
   fechaServicio: ['F SERVICIO', 'FECHA SERVICIO'], // 'Fecha Servicio' es B5.3
   toro: ['T', 'TORO'],
+  // 'Estado registrado' es B5.4 (D-E, plan agosto 2026) -- exclusiva de
+  // nuestro propio formato, nunca ambigua con el alias 'ESTADO' del grupo
+  // final (comparación EXACTA de texto normalizado, ver `buscarColumnas`).
+  estadoRegistrado: ['ESTADO REGISTRADO'],
   ttto: ['TTTO', 'TRATAMIENTO'], // 'Tratamiento' es B5.3
 };
 
@@ -300,6 +311,11 @@ function colmapPosicional(offset: number): ColmapChequeo {
     sx: offset + 5,
     fechaServicio: offset + 6,
     toro: offset + 7,
+    // Ninguna de las 4 hojas headerless del corpus histórico trae 'Estado
+    // registrado' (B5.4, solo existe en nuestro propio formato exportado, que
+    // SIEMPRE lleva encabezado real) -- se deja sin columna, nunca se inventa
+    // una posición.
+    estadoRegistrado: null,
     tp: offset + 8,
     estado: offset + 9,
     secar: offset + 10,
@@ -364,6 +380,7 @@ const COLUMNAS_PARA_FILTRO_VACIO: ColumnaLogicaChequeo[] = [
   'sx',
   'fechaServicio',
   'toro',
+  'estadoRegistrado',
   'estado',
   'secar',
   'pp',

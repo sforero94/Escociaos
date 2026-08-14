@@ -33,6 +33,7 @@ import {
   derivarSexoCria,
   type EstadoActualHatoRow,
   type CriaDestino,
+  type EstadoReproductivo,
   type SexoCria,
   type TipoEstado,
 } from '@/utils/calculosHato';
@@ -83,6 +84,15 @@ export interface AnimalParaPlanillaChequeo {
    * mejor referencia disponible para que el veterinario la vea impresa. */
   fechaSecar: string | null;
   fechaProbableParto: string | null;
+  /** "Estado registrado" (D-E, N21/N22 -- docs/plan_hato_telegram_estados_agosto_2026.md
+   * §3 Capa 5): el `EstadoReproductivo` que el motor deriva HOY para esta
+   * vaca, la MISMA llamada a `derivarEstadoReproductivo` que ya se hacía
+   * para `fechaSecar`/`fechaProbableParto` -- ningún cálculo nuevo, solo se
+   * expone el campo `.estado` que antes se descartaba. Sale de
+   * `v_hato_estado_actual`, que fusiona TODO `hato_eventos` sin importar el
+   * origen -- incluye los manuales de Telegram (`chequeo_vaca_id IS NULL`),
+   * que es exactamente el mecanismo de sincronía que pide D-E. */
+  estadoReproductivo: EstadoReproductivo;
 }
 
 /** Lo que se necesita de un evento `parto` para resolver el sexo de la cría
@@ -257,6 +267,7 @@ export function useAnimalesParaPlanillaChequeo() {
             ultimoEstadoChequeo: fila.ultimo_estado_chequeo,
             fechaSecar: derivado.fecha_secar,
             fechaProbableParto: derivado.fecha_probable_parto,
+            estadoReproductivo: derivado.estado,
           };
         })
         .sort(ordenarPorNombreDeVaca);

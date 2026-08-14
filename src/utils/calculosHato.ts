@@ -2162,6 +2162,55 @@ export function derivarEstadoReproductivo(
   };
 }
 
+/**
+ * Etiqueta legible de un `EstadoReproductivo`, en el vocabulario de CINCO
+ * estados de D-D (Vacía · Servida · Confirmada · Por secar · Seca) más los
+ * estados no-aplicables/terminales. Extraída de `hatoUi.ts::chipEstadoReproductivo`
+ * (S8) para que exista UNA sola fuente del TEXTO -- el color/className sigue
+ * viviendo en `hatoUi.ts` (browser-only), que ahora reusa esta función.
+ *
+ * Por qué vive acá y no solo en `hatoUi.ts`: la columna "Estado registrado"
+ * de la planilla de chequeo (D-E, docs/plan_hato_telegram_estados_agosto_2026.md
+ * N21-N23) imprime este mismo texto en el `.xlsx`/PDF (`exportarPlanillaChequeo*.ts`,
+ * browser) y el endpoint de diff (Deno, `hato-chequeo-preview.ts`) necesita
+ * calcular el MISMO texto para detectar cuándo lo impreso ya no coincide con
+ * lo que el sistema cree HOY -- y el lado Deno no puede importar `hatoUi.ts`
+ * (no es parte del trío espejado). Este archivo sí lo es, así que la etiqueta
+ * viaja gratis a los tres lados sin duplicar el vocabulario.
+ */
+export function etiquetaEstadoReproductivo(estado: EstadoReproductivo): string {
+  switch (estado) {
+    case 'preñada':
+      return 'Confirmada';
+    case 'parida_reciente':
+      return 'Vacía';
+    case 'servida':
+      return 'Servida';
+    case 'proxima_a_secar':
+      return 'Por secar';
+    case 'seca':
+      return 'Seca';
+    case 'vacia_por_servir':
+      return 'Vacía';
+    case 'novilla':
+      return 'Vacía';
+    case 'cria':
+      return 'Cría';
+    case 'indeterminado':
+      return '—';
+    case 'vendida':
+      return 'Vendida';
+    case 'muerta':
+      return 'Muerta';
+    case 'descartada':
+      return 'Descartada';
+    default: {
+      const _exhaustivo: never = estado;
+      return String(_exhaustivo);
+    }
+  }
+}
+
 // ============================================================================
 // BLOQUE 5 — PL / productividad
 // ============================================================================

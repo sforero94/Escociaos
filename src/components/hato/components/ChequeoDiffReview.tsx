@@ -198,7 +198,8 @@ function FilaDiffEditable({
     diff.diferencias.length > 0 ||
     fila.issues.length > 0 ||
     erroresPorCampo.size > 0 ||
-    diff.clasificacion === 'nuevo';
+    diff.clasificacion === 'nuevo' ||
+    diff.conflictoEstadoRegistrado !== null;
 
   return (
     <>
@@ -244,6 +245,16 @@ function FilaDiffEditable({
         <tr className="bg-gray-50">
           <td colSpan={TOTAL_COLUMNAS} className="px-3 py-2">
             <div className="space-y-1">
+              {diff.conflictoEstadoRegistrado && (
+                <p className="text-xs text-red-700">
+                  <AlertTriangle className="w-4 h-4 inline-flex flex-shrink-0" /> "Estado registrado" impreso decía{' '}
+                  <span className="font-medium">{diff.conflictoEstadoRegistrado.impreso}</span>, pero el sistema cree
+                  ahora <span className="font-medium">{diff.conflictoEstadoRegistrado.actual}</span> -- algo cambió
+                  desde que se imprimió esta planilla (un evento de Telegram, una corrección). Verifica contra la vaca
+                  real antes de aprobar.
+                </p>
+              )}
+
               {diff.motivoNoReconocido && (
                 <p className="text-xs text-red-600">
                   <AlertTriangle className="w-4 h-4 inline-flex flex-shrink-0" /> {diff.motivoNoReconocido}
@@ -354,7 +365,10 @@ export function ChequeoDiffReview({
   const requiereAtencion = (f: FilaDiffChequeo) =>
     !esClasificacionAprobable(f.clasificacion) ||
     f.issues.length > 0 ||
-    erroresPorFila.has(f.fila);
+    erroresPorFila.has(f.fila) ||
+    // D-E/N23: lo impreso ya no coincide con lo que el sistema cree hoy --
+    // la contradicción tiene que verse ANTES de aprobar.
+    f.conflictoEstadoRegistrado !== null;
 
   const coincideFiltro = (f: FilaDiffChequeo, clasificacion: ClasificacionFilaDiff) => {
     switch (filtro) {
@@ -398,6 +412,15 @@ export function ChequeoDiffReview({
           <p className="text-xs text-red-600">No reconocidas</p>
         </div>
       </div>
+
+      {resumen.conConflictoEstadoRegistrado > 0 && (
+        <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+          {resumen.conConflictoEstadoRegistrado} fila(s) con "Estado registrado" desactualizado: el sistema cree algo
+          distinto de lo que estaba impreso cuando se exportó esta planilla. Revísalas antes de aprobar (filtro
+          "Requiere atención").
+        </div>
+      )}
 
       {cargandoEstado && (
         <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">

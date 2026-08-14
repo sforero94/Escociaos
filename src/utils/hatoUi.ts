@@ -16,7 +16,7 @@
 // alterarlo (V1 del plan -- los componentes nuevos del mock no tocan
 // definiciones globales del sistema de diseño).
 
-import type { EstadoReproductivo, SenalRevisionHato, TipoEstado } from '@/utils/calculosHato';
+import { etiquetaEstadoReproductivo, type EstadoReproductivo, type SenalRevisionHato, type TipoEstado } from '@/utils/calculosHato';
 import type { ClasificacionFilaDiff } from '@/utils/importHato/diffChequeo';
 import type { CategoriaHato, SubetapaTernera } from '@/utils/hatoCategorias';
 import type { EstadoAlertaHato } from '@/utils/hatoAlertas';
@@ -64,31 +64,32 @@ const ROJO = 'bg-red-50 text-red-700 border-red-200';
  *   escribe "—", nunca un valor por defecto.
  */
 export function chipEstadoReproductivo(estado: EstadoReproductivo): ChipEstilo {
+  const label = etiquetaEstadoReproductivo(estado);
   switch (estado) {
     case 'preñada':
-      return { label: 'Confirmada', className: VERDE, title: 'Preñez confirmada por palpación' };
+      return { label, className: VERDE, title: 'Preñez confirmada por palpación' };
     case 'parida_reciente':
-      return { label: 'Vacía', className: AMBAR, title: 'Parió y todavía no ha sido servida' };
+      return { label, className: AMBAR, title: 'Parió y todavía no ha sido servida' };
     case 'servida':
-      return { label: 'Servida', className: AZUL, title: 'Montada o inseminada, preñez sin confirmar por palpación' };
+      return { label, className: AZUL, title: 'Montada o inseminada, preñez sin confirmar por palpación' };
     case 'proxima_a_secar':
-      return { label: 'Por secar', className: AMBAR };
+      return { label, className: AMBAR };
     case 'seca':
-      return { label: 'Seca', className: GRIS };
+      return { label, className: GRIS };
     case 'vacia_por_servir':
-      return { label: 'Vacía', className: AMBAR };
+      return { label, className: AMBAR };
     case 'novilla':
-      return { label: 'Vacía', className: AMBAR, title: 'Novilla: todavía no ha entrado al ciclo reproductivo' };
+      return { label, className: AMBAR, title: 'Novilla: todavía no ha entrado al ciclo reproductivo' };
     case 'cria':
-      return { label: 'Cría', className: GRIS };
+      return { label, className: GRIS };
     case 'indeterminado':
-      return { label: '—', className: GRIS, title: 'Sin dato: hay un evento posterior sin clasificar — ver la señal de revisión' };
+      return { label, className: GRIS, title: 'Sin dato: hay un evento posterior sin clasificar — ver la señal de revisión' };
     case 'vendida':
-      return { label: 'Vendida', className: GRIS };
+      return { label, className: GRIS };
     case 'muerta':
-      return { label: 'Muerta', className: GRIS };
+      return { label, className: GRIS };
     case 'descartada':
-      return { label: 'Descartada', className: GRIS };
+      return { label, className: GRIS };
     default: {
       const _exhaustivo: never = estado;
       return { label: String(_exhaustivo), className: GRIS };

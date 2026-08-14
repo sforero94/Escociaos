@@ -55,6 +55,14 @@ export interface CrudoFilaChequeo {
   sx: string | null;
   fechaServicio: string | null;
   toro: string | null;
+  /** "Estado registrado" (D-E, B5.4): el texto VERBATIM impreso en la
+   * columna de referencia -- la etiqueta de `EstadoReproductivo`
+   * (`etiquetaEstadoReproductivo`, calculosHato.ts) que el sistema creía
+   * cierta al momento de exportar/imprimir la planilla. Nunca se interpreta
+   * acá (ni se convierte a un `EstadoReproductivo`): es evidencia cruda que
+   * el diff compara contra lo que el sistema cree AHORA (N23). `null` en
+   * cualquier generación histórica -- esa columna no existía. */
+  estadoRegistrado: string | null;
   /** Se conserva por trazabilidad pero NUNCA se interpreta: es una fórmula
    * `TODAY()` congelada, no un dato del chequeo (doc S2 QA §2.4). */
   tp: string | null;
@@ -99,6 +107,13 @@ export interface FilaChequeoNormalizada {
   fechaProbableParto: string | null;
   toroNombre: string | null;
   tipoServicio: 'monta' | 'inseminacion' | null;
+  /** Copia trimeada de `raw.estadoRegistrado` -- lo que estaba impreso en
+   * "Estado registrado" cuando se exportó esta planilla (D-E, B5.4). `null`
+   * cuando la hoja no trae esa columna (toda generación histórica) o la
+   * celda vino vacía. El diff (`diffChequeo.ts`) la compara contra el
+   * `EstadoReproductivo` que el sistema deriva HOY -- nunca contra otro
+   * campo, y nunca se reinterpreta a un tipo cerrado acá. */
+  estadoRegistrado: string | null;
 
   issues: ParseIssue[];
 }

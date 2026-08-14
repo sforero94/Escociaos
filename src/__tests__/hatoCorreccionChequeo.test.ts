@@ -64,6 +64,7 @@ function fila(datos: Partial<FilaChequeoNormalizada> & { fila: number; numero: n
       sx: null,
       fechaServicio: null,
       toro: null,
+      estadoRegistrado: null,
       tp: null,
       estado: null,
       secar: null,
@@ -80,6 +81,7 @@ function fila(datos: Partial<FilaChequeoNormalizada> & { fila: number; numero: n
     fechaProbableParto: datos.fechaProbableParto ?? null,
     toroNombre: datos.toroNombre ?? null,
     tipoServicio: datos.tipoServicio ?? null,
+    estadoRegistrado: datos.estadoRegistrado ?? null,
     issues: datos.issues ?? [],
   };
 }
@@ -159,7 +161,7 @@ describe('aplicarCorreccionesFila — la capa cruda nunca se sobreescribe', () =
       fila: 5,
       numero: 157,
       pl: 1,
-      raw: { pl: '1', np: '3', ultimaCria: '2/12/2025', sx: 'OV', fechaServicio: null, toro: null, tp: null, estado: null, secar: null, pp: null, ttto: 'estrumate' },
+      raw: { pl: '1', np: '3', ultimaCria: '2/12/2025', sx: 'OV', fechaServicio: null, toro: null, estadoRegistrado: null, tp: null, estado: null, secar: null, pp: null, ttto: 'estrumate' },
     });
 
     const { fila: corregida, camposCorregidos, errores } = aplicarCorreccionesFila(original, { pl: '14' }, CONFIG);
@@ -176,7 +178,7 @@ describe('aplicarCorreccionesFila — la capa cruda nunca se sobreescribe', () =
   });
 
   it('registra la corrección como issue auditable con prefijo estable, citando crudo y ambos valores', () => {
-    const original = fila({ fila: 5, numero: 157, pl: 1, raw: { pl: '1', np: null, ultimaCria: null, sx: null, fechaServicio: null, toro: null, tp: null, estado: null, secar: null, pp: null, ttto: null } });
+    const original = fila({ fila: 5, numero: 157, pl: 1, raw: { pl: '1', np: null, ultimaCria: null, sx: null, fechaServicio: null, toro: null, estadoRegistrado: null, tp: null, estado: null, secar: null, pp: null, ttto: null } });
     const { fila: corregida } = aplicarCorreccionesFila(original, { pl: '14' }, CONFIG);
 
     const issue = corregida.issues.find((i) => i.motivo.startsWith(PREFIJO_ISSUE_CORRECCION_MANUAL));
@@ -192,7 +194,7 @@ describe('aplicarCorreccionesFila — la capa cruda nunca se sobreescribe', () =
       fila: 5,
       numero: 157,
       pl: null,
-      raw: { pl: '#VALUE!', np: null, ultimaCria: null, sx: null, fechaServicio: null, toro: null, tp: null, estado: null, secar: null, pp: null, ttto: null },
+      raw: { pl: '#VALUE!', np: null, ultimaCria: null, sx: null, fechaServicio: null, toro: null, estadoRegistrado: null, tp: null, estado: null, secar: null, pp: null, ttto: null },
       issues: [{ crudo: '#VALUE!', motivo: 'PL: error de fórmula de Excel propagado (no se reinterpreta aquí)' }],
     });
 
@@ -242,7 +244,7 @@ describe('aplicarCorreccionesFila — interpretación por campo (un solo parser,
       fila: 3,
       numero: 148,
       sx: parseSX('0V'),
-      raw: { pl: null, np: null, ultimaCria: null, sx: '0V', fechaServicio: null, toro: null, tp: null, estado: null, secar: null, pp: null, ttto: null },
+      raw: { pl: null, np: null, ultimaCria: null, sx: '0V', fechaServicio: null, toro: null, estadoRegistrado: null, tp: null, estado: null, secar: null, pp: null, ttto: null },
     });
     const { fila: corregida } = aplicarCorreccionesFila(original, { sx: 'A 206' }, CONFIG);
     expect(corregida.sx).toEqual(parseSX('A 206'));

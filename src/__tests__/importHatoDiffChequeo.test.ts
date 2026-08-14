@@ -12,6 +12,7 @@ import {
   construirDiffChequeo,
   seleccionarUltimoChequeoPorAnimal,
   type AnimalHatoActual,
+  type AnimalEstadoRegistradoActual,
   type UltimoChequeoVacaActual,
   type FilaChequeoVacaHistorico,
 } from '@/utils/importHato/diffChequeo';
@@ -37,6 +38,7 @@ function fila(datos: Partial<FilaChequeoNormalizada> & { fila: number; numero: n
       sx: null,
       fechaServicio: null,
       toro: null,
+      estadoRegistrado: datos.estadoRegistrado ?? null,
       tp: null,
       estado: null,
       secar: null,
@@ -52,6 +54,7 @@ function fila(datos: Partial<FilaChequeoNormalizada> & { fila: number; numero: n
     fechaProbableParto: datos.fechaProbableParto ?? null,
     toroNombre: datos.toroNombre ?? null,
     tipoServicio: datos.tipoServicio ?? null,
+    estadoRegistrado: datos.estadoRegistrado ?? null,
     issues: datos.issues ?? [],
   };
 }
@@ -242,7 +245,76 @@ describe('construirDiffChequeo — clasificación de filas', () => {
       cambios: 0,
       noReconocidos: 1,
       conIssues: 0,
+      conConflictoEstadoRegistrado: 0,
     });
+  });
+});
+
+describe('construirDiffChequeo — conflicto "registrado vs. papel" (D-E, N23, docs/plan_hato_telegram_estados_agosto_2026.md §3 Capa 5)', () => {
+  function estadoRegistrado(datos: AnimalEstadoRegistradoActual): AnimalEstadoRegistradoActual {
+    return datos;
+  }
+
+  it('lo impreso ("Estado registrado") difiere de lo que el sistema cree AHORA -> conflicto explícito', () => {
+    const animales = [animal({ id: 'a1', numero: 201, nombre: 'CAMPESINA' })];
+    const filas = [fila({ fila: 3, numero: 201, nombre: 'CAMPESINA', estadoRegistrado: 'Servida' })];
+
+    const resultado = construirDiffChequeo(filas, animales, [], [estadoRegistrado({ animalId: 'a1', estado: 'Confirmada' })]);
+
+    expect(resultado.filas[0].conflictoEstadoRegistrado).toEqual({ impreso: 'Servida', actual: 'Confirmada' });
+    expect(resultado.resumen.conConflictoEstadoRegistrado).toBe(1);
+  });
+
+  it('lo impreso coincide con lo que el sistema cree hoy -> sin conflicto', () => {
+    const animales = [animal({ id: 'a1', numero: 201, nombre: 'CAMPESINA' })];
+    const filas = [fila({ fila: 3, numero: 201, nombre: 'CAMPESINA', estadoRegistrado: 'Vacía' })];
+
+    const resultado = construirDiffChequeo(filas, animales, [], [estadoRegistrado({ animalId: 'a1', estado: 'Vacía' })]);
+
+    expect(resultado.filas[0].conflictoEstadoRegistrado).toBeNull();
+    expect(resultado.resumen.conConflictoEstadoRegistrado).toBe(0);
+  });
+
+  it('sin la columna (generación histórica, o celda vacía) -> nunca se fabrica un conflicto', () => {
+    const animales = [animal({ id: 'a1', numero: 201, nombre: 'CAMPESINA' })];
+    const filas = [fila({ fila: 3, numero: 201, nombre: 'CAMPESINA', estadoRegistrado: null })];
+
+    const resultado = construirDiffChequeo(filas, animales, [], [estadoRegistrado({ animalId: 'a1', estado: 'Servida' })]);
+
+    expect(resultado.filas[0].conflictoEstadoRegistrado).toBeNull();
+  });
+
+  it('sin `estadosRegistrados` (parámetro opcional, llamadas existentes) -> el diff se comporta exactamente igual que antes', () => {
+    const animales = [animal({ id: 'a1', numero: 201, nombre: 'CAMPESINA' })];
+    const filas = [fila({ fila: 3, numero: 201, nombre: 'CAMPESINA', estadoRegistrado: 'Servida' })];
+
+    const resultado = construirDiffChequeo(filas, animales, []);
+
+    expect(resultado.filas[0].conflictoEstadoRegistrado).toBeNull();
+  });
+
+  it('el animal no aparece en `estadosRegistrados` (mapa incompleto) -> nunca se fabrica un conflicto falso', () => {
+    const animales = [animal({ id: 'a1', numero: 201, nombre: 'CAMPESINA' })];
+    const filas = [fila({ fila: 3, numero: 201, nombre: 'CAMPESINA', estadoRegistrado: 'Servida' })];
+
+    const resultado = construirDiffChequeo(filas, animales, [], []);
+
+    expect(resultado.filas[0].conflictoEstadoRegistrado).toBeNull();
+  });
+
+  it('filas `nuevo`/`no_reconocido` nunca llevan conflicto -- no hay animal contra el cual recalcular', () => {
+    const filaNueva = fila({ fila: 2, numero: 500, nombre: 'NUEVA', estadoRegistrado: 'Servida' });
+    const filaSinNumero = fila({ fila: 5, numero: null, nombre: 'SIN NUMERO', estadoRegistrado: 'Servida' });
+
+    const resultado = construirDiffChequeo(
+      [filaNueva, filaSinNumero],
+      [],
+      [],
+      [estadoRegistrado({ animalId: 'no-existe', estado: 'Confirmada' })],
+    );
+
+    expect(resultado.filas[0].conflictoEstadoRegistrado).toBeNull();
+    expect(resultado.filas[1].conflictoEstadoRegistrado).toBeNull();
   });
 });
 

@@ -43,6 +43,7 @@ function filaBase(overrides: Partial<FilaChequeoNormalizada> = {}): FilaChequeoN
       sx: null,
       fechaServicio: '23/04/2026',
       toro: 'ins laredo',
+      estadoRegistrado: null,
       tp: null,
       estado: 'ok',
       secar: null,
@@ -58,6 +59,7 @@ function filaBase(overrides: Partial<FilaChequeoNormalizada> = {}): FilaChequeoN
     fechaProbableParto: '2027-01-23',
     toroNombre: 'ins laredo',
     tipoServicio: 'inseminacion',
+    estadoRegistrado: null,
     issues: [],
     ...overrides,
   };
@@ -184,7 +186,7 @@ describe('construirFilasVacas', () => {
     const fila = filaBase({
       raw: {
         pl: '16', np: '2', ultimaCria: '01/2025', sx: 'A210', fechaServicio: '23/04/2026',
-        toro: 'ins laredo', tp: '#VALUE!', estado: 'ok', secar: null, pp: null, ttto: 'penicilina',
+        toro: 'ins laredo', estadoRegistrado: null, tp: '#VALUE!', estado: 'ok', secar: null, pp: null, ttto: 'penicilina',
       },
     });
     const aprobadas: FilaChequeoAprobada[] = [{ fila, animalId: 'animal-1' }];
@@ -206,7 +208,7 @@ describe('construirFilasVacas', () => {
 
   it('#VALUE!/celdas vacías se preservan en la capa cruda y la normalizada queda null -- la fila nunca se descarta', () => {
     const fila = filaBase({
-      raw: { pl: '#VALUE!', np: null, ultimaCria: null, sx: null, fechaServicio: null, toro: null, tp: null, estado: null, secar: null, pp: null, ttto: null },
+      raw: { pl: '#VALUE!', np: null, ultimaCria: null, sx: null, fechaServicio: null, toro: null, estadoRegistrado: null, tp: null, estado: null, secar: null, pp: null, ttto: null },
       pl: null,
       numPartos: null,
       fechasServicio: [],
