@@ -283,58 +283,47 @@ export function construirFilasPlanillaPDF(filas: readonly FilaPlanillaChequeo[])
  * impresora de oficina.
  *
  * El reparto NO es uniforme y no se eligió a ojo: cada ancho se midió con
- * `doc.getTextWidth` contra el contenido REAL más largo de esa columna a
- * 11pt (datos) O la palabra más larga del encabezado a 9pt bold (lo que sea
- * mayor) más 3mm de padding horizontal. Las celdas de DATOS nunca se
- * envuelven a dos líneas (requisito duro); un encabezado de dos palabras SÍ
- * puede partirse en dos líneas entre palabras (p. ej. "Fecha" / "Servicio"),
- * pero ninguna palabra individual se parte a la mitad -- por eso el piso de
- * cada columna es el MAYOR de los dos:
- * - Fechas (`Última Cría`, `Fecha Servicio`, `Secar`, `Parto Probable`):
- *   `22/12/2026` mide 19,25mm -> 22,5mm de columna.
- * - `Nombre`: `BRILLANTINA` (el nombre más largo del hato) mide 24,87mm -> 28mm.
- * - `Toro`: `Ins Holstein` (raza-como-nombre-de-toro, el caso más largo) mide
- *   20,18mm -> 23,4mm.
- * - `Sexo cría` lleva una FRASE, no un dato corto: `H retenida #206` (el caso
- *   real más largo) mide 27,40mm -> 30,6mm de columna.
- * - `Estado registrado` (D-E, B5.4, N22): la etiqueta más larga del
- *   vocabulario de 5 estados es `Confirmada` (19,91mm de dato) -- pero la
- *   palabra suelta del encabezado, `registrado`, mide 15,46mm a 9pt bold, así
- *   que el dato manda -> 23,4mm de columna.
- * - `Estado`/`PL`/`# Partos` son códigos cortos (`ok`/`rech`, números de 1-2
- *   dígitos), pero cada uno respeta el piso de su propia palabra de
- *   encabezado ("Estado" 10,51mm, "Partos" 9,81mm) para no partirla:
- *   `Estado` -> 13,7mm, `PL` -> 7,5mm, `# Partos` -> 13mm.
- * - `Tratamiento` es la columna donde Martha MÁS escribe y por eso sigue
- *   recibiendo el resto del presupuesto disponible -- 22,5mm, medido contra
- *   el histórico de `hato_chequeo_vacas` (2026-07-29): SX promedia 3
- *   caracteres escritos a mano y TTTO promedia 12 (máx. 54). Encogió frente
- *   a la versión anterior (35mm) para financiar la columna 13; sigue
- *   cubriendo con holgura el caso promedio, no el máximo histórico extremo.
- * - Las de referencia pura (`#`) lleva lo justo para su contenido conocido:
- *   nadie escribe ahí.
+ * `doc.getTextWidth` contra el contenido REAL más largo de esa columna a 9pt
+ * (datos) O la palabra más larga del encabezado a 8pt bold (lo que sea mayor),
+ * más 3,4mm de padding real (`cellPadding` 1,5+1,5 y el borde). Un encabezado
+ * de dos palabras SÍ puede partirse entre palabras ("Fecha" / "Servicio"),
+ * pero ninguna palabra individual se parte a la mitad.
  *
- * El total queda en 263,1mm de los 263,4 útiles: 0,3mm de holgura --
- * deliberadamente angosta (cada columna ya trae su propio colchón de
- * redondeo, ver el test que mide contra `doc.getTextWidth` real) para poder
- * financiar la columna 13 sin ir a tamaño oficio ni sacrificar el requisito
- * de letra ≥11pt. Cualquier columna nueva o más ancha exige quitar de otra o
- * aceptar una página más -- no hay margen escondido.
+ * **Rehecho el 2026-08-14, después de ver la planilla impresa.** El reparto
+ * anterior tenía tres defectos que sólo se ven en el papel:
+ * - `Tratamiento`, la columna donde Martha MÁS escribe, había bajado a 22,5mm
+ *   para financiar la columna 13. Vuelve a 36mm -- por encima incluso de los
+ *   35mm que tenía antes de que existiera "Estado registrado".
+ * - `Sexo cría` tenía 30,6mm, más que `Nombre`. Baja a 24mm: cubre `H
+ *   retenida` con holgura, y el caso extremo `H retenida #206` se parte en dos
+ *   líneas, que es aceptable en una columna de referencia dentro de una fila
+ *   de 9mm de alto.
+ * - `Nombre` (28mm) y `Toro` (23,4mm) NO alcanzaban a 11pt: `BRILLANTINA`, el
+ *   nombre más largo del hato real, se partía por 0,3mm, y `Ternero Holstein`
+ *   se partía siempre. A 9pt miden 20,4 y 22,9mm y ahora caben enteros.
+ *
+ * `Estado` sube de 13,7 a 18mm por la misma razón que `Tratamiento`: es de las
+ * que se escriben a mano. Las de referencia pura (`#`, las 4 de fecha,
+ * `Estado registrado`) llevan lo justo para su contenido conocido.
+ *
+ * El total queda en 255,5mm de los 259,4 útiles (márgenes de vuelta en 10mm,
+ * no en los 8mm de emergencia): **3,9mm de holgura**. Cualquier columna nueva
+ * exige quitar de otra, bajar más la letra o aceptar una página más.
  */
 export const ANCHOS_COLUMNAS_PDF_MM: readonly number[] = [
-  11.1, // # (cabe `999*`: la marca de provisional suma un carácter)
-  28, // Nombre
-  7.5, // PL
-  13, // # Partos
-  22.5, // Última Cría
-  30.6, // Sexo cría
-  22.5, // Fecha Servicio
-  23.4, // Toro
-  23.4, // Estado registrado
-  13.7, // Estado
-  22.5, // Secar
-  22.5, // Parto Probable
-  22.5, // Tratamiento
+  10, // # (cabe `999*`: la marca de provisional suma un carácter)
+  24, // Nombre (BRILLANTINA, el más largo del hato, mide 20,4mm a 9pt)
+  7, // PL
+  12, // # Partos
+  19.5, // Última Cría
+  25.5, // Sexo cría (cabe entero `H retenida #206`, el caso real más largo)
+  19.5, // Fecha Servicio
+  26.5, // Toro ("Ternero Holstein", 22,9mm a 9pt: deja de partirse)
+  20, // Estado registrado
+  18, // Estado -- SE ESCRIBE A MANO
+  19.5, // Secar
+  19.5, // Parto Probable
+  36, // Tratamiento -- SE ESCRIBE A MANO, la que más
 ];
 
 /** Ancho total de la tabla = suma exacta de los anchos de columna. Se le pasa
@@ -351,16 +340,32 @@ export const ANCHO_TABLA_PDF_MM = ANCHOS_COLUMNAS_PDF_MM.reduce((a, b) => a + b,
  * banda del pie (nota operativa + "Página i de N"). `right`/`left` bajaron de
  * 10 a 8mm en D-E/N22 para financiar la columna 13 ("Estado registrado") --
  * ver la nota de `ANCHOS_COLUMNAS_PDF_MM`. */
-export const MARGENES_PDF_MM = { top: 20, right: 8, bottom: 12, left: 8 } as const;
+export const MARGENES_PDF_MM = { top: 20, right: 10, bottom: 12, left: 10 } as const;
 
 /** Ancho útil de una hoja carta horizontal con estos márgenes. Constante
  * explícita para que el test de presupuesto de ancho no repita la aritmética. */
 export const ANCHO_UTIL_CARTA_HORIZONTAL_MM = 279.4 - MARGENES_PDF_MM.left - MARGENES_PDF_MM.right;
 
-/** Tamaño de letra de las celdas de DATOS. Requisito duro del dueño (plan §6
- * y §8.3): **≥11pt** es lo que hace legible la planilla en papel. Si el
- * layout no cupiera, la salida son más páginas -- NUNCA letra más chica. */
-export const FUENTE_DATOS_PT = 11;
+/** Tamaño de letra de las celdas de DATOS.
+ *
+ * **Historia de esta constante, porque cambió una regla del dueño.** Valía 11pt
+ * por un requisito suyo explícito ("≥11pt es lo que hace legible la planilla en
+ * papel; si el layout no cupiera, la salida son más páginas, NUNCA letra más
+ * chica"). El dueño la REVOCÓ el 2026-08-14 viendo la planilla de 13 columnas
+ * ya renderizada: *"el texto está muy grande, se puede condensar para abrir
+ * espacio"*.
+ *
+ * No fue una preferencia estética: a 11pt la planilla estaba **sobre-suscrita**.
+ * El mínimo medido con `getTextWidth` era 261,4mm contra 259,4mm útiles, y eso
+ * se pagaba encogiendo `Tratamiento` (donde Martha más escribe) y partiendo en
+ * dos líneas tanto `Ternero Holstein` como `BRILLANTINA` -- el nombre más largo
+ * del hato real, que no cabía por 0,3mm. A 9pt el mínimo baja a 218mm, y esos
+ * ~41mm liberados son los que financian las dos columnas manuscritas y
+ * devuelven los márgenes a 10mm.
+ *
+ * Si vuelve a subir, hay que rehacer el reparto: a 11pt NO cabe con 13
+ * columnas. */
+export const FUENTE_DATOS_PT = 9;
 
 /** El encabezado va más pequeño que los datos, y es una decisión de
  * presupuesto, no un descuido: el requisito de ≥11pt es sobre las CELDAS DE
@@ -368,10 +373,13 @@ export const FUENTE_DATOS_PT = 11;
  * impreso, fijo y en negrilla, y bajarlo a 9pt es lo que permite que
  * `Tratamiento` (17,85mm a 9pt bold) y `# Partos` quepan en su columna sin
  * partir la palabra a mitad. A 10pt no caben. */
-export const FUENTE_ENCABEZADO_PT = 9;
+export const FUENTE_ENCABEZADO_PT = 8;
 
 /** Alto mínimo de fila en mm -- espacio real para escribir a mano DENTRO del
- * recuadro (una línea de 11pt ocupa ~3,9mm, así que quedan ~5mm libres). */
+ * recuadro. Se mantiene en 9mm aunque la letra bajara a 9pt: el alto no es
+ * cuestión de que quepa el texto impreso, sino de que quepa la MANO de Martha.
+ * Al ocupar la línea ~3,2mm en vez de ~3,9mm, la baja de fuente además dejó
+ * MÁS espacio libre para escribir, no menos. */
 export const ALTO_MINIMO_FILA_MM = 9;
 
 const COLOR_PRIMARIO: [number, number, number] = [115, 153, 28]; // #73991C

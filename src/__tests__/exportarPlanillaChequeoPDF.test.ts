@@ -259,10 +259,21 @@ describe('layout del PDF -- presupuesto de ancho y clasificación de columnas', 
     ]);
   });
 
-  it('la letra de los datos es >= 11pt (requisito duro del dueño) y el alto de fila deja espacio para escribir', () => {
-    expect(FUENTE_DATOS_PT).toBeGreaterThanOrEqual(11);
-    // Una línea de 11pt ocupa ~3,9mm: 9mm de fila dejan ~5mm libres dentro
-    // del recuadro para la escritura a mano.
+  it('la letra de los datos no baja de 9pt, y el alto de fila deja espacio para escribir', () => {
+    // Este test pedía >=11pt hasta el 2026-08-14, por un requisito explícito
+    // del dueño. Lo REVOCÓ él mismo viendo la planilla de 13 columnas
+    // renderizada ("el texto está muy grande, se puede condensar para abrir
+    // espacio"): a 11pt la planilla estaba sobre-suscrita y lo pagaban las dos
+    // columnas que se escriben a mano. Ver la nota de `FUENTE_DATOS_PT`.
+    //
+    // El piso pasa a 9pt, y sigue siendo un piso de verdad: por debajo la
+    // planilla deja de leerse en el corral, que es la razón original de la
+    // regla y no cambió. Si hiciera falta más espacio, la salida es una página
+    // más o una columna menos -- nunca letra más chica.
+    expect(FUENTE_DATOS_PT).toBeGreaterThanOrEqual(9);
+    // El alto NO es cuestión de que quepa el texto impreso sino la MANO de
+    // Martha: se queda en 9mm aunque la letra bajara, así que ahora hay más
+    // espacio libre dentro del recuadro, no menos.
     expect(ALTO_MINIMO_FILA_MM).toBeGreaterThanOrEqual(8);
   });
 
