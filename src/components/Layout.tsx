@@ -12,7 +12,6 @@ import {
   Menu,
   X,
   LogOut,
-  Leaf,
   Wrench,
   DollarSign,
   FileText,
@@ -20,10 +19,8 @@ import {
   PanelLeftOpen,
   Cloud,
   Beef,
-  Milk,
   ClipboardCheck,
   Bell,
-  ChevronDown,
   TrendingDown,
   FileBarChart,
   Target,
@@ -43,20 +40,60 @@ interface LayoutProps {
 const SIDEBAR_COLLAPSED_KEY = 'sidebar_collapsed';
 
 // ---------------------------------------------------------------------------
-// Nav data model — grouped sidebar (accordion groups + single items)
+// Custom icons — no avocado/cow icon exists in lucide-react or any other
+// icon set available to this project (verified). Kept minimal and matched
+// to the lucide stroke conventions (stroke-based, strokeWidth 2, currentColor)
+// so they sit visually consistent next to real lucide icons in the nav.
 // ---------------------------------------------------------------------------
+
+function AvocadoIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M12 2.5c-.9 0-1.6.6-1.9 1.5C7.8 4.6 6 7.3 6 11c0 5.7 3 9.5 6 9.5s6-3.8 6-9.5c0-3.7-1.8-6.4-4.1-7C13.6 3.1 12.9 2.5 12 2.5Z" />
+      <circle cx="12" cy="13" r="3.4" />
+    </svg>
+  );
+}
+
+function CowIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <ellipse cx="12" cy="12.5" rx="5.6" ry="5" />
+      <ellipse cx="6.2" cy="9" rx="1.7" ry="2.5" transform="rotate(-25 6.2 9)" />
+      <ellipse cx="17.8" cy="9" rx="1.7" ry="2.5" transform="rotate(25 17.8 9)" />
+      <path d="M9.7 6.3 9 4.5M14.3 6.3l.7-1.8" />
+      <circle cx="9.8" cy="11.5" r=".8" fill="currentColor" />
+      <circle cx="14.2" cy="11.5" r=".8" fill="currentColor" />
+      <rect x="8.6" y="14.3" width="6.8" height="3.6" rx="1.8" />
+      <circle cx="10.3" cy="16.1" r=".45" fill="currentColor" />
+      <circle cx="13.7" cy="16.1" r=".45" fill="currentColor" />
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Nav data model — always-expanded modules (no accordion) + single items.
+// A "module" (NavGroup) renders a fixed, non-clickable header with its
+// children always visible below it. `cardStyle` marks single-item leaves
+// (Ganado, Configuración) that should render with the same module-card
+// treatment even though they have no children — see renderDesktopEntry.
+// ---------------------------------------------------------------------------
+
+type IconComponent = LucideIcon | React.FC<{ className?: string }>;
 
 type NavLeaf = {
   id: string;
   label: string;
-  icon: LucideIcon;
+  icon: IconComponent;
   path: string;
   exact?: boolean;
   /** Extra prefix that also marks this leaf active (e.g. /finanzas dashboard sub-tabs). */
   matchPrefix?: string;
   soloGerencia?: boolean;
+  /** Render as a module-style card (brand-brown header, bg-primary/5) even without children. */
+  cardStyle?: boolean;
 };
-type NavGroup = { id: string; label: string; icon: LucideIcon; modulo: string; children: NavLeaf[] };
+type NavGroup = { id: string; label: string; icon: IconComponent; modulo: string; children: NavLeaf[] };
 type NavEntry = (NavLeaf & { modulo?: string }) | NavGroup;
 
 const isGroup = (e: NavEntry): e is NavGroup => 'children' in e;
@@ -64,7 +101,7 @@ const isGroup = (e: NavEntry): e is NavGroup => 'children' in e;
 const NAV: NavEntry[] = [
   { id: 'tablero', label: 'Tablero General', icon: LayoutDashboard, path: '/', exact: true },
   {
-    id: 'aguacate', label: 'Aguacate', icon: Leaf, modulo: 'aguacate', children: [
+    id: 'aguacate', label: 'Aguacate', icon: AvocadoIcon, modulo: 'aguacate', children: [
       { id: 'labores', label: 'Labores', icon: Wrench, path: '/labores' },
       { id: 'monitoreo', label: 'Monitoreo', icon: Activity, path: '/monitoreo' },
       { id: 'aplicaciones', label: 'Aplicaciones', icon: Sprout, path: '/aplicaciones' },
@@ -75,7 +112,7 @@ const NAV: NavEntry[] = [
     ],
   },
   {
-    id: 'hato', label: 'Hato Lechero', icon: Milk, modulo: 'hato_lechero', children: [
+    id: 'hato', label: 'Hato Lechero', icon: CowIcon, modulo: 'hato_lechero', children: [
       { id: 'hato-tablero', label: 'Tablero', icon: LayoutDashboard, path: '/hato-lechero', exact: true },
       { id: 'hato-produccion', label: 'Producción', icon: TrendingUp, path: '/hato-lechero/produccion' },
       { id: 'hato-hato', label: 'Hato', icon: Beef, path: '/hato-lechero/hato' },
@@ -84,7 +121,7 @@ const NAV: NavEntry[] = [
       { id: 'hato-pajillas', label: 'Pajillas', icon: Syringe, path: '/hato-lechero/pajillas' },
     ],
   },
-  { id: 'ganado', label: 'Ganado', icon: Beef, path: '/ganado', modulo: 'ganado' },
+  { id: 'ganado', label: 'Ganado', icon: Beef, path: '/ganado', modulo: 'ganado', cardStyle: true },
   {
     id: 'finanzas', label: 'Finanzas', icon: DollarSign, modulo: 'finanzas', children: [
       { id: 'fin-dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/finanzas', exact: true, matchPrefix: '/finanzas/dashboard' },
@@ -95,7 +132,7 @@ const NAV: NavEntry[] = [
       { id: 'fin-configuracion', label: 'Configuración', icon: Settings, path: '/finanzas/configuracion' },
     ],
   },
-  { id: 'settings', label: 'Configuración', icon: Settings, path: '/configuracion' },
+  { id: 'settings', label: 'Configuración', icon: Wrench, path: '/configuracion', cardStyle: true },
 ];
 
 /** True when the current pathname should highlight this leaf. */
@@ -104,16 +141,6 @@ function leafMatches(leaf: NavLeaf, pathname: string): boolean {
     ? pathname === leaf.path
     : pathname.startsWith(leaf.path);
   return base || (leaf.matchPrefix ? pathname.startsWith(leaf.matchPrefix) : false);
-}
-
-/** First group (in NAV order) containing a leaf matching the given pathname, if any. */
-function getActiveGroupId(pathname: string): string | undefined {
-  for (const entry of NAV) {
-    if (isGroup(entry)) {
-      if (entry.children.some((child) => leafMatches(child, pathname))) return entry.id;
-    }
-  }
-  return undefined;
 }
 
 interface SidebarTooltipProps {
@@ -159,36 +186,18 @@ export function Layout({ onNavigate, children }: LayoutProps) {
   const mobileNavRef = useRef<HTMLElement>(null);
   const mobileActiveRef = useRef<HTMLButtonElement>(null);
 
-  // Accordion groups open state — initialized so the group containing the active route is open.
-  const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
-    const activeId = getActiveGroupId(location.pathname);
-    return activeId ? new Set([activeId]) : new Set();
-  });
-
-  // Auto-open the active group on navigation, without force-closing groups the user opened.
-  useEffect(() => {
-    const activeId = getActiveGroupId(location.pathname);
-    if (!activeId) return;
-    setOpenGroups((prev) => {
-      if (prev.has(activeId)) return prev;
-      const next = new Set(prev);
-      next.add(activeId);
-      return next;
-    });
-  }, [location.pathname]);
-
   // Keep the active nav item visible inside its own scroll container.
   // Regression from turning the Tailwind compiler on (plan_tailwind_pipeline.md,
   // fase F2 #1): nav items grew from ~31px to 44-48px real padding, so with
-  // several groups open the nav's content can be taller than the container —
-  // the container already scrolls, but nothing was moving that scroll to the
-  // active item, so it could render clipped behind the profile block.
-  // `calcularScrollNearest` returns null when the item is already visible, so
-  // this never causes a jump on a navigation that didn't need one. Depends on
-  // openGroups/collapsed/mobileMenuOpen too (not just pathname) because a
-  // group can still be closed — or the sidebar collapsed, or the mobile menu
-  // just opened — at the exact moment the route changes; this re-checks once
-  // the layout settles instead of racing the group auto-open effect above.
+  // all modules always expanded the nav's content can be taller than the
+  // container — the container already scrolls, but nothing was moving that
+  // scroll to the active item, so it could render clipped behind the profile
+  // block. `calcularScrollNearest` returns null when the item is already
+  // visible, so this never causes a jump on a navigation that didn't need
+  // one. Depends on collapsed/mobileMenuOpen too (not just pathname) because
+  // the sidebar can still be collapsed — or the mobile menu just opened — at
+  // the exact moment the route changes; this re-checks once the layout
+  // settles instead of racing that transition.
   useEffect(() => {
     const ajustar = (contenedor: HTMLElement | null, item: HTMLElement | null) => {
       if (!contenedor || !item) return;
@@ -205,7 +214,7 @@ export function Layout({ onNavigate, children }: LayoutProps) {
 
     ajustar(desktopNavRef.current, desktopActiveRef.current);
     ajustar(mobileNavRef.current, mobileActiveRef.current);
-  }, [location.pathname, openGroups, collapsed, mobileMenuOpen]);
+  }, [location.pathname, collapsed, mobileMenuOpen]);
 
   // Lock body scroll when mobile menu is open
   useEffect(() => {
@@ -245,26 +254,19 @@ export function Layout({ onNavigate, children }: LayoutProps) {
     setMobileMenuOpen(false);
   };
 
-  const toggleGroup = (groupId: string) => {
-    setOpenGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(groupId)) next.delete(groupId);
-      else next.add(groupId);
-      return next;
-    });
-  };
-
-  // Clicking a group icon while collapsed un-collapses the sidebar AND expands the group.
-  const handleGroupIconClick = (groupId: string) => {
+  // Every first-level rail icon (Tablero General, Aguacate, Hato Lechero,
+  // Ganado, Finanzas, Configuración) shares one click handler: expand the
+  // sidebar. There is no "closed group" to also open anymore — once
+  // expanded, a module's children (or a card leaf's own row) are already
+  // visible, so a single un-collapse is the whole interaction.
+  const handleRailIconClick = () => {
     setCollapsed(false);
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, 'false');
-    setOpenGroups((prev) => {
-      if (prev.has(groupId)) return prev;
-      const next = new Set(prev);
-      next.add(groupId);
-      return next;
-    });
   };
+
+  /** True when a group has an active child, or a leaf is itself active. */
+  const isEntryActive = (entry: NavEntry): boolean =>
+    isGroup(entry) ? entry.children.some((c) => isActive(c)) : isActive(entry);
 
   // Fail-open: unconfirmed profile (null or rol==='') is treated as Gerencia for the
   // soloGerencia gate, consistent with puedeAccederModulo's fail-open behavior.
@@ -281,148 +283,164 @@ export function Layout({ onNavigate, children }: LayoutProps) {
 
   // Render a single nav entry (group or leaf) for the DESKTOP sidebar (collapsed-aware).
   const renderDesktopEntry = (entry: NavEntry) => {
-    if (isGroup(entry)) {
+    // Collapsed rail: every first-level entry renders as the same centered
+    // icon button. Children never show in this mode. A group has no path of
+    // its own, so its icon just expands the rail (there is no "closed group"
+    // to also open anymore); a leaf DOES have a path, so it keeps navigating
+    // straight there in one click — same as today, don't make it two clicks.
+    if (collapsed) {
       const Icon = entry.icon;
-      const groupActive = entry.children.some((c) => isActive(c));
-      const open = openGroups.has(entry.id);
-
-      if (collapsed) {
-        return (
-          <SidebarTooltip key={entry.id} label={entry.label} collapsed={collapsed}>
-            <button
-              ref={groupActive ? desktopActiveRef : undefined}
-              onClick={() => handleGroupIconClick(entry.id)}
-              className={`w-full flex items-center justify-center px-0 py-3 rounded-xl transition-all duration-200 ${
-                groupActive ? 'nav-item-active font-semibold' : 'text-foreground hover:bg-muted/50'
-              }`}
-            >
-              <Icon className="w-5 h-5 flex-shrink-0" />
-            </button>
-          </SidebarTooltip>
-        );
-      }
-
+      const active = isEntryActive(entry);
       return (
-        <div key={entry.id}>
+        <SidebarTooltip key={entry.id} label={entry.label} collapsed={collapsed}>
           <button
-            onClick={() => toggleGroup(entry.id)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-              groupActive ? 'nav-item-active font-semibold' : 'text-foreground hover:bg-muted/50'
+            ref={active ? desktopActiveRef : undefined}
+            onClick={isGroup(entry) ? handleRailIconClick : () => handleNavigateClick(entry.path, entry.id)}
+            className={`w-full flex items-center justify-center px-0 py-3 rounded-xl transition-all duration-200 ${
+              active ? 'nav-item-active font-semibold' : 'text-foreground hover:bg-muted/50'
             }`}
           >
             <Icon className="w-5 h-5 flex-shrink-0" />
-            <span className="flex-1 text-left truncate">{entry.label}</span>
-            <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
           </button>
-          {open && (
-            // D-3 (2026-08-07, F4): hijos bajan a 38px de alto renderizado en escritorio,
-            // el primer nivel se queda en 48px (py-3 arriba) — la jerarquía deja de
-            // depender solo de la sangría. `py-[7px]` no es un capricho: sin clase
-            // `text-*` propia, el botón hereda el reset base `text-base`/`leading-1.5`
-            // (24px de caja de línea, ver @layer base en globals.css), así que
-            // 7px + 24px + 7px = 38px exacto. Escritorio-only a propósito: en el
-            // drawer móvil (renderMobileEntry) el mínimo táctil sigue siendo 44px.
-            <div className="space-y-1 mt-1">
-              {entry.children.map((child) => {
-                const ChildIcon = child.icon;
-                const childActive = isActive(child);
-                return (
-                  <button
-                    key={child.id}
-                    ref={childActive ? desktopActiveRef : undefined}
-                    onClick={() => handleNavigateClick(child.path, child.id)}
-                    className={`w-full flex items-center gap-3 pl-9 pr-4 py-[7px] rounded-xl transition-all duration-200 ${
-                      childActive
-                        ? 'nav-item-active font-semibold'
-                        : 'text-foreground hover:bg-muted/50'
-                    }`}
-                  >
-                    <ChildIcon className="w-4 h-4 flex-shrink-0" />
-                    <span className="truncate">{child.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+        </SidebarTooltip>
+      );
+    }
+
+    // Module card: fixed, non-clickable header + always-visible children on
+    // a connector line. No accordion — nothing to open or close.
+    if (isGroup(entry)) {
+      const Icon = entry.icon;
+
+      return (
+        <div key={entry.id} className="bg-primary/5 rounded-2xl pt-[7px] px-2 pb-2">
+          <div className="flex items-center gap-2 px-2 h-7 text-brand-brown cursor-default">
+            <Icon className="w-[15px] h-[15px] flex-shrink-0" />
+            <span className="text-[11px] font-bold uppercase tracking-wide truncate">{entry.label}</span>
+          </div>
+          <div className="ml-[17px] pl-[15px] border-l border-border space-y-0.5">
+            {entry.children.map((child) => {
+              const childActive = isActive(child);
+              return (
+                <button
+                  key={child.id}
+                  ref={childActive ? desktopActiveRef : undefined}
+                  onClick={() => handleNavigateClick(child.path, child.id)}
+                  className={`w-full flex items-center px-2 h-[27px] rounded-lg text-[13px] font-medium transition-all duration-200 ${
+                    childActive
+                      ? 'nav-item-active font-semibold'
+                      : 'text-foreground hover:bg-muted/50'
+                  }`}
+                >
+                  <span className="truncate">{child.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       );
     }
 
     const Icon = entry.icon;
     const active = isActive(entry);
+
+    // Card leaves (Ganado, Configuración): same module-card shell as a group,
+    // but the header itself is the clickable/active row — there are no
+    // children to reveal underneath it.
+    if (entry.cardStyle) {
+      return (
+        <div key={entry.id} className="bg-primary/5 rounded-2xl pt-[7px] px-2 pb-2">
+          <button
+            ref={active ? desktopActiveRef : undefined}
+            onClick={() => handleNavigateClick(entry.path, entry.id)}
+            className={`w-full flex items-center gap-2 px-2 h-7 rounded-lg cursor-pointer transition-all duration-200 ${
+              active ? 'nav-item-active font-semibold' : 'text-brand-brown hover:bg-primary/10'
+            }`}
+          >
+            <Icon className="w-[15px] h-[15px] flex-shrink-0" />
+            <span className="text-[11px] font-bold uppercase tracking-wide truncate">{entry.label}</span>
+          </button>
+        </div>
+      );
+    }
+
+    // Plain single-item leaf (Tablero General): no card, but same brand-brown
+    // resting color as every other top-level entry so it doesn't read as a
+    // different (default-foreground/black) treatment next to them.
     return (
       <SidebarTooltip key={entry.id} label={entry.label} collapsed={collapsed}>
         <button
           ref={active ? desktopActiveRef : undefined}
           onClick={() => handleNavigateClick(entry.path, entry.id)}
-          className={`w-full flex items-center rounded-xl transition-all duration-200 ${
-            collapsed ? 'justify-center px-0 py-3' : 'gap-3 px-4 py-3'
-          } ${
+          className={`w-full flex items-center gap-3 px-4 h-[34px] rounded-xl transition-all duration-200 ${
             active
               ? 'nav-item-active font-semibold'
-              : 'text-foreground hover:bg-muted/50'
+              : 'text-brand-brown hover:bg-primary/10'
           }`}
         >
           <Icon className="w-5 h-5 flex-shrink-0" />
-          {!collapsed && <span className="truncate">{entry.label}</span>}
+          <span className="truncate">{entry.label}</span>
         </button>
       </SidebarTooltip>
     );
   };
 
   // Render a single nav entry (group or leaf) for the MOBILE drawer (no collapse concept).
+  // Same card/connector-line treatment as desktop; children stay at the 44px
+  // touch floor instead of shrinking to the desktop 27px row.
   const renderMobileEntry = (entry: NavEntry) => {
     if (isGroup(entry)) {
       const Icon = entry.icon;
-      const groupActive = entry.children.some((c) => isActive(c));
-      const open = openGroups.has(entry.id);
 
       return (
-        <div key={entry.id}>
-          <button
-            onClick={() => toggleGroup(entry.id)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-              groupActive ? 'nav-item-active font-semibold' : 'text-foreground hover:bg-muted/50'
-            }`}
-          >
-            <Icon className="w-5 h-5 flex-shrink-0" />
-            <span className="flex-1 text-left truncate">{entry.label}</span>
-            <ChevronDown className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
-          </button>
-          {open && (
-            // D-3 (2026-08-07, F4): el drawer móvil se toca con el dedo, así que los
-            // hijos NO bajan a 38px como en escritorio — se quedan en el piso táctil
-            // de 44px (`py-2.5`: 10px + 24px de caja de línea de `text-base` + 10px).
-            // El primer nivel (arriba, py-3) sigue en 48px, así que la jerarquía
-            // también se distingue aquí, solo que con menos margen que en escritorio.
-            <div className="space-y-1 mt-1">
-              {entry.children.map((child) => {
-                const ChildIcon = child.icon;
-                const childActive = isActive(child);
-                return (
-                  <button
-                    key={child.id}
-                    ref={childActive ? mobileActiveRef : undefined}
-                    onClick={() => handleNavigateClick(child.path, child.id)}
-                    className={`w-full flex items-center gap-3 pl-9 pr-4 py-2.5 rounded-xl transition-all duration-200 ${
-                      childActive
-                        ? 'nav-item-active font-semibold'
-                        : 'text-foreground hover:bg-muted/50'
-                    }`}
-                  >
-                    <ChildIcon className="w-5 h-5 flex-shrink-0" />
-                    <span>{child.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+        <div key={entry.id} className="bg-primary/5 rounded-2xl pt-[7px] px-2 pb-2">
+          <div className="flex items-center gap-2 px-2 h-7 text-brand-brown cursor-default">
+            <Icon className="w-[15px] h-[15px] flex-shrink-0" />
+            <span className="text-[11px] font-bold uppercase tracking-wide truncate">{entry.label}</span>
+          </div>
+          <div className="ml-[17px] pl-[15px] border-l border-border space-y-0.5 mt-1">
+            {entry.children.map((child) => {
+              const childActive = isActive(child);
+              return (
+                <button
+                  key={child.id}
+                  ref={childActive ? mobileActiveRef : undefined}
+                  onClick={() => handleNavigateClick(child.path, child.id)}
+                  className={`w-full flex items-center h-11 px-2 rounded-lg transition-all duration-200 ${
+                    childActive
+                      ? 'nav-item-active font-semibold'
+                      : 'text-foreground hover:bg-muted/50'
+                  }`}
+                >
+                  <span>{child.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       );
     }
 
     const Icon = entry.icon;
     const active = isActive(entry);
+
+    // Card leaves (Ganado, Configuración): same brand-brown clickable card as desktop.
+    if (entry.cardStyle) {
+      return (
+        <div key={entry.id} className="bg-primary/5 rounded-2xl pt-[7px] px-2 pb-2">
+          <button
+            ref={active ? mobileActiveRef : undefined}
+            onClick={() => handleNavigateClick(entry.path, entry.id)}
+            className={`w-full flex items-center gap-2 h-11 px-2 rounded-lg transition-all duration-200 ${
+              active ? 'nav-item-active font-semibold' : 'text-brand-brown hover:bg-primary/10'
+            }`}
+          >
+            <Icon className="w-[15px] h-[15px] flex-shrink-0" />
+            <span className="text-[11px] font-bold uppercase tracking-wide truncate">{entry.label}</span>
+          </button>
+        </div>
+      );
+    }
+
     return (
       <button
         key={entry.id}
@@ -431,7 +449,7 @@ export function Layout({ onNavigate, children }: LayoutProps) {
         className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
           active
             ? 'nav-item-active font-semibold'
-            : 'text-foreground hover:bg-muted/50'
+            : 'text-brand-brown hover:bg-primary/10'
         }`}
       >
         <Icon className="w-5 h-5" />
@@ -446,8 +464,12 @@ export function Layout({ onNavigate, children }: LayoutProps) {
         {/* Mobile Header */}
         <div className="lg:hidden bg-white/80 backdrop-blur-xl border-b border-primary/10 px-4 py-3 flex items-center justify-between sticky top-0 z-50 shadow-sm">
           <div className="flex items-center gap-2">
-            <div className="w-9 h-9 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center shadow-sm">
-              <Leaf className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 bg-white rounded-xl flex items-center justify-center shadow-sm overflow-hidden flex-shrink-0">
+              <ImageWithFallback
+                src="https://ywhtjwawnkeqlwxbvgup.supabase.co/storage/v1/object/sign/photos/ehlogo.png?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV80N2U5N2FlMi1lMDc1LTRiNzEtODI0Ny1mMzgwOGYzYzM0ODIiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwaG90b3MvZWhsb2dvLnBuZyIsImlhdCI6MTc2NDAzMzkwNSwiZXhwIjoyMDc5MzkzOTA1fQ.T74UbHfbH9pZ9Xqj35Ljb3dPmIP7f6YpSJPFRoN-83o"
+                alt="Escocia Hass Logo"
+                className="w-full h-full object-cover"
+              />
             </div>
             <span className="text-foreground">Escocia Hass</span>
           </div>
@@ -505,7 +527,7 @@ export function Layout({ onNavigate, children }: LayoutProps) {
         {/* Desktop Sidebar */}
         <div
           className="hidden lg:block fixed left-0 top-0 bottom-0 bg-white/80 backdrop-blur-xl border-r border-primary/10 shadow-[4px_0_24px_rgba(115,153,28,0.04)] transition-[width] duration-300 z-40"
-          style={{ width: collapsed ? '72px' : '16rem' }}
+          style={{ width: collapsed ? '64px' : '236px' }}
         >
         <div className="flex flex-col h-full">
           {/* Logo + collapse toggle */}
@@ -575,7 +597,7 @@ export function Layout({ onNavigate, children }: LayoutProps) {
         {/* Main Content — margin only on lg+ where sidebar is visible */}
         <style>{`
           @media (min-width: 1024px) {
-            #main-content { margin-left: ${collapsed ? '72px' : '16rem'}; }
+            #main-content { margin-left: ${collapsed ? '64px' : '236px'}; }
           }
         `}</style>
         <div id="main-content" className="transition-[margin] duration-300 min-h-[100dvh]">
