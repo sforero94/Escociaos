@@ -124,46 +124,49 @@ function textoDestino(destino: CriaDestino | null, numeroCria: number | null): s
  * re-parseable, y esta etiqueta NO lo es (ni tiene que serlo, el PDF nunca se
  * vuelve a leer con un parser).
  *
- * Tabla de decisión (sexo y destino son ejes INDEPENDIENTES -- se conoce uno,
- * el otro, ambos o ninguno):
+ * **SÓLO EL SEXO desde el 2026-08-14, por decisión del dueño** viendo la
+ * planilla impresa: *"reduce sexo cría a la mitad, sólo necesitamos que quepa
+ * Macho/Hembra o M/H"*. Antes la etiqueta combinaba sexo + destino + chapeta
+ * de la cría (`H retenida #206`), y eso la volvía la columna más ancha de la
+ * planilla -- más que `Nombre`. No era un caso raro: contra producción
+ * (2026-08-14), de las 35 vacas activas con parto, ~15 daban `H retenida
+ * #NNN` y ~15 `M vendido`.
  *
- * | sexo | destino | etiqueta |
+ * **Lo que se deja de imprimir EN EL PAPEL**: el destino (`retenida`,
+ * `vendido`, `murió`) y la chapeta de la cría. No se pierde el dato: el
+ * `.xlsx` sigue emitiendo `sx_raw` verbatim (es re-parseable, esta etiqueta
+ * nunca lo fue) y `hato_eventos` conserva `cria_destino` intacto. Es una
+ * decisión de qué cabe en una hoja, no de qué se guarda.
+ *
+ * Tabla de decisión:
+ *
+ * | sexo | otros hechos | etiqueta |
  * |---|---|---|
- * | Macho | vendido | `M vendido` |
- * | Hembra | retenida + chapeta | `H retenida #206` |
- * | Hembra | vendida | `H vendida` |
- * | Hembra | murió | `H murió` |
- * | Macho/Hembra | — | `Macho` / `Hembra` (sin destino que lo acompañe, la
- * |   |   | inicial sola sería críptica: aquí sí va la palabra completa) |
- * | — | murió | `Cría murió` (es el caso real: `cria_destino='muerta'` NO
- * |   |   | determina el sexo, viene tanto de `A+` como de `O+`) |
- * | — | retenida/vendida | `Cría retenida #206` / `Cría vendida` |
- * | — | (SX = `gem+`) | `Parto gemelar` (la planilla no dice el sexo de cada
- * |   |   | gemelo, así que no hay sexo que imprimir -- pero el hecho sí es
- * |   |   | dato y perderlo sería descartar en silencio) |
+ * | Macho / Hembra | (da igual el destino) | `Macho` / `Hembra` |
+ * | — | SX = `gem+` | `Gemelar` |
+ * | — | destino = murió | `Murió` |
+ * | — | destino conocido | `Cría` (hubo cría; el sexo no se sabe) |
  * | — | — | `null` -> **celda vacía** |
  *
- * REGLA DURA: sin sexo Y sin destino la celda va VACÍA. Nunca "N/D", nunca
- * "—" dentro del texto, nunca un valor por defecto -- mismo contrato de "sin
+ * Las tres filas sin sexo NO se borran junto con el destino: son los casos en
+ * que hubo un hecho real y la celda vacía mentiría diciendo "no hay dato".
+ * Van en una sola palabra corta para no volver a ensanchar la columna.
+ *
+ * REGLA DURA, sin cambios: sin sexo Y sin ningún hecho, la celda va VACÍA.
+ * Nunca "N/D", nunca "—", nunca un valor por defecto -- mismo contrato de "sin
  * dato, nunca 0" del resto del módulo.
  */
 export function etiquetaSexoCria(input: InputEtiquetaSexoCria): string | null {
   const sx = input.sexoCriaRaw ? parseSX(input.sexoCriaRaw) : null;
-  const numeroCria = sx?.numeroCria ?? null;
 
   const sexo = textoSexo(input.sexoCria);
-  const destino = textoDestino(input.criaDestino, numeroCria);
+  const destino = textoDestino(input.criaDestino, null);
 
-  // Sin paréntesis: con el sexo abreviado a inicial, `H retenida #206` se lee
-  // igual de claro que `Hembra (retenida #206)` y ahorra dos caracteres más.
-  if (sexo && destino) return `${sexo} ${destino}`;
   if (sexo) return sexo === 'M' ? 'Macho' : 'Hembra';
-  if (destino === 'murió') return 'Cría murió';
-  if (destino) return `Cría ${destino}`;
-  // Parto gemelar: no hay sexo (son dos crías) ni destino registrado, pero el
-  // código SX sí dice que fue gemelar -- dato real, leído por el único parser
-  // de SX del repo.
-  if (sx?.tipo === 'gemelar') return 'Parto gemelar';
+  // Sin sexo. El hecho igual es real y la celda vacía diría "no hay dato".
+  if (sx?.tipo === 'gemelar') return 'Gemelar';
+  if (destino === 'murió') return 'Murió';
+  if (destino) return 'Cría';
   return null;
 }
 
@@ -294,10 +297,11 @@ export function construirFilasPlanillaPDF(filas: readonly FilaPlanillaChequeo[])
  * - `Tratamiento`, la columna donde Martha MÁS escribe, había bajado a 22,5mm
  *   para financiar la columna 13. Vuelve a 36mm -- por encima incluso de los
  *   35mm que tenía antes de que existiera "Estado registrado".
- * - `Sexo cría` tenía 30,6mm, más que `Nombre`. Baja a 24mm: cubre `H
- *   retenida` con holgura, y el caso extremo `H retenida #206` se parte en dos
- *   líneas, que es aceptable en una columna de referencia dentro de una fila
- *   de 9mm de alto.
+ * - `Sexo cría` tenía 30,6mm, más que `Nombre`. Baja a **14,5mm** (-53%)
+ *   porque el dueño acotó su CONTENIDO el 2026-08-14: ya no imprime destino
+ *   ni chapeta de la cría, sólo el sexo. El piso ya no lo pone `H retenida
+ *   #206` (25,42mm) sino `Gemelar` (14,21mm), la más larga de las etiquetas
+ *   que quedan. Ver la nota de `etiquetaSexoCria`.
  * - `Nombre` (28mm) y `Toro` (23,4mm) NO alcanzaban a 11pt: `BRILLANTINA`, el
  *   nombre más largo del hato real, se partía por 0,3mm, y `Ternero Holstein`
  *   se partía siempre. A 9pt miden 20,4 y 22,9mm y ahora caben enteros.
@@ -306,9 +310,12 @@ export function construirFilasPlanillaPDF(filas: readonly FilaPlanillaChequeo[])
  * que se escriben a mano. Las de referencia pura (`#`, las 4 de fecha,
  * `Estado registrado`) llevan lo justo para su contenido conocido.
  *
- * El total queda en 255,5mm de los 259,4 útiles (márgenes de vuelta en 10mm,
- * no en los 8mm de emergencia): **3,9mm de holgura**. Cualquier columna nueva
- * exige quitar de otra, bajar más la letra o aceptar una página más.
+ * El total queda en 256mm de los 259,4 útiles (márgenes de vuelta en 10mm, no
+ * en los 8mm de emergencia): **3,4mm de holgura**. Los 11mm que liberó
+ * `Sexo cría` fueron completos a las dos columnas que se escriben a mano
+ * (`Tratamiento` 36 -> 44, `Estado` 18 -> 20), que es de donde habían salido.
+ * Cualquier columna nueva exige quitar de otra, bajar más la letra o aceptar
+ * una página más.
  */
 export const ANCHOS_COLUMNAS_PDF_MM: readonly number[] = [
   10, // # (cabe `999*`: la marca de provisional suma un carácter)
@@ -316,14 +323,14 @@ export const ANCHOS_COLUMNAS_PDF_MM: readonly number[] = [
   7, // PL
   12, // # Partos
   19.5, // Última Cría
-  25.5, // Sexo cría (cabe entero `H retenida #206`, el caso real más largo)
+  14.5, // Sexo cría -- sólo el sexo (D-2026-08-14); el piso lo pone `Gemelar`
   19.5, // Fecha Servicio
   26.5, // Toro ("Ternero Holstein", 22,9mm a 9pt: deja de partirse)
   20, // Estado registrado
-  18, // Estado -- SE ESCRIBE A MANO
+  20, // Estado -- SE ESCRIBE A MANO
   19.5, // Secar
   19.5, // Parto Probable
-  36, // Tratamiento -- SE ESCRIBE A MANO, la que más
+  44, // Tratamiento -- SE ESCRIBE A MANO, la que más (histórico: máx. 54 caracteres)
 ];
 
 /** Ancho total de la tabla = suma exacta de los anchos de columna. Se le pasa

@@ -59,69 +59,61 @@ function fila(overrides: Partial<FilaPlanillaChequeo> & { numero: number; nombre
 }
 
 describe('etiquetaSexoCria (D-E: el PDF imprime lenguaje claro, no el código crudo)', () => {
-  it('macho vendido -> "M vendido" (el crudo era `OV`)', () => {
+  // Desde el 2026-08-14 esta etiqueta lleva SÓLO EL SEXO, por decisión del
+  // dueño viendo la planilla impresa ("reduce sexo cría a la mitad, sólo
+  // necesitamos que quepa Macho/Hembra o M/H"). Antes combinaba sexo + destino
+  // + chapeta de la cría, y por eso era la columna más ancha de la hoja.
+  // El destino y la chapeta NO se pierden: siguen en `hato_eventos` y en el
+  // `.xlsx`, que emite `sx_raw` verbatim. Ver la nota de la función.
+
+  it('macho -> "Macho", con o sin destino (el destino ya no se imprime)', () => {
     expect(
       etiquetaSexoCria({ sexoCria: 'macho', criaDestino: 'macho_vendido', sexoCriaRaw: 'OV' }),
-    ).toBe('M vendido');
+    ).toBe('Macho');
+    expect(etiquetaSexoCria({ sexoCria: 'macho', criaDestino: null, sexoCriaRaw: 'OV' })).toBe('Macho');
   });
 
-  it('hembra retenida con chapeta -> "H retenida #206" (el crudo era `A 206`)', () => {
+  it('hembra -> "Hembra", y la chapeta de la cría ya NO va al papel', () => {
     expect(
       etiquetaSexoCria({ sexoCria: 'hembra', criaDestino: 'retenida', sexoCriaRaw: 'A 206' }),
-    ).toBe('H retenida #206');
-  });
-
-  it('hembra retenida SIN número en la celda SX -> omite la chapeta, jamás la inventa', () => {
-    expect(etiquetaSexoCria({ sexoCria: 'hembra', criaDestino: 'retenida', sexoCriaRaw: 'A' })).toBe(
-      'H retenida',
-    );
-    expect(etiquetaSexoCria({ sexoCria: 'hembra', criaDestino: 'retenida', sexoCriaRaw: null })).toBe(
-      'H retenida',
-    );
-  });
-
-  it('hembra vendida -> "H vendida" (el crudo era `AV`)', () => {
+    ).toBe('Hembra');
     expect(
       etiquetaSexoCria({ sexoCria: 'hembra', criaDestino: 'hembra_vendida', sexoCriaRaw: 'AV' }),
-    ).toBe('H vendida');
-  });
-
-  it('cría muerta CON sexo legible (`A+` -> la letra sí dice hembra) -> "H murió"', () => {
+    ).toBe('Hembra');
     expect(etiquetaSexoCria({ sexoCria: 'hembra', criaDestino: 'muerta', sexoCriaRaw: 'A+' })).toBe(
-      'H murió',
+      'Hembra',
     );
-    expect(etiquetaSexoCria({ sexoCria: 'macho', criaDestino: 'muerta', sexoCriaRaw: 'O+' })).toBe(
-      'M murió',
-    );
-  });
-
-  it('cría muerta SIN sexo legible -> "Cría murió" (es el caso real: `cria_destino=muerta` viene tanto de A+ como de O+)', () => {
-    expect(etiquetaSexoCria({ sexoCria: null, criaDestino: 'muerta', sexoCriaRaw: null })).toBe(
-      'Cría murió',
-    );
-  });
-
-  it('sexo conocido pero destino sin registrar -> solo el sexo (es dato real, no se rellena el resto)', () => {
-    expect(etiquetaSexoCria({ sexoCria: 'macho', criaDestino: null, sexoCriaRaw: 'OV' })).toBe('Macho');
     expect(etiquetaSexoCria({ sexoCria: 'hembra', criaDestino: null, sexoCriaRaw: null })).toBe('Hembra');
   });
 
-  it('destino conocido pero sexo no determinable -> se describe la cría sin inventarle sexo', () => {
-    expect(etiquetaSexoCria({ sexoCria: null, criaDestino: 'retenida', sexoCriaRaw: 'A 206' })).toBe(
-      'Cría retenida #206',
-    );
-    expect(etiquetaSexoCria({ sexoCria: null, criaDestino: 'hembra_vendida', sexoCriaRaw: null })).toBe(
-      'Cría vendida',
-    );
-    expect(etiquetaSexoCria({ sexoCria: null, criaDestino: 'macho_vendido', sexoCriaRaw: null })).toBe(
-      'Cría vendido',
-    );
+  // Los tres casos SIN sexo no se borran junto con el destino: hubo un hecho
+  // real y una celda vacía diría "no hay dato". Van en una palabra corta para
+  // no volver a ensanchar la columna.
+  it('cría muerta SIN sexo legible -> "Murió" (`cria_destino=muerta` viene tanto de A+ como de O+)', () => {
+    expect(etiquetaSexoCria({ sexoCria: null, criaDestino: 'muerta', sexoCriaRaw: null })).toBe('Murió');
   });
 
-  it('parto gemelar (`gem+`): no hay sexo de cada gemelo, pero el hecho SÍ es dato -> "Parto gemelar"', () => {
-    expect(etiquetaSexoCria({ sexoCria: null, criaDestino: null, sexoCriaRaw: 'gem+' })).toBe(
-      'Parto gemelar',
-    );
+  it('destino conocido pero sexo no determinable -> "Cría": hubo cría, no se le inventa sexo', () => {
+    expect(etiquetaSexoCria({ sexoCria: null, criaDestino: 'retenida', sexoCriaRaw: 'A 206' })).toBe('Cría');
+    expect(etiquetaSexoCria({ sexoCria: null, criaDestino: 'hembra_vendida', sexoCriaRaw: null })).toBe('Cría');
+    expect(etiquetaSexoCria({ sexoCria: null, criaDestino: 'macho_vendido', sexoCriaRaw: null })).toBe('Cría');
+  });
+
+  it('parto gemelar (`gem+`): no hay sexo de cada gemelo, pero el hecho SÍ es dato -> "Gemelar"', () => {
+    expect(etiquetaSexoCria({ sexoCria: null, criaDestino: null, sexoCriaRaw: 'gem+' })).toBe('Gemelar');
+  });
+
+  it('"Gemelar" es la etiqueta más larga y por eso fija el ancho de la columna', () => {
+    const todas = [
+      etiquetaSexoCria({ sexoCria: 'hembra', criaDestino: 'retenida', sexoCriaRaw: 'A 206' }),
+      etiquetaSexoCria({ sexoCria: 'macho', criaDestino: 'macho_vendido', sexoCriaRaw: 'OV' }),
+      etiquetaSexoCria({ sexoCria: null, criaDestino: 'muerta', sexoCriaRaw: null }),
+      etiquetaSexoCria({ sexoCria: null, criaDestino: 'retenida', sexoCriaRaw: 'A 206' }),
+      etiquetaSexoCria({ sexoCria: null, criaDestino: null, sexoCriaRaw: 'gem+' }),
+    ].filter((e): e is string => e !== null);
+    // Ninguna supera 7 caracteres: es lo que permite que la columna quepa en
+    // 14,5mm en vez de los 25,5 que necesitaba `H retenida #206`.
+    expect(Math.max(...todas.map((e) => e.length))).toBe('Gemelar'.length);
   });
 
   it('aborto: no hay cría que describir -> celda VACÍA', () => {
