@@ -35,6 +35,8 @@ function filaDesdeVista(animal: HatoAnimalRow, vista: EstadoActualHatoViewRow | 
       ultimo_secado_real_fecha: null,
       ultima_confirmacion_prenez_fecha: null,
       ultimo_evento_fecha: null,
+      ultima_confirmacion_prenez_metodo: null,
+      ultimo_aborto_fecha: null,
       ultimo_estado_chequeo: null,
     };
   }
@@ -49,6 +51,8 @@ function filaDesdeVista(animal: HatoAnimalRow, vista: EstadoActualHatoViewRow | 
     ultimo_secado_real_fecha: vista.ultimo_secado_real_fecha,
     ultima_confirmacion_prenez_fecha: vista.ultima_confirmacion_prenez_fecha,
     ultimo_evento_fecha: vista.ultimo_evento_fecha,
+    ultima_confirmacion_prenez_metodo: vista.ultima_confirmacion_prenez_metodo,
+    ultimo_aborto_fecha: vista.ultimo_aborto_fecha,
     ultimo_estado_chequeo: vista.ultimo_estado_chequeo,
   };
 }

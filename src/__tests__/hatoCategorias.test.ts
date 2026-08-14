@@ -271,6 +271,8 @@ describe('clasificarAnimalHato', () => {
       ultimo_secado_real_fecha: null,
       ultima_confirmacion_prenez_fecha: null,
       ultimo_evento_fecha: null,
+      ultima_confirmacion_prenez_metodo: null,
+      ultimo_aborto_fecha: null,
       ultimo_estado_chequeo: null,
       fecha_nacimiento: null,
       etapa_forzada: false,

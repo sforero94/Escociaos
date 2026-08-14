@@ -42,6 +42,8 @@ function fila(datos: Partial<EstadoActualHatoRow> = {}): EstadoActualHatoRow {
     ultimo_secado_real_fecha: null,
     ultima_confirmacion_prenez_fecha: null,
     ultimo_evento_fecha: null,
+    ultima_confirmacion_prenez_metodo: null,
+    ultimo_aborto_fecha: null,
     ultimo_estado_chequeo: null,
     ...datos,
   };
@@ -330,12 +332,24 @@ describe('proyectarEstadoTrasMarca', () => {
       HOY,
     );
     expect(antes).toBe('novilla');
+    // D-D (2026-08-13) corrige D-20: la marca "preñada" es una PRESUNCIÓN, y
+    // una presunción deja a la vaca en `servida` (etiqueta "Servida"), no en
+    // `preñada`. Solo la palpación confirma.
+    expect(despues).toBe('servida');
+  });
+
+  it('vacía por servir -> marca confirmada (palpación) -> queda preñada', () => {
+    const { despues } = proyectarEstadoTrasMarca(fila(), 'confirmada', HOY, CONFIG, HOY);
     expect(despues).toBe('preñada');
   });
 
-  it('vacía por servir -> marca confirmada -> queda preñada (D-20: mismo estado que preñada)', () => {
-    const { despues } = proyectarEstadoTrasMarca(fila(), 'confirmada', HOY, CONFIG, HOY);
-    expect(despues).toBe('preñada');
+  it('la proyección lleva el MÉTODO, no solo la fecha: las dos marcas divergen', () => {
+    // Regresión de D-D: `aplicarMarcaAFilaHipotetica` actualizaba la fecha de
+    // confirmación sin el método, así que el "quedará" del diálogo prometía
+    // el mismo estado para las dos marcas.
+    const conPresuncion = proyectarEstadoTrasMarca(fila(), 'preñada', HOY, CONFIG, HOY);
+    const conPalpacion = proyectarEstadoTrasMarca(fila(), 'confirmada', HOY, CONFIG, HOY);
+    expect(conPresuncion.despues).not.toBe(conPalpacion.despues);
   });
 
   it('servida (ya con servicio) -> marca seca -> queda seca, cierra el lazo de ordeño (D-5)', () => {

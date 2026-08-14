@@ -12,7 +12,7 @@ import type { CrudoFilaChequeo, FilaChequeoNormalizada, ManifiestoHoja } from '@
 
 const RAW_VACIO: CrudoFilaChequeo = {
   pl: null, np: null, ultimaCria: null, sx: null, fechaServicio: null,
-  toro: null, tp: null, estado: null, secar: null, pp: null, ttto: null,
+  toro: null, estadoRegistrado: null, tp: null, estado: null, secar: null, pp: null, ttto: null,
 };
 
 function fila(overrides: Partial<FilaChequeoNormalizada> = {}): FilaChequeoNormalizada {
@@ -35,6 +35,7 @@ function fila(overrides: Partial<FilaChequeoNormalizada> = {}): FilaChequeoNorma
     fechaProbableParto: null,
     toroNombre: null,
     tipoServicio: null,
+    estadoRegistrado: null,
     issues: [],
     ...overrides,
   };

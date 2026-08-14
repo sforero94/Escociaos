@@ -31,7 +31,11 @@ export interface HatoReproCardProps {
 
 export function HatoReproCard({ enOrdeno, prenadas, servidas, vacias }: HatoReproCardProps) {
   const stats: StatRepro[] = [
-    { label: 'Preñadas', count: prenadas, color: 'var(--primary)' },
+    // D-D (2026-08-13): el vocabulario visible del módulo dice
+    // "Confirmada", no "Preñada". La REGLA de conteo no cambia (preñada +
+    // próxima a secar); solo la etiqueta, para que la card y la lista del
+    // hato no llamen distinto a lo mismo.
+    { label: 'Confirmadas', count: prenadas, color: 'var(--primary)' },
     { label: 'Servidas', count: servidas, color: '#2563eb' },
     { label: 'Vacías', count: vacias, color: '#d97706' },
   ];

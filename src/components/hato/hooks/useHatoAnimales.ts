@@ -51,6 +51,10 @@ export interface AnimalHatoDerivado {
    * cruda, no este campo. `null` cuando `categoria` también es `null`
    * (estado terminal, no aplica ninguna de las dos). */
   categoriaOrigen: 'calculado' | 'override_manual' | null;
+  /** `fecha_nacimiento` de `hato_animales` vía la vista. `null` en 20 de
+   * los 65 animales activos del hato real -- la columna "Edad" muestra "—",
+   * nunca una edad inventada (`listaHato.ts::edadEnAnios`). */
+  fechaNacimiento: string | null;
   /** Subgrupo contable dentro de "ternera" (D-13: leche/concentrado),
    * `null` para toda categoría que no sea `ternera` o cuando la edad no se
    * pudo calcular. */
@@ -108,6 +112,7 @@ export function useHatoAnimales() {
           numPartos: fila.num_partos,
           ultimoChequeoFecha: fila.ultimo_chequeo_fecha,
           ultimoPartoFecha: fila.ultimo_parto_fecha,
+          fechaNacimiento: fila.fecha_nacimiento,
           derivado,
           categoria,
           categoriaOrigen,

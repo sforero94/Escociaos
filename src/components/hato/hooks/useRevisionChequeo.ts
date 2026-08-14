@@ -103,7 +103,15 @@ export interface RevisionChequeo {
 
 const REVISION_VACIA_DIFF: ResultadoDiffChequeo = {
   filas: [],
-  resumen: { totalFilas: 0, nuevos: 0, sinCambio: 0, cambios: 0, noReconocidos: 0, conIssues: 0 },
+  resumen: {
+    totalFilas: 0,
+    nuevos: 0,
+    sinCambio: 0,
+    cambios: 0,
+    noReconocidos: 0,
+    conIssues: 0,
+    conConflictoEstadoRegistrado: 0,
+  },
   colisionesEnHoja: [],
 };
 

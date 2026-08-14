@@ -320,13 +320,25 @@ export type ResultadoAnclaPesaje =
  * ambigüedad real. */
 const TOLERANCIA_EDICION_NOMBRE = 1;
 
-export function validarAnclaFilaPesaje(fila: FilaOcrPesaje, roster: RosterPesaje): ResultadoAnclaPesaje {
-  const leido = normalizarNombrePesaje(fila.nombreImpreso);
+/**
+ * Cotejo de un nombre contra el roster de la planilla -- el corazón del
+ * anti-row-drift. Nace del ancla de la ruta FOTO (`validarAnclaFilaPesaje`,
+ * abajo, que solo le pasa `fila.nombreImpreso`), pero es la MISMA regla que
+ * necesita `ocrPesajeCorreccion.ts` para resolver el nombre que Fernando
+ * escribe en una corrección de texto libre (D-C): exacto único -> resuelto;
+ * exacto ambiguo -> nunca se adjudica; a una letra único -> resuelto con
+ * aviso; a una letra ambiguo -> nunca se adjudica; nada -> fuera del roster.
+ * Cotejar el nombre de una corrección con un algoritmo DISTINTO al que
+ * cotejó la foto original sería inconsistente sin motivo -- por eso una sola
+ * función, no dos parecidas.
+ */
+export function resolverNombreEnRosterPesaje(nombreCrudo: string, roster: RosterPesaje): ResultadoAnclaPesaje {
+  const leido = normalizarNombrePesaje(nombreCrudo);
   if (leido === '') {
     return {
       ok: false,
       motivo: 'nombre_ilegible',
-      detalle: `el nombre impreso se leyó como '${fila.nombreImpreso}', que no es un nombre -- la fila no se puede anclar`,
+      detalle: `'${nombreCrudo}' no es un nombre -- no se puede anclar`,
     };
   }
 
@@ -336,7 +348,7 @@ export function validarAnclaFilaPesaje(fila: FilaOcrPesaje, roster: RosterPesaje
     return {
       ok: false,
       motivo: 'nombre_ambiguo_en_roster',
-      detalle: `${exactos.length} vacas en ordeño se llaman '${fila.nombreImpreso}' -- no se adjudica sola (regla del módulo), la fila queda para revisión humana`,
+      detalle: `${exactos.length} vacas en ordeño se llaman '${nombreCrudo}' -- no se adjudica sola (regla del módulo), queda para revisión humana`,
     };
   }
 
@@ -347,22 +359,26 @@ export function validarAnclaFilaPesaje(fila: FilaOcrPesaje, roster: RosterPesaje
     return {
       ok: true,
       entrada: cercanos[0],
-      avisos: [`el nombre impreso se leyó como '${fila.nombreImpreso}' y el roster dice '${cercanos[0].nombre}' (una letra de diferencia) -- revisar`],
+      avisos: [`'${nombreCrudo}' y el roster dice '${cercanos[0].nombre}' (una letra de diferencia) -- revisar`],
     };
   }
   if (cercanos.length > 1) {
     return {
       ok: false,
       motivo: 'nombre_ambiguo_en_roster',
-      detalle: `'${fila.nombreImpreso}' está a una letra de ${cercanos.length} vacas en ordeño distintas -- no se adjudica sola`,
+      detalle: `'${nombreCrudo}' está a una letra de ${cercanos.length} vacas en ordeño distintas -- no se adjudica sola`,
     };
   }
 
   return {
     ok: false,
     motivo: 'nombre_fuera_del_roster',
-    detalle: `ninguna vaca en ordeño activa se llama '${fila.nombreImpreso}' -- puede ser una vaca vendida, una novilla anotada a mano, o un nombre mal leído`,
+    detalle: `ninguna vaca en ordeño activa se llama '${nombreCrudo}' -- puede ser una vaca vendida, una novilla anotada a mano, o un nombre mal escrito/leído`,
   };
+}
+
+export function validarAnclaFilaPesaje(fila: FilaOcrPesaje, roster: RosterPesaje): ResultadoAnclaPesaje {
+  return resolverNombreEnRosterPesaje(fila.nombreImpreso, roster);
 }
 
 // ---------------------------------------------------------------------------

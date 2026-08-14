@@ -1245,6 +1245,8 @@ describe('derivarEstadoReproductivo', () => {
     ultimo_secado_real_fecha: null,
     ultima_confirmacion_prenez_fecha: null,
     ultimo_evento_fecha: null,
+    ultima_confirmacion_prenez_metodo: null,
+    ultimo_aborto_fecha: null,
     ultimo_estado_chequeo: null,
   };
 
@@ -1334,6 +1336,9 @@ describe('derivarEstadoReproductivo', () => {
         ...filaBase,
         ultimo_servicio_fecha: '2024-03-01',
         ultima_confirmacion_prenez_fecha: '2024-03-15',
+        // D-D: solo la PALPACIÓN deja el estado en `preñada` -- una
+        // confirmación por presunción devolvería `servida`.
+        ultima_confirmacion_prenez_metodo: 'palpacion',
       };
       const r = derivarEstadoReproductivo(fila, CONFIG_BASE, '2024-03-31');
       expect(r.estado).toBe('preñada');
@@ -1457,6 +1462,105 @@ describe('derivarEstadoReproductivo', () => {
     });
   });
 
+  // ── D-D (dueño, 2026-08-13): 5 estados ──────────────────────────────
+  // "servida = preñada por presunción · confirmada = palpada". El método de
+  // la confirmación (migración 094) es lo único que las separa.
+  describe('método de la confirmación de preñez (D-D)', () => {
+    // Servicio suficientemente reciente para no caer en la ventana de
+    // secado: así el estado lo decide el método y nada más.
+    const filaConfirmada: EstadoActualHatoRow = {
+      ...filaBase,
+      ultimo_servicio_fecha: '2024-06-01',
+      ultima_confirmacion_prenez_fecha: '2024-07-15',
+      ultimo_evento_fecha: '2024-07-15',
+    };
+
+    it('palpación deja la vaca preñada (etiqueta "Confirmada")', () => {
+      const r = derivarEstadoReproductivo(
+        { ...filaConfirmada, ultima_confirmacion_prenez_metodo: 'palpacion' },
+        CONFIG_BASE,
+        '2024-08-09',
+      );
+      expect(r.estado).toBe('preñada');
+      expect(r.tiempo_prenez_dias).not.toBeNull();
+    });
+
+    it('presunción deja la vaca servida, no preñada', () => {
+      const r = derivarEstadoReproductivo(
+        { ...filaConfirmada, ultima_confirmacion_prenez_metodo: 'presuncion' },
+        CONFIG_BASE,
+        '2024-08-09',
+      );
+      expect(r.estado).toBe('servida');
+      // `servida` no es preñez confirmada: no se reporta tiempo de preñez.
+      expect(r.tiempo_prenez_dias).toBeNull();
+    });
+
+    it('método null se lee como PRESUNCIÓN, nunca como palpación', () => {
+      // La asimetría es deliberada: dar por palpada una vaca que nadie palpó
+      // lleva a secarla con datos que nadie verificó; el error contrario solo
+      // hace que se la vuelva a revisar.
+      const r = derivarEstadoReproductivo(filaConfirmada, CONFIG_BASE, '2024-08-09');
+      expect(r.estado).toBe('servida');
+    });
+
+    it('la misma regla aplica cuando no hay servicio que ancle la confirmación', () => {
+      const sinAncla: EstadoActualHatoRow = {
+        ...filaBase,
+        ultima_confirmacion_prenez_fecha: '2024-07-15',
+        ultimo_evento_fecha: '2024-07-15',
+      };
+      expect(derivarEstadoReproductivo(sinAncla, CONFIG_BASE, '2024-08-09').estado).toBe('servida');
+      expect(
+        derivarEstadoReproductivo(
+          { ...sinAncla, ultima_confirmacion_prenez_metodo: 'palpacion' },
+          CONFIG_BASE,
+          '2024-08-09',
+        ).estado,
+      ).toBe('preñada');
+    });
+  });
+
+  describe('señal de revisión: aborto vs. evento posterior sin tipificar (D-D)', () => {
+    const conServicio: EstadoActualHatoRow = { ...filaBase, ultimo_servicio_fecha: '2026-01-10' };
+
+    it('un aborto posterior deja la vaca VACÍA y explica el porqué en la señal', () => {
+      const r = derivarEstadoReproductivo(
+        { ...conServicio, ultimo_evento_fecha: '2026-06-30', ultimo_aborto_fecha: '2026-06-30' },
+        CONFIG_BASE,
+        '2026-07-09',
+      );
+      expect(r.estado).toBe('vacia_por_servir');
+      expect(r.senal_revision).toEqual({ tipo: 'aborto', fecha: '2026-06-30' });
+      // Nunca se proyecta un ciclo con datos que el aborto invalidó.
+      expect(r.fecha_probable_parto).toBeNull();
+      expect(r.fecha_secar).toBeNull();
+      // Un aborto no es un parto: no ancla el contador de días abiertos.
+      expect(r.dias_abiertos).toBeNull();
+    });
+
+    it('un evento posterior que NO es aborto sigue siendo indeterminado', () => {
+      const r = derivarEstadoReproductivo(
+        { ...conServicio, ultimo_evento_fecha: '2026-06-30' },
+        CONFIG_BASE,
+        '2026-07-09',
+      );
+      expect(r.estado).toBe('indeterminado');
+      expect(r.senal_revision).toEqual({ tipo: 'evento_posterior', fecha: '2026-06-30' });
+    });
+
+    it('un aborto VIEJO (anterior al último servicio) no produce señal alguna', () => {
+      // La vaca abortó, la volvieron a servir: el ciclo nuevo manda.
+      const r = derivarEstadoReproductivo(
+        { ...conServicio, ultimo_aborto_fecha: '2025-08-01', ultimo_evento_fecha: '2026-01-10' },
+        CONFIG_BASE,
+        '2026-02-09',
+      );
+      expect(r.estado).toBe('servida');
+      expect(r.senal_revision).toBeNull();
+    });
+  });
+
   it('servicio_sin_confirmacion se activa solo al pasar el umbral de config (45 días default)', () => {
     const fila: EstadoActualHatoRow = { ...filaBase, ultimo_servicio_fecha: '2024-05-14' };
     const antes = derivarEstadoReproductivo(fila, CONFIG_BASE, '2024-06-01'); // 18 días
@@ -1575,6 +1679,7 @@ describe('derivarEstadoReproductivo', () => {
         ...filaBase,
         ultimo_servicio_fecha: '2026-08-10',
         ultima_confirmacion_prenez_fecha: '2026-08-10',
+        ultima_confirmacion_prenez_metodo: 'palpacion',
       };
       const r = derivarEstadoReproductivo(fila, CONFIG_BASE, '2026-08-10');
       expect(r.estado).toBe('preñada');
@@ -1651,6 +1756,7 @@ describe('derivarEstadoReproductivo', () => {
         ...filaBase,
         ultimo_servicio_fecha: null,
         ultima_confirmacion_prenez_fecha: '2026-08-01',
+        ultima_confirmacion_prenez_metodo: 'palpacion',
       };
       const r = derivarEstadoReproductivo(fila, CONFIG_BASE, '2026-08-06');
       expect(r.estado).toBe('preñada');

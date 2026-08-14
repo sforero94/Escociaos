@@ -18,6 +18,7 @@ import { monitoreoConversation } from "./conversations/monitoreo.ts";
 import { gastoConversation } from "./conversations/gasto.ts";
 import { ingresoConversation } from "./conversations/ingreso.ts";
 import { pesajeLecheConversation } from "./conversations/pesajeLeche.ts";
+import { eventoHatoConversation } from "./conversations/eventoHato.ts";
 // `produccionQuincenal` (litros al camión) se retiró del bot -- SOW 3 de
 // docs/plan_hato_produccion_rework.md §2.3: la quincena pasó a ser un
 // registro financiero (`fin_ingreso_id NOT NULL`, migración 070) y el bot
@@ -25,6 +26,8 @@ import { pesajeLecheConversation } from "./conversations/pesajeLeche.ts";
 // ese NOT NULL ni restringirse a Gerencia (decisión 5 del dueño). `/pesaje`
 // no toca dinero y se mantiene intacto.
 import { llmToolLoop, getSystemPrompt } from "../chat.tsx";
+import { construirMensajeAlertaYaResuelta, construirMensajeCierreAlertaBroadcast } from "../hato-alertas.ts";
+import { cerrarAlertaEnEnvios } from "./enviar.ts";
 
 // ============================================================================
 // SUPABASE CLIENT (service role — same pattern as chat.ts)
@@ -140,6 +143,7 @@ function getBot(): Bot<BotContext> {
   bot.use(createConversation(gastoConversation, "gasto"));
   bot.use(createConversation(ingresoConversation, "ingreso"));
   bot.use(createConversation(pesajeLecheConversation, "pesajeLeche"));
+  bot.use(createConversation(eventoHatoConversation, "eventoHato"));
 
   // ==========================================================================
   // HELPERS
@@ -163,6 +167,7 @@ function getBot(): Bot<BotContext> {
     }
     if (mods.includes("hato_produccion")) {
       kb.text("🐄 Pesaje semanal (leche)", "start_pesajeLeche").row();
+      kb.text("📋 Registrar evento del hato", "start_eventoHato").row();
     }
     if (mods.includes("consultas")) {
       kb.text("💬 Preguntarle a Esco", "start_consulta").row();
@@ -301,6 +306,20 @@ function getBot(): Bot<BotContext> {
     await ctx.conversation.enter("pesajeLeche");
   });
 
+  // /evento — registro en campo del ciclo reproductivo (monta, inseminación,
+  // secado, parto, aborto). Se gatea con el MISMO módulo que el pesaje
+  // (`hato_produccion`) a propósito: es el módulo que Fernando ya tiene, así
+  // que el flujo sirve desde el primer despliegue sin tocar configuración.
+  // Separarlo en un módulo propio es un cambio de `modulos_permitidos`, no
+  // de código.
+  bot.command("evento", async (ctx) => {
+    if (!ctx.telegramUser?.modulos_permitidos?.includes("hato_produccion")) {
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
+    await ctx.conversation.enter("eventoHato");
+  });
+
   bot.command("cancelar", async (ctx) => {
     await ctx.conversation.exit();
     await ctx.reply("Operación cancelada.");
@@ -316,7 +335,8 @@ function getBot(): Bot<BotContext> {
         "/monitoreo — Registrar monitoreo",
         "/gasto — Registrar un gasto",
         "/ingreso — Registrar un ingreso",
-        "/pesaje — Pesaje semanal de leche por vaca",
+        "/pesaje — Cargar la planilla de pesaje de leche por foto",
+        "/evento — Registrar monta, inseminación, secado, parto o aborto",
         "/cancelar — Cancelar operación actual",
         "/ayuda — Ver esta ayuda",
         "",
@@ -372,6 +392,15 @@ function getBot(): Bot<BotContext> {
       return;
     }
     await ctx.conversation.enter("pesajeLeche");
+  });
+
+  bot.callbackQuery("start_eventoHato", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!ctx.telegramUser?.modulos_permitidos?.includes("hato_produccion")) {
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
+    await ctx.conversation.enter("eventoHato");
   });
 
   bot.callbackQuery("start_consulta", async (ctx) => {
@@ -469,7 +498,80 @@ function getBot(): Bot<BotContext> {
   // (`hato_alerta:{alertaId}:{si|no|otro}`), mismo patrón que `mem_save:`.
   // Toda respuesta escribe un evento auditado (quién, cuándo, qué) — plan
   // §6 Épica C "toda respuesta escribe evento auditado".
+  //
+  // BROADCAST CON CIERRE POR EL PRIMERO (migración 096, 2026-08-14): desde
+  // que una alerta se manda a TODOS los suscritos de su tipo
+  // (`hato_alertas_envios`, una fila por suscrito), este handler puede
+  // recibir el mismo `hato_alerta:{id}:...` de MÁS DE UNA persona. La
+  // primera respuesta cierra la alerta para todos; cualquier respuesta
+  // posterior a la misma alerta se trata "amablemente" (no es un error, es
+  // el diseño) y NUNCA repite el efecto de dominio ni el evento auditado.
+  // La atomicidad de "quién llegó primero" la da el propio UPDATE de abajo:
+  // solo tiene efecto si la alerta TODAVÍA está `pendiente`/`enviada`
+  // (`.in('estado', ...)` + `.select()` para saber si de verdad afectó una
+  // fila) — dos respuestas casi simultáneas no pueden colarse las dos.
   // --------------------------------------------------------------------------
+
+  // --------------------------------------------------------------------------
+  // DESHACER un evento recién registrado por /evento (N9).
+  //
+  // Es la contraparte de la decisión D-B (Telegram escribe DIRECTO, sin cola
+  // de aprobación): el error probable en el corral no es inventarse un
+  // evento, es elegir la vaca equivocada de una lista de homónimas — y eso se
+  // ve en el resumen al instante. Sin este botón, corregirlo exigiría entrar
+  // a la app desde una finca sin internet.
+  //
+  // Solo borra eventos de `fuente='telegram'`: el id viaja en el callback, y
+  // un callback puede reenviarse. Nunca puede convertirse en una vía para
+  // borrar un evento derivado de un chequeo aprobado.
+  // --------------------------------------------------------------------------
+
+  bot.callbackQuery(/^hato_ev_undo:([0-9a-f-]+):([0-9a-f-]+|-)$/, async (ctx) => {
+    const eventoId = ctx.match?.[1];
+    const usoId = ctx.match?.[2];
+    if (!eventoId) {
+      await ctx.answerCallbackQuery({ text: "No se pudo procesar." });
+      return;
+    }
+
+    const sb = getSupabaseAdmin();
+    const { data: evento } = await sb
+      .from("hato_eventos")
+      .select("id, fuente")
+      .eq("id", eventoId)
+      .maybeSingle();
+
+    if (!evento) {
+      await ctx.answerCallbackQuery({ text: "Ese registro ya no existe." });
+      return;
+    }
+    if (evento.fuente !== "telegram") {
+      await ctx.answerCallbackQuery({ text: "Ese registro no se puede deshacer desde aquí." });
+      return;
+    }
+
+    // El uso de pajilla se borra PRIMERO: si fallara después del evento, el
+    // inventario quedaría descontado por un servicio que ya no existe.
+    if (usoId && usoId !== "-") {
+      const { error: errorUso } = await sb.from("hato_pajillas_uso").delete().eq("id", usoId);
+      if (errorUso) {
+        await ctx.answerCallbackQuery({ text: "No se pudo devolver la pajilla. No borré nada." });
+        return;
+      }
+    }
+
+    const { error } = await sb.from("hato_eventos").delete().eq("id", eventoId);
+    if (error) {
+      await ctx.answerCallbackQuery({ text: "No se pudo deshacer. Intenta de nuevo." });
+      return;
+    }
+
+    await ctx.answerCallbackQuery({ text: "Deshecho." });
+    // Se edita el mensaje para quitar el botón: un segundo toque sobre un id
+    // ya borrado solo diría "ya no existe", pero deja al usuario dudando de
+    // si borró dos cosas.
+    await ctx.editMessageText("↩️ Registro deshecho. No quedó nada guardado.\n\nUsa /evento para registrarlo de nuevo.");
+  });
 
   bot.callbackQuery(/^hato_alerta:(.+):(si|no|otro)$/, async (ctx) => {
     const alertaId = ctx.match?.[1];
@@ -480,40 +582,65 @@ function getBot(): Bot<BotContext> {
     }
 
     const sb = getSupabaseAdmin();
-    const { data: alerta, error: errorAlerta } = await sb
+    const respondidaPor = ctx.telegramUser?.nombre_display ?? String(ctx.from?.id ?? "desconocido");
+    const nuevoEstado = respuesta === "si" ? "confirmada" : "respondida";
+
+    // Reclamo atómico de "quién llegó primero" (096): el UPDATE solo afecta
+    // una fila si la alerta TODAVÍA está pendiente/enviada -- si otro
+    // suscrito ya la cerró (o la cerró este mismo dos veces, doble-tap),
+    // `.in('estado', ...)` no matchea nada y `actualizada` viene null. Un
+    // read-then-write habría dejado una ventana de carrera entre dos
+    // suscritos respondiendo casi a la vez; este single UPDATE no la tiene.
+    const { data: actualizada, error: errorUpdate } = await sb
       .from("hato_alertas")
-      .select("id, tipo, animal_id, paso_id, estado")
+      .update({ estado: nuevoEstado, respuesta, respondida_por: respondidaPor })
       .eq("id", alertaId)
+      .in("estado", ["pendiente", "enviada"])
+      .select("id, tipo, animal_id, paso_id, datos")
       .maybeSingle();
 
-    if (errorAlerta || !alerta) {
-      await ctx.answerCallbackQuery({ text: "No encontré esa alerta -- puede que ya no exista." });
+    if (errorUpdate) {
+      console.error("[Telegram] hato_alerta update error:", errorUpdate.message);
+      await ctx.answerCallbackQuery({ text: "No pude guardar tu respuesta. Intenta de nuevo." });
       return;
     }
 
-    const respondidaPor = ctx.telegramUser?.nombre_display ?? String(ctx.from?.id ?? "desconocido");
+    if (!actualizada) {
+      // O la alerta no existe, o ya la cerró otro suscrito (o este mismo,
+      // doble-tap) -- se distingue leyendo el estado actual, "amablemente",
+      // SIN repetir el efecto de dominio ni el evento auditado.
+      const { data: alertaExistente } = await sb
+        .from("hato_alertas")
+        .select("id, estado, respuesta, respondida_por")
+        .eq("id", alertaId)
+        .maybeSingle();
+      if (!alertaExistente) {
+        await ctx.answerCallbackQuery({ text: "No encontré esa alerta -- puede que ya no exista." });
+        return;
+      }
+      await ctx.answerCallbackQuery({
+        text: construirMensajeAlertaYaResuelta(
+          alertaExistente.estado,
+          alertaExistente.respondida_por,
+          alertaExistente.respuesta as "si" | "no" | "otro" | null,
+        ),
+      });
+      await ctx.editMessageReplyMarkup().catch(() => {});
+      return;
+    }
+
     const hoyIso = new Date().toISOString().slice(0, 10);
 
     if (respuesta === "si") {
-      const { error: errorUpdate } = await sb
-        .from("hato_alertas")
-        .update({ estado: "confirmada", respuesta: "si", respondida_por: respondidaPor })
-        .eq("id", alertaId);
-      if (errorUpdate) {
-        console.error("[Telegram] hato_alerta 'si' update error:", errorUpdate.message);
-        await ctx.answerCallbackQuery({ text: "No pude guardar tu respuesta. Intenta de nuevo." });
-        return;
-      }
-
       // Efectos de dominio, append-only -- nunca se borra ni se sobreescribe
       // evidencia. Solo dos tipos tienen un efecto de dominio definido más
       // allá de marcar la alerta -- el resto (rechequeo_due,
       // servicio_sin_confirmacion, parto_proximo) se resuelve con la sola
       // confirmación (Martha/Fernando ya lo dejan constar por otra vía --
       // chequeo, ficha -- este "sí" solo cierra el lazo de la alerta).
-      if (alerta.tipo === "secado_due" && alerta.animal_id) {
+      if (actualizada.tipo === "secado_due" && actualizada.animal_id) {
         const { error: errorEvento } = await sb.from("hato_eventos").insert({
-          animal_id: alerta.animal_id,
+          animal_id: actualizada.animal_id,
           tipo: "secado_real",
           fecha: hoyIso,
           fecha_confianza: "aproximada",
@@ -521,37 +648,45 @@ function getBot(): Bot<BotContext> {
           fuente: "alerta",
         });
         if (errorEvento) console.error("[Telegram] hato_eventos (secado_real) insert error:", errorEvento.message);
-      } else if (alerta.tipo === "tratamiento_paso" && alerta.paso_id) {
+      } else if (actualizada.tipo === "tratamiento_paso" && actualizada.paso_id) {
         // hato_eventos.tipo (CHECK de la migración 053) no tiene ninguna
         // variante de "tratamiento" -- no hay un evento que insertar aquí,
         // solo se marca ejecutado el paso mismo (055).
         const { error: errorPaso } = await sb
           .from("hato_tratamiento_pasos")
           .update({ fecha_ejecutada: hoyIso })
-          .eq("id", alerta.paso_id);
+          .eq("id", actualizada.paso_id);
         if (errorPaso) console.error("[Telegram] hato_tratamiento_pasos update error:", errorPaso.message);
       }
-
-      await ctx.answerCallbackQuery({ text: "Gracias, quedó registrado." });
-      await ctx.editMessageReplyMarkup().catch(() => {});
-      return;
     }
-
     // "no"/"otro" -- NUNCA se auto-resuelve: Martha lo revisa desde
     // AlertasView (plan §6 Épica C, C4 "supervisión por excepción").
-    const { error: errorUpdate } = await sb
-      .from("hato_alertas")
-      .update({ estado: "respondida", respuesta, respondida_por: respondidaPor })
-      .eq("id", alertaId);
-    if (errorUpdate) {
-      console.error("[Telegram] hato_alerta respuesta update error:", errorUpdate.message);
-      await ctx.answerCallbackQuery({ text: "No pude guardar tu respuesta. Intenta de nuevo." });
-      return;
-    }
+
     await ctx.answerCallbackQuery({
-      text: respuesta === "no" ? "Anotado, seguimos pendientes." : "Anotado -- Martha lo revisa.",
+      text: respuesta === "si"
+        ? "Gracias, quedó registrado."
+        : respuesta === "no"
+        ? "Anotado, seguimos pendientes."
+        : "Anotado -- Martha lo revisa.",
     });
     await ctx.editMessageReplyMarkup().catch(() => {});
+
+    // Broadcast (096): editar el mensaje de CADA OTRO suscrito al que se le
+    // mandó esta alerta, para que vea que ya se resolvió y por quién --
+    // `hato_alertas_envios` guarda el `message_id` de cada uno. El propio
+    // chat de quien respondió queda excluido (ya se editó arriba, vía ctx).
+    const mensajeOriginal = (actualizada.datos as { mensaje?: string } | null)?.mensaje ??
+      "Alerta del hato lechero (sin mensaje generado).";
+    const telegramIdRespondio = ctx.from?.id != null ? String(ctx.from.id) : null;
+    const { fallidos } = await cerrarAlertaEnEnvios(
+      sb,
+      alertaId,
+      telegramIdRespondio,
+      construirMensajeCierreAlertaBroadcast(mensajeOriginal, respondidaPor, respuesta),
+    );
+    if (fallidos > 0) {
+      console.error(`[Telegram] hato_alerta ${alertaId}: ${fallidos} mensaje(s) de otros suscritos no se pudieron editar al cerrar.`);
+    }
   });
 
   // ==========================================================================
@@ -815,7 +950,8 @@ function getBot(): Bot<BotContext> {
     { command: "monitoreo", description: "Registrar monitoreo" },
     { command: "gasto", description: "Registrar un gasto" },
     { command: "ingreso", description: "Registrar un ingreso" },
-    { command: "pesaje", description: "Pesaje semanal de leche" },
+    { command: "pesaje", description: "Cargar pesaje de leche por foto" },
+    { command: "evento", description: "Registrar evento del hato" },
     { command: "cancelar", description: "Cancelar operación actual" },
     { command: "ayuda", description: "Ver ayuda" },
   ]).catch((err) => console.error("[Telegram] setMyCommands error:", err));

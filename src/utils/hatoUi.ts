@@ -16,7 +16,7 @@
 // alterarlo (V1 del plan -- los componentes nuevos del mock no tocan
 // definiciones globales del sistema de diseño).
 
-import type { EstadoReproductivo, TipoEstado } from '@/utils/calculosHato';
+import { etiquetaEstadoReproductivo, type EstadoReproductivo, type SenalRevisionHato, type TipoEstado } from '@/utils/calculosHato';
 import type { ClasificacionFilaDiff } from '@/utils/importHato/diffChequeo';
 import type { CategoriaHato, SubetapaTernera } from '@/utils/hatoCategorias';
 import type { EstadoAlertaHato } from '@/utils/hatoAlertas';
@@ -38,38 +38,89 @@ const AZUL = 'bg-blue-50 text-blue-700 border-blue-200';
 const GRIS = 'bg-gray-100 text-gray-600 border-gray-200';
 const ROJO = 'bg-red-50 text-red-700 border-red-200';
 
-/** Chip para `EstadoReproductivo` (lista del hato, hoja de vida). */
+/**
+ * Chip para `EstadoReproductivo` (lista del hato, hoja de vida).
+ *
+ * **D-D (dueño, 2026-08-13): el vocabulario visible es de CINCO estados** --
+ * Vacía · Servida · Confirmada · Por secar · Seca -- y esta función es
+ * donde los 13 estados internos del motor se traducen a esos cinco. Las
+ * equivalencias que no son 1:1, y por qué:
+ *
+ * - `parida_reciente` -> **Vacía**. Parió y todavía no la sirven: está
+ *   vacía. La fecha del parto se muestra en su propia columna, así que no
+ *   se pierde nada al no repetirla en el estado.
+ * - `novilla` -> **Vacía**. Nunca entró al ciclo; "vacía" es exactamente su
+ *   situación. La pestaña Novillas ya la separa por etapa.
+ * - `preñada` -> **Confirmada**. El motor solo devuelve `preñada` cuando la
+ *   confirmación vino de una palpación (`estadoDeConfirmacion`); una
+ *   presunción ya sale de ahí como `servida`.
+ * - `cria` -> **Cría**, y NO uno de los cinco: una ternera no tiene estado
+ *   reproductivo, y rotularla "Vacía" sería absurdo. El vocabulario de D-D
+ *   aplica a novillas y vacas.
+ * - `indeterminado` -> **guion**, no un estado inventado. Hay un evento que
+ *   el motor no puede clasificar, así que el estado es genuinamente
+ *   desconocido; el porqué viaja en `chipSenalRevision`, que se muestra en
+ *   la columna de alertas. Misma regla que rige todo el módulo: sin dato se
+ *   escribe "—", nunca un valor por defecto.
+ */
 export function chipEstadoReproductivo(estado: EstadoReproductivo): ChipEstilo {
+  const label = etiquetaEstadoReproductivo(estado);
   switch (estado) {
     case 'preñada':
-      return { label: 'Preñada', className: VERDE };
+      return { label, className: VERDE, title: 'Preñez confirmada por palpación' };
     case 'parida_reciente':
-      return { label: 'Parida reciente', className: VERDE };
+      return { label, className: AMBAR, title: 'Parió y todavía no ha sido servida' };
     case 'servida':
-      return { label: 'Servida', className: AZUL };
+      return { label, className: AZUL, title: 'Montada o inseminada, preñez sin confirmar por palpación' };
     case 'proxima_a_secar':
-      return { label: 'Próxima a secar', className: AMBAR };
+      return { label, className: AMBAR };
     case 'seca':
-      return { label: 'Seca (horro)', className: GRIS };
+      return { label, className: GRIS };
     case 'vacia_por_servir':
-      return { label: 'Vacía por servir', className: AMBAR };
+      return { label, className: AMBAR };
     case 'novilla':
-      return { label: 'Novilla', className: AZUL };
+      return { label, className: AMBAR, title: 'Novilla: todavía no ha entrado al ciclo reproductivo' };
     case 'cria':
-      return { label: 'Cría', className: GRIS };
+      return { label, className: GRIS };
     case 'indeterminado':
-      return { label: 'Indeterminado — revisar', className: AMBAR };
+      return { label, className: GRIS, title: 'Sin dato: hay un evento posterior sin clasificar — ver la señal de revisión' };
     case 'vendida':
-      return { label: 'Vendida', className: GRIS };
+      return { label, className: GRIS };
     case 'muerta':
-      return { label: 'Muerta', className: GRIS };
+      return { label, className: GRIS };
     case 'descartada':
-      return { label: 'Descartada', className: GRIS };
+      return { label, className: GRIS };
     default: {
       const _exhaustivo: never = estado;
       return { label: String(_exhaustivo), className: GRIS };
     }
   }
+}
+
+/**
+ * Chip de la **columna de señales** de la lista del hato (D-D, 2026-08-13:
+ * "5 estados + columna de alertas que digan cuál — si es aborto o algo
+ * diferente"). `null` = nada que revisar, la celda queda vacía.
+ *
+ * Deliberadamente separado de `chipEstadoReproductivo`: el estado dice en
+ * qué punto del ciclo está la vaca, la señal dice por qué ese dato puede no
+ * ser confiable. Meter las dos cosas en una sola etiqueta obligaría a
+ * mentir en uno de los dos ejes.
+ */
+export function chipSenalRevision(senal: SenalRevisionHato | null): ChipEstilo | null {
+  if (!senal) return null;
+  if (senal.tipo === 'aborto') {
+    return {
+      label: `Aborto ${formatShortDate(senal.fecha)}`,
+      className: ROJO,
+      title: 'El último evento registrado es un aborto: la vaca quedó vacía',
+    };
+  }
+  return {
+    label: 'Revisar',
+    className: AMBAR,
+    title: `Hay un evento del ${formatShortDate(senal.fecha)} que el sistema no puede clasificar. Registra qué pasó para que el estado vuelva a ser confiable.`,
+  };
 }
 
 /** Chip para "¿esta vacía es normal o un problema?" (D-2/V14). `null` =

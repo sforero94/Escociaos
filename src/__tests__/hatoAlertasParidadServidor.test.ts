@@ -84,6 +84,8 @@ const ANIMALES: frontend.AnimalHatoParaAlertas[] = [
     ultimo_secado_real_fecha: null,
     ultima_confirmacion_prenez_fecha: null,
     ultimo_evento_fecha: '2025-12-01',
+    ultima_confirmacion_prenez_metodo: null,
+    ultimo_aborto_fecha: null,
     ultimo_estado_chequeo: null,
   },
   // Chapeta provisional -- ejercita la regla "lidera con el nombre".
@@ -101,6 +103,8 @@ const ANIMALES: frontend.AnimalHatoParaAlertas[] = [
     ultimo_secado_real_fecha: null,
     ultima_confirmacion_prenez_fecha: null,
     ultimo_evento_fecha: '2025-10-25',
+    ultima_confirmacion_prenez_metodo: null,
+    ultimo_aborto_fecha: null,
     ultimo_estado_chequeo: null,
   },
 ];

@@ -61,6 +61,7 @@ function filaChequeo(datos: {
       sx: datos.sx ?? null,
       fechaServicio: null,
       toro: datos.toro ?? null,
+      estadoRegistrado: null,
       tp: null,
       estado: null,
       secar: null,
@@ -76,6 +77,7 @@ function filaChequeo(datos: {
     fechaProbableParto: null,
     toroNombre: datos.toroNombre !== undefined ? datos.toroNombre : (datos.toro ?? null),
     tipoServicio: null,
+    estadoRegistrado: null,
     issues: [],
   };
 }

@@ -55,12 +55,20 @@
 // continua (requisito duro de B5.1: "nunca repetir el header, rompe la
 // extracción del parser de subida").
 
-import type { TipoEstado } from '@/utils/calculosHato';
+import { etiquetaEstadoReproductivo, type EstadoReproductivo, type TipoEstado } from '@/utils/calculosHato';
 
-/** Las 12 columnas del template (13 históricas menos `TP`), en orden, con
- * las abreviaturas desarrolladas (decisión del dueño). Única fuente de
- * verdad del header -- tanto el armado del AOA como los tests la reutilizan,
- * nunca se repite el arreglo literal en dos sitios. */
+/** Las 13 columnas del template (13 históricas menos `TP`, más "Estado
+ * registrado" de B5.4 -- D-E, docs/plan_hato_telegram_estados_agosto_2026.md
+ * N21-N22), en orden, con las abreviaturas desarrolladas (decisión del
+ * dueño). Única fuente de verdad del header -- tanto el armado del AOA como
+ * los tests la reutilizan, nunca se repite el arreglo literal en dos sitios.
+ *
+ * "Estado registrado" va ANTES de "Estado" a propósito: primero lo que el
+ * sistema cree (referencia, gris), después la columna donde Martha lo
+ * verifica (ok/rech/nota). Es el mecanismo de sincronía de D-E -- la monta
+ * que Fernando registró por Telegram en agosto llega impresa al papel de la
+ * vet en agosto, para que lo confirme o lo corrija en vez de transcribirlo
+ * de memoria. */
 export const ENCABEZADOS_PLANILLA_CHEQUEO = [
   '#',
   'Nombre',
@@ -70,6 +78,7 @@ export const ENCABEZADOS_PLANILLA_CHEQUEO = [
   'Sexo cría',
   'Fecha Servicio',
   'Toro',
+  'Estado registrado',
   'Estado',
   'Secar',
   'Parto Probable',
@@ -100,6 +109,15 @@ export interface FilaPlanillaChequeo {
   sexoCria: string | null;
   fechaServicio: string | null;
   toro: string | null;
+  /** "Estado registrado" (D-E, B5.4): la etiqueta de `EstadoReproductivo`
+   * que el sistema creía cierta al exportar (`textoCeldaEstadoRegistrado`),
+   * gris/de solo referencia -- Martha nunca escribe acá, `estado` (la
+   * columna de al lado) es su verificación. OPCIONAL: el B5.2
+   * record-keeping (`ChequeoDetalle.tsx`, un chequeo YA CARGADO) no la trae
+   * -- esa columna no existía cuando ese chequeo se capturó, así que su
+   * ausencia en el objeto se traduce a celda vacía igual que `null`, nunca
+   * a un valor inventado retroactivamente. */
+  estadoRegistrado?: string | null;
   estado: string | null;
   /** Referencia de solo-lectura calculada por la app -- el parser de
    * subida JAMÁS la lee de vuelta (Secar/PP siempre se RE-DERIVAN desde
@@ -124,6 +142,7 @@ function filaAOA(fila: FilaPlanillaChequeo): CeldaAOA[] {
     fila.sexoCria,
     fila.fechaServicio,
     fila.toro,
+    fila.estadoRegistrado ?? null,
     fila.estado,
     fila.secar,
     fila.partoProbable,
@@ -231,12 +250,38 @@ export function textoCeldaEstado(tipo: TipoEstado | null | undefined): string | 
   return null;
 }
 
-/** Anchos de columna (`!cols`, caracteres) -- angostos a propósito: 12
+/**
+ * Texto de la celda "Estado registrado" (D-E, B5.4) -- la etiqueta de
+ * `EstadoReproductivo` (`etiquetaEstadoReproductivo`, calculosHato.ts), la
+ * MISMA que ve el resto de la app (`chipEstadoReproductivo`, `hatoUi.ts`).
+ *
+ * A diferencia de `textoCeldaToro`/`textoCeldaEstado` (que escriben códigos
+ * CRUDOS re-parseables porque esas dos columnas son DILIGENCIADAS), esta
+ * columna es de solo REFERENCIA -- nadie la vuelve a escribir a mano, así que
+ * no hay razón para que el `.xlsx` y el PDF muestren textos distintos como sí
+ * ocurre con `Sexo cría` (ver `exportarPlanillaChequeoPDF.ts`). El diff
+ * (`importHato/diffChequeo.ts`, N23) compara esta MISMA etiqueta -- impresa
+ * vs. recalculada al momento de aprobar -- para marcar el conflicto explícito
+ * que pide D-E.
+ *
+ * `null` -> celda vacía, nunca un texto inventado: sin `EstadoReproductivo`
+ * conocido (la fila no tiene animal resuelto, p. ej. B5.2 de un chequeo
+ * histórico que no guardó este dato) no hay nada que imprimir.
+ */
+export function textoCeldaEstadoRegistrado(estado: EstadoReproductivo | null | undefined): string | null {
+  if (!estado) return null;
+  return etiquetaEstadoReproductivo(estado);
+}
+
+/** Anchos de columna (`!cols`, caracteres) -- angostos a propósito: las 13
  * columnas deben caber en el ANCHO de una página impresa tamaño carta/oficio
  * en orientación horizontal sin que Excel corte la tabla por la mitad al
  * paginar (ver nota de `construirLibroPlanillaChequeo` sobre las
- * limitaciones reales de paginación de esta librería). */
-const ANCHOS_COLUMNAS_PLANILLA: readonly number[] = [6, 20, 6, 8, 11, 12, 13, 14, 9, 11, 13, 18];
+ * limitaciones reales de paginación de esta librería). El .xlsx es el
+ * artefacto de MÁQUINA (nunca se imprime tal cual -- para eso está el PDF),
+ * así que este ancho es cosmético para quien lo abra en Excel, no un
+ * presupuesto físico como el de `exportarPlanillaChequeoPDF.ts`. */
+const ANCHOS_COLUMNAS_PLANILLA: readonly number[] = [6, 20, 6, 8, 11, 12, 13, 14, 16, 9, 11, 13, 18];
 
 export type XLSXModule = typeof import('xlsx');
 

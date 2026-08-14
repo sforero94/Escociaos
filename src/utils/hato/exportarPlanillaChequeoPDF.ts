@@ -124,46 +124,49 @@ function textoDestino(destino: CriaDestino | null, numeroCria: number | null): s
  * re-parseable, y esta etiqueta NO lo es (ni tiene que serlo, el PDF nunca se
  * vuelve a leer con un parser).
  *
- * Tabla de decisión (sexo y destino son ejes INDEPENDIENTES -- se conoce uno,
- * el otro, ambos o ninguno):
+ * **SÓLO EL SEXO desde el 2026-08-14, por decisión del dueño** viendo la
+ * planilla impresa: *"reduce sexo cría a la mitad, sólo necesitamos que quepa
+ * Macho/Hembra o M/H"*. Antes la etiqueta combinaba sexo + destino + chapeta
+ * de la cría (`H retenida #206`), y eso la volvía la columna más ancha de la
+ * planilla -- más que `Nombre`. No era un caso raro: contra producción
+ * (2026-08-14), de las 35 vacas activas con parto, ~15 daban `H retenida
+ * #NNN` y ~15 `M vendido`.
  *
- * | sexo | destino | etiqueta |
+ * **Lo que se deja de imprimir EN EL PAPEL**: el destino (`retenida`,
+ * `vendido`, `murió`) y la chapeta de la cría. No se pierde el dato: el
+ * `.xlsx` sigue emitiendo `sx_raw` verbatim (es re-parseable, esta etiqueta
+ * nunca lo fue) y `hato_eventos` conserva `cria_destino` intacto. Es una
+ * decisión de qué cabe en una hoja, no de qué se guarda.
+ *
+ * Tabla de decisión:
+ *
+ * | sexo | otros hechos | etiqueta |
  * |---|---|---|
- * | Macho | vendido | `M vendido` |
- * | Hembra | retenida + chapeta | `H retenida #206` |
- * | Hembra | vendida | `H vendida` |
- * | Hembra | murió | `H murió` |
- * | Macho/Hembra | — | `Macho` / `Hembra` (sin destino que lo acompañe, la
- * |   |   | inicial sola sería críptica: aquí sí va la palabra completa) |
- * | — | murió | `Cría murió` (es el caso real: `cria_destino='muerta'` NO
- * |   |   | determina el sexo, viene tanto de `A+` como de `O+`) |
- * | — | retenida/vendida | `Cría retenida #206` / `Cría vendida` |
- * | — | (SX = `gem+`) | `Parto gemelar` (la planilla no dice el sexo de cada
- * |   |   | gemelo, así que no hay sexo que imprimir -- pero el hecho sí es
- * |   |   | dato y perderlo sería descartar en silencio) |
+ * | Macho / Hembra | (da igual el destino) | `Macho` / `Hembra` |
+ * | — | SX = `gem+` | `Gemelar` |
+ * | — | destino = murió | `Murió` |
+ * | — | destino conocido | `Cría` (hubo cría; el sexo no se sabe) |
  * | — | — | `null` -> **celda vacía** |
  *
- * REGLA DURA: sin sexo Y sin destino la celda va VACÍA. Nunca "N/D", nunca
- * "—" dentro del texto, nunca un valor por defecto -- mismo contrato de "sin
+ * Las tres filas sin sexo NO se borran junto con el destino: son los casos en
+ * que hubo un hecho real y la celda vacía mentiría diciendo "no hay dato".
+ * Van en una sola palabra corta para no volver a ensanchar la columna.
+ *
+ * REGLA DURA, sin cambios: sin sexo Y sin ningún hecho, la celda va VACÍA.
+ * Nunca "N/D", nunca "—", nunca un valor por defecto -- mismo contrato de "sin
  * dato, nunca 0" del resto del módulo.
  */
 export function etiquetaSexoCria(input: InputEtiquetaSexoCria): string | null {
   const sx = input.sexoCriaRaw ? parseSX(input.sexoCriaRaw) : null;
-  const numeroCria = sx?.numeroCria ?? null;
 
   const sexo = textoSexo(input.sexoCria);
-  const destino = textoDestino(input.criaDestino, numeroCria);
+  const destino = textoDestino(input.criaDestino, null);
 
-  // Sin paréntesis: con el sexo abreviado a inicial, `H retenida #206` se lee
-  // igual de claro que `Hembra (retenida #206)` y ahorra dos caracteres más.
-  if (sexo && destino) return `${sexo} ${destino}`;
   if (sexo) return sexo === 'M' ? 'Macho' : 'Hembra';
-  if (destino === 'murió') return 'Cría murió';
-  if (destino) return `Cría ${destino}`;
-  // Parto gemelar: no hay sexo (son dos crías) ni destino registrado, pero el
-  // código SX sí dice que fue gemelar -- dato real, leído por el único parser
-  // de SX del repo.
-  if (sx?.tipo === 'gemelar') return 'Parto gemelar';
+  // Sin sexo. El hecho igual es real y la celda vacía diría "no hay dato".
+  if (sx?.tipo === 'gemelar') return 'Gemelar';
+  if (destino === 'murió') return 'Murió';
+  if (destino) return 'Cría';
   return null;
 }
 
@@ -251,7 +254,7 @@ export function hayNumerosProvisionales(filas: readonly FilaPlanillaChequeo[]): 
 
 export function construirFilasPlanillaPDF(filas: readonly FilaPlanillaChequeo[]): string[][] {
   return filas.map((f) => {
-    const celdas: (string | number | null)[] = [
+    const celdas: (string | number | null | undefined)[] = [
       textoCeldaNumero(f.numero),
       f.nombre,
       f.pl,
@@ -260,6 +263,7 @@ export function construirFilasPlanillaPDF(filas: readonly FilaPlanillaChequeo[])
       f.sexoCria,
       f.fechaServicio,
       f.toro,
+      f.estadoRegistrado,
       f.estado,
       f.secar,
       f.partoProbable,
@@ -275,48 +279,58 @@ export function construirFilasPlanillaPDF(filas: readonly FilaPlanillaChequeo[])
 
 /**
  * Anchos de columna en MILÍMETROS. Presupuesto real de carta HORIZONTAL:
- * 279,4mm de ancho − 10mm de margen a cada lado = **259,4mm útiles**. La suma
- * de abajo es 254,5mm, con holgura deliberada para que un redondeo de jsPDF
- * nunca empuje la tabla fuera de la página (hay un test que fija el techo).
+ * 279,4mm de ancho − 8mm de margen a cada lado = **263,4mm útiles**. El
+ * margen bajó de 10 a 8mm en D-E/N22 (docs/plan_hato_telegram_estados_agosto_2026.md)
+ * para financiar la columna 13 ("Estado registrado") sin comerse la del
+ * resto -- 8mm sigue siendo un margen imprimible normal en cualquier
+ * impresora de oficina.
  *
  * El reparto NO es uniforme y no se eligió a ojo: cada ancho se midió con
- * `doc.getTextWidth` contra el contenido REAL más largo de esa columna a
- * 11pt, más 3mm de padding horizontal, para que **ninguna celda se envuelva a
- * dos líneas** (una tabla de altos uniformes es más fácil de leer, de escribir
- * y de anclar para el OCR de la Fase 3):
- * - Fechas (`Última Cría`, `Fecha Servicio`, `Secar`, `Parto Probable`):
- *   `22/12/2026` mide 19,25mm -> 22,5mm de columna.
- * - `Nombre`: `BRILLANTINA` (el nombre más largo del hato) mide 24,87mm -> 28mm.
- * - `Toro`: `Ins Holstein` (raza-como-nombre-de-toro, el caso más largo) mide
- *   20,18mm -> 24mm.
- * - `Sexo cría` lleva una FRASE, no un dato corto: `H retenida #206` (el caso
- *   real más largo) mide 27,40mm -> 31mm de columna.
- * - `Tratamiento` es la columna donde Martha MÁS escribe y por eso recibe el
- *   ancho liberado por la etiqueta compacta: 37mm. El reparto no se eligió a
- *   ojo sino midiendo el histórico de `hato_chequeo_vacas` (2026-07-29): SX
- *   promedia 3 caracteres escritos a mano y `TTTO` promedia 12 con máximos de
- *   54. La versión anterior asignaba 44mm a SX y 21mm a TTTO -- exactamente al
- *   revés de la necesidad real. Ver la nota de `textoSexo`.
- * - Las de referencia pura (`#`, `# Partos`) llevan lo justo para su contenido
- *   conocido: nadie escribe ahí.
+ * `doc.getTextWidth` contra el contenido REAL más largo de esa columna a 9pt
+ * (datos) O la palabra más larga del encabezado a 8pt bold (lo que sea mayor),
+ * más 3,4mm de padding real (`cellPadding` 1,5+1,5 y el borde). Un encabezado
+ * de dos palabras SÍ puede partirse entre palabras ("Fecha" / "Servicio"),
+ * pero ninguna palabra individual se parte a la mitad.
  *
- * El total queda en 257,5mm de los 259,4 útiles: 1,9mm de holgura. Cualquier
- * columna nueva o más ancha exige quitar de otra, ir a oficio, o aceptar una
- * 3ª página -- no hay margen escondido.
+ * **Rehecho el 2026-08-14, después de ver la planilla impresa.** El reparto
+ * anterior tenía tres defectos que sólo se ven en el papel:
+ * - `Tratamiento`, la columna donde Martha MÁS escribe, había bajado a 22,5mm
+ *   para financiar la columna 13. Vuelve a 36mm -- por encima incluso de los
+ *   35mm que tenía antes de que existiera "Estado registrado".
+ * - `Sexo cría` tenía 30,6mm, más que `Nombre`. Baja a **14,5mm** (-53%)
+ *   porque el dueño acotó su CONTENIDO el 2026-08-14: ya no imprime destino
+ *   ni chapeta de la cría, sólo el sexo. El piso ya no lo pone `H retenida
+ *   #206` (25,42mm) sino `Gemelar` (14,21mm), la más larga de las etiquetas
+ *   que quedan. Ver la nota de `etiquetaSexoCria`.
+ * - `Nombre` (28mm) y `Toro` (23,4mm) NO alcanzaban a 11pt: `BRILLANTINA`, el
+ *   nombre más largo del hato real, se partía por 0,3mm, y `Ternero Holstein`
+ *   se partía siempre. A 9pt miden 20,4 y 22,9mm y ahora caben enteros.
+ *
+ * `Estado` sube de 13,7 a 18mm por la misma razón que `Tratamiento`: es de las
+ * que se escriben a mano. Las de referencia pura (`#`, las 4 de fecha,
+ * `Estado registrado`) llevan lo justo para su contenido conocido.
+ *
+ * El total queda en 256mm de los 259,4 útiles (márgenes de vuelta en 10mm, no
+ * en los 8mm de emergencia): **3,4mm de holgura**. Los 11mm que liberó
+ * `Sexo cría` fueron completos a las dos columnas que se escriben a mano
+ * (`Tratamiento` 36 -> 44, `Estado` 18 -> 20), que es de donde habían salido.
+ * Cualquier columna nueva exige quitar de otra, bajar más la letra o aceptar
+ * una página más.
  */
 export const ANCHOS_COLUMNAS_PDF_MM: readonly number[] = [
-  12, // # (cabe `999*`: la marca de provisional suma un carácter)
-  28, // Nombre
-  10, // PL
-  13.5, // # Partos
-  22.5, // Última Cría
-  31, // Sexo cría
-  22.5, // Fecha Servicio
-  24, // Toro
-  14, // Estado
-  22.5, // Secar
-  22.5, // Parto Probable
-  35, // Tratamiento
+  10, // # (cabe `999*`: la marca de provisional suma un carácter)
+  24, // Nombre (BRILLANTINA, el más largo del hato, mide 20,4mm a 9pt)
+  7, // PL
+  12, // # Partos
+  19.5, // Última Cría
+  14.5, // Sexo cría -- sólo el sexo (D-2026-08-14); el piso lo pone `Gemelar`
+  19.5, // Fecha Servicio
+  26.5, // Toro ("Ternero Holstein", 22,9mm a 9pt: deja de partirse)
+  20, // Estado registrado
+  20, // Estado -- SE ESCRIBE A MANO
+  19.5, // Secar
+  19.5, // Parto Probable
+  44, // Tratamiento -- SE ESCRIBE A MANO, la que más (histórico: máx. 54 caracteres)
 ];
 
 /** Ancho total de la tabla = suma exacta de los anchos de columna. Se le pasa
@@ -330,17 +344,35 @@ export const ANCHO_TABLA_PDF_MM = ANCHOS_COLUMNAS_PDF_MM.reduce((a, b) => a + b,
 
 /** Márgenes de la página, en mm. `top` reserva la banda del título, que se
  * redibuja en CADA página (ver `dibujarEncabezadoPagina`); `bottom` reserva la
- * banda del pie (nota operativa + "Página i de N"). */
+ * banda del pie (nota operativa + "Página i de N"). `right`/`left` bajaron de
+ * 10 a 8mm en D-E/N22 para financiar la columna 13 ("Estado registrado") --
+ * ver la nota de `ANCHOS_COLUMNAS_PDF_MM`. */
 export const MARGENES_PDF_MM = { top: 20, right: 10, bottom: 12, left: 10 } as const;
 
 /** Ancho útil de una hoja carta horizontal con estos márgenes. Constante
  * explícita para que el test de presupuesto de ancho no repita la aritmética. */
 export const ANCHO_UTIL_CARTA_HORIZONTAL_MM = 279.4 - MARGENES_PDF_MM.left - MARGENES_PDF_MM.right;
 
-/** Tamaño de letra de las celdas de DATOS. Requisito duro del dueño (plan §6
- * y §8.3): **≥11pt** es lo que hace legible la planilla en papel. Si el
- * layout no cupiera, la salida son más páginas -- NUNCA letra más chica. */
-export const FUENTE_DATOS_PT = 11;
+/** Tamaño de letra de las celdas de DATOS.
+ *
+ * **Historia de esta constante, porque cambió una regla del dueño.** Valía 11pt
+ * por un requisito suyo explícito ("≥11pt es lo que hace legible la planilla en
+ * papel; si el layout no cupiera, la salida son más páginas, NUNCA letra más
+ * chica"). El dueño la REVOCÓ el 2026-08-14 viendo la planilla de 13 columnas
+ * ya renderizada: *"el texto está muy grande, se puede condensar para abrir
+ * espacio"*.
+ *
+ * No fue una preferencia estética: a 11pt la planilla estaba **sobre-suscrita**.
+ * El mínimo medido con `getTextWidth` era 261,4mm contra 259,4mm útiles, y eso
+ * se pagaba encogiendo `Tratamiento` (donde Martha más escribe) y partiendo en
+ * dos líneas tanto `Ternero Holstein` como `BRILLANTINA` -- el nombre más largo
+ * del hato real, que no cabía por 0,3mm. A 9pt el mínimo baja a 218mm, y esos
+ * ~41mm liberados son los que financian las dos columnas manuscritas y
+ * devuelven los márgenes a 10mm.
+ *
+ * Si vuelve a subir, hay que rehacer el reparto: a 11pt NO cabe con 13
+ * columnas. */
+export const FUENTE_DATOS_PT = 9;
 
 /** El encabezado va más pequeño que los datos, y es una decisión de
  * presupuesto, no un descuido: el requisito de ≥11pt es sobre las CELDAS DE
@@ -348,10 +380,13 @@ export const FUENTE_DATOS_PT = 11;
  * impreso, fijo y en negrilla, y bajarlo a 9pt es lo que permite que
  * `Tratamiento` (17,85mm a 9pt bold) y `# Partos` quepan en su columna sin
  * partir la palabra a mitad. A 10pt no caben. */
-export const FUENTE_ENCABEZADO_PT = 9;
+export const FUENTE_ENCABEZADO_PT = 8;
 
 /** Alto mínimo de fila en mm -- espacio real para escribir a mano DENTRO del
- * recuadro (una línea de 11pt ocupa ~3,9mm, así que quedan ~5mm libres). */
+ * recuadro. Se mantiene en 9mm aunque la letra bajara a 9pt: el alto no es
+ * cuestión de que quepa el texto impreso, sino de que quepa la MANO de Martha.
+ * Al ocupar la línea ~3,2mm en vez de ~3,9mm, la baja de fuente además dejó
+ * MÁS espacio libre para escribir, no menos. */
 export const ALTO_MINIMO_FILA_MM = 9;
 
 const COLOR_PRIMARIO: [number, number, number] = [115, 153, 28]; // #73991C

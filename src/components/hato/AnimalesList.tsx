@@ -39,7 +39,14 @@ import { CrearAnimalDialog } from './components/CrearAnimalDialog';
 import { MarcarCicloDialog } from './components/MarcarCicloDialog';
 import { useHatoAnimales, type AnimalHatoDerivado } from './hooks/useHatoAnimales';
 import { usePesajesYPartos } from './hooks/usePesajesYPartos';
-import { chipEstadoReproductivo, chipProximaAReemplazo, chipNumeroProvisional, chipSubetapaTernera } from '@/utils/hatoUi';
+import {
+  chipEstadoReproductivo,
+  chipProximaAReemplazo,
+  chipNumeroProvisional,
+  chipSubetapaTernera,
+  chipSenalRevision,
+} from '@/utils/hatoUi';
+import { formatearEdadHato, proximoEventoHato } from '@/utils/hato/listaHato';
 import { LABEL_CATEGORIA_HATO, type CategoriaHato } from '@/utils/hatoCategorias';
 import {
   ordenarAnimalesHato,
@@ -59,14 +66,31 @@ function produccionTexto(animal: AnimalHatoDerivado, rendimientoPorAnimal: Map<s
   return actual != null ? `${formatNumber(actual, 1)} L/día` : '—';
 }
 
-function proximoEvento(animal: AnimalHatoDerivado): string {
-  if (animal.derivado.fecha_probable_parto) {
-    return `Parto: ${formatShortDate(animal.derivado.fecha_probable_parto)}`;
+/** Celda "Próximo evento". La ELECCIÓN del hito vive en
+ * `proximoEventoHato` (puro, testeado); acá solo se pinta. La versión
+ * anterior de esta función prefería SIEMPRE el parto sobre el secado, así
+ * que una vaca con secado en septiembre y parto en noviembre anunciaba
+ * noviembre -- el hito más lejano, y justamente el que no requiere acción
+ * todavía. */
+/** Señal de revisión de la fila (D-D): aborto o evento sin clasificar. El
+ * motor ya decidió si hay algo que revisar; acá solo se colorea. */
+function senalDeRevision(animal: AnimalHatoDerivado) {
+  return chipSenalRevision(animal.derivado.senal_revision);
+}
+
+function CeldaProximoEvento({ animal, hoy }: { animal: AnimalHatoDerivado; hoy: string }) {
+  const proximo = proximoEventoHato({ derivado: animal.derivado }, hoy);
+  if (!proximo) return <span className="text-gray-400">—</span>;
+  if (!proximo.fecha) {
+    // Rechequeo / servir: el sistema no tiene fecha objetivo para estos y no
+    // se la inventa. Se nombra el hito y nada más.
+    return <span>{proximo.etiqueta}</span>;
   }
-  if (animal.derivado.fecha_secar) {
-    return `Secar: ${formatShortDate(animal.derivado.fecha_secar)}`;
-  }
-  return '—';
+  return (
+    <span className={proximo.dias !== null && proximo.dias < 0 ? 'text-red-600' : undefined}>
+      {proximo.etiqueta}: {formatShortDate(proximo.fecha)}
+    </span>
+  );
 }
 
 function CabeceraOrdenable({
@@ -127,7 +151,15 @@ function TablaAnimales({
     );
   };
 
-  const animalesOrdenados = useMemo(() => ordenarAnimalesHato(animales, orden.columna, orden.direccion), [animales, orden]);
+  // Un solo "hoy" para toda la tabla: si cada celda llamara a
+  // `obtenerFechaHoy()` por su cuenta, una tabla renderizada a las 23:59:59
+  // podría mezclar dos días. Hora LOCAL, nunca UTC (ver CLAUDE.md).
+  const hoy = useMemo(() => obtenerFechaHoy(), []);
+
+  const animalesOrdenados = useMemo(
+    () => ordenarAnimalesHato(animales, orden.columna, orden.direccion, hoy),
+    [animales, orden, hoy],
+  );
 
   if (animales.length === 0) {
     return (
@@ -145,8 +177,11 @@ function TablaAnimales({
             <tr>
               <CabeceraOrdenable label="N.º" columna="numero" ordenActual={orden} onOrdenar={handleOrdenar} />
               <CabeceraOrdenable label="Nombre" columna="nombre" ordenActual={orden} onOrdenar={handleOrdenar} />
+              <CabeceraOrdenable label="Edad" columna="edad" ordenActual={orden} onOrdenar={handleOrdenar} align="right" />
+              <CabeceraOrdenable label="Partos" columna="partos" ordenActual={orden} onOrdenar={handleOrdenar} align="right" />
               <CabeceraOrdenable label="Estado" columna="estado" ordenActual={orden} onOrdenar={handleOrdenar} />
-              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Último parto</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Señal</th>
+              <CabeceraOrdenable label="Última cría" columna="ultimaCria" ordenActual={orden} onOrdenar={handleOrdenar} />
               <CabeceraOrdenable label="Próximo evento" columna="proximo" ordenActual={orden} onOrdenar={handleOrdenar} />
               <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Raza</th>
               <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide text-gray-500 whitespace-nowrap">Producción</th>
@@ -173,6 +208,10 @@ function TablaAnimales({
                     {animal.nombre ?? '—'}
                   </Link>
                 </td>
+                <td className="px-3 py-1.5 whitespace-nowrap text-right text-gray-600">
+                  {formatearEdadHato(animal.fechaNacimiento, hoy)}
+                </td>
+                <td className="px-3 py-1.5 whitespace-nowrap text-right text-gray-600">{animal.numPartos}</td>
                 <td className="px-3 py-1.5 whitespace-nowrap">
                   <div className="flex flex-wrap items-center gap-1">
                     <EstadoChip chip={chipEstadoReproductivo(animal.derivado.estado)} />
@@ -183,10 +222,19 @@ function TablaAnimales({
                     {animal.derivado.proxima_a_reemplazo && <EstadoChip chip={chipProximaAReemplazo()} />}
                   </div>
                 </td>
+                <td className="px-3 py-1.5 whitespace-nowrap">
+                  {senalDeRevision(animal) ? (
+                    <EstadoChip chip={senalDeRevision(animal)!} />
+                  ) : (
+                    <span className="text-gray-300">—</span>
+                  )}
+                </td>
                 <td className="px-3 py-1.5 whitespace-nowrap text-gray-600">
                   {animal.ultimoPartoFecha ? formatShortDate(animal.ultimoPartoFecha) : '—'}
                 </td>
-                <td className="px-3 py-1.5 whitespace-nowrap text-gray-600">{proximoEvento(animal)}</td>
+                <td className="px-3 py-1.5 whitespace-nowrap text-gray-600">
+                  <CeldaProximoEvento animal={animal} hoy={hoy} />
+                </td>
                 <td className="px-3 py-1.5 whitespace-nowrap text-gray-600">{animal.raza ?? '—'}</td>
                 <td className="px-3 py-1.5 text-right whitespace-nowrap">
                   {produccionTexto(animal, rendimientoPorAnimal)}

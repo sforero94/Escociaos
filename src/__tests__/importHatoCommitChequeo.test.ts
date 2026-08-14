@@ -14,6 +14,7 @@ import {
   construirPayloadCommit,
   seleccionarUltimaCriaAnteriorPorAnimal,
   seleccionarFechasServicioConocidasPorAnimal,
+  fusionarEventosManualesEnDedupe,
   type FilaChequeoAprobada,
   type FilaUltimaCriaHistorico,
 } from '@/utils/importHato/commitChequeo';
@@ -42,6 +43,7 @@ function filaBase(overrides: Partial<FilaChequeoNormalizada> = {}): FilaChequeoN
       sx: null,
       fechaServicio: '23/04/2026',
       toro: 'ins laredo',
+      estadoRegistrado: null,
       tp: null,
       estado: 'ok',
       secar: null,
@@ -57,6 +59,7 @@ function filaBase(overrides: Partial<FilaChequeoNormalizada> = {}): FilaChequeoN
     fechaProbableParto: '2027-01-23',
     toroNombre: 'ins laredo',
     tipoServicio: 'inseminacion',
+    estadoRegistrado: null,
     issues: [],
     ...overrides,
   };
@@ -183,7 +186,7 @@ describe('construirFilasVacas', () => {
     const fila = filaBase({
       raw: {
         pl: '16', np: '2', ultimaCria: '01/2025', sx: 'A210', fechaServicio: '23/04/2026',
-        toro: 'ins laredo', tp: '#VALUE!', estado: 'ok', secar: null, pp: null, ttto: 'penicilina',
+        toro: 'ins laredo', estadoRegistrado: null, tp: '#VALUE!', estado: 'ok', secar: null, pp: null, ttto: 'penicilina',
       },
     });
     const aprobadas: FilaChequeoAprobada[] = [{ fila, animalId: 'animal-1' }];
@@ -205,7 +208,7 @@ describe('construirFilasVacas', () => {
 
   it('#VALUE!/celdas vacías se preservan en la capa cruda y la normalizada queda null -- la fila nunca se descarta', () => {
     const fila = filaBase({
-      raw: { pl: '#VALUE!', np: null, ultimaCria: null, sx: null, fechaServicio: null, toro: null, tp: null, estado: null, secar: null, pp: null, ttto: null },
+      raw: { pl: '#VALUE!', np: null, ultimaCria: null, sx: null, fechaServicio: null, toro: null, estadoRegistrado: null, tp: null, estado: null, secar: null, pp: null, ttto: null },
       pl: null,
       numPartos: null,
       fechasServicio: [],
@@ -605,5 +608,97 @@ describe('construirPayloadCommit', () => {
     const payload2 = construirPayloadCommit({ fecha: '2026-07-09', veterinario: 'Dr. X' }, vacas, eventos, toroMapa);
     expect(payload1).toEqual(payload2);
     expect(JSON.stringify(payload1)).toEqual(JSON.stringify(payload2));
+  });
+});
+
+// ============================================================================
+// fusionarEventosManualesEnDedupe (N10) -- lo que impide que el chequeo
+// duplique lo que Fernando ya registró por Telegram.
+// ============================================================================
+
+describe('fusionarEventosManualesEnDedupe', () => {
+  it('una monta registrada por Telegram entra al set de fechas conocidas', () => {
+    // El caso literal de la visita de campo: Fernando monta el 10 de agosto,
+    // la veterinaria chequea el 20 y su planilla trae esa misma F Servicio.
+    const { fechasServicioPorAnimal } = fusionarEventosManualesEnDedupe(
+      new Map(),
+      new Map(),
+      [{ animalId: 'a1', tipo: 'servicio', fecha: '2026-08-10' }],
+      '2026-08-20',
+    );
+    expect(fechasServicioPorAnimal.get('a1')).toEqual(new Set(['2026-08-10']));
+  });
+
+  it('conserva las fechas que ya venían de chequeos anteriores', () => {
+    const { fechasServicioPorAnimal } = fusionarEventosManualesEnDedupe(
+      new Map([['a1', new Set(['2026-05-02'])]]),
+      new Map(),
+      [{ animalId: 'a1', tipo: 'servicio', fecha: '2026-08-10' }],
+      '2026-08-20',
+    );
+    expect(fechasServicioPorAnimal.get('a1')).toEqual(new Set(['2026-05-02', '2026-08-10']));
+  });
+
+  it('ignora lo registrado el mismo día del chequeo o después', () => {
+    // No es "lo ya conocido", es otro hecho -- mismo criterio estricto que
+    // los dos selectores que se alimentan de hato_chequeo_vacas.
+    const { fechasServicioPorAnimal } = fusionarEventosManualesEnDedupe(
+      new Map(),
+      new Map(),
+      [
+        { animalId: 'a1', tipo: 'servicio', fecha: '2026-08-20' },
+        { animalId: 'a1', tipo: 'servicio', fecha: '2026-08-25' },
+      ],
+      '2026-08-20',
+    );
+    expect(fechasServicioPorAnimal.has('a1')).toBe(false);
+  });
+
+  it('un parto manual reemplaza la última cría cuando es más reciente', () => {
+    const { ultimaCriaAnteriorPorAnimal } = fusionarEventosManualesEnDedupe(
+      new Map(),
+      new Map([['a1', '2026-01-15']]),
+      [{ animalId: 'a1', tipo: 'parto', fecha: '2026-07-30' }],
+      '2026-08-20',
+    );
+    expect(ultimaCriaAnteriorPorAnimal.get('a1')).toBe('2026-07-30');
+  });
+
+  it('un parto manual MÁS VIEJO no pisa la última cría del chequeo anterior', () => {
+    const { ultimaCriaAnteriorPorAnimal } = fusionarEventosManualesEnDedupe(
+      new Map(),
+      new Map([['a1', '2026-07-30']]),
+      [{ animalId: 'a1', tipo: 'parto', fecha: '2026-01-15' }],
+      '2026-08-20',
+    );
+    expect(ultimaCriaAnteriorPorAnimal.get('a1')).toBe('2026-07-30');
+  });
+
+  it('un parto manual llena el hueco cuando el chequeo anterior no pudo parsear la Última Cría', () => {
+    // `seleccionarUltimaCriaAnteriorPorAnimal` deja `null` cuando la celda
+    // cruda es ininterpretable; el evento manual sí tiene fecha real.
+    const { ultimaCriaAnteriorPorAnimal } = fusionarEventosManualesEnDedupe(
+      new Map(),
+      new Map([['a1', null]]),
+      [{ animalId: 'a1', tipo: 'parto', fecha: '2026-07-30' }],
+      '2026-08-20',
+    );
+    expect(ultimaCriaAnteriorPorAnimal.get('a1')).toBe('2026-07-30');
+  });
+
+  it('es puro: no muta los mapas que recibe', () => {
+    const servicios = new Map([['a1', new Set(['2026-05-02'])]]);
+    const crias = new Map<string, string | null>([['a1', '2026-01-15']]);
+    fusionarEventosManualesEnDedupe(
+      servicios,
+      crias,
+      [
+        { animalId: 'a1', tipo: 'servicio', fecha: '2026-08-10' },
+        { animalId: 'a1', tipo: 'parto', fecha: '2026-07-30' },
+      ],
+      '2026-08-20',
+    );
+    expect(servicios.get('a1')).toEqual(new Set(['2026-05-02']));
+    expect(crias.get('a1')).toBe('2026-01-15');
   });
 });

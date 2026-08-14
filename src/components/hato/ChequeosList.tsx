@@ -51,6 +51,7 @@ import {
   isoATextoDDMMYYYY,
   textoCeldaToro,
   textoCeldaEstado,
+  textoCeldaEstadoRegistrado,
   type FilaPlanillaChequeo,
 } from '@/utils/hato/exportarPlanillaChequeo';
 import {
@@ -95,6 +96,11 @@ function filaPlanillaPrellenada(animal: AnimalParaPlanillaChequeo): FilaPlanilla
     sexoCria: animal.sexoCriaRaw,
     fechaServicio: isoATextoDDMMYYYY(animal.ultimoServicioFecha),
     toro: textoCeldaToro(animal.toroNombre, animal.tipoServicio),
+    // "Estado registrado" (D-E, N22): lo que el motor de 5 estados cree HOY
+    // -- misma etiqueta en el `.xlsx` y en el PDF (a diferencia de `Sexo
+    // cría`, no hay un código crudo distinto que preservar: nadie escribe
+    // encima de esta columna).
+    estadoRegistrado: textoCeldaEstadoRegistrado(animal.estadoReproductivo),
     estado: textoCeldaEstado(animal.ultimoEstadoChequeo),
     secar: isoATextoDDMMYYYY(animal.fechaSecar),
     partoProbable: isoATextoDDMMYYYY(animal.fechaProbableParto),

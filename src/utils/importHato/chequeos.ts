@@ -66,6 +66,7 @@ const CRUDO_VACIO: CrudoFilaChequeo = {
   sx: null,
   fechaServicio: null,
   toro: null,
+  estadoRegistrado: null,
   tp: null,
   estado: null,
   secar: null,
@@ -191,6 +192,13 @@ export function procesarHojaChequeo(hoja: HojaCruda, config: HatoConfig): Result
     const toroRes = parseToro(toroCruda, config);
     issues.push(...conCampo('Toro', toroRes.issues));
 
+    // "Estado registrado" (D-E, B5.4): texto de referencia, NUNCA
+    // interpretado -- se conserva verbatim para que el diff lo compare
+    // contra lo que el motor deriva hoy (N23). `null` cuando la hoja no trae
+    // esta columna (toda generación histórica, `colmap.estadoRegistrado ===
+    // null`) o la celda vino vacía.
+    const estadoRegistradoTexto = valorCeldaATexto(celda(filaFisica, colmap.estadoRegistrado));
+
     // D6 (decisión del dueño, 2026-07-22, resolution-report.md §6): un
     // código de ESTADO filtrado a la columna Toro NUNCA es un toro, "sin
     // excepción" -- incluso si la fila SÍ trae una fecha de servicio real.
@@ -256,6 +264,7 @@ export function procesarHojaChequeo(hoja: HojaCruda, config: HatoConfig): Result
       sx: valorCeldaATexto(sxCruda),
       fechaServicio: fechaServicioTexto,
       toro: valorCeldaATexto(toroCruda),
+      estadoRegistrado: estadoRegistradoTexto,
       tp: tpTexto,
       estado: estadoTexto,
       secar: secarTexto,
@@ -282,6 +291,7 @@ export function procesarHojaChequeo(hoja: HojaCruda, config: HatoConfig): Result
       fechaProbableParto,
       toroNombre: toroRes.toroNombre,
       tipoServicio: toroRes.tipoServicio,
+      estadoRegistrado: estadoRegistradoTexto,
       issues,
     });
   }

@@ -64,6 +64,11 @@ MODULOS = [
     # `ocrChequeo.ts` (import relativo `./ocrChequeo`), por eso va DESPUÉS
     # en esta lista -- orden de dependencia, solo por legibilidad del log.
     'ocrPesaje.ts',
+    # N12 de docs/plan_hato_telegram_estados_agosto_2026.md: corrección en
+    # texto libre del pesaje por foto (decisión D-C), usada por el bot de
+    # Telegram (`hato-pesaje-pipeline.ts`). Importa `resolverNombreEnRosterPesaje`
+    # de `ocrPesaje.ts` (import relativo `./ocrPesaje`), por eso va AL FINAL.
+    'ocrPesajeCorreccion.ts',
 ]
 
 DESTINOS = [

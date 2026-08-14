@@ -189,7 +189,7 @@ export function VacasPorEstadoCard({
           rightColor={HORRO}
         />
         <BarraNominal
-          leftLabel="Preñadas"
+          leftLabel="Confirmadas"
           leftValue={prenadas}
           leftColor={PRENADAS_COLOR}
           rightLabel="Por servir"

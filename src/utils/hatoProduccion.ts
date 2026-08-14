@@ -1161,6 +1161,16 @@ export function reconstruirEstadoAFecha(
         eventosAnimal.filter((e) => e.tipo === 'confirmacion_prenez').map((e) => e.fecha),
       ),
       ultimo_evento_fecha: maxFecha(eventosAnimal.map((e) => e.fecha)),
+      ultimo_aborto_fecha: maxFecha(eventosAnimal.filter((e) => e.tipo === 'aborto').map((e) => e.fecha)),
+      // `EventoHistorico` no carga `datos`, así que el método de la
+      // confirmación no está disponible en este corte histórico. `null` se
+      // lee como PRESUNCIÓN (`estadoDeConfirmacion`, calculosHato.ts), y eso
+      // no altera lo que esta función mide: `servida` y `preñada` caen ambas
+      // en la categoría `hato` (en ordeño) de `clasificarCategoriaHato`, que
+      // es el único consumo de estas filas. Ampliar `EventoHistorico` con
+      // `datos` solo para esto agregaría peso a la consulta sin cambiar
+      // ningún número.
+      ultima_confirmacion_prenez_metodo: null,
       ultimo_estado_chequeo: ultimoChequeo?.estado ?? null,
       presente,
       cobertura,

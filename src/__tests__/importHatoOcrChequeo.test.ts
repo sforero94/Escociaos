@@ -122,6 +122,11 @@ describe('vocabulario de columnas', () => {
       expect(ENCABEZADO_POR_COLUMNA_OCR[col]).toBeTruthy();
     }
   });
+
+  it('"Estado registrado" (D-E, B5.4) es una columna OCR más -- el modelo también transcribe la referencia gris, no solo lo diligenciado', () => {
+    expect(COLUMNAS_OCR).toContain('estado_registrado');
+    expect(ENCABEZADO_POR_COLUMNA_OCR.estado_registrado).toBe('Estado registrado');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -357,6 +362,23 @@ describe('procesarLecturaOcr', () => {
     // El texto dudoso NO se pierde: viaja en la respuesta para que el humano
     // lo vea en la ventana de corrección.
     expect(confirmada.celdas.toro).toEqual({ texto: 'NITRO?', confianza: 'baja' });
+  });
+
+  it('"Estado registrado" (D-E) viaja por la matriz igual que cualquier otra columna de referencia -- llega hasta el diff sin un segundo camino', () => {
+    const lectura = parsearRespuestaModeloOcr(
+      respuestaModelo([
+        {
+          numero_impreso: '101',
+          nombre_impreso: 'ALINA',
+          celdas: celdasJson({ estado_registrado: { texto: 'Servida', confianza: 'alta' } }),
+        },
+      ]),
+      1,
+    );
+
+    const resultado = procesarLecturaOcr([lectura], roster, OPCIONES_HOJA);
+    const idxEstadoRegistrado = ENCABEZADOS_HOJA_OCR.indexOf('Estado registrado');
+    expect(resultado.hoja.filas[2][idxEstadoRegistrado]).toBe('Servida');
   });
 
   it('una fila con ancla que no cuadra se reporta no leída y NO desplaza a las demás', () => {

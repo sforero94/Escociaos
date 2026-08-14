@@ -385,9 +385,23 @@ function aplicarMarcaAFilaHipotetica(
 
   switch (marca) {
     case 'preñada':
-    case 'confirmada':
-      siguiente.ultima_confirmacion_prenez_fecha = fechaMasReciente(fila.ultima_confirmacion_prenez_fecha, fecha);
+    case 'confirmada': {
+      const anterior = fila.ultima_confirmacion_prenez_fecha;
+      siguiente.ultima_confirmacion_prenez_fecha = fechaMasReciente(anterior, fecha);
+      // D-D (2026-08-13): el MÉTODO viaja con la fecha, no aparte. Desde que
+      // `estadoDeConfirmacion` (calculosHato.ts) decide "servida" vs
+      // "preñada" leyendo este campo, proyectar la fecha sin el método haría
+      // que el diálogo prometiera un estado que la marca no produce -- la
+      // marca "confirmada" se vería como "servida" en el "quedará".
+      // Solo se pisa el método cuando la marca es efectivamente la
+      // confirmación más reciente: una marca con fecha anterior a una
+      // confirmación ya registrada no cambia el hecho agregado (igual que
+      // la fecha, y consistente con la advertencia A3).
+      if (!anterior || fecha >= anterior) {
+        siguiente.ultima_confirmacion_prenez_metodo = marca === 'confirmada' ? 'palpacion' : 'presuncion';
+      }
       break;
+    }
     case 'seca':
       siguiente.ultimo_secado_real_fecha = fechaMasReciente(fila.ultimo_secado_real_fecha, fecha);
       break;

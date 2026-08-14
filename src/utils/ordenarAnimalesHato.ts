@@ -19,8 +19,9 @@
 
 import { chipEstadoReproductivo } from './hatoUi';
 import type { AnimalHatoDerivado } from '@/components/hato/hooks/useHatoAnimales';
+import { proximoEventoHato } from '@/utils/hato/listaHato';
 
-export type ColumnaOrdenableAnimales = 'numero' | 'nombre' | 'estado' | 'pl' | 'proximo';
+export type ColumnaOrdenableAnimales = 'numero' | 'nombre' | 'edad' | 'partos' | 'ultimaCria' | 'estado' | 'pl' | 'proximo';
 export type DireccionOrdenAnimales = 'asc' | 'desc';
 
 /** Comparador base compartido: numéricas por valor, texto por
@@ -48,23 +49,42 @@ export function ordenarPorValor<T>(
 /** Fecha objetivo cruda (ISO) del "próximo evento" -- SOLO para ordenar por
  * fecha real, nunca por el texto ya formateado ("Parto: ..."/"Secar:
  * ..."), que mezclaría los dos tipos de evento alfabéticamente en vez de
- * cronológicamente. */
-function proximoEventoFecha(animal: AnimalHatoDerivado): string | null {
-  return animal.derivado.fecha_probable_parto ?? animal.derivado.fecha_secar ?? null;
+ * cronológicamente.
+ *
+ * Sale del MISMO `proximoEventoHato` que pinta la celda (N19): si el orden
+ * usara su propio criterio, la tabla mostraría un hito y ordenaría por otro.
+ * Un hito sin fecha (rechequeo, servir) ordena como ausente -- al final en
+ * ambas direcciones, igual que cualquier otro `null`. */
+function proximoEventoFecha(animal: AnimalHatoDerivado, hoyISO: string): string | null {
+  return proximoEventoHato({ derivado: animal.derivado }, hoyISO)?.fecha ?? null;
 }
 
-const EXTRACTORES: Record<ColumnaOrdenableAnimales, (a: AnimalHatoDerivado) => string | number | null> = {
+const EXTRACTORES: Record<
+  ColumnaOrdenableAnimales,
+  (a: AnimalHatoDerivado, hoyISO: string) => string | number | null
+> = {
   numero: (a) => a.numero,
   nombre: (a) => a.nombre,
+  // Se ordena por FECHA DE NACIMIENTO, no por la edad calculada: son
+  // monótonas inversas la una de la otra, y la fecha no arrastra el
+  // redondeo a un decimal (dos animales nacidos con días de diferencia
+  // empatarían en 3,4 años y se ordenarían por azar). El signo se invierte
+  // para que "asc" signifique lo que el usuario espera al pulsar "Edad":
+  // de la más joven a la más vieja.
+  edad: (a) => (a.fechaNacimiento ? -Date.parse(`${a.fechaNacimiento}T00:00:00Z`) : null),
+  partos: (a) => a.numPartos,
+  ultimaCria: (a) => a.ultimoPartoFecha,
   estado: (a) => chipEstadoReproductivo(a.derivado.estado).label,
   pl: (a) => a.pl,
-  proximo: (a) => proximoEventoFecha(a),
+  proximo: (a, hoyISO) => proximoEventoFecha(a, hoyISO),
 };
 
 export function ordenarAnimalesHato(
   animales: AnimalHatoDerivado[],
   columna: ColumnaOrdenableAnimales,
   direccion: DireccionOrdenAnimales,
+  hoyISO: string,
 ): AnimalHatoDerivado[] {
-  return ordenarPorValor(animales, EXTRACTORES[columna], direccion);
+  const extractor = EXTRACTORES[columna];
+  return ordenarPorValor(animales, (a) => extractor(a, hoyISO), direccion);
 }

@@ -20,6 +20,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
   ENCABEZADOS_PLANILLA_CHEQUEO,
+  textoCeldaEstadoRegistrado,
   type FilaPlanillaChequeo,
 } from '@/utils/hato/exportarPlanillaChequeo';
 import {
@@ -36,6 +37,7 @@ import {
   FUENTE_DATOS_PT,
   ALTO_MINIMO_FILA_MM,
   NOTA_OPERATIVA_PLANILLA,
+  MARGENES_PDF_MM,
 } from '@/utils/hato/exportarPlanillaChequeoPDF';
 
 function fila(overrides: Partial<FilaPlanillaChequeo> & { numero: number; nombre: string }): FilaPlanillaChequeo {
@@ -48,6 +50,7 @@ function fila(overrides: Partial<FilaPlanillaChequeo> & { numero: number; nombre
     sexoCria: overrides.sexoCria ?? null,
     fechaServicio: overrides.fechaServicio ?? null,
     toro: overrides.toro ?? null,
+    estadoRegistrado: overrides.estadoRegistrado ?? null,
     estado: overrides.estado ?? null,
     secar: overrides.secar ?? null,
     partoProbable: overrides.partoProbable ?? null,
@@ -56,69 +59,61 @@ function fila(overrides: Partial<FilaPlanillaChequeo> & { numero: number; nombre
 }
 
 describe('etiquetaSexoCria (D-E: el PDF imprime lenguaje claro, no el código crudo)', () => {
-  it('macho vendido -> "M vendido" (el crudo era `OV`)', () => {
+  // Desde el 2026-08-14 esta etiqueta lleva SÓLO EL SEXO, por decisión del
+  // dueño viendo la planilla impresa ("reduce sexo cría a la mitad, sólo
+  // necesitamos que quepa Macho/Hembra o M/H"). Antes combinaba sexo + destino
+  // + chapeta de la cría, y por eso era la columna más ancha de la hoja.
+  // El destino y la chapeta NO se pierden: siguen en `hato_eventos` y en el
+  // `.xlsx`, que emite `sx_raw` verbatim. Ver la nota de la función.
+
+  it('macho -> "Macho", con o sin destino (el destino ya no se imprime)', () => {
     expect(
       etiquetaSexoCria({ sexoCria: 'macho', criaDestino: 'macho_vendido', sexoCriaRaw: 'OV' }),
-    ).toBe('M vendido');
+    ).toBe('Macho');
+    expect(etiquetaSexoCria({ sexoCria: 'macho', criaDestino: null, sexoCriaRaw: 'OV' })).toBe('Macho');
   });
 
-  it('hembra retenida con chapeta -> "H retenida #206" (el crudo era `A 206`)', () => {
+  it('hembra -> "Hembra", y la chapeta de la cría ya NO va al papel', () => {
     expect(
       etiquetaSexoCria({ sexoCria: 'hembra', criaDestino: 'retenida', sexoCriaRaw: 'A 206' }),
-    ).toBe('H retenida #206');
-  });
-
-  it('hembra retenida SIN número en la celda SX -> omite la chapeta, jamás la inventa', () => {
-    expect(etiquetaSexoCria({ sexoCria: 'hembra', criaDestino: 'retenida', sexoCriaRaw: 'A' })).toBe(
-      'H retenida',
-    );
-    expect(etiquetaSexoCria({ sexoCria: 'hembra', criaDestino: 'retenida', sexoCriaRaw: null })).toBe(
-      'H retenida',
-    );
-  });
-
-  it('hembra vendida -> "H vendida" (el crudo era `AV`)', () => {
+    ).toBe('Hembra');
     expect(
       etiquetaSexoCria({ sexoCria: 'hembra', criaDestino: 'hembra_vendida', sexoCriaRaw: 'AV' }),
-    ).toBe('H vendida');
-  });
-
-  it('cría muerta CON sexo legible (`A+` -> la letra sí dice hembra) -> "H murió"', () => {
+    ).toBe('Hembra');
     expect(etiquetaSexoCria({ sexoCria: 'hembra', criaDestino: 'muerta', sexoCriaRaw: 'A+' })).toBe(
-      'H murió',
+      'Hembra',
     );
-    expect(etiquetaSexoCria({ sexoCria: 'macho', criaDestino: 'muerta', sexoCriaRaw: 'O+' })).toBe(
-      'M murió',
-    );
-  });
-
-  it('cría muerta SIN sexo legible -> "Cría murió" (es el caso real: `cria_destino=muerta` viene tanto de A+ como de O+)', () => {
-    expect(etiquetaSexoCria({ sexoCria: null, criaDestino: 'muerta', sexoCriaRaw: null })).toBe(
-      'Cría murió',
-    );
-  });
-
-  it('sexo conocido pero destino sin registrar -> solo el sexo (es dato real, no se rellena el resto)', () => {
-    expect(etiquetaSexoCria({ sexoCria: 'macho', criaDestino: null, sexoCriaRaw: 'OV' })).toBe('Macho');
     expect(etiquetaSexoCria({ sexoCria: 'hembra', criaDestino: null, sexoCriaRaw: null })).toBe('Hembra');
   });
 
-  it('destino conocido pero sexo no determinable -> se describe la cría sin inventarle sexo', () => {
-    expect(etiquetaSexoCria({ sexoCria: null, criaDestino: 'retenida', sexoCriaRaw: 'A 206' })).toBe(
-      'Cría retenida #206',
-    );
-    expect(etiquetaSexoCria({ sexoCria: null, criaDestino: 'hembra_vendida', sexoCriaRaw: null })).toBe(
-      'Cría vendida',
-    );
-    expect(etiquetaSexoCria({ sexoCria: null, criaDestino: 'macho_vendido', sexoCriaRaw: null })).toBe(
-      'Cría vendido',
-    );
+  // Los tres casos SIN sexo no se borran junto con el destino: hubo un hecho
+  // real y una celda vacía diría "no hay dato". Van en una palabra corta para
+  // no volver a ensanchar la columna.
+  it('cría muerta SIN sexo legible -> "Murió" (`cria_destino=muerta` viene tanto de A+ como de O+)', () => {
+    expect(etiquetaSexoCria({ sexoCria: null, criaDestino: 'muerta', sexoCriaRaw: null })).toBe('Murió');
   });
 
-  it('parto gemelar (`gem+`): no hay sexo de cada gemelo, pero el hecho SÍ es dato -> "Parto gemelar"', () => {
-    expect(etiquetaSexoCria({ sexoCria: null, criaDestino: null, sexoCriaRaw: 'gem+' })).toBe(
-      'Parto gemelar',
-    );
+  it('destino conocido pero sexo no determinable -> "Cría": hubo cría, no se le inventa sexo', () => {
+    expect(etiquetaSexoCria({ sexoCria: null, criaDestino: 'retenida', sexoCriaRaw: 'A 206' })).toBe('Cría');
+    expect(etiquetaSexoCria({ sexoCria: null, criaDestino: 'hembra_vendida', sexoCriaRaw: null })).toBe('Cría');
+    expect(etiquetaSexoCria({ sexoCria: null, criaDestino: 'macho_vendido', sexoCriaRaw: null })).toBe('Cría');
+  });
+
+  it('parto gemelar (`gem+`): no hay sexo de cada gemelo, pero el hecho SÍ es dato -> "Gemelar"', () => {
+    expect(etiquetaSexoCria({ sexoCria: null, criaDestino: null, sexoCriaRaw: 'gem+' })).toBe('Gemelar');
+  });
+
+  it('"Gemelar" es la etiqueta más larga y por eso fija el ancho de la columna', () => {
+    const todas = [
+      etiquetaSexoCria({ sexoCria: 'hembra', criaDestino: 'retenida', sexoCriaRaw: 'A 206' }),
+      etiquetaSexoCria({ sexoCria: 'macho', criaDestino: 'macho_vendido', sexoCriaRaw: 'OV' }),
+      etiquetaSexoCria({ sexoCria: null, criaDestino: 'muerta', sexoCriaRaw: null }),
+      etiquetaSexoCria({ sexoCria: null, criaDestino: 'retenida', sexoCriaRaw: 'A 206' }),
+      etiquetaSexoCria({ sexoCria: null, criaDestino: null, sexoCriaRaw: 'gem+' }),
+    ].filter((e): e is string => e !== null);
+    // Ninguna supera 7 caracteres: es lo que permite que la columna quepa en
+    // 14,5mm en vez de los 25,5 que necesitaba `H retenida #206`.
+    expect(Math.max(...todas.map((e) => e.length))).toBe('Gemelar'.length);
   });
 
   it('aborto: no hay cría que describir -> celda VACÍA', () => {
@@ -153,6 +148,7 @@ describe('construirFilasPlanillaPDF', () => {
         sexoCria: 'Hembra (retenida #206)',
         fechaServicio: '5/1/2026',
         toro: 'Ins Nitro',
+        estadoRegistrado: 'Servida',
         estado: 'ok',
         secar: '1/9/2026',
         partoProbable: '1/11/2026',
@@ -171,6 +167,7 @@ describe('construirFilasPlanillaPDF', () => {
       'Hembra (retenida #206)',
       '5/1/2026',
       'Ins Nitro',
+      'Servida',
       'ok',
       '1/9/2026',
       '1/11/2026',
@@ -183,7 +180,7 @@ describe('construirFilasPlanillaPDF', () => {
     expect(celdas[0]).toBe('101');
     expect(celdas[1]).toBe('LUCERO');
     // Todo lo demás sin dato previo: vacío, no cero.
-    expect(celdas.slice(2)).toEqual(['', '', '', '', '', '', '', '', '', '']);
+    expect(celdas.slice(2)).toEqual(['', '', '', '', '', '', '', '', '', '', '']);
     expect(celdas).not.toContain('0');
   });
 
@@ -203,6 +200,23 @@ describe('layout del PDF -- presupuesto de ancho y clasificación de columnas', 
     expect(suma).toBeGreaterThan(215.9 - 20);
   });
 
+  it('los márgenes no bajan del piso imprimible (el presupuesto de ancho NO protege esto)', () => {
+    // El test de arriba compara la suma de anchos contra `ANCHO_UTIL_CARTA_
+    // HORIZONTAL_MM`, que a su vez SE DERIVA de `MARGENES_PDF_MM`. O sea que
+    // encoger el margen sube el techo y el test sigue pasando: es
+    // autorreferencial en ese eje y no puede atrapar "los márgenes quedaron
+    // más chicos de lo que una impresora puede imprimir".
+    //
+    // Pasó de verdad al meter la 13ª columna ("Estado registrado", D-E): los
+    // márgenes bajaron de 10mm a 8mm y quedaron 0,2mm de holgura. 8mm sigue
+    // por encima del área no imprimible típica (~5mm, hasta 6,35mm en las
+    // más restrictivas), pero es el piso: por debajo, la planilla sale
+    // cortada en el papel aunque el PDF se vea bien en pantalla.
+    const PISO_IMPRIMIBLE_MM = 8;
+    expect(MARGENES_PDF_MM.left).toBeGreaterThanOrEqual(PISO_IMPRIMIBLE_MM);
+    expect(MARGENES_PDF_MM.right).toBeGreaterThanOrEqual(PISO_IMPRIMIBLE_MM);
+  });
+
   it('TODA columna del template está clasificada como "se diligencia" o "pre-llenada", sin solapamiento', () => {
     const total = COLUMNAS_A_DILIGENCIAR.size + COLUMNAS_PRELLENADAS.length;
     expect(total).toBe(ENCABEZADOS_PLANILLA_CHEQUEO.length);
@@ -218,8 +232,11 @@ describe('layout del PDF -- presupuesto de ancho y clasificación de columnas', 
       ['Estado', 'Fecha Servicio', 'PL', 'Sexo cría', 'Toro', 'Tratamiento'].sort(),
     );
     // Identidad/referencia: el sistema las calcula, nadie las escribe.
+    // "Estado registrado" (D-E, B5.4) es la más nueva de este grupo: gris,
+    // de solo referencia, nadie la diligencia -- la columna de al lado
+    // ("Estado") sigue siendo la que Martha verifica.
     expect([...COLUMNAS_PRELLENADAS].sort()).toEqual(
-      ['#', '# Partos', 'Nombre', 'Parto Probable', 'Secar', 'Última Cría'].sort(),
+      ['#', '# Partos', 'Estado registrado', 'Nombre', 'Parto Probable', 'Secar', 'Última Cría'].sort(),
     );
   });
 
@@ -234,10 +251,21 @@ describe('layout del PDF -- presupuesto de ancho y clasificación de columnas', 
     ]);
   });
 
-  it('la letra de los datos es >= 11pt (requisito duro del dueño) y el alto de fila deja espacio para escribir', () => {
-    expect(FUENTE_DATOS_PT).toBeGreaterThanOrEqual(11);
-    // Una línea de 11pt ocupa ~3,9mm: 9mm de fila dejan ~5mm libres dentro
-    // del recuadro para la escritura a mano.
+  it('la letra de los datos no baja de 9pt, y el alto de fila deja espacio para escribir', () => {
+    // Este test pedía >=11pt hasta el 2026-08-14, por un requisito explícito
+    // del dueño. Lo REVOCÓ él mismo viendo la planilla de 13 columnas
+    // renderizada ("el texto está muy grande, se puede condensar para abrir
+    // espacio"): a 11pt la planilla estaba sobre-suscrita y lo pagaban las dos
+    // columnas que se escriben a mano. Ver la nota de `FUENTE_DATOS_PT`.
+    //
+    // El piso pasa a 9pt, y sigue siendo un piso de verdad: por debajo la
+    // planilla deja de leerse en el corral, que es la razón original de la
+    // regla y no cambió. Si hiciera falta más espacio, la salida es una página
+    // más o una columna menos -- nunca letra más chica.
+    expect(FUENTE_DATOS_PT).toBeGreaterThanOrEqual(9);
+    // El alto NO es cuestión de que quepa el texto impreso sino la MANO de
+    // Martha: se queda en 9mm aunque la letra bajara, así que ahora hay más
+    // espacio libre dentro del recuadro, no menos.
     expect(ALTO_MINIMO_FILA_MM).toBeGreaterThanOrEqual(8);
   });
 
@@ -269,6 +297,10 @@ describe('layout del PDF -- presupuesto de ancho y clasificación de columnas', 
       })!,
       'Fecha Servicio': '22/12/2026',
       Toro: 'Ins Holstein',
+      // "Confirmada" es la más larga de las 5 etiquetas del vocabulario de
+      // D-D -- derivada de la función REAL (`textoCeldaEstadoRegistrado`),
+      // mismo criterio que 'Sexo cría' arriba: nunca un literal desincronizable.
+      'Estado registrado': textoCeldaEstadoRegistrado('preñada')!,
       Estado: 'rech',
       Secar: '22/12/2026',
       'Parto Probable': '22/12/2026',

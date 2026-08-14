@@ -10,7 +10,12 @@
 // semanal + quincenal). Otras sesiones (S6, S10) añaden aquí sus propios
 // tipos según lo necesiten.
 
-import type { TipoEventoHato, CriaDestino, TipoEstado } from '@/utils/calculosHato';
+import type {
+  TipoEventoHato,
+  CriaDestino,
+  TipoEstado,
+  MetodoConfirmacionPrenez,
+} from '@/utils/calculosHato';
 
 export type { TipoEventoHato, CriaDestino, TipoEstado };
 
@@ -203,6 +208,15 @@ export interface EstadoActualHatoViewRow {
    * `fecha_nacimiento`. Cuando es `true`, `etapa` gana SIEMPRE sobre el
    * cálculo en `calcularEtapaHato`. */
   etapa_forzada: boolean;
+  /** `datos->>'metodo'` del último `confirmacion_prenez` (migración 094,
+   * D-D 2026-08-13) -- columna nueva AL FINAL, después de `etapa_forzada`.
+   * Separa "servida" (presunción) de "confirmada" (palpación); `null` se
+   * lee como presunción, nunca como palpación. */
+  ultima_confirmacion_prenez_metodo: MetodoConfirmacionPrenez | null;
+  /** MAX(fecha) de los eventos `aborto` (migración 094) -- columna nueva AL
+   * FINAL. Permite que el motor tipifique el aborto en vez de dejar al
+   * animal en `indeterminado` sin decir por qué. */
+  ultimo_aborto_fecha: string | null;
 }
 
 // ============================================================================

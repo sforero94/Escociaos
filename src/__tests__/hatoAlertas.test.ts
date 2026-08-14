@@ -20,8 +20,14 @@ import {
   HORAS_MINIMAS_REENVIO,
   INTENTOS_MAXIMOS_REENVIO,
   DIAS_EXPIRACION_ALERTA,
+  claveAlertaCatalogo,
+  agruparSuscriptoresPorClave,
+  etiquetaRespuestaAlerta,
+  construirMensajeAlertaYaResuelta,
+  construirMensajeCierreAlertaBroadcast,
   type AnimalHatoParaAlertas,
   type PasoTratamientoPendienteInput,
+  type FilaSuscripcionAlerta,
 } from '@/utils/hatoAlertas';
 import type { HatoConfig } from '@/utils/calculosHato';
 
@@ -55,6 +61,8 @@ function animalBase(overrides: Partial<AnimalHatoParaAlertas> = {}): AnimalHatoP
     ultimo_secado_real_fecha: null,
     ultima_confirmacion_prenez_fecha: null,
     ultimo_evento_fecha: null,
+    ultima_confirmacion_prenez_metodo: null,
+    ultimo_aborto_fecha: null,
     ultimo_estado_chequeo: null,
     ...overrides,
   };
@@ -573,5 +581,103 @@ describe('decidirExpiracionTerminal — D-24 (docs/plan_hato_ronda_agosto_2026.m
       decidirExpiracionTerminal({ estado: 'escalada', escalada_at: escaladaHace5Dias, updated_at: escaladaHace5Dias }, AHORA, 3),
     ).toBe(true);
     expect(DIAS_EXPIRACION_ALERTA).toBe(14);
+  });
+});
+
+// ============================================================================
+// Suscripciones por usuario de Telegram (migración 096)
+// ============================================================================
+
+describe('claveAlertaCatalogo', () => {
+  it('concatena modulo.tipo', () => {
+    expect(claveAlertaCatalogo('hato', 'secado_due')).toBe('hato.secado_due');
+    expect(claveAlertaCatalogo('aguacate', 'algo')).toBe('aguacate.algo');
+  });
+});
+
+describe('agruparSuscriptoresPorClave', () => {
+  function fila(overrides: Partial<FilaSuscripcionAlerta> = {}): FilaSuscripcionAlerta {
+    return {
+      alerta_clave: 'hato.secado_due',
+      recibe: true,
+      escalamiento: false,
+      telegram_id: '8505349717',
+      ...overrides,
+    };
+  }
+
+  it('agrupa por clave, separando recibe de escalamiento', () => {
+    const filas: FilaSuscripcionAlerta[] = [
+      fila({ telegram_id: '111', recibe: true, escalamiento: true }),
+      fila({ telegram_id: '222', recibe: true, escalamiento: false }),
+      fila({ telegram_id: '333', recibe: false, escalamiento: true }),
+    ];
+    const mapa = agruparSuscriptoresPorClave(filas);
+    const entrada = mapa.get('hato.secado_due');
+    expect(entrada).toBeDefined();
+    expect(entrada!.recibe.sort()).toEqual(['111', '222']);
+    expect(entrada!.escalamiento.sort()).toEqual(['111', '333']);
+  });
+
+  it('un mismo telegram_id puede recibir y escalar a la vez', () => {
+    const mapa = agruparSuscriptoresPorClave([fila({ telegram_id: '111', recibe: true, escalamiento: true })]);
+    const entrada = mapa.get('hato.secado_due')!;
+    expect(entrada.recibe).toEqual(['111']);
+    expect(entrada.escalamiento).toEqual(['111']);
+  });
+
+  it('claves distintas no se mezclan', () => {
+    const mapa = agruparSuscriptoresPorClave([
+      fila({ alerta_clave: 'hato.secado_due', telegram_id: '111' }),
+      fila({ alerta_clave: 'hato.parto_proximo', telegram_id: '222' }),
+    ]);
+    expect(mapa.get('hato.secado_due')!.recibe).toEqual(['111']);
+    expect(mapa.get('hato.parto_proximo')!.recibe).toEqual(['222']);
+  });
+
+  it('ni recibe ni escalamiento -- la clave existe pero ambas listas quedan vacías', () => {
+    const mapa = agruparSuscriptoresPorClave([fila({ recibe: false, escalamiento: false })]);
+    expect(mapa.get('hato.secado_due')).toEqual({ recibe: [], escalamiento: [] });
+  });
+
+  it('lista vacía produce un mapa vacío', () => {
+    expect(agruparSuscriptoresPorClave([]).size).toBe(0);
+  });
+});
+
+describe('etiquetaRespuestaAlerta', () => {
+  it('traduce las 3 respuestas posibles', () => {
+    expect(etiquetaRespuestaAlerta('si')).toBe('Sí');
+    expect(etiquetaRespuestaAlerta('no')).toBe('Todavía no');
+    expect(etiquetaRespuestaAlerta('otro')).toBe('Otra cosa');
+  });
+});
+
+describe('construirMensajeAlertaYaResuelta — broadcast, cierre por el primero', () => {
+  it('con respondida_por y respuesta conocidos, nombra a quién y qué respondió', () => {
+    const texto = construirMensajeAlertaYaResuelta('confirmada', 'Fernando', 'si');
+    expect(texto).toContain('Fernando');
+    expect(texto).toContain('Sí');
+  });
+
+  it('sin respondida_por (dato legado o estado terminal sin respuesta), cae al genérico con el estado', () => {
+    const texto = construirMensajeAlertaYaResuelta('expirada', null, null);
+    expect(texto).toContain('expirada');
+    expect(texto).not.toContain('null');
+  });
+});
+
+describe('construirMensajeCierreAlertaBroadcast — edición del mensaje de los demás suscritos', () => {
+  it('conserva el mensaje original y antepone quién resolvió y cómo', () => {
+    const original = 'Vaca 47 (ESTRELLA) se debe secar hoy. ¿Ya se secó?';
+    const texto = construirMensajeCierreAlertaBroadcast(original, 'Martha', 'si');
+    expect(texto).toContain('Martha');
+    expect(texto).toContain('Sí');
+    expect(texto).toContain(original);
+  });
+
+  it('las 3 respuestas producen etiquetas distintas', () => {
+    const textos = (['si', 'no', 'otro'] as const).map((r) => construirMensajeCierreAlertaBroadcast('X', 'Martha', r));
+    expect(new Set(textos).size).toBe(3);
   });
 });

@@ -19,6 +19,7 @@ import {
   isoATextoDDMMYYYY,
   textoCeldaToro,
   textoCeldaEstado,
+  textoCeldaEstadoRegistrado,
   construirLibroPlanillaChequeo,
   type FilaPlanillaChequeo,
 } from '@/utils/hato/exportarPlanillaChequeo';
@@ -33,6 +34,7 @@ function filaVacia(overrides: Partial<FilaPlanillaChequeo> & { numero: number; n
     sexoCria: overrides.sexoCria ?? null,
     fechaServicio: overrides.fechaServicio ?? null,
     toro: overrides.toro ?? null,
+    estadoRegistrado: overrides.estadoRegistrado ?? null,
     estado: overrides.estado ?? null,
     secar: overrides.secar ?? null,
     partoProbable: overrides.partoProbable ?? null,
@@ -101,6 +103,22 @@ describe('textoCeldaEstado (Fase 1 de docs/plan_chequeo_captura_foto.md)', () =>
   });
 });
 
+describe('textoCeldaEstadoRegistrado (D-E, B5.4 -- N21/N22 del plan de agosto 2026)', () => {
+  it('devuelve la MISMA etiqueta de 5 estados que el resto de la app (chipEstadoReproductivo)', () => {
+    expect(textoCeldaEstadoRegistrado('servida')).toBe('Servida');
+    expect(textoCeldaEstadoRegistrado('preñada')).toBe('Confirmada');
+    expect(textoCeldaEstadoRegistrado('proxima_a_secar')).toBe('Por secar');
+    expect(textoCeldaEstadoRegistrado('seca')).toBe('Seca');
+    expect(textoCeldaEstadoRegistrado('vacia_por_servir')).toBe('Vacía');
+    expect(textoCeldaEstadoRegistrado('parida_reciente')).toBe('Vacía');
+  });
+
+  it('null/undefined -> celda vacía, nunca un texto inventado', () => {
+    expect(textoCeldaEstadoRegistrado(null)).toBeNull();
+    expect(textoCeldaEstadoRegistrado(undefined)).toBeNull();
+  });
+});
+
 describe('construirAOAPlanillaChequeo', () => {
   it('arma título (fila 0) + encabezado (fila 1, UNA sola vez) + filas de datos, una tabla continua', () => {
     const filas = [
@@ -124,9 +142,10 @@ describe('construirAOAPlanillaChequeo', () => {
     expect(filasQueSonElEncabezado).toHaveLength(1);
   });
 
-  it('el template tiene 12 columnas -- las 13 históricas menos TP (decisión del dueño)', () => {
-    expect(ENCABEZADOS_PLANILLA_CHEQUEO).toHaveLength(12);
+  it('el template tiene 13 columnas -- las 13 históricas menos TP, más "Estado registrado" (D-E, B5.4)', () => {
+    expect(ENCABEZADOS_PLANILLA_CHEQUEO).toHaveLength(13);
     expect(ENCABEZADOS_PLANILLA_CHEQUEO).not.toContain('TP');
+    expect(ENCABEZADOS_PLANILLA_CHEQUEO).toContain('Estado registrado');
   });
 });
 
@@ -170,8 +189,8 @@ describe('construirLibroPlanillaChequeo -- ensamblado real con xlsx', () => {
   });
 });
 
-describe('B5.3 -- grilla.ts reconoce los headers en palabra completa de nuestro propio formato', () => {
-  it('construirColmapConEncabezado mapea las 12 columnas del template sin ambigüedad y sin columna TP', () => {
+describe('B5.3/B5.4 -- grilla.ts reconoce los headers en palabra completa de nuestro propio formato', () => {
+  it('construirColmapConEncabezado mapea las 13 columnas del template sin ambigüedad y sin columna TP', () => {
     const { colmap, generacion, columnasExtra, notas } = construirColmapConEncabezado([...ENCABEZADOS_PLANILLA_CHEQUEO]);
 
     expect(colmap).toEqual({
@@ -183,11 +202,12 @@ describe('B5.3 -- grilla.ts reconoce los headers en palabra completa de nuestro 
       sx: 5,
       fechaServicio: 6,
       toro: 7,
+      estadoRegistrado: 8, // "Estado registrado" (D-E, B5.4) -- exclusiva de nuestro formato
       tp: null, // TP se elimina del template -- nunca se lee (regla dura del motor)
-      estado: 8,
-      secar: 9,
-      pp: 10,
-      ttto: 11,
+      estado: 9,
+      secar: 10,
+      pp: 11,
+      ttto: 12,
     });
     expect(generacion).toBe(3);
     expect(columnasExtra).toEqual([]);
@@ -204,5 +224,8 @@ describe('B5.3 -- grilla.ts reconoce los headers en palabra completa de nuestro 
     expect(colmap.tp).toBe(8);
     expect(colmap.estado).toBe(9);
     expect(generacion).toBe(2);
+    // Ninguna generación histórica trae "Estado registrado" (B5.4 es
+    // exclusiva de nuestro propio formato) -- alias aditivo, nunca inventado.
+    expect(colmap.estadoRegistrado).toBeNull();
   });
 });
