@@ -29,21 +29,39 @@
 //                    `.upsert(..., { onConflict: 'regla_clave', ignoreDuplicates: true })`
 //                    -- el `ON CONFLICT ... DO NOTHING` real, PostgREST no
 //                    tiene otra forma de expresarlo.
-//   (b) Despachar -- para cada alerta activa (`pendiente`/`enviada`) cuyo
-//                    `tipo` está `activo` en `hato_alertas_config` Y tiene
-//                    `destinatario_telegram_id` configurado: primer envío
-//                    incondicional si `pendiente`; reenvío solo si
-//                    `debeReenviar(...)` (≥48h desde el último intento,
-//                    <3 intentos) si ya estaba `enviada`. Sin destinatario
-//                    configurado -> se deja `pendiente`, CERO mensajes
-//                    salientes -- este es el default "modo sombra" (el seed
-//                    de 056 no trae ningún destinatario): desplegar este
-//                    endpoint no dispara nada hasta que alguien configure
-//                    `hato_alertas_config` a mano.
+//   (b) Despachar -- BROADCAST (migración 096, 2026-08-14): para cada alerta
+//                    activa (`pendiente`/`enviada`) cuyo `tipo` está `activo`
+//                    en `hato_alertas_config`, se resuelve la lista de
+//                    suscritos con `recibe=true` para esa clave
+//                    (`telegram_alertas_suscripciones`, join
+//                    `telegram_usuarios` activos) y se manda UN mensaje POR
+//                    SUSCRITO -- no una alerta por persona, una sola alerta
+//                    que le llega a todos. Primer envío incondicional si
+//                    `pendiente`; reenvío (a la MISMA lista de suscritos)
+//                    solo si `debeReenviar(...)` (≥48h desde el último
+//                    intento, <3 intentos) si ya estaba `enviada` -- el
+//                    umbral de reenvío sigue siendo por ALERTA, no por
+//                    persona, mismo mecanismo de antes. Sin ningún suscrito
+//                    con `recibe=true` para esa clave -> se deja `pendiente`,
+//                    CERO mensajes salientes (mismo "modo sombra" de antes,
+//                    ahora gobernado por la tabla de suscripciones en vez de
+//                    `hato_alertas_config.destinatario_telegram_id`, que esta
+//                    fase YA NO LEE -- ver migración 096). Cada envío exitoso
+//                    se registra en `hato_alertas_envios` (alerta_id,
+//                    telegram_id, message_id) -- es lo que permite cerrar la
+//                    alerta para TODOS cuando el primero responde (ver
+//                    `telegram/bot.ts`).
 //   (c) Escalar/expirar -- `decidirAccionEscalamiento` sobre las alertas que
 //                    siguen activas tras (b). Telegram no permite
 //                    `editMessageText` pasadas 48h -- el escalamiento SIEMPRE
-//                    manda un mensaje NUEVO (nunca edita el original).
+//                    manda un mensaje NUEVO (nunca edita el original). El
+//                    escalamiento (096) también es broadcast: va a TODOS los
+//                    suscritos con `escalamiento=true` para esa clave, no a
+//                    la variable de entorno `HATO_ALERTAS_ESCALAMIENTO_TELEGRAM_ID`
+//                    (esa variable queda SIN USO por este handler desde
+//                    096 -- no se borra del entorno, ver CLAUDE.md). Sin
+//                    ningún suscrito con `escalamiento=true` -> se marca
+//                    `escalada` sin mandar nada, mismo contrato de antes.
 //
 // Nota de diseño (I/O, no cambia el motor puro): `hato_alertas` (migración
 // 056) no tiene una columna dedicada para "cuándo se envió por primera vez"
@@ -53,25 +71,25 @@
 // umbral de escalamiento sería incorrecto: cada reenvío correría el reloj de
 // escalamiento hacia adelante, retrasándolo exactamente cuando más urge (una
 // alerta que ya se reenvió varias veces sin respuesta). En vez de agregar
-// una columna nueva (fuera del alcance de esta sesión -- "no new migrations
-// needed"), el instante del primer envío se guarda dentro de la columna
-// `datos JSONB` ya existente (`datos.enviada_en`), que SÍ sobrevive
+// una columna nueva, el instante del primer envío se guarda dentro de la
+// columna `datos JSONB` ya existente (`datos.enviada_en`), que SÍ sobrevive
 // intacta a los reenvíos porque este handler nunca la sobreescribe una vez
 // puesta. `updated_at` sigue siendo la fuente correcta para "último intento"
 // (resend policy), porque ese valor SÍ debe correrse con cada intento -- es
 // exactamente lo que esa política mide.
 //
-// Recipiente de escalamiento: `hato_alertas_config` (migración 056) solo
-// declara UN destinatario por tipo -- no hay una columna separada para "a
-// quién escalar" (Martha) vs. "a quién se le manda primero" (Fernando,
-// habilitado por tipo tras el segundo checkpoint de confianza del plan §8).
-// Agregar esa columna sería un cambio de esquema fuera del alcance de esta
-// sesión. Solución sin migración: variable de entorno opcional
-// `HATO_ALERTAS_ESCALAMIENTO_TELEGRAM_ID` (secreto de edge function, mismo
-// mecanismo que `HATO_ALERTAS_TICK_SECRET`). Si no está configurada, el
-// contrato explícito del plan aplica ("si no hay destinatario configurado,
-// solo se marca escalada"): se marca `escalada` sin enviar nada. Contar como
-// hallazgo a validar con el dueño -- ver el reporte de la sesión.
+// `hato_alertas.destinatario_telegram_id` (columna singular, existe desde
+// 056) sobrevive con un significado DISTINTO desde 096: ya no es "el único
+// destinatario" (el broadcast no tiene uno), es "a quién se le envió
+// primero" -- este handler la fija UNA sola vez, en el primer envío exitoso,
+// y nunca la vuelve a tocar (ni en reenvíos ni en despachos posteriores a
+// nuevos suscritos). Se conserva en vez de borrarse porque hay historia
+// real detrás (todas las filas hasta hoy la tienen puesta) -- decisión de
+// esta sesión, documentada en el reporte que acompaña la migración 096.
+// `hato_alertas_config.destinatario_telegram_id` (la columna singular de la
+// tabla de CONFIGURACIÓN, no de esta) queda VESTIGIAL desde el mismo cambio
+// -- este handler ya no la lee en absoluto (fase b/c de abajo), aunque la
+// columna sigue en la tabla (096 no la borra).
 //
 // I/O puro en este archivo: parseo/auth, consultas a Supabase, llamadas a
 // Telegram. Toda la lógica de negocio vive en el módulo puro `hatoAlertas.ts`
@@ -84,14 +102,21 @@ import {
   debeReenviar,
   decidirAccionEscalamiento,
   decidirExpiracionTerminal,
+  claveAlertaCatalogo,
+  agruparSuscriptoresPorClave,
   type AnimalHatoParaAlertas,
   type PasoTratamientoPendienteInput,
   type AlertaGenerada,
   type TipoAlertaHato,
   type EstadoAlertaHato,
+  type FilaSuscripcionAlerta,
 } from './hato-alertas.ts';
 import { construirHatoConfigDesdeFilas, type FilaHatoConfig } from './hato-config-desde-tabla.ts';
 import { enviarMensajeTelegram } from './telegram/enviar.ts';
+
+/** Módulo de este handler dentro de `alertas_catalogo` -- única fuente de
+ * la constante `'hato'` en todo el archivo (migración 096, `clave = modulo.tipo`). */
+const MODULO_ALERTAS = 'hato';
 
 function respuestaError(c: Context, status: 400 | 500 | 503, error: string) {
   return c.json({ success: false, error }, status);
@@ -124,9 +149,35 @@ function verificarSecretoTick(c: Context): Response | null {
 
 interface FilaAlertaConfig {
   tipo: TipoAlertaHato;
-  destinatario_telegram_id: string | null;
   horas_escalamiento: number;
   activo: boolean;
+}
+
+/** Fila cruda de `telegram_alertas_suscripciones` JOIN `telegram_usuarios`
+ * (migración 096) -- el embed de PostgREST puede venir como objeto o como
+ * array de un elemento según la versión del cliente, de ahí el `Array.isArray`
+ * en `resolverFilasSuscripcion`. Solo se listan suscritos ACTIVOS: la
+ * consulta filtra `telegram_usuarios.activo = true`. */
+interface FilaSuscripcionCruda {
+  alerta_clave: string;
+  recibe: boolean;
+  escalamiento: boolean;
+  telegram_usuarios: { telegram_id: number } | { telegram_id: number }[] | null;
+}
+
+function resolverFilasSuscripcion(filas: FilaSuscripcionCruda[]): FilaSuscripcionAlerta[] {
+  return filas
+    .map((f) => {
+      const usuario = Array.isArray(f.telegram_usuarios) ? f.telegram_usuarios[0] : f.telegram_usuarios;
+      if (usuario == null) return null;
+      return {
+        alerta_clave: f.alerta_clave,
+        recibe: f.recibe,
+        escalamiento: f.escalamiento,
+        telegram_id: String(usuario.telegram_id),
+      };
+    })
+    .filter((f): f is FilaSuscripcionAlerta => f !== null);
 }
 
 interface FilaAlertaActiva {
@@ -181,15 +232,33 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
     return respuestaError(c, 500, err instanceof Error ? err.message : String(err));
   }
 
-  // --- hato_alertas_config -- destinatario/activo/horas por tipo ------
+  // --- hato_alertas_config -- activo/horas por tipo. Ya NO se lee
+  //     `destinatario_telegram_id` de aquí (096) -- los destinatarios salen
+  //     de `telegram_alertas_suscripciones`, abajo. La columna sigue en la
+  //     tabla (vestigial, ver cabecera del archivo). --------------------
   const { data: filasAlertasConfig, error: errorAlertasConfig } = await supabase
     .from('hato_alertas_config')
-    .select('tipo, destinatario_telegram_id, horas_escalamiento, activo');
+    .select('tipo, horas_escalamiento, activo');
   if (errorAlertasConfig) {
     return respuestaError(c, 500, `No se pudo leer hato_alertas_config: ${errorAlertasConfig.message}`);
   }
   const configPorTipo = new Map<TipoAlertaHato, FilaAlertaConfig>(
     ((filasAlertasConfig ?? []) as FilaAlertaConfig[]).map((f) => [f.tipo, f]),
+  );
+
+  // --- telegram_alertas_suscripciones -- quién recibe / quién escala, por
+  //     clave (`modulo.tipo`, migración 096). Solo suscritos ACTIVOS en
+  //     telegram_usuarios -- uno desactivado no debe recibir ni escalar
+  //     aunque su fila de suscripción siga con recibe/escalamiento=true. ---
+  const { data: filasSuscripcionesCrudas, error: errorSuscripciones } = await supabase
+    .from('telegram_alertas_suscripciones')
+    .select('alerta_clave, recibe, escalamiento, telegram_usuarios!inner(telegram_id, activo)')
+    .eq('telegram_usuarios.activo', true);
+  if (errorSuscripciones) {
+    return respuestaError(c, 500, `No se pudieron leer las suscripciones de alertas: ${errorSuscripciones.message}`);
+  }
+  const suscriptoresPorClave = agruparSuscriptoresPorClave(
+    resolverFilasSuscripcion((filasSuscripcionesCrudas ?? []) as FilaSuscripcionCruda[]),
   );
 
   // =========================================================================
@@ -284,12 +353,23 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
   }
   const activas = (filasActivas ?? []) as FilaAlertaActiva[];
 
-  let enviadas = 0;
+  let enviadas = 0; // # de ALERTAS con al menos un envío exitoso en este tick
+  let mensajesEnviados = 0; // # de mensajes de Telegram individuales enviados (broadcast)
   let saltadasSinDestinatario = 0;
 
   for (const alerta of activas) {
     const config = configPorTipo.get(alerta.tipo);
-    if (!config || !config.activo || !config.destinatario_telegram_id) {
+    if (!config || !config.activo) {
+      saltadasSinDestinatario += 1;
+      continue;
+    }
+
+    // Broadcast (096): TODOS los suscritos con recibe=true para esta clave,
+    // no un único destinatario. `hato_alertas_config.destinatario_telegram_id`
+    // ya no se lee -- ver cabecera del archivo.
+    const clave = claveAlertaCatalogo(MODULO_ALERTAS, alerta.tipo);
+    const destinatarios = suscriptoresPorClave.get(clave)?.recibe ?? [];
+    if (destinatarios.length === 0) {
       saltadasSinDestinatario += 1;
       continue;
     }
@@ -303,28 +383,65 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
     if (!debeEnviar) continue;
 
     const mensaje = (alerta.datos?.mensaje as string | undefined) ?? 'Alerta del hato lechero (sin mensaje generado).';
-    const resultado = await enviarMensajeTelegram(supabase, {
-      telegramId: config.destinatario_telegram_id,
-      texto: mensaje,
-      tipoMensaje: 'alerta_hato',
-      flujo: alerta.tipo,
-      botones: [
-        { texto: 'Sí', callbackData: `hato_alerta:${alerta.id}:si` },
-        { texto: 'Todavía no', callbackData: `hato_alerta:${alerta.id}:no` },
-        { texto: 'Otra cosa', callbackData: `hato_alerta:${alerta.id}:otro` },
-      ],
-    });
+    const botones = [
+      { texto: 'Sí', callbackData: `hato_alerta:${alerta.id}:si` },
+      { texto: 'Todavía no', callbackData: `hato_alerta:${alerta.id}:no` },
+      { texto: 'Otra cosa', callbackData: `hato_alerta:${alerta.id}:otro` },
+    ];
 
-    const datosActualizados = resultado.ok && !alerta.datos?.enviada_en
+    // Un envío por suscrito -- un fallo puntual (chat bloqueado, etc.) NO
+    // debe tumbar el envío a los demás suscritos de la misma alerta.
+    let algunEnvioOk = false;
+    let primerDestinatarioOk: string | null = null;
+    const filasEnvios: Array<{ alerta_id: string; telegram_id: string; message_id: number | null; enviado_at: string }> = [];
+
+    for (const telegramId of destinatarios) {
+      const resultado = await enviarMensajeTelegram(supabase, {
+        telegramId,
+        texto: mensaje,
+        tipoMensaje: 'alerta_hato',
+        flujo: alerta.tipo,
+        botones,
+      });
+      if (resultado.ok) {
+        algunEnvioOk = true;
+        mensajesEnviados += 1;
+        if (!primerDestinatarioOk) primerDestinatarioOk = telegramId;
+        // `message_id` es lo que permite editar este mensaje puntual cuando
+        // otro suscrito cierre la alerta (telegram/bot.ts). Un reenvío
+        // pisa la fila anterior de este mismo (alerta, telegram_id) a
+        // propósito -- el mensaje viejo ya pasó los límites de edición de
+        // Telegram (48h), el nuevo es el único editable de aquí en más.
+        filasEnvios.push({
+          alerta_id: alerta.id,
+          telegram_id: telegramId,
+          message_id: resultado.telegramMessageId ?? null,
+          enviado_at: fechaHoraReferencia,
+        });
+      }
+    }
+
+    if (filasEnvios.length > 0) {
+      const { error: errorEnvios } = await supabase
+        .from('hato_alertas_envios')
+        .upsert(filasEnvios, { onConflict: 'alerta_id,telegram_id' });
+      if (errorEnvios) {
+        console.error(`[hato-alertas-tick] no se pudieron registrar los envíos de la alerta ${alerta.id}:`, errorEnvios.message);
+      }
+    }
+
+    const datosActualizados = algunEnvioOk && !alerta.datos?.enviada_en
       ? { ...alerta.datos, enviada_en: fechaHoraReferencia }
       : alerta.datos;
 
     const { error: errorUpdate } = await supabase
       .from('hato_alertas')
       .update({
-        estado: resultado.ok ? 'enviada' : alerta.estado,
+        estado: algunEnvioOk ? 'enviada' : alerta.estado,
         intentos: alerta.intentos + 1,
-        destinatario_telegram_id: config.destinatario_telegram_id,
+        // "A quién se le envió primero" (096) -- se fija UNA sola vez, nunca
+        // se pisa en reenvíos ni en despachos a suscritos nuevos.
+        destinatario_telegram_id: alerta.destinatario_telegram_id ?? primerDestinatarioOk,
         datos: datosActualizados,
       })
       .eq('id', alerta.id);
@@ -335,22 +452,27 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
 
     // Reflejar el cambio en memoria para que la fase (c) vea el estado
     // post-despacho sin una segunda consulta a la base.
-    alerta.estado = resultado.ok ? 'enviada' : alerta.estado;
+    alerta.estado = algunEnvioOk ? 'enviada' : alerta.estado;
     alerta.intentos += 1;
     alerta.datos = datosActualizados;
     alerta.updated_at = fechaHoraReferencia;
+    alerta.destinatario_telegram_id = alerta.destinatario_telegram_id ?? primerDestinatarioOk;
 
-    if (resultado.ok) enviadas += 1;
+    if (algunEnvioOk) enviadas += 1;
   }
 
   // =========================================================================
   // (c) ESCALAR / EXPIRAR
   // =========================================================================
 
-  const telegramIdEscalamiento = Deno.env.get('HATO_ALERTAS_ESCALAMIENTO_TELEGRAM_ID') || null;
+  // `HATO_ALERTAS_ESCALAMIENTO_TELEGRAM_ID` YA NO SE LEE -- desde 096 el
+  // escalamiento es broadcast a los suscritos con escalamiento=true de cada
+  // clave (ver cabecera del archivo). La variable de entorno queda sin uso
+  // en este handler; no se borra del entorno por si algo más la necesitara.
 
   let escaladas = 0;
   let expiradas = 0;
+  let mensajesEscalamiento = 0;
 
   for (const alerta of activas) {
     const config = configPorTipo.get(alerta.tipo);
@@ -380,16 +502,26 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
     }
 
     // accion === 'escalar' -- Telegram no permite editar un mensaje pasadas
-    // 48h: se manda uno NUEVO, nunca se edita el original.
-    if (telegramIdEscalamiento) {
+    // 48h: se manda uno NUEVO, nunca se edita el original. Broadcast (096):
+    // a TODOS los suscritos con escalamiento=true para esta clave, no a un
+    // único destinatario de la variable de entorno.
+    const claveEscalamiento = claveAlertaCatalogo(MODULO_ALERTAS, alerta.tipo);
+    const destinatariosEscalamiento = suscriptoresPorClave.get(claveEscalamiento)?.escalamiento ?? [];
+    if (destinatariosEscalamiento.length > 0) {
       const mensajeBase = (alerta.datos?.mensaje as string | undefined) ?? 'Alerta del hato lechero (sin mensaje generado).';
-      await enviarMensajeTelegram(supabase, {
-        telegramId: telegramIdEscalamiento,
-        texto: `⏰ Sin respuesta hace más de ${horasEscalamiento}h -- ${mensajeBase}`,
-        tipoMensaje: 'alerta_hato_escalamiento',
-        flujo: alerta.tipo,
-      });
+      for (const telegramId of destinatariosEscalamiento) {
+        const resultado = await enviarMensajeTelegram(supabase, {
+          telegramId,
+          texto: `⏰ Sin respuesta hace más de ${horasEscalamiento}h -- ${mensajeBase}`,
+          tipoMensaje: 'alerta_hato_escalamiento',
+          flujo: alerta.tipo,
+        });
+        if (resultado.ok) mensajesEscalamiento += 1;
+      }
     }
+    // Sin ningún suscrito con escalamiento=true -- se marca `escalada` sin
+    // mandar nada, mismo contrato de antes (antes: sin la variable de
+    // entorno configurada).
     const { error } = await supabase
       .from('hato_alertas')
       .update({ estado: 'escalada', escalada_at: fechaHoraReferencia })
@@ -438,9 +570,11 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
     success: true,
     fechaReferencia,
     generadas: alertasNuevas.length,
-    enviadas,
+    enviadas, // # de alertas con al menos un envío exitoso
+    mensajes_enviados: mensajesEnviados, // # de mensajes de Telegram individuales (broadcast, 096)
     saltadas_sin_destinatario: saltadasSinDestinatario,
     escaladas,
+    mensajes_escalamiento: mensajesEscalamiento,
     expiradas: expiradas + expiradasAtascadas,
     expiradas_atascadas: expiradasAtascadas,
   });

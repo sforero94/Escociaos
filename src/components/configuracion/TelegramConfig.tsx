@@ -1,15 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
+import { Checkbox } from '../ui/checkbox';
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { ConfirmDialog } from '../ui/confirm-dialog';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
 import { getSupabase } from '../../utils/supabase/client';
 import { formatearFechaHora } from '../../utils/fechas';
-import { Send, Plus, Edit, RotateCcw, Trash2, Copy, CheckCircle2, Clock, AlertTriangle, User } from 'lucide-react';
+import { Send, Plus, Edit, RotateCcw, Trash2, Copy, CheckCircle2, Clock, AlertTriangle, User, Bell } from 'lucide-react';
 import {
   TELEGRAM_MODULES,
   ROLES_BOT,
@@ -22,6 +23,18 @@ import {
   type RolBot,
   type EstadoVinculacion,
 } from '../../utils/telegramUsuarios';
+import {
+  agruparAlertasPorModulo,
+  construirEstadoDesdeSuscripciones,
+  alternarRecibe,
+  alternarEscalamiento,
+  construirFilasParaGuardar,
+  contarSuscripcionesUsuario,
+  formatearResumenAlertas,
+  type AlertaCatalogoRow,
+  type AlertaSuscripcionRow,
+  type SuscripcionEstado,
+} from '../../utils/telegramAlertas';
 
 interface UsuarioOption {
   id: string;
@@ -50,6 +63,16 @@ export function TelegramConfig() {
   const [rolBot, setRolBot] = useState<RolBot>('campo');
   const [modulosPermitidos, setModulosPermitidos] = useState<string[]>(['labores']);
   const [usuarioVinculadoId, setUsuarioVinculadoId] = useState<string | null>(null);
+  const [alertasEstado, setAlertasEstado] = useState<SuscripcionEstado>({});
+
+  // Catálogo de alertas (alertas_catalogo / telegram_alertas_suscripciones):
+  // tablas nuevas que puede que aún no existan en producción. Se degradan a
+  // "no disponible" en vez de romper el resto de la pantalla.
+  const [catalogoAlertas, setCatalogoAlertas] = useState<AlertaCatalogoRow[]>([]);
+  const [catalogoAlertasError, setCatalogoAlertasError] = useState(false);
+  const [todasSuscripciones, setTodasSuscripciones] = useState<AlertaSuscripcionRow[]>([]);
+
+  const gruposAlertas = useMemo(() => agruparAlertasPorModulo(catalogoAlertas), [catalogoAlertas]);
 
   useEffect(() => {
     if (profile && profile.rol !== 'Gerencia') {
@@ -58,7 +81,27 @@ export function TelegramConfig() {
     }
     cargarUsuarios();
     cargarUsuariosSistema();
+    cargarCatalogoAlertas();
+    cargarSuscripciones();
   }, [profile]);
+
+  // Corrige una carrera de carga: `cargarUsuarios`/`cargarSuscripciones` se
+  // disparan en paralelo al montar, así que si alguien abre "Editar" antes de
+  // que las suscripciones hayan llegado, `abrirModalEditar` habría sembrado
+  // el modal con casillas en falso -- y guardar así persiste "sin alertas"
+  // por encima de lo que el usuario sí tenía. Re-sincroniza en cuanto llegan,
+  // sin pisar ediciones en curso del usuario (solo corre cuando cambia el
+  // array de suscripciones, no en cada toggle de casilla).
+  useEffect(() => {
+    if (modalOpen && modalMode === 'editar' && usuarioActual) {
+      setAlertasEstado(
+        construirEstadoDesdeSuscripciones(
+          todasSuscripciones.filter((s) => s.telegram_usuario_id === usuarioActual.id),
+        ),
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [todasSuscripciones]);
 
   const cargarUsuarios = async () => {
     try {
@@ -96,6 +139,49 @@ export function TelegramConfig() {
     }
   };
 
+  // `alertas_catalogo`/`telegram_alertas_suscripciones` todavía no están en
+  // `src/types/database.ts` generado (tablas nuevas) -- mismo cast puntual
+  // que ya usan los hooks de hato/ganado (`getSupabase() as any`), nunca
+  // sobre el resto del archivo.
+  const cargarCatalogoAlertas = async () => {
+    try {
+      const supabase = getSupabase() as any;
+      const { data, error } = await supabase
+        .from('alertas_catalogo')
+        .select('*')
+        .eq('activo', true)
+        .order('orden', { ascending: true });
+
+      if (error) throw error;
+      setCatalogoAlertas((data ?? []) as AlertaCatalogoRow[]);
+      setCatalogoAlertasError(false);
+    } catch (err: unknown) {
+      // Secundario: la tabla puede no existir todavía en este entorno. La
+      // sección de Alertas se degrada a un mensaje explícito, nunca a una
+      // pantalla en blanco ni a una lista fantasma.
+      const msg = err instanceof Error ? err.message : 'Error desconocido';
+      console.error('Error al cargar catálogo de alertas:', msg);
+      setCatalogoAlertas([]);
+      setCatalogoAlertasError(true);
+    }
+  };
+
+  const cargarSuscripciones = async () => {
+    try {
+      const supabase = getSupabase() as any;
+      const { data, error } = await supabase
+        .from('telegram_alertas_suscripciones')
+        .select('*');
+
+      if (error) throw error;
+      setTodasSuscripciones((data ?? []) as AlertaSuscripcionRow[]);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido';
+      console.error('Error al cargar suscripciones de alertas:', msg);
+      setTodasSuscripciones([]);
+    }
+  };
+
   // ---- Modal open helpers ----
 
   const abrirModalCrear = () => {
@@ -105,6 +191,7 @@ export function TelegramConfig() {
     setRolBot('campo');
     setModulosPermitidos(['labores']);
     setUsuarioVinculadoId(null);
+    setAlertasEstado({});
     setModalOpen(true);
   };
 
@@ -115,6 +202,11 @@ export function TelegramConfig() {
     setRolBot(usuario.rol_bot);
     setModulosPermitidos([...(usuario.modulos_permitidos ?? [])]);
     setUsuarioVinculadoId(usuario.usuario_id);
+    setAlertasEstado(
+      construirEstadoDesdeSuscripciones(
+        todasSuscripciones.filter((s) => s.telegram_usuario_id === usuario.id),
+      ),
+    );
     setModalOpen(true);
   };
 
@@ -141,7 +233,7 @@ export function TelegramConfig() {
         const codigo = generarCodigoVinculacion();
         const expira = calcularExpiracion();
 
-        const { error } = await supabase
+        const { data: creado, error } = await supabase
           .from('telegram_usuarios')
           .insert({
             nombre_display: nombreDisplay.trim(),
@@ -151,9 +243,12 @@ export function TelegramConfig() {
             codigo_vinculacion: codigo,
             codigo_expira_at: expira,
             activo: true,
-          });
+          })
+          .select('id')
+          .single();
 
         if (error) throw error;
+        if (creado?.id) await guardarSuscripcionesAlertas(creado.id);
         setModalOpen(false);
         setCodigoModal({ codigo, nombre: nombreDisplay });
       } else if (usuarioActual) {
@@ -168,16 +263,42 @@ export function TelegramConfig() {
           .eq('id', usuarioActual.id);
 
         if (error) throw error;
+        await guardarSuscripcionesAlertas(usuarioActual.id);
         setModalOpen(false);
         toast.success('Usuario actualizado');
       }
 
       await cargarUsuarios();
+      await cargarSuscripciones();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error desconocido';
       toast.error('Error al guardar: ' + msg);
     } finally {
       setSavingId(null);
+    }
+  };
+
+  // Un solo upsert por (telegram_usuario_id, alerta_clave) -- se guarda junto
+  // con el resto del formulario, nunca por casilla. Si el catálogo está
+  // vacío o falló al cargar no hay nada que guardar. Un fallo aquí no debe
+  // tumbar el guardado del usuario, que ya se confirmó -- se avisa aparte.
+  const guardarSuscripcionesAlertas = async (usuarioId: string) => {
+    if (catalogoAlertas.length === 0) return;
+    try {
+      const filas = construirFilasParaGuardar(usuarioId, alertasEstado, catalogoAlertas);
+      // `updated_by` (migración 096) no tiene trigger que lo llene -- a
+      // diferencia del patrón `created_by` de 040/050/063/074, acá se
+      // espera que quien escribe lo declare.
+      const filasConAutor = filas.map((f) => ({ ...f, updated_by: profile?.id ?? null }));
+      const supabase = getSupabase() as any;
+      const { error } = await supabase
+        .from('telegram_alertas_suscripciones')
+        .upsert(filasConAutor, { onConflict: 'telegram_usuario_id,alerta_clave' });
+
+      if (error) throw error;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error desconocido';
+      toast.error('Usuario guardado, pero no se pudieron guardar sus alertas: ' + msg);
     }
   };
 
@@ -256,6 +377,25 @@ export function TelegramConfig() {
 
   // ---- Badge rendering ----
 
+  // Mismo estilo compacto que los chips de "Módulos permitidos" de arriba.
+  function renderAlertasIndicador(usuario: TelegramUsuarioRow) {
+    if (catalogoAlertasError) {
+      return <span className="text-xs text-brand-brown/40">—</span>;
+    }
+    const resumen = contarSuscripcionesUsuario(todasSuscripciones, usuario.id);
+    const activo = resumen.recibe > 0 || resumen.escalamiento > 0;
+    return (
+      <span
+        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${
+          activo ? 'bg-primary/10 text-primary' : 'bg-secondary/10 text-brand-brown/50'
+        }`}
+      >
+        <Bell className="w-3 h-3" />
+        {formatearResumenAlertas(resumen)}
+      </span>
+    );
+  }
+
   function renderEstado(usuario: TelegramUsuarioRow) {
     const estado: EstadoVinculacion = getEstadoVinculacion(usuario);
 
@@ -333,6 +473,7 @@ export function TelegramConfig() {
                   <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Nombre</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Rol</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Módulos</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Alertas</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Estado</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Activo</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Acciones</th>
@@ -370,6 +511,7 @@ export function TelegramConfig() {
                         })}
                       </div>
                     </td>
+                    <td className="px-4 py-3 text-sm">{renderAlertasIndicador(usuario)}</td>
                     <td className="px-4 py-3 text-sm">{renderEstado(usuario)}</td>
                     <td className="px-4 py-3 text-sm">
                       <button
@@ -534,6 +676,67 @@ export function TelegramConfig() {
                     </label>
                   ))}
                 </div>
+              </div>
+
+              {/* Alertas -- catálogo dinámico (alertas_catalogo), agrupado por
+                  módulo. Hoy solo hay filas de `hato`; `aguacate`/`ganado`
+                  aparecerán solos cuando existan, sin tocar este código. */}
+              <div>
+                <Label>Alertas</Label>
+                {catalogoAlertasError ? (
+                  <p className="text-xs text-destructive mt-2">
+                    No se pudo cargar el catálogo de alertas. Intenta de nuevo más tarde.
+                  </p>
+                ) : gruposAlertas.length === 0 ? (
+                  <p className="text-xs text-brand-brown/60 mt-2">
+                    Todavía no hay alertas configuradas.
+                  </p>
+                ) : (
+                  <div className="mt-2 space-y-4">
+                    {gruposAlertas.map((grupo) => (
+                      <div key={grupo.modulo}>
+                        <p className="text-xs font-semibold text-brand-brown/70 uppercase tracking-wide mb-1.5">
+                          {grupo.label}
+                        </p>
+                        <div className="rounded-lg border border-secondary/30 divide-y divide-secondary/20">
+                          {grupo.alertas.map((alerta) => {
+                            const estado = alertasEstado[alerta.clave] ?? { recibe: false, escalamiento: false };
+                            return (
+                              <div key={alerta.clave} className="flex items-start justify-between gap-3 p-2.5">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-foreground">{alerta.nombre}</p>
+                                  {alerta.descripcion && (
+                                    <p className="text-xs text-brand-brown/60 mt-0.5">{alerta.descripcion}</p>
+                                  )}
+                                </div>
+                                <div className="flex flex-shrink-0 gap-4">
+                                  <label className="flex flex-col items-center gap-1 text-xs text-brand-brown/70">
+                                    <Checkbox
+                                      checked={estado.recibe}
+                                      onCheckedChange={() =>
+                                        setAlertasEstado((prev) => alternarRecibe(prev, alerta.clave))
+                                      }
+                                    />
+                                    Recibe
+                                  </label>
+                                  <label className="flex flex-col items-center gap-1 text-xs text-brand-brown/70">
+                                    <Checkbox
+                                      checked={estado.escalamiento}
+                                      onCheckedChange={() =>
+                                        setAlertasEstado((prev) => alternarEscalamiento(prev, alerta.clave))
+                                      }
+                                    />
+                                    Escalamiento
+                                  </label>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
             </DialogBody>

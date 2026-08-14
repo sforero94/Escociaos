@@ -533,3 +533,136 @@ export function decidirExpiracionTerminal(
   const ancla = alerta.escalada_at ?? alerta.updated_at;
   return diferenciaDiasIso(ancla, fechaHoraReferencia) > diasUmbral;
 }
+
+// ============================================================================
+// BLOQUE 8 — Suscripciones por usuario de Telegram (migración 096, plan
+// "Suscripciones a alertas por usuario de Telegram", 2026-08-14)
+//
+// Decisión del dueño (contrato, ver migración 096): BROADCAST con cierre por
+// el primero -- una alerta se manda a TODOS los suscritos de su tipo, y la
+// primera respuesta la cierra para todos. El escalamiento es una segunda
+// casilla POR TIPO y por persona (`telegram_alertas_suscripciones.escalamiento`)
+// -- la variable de entorno `HATO_ALERTAS_ESCALAMIENTO_TELEGRAM_ID` deja de
+// ser la fuente de verdad (`hato-alertas-tick.ts` ya no la lee).
+//
+// Este bloque es deliberadamente GENÉRICO por módulo (`alertas_catalogo`
+// sirve a cualquiera, no solo al hato) -- `claveAlertaCatalogo`/
+// `agruparSuscriptoresPorClave` no importan nada de `calculosHato` ni saben
+// qué es una vaca. Los constructores de mensaje de "ya resuelta"/"cerrada
+// para todos" SÍ son específicos del hato porque forman parte del texto que
+// ve Fernando/Martha en el chat -- si mañana `aguacate`/`ganado` tienen su
+// propio motor de alertas, ese motor tendrá sus propios constructores de
+// mensaje (mismo criterio que ya separa `hato_alertas` de un futuro
+// `aguacate_alertas`).
+// ============================================================================
+
+/**
+ * Clave de `alertas_catalogo` para un tipo de alerta de un módulo dado
+ * (`modulo.tipo`, migración 096). Único punto que arma esa concatenación --
+ * tanto el tick (resolver destinatarios/escalamiento) como cualquier código
+ * futuro que necesite la misma clave la calculan aquí, nunca con un
+ * template string suelto en otro archivo.
+ */
+export function claveAlertaCatalogo(modulo: string, tipo: string): string {
+  return `${modulo}.${tipo}`;
+}
+
+/** Fila mínima de `telegram_alertas_suscripciones` JOIN `telegram_usuarios`
+ * que este motor necesita -- el caller (tick) ya resolvió `telegram_id`
+ * desde el embed y ya filtró `telegram_usuarios.activo = true` en la
+ * consulta (un suscrito desactivado no debe recibir ni escalar). */
+export interface FilaSuscripcionAlerta {
+  alerta_clave: string;
+  recibe: boolean;
+  escalamiento: boolean;
+  /** `telegram_usuarios.telegram_id`, como string -- mismo motivo que
+   * `OpcionesEnvioTelegram.telegramId` en `telegram/enviar.ts` (no arriesgar
+   * precisión de un `bigint` al pasar por un `number` de JS). */
+  telegram_id: string;
+}
+
+/** Destinatarios de un tipo de alerta, ya separados por las dos casillas. Un
+ * mismo `telegram_id` puede aparecer en ambas listas (recibe Y escala) o
+ * solo en una. */
+export interface SuscriptoresPorClave {
+  recibe: string[];
+  escalamiento: string[];
+}
+
+/**
+ * Agrupa las filas de suscripción (ya resueltas a `telegram_id`, JOIN hecho
+ * por el caller) por `alerta_clave`, separando quién recibe el envío normal
+ * de quién recibe el escalamiento. Pura -- ninguna llamada a Supabase ni a
+ * Telegram aquí, eso vive en `hato-alertas-tick.ts` (I/O).
+ */
+export function agruparSuscriptoresPorClave(filas: FilaSuscripcionAlerta[]): Map<string, SuscriptoresPorClave> {
+  const mapa = new Map<string, SuscriptoresPorClave>();
+  for (const fila of filas) {
+    let entrada = mapa.get(fila.alerta_clave);
+    if (!entrada) {
+      entrada = { recibe: [], escalamiento: [] };
+      mapa.set(fila.alerta_clave, entrada);
+    }
+    if (fila.recibe) entrada.recibe.push(fila.telegram_id);
+    if (fila.escalamiento) entrada.escalamiento.push(fila.telegram_id);
+  }
+  return mapa;
+}
+
+// ----------------------------------------------------------------------------
+// Mensajes de cierre (callback `hato_alerta:{id}:{si|no|otro}` en
+// `telegram/bot.ts`) -- broadcast con cierre por el primero.
+// ----------------------------------------------------------------------------
+
+/** Texto corto de cada respuesta posible, para componer los mensajes de
+ * cierre -- una sola definición, reutilizada por los dos constructores de
+ * abajo (antes había un riesgo real de que "Todavía no" se escribiera
+ * distinto en dos lugares). */
+export function etiquetaRespuestaAlerta(respuesta: 'si' | 'no' | 'otro'): string {
+  switch (respuesta) {
+    case 'si':
+      return 'Sí';
+    case 'no':
+      return 'Todavía no';
+    case 'otro':
+      return 'Otra cosa';
+    default: {
+      const _exhaustivo: never = respuesta;
+      return _exhaustivo;
+    }
+  }
+}
+
+/**
+ * Mensaje que reemplaza el de un suscrito que llega TARDE a responder una
+ * alerta que otro suscrito ya cerró (broadcast, cierre por el primero) --
+ * tanto para el popup de `answerCallbackQuery` de quien toca el botón dos
+ * veces como para editar el mensaje de los demás suscritos cuando alguno de
+ * ellos SÍ fue el primero. "Amablemente", no un error -- es el
+ * comportamiento esperado del diseño, no una falla.
+ */
+export function construirMensajeAlertaYaResuelta(
+  estado: EstadoAlertaHato,
+  respondidaPor: string | null,
+  respuesta: 'si' | 'no' | 'otro' | null,
+): string {
+  if (respondidaPor && respuesta) {
+    return `Esta alerta ya fue resuelta por ${respondidaPor} (respuesta: "${etiquetaRespuestaAlerta(respuesta)}"). No quedó nada más por hacer.`;
+  }
+  return `Esta alerta ya no está activa (estado: ${estado}).`;
+}
+
+/**
+ * Texto con el que se edita el mensaje de CADA suscrito al que se le envió
+ * la alerta (vía `hato_alertas_envios.message_id`), una vez que uno de ellos
+ * la cierra -- así todos ven que ya se resolvió y por quién, sin tener que
+ * abrir la app. `mensajeOriginal` es el mismo texto que ya recibieron (se
+ * conserva, no se reemplaza, para no perder el contexto de la alerta).
+ */
+export function construirMensajeCierreAlertaBroadcast(
+  mensajeOriginal: string,
+  respondidaPor: string,
+  respuesta: 'si' | 'no' | 'otro',
+): string {
+  return `✅ Resuelto por ${respondidaPor}: "${etiquetaRespuestaAlerta(respuesta)}"\n\n${mensajeOriginal}`;
+}

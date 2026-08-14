@@ -5,6 +5,16 @@
 // escribe a alguien SIN que haya escrito primero (el tick diario cron ->
 // `hato-alertas-tick.ts`).
 //
+// Migración 096 (2026-08-14, suscripciones + broadcast con cierre por el
+// primero) agrega `editarMensajeTelegram`/`cerrarAlertaEnEnvios`: cuando un
+// suscrito responde una alerta que se mandó a VARIOS suscritos, los mensajes
+// de los DEMÁS hay que editarlos para que se vea que ya se resolvió y por
+// quién — pero esos mensajes viven en OTROS chats, no en el del que
+// respondió, así que `ctx.editMessageText` (que solo edita el mensaje del
+// `Context` actual) no alcanza. Estas dos funciones llaman directo a la Bot
+// API con el `chat_id`/`message_id` guardados en `hato_alertas_envios` (la
+// tabla de envíos del broadcast, una fila por (alerta, suscrito)).
+//
 // Deliberadamente NO reutiliza la instancia interna de `getBot()` de
 // `bot.ts` (no está exportada, y exportarla acoplaría el tick al ciclo de
 // vida completo del bot -- sesiones persistidas, plugin de conversations,
@@ -129,4 +139,102 @@ export async function enviarMensajeTelegram(
 
   await registrarEnvio(supabase, opciones, resultado);
   return resultado;
+}
+
+// ----------------------------------------------------------------------------
+// Edición de un mensaje YA enviado, en un chat que puede no ser el que
+// disparó el callback (migración 096, broadcast con cierre por el primero).
+// ----------------------------------------------------------------------------
+
+export interface OpcionesEdicionTelegram {
+  /** `chat_id` de Telegram del mensaje a editar -- NO necesariamente el chat
+   * de quien respondió la alerta (ese es el punto: se editan los mensajes de
+   * los DEMÁS suscritos). */
+  telegramId: string;
+  /** `message_id` devuelto por `sendMessage` en su momento (guardado en
+   * `hato_alertas_envios.message_id`). */
+  messageId: number;
+  texto: string;
+}
+
+/**
+ * Edita el texto de un mensaje ya enviado, vía la Bot API (`editMessageText`)
+ * -- nunca `ctx.editMessageText`, que solo sabe editar el mensaje del
+ * `Context` en curso. Mismo contrato duro que `enviarMensajeTelegram`: NUNCA
+ * lanza. Telegram rechaza editar un mensaje de más de 48h -- ese fallo (como
+ * cualquier otro: chat bloqueado, mensaje borrado por el usuario) se
+ * devuelve como `{ ok: false, error }` y el caller decide si sigue con el
+ * siguiente destinatario del broadcast.
+ *
+ * No se audita en `telegram_mensajes` (a diferencia de `enviarMensajeTelegram`):
+ * esa tabla registra mensajes NUEVOS, y una edición no es un mensaje nuevo --
+ * el mensaje original ya quedó auditado cuando se mandó.
+ */
+export async function editarMensajeTelegram(opciones: OpcionesEdicionTelegram): Promise<ResultadoEnvioTelegram> {
+  try {
+    const respuesta = await fetch(urlApiTelegram('editMessageText'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: opciones.telegramId,
+        message_id: opciones.messageId,
+        text: opciones.texto,
+      }),
+    });
+    const json = await respuesta.json().catch(() => null);
+    if (!respuesta.ok || !json?.ok) {
+      return { ok: false, error: json?.description ?? `Telegram respondió HTTP ${respuesta.status}` };
+    }
+    return { ok: true, telegramMessageId: opciones.messageId };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export interface ResultadoCierreAlertaEnvios {
+  editados: number;
+  fallidos: number;
+}
+
+/**
+ * Edita el mensaje de CADA suscrito al que se le mandó una alerta
+ * (`hato_alertas_envios`, una fila por (alerta_id, telegram_id)) para
+ * mostrar que ya se resolvió -- el corazón del broadcast "cierre por el
+ * primero" (migración 096). `excluirTelegramId` deja afuera el chat de quien
+ * ACABA de responder: ese mensaje ya lo edita el propio callback vía
+ * `ctx.editMessageReplyMarkup()` (más rápido, no necesita ir por la Bot API
+ * con un `chat_id` explícito) -- editarlo dos veces por dos caminos distintos
+ * es una carrera innecesaria contra el mismo mensaje.
+ *
+ * Un fallo puntual (mensaje ya editado más de 48h, chat bloqueado) no aborta
+ * el resto -- se cuenta en `fallidos` y el caller decide si lo loguea.
+ */
+export async function cerrarAlertaEnEnvios(
+  supabase: SupabaseClient,
+  alertaId: string,
+  excluirTelegramId: string | null,
+  texto: string,
+): Promise<ResultadoCierreAlertaEnvios> {
+  const { data: envios, error } = await supabase
+    .from('hato_alertas_envios')
+    .select('telegram_id, message_id')
+    .eq('alerta_id', alertaId);
+  if (error) {
+    console.error('[hato-alertas][hato_alertas_envios] no se pudieron leer los envíos para cerrar la alerta:', error.message);
+    return { editados: 0, fallidos: 0 };
+  }
+
+  let editados = 0;
+  let fallidos = 0;
+  for (const envio of (envios ?? []) as Array<{ telegram_id: string; message_id: number | null }>) {
+    if (excluirTelegramId && envio.telegram_id === excluirTelegramId) continue;
+    if (envio.message_id == null) {
+      fallidos += 1;
+      continue;
+    }
+    const resultado = await editarMensajeTelegram({ telegramId: envio.telegram_id, messageId: envio.message_id, texto });
+    if (resultado.ok) editados += 1;
+    else fallidos += 1;
+  }
+  return { editados, fallidos };
 }
