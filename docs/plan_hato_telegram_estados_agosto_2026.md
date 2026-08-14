@@ -6,13 +6,18 @@ bimensual. De ahí sale todo este alcance.
 
 **Estado del documento:** grafo aprobado y **en ejecución**. Ver §7 (Estado) al final.
 
-> **El grafo está construido (2026-08-14).** Los 26 nodos de código están
-> hechos, las migraciones 094 y 095 aplicadas y la edge function desplegada.
-> **Queda un solo nodo: N27** (destinatarios de alertas), que es configuración y
-> espera decisión del dueño. Lo demás pendiente NO son nodos del grafo sino
-> cierres de campo — imprimir la planilla, probar `/pesaje` por foto en el
-> corral y mezclar a `main` para que el frontend llegue a producción. Todo
-> listado en §8.5.
+> **Grafo cerrado y en producción (2026-08-14).** Los 26 nodos de código están
+> hechos, las migraciones 094/095/096 aplicadas, la edge function desplegada y
+> el frontend mezclado a `main` (PR #117, desplegado por Vercel).
+>
+> **N27 ya no existe como tarea**: la migración 096 lo absorbió. Agregar a
+> Fernando a `secado_due` y `parto_proximo` era una migración o una edición a
+> mano; ahora son dos casillas en Configuración → Telegram. El grafo queda
+> **sin nodos abiertos**.
+>
+> Lo que sigue pendiente NO son nodos sino cierres de campo y una decisión:
+> imprimir la planilla, probar `/pesaje` por foto en el corral, y decidir si se
+> enciende el escalamiento (que nunca funcionó). Todo en §8.5.
 
 ---
 
@@ -416,7 +421,7 @@ ve antes de aprobar.
 | N24 · Tests | ✅ | 2.182 en verde, 0 errores de lint, `tsc` limpio, los 4 generadores de espejos en sincronía. |
 | N25 · Deploy | ✅ **2026-08-14** | Desplegada después de las migraciones (el orden importa: el tick pide las columnas de 094). `/health` → 200. |
 | N26 · Aplicar migraciones | ✅ **2026-08-14** | 094 y 095, verificadas contra el catálogo vivo. |
-| N27 · Destinatarios de alertas | ⬜ pendiente | Cambio de configuración, no de código. **Único nodo del grafo que sigue abierto.** Cambia a quién le llegan mensajes de Telegram, así que espera decisión explícita del dueño. |
+| N27 · Destinatarios de alertas | ✅ **absorbido por la migración 096 (2026-08-14)** | Dejó de ser una tarea: `alertas_catalogo` + `telegram_alertas_suscripciones` hacen que "quién recibe qué" sea una casilla por usuario y por tipo, para cualquier módulo. Agregar a Fernando ya no requiere migración ni código. |
 
 
 ---
@@ -496,11 +501,12 @@ verificación que pide N25 tras el incidente del 2026-08-11.
   supiera (ver la tabla de §7). Lo que faltaba de verdad era exponer el estado
   derivado y detectar la contradicción, que es lo que se construyó.
 
-### 8.3 Decisión pendiente del dueño
+### 8.3 Cerrado — el frontend YA está en producción (2026-08-14)
 
-El frontend (lista del hato con Edad/Partos/Señal/Próximo evento) **no llega a
-producción hasta que la rama se mezcle a `main`**, que es de donde construye
-Vercel. No se abrió PR por decisión de proceso, no por olvido.
+Esta sección decía que el frontend no llegaba a producción hasta mezclar a
+`main`. **Se mezcló**: PR #117, squash `79ff4d4`, y Vercel construyó y desplegó
+a Producción a las 19:06Z (estado `success` sobre el commit del merge). La
+lista del hato, la planilla del chequeo y las casillas de alertas están vivas.
 
 ### 8.4 El bug que atrapó la guarda de la 095 (2026-08-14)
 
@@ -574,6 +580,15 @@ ampliar el alcance:
 Fernando como destinatario de `secado_due` y `parto_proximo` cambia a quién le
 llegan mensajes de Telegram, así que espera decisión explícita del dueño.
 
-**4. El frontend no está en producción.** Sigue vigente §8.3: la lista del hato,
-la planilla y el diff sólo llegan cuando la rama se mezcle a `main`. Lo
-desplegado hoy es la edge function (Telegram y los endpoints), que sí está viva.
+**4. ~~El frontend no está en producción.~~ Resuelto el 2026-08-14** — ver §8.3.
+
+**5. El escalamiento de alertas nunca funcionó.** Descubierto al montar las
+suscripciones: `HATO_ALERTAS_ESCALAMIENTO_TELEGRAM_ID` nunca se configuró, así
+que desde julio una alerta sin responder a las 48h se marca `escalada` y no le
+llega a nadie. La migración 096 dejó `escalamiento=false` en todas las
+suscripciones justamente para no encender de refilón una función apagada:
+encenderla es marcar la casilla. **Decisión pendiente del dueño.**
+
+**6. `hato_alertas_config.destinatario_telegram_id` quedó vestigial** — el
+motor ya no la lee. No se borró: tiene historia, y borrar una columna merece su
+propia migración.
