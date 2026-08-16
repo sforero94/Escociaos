@@ -1,10 +1,12 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Send, Plus, ArrowLeft, Trash2, X, FileDown, Pencil, Check } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Send, Plus, ArrowLeft, Trash2, X, FileDown, Pencil, Check, Square } from 'lucide-react';
 import { toast } from 'sonner';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { ChatMessageBubble, splitChartBlocks } from './ChatMessage';
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { ChatMessageView, ChatMessageAcciones, splitChartBlocks } from './ChatMessage';
 import { EscoTraza } from './EscoTraza';
+import { EscoMemoriaAprobacion } from './EscoMemoriaAprobacion';
 import { ExportarInformeDialog } from './ExportarInformeDialog';
 import type { ExportData } from './ExportarInformeDialog';
 import { ChatEmptyState } from './ChatEmptyState';
@@ -25,17 +27,51 @@ interface ChatPanelProps {
 
 const MOBILE_BREAKPOINT = 1024; // lg breakpoint — matches Layout.tsx
 
+/** Forma con la que el servidor persiste cada llamada en `chat_messages.metadata`. */
+interface ToolInteractionPersistida {
+  tool: string;
+  args?: Record<string, unknown>;
+  result_summary?: string;
+}
+
 /**
- * Traza que quedó adjunta a un mensaje ya respondido.
+ * Traza de un mensaje ya respondido.
  *
- * Se guarda en el `metadata` del mensaje temporal del cliente, así que sobrevive
- * mientras dure la sesión pero no al recargar: el servidor persiste la misma
- * información en `metadata.tool_interactions`, y leerla de ahí al reabrir una
- * conversación vieja es trabajo de la fase 3 (trazabilidad), no de esta.
+ * Dos fuentes, en orden de preferencia:
+ *
+ *  1. `metadata.traza` — la que el cliente armó en vivo con los eventos SSE.
+ *     Trae duraciones reales, pero solo existe mientras dure la sesión.
+ *  2. `metadata.tool_interactions` — la que el servidor persiste en cada
+ *     respuesta para reinyectarla en el turno siguiente. No trae duraciones,
+ *     pero sobrevive a recargar y a reabrir una conversación vieja.
+ *
+ * La segunda ya se guardaba desde antes de este módulo; simplemente nadie la
+ * leía. Es lo que hace que la trazabilidad no se evapore al cerrar el panel.
  */
 function trazaDeMensaje(msg: ChatMessage): PasoTraza[] | null {
-  const traza = msg.metadata?.traza;
-  return Array.isArray(traza) && traza.length > 0 ? (traza as PasoTraza[]) : null;
+  const enVivo = msg.metadata?.traza;
+  if (Array.isArray(enVivo) && enVivo.length > 0) return enVivo as PasoTraza[];
+
+  const persistida = msg.metadata?.tool_interactions;
+  if (!Array.isArray(persistida) || persistida.length === 0) return null;
+
+  return (persistida as ToolInteractionPersistida[])
+    .filter((t) => typeof t?.tool === 'string')
+    .map((t, i) => ({ index: i, tool: t.tool, args: t.args }));
+}
+
+/**
+ * Memoria que Esco propuso guardar en este turno y que nadie confirmó todavía.
+ *
+ * `propose_memory_save` no escribe nada: deja la propuesta para que el cliente
+ * la confirme. El contenido viaja en los `args` de la llamada, así que la traza
+ * — en vivo o rehidratada — ya lo tiene y no hace falta el token que usa
+ * Telegram para rescatarlo del cache del servidor.
+ */
+function memoriaPropuesta(pasos: PasoTraza[] | null): string | null {
+  const paso = pasos?.find((p) => p.tool === 'propose_memory_save');
+  const content = paso?.args?.content;
+  return typeof content === 'string' && content.trim() ? content.trim() : null;
 }
 
 export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
@@ -57,6 +93,9 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
   const [renameValue, setRenameValue] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  /** Última pregunta enviada, para el botón «Reintentar». */
+  const ultimaPreguntaRef = useRef<string>('');
 
   // Detect mobile viewport
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < MOBILE_BREAKPOINT);
@@ -66,36 +105,9 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // Lock body scroll when panel is open
-  useEffect(() => {
-    if (open) {
-      const scrollY = window.scrollY;
-      document.body.style.overflow = 'hidden';
-      document.body.style.position = 'fixed';
-      document.body.style.top = `-${scrollY}px`;
-      document.body.style.width = '100%';
-      return () => {
-        document.body.style.overflow = '';
-        document.body.style.position = '';
-        document.body.style.top = '';
-        document.body.style.width = '';
-        window.scrollTo(0, scrollY);
-      };
-    }
-  }, [open]);
-
-  // Panel styles — responsive: on mobile, 90% height panel from bottom
-  const panelStyle = useMemo(() => ({
-    position: 'fixed' as const,
-    top: isMobile ? '10dvh' : 0,
-    right: 0,
-    bottom: 0,
-    width: isMobile ? '100%' : '50vw',
-    maxWidth: '100%',
-    minWidth: isMobile ? undefined : '400px',
-    zIndex: 51,
-    borderRadius: isMobile ? '1rem 1rem 0 0' : undefined,
-  }), [isMobile]);
+  // El bloqueo de scroll del fondo lo hace Radix Dialog. Antes se hacía a mano
+  // moviendo `document.body.style.position` a `fixed` y restaurando el scrollY,
+  // que además de frágil dejaba el panel sin trampa de foco ni cierre con Escape.
 
   const scrollToBottom = useCallback(() => {
     setTimeout(() => {
@@ -128,12 +140,18 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
     }
   }, [open, isStreaming, currentConversationId]);
 
+  // Cortar el stream si el panel se cierra a mitad de una respuesta.
+  useEffect(() => {
+    if (!open) abortRef.current?.abort();
+  }, [open]);
+
   const handleSend = async (text?: string) => {
     const messageText = (text || input).trim();
     if (!messageText || isStreaming) return;
 
     setInput('');
     setShowHistory(false);
+    ultimaPreguntaRef.current = messageText;
 
     const tempUserMsg: ChatMessage = {
       id: crypto.randomUUID(),
@@ -150,6 +168,9 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
     setStreamingContent('');
     trazaRef.current = [];
     setTraza([]);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     let finalConversationId = currentConversationId;
 
@@ -187,7 +208,7 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
         } else if (event.type === 'error') {
           toast.error(event.message || 'Error del asistente');
         }
-      });
+      }, controller.signal);
 
       // Se captura ANTES del updater: React lo ejecuta en la fase de render, o sea
       // después de que la línea que limpia el ref ya corrió. Leer `trazaRef.current`
@@ -220,17 +241,46 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
 
       fetchConversations().then(setConversations).catch(() => {});
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error al enviar mensaje';
-      toast.error(msg);
+      // Detener no es un error: el usuario lo pidió.
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        setStreamingContent('');
+        setTraza([]);
+        trazaRef.current = [];
+      } else {
+        const msg = err instanceof Error ? err.message : 'Error al enviar mensaje';
+        toast.error(msg);
+      }
     } finally {
+      abortRef.current = null;
       setIsStreaming(false);
     }
   };
 
+  const handleDetener = () => {
+    abortRef.current?.abort();
+  };
+
+  const handleReintentar = useCallback(() => {
+    const pregunta = ultimaPreguntaRef.current;
+    if (!pregunta || isStreaming) return;
+    // Se quita el último turno (pregunta + respuesta) para no duplicarlo.
+    setMessages((prev) => {
+      const copia = [...prev];
+      while (copia.length && copia[copia.length - 1].role === 'assistant') copia.pop();
+      if (copia.length && copia[copia.length - 1].role === 'user') copia.pop();
+      return copia;
+    });
+    handleSend(pregunta);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStreaming]);
+
   const handleNewConversation = () => {
+    abortRef.current?.abort();
     setCurrentConversationId(null);
     setMessages([]);
     setStreamingContent('');
+    setTraza([]);
+    trazaRef.current = [];
     setShowHistory(false);
   };
 
@@ -304,218 +354,260 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
   };
 
   const currentTitle = conversations.find((c) => c.id === currentConversationId)?.title;
-
-  if (!open) return null;
+  const ultimoAsistenteIdx = messages.reduce(
+    (ultimo, m, i) => (m.role === 'assistant' ? i : ultimo),
+    -1,
+  );
 
   return (
     <>
-      {/* Overlay */}
-      <div
-        style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 50,
-          backgroundColor: 'rgba(0,0,0,0.4)',
-          backdropFilter: isMobile ? 'blur(2px)' : undefined,
-        }}
-        onClick={() => onOpenChange(false)}
-      />
-      {/* Panel */}
-      <div
-        style={panelStyle}
-        className="bg-background shadow-lg border-l"
-      >
-        <div className="flex h-full flex-col">
-          {/* Header */}
-          <div className="flex items-center gap-1 border-b px-4 lg:px-4 py-3">
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent
+          side={isMobile ? 'bottom' : 'right'}
+          // `[&>button]:hidden` oculta la X que trae SheetContent: se superpondría
+          // con la del encabezado propio, que además lleva la etiqueta en español.
+          className={
+            'gap-0 p-0 [&>button]:hidden ' +
+            (isMobile
+              ? 'h-[90dvh] rounded-t-2xl'
+              : 'w-[50vw] min-w-[400px] sm:max-w-none')
+          }
+          onOpenAutoFocus={(ev) => {
+            // El foco va al campo de texto, no al primer botón del encabezado.
+            ev.preventDefault();
+            inputRef.current?.focus();
+          }}
+        >
+          {/* Radix exige un título accesible; el visible vive en el encabezado. */}
+          <SheetTitle className="sr-only">{currentTitle || 'Esco, asistente de datos'}</SheetTitle>
+          <SheetDescription className="sr-only">
+            Preguntá sobre labores, monitoreo, finanzas, hato y clima de la finca.
+          </SheetDescription>
+
+          <div className="flex h-full min-h-0 flex-col">
+            {/* Header */}
+            <div className="flex items-center gap-1 border-b px-4 lg:px-4 py-3">
+              {showHistory ? (
+                <>
+                  <Button variant="ghost" size="icon" className="h-10 w-10 lg:h-8 lg:w-8" onClick={() => setShowHistory(false)}>
+                    <ArrowLeft className="h-5 w-5 lg:h-4 lg:w-4" />
+                  </Button>
+                  <span className="text-sm font-semibold ml-1">Conversaciones</span>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-10 lg:h-8 px-3 text-xs text-muted-foreground"
+                    onClick={() => setShowHistory(true)}
+                  >
+                    Historial
+                  </Button>
+                  <span className="flex-1 truncate text-center text-sm font-semibold">
+                    {currentTitle || 'Esco'}
+                  </span>
+                  <Button variant="ghost" size="icon" className="h-10 w-10 lg:h-8 lg:w-8" onClick={handleNewConversation} title="Nueva conversación">
+                    <Plus className="h-5 w-5 lg:h-4 lg:w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-10 w-10 lg:h-8 lg:w-8"
+                    onClick={handleExport}
+                    disabled={!messages.some((m) => m.role === 'assistant')}
+                    title="Exportar como informe"
+                  >
+                    <FileDown className="h-5 w-5 lg:h-4 lg:w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-10 w-10 lg:h-8 lg:w-8" onClick={() => onOpenChange(false)} title="Cerrar">
+                    <X className="h-5 w-5 lg:h-4 lg:w-4" />
+                  </Button>
+                </>
+              )}
+            </div>
+
+            {/* Body */}
             {showHistory ? (
-              <>
-                <Button variant="ghost" size="icon" className="h-10 w-10 lg:h-8 lg:w-8" onClick={() => setShowHistory(false)}>
-                  <ArrowLeft className="h-5 w-5 lg:h-4 lg:w-4" />
-                </Button>
-                <span className="text-sm font-semibold ml-1">Conversaciones</span>
-              </>
+              <ScrollArea className="flex-1">
+                <div className="flex flex-col gap-1 p-2">
+                  {conversations.length === 0 && (
+                    <p className="p-4 text-center text-sm text-muted-foreground">
+                      Sin conversaciones aun
+                    </p>
+                  )}
+                  {conversations.map((conv) => (
+                    <div
+                      key={conv.id}
+                      className="group flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-muted cursor-pointer"
+                      onClick={() => renamingId !== conv.id && handleSelectConversation(conv.id)}
+                    >
+                      {renamingId === conv.id ? (
+                        <input
+                          autoFocus
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleConfirmRename();
+                            if (e.key === 'Escape') setRenamingId(null);
+                          }}
+                          onBlur={handleConfirmRename}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex-1 rounded border bg-background px-2 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                        />
+                      ) : (
+                        <span className="flex-1 truncate text-sm">
+                          {conv.title || 'Sin titulo'}
+                        </span>
+                      )}
+                      {renamingId === conv.id ? (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={(ev: React.MouseEvent) => {
+                            ev.stopPropagation();
+                            handleConfirmRename();
+                          }}
+                        >
+                          <Check className="h-3.5 w-3.5 text-primary" />
+                        </Button>
+                      ) : (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                            onClick={(ev: React.MouseEvent) => {
+                              ev.stopPropagation();
+                              handleStartRename(conv);
+                            }}
+                          >
+                            <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                            onClick={(ev: React.MouseEvent) => {
+                              ev.stopPropagation();
+                              handleDeleteConversation(conv.id);
+                            }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
             ) : (
               <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-10 lg:h-8 px-3 text-xs text-muted-foreground"
-                  onClick={() => setShowHistory(true)}
+                {/* Messages */}
+                <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
+                  {messages.length === 0 && !streamingContent && !isStreaming ? (
+                    <ChatEmptyState onSelectPrompt={(p) => handleSend(p)} />
+                  ) : (
+                    <div className="flex flex-col gap-4 p-5">
+                      {messages.map((msg, idx) => {
+                        const trazaMsg = trazaDeMensaje(msg);
+                        const esUltimoAsistente = idx === ultimoAsistenteIdx;
+                        const propuesta = msg.role === 'assistant' ? memoriaPropuesta(trazaMsg) : null;
+
+                        return (
+                          <div key={msg.id} className="flex flex-col gap-2">
+                            {trazaMsg && (
+                              <div className="pl-9">
+                                <EscoTraza pasos={trazaMsg} trabajando={false} />
+                              </div>
+                            )}
+                            {/* `data-role` envuelve SOLO la respuesta: `handleExport`
+                                lo usa para capturar el nodo del informe, y ni la
+                                traza ni las acciones son parte del informe. */}
+                            <div data-role={msg.role}>
+                              <ChatMessageView role={msg.role} content={msg.content} />
+                            </div>
+                            {msg.role === 'assistant' && (
+                              <ChatMessageAcciones
+                                contenido={msg.content}
+                                onReintentar={esUltimoAsistente && !isStreaming ? handleReintentar : undefined}
+                              />
+                            )}
+                            {propuesta && (
+                              <div className="pl-9">
+                                {/* La tarjeta se queda montada al resolverse: se
+                                    convierte en su propio acuse («Guardado en la
+                                    memoria de Esco»). Desmontarla dejaba al
+                                    usuario sin saber si había quedado o no. */}
+                                <EscoMemoriaAprobacion propuesta={propuesta} />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {isStreaming && (
+                        <div className="flex flex-col gap-2">
+                          {/* `pl-9` alinea la traza con el texto de la respuesta
+                              (avatar de 28 px + 8 px de gap). */}
+                          <div className="pl-9">
+                            <EscoTraza pasos={traza} trabajando={!streamingContent} />
+                          </div>
+                          {streamingContent && (
+                            <ChatMessageView role="assistant" content={streamingContent} />
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Input */}
+                <div
+                  className="border-t px-4 pt-3"
+                  style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))' }}
                 >
-                  Historial
-                </Button>
-                <span className="flex-1 truncate text-center text-sm font-semibold">
-                  {currentTitle || 'Esco'}
-                </span>
-                <Button variant="ghost" size="icon" className="h-10 w-10 lg:h-8 lg:w-8" onClick={handleNewConversation}>
-                  <Plus className="h-5 w-5 lg:h-4 lg:w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-10 w-10 lg:h-8 lg:w-8"
-                  onClick={handleExport}
-                  disabled={!messages.some((m) => m.role === 'assistant')}
-                  title="Exportar como informe"
-                >
-                  <FileDown className="h-5 w-5 lg:h-4 lg:w-4" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-10 w-10 lg:h-8 lg:w-8" onClick={() => onOpenChange(false)}>
-                  <X className="h-5 w-5 lg:h-4 lg:w-4" />
-                </Button>
+                  <div className="flex items-end gap-3">
+                    <textarea
+                      ref={inputRef}
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder="Pregunta sobre la finca..."
+                      rows={1}
+                      className="flex-1 resize-none rounded-xl border bg-background px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                      style={{ maxHeight: '6rem', minHeight: '44px' }}
+                      disabled={isStreaming}
+                    />
+                    {isStreaming ? (
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-11 w-11 shrink-0 rounded-xl"
+                        onClick={handleDetener}
+                        title="Detener"
+                        aria-label="Detener la respuesta"
+                      >
+                        <Square className="h-4 w-4 fill-current" />
+                      </Button>
+                    ) : (
+                      <Button
+                        size="icon"
+                        className="h-11 w-11 shrink-0 rounded-xl"
+                        onClick={() => handleSend()}
+                        disabled={!input.trim()}
+                        aria-label="Enviar"
+                      >
+                        <Send className="h-5 w-5" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </>
             )}
           </div>
-
-          {/* Body */}
-          {showHistory ? (
-            <ScrollArea className="flex-1">
-              <div className="flex flex-col gap-1 p-2">
-                {conversations.length === 0 && (
-                  <p className="p-4 text-center text-sm text-muted-foreground">
-                    Sin conversaciones aun
-                  </p>
-                )}
-                {conversations.map((conv) => (
-                  <div
-                    key={conv.id}
-                    className="group flex items-center gap-2 rounded-lg px-3 py-2 hover:bg-muted cursor-pointer"
-                    onClick={() => renamingId !== conv.id && handleSelectConversation(conv.id)}
-                  >
-                    {renamingId === conv.id ? (
-                      <input
-                        autoFocus
-                        value={renameValue}
-                        onChange={(e) => setRenameValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleConfirmRename();
-                          if (e.key === 'Escape') setRenamingId(null);
-                        }}
-                        onBlur={handleConfirmRename}
-                        onClick={(e) => e.stopPropagation()}
-                        className="flex-1 rounded border bg-background px-2 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                      />
-                    ) : (
-                      <span className="flex-1 truncate text-sm">
-                        {conv.title || 'Sin titulo'}
-                      </span>
-                    )}
-                    {renamingId === conv.id ? (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={(ev: React.MouseEvent) => {
-                          ev.stopPropagation();
-                          handleConfirmRename();
-                        }}
-                      >
-                        <Check className="h-3.5 w-3.5 text-primary" />
-                      </Button>
-                    ) : (
-                      <>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 opacity-0 group-hover:opacity-100"
-                          onClick={(ev: React.MouseEvent) => {
-                            ev.stopPropagation();
-                            handleStartRename(conv);
-                          }}
-                        >
-                          <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 opacity-0 group-hover:opacity-100"
-                          onClick={(ev: React.MouseEvent) => {
-                            ev.stopPropagation();
-                            handleDeleteConversation(conv.id);
-                          }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          ) : (
-            <>
-              {/* Messages */}
-              <div ref={scrollRef} className="flex-1 overflow-y-auto">
-                {messages.length === 0 && !streamingContent ? (
-                  <ChatEmptyState onSelectPrompt={(p) => handleSend(p)} />
-                ) : (
-                  <div className="flex flex-col gap-4 p-5">
-                    {messages.map((msg) => {
-                      const trazaMsg = trazaDeMensaje(msg);
-                      return (
-                        // El `data-role` envuelve SOLO la burbuja: `handleExport` lo
-                        // usa para capturar el nodo del informe, y la traza no es
-                        // parte del informe.
-                        <div key={msg.id} className="flex flex-col gap-2">
-                          {trazaMsg && (
-                            <div className="pl-9">
-                              <EscoTraza pasos={trazaMsg} trabajando={false} />
-                            </div>
-                          )}
-                          <div data-role={msg.role}>
-                            <ChatMessageBubble role={msg.role} content={msg.content} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {isStreaming && (
-                      <div className="flex flex-col gap-2">
-                        {/* `pl-9` alinea la traza con el texto de la burbuja
-                            (avatar de 28 px + 8 px de gap). */}
-                        <div className="pl-9">
-                          <EscoTraza pasos={traza} trabajando={!streamingContent} />
-                        </div>
-                        {streamingContent && (
-                          <ChatMessageBubble role="assistant" content={streamingContent} />
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Input */}
-              <div
-                className="border-t px-4 pt-3"
-                style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))' }}
-              >
-                <div className="flex items-end gap-3">
-                  <textarea
-                    ref={inputRef}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Pregunta sobre la finca..."
-                    rows={1}
-                    className="flex-1 resize-none rounded-xl border bg-background px-4 py-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                    style={{ maxHeight: '6rem', minHeight: '44px' }}
-                    disabled={isStreaming}
-                  />
-                  <Button
-                    size="icon"
-                    className="h-11 w-11 shrink-0 rounded-xl"
-                    onClick={() => handleSend()}
-                    disabled={!input.trim() || isStreaming}
-                  >
-                    <Send className="h-5 w-5" />
-                  </Button>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+        </SheetContent>
+      </Sheet>
 
       <ExportarInformeDialog
         data={exportData}
