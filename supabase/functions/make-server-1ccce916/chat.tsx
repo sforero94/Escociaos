@@ -473,11 +473,11 @@ const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'get_climate_data',
-    description: 'Datos climáticos de la estación meteorológica Weather Underground (ISANFR102): temperatura, humedad, precipitación acumulada, viento (velocidad/ráfaga/dirección), radiación solar, índice UV. Soporta condiciones actuales, resúmenes por período, y datos históricos.',
+    description: 'Datos climáticos de la estación meteorológica de la finca: temperatura, lluvia, humedad, viento (velocidad/ráfaga/dirección), radiación solar, índice UV. Hay historial diario completo desde 2020-07-01 hasta hoy, más las condiciones actuales. IMPORTANTE: toda respuesta incluye SIEMPRE un bloque `lluvia` con `ultima_lluvia_fecha` y `dias_sin_lluvia` calculados sobre todo el historial, independientemente del rango que pidas — para "hace cuánto no llueve" basta UNA llamada sin parámetros, nunca busques rango por rango. Si un día tiene el pluviómetro con el contador congelado, su lluvia viene como null (sin dato) y se cuenta en `lluvia_dias_sin_dato`: eso significa "no se sabe", nunca "no llovió".',
     parameters: {
       type: 'object',
       properties: {
-        date_from: { type: 'string', description: 'Fecha inicio YYYY-MM-DD (opcional, default: últimos 7 días)' },
+        date_from: { type: 'string', description: 'Fecha inicio YYYY-MM-DD (opcional, default: últimos 7 días). Hay datos desde 2020-07-01.' },
         date_to: { type: 'string', description: 'Fecha fin YYYY-MM-DD (opcional, default: hoy)' },
         metric: { type: 'string', description: 'Métrica específica: temperatura, lluvia, humedad, viento, radiacion, uv (opcional, retorna resumen completo si no se especifica)' },
       },
@@ -2009,153 +2009,331 @@ async function execWeeklyOverview(args: Record<string, unknown>): Promise<string
 // CLIMATE DATA
 // ============================================================================
 
+/**
+ * Dia calendario en Bogota (UTC-5, sin horario de verano).
+ *
+ * El edge function corre en UTC: `new Date().toISOString().slice(0,10)` ya es
+ * *manana* desde las 19:00 hora local, y con eso "dias sin lluvia" se corre un
+ * dia. Es la misma trampa que el CLAUDE.md documenta para `obtenerFechaHoy()`
+ * en el navegador, mirando desde el otro lado.
+ */
+function hoyBogota(): string {
+  return new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function diasEntre(desde: string, hasta: string): number {
+  return Math.round((Date.parse(`${hasta}T00:00:00Z`) - Date.parse(`${desde}T00:00:00Z`)) / 86_400_000);
+}
+
+function sumarDias(fecha: string, dias: number): string {
+  return new Date(Date.parse(`${fecha}T00:00:00Z`) + dias * 86_400_000).toISOString().slice(0, 10);
+}
+
+interface FilaResumenClima {
+  fecha: string;
+  temp_c_avg: number | null;
+  temp_c_max: number | null;
+  temp_c_min: number | null;
+  humedad_pct_avg: number | null;
+  viento_kmh_avg: number | null;
+  rafaga_kmh_max: number | null;
+  radiacion_wm2_avg: number | null;
+  radiacion_wm2_max: number | null;
+  uv_index_max: number | null;
+  lluvia_total_mm: number | null;
+  lluvia_confianza: string | null;
+}
+
+/**
+ * Puerta de confianza de la lluvia — espejo de `lluviaConfiableDeResumen()`
+ * en `src/utils/calculosClima.ts`.
+ *
+ * El contador de lluvia de Ecowitt es acumulado y solo se reinicia a medianoche
+ * si el sensor se porta bien; cuando no, la API sigue sirviendo el total del dia
+ * anterior. La migracion 068 marca esos dias como `contador_congelado`. Un dia
+ * marcado vale **null (sin dato)**, jamas 0: "no llovio" y "no sabemos" son
+ * cosas distintas, y confundirlas es exactamente lo que producia el bug de
+ * lluvia duplicada.
+ */
+function lluviaConfiable(fila: { lluvia_total_mm: number | null; lluvia_confianza?: string | null }): number | null {
+  if (fila.lluvia_confianza === 'contador_congelado') return null;
+  return fila.lluvia_total_mm;
+}
+
+/**
+ * Lluvia del dia de hoy a partir de las lecturas crudas.
+ *
+ * `clima_resumen_diario` lo produce un cron a las 00:15 Bogota, asi que el dia
+ * en curso todavia no existe ahi. Se toma la lectura mas fresca de hoy y solo
+ * se cree si su propio `lluvia_diaria_actualizada_en` cae hoy — misma regla que
+ * aplica el rollup de la 068.
+ */
+function lluviaDeHoy(lecturas: Array<Record<string, unknown>>, hoy: string): number | null {
+  for (const r of lecturas) {
+    const dia = String(r.timestamp).slice(0, 10);
+    if (dia !== hoy) continue;
+    if (r.lluvia_diaria_mm == null) continue;
+    const marca = r.lluvia_diaria_actualizada_en;
+    if (marca != null && String(marca).slice(0, 10) !== hoy) return null; // contador congelado
+    return r.lluvia_diaria_mm as number;
+  }
+  return null;
+}
+
+/**
+ * Datos climaticos.
+ *
+ * **La historia vive en `clima_resumen_diario`, no en `clima_lecturas`.**
+ * `clima_lecturas` es una ventana rodante de 24 h que un cron poda a diario
+ * (migracion 036): hoy tiene ~490 filas, dos dias. `clima_resumen_diario` tiene
+ * una fila por dia desde 2020-07-01. Esta funcion leia solo `clima_lecturas`,
+ * asi que TODA pregunta historica devolvia "no hay datos" — y el modelo, al no
+ * encontrar nada, se ponia a buscar rango por rango hasta agotar las rondas del
+ * loop, o peor, rellenaba el hueco con cifras inventadas (reportado 2026-08-16:
+ * dijo "47 dias sin lluvia" cuando habian pasado 4).
+ *
+ * Reparto de fuentes:
+ *  - `clima_resumen_diario` → la serie diaria de todo el rango pedido.
+ *  - `clima_lecturas`       → condiciones actuales y el dia en curso, que el
+ *                             rollup todavia no produjo.
+ */
 async function execClimateData(args: Record<string, unknown>): Promise<string> {
   const validated = validateDates(args);
   const { metric } = args as { metric?: string };
 
-  // Default: last 7 days
-  const now = new Date();
-  const defaultFrom = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const from = validated.date_from || defaultFrom;
-  const to = validated.date_to || now.toISOString().split('T')[0];
+  const hoy = hoyBogota();
+  const from = validated.date_from || sumarDias(hoy, -7);
+  const to = validated.date_to || hoy;
 
-  // Fetch readings
-  let query = `select=timestamp,temp_c,humedad_pct,viento_kmh,rafaga_kmh,viento_dir,lluvia_diaria_mm,lluvia_diaria_actualizada_en,lluvia_tasa_mm_hr,radiacion_wm2,uv_index`;
-  query += `&timestamp=gte.${e(from)}T00:00:00&timestamp=lte.${e(to)}T23:59:59`;
-  query += `&order=timestamp.desc&limit=5000`;
+  const COLS_RESUMEN = 'fecha,temp_c_avg,temp_c_max,temp_c_min,humedad_pct_avg,viento_kmh_avg,rafaga_kmh_max,radiacion_wm2_avg,radiacion_wm2_max,uv_index_max,lluvia_total_mm,lluvia_confianza';
 
-  const readings = await supabaseQuery('clima_lecturas', query) as Array<Record<string, unknown>>;
+  const rangoIncluyeHoy = to >= hoy;
 
-  if (!readings || readings.length === 0) {
-    return JSON.stringify({ message: 'No hay datos climáticos para el período seleccionado', periodo: { desde: from, hasta: to } });
+  const [resumenRaw, lecturasRaw, ultimaLluviaRaw] = await Promise.all([
+    supabaseQuery('clima_resumen_diario',
+      `select=${COLS_RESUMEN}&fecha=gte.${e(from)}&fecha=lte.${e(to)}&order=fecha.asc&limit=3000`,
+    ) as Promise<FilaResumenClima[]>,
+    rangoIncluyeHoy
+      ? supabaseQuery('clima_lecturas',
+          'select=timestamp,temp_c,humedad_pct,viento_kmh,rafaga_kmh,viento_dir,lluvia_diaria_mm,lluvia_diaria_actualizada_en,radiacion_wm2,uv_index&order=timestamp.desc&limit=600',
+        ) as Promise<Array<Record<string, unknown>>>
+      : Promise.resolve([]),
+    // Ultima lluvia confiable: consulta propia, DELIBERADAMENTE independiente del
+    // rango pedido. "Hace cuanto no llueve" no puede depender de que el modelo
+    // acierte la ventana — esa adivinanza es la que rompia el loop.
+    supabaseQuery('clima_resumen_diario',
+      'select=fecha,lluvia_total_mm,lluvia_confianza&lluvia_total_mm=gt.0&lluvia_confianza=eq.ok&order=fecha.desc&limit=1',
+    ) as Promise<Array<{ fecha: string; lluvia_total_mm: number }>>,
+  ]);
+
+  const resumen = resumenRaw ?? [];
+  const lecturas = lecturasRaw ?? [];
+
+  // ---- Serie diaria: resumen historico + el dia en curso desde las lecturas ----
+  interface DiaClima {
+    fecha: string;
+    temp_avg: number | null; temp_max: number | null; temp_min: number | null;
+    humedad_avg: number | null; viento_avg: number | null;
+    lluvia_mm: number | null; lluvia_sin_dato: boolean;
+    radiacion_avg: number | null; radiacion_max: number | null;
   }
 
-  // Latest reading (current conditions)
-  const latest = readings[0];
+  const serie: DiaClima[] = resumen.map((r) => ({
+    fecha: r.fecha,
+    temp_avg: r.temp_c_avg, temp_max: r.temp_c_max, temp_min: r.temp_c_min,
+    humedad_avg: r.humedad_pct_avg, viento_avg: r.viento_kmh_avg,
+    lluvia_mm: lluviaConfiable(r),
+    lluvia_sin_dato: r.lluvia_confianza === 'contador_congelado',
+    radiacion_avg: r.radiacion_wm2_avg, radiacion_max: r.radiacion_wm2_max,
+  }));
 
-  // Helper: extract non-null numbers
-  const nums = (field: string) => readings.map(r => r[field]).filter((v): v is number => v !== null && typeof v === 'number');
+  const nums = (arr: Array<number | null | undefined>) =>
+    arr.filter((v): v is number => typeof v === 'number');
+  const avg = (arr: number[]) => (arr.length ? Math.round((arr.reduce((s, v) => s + v, 0) / arr.length) * 10) / 10 : null);
+  const max = (arr: number[]) => (arr.length ? arr.reduce((a, b) => (a > b ? a : b)) : null);
+  const min = (arr: number[]) => (arr.length ? arr.reduce((a, b) => (a < b ? a : b)) : null);
+  const r1 = (v: number) => Math.round(v * 10) / 10;
 
-  const temps = nums('temp_c');
-  const humedad = nums('humedad_pct');
-  const viento = nums('viento_kmh');
-  const rafaga = nums('rafaga_kmh');
-  const radiacion = nums('radiacion_wm2');
-  const uv = nums('uv_index');
-
-  // Rainfall: trust only the freshest reading of each day (Ecowitt's rain
-  // counter is cumulative and only resets at local midnight if the sensor
-  // behaves — a stuck counter otherwise re-reports a prior day's total
-  // forever; see migration 068 and clima.tsx). `readings` comes ordered
-  // timestamp.desc, so the first reading seen for a given day is already
-  // its most recent one.
-  const lluviaEsFresca = (actualizadaEn: unknown, day: string): boolean =>
-    actualizadaEn == null || String(actualizadaEn).split('T')[0] === day;
-
-  const lluviaMap = new Map<string, number>();
-  const lluviaDiaVisto = new Set<string>();
-  for (const r of readings) {
-    if (r.lluvia_diaria_mm == null) continue;
-    const day = String(r.timestamp).split('T')[0];
-    if (lluviaDiaVisto.has(day)) continue;
-    lluviaDiaVisto.add(day);
-    if (!lluviaEsFresca(r.lluvia_diaria_actualizada_en, day)) continue; // contador sin reiniciar — no confiable
-    lluviaMap.set(day, r.lluvia_diaria_mm as number);
+  const hoyYaEnResumen = serie.some((d) => d.fecha === hoy);
+  const lecturasHoy = lecturas.filter((r) => String(r.timestamp).slice(0, 10) === hoy);
+  if (rangoIncluyeHoy && !hoyYaEnResumen && lecturasHoy.length > 0) {
+    const col = (f: string) => nums(lecturasHoy.map((r) => r[f] as number | null));
+    serie.push({
+      fecha: hoy,
+      temp_avg: avg(col('temp_c')), temp_max: max(col('temp_c')), temp_min: min(col('temp_c')),
+      humedad_avg: avg(col('humedad_pct')), viento_avg: avg(col('viento_kmh')),
+      lluvia_mm: lluviaDeHoy(lecturas, hoy), lluvia_sin_dato: false,
+      radiacion_avg: avg(col('radiacion_wm2')), radiacion_max: max(col('radiacion_wm2')),
+    });
   }
-  const lluviaTotal = Array.from(lluviaMap.values()).reduce((s, v) => s + v, 0);
 
-  const avg = (arr: number[]) => arr.length ? Math.round(arr.reduce((s, v) => s + v, 0) / arr.length * 10) / 10 : null;
-  const max = (arr: number[]) => arr.length ? arr.reduce((a, b) => a > b ? a : b) : null;
-  const min = (arr: number[]) => arr.length ? arr.reduce((a, b) => a < b ? a : b) : null;
+  if (serie.length === 0) {
+    return JSON.stringify({
+      message: 'No hay datos climaticos para el periodo seleccionado',
+      periodo: { desde: from, hasta: to },
+      cobertura_disponible: 'La estacion tiene resumenes diarios desde 2020-07-01. Si el rango es posterior a esa fecha y aun asi sale vacio, no se registro nada ese periodo.',
+    });
+  }
 
-  const result: Record<string, unknown> = {
-    periodo: { desde: from, hasta: to },
-    total_lecturas: readings.length,
-    condiciones_actuales: {
-      timestamp: latest.timestamp,
-      temperatura_c: latest.temp_c,
-      humedad_pct: latest.humedad_pct,
-      viento_kmh: latest.viento_kmh,
-      rafaga_kmh: latest.rafaga_kmh,
-      direccion_viento: latest.viento_dir,
-      radiacion_wm2: latest.radiacion_wm2,
-      uv_index: latest.uv_index,
-    },
-    resumen_periodo: {
-      temperatura: { promedio: avg(temps), maxima: max(temps), minima: min(temps) },
-      humedad: { promedio: avg(humedad), maxima: max(humedad), minima: min(humedad) },
-      viento: { promedio: avg(viento), rafaga_max: max(rafaga) },
-      lluvia_total_mm: Math.round(lluviaTotal * 10) / 10,
-      radiacion: { promedio: avg(radiacion), maxima: max(radiacion) },
-      uv: { promedio: avg(uv), maximo: max(uv) },
-    },
+  // ---- Hace cuanto no llueve ----
+  const lluviaHoy = rangoIncluyeHoy ? lluviaDeHoy(lecturas, hoy) : null;
+  const ultimaDeResumen = ultimaLluviaRaw?.[0] ?? null;
+  const ultimaLluviaFecha = lluviaHoy != null && lluviaHoy > 0 ? hoy : ultimaDeResumen?.fecha ?? null;
+  const ultimaLluviaMm = lluviaHoy != null && lluviaHoy > 0 ? lluviaHoy : ultimaDeResumen?.lluvia_total_mm ?? null;
+
+  // Dias marcados `contador_congelado` entre la ultima lluvia y hoy: en esos no
+  // se sabe si llovio, asi que el conteo es un maximo, no una certeza.
+  let diasSinDatoDesdeEntonces = 0;
+  if (ultimaLluviaFecha) {
+    const desdeRaw = await supabaseQuery('clima_resumen_diario',
+      `select=fecha&lluvia_confianza=eq.contador_congelado&fecha=gt.${e(ultimaLluviaFecha)}&limit=3000`,
+    ) as Array<{ fecha: string }>;
+    diasSinDatoDesdeEntonces = (desdeRaw ?? []).length;
+  }
+
+  const lluvia = {
+    ultima_lluvia_fecha: ultimaLluviaFecha,
+    ultima_lluvia_mm: ultimaLluviaMm,
+    dias_sin_lluvia: ultimaLluviaFecha ? diasEntre(ultimaLluviaFecha, hoy) : null,
+    dias_sin_dato_en_ese_lapso: diasSinDatoDesdeEntonces,
+    nota: diasSinDatoDesdeEntonces > 0
+      ? `Hay ${diasSinDatoDesdeEntonces} dia(s) con el contador del pluviometro congelado desde la ultima lluvia registrada: en esos dias NO se sabe si llovio, asi que "dias sin lluvia" es un maximo. Reportalo como tal, nunca como certeza.`
+      : 'Sin huecos de datos desde la ultima lluvia registrada.',
   };
 
-  // Daily breakdown (for charts or detail)
-  const porDia = new Map<string, { temps: number[]; humedad: number[]; viento: number[]; lluvia: number | null; lluviaAsignada: boolean; radiacion: number[] }>();
-  for (const r of readings) {
-    const day = String(r.timestamp).split('T')[0];
-    if (!porDia.has(day)) porDia.set(day, { temps: [], humedad: [], viento: [], lluvia: null, lluviaAsignada: false, radiacion: [] });
-    const d = porDia.get(day)!;
-    if (r.temp_c != null) d.temps.push(r.temp_c as number);
-    if (r.humedad_pct != null) d.humedad.push(r.humedad_pct as number);
-    if (r.viento_kmh != null) d.viento.push(r.viento_kmh as number);
-    if (r.radiacion_wm2 != null) d.radiacion.push(r.radiacion_wm2 as number);
-    // readings viene ordenado timestamp.desc — la primera lectura de lluvia
-    // que vemos por día es la más reciente; solo esa decide el total.
-    if (!d.lluviaAsignada && r.lluvia_diaria_mm != null) {
-      d.lluviaAsignada = true;
-      d.lluvia = lluviaEsFresca(r.lluvia_diaria_actualizada_en, day) ? (r.lluvia_diaria_mm as number) : null;
+  // ---- Agregados del periodo ----
+  const lluviaDelRango = serie.map((d) => d.lluvia_mm).filter((v): v is number => v !== null);
+  const diasSinDatoEnRango = serie.filter((d) => d.lluvia_sin_dato).length;
+
+  const resumen_periodo = {
+    dias_con_dato: serie.length,
+    temperatura: {
+      promedio: avg(nums(serie.map((d) => d.temp_avg))),
+      maxima: max(nums(serie.map((d) => d.temp_max))),
+      minima: min(nums(serie.map((d) => d.temp_min))),
+    },
+    humedad: { promedio: avg(nums(serie.map((d) => d.humedad_avg))) },
+    viento: {
+      promedio: avg(nums(serie.map((d) => d.viento_avg))),
+      rafaga_max: max(nums(resumen.map((r) => r.rafaga_kmh_max))),
+    },
+    lluvia_total_mm: lluviaDelRango.length ? r1(lluviaDelRango.reduce((s, v) => s + v, 0)) : null,
+    lluvia_dias_sin_dato: diasSinDatoEnRango,
+    radiacion: {
+      promedio: avg(nums(serie.map((d) => d.radiacion_avg))),
+      maxima: max(nums(serie.map((d) => d.radiacion_max))),
+    },
+    uv: { maximo: max(nums(resumen.map((r) => r.uv_index_max))) },
+  };
+
+  // Un rango largo en grano diario ahoga al modelo (6 anios = ~2.200 filas):
+  // por encima de 120 dias se entrega agregado por mes.
+  const DIAS_MAX_DETALLE_DIARIO = 120;
+  let detalle: Array<Record<string, unknown>>;
+  let grano: 'diario' | 'mensual';
+
+  if (serie.length > DIAS_MAX_DETALLE_DIARIO) {
+    grano = 'mensual';
+    const porMes = new Map<string, DiaClima[]>();
+    for (const d of serie) {
+      const mes = d.fecha.slice(0, 7);
+      if (!porMes.has(mes)) porMes.set(mes, []);
+      porMes.get(mes)!.push(d);
     }
+    detalle = Array.from(porMes.entries()).map(([mes, dias]) => {
+      const ll = dias.map((d) => d.lluvia_mm).filter((v): v is number => v !== null);
+      return {
+        mes,
+        dias_con_dato: dias.length,
+        temp_avg: avg(nums(dias.map((d) => d.temp_avg))),
+        temp_max: max(nums(dias.map((d) => d.temp_max))),
+        temp_min: min(nums(dias.map((d) => d.temp_min))),
+        humedad_avg: avg(nums(dias.map((d) => d.humedad_avg))),
+        lluvia_mm: ll.length ? r1(ll.reduce((s, v) => s + v, 0)) : null,
+        lluvia_dias_sin_dato: dias.filter((d) => d.lluvia_sin_dato).length,
+        radiacion_avg: avg(nums(dias.map((d) => d.radiacion_avg))),
+      };
+    });
+  } else {
+    grano = 'diario';
+    detalle = serie.map((d) => ({
+      fecha: d.fecha,
+      temp_avg: d.temp_avg, temp_max: d.temp_max, temp_min: d.temp_min,
+      humedad_avg: d.humedad_avg, viento_avg: d.viento_avg,
+      lluvia_mm: d.lluvia_mm, lluvia_sin_dato: d.lluvia_sin_dato || undefined,
+      radiacion_avg: d.radiacion_avg, radiacion_max: d.radiacion_max,
+    }));
   }
 
-  const detalle_diario = Array.from(porDia.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([dia, d]) => ({
-      fecha: dia,
-      temp_avg: avg(d.temps),
-      temp_max: max(d.temps),
-      temp_min: min(d.temps),
-      humedad_avg: avg(d.humedad),
-      viento_avg: avg(d.viento),
-      lluvia_mm: d.lluvia != null ? Math.round(d.lluvia * 10) / 10 : null,
-      radiacion_avg: avg(d.radiacion),
-      radiacion_max: max(d.radiacion),
-    }));
+  const ultima = lecturas[0];
+  const condiciones_actuales = rangoIncluyeHoy && ultima
+    ? {
+        timestamp: ultima.timestamp,
+        temperatura_c: ultima.temp_c,
+        humedad_pct: ultima.humedad_pct,
+        viento_kmh: ultima.viento_kmh,
+        rafaga_kmh: ultima.rafaga_kmh,
+        direccion_viento: ultima.viento_dir,
+        radiacion_wm2: ultima.radiacion_wm2,
+        uv_index: ultima.uv_index,
+      }
+    : undefined;
 
-  result.detalle_diario = detalle_diario;
+  const base: Record<string, unknown> = {
+    periodo: { desde: from, hasta: to, grano_detalle: grano },
+    fuente: 'clima_resumen_diario (historico, una fila por dia desde 2020-07-01) + clima_lecturas (ventana de 24 h, solo condiciones actuales y el dia en curso)',
+    ...(condiciones_actuales ? { condiciones_actuales } : {}),
+    lluvia,
+    resumen_periodo,
+  };
 
-  // Filter by specific metric if requested
+  // ---- Filtros por metrica ----
   if (metric) {
     const m = metric.toLowerCase();
-    if (m.includes('temp')) {
-      return JSON.stringify({ periodo: result.periodo, temperatura_actual: latest.temp_c, resumen: result.resumen_periodo, detalle_diario: detalle_diario.map(d => ({ fecha: d.fecha, promedio: d.temp_avg, max: d.temp_max, min: d.temp_min })) });
-    }
     if (m.includes('lluv') || m.includes('precip')) {
-      return JSON.stringify({ periodo: result.periodo, lluvia_total_mm: Math.round(lluviaTotal * 10) / 10, detalle_diario: detalle_diario.map(d => ({ fecha: d.fecha, lluvia_mm: d.lluvia_mm })) });
+      return JSON.stringify({
+        periodo: base.periodo,
+        fuente: base.fuente,
+        lluvia,
+        lluvia_total_mm: resumen_periodo.lluvia_total_mm,
+        lluvia_dias_sin_dato: diasSinDatoEnRango,
+        detalle: detalle.map((d) => ({
+          fecha: d.fecha ?? d.mes,
+          lluvia_mm: d.lluvia_mm,
+          ...(d.lluvia_sin_dato || d.lluvia_dias_sin_dato ? { sin_dato: d.lluvia_sin_dato ?? d.lluvia_dias_sin_dato } : {}),
+        })),
+      });
+    }
+    if (m.includes('temp')) {
+      return JSON.stringify({ periodo: base.periodo, condiciones_actuales, resumen: resumen_periodo.temperatura,
+        detalle: detalle.map((d) => ({ fecha: d.fecha ?? d.mes, promedio: d.temp_avg, max: d.temp_max, min: d.temp_min })) });
     }
     if (m.includes('hum')) {
-      return JSON.stringify({ periodo: result.periodo, humedad_actual: latest.humedad_pct, resumen: result.resumen_periodo, detalle_diario: detalle_diario.map(d => ({ fecha: d.fecha, humedad_avg: d.humedad_avg })) });
+      return JSON.stringify({ periodo: base.periodo, condiciones_actuales, resumen: resumen_periodo.humedad,
+        detalle: detalle.map((d) => ({ fecha: d.fecha ?? d.mes, humedad_avg: d.humedad_avg })) });
     }
     if (m.includes('vient')) {
-      return JSON.stringify({ periodo: result.periodo, viento_actual: latest.viento_kmh, rafaga_actual: latest.rafaga_kmh, direccion: latest.viento_dir, resumen: result.resumen_periodo });
+      return JSON.stringify({ periodo: base.periodo, condiciones_actuales, resumen: resumen_periodo.viento });
     }
     if (m.includes('radi') || m.includes('solar')) {
-      const avgWm2 = avg(radiacion);
-      const sunHoursPerDay = avgWm2 !== null ? Math.round(((avgWm2 * 24) / 1000) * 10) / 10 : null;
+      const avgWm2 = resumen_periodo.radiacion.promedio;
       return JSON.stringify({
-        periodo: result.periodo,
-        radiacion_actual: latest.radiacion_wm2,
-        resumen: { promedio: avgWm2, maxima: max(radiacion) },
-        contexto_solar: { horas_sol_dia: sunHoursPerDay, nota: 'Óptimo Hass: 5.0–7.0 h/día. Usa get_radiation_context para análisis detallado.' },
+        periodo: base.periodo,
+        condiciones_actuales,
+        resumen: resumen_periodo.radiacion,
+        contexto_solar: {
+          horas_sol_dia: avgWm2 !== null ? r1((avgWm2 * 24) / 1000) : null,
+          nota: 'Optimo Hass: 5.0-7.0 h/dia. Usa get_radiation_context para analisis detallado.',
+        },
       });
     }
     if (m.includes('uv')) {
-      return JSON.stringify({ periodo: result.periodo, uv_actual: latest.uv_index, resumen: { promedio: avg(uv), maximo: max(uv) } });
+      return JSON.stringify({ periodo: base.periodo, condiciones_actuales, resumen: resumen_periodo.uv });
     }
   }
 
-  return JSON.stringify(result);
+  base.detalle = detalle;
+  return JSON.stringify(base);
 }
 
 // ============================================================================
@@ -3406,13 +3584,29 @@ export async function llmToolLoop(
     return { text: msg.content || '', toolInteractions };
   }
 
-  // Fallback: do a final call without tools to force a text response
+  // Fallback: se agotaron las rondas y el modelo sigue pidiendo herramientas.
+  // Se le pide que responda YA con lo que tiene.
+  //
+  // `tools` se manda igual, con `tool_choice: 'none'`. Antes se omitia — y eso
+  // deja un historial que contiene `tool_calls` y mensajes `role: 'tool'` sin
+  // ningun esquema al cual atarlos, que es una peticion malformada segun el
+  // contrato compatible-con-OpenAI que implementa OpenRouter. El modelo devolvia
+  // contenido vacio y el `||` de abajo lo enmascaraba con un texto sin salida:
+  // el usuario veia "No pude generar una respuesta." sin ninguna pista.
   const finalRes = await fetch(OPENROUTER_URL, {
     method: 'POST',
     headers,
     body: JSON.stringify({
       model: MODEL,
-      messages,
+      messages: [
+        ...messages,
+        {
+          role: 'system',
+          content: 'Ya no puedes llamar mas herramientas. Responde AHORA con los datos que ya consultaste. Si no alcanzan para contestar, di explicitamente que te falto y que dato concreto necesitarias — nunca inventes cifras.',
+        },
+      ],
+      tools,
+      tool_choice: 'none',
       temperature: 0.3,
       max_tokens: 12000,
     }),
@@ -3420,7 +3614,17 @@ export async function llmToolLoop(
 
   if (!finalRes.ok) throw new Error('Error en respuesta final del LLM');
   const finalResult = await finalRes.json();
-  return { text: finalResult.choices?.[0]?.message?.content || 'No pude generar una respuesta.', toolInteractions };
+  const finalText = finalResult.choices?.[0]?.message?.content;
+
+  if (!finalText) {
+    // Callejon sin salida de verdad. Se lanza en vez de devolver un string
+    // plano: asi el cliente lo pinta como error (con su reintento) en lugar de
+    // como una respuesta valida de Esco.
+    console.error('[Esco] Fallback sin contenido', JSON.stringify(finalResult).slice(0, 400));
+    throw new Error('No pude completar la consulta: agote los intentos de busqueda sin llegar a una respuesta. Volve a preguntar acotando el periodo o el lote.');
+  }
+
+  return { text: finalText, toolInteractions };
 }
 
 // Auto-generate title
