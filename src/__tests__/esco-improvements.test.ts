@@ -292,12 +292,79 @@ describe('System prompt actualizado con nuevos dominios', () => {
 });
 
 describe('Climate data actualizado con radiación diaria', () => {
-  it('daily breakdown debe incluir radiacion en el tipo', () => {
-    expect(chatSource).toContain('radiacion: number[]');
-  });
-
-  it('daily breakdown debe incluir radiacion_avg y radiacion_max', () => {
+  // El acumulador `porDia` con `radiacion: number[]` desapareció cuando
+  // `execClimateData` dejó de agregar lecturas crudas: la serie diaria ahora sale
+  // de `clima_resumen_diario`, que ya viene agregada por día. Lo que la prueba
+  // cuida sigue siendo lo mismo — que el detalle diario lleve radiación — así que
+  // se afirma contra la estructura vigente, no contra el tipo que ya no existe.
+  it('la serie diaria expone radiación por día', () => {
     expect(chatSource).toContain('radiacion_avg');
     expect(chatSource).toContain('radiacion_max');
+  });
+
+  it('la serie diaria se arma sobre el tipo DiaClima', () => {
+    expect(chatSource).toContain('interface DiaClima');
+    expect(chatSource).toContain('radiacion_avg: number | null');
+  });
+});
+
+describe('Climate data lee el histórico, no la ventana de 24 h', () => {
+  /**
+   * Regresión de 2026-08-16. `execClimateData` leía únicamente `clima_lecturas`,
+   * que un cron poda a 24 h (migración 036): toda pregunta climática histórica
+   * devolvía "no hay datos", el modelo se ponía a buscar rango por rango hasta
+   * agotar las rondas del loop, y en algunas corridas rellenaba el hueco con
+   * cifras inventadas — reportó "47 días sin lluvia" cuando habían pasado 4.
+   */
+  it('consulta clima_resumen_diario para la serie histórica', () => {
+    const fn = chatSource.slice(chatSource.indexOf('async function execClimateData'));
+    const cuerpo = fn.slice(0, fn.indexOf('\nfunction ') + 1 || 8000);
+    expect(cuerpo).toContain("supabaseQuery('clima_resumen_diario'");
+  });
+
+  it('responde "hace cuánto no llueve" sin depender del rango pedido', () => {
+    expect(chatSource).toContain('ultima_lluvia_fecha');
+    expect(chatSource).toContain('dias_sin_lluvia');
+  });
+
+  it('aplica la compuerta de confianza de la migración 068', () => {
+    expect(chatSource).toContain('function lluviaConfiable');
+    expect(chatSource).toContain("lluvia_confianza === 'contador_congelado'");
+  });
+
+  it('un día con el contador congelado vale sin dato, nunca 0', () => {
+    const fn = chatSource.slice(chatSource.indexOf('function lluviaConfiable'));
+    const cuerpo = fn.slice(0, fn.indexOf('}\n') + 2);
+    expect(cuerpo).toContain('return null');
+    expect(cuerpo).not.toContain('return 0');
+  });
+
+  it('el día en curso sale de las lecturas, que el rollup aún no cubrió', () => {
+    expect(chatSource).toContain('function lluviaDeHoy');
+  });
+
+  it('usa el día calendario de Bogotá, no el de UTC', () => {
+    expect(chatSource).toContain('function hoyBogota');
+    const fn = chatSource.slice(chatSource.indexOf('async function execClimateData'));
+    const cuerpo = fn.slice(0, 3000);
+    expect(cuerpo).toContain('hoyBogota()');
+    // El patrón que se corre un día desde las 19:00 en Bogotá.
+    expect(cuerpo).not.toContain("now.toISOString().split('T')[0]");
+  });
+});
+
+describe('El fallback del tool-loop no enmascara una respuesta vacía', () => {
+  /**
+   * Al agotarse las rondas se llamaba al modelo con el historial (que contiene
+   * `tool_calls` y mensajes `role: 'tool'`) pero SIN `tools` — petición malformada
+   * según el contrato compatible-con-OpenAI de OpenRouter. Volvía vacía y el
+   * código la tapaba con "No pude generar una respuesta.".
+   */
+  it('mantiene tools con tool_choice none en la llamada final', () => {
+    expect(chatSource).toContain("tool_choice: 'none'");
+  });
+
+  it('ya no devuelve el texto sin salida', () => {
+    expect(chatSource).not.toContain("|| 'No pude generar una respuesta.'");
   });
 });
