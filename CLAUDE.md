@@ -341,6 +341,12 @@ Key behaviors:
 
 Esco's system prompt carries the accounting rules verbatim (cattle purchases are inventory not expense, cosecha semesters cross calendar years, no prorrateo of Oficina Central) so the model explains discrepancies instead of inventing them. `get_financial_summary`'s description now explicitly steers away from profitability questions: subtracting its gastos from its ingresos contradicts the P&G, because there cattle purchases count as an outflow.
 
+**Traza en vivo del tool-calling loop (`tool_start` / `tool_done`).** `llmToolLoop` acepta un tercer parámetro opcional `onEvent`, y `handleChatMessage` lo reenvía por el SSE. Antes el cliente solo conocía `text_delta | done | error` y mostraba un spinner estático durante toda la espera (medido: 27 s de 30,4 s). **Los eventos son aditivos por contrato** — el bot de Telegram llama `llmToolLoop(messages, userId)` sin `onEvent` y se comporta igual que siempre; cualquier cliente que no los conozca los ignora.
+
+- **No se reporta conteo de filas**, solo `ms` y `ok`. Habría que adivinarlo hurgando el JSON de cada herramienta, y un número inventado es peor que ninguno en un sistema que distingue «sin dato» de «0». `ok` sale de `toolResultOk()`, que detecta el `{ error }` que `executeTool` devuelve en vez de lanzar.
+- **La traducción de los 33 nombres técnicos vive en el cliente** (`src/utils/escoHerramientas.ts`), no en el edge function: así no paga el costo de mantenerse sincronizada entre los dos árboles duplicados, y Telegram queda libre de formatear distinto. `src/__tests__/escoHerramientas.test.ts` lee los `case` de `executeTool` y falla si alguna herramienta ejecutable se queda sin etiqueta, o si sobra una etiqueta huérfana.
+- **La traza medió algo que no se sabía**: las herramientas tardan 24–229 ms. Prácticamente toda la espera es el round-trip del LLM, no la base de datos — por eso el estado que más se ve es «Redactando la respuesta…».
+
 **Required edge function secrets** (set via Supabase Dashboard → Project Settings → Edge Functions):
 - `OPENROUTER_API_KEY` — OpenRouter API key (used for DeepSeek and Gemini 2.5 Flash via OpenRouter)
 - `NOTION_TOKEN` — Notion integration token (for owner call summaries; optional, graceful fallback if absent)

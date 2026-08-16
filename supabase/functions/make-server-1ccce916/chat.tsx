@@ -83,6 +83,48 @@ interface ToolInteraction {
   result_summary: string;
 }
 
+/**
+ * Traza en vivo del tool-calling loop.
+ *
+ * El loop siempre supo que herramientas estaba llamando — las acumula en
+ * `toolInteractions` y las persiste en `chat_messages.metadata` para reinyectarlas
+ * en el turno siguiente — pero nunca lo contaba MIENTRAS ocurria: el cliente veia
+ * un spinner estatico durante toda la espera (medido: 27 s de 30,4 s en una
+ * pregunta de 2 herramientas).
+ *
+ * `onEvent` es opcional a proposito. El bot de Telegram llama a `llmToolLoop`
+ * sin el y se comporta exactamente igual que antes: los eventos son aditivos,
+ * nunca un requisito.
+ *
+ * NO se reporta un conteo de filas. Habria que adivinarlo hurgando el JSON de
+ * cada herramienta, y un numero inventado es peor que ninguno en un sistema que
+ * distingue "sin dato" de "0" en monitoreo, hato y clima. Se reporta lo que si
+ * se sabe con certeza: duracion real y si la herramienta devolvio error.
+ */
+export interface ToolLoopEvent {
+  type: 'tool_start' | 'tool_done';
+  /** Nombre tecnico (`get_labor_summary`, …). La etiqueta legible vive en el cliente. */
+  tool: string;
+  /** Indice estable dentro de la respuesta, para parear `tool_start` con su `tool_done`. */
+  index: number;
+  /** Argumentos con los que se llamo. Solo en `tool_start`. */
+  args?: Record<string, unknown>;
+  /** Duracion real de la herramienta en ms. Solo en `tool_done`. */
+  ms?: number;
+  /** `false` si la herramienta devolvio `{ error }`. Solo en `tool_done`. */
+  ok?: boolean;
+}
+
+/** `executeTool` nunca lanza: ante un fallo devuelve `JSON.stringify({ error })`. */
+function toolResultOk(result: string): boolean {
+  try {
+    const parsed = JSON.parse(result);
+    return !(parsed && typeof parsed === 'object' && 'error' in parsed);
+  } catch {
+    return true; // no es JSON — es texto plano de una herramienta que respondio bien
+  }
+}
+
 // ============================================================================
 // SUPABASE ADMIN CLIENT
 // ============================================================================
@@ -3261,11 +3303,13 @@ function getToolsForAPI() {
 export async function llmToolLoop(
   messages: Array<{ role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; name?: string }>,
   userId?: string,
+  onEvent?: (event: ToolLoopEvent) => void,
 ): Promise<{ text: string; toolInteractions: ToolInteraction[] }> {
   const headers = getOpenRouterHeaders();
   const tools = getToolsForAPI();
   const maxRounds = 3;
   const toolInteractions: ToolInteraction[] = [];
+  let toolIndex = 0;
 
   for (let round = 0; round < maxRounds; round++) {
     const controller = new AbortController();
@@ -3324,7 +3368,20 @@ export async function llmToolLoop(
         }
 
         console.log(`[Esco] Tool call: ${fnName}`, JSON.stringify(fnArgs).slice(0, 200));
+
+        const index = toolIndex++;
+        onEvent?.({ type: 'tool_start', tool: fnName, index, args: fnArgs });
+        const iniciadaEn = Date.now();
+
         const toolResult = await executeTool(fnName, fnArgs, userId);
+
+        onEvent?.({
+          type: 'tool_done',
+          tool: fnName,
+          index,
+          ms: Date.now() - iniciadaEn,
+          ok: toolResultOk(toolResult),
+        });
         console.log(`[Esco] Tool result length: ${toolResult.length}`);
 
         // Track tool interaction for context persistence
@@ -3466,8 +3523,14 @@ export async function handleChatMessage(c: Context) {
       };
 
       try {
-        // Tool-calling loop (non-streaming) then stream the final answer
-        const { text: finalText, toolInteractions } = await llmToolLoop(llmMessages, userId);
+        // Tool-calling loop (non-streaming) then stream the final answer.
+        // `send` reenvia la traza tal cual: el cliente decide como mostrarla y
+        // como traducir el nombre tecnico de cada herramienta.
+        const { text: finalText, toolInteractions } = await llmToolLoop(
+          llmMessages,
+          userId,
+          (event) => send(event as unknown as Record<string, unknown>),
+        );
 
         // Stream the final text character by character in chunks
         const chunkSize = 8;
