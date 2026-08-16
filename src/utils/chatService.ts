@@ -8,6 +8,8 @@ export async function sendChatMessage(
   conversationId: string | null,
   message: string,
   onDelta: (event: ChatStreamEvent) => void,
+  /** Permite abandonar la respuesta desde el botón «Detener». */
+  signal?: AbortSignal,
 ): Promise<void> {
   const supabase = getSupabase();
   const { data: { session } } = await supabase.auth.getSession();
@@ -28,6 +30,7 @@ export async function sendChatMessage(
         conversation_id: conversationId,
         message,
       }),
+      signal,
     },
   );
 
@@ -105,6 +108,63 @@ export async function renameConversation(id: string, title: string): Promise<voi
     .from('chat_conversations')
     .update({ title })
     .eq('id', id);
+
+  if (error) throw new Error(error.message);
+}
+
+/**
+ * Guarda una memoria de largo plazo que Esco propuso.
+ *
+ * El flujo estaba diseñado desde el principio — `chat.tsx` lo documenta: «el
+ * cliente renderiza botones de confirmación en línea con el token» — y Telegram
+ * lo implementó, pero la web nunca tuvo una sola línea. Le pedías a Esco que
+ * recordara algo desde el navegador, contestaba que sí, y la fila jamás se
+ * insertaba.
+ *
+ * La web no necesita el token ni el rol de servicio que usa Telegram: el
+ * contenido propuesto ya viaja en la traza (`propose_memory_save` con sus
+ * `args`), y la RLS de `esco_memorias` (migración 041) es
+ * `user_id = auth.uid()` tanto en USING como en WITH CHECK, así que la sesión
+ * del navegador puede insertar su propia memoria y ninguna otra.
+ *
+ * `esco_memorias` no está en los tipos generados (`database.ts`), de ahí el
+ * escape — mismo patrón que `useClimaData` con las tablas de clima.
+ */
+/**
+ * ¿Esta memoria ya está guardada?
+ *
+ * Al reabrir una conversación vieja la propuesta sigue en
+ * `metadata.tool_interactions`, así que la tarjeta volvería a ofrecerla como si
+ * nadie hubiera decidido nada — y aceptarla otra vez duplicaría la fila. No hay
+ * en la metadata ninguna marca de "esto ya se guardó", así que la pregunta se le
+ * hace a la tabla, que es quien sabe.
+ */
+export async function memoriaYaGuardada(content: string): Promise<boolean> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .from('esco_memorias' as any)
+    .select('id')
+    .eq('content', content.trim().slice(0, 1000))
+    .is('archived_at', null)
+    .limit(1);
+
+  if (error) return false; // ante la duda se ofrece: guardar de más es recuperable, perder la memoria no
+  return (data?.length ?? 0) > 0;
+}
+
+export async function guardarMemoria(content: string): Promise<void> {
+  const supabase = getSupabase();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('No hay sesion activa');
+
+  const recorte = content.trim().slice(0, 1000); // CHECK char_length <= 1000
+  if (!recorte) throw new Error('La memoria esta vacia');
+
+  const { error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .from('esco_memorias' as any)
+    .insert({ user_id: user.id, content: recorte, source_channel: 'web' } as never);
 
   if (error) throw new Error(error.message);
 }

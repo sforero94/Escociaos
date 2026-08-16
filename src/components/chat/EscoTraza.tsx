@@ -99,7 +99,10 @@ export function EscoTraza({ pasos, trabajando }: EscoTrazaProps) {
           <div className="relative ml-[7px] mt-1 border-l border-border pl-4">
             <div className="flex flex-col gap-0.5 py-1">
               {pasos.map((paso, i) => {
-                const corriendo = paso.ms === undefined;
+                // Una traza rehidratada desde `metadata.tool_interactions` no
+                // trae duración: sus pasos no tienen `ms` y aun así terminaron
+                // hace rato. Solo hay algo corriendo si el turno está vivo.
+                const corriendo = trabajando && paso.ms === undefined;
                 const fallo = paso.ok === false;
                 const detalle = detalleArgumentos(paso.args);
 
