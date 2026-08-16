@@ -378,6 +378,91 @@ input[type='number'] {
   padding: 0;
 }
 
+/* Traza de Esco — el bloque que reemplaza al spinner "Consultando datos…".
+   Adaptado de los primitivos Thinking / Tool Chips de Beautiful UI (Turbo,
+   beautiful-ui-five.vercel.app): se conserva la gramática visual — shimmer en el
+   encabezado mientras trabaja, línea de hilo vertical, filas que entran
+   escalonadas, easing `ease-out-strong` — pero sobre los tokens de Escocia OS,
+   no sobre los de la librería.
+
+   Las animaciones viven aquí y NO en el JSX a propósito. Los primitivos originales
+   llevan 43 declaraciones `animation:` en línea que ninguna media query puede
+   alcanzar, así que ignoran `prefers-reduced-motion` del sistema operativo. Al
+   declararlas como clases, el bloque de reduced-motion del final las apaga de
+   verdad. Son selectores de dominio (como `.chat-markdown`), no redefinen ninguna
+   utilidad de Tailwind. */
+
+@keyframes esco-shimmer {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+
+@keyframes esco-fade-up {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes esco-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Texto del encabezado mientras Esco todavía está consultando. */
+.esco-traza-activo {
+  background-image: linear-gradient(
+    90deg,
+    var(--muted-foreground) 35%,
+    var(--foreground) 50%,
+    var(--muted-foreground) 65%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: esco-shimmer 1.4s linear infinite;
+}
+
+/* Cada fuente consultada entra escalonada. El índice llega como `--i` desde el JSX. */
+.esco-traza-fila {
+  animation: esco-fade-up 320ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  animation-delay: calc(var(--i, 0) * 90ms);
+}
+
+.esco-traza-spinner {
+  animation: esco-spin 700ms linear infinite;
+}
+
+/* El contenedor colapsable: grid de 0fr→1fr, la técnica que permite animar
+   hacia "altura automática" sin medir el contenido en JS. */
+.esco-traza-caja {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 400ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 400ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.esco-traza-caja[data-abierta='true'] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .esco-traza-activo {
+    animation: none;
+    background-image: none;
+    -webkit-background-clip: border-box;
+    background-clip: border-box;
+    color: var(--muted-foreground);
+  }
+  .esco-traza-fila,
+  .esco-traza-spinner {
+    animation: none;
+  }
+  .esco-traza-caja {
+    transition: none;
+  }
+}
+
 /* Sidebar active state — soft highlight per the approved Figma design:
    #E7EDDD background + #73991C text/icons.
    Defined here (not as Tailwind utilities) because src/index.css is a FROZEN

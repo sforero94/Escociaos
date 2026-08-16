@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Send, Plus, ArrowLeft, Trash2, Loader2, X, FileDown, Pencil, Check } from 'lucide-react';
+import { Send, Plus, ArrowLeft, Trash2, X, FileDown, Pencil, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { ChatMessageBubble, splitChartBlocks } from './ChatMessage';
+import { EscoTraza } from './EscoTraza';
 import { ExportarInformeDialog } from './ExportarInformeDialog';
 import type { ExportData } from './ExportarInformeDialog';
 import { ChatEmptyState } from './ChatEmptyState';
@@ -15,7 +16,7 @@ import {
   deleteConversation,
   renameConversation,
 } from '@/utils/chatService';
-import type { ChatConversation, ChatMessage } from '@/types/chat';
+import type { ChatConversation, ChatMessage, PasoTraza } from '@/types/chat';
 
 interface ChatPanelProps {
   open: boolean;
@@ -24,6 +25,19 @@ interface ChatPanelProps {
 
 const MOBILE_BREAKPOINT = 1024; // lg breakpoint — matches Layout.tsx
 
+/**
+ * Traza que quedó adjunta a un mensaje ya respondido.
+ *
+ * Se guarda en el `metadata` del mensaje temporal del cliente, así que sobrevive
+ * mientras dure la sesión pero no al recargar: el servidor persiste la misma
+ * información en `metadata.tool_interactions`, y leerla de ahí al reabrir una
+ * conversación vieja es trabajo de la fase 3 (trazabilidad), no de esta.
+ */
+function trazaDeMensaje(msg: ChatMessage): PasoTraza[] | null {
+  const traza = msg.metadata?.traza;
+  return Array.isArray(traza) && traza.length > 0 ? (traza as PasoTraza[]) : null;
+}
+
 export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
@@ -31,6 +45,11 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
+  // La traza vive en un ref además del estado: el estado es para pintarla, y el
+  // ref para poder leerla al cerrar el mensaje sin quedar atrapado en el closure
+  // de `handleSend`.
+  const [traza, setTraza] = useState<PasoTraza[]>([]);
+  const trazaRef = useRef<PasoTraza[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [exportData, setExportData] = useState<ExportData | null>(null);
   const [exportTitulo, setExportTitulo] = useState('');
@@ -129,14 +148,31 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
 
     setIsStreaming(true);
     setStreamingContent('');
+    trazaRef.current = [];
+    setTraza([]);
 
     let finalConversationId = currentConversationId;
+
+    const actualizarTraza = (mutar: (pasos: PasoTraza[]) => PasoTraza[]) => {
+      trazaRef.current = mutar(trazaRef.current);
+      setTraza(trazaRef.current);
+    };
 
     try {
       await sendChatMessage(currentConversationId, messageText, (event) => {
         if (event.type === 'text_delta' && event.content) {
           setStreamingContent((prev) => prev + event.content);
           scrollToBottom();
+        } else if (event.type === 'tool_start' && event.tool) {
+          actualizarTraza((pasos) => [
+            ...pasos,
+            { index: event.index ?? pasos.length, tool: event.tool!, args: event.args },
+          ]);
+          scrollToBottom();
+        } else if (event.type === 'tool_done') {
+          actualizarTraza((pasos) =>
+            pasos.map((p) => (p.index === event.index ? { ...p, ms: event.ms, ok: event.ok } : p)),
+          );
         } else if (event.type === 'done') {
           if (event.conversation_id) {
             finalConversationId = event.conversation_id;
@@ -153,6 +189,12 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
         }
       });
 
+      // Se captura ANTES del updater: React lo ejecuta en la fase de render, o sea
+      // después de que la línea que limpia el ref ya corrió. Leer `trazaRef.current`
+      // adentro devolvía siempre el array vacío y la traza desaparecía al llegar la
+      // respuesta, en vez de asentarse encima de ella.
+      const trazaDeEsteTurno = trazaRef.current;
+
       setStreamingContent((content) => {
         if (content) {
           const assistantMsg: ChatMessage = {
@@ -160,13 +202,17 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
             conversation_id: finalConversationId || '',
             role: 'assistant',
             content,
-            metadata: {},
+            // La traza queda pegada a su respuesta: al terminar se asienta
+            // colapsada arriba del mensaje en vez de desaparecer.
+            metadata: { traza: trazaDeEsteTurno },
             created_at: new Date().toISOString(),
           };
           setMessages((prev) => [...prev, assistantMsg]);
         }
         return '';
       });
+      trazaRef.current = [];
+      setTraza([]);
 
       if (finalConversationId && finalConversationId !== currentConversationId) {
         setCurrentConversationId(finalConversationId);
@@ -405,18 +451,34 @@ export function ChatPanel({ open, onOpenChange }: ChatPanelProps) {
                   <ChatEmptyState onSelectPrompt={(p) => handleSend(p)} />
                 ) : (
                   <div className="flex flex-col gap-4 p-5">
-                    {messages.map((msg) => (
-                      <div key={msg.id} data-role={msg.role}>
-                        <ChatMessageBubble role={msg.role} content={msg.content} />
-                      </div>
-                    ))}
-                    {streamingContent && (
-                      <ChatMessageBubble role="assistant" content={streamingContent} />
-                    )}
-                    {isStreaming && !streamingContent && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Consultando datos...
+                    {messages.map((msg) => {
+                      const trazaMsg = trazaDeMensaje(msg);
+                      return (
+                        // El `data-role` envuelve SOLO la burbuja: `handleExport` lo
+                        // usa para capturar el nodo del informe, y la traza no es
+                        // parte del informe.
+                        <div key={msg.id} className="flex flex-col gap-2">
+                          {trazaMsg && (
+                            <div className="pl-9">
+                              <EscoTraza pasos={trazaMsg} trabajando={false} />
+                            </div>
+                          )}
+                          <div data-role={msg.role}>
+                            <ChatMessageBubble role={msg.role} content={msg.content} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {isStreaming && (
+                      <div className="flex flex-col gap-2">
+                        {/* `pl-9` alinea la traza con el texto de la burbuja
+                            (avatar de 28 px + 8 px de gap). */}
+                        <div className="pl-9">
+                          <EscoTraza pasos={traza} trabajando={!streamingContent} />
+                        </div>
+                        {streamingContent && (
+                          <ChatMessageBubble role="assistant" content={streamingContent} />
+                        )}
                       </div>
                     )}
                   </div>

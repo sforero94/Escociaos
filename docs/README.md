@@ -19,6 +19,7 @@ Esta carpeta contiene documentación vigente para operar, mantener y extender el
 - [`plan_hato_produccion_rework.md`](./plan_hato_produccion_rework.md) — contrato del rework del submódulo Producción (Hato Lechero): grano quincenal, vínculo duro Producción↔Finanzas, clasificación del backfill histórico, y los dos hallazgos medidos contra producción que gobiernan el tablero (desfase pago→producción = 0; cobertura de pesaje incompleta hasta junio 2026).
 - [`hato/qa-produccion-rework.md`](./hato/qa-produccion-rework.md) — 45 criterios Given/When/Then del rework de Producción, escritos ANTES de la implementación, más los hallazgos adversariales sobre el propio brief.
 - [`plan_sidebar_modulos.md`](./plan_sidebar_modulos.md) — diseño implementado de navegación y acceso por módulo.
+- [`plan_esco_facelift.md`](./plan_esco_facelift.md) — auditoría medida de la experiencia de Esco y sus ocho puntos de intervención. Fase 1 (traza en vivo del tool-calling, estado vacío por ruta) implementada; fases 2 y 3 pendientes. Incluye las reglas para vendorizar más primitivos de Beautiful UI sin romper los tokens de la app.
 - [`PLAN_PRIORIZACION_MONITOREO.md`](./PLAN_PRIORIZACION_MONITOREO.md) — razonamiento y contrato de priorización de scouting.
 - [`POC_PREDICCION_PLAGAS.md`](./POC_PREDICCION_PLAGAS.md) — POC cerrado; conserva el resultado NO-GO y la evidencia metodológica.
 
