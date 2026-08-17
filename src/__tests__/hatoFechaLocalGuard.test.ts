@@ -95,6 +95,18 @@ const LISTA_BLANCA_UTC: { archivo: string; ocurrencias: number; razon: string }[
       'recorte -- cambiar solo la lectura movería las etiquetas sin corregir el cálculo. ' +
       'Congelado aquí a propósito para que no se cuele un sitio nuevo mientras tanto.',
   },
+  {
+    archivo: 'src/utils/accionesHechos.ts',
+    ocurrencias: 1,
+    razon:
+      'sumarDias() construye la Date explícitamente vía Date.UTC(y, m-1, d+dias) a ' +
+      'partir de un `AAAA-MM-DD` ya parseado -- nunca del reloj -- y la vuelve a leer con ' +
+      'toISOString().slice(0,10); ida y vuelta UTC coherente, mismo patrón que ' +
+      'fechaCorteTimeline (EventoTimeline.tsx). Módulo puro y espejado a Deno (motor de ' +
+      'acciones recomendadas): no puede importar `fechaAISODate`/`obtenerFechaHoy` de ' +
+      '`@/utils/fechas` (sin copia en el árbol Deno), así que toda su aritmética de fecha ' +
+      'es local a este archivo, igual que el `diasEntre` de `accionesOrden.ts`.',
+  },
 ];
 
 /** Quita comentarios antes de buscar el patrón. Varios archivos DOCUMENTAN el
