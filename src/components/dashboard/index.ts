@@ -19,3 +19,7 @@ export { QuickLinksRow } from './QuickLinksRow';
 export { DashboardKPICard } from './DashboardKPICard';
 export { PlagasKPICard } from './PlagasKPICard';
 export type { PlagaKPI } from './PlagasKPICard';
+export { AccionesRecomendadas } from './AccionesRecomendadas';
+export type { AccionesRecomendadasProps } from './AccionesRecomendadas';
+export { AccionCard } from './AccionCard';
+export type { AccionCardProps } from './AccionCard';

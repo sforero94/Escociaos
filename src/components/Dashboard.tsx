@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getSupabase } from '../utils/supabase/client';
 import { formatNumber, formatCompact } from '../utils/format';
@@ -9,13 +9,17 @@ import {
   QuickLinksRow,
   DashboardKPICard,
   PlagasKPICard,
+  AccionesRecomendadas,
   type Alerta,
   type PlagaKPI,
 } from './dashboard/index';
 import { useGanadoInventario } from './ganado/hooks/useGanadoInventario';
 import { calcularKPIsInventario, calcularVariacion } from '../utils/calculosGanado';
 import { calcularIncidencia } from '../utils/calculosMonitoreo';
-import { fechaAISODate } from '../utils/fechas';
+import { fechaAISODate, obtenerFechaHoy } from '../utils/fechas';
+import { useAuth } from '@/contexts/AuthContext';
+import type { NegocioAccion } from '@/utils/accionesTipos';
+import type { EntradaSelectores, GanadoInventarioParaAcciones } from '@/utils/accionesHechos';
 
 interface KPIsDashboard {
   plagas: PlagaKPI[];
@@ -62,10 +66,18 @@ function KPITileSkeleton() {
  */
 export function Dashboard() {
   const navigate = useNavigate();
+  const { profile, hasModulo } = useAuth();
   const { fetchInventario, fetchMovimientos, countPendientes } = useGanadoInventario();
   const [alertas, setAlertas] = useState<Alerta[]>([]);
   const [kpis, setKpis] = useState<KPIsDashboard>(KPIS_VACIO);
   const [isLoading, setIsLoading] = useState(true);
+  // Lo que este mismo dashboard YA cargó para la tarjeta de ganado (Bloque
+  // "Acciones recomendadas", §6.2 del brief del motor: "cero consultas
+  // extra en el navegador" -- el cotejo al pintar reutiliza este derivado,
+  // nunca vuelve a golpear `gan_inventario`). `null` mientras no ha cargado
+  // o si la consulta falló -- el cotejo lo trata como "el negocio no
+  // cargó" (indeterminado, nunca invalida una acción).
+  const [ganadoParaAcciones, setGanadoParaAcciones] = useState<GanadoInventarioParaAcciones | null>(null);
 
   useEffect(() => {
     loadDashboardData();
@@ -259,9 +271,18 @@ export function Dashboard() {
       return { gastoMes, variacion, contexto };
     };
 
-    const loadGanado = async (): Promise<{ ganadoCabezas: number; neto: number; contexto: string | null }> => {
+    const loadGanado = async (): Promise<{
+      ganadoCabezas: number;
+      neto: number;
+      contexto: string | null;
+      paraAcciones: GanadoInventarioParaAcciones | null;
+    }> => {
       try {
-        const [rows, movimientos] = await Promise.all([fetchInventario(), fetchMovimientos()]);
+        const [rows, movimientos, pendientes] = await Promise.all([
+          fetchInventario(),
+          fetchMovimientos(),
+          countPendientes(),
+        ]);
         const kpisGanado = calcularKPIsInventario(rows);
         const hace30Dias = new Date(now);
         hace30Dias.setDate(hace30Dias.getDate() - 30);
@@ -269,9 +290,29 @@ export function Dashboard() {
         const contexto = variacionCabezas.entradas > 0 || variacionCabezas.salidas > 0
           ? `${variacionCabezas.entradas} entran · ${variacionCabezas.salidas} salen (30d)`
           : 'Sin movimientos en 30 días';
-        return { ganadoCabezas: kpisGanado.totalCabezas, neto: variacionCabezas.neto, contexto };
+
+        // Derivado para el cotejo del bloque "Acciones recomendadas" (§6.2
+        // del brief del motor) -- se reagrupa por finca a partir de las
+        // MISMAS filas de `fetchInventario()` de arriba, sin una consulta
+        // adicional.
+        const porFinca = new Map<string, { hectareas: number; cabezas: number; novillos: number; toros: number }>();
+        for (const r of rows) {
+          const acumulado = porFinca.get(r.finca) ?? { hectareas: r.hectareas, cabezas: 0, novillos: 0, toros: 0 };
+          acumulado.cabezas += r.novillos + r.toros;
+          acumulado.novillos += r.novillos;
+          acumulado.toros += r.toros;
+          porFinca.set(r.finca, acumulado);
+        }
+        const paraAcciones: GanadoInventarioParaAcciones = {
+          total: { cabezas: kpisGanado.totalCabezas, novillos: kpisGanado.totalNovillos, toros: kpisGanado.totalToros },
+          por_finca: Array.from(porFinca.entries()).map(([finca, v]) => ({ finca, ...v })),
+          variacion_30_dias: variacionCabezas,
+          pendientes_confirmacion: { total: pendientes },
+        };
+
+        return { ganadoCabezas: kpisGanado.totalCabezas, neto: variacionCabezas.neto, contexto, paraAcciones };
       } catch {
-        return { ganadoCabezas: 0, neto: 0, contexto: null };
+        return { ganadoCabezas: 0, neto: 0, contexto: null, paraAcciones: null };
       }
     };
 
@@ -281,6 +322,8 @@ export function Dashboard() {
       loadGasto(),
       loadGanado(),
     ]);
+
+    setGanadoParaAcciones(ganadoRes.paraAcciones);
 
     setKpis({
       plagas: plagasRes.plagas,
@@ -561,6 +604,38 @@ export function Dashboard() {
     }
   };
 
+  // Bloque "Acciones recomendadas" (§8 del plan del tablero: "el mismo gate
+  // que su tarjeta de pulso") -- se recalcula sólo si cambia lo que
+  // realmente decide el acceso, no en cada render.
+  const negociosAcciones = useMemo<NegocioAccion[]>(() => {
+    const lista: NegocioAccion[] = [];
+    if (hasModulo('hato_lechero')) lista.push('hato_lechero');
+    if (hasModulo('aguacate')) lista.push('aguacate');
+    if (hasModulo('ganado')) lista.push('ganado');
+    return lista;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.modulos, profile?.rol]);
+
+  // `entrada` para el cotejo al pintar (§6.2 del brief del motor). Se
+  // memoiza por higiene de renders (el hook separa el fetch del cotejo, así
+  // que un cambio de referencia aquí ya NO dispara una consulta nueva a
+  // Supabase -- ver el JSDoc de `useAccionesRecomendadas`). El pulso de
+  // hato y aguacate no se carga todavía en este tablero (esa es la Ola 2/3
+  // del rediseño del Centro de Control, `docs/plan_dashboard_centro_control.md`
+  // §3 -- fuera del alcance de esta sesión, que es sólo el Bloque 4): `null`
+  // es la respuesta honesta de "el negocio no cargó" y el cotejo lo trata
+  // como indeterminado, nunca como "caducada".
+  const entradaAcciones = useMemo<EntradaSelectores>(
+    () => ({
+      animalesHato: null,
+      priorizacion: null,
+      ganado: ganadoParaAcciones,
+      config: null,
+      hoy: obtenerFechaHoy(),
+    }),
+    [ganadoParaAcciones],
+  );
+
   const handleAlertClick = (alerta: Alerta) => {
     switch (alerta.tipo) {
       case 'monitoreo': navigate('/monitoreo'); break;
@@ -639,6 +714,18 @@ export function Dashboard() {
           </>
         )}
       </div>
+
+      {/* Acciones recomendadas — bloque 4 del Centro de Control. Se monta
+          después del pulso a propósito: consume lo que ya cargó (ganado),
+          nunca dispara una consulta propia para el cotejo (§6.2 del brief
+          del motor de acciones). No hay estado de carga que coordinar aquí
+          -- el propio bloque decide cuándo pintarse (nada mientras carga). */}
+      <AccionesRecomendadas
+        negocios={negociosAcciones}
+        entrada={entradaAcciones}
+        esGerencia={profile?.rol === 'Gerencia'}
+        userId={profile?.id ?? null}
+      />
 
       {/* Accesos rápidos a módulos sin tarjeta propia */}
       <QuickLinksRow />
