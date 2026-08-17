@@ -146,15 +146,35 @@ describe('cabezasPorHaFinca', () => {
 describe('calcularVariacion', () => {
   it('separa entradas y salidas de movimientos confirmados en la ventana', () => {
     const movs = [
-      { tipo: 'ajuste' as const, estado: 'confirmado' as const, fecha: '2026-06-01', novillos_delta: 10, toros_delta: 1 },
-      { tipo: 'ajuste' as const, estado: 'confirmado' as const, fecha: '2026-06-05', novillos_delta: -4, toros_delta: 0 },
-      { tipo: 'ajuste' as const, estado: 'pendiente' as const, fecha: '2026-06-05', novillos_delta: 99, toros_delta: 0 }, // ignorado
-      { tipo: 'ajuste' as const, estado: 'confirmado' as const, fecha: '2026-04-01', novillos_delta: 50, toros_delta: 0 }, // fuera de ventana
+      { tipo: 'compra' as const, estado: 'confirmado' as const, fecha: '2026-06-01', novillos_delta: 10, toros_delta: 1 },
+      { tipo: 'venta' as const, estado: 'confirmado' as const, fecha: '2026-06-05', novillos_delta: -4, toros_delta: 0 },
+      { tipo: 'compra' as const, estado: 'pendiente' as const, fecha: '2026-06-05', novillos_delta: 99, toros_delta: 0 }, // ignorado
+      { tipo: 'compra' as const, estado: 'confirmado' as const, fecha: '2026-04-01', novillos_delta: 50, toros_delta: 0 }, // fuera de ventana
     ];
     const v = calcularVariacion(movs, '2026-05-15');
     expect(v.entradas).toBe(11);
     expect(v.salidas).toBe(4);
     expect(v.neto).toBe(7);
+  });
+
+  it('la muerte cuenta como salida real del hato', () => {
+    const movs = [
+      { tipo: 'muerte' as const, estado: 'confirmado' as const, fecha: '2026-08-10', novillos_delta: -3, toros_delta: 0 },
+    ];
+    expect(calcularVariacion(movs, '2026-07-18')).toEqual({ entradas: 0, salidas: 3, neto: -3 });
+  });
+
+  it('excluye los ajustes: corregir el registro no es que el hato haya crecido', () => {
+    // Reproduce agosto 2026: la carga inicial (+238) y el conteo físico de
+    // Emiliano cayeron dentro de la ventana y hacían que el KPI dijera +214
+    // cuando lo único que entró de verdad fueron las 19 cabezas compradas.
+    const movs = [
+      { tipo: 'ajuste' as const, estado: 'confirmado' as const, fecha: '2026-08-16', novillos_delta: 111, toros_delta: 127 },
+      { tipo: 'ajuste' as const, estado: 'confirmado' as const, fecha: '2026-08-16', novillos_delta: -111, toros_delta: -127 },
+      { tipo: 'ajuste' as const, estado: 'confirmado' as const, fecha: '2026-08-17', novillos_delta: 0, toros_delta: -19 },
+      { tipo: 'compra' as const, estado: 'confirmado' as const, fecha: '2026-08-06', novillos_delta: 0, toros_delta: 19 },
+    ];
+    expect(calcularVariacion(movs, '2026-07-18')).toEqual({ entradas: 19, salidas: 0, neto: 19 });
   });
 
   it('PU-9: excluye traslados — las 11 parejas del 2026-07-02 no mueven el KPI', () => {

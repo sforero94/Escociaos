@@ -100,12 +100,26 @@ export function cabezasPorHaFinca(rows: InventarioPotreroRow[], fincaId: string)
 }
 
 /**
- * Variación de inventario: entradas vs salidas de movimientos confirmados
- * dentro de la ventana (los deltas vienen con signo).
+ * Los únicos tipos que representan un cambio REAL del hato de ceba: un animal
+ * que llegó a la empresa o que se fue. Todo lo demás mueve el número sin que
+ * haya entrado o salido un animal, y por eso no cuenta acá.
  *
- * Excluye traslados (B-γ): un traslado no es una entrada ni una salida de
- * la empresa, es un movimiento interno entre potreros — contarlo infla
- * ambos lados del KPI sin que haya cruzado una portera.
+ * - `traslado_*` es interno entre potreros: no cruzó una portera, y contarlo
+ *   infla los dos lados del KPI a la vez.
+ * - `ajuste` es corrección de datos, no biología. Contarlo hacía que el KPI
+ *   dijera "+214" en agosto de 2026 solo porque la carga inicial (+238) y el
+ *   conteo físico de Emiliano cayeron dentro de la ventana de 30 días. El
+ *   hato no creció 214 cabezas: creció el registro.
+ *
+ * Ojo — esto es SOLO ganado de ceba (`gan_*`). El Hato Lechero es otro
+ * negocio y vive en `hato_*`; la única tabla compartida es
+ * `fin_transacciones_ganado`, que se filtra por `es_hato = false`.
+ */
+const TIPOS_CAMBIO_REAL = new Set<GanMovimiento['tipo']>(['compra', 'venta', 'muerte']);
+
+/**
+ * Variación del hato en la ventana: cuántas cabezas entraron y salieron de
+ * verdad. Ver TIPOS_CAMBIO_REAL para qué cuenta y por qué.
  */
 export function calcularVariacion(
   movimientos: Pick<GanMovimiento, 'tipo' | 'estado' | 'fecha' | 'novillos_delta' | 'toros_delta'>[],
@@ -115,7 +129,7 @@ export function calcularVariacion(
   let salidas = 0;
   movimientos.forEach((m) => {
     if (m.estado !== 'confirmado' || m.fecha < fechaDesde) return;
-    if (m.tipo === 'traslado_entrada' || m.tipo === 'traslado_salida') return;
+    if (!TIPOS_CAMBIO_REAL.has(m.tipo)) return;
     const delta = m.novillos_delta + m.toros_delta;
     if (delta > 0) entradas += delta;
     else salidas += -delta;

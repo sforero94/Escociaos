@@ -315,7 +315,9 @@ export function GanadoDashboard() {
                 sub={
                   u.cabezasPorHa != null
                     ? `${formatNumber(u.cabezasPorHa, 1)} cabezas/ha · ${formatNumber(u.hectareas, 1)} ha`
-                    : `${formatNumber(u.hectareas, 1)} ha`
+                    // Sin hectáreas cargadas no se dice "0,0 ha": 0 es un área,
+                    // y acá el dato no existe. Misma regla que el KPI de carga.
+                    : 'Sin hectáreas registradas'
                 }
               />
             ))}

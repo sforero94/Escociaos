@@ -117,9 +117,12 @@ describe('buildGanadoInventorySummary', () => {
     expect(sf.por_etapa.sin_clasificar).toBe(5);
   });
 
-  it('calcula variación 30 días EXCLUYENDO traslados (B-γ)', () => {
-    // ajuste +22, traslado ±5 (excluido), muerte -1 => entradas 22, salidas 1
-    expect(summary.variacion_30_dias).toEqual({ entradas: 22, salidas: 1, neto: 21 });
+  it('variación 30 días = cambio REAL del hato: solo compra, venta y muerte', () => {
+    // El fixture trae ajuste +22 (corrección de datos, no cuenta), traslado ±5
+    // (interno, no cuenta) y muerte -1 (sí cuenta). Misma lista que
+    // TIPOS_CAMBIO_REAL en calculosGanado.ts: si Esco y la pantalla no usan
+    // la misma, contestan distinto sobre el mismo hato.
+    expect(summary.variacion_30_dias).toEqual({ entradas: 0, salidas: 1, neto: -1 });
   });
 
   it('resume pendientes con cabezas absolutas (venta llega negativa)', () => {

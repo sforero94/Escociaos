@@ -278,13 +278,18 @@ export function buildGanadoInventorySummary(params: {
     });
   });
 
-  // variacion_30_dias EXCLUYE traslados (B-γ): un traslado no es una
-  // entrada ni una salida de la empresa, es un movimiento interno entre
-  // potreros — mismo criterio que calcularVariacion en calculosGanado.ts.
+  // variacion_30_dias cuenta SOLO el cambio real del hato de ceba: compra,
+  // venta y muerte. Un traslado es interno entre potreros y no cruzó una
+  // portera; un ajuste es corrección de datos, no biología — contarlos hacía
+  // que el KPI dijera "+214" en agosto de 2026 cuando lo único que entró de
+  // verdad fueron 19 cabezas compradas. Mismo criterio y misma lista que
+  // TIPOS_CAMBIO_REAL en calculosGanado.ts: si cambia una, cambian las dos,
+  // o la pantalla y Esco contestan distinto sobre el mismo hato.
+  const TIPOS_CAMBIO_REAL = ['compra', 'venta', 'muerte'];
   let entradas = 0;
   let salidas = 0;
   movimientos30d.forEach((m) => {
-    if (m.tipo === 'traslado_entrada' || m.tipo === 'traslado_salida') return;
+    if (!TIPOS_CAMBIO_REAL.includes(m.tipo)) return;
     const delta = (m.novillos_delta || 0) + (m.toros_delta || 0);
     if (delta > 0) entradas += delta;
     else salidas += -delta;
