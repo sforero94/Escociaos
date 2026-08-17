@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
-import { construirMovimientosTraslado, construirAjustesMasivos, construirMovimientosCargaInicial } from '@/utils/calculosGanado';
-import type { TrasladoParams, AjusteMasivoFila, CargaInicialFila } from '@/utils/calculosGanado';
+import { filasConCabezas, construirAjustesMasivos, construirMovimientosCargaInicial } from '@/utils/calculosGanado';
+import type { RepartoFila, TrasladoMultiParams, AjusteMasivoFila, CargaInicialFila } from '@/utils/calculosGanado';
 import type {
   GanUbicacion,
   GanFinca,
@@ -164,14 +164,19 @@ export function useGanadoInventario() {
     if (error) throw error;
   }, []);
 
-  const registrarTraslado = useCallback(async (params: TrasladoParams) => {
-    const movimientos = construirMovimientosTraslado(params).map((m) => ({ ...m, estado: 'confirmado' }));
-    // Salida primero: si deja el potrero en negativo, el CHECK de
-    // gan_inventario rechaza la operación antes de aplicar la entrada.
-    const { error: errorSalida } = await supabase.from('gan_movimientos').insert(movimientos[0]);
-    if (errorSalida) throw errorSalida;
-    const { error: errorEntrada } = await supabase.from('gan_movimientos').insert(movimientos[1]);
-    if (errorEntrada) throw errorEntrada;
+  // Traslado repartido: N potreros origen → M potreros destino. Va por RPC
+  // (migración 097) para que las salidas y las entradas se apliquen en una
+  // sola transacción; con inserts sueltos un potrero sin cabezas suficientes
+  // dejaba el traslado aplicado a medias.
+  const registrarTraslado = useCallback(async (params: TrasladoMultiParams) => {
+    const { error } = await supabase.rpc('fn_ganado_registrar_traslado_multi', {
+      p_fecha: params.fecha,
+      p_origenes: filasConCabezas(params.origenes),
+      p_destinos: filasConCabezas(params.destinos),
+      p_peso_promedio_kg: params.pesoPromedioKg ?? null,
+      p_notas: params.notas || null,
+    });
+    if (error) throw error;
   }, []);
 
   const registrarAjuste = useCallback(async (params: {
@@ -244,26 +249,18 @@ export function useGanadoInventario() {
     return movimientos.length;
   }, []);
 
+  // Confirma el pendiente repartiendo las cabezas entre uno o varios
+  // potreros. La primera fila se aplica sobre el movimiento pendiente y el
+  // resto entran como movimientos hermanos de la misma transacción, todo en
+  // una sola transacción de base (RPC de la migración 097).
   const confirmarPendiente = useCallback(async (params: {
     movimientoId: string;
-    potreroId: string;
-    novillos: number;
-    toros: number;
-    esVenta: boolean;
+    filas: RepartoFila[];
   }) => {
-    const signo = params.esVenta ? -1 : 1;
-    const { error } = await supabase
-      .from('gan_movimientos')
-      .update({
-        estado: 'confirmado',
-        // venta sale de un potrero (origen), compra entra (destino)
-        potrero_origen_id: params.esVenta ? params.potreroId : null,
-        potrero_destino_id: params.esVenta ? null : params.potreroId,
-        novillos_delta: signo * params.novillos,
-        toros_delta: signo * params.toros,
-      })
-      .eq('id', params.movimientoId)
-      .eq('estado', 'pendiente');
+    const { error } = await supabase.rpc('fn_ganado_confirmar_pendiente_multi', {
+      p_movimiento_id: params.movimientoId,
+      p_filas: filasConCabezas(params.filas),
+    });
     if (error) throw error;
   }, []);
 
