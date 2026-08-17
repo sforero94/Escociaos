@@ -72,11 +72,20 @@ export function HatoDashboard() {
     const horro = animales.filter((a) => a.categoria === 'horro');
     const novillas = animales.filter((a) => a.categoria === 'novilla');
     const terneras = animales.filter((a) => a.categoria === 'ternera');
-    // Las 4 señales de alerta y su aplanado en filas viven en
-    // `utils/hatoAlertas.ts` -- ÚNICA fuente, compartida con
+    // Las 5 señales de alerta y su aplanado en filas viven en
+    // `utils/hatoAlertasTablero.ts` -- ÚNICA fuente, compartida con
     // `AlertasView.tsx` (Cola de alertas), para que nunca puedan divergir.
-    const { proximasASecar, proximasAParir, rechequeoPendiente, vaciasPorServir, filas: filasAlertas } =
-      derivarAlertasTablero(animales);
+    // `secadoVencido`/`proximasASecar` llegan separadas desde la Fase 0a del
+    // motor de acciones (docs/brief_tecnico_motor_acciones.md §10 0a), pero
+    // esta card sigue mostrando ambas juntas -- vencida primero -- porque el
+    // pill de cada fila (`chipVencimiento`/`chipDiasRestantes`) ya distingue
+    // "Vencido" de "Faltan N días" por animal; separar la CARD es una
+    // decisión de producto que no pidió esta fase.
+    const {
+      secadoVencido, proximasASecar: proximasASecarNoVencidas,
+      proximasAParir, rechequeoPendiente, vaciasPorServir, filas: filasAlertas,
+    } = derivarAlertasTablero(animales);
+    const proximasASecar = [...secadoVencido, ...proximasASecarNoVencidas];
     // Desglose reproductivo del hato en ordeño (E3.3: alimenta TANTO
     // `HatoReproCard` -- % Preñadas/Servidas/Vacías del hato en ordeño --
     // COMO la barra "Reproducción" (nominal) de `VacasPorEstadoCard`, que

@@ -3,18 +3,23 @@
 // Dashboard (`utils/hatoAlertasTablero.ts`, Figma alignment spec §7). NO es
 // el motor S6 (ese es `utils/hatoAlertas.ts`, con su propio test): esto solo
 // cubre el resumen derivado client-side que consume `HatoDashboard.tsx` --
-// las 4 señales, el aplanado en filas, la identidad nombre-primero para
-// chapetas provisionales, y el contrato de las 4 claves de meta/pill.
+// las 5 señales (Fase 0a separó secado vencido de próximo a secar, ver
+// docs/brief_tecnico_motor_acciones.md §10 0a), el aplanado en filas, la
+// identidad nombre-primero para chapetas provisionales, el contrato de las
+// 4 claves de meta/pill, y `vaciasMasDeNDias` -- el filtro nuevo que
+// prepara el hecho `hato.vacias_90d` del motor de acciones recomendadas
+// (Fase 1, todavía no implementada en este archivo).
 
 import { describe, it, expect } from 'vitest';
 import {
   derivarAlertasTablero,
+  vaciasMasDeNDias,
   nombreAnimalTablero,
   ALERTA_META_TABLERO,
   PILL_ALERTA_TABLERO,
 } from '../utils/hatoAlertasTablero';
 import type { AnimalHatoDerivado } from '../components/hato/hooks/useHatoAnimales';
-import type { EstadoReproductivoDerivado } from '../utils/calculosHato';
+import type { EstadoReproductivoDerivado, HatoConfig } from '../utils/calculosHato';
 
 function derivado(overrides: Partial<EstadoReproductivoDerivado> = {}): EstadoReproductivoDerivado {
   return {
@@ -55,12 +60,62 @@ function animal(overrides: Partial<AnimalHatoDerivado> = {}): AnimalHatoDerivado
 }
 
 describe('derivarAlertasTablero', () => {
-  it('clasifica próxima a secar por la alerta explícita o por el estado proxima_a_secar', () => {
+  // Fase 0a del motor de acciones (docs/brief_tecnico_motor_acciones.md
+  // §3.3, §10 0a): `secado_vencido` y `proxima_a_secar` eran una sola lista
+  // mezclada (`secado_due || estado === 'proxima_a_secar'`) -- separados a
+  // partir de esta fase en dos conjuntos DISJUNTOS.
+  it('secadoVencido: solo `alertas.secado_due`, sin importar el estado', () => {
     const a = animal({ animalId: 'a', derivado: derivado({ alertas: { ...derivado().alertas, secado_due: true } }) });
-    const b = animal({ animalId: 'b', derivado: derivado({ estado: 'proxima_a_secar' }) });
+    const b = animal({ animalId: 'b', derivado: derivado({ estado: 'proxima_a_secar' }) }); // dentro de ventana, no vencida
     const c = animal({ animalId: 'c' }); // servida, sin ninguna alerta -- no debe aparecer
     const resultado = derivarAlertasTablero([a, b, c]);
-    expect(resultado.proximasASecar.map((x) => x.animalId).sort()).toEqual(['a', 'b']);
+    expect(resultado.secadoVencido.map((x) => x.animalId)).toEqual(['a']);
+  });
+
+  it('proximasASecar: estado proxima_a_secar SIN secado_due -- excluye las vencidas', () => {
+    const vencida = animal({
+      animalId: 'vencida',
+      derivado: derivado({ estado: 'proxima_a_secar', alertas: { ...derivado().alertas, secado_due: true } }),
+    });
+    const proxima = animal({ animalId: 'proxima', derivado: derivado({ estado: 'proxima_a_secar' }) });
+    const c = animal({ animalId: 'c' });
+    const resultado = derivarAlertasTablero([vencida, proxima, c]);
+    expect(resultado.proximasASecar.map((x) => x.animalId)).toEqual(['proxima']);
+  });
+
+  it('secadoVencido y proximasASecar nunca se solapan (11/5/2 de producción, disjuntos por construcción)', () => {
+    const vencidas = Array.from({ length: 5 }, (_, i) =>
+      animal({
+        animalId: `vencida-${i}`,
+        derivado: derivado({ estado: 'proxima_a_secar', alertas: { ...derivado().alertas, secado_due: true } }),
+      }),
+    );
+    const proximas = Array.from({ length: 2 }, (_, i) =>
+      animal({ animalId: `proxima-${i}`, derivado: derivado({ estado: 'proxima_a_secar' }) }),
+    );
+    const resto = Array.from({ length: 3 }, (_, i) => animal({ animalId: `resto-${i}` })); // servida, sin alerta
+
+    const resultado = derivarAlertasTablero([...vencidas, ...proximas, ...resto]);
+    expect(resultado.secadoVencido).toHaveLength(5);
+    expect(resultado.proximasASecar).toHaveLength(2);
+
+    const idsVencidas = new Set(resultado.secadoVencido.map((x) => x.animalId));
+    const idsProximas = new Set(resultado.proximasASecar.map((x) => x.animalId));
+    const interseccion = [...idsVencidas].filter((id) => idsProximas.has(id));
+    expect(interseccion).toEqual([]);
+  });
+
+  it('aplana secadoVencido y proximasASecar bajo el mismo tipo "secado", vencidas primero', () => {
+    const vencida = animal({
+      animalId: 'vencida',
+      derivado: derivado({ estado: 'proxima_a_secar', alertas: { ...derivado().alertas, secado_due: true } }),
+    });
+    const proxima = animal({ animalId: 'proxima', derivado: derivado({ estado: 'proxima_a_secar' }) });
+    const resultado = derivarAlertasTablero([proxima, vencida]);
+    expect(resultado.filas.map((f) => ({ tipo: f.tipo, id: f.animal.animalId }))).toEqual([
+      { tipo: 'secado', id: 'vencida' },
+      { tipo: 'secado', id: 'proxima' },
+    ]);
   });
 
   it('clasifica próxima a parir solo por alertas.parto_proximo', () => {
@@ -93,6 +148,129 @@ describe('derivarAlertasTablero', () => {
 
   it('un animal sin ninguna señal activa no genera ninguna fila', () => {
     expect(derivarAlertasTablero([animal({ animalId: 'quieto' })]).filas).toEqual([]);
+  });
+});
+
+describe('vaciasMasDeNDias', () => {
+  // Umbral real de producción (migración 084, `hato_config.dias_espera_
+  // voluntaria_post_parto`). `HOY` y las fechas de parto son literales fijos
+  // (nunca `new Date()`) para que el test sea determinístico.
+  const CONFIG: Pick<HatoConfig, 'dias_espera_voluntaria_post_parto'> = { dias_espera_voluntaria_post_parto: 90 };
+  const HOY = '2026-08-17';
+  const HACE_89_DIAS = '2026-05-20'; // < 90 -- todavía dentro de la espera voluntaria
+  const HACE_90_DIAS = '2026-05-19'; // umbral exacto -- ya cuenta
+  const HACE_100_DIAS = '2026-05-09';
+  const HACE_150_DIAS = '2026-03-20';
+
+  it('cuenta parida_reciente con parto a 90 días exactos o más (11 de producción, 2026-08-17)', () => {
+    const vacias = Array.from({ length: 11 }, (_, i) =>
+      animal({
+        animalId: `vacia-${i}`,
+        derivado: derivado({ estado: 'parida_reciente', dias_abiertos: 100 }),
+        ultimoPartoFecha: i % 2 === 0 ? HACE_100_DIAS : HACE_150_DIAS,
+      }),
+    );
+    const resultado = vaciasMasDeNDias(vacias, CONFIG, HOY);
+    expect(resultado).toHaveLength(11);
+  });
+
+  it('también cuenta vacia_por_servir (p. ej. tras un aborto) con parto viejo, misma regla', () => {
+    const a = animal({
+      animalId: 'a',
+      derivado: derivado({ estado: 'vacia_por_servir' }),
+      ultimoPartoFecha: HACE_150_DIAS,
+    });
+    expect(vaciasMasDeNDias([a], CONFIG, HOY).map((x) => x.animalId)).toEqual(['a']);
+  });
+
+  it('exactamente en el umbral (90 días) cuenta; un día antes (89) NO cuenta', () => {
+    const enUmbral = animal({
+      animalId: 'en-umbral',
+      derivado: derivado({ estado: 'parida_reciente' }),
+      ultimoPartoFecha: HACE_90_DIAS,
+    });
+    const antesDelUmbral = animal({
+      animalId: 'antes',
+      derivado: derivado({ estado: 'parida_reciente' }),
+      ultimoPartoFecha: HACE_89_DIAS,
+    });
+    const resultado = vaciasMasDeNDias([enUmbral, antesDelUmbral], CONFIG, HOY);
+    expect(resultado.map((x) => x.animalId)).toEqual(['en-umbral']);
+  });
+
+  it('una vaca SIN ultimoPartoFecha nunca entra -- sin dato es sin dato, no se infiere', () => {
+    const sinParto = animal({
+      animalId: 'sin-parto',
+      derivado: derivado({ estado: 'parida_reciente' }),
+      ultimoPartoFecha: null,
+    });
+    expect(vaciasMasDeNDias([sinParto], CONFIG, HOY)).toEqual([]);
+  });
+
+  it('una vaca no activa (vendida/muerta/descartada) nunca entra aunque su parto sea viejo', () => {
+    const vendida = animal({
+      animalId: 'vendida',
+      estadoAnimal: 'vendida',
+      derivado: derivado({ estado: 'parida_reciente' }),
+      ultimoPartoFecha: HACE_150_DIAS,
+    });
+    expect(vaciasMasDeNDias([vendida], CONFIG, HOY)).toEqual([]);
+  });
+
+  it('preñez SIN confirmar aún (servida) o CONFIRMADA (preñada/proxima_a_secar/seca) nunca cuenta como vacía', () => {
+    const servida = animal({
+      animalId: 'servida',
+      derivado: derivado({ estado: 'servida' }),
+      ultimoPartoFecha: HACE_150_DIAS,
+    });
+    const prenada = animal({
+      animalId: 'prenada',
+      derivado: derivado({ estado: 'preñada' }),
+      ultimoPartoFecha: HACE_150_DIAS,
+    });
+    const proximaASecar = animal({
+      animalId: 'proxima-a-secar',
+      derivado: derivado({ estado: 'proxima_a_secar' }),
+      ultimoPartoFecha: HACE_150_DIAS,
+    });
+    const seca = animal({
+      animalId: 'seca',
+      derivado: derivado({ estado: 'seca' }),
+      ultimoPartoFecha: HACE_150_DIAS,
+    });
+    expect(vaciasMasDeNDias([servida, prenada, proximaASecar, seca], CONFIG, HOY)).toEqual([]);
+  });
+
+  it('disjunto de secadoVencido/proximasASecar -- ningún animal puede caer en ambos conjuntos (11/5/2 de producción)', () => {
+    const vacias = Array.from({ length: 11 }, (_, i) =>
+      animal({
+        animalId: `vacia-${i}`,
+        derivado: derivado({ estado: 'parida_reciente' }),
+        ultimoPartoFecha: HACE_100_DIAS,
+      }),
+    );
+    const secadoVencido = Array.from({ length: 5 }, (_, i) =>
+      animal({
+        animalId: `secado-vencido-${i}`,
+        derivado: derivado({ estado: 'proxima_a_secar', alertas: { ...derivado().alertas, secado_due: true } }),
+      }),
+    );
+    const proximasASecar = Array.from({ length: 2 }, (_, i) =>
+      animal({ animalId: `proxima-a-secar-${i}`, derivado: derivado({ estado: 'proxima_a_secar' }) }),
+    );
+    const todos = [...vacias, ...secadoVencido, ...proximasASecar];
+
+    const resultadoVacias = vaciasMasDeNDias(todos, CONFIG, HOY);
+    const resultadoAlertas = derivarAlertasTablero(todos);
+
+    expect(resultadoVacias).toHaveLength(11);
+    expect(resultadoAlertas.secadoVencido).toHaveLength(5);
+    expect(resultadoAlertas.proximasASecar).toHaveLength(2);
+
+    const idsVacias = new Set(resultadoVacias.map((x) => x.animalId));
+    const idsSecado = new Set([...resultadoAlertas.secadoVencido, ...resultadoAlertas.proximasASecar].map((x) => x.animalId));
+    const interseccion = [...idsVacias].filter((id) => idsSecado.has(id));
+    expect(interseccion).toEqual([]);
   });
 });
 
