@@ -18,13 +18,14 @@ import {
 } from '@/utils/calculosGanado';
 import type { RepartoFila } from '@/utils/calculosGanado';
 import { formatNumber } from '@/utils/format';
-import type { GanFinca, GanPotrero } from '@/types/ganado';
+import type { GanFinca, GanLote, GanPotrero } from '@/types/ganado';
 import { obtenerFechaHoy } from '@/utils/fechas';
 
 interface MovimientoFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   fincas: GanFinca[];
+  lotes?: GanLote[];
   potreros: GanPotrero[];
   existencias?: Record<string, ExistenciasPotrero>;
   onSuccess: () => void;
@@ -39,7 +40,7 @@ type TipoManual = 'muerte' | 'traslado' | 'ajuste';
  * M potreros destino, con los totales cerrando por categoría) y ajuste
  * (delta libre con nota obligatoria).
  */
-export function MovimientoFormDialog({ open, onOpenChange, fincas, potreros, existencias, onSuccess }: MovimientoFormDialogProps) {
+export function MovimientoFormDialog({ open, onOpenChange, fincas, lotes = [], potreros, existencias, onSuccess }: MovimientoFormDialogProps) {
   const { registrarMuerte, registrarTraslado, registrarAjuste } = useGanadoInventario();
 
   const [tipo, setTipo] = useState<TipoManual>('muerte');
@@ -213,6 +214,7 @@ export function MovimientoFormDialog({ open, onOpenChange, fincas, potreros, exi
                   filas={origenes}
                   onChange={setOrigenes}
                   fincas={fincas}
+                  lotes={lotes}
                   potreros={potreros}
                   existencias={existencias}
                   potrerosExcluidos={filasConCabezas(destinos).map((f) => f.potrero_id)}
@@ -223,6 +225,7 @@ export function MovimientoFormDialog({ open, onOpenChange, fincas, potreros, exi
                   filas={destinos}
                   onChange={setDestinos}
                   fincas={fincas}
+                  lotes={lotes}
                   potreros={potreros}
                   potrerosExcluidos={filasConCabezas(origenes).map((f) => f.potrero_id)}
                   disabled={saving}

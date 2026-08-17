@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFoo
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 import { useGanadoInventario } from '../hooks/useGanadoInventario';
 import { RepartoPotreros, FILA_REPARTO_VACIA } from './RepartoPotreros';
 import type { ExistenciasPotrero } from './RepartoPotreros';
@@ -14,15 +15,25 @@ import {
   totalCabezasReparto,
 } from '@/utils/calculosGanado';
 import type { RepartoFila } from '@/utils/calculosGanado';
-import { formatNumber } from '@/utils/format';
+import { formatNumber, formatCurrency } from '@/utils/format';
 import { formatearFecha } from '@/utils/fechas';
-import type { GanFinca, GanPotrero, GanMovimiento } from '@/types/ganado';
+import type { GanFinca, GanLote, GanPotrero, GanMovimiento } from '@/types/ganado';
+
+/**
+ * `movimiento` puede traer el valor de la transacción embebido cuando el
+ * rol lo permite (B-2) — campo opcional: si no viene, la fila de valor
+ * simplemente no se muestra, nunca en blanco (R-4/R-1).
+ */
+interface MovimientoPendienteConValor extends GanMovimiento {
+  valor_total?: number | null;
+}
 
 interface ConfirmarPendienteDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  movimiento: GanMovimiento | null;
+  movimiento: MovimientoPendienteConValor | null;
   fincas: GanFinca[];
+  lotes?: GanLote[];
   potreros: GanPotrero[];
   existencias?: Record<string, ExistenciasPotrero>;
   onSuccess: () => void;
@@ -39,11 +50,14 @@ export function ConfirmarPendienteDialog({
   onOpenChange,
   movimiento,
   fincas,
+  lotes = [],
   potreros,
   existencias,
   onSuccess,
 }: ConfirmarPendienteDialogProps) {
   const { confirmarPendiente } = useGanadoInventario();
+  const { profile } = useAuth();
+  const canVerPlata = profile?.rol === 'Gerencia' || profile?.rol === 'Administrador';
 
   const [filas, setFilas] = useState<RepartoFila[]>([{ ...FILA_REPARTO_VACIA }]);
   const [saving, setSaving] = useState(false);
@@ -115,6 +129,9 @@ export function ConfirmarPendienteDialog({
           <div className="space-y-4 p-1">
             <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800 space-y-1">
               <p><strong>{formatNumber(cabezas)}</strong> cabezas · {formatearFecha(movimiento.fecha)}</p>
+              {canVerPlata && movimiento.valor_total != null && (
+                <p>Valor: <strong>{formatCurrency(movimiento.valor_total)}</strong></p>
+              )}
               {movimiento.peso_promedio_kg != null && (
                 <p>Peso promedio: {formatNumber(movimiento.peso_promedio_kg)} kg</p>
               )}
@@ -126,6 +143,7 @@ export function ConfirmarPendienteDialog({
               filas={filas}
               onChange={setFilas}
               fincas={fincas}
+              lotes={lotes}
               potreros={potreros}
               existencias={esVenta ? existencias : undefined}
               disabled={saving}

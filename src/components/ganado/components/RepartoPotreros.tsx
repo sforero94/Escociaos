@@ -5,7 +5,8 @@ import { Label } from '@/components/ui/label';
 import { Plus, Trash2 } from 'lucide-react';
 import { formatNumber } from '@/utils/format';
 import type { RepartoFila } from '@/utils/calculosGanado';
-import type { GanFinca, GanPotrero } from '@/types/ganado';
+import type { GanFinca, GanLote, GanPotrero } from '@/types/ganado';
+import { ETIQUETA_ETAPA } from '@/types/ganado';
 
 const selectClass = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-primary/20';
 
@@ -20,6 +21,8 @@ interface RepartoPotrerosProps {
   onChange: (filas: RepartoFila[]) => void;
   fincas: GanFinca[];
   potreros: GanPotrero[];
+  /** Lotes de las fincas — agrupa los <optgroup> por finca › lote en vez de solo finca. */
+  lotes?: GanLote[];
   /** Inventario actual por potrero: muestra las cabezas disponibles al sacar. */
   existencias?: Record<string, ExistenciasPotrero>;
   /** Potreros usados por el otro lado de un traslado (no se pueden repetir). */
@@ -40,20 +43,37 @@ export function RepartoPotreros({
   onChange,
   fincas,
   potreros,
+  lotes = [],
   existencias,
   potrerosExcluidos = [],
   disabled,
 }: RepartoPotrerosProps) {
-  const potrerosPorFinca = useMemo(() => {
-    const map = new Map<string, GanPotrero[]>();
-    potreros.filter((p) => p.activo).forEach((p) => {
-      if (!map.has(p.finca_id)) map.set(p.finca_id, []);
-      map.get(p.finca_id)!.push(p);
-    });
-    return Array.from(map.entries());
-  }, [potreros]);
-
   const fincaNombre = (fincaId: string) => fincas.find((f) => f.id === fincaId)?.nombre || 'Sin finca';
+  const loteNombre = (loteId: string | null | undefined) =>
+    loteId ? lotes.find((l) => l.id === loteId)?.nombre ?? null : null;
+
+  // <optgroup> por finca › lote (§6.6): un potrero sin lote_id cae en el
+  // grupo "Sin lote" de su finca. El orden de grupos sigue el orden de
+  // aparición de los potreros activos (ya vienen ordenados por nombre).
+  const gruposFincaLote = useMemo(() => {
+    const grupos = new Map<string, { etiqueta: string; potreros: GanPotrero[] }>();
+    potreros
+      .filter((p) => p.activo)
+      .forEach((p) => {
+        const clave = `${p.finca_id}::${p.lote_id ?? 'sin-lote'}`;
+        if (!grupos.has(clave)) {
+          grupos.set(clave, {
+            etiqueta: `${fincaNombre(p.finca_id)} › ${loteNombre(p.lote_id) ?? 'Sin lote'}`,
+            potreros: [],
+          });
+        }
+        grupos.get(clave)!.potreros.push(p);
+      });
+    return Array.from(grupos.values());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [potreros, fincas, lotes]);
+
+  const etapaDe = (p: GanPotrero) => (p.etapa ? ETIQUETA_ETAPA[p.etapa] : null);
 
   const actualizar = (index: number, cambios: Partial<RepartoFila>) => {
     onChange(filas.map((f, i) => (i === index ? { ...f, ...cambios } : f)));
@@ -104,14 +124,20 @@ export function RepartoPotreros({
                   aria-label={`Potrero ${index + 1}`}
                 >
                   <option value="">Seleccionar potrero...</option>
-                  {potrerosPorFinca.map(([fincaId, ps]) => {
-                    const disponibles = ps.filter((p) => !usados.has(p.id));
+                  {gruposFincaLote.map((grupo) => {
+                    const disponibles = grupo.potreros.filter((p) => !usados.has(p.id));
                     if (disponibles.length === 0) return null;
                     return (
-                      <optgroup key={fincaId} label={fincaNombre(fincaId)}>
-                        {disponibles.map((p) => (
-                          <option key={p.id} value={p.id}>{p.nombre}</option>
-                        ))}
+                      <optgroup key={grupo.etiqueta} label={grupo.etiqueta}>
+                        {disponibles.map((p) => {
+                          const etapa = etapaDe(p);
+                          return (
+                            <option key={p.id} value={p.id}>
+                              {p.nombre}
+                              {etapa ? ` · ${etapa}` : ''}
+                            </option>
+                          );
+                        })}
                       </optgroup>
                     );
                   })}
