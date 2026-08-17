@@ -1,12 +1,19 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useGanadoInventario } from '../hooks/useGanadoInventario';
-import { validarSplitConfirmacion, cabezasDePendiente } from '@/utils/calculosGanado';
+import { RepartoPotreros, FILA_REPARTO_VACIA } from './RepartoPotreros';
+import type { ExistenciasPotrero } from './RepartoPotreros';
+import {
+  validarRepartoConfirmacion,
+  validarExistencias,
+  cabezasDePendiente,
+  filasConCabezas,
+  totalCabezasReparto,
+} from '@/utils/calculosGanado';
+import type { RepartoFila } from '@/utils/calculosGanado';
 import { formatNumber } from '@/utils/format';
 import { formatearFecha } from '@/utils/fechas';
 import type { GanFinca, GanPotrero, GanMovimiento } from '@/types/ganado';
@@ -17,22 +24,28 @@ interface ConfirmarPendienteDialogProps {
   movimiento: GanMovimiento | null;
   fincas: GanFinca[];
   potreros: GanPotrero[];
+  existencias?: Record<string, ExistenciasPotrero>;
   onSuccess: () => void;
 }
 
-const selectClass = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-primary/20';
-
 /**
- * Confirmación de un movimiento pendiente generado desde finanzas:
- * asigna el potrero y el split novillos/toros. La suma debe igualar las
- * cabezas de la transacción original (precargadas por el trigger).
+ * Confirmación de un movimiento pendiente generado desde finanzas: reparte
+ * las cabezas entre uno o varios potreros con su split novillos/toros. El
+ * total debe cerrar exactamente contra las cabezas de la transacción
+ * (precargadas por el trigger).
  */
-export function ConfirmarPendienteDialog({ open, onOpenChange, movimiento, fincas, potreros, onSuccess }: ConfirmarPendienteDialogProps) {
+export function ConfirmarPendienteDialog({
+  open,
+  onOpenChange,
+  movimiento,
+  fincas,
+  potreros,
+  existencias,
+  onSuccess,
+}: ConfirmarPendienteDialogProps) {
   const { confirmarPendiente } = useGanadoInventario();
 
-  const [potreroId, setPotreroId] = useState('');
-  const [novillos, setNovillos] = useState('');
-  const [toros, setToros] = useState('');
+  const [filas, setFilas] = useState<RepartoFila[]>([{ ...FILA_REPARTO_VACIA }]);
   const [saving, setSaving] = useState(false);
 
   const cabezas = movimiento ? cabezasDePendiente(movimiento) : 0;
@@ -40,55 +53,51 @@ export function ConfirmarPendienteDialog({ open, onOpenChange, movimiento, finca
 
   useEffect(() => {
     if (!open || !movimiento) return;
-    setPotreroId('');
-    setNovillos(String(cabezasDePendiente(movimiento)));
-    setToros('0');
+    // Arranca con todas las cabezas como novillos en un solo potrero: es el
+    // caso más común y quien reparta solo tiene que corregir hacia abajo.
+    setFilas([{ potrero_id: '', novillos: cabezasDePendiente(movimiento), toros: 0 }]);
   }, [open, movimiento]);
 
-  const potrerosPorFinca = useMemo(() => {
-    const map = new Map<string, GanPotrero[]>();
-    potreros.filter((p) => p.activo).forEach((p) => {
-      if (!map.has(p.finca_id)) map.set(p.finca_id, []);
-      map.get(p.finca_id)!.push(p);
-    });
-    return Array.from(map.entries());
-  }, [potreros]);
+  const asignadas = totalCabezasReparto(filasConCabezas(filas));
+  const restantes = cabezas - asignadas;
 
-  const fincaNombre = (fincaId: string) => fincas.find((f) => f.id === fincaId)?.nombre || 'Sin finca';
+  const nombrePotrero = useMemo(() => {
+    const map = new Map(potreros.map((p) => [p.id, p.nombre]));
+    return (id: string) => map.get(id) || 'El potrero';
+  }, [potreros]);
 
   const handleConfirmar = async () => {
     if (!movimiento) return;
-    if (!potreroId) {
-      toast.error('Selecciona el potrero');
+
+    const errorReparto = validarRepartoConfirmacion(filas, cabezas);
+    if (errorReparto) {
+      toast.error(errorReparto);
       return;
     }
-    const nNovillos = Math.round(Number(novillos) || 0);
-    const nToros = Math.round(Number(toros) || 0);
-    const errorSplit = validarSplitConfirmacion(nNovillos, nToros, cabezas);
-    if (errorSplit) {
-      toast.error(errorSplit);
-      return;
+    // En una venta las cabezas salen de cada potrero: se valida antes para
+    // que el usuario no reciba el error como una falla de base de datos.
+    if (esVenta && existencias) {
+      const errorExistencias = validarExistencias(filas, existencias, nombrePotrero);
+      if (errorExistencias) {
+        toast.error(errorExistencias);
+        return;
+      }
     }
 
     setSaving(true);
     try {
-      await confirmarPendiente({
-        movimientoId: movimiento.id,
-        potreroId,
-        novillos: nNovillos,
-        toros: nToros,
-        esVenta: !!esVenta,
-      });
-      toast.success('Movimiento confirmado e inventario actualizado');
+      await confirmarPendiente({ movimientoId: movimiento.id, filas });
+      const n = filasConCabezas(filas).length;
+      toast.success(
+        n > 1
+          ? `Movimiento confirmado y repartido en ${n} potreros`
+          : 'Movimiento confirmado e inventario actualizado'
+      );
       onSuccess();
       onOpenChange(false);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Error desconocido';
-      if (message.includes('gan_movimientos_transaccion_confirmado_unique')) {
-        toast.error('Esta transacción ya tiene un movimiento confirmado en inventario');
-      } else {
-        toast.error('Error confirmando movimiento: ' + message);
-      }
+      toast.error('Error confirmando movimiento: ' + message);
     } finally {
       setSaving(false);
     }
@@ -98,7 +107,7 @@ export function ConfirmarPendienteDialog({ open, onOpenChange, movimiento, finca
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="md">
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>Confirmar {esVenta ? 'venta' : 'compra'} en inventario</DialogTitle>
         </DialogHeader>
@@ -112,49 +121,33 @@ export function ConfirmarPendienteDialog({ open, onOpenChange, movimiento, finca
               {movimiento.notas && <p className="text-amber-700/80">{movimiento.notas}</p>}
             </div>
 
-            <div className="space-y-1.5">
-              <Label>{esVenta ? 'Potrero de origen *' : 'Potrero de destino *'}</Label>
-              <select value={potreroId} onChange={(e) => setPotreroId(e.target.value)} className={selectClass}>
-                <option value="">Seleccionar...</option>
-                {potrerosPorFinca.map(([fincaId, ps]) => (
-                  <optgroup key={fincaId} label={fincaNombre(fincaId)}>
-                    {ps.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                  </optgroup>
-                ))}
-              </select>
-            </div>
+            <RepartoPotreros
+              label={esVenta ? 'Potreros de origen *' : 'Potreros de destino *'}
+              filas={filas}
+              onChange={setFilas}
+              fincas={fincas}
+              potreros={potreros}
+              existencias={esVenta ? existencias : undefined}
+              disabled={saving}
+            />
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>Novillos *</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={novillos}
-                  onChange={(e) => setNovillos(e.target.value)}
-                  onWheel={(e) => e.currentTarget.blur()}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Toros *</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={toros}
-                  onChange={(e) => setToros(e.target.value)}
-                  onWheel={(e) => e.currentTarget.blur()}
-                />
-              </div>
+            <div
+              className={`rounded-xl border px-3 py-2 text-sm ${
+                restantes === 0
+                  ? 'border-primary/30 bg-primary/5 text-primary'
+                  : 'border-amber-300 bg-amber-50 text-amber-800'
+              }`}
+            >
+              Asignadas <strong>{formatNumber(asignadas)}</strong> de {formatNumber(cabezas)} cabezas
+              {restantes > 0 && ` · faltan ${formatNumber(restantes)}`}
+              {restantes < 0 && ` · sobran ${formatNumber(-restantes)}`}
             </div>
-            <p className="text-xs text-brand-brown/60">
-              La suma de novillos y toros debe ser {formatNumber(cabezas)}.
-            </p>
           </div>
         </DialogBody>
         <DialogFooter>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancelar</Button>
-            <Button onClick={handleConfirmar} disabled={saving}>
+            <Button onClick={handleConfirmar} disabled={saving || restantes !== 0}>
               {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Confirmar
             </Button>

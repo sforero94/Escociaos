@@ -3,8 +3,11 @@ import {
   calcularKPIsInventario,
   cabezasPorHaFinca,
   calcularVariacion,
-  construirMovimientosTraslado,
-  validarSplitConfirmacion,
+  validarRepartoConfirmacion,
+  validarTrasladoMulti,
+  validarExistencias,
+  filasConCabezas,
+  totalCabezasReparto,
   cabezasDePendiente,
   construirAjustesMasivos,
   validarCargaInicial,
@@ -90,40 +93,122 @@ describe('calcularVariacion', () => {
   });
 });
 
-describe('construirMovimientosTraslado', () => {
-  it('genera salida negativa en origen y entrada positiva en destino', () => {
-    const [salida, entrada] = construirMovimientosTraslado({
-      fecha: '2026-06-10',
-      potreroOrigenId: 'pA',
-      potreroDestinoId: 'pB',
-      novillos: 15,
-      toros: 1,
-      pesoPromedioKg: 420,
-      notas: 'rotación',
-    });
-    expect(salida.tipo).toBe('traslado_salida');
-    expect(salida.potrero_origen_id).toBe('pA');
-    expect(salida.potrero_destino_id).toBeNull();
-    expect(salida.novillos_delta).toBe(-15);
-    expect(salida.toros_delta).toBe(-1);
-    expect(entrada.tipo).toBe('traslado_entrada');
-    expect(entrada.potrero_destino_id).toBe('pB');
-    expect(entrada.novillos_delta).toBe(15);
-    expect(entrada.toros_delta).toBe(1);
-    expect(entrada.peso_promedio_kg).toBe(420);
+describe('filasConCabezas / totalCabezasReparto', () => {
+  it('ignora las filas vacías del formulario', () => {
+    const filas = [
+      { potrero_id: 'pA', novillos: 12, toros: 0 },
+      { potrero_id: '', novillos: 0, toros: 0 },
+      { potrero_id: 'pB', novillos: 10, toros: 2 },
+    ];
+    expect(filasConCabezas(filas)).toHaveLength(2);
+    expect(totalCabezasReparto(filasConCabezas(filas))).toBe(24);
   });
 });
 
-describe('validarSplitConfirmacion', () => {
-  it('acepta split que suma las cabezas de la transacción', () => {
-    expect(validarSplitConfirmacion(18, 2, 20)).toBeNull();
+describe('validarRepartoConfirmacion', () => {
+  it('acepta un reparto de un solo potrero que cierra', () => {
+    expect(validarRepartoConfirmacion([{ potrero_id: 'pA', novillos: 18, toros: 2 }], 20)).toBeNull();
   });
-  it('rechaza suma incorrecta', () => {
-    expect(validarSplitConfirmacion(18, 1, 20)).toContain('20');
+
+  it('acepta el reparto en varios potreros cuando el total cierra', () => {
+    const filas = [
+      { potrero_id: 'mochuelos', novillos: 12, toros: 0 },
+      { potrero_id: 'quebradas', novillos: 12, toros: 0 },
+    ];
+    expect(validarRepartoConfirmacion(filas, 24)).toBeNull();
   });
+
+  it('rechaza cuando la suma no cierra contra la transacción', () => {
+    const filas = [
+      { potrero_id: 'mochuelos', novillos: 12, toros: 0 },
+      { potrero_id: 'quebradas', novillos: 10, toros: 0 },
+    ];
+    expect(validarRepartoConfirmacion(filas, 24)).toContain('24');
+  });
+
+  it('rechaza un potrero repetido — sería doble conteo en el mismo potrero', () => {
+    const filas = [
+      { potrero_id: 'mochuelos', novillos: 12, toros: 0 },
+      { potrero_id: 'mochuelos', novillos: 12, toros: 0 },
+    ];
+    expect(validarRepartoConfirmacion(filas, 24)).toMatch(/repetido/i);
+  });
+
+  it('rechaza una fila con cabezas y sin potrero', () => {
+    const filas = [
+      { potrero_id: 'mochuelos', novillos: 12, toros: 0 },
+      { potrero_id: '', novillos: 12, toros: 0 },
+    ];
+    expect(validarRepartoConfirmacion(filas, 24)).toMatch(/potrero/i);
+  });
+
   it('rechaza negativos y no enteros', () => {
-    expect(validarSplitConfirmacion(-1, 21, 20)).not.toBeNull();
-    expect(validarSplitConfirmacion(1.5, 18.5, 20)).not.toBeNull();
+    expect(validarRepartoConfirmacion([{ potrero_id: 'pA', novillos: -1, toros: 21 }], 20)).not.toBeNull();
+    expect(validarRepartoConfirmacion([{ potrero_id: 'pA', novillos: 1.5, toros: 18.5 }], 20)).not.toBeNull();
+  });
+
+  it('rechaza un reparto vacío', () => {
+    expect(validarRepartoConfirmacion([{ potrero_id: '', novillos: 0, toros: 0 }], 24)).not.toBeNull();
+  });
+});
+
+describe('validarExistencias', () => {
+  const inventario = { pA: { novillos: 10, toros: 2 }, pB: { novillos: 0, toros: 5 } };
+  const nombre = (id: string) => (id === 'pA' ? 'Mochuelos Ceba' : 'Quebradas');
+
+  it('acepta una salida dentro de las existencias', () => {
+    expect(validarExistencias([{ potrero_id: 'pA', novillos: 10, toros: 2 }], inventario, nombre)).toBeNull();
+  });
+
+  it('rechaza sacar más novillos de los que hay, nombrando el potrero', () => {
+    const error = validarExistencias([{ potrero_id: 'pA', novillos: 11, toros: 0 }], inventario, nombre);
+    expect(error).toContain('Mochuelos Ceba');
+  });
+
+  it('trata un potrero sin inventario como cero', () => {
+    expect(validarExistencias([{ potrero_id: 'pZ', novillos: 1, toros: 0 }], inventario, nombre)).not.toBeNull();
+  });
+});
+
+describe('validarTrasladoMulti', () => {
+  const base = { fecha: '2026-06-10' };
+
+  it('acepta un traslado de un origen a dos destinos que cierra por categoría', () => {
+    const error = validarTrasladoMulti({
+      ...base,
+      origenes: [{ potrero_id: 'pA', novillos: 20, toros: 4 }],
+      destinos: [
+        { potrero_id: 'pB', novillos: 12, toros: 2 },
+        { potrero_id: 'pC', novillos: 8, toros: 2 },
+      ],
+    });
+    expect(error).toBeNull();
+  });
+
+  it('rechaza sacar novillos y meter toros aunque el total coincida', () => {
+    const error = validarTrasladoMulti({
+      ...base,
+      origenes: [{ potrero_id: 'pA', novillos: 10, toros: 0 }],
+      destinos: [{ potrero_id: 'pB', novillos: 0, toros: 10 }],
+    });
+    expect(error).not.toBeNull();
+  });
+
+  it('rechaza que un potrero sea origen y destino a la vez', () => {
+    const error = validarTrasladoMulti({
+      ...base,
+      origenes: [{ potrero_id: 'pA', novillos: 10, toros: 0 }],
+      destinos: [{ potrero_id: 'pA', novillos: 10, toros: 0 }],
+    });
+    expect(error).toMatch(/origen y destino/i);
+  });
+
+  it('rechaza cuando un lado está vacío', () => {
+    expect(validarTrasladoMulti({
+      ...base,
+      origenes: [{ potrero_id: 'pA', novillos: 10, toros: 0 }],
+      destinos: [{ potrero_id: '', novillos: 0, toros: 0 }],
+    })).not.toBeNull();
   });
 });
 

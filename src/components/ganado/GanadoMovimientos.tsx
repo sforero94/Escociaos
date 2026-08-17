@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGanadoInventario } from './hooks/useGanadoInventario';
 import { GanadoSubNav } from './GanadoSubNav';
@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Loader2, AlertTriangle, X } from 'lucide-react';
 import { toast } from 'sonner';
-import type { GanFinca, GanPotrero, GanMovimiento, MovimientoConContexto } from '@/types/ganado';
+import type { GanFinca, GanPotrero, GanMovimiento, MovimientoConContexto, InventarioPotreroRow } from '@/types/ganado';
 
 const selectClass = 'px-2 py-1.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary min-w-0';
 
@@ -37,12 +37,13 @@ export function GanadoMovimientos() {
   const { profile } = useAuth();
   const canWrite = profile?.rol === 'Administrador' || profile?.rol === 'Gerencia';
 
-  const { fetchEstructura, fetchMovimientos, fetchPendientes, descartarPendiente, loading } = useGanadoInventario();
+  const { fetchEstructura, fetchMovimientos, fetchPendientes, fetchInventario, descartarPendiente, loading } = useGanadoInventario();
 
   const [movimientos, setMovimientos] = useState<MovimientoConContexto[]>([]);
   const [pendientes, setPendientes] = useState<GanMovimiento[]>([]);
   const [fincas, setFincas] = useState<GanFinca[]>([]);
   const [potreros, setPotreros] = useState<GanPotrero[]>([]);
+  const [inventario, setInventario] = useState<InventarioPotreroRow[]>([]);
   const [tipoFilter, setTipoFilter] = useState('');
   const [fincaFilter, setFincaFilter] = useState('');
   const [fechaDesde, setFechaDesde] = useState('');
@@ -52,7 +53,7 @@ export function GanadoMovimientos() {
 
   const loadData = useCallback(async () => {
     try {
-      const [movs, pend, estructura] = await Promise.all([
+      const [movs, pend, estructura, inv] = await Promise.all([
         fetchMovimientos({
           tipo: tipoFilter || undefined,
           fincaId: fincaFilter || undefined,
@@ -61,16 +62,26 @@ export function GanadoMovimientos() {
         }),
         fetchPendientes(),
         fetchEstructura(),
+        fetchInventario(),
       ]);
       setMovimientos(movs.filter((m) => m.estado === 'confirmado'));
       setPendientes(pend);
       setFincas(estructura.fincas);
       setPotreros(estructura.potreros);
+      setInventario(inv);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Error desconocido';
       toast.error('Error cargando movimientos: ' + message);
     }
-  }, [fetchMovimientos, fetchPendientes, fetchEstructura, tipoFilter, fincaFilter, fechaDesde, fechaHasta]);
+  }, [fetchMovimientos, fetchPendientes, fetchEstructura, fetchInventario, tipoFilter, fincaFilter, fechaDesde, fechaHasta]);
+
+  // Cabezas disponibles por potrero: los diálogos las usan para avisar antes
+  // de que el CHECK de gan_inventario rechace una salida sin existencias.
+  const existencias = useMemo(() => {
+    const map: Record<string, { novillos: number; toros: number }> = {};
+    inventario.forEach((r) => { map[r.potrero_id] = { novillos: r.novillos, toros: r.toros }; });
+    return map;
+  }, [inventario]);
 
   useEffect(() => {
     loadData();
@@ -224,6 +235,7 @@ export function GanadoMovimientos() {
           onOpenChange={setShowForm}
           fincas={fincas}
           potreros={potreros}
+          existencias={existencias}
           onSuccess={loadData}
         />
 
@@ -233,6 +245,7 @@ export function GanadoMovimientos() {
           movimiento={pendienteSeleccionado}
           fincas={fincas}
           potreros={potreros}
+          existencias={existencias}
           onSuccess={loadData}
         />
       </div>
