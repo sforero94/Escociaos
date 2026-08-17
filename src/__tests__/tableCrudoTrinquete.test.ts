@@ -108,8 +108,6 @@ const DEUDA_TABLA_CRUDA: readonly string[] = [
   'components/finanzas/dashboard/components/PivotTableGastos.tsx',
   'components/finanzas/reportes/TablaFlujoCaja.tsx',
   'components/finanzas/reportes/TablaPyG.tsx',
-  'components/ganado/GanadoDashboard.tsx',
-  'components/ganado/GanadoMovimientos.tsx',
   'components/ganado/components/AjusteMasivoDialog.tsx',
   'components/ganado/components/InventarioInicialDialog.tsx',
   'components/hato/AnimalesList.tsx',
@@ -276,8 +274,8 @@ describe('trinquete: <table> crudo solo se permite si está declarado en DEUDA_T
       expect(realSources.has(UI_TABLE_REL)).toBe(false);
     });
 
-    it('el conteo de deuda real de hoy es 43 (visible en el diff si alguien lo cambia sin querer)', () => {
-      expect(DEUDA_TABLA_CRUDA.length).toBe(43);
+    it('el conteo de deuda real de hoy es 41 (visible en el diff si alguien lo cambia sin querer)', () => {
+      expect(DEUDA_TABLA_CRUDA.length).toBe(41);
     });
 
     it('regla 1 — ningún archivo con <table> crudo fuera de la lista declarada', () => {

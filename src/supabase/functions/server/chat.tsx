@@ -23,8 +23,10 @@ import {
   renderMovimientosRecientes,
   type GanUbicacionRow,
   type GanFincaRow,
+  type GanLoteRow,
   type GanPotreroRow,
   type GanInventarioRow,
+  type GanPesoHistoricoRow,
   type GanMovimientoRow,
 } from './ganado-inventario.ts';
 import {
@@ -533,7 +535,7 @@ const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'get_ganado_inventory',
-    description: 'Inventario VIVO de ganado de CEBA (gan_*, cabezas de novillos/toros por ubicación → finca → potrero): cabezas actuales, cabezas por hectárea, peso promedio, variación de los últimos 30 días (entradas vs salidas) y movimientos pendientes de confirmar desde finanzas. Opcionalmente lista los movimientos recientes (compras, ventas, muertes, traslados, ajustes). NO incluye el Hato Lechero (animales individuales de ordeño) — para eso usa get_hato_reproduccion (panorama del hato) o get_hato_animal (una vaca puntual). Para el dinero de compras/ventas de ganado de ceba usa get_financial_summary con type=ganado; este tool es para el conteo físico.',
+    description: 'Inventario VIVO de ganado de CEBA (gan_*, cabezas de novillos/toros por ubicación → finca → LOTE → potrero): cabezas actuales, desglose por etapa productiva (terneros/levante/ceba/repele/sin clasificar), cabezas por hectárea, último peso registrado (con su fecha), variación de los últimos 30 días EXCLUYENDO traslados internos (entradas vs salidas reales) y movimientos pendientes de confirmar desde finanzas. Opcionalmente lista los movimientos recientes YA AGRUPADOS: un traslado repartido entre varios potreros o una compra/venta repartida en varios potreros aparece como UN solo evento, nunca como filas sueltas indistinguibles de hechos separados. NO incluye el Hato Lechero (animales individuales de ordeño) — para eso usa get_hato_reproduccion (panorama del hato) o get_hato_animal (una vaca puntual). Para el dinero de compras/ventas de ganado de ceba usa get_financial_summary con type=ganado; este tool es para el conteo físico, por lote y por etapa.',
     parameters: {
       type: 'object',
       properties: {
@@ -2953,14 +2955,19 @@ async function execGanadoInventory(args: Record<string, unknown>): Promise<strin
   hace30.setDate(hace30.getDate() - 30);
   const desde = date_from || hace30.toISOString().split('T')[0];
 
-  let movQuery = `select=tipo,estado,fecha,novillos_delta,toros_delta,potrero_origen_id,potrero_destino_id,peso_promedio_kg,notas&estado=eq.confirmado&fecha=gte.${e(desde)}&order=fecha.desc&limit=200`;
+  let movQuery = `select=tipo,estado,fecha,novillos_delta,toros_delta,potrero_origen_id,potrero_destino_id,peso_promedio_kg,notas,transaccion_ganado_id,grupo_id&estado=eq.confirmado&fecha=gte.${e(desde)}&order=fecha.desc&limit=200`;
   if (date_to) movQuery += `&fecha=lte.${e(date_to)}`;
 
-  const [ubicaciones, fincas, potreros, inventario, movimientos, pendientes] = await Promise.all([
+  const [ubicaciones, fincas, lotes, potreros, inventario, pesos, movimientos, pendientes] = await Promise.all([
     supabaseQuery('gan_ubicaciones', 'select=id,nombre') as Promise<GanUbicacionRow[]>,
     supabaseQuery('gan_fincas', 'select=id,nombre,ubicacion_id,hectareas,activa') as Promise<GanFincaRow[]>,
-    supabaseQuery('gan_potreros', 'select=id,nombre,finca_id,activo') as Promise<GanPotreroRow[]>,
+    supabaseQuery('gan_lotes', 'select=id,finca_id,nombre,activo') as Promise<GanLoteRow[]>,
+    supabaseQuery('gan_potreros', 'select=id,nombre,finca_id,activo,lote_id,etapa') as Promise<GanPotreroRow[]>,
     supabaseQuery('gan_inventario', 'select=potrero_id,novillos,toros,peso_promedio_kg,updated_at') as Promise<GanInventarioRow[]>,
+    // Último peso: gan_inventario.peso_promedio_kg es el del ÚLTIMO
+    // MOVIMIENTO con peso (045, COALESCE), no un promedio — se lee de
+    // gan_pesos_historico, la misma fuente que usa la UI (§3.4 del plan).
+    supabaseQuery('gan_pesos_historico', 'select=potrero_id,fecha,peso_promedio_kg') as Promise<GanPesoHistoricoRow[]>,
     supabaseQuery('gan_movimientos', movQuery) as Promise<GanMovimientoRow[]>,
     supabaseQuery('gan_movimientos', 'select=id,tipo,fecha,novillos_delta,toros_delta,peso_promedio_kg,notas&estado=eq.pendiente&order=fecha.desc') as Promise<GanMovimientoRow[]>,
   ]);
@@ -2969,7 +2976,9 @@ async function execGanadoInventory(args: Record<string, unknown>): Promise<strin
     ubicaciones,
     fincas,
     potreros,
+    lotes,
     inventario,
+    pesos,
     movimientos30d: movimientos,
     pendientes,
     filtroUbicacion: ubicacion_name,
@@ -3398,7 +3407,7 @@ DOMINIOS DE DATOS DISPONIBLES:
 - Pronostico del clima 5-7 dias (get_weather_forecast): para decidir ventanas de aplicacion
 - Inventario: productos agricolas, stock, movimientos, compras
 - Finanzas: gastos (solo Confirmados), ingresos, transacciones de ganado, categorias, busqueda por nombre
-- Inventario vivo de ganado de ceba (get_ganado_inventory): cabezas actuales (novillos/toros) por ubicacion → finca → potrero, cabezas/ha, peso promedio, variacion 30 dias, muertes/traslados/ajustes y movimientos pendientes de confirmar. NO incluye el Hato Lechero. Para el DINERO de compras/ventas de ganado usa get_financial_summary type=ganado; para el CONTEO fisico usa get_ganado_inventory
+- Inventario vivo de ganado de ceba (get_ganado_inventory): cabezas actuales (novillos/toros) por ubicacion → finca → lote → potrero, desglose por etapa productiva (terneros/levante/ceba/repele/sin clasificar), cabezas/ha, ultimo peso con fecha, variacion 30 dias (excluye traslados internos), y movimientos recientes YA AGRUPADOS (un traslado o una compra/venta repartida en varios potreros es UN evento, no N filas sueltas). NO incluye el Hato Lechero. Para el DINERO de compras/ventas de ganado usa get_financial_summary type=ganado; para el CONTEO fisico, por lote o por etapa usa get_ganado_inventory
 - Hato Lechero (vacas/terneras/novillas individuales, modulo distinto de ganado de ceba): get_hato_animal trae la ficha de UN animal por numero de chapeta o nombre (raza, genealogia madre+padre, estado reproductivo actual, eventos recientes, ultimo chequeo veterinario). get_hato_reproduccion trae el panorama del hato completo: conteo por las 4 categorias (terneras, novillas, hato en ordeño, horro = vacas YA secas; una proxima a secar sigue en el hato hasta el secado real), conteo por estado reproductivo, alertas activas (secado/rechequeo/servicio sin confirmar/parto proximo), listas de proximos partos y proximas a secar con dias restantes, y vacas vacias marcadas "problema". get_hato_produccion trae el volumen de leche: pesaje SEMANAL por vaca (litros/vaca — una vaca sin pesaje en el rango no aparece, nunca se reporta con 0) y produccion QUINCENAL vendida al camion del Pomar (litros totales, litros/vaca, conciliacion contra la confirmacion del Pomar). Numeros de chapeta 800-999 son de TRABAJO (colisiones sin resolver de la importacion historica), nunca una caravana fisica — get_hato_animal lo marca explicito. Para el DINERO de la venta de leche usa get_financial_summary o get_pyg_flujo_caja vista=hato.
 - P&G y flujo de caja (get_pyg_flujo_caja): estado de resultados por negocio (global, aguacate, ganado, hato) con Ingresos → Costos directos → Margen de contribucion → Gastos indirectos → Utilidad operativa, en trimestres acumulados o por cosecha (aguacate), mas indicadores unitarios (costo por kilo, $/litro, margen por cabeza) y flujo de caja mensual opcional. USA ESTE TOOL para toda pregunta de rentabilidad, utilidad, margen o "cuanto gano/perdio X"; usa get_financial_summary solo para listar o desglosar gastos e ingresos por categoria, proveedor o comprador.
   REGLAS CONTABLES que debes respetar al interpretar sus cifras, porque son la razon de que no coincidan con una simple resta de ingresos menos gastos:
