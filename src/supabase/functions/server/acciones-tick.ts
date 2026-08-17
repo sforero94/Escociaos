@@ -1,5 +1,5 @@
-// acciones-tick.ts — endpoint del motor de acciones recomendadas (Fase 2,
-// docs/brief_tecnico_motor_acciones.md §2.2, §5, §10 Fase 2):
+// acciones-tick.ts — endpoint del motor de acciones recomendadas (Fase 3,
+// docs/brief_tecnico_motor_acciones.md §2.2, §5, §7, §10 Fase 3):
 // `POST /make-server-1ccce916/acciones/tick`.
 //
 // Disparado a diario por el pg_cron de la migración 098 (05:50 Bogotá --
@@ -10,29 +10,54 @@
 // patrón de `hato-chequeo-commit.ts`) -- no se expone en la interfaz en v1
 // (§2.2 del brief).
 //
-// TODAVÍA SIN MODELO (Fase 2, §10 del brief): este handler ensambla el
-// paquete, consulta `acciones_silencios` (§5.2 -- una acción cuya CLAVE
-// esté silenciada y vigente nunca se publica), y persiste la corrida con
-// `salida_cruda = null` y CERO acciones. `usage`/`costo_usd` se guardan en
-// cero desde el primer día (§10: "aunque en esta fase no haya modelo y
-// vayan en cero") -- así la Fase 3 sólo tiene que EMPEZAR a poblarlos, no
-// crear la columna. No hay ninguna llamada a un LLM en este archivo, y no
-// debe haberla hasta la Fase 3 -- es justamente la propiedad que hace del
-// Hito 2 el más importante del plan (§10): "el pipeline completo corre a
-// diario con CERO participación de un modelo".
+// CON MODELO (Fase 3): "conectar motor + validador dentro de
+// acciones-tick.ts" (§10 Fase 3) es literal -- este handler es el único
+// lugar del repo que llama a `invocarModeloAcciones` (`acciones-motor.ts`)
+// Y a `validarSalidaMotor` (`acciones-validador.ts`) en la misma corrida.
+// Orden: ensamblar paquete → invocar el modelo → validar → (si corresponde,
+// §7.4) reintentar UNA vez a temperatura 0 → ordenar (`ordenarAcciones`) →
+// descartar lo silenciado (§5.2) → persistir corrida + acciones aceptadas.
 //
-// I/O puro en este archivo: auth, poda de corridas viejas, persistencia.
-// La lógica de ensamblado vive en `acciones-paquete.ts` (100% puro,
-// testeado con filas mock -- `accionesPaquete.test.ts`); las consultas
-// reales a Supabase que alimentan esa lógica viven en `acciones-paquete-io.ts`
+// El pipeline SIGUE corriendo aunque el modelo falle o no esté disponible
+// (§7.5 -- ver `estadoModelo`/`peorEstado` más abajo): degrada a CERO
+// acciones publicadas y una corrida con `estado`/`error` registrados, nunca
+// a una excepción que tumbe el tick. Esa propiedad es la que hace del
+// Hito 2 (Fase 2) y del Hito 3 (Fase 3) los dos hitos importantes del plan
+// -- el segundo no le quita al primero su garantía, la extiende.
+//
+// I/O puro en este archivo: auth, la llamada al modelo (delegada a
+// `acciones-motor.ts`, que NO importa el cliente de Supabase -- R-5), poda
+// de corridas viejas, persistencia. La lógica de ensamblado vive en
+// `acciones-paquete.ts` (100% puro, testeado con filas mock --
+// `accionesPaquete.test.ts`); las consultas reales a Supabase que
+// alimentan esa lógica viven en `acciones-paquete-io.ts`
 // (`crearDependenciasSupabase`, `fetchDatos*`) -- ver el header de ese
-// archivo para por qué está separado del ensamblador puro.
+// archivo para por qué está separado del ensamblador puro. Este archivo
+// tampoco tiene test de Vitest dedicado -- mismo criterio ya establecido
+// para `hato-alertas-tick.ts`/`hato-chequeo-commit.ts`: importa `npm:hono`
+// y `jsr:@supabase/supabase-js` a nivel de módulo, que Vitest/Node no
+// puede resolver. Lo que SÍ se prueba con Vitest es cada pieza que este
+// handler conecta -- `acciones-motor.ts` (`accionesMotor.test.ts`,
+// incluidas aserciones estructurales de que este archivo hace la conexión
+// que dice hacer, molde `esco-evals.test.ts`), `acciones-validador.ts` y
+// `acciones-orden.ts` (ya probados en fases previas).
 
 import { Context } from 'npm:hono';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { ensamblarPaquete } from './acciones-paquete.ts';
 import { crearDependenciasSupabase } from './acciones-paquete-io.ts';
-import type { PaqueteAcciones } from './acciones-tipos.ts';
+import {
+  debeReintentar,
+  invocarModeloAcciones,
+  MODELO_ACCIONES_DEFAULT,
+  sumarCostosUsd,
+  TEMPERATURA_INICIAL,
+  TEMPERATURA_REINTENTO,
+  type LlamadaMotorResultado,
+} from './acciones-motor.ts';
+import { validarSalidaMotor, type AccionValidada, type Rechazo } from './acciones-validador.ts';
+import { ordenarAcciones } from './acciones-orden.ts';
+import type { Hecho, NegocioAccion, PaqueteAcciones } from './acciones-tipos.ts';
 
 /** Corridas de más de este número de días se borran en cada tick (§5.3,
  *  sección 6 "Retención" -- "corridas > 90 días se borran, y el ON DELETE
@@ -108,11 +133,11 @@ async function verificarAuth(
 }
 
 // ---------------------------------------------------------------------------
-// Silencios (§5.2) -- el tick los consulta ANTES de publicar. En esta fase
-// no hay acciones que publicar (cero acciones, `salida_cruda=null`), así
-// que esta consulta no tiene ningún efecto observable todavía -- se deja
-// lista desde ya para que la Fase 3 sólo tenga que FILTRAR con el `Set` que
-// esta función ya arma, en vez de escribir la consulta ese día.
+// Silencios (§5.2) -- el tick los consulta ANTES de publicar. `handleAccionesTick`
+// filtra con el `Set` que esta función arma: cualquier `AccionValidada.clave`
+// silenciada y vigente nunca llega a `acciones_recomendadas`, sea cual sea
+// su origen (O1/O2/O8) -- la clave sobrevive a la regeneración diaria por
+// diseño (§5.2 del brief: "el descarte no cuelga de la fila de la corrida").
 // ---------------------------------------------------------------------------
 async function clavesSilenciadasVigentes(supabase: ClienteSupabase, ahoraIso: string): Promise<Set<string>> {
   const { data, error } = await supabase.from('acciones_silencios').select('clave').gt('vigente_hasta', ahoraIso);
@@ -124,6 +149,21 @@ async function clavesSilenciadasVigentes(supabase: ClienteSupabase, ahoraIso: st
     return new Set();
   }
   return new Set((data ?? []).map((f: { clave: string }) => f.clave));
+}
+
+// ---------------------------------------------------------------------------
+// Estado de la corrida (§7.5) -- combina el estado del PAQUETE (¿algún
+// negocio cayó al ensamblar?) con el estado del MOTOR (¿el modelo produjo
+// algo utilizable?). El peor de los dos manda: un paquete 'ok' con un
+// modelo que 'fallo' es una corrida 'fallo' (nada publicable ese día), y un
+// paquete 'parcial' con un modelo 'ok' sigue siendo 'parcial' (un negocio
+// caído no se puede maquillar con acciones válidas de los otros dos).
+// ---------------------------------------------------------------------------
+type EstadoCorrida = 'ok' | 'parcial' | 'fallo';
+const SEVERIDAD_ESTADO: Record<EstadoCorrida, number> = { ok: 0, parcial: 1, fallo: 2 };
+
+function peorEstado(a: EstadoCorrida, b: EstadoCorrida): EstadoCorrida {
+  return SEVERIDAD_ESTADO[a] >= SEVERIDAD_ESTADO[b] ? a : b;
 }
 
 async function podarCorridasViejas(supabase: ClienteSupabase, hoy: string): Promise<void> {
@@ -179,13 +219,94 @@ export async function handleAccionesTick(c: Context): Promise<Response> {
     return respuestaError(c, 500, `No se pudo ensamblar el paquete: ${mensaje}`);
   }
 
-  // §5.2 -- se consultan los silencios vigentes desde ya (ver el comentario
-  // de `clavesSilenciadasVigentes`); en esta fase no hay acciones que
-  // filtrar (0 acciones, ver abajo), así que el resultado no se usa todavía
-  // más que para dejar la consulta viva y probada.
-  await clavesSilenciadasVigentes(supabase, ahora.toISOString());
+  const clavesSilenciadas = await clavesSilenciadasVigentes(supabase, ahora.toISOString());
 
-  const estado: 'ok' | 'parcial' = paquete.incidencias.length > 0 ? 'parcial' : 'ok';
+  const estadoPaquete: EstadoCorrida = paquete.incidencias.length > 0 ? 'parcial' : 'ok';
+
+  // -------------------------------------------------------------------------
+  // El modelo (Fase 3, §7 del brief) -- ver el header del archivo para el
+  // orden completo. TODO este bloque está en un try/catch: la propiedad que
+  // no se puede romper (encargo de esta sesión) es que el pipeline corre
+  // ENTERO aunque el modelo falle de cualquier forma, incluida una que
+  // `acciones-motor.ts`/`acciones-validador.ts`/`acciones-orden.ts` no
+  // previeron (los tres documentan "nunca lanza", pero esta guarda es
+  // defensa en profundidad, no confianza ciega) -- nunca una excepción que
+  // tumbe el tick antes de persistir. Si algo revienta aquí, la corrida se
+  // persiste igual, con CERO acciones y `estado='fallo'`.
+  // -------------------------------------------------------------------------
+  const apiKey = Deno.env.get('OPENROUTER_API_KEY');
+  const modelo = Deno.env.get('ACCIONES_MODELO') || MODELO_ACCIONES_DEFAULT;
+
+  let ultimoResultado: LlamadaMotorResultado | null = null;
+  let aceptadas: AccionValidada[] = [];
+  let rechazos: Rechazo[] = [];
+  let intentosModelo = 0;
+  let tokensPrompt = 0;
+  let tokensCompletion = 0;
+  let costoUsd: number | null = null;
+  let errorMotor: string | null = null;
+
+  if (!apiKey) {
+    // §7.5: "OPENROUTER_API_KEY sin configurar | estado='fallo',
+    // error='sin_api_key'" -- ni se intenta la llamada, mismo patrón "503
+    // antes de tocar nada" que `hato-chequeo-foto.ts`/`hato-alertas-tick.ts`,
+    // adaptado aquí a "no llames al modelo" en vez de "no respondas nada",
+    // porque el resto del tick (paquete, silencios, persistencia) sigue
+    // teniendo trabajo útil que hacer.
+    errorMotor = 'sin_api_key';
+  } else {
+    try {
+      const intento1 = await invocarModeloAcciones(paquete, { apiKey, modelo, temperatura: TEMPERATURA_INICIAL });
+      intentosModelo = 1;
+      ultimoResultado = intento1;
+      let validacion = intento1.salida ? validarSalidaMotor(intento1.salida, paquete) : { aceptadas: [], rechazos: [] };
+      aceptadas = validacion.aceptadas;
+      rechazos = validacion.rechazos;
+      tokensPrompt = intento1.tokensPrompt;
+      tokensCompletion = intento1.tokensCompletion;
+      costoUsd = intento1.costoUsd;
+
+      // §7.4 -- "nunca más de 2 llamadas por corrida". `debeReintentar` sólo
+      // dispara sobre (a) fallo de la llamada o (b) el validador rechazó
+      // TODAS las acciones propuestas -- nunca sobre "el modelo propuso
+      // legítimamente cero acciones" (§7.5: ese es el caso bueno).
+      if (debeReintentar(intento1, aceptadas.length)) {
+        const intento2 = await invocarModeloAcciones(paquete, { apiKey, modelo, temperatura: TEMPERATURA_REINTENTO });
+        intentosModelo = 2;
+        ultimoResultado = intento2;
+        validacion = intento2.salida ? validarSalidaMotor(intento2.salida, paquete) : { aceptadas: [], rechazos: [] };
+        aceptadas = validacion.aceptadas;
+        rechazos = validacion.rechazos;
+        tokensPrompt += intento2.tokensPrompt;
+        tokensCompletion += intento2.tokensCompletion;
+        costoUsd = sumarCostosUsd([costoUsd, intento2.costoUsd]);
+      }
+
+      if (!ultimoResultado.ok) errorMotor = ultimoResultado.error;
+    } catch (err) {
+      // Defensa en profundidad (ver el comentario del bloque): nada de esto
+      // debería lanzar, pero si lo hace, la corrida degrada a 'fallo' en vez
+      // de tumbar el tick.
+      errorMotor = err instanceof Error ? err.message : String(err);
+      aceptadas = [];
+      rechazos = [];
+    }
+  }
+
+  // §4.6 -- el orden lo calcula el data layer, nunca el modelo.
+  const ordenadas = ordenarAcciones(aceptadas, paquete);
+  // §5.2 -- lo silenciado no se publica, aunque haya sobrevivido la validación.
+  const publicables = ordenadas.filter((a) => !clavesSilenciadas.has(a.clave));
+
+  // §7.5 -- estado del motor: 'fallo' si no hubo llamada utilizable en
+  // absoluto (sin api key, o ambos intentos fallaron); 'parcial' si hubo
+  // salida pero el validador rechazó algo (incluido "rechazó todo", que
+  // también es 'parcial' -- el diagnóstico vive en `rechazos[]`, no en
+  // `error`); 'ok' en cualquier otro caso, INCLUIDO "el modelo propuso 0
+  // acciones legítimamente" (§7.5: "es el caso bueno y tiene que verse de
+  // verdad").
+  const estadoModelo: EstadoCorrida = !apiKey || !ultimoResultado?.ok ? 'fallo' : rechazos.length > 0 ? 'parcial' : 'ok';
+  const estado = peorEstado(estadoPaquete, estadoModelo);
   const duracionMs = Date.now() - inicio;
 
   const { data: corridaInsertada, error: errorInsertCorrida } = await supabase
@@ -194,16 +315,16 @@ export async function handleAccionesTick(c: Context): Promise<Response> {
       fecha_referencia: paquete.fecha_referencia,
       disparo: auth.disparo,
       estado,
-      modelo: null, // Fase 3 -- todavía sin LLM
-      tokens_prompt: 0,
-      tokens_completion: 0,
-      costo_usd: 0,
+      modelo: apiKey ? modelo : null,
+      tokens_prompt: tokensPrompt,
+      tokens_completion: tokensCompletion,
+      costo_usd: costoUsd,
       duracion_ms: duracionMs,
       paquete,
-      salida_cruda: null, // Fase 3 -- todavía sin LLM
-      rechazos: [],
+      salida_cruda: ultimoResultado?.salidaCruda ?? null,
+      rechazos,
       contexto_comite: paquete.contexto_comite.estado,
-      error: null,
+      error: errorMotor,
     })
     .select('id')
     .single();
@@ -212,9 +333,59 @@ export async function handleAccionesTick(c: Context): Promise<Response> {
     return respuestaError(c, 500, `El paquete se ensambló pero no se pudo persistir la corrida: ${errorInsertCorrida.message}`);
   }
 
-  // Fase 2: CERO acciones publicadas -- no hay modelo todavía que las
-  // proponga (§10: "escribe la corrida con salida_cruda=null y CERO
-  // acciones"). No se inserta nada en `acciones_recomendadas` en esta fase.
+  // -------------------------------------------------------------------------
+  // Persistir las acciones aceptadas (§5.2/§5.3 del brief). `orden` es la
+  // POSICIÓN dentro del negocio en `publicables` -- ya viene agrupado y
+  // ordenado por `ordenarAcciones`, así que un contador que se reinicia por
+  // negocio basta; no hace falta releer el criterio de orden aquí.
+  // -------------------------------------------------------------------------
+  const ordenPorNegocio = new Map<NegocioAccion, number>();
+  const filasAcciones: Array<Record<string, unknown>> = [];
+  for (const accion of publicables) {
+    const destino = paquete.destinos.find((d) => d.id === accion.destino_id && d.negocio === accion.negocio);
+    if (!destino) {
+      // No debería pasar: el validador ya exigió que el destino exista para
+      // ese negocio. Si pasa igual (una corrida real puede desviarse de lo
+      // que el corpus de tests cubrió), se omite ESA acción y se registra --
+      // nunca se aborta la corrida completa por una fila.
+      console.error(`[acciones-tick] la acción de clave '${accion.clave}' no resolvió un destino tras validar -- se omite.`);
+      continue;
+    }
+    const orden = (ordenPorNegocio.get(accion.negocio) ?? 0) + 1;
+    ordenPorNegocio.set(accion.negocio, orden);
+    const hechosSnapshot = accion.hecho_ids
+      .map((id) => paquete.hechos.find((h) => h.id === id))
+      .filter((h): h is Hecho => h !== undefined);
+
+    filasAcciones.push({
+      corrida_id: corridaInsertada.id,
+      negocio: accion.negocio,
+      clave: accion.clave,
+      origen: accion.origen,
+      visibilidad: accion.visibilidad,
+      orden,
+      plantilla: accion.plantilla,
+      ranuras: accion.ranuras,
+      hecho_ids: accion.hecho_ids,
+      hechos_snapshot: hechosSnapshot,
+      destino_id: accion.destino_id,
+      destino_ruta: destino.ruta,
+      destino_etiqueta: destino.etiqueta_boton,
+    });
+  }
+
+  let accionesPublicadas = 0;
+  if (filasAcciones.length > 0) {
+    const { error: errorInsertAcciones } = await supabase.from('acciones_recomendadas').insert(filasAcciones);
+    if (errorInsertAcciones) {
+      // La corrida YA quedó persistida con su estado/rechazos/salida_cruda
+      // (auditoría intacta); un fallo aquí sólo significa que el navegador
+      // no verá acciones hoy -- se registra y NO se aborta.
+      console.error('[acciones-tick] no se pudieron insertar acciones_recomendadas -- la corrida queda persistida sin acciones publicadas:', errorInsertAcciones.message);
+    } else {
+      accionesPublicadas = filasAcciones.length;
+    }
+  }
 
   await podarCorridasViejas(supabase, paquete.fecha_referencia);
 
@@ -226,7 +397,15 @@ export async function handleAccionesTick(c: Context): Promise<Response> {
     negocios: paquete.negocios,
     total_hechos: paquete.hechos.length,
     incidencias: paquete.incidencias,
-    acciones_publicadas: 0, // Fase 2 -- sin modelo todavía (§10 del brief)
+    modelo: apiKey ? modelo : null,
+    intentos_modelo: intentosModelo,
+    acciones_aceptadas: aceptadas.length,
+    acciones_silenciadas: ordenadas.length - publicables.length,
+    acciones_publicadas: accionesPublicadas,
+    rechazos: rechazos.length,
+    tokens_prompt: tokensPrompt,
+    tokens_completion: tokensCompletion,
+    costo_usd: costoUsd,
     duracion_ms: duracionMs,
   });
 }

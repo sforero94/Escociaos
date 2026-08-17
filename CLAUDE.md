@@ -371,6 +371,8 @@ Esco's system prompt carries the accounting rules verbatim (cattle purchases are
 - `FARM_LAT`, `FARM_LON` — optional. Override the default farm coordinates for the weather forecast. Defaults to Aguadas, Caldas (≈ 5.6094, -75.4582)
 - `HATO_ALERTAS_TICK_SECRET` — shared secret for the hato alertas tick endpoint; must equal the Vault secret `hato_alertas_tick_secret` that the 060 pg_cron sends in the `x-hato-tick-secret` header. Both provisioned 2026-07-23. Endpoint returns 503 (does nothing) if unset.
 - `HATO_ALERTAS_ESCALAMIENTO_TELEGRAM_ID` — optional. Telegram chat id that receives escalation messages for unanswered alerts; unset → escalated alerts are only marked `escalada`, no message sent.
+- `ACCIONES_TICK_SECRET` — shared secret for the recommended-actions tick (`POST /make-server-1ccce916/acciones/tick`), sent by the 098 pg_cron in the `x-acciones-tick-secret` header. The endpoint has a second door (JWT + Gerencia) for manual runs, so an unset secret disables the cron path only, not the whole endpoint.
+- `ACCIONES_MODELO` — optional. Overrides the model used by the recommended-actions engine. Defaults to `google/gemini-3-flash-preview` (the same one Esco uses). Reuses `OPENROUTER_API_KEY`; if that is unset the tick still runs and persists the paquete, publishing **zero actions** with the failure recorded — the pipeline never depends on the model being up.
 - `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` — auto-injected by Supabase
 
 **Deploy command**: `npx supabase functions deploy make-server-1ccce916`

@@ -200,12 +200,14 @@ app.post("/make-server-1ccce916/hato/alertas/tick", async (c) => {
   return await handleHatoAlertasTick(c);
 });
 
-// Motor de acciones recomendadas (bloque 4 del Centro de Control, Fase 2 --
-// docs/brief_tecnico_motor_acciones.md §2.2, §10). Tick diario disparado por
-// pg_cron (migración 098, 05:50 Bogotá) con secreto compartido
+// Motor de acciones recomendadas (bloque 4 del Centro de Control, Fase 3 --
+// docs/brief_tecnico_motor_acciones.md §2.2, §7, §10). Tick diario disparado
+// por pg_cron (migración 098, 05:50 Bogotá) con secreto compartido
 // (x-acciones-tick-secret), más disparo manual con JWT+Gerencia -- ver
-// acciones-tick.ts. Todavía sin LLM (Fase 2): ensambla y persiste el
-// paquete, cero acciones publicadas.
+// acciones-tick.ts. Ensambla el paquete, llama al modelo (OpenRouter,
+// json_schema estricto, sin tools), valida y persiste -- degrada a cero
+// acciones publicadas si el modelo falla o OPENROUTER_API_KEY no está
+// configurada, nunca tumba el tick.
 app.post("/make-server-1ccce916/acciones/tick", async (c) => {
   return await handleAccionesTick(c);
 });
