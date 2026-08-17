@@ -139,8 +139,27 @@ PostgreSQL hosted on Supabase with 32+ tables, 7+ custom ENUM types, Row-Level S
 ### Key Domains
 
 - **Configuration**: `lotes`, `sublotes`, `empleados`, `terceros`, `usuarios`, `productos`
-- **Applications**: `aplicaciones`, `aplicaciones_calculos`, `aplicaciones_mezclas`, `aplicaciones_productos`, `aplicaciones_lotes`, `aplicaciones_lotes_planificado`, `aplicaciones_lotes_compras`, `movimientos_diarios`, `movimientos_diarios_productos`
-- **Inventory**: `movimientos_inventario`, `compras`, `compras_productos`, `verificaciones_inventario`, `verificaciones_detalle`
+- **Applications**: `aplicaciones`, `aplicaciones_calculos`, `aplicaciones_mezclas`, `aplicaciones_productos`, `aplicaciones_lotes`, `aplicaciones_lotes_planificado`, `aplicaciones_compras`, `aplicaciones_cierre`, `movimientos_diarios`, `movimientos_diarios_productos`
+- **Inventory**: `movimientos_inventario`, `compras`, `verificaciones_inventario`, `verificaciones_detalle`
+
+> **Corregido 2026-08-17 contra `information_schema`.** Este listado nombraba dos tablas que
+> **no existen**: `aplicaciones_lotes_compras` (la real es **`aplicaciones_compras`**) y
+> `compras_productos` (no existe — `compras` es plana, con `producto_id`/`cantidad` en la
+> propia fila). Y omitía **`aplicaciones_cierre`**. El error costó tiempo real: un agente
+> intentó apoyar una guarda del motor de acciones en `compras_productos` y tuvo que dejarla
+> sin poblar. Verifica contra el catálogo vivo, nunca contra este listado ni contra
+> `src/types/database.ts`, que también está desactualizado (le faltan las 15 tablas `hato_*`,
+> `fin_presupuestos` y `fin_parametros`).
+>
+> **`aplicaciones_compras` es un *snapshot* del momento del cálculo, no un dato vivo.** Trae
+> `inventario_actual`, `cantidad_necesaria`, `cantidad_faltante`, `costo_estimado` y `alerta`
+> congelados cuando se corrió la calculadora. Comprobado 2026-08-17: sus 8 filas vigentes se
+> calcularon el 2026-08-08 y ya divergen del inventario real (Naturboro figura con 40 L; hoy
+> hay 20), y **la aplicación "Enmienda" —Calculada, arranca el 18-ago— no tiene ni una fila**,
+> así que su faltante de 4.694 kg de Silicalmag es invisible en esa pantalla. Cualquier
+> consumidor que necesite el faltante **de hoy** tiene que derivarlo en vivo de
+> `aplicaciones_productos.cantidad_total_necesaria` (agregado por `producto_id`, porque un
+> producto puede repetirse en varias mezclas) contra `productos.cantidad_actual`.
 - **Monitoring**: `monitoreos` (denormalized: one row per pest observation, includes `incidencia`, `lote_id`, FK to `plagas_enfermedades_catalogo`, floración fields: `floracion_sin_flor`, `floracion_brotes`, `floracion_flor_madura`, `floracion_cuaje`), `sublotes`, `plagas_enfermedades_catalogo`, `rondas_monitoreo`, `mon_conductividad` (soil CE readings), `mon_colmenas` (beehive health), `apiarios` (apiary config)
 - **Labor**: `tareas`, `registros_trabajo`, `empleados_tareas`
 - **Finance**: `fin_gastos`, `fin_ingresos`, `fin_transacciones_ganado`, `fin_conceptos_gastos`, `fin_proveedores`, `fin_categorias_gastos`, `fin_categorias_ingresos`, `fin_medios_pago`, `fin_regiones`, `fin_negocios`, `fin_compradores`, `fin_presupuestos` (budget allocations by concepto, year, negocio), `fin_parametros` (accounting inputs the system cannot derive: `cabezas_inventario_inicial`, `costo_cabeza_inventario_inicial`, `saldo_inicial_caja`)

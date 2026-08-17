@@ -15,6 +15,7 @@ import { handleHatoProduccionQuincenaFoto } from "./hato-produccion-quincena-fot
 import { handleHatoPesajeFoto } from "./hato-pesaje-foto.ts";
 import { handleHatoPesajeCommit } from "./hato-pesaje-commit.ts";
 import { handleHatoAlertasTick } from "./hato-alertas-tick.ts";
+import { handleAccionesTick } from "./acciones-tick.ts";
 import { handleWebhook } from "./telegram/bot.ts";
 
 const app = new Hono();
@@ -197,6 +198,16 @@ app.post("/make-server-1ccce916/hato/pesaje/commit", async (c) => {
 // (x-hato-tick-secret), no JWT de usuario -- ver hato-alertas-tick.ts.
 app.post("/make-server-1ccce916/hato/alertas/tick", async (c) => {
   return await handleHatoAlertasTick(c);
+});
+
+// Motor de acciones recomendadas (bloque 4 del Centro de Control, Fase 2 --
+// docs/brief_tecnico_motor_acciones.md §2.2, §10). Tick diario disparado por
+// pg_cron (migración 098, 05:50 Bogotá) con secreto compartido
+// (x-acciones-tick-secret), más disparo manual con JWT+Gerencia -- ver
+// acciones-tick.ts. Todavía sin LLM (Fase 2): ensambla y persiste el
+// paquete, cero acciones publicadas.
+app.post("/make-server-1ccce916/acciones/tick", async (c) => {
+  return await handleAccionesTick(c);
 });
 
 // Handle preflight OPTIONS at Deno.serve level to ensure CORS works
