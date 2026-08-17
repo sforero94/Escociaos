@@ -139,8 +139,27 @@ PostgreSQL hosted on Supabase with 32+ tables, 7+ custom ENUM types, Row-Level S
 ### Key Domains
 
 - **Configuration**: `lotes`, `sublotes`, `empleados`, `terceros`, `usuarios`, `productos`
-- **Applications**: `aplicaciones`, `aplicaciones_calculos`, `aplicaciones_mezclas`, `aplicaciones_productos`, `aplicaciones_lotes`, `aplicaciones_lotes_planificado`, `aplicaciones_lotes_compras`, `movimientos_diarios`, `movimientos_diarios_productos`
-- **Inventory**: `movimientos_inventario`, `compras`, `compras_productos`, `verificaciones_inventario`, `verificaciones_detalle`
+- **Applications**: `aplicaciones`, `aplicaciones_calculos`, `aplicaciones_mezclas`, `aplicaciones_productos`, `aplicaciones_lotes`, `aplicaciones_lotes_planificado`, `aplicaciones_compras`, `aplicaciones_cierre`, `movimientos_diarios`, `movimientos_diarios_productos`
+- **Inventory**: `movimientos_inventario`, `compras`, `verificaciones_inventario`, `verificaciones_detalle`
+
+> **Corregido 2026-08-17 contra `information_schema`.** Este listado nombraba dos tablas que
+> **no existen**: `aplicaciones_lotes_compras` (la real es **`aplicaciones_compras`**) y
+> `compras_productos` (no existe — `compras` es plana, con `producto_id`/`cantidad` en la
+> propia fila). Y omitía **`aplicaciones_cierre`**. El error costó tiempo real: un agente
+> intentó apoyar una guarda del motor de acciones en `compras_productos` y tuvo que dejarla
+> sin poblar. Verifica contra el catálogo vivo, nunca contra este listado ni contra
+> `src/types/database.ts`, que también está desactualizado (le faltan las 15 tablas `hato_*`,
+> `fin_presupuestos` y `fin_parametros`).
+>
+> **`aplicaciones_compras` es un *snapshot* del momento del cálculo, no un dato vivo.** Trae
+> `inventario_actual`, `cantidad_necesaria`, `cantidad_faltante`, `costo_estimado` y `alerta`
+> congelados cuando se corrió la calculadora. Comprobado 2026-08-17: sus 8 filas vigentes se
+> calcularon el 2026-08-08 y ya divergen del inventario real (Naturboro figura con 40 L; hoy
+> hay 20), y **la aplicación "Enmienda" —Calculada, arranca el 18-ago— no tiene ni una fila**,
+> así que su faltante de 4.694 kg de Silicalmag es invisible en esa pantalla. Cualquier
+> consumidor que necesite el faltante **de hoy** tiene que derivarlo en vivo de
+> `aplicaciones_productos.cantidad_total_necesaria` (agregado por `producto_id`, porque un
+> producto puede repetirse en varias mezclas) contra `productos.cantidad_actual`.
 - **Monitoring**: `monitoreos` (denormalized: one row per pest observation, includes `incidencia`, `lote_id`, FK to `plagas_enfermedades_catalogo`, floración fields: `floracion_sin_flor`, `floracion_brotes`, `floracion_flor_madura`, `floracion_cuaje`), `sublotes`, `plagas_enfermedades_catalogo`, `rondas_monitoreo`, `mon_conductividad` (soil CE readings), `mon_colmenas` (beehive health), `apiarios` (apiary config)
 - **Labor**: `tareas`, `registros_trabajo`, `empleados_tareas`
 - **Finance**: `fin_gastos`, `fin_ingresos`, `fin_transacciones_ganado`, `fin_conceptos_gastos`, `fin_proveedores`, `fin_categorias_gastos`, `fin_categorias_ingresos`, `fin_medios_pago`, `fin_regiones`, `fin_negocios`, `fin_compradores`, `fin_presupuestos` (budget allocations by concepto, year, negocio), `fin_parametros` (accounting inputs the system cannot derive: `cabezas_inventario_inicial`, `costo_cabeza_inventario_inicial`, `saldo_inicial_caja`)
@@ -385,6 +404,8 @@ Esco's system prompt carries the accounting rules verbatim (cattle purchases are
 - `FARM_LAT`, `FARM_LON` — optional. Override the default farm coordinates for the weather forecast. Defaults to Aguadas, Caldas (≈ 5.6094, -75.4582)
 - `HATO_ALERTAS_TICK_SECRET` — shared secret for the hato alertas tick endpoint; must equal the Vault secret `hato_alertas_tick_secret` that the 060 pg_cron sends in the `x-hato-tick-secret` header. Both provisioned 2026-07-23. Endpoint returns 503 (does nothing) if unset.
 - `HATO_ALERTAS_ESCALAMIENTO_TELEGRAM_ID` — optional. Telegram chat id that receives escalation messages for unanswered alerts; unset → escalated alerts are only marked `escalada`, no message sent.
+- `ACCIONES_TICK_SECRET` — shared secret for the recommended-actions tick (`POST /make-server-1ccce916/acciones/tick`), sent by the 098 pg_cron in the `x-acciones-tick-secret` header. The endpoint has a second door (JWT + Gerencia) for manual runs, so an unset secret disables the cron path only, not the whole endpoint.
+- `ACCIONES_MODELO` — optional. Overrides the model used by the recommended-actions engine. Defaults to `google/gemini-3-flash-preview` (the same one Esco uses). Reuses `OPENROUTER_API_KEY`; if that is unset the tick still runs and persists the paquete, publishing **zero actions** with the failure recorded — the pipeline never depends on the model being up.
 - `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` — auto-injected by Supabase
 
 **Deploy command**: `npx supabase functions deploy make-server-1ccce916`

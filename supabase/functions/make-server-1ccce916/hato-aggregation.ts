@@ -390,7 +390,17 @@ export function calcularSubetapaTernera(edadMeses: number, umbrales: UmbralesCat
 // fuente para las dos cosas.
 // ----------------------------------------------------------------------------
 
-interface EtapaEfectivaHato {
+/**
+ * Exportada para `acciones-paquete.ts` (motor de acciones recomendadas,
+ * Fase 2, docs/brief_tecnico_motor_acciones.md §3.3): ese ensamblador
+ * necesita construir la MISMA lista de animales por-fila que este archivo
+ * usa internamente (`AnimalHatoParaAcciones`, `src/utils/accionesHechos.ts`)
+ * para los hechos `hato.vacias_90d`/`hato.secado_vencido`/
+ * `hato.proximas_a_secar`/`hato.rechequeo_vencido`/`hato.cobertura_pesaje`/
+ * `hato.servicios_90d` -- reutiliza esta función y `categorizarAnimal` en
+ * vez de reimplementar la resolución de etapa/categoría una tercera vez.
+ */
+export interface EtapaEfectivaHato {
   etapa: 'ternera' | 'novilla' | 'vaca' | 'toro';
   subetapaTernera: SubetapaTernera | null;
 }
@@ -403,7 +413,7 @@ interface EtapaEfectivaHato {
  * `derivarEstadoReproductivo` (estado reproductivo) en
  * `buildReproduccionSummary` -- las dos nunca pueden discrepar porque
  * salen de la misma llamada. */
-function resolverEtapaEfectiva(
+export function resolverEtapaEfectiva(
   fila: HatoEstadoActualRow,
   umbrales: UmbralesCategoriaHato,
   fechaReferencia: string,
@@ -433,7 +443,11 @@ function resolverEtapaEfectiva(
   return { etapa: 'novilla', subetapaTernera: null };
 }
 
-function categorizarAnimal(
+/** Exportada por el mismo motivo que `resolverEtapaEfectiva` -- ver su
+ * comentario. Usada por `acciones-paquete.ts` para contar "vacas en
+ * ordeño" (hechos `hato.cobertura_pesaje`/`hato.servicios_90d`) con la
+ * MISMA regla que categoriza la pestaña del hato y el resto de Esco. */
+export function categorizarAnimal(
   fila: HatoEstadoActualRow,
   etapaEfectiva: EtapaEfectivaHato['etapa'],
   estado: EstadoReproductivo,

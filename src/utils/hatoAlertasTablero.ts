@@ -16,6 +16,7 @@
 import type { LucideIcon } from 'lucide-react';
 import { Droplet, Baby, Stethoscope, Syringe } from 'lucide-react';
 import type { AnimalHatoDerivado } from '@/components/hato/hooks/useHatoAnimales';
+import type { HatoConfig } from '@/utils/calculosHato';
 import {
   chipEstadoReproductivo,
   chipVaciaEsProblema,
@@ -33,12 +34,30 @@ export interface AlertaTableroFila {
 }
 
 export interface AlertasTableroDerivadas {
+  /** `fecha_secar` YA PASÓ (`derivado.alertas.secado_due`) -- exige acción
+   * HOY. Separado de `proximasASecar` en la Fase 0a del motor de acciones
+   * (docs/brief_tecnico_motor_acciones.md §3.3/§10 0a): antes de esta fase
+   * `derivarAlertasTablero` mezclaba ambas señales en una sola lista
+   * (`estado === 'proxima_a_secar' || secado_due`), lo que hacía imposible
+   * que el motor dijera "N vacas con secado vencido" sin contar también las
+   * que solo están dentro de la ventana de aviso. Disjunto de
+   * `proximasASecar` por construcción. */
+  secadoVencido: AnimalHatoDerivado[];
+  /** Dentro de la ventana de aviso (`estado === 'proxima_a_secar'`) pero
+   * TODAVÍA NO vencida -- planificación, no acción inmediata. Disjunto de
+   * `secadoVencido` (ver arriba): ambos filtros parten de mutuamente
+   * excluyentes sobre `alertas.secado_due`. */
   proximasASecar: AnimalHatoDerivado[];
   proximasAParir: AnimalHatoDerivado[];
   rechequeoPendiente: AnimalHatoDerivado[];
   vaciasPorServir: AnimalHatoDerivado[];
-  /** Las 4 listas anteriores aplanadas en el orden secado→parto→rechequeo→
-   * servir -- el orden del tablero del Dashboard. */
+  /** Las 5 listas anteriores aplanadas en el orden secado (vencido primero,
+   * luego próximo)→parto→rechequeo→servir -- el orden del tablero del
+   * Dashboard. `secadoVencido` y `proximasASecar` comparten el `tipo`
+   * `'secado'`: la distinción vive en el dato (`AlertasTableroDerivadas`),
+   * no en el aplanado visual del panel -- el pill (`chipDiasRestantes`/
+   * `chipVencimiento`) ya distingue "Vencido" de "Faltan N días" por
+   * animal. */
   filas: AlertaTableroFila[];
 }
 
@@ -85,22 +104,67 @@ export function nombreAnimalTablero(a: AnimalHatoDerivado): { principal: string;
   return { principal: `#${a.numero}`, secundario: a.nombre };
 }
 
-/** Deriva las 4 señales de alerta del hato activo a partir de los animales
+/** Deriva las 5 señales de alerta del hato activo a partir de los animales
  * YA resueltos por `useHatoAnimales`. "Vacías por servir" se calcula SOLO
  * sobre el hato en ordeño (`categoria === 'hato'`), igual que el resto de
- * las listas de acción de la Épica E1. */
+ * las listas de acción de la Épica E1.
+ *
+ * `secadoVencido`/`proximasASecar` se calculan por separado (Fase 0a) a
+ * partir de la MISMA fuente que antes las mezclaba: `secado_due` es
+ * mutuamente excluyente de "`proxima_a_secar` sin vencer" porque un animal
+ * solo puede tener un `derivado.estado`, y `secado_due` (en
+ * `calculosHato.ts::derivarEstadoReproductivo`) solo es `true` cuando ese
+ * estado YA es `'proxima_a_secar'` -- así que filtrar el mismo conjunto por
+ * `secado_due` primero y por su negación después no puede solapar ni dejar
+ * huecos frente al filtro combinado que existía antes. */
 export function derivarAlertasTablero(animales: AnimalHatoDerivado[]): AlertasTableroDerivadas {
   const enOrdeno = animales.filter((a) => a.categoria === 'hato');
-  const proximasASecar = animales.filter((a) => a.derivado.alertas.secado_due || a.derivado.estado === 'proxima_a_secar');
+  const secadoVencido = animales.filter((a) => a.derivado.alertas.secado_due);
+  const proximasASecar = animales.filter(
+    (a) => a.derivado.estado === 'proxima_a_secar' && !a.derivado.alertas.secado_due,
+  );
   const proximasAParir = animales.filter((a) => a.derivado.alertas.parto_proximo);
   const rechequeoPendiente = animales.filter((a) => a.derivado.alertas.rechequeo_due);
   const vaciasPorServir = enOrdeno.filter((a) => a.derivado.estado === 'vacia_por_servir');
 
   const filas: AlertaTableroFila[] = [];
+  for (const animal of secadoVencido) filas.push({ tipo: 'secado', animal });
   for (const animal of proximasASecar) filas.push({ tipo: 'secado', animal });
   for (const animal of proximasAParir) filas.push({ tipo: 'parto', animal });
   for (const animal of rechequeoPendiente) filas.push({ tipo: 'rechequeo', animal });
   for (const animal of vaciasPorServir) filas.push({ tipo: 'servir', animal });
 
-  return { proximasASecar, proximasAParir, rechequeoPendiente, vaciasPorServir, filas };
+  return { secadoVencido, proximasASecar, proximasAParir, rechequeoPendiente, vaciasPorServir, filas };
+}
+
+/** Vacas ACTIVAS cuyo último parto conocido lleva `dias_espera_voluntaria_
+ * post_parto` días o más (90 desde la migración 084) sin un nuevo servicio
+ * ni preñez confirmada -- las dos únicas `EstadoReproductivo` "efectivamente
+ * vacía" que el motor reconoce (V14, `calculosHato.ts`): `parida_reciente`
+ * (parió y sigue sin servir) y `vacia_por_servir` (p. ej. tras un aborto).
+ * Un animal `servida`/`preñada`/`proxima_a_secar`/`seca` NUNCA entra aquí
+ * aunque su último parto sea viejo -- ya hay progreso reproductivo desde
+ * entonces, así que ya no es "vacía".
+ *
+ * Regla dura (sin dato = sin dato, nunca se infiere): un animal SIN
+ * `ultimoPartoFecha` no entra.
+ *
+ * Prerrequisito bloqueante de la Fase 1 del motor de acciones recomendadas
+ * (docs/brief_tecnico_motor_acciones.md §3.3, hecho `hato.vacias_90d`):
+ * el resultado es disjunto de `secadoVencido`/`proximasASecar` por
+ * construcción -- ningún animal puede tener a la vez
+ * `estado === 'proxima_a_secar'` y `estado === 'parida_reciente' |
+ * 'vacia_por_servir'`, son ramas mutuamente excluyentes de
+ * `derivarEstadoReproductivo`. */
+export function vaciasMasDeNDias(
+  animales: AnimalHatoDerivado[],
+  config: Pick<HatoConfig, 'dias_espera_voluntaria_post_parto'>,
+  hoy: string,
+): AnimalHatoDerivado[] {
+  return animales.filter((a) => {
+    if (a.estadoAnimal !== 'activa') return false;
+    if (a.derivado.estado !== 'parida_reciente' && a.derivado.estado !== 'vacia_por_servir') return false;
+    if (!a.ultimoPartoFecha) return false;
+    return diferenciaEnDias(a.ultimoPartoFecha, hoy) >= config.dias_espera_voluntaria_post_parto;
+  });
 }
