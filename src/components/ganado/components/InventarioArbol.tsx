@@ -6,11 +6,14 @@ import { ChevronRight, Loader2 } from 'lucide-react';
 import { formatNumber, formatWeight } from '@/utils/format';
 import { formatearFechaCorta } from '@/utils/fechas';
 import { ChipsEtapa, BarraEtapa, EtapaChip } from './ChipsEtapa';
-import type { NodoUbicacion, NodoFinca, NodoLote } from '@/types/ganado';
+import { MenuEtapaPotrero } from './MenuEtapaPotrero';
+import type { NodoUbicacion, NodoFinca, NodoLote, EtapaProductiva } from '@/types/ganado';
 
 interface InventarioArbolProps {
   ubicaciones: NodoUbicacion[];
   loading: boolean;
+  /** Edición en línea de la etapa. Ausente = solo lectura (rol sin escritura). */
+  onCambiarEtapa?: (potreroId: string, etapa: EtapaProductiva | null) => Promise<void>;
 }
 
 /**
@@ -20,7 +23,7 @@ interface InventarioArbolProps {
  * caso "lista" y ya envuelve en scroll horizontal propio — el body nunca
  * scrollea en horizontal.
  */
-export function InventarioArbol({ ubicaciones, loading }: InventarioArbolProps) {
+export function InventarioArbol({ ubicaciones, loading, onCambiarEtapa }: InventarioArbolProps) {
   const totalFincas = ubicaciones.reduce((s, u) => s + u.fincas.length, 0);
 
   const fincaMasGrande = useMemo(() => {
@@ -84,6 +87,7 @@ export function InventarioArbol({ ubicaciones, loading }: InventarioArbolProps) 
                 finca={finca}
                 abierta={abiertas.has(finca.finca_id)}
                 onToggle={() => toggleFinca(finca.finca_id)}
+                onCambiarEtapa={onCambiarEtapa}
               />
             ))}
           </div>
@@ -93,7 +97,7 @@ export function InventarioArbol({ ubicaciones, loading }: InventarioArbolProps) 
   );
 }
 
-function FincaCard({ finca, abierta, onToggle }: { finca: NodoFinca; abierta: boolean; onToggle: () => void }) {
+function FincaCard({ finca, abierta, onToggle, onCambiarEtapa }: { finca: NodoFinca; abierta: boolean; onToggle: () => void; onCambiarEtapa?: (potreroId: string, etapa: EtapaProductiva | null) => Promise<void> }) {
   const lotesReales = finca.lotes.filter((l) => l.lote_id !== null).length;
   const potrerosCount = finca.lotes.reduce((s, l) => s + l.potreros.length, 0);
 
@@ -147,7 +151,7 @@ function FincaCard({ finca, abierta, onToggle }: { finca: NodoFinca; abierta: bo
 
         <CollapsibleContent>
           <div className="border-t border-primary/10 bg-gray-50/40 px-2 sm:px-3 py-2">
-            <PotrerosTabla lotes={finca.lotes} />
+            <PotrerosTabla lotes={finca.lotes} onCambiarEtapa={onCambiarEtapa} />
           </div>
         </CollapsibleContent>
       </div>
@@ -155,7 +159,7 @@ function FincaCard({ finca, abierta, onToggle }: { finca: NodoFinca; abierta: bo
   );
 }
 
-function PotrerosTabla({ lotes }: { lotes: NodoLote[] }) {
+function PotrerosTabla({ lotes, onCambiarEtapa }: { lotes: NodoLote[]; onCambiarEtapa?: (potreroId: string, etapa: EtapaProductiva | null) => Promise<void> }) {
   if (lotes.length === 0) {
     return <p className="text-sm text-brand-brown/40 text-center py-4">Sin potreros en esta finca</p>;
   }
@@ -171,14 +175,14 @@ function PotrerosTabla({ lotes }: { lotes: NodoLote[] }) {
       </TableHeader>
       <TableBody>
         {lotes.map((lote) => (
-          <LoteFilas key={lote.lote_id ?? 'sin-lote'} lote={lote} />
+          <LoteFilas key={lote.lote_id ?? 'sin-lote'} lote={lote} onCambiarEtapa={onCambiarEtapa} />
         ))}
       </TableBody>
     </Table>
   );
 }
 
-function LoteFilas({ lote }: { lote: NodoLote }) {
+function LoteFilas({ lote, onCambiarEtapa }: { lote: NodoLote; onCambiarEtapa?: (potreroId: string, etapa: EtapaProductiva | null) => Promise<void> }) {
   return (
     <>
       <TableRow className="bg-gray-50/80 hover:bg-gray-50/80">
@@ -198,9 +202,33 @@ function LoteFilas({ lote }: { lote: NodoLote }) {
       </TableRow>
       {lote.potreros.map((p) => (
         <TableRow key={p.potrero_id}>
-          <TableCell className="pl-8 text-brand-brown/80">{p.potrero}</TableCell>
+          <TableCell className="pl-8 text-brand-brown/80">
+            {onCambiarEtapa ? (
+              <MenuEtapaPotrero
+                potreroId={p.potrero_id}
+                nombrePotrero={p.potrero}
+                etapaActual={p.etapa ?? null}
+                onCambiar={onCambiarEtapa}
+              >
+                <span>{p.potrero}</span>
+              </MenuEtapaPotrero>
+            ) : (
+              p.potrero
+            )}
+          </TableCell>
           <TableCell>
-            <EtapaChip etapa={p.etapa ?? 'sin_clasificar'} />
+            {onCambiarEtapa ? (
+              <MenuEtapaPotrero
+                potreroId={p.potrero_id}
+                nombrePotrero={p.potrero}
+                etapaActual={p.etapa ?? null}
+                onCambiar={onCambiarEtapa}
+              >
+                <EtapaChip etapa={p.etapa ?? 'sin_clasificar'} />
+              </MenuEtapaPotrero>
+            ) : (
+              <EtapaChip etapa={p.etapa ?? 'sin_clasificar'} />
+            )}
           </TableCell>
           <TableCell className="text-right tabular-nums">{formatNumber(p.cabezas)}</TableCell>
           <TableCell className="text-right hidden sm:table-cell tabular-nums">
