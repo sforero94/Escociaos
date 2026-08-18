@@ -29,6 +29,7 @@ import type {
   GanLote,
   VariacionInventario,
   EtapaBucket,
+  EtapaProductiva,
 } from '@/types/ganado';
 
 const selectClass =
@@ -54,6 +55,7 @@ export function GanadoDashboard() {
     fetchInventarioFincasInactivas,
     fetchMovimientos,
     countPendientes,
+    actualizarEtapaPotrero,
   } = useGanadoInventario();
 
   const [rows, setRows] = useState<InventarioPotreroRow[]>([]);
@@ -115,6 +117,27 @@ export function GanadoDashboard() {
       setCargando(false);
     }
   }, [fetchInventario, fetchInventarioFincasInactivas, fetchEstructura, countPendientes, fetchMovimientos]);
+
+  /**
+   * Edición en línea de la etapa desde el árbol. Optimista para que el
+   * chip cambie al instante, pero **si la escritura falla se revierte**:
+   * dejar la pantalla mostrando una etapa que la base no tiene es la
+   * misma clase de mentira que mostrar 0 cuando no se pudo leer.
+   */
+  const cambiarEtapaPotrero = useCallback(
+    async (potreroId: string, etapa: EtapaProductiva | null) => {
+      const anterior = rows.find((r) => r.potrero_id === potreroId)?.etapa ?? null;
+      setRows((prev) => prev.map((r) => (r.potrero_id === potreroId ? { ...r, etapa } : r)));
+      try {
+        await actualizarEtapaPotrero(potreroId, etapa);
+      } catch (error: unknown) {
+        setRows((prev) => prev.map((r) => (r.potrero_id === potreroId ? { ...r, etapa: anterior } : r)));
+        const message = error instanceof Error ? error.message : 'Error desconocido';
+        toast.error('No se pudo cambiar la etapa: ' + message);
+      }
+    },
+    [rows, actualizarEtapaPotrero]
+  );
 
   useEffect(() => {
     loadData();
@@ -394,7 +417,11 @@ export function GanadoDashboard() {
         </div>
 
         {/* Árbol de inventario */}
-        <InventarioArbol ubicaciones={arbol} loading={cargando} />
+        <InventarioArbol
+          ubicaciones={arbol}
+          loading={cargando}
+          onCambiarEtapa={canWrite ? cambiarEtapaPotrero : undefined}
+        />
         </>
         )}
 

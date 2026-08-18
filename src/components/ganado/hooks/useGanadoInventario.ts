@@ -426,6 +426,22 @@ export function useGanadoInventario() {
   // con llamadas directas a Supabase, que es el patrón de Configuración desde
   // siempre. No se duplican acá para no dejar dos caminos de escritura.
 
+  /**
+   * Cambia la etapa productiva de un potrero (edición en línea desde el
+   * árbol de inventario). `null` la deja sin clasificar — es un estado
+   * legítimo, no un borrado a medias.
+   *
+   * No hay historia de etapa por diseño (ver CLAUDE.md): esto pisa el
+   * valor anterior y el inventario de ayer se lee con la etapa de hoy.
+   */
+  const actualizarEtapaPotrero = useCallback(async (potreroId: string, etapa: EtapaProductiva | null) => {
+    const { error } = await supabase
+      .from('gan_potreros')
+      .update({ etapa })
+      .eq('id', potreroId);
+    if (error) throw error;
+  }, []);
+
   return {
     loading,
     fetchEstructura,
@@ -441,5 +457,6 @@ export function useGanadoInventario() {
     cargarInventarioInicial,
     confirmarPendiente,
     descartarPendiente,
+    actualizarEtapaPotrero,
   };
 }
