@@ -1,3 +1,10 @@
+-- =============================================================================
+-- RENUMERADA 098 -> 102 el 2026-08-17, por la misma colision que 101.
+-- APLICADA A PRODUCCION ese dia: el job `acciones-recomendadas-tick` existe
+-- en `cron.job` (jobid 6, `50 10 * * *` = 05:50 Bogota). Quedo PAUSADO
+-- (`active = false`) a la espera de verificar los agregados; se reactiva con
+-- `cron.alter_job`, no volviendo a correr este archivo.
+-- =============================================================================
 -- =====================================================================
 -- 098: Cron diario del tick del motor de acciones recomendadas
 -- Fecha: 2026-08-17
