@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { RequiereDecision } from '@/components/dashboard/RequiereDecision';
 import type { FilaRequiereDecision, UseRequiereDecisionResultado } from '@/components/dashboard/hooks/useRequiereDecision';
 
 /**
@@ -13,8 +12,24 @@ import type { FilaRequiereDecision, UseRequiereDecisionResultado } from '@/compo
  * A diferencia de `AccionesRecomendadas`, este componente NO llama al hook
  * internamente -- recibe `resultado` ya calculado por el llamador (para que
  * la barra de estado pueda recibir `totalFilas` sin duplicar la consulta),
- * así que estos tests construyen el objeto directamente, sin `vi.mock`.
+ * así que estos tests construyen el objeto directamente, sin `vi.mock` PARA
+ * `useRequiereDecision`. Pero SÍ renderiza siempre (incluso con el diálogo
+ * cerrado) `ConfirmarPendienteDialog`, que internamente llama a
+ * `useGanadoInventario` -- y ese hook, desde la reorganización de ganado
+ * (fincas/lotes/grupos), lee `useAuth()` para `puedeVerPlata` (R-4, ocultar
+ * el valor de la transacción a quien no puede verlo). Sin `AuthProvider` en
+ * el árbol de `renderToStaticMarkup`, ese hook explota -- mismo patrón que
+ * `dineroComponente.test.tsx`/`saludDatosComponente.test.tsx`: se mockea
+ * `@/contexts/AuthContext` para observar el render puro.
  */
+
+const authMock = vi.fn(() => ({ profile: { id: 'u1', nombre: 'Santiago', email: 's@x.com', rol: 'Gerencia', modulos: [] } }));
+
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => authMock(),
+}));
+
+const { RequiereDecision } = await import('@/components/dashboard/RequiereDecision');
 
 function resultadoBase(overrides: Partial<UseRequiereDecisionResultado> = {}): UseRequiereDecisionResultado {
   return {
@@ -148,6 +163,7 @@ describe('RequiereDecision — estados', () => {
               notas: null,
               created_at: '2026-08-08T10:00:00.000Z',
               created_by: null,
+              grupo_id: null,
             },
             fincas: [],
             potreros: [],

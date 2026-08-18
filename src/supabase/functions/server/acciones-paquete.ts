@@ -831,6 +831,23 @@ export function construirHechosGanado(datos: DatosGanadoParaPaquete): Hecho[] {
     ubicaciones: datos.ubicaciones,
     fincas: datos.fincas,
     potreros: datos.potreros,
+    // `lotes`/`pesos` -- reorganización de ganado (`buildGanadoInventorySummary`
+    // ahora los exige) -- se pasan vacíos A PROPÓSITO, no para callar el
+    // tipo: dentro de esa función las dos ÚNICAS cosas que alimentan son
+    // `por_finca[].por_lote[].lote` (nombre de lote) y
+    // `por_finca[].por_lote[].potreros[].ultimo_peso_kg/fecha`. Ninguna de
+    // las dos sale de acá -- `GanadoInventarioParaAcciones`
+    // (`acciones-hechos.ts`) sólo toma `total`, `por_finca` reducido a
+    // `{finca,hectareas,cabezas,novillos,toros}`, `variacion_30_dias` y
+    // `pendientes_confirmacion.total`, y ningún `construirHechoGanado*`
+    // de este archivo lee `por_lote` ni `ultimo_peso_*` (verificado
+    // leyendo ambos cuerpos, no asumido). Si algún día un hecho de ganado
+    // necesita agrupar por lote o exponer el último peso, `lotes`/`pesos`
+    // tienen que dejar de estar vacíos aquí Y `DatosGanadoParaPaquete` +
+    // `fetchDatosGanado` (`acciones-paquete-io.ts`) tienen que consultarlos
+    // de verdad -- nunca sólo callar el tipo.
+    lotes: [],
+    pesos: [],
     inventario: datos.inventario,
     movimientos30d: datos.movimientos30d,
     pendientes: datos.pendientes,

@@ -1457,7 +1457,7 @@ export function construirHechoGanadoConcentracion(
 
 export type DisparoRevision = 'cada_n_dias' | 'al_cerrar_periodo' | 'al_ocurrir_evento';
 
-/** Fila de `revisiones_periodicas` (migración 097), ya consultada. */
+/** Fila de `revisiones_periodicas` (migración 101, aplicada como 097), ya consultada. */
 export interface RevisionPeriodicaFila {
   clave: string;
   negocio: NegocioAccion;
@@ -1493,7 +1493,7 @@ interface PeriodoCerrado {
 
 /** El período CERRADO más reciente respecto de `hoy`, para las tres formas
  *  de `periodo`. Sólo `'mensual'` está ejercitado contra datos reales
- *  (única forma que siembra la migración 097); `'quincenal'`/`'trimestral'`
+ *  (única forma que siembra la migración 101); `'quincenal'`/`'trimestral'`
  *  están implementados para sostener el `CHECK` del esquema, no porque haya
  *  hoy una revisión sembrada de esa forma. */
 function periodoCerradoMasReciente(
