@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useFormDraft } from '@/hooks/useFormDraft';
 import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 import { Save, X, Calendar, Package, Droplet, User, Plus, Trash2, AlertTriangle, FileText, Cloud, Clock } from 'lucide-react';
@@ -73,6 +73,12 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
   const [bultosPorLote, setBultosPorLote] = useState<Record<string, number>>({});
   const [loteToMezclaMap, setLoteToMezclaMap] = useState<Record<string, string>>({});
   const [productosPorMezcla, setProductosPorMezcla] = useState<Record<string, any[]>>({});
+  // Estado real de carga del catalogo de la aplicacion: arranca en true y solo
+  // pasa a false cuando cargarDatosAplicacion termina (con exito o con error).
+  const [cargandoProductos, setCargandoProductos] = useState(true);
+  const [errorProductos, setErrorProductos] = useState<string | null>(null);
+  // Token para descartar precargas obsoletas cuando el lote cambia rapido.
+  const precargaTokenRef = useRef(0);
 
   // Worker tracking (employees + contractors)
   const [empleadosDisponibles, setEmpleadosDisponibles] = useState<Empleado[]>([]);
@@ -112,15 +118,14 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
 
   // 🔧 Productos filtrados según el lote seleccionado
   // Si hay un lote seleccionado, mostrar solo productos de su mezcla
-  // Si no hay lote seleccionado, mostrar todos
-  const productosParaMostrar = (() => {
-    if (!loteId || !loteToMezclaMap[loteId]) {
-      return productosDisponibles; // Mostrar todos si no hay lote seleccionado
+  // Si no hay lote seleccionado, mostrar todos los de la aplicación
+  const productosParaMostrar = useMemo(() => {
+    const mezclaId = loteId ? loteToMezclaMap[loteId] : undefined;
+    if (mezclaId) {
+      return productosPorMezcla[mezclaId] || [];
     }
-
-    const mezclaId = loteToMezclaMap[loteId];
-    return productosPorMezcla[mezclaId] || [];
-  })();
+    return productosDisponibles;
+  }, [loteId, loteToMezclaMap, productosPorMezcla, productosDisponibles]);
 
   // Cargar datos al montar
   useEffect(() => {
@@ -129,14 +134,20 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
     cargarTrabajadores();
   }, [aplicacion.id]);
 
-  // 🔧 Precargar productos cuando se selecciona un lote
+  // 🔧 Precargar productos apenas se conocen, sin esperar a que se elija lote.
+  // No hay forma manual de agregar productos en este formulario, así que si la
+  // precarga no corre el movimiento no se puede guardar (validarFormulario exige
+  // al menos un producto). Al cambiar de lote se recalcula la lista conservando
+  // las cantidades ya digitadas.
   useEffect(() => {
-    if (loteId && productosParaMostrar.length > 0) {
+    if (productosParaMostrar.length > 0) {
       precargarProductos(productosParaMostrar);
     }
-  }, [loteId, productosParaMostrar]);
+  }, [productosParaMostrar]);
 
   const cargarDatosAplicacion = async () => {
+    setCargandoProductos(true);
+    setErrorProductos(null);
     try {
       // Cargar lotes de la aplicación
       const { data: lotesData, error: errorLotes } = await supabase
@@ -262,56 +273,81 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
 
         const productosArray = Array.from(productosUnicos.values());
         setProductosDisponibles(productosArray);
+      } else {
+        setProductosPorMezcla({});
+        setProductosDisponibles([]);
       }
     } catch (err: any) {
       setError('Error al cargar los datos de la aplicación');
+      setErrorProductos('No se pudieron cargar los productos de la aplicación.');
+    } finally {
+      setCargandoProductos(false);
     }
   };
 
-  // 🆕 NUEVA FUNCIÓN: Precargar todos los productos
+  // 🆕 Precargar todos los productos de la mezcla que aplica al lote elegido.
+  // Conserva las cantidades ya digitadas (mismo producto_id) para que cambiar de
+  // lote no borre lo que el usuario venía escribiendo.
   const precargarProductos = async (productos: any[]) => {
-    const productosFormulario: ProductoFormulario[] = [];
+    const token = ++precargaTokenRef.current;
 
-    for (const producto of productos) {
-      // Cargar presentacion_kg_l del producto SOLO para fertilización
-      let presentacionKgL: number | undefined;
-      if (aplicacion.tipo_aplicacion === 'Fertilización') {
+    // presentacion_kg_l SOLO se usa en fertilización, y se pide en una sola
+    // consulta: antes era un select por producto, en serie.
+    const presentaciones = new Map<string, number>();
+    if (aplicacion.tipo_aplicacion === 'Fertilización') {
+      const ids = productos.map(p => p.producto_id).filter(Boolean);
+      if (ids.length > 0) {
         try {
-          const { data: productoData, error: errorProducto } = await supabase
+          const { data, error: errorProductos } = await supabase
             .from('productos')
-            .select('presentacion_kg_l')
-            .eq('id', producto.producto_id)
-            .single();
-          
-          if (!errorProducto && productoData) {
-            presentacionKgL = productoData.presentacion_kg_l ?? undefined;
+            .select('id, presentacion_kg_l')
+            .in('id', ids);
+
+          if (errorProductos) {
+            console.error('Failed to fetch productos presentacion_kg_l:', errorProductos);
+          } else {
+            (data || []).forEach((p: any) => {
+              if (p.presentacion_kg_l != null) {
+                presentaciones.set(p.id, p.presentacion_kg_l);
+              }
+            });
           }
         } catch (err) {
-          console.error('Failed to fetch product presentacion_kg_l:', err);
+          console.error('Failed to fetch productos presentacion_kg_l:', err);
         }
       }
+    }
 
-      productosFormulario.push({
+    // Una precarga posterior ya ganó la carrera: descartamos esta.
+    if (token !== precargaTokenRef.current) return;
+
+    setProductosAgregados(prev => {
+      const cantidadesPrevias = new Map(
+        prev.map(p => [p.producto_id, p.cantidad_utilizada])
+      );
+
+      return productos.map(producto => ({
         producto_id: producto.producto_id,
         producto_nombre: producto.producto_nombre,
         producto_categoria: producto.producto_categoria,
-        cantidad_utilizada: '',
+        cantidad_utilizada: cantidadesPrevias.get(producto.producto_id) ?? '',
         unidad_producto: producto.producto_unidad,
-        presentacion_kg_l: presentacionKgL
-      });
-    }
-
-    setProductosAgregados(productosFormulario);
+        presentacion_kg_l: presentaciones.get(producto.producto_id)
+      }));
+    });
   };
 
   const cargarUsuarioActual = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        // `usuarios.id` ES el uid de auth (así lo asume get_user_role() en las
+        // políticas RLS). No existe columna `user_id`: filtrar por ella devolvía 400
+        // y el responsable nunca se autocompletaba.
         const { data: profile } = await supabase
           .from('usuarios')
           .select('nombre_completo')
-          .eq('user_id', user.id)
+          .eq('id', user.id)
           .single();
 
         if (profile?.nombre_completo) {
@@ -941,11 +977,25 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
                 </div>
               ))}
             </div>
-          ) : (
+          ) : cargandoProductos ? (
             <div className="p-8 text-center border-2 border-dashed border-primary/20 rounded-xl">
-              <Package className="w-12 h-12 text-primary/30 mx-auto mb-3" />
+              <Package className="w-12 h-12 text-primary/30 mx-auto mb-3 animate-pulse" />
               <p className="text-sm text-brand-brown/50">
                 Cargando productos...
+              </p>
+            </div>
+          ) : (
+            <div className="p-8 text-center border-2 border-dashed border-red-200 bg-red-50/50 rounded-xl">
+              <AlertTriangle className="w-12 h-12 text-red-400 mx-auto mb-3" />
+              <p className="text-sm text-red-700">
+                {errorProductos
+                  ? errorProductos
+                  : loteId
+                    ? 'La mezcla asignada a este lote no tiene productos configurados.'
+                    : 'Esta aplicación no tiene productos configurados en su mezcla.'}
+              </p>
+              <p className="text-xs text-red-600/70 mt-2">
+                Revisa la mezcla de la aplicación en la Calculadora antes de registrar el movimiento.
               </p>
             </div>
           )}
