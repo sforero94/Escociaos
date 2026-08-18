@@ -156,6 +156,25 @@ export function derivarAlertasTablero(animales: AnimalHatoDerivado[]): AlertasTa
  * `estado === 'proxima_a_secar'` y `estado === 'parida_reciente' |
  * 'vacia_por_servir'`, son ramas mutuamente excluyentes de
  * `derivarEstadoReproductivo`. */
+/** Vacas ACTIVAS (`etapa === 'vaca' && estadoAnimal === 'activa'`) -- el
+ * denominador contractual del pulso de hato lechero del Tablero General
+ * (`docs/plan_dashboard_centro_control.md` §3.1, "27 de N vacas pesadas").
+ *
+ * Deliberadamente NO usa `categoria === 'hato'` (la categoría de inventario
+ * que sí gobierna `AnimalesList.tsx`/`vaciasPorServir` de arriba): esa
+ * categoría exige que `derivarEstadoReproductivo` pueda devolver
+ * `estado === 'seca'`, y eso depende de un evento `secado_real` que el
+ * motor de alertas S6 nunca ha podido escribir en producción (LAZO ABIERTO,
+ * `src/components/hato/CLAUDE.md`) -- así que `categoria === 'hato'`
+ * subcuenta el hato real (26 en vez de 35 verificadas en producción
+ * 2026-08-17), no por un error de captura sino por ese hueco aguas abajo.
+ * `etapa === 'vaca'` es un hecho de edad/partos que no depende del evento
+ * ausente, así que es el denominador correcto mientras ese lazo siga
+ * abierto. */
+export function contarVacasActivas(animales: AnimalHatoDerivado[]): number {
+  return animales.filter((a) => a.etapa === 'vaca' && a.estadoAnimal === 'activa').length;
+}
+
 export function vaciasMasDeNDias(
   animales: AnimalHatoDerivado[],
   config: Pick<HatoConfig, 'dias_espera_voluntaria_post_parto'>,

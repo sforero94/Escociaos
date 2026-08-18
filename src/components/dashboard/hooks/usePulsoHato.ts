@@ -19,7 +19,7 @@ import { getSupabase } from '@/utils/supabase/client';
 import { useHatoAnimales } from '@/components/hato/hooks/useHatoAnimales';
 import { usePesajesYPartos } from '@/components/hato/hooks/usePesajesYPartos';
 import { construirHatoConfigDesdeFilas, type FilaHatoConfig } from '@/utils/hatoConfigDesdeTabla';
-import { vaciasMasDeNDias, derivarAlertasTablero } from '@/utils/hatoAlertasTablero';
+import { vaciasMasDeNDias, derivarAlertasTablero, contarVacasActivas } from '@/utils/hatoAlertasTablero';
 import { calcularPulsoHato, vejezPesajes, type PulsoHatoDatos, type VejezPesajes } from '../pulsoNegocioCalculos';
 import { obtenerFechaHoy } from '@/utils/fechas';
 
@@ -89,10 +89,12 @@ export function usePulsoHato(): UsoPulsoHato {
 
   const hoy = obtenerFechaHoy();
 
-  const vacasTotalEnOrdeno = useMemo(
-    () => animales.filter((a) => a.categoria === 'hato' && a.estadoAnimal === 'activa').length,
-    [animales],
-  );
+  // Denominador contractual (§3.1, "27 de N vacas pesadas") -- vacas
+  // ACTIVAS (`contarVacasActivas`, `hatoAlertasTablero.ts`), nunca
+  // `categoria === 'hato'`: esa categoría subcuenta el hato real mientras
+  // el LAZO ABIERTO de `secado_real` siga sin cerrarse (ver el comentario
+  // de `contarVacasActivas`).
+  const vacasTotalEnOrdeno = useMemo(() => contarVacasActivas(animales), [animales]);
 
   const datos = useMemo(
     () => calcularPulsoHato(pesajes, vacasTotalEnOrdeno, hoy),

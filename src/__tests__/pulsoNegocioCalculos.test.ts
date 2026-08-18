@@ -16,6 +16,7 @@ import {
   calcularPulsoGanado,
   formatearFechaSinAnio,
   formatearDiasTranscurridos,
+  denominadorHatoInvalido,
   vejezPesajes,
   PLAGAS_VISIBLES_PULSO_AGUACATE,
   type FilaMonitoreoPulso,
@@ -350,5 +351,29 @@ describe('formatearDiasTranscurridos', () => {
 
   it('varios días se leen en plural, sin redondear a semanas', () => {
     expect(formatearDiasTranscurridos(13)).toBe('hace 13 días');
+  });
+});
+
+// ============================================================================
+// denominadorHatoInvalido -- guarda contra un denominador mal derivado
+// ============================================================================
+
+describe('denominadorHatoInvalido', () => {
+  // Caso real del defecto (2026-08-17): el denominador se derivó con un
+  // filtro equivocado (`categoria === 'hato'`) y salió MENOR que el
+  // numerador -- "27 de 26 vacas pesadas", una cifra imposible (no puede
+  // haber pesado más vacas de las que existen). Esta guarda es la clase
+  // entera del defecto, no sólo esta instancia: cualquier futura forma de
+  // derivar mal el denominador cae en el mismo `true`.
+  it('numerador MAYOR que el denominador -- inválido (caso real: 27 de 26)', () => {
+    expect(denominadorHatoInvalido({ vacasPesadasHoy: 27, vacasTotalEnOrdeno: 26 })).toBe(true);
+  });
+
+  it('numerador igual al denominador -- válido (todo el hato se pesó)', () => {
+    expect(denominadorHatoInvalido({ vacasPesadasHoy: 35, vacasTotalEnOrdeno: 35 })).toBe(false);
+  });
+
+  it('numerador menor que el denominador -- válido (caso normal, 27 de 35)', () => {
+    expect(denominadorHatoInvalido({ vacasPesadasHoy: 27, vacasTotalEnOrdeno: 35 })).toBe(false);
   });
 });

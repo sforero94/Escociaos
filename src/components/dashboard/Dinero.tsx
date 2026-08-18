@@ -77,10 +77,15 @@ function DineroCandado() {
 
 function TextoFaltanQuincenas({ faltantes, rango }: { faltantes: QuincenaResuelta[]; rango: { min: number; max: number } | null }) {
   if (faltantes.length === 0) return null;
-  const cuenta = faltantes.length === 1 ? '1 quincena' : `${faltantes.length} quincenas`;
+  // Concordancia sujeto/verbo: "falta 1 quincena" (singular), "faltan N
+  // quincenas" (plural) -- el verbo tiene que concordar igual que el
+  // sustantivo, no sólo éste.
+  const singular = faltantes.length === 1;
+  const verbo = singular ? 'falta' : 'faltan';
+  const cuenta = singular ? '1 quincena' : `${faltantes.length} quincenas`;
   return (
     <p className="mt-2 text-xs text-brand-brown/70">
-      No es que no se vendió: faltan {cuenta} de leche por capturar
+      No es que no se vendió: {verbo} {cuenta} de leche por capturar
       {rango && rango.min !== rango.max
         ? `, de ${formatMillonesCOP(rango.min)} a ${formatMillonesCOP(rango.max)} cada una`
         : rango
@@ -93,7 +98,16 @@ function TextoFaltanQuincenas({ faltantes, rango }: { faltantes: QuincenaResuelt
 
 function ColumnaGasto({ datos }: { datos: DatosDinero }) {
   const variacion = calcularVariacionGasto(datos.gastoMesActual, datos.gastoMesAnterior);
-  const ejecucion = calcularEjecucionPresupuesto(datos.gastoAcumuladoAnio, datos.presupuestoTotalAnual, datos.trimestreActual);
+  // `gastoAcumuladoPresupuestado`, NUNCA `gastoAcumuladoAnio`: ese último es
+  // TODO el gasto del año en TODOS los negocios/categorías, incluido gasto
+  // en categorías sin ninguna fila en `fin_presupuestos` (p. ej. buena
+  // parte de Oficina Central) -- compararlo contra el presupuesto infla el
+  // % ejecutado con gasto que ningún presupuesto cubre (caso real: 208%).
+  const ejecucion = calcularEjecucionPresupuesto(
+    datos.gastoAcumuladoPresupuestado,
+    datos.presupuestoTotalAnual,
+    datos.trimestreActual,
+  );
   const top2 = topNegocios(datos.porNegocioAnio, 2);
   const mesAnteriorNum = datos.mesActual === 1 ? 12 : datos.mesActual - 1;
 
@@ -131,7 +145,7 @@ function ColumnaGasto({ datos }: { datos: DatosDinero }) {
               />
             </div>
             <p className="mt-1 text-xs text-brand-brown/60">
-              {formatMillonesCOP(datos.gastoAcumuladoAnio)} de {formatMillonesCOP(ejecucion.presupuestoAcumuladoQ)}{' '}
+              {formatMillonesCOP(datos.gastoAcumuladoPresupuestado)} de {formatMillonesCOP(ejecucion.presupuestoAcumuladoQ)}{' '}
               presupuestado al Q{datos.trimestreActual} ({ejecucion.pct}%)
             </p>
           </>

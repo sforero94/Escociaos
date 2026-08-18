@@ -18,7 +18,14 @@ import { getSupabase } from '@/utils/supabase/client';
 import { fetchAll } from '@/utils/supabase/fetchAll';
 import { obtenerFechaHoy } from '@/utils/fechas';
 import { useProduccionHato } from '@/components/hato/hooks/useProduccionHato';
-import { agregarGastoDinero, type FilaGastoDinero, type QuincenaResuelta } from '@/utils/calculosDinero';
+import {
+  agregarGastoDinero,
+  gastoEjecutadoContraPresupuesto,
+  type FilaGastoDinero,
+  type FilaGastoParaPresupuesto,
+  type FilaPresupuestoParaEjecucion,
+  type QuincenaResuelta,
+} from '@/utils/calculosDinero';
 
 export type EstadoDinero = 'cargando' | 'error' | 'listo';
 
@@ -32,6 +39,12 @@ export interface DatosDinero {
   porNegocioAnio: Array<{ nombre: string; total: number }>;
   /** Suma de `fin_presupuestos.monto_anual` del año -- 0 = sin presupuesto cargado. */
   presupuestoTotalAnual: number;
+  /** Gasto `Confirmado` del año ESCOPADO a las combinaciones (negocio,
+   *  categoría) que tienen fila en `fin_presupuestos` -- la línea "$X de $Y
+   *  presupuestado al Q{n}" se calcula y se muestra con ESTE número, nunca
+   *  con `gastoAcumuladoAnio` (que es TODO el gasto, incluido el de
+   *  categorías sin presupuestar -- ver `gastoEjecutadoContraPresupuesto`). */
+  gastoAcumuladoPresupuestado: number;
   ingresoMesActual: number;
   /** `false` = ninguna fila en `fin_ingresos` este mes -- el caso "sin
    *  ingresos" del plan (§5.2), distinto de "hubo filas que suman $0". */
@@ -50,10 +63,13 @@ interface FilaGastoRaw {
   valor: number;
   fecha: string;
   negocio_id: string;
+  categoria_id: string | null;
 }
 
 interface FilaPresupuestoRaw {
   id: string;
+  negocio_id: string;
+  categoria_id: string;
   monto_anual: number;
 }
 
@@ -99,7 +115,7 @@ export function useDinero(params: UseDineroParams): { estado: EstadoDinero; dato
           fetchAll<FilaGastoRaw>((rangoDesde, rangoHasta) =>
             supabase
               .from('fin_gastos')
-              .select('id, valor, fecha, negocio_id')
+              .select('id, valor, fecha, negocio_id, categoria_id')
               .eq('estado', 'Confirmado')
               .gte('fecha', desde)
               .lte('fecha', hoy)
@@ -110,7 +126,7 @@ export function useDinero(params: UseDineroParams): { estado: EstadoDinero; dato
           fetchAll<FilaPresupuestoRaw>((rangoDesde, rangoHasta) =>
             supabaseSinTipos
               .from('fin_presupuestos')
-              .select('id, monto_anual')
+              .select('id, negocio_id, categoria_id, monto_anual')
               .eq('anio', anio)
               .order('id')
               .range(rangoDesde, rangoHasta),
@@ -142,6 +158,28 @@ export function useDinero(params: UseDineroParams): { estado: EstadoDinero; dato
           0,
         );
 
+        // Gasto ESCOPADO a lo presupuestado (§5.1) -- nunca `gastoAcumuladoAnio`
+        // crudo contra `presupuestoTotalAnual` crudo: `fin_presupuestos` sólo
+        // cubre ALGUNAS combinaciones (negocio, categoría), así que sumar TODO
+        // el gasto del año infla el % con gasto que ningún presupuesto cubre
+        // (ver `gastoEjecutadoContraPresupuesto`).
+        const filasGastoParaPresupuesto: FilaGastoParaPresupuesto[] = gastosRes.filas.map((g) => ({
+          valor: Number(g.valor) || 0,
+          fecha: g.fecha,
+          negocioId: g.negocio_id ?? null,
+          categoriaId: g.categoria_id ?? null,
+        }));
+        const presupuestosParaEjecucion: FilaPresupuestoParaEjecucion[] = presupuestoRes.filas.map((p) => ({
+          negocioId: p.negocio_id,
+          categoriaId: p.categoria_id,
+          montoAnual: Number(p.monto_anual) || 0,
+        }));
+        const gastoAcumuladoPresupuestado = gastoEjecutadoContraPresupuesto(
+          filasGastoParaPresupuesto,
+          presupuestosParaEjecucion,
+          hoy,
+        );
+
         const ingresoMesActual = (ingresoRes.data ?? []).reduce(
           (suma: number, i: { valor: number }) => suma + (Number(i.valor) || 0),
           0,
@@ -171,6 +209,7 @@ export function useDinero(params: UseDineroParams): { estado: EstadoDinero; dato
           gastoAcumuladoAnio: agregado.gastoAcumuladoAnio,
           porNegocioAnio: agregado.porNegocioAnio,
           presupuestoTotalAnual,
+          gastoAcumuladoPresupuestado,
           ingresoMesActual,
           ingresoTieneFilas,
           ultimaQuincena,

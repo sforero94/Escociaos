@@ -113,6 +113,61 @@ export function agregarGastoDinero(filas: FilaGastoDinero[], hoy: string): Agreg
 }
 
 // ---------------------------------------------------------------------------
+// Gasto ejecutado CONTRA presupuesto -- escopado por (negocio, categoría)
+// ---------------------------------------------------------------------------
+
+export interface FilaGastoParaPresupuesto {
+  valor: number;
+  /** `YYYY-MM-DD` */
+  fecha: string;
+  /** `null` cuando el embed/RLS no resolvió -- la fila no puede parearse
+   *  contra `fin_presupuestos` y queda fuera, nunca se incluye "a ciegas". */
+  negocioId: string | null;
+  categoriaId: string | null;
+}
+
+export interface FilaPresupuestoParaEjecucion {
+  negocioId: string;
+  categoriaId: string;
+  montoAnual: number;
+}
+
+/**
+ * Gasto `Confirmado` del año (hasta `hoy`) restringido a las combinaciones
+ * (negocio, categoría) que SÍ tienen una fila en `fin_presupuestos` para el
+ * año -- mismo criterio de pareo que `loadPresupuestoAlertas` (Dashboard
+ * anterior, commit `7a842fe`) y `usePresupuestoData.ts` (pantalla real de
+ * Presupuesto): `fin_presupuestos` guarda un monto por (negocio, categoría,
+ * concepto), así que sumar TODO `fin_gastos` del año contra la suma de TODO
+ * `fin_presupuestos` infla el % cuando existe gasto real en una
+ * combinación SIN presupuesto asignado (p. ej. buena parte de Oficina
+ * Central, "puro overhead compartido que ningún negocio presupuesta" --
+ * CLAUDE.md) -- ese gasto entraría al numerador sin que ningún denominador
+ * lo cubra. Aquí el gasto de una combinación sin presupuesto simplemente no
+ * cuenta para la ejecución -- el gasto real completo (`gastoAcumuladoAnio`/
+ * `porNegocioAnio`) no cambia, sigue siendo la suma de TODO.
+ */
+export function gastoEjecutadoContraPresupuesto(
+  filas: FilaGastoParaPresupuesto[],
+  presupuestos: FilaPresupuestoParaEjecucion[],
+  hoy: string,
+): number {
+  const anio = hoy.slice(0, 4);
+  const clavesPresupuestadas = new Set(
+    presupuestos.filter((p) => p.montoAnual > 0).map((p) => `${p.negocioId}-${p.categoriaId}`),
+  );
+
+  let total = 0;
+  for (const f of filas) {
+    if (f.fecha.slice(0, 4) !== anio) continue;
+    if (!f.negocioId || !f.categoriaId) continue;
+    if (!clavesPresupuestadas.has(`${f.negocioId}-${f.categoriaId}`)) continue;
+    total += f.valor;
+  }
+  return total;
+}
+
+// ---------------------------------------------------------------------------
 // Variación de gasto (semántica invertida: bajar es bueno)
 // ---------------------------------------------------------------------------
 

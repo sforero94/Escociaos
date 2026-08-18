@@ -6,7 +6,7 @@ import { PulsoChipFrescura } from './PulsoChipFrescura';
 import { PulsoFilaAccion } from './PulsoFilaAccion';
 import { PulsoCardSkeleton } from './PulsoCardSkeleton';
 import { usePulsoHato, type UsoPulsoHato } from './hooks/usePulsoHato';
-import { formatearFechaSinAnio, formatearDiasTranscurridos } from './pulsoNegocioCalculos';
+import { formatearFechaSinAnio, formatearDiasTranscurridos, denominadorHatoInvalido } from './pulsoNegocioCalculos';
 
 const RUTA_HATO = '/hato-lechero';
 
@@ -66,10 +66,16 @@ export function PulsoHatoCardView({ cargando, error, datos, vejez, revision, onN
           </p>
           {/* Denominador contractual (§3.1 del plan, R-4): SIEMPRE visible,
               nunca en tooltip. Ámbar a propósito -- es la regla, no un
-              estado de alerta. */}
-          <p className="text-sm font-medium text-amber-700 mt-2">
-            {datos.vacasPesadasHoy} de {datos.vacasTotalEnOrdeno} vacas pesadas
-          </p>
+              estado de alerta. EXCEPTO cuando el denominador es imposible
+              (numerador > denominador, `denominadorHatoInvalido`): una
+              cifra que no puede ser cierta ("27 de 26 vacas pesadas") es
+              peor que no mostrar la línea -- se omite entera en vez de
+              mentir. */}
+          {!denominadorHatoInvalido(datos) && (
+            <p className="text-sm font-medium text-amber-700 mt-2">
+              {datos.vacasPesadasHoy} de {datos.vacasTotalEnOrdeno} vacas pesadas
+            </p>
+          )}
         </div>
       )}
 

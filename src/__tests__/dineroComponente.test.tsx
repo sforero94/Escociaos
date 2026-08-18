@@ -41,6 +41,11 @@ function datosBase(overrides: Partial<DatosDinero> = {}): DatosDinero {
     gastoMesActual: 66_529_769,
     gastoMesAnterior: 144_838_926,
     gastoAcumuladoAnio: 300_000_000,
+    // Escopado a combinaciones (negocio, categoría) con presupuesto -- por
+    // defecto igual al acumulado crudo (nada que escopar en el fixture
+    // base); el test de la §5.1 más abajo los hace divergir a propósito
+    // para fijar el defecto real (208%).
+    gastoAcumuladoPresupuestado: 300_000_000,
     porNegocioAnio: [
       { nombre: 'Aguacate Hass', total: 524_900_000 },
       { nombre: 'Oficina Central', total: 359_700_000 },
@@ -106,6 +111,30 @@ describe('Dinero — el caso "sin ingresos" (§5.2, "el caso más importante del
     expect(html).toContain('quincena');
   });
 
+  it('concordancia singular/plural: 1 quincena faltante usa el verbo en singular ("falta", no "faltan")', () => {
+    // datosBase() ya resuelve a exactamente 1 quincena faltante (última
+    // registrada julio Q2, hoy 17 de agosto -- agosto Q1 falta), caso real
+    // del defecto reportado.
+    auth();
+    dineroMock.mockReturnValue({ estado: 'listo', datos: datosBase() });
+    const html = render();
+    expect(html).toContain('falta 1 quincena de leche por capturar');
+    expect(html).not.toContain('faltan 1 quincena');
+  });
+
+  it('concordancia singular/plural: varias quincenas faltantes usan el verbo en plural ("faltan")', () => {
+    // última registrada junio Q1, hoy 17 de agosto -- jun Q2, jul Q1, jul
+    // Q2, ago Q1 (4 quincenas cerradas) faltan.
+    auth();
+    dineroMock.mockReturnValue({
+      estado: 'listo',
+      datos: datosBase({ ultimaQuincena: { anio: 2026, mes: 6, quincena: 1 } }),
+    });
+    const html = render();
+    expect(html).toContain('faltan 4 quincenas de leche por capturar');
+    expect(html).not.toContain('falta 4 quincenas');
+  });
+
   it('con filas de ingreso, se muestra el monto real -- nunca el guion', () => {
     auth();
     dineroMock.mockReturnValue({
@@ -156,6 +185,26 @@ describe('Dinero — gasto vs. presupuesto (§5.1)', () => {
     dineroMock.mockReturnValue({ estado: 'listo', datos: datosBase() });
     const html = render();
     expect(html).toContain('presupuestado al Q3');
+  });
+
+  it('caso real del defecto: usa el gasto ESCOPADO a lo presupuestado, nunca el acumulado crudo de todos los negocios/categorías (208% inventado)', () => {
+    // $1.193M acumulado crudo (incluye gasto en categorías SIN presupuesto,
+    // p. ej. Oficina Central) vs. $700M escopado a lo que sí tiene fila en
+    // fin_presupuestos -- el mismo caso real reportado (208% imposible).
+    auth();
+    dineroMock.mockReturnValue({
+      estado: 'listo',
+      datos: datosBase({
+        gastoAcumuladoAnio: 1_193_000_000,
+        gastoAcumuladoPresupuestado: 700_000_000,
+        presupuestoTotalAnual: 765_600_000,
+      }),
+    });
+    const html = render();
+    // 700M de (765.6M*3/4=574.2M) = 122%, nunca 208%.
+    expect(html).toContain('$700,0M de $574,2M presupuestado al Q3 (122%)');
+    expect(html).not.toContain('208%');
+    expect(html).not.toContain('$1.193M de');
   });
 
   it('cita los dos negocios de mayor gasto del año', () => {

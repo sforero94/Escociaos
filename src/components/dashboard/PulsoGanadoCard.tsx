@@ -79,11 +79,14 @@ export function PulsoGanadoCardView({ cargando, error, datos, onNavigate }: Puls
 
           {/* Hueco declarado, nunca un 0 (plan §3.3: "Mostrarlo sería un —
               permanente"). El número de fincas es dinámico -- nunca "las 8
-              fincas" hardcodeado. */}
+              fincas" hardcodeado, Y es "con inventario" (las que aparecen
+              en `porFinca`, no el total de fincas configuradas) -- decirlo
+              sin ese calificativo da a entender que la finca solo tiene
+              esa cantidad de fincas en total. */}
           {datos.cabezasPorHa === null && datos.porFinca.length > 0 && (
             <p className="mt-3 text-xs text-brand-brown/60">
               Cabezas/ha no disponible — las {datos.porFinca.length} finca{datos.porFinca.length === 1 ? '' : 's'}{' '}
-              tienen hectáreas en 0 en Configuración → Ganado.
+              con inventario tienen hectáreas en 0 en Configuración → Ganado.
             </p>
           )}
         </div>

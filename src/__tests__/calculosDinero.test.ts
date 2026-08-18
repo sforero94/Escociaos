@@ -11,12 +11,15 @@ import {
   agregarGastoDinero,
   calcularVariacionGasto,
   calcularEjecucionPresupuesto,
+  gastoEjecutadoContraPresupuesto,
   topNegocios,
   quincenasFaltantes,
   rangoValorQuincenas,
   etiquetaQuincena,
   nombreMes,
   type FilaGastoDinero,
+  type FilaGastoParaPresupuesto,
+  type FilaPresupuestoParaEjecucion,
 } from '@/utils/calculosDinero';
 
 describe('nombreMes', () => {
@@ -113,6 +116,91 @@ describe('calcularEjecucionPresupuesto', () => {
 
   it('sin presupuesto cargado (0 o sin filas), null -- NUNCA una barra al 0%', () => {
     expect(calcularEjecucionPresupuesto(100, 0, 3)).toBeNull();
+  });
+});
+
+describe('gastoEjecutadoContraPresupuesto', () => {
+  // Caso real del defecto (2026-08-17): el % ejecutado salía 208% porque el
+  // numerador sumaba TODO `fin_gastos` (todos los negocios, todas las
+  // categorías) contra un denominador que sólo cubre las combinaciones
+  // (negocio, categoría) que SÍ tienen fila en `fin_presupuestos` --
+  // `fin_presupuestos` guarda un monto por (negocio, categoría, concepto),
+  // así que gasto en una categoría SIN presupuesto (p. ej. buena parte de
+  // Oficina Central, "puro overhead compartido que ningún negocio
+  // presupuesta", CLAUDE.md) infla el numerador sin ningún denominador que
+  // lo cubra. Mismo criterio de pareo que `loadPresupuestoAlertas` (Dashboard
+  // anterior, commit 7a842fe) y `usePresupuestoData.ts` (Presupuesto real).
+  const anio2026 = '2026';
+
+  it('sólo cuenta el gasto de combinaciones (negocio, categoría) que SÍ tienen presupuesto', () => {
+    const filas: FilaGastoParaPresupuesto[] = [
+      { valor: 100_000_000, fecha: '2026-08-10', negocioId: 'aguacate', categoriaId: 'insumos' },
+      { valor: 50_000_000, fecha: '2026-08-05', negocioId: 'oficina-central', categoriaId: 'admin-sin-presupuesto' },
+    ];
+    const presupuestos: FilaPresupuestoParaEjecucion[] = [
+      { negocioId: 'aguacate', categoriaId: 'insumos', montoAnual: 80_000_000 },
+    ];
+    expect(gastoEjecutadoContraPresupuesto(filas, presupuestos, `${anio2026}-08-17`)).toBe(100_000_000);
+  });
+
+  it('una fila sin negocioId o categoriaId (embed/RLS vacío) nunca cuenta -- no se puede parear', () => {
+    const filas: FilaGastoParaPresupuesto[] = [
+      { valor: 10_000_000, fecha: '2026-08-10', negocioId: null, categoriaId: 'insumos' },
+      { valor: 20_000_000, fecha: '2026-08-10', negocioId: 'aguacate', categoriaId: null },
+    ];
+    const presupuestos: FilaPresupuestoParaEjecucion[] = [
+      { negocioId: 'aguacate', categoriaId: 'insumos', montoAnual: 80_000_000 },
+    ];
+    expect(gastoEjecutadoContraPresupuesto(filas, presupuestos, '2026-08-17')).toBe(0);
+  });
+
+  it('descarta gasto de años anteriores al de `hoy`', () => {
+    const filas: FilaGastoParaPresupuesto[] = [
+      { valor: 10_000_000, fecha: '2025-12-20', negocioId: 'aguacate', categoriaId: 'insumos' },
+      { valor: 20_000_000, fecha: '2026-01-05', negocioId: 'aguacate', categoriaId: 'insumos' },
+    ];
+    const presupuestos: FilaPresupuestoParaEjecucion[] = [
+      { negocioId: 'aguacate', categoriaId: 'insumos', montoAnual: 80_000_000 },
+    ];
+    expect(gastoEjecutadoContraPresupuesto(filas, presupuestos, '2026-08-17')).toBe(20_000_000);
+  });
+
+  it('sin presupuestos cargados, el total ejecutado es 0 -- nada matchea', () => {
+    const filas: FilaGastoParaPresupuesto[] = [
+      { valor: 10_000_000, fecha: '2026-08-10', negocioId: 'aguacate', categoriaId: 'insumos' },
+    ];
+    expect(gastoEjecutadoContraPresupuesto(filas, [], '2026-08-17')).toBe(0);
+  });
+
+  it('un presupuesto con monto_anual 0 no habilita la combinación', () => {
+    const filas: FilaGastoParaPresupuesto[] = [
+      { valor: 10_000_000, fecha: '2026-08-10', negocioId: 'aguacate', categoriaId: 'insumos' },
+    ];
+    const presupuestos: FilaPresupuestoParaEjecucion[] = [
+      { negocioId: 'aguacate', categoriaId: 'insumos', montoAnual: 0 },
+    ];
+    expect(gastoEjecutadoContraPresupuesto(filas, presupuestos, '2026-08-17')).toBe(0);
+  });
+
+  it('reproduce el defecto: el mismo gasto sin escopar da 208%, escopado a lo presupuestado da un % defendible', () => {
+    const filas: FilaGastoParaPresupuesto[] = [
+      { valor: 700_000_000, fecha: '2026-08-01', negocioId: 'aguacate', categoriaId: 'insumos' }, // presupuestado
+      { valor: 493_000_000, fecha: '2026-03-01', negocioId: 'oficina-central', categoriaId: 'overhead' }, // SIN presupuesto
+    ];
+    const presupuestos: FilaPresupuestoParaEjecucion[] = [
+      { negocioId: 'aguacate', categoriaId: 'insumos', montoAnual: 765_600_000 },
+    ];
+    const gastoSinEscopar = filas.reduce((s, f) => s + f.valor, 0); // 1.193.000.000, el numerador roto del defecto real
+    const gastoEscopado = gastoEjecutadoContraPresupuesto(filas, presupuestos, '2026-08-17');
+    const presupuestoTotalAnual = presupuestos.reduce((s, p) => s + p.montoAnual, 0);
+
+    const ejecucionRota = calcularEjecucionPresupuesto(gastoSinEscopar, presupuestoTotalAnual, 3);
+    const ejecucionCorregida = calcularEjecucionPresupuesto(gastoEscopado, presupuestoTotalAnual, 3);
+
+    expect(ejecucionRota!.pct).toBe(208); // el % del defecto reportado
+    expect(gastoEscopado).toBe(700_000_000);
+    expect(ejecucionCorregida!.pct).toBe(122); // sigue siendo real, pero ya no incluye overhead sin presupuestar
+    expect(ejecucionCorregida!.pct).toBeLessThan(ejecucionRota!.pct);
   });
 });
 

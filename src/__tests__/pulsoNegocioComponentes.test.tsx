@@ -126,6 +126,26 @@ describe('PulsoHatoCardView', () => {
     expect(html).toContain('bg-amber-50');
   });
 
+  it('denominador imposible (numerador > denominador): la línea del denominador NO se pinta -- caso real "27 de 26"', () => {
+    const datosDenominadorRoto: PulsoHatoDatos = { ...datosHatoEjemplo, vacasPesadasHoy: 27, vacasTotalEnOrdeno: 26 };
+    const html = renderToStaticMarkup(
+      <PulsoHatoCardView
+        cargando={false}
+        error={null}
+        datos={datosDenominadorRoto}
+        vejez={{ ultimaFecha: '2026-08-12', semanas: 0, nivel: 'ok' }}
+        revision={revisionEjemplo}
+        onNavigate={() => {}}
+      />,
+    );
+    expect(html).not.toContain('de 26 vacas pesadas');
+    expect(html).not.toContain('27 de 26');
+    // El resto de la tarjeta (L/vaca, fecha, fila de revisión) se sigue
+    // pintando -- sólo la línea del denominador roto desaparece.
+    expect(html).toContain('15,4');
+    expect(html).toContain('16 vacas por revisar');
+  });
+
   it('error: mensaje explícito, y la fila de revisión no se pinta (no se mezclan datos parciales)', () => {
     const html = renderToStaticMarkup(
       <PulsoHatoCardView
@@ -286,6 +306,10 @@ describe('PulsoGanadoCardView', () => {
     expect(html).toContain('hectáreas en 0');
     expect(html).not.toContain('0 cabezas/ha');
     expect(html).not.toContain('/ha</p>'); // ningún renglón "X cabezas/ha" con número
+    // "las N fincas" es CON INVENTARIO (las de `porFinca`, p. ej. 3 de 8 en
+    // total en el caso real de producción), nunca da a entender que la
+    // finca solo tiene N fincas en total -- el ejemplo trae 6 en `porFinca`.
+    expect(html).toContain('6 fincas con inventario');
   });
 
   it('cabezasPorHa con valor: NO se muestra el mensaje de hueco', () => {

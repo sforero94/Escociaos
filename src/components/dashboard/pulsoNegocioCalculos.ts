@@ -128,6 +128,25 @@ export function calcularPulsoHato(
   };
 }
 
+/**
+ * `true` cuando el numerador ("vacas realmente pesadas") es MAYOR que el
+ * denominador que se le pasó como "vacas activas en ordeño" -- una cifra
+ * imposible (p. ej. "27 de 26 vacas pesadas": no se puede haber pesado más
+ * vacas de las que existen) que sólo puede pasar si el denominador se
+ * derivó mal. `PulsoHatoCardView` usa esto para dejar de pintar la línea
+ * del denominador entera en vez de mostrar un número que no puede ser
+ * cierto -- "sin dato es sin dato" aplicado a un dato roto, no sólo a uno
+ * ausente. Es la clase entera del defecto, no una comprobación puntual: se
+ * mantiene aparte de `calcularPulsoHato` para poder testearla en aislado y
+ * para que el componente la aplique SIEMPRE, incluso si el origen del
+ * denominador cambia en el futuro.
+ */
+export function denominadorHatoInvalido(
+  datos: Pick<PulsoHatoDatos, 'vacasPesadasHoy' | 'vacasTotalEnOrdeno'>,
+): boolean {
+  return datos.vacasPesadasHoy > datos.vacasTotalEnOrdeno;
+}
+
 /** Reexport de conveniencia -- los hooks/tarjetas de este bloque calculan la
  *  vejez del pesaje por separado de `calcularPulsoHato` (§ cabecera:
  *  `vejezPesajes` sabe manejar el caso "sin ningún pesaje" con su propio
