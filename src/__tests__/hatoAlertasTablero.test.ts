@@ -14,6 +14,7 @@ import { describe, it, expect } from 'vitest';
 import {
   derivarAlertasTablero,
   vaciasMasDeNDias,
+  contarVacasActivas,
   nombreAnimalTablero,
   ALERTA_META_TABLERO,
   PILL_ALERTA_TABLERO,
@@ -271,6 +272,44 @@ describe('vaciasMasDeNDias', () => {
     const idsSecado = new Set([...resultadoAlertas.secadoVencido, ...resultadoAlertas.proximasASecar].map((x) => x.animalId));
     const interseccion = [...idsVacias].filter((id) => idsSecado.has(id));
     expect(interseccion).toEqual([]);
+  });
+});
+
+describe('contarVacasActivas', () => {
+  // Caso real de producción (2026-08-17): 35 vacas activas
+  // (`v_hato_estado_actual` con `estado='activa' AND etapa='vaca'`), pero
+  // sólo 27 tenían pesaje en el último pesaje. El denominador del pulso de
+  // hato ("27 de N vacas pesadas") tiene que salir de ESTE conteo, nunca de
+  // `categoria === 'hato'`: esa categoría exige que
+  // `derivarEstadoReproductivo` pueda devolver `estado === 'seca'`, y eso
+  // depende de un evento `secado_real` que el motor de alertas nunca ha
+  // podido escribir en producción (LAZO ABIERTO documentado en
+  // `src/components/hato/CLAUDE.md`) -- así que `categoria === 'hato'`
+  // subcuenta el hato real por construcción (26 en vez de 35), no por un
+  // error de captura.
+  it('cuenta etapa vaca + activa, sin importar la categoría de inventario (35 de producción)', () => {
+    const vacasActivas = Array.from({ length: 35 }, (_, i) =>
+      animal({ animalId: `vaca-${i}`, etapa: 'vaca', estadoAnimal: 'activa', categoria: 'hato' }),
+    );
+    expect(contarVacasActivas(vacasActivas)).toBe(35);
+  });
+
+  it('una vaca activa clasificada como "horro" (categoria !== "hato") SÍ cuenta -- el denominador no depende de la categoría', () => {
+    const horro = animal({ animalId: 'horro', etapa: 'vaca', estadoAnimal: 'activa', categoria: 'horro' });
+    expect(contarVacasActivas([horro])).toBe(1);
+  });
+
+  it('excluye etapas que no son "vaca" (novilla, ternera, toro)', () => {
+    const novilla = animal({ animalId: 'novilla', etapa: 'novilla', estadoAnimal: 'activa' });
+    const ternera = animal({ animalId: 'ternera', etapa: 'ternera', estadoAnimal: 'activa' });
+    const toro = animal({ animalId: 'toro', etapa: 'toro', estadoAnimal: 'activa' });
+    expect(contarVacasActivas([novilla, ternera, toro])).toBe(0);
+  });
+
+  it('excluye vacas no activas (vendida/muerta/descartada) aunque su etapa sea "vaca"', () => {
+    const vendida = animal({ animalId: 'vendida', etapa: 'vaca', estadoAnimal: 'vendida' });
+    const muerta = animal({ animalId: 'muerta', etapa: 'vaca', estadoAnimal: 'muerta' });
+    expect(contarVacasActivas([vendida, muerta])).toBe(0);
   });
 });
 

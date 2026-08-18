@@ -1,3 +1,14 @@
+-- =============================================================================
+-- RENUMERADA 097 -> 101 el 2026-08-17.
+-- APLICADA A PRODUCCION ese mismo dia, cuando el archivo se llamaba 097. El
+-- numero cambio despues, al integrar con `main`: una sesion paralela habia
+-- ocupado 097-100 con la reorganizacion del modulo de ganado (fincas, lotes,
+-- grupos), y `hatoSchemaContract.test.ts` guarda contra prefijos duplicados.
+-- Se renumero ESTE archivo y no aquellos porque aquellos son un bloque
+-- contiguo ya en main y estos son dos sueltos.
+-- No la vuelvas a aplicar: las cuatro tablas ya existen (verificado contra
+-- information_schema el 2026-08-17). Mismo criterio que 067 y 079.
+-- =============================================================================
 -- =====================================================================
 -- 097: Motor de acciones recomendadas (bloque 4 del Centro de Control).
 -- Fecha: 2026-08-17

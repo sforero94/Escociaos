@@ -240,6 +240,32 @@ export function formatCompact(value: number): string {
 }
 
 /**
+ * Formatea dinero abreviado a millones con coma decimal COLOMBIANA -- lo que
+ * pide CLAUDE.md ("$95M", "usa formato 2.000M — nunca billones") y lo que
+ * pide el diseño del bloque "Dinero" del Centro de Control
+ * (`docs/plan_dashboard_centro_control.md` §9.1: "$66,5M").
+ *
+ * `formatCompact` NO sirve para esto: usa `.toFixed(1)`, que produce coma
+ * inglesa ("66.5M"), no colombiana ("66,5M") -- el bug que este formateador
+ * existe para evitar. Siempre un decimal por debajo de 1.000M (nunca se
+ * redondea "$0,5M" a "$1M"); por encima, sin decimales y con separador de
+ * miles con punto, para no cruzar nunca a la escala de "billones" (Colombia
+ * no la usa).
+ *
+ * @example
+ * formatMillonesCOP(66_529_769) // "$66,5M"
+ * formatMillonesCOP(2_000_000_000) // "$2.000M"
+ */
+export function formatMillonesCOP(value: number): string {
+  const millones = value / 1_000_000;
+  const abs = Math.abs(millones);
+  const formatted = abs >= 1000
+    ? new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }).format(millones)
+    : new Intl.NumberFormat('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(millones);
+  return `$${formatted}M`;
+}
+
+/**
  * Formatea una hectárea con decimales
  * 
  * @param ha - Hectáreas

@@ -359,3 +359,99 @@ describe('lecturas24hToHorario', () => {
     expect(result[0].lluvia_diaria_mm).toBe(4.2);
   });
 });
+
+// Bloque "Hoy en la finca" del tablero (docs/plan_dashboard_centro_control.md
+// §4 Bloque 2.1 / §9.2): la franja de los últimos N días de lluvia. El caso
+// real que sostiene este bloque (06-ago → 15-ago 2026, verificado en
+// producción): 0,25 · 0,51 · s/d · 0,25 · s/d · 0,00 · 0,25 · s/d · 0,00 ·
+// 0,00 mm -- tres días con el contador congelado y dos ceros reales, y la
+// franja tiene que distinguirlos.
+describe('construirFranjaLluvia', () => {
+  let construirFranjaLluvia: (
+    resumenes: ResumenDiario[],
+    dias: number,
+    hastaISO: string,
+  ) => import('@/utils/calculosClima').DiaFranjaLluvia[];
+
+  beforeAll(async () => {
+    const mod = await import('@/utils/calculosClima');
+    construirFranjaLluvia = mod.construirFranjaLluvia;
+  });
+
+  it('clasifica el caso real de producción (06-ago → 15-ago 2026)', () => {
+    const mmPorDia: Record<string, number> = {
+      '2026-08-06': 0.25,
+      '2026-08-07': 0.51,
+      '2026-08-09': 0.25,
+      '2026-08-12': 0.25,
+    };
+    const congelados = new Set(['2026-08-08', '2026-08-10', '2026-08-13']);
+    const ceros = new Set(['2026-08-11', '2026-08-14', '2026-08-15']);
+
+    const rows: ResumenDiario[] = [];
+    for (const fecha of [
+      '2026-08-06', '2026-08-07', '2026-08-08', '2026-08-09', '2026-08-10',
+      '2026-08-11', '2026-08-12', '2026-08-13', '2026-08-14', '2026-08-15',
+    ]) {
+      if (congelados.has(fecha)) {
+        rows.push(resumenDia({ fecha, lluvia_total_mm: null, lluvia_confianza: 'contador_congelado' }));
+      } else if (ceros.has(fecha)) {
+        rows.push(resumenDia({ fecha, lluvia_total_mm: 0, lluvia_confianza: 'ok' }));
+      } else {
+        rows.push(resumenDia({ fecha, lluvia_total_mm: mmPorDia[fecha], lluvia_confianza: 'ok' }));
+      }
+    }
+
+    const franja = construirFranjaLluvia(rows, 10, '2026-08-15');
+
+    expect(franja).toHaveLength(10);
+    expect(franja[0].fecha).toBe('2026-08-06');
+    expect(franja[9].fecha).toBe('2026-08-15');
+
+    const porFecha = Object.fromEntries(franja.map((d) => [d.fecha, d]));
+
+    // Días con lluvia real
+    expect(porFecha['2026-08-06']).toMatchObject({ estado: 'lluvia', mm: 0.25 });
+    expect(porFecha['2026-08-07']).toMatchObject({ estado: 'lluvia', mm: 0.51 });
+    expect(porFecha['2026-08-09']).toMatchObject({ estado: 'lluvia', mm: 0.25 });
+    expect(porFecha['2026-08-12']).toMatchObject({ estado: 'lluvia', mm: 0.25 });
+
+    // Ceros reales -- nunca "sin dato"
+    expect(porFecha['2026-08-11']).toMatchObject({ estado: 'seco', mm: 0 });
+    expect(porFecha['2026-08-14']).toMatchObject({ estado: 'seco', mm: 0 });
+    expect(porFecha['2026-08-15']).toMatchObject({ estado: 'seco', mm: 0 });
+
+    // Contador congelado -- sin dato, NUNCA 0mm, y con su causa
+    for (const fecha of ['2026-08-08', '2026-08-10', '2026-08-13']) {
+      expect(porFecha[fecha].estado).toBe('sin_dato');
+      expect(porFecha[fecha].mm).toBeNull();
+      expect(porFecha[fecha].causa).toBe('contador_congelado');
+    }
+
+    const sinDato = franja.filter((d) => d.estado === 'sin_dato');
+    expect(sinDato).toHaveLength(3);
+  });
+
+  it('un día sin ninguna fila en clima_resumen_diario es "sin_dato", nunca 0mm', () => {
+    const franja = construirFranjaLluvia([], 3, '2026-08-15');
+    expect(franja.every((d) => d.estado === 'sin_dato' && d.mm === null)).toBe(true);
+    expect(franja.map((d) => d.causa)).toEqual(['sin_registro', 'sin_registro', 'sin_registro']);
+  });
+
+  it('nunca lee lluvia_total_mm directo -- pasa por lluviaConfiableDeResumen incluso si confianza no está seteada como congelada pero el total es null', () => {
+    const rows = [resumenDia({ fecha: '2026-08-15', lluvia_total_mm: null, lluvia_confianza: 'ok' })];
+    const franja = construirFranjaLluvia(rows, 1, '2026-08-15');
+    expect(franja[0].estado).toBe('sin_dato');
+    expect(franja[0].mm).toBeNull();
+  });
+
+  it('respeta el rango exacto de `dias` terminando en `hastaISO`, ordenado ascendente', () => {
+    const rows = [
+      resumenDia({ fecha: '2026-08-13', lluvia_total_mm: 1, lluvia_confianza: 'ok' }),
+      resumenDia({ fecha: '2026-08-14', lluvia_total_mm: 2, lluvia_confianza: 'ok' }),
+      resumenDia({ fecha: '2026-08-15', lluvia_total_mm: 3, lluvia_confianza: 'ok' }),
+    ];
+    const franja = construirFranjaLluvia(rows, 3, '2026-08-15');
+    expect(franja.map((d) => d.fecha)).toEqual(['2026-08-13', '2026-08-14', '2026-08-15']);
+  });
+});

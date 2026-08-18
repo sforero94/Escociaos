@@ -279,6 +279,38 @@ describe('construirHechosHatoLechero', () => {
     expect(hVacias?.destinos).toEqual(['hato.lista_vacias']);
   });
 
+  it('defecto 2 (verificación visual 2026-08-17): el denominador de vacías es "activas CON parto registrado", NUNCA el total histórico ni el total de activas a secas', () => {
+    // Reproduce a escala la proporción real de producción (11 de 35, sobre
+    // 65 activas y 179 filas históricas en v_hato_estado_actual): 11 vacas
+    // activas con parto viejo (≥90 días, sin servicio) -> vacías; 24 activas
+    // con parto reciente (<90 días) -> tienen parto registrado pero NO están
+    // vacías todavía, así que cuentan en el denominador y no en `cantidad`;
+    // 30 activas sin ningún parto (novillas/terneras) -- no pueden estar
+    // vacías, el denominador tiene que EXCLUIRLAS; 5 vendidas -- prueban que
+    // `filasEstadoActual.length` (histórico completo) tampoco es el
+    // denominador.
+    const partoViejo = '2026-01-01'; // 228 días antes de HOY -- >= 90
+    const partoReciente = '2026-08-10'; // 7 días antes de HOY -- < 90
+    const filas = [
+      ...Array.from({ length: 11 }, (_, i) => estadoActualBase({ animal_id: `vieja-${i}`, numero: i, ultimo_parto_fecha: partoViejo })),
+      ...Array.from({ length: 24 }, (_, i) => estadoActualBase({ animal_id: `reciente-${i}`, numero: 100 + i, ultimo_parto_fecha: partoReciente })),
+      ...Array.from({ length: 30 }, (_, i) => estadoActualBase({ animal_id: `novilla-${i}`, numero: 200 + i, ultimo_parto_fecha: null })),
+      ...Array.from({ length: 5 }, (_, i) => estadoActualBase({ animal_id: `vendida-${i}`, numero: 300 + i, estado: 'vendida', ultimo_parto_fecha: partoViejo })),
+    ];
+    expect(filas).toHaveLength(70); // universo de la fixture -- NUNCA el denominador
+
+    const hechos = construirHechosHatoLechero(datosHatoBase({ filasEstadoActual: filas }));
+    const hVacias = hechos.find((h) => h.id === 'hato.vacias_90d')!;
+    expect(hVacias).toBeDefined();
+    expect(hVacias.valores.cantidad.crudo).toBe(11);
+    // NUNCA 70 (filasEstadoActual.length, el histórico completo -- el
+    // equivalente a escala del 179 real) ni 65 (11+24+30, "activas" a
+    // secas -- arrastra las 30 novillas/terneras que nunca pueden estar
+    // vacías). El denominador correcto es 35 = 11 + 24.
+    expect(hVacias.valores.total_hato.crudo).toBe(35);
+    expect(hVacias.texto).toContain('11 de 35 vacas');
+  });
+
   it('hato.ultimo_chequeo es sin_dato cuando nunca hubo chequeo, con destino de CAPTURA (R-7 se cumple)', () => {
     const hechos = construirHechosHatoLechero(datosHatoBase({ fechaUltimoChequeo: null }));
     const h = hechos.find((x) => x.id === 'hato.ultimo_chequeo');
@@ -366,6 +398,10 @@ describe('construirHechosAguacate', () => {
     expect(h?.confianza).toBe('ok');
     expect(h?.valores.falta.crudo).toBe(4694);
     expect(h?.verbos_permitidos).toEqual(['Confirmar', 'Verificar']);
+    // Defecto 1 (verificación visual 2026-08-17): {unidad} tiene que
+    // resolver a "kg" a través del ensamblador completo, no sólo del
+    // constructor puro (ya cubierto en accionesHechos.test.ts).
+    expect(h?.valores.unidad?.render).toBe('kg');
   });
 
   it('agu.insumo_faltante es sin_dato (nunca "faltan 12.694") cuando cantidad_actual es NULL', () => {
@@ -450,6 +486,50 @@ describe('construirHechosGanado', () => {
     expect(h?.confianza).toBe('sin_dato');
     const destino = CATALOGO_DESTINOS.find((d) => h?.destinos.includes(d.id) && d.negocio === 'ganado');
     expect(destino?.familia).toBe('captura');
+  });
+
+  it('defecto 3 (verificación visual 2026-08-17): "sin hectáreas" cuenta el catálogo COMPLETO de gan_fincas, nunca la vista de inventario filtrada por activa', () => {
+    // Reproduce el mecanismo real: 8 fincas en total, TODAS sin hectáreas,
+    // pero sólo 3 marcadas `activa=true` -- exactamente lo que alimenta
+    // `por_finca` dentro de `buildGanadoInventorySummary` para los KPIs
+    // operativos. Antes del fix, `gan.fincas_sin_ha` reusaba esa vista y el
+    // conteo caía de 8 a 3.
+    const fincas = Array.from({ length: 8 }, (_, i) => ({
+      id: `f${i}`,
+      nombre: `Finca ${i}`,
+      ubicacion_id: 'u1',
+      hectareas: 0,
+      activa: i < 3,
+    }));
+    const hechos = construirHechosGanado(
+      datosGanadoBase({ ubicaciones: [{ id: 'u1', nombre: 'Zona Norte' }], fincas }),
+    );
+    const h = hechos.find((x) => x.id === 'gan.fincas_sin_ha')!;
+    expect(h).toBeDefined();
+    expect(h.valores.cantidad.crudo).toBe(8); // NUNCA 3 (las únicas que `por_finca` deja pasar)
+    expect(h.tamano_conjunto).toBe(8);
+    expect(h.texto).toContain('8 finca(s)');
+  });
+
+  it('clase del defecto 3: el conteo de un hecho NUNCA es la longitud de su muestra de nombres ya truncada (§3.6, cap 5)', () => {
+    const fincas = Array.from({ length: 8 }, (_, i) => ({
+      id: `f${i}`,
+      nombre: `Finca ${i}`,
+      ubicacion_id: 'u1',
+      hectareas: 0,
+      activa: true, // todas activas -- aísla la afirmación de la clase general del cupo de nombres
+    }));
+    const hechos = construirHechosGanado(
+      datosGanadoBase({ ubicaciones: [{ id: 'u1', nombre: 'Zona Norte' }], fincas }),
+    );
+    const h = hechos.find((x) => x.id === 'gan.fincas_sin_ha')!;
+    // `nombres.render` es una MUESTRA (cap de 5, §3.6) -- contar sus
+    // elementos separados por coma da un número DISTINTO de `cantidad`, y
+    // el hecho tiene que reportar el conjunto completo, no la muestra.
+    const nombresMostrados = h.valores.nombres.render.split(',').length;
+    expect(h.valores.cantidad.crudo).toBe(8);
+    expect(h.valores.cantidad.crudo).not.toBe(nombresMostrados);
+    expect(h.valores.nombres.render).toContain('y 3 más');
   });
 });
 

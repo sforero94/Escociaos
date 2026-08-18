@@ -35,6 +35,63 @@ export function lluviaConfiableDeResumen(
   return fila.lluvia_total_mm;
 }
 
+// ============================================================================
+// Franja de lluvia de N días (tablero, "Hoy en la finca" — Bloque 2)
+// ============================================================================
+
+export type EstadoDiaLluvia = 'lluvia' | 'seco' | 'sin_dato';
+
+export interface DiaFranjaLluvia {
+  /** YYYY-MM-DD, hora local */
+  fecha: string;
+  estado: EstadoDiaLluvia;
+  /** mm confiables — SIEMPRE null cuando estado es 'sin_dato', nunca 0 */
+  mm: number | null;
+  /** Sólo relevante cuando estado es 'sin_dato' */
+  causa: 'contador_congelado' | 'sin_registro' | null;
+}
+
+// Arma la franja de los últimos `dias` días terminando en `hastaISO`
+// (inclusive), a partir de clima_resumen_diario. Un día sin fila en absoluto
+// (la estación no llegó a sincronizar, el rollup no corrió) y un día cuyo
+// lluviaConfiableDeResumen() da null (contador congelado, migración 068) se
+// tratan igual en el estado ('sin_dato') pero se distinguen por `causa`, para
+// que el pie de la tarjeta pueda nombrar la causa real cuando la conoce. Un
+// 0mm real (`estado: 'seco'`) nunca se confunde con lo anterior — es
+// exactamente el bug que esta franja existe para hacer visible.
+export function construirFranjaLluvia(
+  resumenes: ResumenDiario[],
+  dias: number,
+  hastaISO: string,
+): DiaFranjaLluvia[] {
+  const porFecha = new Map(resumenes.map((r) => [r.fecha, r]));
+  const [anio, mes, dia] = hastaISO.split('-').map(Number);
+
+  const resultado: DiaFranjaLluvia[] = [];
+  for (let i = dias - 1; i >= 0; i--) {
+    const fechaDia = new Date(anio, mes - 1, dia - i);
+    const fechaStr = fechaAISODate(fechaDia);
+    const fila = porFecha.get(fechaStr);
+
+    if (!fila) {
+      resultado.push({ fecha: fechaStr, estado: 'sin_dato', mm: null, causa: 'sin_registro' });
+      continue;
+    }
+
+    const mm = lluviaConfiableDeResumen(fila);
+    if (mm === null) {
+      const causa = fila.lluvia_confianza === 'contador_congelado' ? 'contador_congelado' : 'sin_registro';
+      resultado.push({ fecha: fechaStr, estado: 'sin_dato', mm: null, causa });
+    } else if (mm > 0) {
+      resultado.push({ fecha: fechaStr, estado: 'lluvia', mm, causa: null });
+    } else {
+      resultado.push({ fecha: fechaStr, estado: 'seco', mm: 0, causa: null });
+    }
+  }
+
+  return resultado;
+}
+
 // Cardinal direction from degrees (0-360)
 const CARDINALS = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'] as const;
 

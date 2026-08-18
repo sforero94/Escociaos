@@ -80,7 +80,7 @@ export interface AccionValidada {
    * `<negocio completo>.<regla>`, tomando `regla` de `hecho_ids[0]` --
    * NUNCA el hecho_id crudo. Ver el reporte de la sesión para la evidencia:
    * el catálogo de hechos (§3.3) usa prefijos abreviados (`agu.`, `hato.`,
-   * `gan.`), pero la migración 097 -- ya aplicada por otra ola en
+   * `gan.`), pero la migración 101 (aplicada como 097) -- ya aplicada por otra ola en
    * paralelo -- siembra `revisiones_periodicas.clave` con el negocio
    * COMPLETO ('aguacate.ejecucion_presupuestal', 'hato_lechero.productividad').
    * Esta función reproduce exactamente esas claves.
@@ -333,7 +333,7 @@ function evaluarAccionIndividual(
   // (§3.3 ter) es el mismo destino_id compartido por las tres tarjetas --
   // hato_lechero, aguacate y ganado tienen cada una su propia revisión de
   // ejecución presupuestal apuntando ahí (verificado contra la siembra real
-  // de la migración 097). Si se indexara por id solo, un `Map` colapsaría
+  // de la migración 101, aplicada como 097). Si se indexara por id solo, un `Map` colapsaría
   // las tres filas en una y `DESTINO_DE_OTRO_NEGOCIO` dispararía falsos
   // positivos en dos de cada tres negocios. Ver el reporte de la sesión.
   const destinosConEseId = destinosPorId.get(accion.destino_id) ?? [];

@@ -1,6 +1,6 @@
 /**
  * Formas de fila persistidas por el motor de acciones recomendadas (bloque 4
- * del Centro de Control) -- `src/sql/migrations/097_acciones_recomendadas.sql`.
+ * del Centro de Control) -- `src/sql/migrations/101_acciones_recomendadas.sql`.
  *
  * Estas tablas NO están en `src/types/database.ts` todavía (los tipos
  * generados no se han vuelto a correr desde que se aplicó la 097) -- mismo

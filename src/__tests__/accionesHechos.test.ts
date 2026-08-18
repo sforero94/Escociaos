@@ -206,6 +206,14 @@ describe('construirHechoVaciasLargas', () => {
     const h = construirHechoVaciasLargas(vacias, 90, 35, HOY)!;
     expect(h.valores.nombres.render).toContain('y 2 más');
   });
+
+  it('defecto 1, caso AMBIGUO: NO expone `valores.unidad` -- el hecho mezcla \'vacas\' y \'días\', un campo único sería el mismo defecto disfrazado', () => {
+    const vacias = [animal({ animalId: '1', numero: 47, ultimoPartoFecha: '2026-04-01' })];
+    const h = construirHechoVaciasLargas(vacias, 90, 35, HOY)!;
+    expect(h.valores.cantidad.unidad).toBe('vacas');
+    expect(h.valores.dias_umbral.unidad).toBe('días');
+    expect(h.valores.unidad).toBeUndefined();
+  });
 });
 
 describe('construirHechoSecadoVencido / construirHechoProximasASecar', () => {
@@ -252,6 +260,15 @@ describe('construirHechoRechequeoVencido', () => {
 
   it('null sin animales', () => {
     expect(construirHechoRechequeoVencido([], HOY)).toBeNull();
+  });
+
+  it('defecto 1, caso de UNA sola unidad: SÍ expone `valores.unidad` -- referenciable por una ranura {unidad}', () => {
+    const animales = [animal({ animalId: '1', ultimoChequeoFecha: '2026-06-01' })];
+    const h = construirHechoRechequeoVencido(animales, HOY)!;
+    expect(h.valores.cantidad.unidad).toBe('vacas');
+    expect(h.valores.unidad).toBeDefined();
+    expect(h.valores.unidad.crudo).toBe('vacas');
+    expect(h.valores.unidad.render).toBe('vacas');
   });
 });
 
@@ -436,6 +453,31 @@ describe('construirHechosInsumoFaltante -- caso de oro (producción 2026-08-16/1
     expect(h.fecha_limite).toBe('2026-08-18');
     expect(h.verbos_permitidos).toEqual(['Confirmar', 'Verificar']);
     expect(h.destinos).toEqual(['agu.aplicacion_detalle', 'inv.producto']);
+  });
+
+  it('defecto 1 (verificación visual 2026-08-17): {unidad} es una ranura referenciable que renderiza "kg", sin pisar el render del número', () => {
+    const hechos = construirHechosInsumoFaltante([filaEnmienda], HOY);
+    const h = hechos[0];
+    // necesario/disponible/falta comparten la MISMA unidad ('kg') -- el
+    // caso exacto que reprodujo la pantalla real ("Confirmar 4.694 12.694
+    // de Silicalmag"): antes de este fix no existía un campo `unidad` al
+    // que una ranura `{unidad}` pudiera apuntar.
+    expect(h.valores.unidad).toBeDefined();
+    expect(h.valores.unidad.crudo).toBe('kg');
+    expect(h.valores.unidad.render).toBe('kg');
+    // El render del número NUNCA lleva la unidad pegada -- si la llevara,
+    // una plantilla "{falta} {unidad}" acabaría en "4.694 kg kg".
+    expect(h.valores.falta.render).toBe('4.694');
+    expect(h.valores.falta.render).not.toContain('kg');
+    expect(h.valores.necesario.render).not.toContain('kg');
+  });
+
+  it('defecto 1: la unidad sigue siendo referenciable en la rama sin_dato (disponible/falta en s/d)', () => {
+    const filaSinStock: FilaAplicacionInsumo = { ...filaEnmienda, cantidadDisponible: null };
+    const hechos = construirHechosInsumoFaltante([filaSinStock], HOY);
+    const h = hechos[0];
+    expect(h.confianza).toBe('sin_dato');
+    expect(h.valores.unidad?.render).toBe('kg');
   });
 
   it('el piso de ruido del 2% filtra Magister y Proxam (1,4% de faltante) pero no Acondicionador sys (6,6%)', () => {
