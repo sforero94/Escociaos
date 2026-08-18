@@ -5,7 +5,10 @@ import { useClimaData } from '@/hooks/useClimaData';
 import { getSupabase } from '@/utils/supabase/client';
 import { projectId } from '@/utils/supabase/info.tsx';
 import { aggregateRadiation } from '@/utils/calculosRadiacion';
-import { fechaAISODate } from '@/utils/fechas';
+import { fechaAISODate, obtenerFechaHoy } from '@/utils/fechas';
+import { formatNumber } from '@/utils/format';
+import { construirFranjaLluvia } from '@/utils/calculosClima';
+import { FranjaLluvia } from './FranjaLluvia';
 
 interface DiaPronostico {
   date: string;
@@ -43,6 +46,15 @@ export function ClimaCard() {
   const [pronostico, setPronostico] = useState<DiaPronostico[] | null>(null);
 
   const sunHoursSemana = useMemo(() => sunHoursUltimos7Dias(resumenesDiarios), [resumenesDiarios]);
+
+  // Franja de lluvia de los últimos 10 días (§4 Bloque 2.1 del plan del
+  // tablero). `construirFranjaLluvia` ya pasa por `lluviaConfiableDeResumen`
+  // -- un día `contador_congelado` (migración 068) o sin fila en absoluto
+  // llega como 'sin_dato', nunca como 0mm.
+  const franjaLluvia10Dias = useMemo(
+    () => construirFranjaLluvia(resumenesDiarios, 10, obtenerFechaHoy()),
+    [resumenesDiarios],
+  );
 
   useEffect(() => {
     let cancelado = false;
@@ -158,10 +170,12 @@ export function ClimaCard() {
           )}
         </div>
       )}
+
+      <FranjaLluvia dias={franjaLluvia10Dias} visibleEnMovil={7} />
     </div>
   );
 }
 
 function formatMm(mm: number): string {
-  return `${mm.toFixed(mm < 10 ? 1 : 0)} mm`;
+  return `${formatNumber(mm, mm < 10 ? 1 : 0)} mm`;
 }
