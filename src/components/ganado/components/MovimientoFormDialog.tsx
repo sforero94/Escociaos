@@ -7,14 +7,27 @@ import { Textarea } from '@/components/ui/textarea';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useGanadoInventario } from '../hooks/useGanadoInventario';
-import type { GanFinca, GanPotrero } from '@/types/ganado';
+import { RepartoPotreros, FILA_REPARTO_VACIA } from './RepartoPotreros';
+import type { ExistenciasPotrero } from './RepartoPotreros';
+import {
+  validarTrasladoMulti,
+  validarExistencias,
+  filasConCabezas,
+  totalNovillosReparto,
+  totalTorosReparto,
+} from '@/utils/calculosGanado';
+import type { RepartoFila } from '@/utils/calculosGanado';
+import { formatNumber } from '@/utils/format';
+import type { GanFinca, GanLote, GanPotrero } from '@/types/ganado';
 import { obtenerFechaHoy } from '@/utils/fechas';
 
 interface MovimientoFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   fincas: GanFinca[];
+  lotes?: GanLote[];
   potreros: GanPotrero[];
+  existencias?: Record<string, ExistenciasPotrero>;
   onSuccess: () => void;
 }
 
@@ -23,10 +36,11 @@ const selectClass = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-xl 
 type TipoManual = 'muerte' | 'traslado' | 'ajuste';
 
 /**
- * Registro manual de movimientos: muerte, traslado (genera salida +
- * entrada) y ajuste (delta libre con nota obligatoria).
+ * Registro manual de movimientos: muerte, traslado (N potreros origen →
+ * M potreros destino, con los totales cerrando por categoría) y ajuste
+ * (delta libre con nota obligatoria).
  */
-export function MovimientoFormDialog({ open, onOpenChange, fincas, potreros, onSuccess }: MovimientoFormDialogProps) {
+export function MovimientoFormDialog({ open, onOpenChange, fincas, lotes = [], potreros, existencias, onSuccess }: MovimientoFormDialogProps) {
   const { registrarMuerte, registrarTraslado, registrarAjuste } = useGanadoInventario();
 
   const [tipo, setTipo] = useState<TipoManual>('muerte');
@@ -35,6 +49,8 @@ export function MovimientoFormDialog({ open, onOpenChange, fincas, potreros, onS
   const [potreroDestino, setPotreroDestino] = useState('');
   const [novillos, setNovillos] = useState('');
   const [toros, setToros] = useState('');
+  const [origenes, setOrigenes] = useState<RepartoFila[]>([{ ...FILA_REPARTO_VACIA }]);
+  const [destinos, setDestinos] = useState<RepartoFila[]>([{ ...FILA_REPARTO_VACIA }]);
   const [notas, setNotas] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -46,6 +62,8 @@ export function MovimientoFormDialog({ open, onOpenChange, fincas, potreros, onS
     setPotreroDestino('');
     setNovillos('');
     setToros('');
+    setOrigenes([{ ...FILA_REPARTO_VACIA }]);
+    setDestinos([{ ...FILA_REPARTO_VACIA }]);
     setNotas('');
   }, [open]);
 
@@ -62,12 +80,17 @@ export function MovimientoFormDialog({ open, onOpenChange, fincas, potreros, onS
     return Array.from(map.entries());
   }, [potrerosActivos]);
 
-  const renderPotreroSelect = (value: string, onChange: (v: string) => void, excluir?: string) => (
+  const nombrePotrero = useMemo(() => {
+    const map = new Map(potreros.map((p) => [p.id, p.nombre]));
+    return (id: string) => map.get(id) || 'El potrero';
+  }, [potreros]);
+
+  const renderPotreroSelect = (value: string, onChange: (v: string) => void) => (
     <select value={value} onChange={(e) => onChange(e.target.value)} className={selectClass}>
       <option value="">Seleccionar...</option>
       {potrerosPorFinca.map(([fincaId, ps]) => (
         <optgroup key={fincaId} label={fincaNombre(fincaId)}>
-          {ps.filter((p) => p.id !== excluir).map((p) => (
+          {ps.map((p) => (
             <option key={p.id} value={p.id}>{p.nombre}</option>
           ))}
         </optgroup>
@@ -75,56 +98,71 @@ export function MovimientoFormDialog({ open, onOpenChange, fincas, potreros, onS
     </select>
   );
 
-  const handleSubmit = async () => {
-    const nNovillos = Math.round(Number(novillos) || 0);
-    const nToros = Math.round(Number(toros) || 0);
+  const salen = { novillos: totalNovillosReparto(filasConCabezas(origenes)), toros: totalTorosReparto(filasConCabezas(origenes)) };
+  const entran = { novillos: totalNovillosReparto(filasConCabezas(destinos)), toros: totalTorosReparto(filasConCabezas(destinos)) };
+  const trasladoCierra = salen.novillos === entran.novillos && salen.toros === entran.toros && salen.novillos + salen.toros > 0;
 
+  const handleSubmit = async () => {
     if (!fecha) {
       toast.error('La fecha es requerida');
       return;
     }
-    if (tipo !== 'ajuste' && nNovillos + nToros <= 0) {
-      toast.error('Debes indicar al menos una cabeza');
-      return;
-    }
-    if (tipo !== 'ajuste' && (nNovillos < 0 || nToros < 0)) {
-      toast.error('Las cantidades no pueden ser negativas');
-      return;
-    }
-    if (tipo === 'ajuste' && nNovillos === 0 && nToros === 0) {
-      toast.error('El ajuste debe tener un delta distinto de cero');
-      return;
-    }
-    if (tipo === 'ajuste' && !notas.trim()) {
-      toast.error('La nota es obligatoria para ajustes');
-      return;
-    }
-    if ((tipo === 'muerte' || tipo === 'traslado') && !potreroOrigen) {
-      toast.error('Selecciona el potrero de origen');
-      return;
-    }
-    if (tipo === 'traslado' && !potreroDestino) {
-      toast.error('Selecciona el potrero de destino');
-      return;
-    }
-    if (tipo === 'ajuste' && !potreroDestino) {
-      toast.error('Selecciona el potrero');
-      return;
+
+    if (tipo === 'traslado') {
+      const errorTraslado = validarTrasladoMulti({ fecha, origenes, destinos, notas });
+      if (errorTraslado) {
+        toast.error(errorTraslado);
+        return;
+      }
+      if (existencias) {
+        const errorExistencias = validarExistencias(origenes, existencias, nombrePotrero);
+        if (errorExistencias) {
+          toast.error(errorExistencias);
+          return;
+        }
+      }
+    } else {
+      const nNovillos = Math.round(Number(novillos) || 0);
+      const nToros = Math.round(Number(toros) || 0);
+
+      if (tipo === 'muerte') {
+        if (nNovillos + nToros <= 0) {
+          toast.error('Debes indicar al menos una cabeza');
+          return;
+        }
+        if (nNovillos < 0 || nToros < 0) {
+          toast.error('Las cantidades no pueden ser negativas');
+          return;
+        }
+        if (!potreroOrigen) {
+          toast.error('Selecciona el potrero de origen');
+          return;
+        }
+      } else {
+        if (nNovillos === 0 && nToros === 0) {
+          toast.error('El ajuste debe tener un delta distinto de cero');
+          return;
+        }
+        if (!notas.trim()) {
+          toast.error('La nota es obligatoria para ajustes');
+          return;
+        }
+        if (!potreroDestino) {
+          toast.error('Selecciona el potrero');
+          return;
+        }
+      }
     }
 
     setSaving(true);
     try {
+      const nNovillos = Math.round(Number(novillos) || 0);
+      const nToros = Math.round(Number(toros) || 0);
+
       if (tipo === 'muerte') {
         await registrarMuerte({ fecha, potreroId: potreroOrigen, novillos: nNovillos, toros: nToros, notas: notas.trim() || null });
       } else if (tipo === 'traslado') {
-        await registrarTraslado({
-          fecha,
-          potreroOrigenId: potreroOrigen,
-          potreroDestinoId: potreroDestino,
-          novillos: nNovillos,
-          toros: nToros,
-          notas: notas.trim() || null,
-        });
+        await registrarTraslado({ fecha, origenes, destinos, notas: notas.trim() || null });
       } else {
         await registrarAjuste({ fecha, potreroId: potreroDestino, novillosDelta: nNovillos, torosDelta: nToros, notas: notas.trim() });
       }
@@ -141,7 +179,7 @@ export function MovimientoFormDialog({ open, onOpenChange, fincas, potreros, onS
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent size="md">
+      <DialogContent size={tipo === 'traslado' ? 'lg' : 'md'}>
         <DialogHeader>
           <DialogTitle>Registrar movimiento</DialogTitle>
         </DialogHeader>
@@ -170,16 +208,39 @@ export function MovimientoFormDialog({ open, onOpenChange, fincas, potreros, onS
             )}
 
             {tipo === 'traslado' && (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label>Potrero origen *</Label>
-                  {renderPotreroSelect(potreroOrigen, setPotreroOrigen, potreroDestino)}
+              <>
+                <RepartoPotreros
+                  label="Salen de *"
+                  filas={origenes}
+                  onChange={setOrigenes}
+                  fincas={fincas}
+                  lotes={lotes}
+                  potreros={potreros}
+                  existencias={existencias}
+                  potrerosExcluidos={filasConCabezas(destinos).map((f) => f.potrero_id)}
+                  disabled={saving}
+                />
+                <RepartoPotreros
+                  label="Entran a *"
+                  filas={destinos}
+                  onChange={setDestinos}
+                  fincas={fincas}
+                  lotes={lotes}
+                  potreros={potreros}
+                  potrerosExcluidos={filasConCabezas(origenes).map((f) => f.potrero_id)}
+                  disabled={saving}
+                />
+                <div
+                  className={`rounded-xl border px-3 py-2 text-sm ${
+                    trasladoCierra
+                      ? 'border-primary/30 bg-primary/5 text-primary'
+                      : 'border-amber-300 bg-amber-50 text-amber-800'
+                  }`}
+                >
+                  Salen {formatNumber(salen.novillos)} novillos y {formatNumber(salen.toros)} toros ·
+                  {' '}Entran {formatNumber(entran.novillos)} novillos y {formatNumber(entran.toros)} toros
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Potrero destino *</Label>
-                  {renderPotreroSelect(potreroDestino, setPotreroDestino, potreroOrigen)}
-                </div>
-              </div>
+              </>
             )}
 
             {tipo === 'ajuste' && (
@@ -189,30 +250,32 @@ export function MovimientoFormDialog({ open, onOpenChange, fincas, potreros, onS
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>{tipo === 'ajuste' ? 'Delta novillos (+/-)' : 'Novillos'}</Label>
-                <Input
-                  type="number"
-                  min={tipo === 'ajuste' ? undefined : 0}
-                  value={novillos}
-                  onChange={(e) => setNovillos(e.target.value)}
-                  onWheel={(e) => e.currentTarget.blur()}
-                  placeholder="0"
-                />
+            {tipo !== 'traslado' && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>{tipo === 'ajuste' ? 'Delta novillos (+/-)' : 'Novillos'}</Label>
+                  <Input
+                    type="number"
+                    min={tipo === 'ajuste' ? undefined : 0}
+                    value={novillos}
+                    onChange={(e) => setNovillos(e.target.value)}
+                    onWheel={(e) => e.currentTarget.blur()}
+                    placeholder="0"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>{tipo === 'ajuste' ? 'Delta toros (+/-)' : 'Toros'}</Label>
+                  <Input
+                    type="number"
+                    min={tipo === 'ajuste' ? undefined : 0}
+                    value={toros}
+                    onChange={(e) => setToros(e.target.value)}
+                    onWheel={(e) => e.currentTarget.blur()}
+                    placeholder="0"
+                  />
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <Label>{tipo === 'ajuste' ? 'Delta toros (+/-)' : 'Toros'}</Label>
-                <Input
-                  type="number"
-                  min={tipo === 'ajuste' ? undefined : 0}
-                  value={toros}
-                  onChange={(e) => setToros(e.target.value)}
-                  onWheel={(e) => e.currentTarget.blur()}
-                  placeholder="0"
-                />
-              </div>
-            </div>
+            )}
 
             <div className="space-y-1.5">
               <Label>{tipo === 'muerte' ? 'Notas (causa)' : tipo === 'ajuste' ? 'Nota *' : 'Notas'}</Label>
@@ -228,7 +291,7 @@ export function MovimientoFormDialog({ open, onOpenChange, fincas, potreros, onS
         <DialogFooter>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancelar</Button>
-            <Button onClick={handleSubmit} disabled={saving}>
+            <Button onClick={handleSubmit} disabled={saving || (tipo === 'traslado' && !trasladoCierra)}>
               {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Registrar
             </Button>

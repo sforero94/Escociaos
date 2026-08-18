@@ -9,7 +9,7 @@ export function GanadoSubNav() {
     {
       id: 'inventario',
       label: 'Inventario',
-      subtitle: 'Cabezas por potrero',
+      subtitle: 'Cabezas por finca, lote y potrero',
       icon: ClipboardList,
       path: '/ganado',
     },

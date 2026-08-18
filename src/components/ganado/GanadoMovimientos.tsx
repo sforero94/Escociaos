@@ -1,76 +1,168 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGanadoInventario } from './hooks/useGanadoInventario';
 import { GanadoSubNav } from './GanadoSubNav';
 import { MovimientoFormDialog } from './components/MovimientoFormDialog';
 import { ConfirmarPendienteDialog } from './components/ConfirmarPendienteDialog';
-import { cabezasDePendiente } from '@/utils/calculosGanado';
-import { formatNumber } from '@/utils/format';
-import { formatearFecha } from '@/utils/fechas';
+import { MovimientosTabla } from './components/MovimientosTabla';
+import { BannerPendientes } from './components/BannerPendientes';
+import type { PendienteConValor } from './components/BannerPendientes';
+import { ContadorBrechaFinanzas } from './components/ContadorBrechaFinanzas';
+import { ErrorCargaGanado } from './components/ErrorCargaGanado';
+import { calcularSaldosPorPotrero, agruparMovimientos } from '@/utils/calculosGanado';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Loader2, AlertTriangle, X } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { toast } from 'sonner';
-import type { GanFinca, GanPotrero, GanMovimiento, MovimientoConContexto } from '@/types/ganado';
+import type {
+  GanFinca,
+  GanLote,
+  GanPotrero,
+  GanMovimiento,
+  MovimientoConContexto,
+  MovimientoAgrupado,
+  InventarioPotreroRow,
+} from '@/types/ganado';
 
-const selectClass = 'px-2 py-1.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary min-w-0';
+const selectClass =
+  'px-2 py-1.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary min-w-0';
 
-const TIPO_LABELS: Record<string, string> = {
-  compra: 'Compra',
-  venta: 'Venta',
-  muerte: 'Muerte',
-  traslado_entrada: 'Traslado (entrada)',
-  traslado_salida: 'Traslado (salida)',
-  ajuste: 'Ajuste',
-};
+const TIPO_FILTRO_OPCIONES: { value: string; label: string }[] = [
+  { value: '', label: 'Todos los tipos' },
+  { value: 'compra', label: 'Compra' },
+  { value: 'venta', label: 'Venta' },
+  { value: 'muerte', label: 'Muerte' },
+  { value: 'traslado', label: 'Traslado' },
+  { value: 'ajuste', label: 'Ajuste' },
+];
 
-const TIPO_BADGE: Record<string, string> = {
-  compra: 'bg-green-100 text-green-800',
-  venta: 'bg-blue-100 text-blue-800',
-  muerte: 'bg-red-100 text-red-700',
-  traslado_entrada: 'bg-purple-100 text-purple-700',
-  traslado_salida: 'bg-purple-100 text-purple-700',
-  ajuste: 'bg-gray-100 text-gray-700',
-};
+function tipoDeGrupo(a: MovimientoAgrupado): string {
+  switch (a.clase) {
+    case 'simple':
+      return a.movimiento.tipo === 'traslado_entrada' || a.movimiento.tipo === 'traslado_salida'
+        ? 'traslado'
+        : a.movimiento.tipo;
+    case 'traslado':
+      return 'traslado';
+    case 'compra_venta':
+      return a.tipo;
+    case 'conteo_fisico':
+      return 'ajuste';
+    default:
+      return '';
+  }
+}
+
+function fechaDeGrupo(a: MovimientoAgrupado): string {
+  return a.clase === 'simple' ? a.movimiento.fecha : a.fecha;
+}
+
+function fincasDeGrupo(a: MovimientoAgrupado): string[] {
+  switch (a.clase) {
+    case 'simple':
+      return [a.movimiento.finca_origen, a.movimiento.finca_destino].filter((x): x is string => !!x);
+    case 'traslado':
+      return [...a.origenes, ...a.destinos].map((p) => p.finca);
+    case 'compra_venta':
+    case 'conteo_fisico':
+      return a.puntas.map((p) => p.finca);
+    default:
+      return [];
+  }
+}
+
+function lotesDeGrupo(a: MovimientoAgrupado): string[] {
+  switch (a.clase) {
+    case 'simple':
+      return [a.movimiento.lote_origen, a.movimiento.lote_destino].filter((x): x is string => !!x);
+    case 'traslado':
+      return [...a.origenes, ...a.destinos].map((p) => p.lote).filter((x): x is string => !!x);
+    case 'compra_venta':
+    case 'conteo_fisico':
+      return a.puntas.map((p) => p.lote).filter((x): x is string => !!x);
+    default:
+      return [];
+  }
+}
 
 export function GanadoMovimientos() {
   const { profile } = useAuth();
   const canWrite = profile?.rol === 'Administrador' || profile?.rol === 'Gerencia';
+  // Fail closed: durante la ventana en que AuthContext no tiene perfil aún,
+  // no se muestra plata (R-4) — mismo criterio que la finca de columna en
+  // /finanzas/reportes.
+  const canVerPlata = profile?.rol === 'Gerencia' || profile?.rol === 'Administrador';
 
-  const { fetchEstructura, fetchMovimientos, fetchPendientes, descartarPendiente, loading } = useGanadoInventario();
+  const {
+    fetchEstructura,
+    fetchMovimientos,
+    fetchPendientes,
+    fetchInventario,
+    descartarPendiente,
+  } = useGanadoInventario();
 
   const [movimientos, setMovimientos] = useState<MovimientoConContexto[]>([]);
-  const [pendientes, setPendientes] = useState<GanMovimiento[]>([]);
+  const [pendientes, setPendientes] = useState<PendienteConValor[]>([]);
   const [fincas, setFincas] = useState<GanFinca[]>([]);
+  const [lotes, setLotes] = useState<GanLote[]>([]);
   const [potreros, setPotreros] = useState<GanPotrero[]>([]);
+  const [inventario, setInventario] = useState<InventarioPotreroRow[]>([]);
+
   const [tipoFilter, setTipoFilter] = useState('');
   const [fincaFilter, setFincaFilter] = useState('');
+  const [loteFilter, setLoteFilter] = useState('');
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
+
   const [showForm, setShowForm] = useState(false);
   const [pendienteSeleccionado, setPendienteSeleccionado] = useState<GanMovimiento | null>(null);
 
+  // Estado de carga propio de la página — igual que en GanadoDashboard.tsx,
+  // separado del `loading` compartido del hook. Una lectura fallida (p.ej.
+  // columnas nuevas sin migrar) no puede renderizar "Sin movimientos que
+  // coincidan con los filtros": eso dice "no hay nada que mostrar", cuando
+  // lo real es "no sabemos qué hay".
+  const [cargando, setCargando] = useState(true);
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+
   const loadData = useCallback(async () => {
+    setCargando(true);
     try {
-      const [movs, pend, estructura] = await Promise.all([
-        fetchMovimientos({
-          tipo: tipoFilter || undefined,
-          fincaId: fincaFilter || undefined,
-          fechaDesde: fechaDesde || undefined,
-          fechaHasta: fechaHasta || undefined,
-        }),
+      // Historia confirmada COMPLETA, sin filtros de fecha/tipo/finca en la
+      // consulta: el saldo por potrero (R-6) se calcula sobre el total y
+      // los filtros de la pantalla solo deciden qué filas se ven, nunca qué
+      // dice la columna Saldo.
+      const [movs, pend, estructura, inv] = await Promise.all([
+        fetchMovimientos({}),
         fetchPendientes(),
         fetchEstructura(),
+        fetchInventario(),
       ]);
-      setMovimientos(movs.filter((m) => m.estado === 'confirmado'));
-      setPendientes(pend);
+      setMovimientos((movs as MovimientoConContexto[]).filter((m) => m.estado === 'confirmado'));
+      setPendientes(pend as PendienteConValor[]);
       setFincas(estructura.fincas);
+      setLotes(estructura.lotes);
       setPotreros(estructura.potreros);
+      setInventario(inv);
+      setErrorCarga(null);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Error desconocido';
+      setErrorCarga(message);
       toast.error('Error cargando movimientos: ' + message);
+    } finally {
+      setCargando(false);
     }
-  }, [fetchMovimientos, fetchPendientes, fetchEstructura, tipoFilter, fincaFilter, fechaDesde, fechaHasta]);
+  }, [fetchMovimientos, fetchPendientes, fetchEstructura, fetchInventario]);
+
+  // Cabezas disponibles por potrero: los diálogos las usan para avisar antes
+  // de que el CHECK de gan_inventario rechace una salida sin existencias.
+  const existencias = useMemo(() => {
+    const map: Record<string, { novillos: number; toros: number }> = {};
+    inventario.forEach((r) => {
+      map[r.potrero_id] = { novillos: r.novillos, toros: r.toros };
+    });
+    return map;
+  }, [inventario]);
 
   useEffect(() => {
     loadData();
@@ -87,152 +179,148 @@ export function GanadoMovimientos() {
     }
   };
 
-  const potreroDe = (m: MovimientoConContexto) => {
-    if (m.tipo === 'traslado_salida' || m.tipo === 'venta' || m.tipo === 'muerte') {
-      return m.potrero_origen ? `${m.potrero_origen} (${m.finca_origen})` : '-';
-    }
-    return m.potrero_destino ? `${m.potrero_destino} (${m.finca_destino})` : '-';
-  };
+  // Saldo por potrero sobre la historia COMPLETA (R-6) — se calcula una sola
+  // vez por carga de datos, antes de aplicar cualquier filtro de pantalla.
+  const agrupadosCompletos = useMemo(() => {
+    const snapshot: Record<string, number> = {};
+    inventario.forEach((r) => {
+      snapshot[r.potrero_id] = r.novillos + r.toros;
+    });
+    const saldos = calcularSaldosPorPotrero(movimientos, snapshot);
+    return agruparMovimientos(movimientos, saldos);
+  }, [movimientos, inventario]);
+
+  const lotesFiltrados = useMemo(
+    () => lotes.filter((l) => !fincaFilter || fincas.find((f) => f.nombre === fincaFilter)?.id === l.finca_id),
+    [lotes, fincas, fincaFilter]
+  );
+
+  const agrupadosFiltrados = useMemo(
+    () =>
+      agrupadosCompletos.filter((a) => {
+        const fecha = fechaDeGrupo(a);
+        if (fechaDesde && fecha < fechaDesde) return false;
+        if (fechaHasta && fecha > fechaHasta) return false;
+        if (tipoFilter && tipoDeGrupo(a) !== tipoFilter) return false;
+        if (fincaFilter && !fincasDeGrupo(a).includes(fincaFilter)) return false;
+        if (loteFilter && !lotesDeGrupo(a).includes(loteFilter)) return false;
+        return true;
+      }),
+    [agrupadosCompletos, fechaDesde, fechaHasta, tipoFilter, fincaFilter, loteFilter]
+  );
 
   return (
     <div className="min-h-screen min-h-[100dvh] bg-gradient-to-br from-background via-white to-secondary/10 p-4 lg:p-8">
       <div className="max-w-7xl mx-auto w-full">
         <GanadoSubNav />
 
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div>
             <h1 className="text-foreground mb-1">Movimientos de Ganado</h1>
-            <p className="text-sm text-brand-brown/70">Log cronológico de eventos del inventario</p>
+            <p className="text-sm text-brand-brown/70">Compras, ventas, traslados y ajustes</p>
           </div>
           {canWrite && (
-            <Button onClick={() => setShowForm(true)}>
+            <Button
+              onClick={() => setShowForm(true)}
+              disabled={!!errorCarga}
+              title={errorCarga ? 'No disponible mientras los movimientos no se puedan leer' : undefined}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Registrar movimiento
             </Button>
           )}
         </div>
 
-        {/* Pendientes de confirmar */}
-        {pendientes.length > 0 && (
-          <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 mb-6">
-            <div className="flex items-center gap-2 mb-3">
-              <AlertTriangle className="w-5 h-5 text-amber-600" />
-              <h3 className="text-sm font-semibold text-amber-800">
-                Pendientes de confirmar ({pendientes.length})
-              </h3>
-            </div>
-            <div className="space-y-2">
-              {pendientes.map((p) => (
-                <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white border border-amber-200 px-3 py-2">
-                  <div className="text-sm">
-                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium mr-2 ${TIPO_BADGE[p.tipo] || 'bg-gray-100 text-gray-700'}`}>
-                      {TIPO_LABELS[p.tipo] || p.tipo}
-                    </span>
-                    <strong>{formatNumber(cabezasDePendiente(p))}</strong> cabezas · {formatearFecha(p.fecha)}
-                    {p.notas && <span className="text-brand-brown/60 ml-2 hidden sm:inline">{p.notas}</span>}
-                  </div>
-                  {canWrite && (
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={() => setPendienteSeleccionado(p)}>Confirmar</Button>
-                      <Button size="sm" variant="outline" onClick={() => handleDescartar(p)} title="Descartar (ya registrado manualmente)">
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {errorCarga ? (
+          <ErrorCargaGanado
+            titulo="No se pudo leer los movimientos"
+            mensaje={errorCarga}
+            onReintentar={loadData}
+          />
+        ) : (
+        <>
+        <div className="mb-6 space-y-2">
+          <BannerPendientes
+            pendientes={pendientes}
+            canWrite={canWrite}
+            canVerPlata={canVerPlata}
+            onConfirmar={(m) => setPendienteSeleccionado(m)}
+            onDescartar={handleDescartar}
+          />
+          <ContadorBrechaFinanzas />
+        </div>
 
         {/* Filtros */}
         <div className="flex flex-wrap items-center gap-3 mb-4">
-          <select value={tipoFilter} onChange={(e) => setTipoFilter(e.target.value)} className={selectClass}>
-            <option value="">Todos los tipos</option>
-            {Object.entries(TIPO_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
+          <select value={tipoFilter} onChange={(e) => setTipoFilter(e.target.value)} className={selectClass} aria-label="Tipo">
+            {TIPO_FILTRO_OPCIONES.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
             ))}
           </select>
-          <select value={fincaFilter} onChange={(e) => setFincaFilter(e.target.value)} className={selectClass}>
+          <select
+            value={fincaFilter}
+            onChange={(e) => {
+              setFincaFilter(e.target.value);
+              setLoteFilter('');
+            }}
+            className={selectClass}
+            aria-label="Finca"
+          >
             <option value="">Todas las fincas</option>
-            {fincas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}
+            {fincas.map((f) => (
+              <option key={f.id} value={f.nombre}>
+                {f.nombre}
+              </option>
+            ))}
+          </select>
+          <select value={loteFilter} onChange={(e) => setLoteFilter(e.target.value)} className={selectClass} aria-label="Lote">
+            <option value="">Todos los lotes</option>
+            {lotesFiltrados.map((l) => (
+              <option key={l.id} value={l.nombre}>
+                {l.nombre}
+              </option>
+            ))}
           </select>
           <div className="flex items-center gap-1.5">
-            <label htmlFor="ganado-fecha-desde" className="text-sm text-gray-500">Desde</label>
+            <label htmlFor="ganado-fecha-desde" className="text-sm text-gray-500">
+              Desde
+            </label>
             <Input id="ganado-fecha-desde" type="date" value={fechaDesde} onChange={(e) => setFechaDesde(e.target.value)} className="w-auto" />
           </div>
           <div className="flex items-center gap-1.5">
-            <label htmlFor="ganado-fecha-hasta" className="text-sm text-gray-500">Hasta</label>
+            <label htmlFor="ganado-fecha-hasta" className="text-sm text-gray-500">
+              Hasta
+            </label>
             <Input id="ganado-fecha-hasta" type="date" value={fechaHasta} onChange={(e) => setFechaHasta(e.target.value)} className="w-auto" />
           </div>
         </div>
 
-        {/* Log de movimientos */}
-        <div className="rounded-xl border border-primary/10 bg-white overflow-hidden">
-          <div className="overflow-auto" style={{ maxHeight: '36rem' }}>
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-green-600 text-white">
-                <tr>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap">Fecha</th>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap">Tipo</th>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap">Potrero</th>
-                  <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide whitespace-nowrap">Novillos</th>
-                  <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide whitespace-nowrap">Toros</th>
-                  <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide whitespace-nowrap">Notas</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading && movimientos.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-3 py-8 text-center">
-                      <Loader2 className="w-5 h-5 animate-spin text-primary inline" />
-                    </td>
-                  </tr>
-                ) : movimientos.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-3 py-8 text-center text-sm text-brand-brown/50">
-                      Sin movimientos registrados
-                    </td>
-                  </tr>
-                ) : (
-                  movimientos.map((m, i) => (
-                    <tr key={m.id} className={`border-t border-primary/5 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
-                      <td className="px-3 py-2.5 whitespace-nowrap">{formatearFecha(m.fecha)}</td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${TIPO_BADGE[m.tipo] || 'bg-gray-100 text-gray-700'}`}>
-                          {TIPO_LABELS[m.tipo] || m.tipo}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">{potreroDe(m)}</td>
-                      <td className={`px-3 py-2.5 text-right whitespace-nowrap ${m.novillos_delta < 0 ? 'text-red-600' : m.novillos_delta > 0 ? 'text-green-700' : ''}`}>
-                        {m.novillos_delta > 0 ? '+' : ''}{formatNumber(m.novillos_delta)}
-                      </td>
-                      <td className={`px-3 py-2.5 text-right whitespace-nowrap ${m.toros_delta < 0 ? 'text-red-600' : m.toros_delta > 0 ? 'text-green-700' : ''}`}>
-                        {m.toros_delta > 0 ? '+' : ''}{formatNumber(m.toros_delta)}
-                      </td>
-                      <td className="px-3 py-2.5 text-brand-brown/70 max-w-xs truncate" title={m.notas || undefined}>{m.notas || '-'}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <MovimientosTabla agrupados={agrupadosFiltrados} canVerPlata={canVerPlata} loading={cargando} />
+        </>
+        )}
 
         <MovimientoFormDialog
           open={showForm}
           onOpenChange={setShowForm}
           fincas={fincas}
+          lotes={lotes}
           potreros={potreros}
+          existencias={existencias}
           onSuccess={loadData}
         />
 
         <ConfirmarPendienteDialog
           open={!!pendienteSeleccionado}
-          onOpenChange={(open) => { if (!open) setPendienteSeleccionado(null); }}
+          onOpenChange={(open) => {
+            if (!open) setPendienteSeleccionado(null);
+          }}
           movimiento={pendienteSeleccionado}
           fincas={fincas}
+          lotes={lotes}
           potreros={potreros}
+          existencias={existencias}
           onSuccess={loadData}
         />
       </div>
