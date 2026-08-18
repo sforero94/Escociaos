@@ -217,6 +217,46 @@ function abreviarUnidad(unidadMedida: string): string {
   }
 }
 
+/**
+ * Defecto 1 (verificación visual de la primera corrida, 2026-08-17): la
+ * ranura `{unidad}` de una plantilla no tenía NINGÚN campo que resolverla
+ * -- `ValorHecho.unidad` vive DENTRO de cada valor numérico, no es
+ * direccionable por sí solo -- así que el modelo, forzado a apuntarla a
+ * algún campo existente, la apuntó a `necesario` y la pantalla mostró
+ * "4.694 12.694 de Silicalmag" (un número donde iba "kg").
+ *
+ * Arreglo mecánico, aplicado en `baseHecho` a TODO hecho (no sólo
+ * `agu.insumo_faltante`, "y donde aplique en el resto"): si TODOS los
+ * valores no-nulos de `unidad` dentro de un mismo hecho coinciden en una
+ * única unidad, esa unidad se expone como su propio campo `valores.unidad`
+ * -- referenciable por una ranura `{unidad}` como cualquier otro campo.
+ *
+ * Si el hecho mezcla MÁS de una unidad (p. ej. `hato.vacias_90d`: 'vacas' en
+ * `cantidad`/`total_hato` y 'días' en `dias_umbral`), NO se expone -- un
+ * campo `unidad` único ahí sería ambiguo y reproduciría el mismo defecto
+ * disfrazado. En ese caso el modelo sigue sin poder referenciar "la"
+ * unidad porque no hay una sola; puede escribirla en texto libre si hace
+ * falta (no es un dígito, `%` ni `$`, así que R-2 no la bloquea).
+ *
+ * Nunca pisa una clave `unidad` que el constructor ya haya declarado a
+ * mano -- ningún constructor de este archivo lo hace hoy, pero la guarda
+ * es gratis y evita una colisión silenciosa si alguno lo hiciera mañana.
+ * `render`/`crudo` de los valores numéricos NO cambian -- la unidad viaja
+ * SÓLO en el campo nuevo, nunca pegada al número, para que una plantilla
+ * `{falta} {unidad}` no pueda terminar en "4.694 kg kg" (§3.3, defecto 1).
+ */
+function conUnidadReferenciable(valores: Record<string, ValorHecho>): Record<string, ValorHecho> {
+  if ('unidad' in valores) return valores;
+  const unidades = new Set(
+    Object.values(valores)
+      .map((v) => v.unidad)
+      .filter((u): u is string => u != null),
+  );
+  if (unidades.size !== 1) return valores;
+  const [unica] = unidades;
+  return { ...valores, unidad: valorTexto(unica) };
+}
+
 // ============================================================================
 // §6.2 -- selectores nombrados
 // ============================================================================
@@ -456,7 +496,7 @@ function baseHecho(params: {
     origen: params.origen,
     categoria: params.categoria,
     texto: params.texto,
-    valores: params.valores,
+    valores: conUnidadReferenciable(params.valores),
     fuente: params.fuente,
     fecha_dato: params.fecha_dato,
     edad_dias: params.edad_dias,

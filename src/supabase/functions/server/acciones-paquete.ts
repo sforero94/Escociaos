@@ -433,7 +433,24 @@ export function construirHechosHatoLechero(datos: DatosHatoParaPaquete): Hecho[]
 
   const hechos: Hecho[] = [];
 
-  const hVacias = construirHechoVaciasLargas(vacias, config.dias_espera_voluntaria_post_parto, animales.length, hoy);
+  // Defecto 2 (verificación visual de la primera corrida, 2026-08-17): el
+  // denominador de "N de TOTAL vacas llevan X días o más vacías" tiene que
+  // ser la población de la que esas N vacías SALEN. `animales` viene de
+  // `datos.filasEstadoActual` -- `v_hato_estado_actual` SIN filtrar, así
+  // que `animales.length` es el total HISTÓRICO de `hato_animales`
+  // (incluye vendidas y descartadas, p. ej. 179 en producción hoy), no la
+  // población elegible. Tampoco basta filtrar sólo por `estadoAnimal ===
+  // 'activa'` (65 hoy): eso arrastra novillas y terneras que nunca han
+  // parido y por tanto NUNCA pueden estar "vacías". El denominador correcto
+  // es "vacas ACTIVAS con parto registrado" (35 hoy) -- la misma condición
+  // de base que `filtrarVaciasLargas` exige antes de evaluar el umbral de
+  // días, sin el filtro adicional de `derivado.estado` (ese sólo decide
+  // CUÁLES de esas 35 están vacías, no CUÁNTAS podrían estarlo).
+  const totalConPartoRegistrado = animales.filter(
+    (a) => a.estadoAnimal === 'activa' && a.ultimoPartoFecha != null,
+  ).length;
+
+  const hVacias = construirHechoVaciasLargas(vacias, config.dias_espera_voluntaria_post_parto, totalConPartoRegistrado, hoy);
   if (hVacias) hechos.push(hVacias);
 
   const hSecado = construirHechoSecadoVencido(secadoVencido, hoy);
@@ -798,6 +815,16 @@ export interface DatosGanadoParaPaquete {
   hoy: string;
 }
 
+/** `gan_fincas.hectareas` es `NUMERIC(10,2)` (migración 044) -- llega como
+ *  `number` o como `string` según el cliente. Copia local de la misma
+ *  coerción de `ganado-inventario.ts` (no exportada de allí, así que no hay
+ *  nada que importar sin crear un acoplamiento nuevo por una función de una
+ *  línea). */
+function numeroCoercido(v: number | string | null | undefined): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
 export function construirHechosGanado(datos: DatosGanadoParaPaquete): Hecho[] {
   const { hoy } = datos;
   const summary = buildGanadoInventorySummary({
@@ -827,7 +854,18 @@ export function construirHechosGanado(datos: DatosGanadoParaPaquete): Hecho[] {
   );
   if (hVariacion) hechos.push(hVariacion);
 
-  const fincasSinHa = ganadoParaAcciones.por_finca.filter((f) => f.hectareas === 0).map((f) => f.finca);
+  // Defecto 3 (verificación visual de la primera corrida, 2026-08-17): "sin
+  // hectáreas" es una pregunta de CONFIGURACIÓN del catálogo `gan_fincas`
+  // (§3.3: fuente `gan_fincas`), no del resumen de INVENTARIO. `por_finca`
+  // (`ganadoParaAcciones.por_finca` == `summary.por_finca`) está filtrado a
+  // `activa=true` dentro de `buildGanadoInventorySummary` -- correcto para
+  // los KPIs operativos (cabezas/ha, concentración), pero reusarlo aquí
+  // hacía que el conteo "siguiera" a esa lista ya recortada: una finca
+  // inactiva sigue necesitando sus hectáreas configuradas el día que se
+  // reactive, y en producción esto redujo 8 fincas sin hectáreas a 3. La
+  // fuente tiene que ser el catálogo COMPLETO que el ensamblador ya recibió
+  // (`datos.fincas`), nunca una vista derivada y filtrada para otro fin.
+  const fincasSinHa = datos.fincas.filter((f) => numeroCoercido(f.hectareas) === 0).map((f) => f.nombre);
   const hFincas = construirHechoGanadoFincasSinHa(fincasSinHa, hoy);
   if (hFincas) hechos.push(hFincas);
 
