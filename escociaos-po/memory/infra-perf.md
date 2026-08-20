@@ -169,3 +169,18 @@ prompt del agente en cada corrida.
 ## Baselines (corrida 2026-08-20-jueves)
 | Infra | DB **113 MB** (1,4% de 8 GB) — 59 MB siguen siendo `net._http_response` (74 filas) y **16 MB `cron.job_run_details` con 0 filas vivas (NUEVO en el top-2)**; datos reales ~38 MB. 8 usuarios auth. Edge function **v213** (2026-08-18T01:36:38Z), **al dia con HEAD**. Frontend verificado POR CONTENIDO en 8306dbf. **4 pg_cron** (nuevo: `acciones-recomendadas-tick`, `50 10 * * *` UTC): 2.903 corridas en 10 dias, 0 fallos. Edge log 24h: 310 peticiones, **0 no-200**. Motor de acciones: corre diario, ~USD 0,010/dia, estados ok/parcial | 2026-08-20-jueves |
 | Advisors performance (por SQL) | unindexed_fks **89** (igual) · unused_idx **80** (era 43 — el salto es por indices nuevos nunca escaneados en `gan_lotes`/`acciones_*`/`pest_*`, `stats_reset` es NULL asi que no hubo reinicio de estadisticas; **NO es hallazgo**) · sin_pk **9** (eran 3; los 6 nuevos son `respaldos.backup_095/099×3/100×2`, estado final buscado). Consulta de aplicacion mas lenta: `v_hato_estado_actual` por PostgREST 149,2 ms / 6 llamadas; `fn_clima_rollup_diario` subio de 100,5 a **229,7 ms** de media (27 llamadas, 1/dia — irrelevante) | 2026-08-20-jueves |
+
+## Correccion de causa (corrida 2026-08-20-jueves, post-barrido)
+- **La caida de la estacion Ecowitt del 2026-08-19/20 fue un CORTE DE LUZ prolongado en la
+  finca, confirmado por Santiago** — no degradacion del sensor. **Revisar la entrada de arriba
+  que decia "si vuelve a pasar, ya no es hardware esporadico: es la estacion": esa inferencia
+  quedo refutada por el dueno.** Antes de escalar una caida de clima a hallazgo de hardware,
+  preguntar por la luz: la finca tiene cortes largos y son la explicacion mas simple de un
+  silencio total (a diferencia del `contador_congelado`, que si es del sensor).
+  [corrida: 2026-08-20-jueves]
+- **Implicacion de diseno que sobrevive a la causa**: los cortes de luz recurren, asi que la
+  ausencia de reja de frescura en `ClimaCard`/`useSaludDatos` y la ausencia de gate de cobertura
+  en `fn_clima_rollup_diario` son defectos **periodicos**, no anecdoticos. El peor caso del
+  rollup es la restauracion de luz a media jornada: produce un dia parcial que pasa el gate de
+  frescura de la 068 y se sella `ok`. Un dia sin NINGUNA lectura no inserta fila y es seguro.
+  [corrida: 2026-08-20-jueves]
