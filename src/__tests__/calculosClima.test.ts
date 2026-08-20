@@ -445,6 +445,59 @@ describe('construirFranjaLluvia', () => {
     expect(franja[0].mm).toBeNull();
   });
 
+  // -------------------------------------------------------------------------
+  // Migración 103 — día capturado incompleto (corte de luz en la finca)
+  // -------------------------------------------------------------------------
+  // Caso REAL de producción: el 2026-08-19 la estación registró 167 de las 288
+  // lecturas del día (sin captura entre las 11:00 y las 17:00, ni después de
+  // las 21:10, por un corte de luz prolongado) y el rollup nocturno lo escribió
+  // como `lluvia_confianza='ok', lluvia_total_mm=0.00`. Nadie puede afirmar que
+  // no llovió en esas nueve horas — y en Aguadas la tarde es justamente cuando
+  // llueve. Es el espejo del bug que motivó la 068: aquél fabricaba un
+  // DUPLICADO, éste fabrica un CERO.
+  it('un día `cobertura_parcial` es "sin_dato" con su causa — JAMÁS "seco" (migración 103)', () => {
+    const rows = [
+      resumenDia({
+        fecha: '2026-08-19',
+        lluvia_total_mm: 0,
+        lluvia_confianza: 'cobertura_parcial',
+        lecturas_count: 167,
+      }),
+    ];
+    const franja = construirFranjaLluvia(rows, 1, '2026-08-19');
+
+    expect(franja[0].estado).toBe('sin_dato');
+    expect(franja[0].estado).not.toBe('seco');
+    expect(franja[0].mm).toBeNull();
+    expect(franja[0].mm).not.toBe(0);
+    expect(franja[0].causa).toBe('cobertura_parcial');
+  });
+
+  it('la MISMA fila marcada `ok` sí es un cero real — la confianza es lo único que las separa', () => {
+    const fila = { fecha: '2026-08-19', lluvia_total_mm: 0, lecturas_count: 167 };
+
+    const parcial = construirFranjaLluvia(
+      [resumenDia({ ...fila, lluvia_confianza: 'cobertura_parcial' })], 1, '2026-08-19');
+    const okReal = construirFranjaLluvia(
+      [resumenDia({ ...fila, lluvia_confianza: 'ok' })], 1, '2026-08-19');
+
+    expect(parcial[0]).toMatchObject({ estado: 'sin_dato', mm: null, causa: 'cobertura_parcial' });
+    expect(okReal[0]).toMatchObject({ estado: 'seco', mm: 0, causa: null });
+  });
+
+  it('distingue las dos causas de sin_dato en la misma franja: congelado vs cobertura parcial', () => {
+    const rows = [
+      resumenDia({ fecha: '2026-08-17', lluvia_total_mm: 3.2, lluvia_confianza: 'ok' }),
+      resumenDia({ fecha: '2026-08-18', lluvia_total_mm: null, lluvia_confianza: 'contador_congelado' }),
+      resumenDia({ fecha: '2026-08-19', lluvia_total_mm: 0, lluvia_confianza: 'cobertura_parcial', lecturas_count: 167 }),
+    ];
+    const franja = construirFranjaLluvia(rows, 3, '2026-08-19');
+
+    expect(franja.map((d) => d.estado)).toEqual(['lluvia', 'sin_dato', 'sin_dato']);
+    expect(franja.map((d) => d.causa)).toEqual([null, 'contador_congelado', 'cobertura_parcial']);
+    expect(franja.filter((d) => d.estado === 'seco')).toHaveLength(0);
+  });
+
   it('respeta el rango exacto de `dias` terminando en `hastaISO`, ordenado ascendente', () => {
     const rows = [
       resumenDia({ fecha: '2026-08-13', lluvia_total_mm: 1, lluvia_confianza: 'ok' }),
@@ -453,5 +506,42 @@ describe('construirFranjaLluvia', () => {
     ];
     const franja = construirFranjaLluvia(rows, 3, '2026-08-15');
     expect(franja.map((d) => d.fecha)).toEqual(['2026-08-13', '2026-08-14', '2026-08-15']);
+  });
+});
+
+// ===========================================================================
+// La puerta por la que TODO consumidor de clima_resumen_diario tiene que pasar
+// ===========================================================================
+// Es la única función que sabe qué valores de `lluvia_confianza` invalidan el
+// total. Leer `lluvia_total_mm` directo resucita el bug que la migración
+// correspondiente detectó — pasó con el reporte semanal en S30/2026.
+describe('lluviaConfiableDeResumen', () => {
+  let lluviaConfiableDeResumen: (
+    fila: { lluvia_total_mm: number | null; lluvia_confianza?: string | null },
+  ) => number | null;
+
+  beforeAll(async () => {
+    const mod = await import('@/utils/calculosClima');
+    lluviaConfiableDeResumen = mod.lluviaConfiableDeResumen;
+  });
+
+  it('devuelve null para los dos estados de desconfianza, y el valor para los demás', () => {
+    const casos: Array<[string | null | undefined, number | null, number | null]> = [
+      // [confianza, lluvia_total_mm, esperado]
+      ['ok', 12.5, 12.5],
+      ['ok', 0, 0],
+      ['sin_time_piezo', 4.2, 4.2],
+      ['contador_congelado', 15.75, null],
+      ['cobertura_parcial', 0, null],
+      ['cobertura_parcial', 18.03, null],
+      [undefined, 7, 7],
+      [null, 7, 7],
+    ];
+
+    for (const [confianza, total, esperado] of casos) {
+      expect(
+        lluviaConfiableDeResumen({ lluvia_total_mm: total, lluvia_confianza: confianza }),
+      ).toBe(esperado);
+    }
   });
 });

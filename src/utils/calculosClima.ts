@@ -29,10 +29,20 @@ function safeMin(values: number[]): number {
 // consumidor de clima_resumen_diario debe pasar por aqui: sumar
 // lluvia_total_mm directo revive el duplicado que la migracion detecto.
 // "Sin dato" es NULL, nunca 0.
+//
+// Migración 103: `cobertura_parcial` entra por la misma puerta. Un día del que
+// sólo se capturó una parte (corte de luz en la finca) no tiene total que
+// afirmar — el contador de lluvia es acumulado, así que el máximo de las
+// lecturas disponibles es una cota inferior, no una medición. El rollup lo
+// guarda como NULL, y esta puerta lo sostiene también para las filas que el
+// backfill de la 103 marcó. Es el espejo del bug de la 068: aquélla impedía un
+// duplicado fabricado, ésta impide un CERO fabricado.
+const CONFIANZAS_SIN_DATO = new Set(['contador_congelado', 'cobertura_parcial']);
+
 export function lluviaConfiableDeResumen(
   fila: { lluvia_total_mm: number | null; lluvia_confianza?: string | null }
 ): number | null {
-  if (fila.lluvia_confianza === 'contador_congelado') return null;
+  if (fila.lluvia_confianza != null && CONFIANZAS_SIN_DATO.has(fila.lluvia_confianza)) return null;
   return fila.lluvia_total_mm;
 }
 
@@ -49,7 +59,7 @@ export interface DiaFranjaLluvia {
   /** mm confiables — SIEMPRE null cuando estado es 'sin_dato', nunca 0 */
   mm: number | null;
   /** Sólo relevante cuando estado es 'sin_dato' */
-  causa: 'contador_congelado' | 'sin_registro' | null;
+  causa: 'contador_congelado' | 'cobertura_parcial' | 'sin_registro' | null;
 }
 
 // Arma la franja de los últimos `dias` días terminando en `hastaISO`
@@ -81,7 +91,13 @@ export function construirFranjaLluvia(
 
     const mm = lluviaConfiableDeResumen(fila);
     if (mm === null) {
-      const causa = fila.lluvia_confianza === 'contador_congelado' ? 'contador_congelado' : 'sin_registro';
+      // Un día `cobertura_parcial` (migración 103) es 'sin_dato' igual que uno
+      // con el contador congelado, y JAMÁS 'seco': la fila trae 0.00 mm sólo
+      // porque no se capturó la tarde, no porque no haya llovido.
+      const causa: DiaFranjaLluvia['causa'] =
+        fila.lluvia_confianza === 'contador_congelado' ? 'contador_congelado'
+        : fila.lluvia_confianza === 'cobertura_parcial' ? 'cobertura_parcial'
+        : 'sin_registro';
       resultado.push({ fecha: fechaStr, estado: 'sin_dato', mm: null, causa });
     } else if (mm > 0) {
       resultado.push({ fecha: fechaStr, estado: 'lluvia', mm, causa: null });

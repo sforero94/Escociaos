@@ -327,9 +327,20 @@ describe('Climate data lee el histórico, no la ventana de 24 h', () => {
     expect(chatSource).toContain('dias_sin_lluvia');
   });
 
-  it('aplica la compuerta de confianza de la migración 068', () => {
+  it('aplica la compuerta de confianza de las migraciones 068 y 103', () => {
     expect(chatSource).toContain('function lluviaConfiable');
     expect(chatSource).toContain("lluvia_confianza === 'contador_congelado'");
+    // Migración 103: un día que la estación capturó incompleto (corte de luz)
+    // tampoco tiene total que afirmar. Sin esto Esco lee el 0,00 mm que el
+    // rollup dejó escrito y afirma que no llovió en horas que nadie vio.
+    expect(chatSource).toContain("lluvia_confianza === 'cobertura_parcial'");
+  });
+
+  it('el conteo de "días sin llover" cubre las dos causas de sin dato', () => {
+    // Es el consumidor del incidente del 2026-08-16, donde el modelo terminó
+    // inventando "47 días sin lluvia". Un día parcial que no entre acá vuelve
+    // a convertir un hueco de datos en una afirmación.
+    expect(chatSource).toContain('lluvia_confianza=in.(contador_congelado,cobertura_parcial)');
   });
 
   it('un día con el contador congelado vale sin dato, nunca 0', () => {
