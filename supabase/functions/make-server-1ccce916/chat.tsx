@@ -2056,9 +2056,15 @@ interface FilaResumenClima {
  * marcado vale **null (sin dato)**, jamas 0: "no llovio" y "no sabemos" son
  * cosas distintas, y confundirlas es exactamente lo que producia el bug de
  * lluvia duplicada.
+ *
+ * La migracion 103 agrega `cobertura_parcial` por la misma puerta: un dia que
+ * la estacion capturo incompleto (corte de luz en la finca) tampoco tiene un
+ * total que afirmar. Es el mismo error con el signo cambiado -- la 068 impedia
+ * un DUPLICADO fabricado, la 103 impide un CERO fabricado.
  */
 function lluviaConfiable(fila: { lluvia_total_mm: number | null; lluvia_confianza?: string | null }): number | null {
   if (fila.lluvia_confianza === 'contador_congelado') return null;
+  if (fila.lluvia_confianza === 'cobertura_parcial') return null;
   return fila.lluvia_total_mm;
 }
 
@@ -2145,7 +2151,7 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
     temp_avg: r.temp_c_avg, temp_max: r.temp_c_max, temp_min: r.temp_c_min,
     humedad_avg: r.humedad_pct_avg, viento_avg: r.viento_kmh_avg,
     lluvia_mm: lluviaConfiable(r),
-    lluvia_sin_dato: r.lluvia_confianza === 'contador_congelado',
+    lluvia_sin_dato: r.lluvia_confianza === 'contador_congelado' || r.lluvia_confianza === 'cobertura_parcial',
     radiacion_avg: r.radiacion_wm2_avg, radiacion_max: r.radiacion_wm2_max,
   }));
 
@@ -2183,12 +2189,14 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
   const ultimaLluviaFecha = lluviaHoy != null && lluviaHoy > 0 ? hoy : ultimaDeResumen?.fecha ?? null;
   const ultimaLluviaMm = lluviaHoy != null && lluviaHoy > 0 ? lluviaHoy : ultimaDeResumen?.lluvia_total_mm ?? null;
 
-  // Dias marcados `contador_congelado` entre la ultima lluvia y hoy: en esos no
-  // se sabe si llovio, asi que el conteo es un maximo, no una certeza.
+  // Dias sin dato de lluvia entre la ultima lluvia y hoy: en esos no se sabe si
+  // llovio, asi que el conteo es un maximo, no una certeza. Cubre el contador
+  // congelado (068) y el dia capturado incompleto (103) -- omitir el segundo
+  // haria que Esco afirmara "N dias sin llover" incluyendo dias que nadie vio.
   let diasSinDatoDesdeEntonces = 0;
   if (ultimaLluviaFecha) {
     const desdeRaw = await supabaseQuery('clima_resumen_diario',
-      `select=fecha&lluvia_confianza=eq.contador_congelado&fecha=gt.${e(ultimaLluviaFecha)}&limit=3000`,
+      `select=fecha&lluvia_confianza=in.(contador_congelado,cobertura_parcial)&fecha=gt.${e(ultimaLluviaFecha)}&limit=3000`,
     ) as Array<{ fecha: string }>;
     diasSinDatoDesdeEntonces = (desdeRaw ?? []).length;
   }

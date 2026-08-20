@@ -25,7 +25,11 @@ export interface LecturaClima {
 //   viene NULL (sin dato, nunca un duplicado fabricado) — ver migración 068.
 // 'sin_time_piezo' = Ecowitt no envió la señal de frescura; se confía en el
 //   valor crudo (comportamiento previo a la migración 068).
-export type LluviaConfianza = 'ok' | 'contador_congelado' | 'sin_time_piezo';
+// 'cobertura_parcial' = el día se capturó incompleto (menos de 240 de las 288
+//   lecturas de 5 min esperadas, típicamente por corte de luz en la finca);
+//   lluvia_total_mm viene NULL, porque el contador es acumulado y un día
+//   truncado sólo da una cota inferior, nunca un total — ver migración 103.
+export type LluviaConfianza = 'ok' | 'contador_congelado' | 'sin_time_piezo' | 'cobertura_parcial';
 
 export interface ResumenDiario {
   fecha: string;

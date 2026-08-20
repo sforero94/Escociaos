@@ -38,6 +38,9 @@ function causaTexto(dias: DiaFranjaLluvia[]): string | null {
   if (dias.some((d) => d.causa === 'contador_congelado')) {
     return ' — el contador del pluviómetro no se reinició';
   }
+  if (dias.some((d) => d.causa === 'cobertura_parcial')) {
+    return ' — la estación no registró el día completo';
+  }
   return null;
 }
 
@@ -85,6 +88,7 @@ export function FranjaLluvia({ dias, visibleEnMovil = 7 }: FranjaLluviaProps) {
                   <span className="sr-only">
                     {d.fecha}: sin dato de lluvia
                     {d.causa === 'contador_congelado' ? ' — contador del pluviómetro congelado' : ''}
+                    {d.causa === 'cobertura_parcial' ? ' — la estación no registró el día completo' : ''}
                   </span>
                 </div>
                 <span className="text-[10px] text-brand-brown/40">{etiquetaDia(d.fecha)}</span>
