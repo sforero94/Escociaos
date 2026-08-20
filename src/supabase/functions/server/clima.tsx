@@ -164,7 +164,7 @@ function getSupabaseConfig() {
 //   (a) secreto compartido `x-clima-sync-secret` -- el llamador normal de
 //       `/clima/sync` es el pg_cron `clima-sync-wu` (migración 030, cada 5
 //       minutos), no una sesión humana. El secreto se resuelve en tiempo de
-//       disparo desde Supabase Vault (migración 103) y se compara contra
+//       disparo desde Supabase Vault (migración 105) y se compara contra
 //       `Deno.env.get('CLIMA_SYNC_SECRET')`. Si el secreto NO está
 //       configurado en este entorno y tampoco llega un JWT, el endpoint
 //       responde 503 y NO HACE NADA -- nunca corre "abierto", mismo criterio
@@ -228,7 +228,7 @@ async function verificarAccesoClima(c: Context): Promise<{ disparo: 'cron' | 'ma
 
   if (!secretoConfigurado) {
     return c.json({
-      error: 'CLIMA_SYNC_SECRET no está configurado en este entorno -- los endpoints de escritura de clima quedan deshabilitados hasta que se configure el secreto (ver migración 103), y no llegó ningún JWT de Gerencia como alternativa.',
+      error: 'CLIMA_SYNC_SECRET no está configurado en este entorno -- los endpoints de escritura de clima quedan deshabilitados hasta que se configure el secreto (ver migración 105), y no llegó ningún JWT de Gerencia como alternativa.',
     }, 503);
   }
 
