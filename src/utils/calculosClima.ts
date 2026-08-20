@@ -1,5 +1,6 @@
 import type { LecturaClima, ResumenClima, ResumenDiario, LecturaClimaAgregada, DatoAnualOverlay, SerieAnual } from '@/types/clima';
 import { fechaAISODate } from '@/utils/fechas';
+import { formatNumber } from '@/utils/format';
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -107,6 +108,87 @@ export function lecturaActual(rows: LecturaClima[]): LecturaClima | null {
   return rows.reduce((latest, row) =>
     new Date(row.timestamp) > new Date(latest.timestamp) ? row : latest
   );
+}
+
+// ============================================================================
+// Frescura de la lectura en vivo (corte de luz en la finca, ESCO-31)
+// ============================================================================
+
+/**
+ * UMBRALES DE FRESCURA — ÚNICO LUGAR DONDE SE TOCAN.
+ *
+ * La estación envía una lectura cada 5 minutos, así que cualquier hueco de
+ * más de media hora ya no es jitter de la sincronización: es la estación
+ * callada (corte de luz en la finca, internet caído, Ecowitt respondiendo
+ * `{"message":"No data available"}` con HTTP 200 — que es exactamente lo que
+ * pasó el 2026-08-19/20, 14 h sin una sola lectura).
+ *
+ * Los dos números gobiernan a la vez la tarjeta del Tablero, la de `/clima`
+ * y la señal "Estación" de Salud de los datos: cambiarlos acá los cambia en
+ * los tres sitios. Son criterio de FRESCURA de captura, no una regla
+ * agronómica — mismo estatus que los umbrales de `calculosSaludDatos.ts`.
+ */
+export const UMBRAL_FRESCURA_LECTURA = {
+  /** Hasta acá la lectura se presenta como "Ahora", sin atenuar. */
+  frescaMinutos: 30,
+  /** Entre `frescaMinutos` y acá se muestra atenuada y rotulada "hace N h".
+   *  Por encima no se muestra ningún valor: estado explícito "sin dato
+   *  reciente" — un número viejo presentado como actual es peor que ninguno,
+   *  porque contra él se planean aplicaciones e irrigación. */
+  demoradaMinutos: 180,
+} as const;
+
+/** `obsoleta` incluye el caso "no hay ninguna lectura": el cron de la
+ *  migración 036 poda `clima_lecturas` a 24 h, así que una estación muda
+ *  desde hace más de un día deja la tabla vacía. Eso NO es "todo bien", y
+ *  nunca puede volver a hacer desaparecer la tarjeta en silencio. */
+export type FrescuraLectura = 'fresca' | 'demorada' | 'obsoleta';
+
+/** Edad de la lectura en minutos (redondeada hacia abajo). `null` cuando no
+ *  hay lectura o su `timestamp` no es parseable — nunca 0, que significaría
+ *  "recién llegada". Aritmética de instantes sobre `timestamptz`: no hay
+ *  trampa de huso horario acá (a diferencia de las fechas `YYYY-MM-DD`). */
+export function minutosDesdeLectura(
+  lectura: { timestamp: string } | null | undefined,
+  ahora: Date = new Date(),
+): number | null {
+  if (!lectura?.timestamp) return null;
+  const ms = new Date(lectura.timestamp).getTime();
+  if (Number.isNaN(ms)) return null;
+  return Math.max(0, Math.floor((ahora.getTime() - ms) / 60000));
+}
+
+/** ¿La lectura sirve para presentarse como condiciones actuales? Sin lectura
+ *  la respuesta es `false`, nunca `true` por omisión. */
+export function lecturaEsReciente(
+  lectura: { timestamp: string } | null | undefined,
+  maxMinutos: number = UMBRAL_FRESCURA_LECTURA.frescaMinutos,
+  ahora: Date = new Date(),
+): boolean {
+  const minutos = minutosDesdeLectura(lectura, ahora);
+  return minutos !== null && minutos <= maxMinutos;
+}
+
+export function clasificarFrescuraLectura(
+  lectura: { timestamp: string } | null | undefined,
+  ahora: Date = new Date(),
+): FrescuraLectura {
+  const minutos = minutosDesdeLectura(lectura, ahora);
+  if (minutos === null) return 'obsoleta';
+  if (minutos <= UMBRAL_FRESCURA_LECTURA.frescaMinutos) return 'fresca';
+  if (minutos <= UMBRAL_FRESCURA_LECTURA.demoradaMinutos) return 'demorada';
+  return 'obsoleta';
+}
+
+/** "hace 45 min" · "hace 14 h" · "hace 3 d" · "sin lecturas" (null). Nunca
+ *  "hace 0 min": por debajo del minuto se dice "hace instantes". */
+export function etiquetaEdadLectura(minutos: number | null): string {
+  if (minutos === null) return 'sin lecturas';
+  if (minutos < 1) return 'hace instantes';
+  if (minutos < 60) return `hace ${formatNumber(minutos, 0)} min`;
+  const horas = Math.floor(minutos / 60);
+  if (horas < 48) return `hace ${formatNumber(horas, 0)} h`;
+  return `hace ${formatNumber(Math.floor(horas / 24), 0)} d`;
 }
 
 // ============================================================================

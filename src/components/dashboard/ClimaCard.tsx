@@ -1,14 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Cloud, Droplets, Wind, CloudRain, Sun } from 'lucide-react';
+import { Cloud, Droplets, Wind, CloudRain, Sun, CloudOff } from 'lucide-react';
 import { useClimaData } from '@/hooks/useClimaData';
 import { getSupabase } from '@/utils/supabase/client';
 import { projectId } from '@/utils/supabase/info.tsx';
 import { aggregateRadiation } from '@/utils/calculosRadiacion';
 import { fechaAISODate, obtenerFechaHoy } from '@/utils/fechas';
 import { formatNumber } from '@/utils/format';
-import { construirFranjaLluvia } from '@/utils/calculosClima';
+import {
+  construirFranjaLluvia,
+  clasificarFrescuraLectura,
+  etiquetaEdadLectura,
+  minutosDesdeLectura,
+} from '@/utils/calculosClima';
 import { FranjaLluvia } from './FranjaLluvia';
+import type { ResumenClima } from '@/types/clima';
 
 interface DiaPronostico {
   date: string;
@@ -83,11 +89,55 @@ export function ClimaCard() {
     return <div className="h-20 bg-gray-100 rounded-2xl animate-pulse" />;
   }
 
-  if (!estacionConfigurada || !lecturaActual || lecturaActual.temp_c === null) {
+  // Única razón para no pintar nada: la estación nunca existió (ni una
+  // lectura ni un resumen en toda la base). Que DEJE de reportar no es eso —
+  // eso se dice, no se esconde. Antes esta guarda también cubría
+  // `!lecturaActual`, y como el cron de la migración 036 poda
+  // `clima_lecturas` a 24 h, una estación muda un día entero hacía
+  // desaparecer la tarjeta del Tablero en silencio.
+  if (!estacionConfigurada) {
     return null;
   }
 
   const resumenSemana = resumenPeriodos.find((p) => p.label === 'Semana')?.resumen ?? null;
+
+  // Reja de frescura: `lecturaActual` es un `max by timestamp` sin noción de
+  // edad, así que la última lectura de anoche llegaba acá indistinguible de
+  // una de hace 5 minutos y se rotulaba "Ahora" (2026-08-19/20: 14 h de corte
+  // de luz en la finca mostrando 19,5°C / 0 W/m² / 0 km/h como actuales).
+  // Umbrales: UMBRAL_FRESCURA_LECTURA en calculosClima.ts.
+  const minutosLectura = minutosDesdeLectura(lecturaActual);
+  const frescura = clasificarFrescuraLectura(lecturaActual);
+  if (frescura === 'obsoleta' || !lecturaActual || lecturaActual.temp_c === null) {
+    return (
+      <div
+        onClick={() => navigate('/clima')}
+        className="bg-white rounded-2xl p-4 border border-gray-200 hover:border-primary/40 transition-all cursor-pointer space-y-3"
+      >
+        <div className="flex items-start gap-3">
+          <CloudOff className="w-6 h-6 text-brand-brown/40 shrink-0" aria-hidden="true" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-foreground">Sin dato reciente del clima</p>
+            <p className="text-xs text-brand-brown/60">
+              {minutosLectura === null
+                ? 'La estación no envía lecturas desde hace más de 24 h.'
+                : `Última lectura ${etiquetaEdadLectura(minutosLectura)}.`}{' '}
+              Los datos de abajo son historia, no condiciones actuales.
+            </p>
+          </div>
+        </div>
+
+        {resumenSemana && <ResumenSemana resumen={resumenSemana} sunHoursSemana={sunHoursSemana} />}
+
+        <FranjaLluvia dias={franjaLluvia10Dias} visibleEnMovil={7} />
+      </div>
+    );
+  }
+
+  // A partir de acá la lectura existe, tiene temperatura y es 'fresca' o
+  // 'demorada'. En 'demorada' los valores se atenúan y el rótulo deja de
+  // decir "Ahora".
+  const atenuado = frescura === 'demorada' ? 'opacity-60' : '';
 
   return (
     <div
@@ -95,14 +145,16 @@ export function ClimaCard() {
       className="bg-white rounded-2xl p-4 border border-gray-200 hover:border-primary/40 transition-all cursor-pointer space-y-3"
     >
       <div className="flex items-center gap-4 flex-wrap">
-        <span className="text-[10px] uppercase text-brand-brown/40 tracking-wide">Ahora</span>
+        <span className="text-[10px] uppercase text-brand-brown/40 tracking-wide">
+          {frescura === 'fresca' ? 'Ahora' : etiquetaEdadLectura(minutosLectura)}
+        </span>
 
-        <div className="flex items-center gap-2">
+        <div className={`flex items-center gap-2 ${atenuado}`}>
           <Cloud className="w-8 h-8 text-primary/70" />
           <span className="text-2xl font-semibold text-foreground">{Math.round(lecturaActual.temp_c)}°C</span>
         </div>
 
-        <div className="flex items-center gap-3 text-xs text-brand-brown/60 flex-wrap">
+        <div className={`flex items-center gap-3 text-xs text-brand-brown/60 flex-wrap ${atenuado}`}>
           {lecturaActual.humedad_pct !== null && (
             <span className="flex items-center gap-1">
               <Droplets className="w-3.5 h-3.5" /> {Math.round(lecturaActual.humedad_pct)}%
@@ -142,34 +194,7 @@ export function ClimaCard() {
         )}
       </div>
 
-      {resumenSemana && (
-        <div className="pt-3 border-t border-gray-100 flex items-center gap-4 flex-wrap text-xs text-brand-brown/70">
-          <span className="text-[10px] uppercase text-brand-brown/40 tracking-wide">Esta semana</span>
-          {resumenSemana.lluvia_total_mm !== null && (
-            <span className="flex items-center gap-1">
-              <CloudRain className="w-3.5 h-3.5 text-blue-400" /> {formatMm(resumenSemana.lluvia_total_mm)} acumulados
-            </span>
-          )}
-          {resumenSemana.temp_promedio_c !== null && (
-            <span>
-              Prom. {resumenSemana.temp_promedio_c.toFixed(1)}°C
-              {resumenSemana.temp_max_c !== null && resumenSemana.temp_min_c !== null && (
-                <span className="text-brand-brown/50"> ({resumenSemana.temp_min_c.toFixed(0)}°–{resumenSemana.temp_max_c.toFixed(0)}°)</span>
-              )}
-            </span>
-          )}
-          {resumenSemana.rafaga_max_kmh !== null && (
-            <span className="flex items-center gap-1">
-              <Wind className="w-3.5 h-3.5" /> ráfaga máx. {Math.round(resumenSemana.rafaga_max_kmh)} km/h
-            </span>
-          )}
-          {sunHoursSemana !== null && (
-            <span className="flex items-center gap-1">
-              <Sun className="w-3.5 h-3.5 text-amber-500" /> {sunHoursSemana.toFixed(1)} h-sol/día
-            </span>
-          )}
-        </div>
-      )}
+      {resumenSemana && <ResumenSemana resumen={resumenSemana} sunHoursSemana={sunHoursSemana} />}
 
       <FranjaLluvia dias={franjaLluvia10Dias} visibleEnMovil={7} />
     </div>
@@ -178,4 +203,45 @@ export function ClimaCard() {
 
 function formatMm(mm: number): string {
   return `${formatNumber(mm, mm < 10 ? 1 : 0)} mm`;
+}
+
+// El resumen semanal y la franja de lluvia salen de `clima_resumen_diario`,
+// no de la lectura en vivo: siguen siendo válidos (son historia) cuando la
+// estación está muda, así que el estado "sin dato reciente" los conserva en
+// vez de dejar la tarjeta hueca.
+function ResumenSemana({
+  resumen,
+  sunHoursSemana,
+}: {
+  resumen: ResumenClima;
+  sunHoursSemana: number | null;
+}) {
+  return (
+    <div className="pt-3 border-t border-gray-100 flex items-center gap-4 flex-wrap text-xs text-brand-brown/70">
+      <span className="text-[10px] uppercase text-brand-brown/40 tracking-wide">Esta semana</span>
+      {resumen.lluvia_total_mm !== null && (
+        <span className="flex items-center gap-1">
+          <CloudRain className="w-3.5 h-3.5 text-blue-400" /> {formatMm(resumen.lluvia_total_mm)} acumulados
+        </span>
+      )}
+      {resumen.temp_promedio_c !== null && (
+        <span>
+          Prom. {resumen.temp_promedio_c.toFixed(1)}°C
+          {resumen.temp_max_c !== null && resumen.temp_min_c !== null && (
+            <span className="text-brand-brown/50"> ({resumen.temp_min_c.toFixed(0)}°–{resumen.temp_max_c.toFixed(0)}°)</span>
+          )}
+        </span>
+      )}
+      {resumen.rafaga_max_kmh !== null && (
+        <span className="flex items-center gap-1">
+          <Wind className="w-3.5 h-3.5" /> ráfaga máx. {Math.round(resumen.rafaga_max_kmh)} km/h
+        </span>
+      )}
+      {sunHoursSemana !== null && (
+        <span className="flex items-center gap-1">
+          <Sun className="w-3.5 h-3.5 text-amber-500" /> {sunHoursSemana.toFixed(1)} h-sol/día
+        </span>
+      )}
+    </div>
+  );
 }

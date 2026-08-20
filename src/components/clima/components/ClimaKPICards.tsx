@@ -1,7 +1,12 @@
 import { useMemo } from 'react';
-import { Thermometer, CloudRain, Wind, Droplets, Sun, Zap } from 'lucide-react';
+import { Thermometer, CloudRain, Wind, Droplets, Sun, Zap, CloudOff } from 'lucide-react';
 import { LecturaClima } from '@/types/clima';
-import { calcularResumen24h } from '@/utils/calculosClima';
+import {
+  calcularResumen24h,
+  clasificarFrescuraLectura,
+  etiquetaEdadLectura,
+  minutosDesdeLectura,
+} from '@/utils/calculosClima';
 import { estimateSunHoursToday, getRadiationStatus } from '@/utils/calculosRadiacion';
 import { WindDirectionArrow } from './WindDirectionArrow';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -22,6 +27,14 @@ export function ClimaKPICards({ lecturaActual, todasLecturas, loading }: ClimaKP
   }, [todasLecturas]);
 
   const sunStatus = todaySunEstimate ? getRadiationStatus(todaySunEstimate.sunHoursSoFar) : null;
+
+  // Misma reja de frescura que la tarjeta del Tablero: `lecturaActual` es un
+  // `max by timestamp` sin noción de edad, así que sin esto la última lectura
+  // de anoche se pinta bajo el título "Condiciones Actuales" como si fuera de
+  // hace 5 minutos. Umbrales: UMBRAL_FRESCURA_LECTURA en calculosClima.ts.
+  const minutosLectura = minutosDesdeLectura(lecturaActual);
+  const frescura = clasificarFrescuraLectura(lecturaActual);
+  const mostrarAvisoFrescura = !loading && frescura !== 'fresca';
 
   const getUVDescriptor = (uv: number | null) => {
     if (uv === null) return '--';
@@ -76,7 +89,24 @@ export function ClimaKPICards({ lecturaActual, todasLecturas, loading }: ClimaKP
   );
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="space-y-3">
+      {mostrarAvisoFrescura && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <CloudOff className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
+          <span>
+            {minutosLectura === null
+              ? 'La estación no envía lecturas desde hace más de 24 h.'
+              : `Última lectura ${etiquetaEdadLectura(minutosLectura)}.`}{' '}
+            Los valores de abajo no son las condiciones actuales.
+          </span>
+        </div>
+      )}
+
+      <div
+        className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 ${
+          frescura === 'obsoleta' && !loading ? 'opacity-60' : ''
+        }`}
+      >
       {/* Temperatura */}
       <KPICard
         icon={<Thermometer className="w-6 h-6" />}
@@ -179,6 +209,7 @@ export function ClimaKPICards({ lecturaActual, todasLecturas, loading }: ClimaKP
         unit={`(${getUVDescriptor(lecturaActual?.uv_index ?? null)})`}
         color="from-purple-400 to-pink-500"
       />
+      </div>
     </div>
   );
 }

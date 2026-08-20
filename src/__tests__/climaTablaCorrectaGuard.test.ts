@@ -46,8 +46,26 @@ const LISTA_BLANCA: Record<string, string> = {
     'Backfill del reporte semanal: completa los días que el rollup aún no produjo. La serie del reporte sale de clima_resumen_diario (arreglo de 2026-04-16).',
   'supabase/functions/server/chat.tsx':
     'execClimateData: condiciones actuales y el día en curso. La serie histórica sale de clima_resumen_diario (arreglo de 2026-08-16).',
+  'components/dashboard/hooks/useSaludDatos.ts':
+    'Señal "Estación" de Salud de los datos: es un MAX(timestamp) que quiere justamente el instante más reciente, para decir si la estación está reportando AHORA. No lee ninguna serie histórica.',
   'types/database.ts': 'Tipos generados del esquema.',
 };
+
+/**
+ * Quita los comentarios antes de buscar el nombre de la tabla: desde que
+ * `clima_lecturas` tiene también una reja de frescura, varios archivos la
+ * NOMBRAN al explicar por qué no la consultan (p. ej. "el cron de la 036 poda
+ * clima_lecturas a 24 h"). Contar esas menciones como consultas convertía la
+ * guarda en un impuesto sobre documentar bien. Se descartan los comentarios de
+ * bloque (incluidos los de JSX) y las líneas que empiezan con `//` o `*`.
+ */
+function sinComentarios(contenido: string): string {
+  return contenido
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .filter((linea) => !/^\s*(\/\/|\*)/.test(linea))
+    .join('\n');
+}
 
 function archivosFuente(dir: string, acc: string[] = []): string[] {
   for (const entrada of readdirSync(dir)) {
@@ -61,7 +79,7 @@ function archivosFuente(dir: string, acc: string[] = []): string[] {
 
 describe('clima_lecturas solo se lee donde la ventana de 24 h es lo que se quiere', () => {
   const infractores = archivosFuente(SRC)
-    .filter((f) => readFileSync(f, 'utf8').includes('clima_lecturas'))
+    .filter((f) => sinComentarios(readFileSync(f, 'utf8')).includes('clima_lecturas'))
     .map((f) => relative(SRC, f).split('\\').join('/'))
     .filter((rel) => !(rel in LISTA_BLANCA));
 
@@ -71,7 +89,7 @@ describe('clima_lecturas solo se lee donde la ventana de 24 h es lo que se quier
 
   it('la lista blanca no tiene entradas muertas', () => {
     const todos = archivosFuente(SRC)
-      .filter((f) => readFileSync(f, 'utf8').includes('clima_lecturas'))
+      .filter((f) => sinComentarios(readFileSync(f, 'utf8')).includes('clima_lecturas'))
       .map((f) => relative(SRC, f).split('\\').join('/'));
     const muertas = Object.keys(LISTA_BLANCA).filter((k) => !todos.includes(k));
     expect(muertas).toEqual([]);
