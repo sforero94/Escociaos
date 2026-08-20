@@ -11,11 +11,20 @@
 // "Hoy en la finca" (`construirFranjaLluvia`, `calculosClima.ts`) -- nunca
 // se relee `lluvia_total_mm` a mano aquí, esa es exactamente la trampa que
 // `lluviaConfiableDeResumen()` existe para cerrar (CLAUDE.md, migración 068).
+//
+// La señal "Estación" es una consulta APARTE, contra `clima_lecturas`, y mide
+// otra cosa: si la estación está reportando ahora. La de "Clima" mide la
+// confiabilidad del contador de lluvia de los días que sí llegaron, así que
+// decía "ok" el 2026-08-20 con la estación muda desde las 21:05 de la noche
+// anterior (14 h de corte de luz en la finca). Ninguna de las dos reemplaza a
+// la otra. Ésta es la única lectura de `clima_lecturas` fuera del tablero en
+// vivo, y es legítima justamente porque quiere el instante más reciente y
+// nada más -- ver `climaTablaCorrectaGuard.test.ts`.
 
 import { useEffect, useState } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
 import { obtenerFechaHoy } from '@/utils/fechas';
-import { construirFranjaLluvia } from '@/utils/calculosClima';
+import { construirFranjaLluvia, minutosDesdeLectura } from '@/utils/calculosClima';
 import { construirSenalesSaludDatos, type SenalSaludDatos } from '@/utils/calculosSaludDatos';
 import type { QuincenaResuelta } from '@/utils/calculosDinero';
 import type { ResumenDiario } from '@/types/clima';
@@ -58,7 +67,7 @@ export function useSaludDatos(params: UseSaludDatosParams): { estado: EstadoSalu
       const supabaseSinTipos = supabase as any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
       try {
-        const [monitoreoRes, climaRes, chequeoRes, pesajeRes, quincenaRes] = await Promise.all([
+        const [monitoreoRes, climaRes, estacionRes, chequeoRes, pesajeRes, quincenaRes] = await Promise.all([
           hasAguacate
             ? supabase
                 .from('monitoreos')
@@ -72,6 +81,13 @@ export function useSaludDatos(params: UseSaludDatosParams): { estado: EstadoSalu
                 .select('fecha, lluvia_total_mm, lluvia_confianza')
                 .order('fecha', { ascending: false })
                 .limit(LIMITE_FETCH_CLIMA)
+            : Promise.resolve({ data: null, error: null }),
+          hasAguacate
+            ? supabaseSinTipos
+                .from('clima_lecturas')
+                .select('timestamp')
+                .order('timestamp', { ascending: false })
+                .limit(1)
             : Promise.resolve({ data: null, error: null }),
           hasHato
             ? supabaseSinTipos.from('hato_chequeos').select('fecha').order('fecha', { ascending: false }).limit(1)
@@ -102,6 +118,12 @@ export function useSaludDatos(params: UseSaludDatosParams): { estado: EstadoSalu
           climaConfiables = franja.filter((d) => d.estado !== 'sin_dato').length;
         }
 
+        // `null` cuando la tabla vino vacía: tras la poda de 24 h de la
+        // migración 036 eso es "la estación no reporta desde hace más de un
+        // día", que la señal muestra como "sin lecturas" -- nunca como 0 min.
+        const filaEstacion = estacionRes.data?.[0] as { timestamp: string } | undefined;
+        const minutosUltimaLectura = hasAguacate ? minutosDesdeLectura(filaEstacion ?? null) : null;
+
         const fechaUltimoChequeo: string | null =
           (chequeoRes.data?.[0] as { fecha: string } | undefined)?.fecha?.slice(0, 10) ?? null;
         const fechaUltimoPesaje: string | null =
@@ -126,6 +148,7 @@ export function useSaludDatos(params: UseSaludDatosParams): { estado: EstadoSalu
             ultimaQuincena,
             climaConfiables,
             climaTotal,
+            minutosUltimaLectura,
           }),
         );
         setEstado('listo');

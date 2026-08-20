@@ -12,12 +12,14 @@ import {
   diasDesde,
   clasificarPorCadencia,
   clasificarClima,
+  clasificarFrescuraEstacion,
   construirSenalesSaludDatos,
   UMBRAL_MONITOREO,
   UMBRAL_CHEQUEO,
   UMBRAL_PESAJE,
   UMBRAL_QUINCENA,
 } from '@/utils/calculosSaludDatos';
+import { UMBRAL_FRESCURA_LECTURA } from '@/utils/calculosClima';
 
 describe('diasDesde', () => {
   it('calcula días entre una fecha pasada y hoy', () => {
@@ -73,9 +75,10 @@ describe('construirSenalesSaludDatos', () => {
     ultimaQuincena: { anio: 2026, mes: 7, quincena: 2 as const },
     climaConfiables: 7,
     climaTotal: 10,
+    minutosUltimaLectura: 12,
   };
 
-  it('caso real completo: cinco señales con las edades exactas del plan', () => {
+  it('caso real completo: las señales con las edades exactas del plan', () => {
     const senales = construirSenalesSaludDatos(base);
     const porClave = Object.fromEntries(senales.map((s) => [s.clave, s]));
 
@@ -84,11 +87,19 @@ describe('construirSenalesSaludDatos', () => {
     expect(porClave.pesaje.detalle).toBe('4 d');
     expect(porClave.quincena.detalle).toBe('julio Q2');
     expect(porClave.clima.detalle).toBe('7 de 10 días confiables');
+    expect(porClave.estacion.detalle).toBe('hace 12 min');
   });
 
-  it('el orden es siempre: monitoreo, chequeo, pesaje, quincena, clima', () => {
+  it('el orden es siempre: monitoreo, chequeo, pesaje, quincena, clima, estación', () => {
     const senales = construirSenalesSaludDatos(base);
-    expect(senales.map((s) => s.clave)).toEqual(['monitoreo', 'chequeo', 'pesaje', 'quincena', 'clima']);
+    expect(senales.map((s) => s.clave)).toEqual([
+      'monitoreo',
+      'chequeo',
+      'pesaje',
+      'quincena',
+      'clima',
+      'estacion',
+    ]);
   });
 
   it('clasifica el nivel de cada señal con sus propios umbrales -- caso real, todo fresco salvo el clima', () => {
@@ -99,6 +110,7 @@ describe('construirSenalesSaludDatos', () => {
     expect(porClave.pesaje.nivel).toBe('verde'); // 4 <= 7
     expect(porClave.quincena.nivel).toBe('verde'); // fin de julio Q2 (31-jul) a 16-ago = 16 d <= 20
     expect(porClave.clima.nivel).toBe('ambar'); // 7 de 10 confiables
+    expect(porClave.estacion.nivel).toBe('verde'); // 12 min <= 30
   });
 
   it('chequeo pasado el umbral rojo (75 d, el mismo punto en que el plan lo escala a "Requiere tu decisión")', () => {
@@ -121,7 +133,7 @@ describe('construirSenalesSaludDatos', () => {
 
   it('sin módulo hato_lechero, no aparecen chequeo/pesaje/quincena', () => {
     const senales = construirSenalesSaludDatos({ ...base, hasHato: false });
-    expect(senales.map((s) => s.clave)).toEqual(['monitoreo', 'clima']);
+    expect(senales.map((s) => s.clave)).toEqual(['monitoreo', 'clima', 'estacion']);
   });
 
   it('sin ningún módulo, arreglo vacío', () => {
@@ -137,6 +149,7 @@ describe('construirSenalesSaludDatos', () => {
       ultimaQuincena: null,
       climaConfiables: null,
       climaTotal: null,
+      minutosUltimaLectura: null,
     });
     const porClave = Object.fromEntries(senales.map((s) => [s.clave, s]));
     expect(porClave.monitoreo).toMatchObject({ detalle: 'nunca', nivel: 'gris' });
@@ -144,5 +157,40 @@ describe('construirSenalesSaludDatos', () => {
     expect(porClave.pesaje).toMatchObject({ detalle: 'nunca', nivel: 'gris' });
     expect(porClave.quincena).toMatchObject({ detalle: 'nunca', nivel: 'gris' });
     expect(porClave.clima).toMatchObject({ nivel: 'gris' });
+    expect(porClave.estacion).toMatchObject({ detalle: 'sin lecturas', nivel: 'gris' });
+  });
+
+  // ------------------------------------------------------------------
+  // Señal "Estación" (frescura de clima_lecturas) -- corte de luz del
+  // 2026-08-19/20 en la finca: 14 h sin una sola lectura mientras la señal
+  // "Clima" (confiabilidad de lluvia) seguía diciendo "ok".
+  // ------------------------------------------------------------------
+
+  it('la estación muda no contagia a la señal de clima ni al revés: son dos señales distintas', () => {
+    const senales = construirSenalesSaludDatos({
+      ...base,
+      climaConfiables: 10,
+      climaTotal: 10,
+      minutosUltimaLectura: 14 * 60, // el corte real: 14 h
+    });
+    const porClave = Object.fromEntries(senales.map((s) => [s.clave, s]));
+    expect(porClave.clima.nivel).toBe('verde'); // los días que llegaron son confiables
+    expect(porClave.estacion.nivel).toBe('rojo'); // pero la estación está muda
+    expect(porClave.estacion.detalle).toBe('hace 14 h');
+  });
+});
+
+describe('clasificarFrescuraEstacion', () => {
+  it('usa los MISMOS umbrales que las tarjetas de clima (30 min / 3 h), no unos propios', () => {
+    expect(UMBRAL_FRESCURA_LECTURA).toEqual({ frescaMinutos: 30, demoradaMinutos: 180 });
+    expect(clasificarFrescuraEstacion(5)).toBe('verde');
+    expect(clasificarFrescuraEstacion(30)).toBe('verde');
+    expect(clasificarFrescuraEstacion(31)).toBe('ambar');
+    expect(clasificarFrescuraEstacion(180)).toBe('ambar');
+    expect(clasificarFrescuraEstacion(181)).toBe('rojo');
+  });
+
+  it('sin ninguna lectura, gris ("sin lecturas") -- nunca verde por omisión', () => {
+    expect(clasificarFrescuraEstacion(null)).toBe('gris');
   });
 });

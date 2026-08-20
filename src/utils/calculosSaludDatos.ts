@@ -14,6 +14,7 @@
 // dueño los ajuste sin desplegar, es candidato a Ola 3 (ver plan §6).
 
 import { diferenciaEnDias } from '@/utils/fechas';
+import { UMBRAL_FRESCURA_LECTURA, etiquetaEdadLectura } from '@/utils/calculosClima';
 import { etiquetaQuincena, type QuincenaResuelta } from '@/utils/calculosDinero';
 import { rangoQuincena } from '@/utils/calculosHato';
 
@@ -77,12 +78,28 @@ export function clasificarClima(confiables: number, total: number): NivelSaludDa
   return 'rojo';
 }
 
+// Frescura de la ESTACIÓN (`clima_lecturas`), que es otra cosa que la señal
+// "Clima" de arriba: esa mide la CONFIABILIDAD del contador de lluvia sobre
+// los días que sí llegaron (migración 068), y por eso decía "ok" el
+// 2026-08-20 con la estación muda desde las 21:05 de la noche anterior. Ésta
+// mide si la estación está reportando AHORA. Se quedan las dos, separadas.
+//
+// Los umbrales NO se redefinen acá: son los mismos `UMBRAL_FRESCURA_LECTURA`
+// que gobiernan la tarjeta del Tablero y la de `/clima`, para que la señal no
+// pueda decir "al día" mientras la tarjeta dice "sin dato reciente".
+export function clasificarFrescuraEstacion(minutos: number | null): NivelSaludDato {
+  if (minutos === null) return 'gris';
+  if (minutos <= UMBRAL_FRESCURA_LECTURA.frescaMinutos) return 'verde';
+  if (minutos <= UMBRAL_FRESCURA_LECTURA.demoradaMinutos) return 'ambar';
+  return 'rojo';
+}
+
 // ---------------------------------------------------------------------------
-// Ensamblado de las cinco señales, en el orden fijo del diseño
+// Ensamblado de las seis señales, en el orden fijo del diseño
 // ---------------------------------------------------------------------------
 
 export interface SenalSaludDatos {
-  clave: 'monitoreo' | 'chequeo' | 'pesaje' | 'quincena' | 'clima';
+  clave: 'monitoreo' | 'chequeo' | 'pesaje' | 'quincena' | 'clima' | 'estacion';
   etiqueta: string;
   /** "13 d" · "julio Q2" · "7 de 10 días confiables" · "nunca" */
   detalle: string;
@@ -104,13 +121,18 @@ export interface InputSaludDatos {
    *  de `0`, que sí sería "se consultó y no hay ninguna lectura". */
   climaConfiables: number | null;
   climaTotal: number | null;
+  /** Edad en minutos de la última fila de `clima_lecturas`. `null` = no se
+   *  consultó (sin módulo aguacate) o la tabla no tiene ninguna fila -- que
+   *  después de la poda de 24 h de la migración 036 significa "la estación
+   *  no reporta desde hace más de un día", nunca "todo bien". */
+  minutosUltimaLectura: number | null;
 }
 
 /**
  * Arma las señales visibles del bloque "Salud de los datos", ya filtradas
  * por módulo (plan §8: "filtra sus filas por módulo -- sólo las señales de
  * sus módulos") y en el orden fijo del diseño: monitoreo, chequeo, pesaje,
- * quincena, clima. Sin ningún módulo habilitado, arreglo vacío -- el
+ * quincena, clima, estación. Sin ningún módulo habilitado, arreglo vacío -- el
  * componente decide qué hacer con eso (colapsar la sección entera, mismo
  * criterio que el resto del tablero).
  */
@@ -165,6 +187,13 @@ export function construirSenalesSaludDatos(input: InputSaludDatos): SenalSaludDa
       etiqueta: 'Clima',
       detalle: total === 0 ? 'sin datos recientes' : `${confiables} de ${total} días confiables`,
       nivel: clasificarClima(confiables, total),
+    });
+
+    senales.push({
+      clave: 'estacion',
+      etiqueta: 'Estación',
+      detalle: etiquetaEdadLectura(input.minutosUltimaLectura),
+      nivel: clasificarFrescuraEstacion(input.minutosUltimaLectura),
     });
   }
 
