@@ -14,13 +14,18 @@ Hechos que aplican a mas de un agente. Mismas reglas de escritura que el resto
   `docs/plan_reportes_finanzas.md:193` lo midio contra esta misma base. El tope
   NO es legible por SQL: vive en el fichero de PostgREST, no en la BD.
   [corrida: 2026-08-03-lunes]
-- **Vercel MCP sigue inutilizable, 2a corrida consecutiva** — `list_teams` solo
-  devuelve `team_Ov5b46sLrIUWwVlkuCfdCgdG` (0 proyectos); `list_projects` contra
-  el scope real da 403. El proyecto real es `prj_r9z59zKKLqZo64RgecbEB8lXyYCd`
-  bajo `team_hQ3EH5CL5DQFmWLo3VceWeE6` (slug `santiago-foreros-projects-da8a20e8`),
-  dato obtenido del comentario de vercel[bot] en el PR #98. **Ya filado como P1
-  contra la operacion (§7); no re-diagnosticar, solo declarar bajo NO CORRIO.**
-  [corrida: 2026-08-03-lunes]
+- **Vercel se accede via Composio, NO por el conector Vercel directo** (Santiago,
+  2026-08-20). Historia: el conector directo llevaba 5 corridas roto (`list_teams`
+  devolvia `team_Ov5b46sLrIUWwVlkuCfdCgdG` con 0 proyectos; `list_projects` contra
+  el scope real daba 403). Proyecto real: `prj_r9z59zKKLqZo64RgecbEB8lXyYCd` bajo
+  `team_hQ3EH5CL5DQFmWLo3VceWeE6` (slug `santiago-foreros-projects-da8a20e8`),
+  dato obtenido del comentario de vercel[bot] en el PR #98. **`ListConnectors`
+  confirma Composio `connected: true` pero `enabledInChat: false` para el bot de
+  ChatGPT; hay que habilitarlo por chat.** En sesiones donde Composio no este
+  encendido para el chat, seguir usando la sonda de contenido
+  (`curl https://escociaos.vercel.app/` + grep de chunks). **Hallazgo #5 se puede
+  cerrar (el conector Vercel directo no vuelve; queda como historia).**
+  [corrida: 2026-08-03-lunes, actualizado 2026-08-20-jueves por Santiago]
 - `get_advisors` (security ~111k chars, performance ~614k) y `get_edge_function`
   (~999k chars en v197) revientan el limite de tokens. Guardar a archivo con
   python y leer por partes. El JSON de `get_edge_function` trae
@@ -143,6 +148,14 @@ desempate importaba mas que cualquiera de los dos hallazgos. [corrida: 2026-08-1
   solo permite `escociaos-po/memory/**` y `escociaos-po/reports/**`. Su contenido
   se absorbio en el reporte de la corrida. Si se quiere un CHANGELOG.md propio,
   necesita su propio PR. [corrida: 2026-08-03-lunes]
+
+## Reglas de negocio confirmadas por Santiago
+- **El divisor del jornal es 22** (Santiago, 2026-08-20). Cierra la ambiguedad
+  del hallazgo #3 (la app dividia por ~23,8, Esco por 22). La formula legal
+  colombiana no aplica aca — es decision del dueno. **Fix pendiente: alinear
+  `calculosCostoKg.ts` (y cualquier consumidor de app) al divisor 22 y anadir
+  guarda estatica que impida reintroducir otro divisor.** No es refactor;
+  cambia la cifra de $ por jornal / $ por kg. [corrida: 2026-08-20-jueves]
 
 ## Archivo
 (vacio)
