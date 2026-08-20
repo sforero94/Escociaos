@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
+import { fetchAll } from '@/utils/supabase/fetchAll';
 import { calcularRangoFechasPorPeriodo } from '@/utils/fechas';
 import type {
   FiltrosFinanzas,
@@ -44,6 +45,22 @@ function resolveFechas(filtros: FiltrosFinanzas) {
   return { fecha_desde: filtros.fecha_desde || '', fecha_hasta: filtros.fecha_hasta || '' };
 }
 
+/**
+ * Orden total y determinista para paginar.
+ *
+ * `fetchAll` pagina por `.range(desde, hasta)`, o sea por OFFSET. Un offset
+ * sobre un resultado sin orden total no es reproducible entre páginas: dos
+ * filas con la misma `fecha` pueden salir en distinto orden en la página 1 y
+ * en la 2, y entonces una fila se duplica y otra se pierde. Por eso todas las
+ * consultas paginadas de este hook ordenan por `fecha` y desempatan por `id`,
+ * que es la PK.
+ */
+function ordenarDeterminista(query: any, ascendente = true) {
+  return query
+    .order('fecha', { ascending: ascendente })
+    .order('id', { ascending: ascendente });
+}
+
 export function useDashboardData() {
   const [loading, setLoading] = useState(false);
   const supabase = getSupabase();
@@ -70,18 +87,25 @@ export function useDashboardData() {
     return query;
   };
 
+  // Un año completo de gastos ya pasa del tope: 1.356 filas en 2024 y 1.156
+  // en 2025 (producción, 2026-08-20). Sin paginar, `Total 2024` mostraba un
+  // -25,0% y `Total 2025` un -11,7% frente a la cifra real.
   async function sumGastos(desde: string, hasta: string, negocioId?: string) {
-    let q: any = supabase.from('fin_gastos').select('valor').eq('estado', 'Confirmado').gte('fecha', desde).lte('fecha', hasta);
-    if (negocioId) q = q.eq('negocio_id', negocioId);
-    const { data } = await q;
-    return (data as any[])?.reduce((s: number, r: any) => s + (r.valor || 0), 0) || 0;
+    const { filas } = await fetchAll<{ valor: number | null }>((rangoDesde, rangoHasta) => {
+      let q: any = supabase.from('fin_gastos').select('id, fecha, valor').eq('estado', 'Confirmado').gte('fecha', desde).lte('fecha', hasta);
+      if (negocioId) q = q.eq('negocio_id', negocioId);
+      return ordenarDeterminista(q).range(rangoDesde, rangoHasta);
+    });
+    return filas.reduce((s: number, r) => s + (r.valor || 0), 0);
   }
 
   async function sumIngresos(desde: string, hasta: string, negocioId?: string) {
-    let q: any = supabase.from('fin_ingresos').select('valor').gte('fecha', desde).lte('fecha', hasta);
-    if (negocioId) q = q.eq('negocio_id', negocioId);
-    const { data } = await q;
-    return (data as any[])?.reduce((s: number, r: any) => s + (r.valor || 0), 0) || 0;
+    const { filas } = await fetchAll<{ valor: number | null }>((rangoDesde, rangoHasta) => {
+      let q: any = supabase.from('fin_ingresos').select('id, fecha, valor').gte('fecha', desde).lte('fecha', hasta);
+      if (negocioId) q = q.eq('negocio_id', negocioId);
+      return ordenarDeterminista(q).range(rangoDesde, rangoHasta);
+    });
+    return filas.reduce((s: number, r) => s + (r.valor || 0), 0);
   }
 
   function variacion(actual: number, anterior: number) {
@@ -140,14 +164,17 @@ export function useDashboardData() {
             sumGastos(fullPrev2.desde, fullPrev2.hasta, neg.id),
           ]);
 
-          // Get categories and conceptos for this negocio
-          const { data: catData } = await (supabase
-            .from('fin_gastos')
-            .select('categoria_id, concepto_id, valor, fecha, fin_categorias_gastos(nombre), fin_conceptos_gastos(nombre)')
-            .eq('estado', 'Confirmado')
-            .eq('negocio_id', neg.id)
-            .gte('fecha', fullPrev2.desde)
-            .lte('fecha', ytdCurrent.hasta) as any);
+          // Get categories and conceptos for this negocio.
+          // Tres años por negocio: el mayor va en 984 filas (producción,
+          // 2026-08-20), a 16 del tope. Latente, no teórico.
+          const { filas: catData } = await fetchAll<any>((rangoDesde, rangoHasta) =>
+            (ordenarDeterminista(supabase
+              .from('fin_gastos')
+              .select('id, categoria_id, concepto_id, valor, fecha, fin_categorias_gastos(nombre), fin_conceptos_gastos(nombre)')
+              .eq('estado', 'Confirmado')
+              .eq('negocio_id', neg.id)
+              .gte('fecha', fullPrev2.desde)
+              .lte('fecha', ytdCurrent.hasta)).range(rangoDesde, rangoHasta) as any));
 
           const catMap = new Map<string, {
             nombre: string;
@@ -155,7 +182,7 @@ export function useDashboardData() {
             conceptos: Map<string, { nombre: string; ytd_actual: number; ytd_anterior: number; total_anterior: number; total_n2: number }>;
           }>();
 
-          catData?.forEach((g: any) => {
+          catData.forEach((g: any) => {
             const catId = g.categoria_id || 'sin_cat';
             const catNombre = g.fin_categorias_gastos?.nombre || 'Sin categoria';
             if (!catMap.has(catId)) {
@@ -221,19 +248,25 @@ export function useDashboardData() {
     setLoading(true);
     try {
       const year = new Date().getFullYear();
-      const { data: gastos } = await (supabase
-        .from('fin_gastos')
-        .select('fecha, valor, negocio_id, fin_negocios(nombre)')
-        .eq('estado', 'Confirmado')
-        .gte('fecha', `${year - 1}-01-01`)
-        .lte('fecha', `${year}-12-31`) as any);
+      // La gráfica del tablero por defecto. Dos años de gastos son 1.760
+      // filas (producción, 2026-08-20): PostgREST devolvía las primeras 1.000
+      // y se perdían $1.436M de $3.264M (44,0%). Como no había orden, el
+      // corte lo decidía el heap y se repartía por todos los trimestres sin
+      // dejar hueco visible.
+      const { filas: gastos } = await fetchAll<any>((rangoDesde, rangoHasta) =>
+        (ordenarDeterminista(supabase
+          .from('fin_gastos')
+          .select('id, fecha, valor, negocio_id, fin_negocios(nombre)')
+          .eq('estado', 'Confirmado')
+          .gte('fecha', `${year - 1}-01-01`)
+          .lte('fecha', `${year}-12-31`)).range(rangoDesde, rangoHasta) as any));
 
-      if (!gastos || gastos.length === 0) return { data: [], negocios: [] };
+      if (gastos.length === 0) return { data: [], negocios: [] };
 
       const negocioNames = new Set<string>();
       const quarterMap = new Map<string, Record<string, number>>();
 
-      (gastos as any[]).forEach((g: any) => {
+      gastos.forEach((g: any) => {
         const qLabel = getQuarterLabel(g.fecha);
         const negNombre = g.fin_negocios?.nombre || 'Otro';
         negocioNames.add(negNombre);
@@ -257,15 +290,16 @@ export function useDashboardData() {
     setLoading(true);
     try {
       const { fecha_desde, fecha_hasta } = resolveFechas(_filtros);
-      let q: any = supabase
-        .from('fin_gastos')
-        .select('valor, fin_categorias_gastos(nombre), fin_negocios(nombre)')
-        .eq('estado', 'Confirmado');
-      if (fecha_desde) q = q.gte('fecha', fecha_desde);
-      if (fecha_hasta) q = q.lte('fecha', fecha_hasta);
-
-      const { data: gastos } = await q;
-      if (!gastos || gastos.length === 0) return { data: [], negocios: [] };
+      const { filas: gastos } = await fetchAll<any>((rangoDesde, rangoHasta) => {
+        let q: any = supabase
+          .from('fin_gastos')
+          .select('id, fecha, valor, fin_categorias_gastos(nombre), fin_negocios(nombre)')
+          .eq('estado', 'Confirmado');
+        if (fecha_desde) q = q.gte('fecha', fecha_desde);
+        if (fecha_hasta) q = q.lte('fecha', fecha_hasta);
+        return ordenarDeterminista(q).range(rangoDesde, rangoHasta);
+      });
+      if (gastos.length === 0) return { data: [], negocios: [] };
 
       const negocioNames = new Set<string>();
       const catMap = new Map<string, Record<string, number>>();
@@ -341,17 +375,16 @@ export function useDashboardData() {
     setLoading(true);
     try {
       const year = new Date().getFullYear();
-      const { data: ingresos } = await (supabase
-        .from('fin_ingresos')
-        .select('fecha, valor')
-        .eq('negocio_id', negocioId)
-        .gte('fecha', `${year - 1}-01-01`)
-        .lte('fecha', `${year}-12-31`) as any);
-
-      if (!ingresos) return [];
+      const { filas: ingresos } = await fetchAll<any>((rangoDesde, rangoHasta) =>
+        (ordenarDeterminista(supabase
+          .from('fin_ingresos')
+          .select('id, fecha, valor')
+          .eq('negocio_id', negocioId)
+          .gte('fecha', `${year - 1}-01-01`)
+          .lte('fecha', `${year}-12-31`)).range(rangoDesde, rangoHasta) as any));
 
       const qMap = new Map<string, number>();
-      (ingresos as any[]).forEach((i: any) => {
+      ingresos.forEach((i: any) => {
         const q = getQuarterLabel(i.fecha);
         qMap.set(q, (qMap.get(q) || 0) + (i.valor || 0));
       });
@@ -369,20 +402,20 @@ export function useDashboardData() {
     try {
       const year = new Date().getFullYear();
       const regionId = typeof _filtros.region_id === 'string' ? _filtros.region_id : undefined;
-      let q: any = supabase
-        .from('fin_gastos')
-        .select('fecha, valor')
-        .eq('estado', 'Confirmado')
-        .eq('negocio_id', negocioId)
-        .gte('fecha', `${year - 1}-01-01`)
-        .lte('fecha', `${year}-12-31`);
-      if (regionId) q = q.eq('region_id', regionId);
-      const { data: gastos } = await q;
-
-      if (!gastos) return [];
+      const { filas: gastos } = await fetchAll<any>((rangoDesde, rangoHasta) => {
+        let q: any = supabase
+          .from('fin_gastos')
+          .select('id, fecha, valor')
+          .eq('estado', 'Confirmado')
+          .eq('negocio_id', negocioId)
+          .gte('fecha', `${year - 1}-01-01`)
+          .lte('fecha', `${year}-12-31`);
+        if (regionId) q = q.eq('region_id', regionId);
+        return ordenarDeterminista(q).range(rangoDesde, rangoHasta);
+      });
 
       const qMap = new Map<string, number>();
-      (gastos as any[]).forEach((g: any) => {
+      gastos.forEach((g: any) => {
         const q = getQuarterLabel(g.fecha);
         qMap.set(q, (qMap.get(q) || 0) + (g.valor || 0));
       });
@@ -399,16 +432,16 @@ export function useDashboardData() {
     setLoading(true);
     try {
       const { fecha_desde, fecha_hasta } = resolveFechas(_filtros);
-      let q: any = supabase
-        .from('fin_ingresos')
-        .select('fecha, nombre, valor, cantidad, precio_unitario, cosecha, alianza, cliente, finca, fin_categorias_ingresos(nombre), fin_compradores(nombre)')
-        .eq('negocio_id', negocioId)
-        .order('fecha', { ascending: false });
-      if (fecha_desde) q = q.gte('fecha', fecha_desde);
-      if (fecha_hasta) q = q.lte('fecha', fecha_hasta);
-
-      const { data } = await q;
-      return (data || []).map((d: any) => ({
+      const { filas: data } = await fetchAll<any>((rangoDesde, rangoHasta) => {
+        let q: any = supabase
+          .from('fin_ingresos')
+          .select('id, fecha, nombre, valor, cantidad, precio_unitario, cosecha, alianza, cliente, finca, fin_categorias_ingresos(nombre), fin_compradores(nombre)')
+          .eq('negocio_id', negocioId);
+        if (fecha_desde) q = q.gte('fecha', fecha_desde);
+        if (fecha_hasta) q = q.lte('fecha', fecha_hasta);
+        return ordenarDeterminista(q, false).range(rangoDesde, rangoHasta);
+      });
+      return data.map((d: any) => ({
         fecha: d.fecha,
         tipo_ingreso: d.fin_categorias_ingresos?.nombre || d.nombre,
         cantidad: d.cantidad,
@@ -433,15 +466,16 @@ export function useDashboardData() {
     try {
       const year = new Date().getFullYear();
       const ytd = getYTDRange(year);
-      const { data } = await (supabase
-        .from('fin_ingresos')
-        .select('valor, cantidad, fin_categorias_ingresos(nombre)')
-        .eq('negocio_id', negocioId)
-        .not('cantidad', 'is', null)
-        .gte('fecha', ytd.desde)
-        .lte('fecha', ytd.hasta) as any);
+      const { filas: data } = await fetchAll<any>((rangoDesde, rangoHasta) =>
+        (ordenarDeterminista(supabase
+          .from('fin_ingresos')
+          .select('id, fecha, valor, cantidad, fin_categorias_ingresos(nombre)')
+          .eq('negocio_id', negocioId)
+          .not('cantidad', 'is', null)
+          .gte('fecha', ytd.desde)
+          .lte('fecha', ytd.hasta)).range(rangoDesde, rangoHasta) as any));
 
-      const rows = ((data || []) as any[]).filter((r: any) =>
+      const rows = data.filter((r: any) =>
         !categoriaFiltro ||
         (r.fin_categorias_ingresos?.nombre || '').toLowerCase().includes(categoriaFiltro.toLowerCase())
       );
@@ -461,18 +495,18 @@ export function useDashboardData() {
     try {
       const { fecha_desde, fecha_hasta } = resolveFechas(_filtros);
       const regionId = typeof _filtros.region_id === 'string' ? _filtros.region_id : undefined;
-      let q: any = supabase
-        .from('fin_gastos')
-        .select('fecha, nombre, valor, fin_categorias_gastos(nombre), fin_conceptos_gastos(nombre)')
-        .eq('estado', 'Confirmado')
-        .eq('negocio_id', negocioId)
-        .order('fecha', { ascending: false });
-      if (regionId) q = q.eq('region_id', regionId);
-      if (fecha_desde) q = q.gte('fecha', fecha_desde);
-      if (fecha_hasta) q = q.lte('fecha', fecha_hasta);
-
-      const { data } = await q;
-      return (data || []).map((d: any) => ({
+      const { filas: data } = await fetchAll<any>((rangoDesde, rangoHasta) => {
+        let q: any = supabase
+          .from('fin_gastos')
+          .select('id, fecha, nombre, valor, fin_categorias_gastos(nombre), fin_conceptos_gastos(nombre)')
+          .eq('estado', 'Confirmado')
+          .eq('negocio_id', negocioId);
+        if (regionId) q = q.eq('region_id', regionId);
+        if (fecha_desde) q = q.gte('fecha', fecha_desde);
+        if (fecha_hasta) q = q.lte('fecha', fecha_hasta);
+        return ordenarDeterminista(q, false).range(rangoDesde, rangoHasta);
+      });
+      return data.map((d: any) => ({
         fecha: d.fecha,
         categoria: d.fin_categorias_gastos?.nombre || '',
         concepto: d.fin_conceptos_gastos?.nombre || d.nombre,
@@ -487,18 +521,19 @@ export function useDashboardData() {
     setLoading(true);
     try {
       const { fecha_desde, fecha_hasta } = resolveFechas(_filtros);
-      let q: any = supabase
-        .from('fin_ingresos')
-        .select('valor, fin_categorias_ingresos(nombre)')
-        .eq('negocio_id', negocioId);
-      if (fecha_desde) q = q.gte('fecha', fecha_desde);
-      if (fecha_hasta) q = q.lte('fecha', fecha_hasta);
-
-      const { data } = await q;
-      if (!data || data.length === 0) return [];
+      const { filas: data } = await fetchAll<any>((rangoDesde, rangoHasta) => {
+        let q: any = supabase
+          .from('fin_ingresos')
+          .select('id, fecha, valor, fin_categorias_ingresos(nombre)')
+          .eq('negocio_id', negocioId);
+        if (fecha_desde) q = q.gte('fecha', fecha_desde);
+        if (fecha_hasta) q = q.lte('fecha', fecha_hasta);
+        return ordenarDeterminista(q).range(rangoDesde, rangoHasta);
+      });
+      if (data.length === 0) return [];
 
       const catMap = new Map<string, number>();
-      (data as any[]).forEach((d: any) => {
+      data.forEach((d: any) => {
         const name = d.fin_categorias_ingresos?.nombre || 'Sin categoria';
         catMap.set(name, (catMap.get(name) || 0) + (d.valor || 0));
       });
@@ -517,20 +552,21 @@ export function useDashboardData() {
     try {
       const { fecha_desde, fecha_hasta } = resolveFechas(_filtros);
       const regionId = typeof _filtros.region_id === 'string' ? _filtros.region_id : undefined;
-      let q: any = supabase
-        .from('fin_gastos')
-        .select('valor, fin_categorias_gastos(nombre)')
-        .eq('estado', 'Confirmado')
-        .eq('negocio_id', negocioId);
-      if (regionId) q = q.eq('region_id', regionId);
-      if (fecha_desde) q = q.gte('fecha', fecha_desde);
-      if (fecha_hasta) q = q.lte('fecha', fecha_hasta);
-
-      const { data } = await q;
-      if (!data || data.length === 0) return [];
+      const { filas: data } = await fetchAll<any>((rangoDesde, rangoHasta) => {
+        let q: any = supabase
+          .from('fin_gastos')
+          .select('id, fecha, valor, fin_categorias_gastos(nombre)')
+          .eq('estado', 'Confirmado')
+          .eq('negocio_id', negocioId);
+        if (regionId) q = q.eq('region_id', regionId);
+        if (fecha_desde) q = q.gte('fecha', fecha_desde);
+        if (fecha_hasta) q = q.lte('fecha', fecha_hasta);
+        return ordenarDeterminista(q).range(rangoDesde, rangoHasta);
+      });
+      if (data.length === 0) return [];
 
       const catMap = new Map<string, number>();
-      (data as any[]).forEach((d: any) => {
+      data.forEach((d: any) => {
         const name = d.fin_categorias_gastos?.nombre || 'Sin categoria';
         catMap.set(name, (catMap.get(name) || 0) + (d.valor || 0));
       });
