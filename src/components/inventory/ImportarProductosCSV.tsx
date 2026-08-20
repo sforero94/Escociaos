@@ -3,7 +3,8 @@ import { Upload, Download, AlertCircle, CheckCircle2, XCircle, FileText } from '
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Alert, AlertDescription } from '../ui/alert';
-import { projectId, publicAnonKey } from '../../utils/supabase/info';
+import { projectId } from '../../utils/supabase/info';
+import { getSupabase } from '../../utils/supabase/client';
 
 interface ImportResult {
   success: boolean;
@@ -207,13 +208,21 @@ export function ImportarProductosCSV() {
         reader.readAsText(archivo, 'UTF-8');
       });
 
+      // El endpoint exige el JWT de sesion del usuario (rol Administrador o
+      // Gerencia), no el anon key -- mismo patron que UsuariosConfig.tsx y
+      // chatService.ts.
+      const { data: { session } } = await getSupabase().auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Sesion no valida -- vuelve a iniciar sesion e intenta de nuevo.');
+      }
+
       const response = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-1ccce916/inventario/importar-productos`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${publicAnonKey}`
+            Authorization: `Bearer ${session.access_token}`
           },
           body: JSON.stringify({ csvData: texto })
         }

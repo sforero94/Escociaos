@@ -171,15 +171,24 @@ export function InventoryList({ onNavigate }: InventoryListProps) {
     e.stopPropagation();
     
     try {
-      const { projectId, publicAnonKey } = await import('../../utils/supabase/info.tsx');
-      
+      const { projectId } = await import('../../utils/supabase/info.tsx');
+
+      // El endpoint exige el JWT de sesion del usuario (rol Administrador o
+      // Gerencia), no el anon key -- mismo patron que UsuariosConfig.tsx y
+      // chatService.ts.
+      const { data: { session } } = await getSupabase().auth.getSession();
+      if (!session?.access_token) {
+        toast.error('Sesion no valida -- vuelve a iniciar sesion e intenta de nuevo.');
+        return;
+      }
+
       const response = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-1ccce916/inventario/toggle-producto-activo`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${publicAnonKey}`,
+            'Authorization': `Bearer ${session.access_token}`,
           },
           body: JSON.stringify({
             productoId: productId,

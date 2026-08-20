@@ -1,4 +1,5 @@
 import { Context } from 'https://deno.land/x/hono@v4.0.0/mod.ts';
+import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { parseOpenWeatherForecast } from './external-tools.ts';
 
 // ============================================================================
@@ -157,11 +158,92 @@ function getSupabaseConfig() {
 }
 
 // ============================================================================
+// Auth de los dos endpoints de ESCRITURA de clima (`/clima/sync` y
+// `/clima/backfill`) -- DOBLE PUERTA, calcada de `acciones-tick.ts`:
+//
+//   (a) secreto compartido `x-clima-sync-secret` -- el llamador normal de
+//       `/clima/sync` es el pg_cron `clima-sync-wu` (migración 030, cada 5
+//       minutos), no una sesión humana. El secreto se resuelve en tiempo de
+//       disparo desde Supabase Vault (migración 103) y se compara contra
+//       `Deno.env.get('CLIMA_SYNC_SECRET')`. Si el secreto NO está
+//       configurado en este entorno y tampoco llega un JWT, el endpoint
+//       responde 503 y NO HACE NADA -- nunca corre "abierto", mismo criterio
+//       que `HATO_ALERTAS_TICK_SECRET` y `ACCIONES_TICK_SECRET`.
+//
+//   (b) JWT + rol Gerencia -- disparo manual (sobre todo `/clima/backfill`,
+//       que no tiene cron y se corre a mano cuando hay que rellenar
+//       historia). Gerencia y no {Administrador, Gerencia} a propósito:
+//       `clima_lecturas`/`clima_resumen_diario` NO tienen ninguna política
+//       RLS de escritura -- sólo el service role las escribe -- así que no
+//       hay un rol de navegador que "ya podía" escribirlas; es una acción de
+//       mantenimiento. Mismo criterio que el disparo manual de
+//       `acciones-tick.ts`.
+//
+// Antes de esta puerta ambas rutas corrían con el service role y sin leer
+// ningún encabezado: cualquiera en internet que supiera la URL podía agotar
+// la cuota de Ecowitt con `/clima/backfill` (y con eso tumbar el cron de 5
+// minutos). La edge function corre con verify_jwt=false y no se puede
+// activar, porque el webhook de Telegram y los pg_cron dependen de que siga
+// en false.
+// ============================================================================
+
+const ROLES_DISPARO_MANUAL = new Set(['Gerencia']);
+
+async function verificarAccesoClima(c: Context): Promise<{ disparo: 'cron' | 'manual' } | Response> {
+  const secretoConfigurado = Deno.env.get('CLIMA_SYNC_SECRET');
+  const secretoRecibido = c.req.header('x-clima-sync-secret');
+  if (secretoConfigurado && secretoRecibido && secretoRecibido === secretoConfigurado) {
+    return { disparo: 'cron' };
+  }
+
+  // No coincidió el secreto (o no vino) -- se intenta la segunda puerta,
+  // JWT + Gerencia, antes de rechazar.
+  const authHeader = c.req.header('Authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const sb = getSupabaseConfig();
+    if (!sb) {
+      return c.json({ error: 'Missing Supabase config' }, 500);
+    }
+    const supabase = createClient(sb.supabaseUrl, sb.serviceKey);
+    const token = authHeader.slice(7);
+
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user) {
+      return c.json({ error: 'Token inválido o expirado.' }, 401);
+    }
+
+    const { data: usuario, error: usuarioError } = await supabase
+      .from('usuarios')
+      .select('rol')
+      .eq('id', userData.user.id)
+      .maybeSingle();
+    if (usuarioError) {
+      return c.json({ error: `No se pudo verificar el rol del usuario: ${usuarioError.message}` }, 500);
+    }
+    if (!usuario || !ROLES_DISPARO_MANUAL.has(usuario.rol as string)) {
+      return c.json({ error: 'El disparo manual de clima está restringido a Gerencia.' }, 403);
+    }
+    return { disparo: 'manual' };
+  }
+
+  if (!secretoConfigurado) {
+    return c.json({
+      error: 'CLIMA_SYNC_SECRET no está configurado en este entorno -- los endpoints de escritura de clima quedan deshabilitados hasta que se configure el secreto (ver migración 103), y no llegó ningún JWT de Gerencia como alternativa.',
+    }, 503);
+  }
+
+  return c.json({ error: 'No autorizado -- falta el encabezado x-clima-sync-secret o un JWT de Gerencia.' }, 401);
+}
+
+// ============================================================================
 // Handler: Ecowitt real-time sync (called by pg_cron every 5 min)
 // ============================================================================
 
 export async function handleClimaSync(c: Context): Promise<Response> {
   const log = '[clima-sync]';
+
+  const acceso = await verificarAccesoClima(c);
+  if (acceso instanceof Response) return acceso;
 
   try {
     const creds = getEcowittCredentials();
@@ -252,6 +334,10 @@ function formatEcowittDate(d: Date): string {
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
+
+/** Tope de días por llamada a `/clima/backfill` -- ver el comentario en el
+ *  handler. Constante nombrada, no un número mágico en la validación. */
+const MAX_DIAS_BACKFILL = 90;
 
 function parseDateParam(s: string): Date | null {
   if (!/^\d{8}$/.test(s)) return null;
@@ -386,6 +472,9 @@ function aggregateReadingsToDaily(
 export async function handleClimaBackfill(c: Context): Promise<Response> {
   const log = '[clima-backfill]';
 
+  const acceso = await verificarAccesoClima(c);
+  if (acceso instanceof Response) return acceso;
+
   try {
     const creds = getEcowittCredentials();
     if (!creds) {
@@ -413,6 +502,18 @@ export async function handleClimaBackfill(c: Context): Promise<Response> {
 
     if (fromDate > toDate) {
       return c.json({ error: 'from date must be before to date' }, 400);
+    }
+
+    // Tope de rango: `parseDateParam` sólo valida el FORMATO, así que un
+    // `from=19700101` pedía ~20.000 días a Ecowitt (una llamada HTTP por
+    // día) y agotaba la cuota de la estación, con lo que el cron de 5
+    // minutos se queda sin datos. El tope es una cota de daño, no una regla
+    // de negocio: 90 días cubre de sobra el uso real (el default son 30).
+    const diasSolicitados = Math.floor((toDate.getTime() - fromDate.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+    if (diasSolicitados > MAX_DIAS_BACKFILL) {
+      return c.json({
+        error: `Rango demasiado amplio: ${diasSolicitados} días. El máximo por llamada es ${MAX_DIAS_BACKFILL} (una llamada a Ecowitt por día). Corre el backfill por tramos.`,
+      }, 400);
     }
 
     console.info(`${log} Backfilling ${formatDateParam(fromDate)} → ${formatDateParam(toDate)} for station ${creds.mac}`);
