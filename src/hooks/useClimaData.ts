@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
+import { fetchAll } from '@/utils/supabase/fetchAll';
 import type { LecturaClima, ResumenDiario, PeriodoResumen, LecturaClimaAgregada, SerieAnual } from '@/types/clima';
 import {
   lecturaActual as getLecturaActual,
@@ -64,31 +65,37 @@ export function useClimaData(): UseClimaDataReturn {
 
       const supabase = getSupabase();
 
-      // Fetch both tables in parallel
+      // Fetch both tables in parallel.
+      //
+      // `clima_resumen_diario` tiene UNA FILA POR DÍA desde 2020-07-01 y hoy
+      // ya pasa de 1.900: por encima del tope de 1.000 filas que PostgREST
+      // aplica en silencio. Sin paginar, y ordenando `fecha` ascendente, el
+      // navegador recibía los 1.000 días MÁS VIEJOS (2020-07-01 → 2023-07-11)
+      // y perdía los 910 más recientes — es decir, todo lo que las tarjetas
+      // de período y los históricos necesitan de verdad. Por eso va por
+      // `fetchAll`, igual que las consultas de reportes.
       const [liveRes, dailyRes] = await Promise.all([
         // Live readings: all rows in clima_lecturas (rolling 24h window after migration)
         (supabase
           .from('clima_lecturas' as any)
           .select('*')
           .order('timestamp', { ascending: true }) as any),
-        // Daily summaries: all rows (one per day, stays small forever)
-        (supabase
-          .from('clima_resumen_diario' as any)
-          .select('*')
-          .order('fecha', { ascending: true }) as any),
+        fetchAll<ResumenDiario>((desde, hasta) =>
+          (supabase
+            .from('clima_resumen_diario' as any)
+            .select('*')
+            .order('fecha', { ascending: true })
+            .range(desde, hasta) as any),
+        ),
       ]);
 
       if (liveRes.error) {
         setError(liveRes.error.message);
         return;
       }
-      if (dailyRes.error) {
-        setError(dailyRes.error.message);
-        return;
-      }
 
       setLiveLecturas((liveRes.data as LecturaClima[]) ?? []);
-      setResumenesDiarios((dailyRes.data as ResumenDiario[]) ?? []);
+      setResumenesDiarios(dailyRes.filas);
       setUltimaActualizacion(new Date());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error desconocido');
