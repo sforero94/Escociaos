@@ -93,3 +93,53 @@ prompt del agente en cada corrida.
 
 ## Archivo
 (vacio)
+
+
+## Estados aceptados (corrida 2026-08-20-jueves)
+- **Migraciones 094, 095, 096, 097, 098, 099, 100, 101 y 102 estan APLICADAS a produccion**
+  (verificado contra `pg_proc`/`pg_class`/`cron.job`, no contra `list_migrations`). La unica que
+  sigue pendiente es la **093**. La nota "No aplicada aun" de 097/100 en el root `CLAUDE.md` es
+  falsa. [corrida: 2026-08-20-jueves]
+  **CORRECCION 2026-08-20 (el orquestador): 093 TAMBIEN esta aplicada** — verificado con
+  `SELECT count(*) FILTER (WHERE qual ~ 'es_usuario_gerencia\(\)' AND qual !~ '\(\s*SELECT\s+es_usuario_gerencia') FROM pg_policies` = 0 desnudas, 82 envueltas. Bug Triage
+  se equivoco en esta corrida; los otros tres agentes lo cotejaron bien.
+- **El inventario de ganado cierra exacto**: `Σ (novillos_delta+toros_delta)` agrupado por
+  `COALESCE(potrero_destino_id, potrero_origen_id)` contra `gan_inventario` da **0 potreros con
+  diferencia** (53 movimientos, 34 potreros, 0 filas con ambos lados poblados, 0 pendientes).
+  **No re-auditar esta reconciliacion.** [corrida: 2026-08-20-jueves]
+- **Los dos arboles de edge function siguen sincronizados tras 39 commits**: con `tail -n +2` +
+  `diff -w`, **0 archivos** difieren; la unica asimetria sigue siendo `index.tsx`/`index.ts`. No
+  reportarlo. [corrida: 2026-08-20-jueves]
+- **El motor de acciones funciona y su anti-invento rechaza de verdad**: corridas diarias
+  `ok`/`parcial`, 0 errores. `NUMERAL_EN_LETRA` sobre `"la primera en …"` **no es un falso
+  positivo**: los ordinales estan en `NUMERALES_ES` a proposito (`accionesValidador.ts:138-140`)
+  porque son afirmaciones factuales que el modelo puede errar. **No filarlo como bug.**
+  [corrida: 2026-08-20-jueves]
+- **Las conversaciones nuevas de Telegram del hato (#117) SI convierten a Bogota** —
+  `eventoHato.ts:57` y `pesajeLeche.ts:85` tienen `hoyBogota()` correcto. Los sitios UTC que
+  quedan en el arbol Deno son los ya documentados (`jornal.ts`, `ingreso.ts`, `chat.tsx`,
+  `generar-reporte-semanal.tsx`). [corrida: 2026-08-20-jueves]
+
+## Navegacion (corrida 2026-08-20-jueves)
+- **Nombres reales de las tablas de la 096**: `alertas_catalogo`,
+  `telegram_alertas_suscripciones`, `hato_alertas_envios` — **no**
+  `hato_alertas_catalogo`/`hato_alertas_suscripciones`. Consultar por el nombre equivocado
+  devuelve 0 y parece una migracion sin aplicar; casi lo filo como P0. Usar `pg_class`, y ante
+  un 0 confirmar el nombre antes de concluir. [corrida: 2026-08-20-jueves]
+- **`clima_resumen_diario` tiene 1.910 filas y crece un dia por dia**: cualquier lector nuevo
+  necesita `fetchAll`. `clima_lecturas` no (ventana de 24 h, ~288 filas).
+  [corrida: 2026-08-20-jueves]
+- **6 de los ultimos 21 dias tienen `lluvia_confianza='contador_congelado'`** (08-18, 08-13,
+  08-10, 08-08, 08-02, 07-31), o sea ~29% de los dias sin lluvia utilizable. La guarda de la
+  068 esta funcionando como se diseno; el numero alto es del sensor, no del codigo. No es un
+  bug — anotado para que nadie lo "arregle". [corrida: 2026-08-20-jueves]
+- **`src/hooks/` y `src/contexts/` NO estan en `RAICES_CUBIERTAS` de `hatoFechaLocalGuard.test.ts`.**
+  El guard verde no cubre esas carpetas. Hay una violacion viva en `src/hooks/useClimaData.ts:43`.
+  [corrida: 2026-08-20-jueves]
+- **No hay CI en el repo** (`.github/` no existe), asi que `npm test` solo corre donde alguien
+  lo corra, y una prueba que dependa de `.env.local` puede estar roja durante dias sin que nadie
+  lo note. **Regla que se gana el sitio: en toda corrida, correr `npm test` sobre el HEAD antes
+  de reportar hallazgos de test coverage.** [corrida: 2026-08-20-jueves]
+
+## Baselines (corrida 2026-08-20-jueves)
+| main@8306dbf | npm test **119 archivos / 2.818 tests con 8 EN ROJO** (`requiereDecisionSeccion.test.tsx`, entorno sin `.env.local`) · lint 0 errores · `tsc --noEmit` limpio. Con PR #130 queda 119/2.818 **todo verde**; con #130+#131, **120 / 2.821** | 2026-08-20-jueves |

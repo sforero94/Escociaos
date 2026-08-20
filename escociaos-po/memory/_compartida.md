@@ -34,18 +34,22 @@ Hechos que aplican a mas de un agente. Mismas reglas de escritura que el resto
 | Corrida | Hallazgos nuevos |
 |---|---|
 | 2026-08-06-jueves | 5 (racha de ceros: **0**) |
+| 2026-08-13-jueves | NO CORRIO (no disparo la Routine) |
+| 2026-08-20-jueves | 6 (3 P1 + 3 P2, retenidos por severidad sobre el cap de 5). Racha de ceros: 0 |
 
 ## Estado de la operacion
-- Ultima corrida: **2026-08-10-lunes** (barrido semanal, roster de 6). Modo:
-  **full write · Notion OPERATIVO otra vez**.
-- Resultado: **12 hallazgos filados** (1 P1 · 11 P2), **2 PRs verdes** (#110, #111),
-  **5 verificaciones adversariales** y **2 hallazgos del jueves cerrados**.
-- **Notion se recupero y se puso al dia**: se filaron con retraso los 5 hallazgos
-  del jueves que se habian perdido, se cerraron los 3 del lunes que ya estaban
-  resueltos, se bajo #4 a P3 y se corrigio el diagnostico de #2. La base de
-  seguimiento ya no tiene huecos. **No se llego a 2 corridas seguidas caidas**, asi
-  que no hubo hallazgo contra la operacion por ese lado.
-- **El conector Vercel sigue roto — 4a corrida consecutiva.** 403 "must
+- Ultima corrida: **2026-08-20-jueves** (pulso operativo, roster de 4). Modo:
+  **full write · Notion OPERATIVO**.
+- Resultado: **6 hallazgos nuevos filados** (3 P1 + 3 P2, uno sobre el cap de 5,
+  retenidos por severidad), **2 PRs verdes abiertos** (#130 tests hermeticos, #131
+  paginado de clima), **4 verificaciones adversariales** (3 cambiaron el resultado),
+  **4 hallazgos cerrados** (#8, #13, #21, #26), **1 actualizado desvinculando su PR
+  incorrecto** (#12) y **1 reencaminado a solo brecha de cobertura** (#14).
+- **Los dos ANTECEDENTES ROTOS de esta corrida — el 08-13 y el 08-17 — NO
+  dispararon.** Cero filas en Notion, cero reportes, 10 dias sin conciliacion sobre
+  39 commits y 9 migraciones. **Ya se cruzo el umbral autoimpuesto** ('dos corridas
+  seguidas caidas'). Filado como P1 contra la operacion; ver acciones en el reporte.
+- **El conector Vercel sigue roto — 5a corrida consecutiva.** 403 "must
   re-authenticate to this scope". Ya filado como P1 (Notion #5); NO re-diagnosticar,
   solo declarar bajo NO CORRIO y sustituir por la sonda de contenido.
 
@@ -63,6 +67,33 @@ fue ceremonia:
 verificador independiente reproduzca la reconciliacion por un metodo distinto.**
 Dos agentes reconciliaron el mismo inventario y les dio 3 y 5 productos; el
 desempate importaba mas que cualquiera de los dos hallazgos. [corrida: 2026-08-10-lunes]
+
+## Lecciones de metodo de la corrida 2026-08-20 (mantener las tres)
+1. **El ref local `main` puede estar semanas atrasado respecto a `origin/main`.** Esta
+   corrida arranco con `main = cfae769` (2026-08-11) contra `origin/main = 8306dbf`
+   (2026-08-18) — 29 commits atras. `git show main:<path>` **falla en silencio
+   semantico** (devuelve un arbol viejo, o `exists on disk, but not in 'main'` si el
+   archivo es nuevo). Un agente re-leyendo el mismo archivo sin `git rev-parse` habria
+   sacado conclusiones sobre codigo de 9 dias antes sin darse cuenta. **Regla: el
+   primer comando de cada corrida es `git rev-parse main HEAD origin/main`; si difieren,
+   fast-forward `main` a `origin/main` (HEAD queda quieto si esta detached en el commit
+   correcto) y leer por `HEAD:<path>`, jamas por `main:` hasta confirmar.** Y notificar
+   la correccion a los agentes ya en vuelo por SendMessage, para que rederiven lo que
+   este apoyado en lecturas rancias.
+2. **`CLAUDE.md` NO es autoritativo sobre el estado de migraciones aplicadas.** Esta
+   corrida el archivo decia 'no aplicada' de 3 migraciones aplicadas dias atras, con la
+   advertencia de una de ellas invertida ('la app rompe' cuando lo cierto es lo
+   contrario). Costo real: 4 agentes gastaron ciclos verificando una ruptura de
+   produccion inexistente. **Regla ya escrita en el propio archivo, aplicar sin
+   excepcion: verificar contra `pg_proc`/`pg_indexes`/`information_schema` en vivo,
+   nunca contra la lista del CLAUDE.md ni contra `list_migrations`.**
+3. **`pg_cron succeeded` + HTTP 200 + edge log limpio NO prueban que la operacion
+   hizo algo.** El endpoint del clima responde 200 con `{"message":"No data
+   available","synced":0}` cuando Ecowitt no tiene datos; los tres verdes coexisten
+   con **13,5 h de datos perdidos**. **La unica prueba de liveness del clima es el
+   dato mismo:** `SELECT round(extract(epoch FROM (now()-MAX(timestamp)))/60) FROM
+   clima_lecturas` y `clima_resumen_diario.lecturas_count`. Agregar `net._http_response.content`
+   a la consulta — fue lo que delato la causa en 10 segundos.
 
 ## Corrida anterior (2026-08-03-lunes)
 - 12 hallazgos filados en Notion (5 P1 + 7 P2), 4 PRs (#98 #99 #100 #101), todos
@@ -99,6 +130,15 @@ desempate importaba mas que cualquiera de los dos hallazgos. [corrida: 2026-08-1
   compartido, porque `-C` resuelve la ruta relativa alli. **El prompt de despacho
   debe decir "worktree en ruta ABSOLUTA al scratchpad", no solo "worktree aislado".**
   [corrida: 2026-08-10-lunes]
+- **La regla del chequeo del backup nocturno (`thinksid/escocia-backups`, escrita
+  2026-08-13) es INEJECUTABLE en el scope actual.** `actions_list` sobre ese repo
+  devuelve `Access denied: repository "thinksid/escocia-backups" is not configured
+  for this session. Allowed repositories: sforero94/escociaos`. Verificado por el
+  orquestador esta corrida. No es que el backup fallara; es que la sesion no puede
+  verlo. **Hasta que se ajuste el allowlist, la regla se declara NO CORRIO en cada
+  corrida y no se investiga.** Alternativas discutidas para Santiago: (a) agregar
+  el repo, (b) heartbeat semanal por Telegram desde el propio `escocia-backups`,
+  (c) delegar a otra sesion. [corrida: 2026-08-20-jueves]
 - `escociaos-po/CHANGELOG.md` quedo fuera del commit de memoria a proposito: §6
   solo permite `escociaos-po/memory/**` y `escociaos-po/reports/**`. Su contenido
   se absorbio en el reporte de la corrida. Si se quiere un CHANGELOG.md propio,

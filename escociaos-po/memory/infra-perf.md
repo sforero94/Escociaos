@@ -124,3 +124,48 @@ prompt del agente en cada corrida.
 
 ## Archivo
 (vacio)
+
+
+## Estados aceptados (corrida 2026-08-20-jueves)
+- **El drift de edge function y de frontend NO existio esta corrida — los dos estan en HEAD
+  `8306dbf`.** Edge v213 desplegada 2026-08-18T01:36:38Z, 25 s DESPUES de b257671 (el ultimo
+  commit que toca `supabase/functions/make-server-1ccce916`); los dos commits posteriores
+  (91c7100, 8306dbf) no tocan ese arbol. Frontend verificado POR CONTENIDO en 8306dbf.
+  Los hallazgos #21/#22 siguen abiertos por estructura pero NO hay evidencia nueva.
+  [corrida: 2026-08-20-jueves]
+- **La estacion Ecowitt estuvo caida el 2026-08-19/20 y es de un orden de magnitud distinto al
+  ruido conocido.** Baseline previo: perdidas de 1-6 lecturas/dia = ruido; 9 seguidas (08-06) =
+  evento aislado. Esto fue **121 de 288 el 08-19** (hueco diurno 10:55→17:00) mas **13,5 h y
+  contando** desde el 08-19 21:05. En 40 dias los unicos dias bajo 280 lecturas son 08-06 (279)
+  y 08-19 (167). Si vuelve a pasar, ya no es hardware esporadico: es la estacion.
+  [corrida: 2026-08-20-jueves]
+- **`contador_congelado` subio de 5/30 (17%) a 8/30 (27%) y 19/90 (21%).** La memoria previa lo
+  tenia como "plano, no refilar"; ya no lo es. El sensor se esta degradando; considerar accion
+  aparte cuando lleguen los ~14/30 que serian claramente epidemicos. [corrida: 2026-08-20-jueves]
+
+## Refutaciones (corrida 2026-08-20-jueves)
+| CLAUDE.md 097/100/093 «No aplicada aun» | Que las migraciones 093, 097 y 100 esten pendientes en produccion | Las tres estan aplicadas y verificadas contra el catalogo vivo: las 2 RPC de 097 existen en `pg_proc`, el indice 044 `gan_movimientos_transaccion_confirmado_unique` esta en 0 y el trigger `trg_gan_validar_cabezas_transaccion` presente; `respaldos.backup_100_*` existen y 48/53 `gan_movimientos` llevan `grupo_id`; 093 da 0 llamadas desnudas y 82 envueltas. **No hay carrera migracion-vs-frontend y no hay ruptura en produccion por este lado.** 101/102 tambien aplicadas (3 tablas `acciones_*`, jobid 6 corriendo). | 2026-08-20-jueves |
+
+## Navegacion (corrida 2026-08-20-jueves)
+- **Sonda de ruta de edge function, mejor que cualquier timestamp y cuesta 3 curl:**
+  `curl -s -o /dev/null -w '%{http_code}' -X POST <fn>/<ruta>` — una ruta desplegada que exige
+  secreto da **401**, una inexistente da **404**. Control positivo `hato/alertas/tick` (401),
+  control negativo `ruta/que/no/existe` (404). Con eso se prueba que `/acciones/tick` esta
+  desplegada sin gastar 1 MB de contexto en `get_edge_function`. [corrida: 2026-08-20-jueves]
+- **`cron.job_run_details` = 'succeeded' Y el edge log = 200 Y `net._http_response.status_code` = 200
+  pueden ser los TRES verdes con CERO datos entrando.** `/clima/sync` responde
+  `{"message":"No data available","synced":0}` con status 200 cuando Ecowitt no tiene datos. **La
+  unica prueba de liveness del clima es el dato mismo**: `select round(extract(epoch from
+  (now()-max(timestamp)))/60) from clima_lecturas` (minutos sin lectura) y
+  `clima_resumen_diario.lecturas_count` (288 = dia completo). Anadir a esa consulta el
+  `left(content,200)` de `net._http_response`, que es lo que delato la causa en 10 segundos.
+  [corrida: 2026-08-20-jueves]
+- **El chequeo obligatorio del backup nocturno NO se pudo hacer: `actions_list` sobre
+  `thinksid/escocia-backups` devuelve `Access denied ... Allowed repositories: sforero94/escociaos`.**
+  No es que el backup fallara — es que el scope de GitHub de la sesion no incluye ese repo.
+  Hay que anadirlo al allowlist del despacho o mover el chequeo a quien tenga el scope, o la
+  regla escrita el 2026-08-13 es inejecutable. [corrida: 2026-08-20-jueves]
+
+## Baselines (corrida 2026-08-20-jueves)
+| Infra | DB **113 MB** (1,4% de 8 GB) — 59 MB siguen siendo `net._http_response` (74 filas) y **16 MB `cron.job_run_details` con 0 filas vivas (NUEVO en el top-2)**; datos reales ~38 MB. 8 usuarios auth. Edge function **v213** (2026-08-18T01:36:38Z), **al dia con HEAD**. Frontend verificado POR CONTENIDO en 8306dbf. **4 pg_cron** (nuevo: `acciones-recomendadas-tick`, `50 10 * * *` UTC): 2.903 corridas en 10 dias, 0 fallos. Edge log 24h: 310 peticiones, **0 no-200**. Motor de acciones: corre diario, ~USD 0,010/dia, estados ok/parcial | 2026-08-20-jueves |
+| Advisors performance (por SQL) | unindexed_fks **89** (igual) · unused_idx **80** (era 43 — el salto es por indices nuevos nunca escaneados en `gan_lotes`/`acciones_*`/`pest_*`, `stats_reset` es NULL asi que no hubo reinicio de estadisticas; **NO es hallazgo**) · sin_pk **9** (eran 3; los 6 nuevos son `respaldos.backup_095/099×3/100×2`, estado final buscado). Consulta de aplicacion mas lenta: `v_hato_estado_actual` por PostgREST 149,2 ms / 6 llamadas; `fn_clima_rollup_diario` subio de 100,5 a **229,7 ms** de media (27 llamadas, 1/dia — irrelevante) | 2026-08-20-jueves |

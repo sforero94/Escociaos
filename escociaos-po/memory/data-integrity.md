@@ -130,3 +130,66 @@ prompt del agente en cada corrida.
 
 ## Archivo
 (vacio)
+
+
+## Estados aceptados (corrida 2026-08-20-jueves)
+- **El ganado concilia perfecto y NO hay doble conteo.** `gan_inventario` vs libro de
+  `gan_movimientos` confirmados: **0 divergencias en los 34 potreros**, total 369 = 369.
+  OJO CON EL METODO: hay que agrupar por `coalesce(potrero_destino_id, potrero_origen_id)` —
+  los `traslado_salida` usan SOLO `potrero_origen_id` (11 filas) y agrupar solo por destino
+  marca 3 falsos positivos de 131 cabezas en los potreros "General". Linea de tiempo verificada:
+  131 (08-10) → 163 (compras) → 401 (conteo fisico de 238 el 08-16) → 369 (08-17, +11 compra
+  −43 de la migracion huerfana `ganado_revertir_duplicado_carga_inicial`). Las 131 cabezas de los
+  3 "General" son santimp (67) y Supata (19+45), fincas distintas de Escocia — no son duplicados.
+  [corrida: 2026-08-20-jueves]
+- **El motor de alertas del hato NO esta muerto pese a 11 dias sin generar nada.** Ultima alerta
+  creada 2026-08-09; el tick responde `generadas: 0` a diario. Verificado que es correcto:
+  `select ... from v_hato_estado_actual where estado='activa' and (fecha_probable_parto between
+  current_date-30 and current_date+14 or fecha_secar <= current_date ...)` => **0 filas**. No
+  re-investigar salvo que aparezcan vacas en ventana y siga en 0. [corrida: 2026-08-20-jueves]
+- **El motor de acciones recomendadas (101/102) esta sano.** 5 corridas, todas por cron a las
+  10:50 UTC, la de hoy `estado='ok'` con 9 acciones y 0 rechazos; las anteriores `parcial` con
+  1-2 rechazos (el validador anti-invento operando, no un fallo). Las 9 acciones publicadas hoy
+  son todas de plantilla+ranuras ligadas a `hecho_id` — 0 texto libre. [corrida: 2026-08-20-jueves]
+- **Los 2 huecos de quincenal del hallazgo #26 se llenaron**: `hato_produccion_quincenal` tiene
+  2026-07 Q2 (5.938 L) y 2026-08 Q1 (5.564 L), ambas `medido` con `litros_total` NULL como manda
+  el CHECK de la 070. 2026-08 Q2 aun no vence. → **UPDATE #26, no refilar.**
+  [corrida: 2026-08-20-jueves]
+- **Las filas `derivado_mensual` de quincenal COMPARTEN un `fin_ingreso_id` entre Q1 y Q2 del
+  mismo mes, y eso es correcto**: son el backfill mensual partido en dos, y `sum(litros_total)`
+  de las dos cierra EXACTO contra `fin_ingresos.cantidad` en los 10 meses probados. No es doble
+  conteo. Lo seria sumar `fin_ingresos.cantidad` a traves del FK; sumar `litros_total` es lo
+  correcto. [corrida: 2026-08-20-jueves]
+- **Migraciones 093, 097 y 100 ESTAN aplicadas a produccion.** El root CLAUDE.md dice lo
+  contrario, con la advertencia de 097 invertida. Verificado contra el catalogo vivo por
+  triangulacion (Data Integrity, Infra, Release + el orquestador): 0 llamadas desnudas a
+  es_usuario_gerencia/get_user_role en 82 policies; las 2 RPC multi de 097 existen SECURITY
+  INVOKER; 48/53 gan_movimientos con grupo_id. NO re-investigar. [corrida: 2026-08-20-jueves]
+
+## Navegacion (corrida 2026-08-20-jueves)
+- **El ref local `main` puede estar RANCIO frente a `origin/main`.** El 2026-08-20 estaba 29
+  commits atras (cfae769 vs 8306dbf) y `git show main:<path>` devolvia codigo de 9 dias antes,
+  sin fallar. **Regla: arrancar toda corrida con `git rev-parse HEAD main origin/main` y leer por
+  `git show HEAD:<path>` si no coinciden.** [corrida: 2026-08-20-jueves]
+- Columnas que rompen queries escritas de memoria: `gan_movimientos` **no tiene `potrero_id`** —
+  son `potrero_origen_id`/`potrero_destino_id`, y los ajustes y compras usan `potrero_destino_id`
+  incluso con delta negativo. `movimientos_diarios_productos` usa **`cantidad_utilizada`** (no
+  `cantidad_usada`). `hato_eventos` no tiene `origen` (es `fuente`; `hato_animales` si tiene
+  `origen`). `hato_alertas` usa `fecha_programada` (no `fecha_generada`). `hato_correcciones` y
+  `acciones_corridas` **no tienen `created_at`** (`acciones_corridas` usa `generado_at`).
+  [corrida: 2026-08-20-jueves]
+- **El ledger `supabase_migrations.schema_migrations` gano 5 filas el 2026-08-17** (097-100 mas
+  `ganado_revertir_duplicado_carga_inicial`, sin archivo). 083-096 y 101-102 siguen aplicadas SIN
+  fila. La regla de comparar por NOMBRE y verificar contra el catalogo vivo se confirma otra vez.
+  [corrida: 2026-08-20-jueves]
+- `cron.job` tiene 4 jobs activos: 1 `clima-sync-wu` (*/5), 2 `clima-daily-rollup` (15 5 * * *),
+  4 `hato-alertas-tick` (45 10), 6 `acciones-recomendadas-tick` (50 10). Un `succeeded` en
+  `cron.job_run_details` NO prueba que el endpoint hizo algo: el 2026-08-20 las 360 corridas del
+  clima fueron `succeeded` y las 71 ultimas devolvieron `{"message":"No data available"}`. La
+  prueba real esta en `net._http_response.content`. [corrida: 2026-08-20-jueves]
+
+## Baselines (corrida 2026-08-20-jueves)
+| Deltas 10 dias (08-10 → 08-20) | hato_pesajes_leche **+173** (376→549, backfill de jul + 08-05 y 08-12) · gan_movimientos +27 (26→53) · movimientos_diarios +16 (140→154) · mdp +64 (693→749) · hato_eventos +10 (756→766) · fin_gastos +10 (4.464→4.474) · fin_ingresos +2 (230→232) · quincenal +2 (80→82) · **monitoreos 0, rondas 0, chequeos 0, movimientos_inventario 0, compras 0, aplicaciones 0** | 2026-08-20-jueves |
+| Integridad referencial | **0 huerfanos en todas las relaciones probadas** (md↔aplicaciones, mdp↔md, mdp↔productos, md↔lotes). 0 mdp con cantidad invalida · 0 md con fecha futura · 0 gastos futuros (bug UTC no reaparecio) · 0 gastos/ingresos nuevos sin `created_by` · 0 gastos en estado != Confirmado · 0 productos con stock negativo · 0 movimientos ganado pendientes. Sin cambio: 86 monitoreos con ronda_id NULL (#7) · 1 md fuera de ventana (#24) · 3 divergencias libro-vs-stock, identicas (#29: Sulcamag −8.000, Naturboro −20, TecniFeed Boro +18,69) · 2 eventos post-salida · verificacion de inventario del 2026-07-30 sigue abandonada, 223 detalles / 0 contados | 2026-08-20-jueves |
+| Clima | **Sync CAIDO al momento del barrido**: ultima lectura 9,1 h (2026-08-19 21:05 Bogota), 71/71 respuestas `No data available` en 12 h, cron OK. Ayer 164/288 lecturas (57%) con hueco de 7 h. `contador_congelado` **19/90 (21,1%) y 8/30** — la memoria de Infra lo tiene como «plano 5/30 (17%), no refilar»; **subio, conviene que Infra lo re-mida** | 2026-08-20-jueves |
+| Conteos de dominio | hato_animales 179 · hato_eventos 766 · partos 300 · chequeos 33 / chequeo_vacas 1.479 (ultimo 2026-07-09, 42 dias — dentro del intervalo normal, no es hallazgo) · pesajes 549 (ultimo 2026-08-12; falta la semana del 07-29 y la del 08-19) · quincenal 82 · alertas 64 (ultima creada 08-09) · hato_correcciones 10 (eran 0) · monitoreos 4.200 / 29 rondas (ultima 2026-07-29, 22 dias — ambar en SaludDatos, rojo a los 28) · productos 341 · movimientos_inventario 155 · movimientos_diarios 154 / mdp 749 · gan_movimientos 53 / gan_inventario 34 potreros / **369 cabezas** · acciones_corridas 5 / acciones_recomendadas 38 | 2026-08-20-jueves |

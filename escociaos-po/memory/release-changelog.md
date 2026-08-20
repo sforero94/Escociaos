@@ -82,3 +82,53 @@ prompt del agente en cada corrida.
 
 ## Archivo
 (vacio)
+
+
+## Estados aceptados (corrida 2026-08-20-jueves)
+- **`acciones_corridas` con `estado='parcial'` es el motor funcionando, no una falla.** El
+  validador anti-invento rechaza acciones individuales (`LONGITUD` >90 caracteres,
+  `SIN_DATO_MAL_USADO`, `NUMERAL_EN_LETRA`) y publica el resto; `parcial` = hubo rechazos,
+  `ok` = ninguno. 4 de las 5 primeras corridas fueron `parcial` y publicaron 7-8 acciones
+  igual. **No filar como defecto sin mirar `rechazos`.** [corrida: 2026-08-20-jueves]
+- **`acciones-render.ts` no tiene importador del lado edge** — el validador re-implementa el
+  render. Su ausencia del bundle desplegado es correcta, igual que `acciones-tipos.ts`,
+  `importHato/tipos.ts` y `telegram/types.ts`, que son `import type` y se borran al transpilar.
+  [corrida: 2026-08-20-jueves]
+- **Los 16 "DESYNC" entre `src/supabase/functions/server/` y `supabase/functions/make-server-1ccce916/`
+  son solo el comentario `// ARCHIVO:` de la primera linea.** Verificar con `diff -w` antes de
+  reportar paridad rota. [corrida: 2026-08-20-jueves]
+- **Migracion aplicada sin archivo commiteado**: `ganado_revertir_duplicado_carga_inicial`
+  (version 20260817152442) removio 43 cabezas del inventario (Bosque -19 toros, Mochuelos
+  Repele -11 novillos, Quebradas -13 toros) para revertir un duplicado de la carga inicial.
+  Es del mismo patron que 067 y 079 — el cuerpo se recupera de
+  `supabase_migrations.schema_migrations.statements`. Debe archivarse como `NNN_ganado_revertir_duplicado_carga_inicial.sql`
+  marcado "archivo de registro, no aplicar" con la aritmetica 163+238-43=369 en el encabezado.
+  [corrida: 2026-08-20-jueves]
+
+## Navegacion (corrida 2026-08-20-jueves)
+- **El ref local `main` puede estar semanas atrasado respecto a `origin/main`, y `git show
+  main:<path>` falla en silencio semantico** (devuelve un arbol viejo, o `exists on disk, but
+  not in 'main'` si el archivo es nuevo). **Arrancar toda corrida con `git rev-parse main HEAD
+  origin/main` y leer por el SHA de la corrida, nunca por `main:`.** Esta corrida el ref estaba
+  29 commits atras (cfae769 vs 8306dbf). [corrida: 2026-08-20-jueves]
+- **Verificacion fuerte del edge function: comparacion byte a byte, no timestamp.**
+  `get_edge_function` → guardar el JSON → `files: [{name, content}]` → comparar cada uno contra
+  `git show <sha>:supabase/functions/make-server-1ccce916/<n>`. Da tres listas (solo-repo /
+  solo-desplegado / contenido distinto) y elimina la ambiguedad de "desplegaron antes de
+  commitear". [corrida: 2026-08-20-jueves]
+- **Sonda de contenido para un hook compartido: el chunk lleva el nombre del HOOK, no de la
+  ruta.** Los RPC de ganado no estan en `GanadoDashboard-*.js` ni en `GanadoMovimientos-*.js`
+  sino en `useGanadoInventario-*.js`. Extraer el grafo completo con
+  `grep -oE '[A-Za-z0-9_-]+-[A-Za-z0-9_-]{8}\.js'` sobre `main.js` **y sobre los chunks de
+  ruta**, no solo sobre el index. [corrida: 2026-08-20-jueves]
+- **Un PR adjunto a una fila de Notion no prueba que esa fila este arreglada.** El PR #100
+  estaba adjunto al hallazgo #12 y nunca toco `CargaMasiva.tsx`. **Verificar `git show --stat
+  <merge>` contra el archivo que el hallazgo nombra**, antes de cualquier veredicto de cierre.
+  [corrida: 2026-08-20-jueves]
+
+## Baselines (corrida 2026-08-20-jueves)
+| Estado de despliegue | HEAD main **8306dbf** · edge function **v213** (2026-08-18T01:36:38Z), **byte-identica a HEAD** (56/56 archivos, 0 diferencias) · migraciones **001-102 aplicadas y verificadas contra el catalogo VIVO** (067/079 archivos de registro; 087/088 huecos deliberados; `ganado_revertir_duplicado_carga_inicial` aplicada sin archivo) · frontend verificado POR CONTENIDO en `index-CeSmVn6y.js` sirviendo 8306dbf, incluida la ultima commit · **nada pendiente de desplegar** | 2026-08-20-jueves |
+| Crons | **4/4 sanos** (nuevo: `acciones-recomendadas-tick` a `50 10 * * *`), todos `succeeded` el 2026-08-20 | 2026-08-20-jueves |
+| Cadencia (ventana corta 2026-08-10→08-18, 8 dias) | 34,1 commits/sem (sube desde 23,8) · fix share **31,8 %** (baja desde 53,5 %). **Empujon de features, no calidad degradandose** | 2026-08-20-jueves |
+| Motor de acciones | 5 corridas · 38 acciones · 9 publicadas hoy · `estado` hoy `ok` | 2026-08-20-jueves |
+| Handoff del hato a captura viva | **173 pesajes + 10 eventos** desde 2026-08-10 via Telegram — el hallazgo #8 ("nunca hizo el handoff") **cambio de estado en los hechos** | 2026-08-20-jueves |
