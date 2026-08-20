@@ -29,6 +29,27 @@ vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => authMock(),
 }));
 
+/**
+ * `ConfirmarPendienteDialog` llama a `useGanadoInventario`, y ese hook llama
+ * a `getSupabase()` en el cuerpo -- no dentro de un efecto -- así que se
+ * ejecuta con sólo montar el diálogo, aunque esté cerrado. `getSupabase()`
+ * LANZA si faltan `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`.
+ *
+ * Sin este mock la prueba sólo pasa en una máquina que tenga `.env.local`:
+ * en un checkout limpio (y no hay CI que lo hubiera cantado) los 8 casos de
+ * este archivo fallan con "Missing Supabase environment variables". El
+ * mock lo vuelve hermético -- ninguna prueba de render debería necesitar
+ * credenciales, y ninguna de este archivo toca la red.
+ */
+vi.mock('@/utils/supabase/client', () => ({
+  getSupabase: () => ({
+    from: () => ({
+      select: () => ({ eq: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) }),
+    }),
+    rpc: () => Promise.resolve({ data: null, error: null }),
+  }),
+}));
+
 const { RequiereDecision } = await import('@/components/dashboard/RequiereDecision');
 
 function resultadoBase(overrides: Partial<UseRequiereDecisionResultado> = {}): UseRequiereDecisionResultado {
