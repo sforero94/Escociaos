@@ -62,7 +62,7 @@ function ComparisonCell({ field, decimals = 1 }: { field: ComparisonField; decim
         )}
         {field.planeado > 0 && (
           <span className={`text-xs font-medium ${deviationColor(field.desviacion)}`}>
-            {field.desviacion > 0 ? '+' : ''}{field.desviacion.toFixed(1)}%
+            {field.desviacion > 0 ? '+' : ''}{formatearNumero(field.desviacion, 1)}%
           </span>
         )}
       </div>

@@ -52,7 +52,7 @@ function DeviationBadge({ desviacion, invertCost = false }: { desviacion: number
   const color = deviationColor(desviacion, invertCost);
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${color}`}>
-      {desviacion > 0 ? '+' : ''}{abs.toFixed(1)}%
+      {desviacion > 0 ? '+' : ''}{formatearNumero(abs, 1)}%
     </span>
   );
 }
@@ -66,7 +66,7 @@ function DeltaBadge({ current, previous, inverted = false }: { current: number; 
   return (
     <div className={`flex items-center gap-1 text-xs font-medium ${isGood ? 'text-green-600' : 'text-red-600'}`}>
       {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-      <span>{delta > 0 ? '+' : ''}{delta.toFixed(1)}%</span>
+      <span>{delta > 0 ? '+' : ''}{formatearNumero(delta, 1)}%</span>
     </div>
   );
 }

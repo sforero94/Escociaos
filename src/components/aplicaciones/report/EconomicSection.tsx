@@ -2,7 +2,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer,
 } from 'recharts';
-import { formatearMoneda } from '../../../utils/calculosReporteAplicacion';
+import { formatearMoneda, formatearNumero } from '../../../utils/calculosReporteAplicacion';
 
 interface ComparisonField {
   real: number;
@@ -38,9 +38,9 @@ function deviationColor(desviacion: number, invertCost = true): string {
 }
 
 function formatCompact(value: number): string {
-  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;
-  return `$${value.toFixed(0)}`;
+  if (value >= 1_000_000) return `$${formatearNumero(value / 1_000_000, 1)}M`;
+  if (value >= 1_000) return `$${formatearNumero(value / 1_000, 0)}K`;
+  return `$${formatearNumero(value, 0)}`;
 }
 
 interface CostCell {
@@ -59,7 +59,7 @@ function CostComparisonCell({ field }: { field: CostCell }) {
         )}
         {field.planeado > 0 && (
           <span className={`text-xs font-medium ${deviationColor(field.desviacion)}`}>
-            {field.desviacion > 0 ? '+' : ''}{field.desviacion.toFixed(1)}%
+            {field.desviacion > 0 ? '+' : ''}{formatearNumero(field.desviacion, 1)}%
           </span>
         )}
       </div>

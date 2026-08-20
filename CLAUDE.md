@@ -175,10 +175,16 @@ The applications module has two distinct tracking layers — **do not confuse th
 
 | Layer | Tables | Purpose |
 |---|---|---|
-| **Planned** | `aplicaciones_lotes_planificado`, `aplicaciones_productos`, `aplicaciones_mezclas` | What was planned before execution (lot targets, product dosis, mixes) |
+| **Planned** | `aplicaciones_calculos`, `aplicaciones_productos`, `aplicaciones_mezclas` (`aplicaciones_lotes_planificado` está vacía — ver la nota debajo) | What was planned before execution (lot targets, product dosis, mixes) |
 | **Real** | `movimientos_diarios`, `movimientos_diarios_productos` | What actually happened per day (canecas, bultos, products used) |
 
-`aplicaciones_lotes_planificado` is the canonical source for planned tree counts and lot assignments. `movimientos_diarios` is the canonical source for real execution data. Never substitute one for the other.
+`movimientos_diarios` is the canonical source for real execution data. Never substitute it for a planned-layer table.
+
+> **Corregido 2026-08-20 contra producción. `aplicaciones_lotes_planificado` está VACÍA — 0 filas, las 20 aplicaciones — y nunca se escribió.** Esta línea la llamaba "the canonical source for planned tree counts and lot assignments"; no lo es, y la migración 023 la marcó "KEEP - actively used" con el mismo error. **Leerla no falla: devuelve vacío**, que es la trampa — el consumidor cae a su fallback y nadie se entera.
+>
+> **El mapeo mezcla→lote real vive en `aplicaciones_calculos.mezcla_id`** (59 de 67 filas, 16 de 20 aplicaciones). Ese es el que hay que leer. Ya costó un defecto: `CalculadoraAplicaciones.tsx` rehidrata las mezclas sin `lotes_asignados` — la tabla `aplicaciones_mezclas` no tiene esa columna — así que reabrir una aplicación guardada muestra "0 lotes" y volver a guardar escribe el vacío encima de un mapeo que el usuario no ve que todavía tenía.
+>
+> **La tabla NO se borró a propósito.** `src/hooks/useReporteAplicacion.ts` la lee en 8 sitios (la prefiere para conteo de árboles y cae a `aplicaciones_lotes`) y `chat.tsx` de Esco una vez. Borrarla rompe el Reporte. Eliminarla exige primero sacar esos lectores, y es un cambio aparte — no un rediseño.
 
 > **Removed tables** (migration 022): `aplicaciones_lotes_real`, `aplicaciones_productos_real`, `aplicaciones_productos_planificado`, `aplicaciones_mezclas_productos` — these were ghost tables from an abandoned design; they were never populated or queried.
 

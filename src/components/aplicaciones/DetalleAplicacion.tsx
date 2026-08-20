@@ -8,6 +8,7 @@ import { generarPDFReporteCierre } from '../../utils/generarPDFReporteCierre';
 import { fetchDatosReporteCierre } from '../../utils/fetchDatosReporteCierre';
 import type { Aplicacion, ListaCompras } from '../../types/aplicaciones';
 import { toast } from 'sonner';
+import { formatearNumero } from '../../utils/format';
 
 interface DetalleAplicacionProps {
   aplicacion: Aplicacion;
@@ -481,9 +482,10 @@ export function DetalleAplicacion({
               <span className={`px-3 py-1.5 rounded-lg text-sm border ${getEstadoBadge(aplicacion.estado ?? '')}`}>
                 {aplicacion.estado}
               </span>
-              <button 
-                onClick={onClose} 
+              <button
+                onClick={onClose}
                 className="p-2 hover:bg-white/20 rounded-lg transition-colors text-white"
+                aria-label="Cerrar"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -591,13 +593,13 @@ export function DetalleAplicacion({
                   <div className="grid grid-cols-3 gap-4">
                     <div className="text-center p-4 bg-background rounded-xl">
                       <p className="text-xs text-brand-brown/60 mb-1">Planeado</p>
-                      <p className="text-2xl text-foreground">{canecasPlaneadas.toFixed(1)}</p>
+                      <p className="text-2xl text-foreground">{formatearNumero(canecasPlaneadas, 1)}</p>
                     </div>
                     <div className="text-center p-4 bg-primary/5 rounded-xl">
                       <p className="text-xs text-brand-brown/60 mb-1">Aplicado</p>
-                      <p className="text-2xl text-primary">{canecasAplicadas.toFixed(1)}</p>
+                      <p className="text-2xl text-primary">{formatearNumero(canecasAplicadas, 1)}</p>
                       <p className="text-xs text-brand-brown/60 mt-1">
-                        ({canecasPlaneadas > 0 ? ((canecasAplicadas / canecasPlaneadas) * 100).toFixed(0) : 0}%)
+                        ({canecasPlaneadas > 0 ? formatearNumero((canecasAplicadas / canecasPlaneadas) * 100, 0) : 0}%)
                       </p>
                     </div>
                     <div className="text-center p-4 bg-background rounded-xl">
@@ -610,20 +612,20 @@ export function DetalleAplicacion({
                           : 'text-gray-600'
                       }`}>
                         {canecasAplicadas > canecasPlaneadas ? '+' : ''}
-                        {(canecasAplicadas - canecasPlaneadas).toFixed(1)}
+                        {formatearNumero(canecasAplicadas - canecasPlaneadas, 1)}
                       </p>
                       <p className="text-xs text-brand-brown/60 mt-1">
-                        ({canecasPlaneadas > 0 ? (((canecasAplicadas - canecasPlaneadas) / canecasPlaneadas) * 100).toFixed(0) : 0}%)
+                        ({canecasPlaneadas > 0 ? formatearNumero(((canecasAplicadas - canecasPlaneadas) / canecasPlaneadas) * 100, 0) : 0}%)
                       </p>
                     </div>
                   </div>
-                  
+
                   {/* Barra de progreso */}
                   <div className="mt-4">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs text-brand-brown/60">Progreso</span>
                       <span className="text-xs text-foreground">
-                        {canecasPlaneadas > 0 ? ((canecasAplicadas / canecasPlaneadas) * 100).toFixed(0) : 0}%
+                        {canecasPlaneadas > 0 ? formatearNumero((canecasAplicadas / canecasPlaneadas) * 100, 0) : 0}%
                       </span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
@@ -682,14 +684,14 @@ export function DetalleAplicacion({
                                 <div className="text-xs text-brand-brown/50 mt-0.5">{insumo.unidad}</div>
                               </td>
                               <td className="py-3 px-4 text-right text-sm text-foreground">
-                                {insumo.planeado.toFixed(2)}
+                                {formatearNumero(insumo.planeado, 2)}
                               </td>
                               <td className="py-3 px-4 text-right">
                                 <div className="text-sm text-primary">
-                                  {insumo.aplicado.toFixed(2)}
+                                  {formatearNumero(insumo.aplicado, 2)}
                                 </div>
                                 <div className="text-xs text-brand-brown/50 mt-0.5">
-                                  {porcentaje.toFixed(0)}%
+                                  {formatearNumero(porcentaje, 0)}%
                                 </div>
                               </td>
                               <td className="py-3 px-4 text-right">
@@ -702,7 +704,7 @@ export function DetalleAplicacion({
                                 }`}>
                                   {diferencia > 0 && <TrendingUp className="w-3 h-3" />}
                                   {diferencia > 0 ? '+' : ''}
-                                  {diferencia.toFixed(2)}
+                                  {formatearNumero(diferencia, 2)}
                                 </span>
                               </td>
                             </tr>

@@ -8,6 +8,7 @@ import { Button } from '../../ui/button';
 import { useReporteAplicacion } from '../../../hooks/useReporteAplicacion';
 import { generarPDFReporteCierre } from '../../../utils/generarPDFReporteCierre';
 import { fetchDatosReporteCierre } from '../../../utils/fetchDatosReporteCierre';
+import { formatearMoneda, formatearNumero } from '../../../utils/calculosReporteAplicacion';
 import { HeroKPICards } from './HeroKPICards';
 import { TechnicalSection } from './TechnicalSection';
 import { EconomicSection } from './EconomicSection';
@@ -93,7 +94,7 @@ export function ApplicationResultsDashboard({ aplicacionId }: ApplicationResults
       {/* ============================================================ */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <button onClick={handleClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+          <button onClick={handleClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors" aria-label="Volver">
             <ArrowLeft className="w-5 h-5 text-brand-brown" />
           </button>
           <div>
@@ -250,13 +251,13 @@ export function ApplicationResultsDashboard({ aplicacionId }: ApplicationResults
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-brand-brown/60">Arboles totales</span>
-                  <span className="text-foreground">{reporte.total_arboles.toLocaleString('es-CO')}</span>
+                  <span className="text-foreground">{formatearNumero(reporte.total_arboles, 0)}</span>
                 </div>
               </div>
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-brand-brown/60">Valor jornal</span>
-                  <span className="text-foreground">${reporte.detalle_jornales.valor_jornal.toLocaleString('es-CO')}</span>
+                  <span className="text-foreground">{formatearMoneda(reporte.detalle_jornales.valor_jornal)}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-brand-brown/60">Tamano caneca</span>

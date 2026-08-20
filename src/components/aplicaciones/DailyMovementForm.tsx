@@ -970,6 +970,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
                       variant="ghost"
                       size="sm"
                       className="text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      aria-label="Eliminar producto"
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>

@@ -481,6 +481,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                       onClick={() => editarMezcla(mezcla)}
                       className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors"
                       title="Editar"
+                      aria-label={`Editar mezcla ${mezcla.nombre}`}
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
@@ -488,6 +489,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                       onClick={() => eliminarMezcla(mezcla.id)}
                       className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                       title="Eliminar"
+                      aria-label={`Eliminar mezcla ${mezcla.nombre}`}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -665,6 +667,7 @@ export function PasoMezcla({ configuracion, mezclas, calculos: calculosIniciales
                       <button
                         onClick={() => quitarProducto(producto.producto_id)}
                         className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        aria-label={`Quitar ${producto.producto_nombre}`}
                       >
                         <X className="w-5 h-5" />
                       </button>

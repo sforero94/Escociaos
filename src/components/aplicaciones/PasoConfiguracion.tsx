@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Sprout, Calendar, MapPin, Plus, X, AlertCircle, Bug } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { formatearFecha } from '../../utils/fechas';
+import { formatearNumero } from '../../utils/format';
 import { DateInput } from '../ui/date-input';
 import type {
   ConfiguracionAplicacion,
@@ -553,6 +554,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
                               type="button"
                               onClick={() => quitarBlanco(blanco.id)}
                               className="ml-1 text-brand-brown/70 hover:text-red-600 transition-colors"
+                              aria-label={`Quitar ${blanco.nombre}`}
                             >
                               <X className="w-4 h-4" />
                             </button>
@@ -662,6 +664,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
                               type="button"
                               onClick={() => quitarBlanco(blanco.id)}
                               className="ml-1 text-brand-brown/70 hover:text-red-600 transition-colors"
+                              aria-label={`Quitar ${blanco.nombre}`}
                             >
                               <X className="w-4 h-4" />
                             </button>
@@ -789,6 +792,7 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
                   type="button"
                   onClick={() => quitarLote(lote.lote_id)}
                   className="text-red-600 hover:text-red-800 transition-colors"
+                  aria-label={`Quitar lote ${lote.nombre}`}
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -922,11 +926,11 @@ export function PasoConfiguracion({ configuracion, onUpdate }: PasoConfiguracion
             </div>
             <div>
               <div className="text-sm text-brand-brown/70">Área Total</div>
-              <div className="text-2xl text-foreground">{totales.area.toFixed(1)} ha</div>
+              <div className="text-2xl text-foreground">{formatearNumero(totales.area, 1)} ha</div>
             </div>
             <div>
               <div className="text-sm text-brand-brown/70">Árboles</div>
-              <div className="text-2xl text-foreground">{totales.arboles.toLocaleString()}</div>
+              <div className="text-2xl text-foreground">{formatearNumero(totales.arboles, 0)}</div>
             </div>
           </div>
         </div>

@@ -615,6 +615,7 @@ export function AplicacionesList() {
                             });
                           }}
                           className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+                          aria-label="Más opciones"
                         >
                           <MoreVertical className="w-5 h-5 text-brand-brown/70" />
                         </button>

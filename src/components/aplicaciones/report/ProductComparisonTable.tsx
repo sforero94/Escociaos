@@ -90,7 +90,7 @@ export function ProductComparisonTable({ productos }: ProductComparisonTableProp
                   </td>
                   <td className="py-2.5 px-3 text-right text-sm">
                     <span className={`font-medium ${deviationColor(prod.cantidad.desviacion)}`}>
-                      {prod.cantidad.desviacion > 0 ? '+' : ''}{prod.cantidad.desviacion.toFixed(1)}%
+                      {prod.cantidad.desviacion > 0 ? '+' : ''}{formatearNumero(prod.cantidad.desviacion, 1)}%
                     </span>
                   </td>
                   <td className="py-2.5 px-3 text-right text-sm text-foreground">

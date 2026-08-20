@@ -6,6 +6,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import type { Aplicacion } from '../../types/aplicaciones';
 import { obtenerFechaHoy } from '@/utils/fechas';
+import { formatearNumero } from '@/utils/format';
 
 interface IniciarEjecucionModalProps {
   aplicacion: Aplicacion;
@@ -202,7 +203,7 @@ export function IniciarEjecucionModal({
   const confirmStockDescription = productosFaltantes.length > 0
     ? `${productosFaltantes.length} producto(s) no tienen suficiente inventario:\n` +
       productosFaltantes.map(
-        (p) => `${p.nombre}: necesita ${p.necesario.toFixed(2)} ${p.unidad}, disponible ${p.disponible.toFixed(2)} ${p.unidad}`
+        (p) => `${p.nombre}: necesita ${formatearNumero(p.necesario, 2)} ${p.unidad}, disponible ${formatearNumero(p.disponible, 2)} ${p.unidad}`
       ).join(' / ') +
       '\n\nEsta acción no se puede deshacer.'
     : 'Esta acción no se puede deshacer.';
@@ -234,6 +235,7 @@ export function IniciarEjecucionModal({
           <button
             onClick={onClose}
             className="text-brand-brown/40 hover:text-brand-brown transition-colors"
+            aria-label="Cerrar"
           >
             <X className="w-5 h-5" />
           </button>

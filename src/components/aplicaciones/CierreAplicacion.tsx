@@ -4,6 +4,7 @@ import { getSupabase } from '../../utils/supabase/client';
 import { formatearFecha, obtenerFechaHoy } from '../../utils/fechas';
 import { fetchRegistrosTrabajoParaCierre, recalcularCostoJornal } from '../../utils/laborCosts';
 import { generarPDFReporteCierre } from '../../utils/generarPDFReporteCierre';
+import { formatearNumero } from '../../utils/format';
 import type { Aplicacion, RegistroTrabajoCierre, ResumenLaboresCierre } from '../../types/aplicaciones';
 
 interface CierreAplicacionProps {
@@ -690,6 +691,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
           <button
             onClick={onClose}
             className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+            aria-label="Cerrar"
           >
             <X className="w-5 h-5" />
           </button>
@@ -762,7 +764,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                         </div>
                         <div>
                           <p className="text-xs text-brand-brown/70 mb-1">Total Árboles</p>
-                          <p className="text-sm text-foreground font-medium">{totalArboles.toLocaleString()}</p>
+                          <p className="text-sm text-foreground font-medium">{formatearNumero(totalArboles, 0)}</p>
                         </div>
                         <div>
                           <p className="text-xs text-brand-brown/70 mb-1">Propósito</p>
@@ -804,15 +806,15 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                                       {insumo.nombre}
                                     </td>
                                     <td className="px-4 py-3 text-sm text-brand-brown/70 text-right">
-                                      {insumo.planeado.toFixed(2)} {insumo.unidad}
+                                      {formatearNumero(insumo.planeado, 2)} {insumo.unidad}
                                     </td>
                                     <td className="px-4 py-3 text-sm text-foreground font-medium text-right">
-                                      {insumo.aplicado.toFixed(2)} {insumo.unidad}
+                                      {formatearNumero(insumo.aplicado, 2)} {insumo.unidad}
                                     </td>
                                     <td className={`px-4 py-3 text-sm text-right ${
                                       diferencia > 0 ? 'text-orange-600' : diferencia < 0 ? 'text-blue-600' : 'text-gray-600'
                                     }`}>
-                                      {diferencia > 0 ? '+' : ''}{diferencia.toFixed(2)} {insumo.unidad}
+                                      {diferencia > 0 ? '+' : ''}{formatearNumero(diferencia, 2)} {insumo.unidad}
                                     </td>
                                     <td className="px-4 py-3 text-center">
                                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs ${
@@ -842,11 +844,11 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                           <div className="grid grid-cols-3 gap-4">
                             <div className="text-center">
                               <p className="text-xs text-brand-brown/70 mb-1">Planeadas</p>
-                              <p className="text-2xl text-foreground font-semibold">{canecasPlaneadas}</p>
+                              <p className="text-2xl text-foreground font-semibold">{formatearNumero(canecasPlaneadas, 1)}</p>
                             </div>
                             <div className="text-center">
                               <p className="text-xs text-brand-brown/70 mb-1">Aplicadas</p>
-                              <p className="text-2xl text-primary font-semibold">{canecasAplicadas}</p>
+                              <p className="text-2xl text-primary font-semibold">{formatearNumero(canecasAplicadas, 1)}</p>
                             </div>
                             <div className="text-center">
                               <p className="text-xs text-brand-brown/70 mb-1">Diferencia</p>
@@ -855,7 +857,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                                 canecasAplicadas - canecasPlaneadas < 0 ? 'text-blue-600' : 'text-gray-600'
                               }`}>
                                 {canecasAplicadas - canecasPlaneadas > 0 ? '+' : ''}
-                                {canecasAplicadas - canecasPlaneadas}
+                                {formatearNumero(canecasAplicadas - canecasPlaneadas, 1)}
                               </p>
                             </div>
                           </div>
@@ -881,7 +883,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
                       <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-center">
                         <Users className="w-5 h-5 text-primary mx-auto mb-1" />
-                        <p className="text-2xl text-foreground font-bold">{totalJornales.toFixed(1)}</p>
+                        <p className="text-2xl text-foreground font-bold">{formatearNumero(totalJornales, 1)}</p>
                         <p className="text-xs text-brand-brown/70">Jornales</p>
                       </div>
                       <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-center">
@@ -957,11 +959,11 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                                   <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                                   <span className="text-sm text-foreground font-medium">{lote_nombre}</span>
                                   <span className="text-xs text-brand-brown/60">
-                                    {lotes.find(l => l.lote_id === loteId)?.arboles.toLocaleString()} árboles
+                                    {formatearNumero(lotes.find(l => l.lote_id === loteId)?.arboles ?? 0, 0)} árboles
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-4">
-                                  <span className="text-sm text-foreground font-medium">{totalLote.toFixed(1)} jornales</span>
+                                  <span className="text-sm text-foreground font-medium">{formatearNumero(totalLote, 1)} jornales</span>
                                   <span className="text-sm text-primary font-semibold">{formatearMoneda(costoLote)}</span>
                                 </div>
                               </button>
@@ -1035,6 +1037,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                                                   onClick={() => setEditandoRegistro(regKey)}
                                                   className="p-1 text-gray-400 hover:text-primary transition-colors"
                                                   title="Editar fracción"
+                                                  aria-label="Editar fracción de jornal"
                                                 >
                                                   <Edit3 className="w-3.5 h-3.5" />
                                                 </button>
@@ -1042,6 +1045,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                                                   onClick={() => eliminarRegistro(reg._index)}
                                                   className="p-1 text-gray-400 hover:text-red-500 transition-colors"
                                                   title="Eliminar"
+                                                  aria-label="Eliminar registro de jornal"
                                                 >
                                                   <Trash2 className="w-3.5 h-3.5" />
                                                 </button>
@@ -1274,7 +1278,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                           </div>
                           <div className="flex justify-between">
                             <span className="text-brand-brown/70">Árboles:</span>
-                            <span className="text-foreground">{totalArboles.toLocaleString()}</span>
+                            <span className="text-foreground">{formatearNumero(totalArboles, 0)}</span>
                           </div>
                         </div>
                       </div>
@@ -1293,7 +1297,7 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
                           </div>
                           <div className="flex justify-between">
                             <span className="text-brand-brown/70">Jornales registrados:</span>
-                            <span className="text-foreground font-medium">{totalJornales.toFixed(1)}</span>
+                            <span className="text-foreground font-medium">{formatearNumero(totalJornales, 1)}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-brand-brown/70">Trabajadores:</span>

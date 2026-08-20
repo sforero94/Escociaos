@@ -29,6 +29,7 @@ import type {
 } from '../../types/aplicaciones';
 import { obtenerFechaHoy } from '@/utils/fechas';
 import { usaCanecas } from '@/utils/calculosAplicaciones';
+import { formatearNumero } from '@/utils/format';
 
 interface DailyMovementsDashboardProps {
   aplicacion: Aplicacion;
@@ -295,14 +296,14 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
         nuevasAlertas.push({
           tipo: 'error',
           producto_nombre: item.producto_nombre,
-          mensaje: `Se ha excedido la cantidad planificada en ${Math.abs(item.diferencia).toFixed(2)} ${item.producto_unidad}`,
+          mensaje: `Se ha excedido la cantidad planificada en ${formatearNumero(Math.abs(item.diferencia), 2)} ${item.producto_unidad}`,
           porcentaje_usado: item.porcentaje_usado
         });
       } else if (item.porcentaje_usado >= 90) {
         nuevasAlertas.push({
           tipo: 'warning',
           producto_nombre: item.producto_nombre,
-          mensaje: `Cerca del límite planificado (${item.porcentaje_usado.toFixed(1)}%)`,
+          mensaje: `Cerca del límite planificado (${formatearNumero(item.porcentaje_usado, 1)}%)`,
           porcentaje_usado: item.porcentaje_usado
         });
       }
@@ -505,16 +506,16 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
             <div className="flex-1">
               <h3 className="text-sm text-brand-brown/70 mb-1">Progreso de Canecas</h3>
               <div className="flex items-baseline gap-2">
-                <span className="text-2xl text-foreground">{canecasTotales.utilizadas.toFixed(1)}</span>
-                <span className="text-sm text-brand-brown/60">/ {canecasTotales.planeadas.toFixed(1)} canecas</span>
+                <span className="text-2xl text-foreground">{formatearNumero(canecasTotales.utilizadas, 1)}</span>
+                <span className="text-sm text-brand-brown/60">/ {formatearNumero(canecasTotales.planeadas, 1)} canecas</span>
                 <span className={`ml-2 text-sm px-2 py-1 rounded-lg ${
-                  canecasTotales.porcentaje > 100 
-                    ? 'bg-red-100 text-red-700' 
-                    : canecasTotales.porcentaje >= 90 
-                    ? 'bg-amber-100 text-amber-700' 
+                  canecasTotales.porcentaje > 100
+                    ? 'bg-red-100 text-red-700'
+                    : canecasTotales.porcentaje >= 90
+                    ? 'bg-amber-100 text-amber-700'
                     : 'bg-primary/10 text-primary'
                 }`}>
-                  {canecasTotales.porcentaje.toFixed(0)}%
+                  {formatearNumero(canecasTotales.porcentaje, 0)}%
                 </span>
               </div>
               <div className="mt-3 w-full bg-white/50 rounded-full h-2 overflow-hidden">
@@ -620,17 +621,17 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
                       <div className="flex-1">
                         <p className="text-sm text-foreground">{item.producto_nombre}</p>
                         <p className="text-xs text-brand-brown/60 mt-1">
-                          {item.total_utilizado.toFixed(2)} / {item.cantidad_planeada.toFixed(2)} {item.producto_unidad}
+                          {formatearNumero(item.total_utilizado, 2)} / {formatearNumero(item.cantidad_planeada, 2)} {item.producto_unidad}
                         </p>
                       </div>
                       <div className="text-right">
                         {item.excede_planeado ? (
                           <span className="inline-block px-2 py-1 bg-red-100 text-red-700 rounded-lg text-xs">
-                            +{Math.abs(item.diferencia).toFixed(2)}
+                            +{formatearNumero(Math.abs(item.diferencia), 2)}
                           </span>
                         ) : (
                           <span className="inline-block px-2 py-1 bg-primary/10 text-primary rounded-lg text-xs">
-                            {item.porcentaje_usado.toFixed(0)}%
+                            {formatearNumero(item.porcentaje_usado, 0)}%
                           </span>
                         )}
                       </div>
@@ -738,6 +739,7 @@ export function DailyMovementsDashboard({ aplicacion, onClose }: DailyMovementsD
                         onClick={() => handleEliminarMovimiento(mov.id!)}
                         className="text-red-500 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 transition-colors"
                         title="Eliminar movimiento"
+                        aria-label="Eliminar movimiento"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
