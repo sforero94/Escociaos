@@ -33,6 +33,15 @@ export async function generarHTMLReporte(
 
   console.log('[ReporteSemanal] Iniciando generación HTML via Edge Function...');
 
+  // El endpoint exige el JWT de sesion del usuario (rol Administrador o
+  // Gerencia), no el anon key -- mismo patron que chatService.ts.
+  const supabase = getSupabase();
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    clearTimeout(timeoutId);
+    throw new Error('Sesion no valida -- vuelve a iniciar sesion e intenta de nuevo.');
+  }
+
   try {
     const response = await fetch(
       `${EDGE_FUNCTION_BASE}/make-server-1ccce916/reportes/generar-semanal`,
@@ -40,7 +49,7 @@ export async function generarHTMLReporte(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`,
+          'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({ datos, instrucciones }),
         signal: controller.signal,

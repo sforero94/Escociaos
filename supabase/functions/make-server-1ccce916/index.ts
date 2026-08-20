@@ -2,10 +2,10 @@ import { Hono } from "npm:hono";
 import { cors } from "npm:hono/cors";
 import { logger } from "npm:hono/logger";
 import * as kv from "./kv_store.tsx";
-import { procesarCSV } from "./importar-productos.tsx";
+import { handleImportarProductos } from "./importar-productos.tsx";
 import { crearUsuario, editarUsuario, eliminarUsuario } from "./usuarios.tsx";
 import { toggleProductoActivo } from "./productos.tsx";
-import { generarReporteSemanal } from "./generar-reporte-semanal.tsx";
+import { handleGenerarReporteSemanal } from "./generar-reporte-semanal-endpoint.ts";
 import { handleChatMessage } from "./chat.tsx";
 import { handleClimaSync, handleClimaBackfill, handleClimaForecast } from "./clima.tsx";
 import { handleHatoChequeoPreview } from "./hato-chequeo-preview.ts";
@@ -49,25 +49,12 @@ app.get("/make-server-1ccce916/health", (c) => {
   return c.json({ status: "ok" });
 });
 
-// Ruta para importar productos desde CSV
+// Ruta para importar productos desde CSV -- Administrador/Gerencia (ver
+// `verificarAcceso` en importar-productos.tsx). El handler recibe el Context
+// completo (no sólo el body) porque el gate necesita leer el encabezado
+// Authorization, igual que las rutas de usuarios.
 app.post("/make-server-1ccce916/inventario/importar-productos", async (c) => {
-  try {
-    const body = await c.req.json();
-    const { csvData } = body;
-
-    if (!csvData) {
-      return c.json({ success: false, error: 'No se proporcionó datos CSV' }, 400);
-    }
-
-    const resultado = await procesarCSV(csvData);
-    return c.json(resultado);
-  } catch (error: any) {
-    console.error('Error en endpoint de importación:', error);
-    return c.json({
-      success: false,
-      error: error.message || 'Error al procesar la solicitud'
-    }, 500);
-  }
+  return await handleImportarProductos(c);
 });
 
 // Rutas para usuarios -- exclusivas de Gerencia (ver `verificarAccesoGerencia`
@@ -85,39 +72,18 @@ app.post("/make-server-1ccce916/usuarios/eliminar", async (c) => {
   return await eliminarUsuario(c);
 });
 
-// Rutas para productos
+// Rutas para productos -- Administrador/Gerencia (ver `verificarAcceso` en
+// productos.tsx), mismo permiso de escritura que la RLS de `productos`.
 app.post("/make-server-1ccce916/inventario/toggle-producto-activo", async (c) => {
-  try {
-    const body = await c.req.json();
-    const resultado = await toggleProductoActivo(body);
-    return c.json(resultado);
-  } catch (error: any) {
-    console.error('Error en endpoint de toggle producto activo:', error);
-    return c.json({
-      success: false,
-      error: error.message || 'Error al procesar la solicitud'
-    }, 500);
-  }
+  return await toggleProductoActivo(c);
 });
 
-// Ruta para generar reporte semanal con Gemini
+// Ruta para generar reporte semanal -- Administrador/Gerencia (ver
+// `verificarAcceso` en generar-reporte-semanal.tsx). Sin gate era un canal
+// de LECTURA anónimo alrededor de toda la RLS: el prompt lleva 4 semanas de
+// datos reales de finca y los resúmenes de llamadas del dueño.
 app.post("/make-server-1ccce916/reportes/generar-semanal", async (c) => {
-  try {
-    const body = await c.req.json();
-    const resultado = await generarReporteSemanal(body);
-
-    if (!resultado.success) {
-      return c.json(resultado, 400);
-    }
-
-    return c.json(resultado);
-  } catch (error: any) {
-    console.error('Error en endpoint de reporte semanal:', error);
-    return c.json({
-      success: false,
-      error: error.message || 'Error al generar el reporte semanal'
-    }, 500);
-  }
+  return await handleGenerarReporteSemanal(c);
 });
 
 // Telegram bot webhook
@@ -130,12 +96,19 @@ app.post("/make-server-1ccce916/chat/message", async (c) => {
   return await handleChatMessage(c);
 });
 
-// Ruta para sincronizar datos de clima desde Ecowitt API (pg_cron every 5 min)
+// Ruta para sincronizar datos de clima desde Ecowitt API (pg_cron every 5 min).
+// Auth de DOBLE PUERTA en clima.tsx (`verificarAccesoClima`): secreto
+// compartido `x-clima-sync-secret` para el cron (migraciones 030 + 103), o
+// JWT + Gerencia para un disparo manual. Sin secreto configurado y sin JWT
+// responde 503 -- nunca corre "abierto".
 app.post("/make-server-1ccce916/clima/sync", async (c) => {
   return await handleClimaSync(c);
 });
 
-// Backfill historical weather data from Ecowitt API
+// Backfill historical weather data from Ecowitt API. Mismo gate que
+// /clima/sync; no tiene cron, el camino normal es el JWT de Gerencia. El
+// rango está topado (MAX_DIAS_BACKFILL) para que no se pueda agotar la cuota
+// de Ecowitt de una sola llamada.
 app.post("/make-server-1ccce916/clima/backfill", async (c) => {
   return await handleClimaBackfill(c);
 });

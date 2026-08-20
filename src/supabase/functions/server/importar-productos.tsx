@@ -1,4 +1,91 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.39.3';
+import { Context } from 'npm:hono';
+
+// ---------------------------------------------------------------------------
+// Auth: la importación masiva de productos por CSV INSERTA filas en
+// `productos` con el service role. Mismo permiso de escritura que la RLS de
+// esa tabla (política "Gerencia acceso total" + "Administrador escritura
+// productos"), y mismo patrón `verificarAcceso` que `usuarios.tsx` /
+// `hato-chequeo-commit.ts` (Bearer JWT -> auth.getUser -> rol en
+// `usuarios`), repetido en vez de importado por el mismo motivo: cada
+// endpoint de este árbol es autocontenido en su propio I/O.
+//
+// Antes de este gate la ruta corría sin leer el encabezado Authorization:
+// cualquiera en internet que supiera la URL podía insertar filas
+// arbitrarias en el catálogo de productos (la edge function corre con
+// verify_jwt=false, que no se puede activar porque el webhook de Telegram y
+// los pg_cron dependen de que siga en false).
+// ---------------------------------------------------------------------------
+const ROLES_PERMITIDOS = new Set(['Administrador', 'Gerencia']);
+
+function respuestaError(c: Context, status: 400 | 401 | 403 | 500, body: Record<string, unknown>) {
+  return c.json({ success: false, ...body }, status);
+}
+
+async function verificarAcceso(
+  c: Context,
+  supabase: ReturnType<typeof createClient>,
+): Promise<{ userId: string } | Response> {
+  const authHeader = c.req.header('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return respuestaError(c, 401, { error: 'No autorizado -- falta encabezado Authorization Bearer.' });
+  }
+  const token = authHeader.slice(7);
+
+  const { data: userData, error: userError } = await supabase.auth.getUser(token);
+  if (userError || !userData?.user) {
+    return respuestaError(c, 401, { error: 'Token inválido o expirado.' });
+  }
+
+  const { data: usuario, error: usuarioError } = await supabase
+    .from('usuarios')
+    .select('rol')
+    .eq('id', userData.user.id)
+    .maybeSingle();
+  if (usuarioError) {
+    return respuestaError(c, 500, { error: `No se pudo verificar el rol del usuario: ${usuarioError.message}` });
+  }
+  if (!usuario || !ROLES_PERMITIDOS.has(usuario.rol as string)) {
+    return respuestaError(c, 403, {
+      error: 'Acceso restringido a Administrador o Gerencia (mismo permiso de escritura que la RLS de productos).',
+    });
+  }
+
+  return { userId: userData.user.id };
+}
+
+/**
+ * Entrada HTTP de la importación por CSV.
+ *
+ * Recibe el Context completo de Hono (no sólo el body) porque el gate
+ * necesita leer el encabezado Authorization -- mismo cambio de firma que
+ * hizo `usuarios.tsx`. `procesarCSV` queda intacta y sin auth: es la lógica
+ * de importación, no la puerta.
+ */
+export async function handleImportarProductos(c: Context): Promise<Response> {
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+  );
+
+  const acceso = await verificarAcceso(c, supabase);
+  if (acceso instanceof Response) return acceso;
+
+  try {
+    const body = await c.req.json();
+    const { csvData } = body ?? {};
+
+    if (!csvData) {
+      return respuestaError(c, 400, { error: 'No se proporcionó datos CSV' });
+    }
+
+    const resultado = await procesarCSV(csvData);
+    return c.json(resultado);
+  } catch (error: any) {
+    console.error('Error en endpoint de importación:', error);
+    return respuestaError(c, 500, { error: error.message || 'Error al procesar la solicitud' });
+  }
+}
 
 // Función para normalizar texto (quitar acentos, convertir a minúsculas)
 function normalizar(texto: string): string {
