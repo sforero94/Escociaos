@@ -12,16 +12,19 @@ import { join, relative } from 'path';
  * de pantalla como diálogo.
  *
  * `dialogScrollContract.test.ts` ya vigila el contrato de scroll de `DialogContent`, pero
- * solo mira `DialogContent` — no puede ver estos cinco modales hechos a mano porque no usan
- * ese componente en absoluto.
+ * solo mira `DialogContent` — no puede ver los modales hechos a mano porque no usan ese
+ * componente en absoluto.
  *
- * HOY el módulo tiene exactamente 5 de estos (ver ALLOWLIST): son la Fase 0 encontrándolos,
- * no la Fase 0 introduciéndolos. La decisión 1 del contrato ya migra uno de los cinco
- * (CierreAplicacion.tsx, que hoy es una página completa disfrazada de modal) a página real con
- * `AplicacionShell` — las fases siguientes hacen lo mismo con los otros cuatro. Por eso este
- * guard está en verde hoy mismo (los 5 están en la allowlist) pero no puede admitir un sexto:
- * cualquier archivo nuevo bajo este módulo que use `fixed inset-0` hace fallar el test, con los
- * nombres de archivo listados en el mensaje de fallo.
+ * El módulo arrancó con exactamente 5 de estos (ver ALLOWLIST original en el historial de
+ * git): son la Fase 0 encontrándolos, no la Fase 0 introduciéndolos. W00 (Lista/Detalle/Iniciar
+ * Ejecución), W03 (Cierre) y W01 (Calculadora — este cambio) ya migraron los 5 a
+ * `Dialog`/`AlertDialog` reales o a `AplicacionShell` (Cierre, página completa en vez de modal
+ * falso). La confirmación de "¿Cancelar aplicación?" de `CalculadoraAplicaciones.tsx` era el
+ * último: pasó de un `<div className="fixed inset-0 ...">` a mano a `ConfirmDialog` (`AlertDialog`
+ * de Radix, regla 6 del contrato — es una acción destructiva/irreversible). La ALLOWLIST queda
+ * vacía — no es un permiso permanente, así que el guard no admite ningún archivo nuevo: cualquiera
+ * bajo este módulo que use `fixed inset-0` hace fallar el test, con los nombres de archivo
+ * listados en el mensaje de fallo.
  *
  * Busca solo dentro de valores de `className` (atributo JSX, string u objeto de plantilla),
  * nunca en texto plano del archivo — así un comentario que *mencione* "fixed inset-0" (como
@@ -31,24 +34,13 @@ import { join, relative } from 'path';
 const APLICACIONES_DIR = join(__dirname, '..', 'components', 'aplicaciones');
 
 /**
- * Los 5 modales hechos a mano que existen HOY. Cada entrada debe borrarse de esta lista
- * cuando su workflow se migra a `Dialog`/`AlertDialog` (acciones destructivas, regla 6) o a
- * `AplicacionShell` (páginas completas, como Cierre). La allowlist debe llegar a [] — no es
- * un permiso permanente.
+ * Los 5 modales hechos a mano que existían al arrancar Fase 0/1 ya migraron todos —
+ * `CalculadoraAplicaciones.tsx` era el último (ver docstring de arriba). Esta lista queda
+ * vacía a propósito: no es un permiso permanente, y la tercera prueba de este archivo
+ * (`la allowlist no contiene ningún archivo que ya haya migrado`) falla si alguien agrega
+ * una entrada que ya no tiene `fixed inset-0`.
  */
-const ALLOWLIST = new Set([
-  // Confirmación de cancelar el wizard — debería ser AlertDialog (acción destructiva/irreversible).
-  'CalculadoraAplicaciones.tsx',
-  // Confirmación de eliminar una aplicación — debería ser AlertDialog.
-  'AplicacionesList.tsx',
-  // Modal de detalle de una aplicación — debería ser Dialog + DialogContent size + DialogBody.
-  'DetalleAplicacion.tsx',
-  // Modal de iniciar ejecución — debería ser Dialog + DialogContent size + DialogBody.
-  'IniciarEjecucionModal.tsx',
-  // Hoy es la PANTALLA COMPLETA de Cierre disfrazada de modal (decisión 1 del contrato):
-  // pasa a página real en /aplicaciones/:id/cierre con AplicacionShell + AplicacionStepper.
-  'CierreAplicacion.tsx',
-]);
+const ALLOWLIST = new Set<string>([]);
 
 function collectTsx(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {

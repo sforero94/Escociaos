@@ -1,14 +1,46 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, Edit, PlayCircle, CheckCircle, Calendar, Droplet, Package, MapPin, Target, TrendingUp, ShoppingCart, FileText, DollarSign, Users, Loader2, BarChart2, Play } from 'lucide-react';
+import {
+  Edit,
+  CheckCircle,
+  Calendar,
+  Droplet,
+  Package,
+  MapPin,
+  Target,
+  TrendingUp,
+  ShoppingCart,
+  FileText,
+  DollarSign,
+  Users,
+  BarChart2,
+  Play,
+  ClipboardList,
+  type LucideIcon,
+} from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { Button } from '../ui/button';
+import { Spinner } from '@/components/ui/spinner';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Progress } from '@/components/ui/progress';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { cn } from '@/components/ui/utils';
+import { EstadoAplicacionBadge } from './shared/EstadoAplicacionBadge';
 import { generarPDFListaCompras } from '../../utils/generarPDFListaCompras';
 import { generarPDFReporteCierre } from '../../utils/generarPDFReporteCierre';
 import { fetchDatosReporteCierre } from '../../utils/fetchDatosReporteCierre';
 import type { Aplicacion, ListaCompras } from '../../types/aplicaciones';
 import { toast } from 'sonner';
-import { formatearNumero } from '../../utils/format';
+import { formatearNumero, formatearMoneda } from '../../utils/format';
 
 interface DetalleAplicacionProps {
   aplicacion: Aplicacion;
@@ -24,6 +56,31 @@ interface ResumenInsumo {
   unidad: string;
   planeado: number;
   aplicado: number;
+}
+
+/** Marco de sub-sección compartido dentro del diálogo: icono + título + cuerpo con padding.
+ * Local a este archivo — no se promueve a `shared/` porque solo lo usan las 3 secciones de
+ * abajo (Información General, Resumen de Canecas/Bultos, Resumen de Cierre). La sección de
+ * productos NO lo usa: `Table` ya trae su propio borde/redondeo y anidarla aquí dibujaría un
+ * borde dentro de otro borde. */
+function SeccionDetalle({
+  icon: Icon,
+  titulo,
+  children,
+}: {
+  icon: LucideIcon;
+  titulo: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border bg-card">
+      <div className="flex items-center gap-2 border-b border-border bg-primary/5 px-5 py-3">
+        <Icon className="size-4 text-primary" aria-hidden="true" />
+        <h3 className="text-sm font-medium text-foreground">{titulo}</h3>
+      </div>
+      <div className="p-5">{children}</div>
+    </div>
+  );
 }
 
 export function DetalleAplicacion({
@@ -107,7 +164,7 @@ export function DetalleAplicacion({
               .from('plagas_enfermedades_catalogo')
               .select('nombre')
               .in('id', bb);
-            
+
             setBlancoBiologico(plagas?.map(p => p.nombre).join(', ') || 'No especificado');
           } else {
             setBlancoBiologico('No especificado');
@@ -222,7 +279,7 @@ export function DetalleAplicacion({
 
       if (mezclas && mezclas.length > 0) {
         const mezclasIds = mezclas.map(m => m.id);
-        
+
         const result = await supabase
           .from('aplicaciones_productos')
           .select('producto_id, producto_nombre, producto_unidad, cantidad_total_necesaria, mezcla_id, dosis_grandes, dosis_medianos, dosis_pequenos, dosis_clonales')
@@ -306,7 +363,7 @@ export function DetalleAplicacion({
       // Agregar aplicados (convirtiendo a unidad base si es necesario)
       productosAplicados?.forEach((prod) => {
         const key = prod.producto_id;
-        
+
         // Convertir a unidad base (L o Kg)
         let cantidadEnUnidadBase = prod.cantidad_utilizada;
         if (prod.unidad === 'cc') {
@@ -314,7 +371,7 @@ export function DetalleAplicacion({
         } else if (prod.unidad === 'g') {
           cantidadEnUnidadBase = prod.cantidad_utilizada / 1000;
         }
-        
+
         if (!insumosMap.has(key)) {
           // Si no existe en planeados, crear entrada
           insumosMap.set(key, {
@@ -342,27 +399,17 @@ export function DetalleAplicacion({
     if (!fecha) return '-';
     // Extraer año, mes, día directamente del string para evitar problemas de zona horaria
     const [year, month, day] = fecha.split('T')[0].split('-');
-    
+
     const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
     const mesNombre = meses[parseInt(month) - 1];
-    
+
     return `${parseInt(day)} de ${mesNombre} de ${year}`;
   };
 
-  const getEstadoBadge = (estado: string) => {
-    const styles = {
-      Calculada: 'bg-blue-50 border-blue-200 text-blue-700',
-      Programada: 'bg-purple-50 border-purple-200 text-purple-700',
-      'En ejecución': 'bg-amber-50 border-amber-200 text-amber-700',
-      Cerrada: 'bg-green-50 border-green-200 text-green-700',
-    };
-    return styles[estado as keyof typeof styles] || 'bg-gray-50 border-gray-200 text-gray-700';
-  };
-
   const getTipoIcon = () => {
-    if (aplicacion.tipo_aplicacion === 'Fumigación') return <Droplet className="w-5 h-5" />;
-    if (aplicacion.tipo_aplicacion === 'Fertilización') return <Package className="w-5 h-5" />;
-    return <Target className="w-5 h-5" />;
+    if (aplicacion.tipo_aplicacion === 'Fumigación') return <Droplet className="size-[18px]" aria-hidden="true" />;
+    if (aplicacion.tipo_aplicacion === 'Fertilización') return <Package className="size-[18px]" aria-hidden="true" />;
+    return <Target className="size-[18px]" aria-hidden="true" />;
   };
 
   const getTipoNombre = () => {
@@ -446,442 +493,357 @@ export function DetalleAplicacion({
     }
   };
 
-  const formatearMonedaLocal = (valor: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0,
-    }).format(valor);
-  };
+  const diferenciaCanecas = canecasAplicadas - canecasPlaneadas;
+  const porcentajeAplicado = canecasPlaneadas > 0 ? (canecasAplicadas / canecasPlaneadas) * 100 : 0;
+  const progresoPct = canecasPlaneadas > 0 ? Math.min((canecasAplicadas / canecasPlaneadas) * 100, 100) : 0;
 
   return (
-    <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-      onClick={onClose}
-    >
-      <div 
-        className="bg-background rounded-3xl shadow-[0_8px_48px_rgba(115,153,28,0.15)] max-w-5xl w-full max-h-[92vh] overflow-hidden flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* HEADER con diseño mejorado */}
-        <div className="relative bg-gradient-to-r from-primary to-primary-dark px-6 py-5">
-          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48cGF0dGVybiBpZD0iZ3JpZCIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBwYXR0ZXJuVW5pdHM9InVzZXJTcGFjZU9uVXNlIj48cGF0aCBkPSJNIDQwIDAgTCAwIDAgMCA0MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLW9wYWNpdHk9IjAuMSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9wYXR0ZXJuPjwvZGVmcz48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI2dyaWQpIi8+PC9zdmc+')] opacity-30"></div>
-          
-          <div className="relative flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center text-white">
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent size="lg">
+        <DialogHeader>
+          <div className="flex items-start justify-between gap-4 pr-6">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 {getTipoIcon()}
               </div>
-              <div>
-                <h2 className="text-xl text-white">{aplicacion.nombre_aplicacion}</h2>
-                <p className="text-sm text-white/80 mt-0.5">{getTipoNombre()}</p>
+              <div className="min-w-0">
+                <DialogTitle className="truncate">{aplicacion.nombre_aplicacion}</DialogTitle>
+                <p className="mt-0.5 text-sm text-muted-foreground">{getTipoNombre()}</p>
               </div>
             </div>
-            
-            <div className="flex items-center gap-3">
-              <span className={`px-3 py-1.5 rounded-lg text-sm border ${getEstadoBadge(aplicacion.estado ?? '')}`}>
-                {aplicacion.estado}
-              </span>
-              <button
-                onClick={onClose}
-                className="p-2 hover:bg-white/20 rounded-lg transition-colors text-white"
-                aria-label="Cerrar"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+            <EstadoAplicacionBadge estado={aplicacion.estado} className="shrink-0" />
           </div>
-        </div>
+          <DialogDescription className="sr-only">
+            Detalle de la aplicación {aplicacion.nombre_aplicacion}: información general,
+            resumen de canecas o bultos, productos y — si está cerrada — resumen de cierre.
+          </DialogDescription>
+        </DialogHeader>
 
-        {/* CONTENIDO */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <DialogBody className="space-y-4">
           {loading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+            <div className="flex h-64 items-center justify-center">
+              <Spinner className="size-8 text-primary" />
             </div>
           ) : (
-            <div className="space-y-5">
-              {/* Card de Información General */}
-              <div className="bg-white rounded-2xl border border-primary/10 shadow-[0_2px_12px_rgba(115,153,28,0.06)] overflow-hidden">
-                <div className="px-5 py-3 bg-gradient-to-r from-primary/5 to-transparent border-b border-primary/10">
-                  <h3 className="text-sm text-foreground flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-primary" />
-                    Información General
-                  </h3>
-                </div>
-                <div className="p-5">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <p className="text-xs text-brand-brown/60">Fecha Inicio (Planeada)</p>
-                      <p className="text-sm text-foreground">{formatearFecha(aplicacion.fecha_inicio_planeada ?? null)}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs text-brand-brown/60">Fecha Fin (Planeada)</p>
-                      <p className="text-sm text-foreground">{formatearFecha(fechaFinEstimada)}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs text-brand-brown/60">Fecha Inicio (Real)</p>
-                      <p className="text-sm text-foreground">{formatearFecha(aplicacion.fecha_inicio_ejecucion ?? null)}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs text-brand-brown/60">Fecha Fin (Real)</p>
-                      <p className="text-sm text-foreground">
-                        {aplicacion.fecha_cierre ? formatearFecha(aplicacion.fecha_cierre) : (
-                          <span className="text-amber-600">En progreso</span>
-                        )}
-                      </p>
-                    </div>
-                    <div className="space-y-1 col-span-2">
-                      <p className="text-xs text-brand-brown/60">Propósito</p>
-                      <p className="text-sm text-foreground">{aplicacion.proposito || 'No especificado'}</p>
-                    </div>
-                    <div className="space-y-1 col-span-2">
-                      <p className="text-xs text-brand-brown/60 flex items-center gap-1">
-                        <Target className="w-3 h-3" />
-                        Blanco Biológico
-                      </p>
-                      <p className="text-sm text-foreground">{blancoBiologico}</p>
-                    </div>
-                    <div className="space-y-1 col-span-2">
-                      <p className="text-xs text-brand-brown/60 flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />
-                        Lotes {selectedLote && <span className="text-primary font-medium">(filtrado)</span>}
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => setSelectedLote(null)}
-                          className={`px-2 py-1 rounded-lg text-xs transition-all ${
-                            !selectedLote
-                              ? 'bg-primary text-white shadow-sm'
-                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                          }`}
-                        >
-                          Todos
-                        </button>
-                        {lotesData.map((lote, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => setSelectedLote(lote.id)}
-                            className={`px-2 py-1 rounded-lg text-xs transition-all ${
-                              selectedLote === lote.id
-                                ? 'bg-primary text-white shadow-sm'
-                                : 'bg-primary/10 text-primary hover:bg-primary/20'
-                            }`}
-                          >
-                            {lote.nombre}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+            <>
+              {/* Información General */}
+              <SeccionDetalle icon={Calendar} titulo="Información General">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Fecha Inicio (Planeada)</p>
+                    <p className="text-sm text-foreground">{formatearFecha(aplicacion.fecha_inicio_planeada ?? null)}</p>
                   </div>
-                </div>
-              </div>
-
-              {/* Card de Resumen de Canecas/Bultos */}
-              <div className="bg-white rounded-2xl border border-primary/10 shadow-[0_2px_12px_rgba(115,153,28,0.06)] overflow-hidden">
-                <div className="px-5 py-3 bg-gradient-to-r from-primary/5 to-transparent border-b border-primary/10">
-                  <h3 className="text-sm text-foreground flex items-center gap-2">
-                    {aplicacion.tipo_aplicacion === 'Fertilización' ? (
-                      <Package className="w-4 h-4 text-primary" />
-                    ) : (
-                      <Droplet className="w-4 h-4 text-primary" />
-                    )}
-                    {aplicacion.tipo_aplicacion === 'Fertilización' ? 'Resumen de Bultos' : 'Resumen de Canecas'}
-                  </h3>
-                </div>
-                <div className="p-5">
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="text-center p-4 bg-background rounded-xl">
-                      <p className="text-xs text-brand-brown/60 mb-1">Planeado</p>
-                      <p className="text-2xl text-foreground">{formatearNumero(canecasPlaneadas, 1)}</p>
-                    </div>
-                    <div className="text-center p-4 bg-primary/5 rounded-xl">
-                      <p className="text-xs text-brand-brown/60 mb-1">Aplicado</p>
-                      <p className="text-2xl text-primary">{formatearNumero(canecasAplicadas, 1)}</p>
-                      <p className="text-xs text-brand-brown/60 mt-1">
-                        ({canecasPlaneadas > 0 ? formatearNumero((canecasAplicadas / canecasPlaneadas) * 100, 0) : 0}%)
-                      </p>
-                    </div>
-                    <div className="text-center p-4 bg-background rounded-xl">
-                      <p className="text-xs text-brand-brown/60 mb-1">Diferencia</p>
-                      <p className={`text-2xl ${
-                        canecasAplicadas > canecasPlaneadas
-                          ? 'text-red-600'
-                          : canecasAplicadas < canecasPlaneadas
-                          ? 'text-amber-600'
-                          : 'text-gray-600'
-                      }`}>
-                        {canecasAplicadas > canecasPlaneadas ? '+' : ''}
-                        {formatearNumero(canecasAplicadas - canecasPlaneadas, 1)}
-                      </p>
-                      <p className="text-xs text-brand-brown/60 mt-1">
-                        ({canecasPlaneadas > 0 ? formatearNumero(((canecasAplicadas - canecasPlaneadas) / canecasPlaneadas) * 100, 0) : 0}%)
-                      </p>
-                    </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Fecha Fin (Planeada)</p>
+                    <p className="text-sm text-foreground">{formatearFecha(fechaFinEstimada)}</p>
                   </div>
-
-                  {/* Barra de progreso */}
-                  <div className="mt-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-brand-brown/60">Progreso</span>
-                      <span className="text-xs text-foreground">
-                        {canecasPlaneadas > 0 ? formatearNumero((canecasAplicadas / canecasPlaneadas) * 100, 0) : 0}%
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                      <div
-                        className={`h-full transition-all ${
-                          canecasAplicadas > canecasPlaneadas
-                            ? 'bg-red-500'
-                            : canecasAplicadas >= canecasPlaneadas * 0.9
-                            ? 'bg-amber-500'
-                            : 'bg-primary'
-                        }`}
-                        style={{ 
-                          width: `${canecasPlaneadas > 0 ? Math.min((canecasAplicadas / canecasPlaneadas) * 100, 100) : 0}%` 
-                        }}
-                      />
-                    </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Fecha Inicio (Real)</p>
+                    <p className="text-sm text-foreground">{formatearFecha(aplicacion.fecha_inicio_ejecucion ?? null)}</p>
                   </div>
-                </div>
-              </div>
-
-              {/* Card de Resumen de Insumos */}
-              <div className="bg-white rounded-2xl border border-primary/10 shadow-[0_2px_12px_rgba(115,153,28,0.06)] overflow-hidden">
-                <div className="px-5 py-3 bg-gradient-to-r from-primary/5 to-transparent border-b border-primary/10">
-                  <h3 className="text-sm text-foreground flex items-center gap-2">
-                    <Package className="w-4 h-4 text-primary" />
-                    Resumen de Productos
-                  </h3>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-background">
-                      <tr>
-                        <th className="text-left py-3 px-5 text-xs text-brand-brown/70">Producto</th>
-                        <th className="text-right py-3 px-4 text-xs text-brand-brown/70">Planeado</th>
-                        <th className="text-right py-3 px-4 text-xs text-brand-brown/70">Aplicado</th>
-                        <th className="text-right py-3 px-4 text-xs text-brand-brown/70">Diferencia</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-primary/5">
-                      {resumenInsumos.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} className="py-8 text-center">
-                            <Package className="w-10 h-10 text-primary/20 mx-auto mb-2" />
-                            <p className="text-sm text-brand-brown/50">No hay productos registrados</p>
-                          </td>
-                        </tr>
-                      ) : (
-                        resumenInsumos.map((insumo, index) => {
-                          const diferencia = insumo.aplicado - insumo.planeado;
-                          const porcentaje = insumo.planeado > 0 ? (insumo.aplicado / insumo.planeado) * 100 : 0;
-                          
-                          return (
-                            <tr key={index} className="hover:bg-background transition-colors">
-                              <td className="py-3 px-5">
-                                <div className="text-sm text-foreground">{insumo.nombre}</div>
-                                <div className="text-xs text-brand-brown/50 mt-0.5">{insumo.unidad}</div>
-                              </td>
-                              <td className="py-3 px-4 text-right text-sm text-foreground">
-                                {formatearNumero(insumo.planeado, 2)}
-                              </td>
-                              <td className="py-3 px-4 text-right">
-                                <div className="text-sm text-primary">
-                                  {formatearNumero(insumo.aplicado, 2)}
-                                </div>
-                                <div className="text-xs text-brand-brown/50 mt-0.5">
-                                  {formatearNumero(porcentaje, 0)}%
-                                </div>
-                              </td>
-                              <td className="py-3 px-4 text-right">
-                                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-sm ${
-                                  diferencia > 0.1
-                                    ? 'bg-red-50 text-red-700'
-                                    : diferencia < -0.1
-                                    ? 'bg-amber-50 text-amber-700'
-                                    : 'bg-gray-50 text-gray-700'
-                                }`}>
-                                  {diferencia > 0 && <TrendingUp className="w-3 h-3" />}
-                                  {diferencia > 0 ? '+' : ''}
-                                  {formatearNumero(diferencia, 2)}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Fecha Fin (Real)</p>
+                    <p className="text-sm text-foreground">
+                      {aplicacion.fecha_cierre ? formatearFecha(aplicacion.fecha_cierre) : (
+                        <span className="text-warning-foreground">En progreso</span>
                       )}
-                    </tbody>
-                  </table>
+                    </p>
+                  </div>
+                  <div className="col-span-2 space-y-1">
+                    <p className="text-xs text-muted-foreground">Propósito</p>
+                    <p className="text-sm text-foreground">{aplicacion.proposito || 'No especificado'}</p>
+                  </div>
+                  <div className="col-span-2 space-y-1">
+                    <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Target className="size-3" aria-hidden="true" />
+                      Blanco Biológico
+                    </p>
+                    <p className="text-sm text-foreground">{blancoBiologico}</p>
+                  </div>
+                  <div className="col-span-2 space-y-1.5">
+                    <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <MapPin className="size-3" aria-hidden="true" />
+                      Lotes {selectedLote && <span className="font-medium text-primary">(filtrado)</span>}
+                    </p>
+                    <ToggleGroup
+                      type="single"
+                      variant="outline"
+                      value={selectedLote ?? 'todos'}
+                      onValueChange={(value) => setSelectedLote(!value || value === 'todos' ? null : value)}
+                      className="h-auto flex-wrap justify-start"
+                      aria-label="Filtrar por lote"
+                    >
+                      <ToggleGroupItem value="todos">Todos</ToggleGroupItem>
+                      {lotesData.map((lote) => (
+                        <ToggleGroupItem key={lote.id} value={lote.id}>
+                          {lote.nombre}
+                        </ToggleGroupItem>
+                      ))}
+                    </ToggleGroup>
+                  </div>
                 </div>
+              </SeccionDetalle>
+
+              {/* Resumen de Canecas/Bultos */}
+              <SeccionDetalle
+                icon={aplicacion.tipo_aplicacion === 'Fertilización' ? Package : Droplet}
+                titulo={aplicacion.tipo_aplicacion === 'Fertilización' ? 'Resumen de Bultos' : 'Resumen de Canecas'}
+              >
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-xl bg-muted p-4 text-center">
+                    <p className="mb-1 text-xs text-muted-foreground">Planeado</p>
+                    <p className="text-xl font-semibold tabular-nums text-foreground">
+                      {formatearNumero(canecasPlaneadas, 1)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-primary/5 p-4 text-center">
+                    <p className="mb-1 text-xs text-muted-foreground">Aplicado</p>
+                    <p className="text-xl font-semibold tabular-nums text-primary">
+                      {formatearNumero(canecasAplicadas, 1)}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      ({canecasPlaneadas > 0 ? formatearNumero(porcentajeAplicado, 0) : 0}%)
+                    </p>
+                  </div>
+                  <div
+                    className={cn(
+                      'rounded-xl p-4 text-center',
+                      diferenciaCanecas > 0
+                        ? 'bg-destructive/10'
+                        : diferenciaCanecas < 0
+                          ? 'bg-warning/15'
+                          : 'bg-muted',
+                    )}
+                  >
+                    <p className="mb-1 text-xs text-muted-foreground">Diferencia</p>
+                    <p
+                      className={cn(
+                        'text-xl font-semibold tabular-nums',
+                        diferenciaCanecas > 0
+                          ? 'text-destructive'
+                          : diferenciaCanecas < 0
+                            ? 'text-warning-foreground'
+                            : 'text-foreground',
+                      )}
+                    >
+                      {diferenciaCanecas > 0 ? '+' : ''}
+                      {formatearNumero(diferenciaCanecas, 1)}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      ({canecasPlaneadas > 0 ? formatearNumero((diferenciaCanecas / canecasPlaneadas) * 100, 0) : 0}%)
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Progreso</span>
+                    <span className="text-foreground">
+                      {canecasPlaneadas > 0 ? formatearNumero(porcentajeAplicado, 0) : 0}%
+                    </span>
+                  </div>
+                  <Progress value={progresoPct} />
+                </div>
+              </SeccionDetalle>
+
+              {/* Resumen de Productos — Table ya trae su propio borde/redondeo; no se anida en
+                  SeccionDetalle para no dibujar un borde dentro de otro borde. */}
+              <div>
+                <div className="mb-3 flex items-center gap-2">
+                  <Package className="size-4 text-primary" aria-hidden="true" />
+                  <h3 className="text-sm font-medium text-foreground">Resumen de Productos</h3>
+                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Producto</TableHead>
+                      <TableHead className="text-right">Planeado</TableHead>
+                      <TableHead className="text-right">Aplicado</TableHead>
+                      <TableHead className="text-right">Diferencia</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {resumenInsumos.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="whitespace-normal py-8 text-center">
+                          <Package className="mx-auto mb-2 size-8 text-primary/20" aria-hidden="true" />
+                          <p className="text-sm text-muted-foreground">No hay productos registrados</p>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      resumenInsumos.map((insumo, index) => {
+                        const diferencia = insumo.aplicado - insumo.planeado;
+                        const porcentaje = insumo.planeado > 0 ? (insumo.aplicado / insumo.planeado) * 100 : 0;
+
+                        return (
+                          <TableRow key={index}>
+                            <TableCell className="whitespace-normal">
+                              <div className="text-sm text-foreground">{insumo.nombre}</div>
+                              <div className="text-xs text-muted-foreground">{insumo.unidad}</div>
+                            </TableCell>
+                            <TableCell className="text-right">{formatearNumero(insumo.planeado, 2)}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="text-primary">{formatearNumero(insumo.aplicado, 2)}</div>
+                              <div className="text-xs text-muted-foreground">{formatearNumero(porcentaje, 0)}%</div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <span
+                                className={cn(
+                                  'inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm',
+                                  diferencia > 0.1
+                                    ? 'bg-destructive/10 text-destructive'
+                                    : diferencia < -0.1
+                                      ? 'bg-warning/15 text-warning-foreground'
+                                      : 'bg-muted text-muted-foreground',
+                                )}
+                              >
+                                {diferencia > 0 && <TrendingUp className="size-3" aria-hidden="true" />}
+                                {diferencia > 0 ? '+' : ''}
+                                {formatearNumero(diferencia, 2)}
+                              </span>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
               </div>
 
-              {/* Card de Resumen de Cierre (solo para apps cerradas) */}
+              {/* Resumen de Cierre (solo para apps cerradas) */}
               {aplicacion.estado === 'Cerrada' && datosCompletos && (
-                <div className="bg-white rounded-2xl border border-primary/10 shadow-[0_2px_12px_rgba(115,153,28,0.06)] overflow-hidden">
-                  <div className="px-5 py-3 bg-gradient-to-r from-primary/5 to-transparent border-b border-primary/10">
-                    <h3 className="text-sm text-foreground flex items-center gap-2">
-                      <DollarSign className="w-4 h-4 text-primary" />
-                      Resumen de Cierre
-                    </h3>
-                  </div>
-                  <div className="p-5">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="text-center p-3 bg-blue-50 rounded-xl">
-                        <p className="text-xs text-blue-700 mb-1">Insumos</p>
-                        <p className="text-lg text-blue-900 font-semibold">
-                          {formatearMonedaLocal(datosCompletos.costo_total_insumos || 0)}
-                        </p>
-                      </div>
-                      <div className="text-center p-3 bg-purple-50 rounded-xl">
-                        <p className="text-xs text-purple-700 mb-1">Mano de Obra</p>
-                        <p className="text-lg text-purple-900 font-semibold">
-                          {formatearMonedaLocal(datosCompletos.costo_total_mano_obra || 0)}
-                        </p>
-                      </div>
-                      <div className="text-center p-3 bg-primary/10 rounded-xl">
-                        <p className="text-xs text-primary mb-1">Costo Total</p>
-                        <p className="text-lg text-foreground font-bold">
-                          {formatearMonedaLocal(datosCompletos.costo_total || 0)}
-                        </p>
-                      </div>
-                      <div className="text-center p-3 bg-orange-50 rounded-xl">
-                        <p className="text-xs text-orange-700 mb-1">Costo / Árbol</p>
-                        <p className="text-lg text-orange-900 font-semibold">
-                          {formatearMonedaLocal(datosCompletos.costo_por_arbol || 0)}
-                        </p>
-                      </div>
+                <SeccionDetalle icon={DollarSign} titulo="Resumen de Cierre">
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    <div className="rounded-xl bg-muted p-3 text-center">
+                      <p className="mb-1 text-xs text-muted-foreground">Insumos</p>
+                      <p className="text-base font-semibold text-foreground">
+                        {formatearMoneda(datosCompletos.costo_total_insumos || 0)}
+                      </p>
                     </div>
-
-                    {/* Labor info */}
-                    {(datosCompletos.jornales_utilizados > 0 || datosCompletos.valor_jornal > 0) && (
-                      <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-4">
-                        {datosCompletos.jornales_utilizados > 0 && (
-                          <div className="flex items-center gap-2 text-sm">
-                            <Users className="w-4 h-4 text-primary" />
-                            <span className="text-brand-brown/60">Jornales:</span>
-                            <span className="text-foreground font-medium">{datosCompletos.jornales_utilizados}</span>
-                          </div>
-                        )}
-                        {datosCompletos.valor_jornal > 0 && (
-                          <div className="flex items-center gap-2 text-sm">
-                            <DollarSign className="w-4 h-4 text-primary" />
-                            <span className="text-brand-brown/60">Valor jornal:</span>
-                            <span className="text-foreground font-medium">{formatearMonedaLocal(datosCompletos.valor_jornal)}</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Observations */}
-                    {datosCompletos.observaciones_cierre && (
-                      <div className="mt-4 pt-4 border-t border-gray-100">
-                        <p className="text-xs text-brand-brown/60 mb-1">Observaciones de cierre</p>
-                        <p className="text-sm text-foreground bg-background rounded-lg p-3 italic">
-                          {datosCompletos.observaciones_cierre}
-                        </p>
-                      </div>
-                    )}
+                    <div className="rounded-xl bg-muted p-3 text-center">
+                      <p className="mb-1 text-xs text-muted-foreground">Mano de Obra</p>
+                      <p className="text-base font-semibold text-foreground">
+                        {formatearMoneda(datosCompletos.costo_total_mano_obra || 0)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-primary/5 p-3 text-center">
+                      <p className="mb-1 text-xs text-primary">Costo Total</p>
+                      <p className="text-base font-bold text-foreground">
+                        {formatearMoneda(datosCompletos.costo_total || 0)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl bg-muted p-3 text-center">
+                      <p className="mb-1 text-xs text-muted-foreground">Costo / Árbol</p>
+                      <p className="text-base font-semibold text-foreground">
+                        {formatearMoneda(datosCompletos.costo_por_arbol || 0)}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
 
-        {/* FOOTER con botones mejorados */}
-        <div className="border-t border-primary/10 p-5 bg-white/50 backdrop-blur-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            {/* Botón de lista de compras a la izquierda */}
-            <Button
-              onClick={descargarListaCompras}
-              variant="outline"
-              className="border-brand-brown/30 text-brand-brown hover:bg-brand-brown/10 hover:border-brand-brown"
-              disabled={descargandoPDF}
-            >
-              <ShoppingCart className="w-4 h-4 mr-2" />
-              Ver Lista de Compras
-            </Button>
-
-            {/* Botones de acción a la derecha */}
-            <div className="flex flex-wrap items-center gap-3">
-              {aplicacion.estado === 'Cerrada' ? (
-                <>
-                  <Button
-                    onClick={() => {
-                      onClose();
-                      navigate(`/aplicaciones/${aplicacion.id}/reporte`);
-                    }}
-                    variant="outline"
-                    className="border-primary/30 text-primary hover:bg-primary/10 hover:border-primary"
-                  >
-                    <BarChart2 className="w-4 h-4 mr-2" />
-                    Ver Reporte Completo
-                  </Button>
-
-                  <Button
-                    onClick={descargarReporteCierre}
-                    disabled={generandoReporte}
-                    className="bg-primary hover:bg-primary-dark text-white"
-                  >
-                    {generandoReporte ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Generando...
-                      </>
-                    ) : (
-                      <>
-                        <FileText className="w-4 h-4 mr-2" />
-                        Exportar PDF
-                      </>
-                    )}
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button
-                    onClick={onEditar}
-                    disabled={(aplicacion.estado as string) !== 'Calculada'}
-                    variant="outline"
-                    className="border-primary/30 text-primary hover:bg-primary/10 hover:border-primary"
-                  >
-                    <Edit className="w-4 h-4 mr-2" />
-                    Editar
-                  </Button>
-
-                  {(aplicacion.estado as string) === 'Calculada' && onIniciarEjecucion ? (
-                    <Button
-                      onClick={onIniciarEjecucion}
-                      className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white"
-                    >
-                      <Play className="w-4 h-4 mr-2" />
-                      Iniciar Ejecución
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={onRegistrarMovimientos}
-                      disabled={(aplicacion.estado as string) !== 'En ejecución'}
-                      className="bg-brand-brown hover:bg-brand-brown text-white"
-                    >
-                      <PlayCircle className="w-4 h-4 mr-2" />
-                      Registrar Movimientos
-                    </Button>
+                  {/* Labor info */}
+                  {(datosCompletos.jornales_utilizados > 0 || datosCompletos.valor_jornal > 0) && (
+                    <div className="mt-4 flex flex-wrap gap-4 border-t border-border pt-4">
+                      {datosCompletos.jornales_utilizados > 0 && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Users className="size-4 text-primary" aria-hidden="true" />
+                          <span className="text-muted-foreground">Jornales:</span>
+                          <span className="font-medium text-foreground">{datosCompletos.jornales_utilizados}</span>
+                        </div>
+                      )}
+                      {datosCompletos.valor_jornal > 0 && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <DollarSign className="size-4 text-primary" aria-hidden="true" />
+                          <span className="text-muted-foreground">Valor jornal:</span>
+                          <span className="font-medium text-foreground">{formatearMoneda(datosCompletos.valor_jornal)}</span>
+                        </div>
+                      )}
+                    </div>
                   )}
 
-                  <Button
-                    onClick={onCerrarAplicacion}
-                    disabled={(aplicacion.estado as string) !== 'En ejecución'}
-                    className="bg-primary hover:bg-primary-dark text-white"
-                  >
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    Cerrar Aplicación
-                  </Button>
-                </>
+                  {/* Observations */}
+                  {datosCompletos.observaciones_cierre && (
+                    <div className="mt-4 border-t border-border pt-4">
+                      <p className="mb-1 text-xs text-muted-foreground">Observaciones de cierre</p>
+                      <p className="rounded-lg bg-muted p-3 text-sm italic text-foreground">
+                        {datosCompletos.observaciones_cierre}
+                      </p>
+                    </div>
+                  )}
+                </SeccionDetalle>
               )}
-            </div>
+            </>
+          )}
+        </DialogBody>
+
+        <DialogFooter className="sm:justify-between">
+          {/* Botón de lista de compras a la izquierda */}
+          <Button onClick={descargarListaCompras} variant="outline" disabled={descargandoPDF}>
+            <ShoppingCart className="size-4" aria-hidden="true" />
+            Ver Lista de Compras
+          </Button>
+
+          {/* Botones de acción a la derecha */}
+          <div className="flex flex-wrap items-center gap-3">
+            {aplicacion.estado === 'Cerrada' ? (
+              <>
+                <Button
+                  onClick={() => {
+                    onClose();
+                    navigate(`/aplicaciones/${aplicacion.id}/reporte`);
+                  }}
+                  variant="outline"
+                  className="border-primary/30 text-primary hover:bg-primary/10 hover:border-primary"
+                >
+                  <BarChart2 className="size-4" aria-hidden="true" />
+                  Ver Reporte Completo
+                </Button>
+
+                <Button onClick={descargarReporteCierre} disabled={generandoReporte}>
+                  {generandoReporte ? <Spinner className="size-4" /> : <FileText className="size-4" aria-hidden="true" />}
+                  {generandoReporte ? 'Generando...' : 'Exportar PDF'}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  onClick={onEditar}
+                  disabled={(aplicacion.estado as string) !== 'Calculada'}
+                  variant="outline"
+                  className="border-primary/30 text-primary hover:bg-primary/10 hover:border-primary"
+                >
+                  <Edit className="size-4" aria-hidden="true" />
+                  Editar
+                </Button>
+
+                {(aplicacion.estado as string) === 'Calculada' && onIniciarEjecucion ? (
+                  <Button onClick={onIniciarEjecucion}>
+                    <Play className="size-4" aria-hidden="true" />
+                    Iniciar Ejecución
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={onRegistrarMovimientos}
+                    disabled={(aplicacion.estado as string) !== 'En ejecución'}
+                    variant="outline"
+                    className="border-primary/30 text-primary hover:bg-primary/10 hover:border-primary"
+                  >
+                    <ClipboardList className="size-4" aria-hidden="true" />
+                    Registrar Movimientos
+                  </Button>
+                )}
+
+                <Button
+                  onClick={onCerrarAplicacion}
+                  disabled={(aplicacion.estado as string) !== 'En ejecución'}
+                >
+                  <CheckCircle className="size-4" aria-hidden="true" />
+                  Cerrar Aplicación
+                </Button>
+              </>
+            )}
           </div>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

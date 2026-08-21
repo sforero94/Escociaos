@@ -1,25 +1,28 @@
 import { useState, useEffect } from 'react';
 import {
-  Package,
   ShoppingCart,
   CheckCircle,
   AlertTriangle,
-  DollarSign,
   Download,
   Edit2,
   Save,
   X as XIcon,
-  TrendingUp
 } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { useSafeMode } from '../../contexts/SafeModeContext';
 import { generarPDFListaCompras } from '../../utils/generarPDFListaCompras';
-import {
-  calcularTotalesGlobalesProductos,
-  generarListaCompras
-} from '../../utils/calculosAplicaciones';
+import { calcularTotalesGlobalesProductos, generarListaCompras } from '../../utils/calculosAplicaciones';
 import { formatearMoneda, formatearNumero } from '../../utils/format';
 import { toast } from 'sonner';
+import { Button } from '../ui/button';
+import { Badge } from '../ui/badge';
+import { Alert, AlertDescription } from '../ui/alert';
+import { Card } from '../ui/card';
+import { Field, FieldLabel } from '../ui/field';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '../ui/input-group';
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from '../ui/empty';
+import { Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableCell } from '../ui/table';
+import { cn } from '../ui/utils';
 import type {
   ConfiguracionAplicacion,
   Mezcla,
@@ -40,7 +43,6 @@ interface PasoListaComprasProps {
 export function PasoListaCompras({
   configuracion,
   mezclas,
-  calculos,
   lista_compras,
   onUpdate,
 }: PasoListaComprasProps) {
@@ -49,44 +51,30 @@ export function PasoListaCompras({
 
   const [lista, setLista] = useState<ListaCompras | null>(lista_compras);
   const [cargando, setCargando] = useState(false);
-  const [inventario, setInventario] = useState<ProductoCatalogo[]>([]);
-  
-  // Estado para edición manual - inline directa
+
   const [modoEdicion, setModoEdicion] = useState(false);
   const [itemsEditables, setItemsEditables] = useState<Record<string, ItemListaCompras>>({});
 
-  /**
-   * GENERAR LISTA DE COMPRAS AL MONTAR
-   */
   useEffect(() => {
     if (!lista_compras) {
       generarLista();
     } else {
-      // Inicializar items editables
       const editables: Record<string, ItemListaCompras> = {};
       lista_compras.items.forEach((item) => {
         editables[item.producto_id] = { ...item };
       });
       setItemsEditables(editables);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /**
-   * CARGAR INVENTARIO Y GENERAR LISTA
-   */
   const generarLista = async () => {
     setCargando(true);
     try {
-      // Obtener IDs de productos necesarios (usando totales desde mezclas)
       const productosNecesarios = calcularTotalesGlobalesProductos(mezclas);
       const productosIds = productosNecesarios.map((p) => p.producto_id);
 
-      // Cargar inventario actual de esos productos
-      const { data, error } = await supabase
-        .from('productos')
-        .select('*')
-        .in('id', productosIds);
-
+      const { data, error } = await supabase.from('productos').select('*').in('id', productosIds);
       if (error) throw error;
 
       let inventarioActual = data.map((p) => ({
@@ -96,66 +84,48 @@ export function PasoListaCompras({
         grupo: p.grupo,
         unidad_medida: p.unidad_medida,
         estado_fisico: p.estado_fisico,
-        // Construir presentación: "50 Kg" o fallback a "1 Kg/L"
-        presentacion_comercial: p.presentacion_kg_l && p.presentacion_kg_l > 0
-          ? `${p.presentacion_kg_l} ${(p.unidad_medida as string) === 'kilos' || p.unidad_medida === 'Kilos' ? 'Kg' : (p.unidad_medida as string) === 'litros' || p.unidad_medida === 'Litros' ? 'L' : p.unidad_medida}`
-          : `1 ${(p.unidad_medida as string) === 'kilos' || p.unidad_medida === 'Kilos' ? 'Kg' : (p.unidad_medida as string) === 'litros' || p.unidad_medida === 'Litros' ? 'L' : p.unidad_medida}`,
-        ultimo_precio_unitario: p.precio_unitario || 0,      // Precio por Kg/L
-        precio_presentacion: p.precio_por_presentacion || 0, // Precio por bulto/envase
+        presentacion_comercial:
+          p.presentacion_kg_l && p.presentacion_kg_l > 0
+            ? `${p.presentacion_kg_l} ${(p.unidad_medida as string) === 'kilos' || p.unidad_medida === 'Kilos' ? 'Kg' : (p.unidad_medida as string) === 'litros' || p.unidad_medida === 'Litros' ? 'L' : p.unidad_medida}`
+            : `1 ${(p.unidad_medida as string) === 'kilos' || p.unidad_medida === 'Kilos' ? 'Kg' : (p.unidad_medida as string) === 'litros' || p.unidad_medida === 'Litros' ? 'L' : p.unidad_medida}`,
+        ultimo_precio_unitario: p.precio_unitario || 0,
+        precio_presentacion: p.precio_por_presentacion || 0,
         cantidad_actual: p.cantidad_actual || 0,
         permitido_gerencia: p.permitido_gerencia ?? undefined,
       })) as unknown as ProductoCatalogo[];
 
-      // Filtrar productos no permitidos si modo seguro está activado
       if (isSafeModeEnabled) {
         inventarioActual = inventarioActual.filter((p) => p.permitido_gerencia !== false);
       }
 
-      setInventario(inventarioActual);
-
-      // Generar lista de compras
       const nuevaLista = generarListaCompras(productosNecesarios, inventarioActual);
       setLista(nuevaLista);
       onUpdate(nuevaLista);
-    } catch (error) {
+    } catch {
       toast.error('Error al generar lista de compras');
     } finally {
       setCargando(false);
     }
   };
 
-  /**
-   * EXPORTAR LISTA A PDF
-   */
   const exportarPDF = async () => {
-    if (lista) {
-      // Datos de la empresa (podrías cargarlos de configuración global)
-      const datosEmpresa = {
-        nombre: 'Escocia Hass',
-        nit: '900.XXX.XXX-X', // Actualizar con NIT real
-        direccion: 'Dirección del cultivo', // Actualizar con dirección real
-        telefono: '+57 XXX XXX XXXX', // Actualizar con teléfono real
-        email: 'contacto@escocia-hass.com', // Actualizar con email real
-      };
-
-      await generarPDFListaCompras(lista, configuracion, datosEmpresa);
-    } else {
+    if (!lista) {
       toast.error('No hay lista de compras para exportar');
+      return;
     }
+    const datosEmpresa = {
+      nombre: 'Escocia Hass',
+      nit: '900.XXX.XXX-X',
+      direccion: 'Dirección del cultivo',
+      telefono: '+57 XXX XXX XXXX',
+      email: 'contacto@escocia-hass.com',
+    };
+    await generarPDFListaCompras(lista, configuracion, datosEmpresa);
   };
 
-  /**
-   * ACTIVAR MODO EDICIÓN
-   */
-  const activarEdicion = () => {
-    setModoEdicion(true);
-  };
+  const activarEdicion = () => setModoEdicion(true);
 
-  /**
-   * CANCELAR EDICIÓN
-   */
   const cancelarEdicion = () => {
-    // Restaurar valores originales
     if (lista) {
       const editables: Record<string, ItemListaCompras> = {};
       lista.items.forEach((item) => {
@@ -163,104 +133,56 @@ export function PasoListaCompras({
       });
       setItemsEditables(editables);
     }
-
     setModoEdicion(false);
   };
 
-  /**
-   * Extrae el tamaño numérico de una presentación comercial
-   */
   const extraerTamanoPresentacion = (presentacion: string | undefined): number => {
     if (!presentacion) return 1;
-    
-    // Normalizar: reemplazar coma europea por punto decimal
     const normalizada = presentacion.replace(/,/g, '.');
-    
-    // Buscar primer número (entero o decimal)
     const match = normalizada.match(/(\d+\.?\d*)/);
     const valor = match ? parseFloat(match[1]) : 1;
-    
-    // Validar que sea un número válido
     return isNaN(valor) || valor <= 0 ? 1 : valor;
   };
 
-  /**
-   * EDITAR CANTIDAD DE UN PRODUCTO
-   */
   const editarCantidad = (
     productoId: string,
     campo: 'unidades_a_comprar' | 'cantidad_faltante',
-    valor: number
+    valor: number,
   ) => {
     const item = itemsEditables[productoId];
     if (!item) return;
 
     const itemActualizado = { ...item };
-
     if (campo === 'unidades_a_comprar') {
       itemActualizado.unidades_a_comprar = Math.max(0, valor);
-
-      // Recalcular cantidad faltante basado en unidades
       const tamanoPresentacion = extraerTamanoPresentacion(item.presentacion_comercial);
-      const nuevaCantidadFaltante = itemActualizado.unidades_a_comprar * tamanoPresentacion;
-      itemActualizado.cantidad_faltante = nuevaCantidadFaltante;
-    } else if (campo === 'cantidad_faltante') {
+      itemActualizado.cantidad_faltante = itemActualizado.unidades_a_comprar * tamanoPresentacion;
+    } else {
       itemActualizado.cantidad_faltante = Math.max(0, valor);
-
-      // Recalcular unidades basado en cantidad
       const tamanoPresentacion = extraerTamanoPresentacion(item.presentacion_comercial);
       itemActualizado.unidades_a_comprar = Math.ceil(valor / tamanoPresentacion);
     }
-
-    // Recalcular costo usando precio_presentacion
     itemActualizado.costo_estimado = itemActualizado.unidades_a_comprar * (item.precio_presentacion || 0);
 
-    setItemsEditables((prev) => ({
-      ...prev,
-      [productoId]: itemActualizado,
-    }));
+    setItemsEditables((prev) => ({ ...prev, [productoId]: itemActualizado }));
   };
 
-  /**
-   * EDITAR PRECIO DE PRESENTACIÓN (precio por bulto/envase completo)
-   * Este precio NO afecta la tabla de productos, solo el reporte de lista de compras
-   */
   const editarPrecioPresentacion = (productoId: string, nuevoPrecio: number) => {
     const item = itemsEditables[productoId];
     if (!item) return;
-
-    const itemActualizado = { ...item };
-    itemActualizado.precio_presentacion = Math.max(0, nuevoPrecio);
-
-    // Recalcular costo con el nuevo precio
-    itemActualizado.costo_estimado = itemActualizado.unidades_a_comprar * nuevoPrecio;
-
-    setItemsEditables((prev) => ({
-      ...prev,
-      [productoId]: itemActualizado,
-    }));
+    const itemActualizado = { ...item, precio_presentacion: Math.max(0, nuevoPrecio) };
+    itemActualizado.costo_estimado = itemActualizado.unidades_a_comprar * itemActualizado.precio_presentacion;
+    setItemsEditables((prev) => ({ ...prev, [productoId]: itemActualizado }));
   };
 
-  /**
-   * GUARDAR CAMBIOS DE EDICIÓN
-   */
   const guardarCambios = () => {
     if (!lista) return;
-
-    // Crear nueva lista con items editados
     const itemsActualizados = Object.values(itemsEditables);
-
-    // Recalcular totales
     const nuevosCostos = itemsActualizados
       .filter((item) => item.cantidad_faltante > 0)
       .reduce((sum, item) => sum + (item.costo_estimado || 0), 0);
 
-    const nuevaLista: ListaCompras = {
-      ...lista,
-      items: itemsActualizados,
-      costo_total_estimado: nuevosCostos,
-    };
-
+    const nuevaLista: ListaCompras = { ...lista, items: itemsActualizados, costo_total_estimado: nuevosCostos };
     setLista(nuevaLista);
     onUpdate(nuevaLista);
     setModoEdicion(false);
@@ -268,10 +190,10 @@ export function PasoListaCompras({
 
   if (cargando) {
     return (
-      <div className="flex items-center justify-center py-12">
+      <div className="flex items-center justify-center py-16">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary/20 border-t-primary mx-auto mb-4"></div>
-          <p className="text-brand-brown/70">Generando lista de compras...</p>
+          <div className="animate-spin rounded-full h-10 w-10 border-4 border-primary/20 border-t-primary mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">Generando lista de compras...</p>
         </div>
       </div>
     );
@@ -279,168 +201,125 @@ export function PasoListaCompras({
 
   if (!lista) {
     return (
-      <div className="text-center py-12">
-        <Package className="w-16 h-16 text-primary/50 mx-auto mb-4" />
-        <p className="text-brand-brown/70 mb-4">No se pudo generar la lista de compras</p>
-        <button
-          onClick={generarLista}
-          className="px-4 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:from-primary-dark hover:to-secondary-dark transition-all"
-        >
+      <Empty>
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <ShoppingCart />
+          </EmptyMedia>
+          <EmptyTitle>No se pudo generar la lista de compras</EmptyTitle>
+          <EmptyDescription>Intenta de nuevo — puede ser un problema temporal de conexión.</EmptyDescription>
+        </EmptyHeader>
+        <Button type="button" onClick={generarLista}>
           Reintentar
-        </button>
-      </div>
+        </Button>
+      </Empty>
     );
   }
 
-  // Separar productos: a comprar vs disponibles
-  const productosAComprar = modoEdicion 
-    ? Object.values(itemsEditables).filter((item) => item.cantidad_faltante > 0) 
+  const productosAComprar = modoEdicion
+    ? Object.values(itemsEditables).filter((item) => item.cantidad_faltante > 0)
     : lista.items.filter((item) => item.cantidad_faltante > 0);
   const productosDisponibles = modoEdicion
     ? Object.values(itemsEditables).filter((item) => item.cantidad_faltante === 0)
     : lista.items.filter((item) => item.cantidad_faltante === 0);
-  
-  // Recalcular costo total en tiempo real cuando está en modo edición
+
   const costoTotalActual = modoEdicion
     ? productosAComprar.reduce((sum, item) => sum + (item.costo_estimado || 0), 0)
     : lista.costo_total_estimado;
 
   return (
     <div className="space-y-6">
-      {/* HEADER */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="text-lg text-foreground">Lista de Compras</h2>
-          <p className="text-sm text-brand-brown/70 mt-1">Comparación con inventario disponible</p>
+          <h3 className="text-base font-bold text-foreground">Lista de Compras</h3>
+          <p className="text-sm text-muted-foreground mt-0.5">Comparación con inventario disponible</p>
         </div>
 
         <div className="flex gap-2">
-          {/* Botón Editar/Guardar/Cancelar */}
           {!modoEdicion ? (
-            <button
-              onClick={activarEdicion}
-              className="px-4 py-2 border border-gray-300 text-brand-brown rounded-lg hover:bg-gray-50 transition-all flex items-center gap-2"
-            >
+            <Button type="button" variant="outline" size="sm" onClick={activarEdicion}>
               <Edit2 className="w-4 h-4" />
               <span className="hidden sm:inline">Editar Cantidades</span>
-            </button>
+            </Button>
           ) : (
             <>
-              <button
-                onClick={cancelarEdicion}
-                className="px-4 py-2 border border-gray-300 text-brand-brown rounded-lg hover:bg-gray-50 transition-all flex items-center gap-2"
-              >
+              <Button type="button" variant="outline" size="sm" onClick={cancelarEdicion}>
                 <XIcon className="w-4 h-4" />
                 <span className="hidden sm:inline">Cancelar</span>
-              </button>
-              <button
-                onClick={guardarCambios}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all flex items-center gap-2"
-              >
+              </Button>
+              <Button type="button" size="sm" onClick={guardarCambios}>
                 <Save className="w-4 h-4" />
                 <span className="hidden sm:inline">Guardar Cambios</span>
-              </button>
+              </Button>
             </>
           )}
-
-          {/* Botón Exportar PDF */}
-          <button
-            onClick={exportarPDF}
-            disabled={modoEdicion}
-            className="px-4 py-2 border border-gray-300 text-brand-brown rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
-          >
+          <Button type="button" variant="outline" size="sm" onClick={exportarPDF} disabled={modoEdicion}>
             <Download className="w-4 h-4" />
             <span className="hidden sm:inline">Exportar PDF</span>
-          </button>
+          </Button>
         </div>
       </div>
 
-      {/* ALERTA DE MODO EDICIÓN */}
       {modoEdicion && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3">
-          <Edit2 className="w-5 h-5 text-blue-600 flex-shrink-0" />
-          <div className="flex-1">
-            <p className="text-blue-900">Modo de edición activado</p>
-            <p className="text-blue-700 text-sm">
-              Puedes modificar las cantidades y los precios unitarios. Los costos se recalcularán automáticamente. 
-              <strong> Los precios editados aquí NO afectan el inventario</strong>, solo se usan para este reporte.
-            </p>
-          </div>
-        </div>
+        <Alert>
+          <Edit2 />
+          <AlertDescription>
+            <strong className="text-foreground">Modo de edición activado.</strong> Puedes modificar las cantidades y
+            precios. Los costos se recalculan al vuelo.{' '}
+            <strong className="text-foreground">Los precios editados aquí no afectan el inventario</strong>, solo
+            este reporte.
+          </AlertDescription>
+        </Alert>
       )}
 
-      {/* RESUMEN GENERAL */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-gradient-to-br from-red-50 to-red-100/50 border border-red-200 rounded-xl p-4">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-red-100 rounded-lg">
-              <ShoppingCart className="w-5 h-5 text-red-600" />
-            </div>
-            <div className="text-sm text-red-700">Productos a Comprar</div>
-          </div>
-          <div className="text-2xl text-red-900">{productosAComprar.length}</div>
-        </div>
-
-        <div className="bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20 rounded-xl p-4">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-primary/10 rounded-lg">
-              <CheckCircle className="w-5 h-5 text-primary" />
-            </div>
-            <div className="text-sm text-brand-brown/70">Disponibles en Stock</div>
-          </div>
-          <div className="text-2xl text-foreground">{productosDisponibles.length}</div>
-        </div>
-
-        <div className="bg-gradient-to-br from-yellow-50 to-yellow-100/50 border border-yellow-200 rounded-xl p-4">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-yellow-100 rounded-lg">
-              <DollarSign className="w-5 h-5 text-yellow-600" />
-            </div>
-            <div className="text-sm text-yellow-700">Inversión Estimada</div>
-          </div>
-          <div className="text-2xl text-yellow-900">
-            {formatearMoneda(costoTotalActual)}
-          </div>
-        </div>
+      {/* RESUMEN */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className="p-4">
+          <p className={cn('text-2xl font-bold tabular-nums', productosAComprar.length > 0 && 'text-destructive')}>
+            {productosAComprar.length}
+          </p>
+          <p className="text-sm text-muted-foreground mt-0.5">Productos a Comprar</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-2xl font-bold tabular-nums text-foreground">{productosDisponibles.length}</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Disponibles en Stock</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-2xl font-bold tabular-nums text-foreground">{formatearMoneda(costoTotalActual)}</p>
+          <p className="text-sm text-muted-foreground mt-0.5">Inversión Estimada</p>
+        </Card>
       </div>
 
       {/* ALERTAS */}
       {(lista.productos_sin_precio > 0 || lista.productos_sin_stock > 0) && (
         <div className="space-y-2">
           {lista.productos_sin_precio > 0 && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-              <p className="text-yellow-800 text-sm">
-                <strong>{lista.productos_sin_precio}</strong> producto(s) no tienen precio
-                registrado. El costo estimado puede ser inexacto.
-              </p>
-            </div>
+            <Alert variant="warning">
+              <AlertTriangle />
+              <AlertDescription>
+                <strong className="text-foreground">{lista.productos_sin_precio}</strong> producto(s) no tienen
+                precio registrado. El costo estimado puede ser inexacto.
+              </AlertDescription>
+            </Alert>
           )}
-
           {lista.productos_sin_stock > 0 && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-              <p className="text-red-800 text-sm">
-                <strong>{lista.productos_sin_stock}</strong> producto(s) no tienen stock
+            <Alert variant="destructive">
+              <AlertTriangle />
+              <AlertDescription>
+                <strong className="text-foreground">{lista.productos_sin_stock}</strong> producto(s) no tienen stock
                 disponible y deben comprarse en su totalidad.
-              </p>
-            </div>
+              </AlertDescription>
+            </Alert>
           )}
-
-          {/* Alerta si hay productos sin presentación configurada */}
-          {lista.items.some(item => item.presentacion_comercial.startsWith('1 ')) && (
-            <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-orange-900">
-                  <strong>Algunos productos no tienen presentación comercial configurada</strong>
-                </p>
-                <p className="text-orange-700 text-sm mt-1">
-                  Los productos sin tamaño de presentación se calcularán en unidades individuales (1 Kg/L). 
-                  Para calcular correctamente en bultos, configura el campo "presentacion_kg_l" en la tabla de productos.
-                </p>
-              </div>
-            </div>
+          {lista.items.some((item) => item.presentacion_comercial.startsWith('1 ')) && (
+            <Alert variant="warning">
+              <AlertTriangle />
+              <AlertDescription>
+                <strong className="text-foreground">Algunos productos no tienen presentación comercial configurada.</strong>{' '}
+                Se calculan en unidades individuales (1 Kg/L). Configura "presentacion_kg_l" en Inventario para
+                calcular en bultos.
+              </AlertDescription>
+            </Alert>
           )}
         </div>
       )}
@@ -448,289 +327,305 @@ export function PasoListaCompras({
       {/* PRODUCTOS A COMPRAR */}
       {productosAComprar.length > 0 && (
         <div>
-          <h3 className="text-foreground mb-3 flex items-center gap-2">
-            <ShoppingCart className="w-5 h-5 text-red-600" />
+          <h4 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
+            <ShoppingCart className="w-4 h-4 text-destructive" />
             Productos a Comprar ({productosAComprar.length})
-          </h3>
+          </h4>
 
-          <div className="border border-gray-200 rounded-xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs text-brand-brown uppercase tracking-wider">
-                      Producto
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs text-brand-brown uppercase tracking-wider">
-                      En Stock
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs text-brand-brown uppercase tracking-wider">
-                      Necesario
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs text-brand-brown uppercase tracking-wider">
-                      Faltante
-                    </th>
-                    <th className="px-4 py-3 text-center text-xs text-brand-brown uppercase tracking-wider">
-                      A Comprar
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs text-brand-brown uppercase tracking-wider">
-                      Precio Unit.
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs text-brand-brown uppercase tracking-wider">
-                      Costo Est.
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {productosAComprar.map((item) => (
-                    <tr key={item.producto_id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3">
-                        <div>
-                          <div className={`${item.permitido_gerencia === false ? 'text-red-600 font-bold' : 'text-foreground'}`}>{item.producto_nombre}</div>
-                          <div className="text-sm text-brand-brown/70">{item.producto_categoria}</div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm">
-                        <span className="text-brand-brown/70">
-                          {formatearNumero(item.inventario_actual)} {item.unidad}
+          {/* Escritorio: tabla */}
+          <div className="hidden sm:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Producto</TableHead>
+                  <TableHead className="text-right">En Stock</TableHead>
+                  <TableHead className="text-right">Necesario</TableHead>
+                  <TableHead className="text-right">Faltante</TableHead>
+                  <TableHead className="text-center">A Comprar</TableHead>
+                  <TableHead className="text-right">Precio / Presentación</TableHead>
+                  <TableHead className="text-right">Costo Est.</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {productosAComprar.map((item) => (
+                  <TableRow key={item.producto_id}>
+                    <TableCell className="whitespace-normal">
+                      <p className={cn('font-medium', item.permitido_gerencia === false && 'text-destructive font-bold')}>
+                        {item.producto_nombre}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{item.producto_categoria}</p>
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground tabular-nums">
+                      {formatearNumero(item.inventario_actual)} {item.unidad}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatearNumero(item.cantidad_necesaria)} {item.unidad}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {modoEdicion ? (
+                        <InputGroupInput
+                          type="number"
+                          step="0.01"
+                          value={item.cantidad_faltante}
+                          onChange={(e) => editarCantidad(item.producto_id, 'cantidad_faltante', parseFloat(e.target.value) || 0)}
+                          className="w-28 text-right ml-auto"
+                          aria-label={`Faltante de ${item.producto_nombre}`}
+                        />
+                      ) : (
+                        <span className="text-destructive font-semibold">
+                          {formatearNumero(item.cantidad_faltante)} {item.unidad}
                         </span>
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm text-foreground">
-                        {formatearNumero(item.cantidad_necesaria)} {item.unidad}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm">
-                        {modoEdicion ? (
-                          <input
-                            type="number"
-                            onWheel={(e) => e.currentTarget.blur()}
-                            step="0.01"
-                            value={item.cantidad_faltante}
-                            onChange={(e) =>
-                              editarCantidad(
-                                item.producto_id,
-                                'cantidad_faltante',
-                                parseFloat(e.target.value) || 0
-                              )
-                            }
-                            className="w-24 px-2 py-1 text-sm text-right border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                          />
-                        ) : (
-                          <span className="text-red-600">
-                            {formatearNumero(item.cantidad_faltante)} {item.unidad}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {modoEdicion ? (
-                          <div className="flex items-center justify-center gap-1">
-                            <input
-                              type="number"
-                              onWheel={(e) => e.currentTarget.blur()}
-                              min="0"
-                              value={item.unidades_a_comprar}
-                              onChange={(e) =>
-                                editarCantidad(
-                                  item.producto_id,
-                                  'unidades_a_comprar',
-                                  parseInt(e.target.value) || 0
-                                )
-                              }
-                              className="w-16 px-2 py-1 text-sm text-center border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                            />
-                            <span className="text-xs text-brand-brown/70">×</span>
-                            <span className="text-xs text-brand-brown/70">{item.presentacion_comercial}</span>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-center gap-1">
-                            <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm ${
-                              item.presentacion_comercial.startsWith('1 ')
-                                ? 'bg-orange-100 text-orange-800'
-                                : 'bg-red-100 text-red-800'
-                            }`}>
-                              {item.unidades_a_comprar} × {item.presentacion_comercial}
-                            </div>
-                            {item.presentacion_comercial.startsWith('1 ') && (
-                              <span className="text-xs text-orange-600">Sin presentación</span>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm">
-                        {modoEdicion ? (
-                          <div className="flex items-center justify-end gap-1">
-                            <span className="text-xs text-brand-brown/70">$</span>
-                            <input
-                              type="number"
-                              onWheel={(e) => e.currentTarget.blur()}
-                              step="1000"
-                              min="0"
-                              value={item.precio_presentacion || 0}
-                              onChange={(e) =>
-                                editarPrecioPresentacion(
-                                  item.producto_id,
-                                  parseFloat(e.target.value) || 0
-                                )
-                              }
-                              className="w-28 px-2 py-1 text-sm text-right border border-blue-300 rounded focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                              placeholder="0"
-                            />
-                          </div>
-                        ) : item.alerta === 'sin_precio' ? (
-                          <span className="text-yellow-600">Sin precio</span>
-                        ) : (
-                          <span className="text-foreground">
-                            {formatearMoneda(item.precio_presentacion || 0)}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm">
-                        {item.alerta === 'sin_precio' ? (
-                          <span className="text-yellow-600">Sin precio</span>
-                        ) : (
-                          <span className="text-foreground">
-                            {formatearMoneda(item.costo_estimado || 0)}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot className="bg-gray-50">
-                  <tr>
-                    <td colSpan={6} className="px-4 py-3 text-right text-foreground">
-                      TOTAL A COMPRAR:
-                    </td>
-                    <td className="px-4 py-3 text-right text-foreground">
-                      {formatearMoneda(
-                        productosAComprar.reduce((sum, item) => sum + (item.costo_estimado || 0), 0)
                       )}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {modoEdicion ? (
+                        <div className="flex items-center justify-center gap-1.5">
+                          <InputGroupInput
+                            type="number"
+                            min={0}
+                            value={item.unidades_a_comprar}
+                            onChange={(e) =>
+                              editarCantidad(item.producto_id, 'unidades_a_comprar', parseInt(e.target.value, 10) || 0)
+                            }
+                            className="w-16 text-center"
+                            aria-label={`Unidades a comprar de ${item.producto_nombre}`}
+                          />
+                          <span className="text-xs text-muted-foreground">× {item.presentacion_comercial}</span>
+                        </div>
+                      ) : (
+                        <Badge variant="destructive">
+                          {item.unidades_a_comprar} × {item.presentacion_comercial}
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {modoEdicion ? (
+                        <InputGroup className="w-32 ml-auto">
+                          <InputGroupAddon>$</InputGroupAddon>
+                          <InputGroupInput
+                            type="number"
+                            step="1000"
+                            min={0}
+                            value={item.precio_presentacion || 0}
+                            onChange={(e) => editarPrecioPresentacion(item.producto_id, parseFloat(e.target.value) || 0)}
+                            aria-label={`Precio por presentación de ${item.producto_nombre}`}
+                          />
+                        </InputGroup>
+                      ) : item.alerta === 'sin_precio' ? (
+                        <span className="text-warning">Sin precio</span>
+                      ) : (
+                        formatearMoneda(item.precio_presentacion || 0)
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums font-medium">
+                      {item.alerta === 'sin_precio' ? (
+                        <span className="text-warning">Sin precio</span>
+                      ) : (
+                        formatearMoneda(item.costo_estimado || 0)
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+              <TableFooter>
+                <TableRow>
+                  <TableCell colSpan={6} className="text-right">
+                    TOTAL A COMPRAR
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatearMoneda(productosAComprar.reduce((sum, item) => sum + (item.costo_estimado || 0), 0))}
+                  </TableCell>
+                </TableRow>
+              </TableFooter>
+            </Table>
+          </div>
+
+          {/* Móvil: tarjetas (Patrón A del sistema visual — no la misma tabla con scroll horizontal) */}
+          <div className="sm:hidden space-y-3">
+            {productosAComprar.map((item) => (
+              <div key={item.producto_id} className="border border-border rounded-xl p-4 bg-card">
+                <div className="flex justify-between gap-3 mb-3">
+                  <div>
+                    <p className={cn('font-bold text-sm', item.permitido_gerencia === false && 'text-destructive')}>
+                      {item.producto_nombre}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{item.producto_categoria}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-lg font-bold tabular-nums text-destructive">{formatearNumero(item.cantidad_faltante)}</p>
+                    <p className="text-[0.625rem] uppercase tracking-wide text-muted-foreground">Faltante · {item.unidad}</p>
+                  </div>
+                </div>
+                <div className="flex gap-5 text-xs text-muted-foreground mb-3">
+                  <span>
+                    En stock <b className="text-foreground">{formatearNumero(item.inventario_actual)}</b>
+                  </span>
+                  <span>
+                    Necesario <b className="text-foreground">{formatearNumero(item.cantidad_necesaria)}</b>
+                  </span>
+                </div>
+                {modoEdicion ? (
+                  <div className="grid grid-cols-2 gap-2.5 pt-3 border-t border-border">
+                    <Field>
+                      <FieldLabel className="text-xs">A Comprar</FieldLabel>
+                      <InputGroupInput
+                        type="number"
+                        min={0}
+                        value={item.unidades_a_comprar}
+                        onChange={(e) => editarCantidad(item.producto_id, 'unidades_a_comprar', parseInt(e.target.value, 10) || 0)}
+                        aria-label={`Unidades a comprar de ${item.producto_nombre}`}
+                      />
+                    </Field>
+                    <Field>
+                      <FieldLabel className="text-xs">Precio</FieldLabel>
+                      <InputGroup>
+                        <InputGroupAddon>$</InputGroupAddon>
+                        <InputGroupInput
+                          type="number"
+                          step="1000"
+                          min={0}
+                          value={item.precio_presentacion || 0}
+                          onChange={(e) => editarPrecioPresentacion(item.producto_id, parseFloat(e.target.value) || 0)}
+                          aria-label={`Precio por presentación de ${item.producto_nombre}`}
+                        />
+                      </InputGroup>
+                    </Field>
+                  </div>
+                ) : (
+                  <div className="flex justify-between items-center pt-3 border-t border-border">
+                    <Badge variant="destructive">
+                      {item.unidades_a_comprar} × {item.presentacion_comercial}
+                    </Badge>
+                    <span className="font-bold text-sm tabular-nums">
+                      {item.alerta === 'sin_precio' ? 'Sin precio' : formatearMoneda(item.costo_estimado || 0)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}
 
       {/* PRODUCTOS DISPONIBLES */}
-      {productosDisponibles.length > 0 && (
-        <div>
-          <h3 className="text-foreground mb-3 flex items-center gap-2">
-            <CheckCircle className="w-5 h-5 text-primary" />
-            Productos Disponibles en Stock ({productosDisponibles.length})
-          </h3>
+      <div>
+        <h4 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
+          <CheckCircle className="w-4 h-4 text-primary" />
+          Productos Disponibles en Stock ({productosDisponibles.length})
+        </h4>
 
-          <div className="border border-gray-200 rounded-xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs text-brand-brown uppercase tracking-wider">
-                      Producto
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs text-brand-brown uppercase tracking-wider">
-                      En Stock
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs text-brand-brown uppercase tracking-wider">
-                      Necesario
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs text-brand-brown uppercase tracking-wider">
-                      Sobrante
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {productosDisponibles.map((item) => {
-                    const sobrante = item.inventario_actual - item.cantidad_necesaria;
-                    return (
-                      <tr key={item.producto_id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-3">
-                          <div>
-                            <div className={`${item.permitido_gerencia === false ? 'text-red-600 font-bold' : 'text-foreground'}`}>{item.producto_nombre}</div>
-                            <div className="text-sm text-brand-brown/70">
-                              {item.producto_categoria}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm text-primary">
-                          {formatearNumero(item.inventario_actual)} {item.unidad}
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm text-foreground">
-                          {formatearNumero(item.cantidad_necesaria)} {item.unidad}
-                        </td>
-                        <td className="px-4 py-3 text-right text-sm text-primary">
-                          +{formatearNumero(sobrante)} {item.unidad}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+        {productosDisponibles.length === 0 ? (
+          <Empty className="py-8">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <CheckCircle />
+              </EmptyMedia>
+              <EmptyTitle>Sin productos disponibles en este cálculo</EmptyTitle>
+              <EmptyDescription>
+                Todo lo necesario para esta aplicación debe comprarse — no hay excedente de inventario que mostrar aquí.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          <div className="hidden sm:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Producto</TableHead>
+                  <TableHead className="text-right">En Stock</TableHead>
+                  <TableHead className="text-right">Necesario</TableHead>
+                  <TableHead className="text-right">Sobrante</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {productosDisponibles.map((item) => {
+                  const sobrante = item.inventario_actual - item.cantidad_necesaria;
+                  return (
+                    <TableRow key={item.producto_id}>
+                      <TableCell className="whitespace-normal">
+                        <p className={cn('font-medium', item.permitido_gerencia === false && 'text-destructive font-bold')}>
+                          {item.producto_nombre}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{item.producto_categoria}</p>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-primary">
+                        {formatearNumero(item.inventario_actual)} {item.unidad}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatearNumero(item.cantidad_necesaria)} {item.unidad}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-primary">
+                        +{formatearNumero(sobrante)} {item.unidad}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           </div>
-        </div>
-      )}
-
-      {/* RESUMEN FINAL */}
-      <div className="bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20 rounded-xl p-6">
-        <h3 className="text-foreground mb-4 flex items-center gap-2">
-          <TrendingUp className="w-5 h-5 text-primary" />
-          Resumen de la Aplicación
-        </h3>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          <div>
-            <div className="text-brand-brown/70 mb-1">Nombre:</div>
-            <div className="text-foreground">{configuracion.nombre}</div>
+        )}
+        {productosDisponibles.length > 0 && (
+          <div className="sm:hidden space-y-3">
+            {productosDisponibles.map((item) => {
+              const sobrante = item.inventario_actual - item.cantidad_necesaria;
+              return (
+                <div key={item.producto_id} className="border border-border rounded-xl p-4 bg-card">
+                  <p className={cn('font-bold text-sm', item.permitido_gerencia === false && 'text-destructive')}>
+                    {item.producto_nombre}
+                  </p>
+                  <p className="text-xs text-muted-foreground mb-2">{item.producto_categoria}</p>
+                  <div className="flex gap-5 text-xs text-muted-foreground">
+                    <span>
+                      Stock <b className="text-foreground">{formatearNumero(item.inventario_actual)}</b>
+                    </span>
+                    <span>
+                      Sobrante <b className="text-primary">+{formatearNumero(sobrante)}</b>
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-
-          <div>
-            <div className="text-brand-brown/70 mb-1">Tipo:</div>
-            <div className="text-foreground capitalize">{configuracion.tipo}</div>
-          </div>
-
-          <div>
-            <div className="text-brand-brown/70 mb-1">Fecha Inicio:</div>
-            <div className="text-foreground">
-              {new Date(configuracion.fecha_inicio ?? configuracion.fecha_inicio_planeada).toLocaleDateString('es-CO', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
-            </div>
-          </div>
-
-          <div>
-            <div className="text-brand-brown/70 mb-1">Lotes:</div>
-            <div className="text-foreground">
-              {configuracion.lotes_seleccionados.length} lotes seleccionados
-            </div>
-          </div>
-
-          <div>
-            <div className="text-brand-brown/70 mb-1">Productos en Mezcla:</div>
-            <div className="text-foreground">{mezclas[0]?.productos.length || 0} productos</div>
-          </div>
-
-          <div>
-            <div className="text-brand-brown/70 mb-1">Inversión Estimada:</div>
-            <div className="text-foreground text-lg">
-              {formatearMoneda(costoTotalActual)}
-            </div>
-          </div>
-        </div>
+        )}
       </div>
 
-      {/* MENSAJE DE ÉXITO */}
-      {productosAComprar.length === 0 && (
-        <div className="bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20 rounded-xl p-6 text-center">
-          <CheckCircle className="w-12 h-12 text-primary mx-auto mb-3" />
-          <h4 className="text-lg text-foreground mb-2">¡Todos los productos están disponibles!</h4>
-          <p className="text-sm text-brand-brown/70">
-            No necesitas comprar nada. Tienes suficiente stock para realizar la aplicación.
-          </p>
+      {/* RESUMEN FINAL */}
+      <Card className="p-5">
+        <h4 className="text-sm font-bold text-foreground mb-4">Resumen de la Aplicación</h4>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+          <div>
+            <p className="text-muted-foreground mb-0.5">Nombre</p>
+            <p className="text-foreground font-medium">{configuracion.nombre}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground mb-0.5">Tipo</p>
+            <p className="text-foreground font-medium capitalize">{configuracion.tipo}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground mb-0.5">Lotes</p>
+            <p className="text-foreground font-medium">{configuracion.lotes_seleccionados.length} lotes seleccionados</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground mb-0.5">Productos en Mezcla</p>
+            <p className="text-foreground font-medium">{mezclas[0]?.productos.length || 0} productos</p>
+          </div>
+          <div className="sm:col-span-2">
+            <p className="text-muted-foreground mb-0.5">Inversión Estimada</p>
+            <p className="text-foreground font-bold text-lg tabular-nums">{formatearMoneda(costoTotalActual)}</p>
+          </div>
         </div>
+      </Card>
+
+      {productosAComprar.length === 0 && (
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <CheckCircle />
+            </EmptyMedia>
+            <EmptyTitle>¡Todos los productos están disponibles!</EmptyTitle>
+            <EmptyDescription>No necesitas comprar nada. Tienes suficiente stock para realizar la aplicación.</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
     </div>
   );

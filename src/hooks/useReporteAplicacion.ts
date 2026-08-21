@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getSupabase } from '../utils/supabase/client';
 import {
+    calcularCambio,
     calcularDesviacion,
     convertirCanecasALitros,
     formatearDesviacion,
@@ -20,7 +21,11 @@ interface KPICardData {
 interface ComparisonField {
     real: number;
     planeado: number;
-    desviacion: number;
+    // D2 fix (5 call sites, see below): `undefined` = no hay base de comparación
+    // (planeado ausente o 0) — nunca se fabrica un +100%. Los sitios que todavía
+    // usan `calcularDesviacion` (per-lote / per-producto) siguen devolviendo
+    // `number`, que es un subtipo válido de `number | undefined`.
+    desviacion: number | undefined;
 }
 
 interface CanecasPorLote {
@@ -58,7 +63,8 @@ interface DatosGraficoCostos {
 interface FinancieroField {
     real: number;
     planeado: number;
-    desviacion: number;
+    // D2 fix — ver la misma nota en ComparisonField.
+    desviacion: number | undefined;
     cambio: number;
 }
 
@@ -792,8 +798,11 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                 totales: {
                     lote_id: '',
                     lote_nombre: 'Total',
-                    canecas: { real: totalCanecasReal, planeado: totalCanecasPlan, desviacion: calcularDesviacion(totalCanecasPlan, totalCanecasReal) },
-                    litros_totales: { real: totalLitrosReal, planeado: totalLitrosPlan, desviacion: calcularDesviacion(totalLitrosPlan, totalLitrosReal) }
+                    // D2 fix (1/5, 2/5): calcularCambio devuelve undefined cuando planeado es 0/ausente
+                    // — nunca un +100% fabricado. aplicaciones_lotes_planificado está vacía hoy, así que
+                    // esto es el caso normal, no la excepción (decisión 4 del contrato, CLAUDE.md D2).
+                    canecas: { real: totalCanecasReal, planeado: totalCanecasPlan, desviacion: calcularCambio(totalCanecasReal, totalCanecasPlan) },
+                    litros_totales: { real: totalLitrosReal, planeado: totalLitrosPlan, desviacion: calcularCambio(totalLitrosReal, totalLitrosPlan) }
                 } as CanecasPorLote,
                 por_lote: Array.from(lotesRealMap.values()).map(l => {
                     const planLote = lotesPlanMap.get(l.lote_id);
@@ -938,11 +947,13 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                     };
                 })(),
                 alertas: [],
+                // D2 fix (3/5, 4/5, 5/5): mismo cambio que arriba, aplicado a los totales
+                // financieros que alimentan directamente las 4 tarjetas KPI del Reporte.
                 financiero: {
                     costo_productos: {
                         real: totalCostoProductosReal,
                         planeado: costoProductosPlanTotal,
-                        desviacion: calcularDesviacion(costoProductosPlanTotal, totalCostoProductosReal),
+                        desviacion: calcularCambio(totalCostoProductosReal, costoProductosPlanTotal),
                         cambio: 0
                     },
                     costo_jornales: {
@@ -954,7 +965,7 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                     costo_total: {
                         real: totalCostoReal,
                         planeado: costoProductosPlanTotal,
-                        desviacion: calcularDesviacion(costoProductosPlanTotal, totalCostoReal),
+                        desviacion: calcularCambio(totalCostoReal, costoProductosPlanTotal),
                         cambio: 0
                     },
                     costo_por_arbol: (() => {
@@ -963,7 +974,7 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                         return {
                             real,
                             planeado,
-                            desviacion: calcularDesviacion(planeado, real),
+                            desviacion: calcularCambio(real, planeado),
                             cambio: 0
                         };
                     })()

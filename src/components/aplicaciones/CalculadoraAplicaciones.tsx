@@ -1,22 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  Settings,
-  Beaker,
-  ShoppingCart,
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  X,
-  AlertTriangle,
-  FileDown,
-  Loader2,
-} from 'lucide-react';
+import { ChevronLeft, ChevronRight, X, AlertTriangle, Check } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
-import { generarPDFListaCompras } from '../../utils/generarPDFListaCompras';
 import { useFormPersistence } from '../../hooks/useFormPersistence';
 import { FormDraftBanner } from '../shared/FormDraftBanner';
+import { AplicacionShell } from './shared/AplicacionShell';
+import { AplicacionStepper, type PasoStepper } from './shared/AplicacionStepper';
+import { Button } from '../ui/button';
+import { ButtonGroup } from '../ui/button-group';
+import { Spinner } from '../ui/spinner';
+import { Alert, AlertTitle, AlertDescription } from '../ui/alert';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 import type {
+  EstadoAplicacion,
   EstadoCalculadora,
   ConfiguracionAplicacion,
   Mezcla,
@@ -26,33 +22,20 @@ import type {
 
 // Importar componentes de pasos
 import { PasoConfiguracion } from './PasoConfiguracion';
-import { PasoMezcla } from './PasoMezcla';
+import type { EstadoAsignacionMezcla } from './PasoMezcla';
 import { PasoListaCompras } from './PasoListaCompras';
 import { obtenerFechaHoy } from '@/utils/fechas';
 
 // ============================================================================
-// CONFIGURACIÓN DE PASOS
+// CONFIGURACIÓN DE PASOS — 2, no 3 (W01-calculadora-v2.md). "Configuración" y "Mezcla"
+// se fusionan en "Plan": son la misma cadena causal de decisión (qué se va a hacer y
+// dónde), mientras que "Lista de Compras" es una fase distinta de verdad (procurar, no
+// decidir) y se mantiene aparte.
 // ============================================================================
 
-const PASOS = [
-  {
-    numero: 1,
-    titulo: 'Configuración',
-    descripcion: 'Selecciona lotes y tipo de aplicación',
-    icono: Settings,
-  },
-  {
-    numero: 2,
-    titulo: 'Mezcla',
-    descripcion: 'Define productos y dosis',
-    icono: Beaker,
-  },
-  {
-    numero: 3,
-    titulo: 'Lista de Compras',
-    descripcion: 'Revisa inventario y necesidades',
-    icono: ShoppingCart,
-  },
+const PASOS: PasoStepper[] = [
+  { id: 'plan', titulo: 'Plan', descripcion: 'Lotes, mezclas y dosis' },
+  { id: 'compras', titulo: 'Lista de Compras', descripcion: 'Inventario y costos' },
 ];
 
 // ============================================================================
@@ -83,15 +66,20 @@ export function CalculadoraAplicaciones() {
 
   // Use form persistence for NEW applications only (not in edit mode)
   const [state, setState, clearFormData] = useFormPersistence<EstadoCalculadora>({
-    key: modoEdicion ? `calculadora-edit-${id}` : 'calculadora-new-v1',
+    key: modoEdicion ? `calculadora-edit-${id}` : 'calculadora-new-v2',
     initialState: INITIAL_STATE,
     debounceMs: 1500, // Longer debounce for complex form
-    enabled: !modoEdicion // Only enable for new applications
+    enabled: !modoEdicion, // Only enable for new applications
   });
 
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [validationError, setValidationError] = useState('');
   const [cargandoDatos, setCargandoDatos] = useState(false);
+  const [estadoAplicacionActual, setEstadoAplicacionActual] = useState<EstadoAplicacion | null>(null);
+
+  // D6 — estado de asignación mezcla↔lotes por mezcla.id, solo relevante con 2+ mezclas
+  // (con 1 sola mezcla la asignación se hereda estructuralmente, ver PasoMezcla.tsx).
+  const [estadosAsignacion, setEstadosAsignacion] = useState<Record<string, EstadoAsignacionMezcla>>({});
 
   // ==========================================================================
   // CARGAR DATOS EN MODO EDICIÓN
@@ -101,6 +89,7 @@ export function CalculadoraAplicaciones() {
     if (modoEdicion && id) {
       cargarAplicacion();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, modoEdicion]);
 
   const cargarAplicacion = async () => {
@@ -114,62 +103,48 @@ export function CalculadoraAplicaciones() {
         .eq('id', id!)
         .single();
 
-      if (errorAplicacion) {
-        throw errorAplicacion;
-      }
+      if (errorAplicacion) throw errorAplicacion;
+      if (!aplicacion) throw new Error('Aplicación no encontrada');
 
-      if (!aplicacion) {
-        throw new Error('Aplicación no encontrada');
-      }
-
+      setEstadoAplicacionActual((aplicacion.estado as EstadoAplicacion | null) ?? null);
 
       // 2. Obtener lotes con conteo de árboles
       const { data: lotesData, error: errorLotes } = await supabase
         .from('aplicaciones_lotes')
-        .select(`
+        .select(
+          `
           *,
-          lotes (
-            id,
-            nombre,
-            area_hectareas
-          )
-        `)
+          lotes ( id, nombre, area_hectareas )
+        `,
+        )
         .eq('aplicacion_id', id!);
 
-      if (errorLotes) {
-        throw errorLotes;
-      }
-
+      if (errorLotes) throw errorLotes;
 
       // 3. Obtener mezclas
-      const { data: mezclas, error: errorMezclas } = await supabase
+      const { data: mezclasRaw, error: errorMezclas } = await supabase
         .from('aplicaciones_mezclas')
         .select('*')
         .eq('aplicacion_id', id!)
         .order('numero_mezcla');
 
-      if (errorMezclas) {
-        throw errorMezclas;
-      }
-
+      if (errorMezclas) throw errorMezclas;
 
       // 4. Obtener productos de cada mezcla
-      const mezclasConProductos = await Promise.all(
-        (mezclas || []).map(async (mezcla) => {
+      let mezclasConProductos = await Promise.all(
+        (mezclasRaw || []).map(async (mezcla) => {
           const { data: productos, error: errorProductos } = await supabase
             .from('aplicaciones_productos')
             .select('*')
             .eq('mezcla_id', mezcla.id);
 
-          if (errorProductos) {
-            throw errorProductos;
-          }
+          if (errorProductos) throw errorProductos;
 
           return {
             id: mezcla.id,
             numero_orden: mezcla.numero_mezcla,
             nombre: mezcla.nombre_mezcla || `Mezcla ${mezcla.numero_mezcla}`,
-            productos: (productos || []).map(p => ({
+            productos: (productos || []).map((p) => ({
               producto_id: p.producto_id,
               producto_nombre: p.producto_nombre,
               producto_categoria: p.producto_categoria,
@@ -181,66 +156,79 @@ export function CalculadoraAplicaciones() {
               dosis_pequenos: p.dosis_pequenos || undefined,
               dosis_clonales: p.dosis_clonales || undefined,
               cantidad_total_necesaria: p.cantidad_total_necesaria || 0,
-            }))
+            })),
+            lotes_asignados: [] as string[],
           };
-        })
+        }),
       );
 
-
-      // 5. Obtener cálculos
+      // 5. Obtener cálculos — es también la fuente del mapeo mezcla↔lote real
+      // (`aplicaciones_calculos.mezcla_id`, contrato de Fase 0).
       const { data: calculos, error: errorCalculos } = await supabase
         .from('aplicaciones_calculos')
         .select('*')
         .eq('aplicacion_id', id!);
 
-      if (errorCalculos) {
-        throw errorCalculos;
-      }
+      if (errorCalculos) throw errorCalculos;
 
+      // 5b. D6 — rehidratar `lotes_asignados` por mezcla en vez de dejarlo vacío (el bug
+      // original: cargarAplicacion() nunca lo poblaba). Con una sola mezcla no hace falta
+      // leer nada: se hereda de los lotes de la aplicación, estructuralmente sin ambigüedad
+      // (W01-calculadora-v2.md §5). Con 2+ mezclas se lee `aplicaciones_calculos.mezcla_id`
+      // y se distinguen 3 estados — nunca se confunde "0 lotes" con "no se pudo leer".
+      const idsLotesAplicacion = (lotesData || []).map((l) => l.lote_id);
+      const nuevosEstadosAsignacion: Record<string, EstadoAsignacionMezcla> = {};
+
+      if (mezclasConProductos.length === 1) {
+        mezclasConProductos = [{ ...mezclasConProductos[0], lotes_asignados: idsLotesAplicacion }];
+      } else if (mezclasConProductos.length > 1) {
+        const algunCalculoTraeMezclaId = (calculos || []).some((c) => !!c.mezcla_id);
+        mezclasConProductos = mezclasConProductos.map((m) => {
+          const lotesDeEstaMezcla = Array.from(
+            new Set((calculos || []).filter((c) => c.mezcla_id === m.id).map((c) => c.lote_id as string)),
+          );
+          if (!algunCalculoTraeMezclaId) {
+            // Ningún cálculo de TODA la aplicación trae mezcla_id: no es "0 lotes", es que
+            // no se puede leer el mapeo — falla de carga, no una decisión deliberada.
+            nuevosEstadosAsignacion[m.id] = 'error';
+          } else if (lotesDeEstaMezcla.length === 0) {
+            nuevosEstadosAsignacion[m.id] = 'sin_asignar';
+          } else {
+            nuevosEstadosAsignacion[m.id] = 'ok';
+          }
+          return { ...m, lotes_asignados: lotesDeEstaMezcla };
+        });
+      }
+      setEstadosAsignacion(nuevosEstadosAsignacion);
 
       // 6. Obtener lista de compras
       const { data: compras, error: errorCompras } = await supabase
         .from('aplicaciones_compras')
-        .select(`
-          id,
-          aplicacion_id,
-          producto_id,
-          producto_nombre,
-          producto_categoria,
-          unidad,
-          inventario_actual,
-          cantidad_necesaria,
-          cantidad_faltante,
-          presentacion_comercial,
-          unidades_a_comprar,
-          precio_unitario,
-          costo_estimado,
-          alerta,
-          created_at
-        `)
+        .select(
+          `
+          id, aplicacion_id, producto_id, producto_nombre, producto_categoria, unidad,
+          inventario_actual, cantidad_necesaria, cantidad_faltante, presentacion_comercial,
+          unidades_a_comprar, precio_unitario, costo_estimado, alerta, created_at
+        `,
+        )
         .eq('aplicacion_id', id!);
 
-      if (errorCompras) {
-        throw errorCompras;
-      }
-
+      if (errorCompras) throw errorCompras;
 
       // 7. Mapear datos a la configuración
-      const tipoAplicacion = aplicacion.tipo_aplicacion === 'Fumigación' 
-        ? 'fumigacion' 
-        : aplicacion.tipo_aplicacion === 'Fertilización'
-        ? 'fertilizacion'
-        : 'drench';
+      const tipoAplicacion =
+        aplicacion.tipo_aplicacion === 'Fumigación'
+          ? 'fumigacion'
+          : aplicacion.tipo_aplicacion === 'Fertilización'
+            ? 'fertilizacion'
+            : 'drench';
 
-      // Parsear blanco_biologico
       let blancoBiologico: string[] = [];
       if (aplicacion.blanco_biologico) {
         try {
-          blancoBiologico = JSON.parse(aplicacion.blanco_biologico);
-          if (!Array.isArray(blancoBiologico)) {
-            blancoBiologico = [];
-          }
-        } catch (e) {
+          const parsed = JSON.parse(aplicacion.blanco_biologico);
+          if (Array.isArray(parsed)) blancoBiologico = parsed;
+        } catch {
           blancoBiologico = [];
         }
       }
@@ -253,8 +241,8 @@ export function CalculadoraAplicaciones() {
         fecha_recomendacion: aplicacion.fecha_recomendacion || undefined,
         proposito: aplicacion.proposito || undefined,
         agronomo_responsable: aplicacion.agronomo_responsable || undefined,
-        blanco_biologico: blancoBiologico.length > 0 ? blancoBiologico : [],
-        lotes_seleccionados: (lotesData || []).map(lote => ({
+        blanco_biologico: blancoBiologico,
+        lotes_seleccionados: (lotesData || []).map((lote) => ({
           lote_id: lote.lote_id,
           nombre: lote.lotes?.nombre || 'Sin nombre',
           sublotes_ids: lote.sublotes_ids || [],
@@ -268,10 +256,10 @@ export function CalculadoraAplicaciones() {
           },
           calibracion_litros_arbol: lote.calibracion_litros_arbol || undefined,
           tamano_caneca: (lote.tamano_caneca || undefined) as 20 | 200 | 500 | 1000 | undefined,
-        }))
+        })),
       };
 
-      const calculosData = (calculos || []).map(calc => ({
+      const calculosData = (calculos || []).map((calc) => ({
         lote_id: calc.lote_id,
         lote_nombre: calc.lote_nombre,
         total_arboles: calc.total_arboles,
@@ -286,25 +274,28 @@ export function CalculadoraAplicaciones() {
         productos: [],
       })) as CalculosPorLote[];
 
-      const listaCompras: ListaCompras | null = compras && compras.length > 0 ? {
-        items: compras.map(item => ({
-          producto_id: item.producto_id,
-          producto_nombre: item.producto_nombre,
-          producto_categoria: item.producto_categoria ?? '',
-          unidad: item.unidad,
-          inventario_actual: item.inventario_actual,
-          cantidad_necesaria: item.cantidad_necesaria,
-          cantidad_faltante: item.cantidad_faltante,
-          presentacion_comercial: item.presentacion_comercial || '',
-          unidades_a_comprar: item.unidades_a_comprar,
-          ultimo_precio_unitario: item.precio_unitario || undefined,
-          costo_estimado: item.costo_estimado || undefined,
-          alerta: (item.alerta ?? 'normal') as 'normal' | 'sin_precio' | 'sin_stock',
-        })),
-        costo_total_estimado: compras.reduce((sum, item) => sum + (item.costo_estimado || 0), 0),
-        productos_sin_precio: compras.filter(item => !item.precio_unitario).length,
-        productos_sin_stock: compras.filter(item => item.cantidad_faltante > 0).length,
-      } : null;
+      const listaCompras: ListaCompras | null =
+        compras && compras.length > 0
+          ? {
+              items: compras.map((item) => ({
+                producto_id: item.producto_id,
+                producto_nombre: item.producto_nombre,
+                producto_categoria: item.producto_categoria ?? '',
+                unidad: item.unidad,
+                inventario_actual: item.inventario_actual,
+                cantidad_necesaria: item.cantidad_necesaria,
+                cantidad_faltante: item.cantidad_faltante,
+                presentacion_comercial: item.presentacion_comercial || '',
+                unidades_a_comprar: item.unidades_a_comprar,
+                ultimo_precio_unitario: item.precio_unitario || undefined,
+                costo_estimado: item.costo_estimado || undefined,
+                alerta: (item.alerta ?? 'normal') as 'normal' | 'sin_precio' | 'sin_stock',
+              })),
+              costo_total_estimado: compras.reduce((sum, item) => sum + (item.costo_estimado || 0), 0),
+              productos_sin_precio: compras.filter((item) => !item.precio_unitario).length,
+              productos_sin_stock: compras.filter((item) => item.cantidad_faltante > 0).length,
+            }
+          : null;
 
       // 8. Actualizar estado
       setState({
@@ -316,12 +307,10 @@ export function CalculadoraAplicaciones() {
         guardando: false,
         error: null,
       });
-
-
     } catch (error) {
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
-        error: error instanceof Error ? error.message : 'Error cargando la aplicación'
+        error: error instanceof Error ? error.message : 'Error cargando la aplicación',
       }));
     } finally {
       setCargandoDatos(false);
@@ -329,10 +318,12 @@ export function CalculadoraAplicaciones() {
   };
 
   // ==========================================================================
-  // VALIDACIONES POR PASO
+  // VALIDACIÓN DEL PASO "PLAN" — fusión de las viejas validarPaso1 + validarPaso2: ya no
+  // hay una pantalla intermedia donde detenerse, así que se valida todo junto antes de
+  // pasar a Lista de Compras.
   // ==========================================================================
 
-  const validarPaso1 = (): boolean => {
+  const validarPasoPlan = (): boolean => {
     if (!state.configuracion) {
       setValidationError('Debes completar la configuración');
       return false;
@@ -344,74 +335,70 @@ export function CalculadoraAplicaciones() {
       setValidationError('Debes ingresar un nombre para la aplicación');
       return false;
     }
-
     if (!tipo) {
       setValidationError('Debes seleccionar un tipo de aplicación');
       return false;
     }
-
     if (!fecha_inicio_planeada) {
       setValidationError('Debes seleccionar una fecha de inicio');
       return false;
     }
-
     if (lotes_seleccionados.length === 0) {
       setValidationError('Debes seleccionar al menos un lote');
       return false;
     }
 
-    // Validar calibración para fumigaciones
-    if (tipo === 'fumigacion') {
+    if (tipo === 'fumigacion' || tipo === 'drench') {
       const lotesSinCalibracion = lotes_seleccionados.filter(
-        l => !l.calibracion_litros_arbol || 
-             l.calibracion_litros_arbol <= 0 || 
-             !l.tamano_caneca
+        (l) => !l.calibracion_litros_arbol || l.calibracion_litros_arbol <= 0 || !l.tamano_caneca,
       );
-      
       if (lotesSinCalibracion.length > 0) {
-        const nombres = lotesSinCalibracion
-          .map(l => l.nombre)
-          .join(', ');
         setValidationError(
-          `Los siguientes lotes necesitan calibración completa (L/árbol y tamaño de caneca): ${nombres}`
+          `Los siguientes lotes necesitan calibración completa (L/árbol y tamaño de caneca): ${lotesSinCalibracion
+            .map((l) => l.nombre)
+            .join(', ')}`,
         );
         return false;
       }
     }
 
-    setValidationError('');
-    return true;
-  };
-
-  const validarPaso2 = (): boolean => {
     if (state.mezclas.length === 0) {
       setValidationError('Debes crear al menos una mezcla');
       return false;
     }
 
-    // Validar que todas las mezclas tengan productos
     const mezclasSinProductos = state.mezclas.filter((m) => m.productos.length === 0);
-
     if (mezclasSinProductos.length > 0) {
       setValidationError('Todas las mezclas deben tener al menos un producto');
       return false;
     }
 
-    // Validar que todos los productos tengan dosis configuradas
-    const productosSinDosis = state.mezclas.flatMap((m) => m.productos).filter((p) => {
-      if (state.configuracion?.tipo === 'fumigacion' || state.configuracion?.tipo === 'drench') {
-        // Fumigación y Drench usan dosis por caneca
-        return !p.dosis_por_caneca || p.dosis_por_caneca <= 0;
-      } else {
-        // Fertilización: al menos una dosis debe ser > 0
+    // Con 2+ mezclas la asignación de lotes vuelve a ser una decisión real (antes la
+    // gateaba el diálogo "Confirmar Mezcla"; al volverse edición directa, esta es la
+    // única puerta que queda para no guardar una mezcla sin lotes).
+    if (state.mezclas.length > 1) {
+      const mezclasSinLotes = state.mezclas.filter((m) => !m.lotes_asignados || m.lotes_asignados.length === 0);
+      if (mezclasSinLotes.length > 0) {
+        setValidationError(
+          `Estas mezclas todavía no tienen lotes asignados: ${mezclasSinLotes.map((m) => m.nombre).join(', ')}`,
+        );
+        return false;
+      }
+    }
+
+    const productosSinDosis = state.mezclas
+      .flatMap((m) => m.productos)
+      .filter((p) => {
+        if (tipo === 'fumigacion' || tipo === 'drench') {
+          return !p.dosis_por_caneca || p.dosis_por_caneca <= 0;
+        }
         return (
           (p.dosis_grandes || 0) === 0 &&
           (p.dosis_medianos || 0) === 0 &&
           (p.dosis_pequenos || 0) === 0 &&
           (p.dosis_clonales || 0) === 0
         );
-      }
-    });
+      });
 
     if (productosSinDosis.length > 0) {
       setValidationError('Todos los productos deben tener dosis configuradas');
@@ -422,62 +409,35 @@ export function CalculadoraAplicaciones() {
     return true;
   };
 
-  const validarPaso3 = (): boolean => {
-    // Paso 3 siempre puede avanzar (aunque falten productos)
-    setValidationError('');
-    return true;
-  };
-
   // ==========================================================================
-  // NAVEGACIÓN
+  // NAVEGACIÓN — 2 pasos
   // ==========================================================================
 
   const handleSiguiente = () => {
-    // Validar paso actual antes de avanzar
-    let esValido = false;
+    if (state.paso_actual === 1 && !validarPasoPlan()) return;
 
-    if (state.paso_actual === 1) {
-      esValido = validarPaso1();
-    } else if (state.paso_actual === 2) {
-      esValido = validarPaso2();
-    } else if (state.paso_actual === 3) {
-      esValido = validarPaso3();
-    }
-
-    if (!esValido) return;
-
-    // Avanzar al siguiente paso
-    if (state.paso_actual < 3) {
-      setState((prev) => ({
-        ...prev,
-        paso_actual: (prev.paso_actual + 1) as 1 | 2 | 3,
-      }));
+    if (state.paso_actual < 2) {
+      setState((prev) => ({ ...prev, paso_actual: (prev.paso_actual + 1) as 1 | 2 }));
       setValidationError('');
     }
   };
 
   const handleAnterior = () => {
     if (state.paso_actual > 1) {
-      setState((prev) => ({
-        ...prev,
-        paso_actual: (prev.paso_actual - 1) as 1 | 2 | 3,
-      }));
+      setState((prev) => ({ ...prev, paso_actual: (prev.paso_actual - 1) as 1 | 2 }));
       setValidationError('');
     }
   };
 
-  const handleCancelar = () => {
-    setShowCancelDialog(true);
-  };
+  const handleCancelar = () => setShowCancelDialog(true);
 
   const confirmarCancelar = () => {
-    clearFormData(); // Clear saved form data
+    setShowCancelDialog(false);
+    clearFormData();
     navigate('/aplicaciones');
   };
 
   const handleGuardarYFinalizar = async () => {
-    if (!validarPaso3()) return;
-
     if (!state.configuracion || state.mezclas.length === 0) {
       setState((prev) => ({ ...prev, error: 'Datos incompletos' }));
       return;
@@ -486,8 +446,9 @@ export function CalculadoraAplicaciones() {
     try {
       setState((prev) => ({ ...prev, guardando: true, error: null }));
 
-      // Obtener usuario actual
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuario no autenticado');
 
       let aplicacionId: string;
@@ -497,9 +458,7 @@ export function CalculadoraAplicaciones() {
         // =============================================================
         // MODO EDICIÓN: ACTUALIZAR APLICACIÓN EXISTENTE
         // =============================================================
-        
 
-        // Obtener código existente
         const { data: aplicacionExistente } = await supabase
           .from('aplicaciones')
           .select('codigo_aplicacion')
@@ -508,14 +467,13 @@ export function CalculadoraAplicaciones() {
 
         codigoAplicacion = aplicacionExistente?.codigo_aplicacion || '';
 
-        // Actualizar aplicación base
         const aplicacionData = {
           nombre_aplicacion: state.configuracion.nombre,
           tipo_aplicacion: (state.configuracion.tipo === 'fumigacion'
             ? 'Fumigación'
             : state.configuracion.tipo === 'fertilizacion'
-            ? 'Fertilización'
-            : 'Drench') as 'Fumigación' | 'Fertilización' | 'Drench',
+              ? 'Fertilización'
+              : 'Drench') as 'Fumigación' | 'Fertilización' | 'Drench',
           proposito: state.configuracion.proposito || null,
           blanco_biologico: state.configuracion.blanco_biologico
             ? JSON.stringify(state.configuracion.blanco_biologico)
@@ -527,70 +485,37 @@ export function CalculadoraAplicaciones() {
           updated_at: new Date().toISOString(),
         };
 
-        const { error: errorAplicacion } = await supabase
-          .from('aplicaciones')
-          .update(aplicacionData)
-          .eq('id', id);
-
-        if (errorAplicacion) {
-          throw errorAplicacion;
-        }
-
+        const { error: errorAplicacion } = await supabase.from('aplicaciones').update(aplicacionData).eq('id', id);
+        if (errorAplicacion) throw errorAplicacion;
 
         // Eliminar relaciones existentes
+        await supabase.from('aplicaciones_lotes').delete().eq('aplicacion_id', id!);
 
-        // Eliminar lotes
-        await supabase
-          .from('aplicaciones_lotes')
-          .delete()
-          .eq('aplicacion_id', id!);
-
-        // Eliminar productos de mezclas
         const { data: mezclasExistentes } = await supabase
           .from('aplicaciones_mezclas')
           .select('id')
           .eq('aplicacion_id', id!);
 
         if (mezclasExistentes && mezclasExistentes.length > 0) {
-          const mezclaIds = mezclasExistentes.map(m => m.id);
-          
-          await supabase
-            .from('aplicaciones_productos')
-            .delete()
-            .in('mezcla_id', mezclaIds);
+          const mezclaIds = mezclasExistentes.map((m) => m.id);
+          await supabase.from('aplicaciones_productos').delete().in('mezcla_id', mezclaIds);
         }
 
-        // Eliminar mezclas
-        await supabase
-          .from('aplicaciones_mezclas')
-          .delete()
-          .eq('aplicacion_id', id!);
-
-        // Eliminar cálculos
-        await supabase
-          .from('aplicaciones_calculos')
-          .delete()
-          .eq('aplicacion_id', id!);
-
-        // Eliminar lista de compras
-        await supabase
-          .from('aplicaciones_compras')
-          .delete()
-          .eq('aplicacion_id', id!);
-
+        await supabase.from('aplicaciones_mezclas').delete().eq('aplicacion_id', id!);
+        await supabase.from('aplicaciones_calculos').delete().eq('aplicacion_id', id!);
+        await supabase.from('aplicaciones_compras').delete().eq('aplicacion_id', id!);
 
         aplicacionId = id;
-
       } else {
         // =============================================================
         // MODO CREACIÓN: INSERTAR NUEVA APLICACIÓN
         // =============================================================
-        
-        // Generar código único (formato: APL-YYYYMMDD-XXX)
+
         const fecha = new Date();
-        const codigoBase = `APL-${fecha.getFullYear()}${String(fecha.getMonth() + 1).padStart(2, '0')}${String(fecha.getDate()).padStart(2, '0')}`;
-        
-        // Buscar último código del día
+        const codigoBase = `APL-${fecha.getFullYear()}${String(fecha.getMonth() + 1).padStart(2, '0')}${String(
+          fecha.getDate(),
+        ).padStart(2, '0')}`;
+
         const { data: ultimaAplicacion } = await supabase
           .from('aplicaciones')
           .select('codigo_aplicacion')
@@ -611,10 +536,10 @@ export function CalculadoraAplicaciones() {
           tipo_aplicacion: (state.configuracion.tipo === 'fumigacion'
             ? 'Fumigación'
             : state.configuracion.tipo === 'fertilizacion'
-            ? 'Fertilización'
-            : 'Drench') as 'Fumigación' | 'Fertilización' | 'Drench',
+              ? 'Fertilización'
+              : 'Drench') as 'Fumigación' | 'Fertilización' | 'Drench',
           proposito: state.configuracion.proposito || null,
-          blanco_biologico: state.configuracion.blanco_biologico 
+          blanco_biologico: state.configuracion.blanco_biologico
             ? JSON.stringify(state.configuracion.blanco_biologico)
             : null,
           fecha_inicio_planeada: state.configuracion.fecha_inicio_planeada,
@@ -626,70 +551,56 @@ export function CalculadoraAplicaciones() {
           fecha_fin_ejecucion: null,
         };
 
-
-        const { data, error: errorAplicacion } = await supabase
-          .from('aplicaciones')
-          .insert([aplicacionData])
-          .select();
-
-        if (errorAplicacion) {
-          throw errorAplicacion;
-        }
+        const { data, error: errorAplicacion } = await supabase.from('aplicaciones').insert([aplicacionData]).select();
+        if (errorAplicacion) throw errorAplicacion;
 
         const aplicacion = data?.[0];
-        if (!aplicacion) {
-          throw new Error('No se pudo crear la aplicación');
-        }
+        if (!aplicacion) throw new Error('No se pudo crear la aplicación');
 
         aplicacionId = aplicacion.id;
       }
 
       // =============================================================
-      // PASO 2: INSERTAR LOTES (común para creación y edición)
+      // INSERTAR LOTES
+      // W01-calculadora-v2.md campo #13 / CLAUDE.md: `sublotes_ids` deja de escribirse.
+      // Es siempre `lote.sublotes.map(s => s.id)` (todos los sublotes del lote, verificado
+      // contra las 87 filas de producción) — no hay un lector real y la columna nullable
+      // simplemente queda NULL en filas nuevas; las 87 existentes no se tocan.
       // =============================================================
-      
+
       const lotesData = state.configuracion.lotes_seleccionados.map((lote) => ({
         aplicacion_id: aplicacionId,
         lote_id: lote.lote_id,
-        sublotes_ids: lote.sublotes_ids || null,
         arboles_grandes: lote.conteo_arboles.grandes,
         arboles_medianos: lote.conteo_arboles.medianos,
         arboles_pequenos: lote.conteo_arboles.pequenos,
         arboles_clonales: lote.conteo_arboles.clonales,
         total_arboles: lote.conteo_arboles.total,
-        calibracion_litros_arbol: ((state.configuracion as any)?.tipo === 'fumigacion' || (state.configuracion as any)?.tipo === 'drench')
-          ? lote.calibracion_litros_arbol
-          : null,
-        tamano_caneca: ((state.configuracion as any)?.tipo === 'fumigacion' || (state.configuracion as any)?.tipo === 'drench')
-          ? lote.tamano_caneca
-          : null,
+        calibracion_litros_arbol:
+          state.configuracion?.tipo === 'fumigacion' || state.configuracion?.tipo === 'drench'
+            ? lote.calibracion_litros_arbol
+            : null,
+        tamano_caneca:
+          state.configuracion?.tipo === 'fumigacion' || state.configuracion?.tipo === 'drench'
+            ? lote.tamano_caneca
+            : null,
       }));
 
-
-      const { error: errorLotes } = await supabase
-        .from('aplicaciones_lotes')
-        .insert(lotesData);
-
-      if (errorLotes) {
-        throw errorLotes;
-      }
-
+      const { error: errorLotes } = await supabase.from('aplicaciones_lotes').insert(lotesData);
+      if (errorLotes) throw errorLotes;
 
       // =============================================================
-      // PASO 3: INSERTAR MEZCLAS Y PRODUCTOS
+      // INSERTAR MEZCLAS Y PRODUCTOS
       // =============================================================
 
-      // Map to store lote_id → mezcla_id relationship
       const loteToMezclaMap: Record<string, string> = {};
 
       for (const mezcla of state.mezclas) {
-        // Insertar mezcla
         const mezclaData = {
           aplicacion_id: aplicacionId,
           numero_mezcla: mezcla.numero_orden,
           nombre_mezcla: mezcla.nombre,
         };
-
 
         const { data: mezclaInsertada, error: errorMezcla } = await supabase
           .from('aplicaciones_mezclas')
@@ -697,65 +608,51 @@ export function CalculadoraAplicaciones() {
           .select()
           .single();
 
-        if (errorMezcla) {
-          throw errorMezcla;
-        }
+        if (errorMezcla) throw errorMezcla;
 
-        // Store lote → mezcla mapping for each assigned lote
-        if (mezcla.lotes_asignados) {
-          mezcla.lotes_asignados.forEach((loteId: string) => {
-            loteToMezclaMap[loteId] = mezclaInsertada.id;
-          });
-        }
+        // Con una sola mezcla, `lotes_asignados` es la misma lista que
+        // `configuracion.lotes_seleccionados` (heredada, ver PasoMezcla.tsx) — el mapeo se
+        // escribe igual que antes.
+        const lotesEfectivos =
+          state.mezclas.length === 1
+            ? state.configuracion.lotes_seleccionados.map((l) => l.lote_id)
+            : mezcla.lotes_asignados || [];
 
-        // Insertar productos de la mezcla
+        lotesEfectivos.forEach((loteId) => {
+          loteToMezclaMap[loteId] = mezclaInsertada.id;
+        });
+
         const productosData = mezcla.productos.map((producto) => ({
           mezcla_id: mezclaInsertada.id,
           producto_id: producto.producto_id,
-          dosis_por_caneca: state.configuracion?.tipo === 'fumigacion'
-            ? producto.dosis_por_caneca
-            : null,
-          unidad_dosis: state.configuracion?.tipo === 'fumigacion'
-            ? producto.unidad_dosis
-            : null,
-          dosis_grandes: state.configuracion?.tipo === 'fertilizacion'
-            ? producto.dosis_grandes
-            : null,
-          dosis_medianos: state.configuracion?.tipo === 'fertilizacion'
-            ? producto.dosis_medianos
-            : null,
-          dosis_pequenos: state.configuracion?.tipo === 'fertilizacion'
-            ? producto.dosis_pequenos
-            : null,
-          dosis_clonales: state.configuracion?.tipo === 'fertilizacion'
-            ? producto.dosis_clonales
-            : null,
+          dosis_por_caneca:
+            state.configuracion?.tipo === 'fumigacion' || state.configuracion?.tipo === 'drench'
+              ? producto.dosis_por_caneca
+              : null,
+          unidad_dosis:
+            state.configuracion?.tipo === 'fumigacion' || state.configuracion?.tipo === 'drench'
+              ? producto.unidad_dosis
+              : null,
+          dosis_grandes: state.configuracion?.tipo === 'fertilizacion' ? producto.dosis_grandes : null,
+          dosis_medianos: state.configuracion?.tipo === 'fertilizacion' ? producto.dosis_medianos : null,
+          dosis_pequenos: state.configuracion?.tipo === 'fertilizacion' ? producto.dosis_pequenos : null,
+          dosis_clonales: state.configuracion?.tipo === 'fertilizacion' ? producto.dosis_clonales : null,
           cantidad_total_necesaria: producto.cantidad_total_necesaria,
           producto_nombre: producto.producto_nombre,
           producto_categoria: producto.producto_categoria,
           producto_unidad: producto.producto_unidad,
         }));
 
-
-        const { error: errorProductos } = await supabase
-          .from('aplicaciones_productos')
-          .insert(productosData);
-
-        if (errorProductos) {
-          throw errorProductos;
-        }
-
+        const { error: errorProductos } = await supabase.from('aplicaciones_productos').insert(productosData);
+        if (errorProductos) throw errorProductos;
       }
 
       // =============================================================
-      // PASO 4: INSERTAR CÁLCULOS POR LOTE
+      // INSERTAR CÁLCULOS POR LOTE
       // =============================================================
-      
+
       const calculosData = state.calculos.map((calculo) => {
-        // Buscar datos del lote
-        const loteConfig = state.configuracion!.lotes_seleccionados.find(
-          (l) => l.lote_id === calculo.lote_id
-        );
+        const loteConfig = state.configuracion!.lotes_seleccionados.find((l) => l.lote_id === calculo.lote_id);
 
         return {
           aplicacion_id: aplicacionId,
@@ -763,51 +660,31 @@ export function CalculadoraAplicaciones() {
           lote_nombre: calculo.lote_nombre,
           area_hectareas: loteConfig?.area_hectareas || null,
           total_arboles: calculo.total_arboles,
-          // Link to mezcla
           mezcla_id: loteToMezclaMap[calculo.lote_id] || null,
-          // Fumigación y Drench
-          litros_mezcla: ((state.configuracion as any)?.tipo === 'fumigacion' || (state.configuracion as any)?.tipo === 'drench')
-            ? calculo.litros_mezcla
-            : null,
-          numero_canecas: ((state.configuracion as any)?.tipo === 'fumigacion' || (state.configuracion as any)?.tipo === 'drench')
-            ? calculo.numero_canecas
-            : null,
-          // Fertilización
-          kilos_totales: state.configuracion?.tipo === 'fertilizacion'
-            ? calculo.kilos_totales
-            : null,
-          numero_bultos: state.configuracion?.tipo === 'fertilizacion'
-            ? calculo.numero_bultos
-            : null,
-          kilos_grandes: state.configuracion?.tipo === 'fertilizacion'
-            ? calculo.kilos_grandes
-            : null,
-          kilos_medianos: state.configuracion?.tipo === 'fertilizacion'
-            ? calculo.kilos_medianos
-            : null,
-          kilos_pequenos: state.configuracion?.tipo === 'fertilizacion'
-            ? calculo.kilos_pequenos
-            : null,
-          kilos_clonales: state.configuracion?.tipo === 'fertilizacion'
-            ? calculo.kilos_clonales
-            : null,
+          litros_mezcla:
+            state.configuracion?.tipo === 'fumigacion' || state.configuracion?.tipo === 'drench'
+              ? calculo.litros_mezcla
+              : null,
+          numero_canecas:
+            state.configuracion?.tipo === 'fumigacion' || state.configuracion?.tipo === 'drench'
+              ? calculo.numero_canecas
+              : null,
+          kilos_totales: state.configuracion?.tipo === 'fertilizacion' ? calculo.kilos_totales : null,
+          numero_bultos: state.configuracion?.tipo === 'fertilizacion' ? calculo.numero_bultos : null,
+          kilos_grandes: state.configuracion?.tipo === 'fertilizacion' ? calculo.kilos_grandes : null,
+          kilos_medianos: state.configuracion?.tipo === 'fertilizacion' ? calculo.kilos_medianos : null,
+          kilos_pequenos: state.configuracion?.tipo === 'fertilizacion' ? calculo.kilos_pequenos : null,
+          kilos_clonales: state.configuracion?.tipo === 'fertilizacion' ? calculo.kilos_clonales : null,
         };
       });
 
-
-      const { error: errorCalculos } = await supabase
-        .from('aplicaciones_calculos')
-        .insert(calculosData);
-
-      if (errorCalculos) {
-        throw errorCalculos;
-      }
-
+      const { error: errorCalculos } = await supabase.from('aplicaciones_calculos').insert(calculosData);
+      if (errorCalculos) throw errorCalculos;
 
       // =============================================================
-      // PASO 5: INSERTAR LISTA DE COMPRAS
+      // INSERTAR LISTA DE COMPRAS
       // =============================================================
-      
+
       if (state.lista_compras && state.lista_compras.items.length > 0) {
         const comprasData = state.lista_compras.items.map((item) => ({
           aplicacion_id: aplicacionId,
@@ -823,38 +700,26 @@ export function CalculadoraAplicaciones() {
           precio_unitario: item.ultimo_precio_unitario || null,
           costo_estimado: item.costo_estimado || null,
           alerta: item.alerta || 'normal',
-          // NO incluir 'estado' - ese campo pertenece a la tabla productos, no a aplicaciones_compras
         }));
 
-
-        const { error: errorCompras } = await supabase
-          .from('aplicaciones_compras')
-          .insert(comprasData);
-
-        if (errorCompras) {
-          throw errorCompras;
-        }
-
+        const { error: errorCompras } = await supabase.from('aplicaciones_compras').insert(comprasData);
+        if (errorCompras) throw errorCompras;
       }
 
       // =============================================================
       // ÉXITO - REDIRIGIR
       // =============================================================
 
-
-      // Clear saved form data since we successfully saved
       clearFormData();
 
-      // Redirigir al listado con mensaje de éxito
       navigate('/aplicaciones', {
         state: {
           success: true,
           mensaje: modoEdicion
             ? `Aplicación ${codigoAplicacion} actualizada exitosamente`
-            : `Aplicación ${codigoAplicacion} guardada exitosamente`
-        }
+            : `Aplicación ${codigoAplicacion} guardada exitosamente`,
+        },
       });
-      
     } catch (error) {
       setState((prev) => ({
         ...prev,
@@ -870,313 +735,141 @@ export function CalculadoraAplicaciones() {
   // ==========================================================================
 
   const updateConfiguracion = (configuracion: ConfiguracionAplicacion) => {
-    setState((prev) => ({
-      ...prev,
-      configuracion,
-    }));
+    setState((prev) => ({ ...prev, configuracion }));
   };
 
   const updateMezclas = (mezclas: Mezcla[], calculos: CalculosPorLote[]) => {
-    setState((prev) => ({
-      ...prev,
-      mezclas,
-      calculos,
-    }));
+    setState((prev) => ({ ...prev, mezclas, calculos }));
   };
 
   const updateListaCompras = (lista_compras: ListaCompras) => {
-    setState((prev) => ({
-      ...prev,
-      lista_compras,
-    }));
+    setState((prev) => ({ ...prev, lista_compras }));
   };
 
   // ==========================================================================
   // RENDER
   // ==========================================================================
 
-  // Mostrar loading mientras se cargan datos en modo edición
   if (cargandoDatos) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-12 text-center max-w-md">
-          <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto mb-4" />
+        <div className="bg-card rounded-2xl shadow-sm border border-border p-12 text-center max-w-md">
+          <Spinner className="size-10 text-primary mx-auto mb-4" />
           <h2 className="text-xl text-foreground mb-2">Cargando aplicación...</h2>
-          <p className="text-sm text-brand-brown/70">
-            Estamos recuperando los datos de la aplicación
-          </p>
+          <p className="text-sm text-muted-foreground">Estamos recuperando los datos de la aplicación</p>
         </div>
       </div>
     );
   }
 
+  const nombreVisible = state.configuracion?.nombre?.trim() || (modoEdicion ? 'Editar Aplicación' : 'Nueva Aplicación');
+
   return (
-    <div className="min-h-screen bg-background py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-[1200px] mx-auto">
-        {/* Header con Stepper */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 mb-8">
-          {/* Título */}
-          <div className="mb-8">
-            <h1 className="text-foreground mb-2">
-              {modoEdicion ? 'Editar Aplicación' : 'Nueva Aplicación'}
-            </h1>
-            <p className="text-brand-brown/70">
-              Calcula productos, dosis y genera lista de compras automáticamente
-            </p>
-          </div>
+    <AplicacionShell
+      titulo={nombreVisible}
+      subtitulo={modoEdicion ? undefined : 'Calcula productos, dosis y genera la lista de compras automáticamente'}
+      estado={modoEdicion ? estadoAplicacionActual : undefined}
+    >
+      <FormDraftBanner
+        variant="restored"
+        show={state.paso_actual > 1 && !modoEdicion}
+        onDiscard={clearFormData}
+      />
 
-          <FormDraftBanner
-            variant="restored"
-            show={state.paso_actual > 1 && !modoEdicion}
-            onDiscard={clearFormData}
-          />
-
-          {/* Stepper */}
-          <div className="relative">
-            {/* Desktop Stepper */}
-            <div className="hidden md:block">
-              <div className="flex items-center justify-between">
-                {PASOS.map((paso, index) => {
-                  const Icon = paso.icono;
-                  const isActive = state.paso_actual === paso.numero;
-                  const isCompleted = state.paso_actual > paso.numero;
-                  const isLast = index === PASOS.length - 1;
-
-                  return (
-                    <div key={paso.numero} className="flex items-center flex-1">
-                      {/* Paso */}
-                      <div className="flex flex-col items-center">
-                        {/* Círculo con icono */}
-                        <div
-                          className={`
-                            w-16 h-16 rounded-2xl flex items-center justify-center mb-3 transition-all duration-300
-                            ${
-                              isActive
-                                ? 'bg-gradient-to-br from-primary to-secondary text-white shadow-lg scale-110'
-                                : isCompleted
-                                ? 'bg-primary text-white'
-                                : 'bg-gray-100 text-gray-400'
-                            }
-                          `}
-                        >
-                          {isCompleted ? (
-                            <Check className="w-8 h-8" />
-                          ) : (
-                            <Icon className="w-8 h-8" />
-                          )}
-                        </div>
-
-                        {/* Texto */}
-                        <div className="text-center">
-                          <p
-                            className={`text-sm mb-1 transition-colors ${
-                              isActive || isCompleted
-                                ? 'text-foreground'
-                                : 'text-gray-400'
-                            }`}
-                          >
-                            {paso.titulo}
-                          </p>
-                          <p className="text-xs text-brand-brown/50 max-w-[140px]">
-                            {paso.descripcion}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Línea conectora */}
-                      {!isLast && (
-                        <div className="flex-1 h-1 mx-4 -mt-12">
-                          <div
-                            className={`h-full rounded-full transition-all duration-300 ${
-                              isCompleted ? 'bg-primary' : 'bg-gray-200'
-                            }`}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Mobile Breadcrumbs */}
-            <div className="md:hidden">
-              <div className="flex items-center justify-center gap-2 mb-6">
-                {PASOS.map((paso) => {
-                  const isActive = state.paso_actual === paso.numero;
-                  const isCompleted = state.paso_actual > paso.numero;
-
-                  return (
-                    <div
-                      key={paso.numero}
-                      className={`
-                        h-2 flex-1 rounded-full transition-all duration-300
-                        ${
-                          isActive || isCompleted
-                            ? 'bg-primary'
-                            : 'bg-gray-200'
-                        }
-                      `}
-                    />
-                  );
-                })}
-              </div>
-
-              {/* Paso actual en móvil */}
-              <div className="text-center">
-                <p className="text-lg text-foreground mb-1">
-                  {PASOS[state.paso_actual - 1].titulo}
-                </p>
-                <p className="text-sm text-brand-brown/70">
-                  Paso {state.paso_actual} de {PASOS.length}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Mensaje de error de validación */}
-        {validationError && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-            <div>
-              <h4 className="text-red-800 mb-1">Error de validación</h4>
-              <p className="text-red-700 text-sm">{validationError}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Error general */}
-        {state.error && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-            <div>
-              <h4 className="text-red-800 mb-1">Error</h4>
-              <p className="text-red-700 text-sm">{state.error}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Contenido del paso actual */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 mb-8">
-          {state.paso_actual === 1 && (
-            <PasoConfiguracion
-              configuracion={state.configuracion}
-              onUpdate={updateConfiguracion}
-            />
-          )}
-
-          {state.paso_actual === 2 && state.configuracion && (
-            <PasoMezcla
-              configuracion={state.configuracion}
-              mezclas={state.mezclas}
-              calculos={state.calculos}
-              onUpdate={updateMezclas}
-            />
-          )}
-
-          {state.paso_actual === 3 && state.configuracion && (
-            <PasoListaCompras
-              configuracion={state.configuracion}
-              mezclas={state.mezclas}
-              calculos={state.calculos}
-              lista_compras={state.lista_compras}
-              onUpdate={updateListaCompras}
-            />
-          )}
-        </div>
-
-        {/* Navegación */}
-        <div className="flex items-center justify-between gap-4">
-          {/* Botón Cancelar */}
-          <button
-            onClick={handleCancelar}
-            disabled={state.guardando}
-            className="px-6 py-3 text-brand-brown hover:bg-gray-100 rounded-xl transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <X className="w-5 h-5" />
-            <span className="hidden sm:inline">Cancelar</span>
-          </button>
-
-          <div className="flex items-center gap-4">
-            {/* Botón Anterior */}
-            <button
-              onClick={handleAnterior}
-              disabled={state.paso_actual === 1 || state.guardando}
-              className="px-6 py-3 bg-gray-100 text-foreground rounded-xl hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
-            >
-              <ChevronLeft className="w-5 h-5" />
-              <span className="hidden sm:inline">Anterior</span>
-            </button>
-
-            {/* Botón Siguiente o Finalizar */}
-            {state.paso_actual < 3 ? (
-              <button
-                onClick={handleSiguiente}
-                disabled={state.guardando}
-                className="px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:from-primary-dark hover:to-secondary-dark transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <span>Siguiente</span>
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            ) : (
-              <button
-                onClick={handleGuardarYFinalizar}
-                disabled={state.guardando}
-                className="px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:from-primary-dark hover:to-secondary-dark transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {state.guardando ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Guardando...</span>
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-5 h-5" />
-                    <span>Guardar y Finalizar</span>
-                  </>
-                )}
-              </button>
-            )}
-          </div>
-        </div>
+      <div className="bg-card rounded-2xl shadow-sm border border-border p-6 sm:p-8">
+        <AplicacionStepper pasos={PASOS} pasoActual={state.paso_actual} />
       </div>
 
-      {/* Dialog de cancelación */}
-      {showCancelDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full">
-            <div className="flex items-start gap-4 mb-6">
-              <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                <AlertTriangle className="w-6 h-6 text-red-600" />
-              </div>
-              <div>
-                <h3 className="text-lg text-foreground mb-2">
-                  ¿Cancelar aplicación?
-                </h3>
-                <p className="text-sm text-brand-brown/70">
-                  Se perderán todos los datos ingresados. Esta acción no se puede deshacer.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 justify-end">
-              <button
-                onClick={() => setShowCancelDialog(false)}
-                className="px-4 py-2 text-brand-brown hover:bg-gray-100 rounded-lg transition-all"
-              >
-                Continuar editando
-              </button>
-              <button
-                onClick={confirmarCancelar}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all"
-              >
-                Sí, cancelar
-              </button>
-            </div>
-          </div>
-        </div>
+      {validationError && (
+        <Alert variant="destructive">
+          <AlertTriangle />
+          <AlertTitle>Error de validación</AlertTitle>
+          <AlertDescription>{validationError}</AlertDescription>
+        </Alert>
       )}
-    </div>
+
+      {state.error && (
+        <Alert variant="destructive">
+          <AlertTriangle />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{state.error}</AlertDescription>
+        </Alert>
+      )}
+
+      <div className="bg-card rounded-2xl shadow-sm border border-border p-6 sm:p-8">
+        {state.paso_actual === 1 && (
+          <PasoConfiguracion
+            configuracion={state.configuracion}
+            onUpdate={updateConfiguracion}
+            mezclas={state.mezclas}
+            onUpdateMezclas={updateMezclas}
+            estadosAsignacion={estadosAsignacion}
+            onReintentarAsignacion={modoEdicion ? cargarAplicacion : undefined}
+          />
+        )}
+
+        {state.paso_actual === 2 && state.configuracion && (
+          <PasoListaCompras
+            configuracion={state.configuracion}
+            mezclas={state.mezclas}
+            calculos={state.calculos}
+            lista_compras={state.lista_compras}
+            onUpdate={updateListaCompras}
+          />
+        )}
+      </div>
+
+      {/* Navegación */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <Button type="button" variant="ghost" onClick={handleCancelar} disabled={state.guardando}>
+          <X className="w-4 h-4" />
+          <span className="hidden sm:inline">Cancelar</span>
+        </Button>
+
+        <ButtonGroup>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleAnterior}
+            disabled={state.paso_actual === 1 || state.guardando}
+          >
+            <ChevronLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">Anterior</span>
+          </Button>
+
+          {state.paso_actual < 2 ? (
+            <Button type="button" onClick={handleSiguiente} disabled={state.guardando}>
+              <span>Siguiente</span>
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          ) : (
+            <Button type="button" onClick={handleGuardarYFinalizar} disabled={state.guardando}>
+              {state.guardando ? (
+                <>
+                  <Spinner />
+                  <span>Guardando…</span>
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>Guardar y Finalizar</span>
+                </>
+              )}
+            </Button>
+          )}
+        </ButtonGroup>
+      </div>
+
+      <ConfirmDialog
+        open={showCancelDialog}
+        onOpenChange={setShowCancelDialog}
+        title="¿Cancelar aplicación?"
+        description="Se perderán todos los datos ingresados. Esta acción no se puede deshacer."
+        confirmLabel="Sí, cancelar"
+        cancelLabel="Continuar editando"
+        onConfirm={confirmarCancelar}
+        destructive
+      />
+    </AplicacionShell>
   );
 }

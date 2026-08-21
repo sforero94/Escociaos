@@ -130,8 +130,11 @@ export interface ListaCompras {
 }
 
 // Estado completo de la calculadora
+// W01 v2 (2026-08-20): 3 pasos -> 2 ("Plan" fusiona Configuración+Mezcla, "Lista de
+// Compras" se mantiene). Único consumidor de este campo fuera de este archivo es
+// CalculadoraAplicaciones.tsx — verificado antes de reducir el tipo.
 export interface EstadoCalculadora {
-  paso_actual: 1 | 2 | 3;
+  paso_actual: 1 | 2;
   configuracion: ConfiguracionAplicacion | null;
   mezclas: Mezcla[];
   calculos: CalculosPorLote[];
