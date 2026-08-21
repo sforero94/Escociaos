@@ -6,6 +6,7 @@ import {
   Package,
   Calendar as CalendarIcon,
   User,
+  Users,
   Trash2,
   Plus,
   ChevronDown,
@@ -30,6 +31,7 @@ import {
   AccordionContent,
 } from '../ui/accordion';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/collapsible';
+import { Item, ItemMedia, ItemContent, ItemTitle, ItemDescription, ItemGroup } from '../ui/item';
 import { Empty, EmptyContent, EmptyDescription, EmptyMedia, EmptyTitle } from '../ui/empty';
 import { Spinner } from '../ui/spinner';
 import { Skeleton } from '../ui/skeleton';
@@ -50,9 +52,30 @@ interface DailyMovementsDashboardProps {
   aplicacion: Aplicacion;
 }
 
-// Tipo extendido con productos cargados
+// Un trabajador (empleado o contratista) de la cuadrilla de un movimiento, ya resuelto a nombre.
+// El nombre viene de `empleados.nombre` o `contratistas.nombre` según cuál id no sea null
+// (constraint XOR en movimientos_diarios_trabajadores) — nunca ambos, nunca ninguno.
+interface TrabajadorMovimiento {
+  id: string;
+  nombre: string;
+  fraccion_jornal: number;
+}
+
+// Fila cruda que devuelve PostgREST al anidar movimientos_diarios_trabajadores con los dos
+// catálogos de nombre. empleados/contratistas vienen como objeto singular (no arreglo) porque
+// cada FK es many-to-one.
+interface FilaTrabajadorMovimiento {
+  id: string;
+  movimiento_diario_id: string;
+  fraccion_jornal: number;
+  empleados: { nombre: string } | null;
+  contratistas: { nombre: string } | null;
+}
+
+// Tipo extendido con productos y cuadrilla cargados
 interface MovimientoConProductos extends MovimientoDiario {
   productos: MovimientoDiarioProducto[];
+  trabajadores: TrabajadorMovimiento[];
 }
 
 /** Unidades abreviadas para las filas de producto dentro de un movimiento expandido. */
@@ -67,6 +90,14 @@ const MAPA_UNIDAD_CORTA: Record<string, string> = {
   kilos: 'Kg',
   Unidades: 'Unid.',
 };
+
+/** Iniciales para el avatar circular de cada fila de personal ("Clara Yaneth" → "CY"). */
+function iniciales(nombre: string): string {
+  const partes = nombre.trim().split(/\s+/).filter(Boolean);
+  const a = partes[0]?.[0] ?? '';
+  const b = partes[1]?.[0] ?? '';
+  return (a + b).toUpperCase() || '?';
+}
 
 type EstadoProgreso = 'ok' | 'warn' | 'over';
 
@@ -213,6 +244,28 @@ export function DailyMovementsDashboard({ aplicacion }: DailyMovementsDashboardP
 
       if (errorProductos) throw errorProductos;
 
+      // 2b. Cargar la cuadrilla de cada movimiento (empleados + contratistas), con el nombre
+      // resuelto vía embed — `movimientos_diarios_trabajadores` nunca se leía antes, así que
+      // el accordion solo mostraba `responsable` (un supervisor de texto libre).
+      const { data: trabajadoresData, error: errorTrabajadores } = await supabase
+        .from('movimientos_diarios_trabajadores')
+        .select('id, movimiento_diario_id, fraccion_jornal, empleados(nombre), contratistas(nombre)')
+        .in('movimiento_diario_id', movimientoIds);
+
+      if (errorTrabajadores) throw errorTrabajadores;
+
+      const trabajadoresPorMovimiento = new Map<string, TrabajadorMovimiento[]>();
+      ((trabajadoresData || []) as unknown as FilaTrabajadorMovimiento[]).forEach(fila => {
+        const nombre = fila.empleados?.nombre ?? fila.contratistas?.nombre ?? 'Sin nombre';
+        const lista = trabajadoresPorMovimiento.get(fila.movimiento_diario_id) ?? [];
+        lista.push({
+          id: fila.id,
+          nombre,
+          fraccion_jornal: Number(fila.fraccion_jornal),
+        });
+        trabajadoresPorMovimiento.set(fila.movimiento_diario_id, lista);
+      });
+
       // 3. Para fertilización, cargar presentacion_kg_l de cada producto
       const presentacionMap = new Map<string, number>();
       if (aplicacion.tipo_aplicacion === 'Fertilización') {
@@ -233,7 +286,7 @@ export function DailyMovementsDashboard({ aplicacion }: DailyMovementsDashboardP
         }
       }
 
-      // 4. Agrupar productos por movimiento
+      // 4. Agrupar productos y cuadrilla por movimiento
       const movimientosConProductos = movimientosData.map(mov => {
         const productosMovimiento = (productosData || []).filter(
           p => p.movimiento_diario_id === mov.id
@@ -242,6 +295,7 @@ export function DailyMovementsDashboard({ aplicacion }: DailyMovementsDashboardP
         return {
           ...mov,
           productos: productosMovimiento,
+          trabajadores: trabajadoresPorMovimiento.get(mov.id) ?? [],
         };
       });
 
@@ -714,15 +768,48 @@ export function DailyMovementsDashboard({ aplicacion }: DailyMovementsDashboardP
                       ))}
                     </div>
 
-                    <div className="mt-3 flex items-center justify-between gap-3 border-t border-border/60 pt-3">
-                      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <User className="size-3" /> {mov.responsable}
+                    {/* Cuadrilla (movimientos_diarios_trabajadores) — distinta del responsable de
+                        abajo, que es un solo nombre de texto libre tecleado a mano. Ausencia de
+                        filas (movimientos antiguos, capturados antes de que el formulario pidiera
+                        cuadrilla) no renderiza sección ni "0" — es un dato que nunca se tuvo. */}
+                    {mov.trabajadores.length > 0 && (
+                      <div className="mt-3 border-t border-border/60 pt-3">
+                        <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                          <Users className="size-3.5" />
+                          Personal ({mov.trabajadores.length})
+                        </div>
+                        <ItemGroup className="gap-1.5">
+                          {mov.trabajadores.map(trabajador => (
+                            <Item
+                              key={trabajador.id}
+                              size="sm"
+                              className="rounded-lg border border-border/60 bg-muted/40"
+                            >
+                              <ItemMedia variant="icon" className="text-[0.7rem] font-bold">
+                                {iniciales(trabajador.nombre)}
+                              </ItemMedia>
+                              <ItemContent>
+                                <ItemTitle className="whitespace-normal">{trabajador.nombre}</ItemTitle>
+                                <ItemDescription className="line-clamp-none">
+                                  {formatearNumero(trabajador.fraccion_jornal, 2)} jornal
+                                </ItemDescription>
+                              </ItemContent>
+                            </Item>
+                          ))}
+                        </ItemGroup>
+                      </div>
+                    )}
+
+                    <div className="mt-3 flex items-start justify-between gap-3 border-t border-border/60 pt-3">
+                      <span className="flex min-w-0 items-start gap-1.5 text-xs text-muted-foreground">
+                        <User className="mt-0.5 size-3 shrink-0" />
+                        <span className="break-words">Responsable: {mov.responsable}</span>
                       </span>
                       <button
                         type="button"
                         onClick={() => handleEliminarMovimiento(mov.id!)}
                         aria-label="Eliminar movimiento"
-                        className="rounded-lg p-1.5 text-destructive transition-colors hover:bg-destructive/10"
+                        className="shrink-0 rounded-lg p-1.5 text-destructive transition-colors hover:bg-destructive/10"
                       >
                         <Trash2 className="size-4" />
                       </button>
