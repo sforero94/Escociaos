@@ -190,7 +190,13 @@ The applications module has two distinct tracking layers — **do not confuse th
 
 ### Migrations
 
-Sequential SQL migrations live in `src/sql/migrations/` (001–082). See `src/sql/migrations/README_MIGRATION.md` for instructions on running them.
+Sequential SQL migrations live in `src/sql/migrations/` (001–105). See `src/sql/migrations/README_MIGRATION.md` for instructions on running them.
+
+> **`src/sql/migrations/` is the ONLY location — there is no `supabase/migrations/`** (deleted 2026-08-21). A second copy lived there from 2026-03-18, frozen at `030` and never updated again, so anyone who opened it saw a migration set that stopped five months and 75 migrations ago — which is exactly how 103 and 104 came to be "missing". All 31 of its files were verified byte-identical to files already here before it was removed (git history keeps them). It was never the applied source either: it is not wired to anything, `supabase/config.toml` has no `[db]` section, and the CLI is used only for `functions deploy`.
+>
+> **Do not recreate it.** `supabase migration new` / `supabase db pull` will, silently. If the CLI migration workflow is ever genuinely adopted, that is a deliberate migration of the whole 105-file history, not a second copy alongside this one.
+>
+> **Known and deliberately NOT fixed: this directory carries two parallel numbering series for migrations 019–028**, offset by one over the same content (e.g. `023_create_fin_transacciones_ganado.sql` and `024_create_fin_transacciones_ganado.sql` are the same bytes). Seven of the eight pairs are byte-identical; the exception is `create_chat_tables`, where the higher number (`026`) is the idempotent version that adds the `DROP … IF EXISTS` guards `025` lacks. **This CLAUDE.md documents the LOWER series** (023 = `create_fin_transacciones_ganado`, 024 = `alter_fin_ingresos_add_columns`), and the two series reconverge at 029. Deleting the redundant half would violate the never-touch-an-applied-migration rule for zero functional gain — read the numbers here, not the filenames.
 
 > **Forensic backups go in the `respaldos` schema, never in `public`** (migration 081). A `CREATE TABLE public.backup_* AS SELECT …` inherits Supabase's default `GRANT ALL … TO anon` and lands the backup on the public API with no RLS — that is how the 2026-08-03 critical linter alert happened.
 
