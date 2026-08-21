@@ -34,7 +34,8 @@ dedupe set). Run id `YYYY-MM-DD-jueves`.
 
 **Phase 2–6** — identical: refute every P0/P1, consolidate (cap **5** new
 findings on Thursdays), act only in full write mode, file + memory commit,
-notify with the §10 summary.
+notify with the §10 summary. Set `Clase` on everything filed (constitution §5) —
+Friday cannot drain what Thursday did not classify.
 
 ---
 
@@ -49,3 +50,9 @@ the streak in `memory/_compartida.md`.
 
 Same as Monday: one agent failing never kills the run; label it under
 **NO CORRIÓ** and continue.
+
+The unattended-run rules of constitution §7 bind here in particular: **never
+wait on a permission prompt**, and **write the report before the session can end
+for any reason**. The Thursday run of 2026-08-13 died on a permission prompt with
+work in hand and filed nothing; the report a week later then misdiagnosed it as
+the Routine never firing. It fired.

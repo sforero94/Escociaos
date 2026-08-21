@@ -1,9 +1,13 @@
 # escociaos-po/ — la operación de mantenimiento del Product Owner
 
-Un equipo de agentes especialistas corre **lunes y jueves a las 7:00 am ET** en
-Cloud Routines, audita la app desplegada, verifica antes de reportar, archiva
-hallazgos en Notion, borrador-iza fixes como PRs y te manda un resumen por
-push + email. Este folder es la única fuente de verdad de la operación.
+Un equipo de agentes especialistas corre **lunes, jueves y viernes a las 7:00 am
+ET** en Cloud Routines, audita la app desplegada, verifica antes de reportar,
+archiva hallazgos en Notion, borrador-iza fixes como PRs y te manda un resumen
+por push + email. Este folder es la única fuente de verdad de la operación.
+
+**Lunes y jueves encuentran; el viernes termina.** El viernes drena el backlog de
+P2/P3 y no abre hallazgos nuevos. Ninguna de las tres fusiona nunca: fusionar es
+tuyo, siempre.
 
 ## Dónde vive cada pieza
 
@@ -11,10 +15,10 @@ push + email. Este folder es la única fuente de verdad de la operación.
 |---|---|---|
 | Constitución | [`CLAUDE.md`](./CLAUDE.md) | Protocolo de corrida, contrato de hallazgos, rúbrica de severidad, guardrails, modos de escritura |
 | Agentes (8) | [`../.claude/agents/`](../.claude/agents/) | Un brief por especialista, en formato subagente de Claude Code — única copia |
-| Runbooks | [`runbooks/`](./runbooks/) | Qué hace cada corrida programada (lunes / jueves) |
+| Runbooks | [`runbooks/`](./runbooks/) | Qué hace cada corrida programada (lunes / jueves / viernes) |
 | Memoria | [`memory/`](./memory/) | Un archivo por agente + `_compartida.md`; disciplina de escritura en [`memory/README.md`](./memory/README.md) |
 | Reportes | `reports/` | Un `.md` por corrida, escrito por el commit de memoria |
-| Scheduling | Cloud Routines `trig_01QusLNQd3snSbrn9UwBuqmQ` (lunes) y `trig_01BnbYqstYhc1SjTfyrizYUB` (jueves) | Prompts bootstrapper de ~15 líneas que clonan este repo y leen este folder — casi nunca hay que editarlos |
+| Scheduling | Cloud Routines `trig_01QusLNQd3snSbrn9UwBuqmQ` (lunes) · `trig_01BnbYqstYhc1SjTfyrizYUB` (jueves) · `trig_01AbCfQPNmRh7Jq8fX8yktSe` (viernes) | Prompts bootstrapper que clonan este repo y leen este folder — casi nunca hay que editarlos. La allowlist de tools SÍ vive ahí y se pudre en silencio: ver el preflight en `CLAUDE.md` §4 |
 | Hallazgos | [Notion — Escocia OS · Mantenimiento](https://app.notion.com/p/c52d9258fed7466d8e700fa92980d3df) | La base de datos que revisas |
 
 ## Cómo cambiar las prioridades
