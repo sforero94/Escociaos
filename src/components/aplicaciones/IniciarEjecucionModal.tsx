@@ -1,11 +1,22 @@
 import { useState } from 'react';
-import { Play, X, Calendar, AlertCircle, Package } from 'lucide-react';
+import { Play, Calendar, AlertCircle } from 'lucide-react';
 import { ConfirmDialog } from '../ui/confirm-dialog';
 import { getSupabase } from '../../utils/supabase/client';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { EstadoAplicacionBadge } from './shared/EstadoAplicacionBadge';
 import type { Aplicacion } from '../../types/aplicaciones';
 import { obtenerFechaHoy } from '@/utils/fechas';
+import { formatearNumero } from '@/utils/format';
 
 interface IniciarEjecucionModalProps {
   aplicacion: Aplicacion;
@@ -79,7 +90,7 @@ export function IniciarEjecucionModal({
 
       // 2. Consolidar cantidades por producto (puede haber duplicados en diferentes mezclas)
       const necesidadesPorProducto = new Map<string, { nombre: string; cantidad: number; unidad: string }>();
-      
+
       productosNecesarios.forEach(p => {
         const actual = necesidadesPorProducto.get(p.producto_id);
         if (actual) {
@@ -95,7 +106,7 @@ export function IniciarEjecucionModal({
 
       // 3. Cargar stock actual de productos
       const productosIds = Array.from(necesidadesPorProducto.keys());
-      
+
       const { data: productosStock, error: errorStock } = await supabase
         .from('productos')
         .select('id, nombre, cantidad_actual, unidad_medida')
@@ -185,7 +196,7 @@ export function IniciarEjecucionModal({
       return;
     }
 
-    // 🆕 VALIDAR STOCK si no se ha validado aún
+    // Validar stock si no se ha validado aún
     if (!stockValidado) {
       const stockSuficiente = await validarStockSuficiente();
       if (!stockSuficiente) {
@@ -202,141 +213,106 @@ export function IniciarEjecucionModal({
   const confirmStockDescription = productosFaltantes.length > 0
     ? `${productosFaltantes.length} producto(s) no tienen suficiente inventario:\n` +
       productosFaltantes.map(
-        (p) => `${p.nombre}: necesita ${p.necesario.toFixed(2)} ${p.unidad}, disponible ${p.disponible.toFixed(2)} ${p.unidad}`
+        (p) => `${p.nombre}: necesita ${formatearNumero(p.necesario, 2)} ${p.unidad}, disponible ${formatearNumero(p.disponible, 2)} ${p.unidad}`
       ).join(' / ') +
       '\n\nEsta acción no se puede deshacer.'
     : 'Esta acción no se puede deshacer.';
 
   return (
     <>
-    <ConfirmDialog
-      open={showConfirmStockInsuficiente}
-      onOpenChange={(open) => { if (!open) setShowConfirmStockInsuficiente(false); }}
-      title="Stock insuficiente — ¿Iniciar de todos modos?"
-      description={confirmStockDescription}
-      confirmLabel="Iniciar de todos modos"
-      onConfirm={() => { setShowConfirmStockInsuficiente(false); ejecutarInicio(); }}
-      destructive
-    />
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-              <Play className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <h2 className="text-lg text-foreground">Iniciar Ejecución</h2>
-              <p className="text-sm text-brand-brown/60">{aplicacion.nombre_aplicacion}</p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-brand-brown/40 hover:text-brand-brown transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+      <ConfirmDialog
+        open={showConfirmStockInsuficiente}
+        onOpenChange={(open) => { if (!open) setShowConfirmStockInsuficiente(false); }}
+        title="Stock insuficiente — ¿Iniciar de todos modos?"
+        description={confirmStockDescription}
+        confirmLabel="Iniciar de todos modos"
+        onConfirm={() => { setShowConfirmStockInsuficiente(false); ejecutarInicio(); }}
+        destructive
+      />
 
-        {/* Content */}
-        <div className="p-6 space-y-4">
-          {/* Info */}
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm text-blue-900 mb-1">
-                  Al iniciar la ejecución podrás:
-                </p>
-                <ul className="text-xs text-blue-800 space-y-1 ml-4 list-disc">
+      <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+        <DialogContent size="sm">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Play className="size-[18px]" aria-hidden="true" />
+              </div>
+              <div className="min-w-0">
+                <DialogTitle>Iniciar Ejecución</DialogTitle>
+                <p className="text-sm text-muted-foreground truncate">{aplicacion.nombre_aplicacion}</p>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <DialogBody className="space-y-4">
+            {/* Info */}
+            <Alert>
+              <AlertCircle aria-hidden="true" />
+              <AlertDescription>
+                <p className="font-medium text-foreground">Al iniciar la ejecución podrás:</p>
+                <ul className="ml-4 list-disc space-y-0.5">
                   <li>Registrar movimientos diarios de productos</li>
                   <li>Mantener trazabilidad</li>
                   <li>Comparar lo planificado vs lo ejecutado</li>
                 </ul>
-              </div>
-            </div>
-          </div>
+              </AlertDescription>
+            </Alert>
 
-          {/* Fecha de inicio */}
-          <div>
-            <label className="block text-sm text-foreground mb-2">
-              <Calendar className="w-4 h-4 inline mr-1" />
-              Fecha de inicio de ejecución
-            </label>
-            <Input
-              type="date"
-              value={fechaInicio}
-              onChange={(e) => setFechaInicio(e.target.value)}
-              max={obtenerFechaHoy()}
-              className="w-full"
-            />
-            <p className="text-xs text-brand-brown/60 mt-1">
-              Fecha en que comenzó la aplicación en campo
-            </p>
-          </div>
+            {/* Fecha de inicio */}
+            <div>
+              <label htmlFor="fecha-inicio-ejecucion" className="mb-2 flex items-center gap-1.5 text-sm text-foreground">
+                <Calendar className="size-4" aria-hidden="true" />
+                Fecha de inicio de ejecución
+              </label>
+              <Input
+                id="fecha-inicio-ejecucion"
+                type="date"
+                value={fechaInicio}
+                onChange={(e) => setFechaInicio(e.target.value)}
+                max={obtenerFechaHoy()}
+                className="w-full"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Fecha en que comenzó la aplicación en campo
+              </p>
+            </div>
 
-          {/* Error */}
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-              <div className="flex items-center gap-2 text-red-600">
-                <AlertCircle className="w-4 h-4" />
-                <p className="text-sm">{error}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Resumen */}
-          <div className="bg-background rounded-xl p-4 space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-brand-brown/70">Estado actual:</span>
-              <span className="text-foreground px-2 py-0.5 bg-yellow-100 rounded">
-                {aplicacion.estado}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-brand-brown/70">Nuevo estado:</span>
-              <span className="text-foreground px-2 py-0.5 bg-blue-100 rounded">
-                En ejecución
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-brand-brown/70">Tipo:</span>
-              <span className="text-foreground">{aplicacion.tipo_aplicacion}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center gap-3 p-6 border-t border-gray-200">
-          <Button
-            onClick={onClose}
-            variant="outline"
-            className="flex-1 border-gray-300 hover:bg-gray-50"
-            disabled={loading}
-          >
-            Cancelar
-          </Button>
-          <Button
-            onClick={handleIniciar}
-            className="flex-1 bg-primary hover:bg-primary-dark text-white"
-            disabled={loading}
-          >
-            {loading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-                Iniciando...
-              </>
-            ) : (
-              <>
-                <Play className="w-4 h-4 mr-2" />
-                Iniciar Ejecución
-              </>
+            {/* Error */}
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle aria-hidden="true" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
-          </Button>
-        </div>
-      </div>
-    </div>
+
+            {/* Resumen */}
+            <div className="space-y-2 rounded-xl bg-muted p-4 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-brand-brown/70">Estado actual:</span>
+                <EstadoAplicacionBadge estado={aplicacion.estado} />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-brand-brown/70">Nuevo estado:</span>
+                <EstadoAplicacionBadge estado="En ejecución" />
+              </div>
+              <div className="flex justify-between">
+                <span className="text-brand-brown/70">Tipo:</span>
+                <span className="text-foreground">{aplicacion.tipo_aplicacion}</span>
+              </div>
+            </div>
+          </DialogBody>
+
+          <DialogFooter>
+            <Button onClick={onClose} variant="outline" disabled={loading}>
+              Cancelar
+            </Button>
+            <Button onClick={handleIniciar} disabled={loading || validandoStock}>
+              <Play className="size-4" aria-hidden="true" />
+              {loading ? 'Iniciando...' : validandoStock ? 'Validando stock...' : 'Iniciar Ejecución'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

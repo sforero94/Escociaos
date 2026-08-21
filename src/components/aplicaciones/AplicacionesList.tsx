@@ -4,6 +4,7 @@ import {
   Plus,
   Search,
   Filter,
+  ChevronDown,
   Droplet,
   Leaf,
   Calendar,
@@ -12,10 +13,9 @@ import {
   Play,
   CheckCircle2,
   Clock,
-  Loader2,
   Edit2,
   Trash2,
-  X,
+  AlertCircle,
   ClipboardList,
   FileText,
 } from 'lucide-react';
@@ -31,29 +31,23 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card } from '@/components/ui/card';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from '@/components/ui/empty';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ConfirmDialog } from '../ui/confirm-dialog';
+import { KPICard } from './shared/KPICard';
+import { EstadoAplicacionBadge } from './shared/EstadoAplicacionBadge';
+import { formatearNumero, formatShortDate } from '@/utils/format';
+import { cn } from '@/components/ui/utils';
 
 const TIPOS_LABELS: Record<TipoAplicacion, string> = {
   'Fumigación': 'Fumigación',
   'Fertilización': 'Fertilización',
   'Drench': 'Drench',
-};
-
-const ESTADO_LABELS: Record<EstadoAplicacion, string> = {
-  'Calculada': 'Planificada',
-  'En ejecución': 'En Ejecución',
-  'Cerrada': 'Cerrada',
-};
-
-const ESTADO_COLORS: Record<EstadoAplicacion, string> = {
-  'Calculada': 'bg-blue-100 text-blue-700 border-blue-200',
-  'En ejecución': 'bg-green-100 text-green-700 border-green-200',
-  'Cerrada': 'bg-gray-100 text-gray-700 border-gray-200',
-};
-
-const ESTADO_ICONS: Record<EstadoAplicacion, typeof Clock> = {
-  'Calculada': Clock,
-  'En ejecución': Play,
-  'Cerrada': CheckCircle2,
 };
 
 export function AplicacionesList() {
@@ -62,33 +56,23 @@ export function AplicacionesList() {
 
   const [aplicaciones, setAplicaciones] = useState<Aplicacion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filtroTipo, setFiltroTipo] = useState<TipoAplicacion | 'todos'>('todos');
   const [filtroEstado, setFiltroEstado] = useState<EstadoAplicacion | 'todos'>('todos');
-  const [menuAbiertoId, setMenuAbiertoId] = useState<string | null>(null);
-  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
   const [eliminando, setEliminando] = useState<string | null>(null);
   const [iniciarEjecucionId, setIniciarEjecucionId] = useState<string | null>(null);
   const [aplicacionDetalle, setAplicacionDetalle] = useState<Aplicacion | null>(null);
+
   useEffect(() => {
     loadAplicaciones();
   }, []);
 
-  // Cerrar menú al hacer clic fuera
-  useEffect(() => {
-    const handleClickOutside = () => {
-      if (menuAbiertoId) {
-        setMenuAbiertoId(null);
-      }
-    };
-
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
-  }, [menuAbiertoId]);
-
   const loadAplicaciones = async () => {
     try {
       setIsLoading(true);
+      setLoadError(false);
 
       const { data, error } = await supabase
         .from('aplicaciones')
@@ -122,10 +106,9 @@ export function AplicacionesList() {
         throw error;
       }
 
-
       // Mapear datos de BD al formato de la interfaz
       const aplicacionesMapeadas: Aplicacion[] = [];
-      
+
       (data || []).forEach((row: any) => {
         try {
           // Extraer lotes seleccionados
@@ -204,6 +187,7 @@ export function AplicacionesList() {
       setAplicaciones(aplicacionesMapeadas);
     } catch (err) {
       console.error('Failed to load aplicaciones list:', err);
+      setLoadError(true);
     } finally {
       setIsLoading(false);
     }
@@ -222,6 +206,8 @@ export function AplicacionesList() {
     return matchSearch && matchTipo && matchEstado;
   });
 
+  const hayFiltrosActivos = searchQuery !== '' || filtroTipo !== 'todos' || filtroEstado !== 'todos';
+
   // Estadísticas
   const stats = {
     total: aplicaciones.length,
@@ -230,12 +216,13 @@ export function AplicacionesList() {
     cerradas: aplicaciones.filter((a) => a.estado === 'Cerrada').length,
   };
 
+  const aplicacionAEliminar = aplicaciones.find((a) => a.id === eliminando) ?? null;
+
   /**
    * ELIMINAR APLICACIÓN
    */
   const handleEliminar = async (aplicacionId: string) => {
     try {
-
       // 1. Verificar y eliminar movimientos de inventario primero
       const { data: movimientos, error: errorCheckMovimientos } = await supabase
         .from('movimientos_inventario')
@@ -247,7 +234,6 @@ export function AplicacionesList() {
       }
 
       if (movimientos && movimientos.length > 0) {
-        
         const { error: errorDeleteMovimientos } = await supabase
           .from('movimientos_inventario')
           .delete()
@@ -256,7 +242,6 @@ export function AplicacionesList() {
         if (errorDeleteMovimientos) {
           throw errorDeleteMovimientos;
         }
-        
       } else {
         /* no inventory movements to delete — proceed */
       }
@@ -271,7 +256,6 @@ export function AplicacionesList() {
         throw errorLotes;
       }
 
-
       // 3. Obtener IDs de mezclas
       const { data: mezclas, error: errorMezclas } = await supabase
         .from('aplicaciones_mezclas')
@@ -281,7 +265,6 @@ export function AplicacionesList() {
       if (errorMezclas) {
         throw errorMezclas;
       }
-
 
       // 4. Eliminar productos de las mezclas
       if (mezclas && mezclas.length > 0) {
@@ -296,7 +279,6 @@ export function AplicacionesList() {
           throw errorProductosMezcla;
         }
 
-
         // 5. Eliminar mezclas
         const { error: errorDeleteMezclas } = await supabase
           .from('aplicaciones_mezclas')
@@ -306,7 +288,6 @@ export function AplicacionesList() {
         if (errorDeleteMezclas) {
           throw errorDeleteMezclas;
         }
-
       }
 
       // 6. Eliminar cálculos
@@ -319,7 +300,6 @@ export function AplicacionesList() {
         throw errorCalculos;
       }
 
-
       // 7. Eliminar lista de compras
       const { error: errorCompras } = await supabase
         .from('aplicaciones_compras')
@@ -329,7 +309,6 @@ export function AplicacionesList() {
       if (errorCompras) {
         throw errorCompras;
       }
-
 
       // 8. Finalmente, eliminar la aplicación
       const { error: errorAplicacion } = await supabase
@@ -341,11 +320,10 @@ export function AplicacionesList() {
         throw errorAplicacion;
       }
 
-
       // Actualizar lista local
       setAplicaciones(aplicaciones.filter(a => a.id !== aplicacionId));
       setEliminando(null);
-      
+
       toast.success('Aplicación eliminada exitosamente');
     } catch (error) {
       toast.error('Error al eliminar la aplicación. Por favor intenta nuevamente.');
@@ -363,322 +341,342 @@ export function AplicacionesList() {
           </p>
         </div>
 
-        <button
-          onClick={() => navigate('/aplicaciones/calculadora')}
-          className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:from-primary-dark hover:to-secondary-dark transition-all shadow-sm"
-        >
-          <Plus className="w-5 h-5" />
-          <span>Nueva Aplicación</span>
-        </button>
+        <Button onClick={() => navigate('/aplicaciones/calculadora')} className="w-full sm:w-auto">
+          <Plus className="size-4" aria-hidden="true" />
+          Nueva Aplicación
+        </Button>
       </div>
 
-      {/* Estadísticas */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-sm text-brand-brown/70">Total</p>
-            <div className="w-10 h-10 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-lg flex items-center justify-center">
-              <Calendar className="w-5 h-5 text-primary" />
-            </div>
-          </div>
-          <p className="text-2xl text-foreground">{stats.total}</p>
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-sm text-brand-brown/70">Planificadas</p>
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Clock className="w-5 h-5 text-blue-600" />
-            </div>
-          </div>
-          <p className="text-2xl text-foreground">{stats.planificadas}</p>
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-sm text-brand-brown/70">En Ejecución</p>
-            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-              <Play className="w-5 h-5 text-green-600" />
-            </div>
-          </div>
-          <p className="text-2xl text-foreground">{stats.en_ejecucion}</p>
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-sm text-brand-brown/70">Cerradas</p>
-            <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-              <CheckCircle2 className="w-5 h-5 text-gray-600" />
-            </div>
-          </div>
-          <p className="text-2xl text-foreground">{stats.cerradas}</p>
-        </div>
+      {/* Estadísticas — solo "En Ejecución" lleva el acento olivo: es el único
+          estado que pide acción hoy (misma jerarquía que EstadoAplicacionBadge). */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPICard
+          titulo="Total"
+          valor={formatearNumero(stats.total, 0)}
+          icon={Calendar}
+          tono="neutro"
+          comparaciones={[]}
+        />
+        <KPICard
+          titulo="Planificadas"
+          valor={formatearNumero(stats.planificadas, 0)}
+          icon={Clock}
+          tono="neutro"
+          comparaciones={[]}
+        />
+        <KPICard
+          titulo="En Ejecución"
+          valor={formatearNumero(stats.en_ejecucion, 0)}
+          icon={Play}
+          tono="primary"
+          comparaciones={[]}
+        />
+        <KPICard
+          titulo="Cerradas"
+          valor={formatearNumero(stats.cerradas, 0)}
+          icon={CheckCircle2}
+          tono="neutro"
+          comparaciones={[]}
+        />
       </div>
 
       {/* Filtros y búsqueda */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <div className="flex flex-col sm:flex-row gap-4">
+      <Card className="p-4 shadow-sm">
+        <div className="flex flex-col sm:flex-row gap-3">
           {/* Búsqueda */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-brand-brown/40" />
-            <input
+          <div className="relative flex-1 min-w-0 sm:min-w-[220px]">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <Input
               type="text"
               placeholder="Buscar aplicación..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              className="pl-9"
             />
           </div>
 
-          {/* Filtro por tipo */}
-          <select
-            value={filtroTipo}
-            onChange={(e) => setFiltroTipo(e.target.value as TipoAplicacion | 'todos')}
-            className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+          {/* Toggle de filtros — solo móvil: los filtros de abajo se colapsan detrás de
+              este botón para no competir por ancho con el buscador. */}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setFiltrosAbiertos((prev) => !prev)}
+            className="sm:hidden justify-between"
+            aria-expanded={filtrosAbiertos}
           >
-            <option value="todos">Todos los tipos</option>
-            <option value="fumigacion">Fumigación</option>
-            <option value="fertilizacion">Fertilización</option>
-            <option value="drench">Drench</option>
-          </select>
+            <span className="flex items-center gap-2">
+              <Filter className="size-4" aria-hidden="true" />
+              Filtros
+            </span>
+            <ChevronDown
+              className={cn('size-4 transition-transform', filtrosAbiertos && 'rotate-180')}
+              aria-hidden="true"
+            />
+          </Button>
 
-          {/* Filtro por estado */}
-          <select
-            value={filtroEstado}
-            onChange={(e) => setFiltroEstado(e.target.value as EstadoAplicacion | 'todos')}
-            className="px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+          <div
+            className={cn(
+              'flex flex-col gap-3 sm:flex sm:flex-row',
+              !filtrosAbiertos && 'hidden sm:flex',
+            )}
           >
-            <option value="todos">Todos los estados</option>
-            <option value="Calculada">Planificada</option>
-            <option value="En ejecución">En Ejecución</option>
-            <option value="Cerrada">Cerrada</option>
-          </select>
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              value={filtroEstado}
+              onValueChange={(value) => {
+                if (value) setFiltroEstado(value as EstadoAplicacion | 'todos');
+              }}
+              aria-label="Filtrar por estado"
+              className="w-full sm:w-auto"
+            >
+              {/* px-3 + sm:flex-none: ToggleGroupItem trae `min-w-0 flex-1` con `px-2` en el
+                  primitivo, así que en escritorio los 4 se reparten el ancho por igual y
+                  "En Ejecución" (el más largo) se desborda de su caja y se pega visualmente al
+                  vecino. En móvil el grupo sí es de ancho completo y el reparto igual es correcto,
+                  por eso el override solo aplica desde sm. */}
+              <ToggleGroupItem value="todos" className="px-3 sm:flex-none">Todos</ToggleGroupItem>
+              <ToggleGroupItem value="Calculada" className="px-3 sm:flex-none">Planificada</ToggleGroupItem>
+              <ToggleGroupItem value="En ejecución" className="px-3 sm:flex-none">En Ejecución</ToggleGroupItem>
+              <ToggleGroupItem value="Cerrada" className="px-3 sm:flex-none">Cerrada</ToggleGroupItem>
+            </ToggleGroup>
+
+            <Select
+              value={filtroTipo}
+              onValueChange={(value) => setFiltroTipo(value as TipoAplicacion | 'todos')}
+            >
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos los tipos</SelectItem>
+                <SelectItem value="Fumigación">Fumigación</SelectItem>
+                <SelectItem value="Fertilización">Fertilización</SelectItem>
+                <SelectItem value="Drench">Drench</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-      </div>
+      </Card>
 
       {/* Lista de aplicaciones */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <Card className="overflow-hidden shadow-sm">
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 text-primary animate-spin" />
+          <div className="divide-y divide-border">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="flex items-center gap-4 p-4">
+                <Skeleton className="size-11 shrink-0 rounded-xl" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-3.5 w-3/5" />
+                  <Skeleton className="h-3 w-2/5" />
+                </div>
+              </div>
+            ))}
           </div>
+        ) : loadError ? (
+          <Empty className="border-none">
+            <EmptyHeader>
+              <EmptyMedia variant="icon" className="bg-destructive/10 text-destructive">
+                <AlertCircle aria-hidden="true" />
+              </EmptyMedia>
+              <EmptyTitle>No se pudieron cargar las aplicaciones</EmptyTitle>
+              <EmptyDescription>
+                Revisa tu conexión e intenta de nuevo. Si el problema persiste, contacta a soporte.
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button variant="outline" onClick={loadAplicaciones}>
+                Reintentar
+              </Button>
+            </EmptyContent>
+          </Empty>
         ) : aplicacionesFiltradas.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="w-16 h-16 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-2xl mx-auto mb-4 flex items-center justify-center">
-              <Droplet className="w-8 h-8 text-primary" />
-            </div>
-            <h3 className="text-lg text-foreground mb-2">
-              {searchQuery || filtroTipo !== 'todos' || filtroEstado !== 'todos'
-                ? 'No se encontraron aplicaciones'
-                : 'No hay aplicaciones registradas'}
-            </h3>
-            <p className="text-sm text-brand-brown/70 mb-6">
-              {searchQuery || filtroTipo !== 'todos' || filtroEstado !== 'todos'
-                ? 'Intenta ajustar los filtros de búsqueda'
-                : 'Comienza creando tu primera aplicación'}
-            </p>
-            {!searchQuery && filtroTipo === 'todos' && filtroEstado === 'todos' && (
-              <button
-                onClick={() => navigate('/aplicaciones/calculadora')}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:from-primary-dark hover:to-secondary-dark transition-all"
-              >
-                <Plus className="w-5 h-5" />
-                <span>Nueva Aplicación</span>
-              </button>
+          <Empty className="border-none">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                {hayFiltrosActivos ? <Search aria-hidden="true" /> : <Droplet aria-hidden="true" />}
+              </EmptyMedia>
+              <EmptyTitle>
+                {hayFiltrosActivos ? 'No se encontraron aplicaciones' : 'No hay aplicaciones registradas'}
+              </EmptyTitle>
+              <EmptyDescription>
+                {hayFiltrosActivos
+                  ? 'Intenta ajustar los filtros de búsqueda'
+                  : 'Comienza creando tu primera aplicación'}
+              </EmptyDescription>
+            </EmptyHeader>
+            {!hayFiltrosActivos && (
+              <EmptyContent>
+                <Button onClick={() => navigate('/aplicaciones/calculadora')}>
+                  <Plus className="size-4" aria-hidden="true" />
+                  Nueva Aplicación
+                </Button>
+              </EmptyContent>
             )}
-          </div>
+          </Empty>
         ) : (
-          <div className="divide-y divide-gray-200">
+          <div className="divide-y divide-border">
             {aplicacionesFiltradas.map((aplicacion) => {
-              const EstadoIcon = ESTADO_ICONS[(aplicacion.estado ?? 'Calculada') as EstadoAplicacion];
               const TipoIcon = aplicacion.tipo_aplicacion === 'Fumigación' ? Droplet : Leaf;
+              const nombre = aplicacion.nombre_aplicacion ?? 'Sin nombre';
+              const fechaMostrar =
+                aplicacion.fecha_inicio ?? aplicacion.fecha_inicio_planeada ?? aplicacion.created_at ?? null;
 
               return (
                 <div
                   key={aplicacion.id}
-                  className="p-4 hover:bg-gray-50 transition-colors cursor-pointer"
+                  className="p-4 hover:bg-muted/40 transition-colors cursor-pointer"
                   onClick={() => setAplicacionDetalle(aplicacion)}
                 >
                   <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-start gap-4 flex-1">
+                    <div className="flex items-start gap-4 flex-1 min-w-0">
                       {/* Icono */}
-                      <div className="w-12 h-12 bg-gradient-to-br from-primary/10 to-secondary/10 rounded-xl flex items-center justify-center flex-shrink-0">
-                        <TipoIcon className="w-6 h-6 text-primary" />
+                      <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                        <TipoIcon className="size-5" aria-hidden="true" />
                       </div>
 
                       {/* Información */}
                       <div className="flex-1 min-w-0">
-                        {/* `flex-1 min-w-0` on the <h3> alone was not enough: on mobile the
-                            "Acciones" column (main button + menú ⋮) never hides, so it keeps
-                            eating into this row's width regardless of how far the name
-                            shrinks — the badge (flex-shrink-0) has nowhere left to go and
-                            gets clipped by the list's `overflow-hidden` card. Verified this
-                            was estado-independent (the shortest label "Cerrada" was cut too),
-                            so it isn't about badge width, it's about the shared line running
-                            out of room. Below `lg` the badge drops to its own line, under the
-                            name — same "identidad arriba, resto abajo" shape Patrón A already
-                            uses (`TareaMobileCard.tsx`), so its width no longer competes with
-                            the name's and both render in full regardless of label length. */}
-                        <div className="flex flex-col gap-1 mb-1 lg:flex-row lg:items-center lg:gap-2">
-                          <h3 className="text-foreground truncate text-sm lg:text-base lg:flex-1 lg:min-w-0">
-                            {aplicacion.nombre_aplicacion}
-                          </h3>
-                          <span
-                            className={`self-start px-2 py-0.5 text-xs rounded-lg border whitespace-nowrap flex-shrink-0 lg:self-auto ${
-                              ESTADO_COLORS[(aplicacion.estado ?? 'Calculada') as EstadoAplicacion]
-                            }`}
-                          >
-                            {ESTADO_LABELS[(aplicacion.estado ?? 'Calculada') as EstadoAplicacion]}
-                          </span>
+                        {/* Trunca a 1 línea en escritorio; envuelve a 2 en móvil (mismo patrón
+                            que `.gasto-nombre` en Gastos/Ingresos: `truncate` + `max-sm:*`). */}
+                        <h3
+                          title={nombre}
+                          className="text-foreground text-sm sm:text-base font-medium mb-1.5 truncate max-sm:whitespace-normal max-sm:line-clamp-2"
+                        >
+                          {nombre}
+                        </h3>
+
+                        {/* Badge de estado — solo en móvil, bajo el título. En escritorio
+                            vive en el cluster de acciones (ver fix 1 del mockup: badge +
+                            botón + ⋮ comparten un solo ancla vertical). */}
+                        <div className="sm:hidden mb-1.5">
+                          <EstadoAplicacionBadge estado={aplicacion.estado} />
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-2 lg:gap-4 text-sm text-brand-brown/70">
-                          <span className="flex items-center gap-1">
-                            <TipoIcon className="w-4 h-4" />
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-brand-brown/70">
+                          <span className="flex items-center gap-1.5">
+                            <TipoIcon className="size-3.5" aria-hidden="true" />
                             {TIPOS_LABELS[aplicacion.tipo_aplicacion]}
                           </span>
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-4 h-4" />
-                            {new Date(aplicacion.fecha_inicio ?? aplicacion.fecha_inicio_planeada ?? '').toLocaleDateString('es-CO')}
+                          <span className="flex items-center gap-1.5">
+                            <Calendar className="size-3.5" aria-hidden="true" />
+                            {fechaMostrar ? formatShortDate(fechaMostrar) : '—'}
                           </span>
-                          <span className="flex items-center gap-1">
-                            <MapPin className="w-4 h-4" />
+                          <span className="flex items-center gap-1.5">
+                            <MapPin className="size-3.5" aria-hidden="true" />
                             {aplicacion.configuracion?.lotes_seleccionados?.length ?? 0} lotes
                           </span>
                         </div>
 
                         {aplicacion.proposito && (
-                          <p className="text-sm text-brand-brown/70 mt-2 line-clamp-1">
+                          <p className="text-sm text-brand-brown/70 mt-1.5 truncate">
                             {aplicacion.proposito}
                           </p>
                         )}
                       </div>
                     </div>
 
-                    {/* Acciones — escritorio (≥640px): botón principal por estado + menú
-                        ⋮ con Editar/Eliminar. Sin cambios de comportamiento; solo se
-                        ocultó por completo debajo de 640px (ver bloque `sm:hidden` más
-                        abajo) — en esa columna es donde vivía el problema de fondo. */}
-                    <div className="hidden sm:flex items-center gap-2">
-                      {/* Botón principal según estado */}
+                    {/* Cluster de acciones — escritorio (≥640px): badge + botón principal + ⋮,
+                        un solo grupo flex (align-items:center, self-center sobre la fila) para
+                        que se centre igual sin importar cuántas líneas ocupe el título ni si
+                        hay descripción. */}
+                    <div className="hidden sm:flex items-center gap-3 self-center flex-shrink-0">
+                      <EstadoAplicacionBadge estado={aplicacion.estado} />
+
                       {aplicacion.estado === 'Calculada' && (
-                        <button
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-primary/30 text-primary hover:bg-primary/10 hover:border-primary"
                           onClick={(e) => {
                             e.stopPropagation();
                             setIniciarEjecucionId(aplicacion.id);
                           }}
-                          className="px-3 lg:px-4 py-2 bg-gradient-to-r from-green-600 to-green-500 text-white rounded-lg hover:from-green-700 hover:to-green-600 transition-all flex items-center gap-2"
                         >
-                          <Play className="w-4 h-4" />
+                          <Play className="size-4" aria-hidden="true" />
                           <span className="hidden lg:inline">Iniciar Ejecución</span>
-                        </button>
+                        </Button>
                       )}
 
                       {aplicacion.estado === 'En ejecución' && (
-                        <button
+                        <Button
+                          size="sm"
                           onClick={(e) => {
                             e.stopPropagation();
                             navigate(`/aplicaciones/${aplicacion.id}/movimientos`);
                           }}
-                          className="px-3 lg:px-4 py-2 bg-gradient-to-r from-brand-brown to-brand-brown/80 text-white rounded-lg hover:from-brand-brown hover:to-brand-brown/80 transition-all flex items-center gap-2"
                         >
-                          <ClipboardList className="w-4 h-4" />
+                          <ClipboardList className="size-4" aria-hidden="true" />
                           <span className="hidden lg:inline">Registrar Movimientos</span>
-                        </button>
+                        </Button>
                       )}
 
                       {aplicacion.estado === 'Cerrada' && (
-                        <button
+                        <Button
+                          size="sm"
+                          variant="outline"
                           onClick={(e) => {
                             e.stopPropagation();
                             navigate(`/aplicaciones/${aplicacion.id}/reporte`);
                           }}
-                          className="px-3 lg:px-4 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:from-primary-dark hover:to-secondary-dark transition-all flex items-center gap-2"
                         >
-                          <FileText className="w-4 h-4" />
+                          <FileText className="size-4" aria-hidden="true" />
                           <span className="hidden lg:inline">Ver Reporte</span>
-                        </button>
+                        </Button>
                       )}
 
-                      {/* Menú de 3 puntos - solo Editar y Eliminar */}
-                      <div className="relative">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            setMenuAbiertoId(
-                              menuAbiertoId === aplicacion.id ? null : aplicacion.id
-                            );
-                            setMenuPosition({
-                              top: rect.bottom + window.scrollY,
-                              left: rect.left + window.scrollX - 192 + rect.width,
-                            });
-                          }}
-                          className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-                        >
-                          <MoreVertical className="w-5 h-5 text-brand-brown/70" />
-                        </button>
-
-                        {/* Dropdown menu - solo Editar y Eliminar */}
-                        {menuAbiertoId === aplicacion.id && menuPosition && (
-                          <div
-                            className="fixed w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[9999]"
-                            style={{
-                              top: `${menuPosition.top}px`,
-                              left: `${menuPosition.left}px`,
-                            }}
-                          >
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(`/aplicaciones/calculadora/${aplicacion.id}`);
-                                setMenuAbiertoId(null);
-                              }}
-                              className="w-full px-4 py-2 text-left text-sm text-foreground hover:bg-gray-50 flex items-center gap-2 transition-colors"
+                      {/* Menú de 3 puntos (Radix) — solo Editar y Eliminar; la acción
+                          principal ya vive fuera, como botón visible en escritorio. */}
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="border-none text-muted-foreground hover:bg-muted hover:text-foreground data-[state=open]:bg-muted data-[state=open]:text-foreground"
+                              aria-label={`Más acciones para "${nombre}"`}
                             >
-                              <Edit2 className="w-4 h-4 text-gray-500" />
+                              <MoreVertical className="size-5" aria-hidden="true" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => navigate(`/aplicaciones/calculadora/${aplicacion.id}`)}
+                            >
+                              <Edit2 className="size-4" aria-hidden="true" />
                               Editar
-                            </button>
-                            
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEliminando(aplicacion.id);
-                                setMenuAbiertoId(null);
-                              }}
-                              className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem variant="destructive" onClick={() => setEliminando(aplicacion.id)}>
+                              <Trash2 className="size-4" aria-hidden="true" />
                               Eliminar
-                            </button>
-                          </div>
-                        )}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </div>
 
                     {/* Acciones — móvil (<640px): decisión del dueño tras la tercera
-                        vuelta, "esconde todas las acciones detrás de los 3 puntos".
-                        La causa de fondo (medida en las dos vueltas anteriores) era que
-                        esta columna nunca se ocultaba y le robaba ancho real a la fila
-                        sin importar cuánto encogiera el nombre — cada botón que se
-                        agregaba volvía a cortar la descripción y los badges. Un único
-                        ⋮ de 44px reemplaza tanto el botón principal como el menú
+                        vuelta, "esconde todas las acciones detrás de los 3 puntos". Un
+                        único ⋮ de 44px reemplaza tanto el botón principal como el menú
                         Editar/Eliminar; la condición por estado se conserva idéntica,
-                        solo cambia dónde se muestra cada acción. Rótulos de texto
-                        (no solo ícono) porque dentro de un menú un ▶ suelto no se
-                        entiende por contexto. */}
+                        solo cambia dónde se muestra cada acción. */}
                     <div className="sm:hidden flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
-                        <DropdownMenuTrigger
-                          className="touch-target inline-flex items-center justify-center rounded-lg hover:bg-gray-200 transition-colors"
-                          aria-label={`Más acciones para "${aplicacion.nombre_aplicacion}"`}
-                        >
-                          <MoreVertical className="w-5 h-5 text-brand-brown/70" />
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="border-none text-muted-foreground hover:bg-muted hover:text-foreground data-[state=open]:bg-muted data-[state=open]:text-foreground"
+                            aria-label={`Más acciones para "${nombre}"`}
+                          >
+                            <MoreVertical className="size-5" aria-hidden="true" />
+                          </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           {aplicacion.estado === 'Calculada' && (
                             <DropdownMenuItem onClick={() => setIniciarEjecucionId(aplicacion.id)}>
-                              <Play className="w-4 h-4" />
+                              <Play className="size-4" aria-hidden="true" />
                               Iniciar Ejecución
                             </DropdownMenuItem>
                           )}
@@ -687,14 +685,14 @@ export function AplicacionesList() {
                             <DropdownMenuItem
                               onClick={() => navigate(`/aplicaciones/${aplicacion.id}/movimientos`)}
                             >
-                              <ClipboardList className="w-4 h-4" />
+                              <ClipboardList className="size-4" aria-hidden="true" />
                               Registrar Movimientos
                             </DropdownMenuItem>
                           )}
 
                           {aplicacion.estado === 'Cerrada' && (
                             <DropdownMenuItem onClick={() => navigate(`/aplicaciones/${aplicacion.id}/reporte`)}>
-                              <FileText className="w-4 h-4" />
+                              <FileText className="size-4" aria-hidden="true" />
                               Ver Reporte
                             </DropdownMenuItem>
                           )}
@@ -704,12 +702,12 @@ export function AplicacionesList() {
                           <DropdownMenuItem
                             onClick={() => navigate(`/aplicaciones/calculadora/${aplicacion.id}`)}
                           >
-                            <Edit2 className="w-4 h-4 text-gray-500" />
+                            <Edit2 className="size-4" aria-hidden="true" />
                             Editar
                           </DropdownMenuItem>
 
                           <DropdownMenuItem variant="destructive" onClick={() => setEliminando(aplicacion.id)}>
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="size-4" aria-hidden="true" />
                             Eliminar
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -721,44 +719,23 @@ export function AplicacionesList() {
             })}
           </div>
         )}
-      </div>
+      </Card>
 
-      {/* Modal de confirmación de eliminación */}
-      {eliminando && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                <Trash2 className="w-6 h-6 text-red-600" />
-              </div>
-              <div>
-                <h3 className="text-lg text-foreground">Eliminar Aplicación</h3>
-                <p className="text-sm text-brand-brown/70">Esta acción no se puede deshacer</p>
-              </div>
-            </div>
-
-            <p className="text-sm text-brand-brown/70 mb-6">
-              ¿Estás seguro de que deseas eliminar esta aplicación? Se eliminarán todos los
-              datos asociados incluyendo mezclas, cálculos y relaciones con lotes.
-            </p>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => setEliminando(null)}
-                className="flex-1 px-4 py-2 border border-gray-300 text-brand-brown rounded-lg hover:bg-gray-50 transition-all"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={() => handleEliminar(eliminando)}
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all"
-              >
-                Eliminar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Confirmación de eliminación — AlertDialog (ConfirmDialog ya lo envuelve), nunca un
+          <div fixed inset-0> a mano: foco atrapado, cierre con Escape, accesible por defecto. */}
+      <ConfirmDialog
+        open={!!eliminando}
+        onOpenChange={(open) => {
+          if (!open) setEliminando(null);
+        }}
+        title="Eliminar Aplicación"
+        description={`¿Deseas eliminar «${aplicacionAEliminar?.nombre_aplicacion ?? 'esta aplicación'}»? Se eliminarán todos los datos asociados: mezclas, cálculos y relaciones con lotes. Esta acción no se puede deshacer.`}
+        confirmLabel="Eliminar"
+        onConfirm={() => {
+          if (eliminando) handleEliminar(eliminando);
+        }}
+        destructive
+      />
 
       {/* Modal de iniciar ejecución */}
       {iniciarEjecucionId && (

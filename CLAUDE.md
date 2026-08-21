@@ -175,10 +175,16 @@ The applications module has two distinct tracking layers — **do not confuse th
 
 | Layer | Tables | Purpose |
 |---|---|---|
-| **Planned** | `aplicaciones_lotes_planificado`, `aplicaciones_productos`, `aplicaciones_mezclas` | What was planned before execution (lot targets, product dosis, mixes) |
+| **Planned** | `aplicaciones_calculos`, `aplicaciones_productos`, `aplicaciones_mezclas` (`aplicaciones_lotes_planificado` está vacía — ver la nota debajo) | What was planned before execution (lot targets, product dosis, mixes) |
 | **Real** | `movimientos_diarios`, `movimientos_diarios_productos` | What actually happened per day (canecas, bultos, products used) |
 
-`aplicaciones_lotes_planificado` is the canonical source for planned tree counts and lot assignments. `movimientos_diarios` is the canonical source for real execution data. Never substitute one for the other.
+`movimientos_diarios` is the canonical source for real execution data. Never substitute it for a planned-layer table.
+
+> **Corregido 2026-08-20 contra producción. `aplicaciones_lotes_planificado` está VACÍA — 0 filas, las 20 aplicaciones — y nunca se escribió.** Esta línea la llamaba "the canonical source for planned tree counts and lot assignments"; no lo es, y la migración 023 la marcó "KEEP - actively used" con el mismo error. **Leerla no falla: devuelve vacío**, que es la trampa — el consumidor cae a su fallback y nadie se entera.
+>
+> **El mapeo mezcla→lote real vive en `aplicaciones_calculos.mezcla_id`** (59 de 67 filas, 16 de 20 aplicaciones). Ese es el que hay que leer. Ya costó un defecto: `CalculadoraAplicaciones.tsx` rehidrata las mezclas sin `lotes_asignados` — la tabla `aplicaciones_mezclas` no tiene esa columna — así que reabrir una aplicación guardada muestra "0 lotes" y volver a guardar escribe el vacío encima de un mapeo que el usuario no ve que todavía tenía.
+>
+> **La tabla NO se borró a propósito.** `src/hooks/useReporteAplicacion.ts` la lee en 8 sitios (la prefiere para conteo de árboles y cae a `aplicaciones_lotes`) y `chat.tsx` de Esco una vez. Borrarla rompe el Reporte. Eliminarla exige primero sacar esos lectores, y es un cambio aparte — no un rediseño.
 
 > **Removed tables** (migration 022): `aplicaciones_lotes_real`, `aplicaciones_productos_real`, `aplicaciones_productos_planificado`, `aplicaciones_mezclas_productos` — these were ghost tables from an abandoned design; they were never populated or queried.
 
@@ -508,6 +514,15 @@ Tailwind 4.3 **compiles on every `vite dev` / `vite build`** (`@tailwindcss/vite
 |---|---|
 | `src/index.css` | The CSS entry point — three lines: `@import "tailwindcss";`, `@import "tw-animate-css";`, `@import "./styles/globals.css";`. The **only** stylesheet `main.tsx` imports. Never hand-edit |
 | `src/styles/globals.css` | Source of truth for tokens (`:root`, `@theme inline`), `@font-face`, base typography, and the project's own CSS rules |
+
+> **`--input` dejó de ser `transparent` (2026-08-20).** `input.tsx` pinta `border-input` sobre
+> `bg-input-background` (#ffffff), así que con el token en `transparent` **todo `Input` de la app era
+> una caja blanca con borde invisible**: se leía como campo sobre el fondo off-white de la página
+> (`#F8FAF5`) y desaparecía dentro de una `Card` blanca — que es donde viven casi todos los
+> formularios. En la misma pantalla, `DateInput` sí trae su propio borde (`border-primary/20`), así
+> que dos campos vecinos se veían distintos sin ningún motivo. Ahora es el olivo de marca con algo
+> más de peso que `--border`, que está calibrado para separadores y no para bordes de campo.
+> **Lo consumen 54 archivos**: cualquier cambio a este token se ve en todos los módulos a la vez.
 | `src/components/finanzas/dashboard/components/dashboardTables.css` | Plain CSS imported directly by 4 finance table components. No Tailwind directives, so it does not depend on the import chain |
 
 **The import chain is load-bearing.** `globals.css` must enter through `index.css`, never through a JavaScript `import`. Tailwind only reads `@theme`, `@custom-variant` and `@layer base` from files reachable via the `@import "tailwindcss"` chain — import `globals.css` from `main.tsx` instead and the build still passes, CSS is still emitted, and every token silently stops existing.
@@ -580,11 +595,12 @@ See `BUG_REPORT.md` for current tracked bugs. As of the last update, the Reporte
 
 Start with [`docs/README.md`](docs/README.md) for the living-document index. Completed plans, resolved incidents and one-time setup guides live under [`docs/archive/`](docs/archive/README.md).
 
-Two module contracts live as **nested `CLAUDE.md` files** rather than in this one — they load automatically only when Claude works with files under their directory, which keeps them out of unrelated sessions. Read them directly when working on those modules.
+Three module contracts live as **nested `CLAUDE.md` files** rather than in this one — they load automatically only when Claude works with files under their directory, which keeps them out of unrelated sessions. Read them directly when working on those modules.
 
 | Document | Location | Purpose |
 |----------|----------|---------|
 | Hato Lechero contract | `src/components/hato/CLAUDE.md` | Full module contract (auto-loads under that dir) |
+| Aplicaciones contract | `src/components/aplicaciones/CLAUDE.md` | Dónde vive el plan real, qué comparaciones son legítimas, guardas del módulo (auto-loads under that dir) |
 | PO maintenance operation | `escociaos-po/CLAUDE.md` | Scheduled audit operation: agent roster, run protocol, memory layer |
 | Finanzas view contracts | `src/components/finanzas/CLAUDE.md` | Gastos/Ingresos historial, ganado merge, table CSS (auto-loads under that dir) |
 | Database schema | `docs/supabase_tablas.md` | Schema reference; validate against migrations |

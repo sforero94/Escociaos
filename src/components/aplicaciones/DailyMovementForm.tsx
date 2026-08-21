@@ -1,36 +1,63 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useFormDraft } from '@/hooks/useFormDraft';
 import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
-import { Save, X, Calendar, Package, Droplet, User, Plus, Trash2, AlertTriangle, FileText, Cloud, Clock } from 'lucide-react';
+import {
+  Save,
+  Calendar as CalendarIcon,
+  Package,
+  User,
+  Trash2,
+  AlertTriangle,
+  AlertCircle,
+  FileText,
+  Cloud,
+  Clock,
+  ArrowLeft,
+  ChevronRight,
+  Search,
+} from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { obtenerFechaHoy } from '../../utils/fechas';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { Textarea } from '../ui/textarea';
+import { DateInput } from '../ui/date-input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Field, FieldLabel, FieldDescription, FieldError } from '../ui/field';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '../ui/input-group';
+import { Item, ItemMedia, ItemContent, ItemTitle, ItemDescription, ItemGroup } from '../ui/item';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
+import { Badge } from '../ui/badge';
+import { Alert, AlertTitle, AlertDescription } from '../ui/alert';
+import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from '../ui/empty';
+import { Spinner } from '../ui/spinner';
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle, SheetDescription } from '../ui/sheet';
+import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from '../ui/drawer';
+import { cn } from '../ui/utils';
 import type {
   Aplicacion,
-  MovimientoDiario,
   MovimientoDiarioProducto,
   LoteSeleccionado,
-  ProductoEnMezcla,
-  UnidadMedida, // 🚨 NUEVO: Importar el tipo ENUM
-  FraccionJornal
+  UnidadMedida,
+  FraccionJornal,
 } from '../../types/aplicaciones';
 import type {
   Empleado,
   Contratista,
   Trabajador,
-  Lote,
   WorkMatrix,
-  ObservacionesMatrix
+  ObservacionesMatrix,
 } from '../../types/shared';
-import { TrabajadorMultiSelect } from '../shared/TrabajadorMultiSelect';
 import { JornalFractionMatrix } from '../shared/JornalFractionMatrix';
 import { calculateLaborCost, calculateContractorCost } from '../../utils/laborCosts';
+import { formatearNumero } from '@/utils/format';
 
 interface DailyMovementFormProps {
   aplicacion: Aplicacion;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
-  onCancel: () => void;
 }
 
 interface ProductoFormulario {
@@ -38,26 +65,82 @@ interface ProductoFormulario {
   producto_nombre: string;
   producto_categoria: string;
   cantidad_utilizada: string;
-  unidad_producto: string; // 🚨 CAMBIO: Ahora es la unidad_medida del producto desde BD (Litros o Kilos)
+  unidad_producto: string; // unidad_medida del producto desde BD (Litros o Kilos)
   presentacion_kg_l?: number; // SOLO para fertilización: cuántos Kg por bulto
 }
 
-export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMovementFormProps) {
+interface ErroresCampo {
+  fecha?: string;
+  lote?: string;
+  canecas?: string;
+  bultos?: string;
+  responsable?: string;
+  productos?: string;
+}
+
+/** Nombre corto para la tira de chips ("Clara Yaneth Ríos Gómez" → "Clara Y."). */
+function nombreCorto(nombre: string): string {
+  const partes = nombre.trim().split(/\s+/).filter(Boolean);
+  if (partes.length <= 1) return partes[0] ?? '';
+  return `${partes[0]} ${partes[1][0].toUpperCase()}.`;
+}
+
+/** Iniciales para el avatar circular del chip/fila ("Clara Yaneth" → "CY"). */
+function iniciales(nombre: string): string {
+  const partes = nombre.trim().split(/\s+/).filter(Boolean);
+  const a = partes[0]?.[0] ?? '';
+  const b = partes[1]?.[0] ?? '';
+  return (a + b).toUpperCase() || '?';
+}
+
+function trabajadorKey(t: Trabajador): string {
+  return `${t.type}-${t.data.id ?? ''}`;
+}
+
+/** `true` si el error luce como el `TypeError: Failed to fetch` de una señal intermitente. */
+function esErrorDeRed(mensaje: string): boolean {
+  return /failed to fetch|network|conexión|connection/i.test(mensaje);
+}
+
+/** Breakpoint local para elegir Sheet (escritorio) vs Drawer de pantalla completa (móvil). */
+const MOBILE_BREAKPOINT = 768;
+
+export function DailyMovementForm({ aplicacion, open, onOpenChange, onSuccess }: DailyMovementFormProps) {
   const supabase = getSupabase();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [erroresCampo, setErroresCampo] = useState<ErroresCampo>({});
 
-  // 🚨 DIAGNÓSTICO - Verificar tipo de aplicación
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false
+  );
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // Vista interna: campos principales o selector de personal a pantalla completa dentro
+  // del mismo Sheet/Drawer (nunca se rediseñan TrabajadorMultiSelect/JornalFractionMatrix
+  // como componentes compartidos — viven en src/components/shared/ y los usa también
+  // Labores; esta vista es propia de este formulario, ver W02-movimientos.md §8).
+  const [vistaPersonal, setVistaPersonal] = useState(false);
+  const [searchTermPersonal, setSearchTermPersonal] = useState('');
+  const [workerTab, setWorkerTab] = useState<'empleados' | 'contratistas'>('empleados');
+
+  useEffect(() => {
+    if (open) setVistaPersonal(false);
+  }, [open]);
 
   // Estados del formulario
   const [fechaMovimiento, setFechaMovimiento] = useState(obtenerFechaHoy());
   const [loteId, setLoteId] = useState('');
   const [numeroCanecas, setNumeroCanecas] = useState(''); // Total para fumigación/drench
   const [numeroBultos, setNumeroBultos] = useState(''); // Total para fertilización
-  const [equipoAplicacion, setEquipoAplicacion] = useState(''); // 🆕 NUEVO CAMPO
-  const [personal, setPersonal] = useState(''); // 🆕 NUEVO CAMPO
-  const [horaInicio, setHoraInicio] = useState('07:20'); // 🆕 NUEVO CAMPO
-  const [horaFin, setHoraFin] = useState('15:50'); // 🆕 NUEVO CAMPO
+  const [equipoAplicacion, setEquipoAplicacion] = useState('');
+  const [personal, setPersonal] = useState('');
+  const [horaInicio, setHoraInicio] = useState('07:20');
+  const [horaFin, setHoraFin] = useState('15:50');
   const [responsable, setResponsable] = useState('');
   const [condicionesMeteorologicas, setCondicionesMeteorologicas] = useState('');
   const [notas, setNotas] = useState('');
@@ -127,12 +210,14 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
     return productosDisponibles;
   }, [loteId, loteToMezclaMap, productosPorMezcla, productosDisponibles]);
 
-  // Cargar datos al montar
+  // Cargar datos cuando el Sheet/Drawer se abre (el formulario permanece montado
+  // detrás para que la animación de cierre corra completa — ver §6 del diseño).
   useEffect(() => {
+    if (!open) return;
     cargarDatosAplicacion();
     cargarUsuarioActual();
     cargarTrabajadores();
-  }, [aplicacion.id]);
+  }, [open, aplicacion.id]);
 
   // 🔧 Precargar productos apenas se conocen, sin esperar a que se elija lote.
   // No hay forma manual de agregar productos en este formulario, así que si la
@@ -224,7 +309,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       if (mezclasData && mezclasData.length > 0) {
         const mezclaIds = (mezclasData as any[]).map((m: any) => m.id);
 
-        const { data: productosData, error: errorProductos } = await supabase
+        const { data: productosData, error: errorProductosQuery } = await supabase
           .from('aplicaciones_productos')
           .select(`
             mezcla_id,
@@ -236,7 +321,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
           `)
           .in('mezcla_id', mezclaIds);
 
-        if (errorProductos) throw errorProductos;
+        if (errorProductosQuery) throw errorProductosQuery;
 
         // Organizar productos por mezcla
         const productosPorMezclaTemp: Record<string, any[]> = {};
@@ -298,13 +383,13 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       const ids = productos.map(p => p.producto_id).filter(Boolean);
       if (ids.length > 0) {
         try {
-          const { data, error: errorProductos } = await supabase
+          const { data, error: errorProductosQuery } = await supabase
             .from('productos')
             .select('id, presentacion_kg_l')
             .in('id', ids);
 
-          if (errorProductos) {
-            console.error('Failed to fetch productos presentacion_kg_l:', errorProductos);
+          if (errorProductosQuery) {
+            console.error('Failed to fetch productos presentacion_kg_l:', errorProductosQuery);
           } else {
             (data || []).forEach((p: any) => {
               if (p.presentacion_kg_l != null) {
@@ -387,13 +472,15 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
     }
   };
 
+  // Pre-existente y sin uso desde la UI (no hay forma manual de agregar un producto
+  // fuera de la precarga por mezcla) — se conserva tal cual, fuera de alcance de este
+  // rediseño visual (ver reporte de la sesión).
   const agregarProducto = async () => {
     if (!productoSeleccionadoId) {
       setError('Selecciona un producto para agregar');
       return;
     }
 
-    // Verificar si ya está agregado
     if (productosAgregados.some(p => p.producto_id === productoSeleccionadoId)) {
       setError('Este producto ya fue agregado');
       return;
@@ -402,7 +489,6 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
     const producto = productosDisponibles.find(p => p.producto_id === productoSeleccionadoId);
     if (!producto) return;
 
-    // Cargar presentacion_kg_l del producto SOLO para fertilización
     let presentacionKgL: number | undefined;
     if (aplicacion.tipo_aplicacion === 'Fertilización') {
       try {
@@ -411,7 +497,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
           .select('presentacion_kg_l')
           .eq('id', productoSeleccionadoId)
           .single();
-        
+
         if (errorProducto) {
           console.error('Failed to fetch product presentacion_kg_l for selection:', errorProducto);
         } else {
@@ -427,7 +513,7 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       producto_nombre: producto.producto_nombre,
       producto_categoria: producto.producto_categoria,
       cantidad_utilizada: '',
-      unidad_producto: producto.producto_unidad, // 🚨 CAMBIO: Ahora es la unidad_medida del producto desde BD (Litros o Kilos)
+      unidad_producto: producto.producto_unidad,
       presentacion_kg_l: presentacionKgL
     };
 
@@ -446,56 +532,57 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
     setProductosAgregados(nuevosProductos);
   };
 
+  // Pre-existente y sin uso desde la UI — se conserva tal cual (ver nota en agregarProducto).
   const actualizarUnidadProducto = (index: number, unidad: 'cc' | 'L') => {
     const nuevosProductos = [...productosAgregados];
     nuevosProductos[index].unidad_producto = unidad;
     setProductosAgregados(nuevosProductos);
   };
 
-  const validarFormulario = () => {
+  /**
+   * Valida el formulario y llena `erroresCampo` por campo (para `FieldError` puntual)
+   * en vez de un único string global. El banner global (`error`) queda reservado para
+   * fallas de envío no asociadas a un campo — típicamente de red (ver M8 del diseño).
+   */
+  const validarFormulario = (): boolean => {
+    const errores: ErroresCampo = {};
+
     if (!fechaMovimiento) {
-      setError('La fecha es requerida');
-      return false;
+      errores.fecha = 'La fecha es requerida';
     }
     if (!loteId) {
-      setError('Debes seleccionar un lote');
-      return false;
+      errores.lote = 'Debes seleccionar un lote';
     }
-    
-    // Validación según tipo de aplicación
+
     if (aplicacion.tipo_aplicacion === 'Fumigación' || aplicacion.tipo_aplicacion === 'Drench') {
       if (!numeroCanecas || parseFloat(numeroCanecas) <= 0) {
-        setError('El número de canecas debe ser mayor a 0');
-        return false;
+        errores.canecas = 'El número de canecas debe ser mayor a 0';
       }
     }
-    
+
     if (aplicacion.tipo_aplicacion === 'Fertilización') {
       if (!numeroBultos || parseFloat(numeroBultos) <= 0) {
-        setError('El número de bultos debe ser mayor a 0');
-        return false;
+        errores.bultos = 'El número de bultos debe ser mayor a 0';
       }
     }
-    
+
     if (!responsable.trim()) {
-      setError('El responsable es requerido');
-      return false;
-    }
-    
-    if (productosAgregados.length === 0) {
-      setError('Debes agregar al menos un producto');
-      return false;
+      errores.responsable = 'El responsable es requerido';
     }
 
-    // Validar que todos los productos tengan cantidad
-    for (const producto of productosAgregados) {
-      if (!producto.cantidad_utilizada || parseFloat(producto.cantidad_utilizada) <= 0) {
-        setError(`El producto "${producto.producto_nombre}" necesita una cantidad válida`);
-        return false;
+    if (productosAgregados.length === 0) {
+      errores.productos = 'Debes agregar al menos un producto';
+    } else {
+      const productoInvalido = productosAgregados.find(
+        p => !p.cantidad_utilizada || parseFloat(p.cantidad_utilizada) <= 0
+      );
+      if (productoInvalido) {
+        errores.productos = `El producto "${productoInvalido.producto_nombre}" necesita una cantidad válida`;
       }
     }
 
-    return true;
+    setErroresCampo(errores);
+    return Object.keys(errores).length === 0;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -504,10 +591,10 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
     if (!validarFormulario()) {
       return;
     }
+    setError(null);
 
     try {
       setLoading(true);
-      setError(null);
 
       // Obtener usuario actual
       const { data: { user } } = await supabase.auth.getUser();
@@ -659,6 +746,9 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
       setSelectedTrabajadores([]);
       setWorkMatrix({});
       setObservacionesMatrix({});
+      setErroresCampo({});
+      setVistaPersonal(false);
+      setSearchTermPersonal('');
 
       draft.clearDraft();
       onSuccess();
@@ -670,119 +760,319 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
     }
   };
 
-  return (
-    <div className="bg-white rounded-2xl border border-primary/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)]">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
-            <Plus className="w-6 h-6 text-primary" />
-          </div>
-          <div>
-            <h3 className="text-lg text-foreground">Nuevo Movimiento Diario</h3>
-            <p className="text-sm text-brand-brown/60">
-              {aplicacion.tipo_aplicacion === 'Fertilización'
-                ? 'Registra bultos totales y bultos aplicados de cada producto'
-                : 'Registra canecas totales y canecas aplicadas de cada producto'
-              }
-            </p>
-          </div>
+  // ---------------------------------------------------------------------------------
+  // Selección de personal — filtrado, selección y helpers puramente presentacionales.
+  // ---------------------------------------------------------------------------------
+
+  const empleadosFiltrados = useMemo(() => {
+    if (!searchTermPersonal) return empleadosDisponibles;
+    const term = searchTermPersonal.toLowerCase();
+    return empleadosDisponibles.filter(
+      e => e.nombre.toLowerCase().includes(term) || (e.cargo ?? '').toLowerCase().includes(term)
+    );
+  }, [empleadosDisponibles, searchTermPersonal]);
+
+  const contratistasFiltrados = useMemo(() => {
+    if (!searchTermPersonal) return contratistasDisponibles;
+    const term = searchTermPersonal.toLowerCase();
+    return contratistasDisponibles.filter(
+      c => c.nombre.toLowerCase().includes(term) || (c.tipo_contrato ?? '').toLowerCase().includes(term)
+    );
+  }, [contratistasDisponibles, searchTermPersonal]);
+
+  const estaSeleccionado = useCallback(
+    (id: string | undefined, tipo: 'empleado' | 'contratista') => {
+      if (!id) return false;
+      return selectedTrabajadores.some(t => t.type === tipo && t.data.id === id);
+    },
+    [selectedTrabajadores]
+  );
+
+  const alternarTrabajador = useCallback(
+    (id: string, tipo: 'empleado' | 'contratista', data: Empleado | Contratista) => {
+      setSelectedTrabajadores(prev => {
+        const yaEsta = prev.some(t => t.type === tipo && t.data.id === id);
+        if (yaEsta) {
+          return prev.filter(t => !(t.type === tipo && t.data.id === id));
+        }
+        return [...prev, { type: tipo, data } as Trabajador];
+      });
+    },
+    []
+  );
+
+  const alternarSeleccionarTodos = useCallback(() => {
+    const lista = workerTab === 'empleados' ? empleadosFiltrados : contratistasFiltrados;
+    const tipo = workerTab === 'empleados' ? 'empleado' : 'contratista';
+    const todosSeleccionados = lista.length > 0 && lista.every(w => estaSeleccionado(w.id, tipo));
+
+    if (todosSeleccionados) {
+      setSelectedTrabajadores(prev =>
+        prev.filter(t => t.type !== tipo || !lista.some(w => w.id === t.data.id))
+      );
+    } else {
+      setSelectedTrabajadores(prev => {
+        const existentes = new Set(prev.filter(t => t.type === tipo).map(t => t.data.id));
+        const nuevos = lista
+          .filter(w => !existentes.has(w.id))
+          .map(w => ({ type: tipo, data: w } as Trabajador));
+        return [...prev, ...nuevos];
+      });
+    }
+  }, [workerTab, empleadosFiltrados, contratistasFiltrados, estaSeleccionado]);
+
+  // ---------------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------------
+
+  const totalDisponibles = empleadosDisponibles.length + contratistasDisponibles.length;
+
+  const tituloHeader = vistaPersonal ? 'Selección de Personal' : 'Nuevo Movimiento';
+  const subtituloHeader = vistaPersonal
+    ? `${selectedTrabajadores.length} de ${totalDisponibles} seleccionados`
+    : aplicacion.nombre_aplicacion || 'Movimiento diario';
+
+  function renderListaTrabajadores(lista: (Empleado | Contratista)[], tipo: 'empleado' | 'contratista') {
+    const todosSeleccionados = lista.length > 0 && lista.every(w => estaSeleccionado(w.id, tipo));
+    return (
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">{lista.length} activos</span>
+          {lista.length > 0 && (
+            <button
+              type="button"
+              onClick={alternarSeleccionarTodos}
+              className="text-xs font-semibold text-primary hover:underline"
+            >
+              {todosSeleccionados ? 'Deseleccionar todos' : 'Seleccionar todos'}
+            </button>
+          )}
         </div>
+
+        {lista.length === 0 ? (
+          <Empty className="border-none py-8">
+            <EmptyMedia variant="icon">
+              <Search />
+            </EmptyMedia>
+            <EmptyTitle>Sin resultados</EmptyTitle>
+            <EmptyDescription>
+              {searchTermPersonal
+                ? `No hay coincidencias para "${searchTermPersonal}"`
+                : `No hay ${tipo === 'empleado' ? 'empleados' : 'contratistas'} disponibles`}
+            </EmptyDescription>
+          </Empty>
+        ) : (
+          <ItemGroup className="max-h-[300px] overflow-y-auto pr-1">
+            {lista.map(w => {
+              const seleccionado = estaSeleccionado(w.id, tipo);
+              const cargoOCargoContrato = tipo === 'empleado' ? (w as Empleado).cargo : (w as Contratista).tipo_contrato;
+              return (
+                <Item
+                  key={w.id}
+                  asChild
+                  variant={seleccionado ? 'outline' : 'default'}
+                  className={cn(
+                    'cursor-pointer',
+                    seleccionado ? 'border-primary/30 bg-primary/5' : 'hover:bg-muted/70'
+                  )}
+                >
+                  <label>
+                    <ItemMedia
+                      variant="icon"
+                      className={cn('text-[0.7rem] font-bold', seleccionado && 'border-primary bg-primary text-primary-foreground')}
+                    >
+                      {iniciales(w.nombre)}
+                    </ItemMedia>
+                    <ItemContent>
+                      <ItemTitle>{w.nombre}</ItemTitle>
+                      {cargoOCargoContrato && (
+                        <ItemDescription className="line-clamp-none">{cargoOCargoContrato}</ItemDescription>
+                      )}
+                    </ItemContent>
+                    <input
+                      type="checkbox"
+                      checked={seleccionado}
+                      onChange={() => alternarTrabajador(w.id ?? '', tipo, w)}
+                      disabled={loading}
+                      aria-label={`Seleccionar a ${w.nombre}`}
+                      className="size-5 shrink-0 accent-primary disabled:opacity-50"
+                    />
+                  </label>
+                </Item>
+              );
+            })}
+          </ItemGroup>
+        )}
       </div>
+    );
+  }
 
-      <FormDraftBanner
-        variant="available"
-        show={draft.hasDraft}
-        onRestore={handleRestoreDraft}
-        onDiscard={draft.discardDraft}
-      />
+  function renderTiraSeleccionados(soloResumen: boolean) {
+    if (selectedTrabajadores.length === 0) return null;
+    const visibles = soloResumen ? selectedTrabajadores.slice(0, 5) : selectedTrabajadores;
+    const restantes = soloResumen ? selectedTrabajadores.length - visibles.length : 0;
+    return (
+      <TooltipProvider>
+        {visibles.map(t => (
+          <Tooltip key={trabajadorKey(t)}>
+            <TooltipTrigger asChild>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card py-0.5 pl-0.5 pr-2 text-xs font-medium text-foreground">
+                <span className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-primary text-[0.6rem] font-bold text-primary-foreground">
+                  {iniciales(t.data.nombre)}
+                </span>
+                {nombreCorto(t.data.nombre)}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{t.data.nombre}</TooltipContent>
+          </Tooltip>
+        ))}
+        {restantes > 0 && <span className="text-xs text-muted-foreground">+{restantes}</span>}
+      </TooltipProvider>
+    );
+  }
 
-      {/* Error */}
-      {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
-          <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <h4 className="text-red-800 text-sm mb-1">Error</h4>
-            <p className="text-red-700 text-sm">{error}</p>
+  function renderSelectorPersonal() {
+    return (
+      <div className="p-4">
+        {selectedTrabajadores.length > 0 && (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-muted p-3">
+            <span className="text-xs font-semibold text-muted-foreground">Seleccionados</span>
+            {renderTiraSeleccionados(false)}
           </div>
-        </div>
-      )}
+        )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Fecha */}
-        <div>
-          <label className="block text-sm text-foreground mb-2 flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-primary" />
-            Fecha del Movimiento
-            <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="date"
-            value={fechaMovimiento}
-            onChange={(e) => setFechaMovimiento(e.target.value)}
-            max={obtenerFechaHoy()}
-            disabled={loading}
-            className="w-full px-4 py-3 border border-primary/20 rounded-xl bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+        <div className="relative mb-3">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="text"
+            placeholder="Buscar por nombre…"
+            value={searchTermPersonal}
+            onChange={(e) => setSearchTermPersonal(e.target.value)}
+            className="pl-9"
           />
         </div>
 
-        {/* Lote */}
-        <div>
-          <label className="block text-sm text-foreground mb-2 flex items-center gap-2">
-            <Package className="w-4 h-4 text-primary" />
-            Lote Aplicado
-            <span className="text-red-500">*</span>
-          </label>
-          <select
-            value={loteId}
-            onChange={(e) => setLoteId(e.target.value)}
-            disabled={loading}
-            className="w-full px-4 py-3 border border-primary/20 rounded-xl bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <option value="">Selecciona un lote</option>
-            {lotes.map(lote => (
-              <option key={lote.lote_id} value={lote.lote_id}>
-                {lote.nombre}
-              </option>
-            ))}
-          </select>
+        <Tabs value={workerTab} onValueChange={(v) => setWorkerTab(v as 'empleados' | 'contratistas')}>
+          <TabsList className="w-full">
+            <TabsTrigger value="empleados" className="flex-1 gap-1.5">
+              Empleados
+              <Badge variant="outline" className="border-border bg-card">{empleadosDisponibles.length}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="contratistas" className="flex-1 gap-1.5">
+              Contratistas
+              <Badge variant="outline" className="border-border bg-card">{contratistasDisponibles.length}</Badge>
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="empleados">{renderListaTrabajadores(empleadosFiltrados, 'empleado')}</TabsContent>
+          <TabsContent value="contratistas">{renderListaTrabajadores(contratistasFiltrados, 'contratista')}</TabsContent>
+        </Tabs>
+      </div>
+    );
+  }
+
+  function renderCamposPrincipales() {
+    return (
+      <div className="pb-2">
+        <FormDraftBanner
+          variant="available"
+          show={draft.hasDraft}
+          onRestore={handleRestoreDraft}
+          onDiscard={draft.discardDraft}
+        />
+
+        {error && (
+          esErrorDeRed(error) ? (
+            <Alert variant="warning" className="mx-4 mb-4 mt-4">
+              <AlertTriangle />
+              <AlertTitle>No se pudo guardar — sin conexión.</AlertTitle>
+              <AlertDescription>
+                Tu información quedó en este dispositivo. Vuelve a intentar cuando tengas señal; nada se perdió.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <Alert variant="destructive" className="mx-4 mb-4 mt-4">
+              <AlertCircle />
+              <AlertTitle>No se pudo guardar</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )
+        )}
+
+        {/* Fecha y lote */}
+        <div className="px-4 pt-4">
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+            <CalendarIcon className="size-4 text-primary" /> Fecha y lote
+          </div>
+
+          <Field>
+            <FieldLabel>
+              Fecha del Movimiento <span className="text-destructive">*</span>
+            </FieldLabel>
+            <DateInput value={fechaMovimiento} onChange={setFechaMovimiento} max={obtenerFechaHoy()} disabled={loading} />
+            <FieldDescription>Hoy en hora local — no permite fechas futuras</FieldDescription>
+            <FieldError>{erroresCampo.fecha}</FieldError>
+          </Field>
+
+          <Field className="mt-4">
+            <FieldLabel>
+              Lote Aplicado <span className="text-destructive">*</span>
+            </FieldLabel>
+            <Select value={loteId} onValueChange={setLoteId} disabled={loading}>
+              <SelectTrigger className="w-full" aria-invalid={!!erroresCampo.lote}>
+                <SelectValue placeholder="Selecciona un lote" />
+              </SelectTrigger>
+              <SelectContent>
+                {lotes.map(lote => (
+                  <SelectItem key={lote.lote_id} value={lote.lote_id}>
+                    {lote.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FieldError>{erroresCampo.lote}</FieldError>
+          </Field>
+
+          <Field className="mt-4">
+            <FieldLabel>Equipo de Aplicación</FieldLabel>
+            <Select value={equipoAplicacion} onValueChange={setEquipoAplicacion} disabled={loading}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Selecciona el equipo (opcional)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Bomba espalda">🎒 Bomba espalda</SelectItem>
+                <SelectItem value="Bomba estacionaria">⚙️ Bomba estacionaria</SelectItem>
+                <SelectItem value="Fumiducto">🚜 Fumiducto</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
         </div>
 
-        {/* 🆕 NUEVO: Equipo de Aplicación */}
-        <div>
-          <label className="block text-sm text-foreground mb-2 flex items-center gap-2">
-            <Droplet className="w-4 h-4 text-primary" />
-            Equipo de Aplicación
-          </label>
-          <select
-            value={equipoAplicacion}
-            onChange={(e) => setEquipoAplicacion(e.target.value)}
+        {/* Selección de Personal */}
+        <div className="border-t border-border/60 px-4 pt-4">
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+            <User className="size-4 text-primary" /> Selección de Personal
+          </div>
+          <button
+            type="button"
+            onClick={() => setVistaPersonal(true)}
             disabled={loading}
-            className="w-full px-4 py-3 border border-primary/20 rounded-xl bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex w-full items-center gap-3 rounded-xl border border-border bg-muted/50 p-3 text-left transition-colors hover:bg-muted disabled:opacity-50"
           >
-            <option value="">Selecciona el equipo (opcional)</option>
-            <option value="Bomba espalda">🎒 Bomba espalda</option>
-            <option value="Bomba estacionaria">⚙️ Bomba estacionaria</option>
-            <option value="Fumiducto">🚜 Fumiducto</option>
-          </select>
-        </div>
-
-        {/* Worker Selection (Employees + Contractors) */}
-        <div className="border-t border-primary/10 pt-6">
-          <h4 className="text-sm text-foreground mb-4 flex items-center gap-2">
-            <User className="w-4 h-4 text-primary" />
-            Selección de Personal
-          </h4>
-
-          <TrabajadorMultiSelect
-            empleados={empleadosDisponibles}
-            contratistas={contratistasDisponibles}
-            selectedTrabajadores={selectedTrabajadores}
-            onSelectionChange={setSelectedTrabajadores}
-            disabled={loading}
-          />
+            {selectedTrabajadores.length === 0 ? (
+              <span className="text-sm text-muted-foreground">Seleccionar personal (opcional)</span>
+            ) : (
+              <div className="flex flex-1 flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold text-muted-foreground">
+                  {selectedTrabajadores.length} seleccionado{selectedTrabajadores.length === 1 ? '' : 's'}
+                </span>
+                {renderTiraSeleccionados(true)}
+              </div>
+            )}
+            <ChevronRight className="ml-auto size-4 shrink-0 text-muted-foreground" />
+          </button>
 
           {selectedTrabajadores.length > 0 && loteId && (
-            <div className="mt-6">
+            <div className="mt-4">
               <JornalFractionMatrix
                 trabajadores={selectedTrabajadores}
                 lotes={lotes.filter(l => l.lote_id === loteId).map(l => ({
@@ -792,16 +1082,16 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
                 }))}
                 workMatrix={workMatrix}
                 observaciones={observacionesMatrix}
-                onFraccionChange={(trabajadorId, loteId, frac) => {
+                onFraccionChange={(trabajadorId, loteIdMatriz, frac) => {
                   setWorkMatrix(prev => ({
                     ...prev,
-                    [trabajadorId]: { ...prev[trabajadorId], [loteId]: frac }
+                    [trabajadorId]: { ...prev[trabajadorId], [loteIdMatriz]: frac }
                   }));
                 }}
-                onObservacionesChange={(trabajadorId, loteId, obs) => {
+                onObservacionesChange={(trabajadorId, loteIdMatriz, obs) => {
                   setObservacionesMatrix(prev => ({
                     ...prev,
-                    [trabajadorId]: { ...prev[trabajadorId], [loteId]: obs }
+                    [trabajadorId]: { ...prev[trabajadorId], [loteIdMatriz]: obs }
                   }));
                 }}
                 onRemoveTrabajador={(trabajadorId) => {
@@ -816,185 +1106,149 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
           )}
         </div>
 
-        {/* 🆕 NUEVO: Horario de Trabajo */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm text-foreground mb-2 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-primary" />
-              Hora de Inicio
-            </label>
-            <input
-              type="time"
-              value={horaInicio}
-              onChange={(e) => setHoraInicio(e.target.value)}
-              disabled={loading}
-              className="w-full px-4 py-3 border border-primary/20 rounded-xl bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-            />
+        {/* Horario */}
+        <div className="border-t border-border/60 px-4 pt-4">
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Clock className="size-4 text-primary" /> Horario
           </div>
-          <div>
-            <label className="block text-sm text-foreground mb-2 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-primary" />
-              Hora de Fin
-            </label>
-            <input
-              type="time"
-              value={horaFin}
-              onChange={(e) => setHoraFin(e.target.value)}
-              disabled={loading}
-              className="w-full px-4 py-3 border border-primary/20 rounded-xl bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-            />
+          <div className="flex gap-3">
+            <Field className="flex-1">
+              <FieldLabel>Hora Inicio</FieldLabel>
+              <Input type="time" value={horaInicio} onChange={(e) => setHoraInicio(e.target.value)} disabled={loading} />
+            </Field>
+            <Field className="flex-1">
+              <FieldLabel>Hora Fin</FieldLabel>
+              <Input type="time" value={horaFin} onChange={(e) => setHoraFin(e.target.value)} disabled={loading} />
+            </Field>
           </div>
         </div>
 
         {/* Número de Canecas - PARA FUMIGACIÓN Y DRENCH */}
         {(aplicacion.tipo_aplicacion === 'Fumigación' || aplicacion.tipo_aplicacion === 'Drench') && (
-          <div>
-            <label className="block text-sm text-foreground mb-2 flex items-center gap-2">
-              <Droplet className="w-4 h-4 text-primary" />
-              Número TOTAL de Canecas Aplicadas
-              <span className="text-red-500">*</span>
-            </label>
-            <div className="flex gap-3">
-              <Input
-                type="number"
-                value={numeroCanecas}
-                onChange={(e) => setNumeroCanecas(e.target.value)}
-                placeholder="0"
-                step="any"
-                min="0"
-                disabled={loading}
-                className="flex-1 bg-white border-primary/20 focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
-              />
-              <div className="px-4 py-3 bg-muted border border-primary/20 rounded-xl text-foreground min-w-[120px] flex items-center justify-center">
-                canecas
-              </div>
-            </div>
-            {loteId && canecasPorLote[loteId] && (
-              <div className="mt-2 p-3 bg-primary/5 border border-primary/20 rounded-lg">
-                <p className="text-xs text-brand-brown/70">
-                  📊 <strong>Planeado:</strong> {canecasPorLote[loteId]} canecas para este lote
-                </p>
-              </div>
-            )}
+          <div className="border-t border-border/60 px-4 pt-4">
+            <Field>
+              <FieldLabel>
+                Número TOTAL de Canecas Aplicadas <span className="text-destructive">*</span>
+              </FieldLabel>
+              <InputGroup>
+                <InputGroupInput
+                  type="number"
+                  step="any"
+                  min="0"
+                  value={numeroCanecas}
+                  onChange={(e) => setNumeroCanecas(e.target.value)}
+                  placeholder="0"
+                  disabled={loading}
+                  aria-invalid={!!erroresCampo.canecas}
+                />
+                <InputGroupAddon align="inline-end">canecas</InputGroupAddon>
+              </InputGroup>
+              <FieldError>{erroresCampo.canecas}</FieldError>
+              {loteId && canecasPorLote[loteId] ? (
+                <FieldDescription className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+                  Planeado: {formatearNumero(canecasPorLote[loteId], 1)} canecas para este lote
+                </FieldDescription>
+              ) : null}
+            </Field>
           </div>
         )}
 
         {/* Número de Bultos - SOLO PARA FERTILIZACIÓN */}
         {aplicacion.tipo_aplicacion === 'Fertilización' && (
-          <div>
-            <label className="block text-sm text-foreground mb-2 flex items-center gap-2">
-              <Package className="w-4 h-4 text-primary" />
-              Número TOTAL de Bultos Usados
-              <span className="text-red-500">*</span>
-            </label>
-            <div className="flex gap-3">
-              <Input
-                type="number"
-                value={numeroBultos}
-                onChange={(e) => setNumeroBultos(e.target.value)}
-                placeholder="0"
-                step="1"
-                min="0"
-                disabled={loading}
-                className="flex-1 bg-white border-primary/20 focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
-              />
-              <div className="px-4 py-3 bg-muted border border-primary/20 rounded-xl text-foreground min-w-[120px] flex items-center justify-center">
-                bultos
-              </div>
-            </div>
-            {loteId && bultosPorLote[loteId] && (
-              <div className="mt-2 p-3 bg-primary/5 border border-primary/20 rounded-lg">
-                <p className="text-xs text-brand-brown/70">
-                  📊 <strong>Planeado:</strong> {bultosPorLote[loteId]} bultos para este lote
-                </p>
-              </div>
-            )}
+          <div className="border-t border-border/60 px-4 pt-4">
+            <Field>
+              <FieldLabel>
+                Número TOTAL de Bultos Usados <span className="text-destructive">*</span>
+              </FieldLabel>
+              <InputGroup>
+                <InputGroupInput
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={numeroBultos}
+                  onChange={(e) => setNumeroBultos(e.target.value)}
+                  placeholder="0"
+                  disabled={loading}
+                  aria-invalid={!!erroresCampo.bultos}
+                />
+                <InputGroupAddon align="inline-end">bultos</InputGroupAddon>
+              </InputGroup>
+              <FieldError>{erroresCampo.bultos}</FieldError>
+              {loteId && bultosPorLote[loteId] ? (
+                <FieldDescription className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+                  Planeado: {formatearNumero(bultosPorLote[loteId], 0)} bultos para este lote
+                </FieldDescription>
+              ) : null}
+            </Field>
           </div>
         )}
 
         {/* Productos Utilizados */}
-        <div className="border-t border-primary/10 pt-6">
-          <h4 className="text-sm text-foreground mb-4 flex items-center gap-2">
-            <Package className="w-4 h-4 text-primary" />
+        <div className="border-t border-border/60 px-4 pt-4">
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+            <Package className="size-4 text-primary" />
             {aplicacion.tipo_aplicacion === 'Fertilización'
               ? 'Bultos Usados de cada Producto'
-              : 'Cantidad aplicada de cada producto'
-            }
-            <span className="text-red-500">*</span>
-          </h4>
+              : 'Cantidad aplicada de cada producto'}
+            <span className="text-destructive">*</span>
+          </div>
 
-          {/* Lista de productos precargados */}
+          {erroresCampo.productos && (
+            <p role="alert" className="mb-3 flex items-center gap-1.5 text-sm font-medium text-destructive">
+              <AlertCircle className="size-3.5 shrink-0" /> {erroresCampo.productos}
+            </p>
+          )}
+
           {productosAgregados.length > 0 ? (
-            <div className="space-y-3">
+            <div className="flex flex-col gap-3">
               {productosAgregados.map((producto, index) => (
-                <div
-                  key={index}
-                  className="bg-background border border-primary/20 rounded-xl p-4 flex items-center gap-4"
-                >
-                  <div className="flex-1">
-                    <p className="text-sm text-foreground mb-1">
-                      {producto.producto_nombre}
-                    </p>
-                    <p className="text-xs text-brand-brown/60">
-                      {producto.producto_categoria}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <Input
-                      type="number"
-                      value={producto.cantidad_utilizada}
-                      onChange={(e) => actualizarCantidadProducto(index, e.target.value)}
-                      placeholder="0"
-                      step="0.01"
-                      min="0"
-                      disabled={loading}
-                      className="w-32 bg-white border-primary/20 focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
-                    />
-                    
-                    {/* Unidad estática desde BD (no editable) */}
-                    {aplicacion.tipo_aplicacion === 'Fertilización' ? (
-                      <div className="px-4 py-2 bg-muted border border-primary/20 rounded-lg text-foreground text-sm min-w-[80px] flex items-center justify-center">
-                        bultos
-                      </div>
-                    ) : (
-                      <div className="px-4 py-2 bg-muted border border-primary/20 rounded-lg text-foreground text-sm min-w-[80px] flex items-center justify-center">
-                        {producto.unidad_producto}
-                      </div>
-                    )}
-                    
-                    <Button
+                <Field key={index}>
+                  <FieldLabel>{producto.producto_nombre}</FieldLabel>
+                  <div className="flex items-center gap-2">
+                    <InputGroup className="flex-1">
+                      <InputGroupInput
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={producto.cantidad_utilizada}
+                        onChange={(e) => actualizarCantidadProducto(index, e.target.value)}
+                        placeholder="0"
+                        disabled={loading}
+                      />
+                      <InputGroupAddon align="inline-end">
+                        {aplicacion.tipo_aplicacion === 'Fertilización' ? 'bultos' : producto.unidad_producto}
+                      </InputGroupAddon>
+                    </InputGroup>
+                    <button
                       type="button"
                       onClick={() => eliminarProducto(index)}
                       disabled={loading}
-                      variant="ghost"
-                      size="sm"
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      aria-label={`Eliminar ${producto.producto_nombre}`}
+                      className="rounded-lg p-2.5 text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
                     >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                      <Trash2 className="size-4" />
+                    </button>
                   </div>
-                </div>
+                  <FieldDescription>{producto.producto_categoria}</FieldDescription>
+                </Field>
               ))}
             </div>
           ) : cargandoProductos ? (
-            <div className="p-8 text-center border-2 border-dashed border-primary/20 rounded-xl">
-              <Package className="w-12 h-12 text-primary/30 mx-auto mb-3 animate-pulse" />
-              <p className="text-sm text-brand-brown/50">
-                Cargando productos...
-              </p>
+            <div className="flex flex-col items-center gap-3 rounded-xl border-2 border-dashed border-border py-8 text-center">
+              <Spinner className="size-6 text-primary" />
+              <p className="text-sm text-muted-foreground">Cargando productos...</p>
             </div>
           ) : (
-            <div className="p-8 text-center border-2 border-dashed border-red-200 bg-red-50/50 rounded-xl">
-              <AlertTriangle className="w-12 h-12 text-red-400 mx-auto mb-3" />
-              <p className="text-sm text-red-700">
+            <div className="rounded-xl border-2 border-dashed border-destructive/30 bg-destructive/5 px-4 py-8 text-center">
+              <AlertTriangle className="mx-auto mb-3 size-10 text-destructive/60" />
+              <p className="text-sm text-destructive">
                 {errorProductos
                   ? errorProductos
                   : loteId
                     ? 'La mezcla asignada a este lote no tiene productos configurados.'
                     : 'Esta aplicación no tiene productos configurados en su mezcla.'}
               </p>
-              <p className="text-xs text-red-600/70 mt-2">
+              <p className="mt-2 text-xs text-destructive/70">
                 Revisa la mezcla de la aplicación en la Calculadora antes de registrar el movimiento.
               </p>
             </div>
@@ -1002,103 +1256,168 @@ export function DailyMovementForm({ aplicacion, onSuccess, onCancel }: DailyMove
         </div>
 
         {/* Responsable */}
-        <div>
-          <label className="block text-sm text-foreground mb-2 flex items-center gap-2">
-            <User className="w-4 h-4 text-primary" />
-            Responsable
-            <span className="text-red-500">*</span>
-          </label>
-          <Input
-            type="text"
-            value={responsable}
-            onChange={(e) => setResponsable(e.target.value)}
-            placeholder="Nombre del responsable"
-            disabled={loading}
-            className="bg-white border-primary/20 focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
-          />
+        <div className="border-t border-border/60 px-4 pt-4">
+          <Field>
+            <FieldLabel>
+              Responsable <span className="text-destructive">*</span>
+            </FieldLabel>
+            <Input
+              type="text"
+              value={responsable}
+              onChange={(e) => setResponsable(e.target.value)}
+              placeholder="Nombre del responsable"
+              disabled={loading}
+              aria-invalid={!!erroresCampo.responsable}
+            />
+            <FieldError>{erroresCampo.responsable}</FieldError>
+          </Field>
         </div>
 
         {/* Condiciones Meteorológicas */}
-        <div>
-          <label className="block text-sm text-foreground mb-2 flex items-center gap-2">
-            <Cloud className="w-4 h-4 text-primary" />
-            Condiciones Meteorológicas
-          </label>
-          <select
-            value={condicionesMeteorologicas}
-            onChange={(e) => setCondicionesMeteorologicas(e.target.value)}
-            disabled={loading}
-            className="w-full px-4 py-3 border border-primary/20 rounded-xl bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <option value="">Selecciona las condiciones (opcional)</option>
-            <option value="soleadas">☀️ Soleadas</option>
-            <option value="nubladas">☁️ Nubladas</option>
-            <option value="lluvia suave">🌦️ Lluvia Suave</option>
-            <option value="lluvia fuerte">⛈️ Lluvia Fuerte</option>
-          </select>
+        <div className="px-4 pt-4">
+          <Field>
+            <FieldLabel>
+              <Cloud className="size-4 text-primary" /> Condiciones Meteorológicas
+            </FieldLabel>
+            <Select value={condicionesMeteorologicas} onValueChange={setCondicionesMeteorologicas} disabled={loading}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Selecciona las condiciones (opcional)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="soleadas">☀️ Soleadas</SelectItem>
+                <SelectItem value="nubladas">☁️ Nubladas</SelectItem>
+                <SelectItem value="lluvia suave">🌦️ Lluvia Suave</SelectItem>
+                <SelectItem value="lluvia fuerte">⛈️ Lluvia Fuerte</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
         </div>
 
         {/* Notas */}
-        <div>
-          <label className="block text-sm text-foreground mb-2 flex items-center gap-2">
-            <FileText className="w-4 h-4 text-primary" />
-            Notas (Opcional)
-          </label>
-          <textarea
-            value={notas}
-            onChange={(e) => setNotas(e.target.value)}
-            placeholder="Observaciones adicionales..."
-            rows={3}
-            disabled={loading}
-            className="w-full px-4 py-3 border border-primary/20 rounded-xl bg-white text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent resize-none disabled:opacity-50 disabled:cursor-not-allowed"
-          />
+        <div className="px-4 pt-4">
+          <Field>
+            <FieldLabel>
+              <FileText className="size-4 text-primary" /> Notas (Opcional)
+            </FieldLabel>
+            <Textarea
+              value={notas}
+              onChange={(e) => setNotas(e.target.value)}
+              placeholder="Observaciones adicionales..."
+              rows={3}
+              disabled={loading}
+            />
+          </Field>
         </div>
 
-        {/* Botones */}
-        <div className="flex items-center gap-3 pt-4 border-t border-primary/10">
-          <Button
-            type="button"
-            onClick={onCancel}
-            disabled={loading}
-            variant="outline"
-            className="flex-1 border-primary/20 hover:bg-primary/5 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <X className="w-4 h-4 mr-2" />
-            Cancelar
-          </Button>
-          <Button
-            type="submit"
-            disabled={loading}
-            className="flex-1 bg-primary hover:bg-primary-dark text-white disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-                Guardando...
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4 mr-2" />
-                Registrar Movimiento
-              </>
-            )}
-          </Button>
+        {/* Info de movimiento provisional */}
+        <div className="px-4 pb-4 pt-4">
+          <p className="flex items-start gap-2 rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
+            <span className="mt-0.5 text-primary">ℹ️</span>
+            <span>
+              Este es un movimiento <strong>provisional</strong> que no afecta el inventario inmediatamente.
+              {aplicacion.tipo_aplicacion === 'Fertilización'
+                ? ' Se registran los bultos totales usados y los bultos de cada producto. Al cerrar la aplicación, se convertirán a Kg según la presentación de cada producto.'
+                : ' Se registran las canecas totales aplicadas y las canecas de cada producto. Al cerrar la aplicación, se convertirán a litros.'}
+            </span>
+          </p>
         </div>
-      </form>
-
-      {/* Info de movimiento provisional */}
-      <div className="mt-6 p-4 bg-primary/5 border border-primary/20 rounded-xl">
-        <p className="text-xs text-brand-brown/70 flex items-start gap-2">
-          <span className="text-primary mt-0.5">ℹ️</span>
-          <span>
-            Este es un movimiento <strong>provisional</strong> que no afecta el inventario inmediatamente.
-            {aplicacion.tipo_aplicacion === 'Fertilización' 
-              ? ' Se registran los bultos totales usados y los bultos de cada producto. Al cerrar la aplicación, se convertirán a Kg según la presentación de cada producto.'
-              : ' Se registran las canecas totales aplicadas y las canecas de cada producto. Al cerrar la aplicación, se convertirán a litros.'
-            }
-          </span>
-        </p>
       </div>
-    </div>
+    );
+  }
+
+  const pieVistaPersonal = (
+    <Button type="button" className="w-full" onClick={() => setVistaPersonal(false)}>
+      Confirmar personal ({selectedTrabajadores.length})
+    </Button>
+  );
+
+  const pieCamposPrincipales = (
+    <>
+      <Button type="button" variant="outline" className="flex-1" onClick={() => onOpenChange(false)} disabled={loading}>
+        Cancelar
+      </Button>
+      <Button type="submit" className="flex-1" disabled={loading}>
+        {loading ? (
+          <>
+            <Spinner className="size-4" /> Guardando…
+          </>
+        ) : (
+          <>
+            <Save className="size-4" /> Registrar Movimiento
+          </>
+        )}
+      </Button>
+    </>
+  );
+
+  const cuerpo = vistaPersonal ? renderSelectorPersonal() : renderCamposPrincipales();
+
+  return (
+    <>
+      {/* Escritorio: Sheet lateral, más ancho que el sm:max-w-sm por defecto — la
+          matriz de jornal×lote sería inutilizable a 384px (ver §6 del diseño). */}
+      <Sheet open={open && !isMobile} onOpenChange={onOpenChange}>
+        <SheetContent className="flex w-full flex-col gap-0 p-0 sm:max-w-[480px]">
+          <SheetHeader className="border-b border-border px-5 py-4">
+            <SheetTitle>{tituloHeader}</SheetTitle>
+            <SheetDescription>{subtituloHeader}</SheetDescription>
+          </SheetHeader>
+          {vistaPersonal && (
+            <div className="px-5 pt-3">
+              <Button type="button" variant="ghost" size="sm" onClick={() => setVistaPersonal(false)} className="gap-1.5 px-2 text-muted-foreground">
+                <ArrowLeft className="size-4" /> Volver
+              </Button>
+            </div>
+          )}
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+            <div className="flex-1 overflow-y-auto">{cuerpo}</div>
+            <SheetFooter className="flex-row gap-3 border-t border-border px-5 py-4">
+              {vistaPersonal ? pieVistaPersonal : pieCamposPrincipales}
+            </SheetFooter>
+          </form>
+        </SheetContent>
+      </Sheet>
+
+      {/* Móvil: Drawer de PANTALLA COMPLETA — h-[100dvh], no el max-h-[80vh] parcial
+          por defecto de vaul (ver §6 del diseño: 14 campos + matriz no caben en 80vh). */}
+      <Drawer open={open && isMobile} onOpenChange={onOpenChange} direction="bottom">
+        <DrawerContent
+          className={cn(
+            'h-[100dvh] max-h-[100dvh]',
+            // Mismo selector con `data-[vaul-drawer-direction=bottom]:` que usa el primitivo
+            // (drawer.tsx) para estas 4 propiedades: como esa variante agrega un selector de
+            // atributo, tiene más especificidad que la clase plana equivalente y le ganaría a
+            // un simple `rounded-t-none`/`border-t-0` sin el mismo prefijo.
+            'data-[vaul-drawer-direction=bottom]:mt-0',
+            'data-[vaul-drawer-direction=bottom]:max-h-[100dvh]',
+            'data-[vaul-drawer-direction=bottom]:rounded-t-none',
+            'data-[vaul-drawer-direction=bottom]:border-t-0'
+          )}
+        >
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+              <button
+                type="button"
+                onClick={() => (vistaPersonal ? setVistaPersonal(false) : onOpenChange(false))}
+                aria-label={vistaPersonal ? 'Volver' : 'Cerrar sin guardar'}
+                className="shrink-0 rounded-lg p-2 text-foreground hover:bg-muted"
+              >
+                <ArrowLeft className="size-5" />
+              </button>
+              <div className="min-w-0 flex-1">
+                <DrawerTitle className="text-[0.95rem] font-semibold">{tituloHeader}</DrawerTitle>
+                <DrawerDescription className="truncate text-xs">{subtituloHeader}</DrawerDescription>
+              </div>
+            </div>
+            <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+              <div className="flex-1 overflow-y-auto">{cuerpo}</div>
+              <div className="flex gap-3 border-t border-border p-4">
+                {vistaPersonal ? pieVistaPersonal : pieCamposPrincipales}
+              </div>
+            </form>
+          </div>
+        </DrawerContent>
+      </Drawer>
+    </>
   );
 }

@@ -39,7 +39,7 @@ export function FormDraftBanner({ variant, onRestore, onDiscard, show }: FormDra
     <div className="mb-4 flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
       <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
       <span className="text-sm text-amber-800 flex-1">
-        Tienes datos sin guardar de una sesion anterior.
+        Tienes datos sin guardar de una sesión anterior.
       </span>
       <Button
         size="sm"

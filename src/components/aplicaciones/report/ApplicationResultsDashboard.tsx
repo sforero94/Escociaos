@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  ArrowLeft, Calendar, FileText, Loader2,
-  Droplet, Leaf, Target, ChevronDown, ChevronUp,
-} from 'lucide-react';
-import { Button } from '../../ui/button';
-import { useReporteAplicacion } from '../../../hooks/useReporteAplicacion';
-import { generarPDFReporteCierre } from '../../../utils/generarPDFReporteCierre';
-import { fetchDatosReporteCierre } from '../../../utils/fetchDatosReporteCierre';
+import { ChevronDown, ChevronUp, FileText, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AplicacionShell } from '@/components/aplicaciones/shared/AplicacionShell';
+import { useReporteAplicacion } from '@/hooks/useReporteAplicacion';
+import { generarPDFReporteCierre } from '@/utils/generarPDFReporteCierre';
+import { fetchDatosReporteCierre } from '@/utils/fetchDatosReporteCierre';
+import { formatearMoneda, formatearNumero, formatDateRange, formatShortDate } from '@/utils/format';
 import { HeroKPICards } from './HeroKPICards';
 import { TechnicalSection } from './TechnicalSection';
 import { EconomicSection } from './EconomicSection';
@@ -17,18 +19,11 @@ interface ApplicationResultsDashboardProps {
   aplicacionId: string;
 }
 
-function formatFechaCorta(fecha?: string): string {
-  if (!fecha) return '-';
-  const [year, month, day] = fecha.split('T')[0].split('-');
-  const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-  return `${parseInt(day)} ${meses[parseInt(month) - 1]} ${year}`;
-}
-
-function getTipoIcon(tipo: string | null) {
-  const t = (tipo || '').toLowerCase();
-  if (t.includes('fumig')) return <Droplet className="w-4 h-4" />;
-  if (t.includes('fertil')) return <Leaf className="w-4 h-4" />;
-  return <Target className="w-4 h-4" />;
+/** Envoltorio nulo-seguro sobre `formatDateRange` (format.ts) — un reporte cuya aplicación no
+ * registró fecha de inicio/fin real muestra "—", nunca "Invalid Date". */
+function rangoFechas(inicio?: string | null, fin?: string | null): string {
+  if (!inicio || !fin) return '—';
+  return formatDateRange(inicio, fin);
 }
 
 export function ApplicationResultsDashboard({ aplicacionId }: ApplicationResultsDashboardProps) {
@@ -57,6 +52,8 @@ export function ApplicationResultsDashboard({ aplicacionId }: ApplicationResults
     }
   };
 
+  // Loading / error: sin rediseño propio — funcionan, no están en la lista de defectos
+  // (spec §4, "Estado que no diseñé a propósito").
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -85,194 +82,155 @@ export function ApplicationResultsDashboard({ aplicacionId }: ApplicationResults
 
   const esFertilizacion = (reporte.tipo_aplicacion || '').includes('Fertil');
   const containerLabel = esFertilizacion ? 'Bultos' : 'Canecas';
+  const titulo = reporte.nombre_aplicacion || reporte.codigo_aplicacion || 'Reporte';
+  const subtitulo = [
+    reporte.tipo_aplicacion || null,
+    rangoFechas(reporte.fecha_inicio, reporte.fecha_fin),
+    reporte.dias_aplicacion > 0 ? `${reporte.dias_aplicacion} día${reporte.dias_aplicacion === 1 ? '' : 's'}` : null,
+  ].filter(Boolean).join(' · ');
 
   return (
-    <div className="space-y-6 pb-8">
-      {/* ============================================================ */}
-      {/* [A] HEADER */}
-      {/* ============================================================ */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <button onClick={handleClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-            <ArrowLeft className="w-5 h-5 text-brand-brown" />
-          </button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-foreground">
-                {reporte.nombre_aplicacion || reporte.codigo_aplicacion || 'Reporte'}
-              </h1>
-              <span className="px-3 py-1 bg-primary/10 text-primary rounded-lg text-sm font-medium flex items-center gap-1.5">
-                {getTipoIcon(reporte.tipo_aplicacion)}
-                {reporte.tipo_aplicacion}
-              </span>
-            </div>
-            <div className="flex items-center gap-3 text-sm text-brand-brown/70 mt-1">
-              <span className="flex items-center gap-1">
-                <Calendar className="w-4 h-4" />
-                {formatFechaCorta(reporte.fecha_inicio)} - {formatFechaCorta(reporte.fecha_fin)}
-              </span>
-              {reporte.dias_aplicacion > 0 && (
-                <>
-                  <span className="text-brand-brown/30">|</span>
-                  <span>{reporte.dias_aplicacion} dias</span>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {/* Comparison selector */}
-          <select
-            onChange={(e) => seleccionarAnterior(e.target.value || null)}
-            defaultValue=""
-            className="px-4 py-2 pr-8 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm bg-white min-w-[200px] appearance-none"
+    <AplicacionShell
+      titulo={titulo}
+      subtitulo={subtitulo}
+      estado="Cerrada"
+      acciones={(
+        <>
+          <Select
+            value={reporte.aplicacion_anterior_id ?? undefined}
+            onValueChange={(id) => seleccionarAnterior(id)}
           >
-            <option value="">Comparar con...</option>
-            {aplicacionesComparables.map((app) => (
-              <option key={app.id} value={app.id}>
-                {app.nombre || app.codigo} ({formatFechaCorta(app.fecha_cierre)})
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="min-w-[220px]" aria-label="Comparar con una aplicación anterior">
+              <SelectValue placeholder="Comparar con…" />
+            </SelectTrigger>
+            <SelectContent>
+              {aplicacionesComparables.map((app) => (
+                <SelectItem key={app.id} value={app.id}>
+                  {app.nombre || app.codigo}{app.fecha_cierre ? ` (${formatShortDate(app.fecha_cierre)})` : ''}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-          {/* PDF export */}
-          <Button
-            onClick={descargarPDF}
-            disabled={generandoPDF}
-            className="bg-primary hover:bg-primary-dark text-white"
-          >
+          <Button onClick={descargarPDF} disabled={generandoPDF}>
             {generandoPDF ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" aria-hidden="true" />
             ) : (
-              <FileText className="w-4 h-4 mr-2" />
+              <FileText className="w-4 h-4 mr-2" aria-hidden="true" />
             )}
             Exportar PDF
           </Button>
-        </div>
-      </div>
-
-      {/* Anterior banner */}
-      {reporte.aplicacion_anterior_nombre && (
-        <div className="bg-primary/5 border border-primary/20 rounded-xl px-4 py-3 flex items-center justify-between">
-          <p className="text-sm text-foreground">
-            Comparando con: <strong>{reporte.aplicacion_anterior_nombre}</strong>
-          </p>
-          <button
-            onClick={() => seleccionarAnterior(null)}
-            className="text-sm text-primary hover:text-primary-dark font-medium"
-          >
-            Quitar comparacion
-          </button>
-        </div>
+        </>
       )}
-
-      {/* ============================================================ */}
-      {/* [B] HERO KPIs */}
-      {/* ============================================================ */}
-      <HeroKPICards
-        financiero={reporte.financiero}
-        canecasTotales={reporte.detalle_canecas.totales.canecas}
-        totalArboles={reporte.total_arboles}
-        totalJornales={reporte.detalle_jornales.totales.jornales_total?.real || 0}
-        containerLabel={containerLabel}
-        anterior={reporte.anterior}
-      />
-
-      {/* ============================================================ */}
-      {/* [C] TECHNICAL SECTION */}
-      {/* ============================================================ */}
-      <TechnicalSection
-        canecasPorLote={reporte.detalle_canecas.por_lote}
-        canecasTotales={reporte.detalle_canecas.totales}
-        jornalesPorLote={reporte.detalle_jornales.por_lote}
-        jornalesTotales={reporte.detalle_jornales.totales}
-        graficoCanecas={reporte.grafico_canecas_por_lote}
-        graficoJornales={reporte.grafico_jornales_por_lote}
-        containerLabel={containerLabel}
-        detalle_productos_por_lote={reporte.detalle_productos.por_lote}
-      />
-
-      {/* ============================================================ */}
-      {/* [D] ECONOMIC SECTION */}
-      {/* ============================================================ */}
-      <EconomicSection
-        financiero={reporte.financiero}
-        detalle_productos_por_lote={reporte.detalle_productos.por_lote}
-        jornalesPorLote={reporte.detalle_jornales.por_lote}
-        valorJornal={reporte.detalle_jornales.valor_jornal}
-      />
-
-      {/* ============================================================ */}
-      {/* [E] PRODUCT COMPARISON */}
-      {/* ============================================================ */}
-      <ProductComparisonTable productos={reporte.detalle_productos.totales} />
-
-      {/* ============================================================ */}
-      {/* [F] METADATA (collapsible) */}
-      {/* ============================================================ */}
-      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-        <button
-          onClick={() => setMetadataOpen(!metadataOpen)}
-          className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
-        >
-          <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
-            <FileText className="w-5 h-5 text-primary" />
-            Observaciones y Metadata
-          </h3>
-          {metadataOpen ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
-        </button>
-
-        {metadataOpen && (
-          <div className="px-6 pb-5 border-t border-gray-100 pt-4">
-            {reporte.alertas.length > 0 && (
-              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                <p className="text-sm font-medium text-amber-800 mb-1">Alertas</p>
-                <ul className="text-sm text-amber-700 list-disc list-inside">
-                  {reporte.alertas.map((a, i) => <li key={i}>{a}</li>)}
-                </ul>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-brand-brown/60">Fecha inicio real</span>
-                  <span className="text-foreground">{formatFechaCorta(reporte.fecha_inicio)}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-brand-brown/60">Fecha fin real</span>
-                  <span className="text-foreground">{formatFechaCorta(reporte.fecha_fin)}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-brand-brown/60">Dias de ejecucion</span>
-                  <span className="text-foreground">{reporte.dias_aplicacion} dias</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-brand-brown/60">Arboles totales</span>
-                  <span className="text-foreground">{reporte.total_arboles.toLocaleString('es-CO')}</span>
-                </div>
-              </div>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-brand-brown/60">Valor jornal</span>
-                  <span className="text-foreground">${reporte.detalle_jornales.valor_jornal.toLocaleString('es-CO')}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-brand-brown/60">Tamano caneca</span>
-                  <span className="text-foreground">{reporte.tamano_caneca}L</span>
-                </div>
-                {reporte.codigo_aplicacion && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-brand-brown/60">Codigo</span>
-                    <span className="text-foreground">{reporte.codigo_aplicacion}</span>
-                  </div>
-                )}
-              </div>
-            </div>
+    >
+      <div className="space-y-6 pb-8">
+        {reporte.aplicacion_anterior_nombre && (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-primary/25 bg-primary/5 px-4 py-3 flex-wrap">
+            <p className="text-sm text-foreground">
+              Comparando con: <strong>{reporte.aplicacion_anterior_nombre}</strong>
+            </p>
+            <button
+              onClick={() => seleccionarAnterior(null)}
+              className="text-sm font-medium text-primary hover:text-primary-dark"
+            >
+              Quitar comparación
+            </button>
           </div>
         )}
+
+        <HeroKPICards
+          financiero={reporte.financiero}
+          canecasTotales={reporte.detalle_canecas.totales.canecas}
+          totalArboles={reporte.total_arboles}
+          totalJornales={reporte.detalle_jornales.totales.jornales_total?.real || 0}
+          containerLabel={containerLabel}
+          anterior={reporte.anterior}
+        />
+
+        <TechnicalSection
+          canecasPorLote={reporte.detalle_canecas.por_lote}
+          canecasTotales={reporte.detalle_canecas.totales}
+          jornalesPorLote={reporte.detalle_jornales.por_lote}
+          jornalesTotales={reporte.detalle_jornales.totales}
+          graficoCanecas={reporte.grafico_canecas_por_lote}
+          graficoJornales={reporte.grafico_jornales_por_lote}
+          containerLabel={containerLabel}
+          detalle_productos_por_lote={reporte.detalle_productos.por_lote}
+        />
+
+        <EconomicSection
+          financiero={reporte.financiero}
+          detalle_productos_por_lote={reporte.detalle_productos.por_lote}
+          jornalesPorLote={reporte.detalle_jornales.por_lote}
+          valorJornal={reporte.detalle_jornales.valor_jornal}
+        />
+
+        <ProductComparisonTable productos={reporte.detalle_productos.totales} />
+
+        <Collapsible open={metadataOpen} onOpenChange={setMetadataOpen}>
+          <Card className="gap-0 overflow-hidden py-0">
+            <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 px-6 py-4 text-left transition-colors hover:bg-gray-50">
+              <span className="flex items-center gap-2 text-lg font-semibold text-foreground">
+                <FileText className="size-[18px] text-primary" aria-hidden="true" />
+                Observaciones y Metadata
+              </span>
+              {metadataOpen ? (
+                <ChevronUp className="size-4 text-gray-400" aria-hidden="true" />
+              ) : (
+                <ChevronDown className="size-4 text-gray-400" aria-hidden="true" />
+              )}
+            </CollapsibleTrigger>
+
+            <CollapsibleContent className="border-t border-gray-100 px-6 pb-5 pt-4">
+              {reporte.alertas.length > 0 && (
+                <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                  <p className="mb-1 text-sm font-medium text-amber-800">Alertas</p>
+                  <ul className="list-inside list-disc text-sm text-amber-700">
+                    {reporte.alertas.map((a, i) => <li key={i}>{a}</li>)}
+                  </ul>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Fecha inicio real</span>
+                    <span className="tabular-nums text-foreground">{reporte.fecha_inicio ? formatShortDate(reporte.fecha_inicio) : '—'}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Fecha fin real</span>
+                    <span className="tabular-nums text-foreground">{reporte.fecha_fin ? formatShortDate(reporte.fecha_fin) : '—'}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Días de ejecución</span>
+                    <span className="tabular-nums text-foreground">{reporte.dias_aplicacion} día{reporte.dias_aplicacion === 1 ? '' : 's'}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Árboles totales</span>
+                    <span className="tabular-nums text-foreground">{formatearNumero(reporte.total_arboles, 0)}</span>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Valor jornal</span>
+                    <span className="tabular-nums text-foreground">{formatearMoneda(reporte.detalle_jornales.valor_jornal)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Tamaño caneca</span>
+                    <span className="tabular-nums text-foreground">{reporte.tamano_caneca}L</span>
+                  </div>
+                  {reporte.codigo_aplicacion && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Código</span>
+                      <span className="tabular-nums text-foreground">{reporte.codigo_aplicacion}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
       </div>
-    </div>
+    </AplicacionShell>
   );
 }

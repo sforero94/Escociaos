@@ -1,19 +1,25 @@
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  Legend, ResponsiveContainer,
+  Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import { formatearMoneda } from '../../../utils/calculosReporteAplicacion';
+import { BarChart3 } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import {
+  Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table';
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
+import { formatearMoneda, formatearNumero } from '@/utils/format';
+import { cn } from '@/components/ui/utils';
 
 interface ComparisonField {
   real: number;
   planeado: number;
-  desviacion: number;
+  desviacion: number | undefined;
 }
 
 interface FinancieroField {
   real: number;
   planeado: number;
-  desviacion: number;
+  desviacion: number | undefined;
   cambio: number;
 }
 
@@ -29,41 +35,37 @@ interface EconomicSectionProps {
   valorJornal: number;
 }
 
-function deviationColor(desviacion: number, invertCost = true): string {
+const EPSILON_SERIE_CERO = 0.05;
+
+function deviationColor(desviacion: number): string {
   const abs = Math.abs(desviacion);
-  const isOver = desviacion > 0;
-  if (abs <= 5) return 'text-green-600';
-  if (abs <= 20) return 'text-amber-600';
-  return invertCost && isOver ? 'text-red-600' : invertCost && !isOver ? 'text-green-600' : 'text-red-600';
+  if (abs <= 5) return 'text-success';
+  if (abs <= 20) return 'text-warning';
+  return 'text-destructive';
 }
 
 function formatCompact(value: number): string {
-  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `$${(value / 1_000).toFixed(0)}K`;
-  return `$${value.toFixed(0)}`;
+  if (value >= 1_000_000) return `$${formatearNumero(value / 1_000_000, 1)}M`;
+  if (value >= 1_000) return `$${formatearNumero(value / 1_000, 0)}K`;
+  return `$${formatearNumero(value, 0)}`;
 }
 
-interface CostCell {
-  real: number;
-  planeado: number;
-  desviacion: number;
-}
-
-function CostComparisonCell({ field }: { field: CostCell }) {
+function CostComparisonCell({ field }: { field: ComparisonField }) {
+  const tieneDesviacion = field.planeado > 0 && field.desviacion !== undefined;
   return (
-    <td className="py-2.5 px-3 text-right text-sm">
+    <TableCell className="text-right tabular-nums">
       <div className="flex flex-col items-end gap-0.5">
-        <span className="text-foreground font-medium">{formatearMoneda(field.real)}</span>
+        <span className="font-medium text-foreground">{formatearMoneda(field.real)}</span>
         {field.planeado > 0 && (
-          <span className="text-gray-400 text-xs">Plan: {formatearMoneda(field.planeado)}</span>
+          <span className="text-xs text-muted-foreground">Plan: {formatearMoneda(field.planeado)}</span>
         )}
-        {field.planeado > 0 && (
-          <span className={`text-xs font-medium ${deviationColor(field.desviacion)}`}>
-            {field.desviacion > 0 ? '+' : ''}{field.desviacion.toFixed(1)}%
+        {tieneDesviacion && (
+          <span className={cn('text-xs font-semibold', deviationColor(field.desviacion as number))}>
+            {(field.desviacion as number) > 0 ? '+' : ''}{formatearNumero(field.desviacion as number, 1)}%
           </span>
         )}
       </div>
-    </td>
+    </TableCell>
   );
 }
 
@@ -73,20 +75,25 @@ export function EconomicSection({
   jornalesPorLote,
   valorJornal,
 }: EconomicSectionProps) {
-  // Build per-lot economic rows
+  // Mismo criterio que TechnicalSection: "sin mapeo" se detecta por AUSENCIA de filas de
+  // producto (real Y plan), no porque la suma dé 0 — evita confundir "no se rastreó" con
+  // "se aplicaron cero insumos". Costo M.O. es independiente (sale de jornales × valor_jornal,
+  // una fuente distinta) y por eso NO se apaga junto con Insumos.
+  const sinMapeoInsumos = Object.values(detalle_productos_por_lote).every((filas) => (filas?.length ?? 0) === 0);
+
   const lotRows = jornalesPorLote.map((jl) => {
     const prods = detalle_productos_por_lote[jl.lote_id] || [];
     const costoInsumosReal = prods.reduce((s, p) => s + p.costo.real, 0);
     const costoInsumosPlan = prods.reduce((s, p) => s + p.costo.planeado, 0);
-    const costoInsumosDesv = costoInsumosPlan > 0 ? ((costoInsumosReal - costoInsumosPlan) / costoInsumosPlan) * 100 : 0;
+    const costoInsumosDesv = costoInsumosPlan > 0 ? ((costoInsumosReal - costoInsumosPlan) / costoInsumosPlan) * 100 : undefined;
 
     const costoMOReal = jl.jornales_total.real * valorJornal;
     const costoMOPlan = jl.jornales_total.planeado * valorJornal;
-    const costoMODesv = costoMOPlan > 0 ? ((costoMOReal - costoMOPlan) / costoMOPlan) * 100 : 0;
+    const costoMODesv = costoMOPlan > 0 ? ((costoMOReal - costoMOPlan) / costoMOPlan) * 100 : undefined;
 
     const totalReal = costoInsumosReal + costoMOReal;
     const totalPlan = costoInsumosPlan + costoMOPlan;
-    const totalDesv = totalPlan > 0 ? ((totalReal - totalPlan) / totalPlan) * 100 : 0;
+    const totalDesv = totalPlan > 0 ? ((totalReal - totalPlan) / totalPlan) * 100 : undefined;
 
     return {
       lote_id: jl.lote_id,
@@ -97,85 +104,105 @@ export function EconomicSection({
     };
   });
 
-  // Chart data: stacked horizontal bar (Insumos + M.O.)
-  const chartData = lotRows.map((r) => ({
-    lote: r.lote_nombre,
-    insumos: r.insumos.real,
-    mano_obra: r.mano_obra.real,
-  }));
+  const chartData = lotRows.map((r) => ({ lote: r.lote_nombre, insumos: r.insumos.real, mano_obra: r.mano_obra.real }));
+  const hayInsumos = chartData.some((d) => Math.abs(d.insumos) > EPSILON_SERIE_CERO);
+  const hayManoObra = chartData.some((d) => Math.abs(d.mano_obra) > EPSILON_SERIE_CERO);
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-200">
-        <h3 className="text-lg font-semibold text-foreground">Detalle Economico por Lote</h3>
+    <Card className="gap-0 overflow-hidden py-0">
+      <div className="border-b border-gray-200 px-6 py-4">
+        <h3 className="text-lg font-semibold text-foreground">
+          Detalle Económico por Lote
+        </h3>
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[700px]">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="text-left py-2.5 px-4 text-xs text-gray-500 font-medium sticky left-0 bg-gray-50 z-10">Lote</th>
-              <th className="text-right py-2.5 px-3 text-xs text-gray-500 font-medium">Costo Insumos</th>
-              <th className="text-right py-2.5 px-3 text-xs text-gray-500 font-medium">Costo M.O.</th>
-              <th className="text-right py-2.5 px-3 text-xs text-gray-500 font-medium">Total</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {lotRows.map((row) => (
-              <tr key={row.lote_id} className="hover:bg-gray-50 transition-colors">
-                <td className="py-2.5 px-4 text-sm text-foreground font-medium sticky left-0 bg-white z-10">{row.lote_nombre}</td>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Lote</TableHead>
+            <TableHead className="text-right">Costo Insumos</TableHead>
+            <TableHead className="text-right">Costo M.O.</TableHead>
+            <TableHead className="text-right">Total</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {lotRows.map((row) => (
+            <TableRow key={row.lote_id}>
+              <TableCell className="font-medium text-foreground">{row.lote_nombre}</TableCell>
+              {sinMapeoInsumos ? (
+                <TableCell className="text-right font-normal text-muted-foreground">—</TableCell>
+              ) : (
                 <CostComparisonCell field={row.insumos} />
-                <CostComparisonCell field={row.mano_obra} />
+              )}
+              <CostComparisonCell field={row.mano_obra} />
+              {sinMapeoInsumos ? (
+                <TableCell className="text-right font-normal text-muted-foreground">—</TableCell>
+              ) : (
                 <CostComparisonCell field={row.total} />
-              </tr>
-            ))}
-          </tbody>
-          <tfoot className="bg-gray-50 border-t border-gray-200">
-            <tr>
-              <td className="py-2.5 px-4 text-sm font-semibold text-foreground sticky left-0 bg-gray-50 z-10">Total</td>
-              <CostComparisonCell field={{
-                real: financiero.costo_productos.real,
-                planeado: financiero.costo_productos.planeado,
-                desviacion: financiero.costo_productos.desviacion,
-              }} />
-              <CostComparisonCell field={{
-                real: financiero.costo_jornales.real,
-                planeado: financiero.costo_jornales.planeado,
-                desviacion: financiero.costo_jornales.desviacion,
-              }} />
-              <CostComparisonCell field={{
-                real: financiero.costo_total.real,
-                planeado: financiero.costo_total.planeado,
-                desviacion: financiero.costo_total.desviacion,
-              }} />
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+              )}
+            </TableRow>
+          ))}
+        </TableBody>
+        <TableFooter>
+          <TableRow>
+            <TableCell>Total</TableCell>
+            {sinMapeoInsumos ? (
+              <TableCell className="text-right font-normal text-muted-foreground">—</TableCell>
+            ) : (
+              <CostComparisonCell field={financiero.costo_productos} />
+            )}
+            <CostComparisonCell field={financiero.costo_jornales} />
+            <CostComparisonCell field={financiero.costo_total} />
+          </TableRow>
+        </TableFooter>
+      </Table>
 
-      {/* Stacked horizontal bar chart */}
-      {chartData.length > 0 && (
-        <div className="px-6 py-4 border-t border-gray-100">
+      {sinMapeoInsumos && (
+        <p className="border-t border-gray-100 px-6 py-3 text-xs text-muted-foreground">
+          Costo Insumos sin dato por lote — esta aplicación no registró productos por movimiento
+          (<code>movimientos_diarios_productos</code>). El Costo M.O. y el Total sí son reales.
+        </p>
+      )}
+
+      {(hayInsumos || hayManoObra) ? (
+        <div className="border-t border-gray-100 px-6 py-4">
           <div style={{ height: 224 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={chartData}
-                layout="vertical"
-                margin={{ top: 5, right: 20, left: 10, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                <XAxis type="number" tickFormatter={(v) => formatCompact(v)} tick={{ fill: '#6B7280', fontSize: 12 }} />
-                <YAxis type="category" dataKey="lote" tick={{ fill: '#6B7280', fontSize: 12 }} width={100} />
+              <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 24, left: 10, bottom: 5 }}>
+                <defs>
+                  <pattern id="economico-mo-hatch" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
+                    <rect width="6" height="6" fill="var(--chart-4)" />
+                    <line x1="0" y1="0" x2="0" y2="6" stroke="#ffffff" strokeOpacity={0.35} strokeWidth={2} />
+                  </pattern>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis type="number" tickFormatter={formatCompact} tick={{ fill: '#6B7280', fontSize: 12 }} />
+                <YAxis type="category" dataKey="lote" tick={{ fill: '#6B7280', fontSize: 12 }} width={110} />
                 <Tooltip formatter={(v: number) => formatearMoneda(v)} />
-                <Legend />
-                <Bar dataKey="insumos" stackId="cost" fill="#3B82F6" name="Insumos" />
-                <Bar dataKey="mano_obra" stackId="cost" fill="#8B5CF6" name="Mano de Obra" radius={[0, 4, 4, 0]} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                {hayInsumos && (
+                  <Bar dataKey="insumos" stackId="cost" name="Insumos" fill="var(--chart-1)" stroke="var(--chart-1)" strokeWidth={1} />
+                )}
+                {hayManoObra && (
+                  <Bar dataKey="mano_obra" stackId="cost" name="Mano de Obra" fill="url(#economico-mo-hatch)" stroke="var(--chart-4)" strokeWidth={1} radius={[0, 4, 4, 0]} />
+                )}
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
+      ) : (
+        <div className="border-t border-gray-100 px-6 py-8">
+          <Empty className="p-0">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <BarChart3 />
+              </EmptyMedia>
+              <EmptyTitle>Sin datos para graficar</EmptyTitle>
+              <EmptyDescription>Ningún lote tiene costo de insumos ni de mano de obra mayor a cero.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        </div>
       )}
-    </div>
+    </Card>
   );
 }

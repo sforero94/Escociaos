@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getSupabase } from '../utils/supabase/client';
 import {
+    calcularCambio,
     calcularDesviacion,
     convertirCanecasALitros,
     formatearDesviacion,
@@ -20,7 +21,11 @@ interface KPICardData {
 interface ComparisonField {
     real: number;
     planeado: number;
-    desviacion: number;
+    // D2 fix (5 call sites, see below): `undefined` = no hay base de comparación
+    // (planeado ausente o 0) — nunca se fabrica un +100%. Los sitios que todavía
+    // usan `calcularDesviacion` (per-lote / per-producto) siguen devolviendo
+    // `number`, que es un subtipo válido de `number | undefined`.
+    desviacion: number | undefined;
 }
 
 interface CanecasPorLote {
@@ -58,7 +63,8 @@ interface DatosGraficoCostos {
 interface FinancieroField {
     real: number;
     planeado: number;
-    desviacion: number;
+    // D2 fix — ver la misma nota en ComparisonField.
+    desviacion: number | undefined;
     cambio: number;
 }
 
@@ -538,6 +544,82 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                 });
             });
 
+            // Real plan source: `aplicaciones_lotes_planificado` has 0 rows and always has (see
+            // CLAUDE.md, "Applications Data Architecture" / D6) — the loop above never runs.
+            // `aplicaciones_calculos` is the actual snapshot the Calculadora wrote per lote when
+            // the application was planned (`numero_canecas`/`litros_mezcla`, or
+            // `numero_bultos`/`kilos_totales` for Fertilización — same field split the real-data
+            // aggregation above uses), and this hook already fetches it. 4 of 20 closed
+            // applications have no `aplicaciones_calculos` rows (the calculator was never run for
+            // them); those fall straight through to Fallback A/B below with plan left at 0/absent
+            // — never fabricated.
+            const calculosRows: any[] = appData.aplicaciones_calculos || [];
+            if (lotesPlanMap.size === 0 && calculosRows.length > 0) {
+                const esFertilizacionCalc = appData.tipo_aplicacion === 'Fertilización';
+
+                calculosRows.forEach((calc: any) => {
+                    const loteId = calc.lote_id;
+                    const canecas = esFertilizacionCalc
+                        ? Number(calc.numero_bultos || 0)
+                        : Number(calc.numero_canecas || 0);
+                    const litros = esFertilizacionCalc
+                        ? Number(calc.kilos_totales || 0)
+                        : Number(calc.litros_mezcla || 0);
+
+                    lotesPlanMap.set(loteId, {
+                        lote_id: loteId,
+                        canecas_plan: canecas,
+                        litros_plan: litros,
+                        jornales_plan: jornalesPlanLote(calc.total_arboles)
+                    });
+                });
+
+                // Per-product plan: `aplicaciones_productos.cantidad_total_necesaria` is a total
+                // for the MEZCLA, not per lote — when 2+ lotes share the same `mezcla_id` (via
+                // `aplicaciones_calculos.mezcla_id`, the canonical mezcla↔lote mapping — see
+                // CalculadoraAplicaciones.tsx step 5b), split it across those lotes proportionally
+                // to each lote's planned canecas/bultos share (the same real per-lote weight just
+                // computed above), so the totals still sum to `cantidad_total_necesaria` exactly
+                // and nothing is double-counted. Falls back to an equal split only if every lote
+                // sharing that mezcla reads 0 canecas, so a product never silently disappears.
+                const lotesPorMezcla = new Map<string, { lote_id: string; peso: number }[]>();
+                calculosRows.forEach((calc: any) => {
+                    if (!calc.mezcla_id) return;
+                    const arr = lotesPorMezcla.get(calc.mezcla_id) || [];
+                    arr.push({ lote_id: calc.lote_id, peso: lotesPlanMap.get(calc.lote_id)?.canecas_plan || 0 });
+                    lotesPorMezcla.set(calc.mezcla_id, arr);
+                });
+
+                lotesPorMezcla.forEach((lotesDeEstaMezcla, mezclaId) => {
+                    const prods = mezclasProductos.filter((mp: any) => mp.mezcla_id === mezclaId);
+                    if (prods.length === 0) return;
+
+                    const pesoTotal = lotesDeEstaMezcla.reduce((sum, l) => sum + l.peso, 0);
+
+                    prods.forEach((mp: any) => {
+                        const cantidadTotal = Number(mp.cantidad_total_necesaria || 0);
+                        const precio = Number(mp.precio_unitario || 0);
+
+                        lotesDeEstaMezcla.forEach(({ lote_id: loteId, peso }) => {
+                            const fraccion = pesoTotal > 0 ? peso / pesoTotal : 1 / lotesDeEstaMezcla.length;
+                            const cantidad = cantidadTotal * fraccion;
+                            const costo = cantidad * precio;
+
+                            costoProductosPlanTotal += costo;
+
+                            const key = `${loteId}-${mp.producto_id}`;
+                            productosPlanMap.set(key, {
+                                lote_id: loteId,
+                                producto_id: mp.producto_id,
+                                nombre: mp.producto_nombre,
+                                cantidad_plan: cantidad,
+                                costo_plan: costo
+                            });
+                        });
+                    });
+                });
+            }
+
             // Fallback A: when lotesPlanMap is empty but mezclas exist,
             // compute per-lote planned bultos from mezcla product dosis × tree sizes
             if (lotesPlanMap.size === 0 && mezclasProductos.length > 0) {
@@ -792,8 +874,11 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                 totales: {
                     lote_id: '',
                     lote_nombre: 'Total',
-                    canecas: { real: totalCanecasReal, planeado: totalCanecasPlan, desviacion: calcularDesviacion(totalCanecasPlan, totalCanecasReal) },
-                    litros_totales: { real: totalLitrosReal, planeado: totalLitrosPlan, desviacion: calcularDesviacion(totalLitrosPlan, totalLitrosReal) }
+                    // D2 fix (1/5, 2/5): calcularCambio devuelve undefined cuando planeado es 0/ausente
+                    // — nunca un +100% fabricado. aplicaciones_lotes_planificado está vacía hoy, así que
+                    // esto es el caso normal, no la excepción (decisión 4 del contrato, CLAUDE.md D2).
+                    canecas: { real: totalCanecasReal, planeado: totalCanecasPlan, desviacion: calcularCambio(totalCanecasReal, totalCanecasPlan) },
+                    litros_totales: { real: totalLitrosReal, planeado: totalLitrosPlan, desviacion: calcularCambio(totalLitrosReal, totalLitrosPlan) }
                 } as CanecasPorLote,
                 por_lote: Array.from(lotesRealMap.values()).map(l => {
                     const planLote = lotesPlanMap.get(l.lote_id);
@@ -938,11 +1023,13 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                     };
                 })(),
                 alertas: [],
+                // D2 fix (3/5, 4/5, 5/5): mismo cambio que arriba, aplicado a los totales
+                // financieros que alimentan directamente las 4 tarjetas KPI del Reporte.
                 financiero: {
                     costo_productos: {
                         real: totalCostoProductosReal,
                         planeado: costoProductosPlanTotal,
-                        desviacion: calcularDesviacion(costoProductosPlanTotal, totalCostoProductosReal),
+                        desviacion: calcularCambio(totalCostoProductosReal, costoProductosPlanTotal),
                         cambio: 0
                     },
                     costo_jornales: {
@@ -951,19 +1038,34 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                         desviacion: 0,
                         cambio: 0
                     },
+                    // `costo_total` y `costo_por_arbol` NO llevan plan, a propósito.
+                    //
+                    // `totalCostoReal` es insumos + mano de obra, pero el único plan que existe es
+                    // el de insumos (`costoProductosPlanTotal`); no hay plan de jornales guardado
+                    // en ninguna parte — `costo_jornales.planeado` es 0 justo arriba. Compararlos
+                    // es un error de categoría: da "+138,1%" para una aplicación cuyo consumo de
+                    // insumos se desvió +0,4%. El código venía marcando esa línea como
+                    // "// Rough comparison" desde antes.
+                    //
+                    // Mientras `aplicaciones_lotes_planificado` estuvo vacía esto no se notaba: el
+                    // plan era 0 y salía el +100% falso de D2. Al traer el plan real desde
+                    // `aplicaciones_calculos`, la cifra pasó a ser plausible y equivocada, que es
+                    // peor. Sin plan de mano de obra no hay plan de costo total — y la regla del
+                    // proyecto es no inventar la comparación: `planeado: 0` hace que KPICard omita
+                    // el badge y la tabla muestre "—".
+                    // `costo_productos` sí conserva su plan: ahí sí se comparan insumos con insumos.
                     costo_total: {
                         real: totalCostoReal,
-                        planeado: costoProductosPlanTotal,
-                        desviacion: calcularDesviacion(costoProductosPlanTotal, totalCostoReal),
+                        planeado: 0,
+                        desviacion: undefined,
                         cambio: 0
                     },
                     costo_por_arbol: (() => {
                         const real = safeDivide(totalCostoReal, totalArbolesApp);
-                        const planeado = safeDivide(costoProductosPlanTotal, totalArbolesApp);
                         return {
                             real,
-                            planeado,
-                            desviacion: calcularDesviacion(planeado, real),
+                            planeado: 0,
+                            desviacion: undefined,
                             cambio: 0
                         };
                     })()

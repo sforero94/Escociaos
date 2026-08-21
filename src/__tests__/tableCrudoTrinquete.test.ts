@@ -94,12 +94,6 @@ const UI_TABLE_REL = 'components/ui/table.tsx';
  * borrar su entrada en el mismo cambio.
  */
 const DEUDA_TABLA_CRUDA: readonly string[] = [
-  'components/aplicaciones/CierreAplicacion.tsx',
-  'components/aplicaciones/DetalleAplicacion.tsx',
-  'components/aplicaciones/PasoListaCompras.tsx',
-  'components/aplicaciones/report/EconomicSection.tsx',
-  'components/aplicaciones/report/ProductComparisonTable.tsx',
-  'components/aplicaciones/report/TechnicalSection.tsx',
   'components/configuracion/TelegramConfig.tsx',
   'components/configuracion/UsuariosConfig.tsx',
   'components/finanzas/components/GastosBatchTable.tsx',
@@ -274,8 +268,8 @@ describe('trinquete: <table> crudo solo se permite si está declarado en DEUDA_T
       expect(realSources.has(UI_TABLE_REL)).toBe(false);
     });
 
-    it('el conteo de deuda real de hoy es 41 (visible en el diff si alguien lo cambia sin querer)', () => {
-      expect(DEUDA_TABLA_CRUDA.length).toBe(41);
+    it('el conteo de deuda real de hoy es 35 (visible en el diff si alguien lo cambia sin querer)', () => {
+      expect(DEUDA_TABLA_CRUDA.length).toBe(35);
     });
 
     it('regla 1 — ningún archivo con <table> crudo fuera de la lista declarada', () => {

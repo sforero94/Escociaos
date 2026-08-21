@@ -1,15 +1,43 @@
-import { useState, useEffect } from 'react';
-import { X, ChevronRight, Check, Users, Calendar, Trash2, Edit3, Plus, AlertTriangle, ChevronDown, Download } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { AlertTriangle, Check, RefreshCw } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
-import { formatearFecha, obtenerFechaHoy } from '../../utils/fechas';
+import { obtenerFechaHoy } from '../../utils/fechas';
 import { fetchRegistrosTrabajoParaCierre, recalcularCostoJornal } from '../../utils/laborCosts';
 import { generarPDFReporteCierre } from '../../utils/generarPDFReporteCierre';
+import { formatearMoneda, formatearNumero } from '../../utils/format';
+import {
+  calcularExcepcionesCierre,
+  derivarFechasEjecucionReal,
+  agruparRegistrosPorLote,
+  calcularKPIsLabores,
+  formatearListaConY,
+} from '../../utils/calculosCierreAplicacion';
+import { useFormDraft } from '@/hooks/useFormDraft';
+import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
+import { AplicacionShell } from './shared/AplicacionShell';
+import { SeccionInsumosCierre } from './SeccionInsumosCierre';
+import { SeccionLaboresCierre } from './SeccionLaboresCierre';
+import type { NuevoRegistroForm, TrabajadorDisponible } from './SeccionLaboresCierre';
+import { SeccionConfirmarCierre } from './SeccionConfirmarCierre';
+import { Button } from '@/components/ui/button';
+import { Spinner } from '@/components/ui/spinner';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Empty, EmptyContent, EmptyDescription, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from '@/components/ui/alert-dialog';
 import type { Aplicacion, RegistroTrabajoCierre, ResumenLaboresCierre } from '../../types/aplicaciones';
 
 interface CierreAplicacionProps {
   aplicacion: Aplicacion;
-  onClose: () => void;
-  onCerrado: () => void;
 }
 
 interface Movimiento {
@@ -40,17 +68,25 @@ interface DatosFinales {
   observaciones: string;
 }
 
-// Fraction options for inline editing
-const FRACCION_OPTIONS = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0];
-
-type Paso = 'revision' | 'datos-finales' | 'confirmacion';
-
-export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplicacionProps) {
+/**
+ * Cierre de Aplicación — W03 v2 (`docs/…/W03-cierre-v2.md`). PÁGINA de revisión, no un wizard
+ * gateado: ①Insumos ②Labores ③Confirmar son secciones de una sola página con scroll continuo,
+ * cada una en su propio archivo (`SeccionInsumosCierre`, `SeccionLaboresCierre`,
+ * `SeccionConfirmarCierre`) para que este archivo orqueste datos y NO JSX de 1.500 líneas.
+ *
+ * Este archivo sigue siendo el único dueño de:
+ * - `cargarDatos()` y `cerrarAplicacion()` — la secuencia de escrituras a Supabase no se tocó
+ *   (ni el orden ni el manejo de errores), por diseño explícito de este rediseño.
+ * - Todo el estado editable de Labores (`registrosEditados`, `datosFinales`, el formulario
+ *   "Nuevo Registro") — las secciones son presentacionales, reciben props y callbacks.
+ */
+export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
   const supabase = getSupabase();
-  const [paso, setPaso] = useState<Paso>('revision');
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [procesando, setProcesando] = useState(false);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
 
   // Datos cargados - insumos
   const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
@@ -58,26 +94,27 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
   const [canecasPlaneadas, setCanecasPlaneadas] = useState(0);
   const [canecasAplicadas, setCanecasAplicadas] = useState(0);
   const [lotes, setLotes] = useState<LoteConArboles[]>([]);
-  const [blancoBiologico, setBlancoBiologico] = useState<string>('');
 
   // Datos de labores (desde registros_trabajo)
   const [resumenLabores, setResumenLabores] = useState<ResumenLaboresCierre | null>(null);
   const [registrosEditados, setRegistrosEditados] = useState<RegistroTrabajoCierre[]>([]);
   const [tieneTarea, setTieneTarea] = useState(false);
 
+  // De dónde salieron fechaInicioReal/fechaFinReal la primera vez que se cargaron los datos —
+  // solo para la leyenda "Detectado de…"; el campo sigue siendo 100% editable después.
+  const [fuenteFechas, setFuenteFechas] = useState<'registros' | 'movimientos' | 'combinado' | 'ninguna'>(
+    'ninguna',
+  );
+
   // UI state for labor editing
   const [editandoRegistro, setEditandoRegistro] = useState<string | null>(null);
-  const [loteExpandido, setLoteExpandido] = useState<string | null>(null);
   const [mostrarAgregarRegistro, setMostrarAgregarRegistro] = useState(false);
-  const [trabajadoresDisponibles, setTrabajadoresDisponibles] = useState<Array<{
-    id: string; nombre: string; tipo: 'empleado' | 'contratista';
-    salario?: number; prestaciones?: number; auxilios?: number; horas_semanales?: number; tarifa_jornal?: number;
-  }>>([]);
+  const [trabajadoresDisponibles, setTrabajadoresDisponibles] = useState<TrabajadorDisponible[]>([]);
 
   // Nuevo registro temporal
-  const [nuevoRegistro, setNuevoRegistro] = useState({
+  const [nuevoRegistro, setNuevoRegistro] = useState<NuevoRegistroForm>({
     trabajador_id: '',
-    trabajador_tipo: 'empleado' as 'empleado' | 'contratista',
+    trabajador_tipo: 'empleado',
     lote_id: '',
     fecha_trabajo: obtenerFechaHoy(),
     fraccion_jornal: 1.0,
@@ -90,19 +127,15 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
     observaciones: '',
   });
 
-  useEffect(() => {
-    cargarDatos();
-  }, [aplicacion.id]);
-
-  const cargarDatos = async () => {
+  const cargarDatos = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-
       // 1. Cargar aplicación completa con lotes
       const { data: appData } = await supabase
         .from('aplicaciones')
-        .select(`
+        .select(
+          `
           *,
           aplicaciones_lotes (
             lote_id,
@@ -117,39 +150,20 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
             )
           ),
           aplicaciones_calculos (id)
-        `)
+        `,
+        )
         .eq('id', aplicacion.id)
         .single();
 
-
       // Extraer lotes con árboles
-      const lotesData: LoteConArboles[] = appData?.aplicaciones_lotes?.map((al: any) => ({
-        lote_id: al.lotes?.id || '',
-        nombre: al.lotes?.nombre || 'Sin nombre',
-        arboles: al.lotes?.total_arboles || 0,
-      })) || [];
+      const lotesData: LoteConArboles[] =
+        appData?.aplicaciones_lotes?.map((al: any) => ({
+          lote_id: al.lotes?.id || '',
+          nombre: al.lotes?.nombre || 'Sin nombre',
+          arboles: al.lotes?.total_arboles || 0,
+        })) || [];
 
       setLotes(lotesData);
-
-      // Extraer blanco biológico
-      if (appData?.blanco_biologico) {
-        try {
-          const bb = JSON.parse(appData.blanco_biologico);
-          if (Array.isArray(bb) && bb.length > 0) {
-            const { data: plagas } = await supabase
-              .from('plagas_enfermedades_catalogo')
-              .select('nombre')
-              .in('id', bb);
-            setBlancoBiologico(plagas?.map((p) => p.nombre).join(', ') || 'No especificado');
-          } else {
-            setBlancoBiologico('No especificado');
-          }
-        } catch {
-          setBlancoBiologico('No especificado');
-        }
-      } else {
-        setBlancoBiologico('No especificado');
-      }
 
       // 2. Cargar canecas planeadas
       const { data: calculos } = await supabase
@@ -172,20 +186,16 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
         throw new Error(`Error cargando movimientos: ${errorMovimientos.message}`);
       }
 
-
-      // Variable para almacenar movimientos consolidados
       const movimientosConsolidados: Movimiento[] = [];
 
       if (movimientosDiarios && movimientosDiarios.length > 0) {
-        // Calcular canecas aplicadas
         const totalCanecasAplicadas = movimientosDiarios.reduce(
           (sum, mov) => sum + (mov.numero_canecas || 0),
-          0
+          0,
         );
         setCanecasAplicadas(totalCanecasAplicadas);
 
-        // Cargar productos de los movimientos diarios
-        const movimientosIds = movimientosDiarios.map(m => m.id);
+        const movimientosIds = movimientosDiarios.map((m) => m.id);
 
         const { data: productosMovimientos, error: errorProductosMovimientos } = await supabase
           .from('movimientos_diarios_productos')
@@ -196,21 +206,17 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
           throw new Error(`Error cargando productos de movimientos: ${errorProductosMovimientos.message}`);
         }
 
-
         if (productosMovimientos && productosMovimientos.length > 0) {
-          // Obtener IDs únicos de productos
           const productosIds = [...new Set(productosMovimientos.map((p) => p.producto_id))];
 
-          // Cargar precios de productos
           const { data: productos, error: errorProductos } = await supabase
             .from('productos')
             .select('id, precio_unitario')
             .in('id', productosIds);
 
-
           if (errorProductos) {
             setError(
-              `No se pudieron cargar los precios: ${errorProductos.message}. Verifica tus permisos o contacta al administrador.`
+              `No se pudieron cargar los precios: ${errorProductos.message}. Verifica tus permisos o contacta al administrador.`,
             );
             setMovimientos([]);
             setLoading(false);
@@ -224,30 +230,22 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
             return;
           }
 
-          // Verificar que los precios no sean nulos
-          const productosSinPrecio = productos.filter(
-            (p) => !p.precio_unitario || p.precio_unitario === 0
-          );
+          const productosSinPrecio = productos.filter((p) => !p.precio_unitario || p.precio_unitario === 0);
           if (productosSinPrecio.length > 0) {
             setError(
-              `${productosSinPrecio.length} producto(s) no tienen precio asignado. Por favor actualiza los precios en el módulo de Inventario antes de cerrar.`
+              `${productosSinPrecio.length} producto(s) no tienen precio asignado. Por favor actualiza los precios en el módulo de Inventario antes de cerrar.`,
             );
             setMovimientos([]);
             setLoading(false);
             return;
           }
 
-          // Crear mapa de costos
           const costosMap = new Map(productos.map((p) => [p.id, p.precio_unitario || 0]));
 
-          // Consolidar productos por movimiento
-          movimientosDiarios.forEach(mov => {
-            const productosDeMov = productosMovimientos.filter(
-              p => p.movimiento_diario_id === mov.id
-            );
+          movimientosDiarios.forEach((mov) => {
+            const productosDeMov = productosMovimientos.filter((p) => p.movimiento_diario_id === mov.id);
 
-            productosDeMov.forEach(prod => {
-              // Convertir unidades a unidad base si es necesario
+            productosDeMov.forEach((prod) => {
               let cantidadEnUnidadBase = prod.cantidad_utilizada;
               if ((prod.unidad as string) === 'cc') {
                 cantidadEnUnidadBase = prod.cantidad_utilizada / 1000;
@@ -287,12 +285,13 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
 
         const result = await supabase
           .from('aplicaciones_productos')
-          .select('producto_id, producto_nombre, producto_unidad, cantidad_total_necesaria, mezcla_id, dosis_grandes, dosis_medianos, dosis_pequenos, dosis_clonales')
+          .select(
+            'producto_id, producto_nombre, producto_unidad, cantidad_total_necesaria, mezcla_id, dosis_grandes, dosis_medianos, dosis_pequenos, dosis_clonales',
+          )
           .in('mezcla_id', mezclasIds);
 
         productosPlaneados = result.data;
 
-        // When aplicaciones_calculos is empty, recompute per-product planned quantities
         const hasCalcData = appData?.aplicaciones_calculos && appData.aplicaciones_calculos.length > 0;
         if (!hasCalcData && productosPlaneados && productosPlaneados.length > 0) {
           const appLotes = appData?.aplicaciones_lotes || [];
@@ -301,21 +300,19 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
             for (const al of appLotes) {
               const lote = (al as any).lotes;
               if (!lote) continue;
-              totalKg += (lote.arboles_grandes || 0) * (Number(prod.dosis_grandes) || 0) / 1000;
-              totalKg += (lote.arboles_medianos || 0) * (Number(prod.dosis_medianos) || 0) / 1000;
-              totalKg += (lote.arboles_pequenos || 0) * (Number(prod.dosis_pequenos) || 0) / 1000;
-              totalKg += (lote.arboles_clonales || 0) * (Number(prod.dosis_clonales) || 0) / 1000;
+              totalKg += ((lote.arboles_grandes || 0) * (Number(prod.dosis_grandes) || 0)) / 1000;
+              totalKg += ((lote.arboles_medianos || 0) * (Number(prod.dosis_medianos) || 0)) / 1000;
+              totalKg += ((lote.arboles_pequenos || 0) * (Number(prod.dosis_pequenos) || 0)) / 1000;
+              totalKg += ((lote.arboles_clonales || 0) * (Number(prod.dosis_clonales) || 0)) / 1000;
             }
             return { ...prod, cantidad_total_necesaria: Math.round(totalKg * 100) / 100 };
           });
         }
       }
 
-
       // 5. Consolidar insumos
       const insumosMap = new Map<string, ResumenInsumo>();
 
-      // Agregar planeados
       productosPlaneados?.forEach((prod) => {
         const key = prod.producto_id;
         if (!insumosMap.has(key)) {
@@ -330,7 +327,6 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
         insumo.planeado += prod.cantidad_total_necesaria || 0;
       });
 
-      // Agregar aplicados
       movimientosConsolidados.forEach((mov) => {
         const key = mov.producto_id;
         if (!insumosMap.has(key)) {
@@ -348,22 +344,14 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
       setResumenInsumos(Array.from(insumosMap.values()));
 
       // 6. Cargar registros de trabajo desde la tarea vinculada
+      let fechasRegistros: string[] = [];
       if (appData?.tarea_id) {
         setTieneTarea(true);
         try {
           const resumen = await fetchRegistrosTrabajoParaCierre(supabase, appData.tarea_id);
           setResumenLabores(resumen);
-          setRegistrosEditados(resumen.registros.map(r => ({ ...r })));
-
-          // Auto-derive dates from registros if available
-          if (resumen.registros.length > 0) {
-            const fechas = resumen.registros.map(r => r.fecha_trabajo).sort();
-            setDatosFinales(prev => ({
-              ...prev,
-              fechaInicioReal: prev.fechaInicioReal || fechas[0],
-              fechaFinReal: fechas[fechas.length - 1] || prev.fechaFinReal,
-            }));
-          }
+          setRegistrosEditados(resumen.registros.map((r) => ({ ...r })));
+          fechasRegistros = resumen.registros.map((r) => r.fecha_trabajo);
         } catch (err: any) {
           console.error('Error cargando registros de trabajo:', err);
           // Non-blocking: labor data is optional
@@ -372,12 +360,52 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
         setTieneTarea(false);
       }
 
+      // Derivar Fecha Inicio/Fin Real de forma robusta y simétrica (W03-cierre-v2.md §1/§5):
+      // unión de fechas de labor y de movimientos diarios, en vez de la lógica ad hoc anterior
+      // (Fin caía en obtenerFechaHoy(), Inicio solo se corregía si venía vacío).
+      const fechasMovimientos = movimientosConsolidados.map((m) => m.fecha);
+      const derivadas = derivarFechasEjecucionReal(fechasRegistros, fechasMovimientos);
+      setFuenteFechas(derivadas.fuente);
+      if (derivadas.fuente !== 'ninguna') {
+        setDatosFinales((prev) => ({
+          ...prev,
+          fechaInicioReal: derivadas.fechaInicio!,
+          fechaFinReal: derivadas.fechaFin!,
+        }));
+      }
     } catch (err: any) {
       setError('Error al cargar los datos: ' + err.message);
     } finally {
       setLoading(false);
     }
-  };
+  }, [aplicacion.id, supabase]);
+
+  useEffect(() => {
+    cargarDatos();
+  }, [cargarDatos]);
+
+  // ---------------------------------------------------------------------------------------------
+  // Borrador — useFormDraft + FormDraftBanner (decisión del dueño, W03-cierre-v2.md §6/§8.6).
+  // Solo se observa registrosEditados + datosFinales: NO trabajadoresDisponibles (viene de una
+  // query, no de captura del usuario) y NO el formulario "Nuevo Registro" a medio llenar (queda
+  // como sub-estado de UI que se pierde en un refresh real, igual que cuál lote está expandido —
+  // pregunta explícitamente sin resolver en el documento de diseño, resuelta acá del lado de
+  // "menor riesgo": no reabrir un formulario a medias con datos que el usuario no confirmó).
+  // `enabled: !loading` evita que la propia carga inicial (que también cambia estas dos
+  // variables) se guarde como si fuera una edición del usuario.
+  // ---------------------------------------------------------------------------------------------
+  const draft = useFormDraft(
+    `cierre-aplicacion-${aplicacion.id}-v1`,
+    { registrosEditados, datosFinales },
+    { enabled: !loading, debounceMs: 1500 },
+  );
+
+  const handleRestoreDraft = useCallback(() => {
+    if (!draft.draftData) return;
+    setRegistrosEditados(draft.draftData.registrosEditados);
+    setDatosFinales(draft.draftData.datosFinales);
+    draft.acceptDraft();
+  }, [draft]);
 
   /**
    * Cargar trabajadores disponibles para agregar registros
@@ -385,32 +413,50 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
   const cargarTrabajadores = async () => {
     if (trabajadoresDisponibles.length > 0) return;
     const [empRes, contRes] = await Promise.all([
-      supabase.from('empleados').select('id, nombre, salario, prestaciones_sociales, auxilios_no_salariales, horas_semanales').eq('activo', true),
+      supabase
+        .from('empleados')
+        .select('id, nombre, salario, prestaciones_sociales, auxilios_no_salariales, horas_semanales')
+        .eq('activo', true),
       supabase.from('contratistas').select('id, nombre, tarifa_jornal').eq('activo', true),
     ]);
-    const trabajadores: typeof trabajadoresDisponibles = [];
-    (empRes.data || []).forEach((e: any) => trabajadores.push({
-      id: e.id, nombre: e.nombre, tipo: 'empleado',
-      salario: e.salario, prestaciones: e.prestaciones_sociales,
-      auxilios: e.auxilios_no_salariales, horas_semanales: e.horas_semanales,
-    }));
-    (contRes.data || []).forEach((c: any) => trabajadores.push({
-      id: c.id, nombre: c.nombre, tipo: 'contratista', tarifa_jornal: c.tarifa_jornal,
-    }));
+    const trabajadores: TrabajadorDisponible[] = [];
+    (empRes.data || []).forEach((e: any) =>
+      trabajadores.push({
+        id: e.id,
+        nombre: e.nombre,
+        tipo: 'empleado',
+        salario: e.salario,
+        prestaciones: e.prestaciones_sociales,
+        auxilios: e.auxilios_no_salariales,
+        horas_semanales: e.horas_semanales,
+      }),
+    );
+    (contRes.data || []).forEach((c: any) =>
+      trabajadores.push({ id: c.id, nombre: c.nombre, tipo: 'contratista', tarifa_jornal: c.tarifa_jornal }),
+    );
     setTrabajadoresDisponibles(trabajadores);
+  };
+
+  const handleAbrirAgregarRegistro = () => {
+    setNuevoRegistro((prev) => ({ ...prev, fecha_trabajo: datosFinales.fechaFinReal || obtenerFechaHoy() }));
+    setMostrarAgregarRegistro(true);
+    cargarTrabajadores();
   };
 
   /**
    * Editar fracción de un registro
    */
   const editarFraccion = (registroId: string, nuevaFraccion: number) => {
-    setRegistrosEditados(prev => prev.map(r => {
-      if ((r.id || r._isNew) && (r.id === registroId || `new-${registrosEditados.indexOf(r)}` === registroId)) {
-        const nuevoCosto = recalcularCostoJornal(r, nuevaFraccion);
-        return { ...r, fraccion_jornal: nuevaFraccion, costo_jornal: nuevoCosto, _modified: true };
-      }
-      return r;
-    }));
+    setRegistrosEditados((prev) =>
+      prev.map((r, i) => {
+        const key = r.id || `new-${i}`;
+        if (key === registroId) {
+          const nuevoCosto = recalcularCostoJornal(r, nuevaFraccion);
+          return { ...r, fraccion_jornal: nuevaFraccion, costo_jornal: nuevoCosto, _modified: true };
+        }
+        return r;
+      }),
+    );
     setEditandoRegistro(null);
   };
 
@@ -418,19 +464,17 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
    * Marcar registro para eliminar
    */
   const eliminarRegistro = (index: number) => {
-    setRegistrosEditados(prev => prev.map((r, i) =>
-      i === index ? { ...r, _deleted: true } : r
-    ));
+    setRegistrosEditados((prev) => prev.map((r, i) => (i === index ? { ...r, _deleted: true } : r)));
   };
 
   /**
    * Agregar nuevo registro de trabajo
    */
   const agregarRegistro = () => {
-    const trabajador = trabajadoresDisponibles.find(t => t.id === nuevoRegistro.trabajador_id);
+    const trabajador = trabajadoresDisponibles.find((t) => t.id === nuevoRegistro.trabajador_id);
     if (!trabajador || !nuevoRegistro.lote_id) return;
 
-    const lote = lotes.find(l => l.lote_id === nuevoRegistro.lote_id);
+    const lote = lotes.find((l) => l.lote_id === nuevoRegistro.lote_id);
 
     const nuevoReg: RegistroTrabajoCierre = {
       tarea_id: resumenLabores?.tarea_id || aplicacion.tarea_id || '',
@@ -457,41 +501,43 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
 
     nuevoReg.costo_jornal = recalcularCostoJornal(nuevoReg, nuevoRegistro.fraccion_jornal);
 
-    setRegistrosEditados(prev => [...prev, nuevoReg]);
+    setRegistrosEditados((prev) => [...prev, nuevoReg]);
     setMostrarAgregarRegistro(false);
-    setNuevoRegistro({ trabajador_id: '', trabajador_tipo: 'empleado', lote_id: '', fecha_trabajo: obtenerFechaHoy(), fraccion_jornal: 1.0 });
+    setNuevoRegistro({
+      trabajador_id: '',
+      trabajador_tipo: 'empleado',
+      lote_id: '',
+      fecha_trabajo: datosFinales.fechaFinReal || obtenerFechaHoy(),
+      fraccion_jornal: 1.0,
+    });
   };
 
   /**
-   * CERRAR APLICACIÓN
+   * CERRAR APLICACIÓN — secuencia de escrituras sin transacción SQL real. No se toca el orden
+   * ni el manejo de errores (fuera de alcance de W03 v2, ver el `.md` §9 riesgo #1).
    */
   const cerrarAplicacion = async () => {
     try {
       setProcesando(true);
 
-      const registrosActivos = registrosEditados.filter(r => !r._deleted);
+      const registrosActivos = registrosEditados.filter((r) => !r._deleted);
 
-      // Calcular costos desde registros de trabajo
       const totalJornalesLabor = registrosActivos.reduce((s, r) => s + r.fraccion_jornal, 0);
       const costoManoObraReal = registrosActivos.reduce((s, r) => s + r.costo_jornal, 0);
       const valorJornalPromedio = totalJornalesLabor > 0 ? costoManoObraReal / totalJornalesLabor : 0;
 
-      // Calcular costos de insumos
       const totalArbolesCalc = lotes.reduce((sum, lote) => sum + lote.arboles, 0);
-      const costoInsumosCalc = movimientos.reduce(
-        (sum, mov) => sum + mov.cantidad_utilizada * mov.costo_unitario,
-        0
-      );
+      const costoInsumosCalc = movimientos.reduce((sum, mov) => sum + mov.cantidad_utilizada * mov.costo_unitario, 0);
       const costoTotalCalc = costoInsumosCalc + costoManoObraReal;
       const costoPorArbolCalc = totalArbolesCalc > 0 ? costoTotalCalc / totalArbolesCalc : 0;
 
-      // Calcular días de aplicación
       const fechaInicio = new Date(datosFinales.fechaInicioReal);
       const fechaFin = new Date(datosFinales.fechaFinReal);
       const diasAplicacion = Math.ceil((fechaFin.getTime() - fechaInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-      // Obtener usuario actual
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
       // 0. Persistir ediciones de registros_trabajo
       for (const reg of registrosEditados) {
@@ -506,14 +552,18 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
             fecha_trabajo: reg.fecha_trabajo,
             fraccion_jornal: reg.fraccion_jornal.toString(),
             costo_jornal: reg.costo_jornal,
-            valor_jornal_empleado: reg.tarifa_jornal || (reg.salario ? Math.round((reg.salario + (reg.prestaciones || 0) + (reg.auxilios || 0)) / ((reg.horas_semanales || 48) * 4.33) * 8) : 0),
+            valor_jornal_empleado:
+              reg.tarifa_jornal ||
+              (reg.salario
+                ? Math.round(((reg.salario + (reg.prestaciones || 0) + (reg.auxilios || 0)) / ((reg.horas_semanales || 48) * 4.33)) * 8)
+                : 0),
             observaciones: reg.observaciones || null,
           } as any);
         } else if (reg._modified && reg.id && !reg._deleted) {
-          await supabase.from('registros_trabajo').update({
-            fraccion_jornal: reg.fraccion_jornal.toString() as any,
-            costo_jornal: reg.costo_jornal,
-          }).eq('id', reg.id);
+          await supabase
+            .from('registros_trabajo')
+            .update({ fraccion_jornal: reg.fraccion_jornal.toString() as any, costo_jornal: reg.costo_jornal })
+            .eq('id', reg.id);
         }
       }
 
@@ -569,26 +619,17 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
 
       // 4. CONSOLIDAR INVENTARIO DE PRODUCTOS APLICADOS
       if (movimientos.length > 0) {
-
-        // Agrupar movimientos por producto
         const consolidado = new Map<string, { nombre: string; cantidad: number }>();
 
         movimientos.forEach((mov) => {
           if (!consolidado.has(mov.producto_id)) {
-            consolidado.set(mov.producto_id, {
-              nombre: mov.producto_nombre,
-              cantidad: 0,
-            });
+            consolidado.set(mov.producto_id, { nombre: mov.producto_nombre, cantidad: 0 });
           }
-
           const item = consolidado.get(mov.producto_id)!;
           item.cantidad += mov.cantidad_utilizada;
         });
 
-
-        // Para cada producto: actualizar inventario y crear movimiento
         for (const [productoId, { nombre, cantidad }] of consolidado.entries()) {
-          // a) Obtener datos actuales del producto
           const { data: producto, error: errorProd } = await supabase
             .from('productos')
             .select('cantidad_actual, unidad_medida, precio_unitario')
@@ -602,7 +643,6 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
           const saldoAnterior = producto.cantidad_actual || 0;
           const saldoNuevo = saldoAnterior - cantidad;
 
-          // b) Actualizar inventario
           const { error: errorUpdateInv } = await supabase
             .from('productos')
             .update({ cantidad_actual: saldoNuevo })
@@ -612,889 +652,313 @@ export function CierreAplicacion({ aplicacion, onClose, onCerrado }: CierreAplic
             throw new Error(`Error actualizando inventario de ${nombre}`);
           }
 
-          // c) Crear movimiento de salida
-          const { error: errorMov } = await supabase
-            .from('movimientos_inventario')
-            .insert({
-              fecha_movimiento: datosFinales.fechaFinReal,
-              producto_id: productoId,
-              tipo_movimiento: 'Salida por Aplicación',
-              cantidad: cantidad,
-              unidad: producto.unidad_medida,
-              lote_aplicacion: lotes.map(l => l.nombre).join(', '),
-              aplicacion_id: aplicacion.id,
-              saldo_anterior: saldoAnterior,
-              saldo_nuevo: saldoNuevo,
-              valor_movimiento: cantidad * (producto.precio_unitario || 0),
-              responsable: user?.email,
-              observaciones: `Cierre de aplicación: ${aplicacion.nombre_aplicacion}`,
-              provisional: false
-            });
+          const { error: errorMov } = await supabase.from('movimientos_inventario').insert({
+            fecha_movimiento: datosFinales.fechaFinReal,
+            producto_id: productoId,
+            tipo_movimiento: 'Salida por Aplicación',
+            cantidad: cantidad,
+            unidad: producto.unidad_medida,
+            lote_aplicacion: lotes.map((l) => l.nombre).join(', '),
+            aplicacion_id: aplicacion.id,
+            saldo_anterior: saldoAnterior,
+            saldo_nuevo: saldoNuevo,
+            valor_movimiento: cantidad * (producto.precio_unitario || 0),
+            responsable: user?.email,
+            observaciones: `Cierre de aplicación: ${aplicacion.nombre_aplicacion}`,
+            provisional: false,
+          });
 
           if (errorMov) {
             throw new Error(`Error registrando movimiento de ${nombre}`);
           }
-
         }
-
       }
 
-      onCerrado();
+      draft.clearDraft();
+      setConfirmDialogOpen(false);
+      navigate('/aplicaciones');
     } catch (err: any) {
       setError('Error al cerrar la aplicación: ' + err.message);
+      setConfirmDialogOpen(false);
     } finally {
       setProcesando(false);
     }
   };
 
-  const formatearMoneda = (valor: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      minimumFractionDigits: 0,
-    }).format(valor);
+  const handleDescargarPDF = async () => {
+    const fechaInicio = new Date(datosFinales.fechaInicioReal);
+    const fechaFin = new Date(datosFinales.fechaFinReal);
+    const diasCalc = Math.ceil((fechaFin.getTime() - fechaInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const valorJornalProm = totalJornales > 0 ? costoManoObra / totalJornales : 0;
+    const arbolesJornal = totalJornales > 0 ? totalArboles / totalJornales : 0;
+
+    await generarPDFReporteCierre({
+      nombre: aplicacion.nombre_aplicacion || '',
+      tipo_aplicacion: aplicacion.tipo_aplicacion || '',
+      proposito: aplicacion.proposito ?? undefined,
+      fecha_inicio_planeada: aplicacion.fecha_inicio_planeada ?? undefined,
+      fecha_inicio_ejecucion: datosFinales.fechaInicioReal,
+      fecha_cierre: datosFinales.fechaFinReal,
+      dias_aplicacion: diasCalc,
+      lotes: lotes.map((l) => ({ nombre: l.nombre, arboles: l.arboles })),
+      total_arboles: totalArboles,
+      costo_total_insumos: costoInsumos,
+      costo_total_mano_obra: costoManoObra,
+      costo_total: costoTotal,
+      costo_por_arbol: costoPorArbol,
+      jornales_utilizados: totalJornales,
+      valor_jornal: Math.round(valorJornalProm),
+      arboles_por_jornal: arbolesJornal,
+      comparacion_productos: resumenInsumos.map((i) => {
+        const diferencia = i.aplicado - i.planeado;
+        const porcentajeDesviacion = i.planeado > 0 ? (diferencia / i.planeado) * 100 : 0;
+        let costoProducto = 0;
+        movimientos.forEach((mov) => {
+          if (mov.producto_nombre === i.nombre) {
+            costoProducto += mov.cantidad_utilizada * mov.costo_unitario;
+          }
+        });
+        return {
+          producto_nombre: i.nombre,
+          producto_unidad: i.unidad,
+          cantidad_planeada: i.planeado,
+          cantidad_real: i.aplicado,
+          diferencia,
+          porcentaje_desviacion: porcentajeDesviacion,
+          costo_total: costoProducto,
+        };
+      }),
+      observaciones_cierre: datosFinales.observaciones || undefined,
+    });
   };
 
   // Cálculos derivados
   const totalArboles = lotes.reduce((sum, lote) => sum + lote.arboles, 0);
-  const costoInsumos = movimientos.reduce(
-    (sum, mov) => sum + mov.cantidad_utilizada * mov.costo_unitario,
-    0
-  );
-  const registrosActivos = registrosEditados.filter(r => !r._deleted);
-  const totalJornales = registrosActivos.reduce((s, r) => s + r.fraccion_jornal, 0);
-  const costoManoObra = registrosActivos.reduce((s, r) => s + r.costo_jornal, 0);
+  const costoInsumos = movimientos.reduce((sum, mov) => sum + mov.cantidad_utilizada * mov.costo_unitario, 0);
+  const registrosActivos = useMemo(() => registrosEditados.filter((r) => !r._deleted), [registrosEditados]);
+  const kpis = useMemo(() => calcularKPIsLabores(registrosActivos), [registrosActivos]);
+  const { totalJornales, costoManoObra } = kpis;
   const costoTotal = costoInsumos + costoManoObra;
   const costoPorArbol = totalArboles > 0 ? costoTotal / totalArboles : 0;
 
-  // Agrupar registros activos por lote para display
-  const registrosPorLote = new Map<string, { lote_nombre: string; registros: (RegistroTrabajoCierre & { _index: number })[] }>();
-  registrosEditados.forEach((r, index) => {
-    if (r._deleted) return;
-    const key = r.lote_id;
-    if (!registrosPorLote.has(key)) {
-      registrosPorLote.set(key, { lote_nombre: r.lote_nombre, registros: [] });
-    }
-    registrosPorLote.get(key)!.registros.push({ ...r, _index: index });
-  });
+  const registrosPorLote = useMemo(() => agruparRegistrosPorLote(registrosEditados), [registrosEditados]);
+
+  const excepciones = useMemo(
+    () => calcularExcepcionesCierre(resumenInsumos, registrosActivos, lotes, tieneTarea),
+    [resumenInsumos, registrosActivos, lotes, tieneTarea],
+  );
+
+  const insumosParaDialogo = formatearListaConY(
+    resumenInsumos.map((i) => `${i.nombre} (${formatearNumero(i.aplicado, 2)} ${i.unidad})`),
+  );
+
+  if (loading) {
+    return (
+      <AplicacionShell titulo="Cerrar Aplicación" subtitulo={aplicacion.nombre_aplicacion ?? undefined} estado={aplicacion.estado}>
+        <div className="flex flex-col items-center justify-center gap-3 py-10">
+          <Spinner className="size-8 text-primary" />
+          <p className="text-sm text-muted-foreground">Cargando datos de la aplicación…</p>
+        </div>
+        <div className="space-y-4">
+          <Skeleton className="h-40 w-full rounded-2xl" />
+          <Skeleton className="h-64 w-full rounded-2xl" />
+          <Skeleton className="h-40 w-full rounded-2xl" />
+        </div>
+      </AplicacionShell>
+    );
+  }
+
+  if (error) {
+    return (
+      <AplicacionShell titulo="Cerrar Aplicación" subtitulo={aplicacion.nombre_aplicacion ?? undefined} estado={aplicacion.estado}>
+        <Empty>
+          <EmptyMedia variant="icon" className="bg-destructive/10 text-destructive">
+            <AlertTriangle />
+          </EmptyMedia>
+          <EmptyTitle>No pudimos preparar el cierre</EmptyTitle>
+          <EmptyDescription>{error}</EmptyDescription>
+          <EmptyContent>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <Button onClick={cargarDatos}>
+                <RefreshCw className="size-4" />
+                Reintentar
+              </Button>
+              <Button variant="outline" onClick={() => navigate('/aplicaciones')}>
+                Volver a Aplicaciones
+              </Button>
+            </div>
+          </EmptyContent>
+        </Empty>
+      </AplicacionShell>
+    );
+  }
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        {/* HEADER */}
-        <div className="bg-gradient-to-r from-primary to-secondary px-6 py-4 text-white flex items-center justify-between">
-          <div>
-            <h2 className="text-xl">Cerrar Aplicación</h2>
-            <p className="text-sm text-white/90 mt-1">{aplicacion.nombre_aplicacion}</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-white/20 rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <AplicacionShell
+      titulo="Cerrar Aplicación"
+      subtitulo={aplicacion.nombre_aplicacion ?? undefined}
+      estado={aplicacion.estado}
+    >
+      <div className="space-y-6 pb-6">
+        <FormDraftBanner
+          variant="available"
+          show={draft.hasDraft}
+          onRestore={handleRestoreDraft}
+          onDiscard={draft.discardDraft}
+        />
 
-        {/* STEPPER */}
-        <div className="bg-gray-50 px-6 py-3 border-b border-gray-200">
-          <div className="flex items-center justify-center gap-2">
-            <div className={`flex items-center gap-2 ${paso === 'revision' ? 'text-primary' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${paso === 'revision' ? 'bg-primary text-white' : 'bg-gray-200'}`}>
-                1
-              </div>
-              <span className="text-sm hidden sm:inline">Insumos</span>
-            </div>
+        <SeccionInsumosCierre
+          tipoAplicacion={aplicacion.tipo_aplicacion}
+          totalLotes={lotes.length}
+          totalArboles={totalArboles}
+          proposito={aplicacion.proposito}
+          resumenInsumos={resumenInsumos}
+          canecasPlaneadas={canecasPlaneadas}
+          canecasAplicadas={canecasAplicadas}
+        />
 
-            <ChevronRight className="w-4 h-4 text-gray-400" />
+        <SeccionLaboresCierre
+          lotes={lotes}
+          tieneTarea={tieneTarea}
+          registrosPorLote={registrosPorLote}
+          kpis={kpis}
+          excepciones={excepciones}
+          editandoRegistro={editandoRegistro}
+          onIniciarEdicion={setEditandoRegistro}
+          onCancelarEdicion={() => setEditandoRegistro(null)}
+          onEditarFraccion={editarFraccion}
+          onEliminarRegistro={eliminarRegistro}
+          mostrarAgregarRegistro={mostrarAgregarRegistro}
+          onAbrirAgregarRegistro={handleAbrirAgregarRegistro}
+          onCancelarAgregarRegistro={() => setMostrarAgregarRegistro(false)}
+          nuevoRegistro={nuevoRegistro}
+          onCambiarNuevoRegistro={(patch) => setNuevoRegistro((prev) => ({ ...prev, ...patch }))}
+          onConfirmarAgregarRegistro={agregarRegistro}
+          trabajadoresDisponibles={trabajadoresDisponibles}
+          fechaInicioReal={datosFinales.fechaInicioReal}
+          fechaFinReal={datosFinales.fechaFinReal}
+          fuenteFechas={fuenteFechas}
+          onCambiarFechaInicio={(v) => setDatosFinales((prev) => ({ ...prev, fechaInicioReal: v }))}
+          onCambiarFechaFin={(v) => setDatosFinales((prev) => ({ ...prev, fechaFinReal: v }))}
+          observaciones={datosFinales.observaciones}
+          onCambiarObservaciones={(v) => setDatosFinales((prev) => ({ ...prev, observaciones: v }))}
+        />
 
-            <div className={`flex items-center gap-2 ${paso === 'datos-finales' ? 'text-primary' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${paso === 'datos-finales' ? 'bg-primary text-white' : 'bg-gray-200'}`}>
-                2
-              </div>
-              <span className="text-sm hidden sm:inline">Labores</span>
-            </div>
-
-            <ChevronRight className="w-4 h-4 text-gray-400" />
-
-            <div className={`flex items-center gap-2 ${paso === 'confirmacion' ? 'text-primary' : 'text-gray-400'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${paso === 'confirmacion' ? 'bg-primary text-white' : 'bg-gray-200'}`}>
-                3
-              </div>
-              <span className="text-sm hidden sm:inline">Confirmación</span>
-            </div>
-          </div>
-        </div>
-
-        {/* CONTENIDO */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {loading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-            </div>
-          ) : error ? (
-            <div className="bg-red-50 border-2 border-red-200 text-red-700 px-6 py-4 rounded-xl">
-              <p className="font-medium">Error</p>
-              <p className="text-sm mt-1">{error}</p>
-            </div>
-          ) : (
-            <>
-              {/* ========================================= */}
-              {/* PASO 1: REVISIÓN DE INSUMOS */}
-              {/* ========================================= */}
-              {paso === 'revision' && (
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-lg text-foreground mb-4">Resumen de la Aplicación</h3>
-
-                    {/* Información General */}
-                    <div className="bg-gradient-to-br from-primary/5 to-secondary/5 border border-primary/20 rounded-xl p-5 mb-4">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div>
-                          <p className="text-xs text-brand-brown/70 mb-1">Tipo</p>
-                          <p className="text-sm text-foreground font-medium">
-                            {aplicacion.tipo_aplicacion === 'Fumigación' ? 'Fumigación' :
-                             aplicacion.tipo_aplicacion === 'Fertilización' ? 'Fertilización' : 'Drench'}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-brand-brown/70 mb-1">Lotes</p>
-                          <p className="text-sm text-foreground font-medium">{lotes.length} lotes</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-brand-brown/70 mb-1">Total Árboles</p>
-                          <p className="text-sm text-foreground font-medium">{totalArboles.toLocaleString()}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-brand-brown/70 mb-1">Propósito</p>
-                          <p className="text-sm text-foreground font-medium truncate">{aplicacion.proposito || 'No especificado'}</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Tabla de Insumos */}
-                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                      <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                        <h4 className="text-sm text-foreground font-medium">Insumos Utilizados</h4>
-                      </div>
-
-                      {resumenInsumos.length === 0 ? (
-                        <div className="p-8 text-center">
-                          <p className="text-sm text-brand-brown/70">No hay insumos registrados</p>
-                        </div>
-                      ) : (
-                        <div className="overflow-x-auto">
-                          <table className="w-full">
-                            <thead className="bg-gray-50">
-                              <tr>
-                                <th className="px-4 py-3 text-left text-xs text-brand-brown/70">Producto</th>
-                                <th className="px-4 py-3 text-right text-xs text-brand-brown/70">Planeado</th>
-                                <th className="px-4 py-3 text-right text-xs text-brand-brown/70">Aplicado</th>
-                                <th className="px-4 py-3 text-right text-xs text-brand-brown/70">Diferencia</th>
-                                <th className="px-4 py-3 text-center text-xs text-brand-brown/70">Estado</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                              {resumenInsumos.map((insumo, index) => {
-                                const diferencia = insumo.aplicado - insumo.planeado;
-                                const esCritico = insumo.planeado > 0 && Math.abs(diferencia / insumo.planeado) > 0.15;
-
-                                return (
-                                  <tr key={index} className="hover:bg-gray-50 transition-colors">
-                                    <td className="px-4 py-3 text-sm text-foreground">
-                                      {insumo.nombre}
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-brand-brown/70 text-right">
-                                      {insumo.planeado.toFixed(2)} {insumo.unidad}
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-foreground font-medium text-right">
-                                      {insumo.aplicado.toFixed(2)} {insumo.unidad}
-                                    </td>
-                                    <td className={`px-4 py-3 text-sm text-right ${
-                                      diferencia > 0 ? 'text-orange-600' : diferencia < 0 ? 'text-blue-600' : 'text-gray-600'
-                                    }`}>
-                                      {diferencia > 0 ? '+' : ''}{diferencia.toFixed(2)} {insumo.unidad}
-                                    </td>
-                                    <td className="px-4 py-3 text-center">
-                                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs ${
-                                        esCritico
-                                          ? 'bg-red-100 text-red-700'
-                                          : 'bg-green-100 text-green-700'
-                                      }`}>
-                                        {esCritico ? 'Desviado' : 'OK'}
-                                      </span>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Tabla de Canecas (solo para fumigación) */}
-                    {aplicacion.tipo_aplicacion === 'Fumigación' && (
-                      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mt-4">
-                        <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
-                          <h4 className="text-sm text-foreground font-medium">Control de Canecas</h4>
-                        </div>
-                        <div className="p-4">
-                          <div className="grid grid-cols-3 gap-4">
-                            <div className="text-center">
-                              <p className="text-xs text-brand-brown/70 mb-1">Planeadas</p>
-                              <p className="text-2xl text-foreground font-semibold">{canecasPlaneadas}</p>
-                            </div>
-                            <div className="text-center">
-                              <p className="text-xs text-brand-brown/70 mb-1">Aplicadas</p>
-                              <p className="text-2xl text-primary font-semibold">{canecasAplicadas}</p>
-                            </div>
-                            <div className="text-center">
-                              <p className="text-xs text-brand-brown/70 mb-1">Diferencia</p>
-                              <p className={`text-2xl font-semibold ${
-                                canecasAplicadas - canecasPlaneadas > 0 ? 'text-orange-600' :
-                                canecasAplicadas - canecasPlaneadas < 0 ? 'text-blue-600' : 'text-gray-600'
-                              }`}>
-                                {canecasAplicadas - canecasPlaneadas > 0 ? '+' : ''}
-                                {canecasAplicadas - canecasPlaneadas}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* ========================================= */}
-              {/* PASO 2: REVISIÓN DE LABORES */}
-              {/* ========================================= */}
-              {paso === 'datos-finales' && (
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-lg text-foreground mb-2">Revisión de Labores</h3>
-                    <p className="text-sm text-brand-brown/70 mb-4">
-                      Revisa los jornales registrados durante la ejecución. Puedes editar o agregar registros faltantes.
-                    </p>
-
-                    {/* Tarjetas resumen */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                      <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-center">
-                        <Users className="w-5 h-5 text-primary mx-auto mb-1" />
-                        <p className="text-2xl text-foreground font-bold">{totalJornales.toFixed(1)}</p>
-                        <p className="text-xs text-brand-brown/70">Jornales</p>
-                      </div>
-                      <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-center">
-                        <p className="text-2xl text-foreground font-bold">{formatearMoneda(costoManoObra)}</p>
-                        <p className="text-xs text-brand-brown/70">Costo Mano de Obra</p>
-                      </div>
-                      <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-center">
-                        <p className="text-2xl text-foreground font-bold">
-                          {new Set(registrosActivos.map(r => r.empleado_id || r.contratista_id)).size}
-                        </p>
-                        <p className="text-xs text-brand-brown/70">Trabajadores</p>
-                      </div>
-                      <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-center">
-                        <Calendar className="w-5 h-5 text-primary mx-auto mb-1" />
-                        <p className="text-2xl text-foreground font-bold">
-                          {new Set(registrosActivos.map(r => r.fecha_trabajo)).size}
-                        </p>
-                        <p className="text-xs text-brand-brown/70">Días trabajados</p>
-                      </div>
-                    </div>
-
-                    {/* Warning si no hay tarea vinculada */}
-                    {!tieneTarea && (
-                      <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4 mb-4">
-                        <div className="flex items-start gap-3">
-                          <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5" />
-                          <div>
-                            <p className="text-sm text-yellow-800 font-medium">
-                              Esta aplicación no tiene tarea de labor vinculada
-                            </p>
-                            <p className="text-xs text-yellow-700 mt-1">
-                              Los jornales se registraron antes de implementar la vinculación automática.
-                              Puedes agregar registros manualmente usando el botón de abajo.
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Warning si no hay registros */}
-                    {tieneTarea && registrosActivos.length === 0 && (
-                      <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4 mb-4">
-                        <div className="flex items-start gap-3">
-                          <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5" />
-                          <div>
-                            <p className="text-sm text-yellow-800 font-medium">
-                              No hay jornales registrados para esta aplicación
-                            </p>
-                            <p className="text-xs text-yellow-700 mt-1">
-                              Puedes agregar registros de trabajo manualmente o volver al módulo de Labores para registrarlos antes de cerrar.
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Tabla de registros por lote */}
-                    {registrosPorLote.size > 0 && (
-                      <div className="space-y-3 mb-6">
-                        {Array.from(registrosPorLote.entries()).map(([loteId, { lote_nombre, registros: regsLote }]) => {
-                          const totalLote = regsLote.reduce((s, r) => s + r.fraccion_jornal, 0);
-                          const costoLote = regsLote.reduce((s, r) => s + r.costo_jornal, 0);
-                          const isExpanded = loteExpandido === loteId || registrosPorLote.size === 1;
-
-                          return (
-                            <div key={loteId} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                              {/* Lote header */}
-                              <button
-                                onClick={() => setLoteExpandido(isExpanded && registrosPorLote.size > 1 ? null : loteId)}
-                                className="w-full px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between hover:bg-gray-100 transition-colors"
-                              >
-                                <div className="flex items-center gap-3">
-                                  <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                                  <span className="text-sm text-foreground font-medium">{lote_nombre}</span>
-                                  <span className="text-xs text-brand-brown/60">
-                                    {lotes.find(l => l.lote_id === loteId)?.arboles.toLocaleString()} árboles
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                  <span className="text-sm text-foreground font-medium">{totalLote.toFixed(1)} jornales</span>
-                                  <span className="text-sm text-primary font-semibold">{formatearMoneda(costoLote)}</span>
-                                </div>
-                              </button>
-
-                              {/* Registros del lote */}
-                              {isExpanded && (
-                                <div className="overflow-x-auto">
-                                  <table className="w-full">
-                                    <thead className="bg-gray-50/50">
-                                      <tr>
-                                        <th className="px-4 py-2 text-left text-xs text-brand-brown/70">Fecha</th>
-                                        <th className="px-4 py-2 text-left text-xs text-brand-brown/70">Trabajador</th>
-                                        <th className="px-4 py-2 text-center text-xs text-brand-brown/70">Tipo</th>
-                                        <th className="px-4 py-2 text-center text-xs text-brand-brown/70">Fracción</th>
-                                        <th className="px-4 py-2 text-right text-xs text-brand-brown/70">Costo</th>
-                                        <th className="px-4 py-2 text-center text-xs text-brand-brown/70 w-20">Acciones</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-100">
-                                      {regsLote.map((reg) => {
-                                        const regKey = reg.id || `new-${reg._index}`;
-                                        return (
-                                          <tr key={regKey} className={`hover:bg-gray-50 transition-colors ${reg._isNew ? 'bg-green-50/30' : ''}`}>
-                                            <td className="px-4 py-2 text-sm text-foreground">
-                                              {formatearFecha(reg.fecha_trabajo)}
-                                            </td>
-                                            <td className="px-4 py-2 text-sm text-foreground">
-                                              {reg.trabajador_nombre}
-                                            </td>
-                                            <td className="px-4 py-2 text-center">
-                                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs ${
-                                                reg.trabajador_tipo === 'empleado'
-                                                  ? 'bg-blue-100 text-blue-700'
-                                                  : 'bg-purple-100 text-purple-700'
-                                              }`}>
-                                                {reg.trabajador_tipo === 'empleado' ? 'Emp' : 'Cont'}
-                                              </span>
-                                            </td>
-                                            <td className="px-4 py-2 text-center">
-                                              {editandoRegistro === regKey ? (
-                                                <select
-                                                  autoFocus
-                                                  value={reg.fraccion_jornal}
-                                                  onChange={(e) => editarFraccion(regKey, parseFloat(e.target.value))}
-                                                  onBlur={() => setEditandoRegistro(null)}
-                                                  className="w-20 px-1 py-0.5 text-center border border-primary rounded text-sm"
-                                                >
-                                                  {FRACCION_OPTIONS.map(f => (
-                                                    <option key={f} value={f}>{f}</option>
-                                                  ))}
-                                                </select>
-                                              ) : (
-                                                <button
-                                                  onClick={() => setEditandoRegistro(regKey)}
-                                                  className="text-sm text-foreground font-medium hover:text-primary transition-colors cursor-pointer"
-                                                  title="Clic para editar"
-                                                >
-                                                  {reg.fraccion_jornal}
-                                                </button>
-                                              )}
-                                            </td>
-                                            <td className="px-4 py-2 text-sm text-right text-foreground">
-                                              {formatearMoneda(reg.costo_jornal)}
-                                              {reg.costo_jornal === 0 && (
-                                                <AlertTriangle className="w-3 h-3 text-yellow-500 inline ml-1" />
-                                              )}
-                                            </td>
-                                            <td className="px-4 py-2 text-center">
-                                              <div className="flex items-center justify-center gap-1">
-                                                <button
-                                                  onClick={() => setEditandoRegistro(regKey)}
-                                                  className="p-1 text-gray-400 hover:text-primary transition-colors"
-                                                  title="Editar fracción"
-                                                >
-                                                  <Edit3 className="w-3.5 h-3.5" />
-                                                </button>
-                                                <button
-                                                  onClick={() => eliminarRegistro(reg._index)}
-                                                  className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                                                  title="Eliminar"
-                                                >
-                                                  <Trash2 className="w-3.5 h-3.5" />
-                                                </button>
-                                              </div>
-                                            </td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* Botón agregar registro */}
-                    {!mostrarAgregarRegistro ? (
-                      <button
-                        onClick={() => { setMostrarAgregarRegistro(true); cargarTrabajadores(); }}
-                        className="w-full py-3 border-2 border-dashed border-primary/30 text-primary rounded-xl hover:bg-primary/5 transition-colors flex items-center justify-center gap-2 text-sm"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Agregar registro de trabajo faltante
-                      </button>
-                    ) : (
-                      <div className="bg-white border-2 border-primary/30 rounded-xl p-4">
-                        <h4 className="text-sm text-foreground font-medium mb-3">Nuevo Registro de Trabajo</h4>
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                          <div>
-                            <label className="block text-xs text-brand-brown/70 mb-1">Trabajador</label>
-                            <select
-                              value={nuevoRegistro.trabajador_id}
-                              onChange={(e) => {
-                                const t = trabajadoresDisponibles.find(t => t.id === e.target.value);
-                                setNuevoRegistro(prev => ({
-                                  ...prev,
-                                  trabajador_id: e.target.value,
-                                  trabajador_tipo: t?.tipo || 'empleado',
-                                }));
-                              }}
-                              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                            >
-                              <option value="">Seleccionar...</option>
-                              <optgroup label="Empleados">
-                                {trabajadoresDisponibles.filter(t => t.tipo === 'empleado').map(t => (
-                                  <option key={t.id} value={t.id}>{t.nombre}</option>
-                                ))}
-                              </optgroup>
-                              <optgroup label="Contratistas">
-                                {trabajadoresDisponibles.filter(t => t.tipo === 'contratista').map(t => (
-                                  <option key={t.id} value={t.id}>{t.nombre}</option>
-                                ))}
-                              </optgroup>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-xs text-brand-brown/70 mb-1">Lote</label>
-                            <select
-                              value={nuevoRegistro.lote_id}
-                              onChange={(e) => setNuevoRegistro(prev => ({ ...prev, lote_id: e.target.value }))}
-                              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                            >
-                              <option value="">Seleccionar...</option>
-                              {lotes.map(l => (
-                                <option key={l.lote_id} value={l.lote_id}>{l.nombre}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-xs text-brand-brown/70 mb-1">Fecha</label>
-                            <input
-                              type="date"
-                              value={nuevoRegistro.fecha_trabajo}
-                              onChange={(e) => setNuevoRegistro(prev => ({ ...prev, fecha_trabajo: e.target.value }))}
-                              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs text-brand-brown/70 mb-1">Fracción</label>
-                            <select
-                              value={nuevoRegistro.fraccion_jornal}
-                              onChange={(e) => setNuevoRegistro(prev => ({ ...prev, fraccion_jornal: parseFloat(e.target.value) }))}
-                              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                            >
-                              {FRACCION_OPTIONS.map(f => (
-                                <option key={f} value={f}>{f}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="flex items-end gap-2">
-                            <button
-                              onClick={agregarRegistro}
-                              disabled={!nuevoRegistro.trabajador_id || !nuevoRegistro.lote_id}
-                              className="px-4 py-1.5 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            >
-                              Agregar
-                            </button>
-                            <button
-                              onClick={() => setMostrarAgregarRegistro(false)}
-                              className="px-3 py-1.5 text-brand-brown/70 rounded-lg text-sm hover:bg-gray-100 transition-colors"
-                            >
-                              Cancelar
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Fechas y Observaciones */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                      <div>
-                        <label className="block text-sm text-brand-brown/70 mb-2">
-                          Fecha Inicio Real
-                        </label>
-                        <input
-                          type="date"
-                          value={datosFinales.fechaInicioReal}
-                          onChange={(e) =>
-                            setDatosFinales({ ...datosFinales, fechaInicioReal: e.target.value })
-                          }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm text-brand-brown/70 mb-2">
-                          Fecha Fin Real
-                        </label>
-                        <input
-                          type="date"
-                          value={datosFinales.fechaFinReal}
-                          onChange={(e) =>
-                            setDatosFinales({ ...datosFinales, fechaFinReal: e.target.value })
-                          }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-4">
-                      <label className="block text-sm text-brand-brown/70 mb-2">
-                        Observaciones de Cierre
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={datosFinales.observaciones}
-                        onChange={(e) =>
-                          setDatosFinales({ ...datosFinales, observaciones: e.target.value })
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                        placeholder="Describe cualquier incidencia, clima, rendimiento del personal, etc..."
-                      />
-                    </div>
-
-                    {/* Resumen de Costos */}
-                    <div className="bg-gradient-to-br from-primary/5 to-secondary/5 border border-primary/20 rounded-xl p-5 mt-6">
-                      <h4 className="text-sm text-foreground font-medium mb-3">Resumen de Costos</h4>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div>
-                          <p className="text-xs text-brand-brown/70 mb-1">Insumos</p>
-                          <p className="text-lg text-foreground font-semibold">
-                            {formatearMoneda(costoInsumos)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-brand-brown/70 mb-1">Mano de Obra</p>
-                          <p className="text-lg text-foreground font-semibold">
-                            {formatearMoneda(costoManoObra)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-brand-brown/70 mb-1">Total</p>
-                          <p className="text-lg text-primary font-bold">
-                            {formatearMoneda(costoTotal)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-brand-brown/70 mb-1">Costo/Árbol</p>
-                          <p className="text-lg text-foreground font-semibold">
-                            {formatearMoneda(costoPorArbol)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* ========================================= */}
-              {/* PASO 3: CONFIRMACIÓN */}
-              {/* ========================================= */}
-              {paso === 'confirmacion' && (
-                <div className="space-y-6">
-                  <div className="bg-gradient-to-br from-primary/5 to-secondary/5 border-2 border-primary/30 rounded-xl p-6">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center">
-                        <Check className="w-6 h-6 text-white" />
-                      </div>
-                      <div>
-                        <h3 className="text-lg text-foreground">Confirmar Cierre</h3>
-                        <p className="text-sm text-brand-brown/70">
-                          Revisa los datos antes de cerrar la aplicación
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Resumen Final */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* Información General */}
-                      <div>
-                        <h4 className="text-sm text-foreground font-medium mb-3">Información General</h4>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-brand-brown/70">Aplicación:</span>
-                            <span className="text-foreground font-medium">{aplicacion.nombre_aplicacion}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-brand-brown/70">Tipo:</span>
-                            <span className="text-foreground">
-                              {aplicacion.tipo_aplicacion === 'Fumigación' ? 'Fumigación' :
-                               aplicacion.tipo_aplicacion === 'Fertilización' ? 'Fertilización' : 'Drench'}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-brand-brown/70">Lotes:</span>
-                            <span className="text-foreground">{lotes.length} lotes</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-brand-brown/70">Árboles:</span>
-                            <span className="text-foreground">{totalArboles.toLocaleString()}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Ejecución */}
-                      <div>
-                        <h4 className="text-sm text-foreground font-medium mb-3">Ejecución</h4>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-brand-brown/70">Inicio:</span>
-                            <span className="text-foreground">{formatearFecha(datosFinales.fechaInicioReal)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-brand-brown/70">Fin:</span>
-                            <span className="text-foreground">{formatearFecha(datosFinales.fechaFinReal)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-brand-brown/70">Jornales registrados:</span>
-                            <span className="text-foreground font-medium">{totalJornales.toFixed(1)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-brand-brown/70">Trabajadores:</span>
-                            <span className="text-foreground">
-                              {new Set(registrosActivos.map(r => r.empleado_id || r.contratista_id)).size}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-brand-brown/70">Días trabajados:</span>
-                            <span className="text-foreground">
-                              {new Set(registrosActivos.map(r => r.fecha_trabajo)).size}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Costos Totales */}
-                    <div className="mt-6 pt-6 border-t-2 border-primary/20">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="text-center">
-                          <p className="text-xs text-brand-brown/70 mb-1">Insumos</p>
-                          <p className="text-base text-foreground font-semibold">
-                            {formatearMoneda(costoInsumos)}
-                          </p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-xs text-brand-brown/70 mb-1">Mano de Obra</p>
-                          <p className="text-base text-foreground font-semibold">
-                            {formatearMoneda(costoManoObra)}
-                          </p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-xs text-brand-brown/70 mb-1">Costo Total</p>
-                          <p className="text-lg text-primary font-bold">
-                            {formatearMoneda(costoTotal)}
-                          </p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-xs text-brand-brown/70 mb-1">Costo/Árbol</p>
-                          <p className="text-base text-foreground font-semibold">
-                            {formatearMoneda(costoPorArbol)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Observaciones */}
-                    {datosFinales.observaciones && (
-                      <div className="mt-6 pt-6 border-t-2 border-primary/20">
-                        <h4 className="text-sm text-foreground font-medium mb-2">Observaciones</h4>
-                        <p className="text-sm text-brand-brown/70 italic">
-                          &ldquo;{datosFinales.observaciones}&rdquo;
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Advertencia */}
-                  <div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
-                    <p className="text-sm text-yellow-800">
-                      <strong>Importante:</strong> Al cerrar esta aplicación se descontarán los insumos del inventario,
-                      se marcará la tarea de labor como completada y no se podrán realizar más modificaciones.
-                    </p>
-                  </div>
-
-                  {/* Botón Descargar Reporte */}
-                  <button
-                    onClick={async () => {
-                      const fechaInicio = new Date(datosFinales.fechaInicioReal);
-                      const fechaFin = new Date(datosFinales.fechaFinReal);
-                      const diasCalc = Math.ceil((fechaFin.getTime() - fechaInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                      const valorJornalProm = totalJornales > 0 ? costoManoObra / totalJornales : 0;
-                      const arbolesJornal = totalJornales > 0 ? totalArboles / totalJornales : 0;
-
-                      // Build per-product cost from movimientos
-                      const costosPorProducto = new Map<string, number>();
-                      movimientos.forEach((mov) => {
-                        const prev = costosPorProducto.get(mov.producto_id) || 0;
-                        costosPorProducto.set(mov.producto_id, prev + mov.cantidad_utilizada * mov.costo_unitario);
-                      });
-
-                      await generarPDFReporteCierre({
-                        nombre: aplicacion.nombre_aplicacion || '',
-                        tipo_aplicacion: aplicacion.tipo_aplicacion || '',
-                        proposito: aplicacion.proposito ?? undefined,
-                        fecha_inicio_planeada: aplicacion.fecha_inicio_planeada ?? undefined,
-                        fecha_inicio_ejecucion: datosFinales.fechaInicioReal,
-                        fecha_cierre: datosFinales.fechaFinReal,
-                        dias_aplicacion: diasCalc,
-                        lotes: lotes.map((l) => ({ nombre: l.nombre, arboles: l.arboles })),
-                        total_arboles: totalArboles,
-                        costo_total_insumos: costoInsumos,
-                        costo_total_mano_obra: costoManoObra,
-                        costo_total: costoTotal,
-                        costo_por_arbol: costoPorArbol,
-                        jornales_utilizados: totalJornales,
-                        valor_jornal: Math.round(valorJornalProm),
-                        arboles_por_jornal: arbolesJornal,
-                        comparacion_productos: resumenInsumos.map((i) => {
-                          const diferencia = i.aplicado - i.planeado;
-                          const porcentajeDesviacion = i.planeado > 0 ? (diferencia / i.planeado) * 100 : 0;
-                          // Find product cost from movimientos
-                          let costoProducto = 0;
-                          movimientos.forEach((mov) => {
-                            if (mov.producto_nombre === i.nombre) {
-                              costoProducto += mov.cantidad_utilizada * mov.costo_unitario;
-                            }
-                          });
-                          return {
-                            producto_nombre: i.nombre,
-                            producto_unidad: i.unidad,
-                            cantidad_planeada: i.planeado,
-                            cantidad_real: i.aplicado,
-                            diferencia,
-                            porcentaje_desviacion: porcentajeDesviacion,
-                            costo_total: costoProducto,
-                          };
-                        }),
-                        observaciones_cierre: datosFinales.observaciones || undefined,
-                      });
-                    }}
-                    className="w-full px-6 py-3 border-2 border-primary text-primary rounded-lg hover:bg-primary/5 transition-all flex items-center justify-center gap-2"
-                  >
-                    <Download className="w-5 h-5" />
-                    Descargar Reporte de Cierre (PDF)
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* FOOTER - BOTONES */}
-        {!loading && !error && (
-          <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-            <div>
-              {paso !== 'revision' && (
-                <button
-                  onClick={() => {
-                    if (paso === 'datos-finales') setPaso('revision');
-                    if (paso === 'confirmacion') setPaso('datos-finales');
-                  }}
-                  className="px-4 py-2 text-brand-brown/70 hover:text-foreground transition-colors"
-                >
-                  Anterior
-                </button>
-              )}
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                onClick={onClose}
-                className="px-4 py-2 border border-gray-300 text-brand-brown/70 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                Cancelar
-              </button>
-
-              {paso === 'revision' && (
-                <button
-                  onClick={() => setPaso('datos-finales')}
-                  className="px-6 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:from-primary-dark hover:to-secondary-dark transition-all flex items-center gap-2"
-                >
-                  Continuar
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              )}
-
-              {paso === 'datos-finales' && (
-                <button
-                  onClick={() => setPaso('confirmacion')}
-                  className="px-6 py-2 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:from-primary-dark hover:to-secondary-dark transition-all flex items-center gap-2"
-                >
-                  Continuar
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              )}
-
-              {paso === 'confirmacion' && (
-                <button
-                  onClick={cerrarAplicacion}
-                  disabled={procesando}
-                  className="px-6 py-2 bg-gradient-to-r from-green-600 to-green-500 text-white rounded-lg hover:from-green-700 hover:to-green-600 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {procesando ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      Cerrando...
-                    </>
-                  ) : (
-                    <>
-                      <Check className="w-4 h-4" />
-                      Cerrar Aplicación
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+        <SeccionConfirmarCierre
+          costoInsumos={costoInsumos}
+          costoManoObra={costoManoObra}
+          costoTotal={costoTotal}
+          costoPorArbol={costoPorArbol}
+          onDescargarPDF={handleDescargarPDF}
+        />
       </div>
-    </div>
+
+      {/* Footer único, sin variantes por paso (W03-cierre-v2.md §2) */}
+      <div className="sticky bottom-4 z-10 flex flex-col gap-3 rounded-2xl border bg-card/95 px-5 py-3.5 shadow-lg backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div>
+          <p className="text-[10.5px] uppercase tracking-wide text-muted-foreground">Total del cierre</p>
+          <p className="text-lg font-bold tabular-nums text-primary-dark">{formatearMoneda(costoTotal)}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="flex-1 sm:flex-none"
+            disabled={confirmDialogOpen || procesando}
+            onClick={() => navigate('/aplicaciones')}
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="button"
+            className="flex-1 sm:flex-none"
+            disabled={confirmDialogOpen || procesando}
+            onClick={() => setConfirmDialogOpen(true)}
+          >
+            {procesando ? (
+              <>
+                <Spinner className="size-4" />
+                Cerrando...
+              </>
+            ) : (
+              <>
+                <Check className="size-4" />
+                Cerrar Aplicación
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+
+      {/* AlertDialog de confirmación — copia exacta de v1, aprobada por el dueño, sin cambios. */}
+      <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Cerrar esta aplicación?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. Al confirmar el cierre de &ldquo;
+              {aplicacion.nombre_aplicacion}&rdquo;:
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <ul className="flex flex-col gap-2.5 border-t pt-4 text-sm">
+            {resumenInsumos.length > 0 && (
+              <li className="flex gap-2.5">
+                <Check className="mt-0.5 size-4 shrink-0 text-primary-dark" aria-hidden="true" />
+                <span>
+                  Se descontarán del inventario los{' '}
+                  <b className="font-semibold">{resumenInsumos.length} insumos aplicados</b>:{' '}
+                  {insumosParaDialogo}.
+                </span>
+              </li>
+            )}
+            {aplicacion.tarea_id && (
+              <li className="flex gap-2.5">
+                <Check className="mt-0.5 size-4 shrink-0 text-primary-dark" aria-hidden="true" />
+                <span>
+                  La <b className="font-semibold">tarea de labor</b> vinculada se marcará como{' '}
+                  <b className="font-semibold">Completada</b>.
+                </span>
+              </li>
+            )}
+            <li className="flex gap-2.5">
+              <Check className="mt-0.5 size-4 shrink-0 text-primary-dark" aria-hidden="true" />
+              <span>
+                Quedará registrado un costo total de <b className="font-semibold">{formatearMoneda(costoTotal)}</b>{' '}
+                ({formatearMoneda(costoInsumos)} en insumos + {formatearMoneda(costoManoObra)} en mano de obra).
+              </span>
+            </li>
+            <li className="flex gap-2.5">
+              <Check className="mt-0.5 size-4 shrink-0 text-primary-dark" aria-hidden="true" />
+              <span>
+                La aplicación pasará a estado <b className="font-semibold">Cerrada</b> y no se podrá editar: ni sus
+                insumos, ni sus registros de labor, ni las fechas de ejecución.
+              </span>
+            </li>
+          </ul>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={procesando}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={procesando}
+              onClick={(e) => {
+                e.preventDefault();
+                cerrarAplicacion();
+              }}
+            >
+              {procesando ? (
+                <>
+                  <Spinner className="size-4" />
+                  Cerrando...
+                </>
+              ) : (
+                <>
+                  <Check className="size-4" />
+                  Sí, cerrar aplicación
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </AplicacionShell>
   );
 }
