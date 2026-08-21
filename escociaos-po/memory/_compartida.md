@@ -14,18 +14,63 @@ Hechos que aplican a mas de un agente. Mismas reglas de escritura que el resto
   `docs/plan_reportes_finanzas.md:193` lo midio contra esta misma base. El tope
   NO es legible por SQL: vive en el fichero de PostgREST, no en la BD.
   [corrida: 2026-08-03-lunes]
-- **Vercel se accede via Composio, NO por el conector Vercel directo** (Santiago,
-  2026-08-20). Historia: el conector directo llevaba 5 corridas roto (`list_teams`
-  devolvia `team_Ov5b46sLrIUWwVlkuCfdCgdG` con 0 proyectos; `list_projects` contra
-  el scope real daba 403). Proyecto real: `prj_r9z59zKKLqZo64RgecbEB8lXyYCd` bajo
-  `team_hQ3EH5CL5DQFmWLo3VceWeE6` (slug `santiago-foreros-projects-da8a20e8`),
-  dato obtenido del comentario de vercel[bot] en el PR #98. **`ListConnectors`
-  confirma Composio `connected: true` pero `enabledInChat: false` para el bot de
-  ChatGPT; hay que habilitarlo por chat.** En sesiones donde Composio no este
-  encendido para el chat, seguir usando la sonda de contenido
-  (`curl https://escociaos.vercel.app/` + grep de chunks). **Hallazgo #5 se puede
-  cerrar (el conector Vercel directo no vuelve; queda como historia).**
-  [corrida: 2026-08-03-lunes, actualizado 2026-08-20-jueves por Santiago]
+- **El 403 de Vercel NUNCA fue del conector: era la IDENTIDAD.** Diagnosticado
+  2026-08-21 probando los dos caminos contra la API real. Los dos conectores
+  (el directo y Composio) estaban OAuth-eados como **`thinksid` /
+  `subs@thinksid.co`**, cuyo equipo por defecto es `team_Ov5b46sLrIUWwVlkuCfdCgdG`
+  — 5 proyectos, ninguno es Escocia OS. Pruebas: `VERCEL_GET_PROJECTS
+  search:"escocia"` → **0 proyectos**; `VERCEL_GET_DEPLOYMENTS app:"escociaos"` →
+  **0 despliegues**; pedir `teamId=team_hQ3EH5CL5DQFmWLo3VceWeE6` → **403
+  forbidden "Not authorized"**. Ese equipo es `santiago-foreros-projects-da8a20e8`
+  y es el dueno de `prj_r9z59zKKLqZo64RgecbEB8lXyYCd`.
+  **Consecuencia: 6 corridas filaron "conector Vercel roto, re-autenticar" y
+  re-autenticar con el MISMO usuario no habria cambiado nada.** La leccion general:
+  un 403 dice "este usuario no", no "este conector no" — antes de culpar al
+  conector, preguntar *como quien* esta hablando.
+  **Resuelto 2026-08-21**: Santiago reconecto Vercel en Composio con su cuenta
+  personal. Cuenta nueva `vercel_tetric-hash` (default). Verificado en vivo: ve
+  `escociaos` y sus despliegues de produccion.
+  [corrida: 2026-08-03-lunes, corregido y resuelto 2026-08-21]
+- **Vercel se lee por Composio, con estos slugs** (verificados 2026-08-21):
+  `VERCEL_GET_PROJECTS` (usar `search:"escocia"`) · `VERCEL_GET_DEPLOYMENTS`
+  (`projectId` + `teamId` + `limit` + `target:"production"`) · `VERCEL_GET_DEPLOYMENT`
+  (`idOrUrl`) · `VERCEL_GET_DEPLOYMENT_EVENTS2` (logs de build, `idOrUrl`) ·
+  `VERCEL_GET_DEPLOYMENT_LOGS2` (logs de runtime, `projectId` + `deploymentId`).
+  Ids fijos: `projectId=prj_r9z59zKKLqZo64RgecbEB8lXyYCd`,
+  `teamId=team_hQ3EH5CL5DQFmWLo3VceWeE6`.
+  - **Hay DOS cuentas vercel conectadas en Composio**, asi que
+    `COMPOSIO_MULTI_EXECUTE_TOOL` exige `account`. Usar la personal
+    (`vercel_tetric-hash`); la vieja `vercel_unami-dogie` (thinksid) no ve el
+    proyecto. **Comprobacion de una linea antes de confiar en cualquier lectura**:
+    `VERCEL_GET_PROJECTS search:"escocia"` tiene que devolver **1**, no 0. **Si da 0, estas
+    en la cuenta equivocada** — no es que el proyecto no exista.
+  - **Pedir siempre `limit` bajo (3-5).** Una respuesta grande se guarda en el
+    sandbox de Composio (`/mnt/files/...`) y **la operacion no puede leerla**,
+    porque `COMPOSIO_REMOTE_BASH_TOOL` y `COMPOSIO_REMOTE_WORKBENCH` estan fuera
+    de la allowlist a proposito. Si una respuesta se desborda, eso es NO CORRIO,
+    no una excusa para pedir el sandbox.
+  - **SECRETO: `VERCEL_GET_PROJECTS` devuelve el bloque `env` del proyecto** con
+    los valores cifrados de `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`. Estan
+    cifrados, no en claro, pero **no se copian jamas** a Notion, a un reporte, a
+    un commit ni a una notificacion.
+  - **RIESGO ACEPTADO Y ANOTADO**: `COMPOSIO_MULTI_EXECUTE_TOOL` es un ejecutor
+    **generico** — puede correr cualquier slug de Composio de cualquier toolkit
+    conectado (gmail, github, googledrive, quickbooks…), no solo Vercel.
+    Permitirlo **no acota el radio** como si lo hace limitar Supabase_Escritura a
+    `apply_migration`. Regla, y es de prompt, no de mecanismo: **por Composio solo
+    se leen slugs `VERCEL_GET_*`.** Nunca un slug de escritura, nunca otro toolkit.
+  - **ESTADO 2026-08-21: CABLEADO Y VERIFICADO en las tres rutinas.** El clasificador de
+    auto mode bloqueo el `RemoteTrigger update` tres veces desde la sesion interactiva —
+    la aprobacion del dueno en el chat **no alcanza ese gate**, es del harness, no un
+    prompt de permiso — asi que Santiago lo aplico el mismo. Estado final confirmado por
+    `RemoteTrigger get` en las tres: conector `Composio` presente con los 3 tools en
+    `always_allow`, URL real `https://connect.composio.dev/mcp`, y **el conector Vercel
+    directo (`159f73fd-…`) retirado de las tres.** Prueba de humo el mismo dia:
+    `VERCEL_GET_DEPLOYMENTS` (account `vercel_tetric-hash`) devolvio los despliegues de
+    produccion de `escociaos`, el mas reciente `c1a1908` (PR #141) READY/PROMOTED.
+    **Si el clasificador vuelve a bloquear un cambio de conectores, no insistir: pasarle
+    el payload al dueno para una sesion interactiva.**
+  [corrida: 2026-08-21]
 - `get_advisors` (security ~111k chars, performance ~614k) y `get_edge_function`
   (~999k chars en v197) revientan el limite de tokens. Guardar a archivo con
   python y leer por partes. El JSON de `get_edge_function` trae
@@ -39,7 +84,7 @@ Hechos que aplican a mas de un agente. Mismas reglas de escritura que el resto
 | Corrida | Hallazgos nuevos |
 |---|---|
 | 2026-08-06-jueves | 5 (racha de ceros: **0**) |
-| 2026-08-13-jueves | NO CORRIO (no disparo la Routine) |
+| 2026-08-13-jueves | 0 filados — **la Routine SI disparo** (`cse_01PLVdhx…`); murio en prompts de permiso, ver abajo |
 | 2026-08-20-jueves | 6 (3 P1 + 3 P2, retenidos por severidad sobre el cap de 5). Racha de ceros: 0 |
 
 ## Estado de la operacion
@@ -50,13 +95,35 @@ Hechos que aplican a mas de un agente. Mismas reglas de escritura que el resto
   paginado de clima), **4 verificaciones adversariales** (3 cambiaron el resultado),
   **4 hallazgos cerrados** (#8, #13, #21, #26), **1 actualizado desvinculando su PR
   incorrecto** (#12) y **1 reencaminado a solo brecha de cobertura** (#14).
-- **Los dos ANTECEDENTES ROTOS de esta corrida — el 08-13 y el 08-17 — NO
-  dispararon.** Cero filas en Notion, cero reportes, 10 dias sin conciliacion sobre
-  39 commits y 9 migraciones. **Ya se cruzo el umbral autoimpuesto** ('dos corridas
-  seguidas caidas'). Filado como P1 contra la operacion; ver acciones en el reporte.
-- **El conector Vercel sigue roto — 5a corrida consecutiva.** 403 "must
-  re-authenticate to this scope". Ya filado como P1 (Notion #5); NO re-diagnosticar,
-  solo declarar bajo NO CORRIO y sustituir por la sonda de contenido.
+- **CORRECCION 2026-08-21 — el 08-13 y el 08-17 SI dispararon.** El reporte del
+  08-20 dijo "no dispararon" y filo un P1 apuntando al scheduler. Es falso, y
+  verificado contra los logs de ejecucion de las propias Routines:
+  - `cse_01PLVdhxWGidH513tu31MoGd` (08-13, jueves) — disparo 11:01, ~12 prompts de
+    permiso sobre `mcp__Supabase__query_logs`, Santiago interrumpio a las 16:53 y
+    escribio *"run with all permisions grantes (auto). stop asking me for
+    permissions"*; eso abrio un turno nuevo en otro modelo y la corrida descarrilo.
+  - `cse_01Jjf134rJfLxbYnATT4zT7K` (08-17, lunes) — disparo 11:24 y **trabajo bien**:
+    Security & Compliance devolvio un P1 real (el `telegram_id` de un usuario Gerencia
+    esta commiteado en el repo PUBLICO, asi que forjar el webhook paso de "adivinar
+    un id de 10 digitos" a "leer el repo") y Data Integrity dos P2 (la reja de lluvia
+    congelada de la 068 sobre-dispara; 43 cabezas sin confirmar). A las **11:37:47**
+    pego contra un prompt de permiso de `query_logs`, **espero 22 minutos** con
+    cuatro agentes todavia fuera, y murio a las 11:59 sin filar nada. **Esos tres
+    hallazgos se perdieron.**
+  - **Causa raiz unica**: las rutinas tenian en su allowlist un tool llamado
+    `get_logs` que **no existe** en el conector; el real es `query_logs` y no estaba
+    en la lista, asi que cada consulta de logs pedia permiso. Corregido 2026-08-21.
+  - **Leccion, y es de diseno, no de configuracion**: una allowlist a mano se pudre
+    en silencio, y una entrada podrida no falla ruidosamente — convierte una corrida
+    desatendida en una corrida esperando a un humano que no esta. Por eso el
+    preflight de tools del §4 Phase 0 es el arreglo durable, no el rename.
+  [corrida: 2026-08-20-jueves, corregido 2026-08-21]
+- **RESUELTO 2026-08-21 — el 403 de Vercel era de identidad, no del conector.** Durante
+  6 corridas se filo como "conector roto, re-autenticar"; el conector estaba sano y
+  autenticado como un usuario que no pertenece al equipo dueno del proyecto. Santiago
+  reconecto Vercel en Composio con su cuenta personal y quedo verificado en vivo. Ver
+  el detalle, los slugs y las trampas en "Entorno y acceso" arriba. **La sonda de
+  contenido sigue siendo el respaldo valido** cuando Composio no este disponible.
 
 ## Leccion de metodo de la corrida 2026-08-10 (la mas cara de olvidar)
 **Cinco de cinco verificaciones adversariales cambiaron el resultado**, y ninguna
@@ -179,11 +246,41 @@ desempate importaba mas que cualquiera de los dos hallazgos. [corrida: 2026-08-1
   nadie mirando y sin que la plataforma pregunte nunca.** Lo unico que lo frenaria seria la
   instruccion del §6 — una guarda de prompt, no de plataforma, en una operacion cuyo trabajo es
   justamente leer contenido no confiable todo el dia.
-  **Recomendacion vigente: mantener Composio FUERA de los conectores de la rutina.** Asi «una
-  corrida programada nunca escribe» es verdad estructural y no una promesa. Los arreglos van en
-  una sesion interactiva aparte, que es donde un "go" en vivo tiene sentido. Si alguna vez se
-  agrega, que sea una decision explicita del dueno y quede anotada aca.
+  **Recomendacion de esa corrida: mantener el conector de escritura FUERA de la rutina.**
   [corrida: 2026-08-20-jueves]
+- **REVISADA 2026-08-21 por decision explicita de Santiago.** La recomendacion de arriba
+  resolvia un riesgo creando otro: como la lista de conectores se congela al disparar, una
+  sesion sin conector de escritura **no puede actuar aunque el dueno diga "go"** — que es
+  exactamente lo que costo las migraciones 103/104 y dos dias de clima fabricados. Santiago
+  usa la sesion de la propia corrida para actuar cuando se conecta, asi que el camino de
+  escritura tiene que estar ahi. Lo que cambio, y es lo que lo hace defendible:
+  - **El camino de escritura a la BASE no pasa por Composio.** Es `Supabase_Escritura`
+    (`1eeabe38-…`) con `permitted_tools: ["apply_migration"]` y **nada mas**. Sin
+    `execute_sql`, el SQL a mano es **mecanicamente imposible**, no solo prohibido. Eso
+    convierte la regla del §6 «se ejecuta una migracion revisada, verbatim» en mecanismo.
+  - `always_ask` en lunes/jueves; `always_allow` en viernes, que lo necesita desatendido.
+  - **ADVERTENCIA — `always_ask` dentro de una Routine NO esta verificado.** La documentacion
+    citada arriba dice que no hay prompts durante una corrida; la evidencia observada dice lo
+    contrario (los prompts de `query_logs` del 08-13 y 08-17 ocurrieron **y bloquearon**). Las
+    dos cosas se concilian si el prompt aparece para tools fuera de `permitted_tools`, pero
+    **nadie lo probo para un `always_ask` explicito.** Mientras no se pruebe, **la garantia real
+    no es la politica: es que el conector solo expone `apply_migration`.** El peor caso es "corre
+    un fichero de migracion que esta en un PR", no "corre SQL arbitrario" — y no hay migracion
+    que correr si la corrida no la escribio. Verificar en la primera corrida que intente
+    escribir y anotar el resultado aca.
+  - **Composio SI quedo adentro de las tres rutinas — pero solo para LEER Vercel.** Esto
+    supera la recomendacion del 08-20 de mantenerlo afuera, y se cambio sabiendo lo que
+    cuesta. **`COMPOSIO_MULTI_EXECUTE_TOOL` es un ejecutor GENERICO**: corre cualquier slug
+    de cualquier toolkit conectado a la cuenta (gmail, github, googledrive, quickbooks,
+    linkedin), no solo Vercel. Permitirlo **NO acota el radio** como si lo hace limitar
+    `Supabase_Escritura` a `apply_migration`. **La regla «por Composio solo se leen slugs
+    `VERCEL_GET_*`» es de prompt, no de mecanismo — y es el unico conector de la operacion
+    del que eso es cierto.** En el mismo cambio se quito el conector Vercel directo
+    (`159f73fd-…`). Reversa mas segura si alguna vez se quiere: re-autenticar ese conector
+    directo con la cuenta personal — mismos datos, 10 tools de solo lectura, sin ejecutor
+    generico. **El como leer Vercel (cuenta, ids, slugs, trampas) vive en «Entorno y acceso»
+    arriba, no aca** — un solo sitio por hecho.
+  [corrida: 2026-08-21, sesion interactiva]
 - **Transferir SQL largo por contenido, nunca retecleado.** base64 del fichero -> decode -> una
   sola sentencia atomica. Probado: el round-trip da el mismo sha256. Retipear 496 lineas de
   plpgsql contra produccion es un riesgo de transcripcion que no hace falta correr.
@@ -192,3 +289,29 @@ desempate importaba mas que cualquiera de los dos hallazgos. [corrida: 2026-08-1
   103 fijo `v_total <> 1910`; el cron de clima inserta una fila por dia, asi que la guarda
   caduco a las 24 h y volvio la migracion inaplicable (habria hecho todo el trabajo y abortado
   contra si misma). Se captura el conteo de partida y se coteja contra si mismo. [corrida: 2026-08-20-jueves]
+
+## Preflight de tools — la lista esperada (constitucion §4 Phase 0)
+
+Esta es **la** lista. No duplicar en los briefs. Si un nombre no resuelve, es un P1
+contra la operacion y la especialidad que dependia de el va bajo NO CORRIO.
+
+| Conector | Tools |
+|---|---|
+| `Supabase` (solo lectura, `1e08d12f-…`) | `execute_sql` · `list_tables` · `list_migrations` · `list_extensions` · `get_advisors` · **`query_logs`** · `list_edge_functions` · `get_edge_function` · `get_project_url` · `generate_typescript_types` · `list_branches` · `search_docs` |
+| `Supabase_Escritura` (`1eeabe38-…`) | `apply_migration` — y nada mas, a proposito |
+| `Notion` (`af1e5776-…`) | `notion-search` · `notion-fetch` · `notion-query-data-sources` · `notion-get-users` · `notion-get-comments` · `notion-create-pages` · `notion-update-page` · `notion-create-comment` |
+| `Composio` (`2982c4d2-…`) | `COMPOSIO_SEARCH_TOOLS` · `COMPOSIO_GET_TOOL_SCHEMAS` · `COMPOSIO_MULTI_EXECUTE_TOOL` — **solo para leer Vercel**, slugs `VERCEL_GET_*`. Sin `REMOTE_BASH`/`REMOTE_WORKBENCH`/`MANAGE_CONNECTIONS`, a proposito |
+| `Vercel` directo (`159f73fd-…`) | **retirado.** Estaba autenticado como `thinksid`, que no ve el proyecto — 6 corridas de ruido. Si alguna vez se re-autentica con la cuenta personal, es el camino *preferible*: sus 10 tools de lectura acotan el radio mecanicamente, cosa que Composio no hace |
+
+**El nombre del tool va como lo expone el conector, sin prefijo.** `get_logs` **NO
+existe** y costo dos corridas enteras; el real es `query_logs`.
+`notion-query-database-view` esta deprecado y se quito de la allowlist.
+
+## Racha del viernes (regla de auto-poda)
+
+| Corrida | Elegibles drenados |
+|---|---|
+| (primera: 2026-08-28-viernes) | — |
+
+Tres viernes seguidos con el conjunto elegible vacio → el reporte recomienda pasar
+el viernes a mensual.

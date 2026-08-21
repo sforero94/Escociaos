@@ -23,11 +23,31 @@ First Monday of the month adds: `feature-strategy` · `code-quality`.
 4. Resolve **write mode** (constitution §7). Cloud sessions: the claude.ai
    GitHub integration is the push path; verify with the memory commit, not with
    a throwaway ref.
-5. **Dead-man check**: latest `Corrida` in Notion / newest file in
-   `escociaos-po/reports/`. Gap > 8 days → P1 finding against the operation.
-6. Query Notion `collection://b22d2385-a812-4d4a-8094-cefa9d080f60` for every
+5. **Tool preflight** (constitution §4): resolve every tool this run depends on
+   against the list in `memory/_compartida.md`. A missing or renamed tool is a
+   P1 against the operation and its specialty is NO CORRIÓ.
+6. **Dead-man check**: latest `Corrida` in Notion / newest file in
+   `escociaos-po/reports/`. Gap > **5 days** → P1 finding against the operation.
+   (Lowered from 8 on 2026-08-21: the 08-13 → 08-20 gap was exactly 7 days and
+   slipped underneath the old threshold, so two dead runs produced no signal.)
+   **A run that exists but filed nothing counts as a dead run** — check for a
+   report file, not just for a session.
+7. **Migration drift check** — Monday owns this because Friday creates it.
+   For every migration in `src/sql/migrations/` recorded as applied to
+   production, confirm its file is on `main`. Friday applies before merging by
+   design, so a short window is expected; **more than 7 days unmerged is a P1
+   against the operation.** Cross-check `supabase_migrations.schema_migrations`
+   against the live catalog (`pg_proc`, `pg_trigger`, `information_schema`) —
+   the ledger is not authoritative and neither list is a superset of the other.
+8. Query Notion `collection://b22d2385-a812-4d4a-8094-cefa9d080f60` for every
    finding with Estado ≠ Done → the **dedupe set** (pass title + module +
-   severity to every agent).
+   severity to every agent). Also load everything with
+   `Resolucion = Aceptado (no se arregla)` or `Refutado` and pass it as a
+   **do-not-refile set** — an accepted finding that comes back next month means
+   the ledger step was skipped.
+9. Apply any `Aceptado` decisions Santiago made since the last run: `Estado =
+   Done`, `Resolucion = Aceptado (no se arregla)`, `Motivo cierre` = his reason,
+   **and** a line in the finder's memory ledger.
 
 ## Phase 1 — Fan out (parallel, one message)
 
@@ -65,7 +85,12 @@ new findings; if more survive, keep the highest severity × confianza and
 
 Bug Triage: up to 5 PRs. Code Quality (first Mondays): up to 2. One finding per
 PR, all checks green, branch `claude/po-<especialidad>-<slug>`. Nothing marked
-`requiere_aprobacion` becomes a PR.
+`requiere_aprobacion` becomes a PR, and nothing of `clase: datos` or
+`clase: decision` does either.
+
+**Set `Clase` on every finding filed this run.** It is what makes a finding
+eligible for the Friday drain, and an unclassified one just waits. Monday is
+where the backlog's throughput is decided.
 
 ## Phase 5 — File and remember
 
