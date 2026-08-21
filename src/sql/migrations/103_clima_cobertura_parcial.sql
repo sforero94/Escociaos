@@ -149,6 +149,7 @@ DECLARE
   v_objetivo         integer;
   v_objetivo_viejos  integer;
   v_check_def        text;
+  v_total_pre        integer;
 BEGIN
   -- 0.1 Exactamente dos poblaciones. Si aparece una tercera estacion, la
   --     semantica de `lecturas_count` deja de estar establecida y el backfill
@@ -221,7 +222,15 @@ BEGIN
     RAISE EXCEPTION 'Migracion 103: el CHECK ya incluye cobertura_parcial -- la migracion ya se corrio. ABORTA.';
   END IF;
 
-  RAISE NOTICE 'Migracion 103: pre-condiciones OK -- 2 estaciones, 1.757 filas historicas intactas, % filas parciales por corregir.', v_objetivo;
+  -- 0.6 Conteo de partida. La invariante que importa NO es un total absoluto
+  --     sino que esta migracion no cree ni borre filas: el cron nocturno
+  --     inserta una fila por dia, asi que cualquier numero fijo caduca a las
+  --     24 horas de escribirlo. Se guarda transaction-local y se coteja al
+  --     final contra si mismo.
+  SELECT count(*) INTO v_total_pre FROM public.clima_resumen_diario;
+  PERFORM set_config('m103.total_pre', v_total_pre::text, true);
+
+  RAISE NOTICE 'Migracion 103: pre-condiciones OK -- 2 estaciones, 1.757 filas historicas intactas, % filas parciales por corregir, % filas en total al arrancar.', v_objetivo, v_total_pre;
 END $$;
 
 
@@ -387,6 +396,7 @@ DECLARE
   v_wu_parcial    integer;
   v_wu_nulos      integer;
   v_total         integer;
+  v_total_pre     text;
   v_check_def     text;
 BEGIN
   -- 4.1 Los dias parciales quedaron marcados, y TODOS con lluvia_total_mm NULL.
@@ -434,8 +444,12 @@ BEGIN
 
   -- 4.4 No se creo ni se borro ninguna fila: esto es un UPDATE, no una limpieza.
   SELECT count(*) INTO v_total FROM public.clima_resumen_diario;
-  IF v_total <> 1910 THEN
-    RAISE EXCEPTION 'Migracion 103: clima_resumen_diario quedo con % filas, se esperaban 1.910. Esta migracion no inserta ni borra filas.', v_total;
+  v_total_pre := current_setting('m103.total_pre', true);
+  IF v_total_pre IS NULL OR v_total_pre = '' THEN
+    RAISE EXCEPTION 'Migracion 103: no se encontro el conteo de partida. Esta migracion DEBE correrse como una sola transaccion -- el bloque de pre-condiciones y el de post-condiciones tienen que compartir transaccion.';
+  END IF;
+  IF v_total <> v_total_pre::integer THEN
+    RAISE EXCEPTION 'Migracion 103: clima_resumen_diario paso de % a % filas durante la migracion. Esta migracion solo ACTUALIZA: no inserta ni borra.', v_total_pre, v_total;
   END IF;
 
   -- 4.5 El CHECK admite el valor nuevo.
@@ -465,6 +479,11 @@ END $$;
 --
 --   fecha        lecturas_count  lluvia_total_mm  lluvia_confianza
 --   2026-08-19   167             0.00             ok
+--   2026-08-20   114             0.00             ok   <-- sellado por el cron
+--                                                       del 2026-08-21 05:15 UTC,
+--                                                       antes de aplicar esta
+--                                                       migracion. Es el segundo
+--                                                       dia del mismo corte de luz.
 --   2026-03-30   147             18.03            ok
 --   2026-03-27   225             3.30             ok
 --   2026-03-18   111             1.02             ok
