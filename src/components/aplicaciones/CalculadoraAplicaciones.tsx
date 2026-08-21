@@ -776,7 +776,10 @@ export function CalculadoraAplicaciones() {
         onDiscard={clearFormData}
       />
 
-      <div className="bg-card rounded-2xl shadow-sm border border-border p-6 sm:p-8">
+      {/* Antes esto era una tercera tarjeta con sombra y borde propios: encabezado + stepper +
+          contenido, tres bloques apilados antes del primer campo. El stepper es orientación, no
+          contenido — va como banda ligera, sin competir con la tarjeta del formulario. */}
+      <div className="py-2">
         <AplicacionStepper pasos={PASOS} pasoActual={state.paso_actual} />
       </div>
 

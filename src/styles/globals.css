@@ -64,7 +64,14 @@
   --success: #73991C;
   --success-foreground: #ffffff;
   --border: rgba(115, 153, 28, 0.1);
-  --input: transparent;
+  /* Antes: `transparent`. `input.tsx` pinta `border-input` sobre `bg-input-background` (#ffffff),
+     así que todo Input quedaba blanco con borde invisible: se lee como campo sobre el fondo
+     off-white de la página (#F8FAF5), pero desaparece dentro de una Card blanca — que es donde
+     viven casi todos los formularios. En la misma pantalla, DateInput sí trae su propio borde
+     (`border-primary/20`), así que dos campos vecinos se veían distintos sin motivo.
+     Se le da el olivo de marca con algo más de peso que --border, que está calibrado para
+     separadores, no para bordes de campo. */
+  --input: rgba(115, 153, 28, 0.22);
   --input-background: #ffffff;
   --switch-background: #BFD97D;
   --font-weight-medium: 500;

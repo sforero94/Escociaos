@@ -326,8 +326,13 @@ export function PasoConfiguracion({
           )}
         </Field>
 
-        {/* TIPO + FECHAS */}
-        <FieldGroup className="grid grid-cols-1 sm:grid-cols-[auto_1fr] gap-6">
+        {/* TIPO + FECHAS.
+            Antes: `sm:grid-cols-[auto_1fr]`. Con el rail de 300px a la derecha, a "Ventana de
+            ejecución" le quedaban ~180px para DOS DateInput, y cada uno arrastra 72px de padding
+            (`px-4 pr-10`) — el texto se quedaba sin espacio y solo se veía el ícono de calendario,
+            como si el campo estuviera roto. Ahora cada uno ocupa su propia fila hasta lg, y desde
+            lg comparten en 50/50 (no auto/1fr), que es cuando de verdad hay ancho. */}
+        <FieldGroup className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-5">
           <Field>
             <FieldLabel>
               Tipo de Aplicación <span className="text-destructive">*</span>
@@ -382,16 +387,16 @@ export function PasoConfiguracion({
             <FieldLabel>
               Ventana de ejecución <span className="text-destructive">*</span>
             </FieldLabel>
-            <div className="flex items-center gap-2.5">
-              <div className="flex-1">
+            <div className="flex flex-col gap-2 min-[520px]:flex-row min-[520px]:items-center min-[520px]:gap-2.5">
+              <div className="min-w-0 flex-1">
                 <DateInput
                   value={formData.fecha_inicio_planeada || ''}
                   onChange={(v) => setFormData((prev) => ({ ...prev, fecha_inicio_planeada: v }))}
                   required
                 />
               </div>
-              <span className="text-sm text-muted-foreground flex-shrink-0">→</span>
-              <div className="flex-1">
+              <span aria-hidden="true" className="hidden min-[520px]:block text-sm text-muted-foreground flex-shrink-0">→</span>
+              <div className="min-w-0 flex-1">
                 <DateInput
                   value={formData.fecha_fin_planeada || ''}
                   onChange={(v) => {

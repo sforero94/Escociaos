@@ -34,7 +34,13 @@ export function AplicacionStepper({ pasos, pasoActual, onIrAPaso, className }: A
   return (
     <nav aria-label="Progreso de la aplicación" className={cn('w-full', className)}>
       {/* Desktop */}
-      <ol className="hidden md:flex items-start justify-between">
+      {/* `justify-between` + `flex-1` empujaba los pasos a los extremos: con 3 se veía bien y con
+          2 quedaba un conector enorme y todo descentrado. Ahora el <ol> se centra y se topa el
+          ancho en función de cuántos pasos hay, así 2 y 3 se ven igual de deliberados. */}
+      <ol
+        className="mx-auto hidden md:flex items-start justify-center"
+        style={{ maxWidth: `${pasos.length * 15}rem` }}
+      >
         {pasos.map((paso, index) => {
           const numero = index + 1;
           const isActive = pasoActual === numero;
@@ -45,20 +51,23 @@ export function AplicacionStepper({ pasos, pasoActual, onIrAPaso, className }: A
           const Circulo = (
             <div
               className={cn(
-                'w-16 h-16 rounded-2xl flex items-center justify-center mb-3 transition-all duration-300',
+                'size-12 rounded-xl flex items-center justify-center mb-3 transition-colors',
                 isActive
-                  ? 'bg-gradient-to-br from-primary to-secondary text-white shadow-lg scale-110'
+                  // Un solo acento: el paso activo es olivo sólido, no un degradado
+                  // primary→secondary. El `scale-110` además desalineaba el nodo activo
+                  // respecto de los otros y del conector.
+                  ? 'bg-primary text-primary-foreground ring-4 ring-primary/15'
                   : isCompleted
-                    ? 'bg-primary text-white'
+                    ? 'bg-primary/12 text-primary border border-primary'
                     : 'bg-muted text-muted-foreground',
               )}
             >
-              {isCompleted ? <Check className="w-8 h-8" /> : <span className="text-lg">{numero}</span>}
+              {isCompleted ? <Check className="size-5" /> : <span className="text-base font-semibold">{numero}</span>}
             </div>
           );
 
           return (
-            <li key={paso.id} className="flex items-start flex-1" aria-current={isActive ? 'step' : undefined}>
+            <li key={paso.id} className="flex items-start" aria-current={isActive ? 'step' : undefined}>
               <div className="flex flex-col items-center">
                 {isNavegable ? (
                   <button
@@ -89,7 +98,7 @@ export function AplicacionStepper({ pasos, pasoActual, onIrAPaso, className }: A
               </div>
 
               {!isLast && (
-                <div className="flex-1 h-1 mx-4 mt-8">
+                <div className="w-16 lg:w-24 h-0.5 mx-3 mt-6 shrink-0">
                   <div
                     className={cn(
                       'h-full rounded-full transition-all duration-300',
