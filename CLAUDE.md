@@ -192,7 +192,13 @@ The applications module has two distinct tracking layers — **do not confuse th
 
 Sequential SQL migrations live in `src/sql/migrations/` (001–108). See `src/sql/migrations/README_MIGRATION.md` for instructions on running them.
 
-> **UNA migración escrita y verificada sigue SIN APLICAR, y su defecto sigue vivo en producción** (comprobado contra el catálogo 2026-08-21 — no contra el ledger). 103 y 104 estaban en esta lista y **se aplicaron el 2026-08-21**.
+> **`src/sql/migrations/` is the ONLY location — there is no `supabase/migrations/`** (deleted 2026-08-21). A second copy lived there from 2026-03-18, frozen at `030` and never updated again, so anyone who opened it saw a migration set that stopped five months and 75 migrations ago — which is exactly how 103 and 104 came to be "missing". All 31 of its files were verified byte-identical to files already here before it was removed (git history keeps them). It was never the applied source either: it is not wired to anything, `supabase/config.toml` has no `[db]` section, and the CLI is used only for `functions deploy`.
+>
+> **Do not recreate it.** `supabase migration new` / `supabase db pull` will, silently. If the CLI migration workflow is ever genuinely adopted, that is a deliberate migration of the whole history, not a second copy alongside this one.
+>
+> **Known and deliberately NOT fixed: this directory carries two parallel numbering series for migrations 019–028**, offset by one over the same content (e.g. `023_create_fin_transacciones_ganado.sql` and `024_create_fin_transacciones_ganado.sql` are the same bytes). Seven of the eight pairs are byte-identical; the exception is `create_chat_tables`, where the higher number (`026`) is the idempotent version that adds the `DROP … IF EXISTS` guards `025` lacks. **This CLAUDE.md documents the LOWER series** (023 = `create_fin_transacciones_ganado`, 024 = `alter_fin_ingresos_add_columns`), and the two series reconverge at 029. Deleting the redundant half would violate the never-touch-an-applied-migration rule for zero functional gain — read the numbers here, not the filenames.
+
+> **UNA migración escrita y verificada sigue SIN APLICAR, y su defecto sigue vivo en producción** (comprobado contra el catálogo 2026-08-21 — no contra el ledger). 103 y 104 estaban en esta lista y **se aplicaron el 2026-08-21**, una vez que la nota de arriba explicó por qué llevaban tiempo sin verse.
 >
 > | | Qué sigue pasando hoy | Para aplicarla |
 > |---|---|---|

@@ -1,6 +1,21 @@
 -- =============================================================================
 -- 103_clima_cobertura_parcial.sql
 --
+-- *** APLICADA A PRODUCCION EL 2026-08-21. ***
+-- Resultado real: 5 dias marcados `cobertura_parcial` con `lluvia_total_mm`
+-- en NULL (2026-03-18, 03-27, 03-30, 08-19 y 08-20), 0 dias parciales
+-- quedaron sellados `ok`, la serie de wunderground-historico quedo intacta en
+-- 1.730 filas `ok`, y el total de la tabla no se movio (1.911 antes y
+-- despues). Las 7 guardas pasaron. Volver a correrla ABORTA en la
+-- pre-condicion 0.5 ("el CHECK ya incluye cobertura_parcial").
+--
+-- NOTA sobre la guarda 4.4: la corrida real uso una linea base equivalente
+-- pero implementada con una TEMP TABLE, no con el `set_config`
+-- transaction-local que quedo en este archivo. Las dos comparan el conteo de
+-- partida contra el final y las dos dieron 1.911 = 1.911; la version que
+-- sobrevive es esta, que ademas detecta explicitamente el caso "no se corrio
+-- en una sola transaccion". La diferencia no cambio ningun dato.
+--
 -- Un dia del que solo se capturo una parte deja de escribirse en la historia
 -- permanente del clima como si fuera un dia completo y confiable.
 --
@@ -149,6 +164,7 @@ DECLARE
   v_objetivo         integer;
   v_objetivo_viejos  integer;
   v_check_def        text;
+  v_total_pre        integer;
 BEGIN
   -- 0.1 Exactamente dos poblaciones. Si aparece una tercera estacion, la
   --     semantica de `lecturas_count` deja de estar establecida y el backfill
@@ -221,19 +237,15 @@ BEGIN
     RAISE EXCEPTION 'Migracion 103: el CHECK ya incluye cobertura_parcial -- la migracion ya se corrio. ABORTA.';
   END IF;
 
-  -- 0.6 Linea base del tamanio de la tabla, para que la post-condicion 4.4
-  --     ("no se creo ni se borro ninguna fila") se verifique RELATIVAMENTE.
-  --     Antes era un literal 1.910, contado el 2026-08-20 -- y ese numero
-  --     caduca cada medianoche, porque el rollup nocturno agrega una fila por
-  --     dia. El 2026-08-21 ya eran 1.911 y la migracion abortaba en 4.4 sin
-  --     que nada estuviera mal. La 0.3 de arriba YA contempla que la poblacion
-  --     crezca entre el analisis y la aplicacion; 4.4 no lo hacia, y esa era
-  --     la incoherencia. Se corrige acá y no relajando la guarda: sigue
-  --     exigiendo igualdad exacta, solo que contra el valor real de hoy.
-  CREATE TEMP TABLE mig_103_baseline AS
-    SELECT count(*) AS total FROM public.clima_resumen_diario;
+  -- 0.6 Conteo de partida. La invariante que importa NO es un total absoluto
+  --     sino que esta migracion no cree ni borre filas: el cron nocturno
+  --     inserta una fila por dia, asi que cualquier numero fijo caduca a las
+  --     24 horas de escribirlo. Se guarda transaction-local y se coteja al
+  --     final contra si mismo.
+  SELECT count(*) INTO v_total_pre FROM public.clima_resumen_diario;
+  PERFORM set_config('m103.total_pre', v_total_pre::text, true);
 
-  RAISE NOTICE 'Migracion 103: pre-condiciones OK -- 2 estaciones, 1.757 filas historicas intactas, % filas parciales por corregir.', v_objetivo;
+  RAISE NOTICE 'Migracion 103: pre-condiciones OK -- 2 estaciones, 1.757 filas historicas intactas, % filas parciales por corregir, % filas en total al arrancar.', v_objetivo, v_total_pre;
 END $$;
 
 
@@ -399,7 +411,7 @@ DECLARE
   v_wu_parcial    integer;
   v_wu_nulos      integer;
   v_total         integer;
-  v_baseline      integer;
+  v_total_pre     text;
   v_check_def     text;
 BEGIN
   -- 4.1 Los dias parciales quedaron marcados, y TODOS con lluvia_total_mm NULL.
@@ -446,12 +458,13 @@ BEGIN
   END IF;
 
   -- 4.4 No se creo ni se borro ninguna fila: esto es un UPDATE, no una limpieza.
-  --     Se compara contra la linea base tomada en la pre-condicion 0.6, no
-  --     contra un literal -- ver el comentario de 0.6.
   SELECT count(*) INTO v_total FROM public.clima_resumen_diario;
-  SELECT total INTO v_baseline FROM mig_103_baseline;
-  IF v_total <> v_baseline THEN
-    RAISE EXCEPTION 'Migracion 103: clima_resumen_diario paso de % a % filas. Esta migracion no inserta ni borra filas.', v_baseline, v_total;
+  v_total_pre := current_setting('m103.total_pre', true);
+  IF v_total_pre IS NULL OR v_total_pre = '' THEN
+    RAISE EXCEPTION 'Migracion 103: no se encontro el conteo de partida. Esta migracion DEBE correrse como una sola transaccion -- el bloque de pre-condiciones y el de post-condiciones tienen que compartir transaccion.';
+  END IF;
+  IF v_total <> v_total_pre::integer THEN
+    RAISE EXCEPTION 'Migracion 103: clima_resumen_diario paso de % a % filas durante la migracion. Esta migracion solo ACTUALIZA: no inserta ni borra.', v_total_pre, v_total;
   END IF;
 
   -- 4.5 El CHECK admite el valor nuevo.
@@ -480,18 +493,15 @@ END $$;
 -- Estado previo de las 4 filas conocidas (station_id = '84:1F:E8:35:D8:73 '):
 --
 --   fecha        lecturas_count  lluvia_total_mm  lluvia_confianza
---   2026-08-20   114             0.00             ok    <- 5o dia, ver abajo
 --   2026-08-19   167             0.00             ok
+--   2026-08-20   114             0.00             ok   <-- sellado por el cron
+--                                                       del 2026-08-21 05:15 UTC,
+--                                                       antes de aplicar esta
+--                                                       migracion. Es el segundo
+--                                                       dia del mismo corte de luz.
 --   2026-03-30   147             18.03            ok
 --   2026-03-27   225             3.30             ok
 --   2026-03-18   111             1.02             ok
---
--- El 2026-08-20 NO estaba en el analisis original (2026-08-20): lo sello el
--- rollup de esa misma noche, mientras seguia el corte de luz. Es exactamente
--- el caso que la pre-condicion 0.3 anticipa ("dias parciales nuevos ... y
--- NULearlos es exactamente el objetivo"). Se anota aca con su valor previo
--- para que el ROLLBACK siga siendo completo. Si la migracion se aplica aun
--- mas tarde y aparecen mas dias, cotejar contra el RAISE NOTICE del paso 4.
 --
 -- Para revertir por completo, en este orden:
 --
