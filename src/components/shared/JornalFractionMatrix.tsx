@@ -29,6 +29,60 @@ export interface JornalFractionMatrixProps {
   showCostPreview?: boolean; // Show calculated cost per worker
 }
 
+/**
+ * Los dos controles de una asignación (fracción + observación). Viven en un solo lugar a
+ * proposito: el componente tiene dos disposiciones — tabla horizontal para varios lotes y lista
+ * vertical para uno solo — y si cada una trajera su propia copia del `Select`, las opciones de
+ * jornal podrian divergir sin que ningun test lo note.
+ */
+function ControlesAsignacion({
+  trabajadorId,
+  loteId,
+  workMatrix,
+  observaciones,
+  onFraccionChange,
+  onObservacionesChange,
+  disabled,
+}: {
+  trabajadorId: string;
+  loteId: string;
+  workMatrix: WorkMatrix;
+  observaciones: ObservacionesMatrix;
+  onFraccionChange: (trabajadorId: string, loteId: string, fraccion: string) => void;
+  onObservacionesChange: (trabajadorId: string, loteId: string, obs: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <>
+      <Select
+        value={workMatrix[trabajadorId]?.[loteId] || '0.0'}
+        onValueChange={(value) => onFraccionChange(trabajadorId, loteId, value)}
+        disabled={disabled}
+      >
+        <SelectTrigger className="h-8 text-xs border-primary/20 hover:border-primary/40">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="0.0">-</SelectItem>
+          <SelectItem value="0.25">2 horas</SelectItem>
+          <SelectItem value="0.5">4 horas</SelectItem>
+          <SelectItem value="0.75">6 horas</SelectItem>
+          <SelectItem value="1.0">8 horas</SelectItem>
+        </SelectContent>
+      </Select>
+
+      <Textarea
+        value={observaciones[trabajadorId]?.[loteId] || ''}
+        onChange={(e) => onObservacionesChange(trabajadorId, loteId, e.target.value)}
+        placeholder="Notas..."
+        rows={2}
+        className="text-xs resize-none border-primary/20 focus:border-primary/40"
+        disabled={disabled}
+      />
+    </>
+  );
+}
+
 export function JornalFractionMatrix({
   trabajadores,
   lotes,
@@ -131,8 +185,99 @@ export function JornalFractionMatrix({
           </div>
         )}
 
-        {/* Table with horizontal scroll */}
-        <div className="overflow-x-auto">
+        {/* Un solo lote -> LISTA VERTICAL, no tabla.
+            Por que existe esta rama: la tabla de abajo fija la columna del trabajador a la
+            izquierda y la del total a la derecha, y deja las columnas de lote desplazandose en
+            el medio. Eso funciona en el dialogo ancho de Labores, pero `DailyMovementForm`
+            monta esta matriz en un panel lateral de 480px y SIEMPRE le pasa exactamente un
+            lote (un movimiento diario es de un solo lote). Medido en produccion el 2026-08-21:
+            contenedor 445px, columna Trabajador 434px, columna Total 87px -- las dos fijas
+            suman 521px dentro de 445px, se superponen entre si y tapan por completo la unica
+            columna que tiene los controles, que quedaba dibujada fuera de la pantalla.
+            Deslizar no ayudaba: una columna `sticky` se queda clavada encima. Resultado: era
+            IMPOSIBLE cargar el jornal desde esa pantalla.
+            Con un solo lote la tabla no aporta nada -- no hay nada que comparar entre columnas --
+            asi que se cae a una lista, que no tiene ancho minimo ni scroll horizontal. */}
+        {lotes.length === 1 ? (
+          <ul className="divide-y divide-primary/5">
+            {trabajadores.map((trabajador) => {
+              const lote = lotes[0];
+              const totalFraccion = calculateTotalFraccion(trabajador.data.id!);
+              const totalCosto = showCostPreview ? calculateCosto(trabajador, totalFraccion) : 0;
+
+              return (
+                <li key={trabajador.data.id!} className="space-y-3 px-5 py-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium text-foreground">
+                          {trabajador.data.nombre}
+                        </span>
+                        {trabajador.type === 'contratista' ? (
+                          <Badge
+                            variant="outline"
+                            className="flex-shrink-0 border-blue-200 bg-blue-50 text-xs text-blue-700"
+                          >
+                            {trabajador.data.tipo_contrato}
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="flex-shrink-0 border-green-200 bg-green-50 text-xs text-green-700"
+                          >
+                            Empleado
+                          </Badge>
+                        )}
+                      </div>
+                      {showCostPreview && totalFraccion > 0 && (
+                        <p className="mt-0.5 text-xs text-gray-500">
+                          Costo: {formatCurrency(totalCosto)}
+                        </p>
+                      )}
+                    </div>
+
+                    <span
+                      className={`inline-flex flex-shrink-0 items-center justify-center rounded-lg px-3 py-1 text-sm font-semibold ${
+                        totalFraccion > 0
+                          ? 'bg-primary/10 text-primary'
+                          : 'bg-gray-100 text-gray-400'
+                      }`}
+                    >
+                      {totalFraccion.toFixed(2)}
+                    </span>
+
+                    {onRemoveTrabajador && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onRemoveTrabajador(trabajador.data.id!)}
+                        disabled={disabled}
+                        className="h-7 w-7 flex-shrink-0 p-0 text-red-600 hover:bg-red-50 hover:text-red-700"
+                      >
+                        ✕
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,9rem)_minmax(0,1fr)]">
+                    <ControlesAsignacion
+                      trabajadorId={trabajador.data.id!}
+                      loteId={lote.id}
+                      workMatrix={workMatrix}
+                      observaciones={observaciones}
+                      onFraccionChange={onFraccionChange}
+                      onObservacionesChange={onObservacionesChange}
+                      disabled={disabled}
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          /* Varios lotes: la tabla horizontal original, con scroll y columnas fijas. */
+          <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-background">
               <tr>
@@ -214,35 +359,13 @@ export function JornalFractionMatrix({
                     {lotes.map((lote) => (
                       <td key={lote.id} className="py-2 px-2 text-center">
                         <div className="space-y-1.5">
-                          {/* Fraction selector */}
-                          <Select
-                            value={workMatrix[trabajador.data.id!]?.[lote.id] || '0.0'}
-                            onValueChange={(value) =>
-                              onFraccionChange(trabajador.data.id!, lote.id, value)
-                            }
-                            disabled={disabled}
-                          >
-                            <SelectTrigger className="h-8 text-xs border-primary/20 hover:border-primary/40">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="0.0">-</SelectItem>
-                              <SelectItem value="0.25">2 horas</SelectItem>
-                              <SelectItem value="0.5">4 horas</SelectItem>
-                              <SelectItem value="0.75">6 horas</SelectItem>
-                              <SelectItem value="1.0">8 horas</SelectItem>
-                            </SelectContent>
-                          </Select>
-
-                          {/* Observations textarea */}
-                          <Textarea
-                            value={observaciones[trabajador.data.id!]?.[lote.id] || ''}
-                            onChange={(e) =>
-                              onObservacionesChange(trabajador.data.id!, lote.id, e.target.value)
-                            }
-                            placeholder="Notas..."
-                            rows={2}
-                            className="text-xs resize-none border-primary/20 focus:border-primary/40"
+                          <ControlesAsignacion
+                            trabajadorId={trabajador.data.id!}
+                            loteId={lote.id}
+                            workMatrix={workMatrix}
+                            observaciones={observaciones}
+                            onFraccionChange={onFraccionChange}
+                            onObservacionesChange={onObservacionesChange}
                             disabled={disabled}
                           />
                         </div>
@@ -267,6 +390,7 @@ export function JornalFractionMatrix({
             </tbody>
           </table>
         </div>
+        )}
 
         {/* Summary footer */}
         <div className="px-5 py-3 bg-background border-t border-primary/10">
