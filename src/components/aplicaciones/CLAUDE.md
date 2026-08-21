@@ -88,9 +88,23 @@ devuelve 0 y el consumidor cae a su respaldo sin que nadie se entere.** Es la tr
   exactamente TODOS los sublotes de su lote — cero subconjuntos parciales — así que es derivable de
   `lote_id` y nadie lo lee. La columna se conserva; el campo opcional sigue en el tipo TS.
 
-## Riesgo que no se tocó
+## Cierre transaccional (migración 106)
 
-**`cerrarAplicacion()` son 6+ escrituras a Supabase sin transacción** (`registros_trabajo` ×3 →
-`aplicaciones_cierre` → `aplicaciones` → `tareas` → `productos` → `movimientos_inventario`). Si falla
-a la mitad, el cierre queda partido. El rediseño preservó el orden exacto y deliberadamente no lo
-tocó: envolverlo en un RPC es su propio trabajo, con su propia verificación.
+**`cerrarAplicacion()` ya no son 8 escrituras sueltas a Supabase.** Hasta la migración 106 eran
+6+ llamadas sin transacción (`registros_trabajo` ×3 → `aplicaciones_cierre` → `aplicaciones` →
+`tareas` → `productos` → `movimientos_inventario`); si fallaba a la mitad, el cierre quedaba
+partido — inventario parcialmente descontado, tarea a medio completar. Ahora es un único
+`.rpc('fn_cerrar_aplicacion', { payload })` (`src/sql/migrations/106_cierre_aplicacion_transaccional.sql`,
+`SECURITY INVOKER`): las 8 escrituras corren en una sola transacción, mismo orden y mismos
+valores que antes — la única propiedad nueva es que todas confirman o ninguna lo hace.
+
+El payload lo arma `construirPayloadCierreAplicacion` (`src/utils/calculosCierreAplicacion.ts`,
+pura y testeada) — toda la aritmética (costos, fechas, consolidación de insumos por producto)
+sigue viviendo en TypeScript, no en SQL; el RPC solo persiste lo que ese objeto ya trae
+calculado. Dos guardas nuevas que antes no existían: doble cierre imposible
+(`aplicaciones.estado = 'Cerrada'` aborta) e inventario nunca en negativo (`productos.cantidad_actual`
+no tiene CHECK >= 0, así que el RPC lo valida él mismo antes de escribir nada).
+
+`fraccion_jornal` es un ENUM en BD (no numeric) — el payload lo manda como STRING
+(`reg.fraccion_jornal.toString()`, igual que la versión no transaccional), y el RPC solo hace
+`::fraccion_jornal` sobre ese texto sin reformatearlo.

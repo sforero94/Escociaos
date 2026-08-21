@@ -23,6 +23,15 @@ import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { DateInput } from '../ui/date-input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '../ui/command';
 import { Field, FieldLabel, FieldDescription, FieldError } from '../ui/field';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '../ui/input-group';
 import { Item, ItemMedia, ItemContent, ItemTitle, ItemDescription, ItemGroup } from '../ui/item';
@@ -97,6 +106,15 @@ function trabajadorKey(t: Trabajador): string {
   return `${t.type}-${t.data.id ?? ''}`;
 }
 
+/** Persona elegible como Responsable — mismo universo (empleados + contratistas
+ * activos) que el selector de cuadrilla, aplanado para el Command/Popover. */
+interface PersonaResponsable {
+  id: string;
+  nombre: string;
+  tipo: 'empleado' | 'contratista';
+  subtitulo?: string;
+}
+
 /** `true` si el error luce como el `TypeError: Failed to fetch` de una señal intermitente. */
 function esErrorDeRed(mensaje: string): boolean {
   return /failed to fetch|network|conexión|connection/i.test(mensaje);
@@ -142,6 +160,12 @@ export function DailyMovementForm({ aplicacion, open, onOpenChange, onSuccess }:
   const [horaInicio, setHoraInicio] = useState('07:20');
   const [horaFin, setHoraFin] = useState('15:50');
   const [responsable, setResponsable] = useState('');
+  const [responsablePopoverOpen, setResponsablePopoverOpen] = useState(false);
+  // Nombre de perfil (`usuarios.nombre_completo`) del usuario logueado — se
+  // usa para autocompletar Responsable, pero SOLO si coincide con un
+  // empleado/contratista real (ver efecto más abajo): con el picker, ya no
+  // vale un nombre que no esté en esa lista.
+  const [nombreUsuarioActual, setNombreUsuarioActual] = useState<string | null>(null);
   const [condicionesMeteorologicas, setCondicionesMeteorologicas] = useState('');
   const [notas, setNotas] = useState('');
 
@@ -218,6 +242,20 @@ export function DailyMovementForm({ aplicacion, open, onOpenChange, onSuccess }:
     cargarUsuarioActual();
     cargarTrabajadores();
   }, [open, aplicacion.id]);
+
+  // Autocompleta Responsable con el usuario logueado SOLO si su nombre de
+  // perfil coincide EXACTO con un empleado/contratista activo real — el
+  // picker exige que Responsable sea alguien del sistema (ver CLAUDE.md del
+  // módulo), así que ya no basta con `usuarios.nombre_completo` si esa
+  // persona no está en la nómina/planilla (p. ej. un usuario Gerencia sin
+  // ficha de empleado). No pisa una selección ya hecha por el usuario.
+  useEffect(() => {
+    if (!nombreUsuarioActual || responsable) return;
+    const coincide =
+      empleadosDisponibles.some(e => e.nombre === nombreUsuarioActual) ||
+      contratistasDisponibles.some(c => c.nombre === nombreUsuarioActual);
+    if (coincide) setResponsable(nombreUsuarioActual);
+  }, [nombreUsuarioActual, empleadosDisponibles, contratistasDisponibles, responsable]);
 
   // 🔧 Precargar productos apenas se conocen, sin esperar a que se elija lote.
   // No hay forma manual de agregar productos en este formulario, así que si la
@@ -436,7 +474,12 @@ export function DailyMovementForm({ aplicacion, open, onOpenChange, onSuccess }:
           .single();
 
         if (profile?.nombre_completo) {
-          setResponsable(profile.nombre_completo);
+          // No se autocompleta directo: Responsable ahora es un picker sobre
+          // empleados/contratistas, y el perfil de `usuarios` puede no
+          // coincidir con ninguno de los dos (p. ej. un usuario Gerencia que
+          // no está en nómina). Se resuelve en el efecto que cruza este
+          // nombre contra `empleadosDisponibles`/`contratistasDisponibles`.
+          setNombreUsuarioActual(profile.nombre_completo);
         }
       }
     } catch (err) {
@@ -759,6 +802,19 @@ export function DailyMovementForm({ aplicacion, open, onOpenChange, onSuccess }:
       setLoading(false);
     }
   };
+
+  // Universo de personas elegibles como Responsable: mismos empleados +
+  // contratistas activos que el selector de cuadrilla (cargados por
+  // `cargarTrabajadores`), aplanado para el Command/Popover. El filtrado por
+  // texto lo hace `cmdk` internamente sobre `CommandItem.value`.
+  const personasResponsable = useMemo<PersonaResponsable[]>(() => [
+    ...empleadosDisponibles.map(e => ({
+      id: e.id ?? '', nombre: e.nombre, tipo: 'empleado' as const, subtitulo: e.cargo,
+    })),
+    ...contratistasDisponibles.map(c => ({
+      id: c.id ?? '', nombre: c.nombre, tipo: 'contratista' as const, subtitulo: c.tipo_contrato,
+    })),
+  ], [empleadosDisponibles, contratistasDisponibles]);
 
   // ---------------------------------------------------------------------------------
   // Selección de personal — filtrado, selección y helpers puramente presentacionales.
@@ -1255,20 +1311,57 @@ export function DailyMovementForm({ aplicacion, open, onOpenChange, onSuccess }:
           )}
         </div>
 
-        {/* Responsable */}
+        {/* Responsable — picker sobre empleados/contratistas activos (mismo universo
+            que la cuadrilla): ya no es texto libre, ver CLAUDE.md del módulo. */}
         <div className="border-t border-border/60 px-4 pt-4">
           <Field>
             <FieldLabel>
               Responsable <span className="text-destructive">*</span>
             </FieldLabel>
-            <Input
-              type="text"
-              value={responsable}
-              onChange={(e) => setResponsable(e.target.value)}
-              placeholder="Nombre del responsable"
-              disabled={loading}
-              aria-invalid={!!erroresCampo.responsable}
-            />
+            <Popover open={responsablePopoverOpen} onOpenChange={setResponsablePopoverOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  disabled={loading}
+                  aria-invalid={!!erroresCampo.responsable}
+                  className="flex w-full items-center gap-2 rounded-md border border-input px-3 py-2.5 text-left text-sm transition-colors hover:border-ring disabled:opacity-50 aria-invalid:border-destructive"
+                >
+                  <Search className="size-4 flex-shrink-0 text-muted-foreground" />
+                  <span className={cn('flex-1 truncate', !responsable && 'text-muted-foreground')}>
+                    {responsable || 'Buscar responsable…'}
+                  </span>
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="p-0" style={{ width: 'var(--radix-popover-trigger-width)' }}>
+                <Command>
+                  <CommandInput placeholder="Buscar por nombre…" />
+                  <CommandList>
+                    <CommandEmpty>
+                      {personasResponsable.length === 0
+                        ? 'No hay empleados ni contratistas activos.'
+                        : 'Sin resultados.'}
+                    </CommandEmpty>
+                    <CommandGroup>
+                      {personasResponsable.map(p => (
+                        <CommandItem
+                          key={`${p.tipo}-${p.id}`}
+                          value={p.nombre}
+                          onSelect={() => {
+                            setResponsable(p.nombre);
+                            setResponsablePopoverOpen(false);
+                          }}
+                        >
+                          <span className="min-w-0 flex-1 truncate">{p.nombre}</span>
+                          <span className="flex-shrink-0 text-xs capitalize text-muted-foreground">
+                            {p.subtitulo || (p.tipo === 'empleado' ? 'Empleado' : 'Contratista')}
+                          </span>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
             <FieldError>{erroresCampo.responsable}</FieldError>
           </Field>
         </div>

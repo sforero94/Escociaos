@@ -186,7 +186,6 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                         *,
                         aplicaciones_cierre(*),
                         aplicaciones_lotes(*, lotes(nombre, total_arboles, arboles_grandes, arboles_medianos, arboles_pequenos, arboles_clonales)),
-                        aplicaciones_lotes_planificado(*, lotes(nombre, total_arboles, arboles_grandes, arboles_medianos, arboles_pequenos, arboles_clonales)),
                         aplicaciones_mezclas(*),
                         aplicaciones_calculos(*)
                     `)
@@ -202,8 +201,11 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                     .select('*')
                     .eq('aplicacion_id', appId);
 
-                const totalArboles = data.aplicaciones_lotes_planificado?.reduce((sum: number, l: any) =>
-                    sum + (l.total_arboles || l.lotes?.total_arboles || 0), 0) || 0;
+                // `aplicaciones_lotes_planificado` is always empty (CLAUDE.md, "De dónde sale
+                // el PLAN") and this helper never had a fallback for the previous-application
+                // tree count — it has always resolved to 0 here. Kept literal to preserve that
+                // behaviour exactly rather than inventing a new source for the comparison app.
+                const totalArboles = 0;
                 const totalJornales = Number(data.jornales_utilizados || 0);
                 const canecasReales = movs?.reduce((sum, m) => sum + Number(m.numero_canecas || m.numero_bultos || 0), 0) || 0;
 
@@ -224,7 +226,6 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                     tareas ( jornales_estimados ),
                     aplicaciones_cierre(*),
                     aplicaciones_lotes(*, lotes(nombre, total_arboles, arboles_grandes, arboles_medianos, arboles_pequenos, arboles_clonales)),
-                    aplicaciones_lotes_planificado(*, lotes(nombre, total_arboles, arboles_grandes, arboles_medianos, arboles_pequenos, arboles_clonales)),
                     aplicaciones_mezclas(*),
                     aplicaciones_calculos(*)
                 `)
@@ -359,10 +360,11 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
             // ----------------------------------------------------------------
 
             // --- Helper: Totals ---
-            // Prefer aplicaciones_lotes_planificado for tree counts; fall back to aplicaciones_lotes
-            const lotesSource = (appData.aplicaciones_lotes_planificado?.length > 0
-                ? appData.aplicaciones_lotes_planificado
-                : appData.aplicaciones_lotes) || [];
+            // Tree count source: `aplicaciones_lotes` (real, populated table). This used to
+            // prefer `aplicaciones_lotes_planificado` and fall back to `aplicaciones_lotes`, but
+            // the planned table is always empty (CLAUDE.md, "De dónde sale el PLAN") so the
+            // fallback was the only branch that ever ran — the dead preference is removed.
+            const lotesSource = appData.aplicaciones_lotes || [];
             const totalArbolesApp = lotesSource.reduce((sum: number, l: any) =>
                 sum + (l.total_arboles || l.lotes?.total_arboles || 0), 0) || 0;
 
@@ -393,19 +395,10 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
             const lotesRealMap = new Map();
             const productosRealMap = new Map();
 
-            // Initialize real map with all planned lots to ensure coverage
-            appData.aplicaciones_lotes_planificado?.forEach((plan: any) => {
-                const loteId = plan.lote_id;
-                lotesRealMap.set(loteId, {
-                    lote_id: loteId,
-                    lote_nombre: plan.lotes?.nombre || 'Unknown',
-                    total_arboles: plan.total_arboles || plan.lotes?.total_arboles || 0,
-                    canecas_200l: 0,
-                    litros_total: 0,
-                    jornales: 0,
-                    costo_mano_obra: 0
-                });
-            });
+            // This used to seed lotesRealMap from `aplicaciones_lotes_planificado` before
+            // aggregating movements, "to ensure coverage". That table is always empty (CLAUDE.md,
+            // "De dónde sale el PLAN"), so the seed never ran — lotesRealMap has only ever been
+            // populated by movements and registros_trabajo, below. Removed as dead code.
 
             // Aggregate Movements
             movimientos?.forEach(m => {
@@ -509,50 +502,15 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
             const productosPlanMap = new Map();
             let costoProductosPlanTotal = 0;
 
-            appData.aplicaciones_lotes_planificado?.forEach((lp: any) => {
-                const loteId = lp.lote_id;
-                const mezclaId = lp.mezcla_id;
-                const canecas = Number(lp.canecas_planificado || 0); // Need to verify if this is populated
-                const litros = lp.litros_mezcla_planificado || (canecas * (lp.tamano_caneca || 200));
-
-                lotesPlanMap.set(loteId, {
-                    lote_id: loteId,
-                    canecas_plan: canecas,
-                    litros_plan: litros,
-                    jornales_plan: jornalesPlanLote(lp.total_arboles)
-                });
-
-                // Products in this mixture
-                const prods = mezclasProductos?.filter((mp: any) => mp.mezcla_id === mezclaId) || [];
-                prods.forEach((mp: any) => {
-                    const key = `${loteId}-${mp.producto_id}`;
-                    // Dosis check: usually per caneca for field applications
-                    const dosis = Number(mp.dosis || 0);
-                    const cantidad = canecas * dosis;
-                    const precio = Number(mp.precio_unitario || 0);  // Now available from Phase 1
-                    const costo = cantidad * precio;
-
-                    costoProductosPlanTotal += costo;
-
-                    productosPlanMap.set(key, {
-                        lote_id: loteId,
-                        producto_id: mp.producto_id,
-                        nombre: mp.producto_nombre,  // Now available from Phase 1
-                        cantidad_plan: cantidad,
-                        costo_plan: costo
-                    });
-                });
-            });
-
-            // Real plan source: `aplicaciones_lotes_planificado` has 0 rows and always has (see
-            // CLAUDE.md, "Applications Data Architecture" / D6) — the loop above never runs.
-            // `aplicaciones_calculos` is the actual snapshot the Calculadora wrote per lote when
-            // the application was planned (`numero_canecas`/`litros_mezcla`, or
-            // `numero_bultos`/`kilos_totales` for Fertilización — same field split the real-data
-            // aggregation above uses), and this hook already fetches it. 4 of 20 closed
-            // applications have no `aplicaciones_calculos` rows (the calculator was never run for
-            // them); those fall straight through to Fallback A/B below with plan left at 0/absent
-            // — never fabricated.
+            // Plan source: `aplicaciones_lotes_planificado` is always empty (CLAUDE.md, "De
+            // dónde sale el PLAN" / "Applications Data Architecture" D6). A loop reading it used
+            // to sit here and silently never run — removed. `aplicaciones_calculos` is the real
+            // snapshot the Calculadora wrote per lote when the application was planned
+            // (`numero_canecas`/`litros_mezcla`, or `numero_bultos`/`kilos_totales` for
+            // Fertilización — same field split the real-data aggregation above uses), and this
+            // hook already fetches it. 4 of 20 closed applications have no `aplicaciones_calculos`
+            // rows (the calculator was never run for them); those fall straight through to
+            // Fallback A/B below with plan left at 0/absent — never fabricated.
             const calculosRows: any[] = appData.aplicaciones_calculos || [];
             if (lotesPlanMap.size === 0 && calculosRows.length > 0) {
                 const esFertilizacionCalc = appData.tipo_aplicacion === 'Fertilización';
@@ -918,8 +876,18 @@ export function useReporteAplicacion(aplicacionId: string): UseReporteAplicacion
                 valor_jornal: valorJornal
             };
 
-            // Get caneca size from first planned lot (or default to 200L)
-            const tamanoCaneca = appData.aplicaciones_lotes_planificado?.[0]?.tamano_caneca || 200;
+            // Caneca size: `aplicaciones_lotes_planificado` is always empty (CLAUDE.md, "De
+            // dónde sale el PLAN"), so this used to always resolve to the literal fallback below
+            // — it was never reading a real per-application value. `aplicaciones_calculos`
+            // doesn't carry `tamano_caneca` either (checked: its columns are numero_canecas /
+            // litros_mezcla / numero_bultos / kilos_*, no caneca size). The real source is
+            // `aplicaciones_lotes`, populated on every closed application (see
+            // CalculadoraAplicaciones.tsx's lote insert) and already fetched above. Fertilización
+            // applications store `tamano_caneca: null` there (they use bultos, not canecas), so
+            // they still fall through to the default — same result as before, for the right
+            // reason instead of an always-empty table.
+            const TAMANO_CANECA_DEFAULT_L = 200;
+            const tamanoCaneca = appData.aplicaciones_lotes?.[0]?.tamano_caneca || TAMANO_CANECA_DEFAULT_L;
 
             setReporte({
                 aplicacion_id: appData.id,

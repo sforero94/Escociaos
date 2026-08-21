@@ -6,10 +6,18 @@
 // Como `cantidad_actual` es un campo más del formulario, el saldo viajaba con
 // el resto y se sobrescribía SIN movimiento: una mutación de stock sin rastro.
 //
-// El defecto era invisible a un grep. Los cuatro escritores legítimos
-// (`NuevoMovimientoModal`, `NewPurchase`, `PurchaseHistory`, `CierreAplicacion`)
-// escriben `cantidad_actual:` de forma explícita y todos insertan su movimiento;
-// este escribía el mismo campo montado en un spread, sin nombrarlo nunca.
+// El defecto era invisible a un grep. Los escritores legítimos
+// (`NuevoMovimientoModal`, `NewPurchase`, `PurchaseHistory` en TS; el RPC
+// `fn_cerrar_aplicacion` en SQL, migración 106) escriben `cantidad_actual`
+// de forma explícita y todos insertan su movimiento al lado; este escribía
+// el mismo campo montado en un spread, sin nombrarlo nunca.
+//
+// `CierreAplicacion.tsx` escribía `cantidad_actual` directo hasta la
+// migración 106 (cierre transaccional) -- ahora esa escritura vive en el
+// RPC (`src/sql/migrations/106_cierre_aplicacion_transaccional.sql`), que
+// hace el UPDATE de productos y el INSERT de movimientos_inventario en la
+// misma transacción. El archivo TS ya no escribe ninguna de las dos tablas
+// directamente: llama al RPC vía `.rpc('fn_cerrar_aplicacion', …)`.
 //
 // Evidencia en producción (2026-08-10): 5 productos activos tienen desfase
 // entre `cantidad_actual` y la suma de sus `movimientos_inventario` Y su
@@ -87,12 +95,11 @@ describe('prepararDatosProducto — el saldo de inventario no viaja en un UPDATE
 // `movimientos_inventario` en el mismo archivo rompe el contrato.
 // ============================================================================
 
-/** Archivos autorizados a mover el saldo, cada uno con su movimiento al lado. */
+/** Archivos TS autorizados a mover el saldo, cada uno con su movimiento al lado. */
 const ESCRITORES_AUTORIZADOS = [
   'src/components/inventory/NuevoMovimientoModal.tsx',
   'src/components/inventory/NewPurchase.tsx',
   'src/components/inventory/PurchaseHistory.tsx',
-  'src/components/aplicaciones/CierreAplicacion.tsx',
 ];
 
 describe('guard: todo escritor de productos.cantidad_actual inserta su movimiento', () => {
@@ -104,6 +111,40 @@ describe('guard: todo escritor de productos.cantidad_actual inserta su movimient
       fuente.includes("from('movimientos_inventario')"),
       `${archivo} escribe productos.cantidad_actual pero ya no toca movimientos_inventario. ` +
         'Un saldo que cambia sin movimiento es stock sin trazabilidad.',
+    ).toBe(true);
+  });
+
+  it('el RPC fn_cerrar_aplicacion (migración 106) actualiza productos e inserta su movimiento en la misma transacción', () => {
+    const fuente = readFileSync(
+      join(process.cwd(), 'src/sql/migrations/106_cierre_aplicacion_transaccional.sql'),
+      'utf-8',
+    );
+
+    expect(
+      /UPDATE\s+productos[\s\S]*?SET[\s\S]*?cantidad_actual\s*=/i.test(fuente),
+      'fn_cerrar_aplicacion ya no escribe productos.cantidad_actual',
+    ).toBe(true);
+    expect(
+      fuente.includes('INSERT INTO movimientos_inventario'),
+      'fn_cerrar_aplicacion escribe productos.cantidad_actual pero ya no inserta en ' +
+        'movimientos_inventario dentro de la misma transacción.',
+    ).toBe(true);
+  });
+
+  it('CierreAplicacion.tsx ya NO escribe productos ni movimientos_inventario directo -- llama al RPC transaccional', () => {
+    const fuente = readFileSync(
+      join(process.cwd(), 'src/components/aplicaciones/CierreAplicacion.tsx'),
+      'utf-8',
+    );
+
+    expect(
+      fuente.includes("from('productos')") && fuente.includes(".update({ cantidad_actual"),
+      'CierreAplicacion.tsx volvió a escribir productos.cantidad_actual directo -- esa ' +
+        'escritura debe vivir en fn_cerrar_aplicacion (migración 106), no en el cliente.',
+    ).toBe(false);
+    expect(
+      fuente.includes("rpc('fn_cerrar_aplicacion'"),
+      'CierreAplicacion.tsx dejó de llamar al RPC transaccional fn_cerrar_aplicacion.',
     ).toBe(true);
   });
 

@@ -1,6 +1,21 @@
 -- =============================================================================
 -- 103_clima_cobertura_parcial.sql
 --
+-- *** APLICADA A PRODUCCION EL 2026-08-21. ***
+-- Resultado real: 5 dias marcados `cobertura_parcial` con `lluvia_total_mm`
+-- en NULL (2026-03-18, 03-27, 03-30, 08-19 y 08-20), 0 dias parciales
+-- quedaron sellados `ok`, la serie de wunderground-historico quedo intacta en
+-- 1.730 filas `ok`, y el total de la tabla no se movio (1.911 antes y
+-- despues). Las 7 guardas pasaron. Volver a correrla ABORTA en la
+-- pre-condicion 0.5 ("el CHECK ya incluye cobertura_parcial").
+--
+-- NOTA sobre la guarda 4.4: la corrida real uso una linea base equivalente
+-- pero implementada con una TEMP TABLE, no con el `set_config`
+-- transaction-local que quedo en este archivo. Las dos comparan el conteo de
+-- partida contra el final y las dos dieron 1.911 = 1.911; la version que
+-- sobrevive es esta, que ademas detecta explicitamente el caso "no se corrio
+-- en una sola transaccion". La diferencia no cambio ningun dato.
+--
 -- Un dia del que solo se capturo una parte deja de escribirse en la historia
 -- permanente del clima como si fuera un dia completo y confiable.
 --
