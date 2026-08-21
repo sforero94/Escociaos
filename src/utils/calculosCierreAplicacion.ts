@@ -10,10 +10,22 @@
 
 import type { RegistroTrabajoCierre } from '@/types/aplicaciones';
 
-/** Opciones de fracción de jornal — sin cambios respecto a la pantalla original, solo movida
- * aquí para que el `Select` de la tabla y el del formulario "Agregar registro" (dos archivos
- * distintos tras el split) compartan una única fuente. */
-export const FRACCION_OPTIONS = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0] as const;
+/**
+ * Opciones de fracción de jornal — las MISMAS 4 que acepta el ENUM `fraccion_jornal` en la base
+ * (verificado contra `pg_enum` el 2026-08-21), y las mismas que ofrece
+ * `components/labores/EditarRegistroDialog.tsx`, que edita esa misma tabla.
+ *
+ * **Antes traía `1.5` y `2.0`, que la base no puede guardar.** El ENUM no tiene esas etiquetas, así
+ * que elegirlas hacía fallar la escritura de `registros_trabajo` — y como la versión no
+ * transaccional escribía con `await supabase...insert({...})` sin mirar `{ error }`, el fallo se
+ * tragaba en silencio: el cierre decía "listo" y el registro nunca se guardaba. No es una
+ * regresión del rediseño; venía así y el split solo la movió tal cual.
+ *
+ * Si alguna vez hay que registrar horas extra (>1 jornal), esto NO se arregla agregando la opción
+ * de vuelta acá: hay que agregar la etiqueta al ENUM con su propia migración, o el mismo silencio
+ * vuelve.
+ */
+export const FRACCION_OPTIONS = [0.25, 0.5, 0.75, 1.0] as const;
 
 // ---------------------------------------------------------------------------------------------
 // Insumos — desviación planeado vs. aplicado
@@ -234,4 +246,221 @@ export function calcularExcepcionesCierre(
   }
 
   return { insumosCriticos, registrosSinTarifa, lotesSinLabor };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Payload del RPC transaccional fn_cerrar_aplicacion (migración 106) — toda la aritmética de
+// costos/fechas/consolidación de insumos que antes vivía inline en `cerrarAplicacion()` vive
+// acá, pura y testeada, para que el RPC no tenga que reimplementarla en SQL (un solo lenguaje
+// hace el cálculo, el otro solo escribe). El RPC no recalcula nada de lo que este objeto trae.
+// ---------------------------------------------------------------------------------------------
+
+export interface MovimientoInsumoInput {
+  producto_id: string;
+  producto_nombre: string;
+  cantidad_utilizada: number;
+  costo_unitario: number;
+}
+
+export interface LoteParaCierreInput {
+  lote_id: string;
+  nombre: string;
+  arboles: number;
+}
+
+export interface DatosFinalesCierreInput {
+  fechaInicioReal: string;
+  fechaFinReal: string;
+  observaciones: string;
+}
+
+export interface PayloadRegistroTrabajoCierre {
+  id?: string;
+  tarea_id: string;
+  empleado_id: string | null;
+  contratista_id: string | null;
+  lote_id: string;
+  fecha_trabajo: string;
+  /** STRING, no number — `registros_trabajo.fraccion_jornal` es un ENUM en BD, y lleva la etiqueta
+   * LITERAL del ENUM (`0.25` | `0.5` | `0.75` | `1.0`), producida por `etiquetaFraccionJornal()`.
+   * NO uses `.toString()`: `(1.0).toString()` da `"1"`, que el ENUM rechaza. Ver el comentario de
+   * `ETIQUETAS_FRACCION_JORNAL`. */
+  fraccion_jornal: string;
+  costo_jornal: number;
+  /** Ya calculado con la misma fórmula que `cerrarAplicacion()` usaba inline — el RPC lo inserta
+   * tal cual para registros `_isNew`, sin reimplementar la fórmula en SQL. */
+  valor_jornal_empleado: number;
+  observaciones: string | null;
+  _isNew: boolean;
+  _deleted: boolean;
+  _modified: boolean;
+}
+
+export interface PayloadInsumoAplicado {
+  producto_id: string;
+  producto_nombre: string;
+  cantidad: number;
+}
+
+export interface PayloadCierreAplicacion {
+  aplicacion_id: string;
+  fecha_cierre: string;
+  fecha_inicio_ejecucion: string;
+  fecha_fin_ejecucion: string;
+  dias_aplicacion: number;
+  jornales_utilizados: number;
+  valor_jornal: number;
+  /** aplicaciones.observaciones_cierre — texto crudo de `datosFinales.observaciones`, puede ser
+   * cadena vacía. Distinto de `observaciones_generales` a propósito (ver más abajo): la versión
+   * no transaccional escribía cada columna con una regla distinta y esta refactorización no las
+   * unifica. */
+  observaciones_cierre: string;
+  /** aplicaciones_cierre.observaciones_generales — `datosFinales.observaciones || null` (cadena
+   * vacía se guarda como NULL, no como ''). */
+  observaciones_generales: string | null;
+  costo_total_insumos: number;
+  costo_total_mano_obra: number;
+  costo_total: number;
+  costo_por_arbol: number;
+  lote_aplicacion: string;
+  registros_trabajo: PayloadRegistroTrabajoCierre[];
+  insumos_aplicados: PayloadInsumoAplicado[];
+}
+
+/**
+ * Reproduce exactamente `reg.tarifa_jornal || (reg.salario ? Math.round(...) : 0)` — la fórmula
+ * que `cerrarAplicacion()` (versión no transaccional) usaba inline para
+ * `registros_trabajo.valor_jornal_empleado` de un registro NUEVO. Copia literal, no una
+ * reinterpretación: `||` es truthy-check de JS (un `tarifa_jornal` de 0 cae al fallback), no
+ * `??`.
+ */
+function calcularValorJornalEmpleadoNuevo(reg: RegistroTrabajoCierre): number {
+  if (reg.tarifa_jornal) return reg.tarifa_jornal;
+  if (reg.salario) {
+    return Math.round(
+      ((reg.salario + (reg.prestaciones || 0) + (reg.auxilios || 0)) /
+        ((reg.horas_semanales || 48) * 4.33)) *
+        8,
+    );
+  }
+  return 0;
+}
+
+/**
+ * Las 4 etiquetas EXACTAS del ENUM `fraccion_jornal` en producción (verificadas contra `pg_enum`
+ * el 2026-08-21): `0.25`, `0.5`, `0.75`, **`1.0`**.
+ *
+ * **Por qué no se puede usar `.toString()`.** Los registros llegan a la pantalla como NÚMEROS —
+ * `laborCosts.ts:244` hace `parseFloat(r.fraccion_jornal)` al cargarlos, y los registros nuevos
+ * nacen con el literal `1.0` (`CierreAplicacion.tsx:124` y `:515`). En JavaScript `(1.0).toString()`
+ * es `"1"`, **no** `"1.0"`, así que la fracción más común de la finca (1.068 de 2.688 filas) se
+ * enviaba como `'1'`, que NO es una etiqueta válida del ENUM. Las otras tres coinciden por
+ * casualidad (`"0.25"`, `"0.5"`, `"0.75"`), y esa casualidad fue justamente lo que escondió el
+ * defecto.
+ *
+ * **Cómo se manifestaba antes de la migración 106.** La versión no transaccional escribía con
+ * `await supabase.from('registros_trabajo').insert({...})` SIN desestructurar `{ error }`: el
+ * rechazo del ENUM se tragaba en silencio y el cierre reportaba éxito habiendo perdido el
+ * registro. Dentro del RPC ese mismo fallo aborta la transacción entera — más honesto, pero
+ * igual de roto. Por eso el mapeo es explícito acá y no una coincidencia de formato.
+ */
+const ETIQUETAS_FRACCION_JORNAL: ReadonlyArray<{ valor: number; etiqueta: string }> = [
+  { valor: 0.25, etiqueta: '0.25' },
+  { valor: 0.5, etiqueta: '0.5' },
+  { valor: 0.75, etiqueta: '0.75' },
+  { valor: 1, etiqueta: '1.0' },
+];
+
+/**
+ * Convierte la fracción numérica de la UI a la etiqueta literal del ENUM.
+ *
+ * Ante un valor que no es ninguna de las 4 etiquetas **lanza**, en vez de inventar un formato que
+ * la base va a rechazar más adelante: el payload se arma antes de escribir nada, así que fallar acá
+ * deja la aplicación intacta y con un mensaje entendible, que es exactamente lo contrario del
+ * `insert` sin `{ error }` que este arreglo reemplaza.
+ */
+export function etiquetaFraccionJornal(valor: number): string {
+  const match = ETIQUETAS_FRACCION_JORNAL.find((f) => Math.abs(f.valor - valor) < 1e-9);
+  if (!match) {
+    throw new Error(
+      `fraccion_jornal inválida: ${valor}. Solo se aceptan ${ETIQUETAS_FRACCION_JORNAL.map((f) => f.etiqueta).join(', ')}.`,
+    );
+  }
+  return match.etiqueta;
+}
+
+/**
+ * Construye el payload jsonb de `fn_cerrar_aplicacion` (migración 106) a partir de exactamente
+ * los mismos datos que `CierreAplicacion.tsx` ya tenía en estado al momento de cerrar — ninguna
+ * consulta nueva, ninguna cifra calculada distinto de como la versión no transaccional la
+ * calculaba. Es el único lugar donde vive esa aritmética; el RPC solo persiste lo que este
+ * objeto dice, en el orden documentado en la migración 106.
+ */
+export function construirPayloadCierreAplicacion(params: {
+  aplicacionId: string;
+  registrosEditados: RegistroTrabajoCierre[];
+  datosFinales: DatosFinalesCierreInput;
+  lotes: LoteParaCierreInput[];
+  movimientos: MovimientoInsumoInput[];
+}): PayloadCierreAplicacion {
+  const { aplicacionId, registrosEditados, datosFinales, lotes, movimientos } = params;
+
+  const registrosActivos = registrosEditados.filter((r) => !r._deleted);
+  const totalJornalesLabor = registrosActivos.reduce((s, r) => s + r.fraccion_jornal, 0);
+  const costoManoObraReal = registrosActivos.reduce((s, r) => s + r.costo_jornal, 0);
+  const valorJornalPromedio = totalJornalesLabor > 0 ? costoManoObraReal / totalJornalesLabor : 0;
+
+  const totalArboles = lotes.reduce((sum, lote) => sum + lote.arboles, 0);
+  const costoInsumos = movimientos.reduce((sum, mov) => sum + mov.cantidad_utilizada * mov.costo_unitario, 0);
+  const costoTotal = costoInsumos + costoManoObraReal;
+  const costoPorArbol = totalArboles > 0 ? costoTotal / totalArboles : 0;
+
+  const fechaInicio = new Date(datosFinales.fechaInicioReal);
+  const fechaFin = new Date(datosFinales.fechaFinReal);
+  const diasAplicacion = Math.ceil((fechaFin.getTime() - fechaInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+  const insumosMap = new Map<string, PayloadInsumoAplicado>();
+  movimientos.forEach((mov) => {
+    if (!insumosMap.has(mov.producto_id)) {
+      insumosMap.set(mov.producto_id, {
+        producto_id: mov.producto_id,
+        producto_nombre: mov.producto_nombre,
+        cantidad: 0,
+      });
+    }
+    insumosMap.get(mov.producto_id)!.cantidad += mov.cantidad_utilizada;
+  });
+
+  return {
+    aplicacion_id: aplicacionId,
+    fecha_cierre: datosFinales.fechaFinReal,
+    fecha_inicio_ejecucion: datosFinales.fechaInicioReal,
+    fecha_fin_ejecucion: datosFinales.fechaFinReal,
+    dias_aplicacion: diasAplicacion,
+    jornales_utilizados: totalJornalesLabor,
+    valor_jornal: Math.round(valorJornalPromedio),
+    observaciones_cierre: datosFinales.observaciones,
+    observaciones_generales: datosFinales.observaciones || null,
+    costo_total_insumos: costoInsumos,
+    costo_total_mano_obra: costoManoObraReal,
+    costo_total: costoTotal,
+    costo_por_arbol: costoPorArbol,
+    lote_aplicacion: lotes.map((l) => l.nombre).join(', '),
+    registros_trabajo: registrosEditados.map((r) => ({
+      id: r.id,
+      tarea_id: r.tarea_id,
+      empleado_id: r.empleado_id || null,
+      contratista_id: r.contratista_id || null,
+      lote_id: r.lote_id,
+      fecha_trabajo: r.fecha_trabajo,
+      fraccion_jornal: etiquetaFraccionJornal(r.fraccion_jornal),
+      costo_jornal: r.costo_jornal,
+      valor_jornal_empleado: calcularValorJornalEmpleadoNuevo(r),
+      observaciones: r.observaciones || null,
+      _isNew: !!r._isNew,
+      _deleted: !!r._deleted,
+      _modified: !!r._modified,
+    })),
+    insumos_aplicados: Array.from(insumosMap.values()),
+  };
 }

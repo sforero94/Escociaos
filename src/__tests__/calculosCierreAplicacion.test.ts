@@ -7,6 +7,9 @@ import {
   agruparRegistrosPorLote,
   calcularKPIsLabores,
   formatearListaConY,
+  construirPayloadCierreAplicacion,
+  etiquetaFraccionJornal,
+  FRACCION_OPTIONS,
 } from '@/utils/calculosCierreAplicacion';
 import type { RegistroTrabajoCierre } from '@/types/aplicaciones';
 
@@ -188,5 +191,236 @@ describe('calcularExcepcionesCierre', () => {
   it('NO marca lotes sin labor cuando el fetch de lotes llegó vacío (evita falso positivo masivo)', () => {
     const r = calcularExcepcionesCierre([], [registro({ lote_id: 'l1' })], [], true);
     expect(r.lotesSinLabor).toEqual([]);
+  });
+});
+
+describe('etiquetaFraccionJornal — etiquetas literales del ENUM fraccion_jornal', () => {
+  // Las 4 etiquetas verificadas contra pg_enum en produccion el 2026-08-21.
+  it('1 se serializa como "1.0", NO como "1"', () => {
+    // El defecto que este helper cierra: (1.0).toString() === "1", que el ENUM rechaza.
+    // Es la fraccion mas comun de la finca (1.068 de 2.688 filas) y el valor por defecto
+    // de un registro nuevo en la pantalla de Cierre.
+    expect(etiquetaFraccionJornal(1)).toBe('1.0');
+    expect(etiquetaFraccionJornal(1.0)).toBe('1.0');
+    expect((1.0).toString()).toBe('1'); // deja constancia de POR QUE no sirve toString()
+  });
+
+  it('las otras tres etiquetas coinciden con su representacion decimal', () => {
+    expect(etiquetaFraccionJornal(0.25)).toBe('0.25');
+    expect(etiquetaFraccionJornal(0.5)).toBe('0.5');
+    expect(etiquetaFraccionJornal(0.75)).toBe('0.75');
+  });
+
+  it('un valor fuera del ENUM lanza en vez de inventar un formato que la BD va a rechazar', () => {
+    expect(() => etiquetaFraccionJornal(0.6)).toThrow(/fraccion_jornal invalida|fraccion_jornal inv/);
+    expect(() => etiquetaFraccionJornal(0)).toThrow();
+    expect(() => etiquetaFraccionJornal(2)).toThrow();
+  });
+
+  it('el payload del cierre lleva la etiqueta del ENUM para el jornal completo', () => {
+    const payload = construirPayloadCierreAplicacion({
+      aplicacionId: 'app1',
+      registrosEditados: [
+        registro({ id: 'r1', fraccion_jornal: 1, _modified: true }),
+        registro({ id: 'r2', fraccion_jornal: 0.5, _isNew: true }),
+      ],
+      datosFinales: { fechaInicioReal: '2026-08-05', fechaFinReal: '2026-08-05', observaciones: '' },
+      lotes: [{ lote_id: 'l1', nombre: 'Piedra Paula', arboles: 100 }],
+      movimientos: [],
+    });
+    expect(payload.registros_trabajo[0].fraccion_jornal).toBe('1.0');
+    expect(payload.registros_trabajo[1].fraccion_jornal).toBe('0.5');
+  });
+});
+
+describe('construirPayloadCierreAplicacion', () => {
+  const datosFinalesBase = {
+    fechaInicioReal: '2026-08-05',
+    fechaFinReal: '2026-08-07',
+    observaciones: 'Todo bien',
+  };
+  const lotesBase = [
+    { lote_id: 'l1', nombre: 'Piedra Paula', arboles: 100 },
+    { lote_id: 'l2', nombre: 'La Vega', arboles: 50 },
+  ];
+  const movimientosBase = [
+    { producto_id: 'p1', producto_nombre: 'Magister', cantidad_utilizada: 10, costo_unitario: 1000 },
+    { producto_id: 'p1', producto_nombre: 'Magister', cantidad_utilizada: 5, costo_unitario: 1000 },
+    { producto_id: 'p2', producto_nombre: 'Citroemulsion', cantidad_utilizada: 2, costo_unitario: 5000 },
+  ];
+
+  it('calcula jornales, costos y días de aplicación igual que la versión no transaccional', () => {
+    const registros = [
+      registro({ id: 'r1', fraccion_jornal: 1, costo_jornal: 100000 }),
+      registro({ id: 'r2', fraccion_jornal: 0.5, costo_jornal: 50000 }),
+      registro({ id: 'r3', fraccion_jornal: 1, costo_jornal: 999999, _deleted: true }), // excluido
+    ];
+    const payload = construirPayloadCierreAplicacion({
+      aplicacionId: 'app1',
+      registrosEditados: registros,
+      datosFinales: datosFinalesBase,
+      lotes: lotesBase,
+      movimientos: movimientosBase,
+    });
+
+    // jornales/costo mano de obra: solo activos (no _deleted)
+    expect(payload.jornales_utilizados).toBe(1.5);
+    expect(payload.costo_total_mano_obra).toBe(150000);
+    // valor_jornal = costoManoObra / jornales, redondeado
+    expect(payload.valor_jornal).toBe(100000);
+    // costo insumos: 10*1000 + 5*1000 + 2*5000 = 25000
+    expect(payload.costo_total_insumos).toBe(25000);
+    expect(payload.costo_total).toBe(175000);
+    // costo/árbol: 175000 / (100+50)
+    expect(payload.costo_por_arbol).toBeCloseTo(175000 / 150, 6);
+    // 2026-08-05 -> 2026-08-07 inclusive = 3 días
+    expect(payload.dias_aplicacion).toBe(3);
+  });
+
+  it('jornales en 0 no divide por cero: valor_jornal y costo_por_arbol caen a 0', () => {
+    const payload = construirPayloadCierreAplicacion({
+      aplicacionId: 'app1',
+      registrosEditados: [],
+      datosFinales: datosFinalesBase,
+      lotes: [],
+      movimientos: [],
+    });
+    expect(payload.valor_jornal).toBe(0);
+    expect(payload.costo_por_arbol).toBe(0);
+  });
+
+  it('observaciones_cierre conserva el texto crudo (incl. cadena vacía); observaciones_generales lo convierte a null', () => {
+    const payload = construirPayloadCierreAplicacion({
+      aplicacionId: 'app1',
+      registrosEditados: [],
+      datosFinales: { ...datosFinalesBase, observaciones: '' },
+      lotes: [],
+      movimientos: [],
+    });
+    expect(payload.observaciones_cierre).toBe('');
+    expect(payload.observaciones_generales).toBeNull();
+  });
+
+  it('consolida insumos_aplicados por producto_id, sumando cantidad_utilizada', () => {
+    const payload = construirPayloadCierreAplicacion({
+      aplicacionId: 'app1',
+      registrosEditados: [],
+      datosFinales: datosFinalesBase,
+      lotes: [],
+      movimientos: movimientosBase,
+    });
+    expect(payload.insumos_aplicados).toEqual([
+      { producto_id: 'p1', producto_nombre: 'Magister', cantidad: 15 },
+      { producto_id: 'p2', producto_nombre: 'Citroemulsion', cantidad: 2 },
+    ]);
+  });
+
+  it('lote_aplicacion une los nombres de lote con coma y espacio', () => {
+    const payload = construirPayloadCierreAplicacion({
+      aplicacionId: 'app1',
+      registrosEditados: [],
+      datosFinales: datosFinalesBase,
+      lotes: lotesBase,
+      movimientos: [],
+    });
+    expect(payload.lote_aplicacion).toBe('Piedra Paula, La Vega');
+  });
+
+  it('registros_trabajo: fraccion_jornal se serializa como la ETIQUETA del ENUM, no con toString()', () => {
+    const payload = construirPayloadCierreAplicacion({
+      aplicacionId: 'app1',
+      registrosEditados: [registro({ id: 'r1', fraccion_jornal: 1 })],
+      datosFinales: datosFinalesBase,
+      lotes: [],
+      movimientos: [],
+    });
+    // La version anterior de este test usaba 1.5 -> '1.5', que es justamente un valor que el ENUM
+    // NO acepta; pasaba por casualidad porque toString() lo round-trippea. El caso que importa es
+    // el jornal completo: 1 debe salir como '1.0'.
+    expect(payload.registros_trabajo[0].fraccion_jornal).toBe('1.0');
+    expect(typeof payload.registros_trabajo[0].fraccion_jornal).toBe('string');
+  });
+
+  it('FRACCION_OPTIONS solo ofrece fracciones que el ENUM puede guardar', () => {
+    // Ofrecer 1.5 o 2.0 hacia que la escritura fallara en silencio (insert sin { error }).
+    expect([...FRACCION_OPTIONS]).toEqual([0.25, 0.5, 0.75, 1.0]);
+    for (const f of FRACCION_OPTIONS) {
+      expect(() => etiquetaFraccionJornal(f)).not.toThrow();
+    }
+  });
+
+  it('registros_trabajo: preserva los flags _isNew/_deleted/_modified tal cual', () => {
+    const payload = construirPayloadCierreAplicacion({
+      aplicacionId: 'app1',
+      registrosEditados: [
+        registro({ id: 'r1', _modified: true }),
+        registro({ _isNew: true }),
+        registro({ id: 'r3', _deleted: true }),
+      ],
+      datosFinales: datosFinalesBase,
+      lotes: [],
+      movimientos: [],
+    });
+    expect(payload.registros_trabajo.map((r) => [r._isNew, r._deleted, r._modified])).toEqual([
+      [false, false, true],
+      [true, false, false],
+      [false, true, false],
+    ]);
+  });
+
+  it('valor_jornal_empleado de un registro nuevo contratista usa tarifa_jornal', () => {
+    const payload = construirPayloadCierreAplicacion({
+      aplicacionId: 'app1',
+      registrosEditados: [
+        registro({ trabajador_tipo: 'contratista', empleado_id: undefined, tarifa_jornal: 85000, _isNew: true }),
+      ],
+      datosFinales: datosFinalesBase,
+      lotes: [],
+      movimientos: [],
+    });
+    expect(payload.registros_trabajo[0].valor_jornal_empleado).toBe(85000);
+  });
+
+  it('valor_jornal_empleado de un registro nuevo empleado usa la fórmula salario+prestaciones+auxilios', () => {
+    const payload = construirPayloadCierreAplicacion({
+      aplicacionId: 'app1',
+      registrosEditados: [
+        registro({
+          salario: 1300000,
+          prestaciones: 200000,
+          auxilios: 50000,
+          horas_semanales: 48,
+          _isNew: true,
+        }),
+      ],
+      datosFinales: datosFinalesBase,
+      lotes: [],
+      movimientos: [],
+    });
+    const esperado = Math.round(((1300000 + 200000 + 50000) / (48 * 4.33)) * 8);
+    expect(payload.registros_trabajo[0].valor_jornal_empleado).toBe(esperado);
+  });
+
+  it('valor_jornal_empleado cae a 0 sin tarifa_jornal ni salario', () => {
+    const payload = construirPayloadCierreAplicacion({
+      aplicacionId: 'app1',
+      registrosEditados: [registro({ empleado_id: undefined, salario: undefined, _isNew: true })],
+      datosFinales: datosFinalesBase,
+      lotes: [],
+      movimientos: [],
+    });
+    expect(payload.registros_trabajo[0].valor_jornal_empleado).toBe(0);
+  });
+
+  it('empleado_id/contratista_id ausentes se normalizan a null, nunca undefined', () => {
+    const payload = construirPayloadCierreAplicacion({
+      aplicacionId: 'app1',
+      registrosEditados: [registro({ empleado_id: undefined, contratista_id: undefined })],
+      datosFinales: datosFinalesBase,
+      lotes: [],
+      movimientos: [],
+    });
+    expect(payload.registros_trabajo[0].empleado_id).toBeNull();
+    expect(payload.registros_trabajo[0].contratista_id).toBeNull();
   });
 });

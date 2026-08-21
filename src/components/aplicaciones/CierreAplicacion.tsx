@@ -12,6 +12,7 @@ import {
   agruparRegistrosPorLote,
   calcularKPIsLabores,
   formatearListaConY,
+  construirPayloadCierreAplicacion,
 } from '../../utils/calculosCierreAplicacion';
 import { useFormDraft } from '@/hooks/useFormDraft';
 import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
@@ -75,8 +76,11 @@ interface DatosFinales {
  * `SeccionConfirmarCierre`) para que este archivo orqueste datos y NO JSX de 1.500 líneas.
  *
  * Este archivo sigue siendo el único dueño de:
- * - `cargarDatos()` y `cerrarAplicacion()` — la secuencia de escrituras a Supabase no se tocó
- *   (ni el orden ni el manejo de errores), por diseño explícito de este rediseño.
+ * - `cargarDatos()` y `cerrarAplicacion()` — el CÁLCULO de lo que se cierra (costos, fechas,
+ *   consolidación de insumos) no se tocó, solo se movió a la función pura
+ *   `construirPayloadCierreAplicacion` (`calculosCierreAplicacion.ts`). La ESCRITURA dejó de ser
+ *   8 llamadas sueltas a Supabase y pasó a ser un único `.rpc('fn_cerrar_aplicacion', …)`
+ *   transaccional (migración 106) — mismo orden, mismos valores, ahora todo o nada.
  * - Todo el estado editable de Labores (`registrosEditados`, `datosFinales`, el formulario
  *   "Nuevo Registro") — las secciones son presentacionales, reciben props y callbacks.
  */
@@ -513,165 +517,33 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
   };
 
   /**
-   * CERRAR APLICACIÓN — secuencia de escrituras sin transacción SQL real. No se toca el orden
-   * ni el manejo de errores (fuera de alcance de W03 v2, ver el `.md` §9 riesgo #1).
+   * CERRAR APLICACIÓN — una sola escritura transaccional vía `.rpc('fn_cerrar_aplicacion', …)`
+   * (migración 106). El payload lo arma `construirPayloadCierreAplicacion` (función pura,
+   * testeada), con la MISMA aritmética que esta función calculaba inline antes de la migración
+   * 106 — el RPC no recalcula nada, solo persiste las 8 escrituras en el orden documentado ahí.
+   * Si cualquiera de las 8 falla (incluida la nueva guarda de inventario negativo o de doble
+   * cierre), Postgres revierte TODO — nunca queda un cierre a medias.
    */
   const cerrarAplicacion = async () => {
     try {
       setProcesando(true);
 
-      const registrosActivos = registrosEditados.filter((r) => !r._deleted);
+      const payload = construirPayloadCierreAplicacion({
+        aplicacionId: aplicacion.id,
+        registrosEditados,
+        datosFinales,
+        lotes,
+        movimientos,
+      });
 
-      const totalJornalesLabor = registrosActivos.reduce((s, r) => s + r.fraccion_jornal, 0);
-      const costoManoObraReal = registrosActivos.reduce((s, r) => s + r.costo_jornal, 0);
-      const valorJornalPromedio = totalJornalesLabor > 0 ? costoManoObraReal / totalJornalesLabor : 0;
+      // `fn_cerrar_aplicacion` (migración 106) todavía no existe en el `database.ts` generado
+      // (desactualizado, ver root CLAUDE.md) — mismo cast puntual que otros RPC nuevos ya usan
+      // en el resto del repo (p.ej. `useGanadoInventario.ts`, `useProduccionHato.ts`), acotado
+      // acá a esta sola llamada para no perder el tipado del resto del archivo.
+      const { error: errorRpc } = await (supabase as any).rpc('fn_cerrar_aplicacion', { payload }); // eslint-disable-line @typescript-eslint/no-explicit-any
 
-      const totalArbolesCalc = lotes.reduce((sum, lote) => sum + lote.arboles, 0);
-      const costoInsumosCalc = movimientos.reduce((sum, mov) => sum + mov.cantidad_utilizada * mov.costo_unitario, 0);
-      const costoTotalCalc = costoInsumosCalc + costoManoObraReal;
-      const costoPorArbolCalc = totalArbolesCalc > 0 ? costoTotalCalc / totalArbolesCalc : 0;
-
-      const fechaInicio = new Date(datosFinales.fechaInicioReal);
-      const fechaFin = new Date(datosFinales.fechaFinReal);
-      const diasAplicacion = Math.ceil((fechaFin.getTime() - fechaInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      // 0. Persistir ediciones de registros_trabajo
-      for (const reg of registrosEditados) {
-        if (reg._deleted && reg.id) {
-          await supabase.from('registros_trabajo').delete().eq('id', reg.id);
-        } else if (reg._isNew && !reg._deleted) {
-          await supabase.from('registros_trabajo').insert({
-            tarea_id: reg.tarea_id,
-            empleado_id: reg.empleado_id || null,
-            contratista_id: reg.contratista_id || null,
-            lote_id: reg.lote_id,
-            fecha_trabajo: reg.fecha_trabajo,
-            fraccion_jornal: reg.fraccion_jornal.toString(),
-            costo_jornal: reg.costo_jornal,
-            valor_jornal_empleado:
-              reg.tarifa_jornal ||
-              (reg.salario
-                ? Math.round(((reg.salario + (reg.prestaciones || 0) + (reg.auxilios || 0)) / ((reg.horas_semanales || 48) * 4.33)) * 8)
-                : 0),
-            observaciones: reg.observaciones || null,
-          } as any);
-        } else if (reg._modified && reg.id && !reg._deleted) {
-          await supabase
-            .from('registros_trabajo')
-            .update({ fraccion_jornal: reg.fraccion_jornal.toString() as any, costo_jornal: reg.costo_jornal })
-            .eq('id', reg.id);
-        }
-      }
-
-      // 1. CREAR REGISTRO EN aplicaciones_cierre
-      const { error: errorCierre } = await supabase
-        .from('aplicaciones_cierre')
-        .insert([
-          {
-            aplicacion_id: aplicacion.id,
-            fecha_cierre: datosFinales.fechaFinReal,
-            dias_aplicacion: diasAplicacion,
-            valor_jornal: Math.round(valorJornalPromedio),
-            observaciones_generales: datosFinales.observaciones || null,
-            cerrado_por: user?.email || null,
-          },
-        ])
-        .select()
-        .single();
-
-      if (errorCierre) {
-        throw new Error('Error al crear registro de cierre: ' + errorCierre.message);
-      }
-
-      // 2. ACTUALIZAR TABLA aplicaciones
-      const { error: errorUpdate } = await supabase
-        .from('aplicaciones')
-        .update({
-          estado: 'Cerrada',
-          fecha_cierre: datosFinales.fechaFinReal,
-          fecha_inicio_ejecucion: datosFinales.fechaInicioReal,
-          fecha_fin_ejecucion: datosFinales.fechaFinReal,
-          jornales_utilizados: totalJornalesLabor,
-          valor_jornal: Math.round(valorJornalPromedio),
-          observaciones_cierre: datosFinales.observaciones,
-          costo_total_insumos: costoInsumosCalc,
-          costo_total_mano_obra: costoManoObraReal,
-          costo_total: costoTotalCalc,
-          costo_por_arbol: costoPorArbolCalc,
-        })
-        .eq('id', aplicacion.id);
-
-      if (errorUpdate) {
-        throw new Error('Error al actualizar la aplicación: ' + errorUpdate.message);
-      }
-
-      // 3. Marcar tarea como Completada
-      if (aplicacion.tarea_id) {
-        await supabase
-          .from('tareas')
-          .update({ estado: 'Completada', fecha_fin_real: datosFinales.fechaFinReal })
-          .eq('id', aplicacion.tarea_id);
-      }
-
-      // 4. CONSOLIDAR INVENTARIO DE PRODUCTOS APLICADOS
-      if (movimientos.length > 0) {
-        const consolidado = new Map<string, { nombre: string; cantidad: number }>();
-
-        movimientos.forEach((mov) => {
-          if (!consolidado.has(mov.producto_id)) {
-            consolidado.set(mov.producto_id, { nombre: mov.producto_nombre, cantidad: 0 });
-          }
-          const item = consolidado.get(mov.producto_id)!;
-          item.cantidad += mov.cantidad_utilizada;
-        });
-
-        for (const [productoId, { nombre, cantidad }] of consolidado.entries()) {
-          const { data: producto, error: errorProd } = await supabase
-            .from('productos')
-            .select('cantidad_actual, unidad_medida, precio_unitario')
-            .eq('id', productoId)
-            .single();
-
-          if (errorProd || !producto) {
-            throw new Error(`Error obteniendo datos del producto ${nombre}`);
-          }
-
-          const saldoAnterior = producto.cantidad_actual || 0;
-          const saldoNuevo = saldoAnterior - cantidad;
-
-          const { error: errorUpdateInv } = await supabase
-            .from('productos')
-            .update({ cantidad_actual: saldoNuevo })
-            .eq('id', productoId);
-
-          if (errorUpdateInv) {
-            throw new Error(`Error actualizando inventario de ${nombre}`);
-          }
-
-          const { error: errorMov } = await supabase.from('movimientos_inventario').insert({
-            fecha_movimiento: datosFinales.fechaFinReal,
-            producto_id: productoId,
-            tipo_movimiento: 'Salida por Aplicación',
-            cantidad: cantidad,
-            unidad: producto.unidad_medida,
-            lote_aplicacion: lotes.map((l) => l.nombre).join(', '),
-            aplicacion_id: aplicacion.id,
-            saldo_anterior: saldoAnterior,
-            saldo_nuevo: saldoNuevo,
-            valor_movimiento: cantidad * (producto.precio_unitario || 0),
-            responsable: user?.email,
-            observaciones: `Cierre de aplicación: ${aplicacion.nombre_aplicacion}`,
-            provisional: false,
-          });
-
-          if (errorMov) {
-            throw new Error(`Error registrando movimiento de ${nombre}`);
-          }
-        }
+      if (errorRpc) {
+        throw new Error(errorRpc.message);
       }
 
       draft.clearDraft();
