@@ -159,3 +159,36 @@ desempate importaba mas que cualquiera de los dos hallazgos. [corrida: 2026-08-1
 
 ## Archivo
 (vacio)
+
+## Conectores y capacidad de escritura (corrida 2026-08-20-jueves)
+- **La sesion de una corrida programada recibe su lista de conectores CONGELADA al disparar.**
+  Habilitar un conector en la cuenta, o editarlo en la rutina, **no alcanza a la sesion que ya
+  esta corriendo** — aplica desde la corrida siguiente. Por eso el 2026-08-20 no se pudieron
+  aplicar las migraciones desde la propia corrida por mas que el dueno lo autorizara.
+  [corrida: 2026-08-20-jueves]
+- **`Supabase (Routines)` conecta como `supabase_read_only_user` con
+  `default_transaction_read_only = on` y NO expone `apply_migration`.** Toda escritura muere en
+  el nivel de transaccion con `25006`, antes de mirar politicas. No es un problema de permisos
+  que se pueda sortear: es el guardarrail. [corrida: 2026-08-20-jueves]
+- **HECHO DE PLATAFORMA QUE GOBIERNA EL DISENO — de la documentacion de routines, textual:**
+  «all of your connected MCP connectors are included by default. Remove any the routine doesn't
+  need: **Claude can use every tool from an included connector, including writes, without asking
+  for permission during a run**» y «there is no permission-mode picker and no approval prompts
+  during a run». **Consecuencia: si se agrega Composio a la lista de conectores de la rutina, las
+  corridas de lunes y jueves quedan con escritura irrestricta a produccion, a las 07:00, sin
+  nadie mirando y sin que la plataforma pregunte nunca.** Lo unico que lo frenaria seria la
+  instruccion del §6 — una guarda de prompt, no de plataforma, en una operacion cuyo trabajo es
+  justamente leer contenido no confiable todo el dia.
+  **Recomendacion vigente: mantener Composio FUERA de los conectores de la rutina.** Asi «una
+  corrida programada nunca escribe» es verdad estructural y no una promesa. Los arreglos van en
+  una sesion interactiva aparte, que es donde un "go" en vivo tiene sentido. Si alguna vez se
+  agrega, que sea una decision explicita del dueno y quede anotada aca.
+  [corrida: 2026-08-20-jueves]
+- **Transferir SQL largo por contenido, nunca retecleado.** base64 del fichero -> decode -> una
+  sola sentencia atomica. Probado: el round-trip da el mismo sha256. Retipear 496 lineas de
+  plpgsql contra produccion es un riesgo de transcripcion que no hace falta correr.
+  [corrida: 2026-08-20-jueves]
+- **Ningun total absoluto en una guarda de migracion que corre contra una tabla con cron.** La
+  103 fijo `v_total <> 1910`; el cron de clima inserta una fila por dia, asi que la guarda
+  caduco a las 24 h y volvio la migracion inaplicable (habria hecho todo el trabajo y abortado
+  contra si misma). Se captura el conteo de partida y se coteja contra si mismo. [corrida: 2026-08-20-jueves]
