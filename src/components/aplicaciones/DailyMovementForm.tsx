@@ -1447,10 +1447,20 @@ export function DailyMovementForm({ aplicacion, open, onOpenChange, onSuccess }:
 
   return (
     <>
-      {/* Escritorio: Sheet lateral, más ancho que el sm:max-w-sm por defecto — la
-          matriz de jornal×lote sería inutilizable a 384px (ver §6 del diseño). */}
+      {/* Escritorio: Sheet lateral de MEDIA PANTALLA, proporcional al monitor.
+          `clamp(480px, 50vw, 900px)`:
+            - 50vw es el objetivo — el panel crece con la pantalla en vez de quedar
+              clavado en un ancho fijo (1.366px → 683px, 1.600px → 800px).
+            - Piso de 480px: por debajo de un monitor de ~960px, media pantalla
+              empieza a apretar el formulario; ahí se prefiere invadir más de la
+              mitad antes que encoger los campos.
+            - Techo de 900px: en un monitor ancho, media pantalla son 1.200px+ y un
+              formulario de una columna a ese ancho se vuelve incómodo de leer —
+              la vista se estira sin ganar nada.
+          Antes era un fijo de 480px, y con ese ancho la matriz de jornales quedaba
+          literalmente inalcanzable (ver el comentario en JornalFractionMatrix). */}
       <Sheet open={open && !isMobile} onOpenChange={onOpenChange}>
-        <SheetContent className="flex w-full flex-col gap-0 p-0 sm:max-w-[480px]">
+        <SheetContent className="flex w-full flex-col gap-0 p-0 sm:max-w-[clamp(480px,50vw,900px)]">
           <SheetHeader className="border-b border-border px-5 py-4">
             <SheetTitle>{tituloHeader}</SheetTitle>
             <SheetDescription>{subtituloHeader}</SheetDescription>
