@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabase } from '../../utils/supabase/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSafeMode } from '../../contexts/SafeModeContext';
 import { InventorySubNav } from './InventorySubNav';
+import type { Database } from '@/types/database';
 import {
   ShoppingCart,
   Calendar,
@@ -43,6 +45,108 @@ interface Purchase {
     categoria: string;
     permitido_gerencia?: boolean;
   };
+}
+
+/**
+ * Ejecuta la eliminación de una compra revirtiendo el stock del producto.
+ *
+ * `movimientos_inventario` es un log de eventos, no un dato que se corrige a mano:
+ * la compra sí ocurrió, así que su movimiento `Entrada` original NUNCA se borra
+ * (y no puede filtrarse por `compra_id` -- esa columna no existe en esta tabla).
+ * En su lugar se inserta un movimiento `Salida Otros` compensatorio (mismo criterio
+ * que la migración 108 para `gan_movimientos`: no se borra la historia, se compensa).
+ *
+ * Ese movimiento compensatorio se escribe ANTES de tocar `productos.cantidad_actual`
+ * y, si falla, la función lanza y aborta -- el stock queda intacto en vez de moverse
+ * sin dejar rastro. No es atómico (llamado desde el navegador, sin RPC), pero el
+ * orden garantiza que nunca se pierde la trazabilidad silenciosamente.
+ *
+ * Exportada (en vez de quedar inline en `handleDeletePurchase`) para poder probar esta
+ * secuencia sin renderizar el componente -- este repo no tiene @testing-library/react.
+ */
+export async function eliminarCompraConReversion(
+  supabase: SupabaseClient<Database>,
+  purchase: Purchase,
+  responsable: string | null,
+): Promise<void> {
+  // 1. Leer el stock actual del producto
+  const { data: currentProduct, error: productFetchError } = await supabase
+    .from('productos')
+    .select('cantidad_actual')
+    .eq('id', purchase.producto_id)
+    .single();
+
+  if (productFetchError) throw new Error('Error al obtener producto: ' + productFetchError.message);
+
+  const saldoAnterior = currentProduct.cantidad_actual ?? 0;
+  const nuevaCantidad = saldoAnterior - purchase.cantidad;
+
+  if (nuevaCantidad < 0) {
+    throw new Error('No se puede eliminar la compra porque resultaría en inventario negativo');
+  }
+
+  // 2. Dejar el rastro en el ledger ANTES de tocar el stock -- si esto falla, se
+  // aborta acá y el inventario queda intacto.
+  const { error: movementAjusteError } = await supabase
+    .from('movimientos_inventario')
+    .insert({
+      fecha_movimiento: obtenerFechaHoy(),
+      producto_id: purchase.producto_id,
+      tipo_movimiento: 'Salida Otros',
+      cantidad: purchase.cantidad,
+      unidad: purchase.unidad as Database['public']['Enums']['unidad_medida'],
+      factura: null,
+      saldo_anterior: saldoAnterior,
+      saldo_nuevo: nuevaCantidad,
+      valor_movimiento: purchase.costo_total,
+      responsable,
+      observaciones: `Ajuste por eliminación de compra - Factura: ${purchase.numero_factura || 'N/A'} - Proveedor: ${purchase.proveedor} - Fecha original: ${purchase.fecha_compra}`,
+      provisional: false,
+    });
+
+  if (movementAjusteError) {
+    throw new Error('Error al registrar el movimiento de ajuste de inventario: ' + movementAjusteError.message);
+  }
+
+  // 3. Revertir el stock del producto -- solo después de que el ledger quedó escrito.
+  const { error: inventoryError } = await supabase
+    .from('productos')
+    .update({
+      cantidad_actual: nuevaCantidad,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', purchase.producto_id);
+
+  if (inventoryError) throw new Error('Error al actualizar inventario: ' + inventoryError.message);
+
+  // 4. Eliminar gasto pendiente asociado (si existe)
+  // Uses SECURITY DEFINER RPC to bypass fin_gastos RLS (Administrador can't delete directly)
+  const { error: gastoError } = await supabase
+    .rpc('fn_cleanup_compra_dependencies', { p_compra_id: purchase.id });
+
+  if (gastoError) {
+    console.error('Failed to cleanup compra dependencies:', gastoError);
+    // Non-blocking: FK is ON DELETE SET NULL as safety net
+  }
+
+  // 5. Eliminar factura de Storage (si existe)
+  if (purchase.link_factura) {
+    const { error: storageError } = await supabase.storage
+      .from('facturas')
+      .remove([purchase.link_factura]);
+
+    if (storageError) {
+      // No lanzar error, continuar con la eliminación
+    }
+  }
+
+  // 6. Eliminar la compra
+  const { error: deleteError } = await supabase
+    .from('compras')
+    .delete()
+    .eq('id', purchase.id);
+
+  if (deleteError) throw new Error('Error al eliminar compra: ' + deleteError.message);
 }
 
 /**
@@ -320,95 +424,7 @@ export function PurchaseHistory({ hideSubNav = false }: { hideSubNav?: boolean }
 
     try {
       setDeleting(true);
-      const supabase = getSupabase();
-
-      // 1. Revertir inventario (restar la cantidad de la compra del producto)
-      const { data: currentProduct, error: productFetchError } = await supabase
-        .from('productos')
-        .select('cantidad_actual')
-        .eq('id', purchaseToDelete.producto_id)
-        .single();
-
-      if (productFetchError) throw new Error('Error al obtener producto: ' + productFetchError.message);
-
-      const nuevaCantidad = (currentProduct.cantidad_actual ?? 0) - purchaseToDelete.cantidad;
-
-      if (nuevaCantidad < 0) {
-        toast.error('No se puede eliminar la compra porque resultaría en inventario negativo');
-        return;
-      }
-
-      const { error: inventoryError } = await supabase
-        .from('productos')
-        .update({
-          cantidad_actual: nuevaCantidad,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', purchaseToDelete.producto_id);
-
-      if (inventoryError) throw new Error('Error al actualizar inventario: ' + inventoryError.message);
-
-      // 2. Eliminar gasto pendiente asociado (si existe)
-      // Uses SECURITY DEFINER RPC to bypass fin_gastos RLS (Administrador can't delete directly)
-      const { error: gastoError } = await supabase
-        .rpc('fn_cleanup_compra_dependencies', { p_compra_id: purchaseToDelete.id });
-
-      if (gastoError) {
-        console.error('Failed to cleanup compra dependencies:', gastoError);
-        // Non-blocking: FK is ON DELETE SET NULL as safety net
-      }
-
-      // 3. Eliminar factura de Storage (si existe)
-      if (purchaseToDelete.link_factura) {
-        const { error: storageError } = await supabase.storage
-          .from('facturas')
-          .remove([purchaseToDelete.link_factura]);
-
-        if (storageError) {
-          // No lanzar error, continuar con la eliminación
-        }
-      }
-
-      // 4. Eliminar movimiento de compra original y crear movimiento de ajuste
-      // 4a. Eliminar el movimiento original de la compra
-      const { error: movementDeleteError } = await supabase
-        .from('movimientos_inventario')
-        .delete()
-        .eq('compra_id', purchaseToDelete.id);
-
-      if (movementDeleteError) {
-        console.error('Failed to delete purchase movement (non-blocking):', movementDeleteError);
-      }
-
-      // 4b. Crear nuevo movimiento de ajuste que documente la eliminación
-      const { error: movementAjusteError } = await supabase
-        .from('movimientos_inventario')
-        .insert({
-            fecha_movimiento: obtenerFechaHoy(),
-            producto_id: purchaseToDelete.producto_id,
-            tipo_movimiento: 'Salida' as any,
-            cantidad: purchaseToDelete.cantidad,
-            unidad: purchaseToDelete.unidad,
-            factura: null,
-            saldo_anterior: currentProduct.cantidad_actual,
-            saldo_nuevo: nuevaCantidad,
-            valor_movimiento: purchaseToDelete.costo_total,
-            responsable: user?.email || null,
-            observaciones: `Ajuste por eliminación de compra - Factura: ${purchaseToDelete.numero_factura || 'N/A'} - Proveedor: ${purchaseToDelete.proveedor} - Fecha original: ${purchaseToDelete.fecha_compra}`,
-            provisional: false,
-          } as any);
-
-      if (movementAjusteError) {
-        // No lanzar error, continuar con la eliminación
-      }
-
-      // 5. Eliminar la compra
-      const { error: deleteError } = await supabase
-        .from('compras')
-        .delete()
-        .eq('id', purchaseToDelete.id);
-
-      if (deleteError) throw new Error('Error al eliminar compra: ' + deleteError.message);
+      await eliminarCompraConReversion(getSupabase(), purchaseToDelete, user?.email || null);
 
       // Recargar lista de compras
       await loadPurchases();
