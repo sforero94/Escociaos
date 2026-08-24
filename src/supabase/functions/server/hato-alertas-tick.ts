@@ -99,6 +99,7 @@ import { Context } from 'npm:hono';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import {
   generarAlertasPendientes,
+  resumirCoberturaAlertas,
   debeReenviar,
   decidirAccionEscalamiento,
   decidirExpiracionTerminal,
@@ -110,6 +111,7 @@ import {
   type TipoAlertaHato,
   type EstadoAlertaHato,
   type FilaSuscripcionAlerta,
+  type ResumenCoberturaAlertas,
 } from './hato-alertas.ts';
 import { construirHatoConfigDesdeFilas, type FilaHatoConfig } from './hato-config-desde-tabla.ts';
 import { enviarMensajeTelegram } from './telegram/enviar.ts';
@@ -303,17 +305,41 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
     })
     .filter((p): p is PasoTratamientoPendienteInput => p !== null);
 
-  const { data: filasReglas, error: errorReglas } = await supabase.from('hato_alertas').select('regla_clave');
+  // Se trae también `estado` (no solo `regla_clave`) porque la instrumentación
+  // de cobertura de abajo (`resumirCoberturaAlertas`) necesita distinguir
+  // "ya generada, nadie la resolvió todavía" de "un humano ya la descartó en
+  // AlertasView" -- una distinción que un `Set` de puras claves no puede
+  // expresar. `generarAlertasPendientes` sigue recibiendo el `Set` de
+  // siempre (derivado de las claves del mismo `Map`, nunca de una segunda
+  // consulta) -- su firma y su comportamiento no cambian una coma.
+  const { data: filasReglas, error: errorReglas } = await supabase
+    .from('hato_alertas')
+    .select('regla_clave, estado');
   if (errorReglas) {
     return respuestaError(c, 500, `No se pudo leer hato_alertas: ${errorReglas.message}`);
   }
-  const reglasExistentes = new Set<string>((filasReglas ?? []).map((f: { regla_clave: string }) => f.regla_clave));
+  const reglasExistentesConEstado = new Map<string, EstadoAlertaHato>(
+    (filasReglas ?? []).map((f: { regla_clave: string; estado: EstadoAlertaHato }) => [f.regla_clave, f.estado]),
+  );
+  const reglasExistentes = new Set<string>(reglasExistentesConEstado.keys());
 
   const alertasNuevas: AlertaGenerada[] = generarAlertasPendientes(
     animales,
     pasosPendientes,
     hatoConfig,
     reglasExistentes,
+    fechaReferencia,
+  );
+
+  // Instrumentación (hallazgo #4, PO 2026-08-24) -- puramente observacional,
+  // no escribe nada en `hato_alertas` y no participa en absoluto de la
+  // decisión de qué se genera (eso ya lo decidió la llamada de arriba). Ver
+  // la cabecera de `resumirCoberturaAlertas` en `hato-alertas.ts`.
+  const cobertura: ResumenCoberturaAlertas = resumirCoberturaAlertas(
+    animales,
+    pasosPendientes,
+    hatoConfig,
+    reglasExistentesConEstado,
     fechaReferencia,
   );
 
@@ -566,7 +592,7 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
     }
   }
 
-  return c.json({
+  const resultado = {
     success: true,
     fechaReferencia,
     generadas: alertasNuevas.length,
@@ -577,5 +603,84 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
     mensajes_escalamiento: mensajesEscalamiento,
     expiradas: expiradas + expiradasAtascadas,
     expiradas_atascadas: expiradasAtascadas,
+    cobertura,
+  };
+
+  await registrarCorridaTick(supabase, {
+    fechaReferencia,
+    duracionMs: Date.now() - ahora.getTime(),
+    cobertura,
+    resultado,
   });
+
+  return c.json(resultado);
+}
+
+// ---------------------------------------------------------------------------
+// Instrumentación (hallazgo #4, PO 2026-08-24) -- persiste UNA fila por
+// corrida en `hato_alertas_tick_runs` (migración 116) y emite además una
+// línea de `console.log` estructurada. Dos canales a propósito, no
+// redundancia: `query_logs` (edge functions) tiene una ventana de 24h --
+// alcanza para revisar la corrida de esta madrugada, no para confirmar un
+// patrón de varios días ("una alerta cada quince días"). La tabla es la que
+// sobrevive más de 24h; el log es lo único que existe ANTES de que la
+// migración 116 se aplique (esta migración se entrega sin aplicar, ver su
+// cabecera).
+//
+// Contrato de esta función: NUNCA lanza, y su fallo NUNCA cambia la
+// respuesta del tick ni qué alerta se generó -- todo lo que decide "qué
+// generar/enviar/escalar" ya corrió antes de que esta función exista. Si la
+// tabla todavía no existe (migración 116 sin aplicar) o el INSERT falla por
+// cualquier otro motivo, se registra con `console.error` y se sigue --
+// mismo contrato de "no abortar por un fallo de instrumentación" que ya usa
+// el resto de este archivo para `hato_alertas_envios` (fase b, arriba).
+// ---------------------------------------------------------------------------
+async function registrarCorridaTick(
+  supabase: ReturnType<typeof createClient>,
+  args: {
+    fechaReferencia: string;
+    duracionMs: number;
+    cobertura: ResumenCoberturaAlertas;
+    resultado: Record<string, unknown>;
+  },
+): Promise<void> {
+  const resumenLog = {
+    tick: 'hato-alertas',
+    fecha_referencia: args.fechaReferencia,
+    duracion_ms: args.duracionMs,
+    animales_evaluados: args.cobertura.animales_evaluados,
+    animales_sin_raza: args.cobertura.animales_sin_raza,
+    cobertura: args.cobertura.por_tipo,
+    generadas: args.resultado.generadas,
+    enviadas: args.resultado.enviadas,
+    escaladas: args.resultado.escaladas,
+    expiradas: args.resultado.expiradas,
+  };
+  // Línea única, estructurada -- pensada para leerse con `JSON.parse` desde
+  // `query_logs`, no para leerse a simple vista.
+  console.log(`[hato-alertas-tick] resumen: ${JSON.stringify(resumenLog)}`);
+
+  const { error } = await supabase.from('hato_alertas_tick_runs').insert({
+    fecha_referencia: args.fechaReferencia,
+    estado: 'ok',
+    duracion_ms: args.duracionMs,
+    animales_evaluados: args.cobertura.animales_evaluados,
+    animales_sin_raza: args.cobertura.animales_sin_raza,
+    pasos_tratamiento_evaluados: args.cobertura.pasos_tratamiento_evaluados,
+    cobertura: args.cobertura.por_tipo,
+    generadas: args.resultado.generadas,
+    enviadas: args.resultado.enviadas,
+    mensajes_enviados: args.resultado.mensajes_enviados,
+    saltadas_sin_destinatario: args.resultado.saltadas_sin_destinatario,
+    escaladas: args.resultado.escaladas,
+    mensajes_escalamiento: args.resultado.mensajes_escalamiento,
+    expiradas: args.resultado.expiradas,
+    expiradas_atascadas: args.resultado.expiradas_atascadas,
+  });
+  if (error) {
+    // No aborta ni cambia la respuesta del tick -- ver el contrato en la
+    // cabecera de esta función. Motivo esperable hasta que la migración 116
+    // se aplique: la tabla todavía no existe (`42P01`).
+    console.error(`[hato-alertas-tick] no se pudo registrar la corrida en hato_alertas_tick_runs: ${error.message}`);
+  }
 }

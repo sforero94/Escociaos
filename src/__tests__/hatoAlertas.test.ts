@@ -12,6 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   generarAlertasPendientes,
+  resumirCoberturaAlertas,
   construirMensajeAlerta,
   nombrePresentacionAnimal,
   debeReenviar,
@@ -28,6 +29,8 @@ import {
   type AnimalHatoParaAlertas,
   type PasoTratamientoPendienteInput,
   type FilaSuscripcionAlerta,
+  type EstadoAlertaHato,
+  type TipoAlertaHato,
 } from '@/utils/hatoAlertas';
 import type { HatoConfig } from '@/utils/calculosHato';
 
@@ -283,6 +286,222 @@ describe('config-driven: los umbrales de HatoConfig mueven el resultado', () => 
       // Al menos uno de los dos debe existir para que el assert de arriba sea relevante.
       expect(secadoOriginal || secadoConfigNueva).toBeDefined();
     }
+  });
+});
+
+describe('resumirCoberturaAlertas — instrumentación del tick (hallazgo #4, PO 2026-08-24)', () => {
+  const SIN_REGLAS = new Map<string, EstadoAlertaHato>();
+
+  function generadasDe(resumen: ReturnType<typeof resumirCoberturaAlertas>, tipo: TipoAlertaHato): number {
+    return resumen.por_tipo[tipo].generadas;
+  }
+  function omitidasDe(
+    resumen: ReturnType<typeof resumirCoberturaAlertas>,
+    tipo: TipoAlertaHato,
+    razon: keyof ReturnType<typeof resumirCoberturaAlertas>['por_tipo'][TipoAlertaHato]['omitidas'],
+  ): number {
+    return resumen.por_tipo[tipo].omitidas[razon];
+  }
+
+  it('cuenta animales evaluados y sin raza (dato de diagnóstico, no un motivo de omisión)', () => {
+    const conRaza = animalBase({ animal_id: 'a1', raza: 'jersey' });
+    const sinRaza = animalBase({ animal_id: 'a2', raza: null });
+    const resumen = resumirCoberturaAlertas([conRaza, sinRaza], [], CONFIG, SIN_REGLAS, FECHA_REF);
+    expect(resumen.animales_evaluados).toBe(2);
+    expect(resumen.animales_sin_raza).toBe(1);
+  });
+
+  it('sin raza NO es un motivo de omisión -- calcularFechaSecar cae a _default, la alerta se genera igual', () => {
+    const filaConRaza = animalBase({
+      animal_id: 'a1',
+      raza: 'jersey',
+      ultimo_servicio_fecha: '2025-12-01',
+      ultimo_evento_fecha: '2025-12-01',
+    });
+    const filaSinRaza = animalBase({
+      animal_id: 'a2',
+      raza: null,
+      ultimo_servicio_fecha: '2025-12-01',
+      ultimo_evento_fecha: '2025-12-01',
+    });
+    const resumen = resumirCoberturaAlertas([filaConRaza, filaSinRaza], [], CONFIG, SIN_REGLAS, FECHA_REF);
+    // Ambas vencen secado_due igual (jersey y `_default` valen 2 meses en CONFIG) -- las dos se generan.
+    expect(generadasDe(resumen, 'secado_due')).toBe(2);
+  });
+
+  it('no_activa: un animal vendida/muerta/descartada no genera ninguna de las 4 reglas reproductivas', () => {
+    const vendida = animalBase({
+      estado: 'vendida',
+      ultimo_servicio_fecha: '2025-12-01',
+      ultimo_chequeo_fecha: '2026-01-01',
+    });
+    const resumen = resumirCoberturaAlertas([vendida], [], CONFIG, SIN_REGLAS, FECHA_REF);
+    expect(omitidasDe(resumen, 'secado_due', 'no_activa')).toBe(1);
+    expect(omitidasDe(resumen, 'servicio_sin_confirmacion', 'no_activa')).toBe(1);
+    expect(omitidasDe(resumen, 'parto_proximo', 'no_activa')).toBe(1);
+    expect(omitidasDe(resumen, 'rechequeo_due', 'no_activa')).toBe(1);
+  });
+
+  it('sin_ciclo_reproductivo: una ternera (o una vaca que nunca tuvo servicio/parto/secado/confirmación) no compite por las 3 reglas ancladas al ciclo', () => {
+    const ternera = animalBase({ etapa: 'ternera', ultimo_servicio_fecha: null, ultimo_chequeo_fecha: null });
+    const resumenTernera = resumirCoberturaAlertas([ternera], [], CONFIG, SIN_REGLAS, FECHA_REF);
+    expect(omitidasDe(resumenTernera, 'secado_due', 'sin_ciclo_reproductivo')).toBe(1);
+    expect(omitidasDe(resumenTernera, 'servicio_sin_confirmacion', 'sin_ciclo_reproductivo')).toBe(1);
+    expect(omitidasDe(resumenTernera, 'parto_proximo', 'sin_ciclo_reproductivo')).toBe(1);
+    // rechequeo_due no depende del ciclo -- sin ultimo_chequeo_fecha cae en 'sin_chequeo', no en 'sin_ciclo_reproductivo'.
+    expect(omitidasDe(resumenTernera, 'rechequeo_due', 'sin_chequeo')).toBe(1);
+
+    const vacaSinCiclo = animalBase({
+      etapa: 'vaca',
+      ultimo_servicio_fecha: null,
+      ultimo_parto_fecha: null,
+      ultimo_secado_real_fecha: null,
+      ultima_confirmacion_prenez_fecha: null,
+    });
+    const resumenVaca = resumirCoberturaAlertas([vacaSinCiclo], [], CONFIG, SIN_REGLAS, FECHA_REF);
+    expect(omitidasDe(resumenVaca, 'secado_due', 'sin_ciclo_reproductivo')).toBe(1);
+  });
+
+  it('evento_no_clasificado: un evento posterior al servicio que no es aborto (indeterminado) no compite por las 3 reglas ancladas al ciclo', () => {
+    // Mismo fixture que calculosHato.test.ts para 'indeterminado' (evidencia MONA).
+    const fila = animalBase({
+      ultimo_servicio_fecha: '2025-05-16',
+      ultimo_evento_fecha: '2026-01-10',
+      ultimo_aborto_fecha: null,
+    });
+    const resumen = resumirCoberturaAlertas([fila], [], CONFIG, SIN_REGLAS, FECHA_REF);
+    expect(omitidasDe(resumen, 'secado_due', 'evento_no_clasificado')).toBe(1);
+    expect(omitidasDe(resumen, 'servicio_sin_confirmacion', 'evento_no_clasificado')).toBe(1);
+    expect(omitidasDe(resumen, 'parto_proximo', 'evento_no_clasificado')).toBe(1);
+  });
+
+  it('sin_servicio_ancla: secado_real/confirmación sin ultimo_servicio_fecha (S3 §2.2) no compite por las 3 reglas ancladas al ciclo', () => {
+    const fila = animalBase({
+      ultimo_servicio_fecha: null,
+      ultimo_secado_real_fecha: '2026-07-20',
+    });
+    const resumen = resumirCoberturaAlertas([fila], [], CONFIG, SIN_REGLAS, FECHA_REF);
+    expect(omitidasDe(resumen, 'secado_due', 'sin_servicio_ancla')).toBe(1);
+    expect(omitidasDe(resumen, 'servicio_sin_confirmacion', 'sin_servicio_ancla')).toBe(1);
+    expect(omitidasDe(resumen, 'parto_proximo', 'sin_servicio_ancla')).toBe(1);
+  });
+
+  it('sin_chequeo: solo rechequeo_due usa este motivo, cuando el animal nunca tuvo un chequeo', () => {
+    const fila = animalBase({ ultimo_chequeo_fecha: null });
+    const resumen = resumirCoberturaAlertas([fila], [], CONFIG, SIN_REGLAS, FECHA_REF);
+    expect(omitidasDe(resumen, 'rechequeo_due', 'sin_chequeo')).toBe(1);
+  });
+
+  it('bajo_umbral: ciclo anclado y dato presente, pero todavía no cruza el umbral configurado', () => {
+    const fila = animalBase({ ultimo_servicio_fecha: '2026-07-20', ultimo_evento_fecha: '2026-07-20' });
+    const resumen = resumirCoberturaAlertas([fila], [], CONFIG, SIN_REGLAS, FECHA_REF);
+    expect(omitidasDe(resumen, 'secado_due', 'bajo_umbral')).toBe(1);
+    expect(omitidasDe(resumen, 'servicio_sin_confirmacion', 'bajo_umbral')).toBe(1);
+    expect(omitidasDe(resumen, 'parto_proximo', 'bajo_umbral')).toBe(1);
+  });
+
+  it('fecha_futura: solo tratamiento_paso usa este motivo, para un paso programado a futuro', () => {
+    const pasoFuturo: PasoTratamientoPendienteInput = {
+      paso_id: 'paso-1',
+      animal_id: 'animal-2',
+      numero: 12,
+      nombre: 'CAMPANA',
+      fecha_programada: '2026-08-01',
+      descripcion: 'Aplicar estrumate',
+    };
+    const resumen = resumirCoberturaAlertas([], [pasoFuturo], CONFIG, SIN_REGLAS, FECHA_REF);
+    expect(omitidasDe(resumen, 'tratamiento_paso', 'fecha_futura')).toBe(1);
+    expect(generadasDe(resumen, 'tratamiento_paso')).toBe(0);
+  });
+
+  it('ya_generada vs silenciada: misma regla ya existente, distinta según el estado -- descartada es la única que cuenta como "silenciada"', () => {
+    const fila = animalBase({ ultimo_servicio_fecha: '2025-12-01', ultimo_evento_fecha: '2025-12-01' });
+    const clave = generarAlertasPendientes([fila], [], CONFIG, new Set(), FECHA_REF)
+      .find((a) => a.tipo === 'secado_due')!.regla_clave;
+
+    const yaEnviada = new Map<string, EstadoAlertaHato>([[clave, 'enviada']]);
+    const resumenEnviada = resumirCoberturaAlertas([fila], [], CONFIG, yaEnviada, FECHA_REF);
+    expect(omitidasDe(resumenEnviada, 'secado_due', 'ya_generada')).toBe(1);
+    expect(omitidasDe(resumenEnviada, 'secado_due', 'silenciada')).toBe(0);
+
+    const yaDescartada = new Map<string, EstadoAlertaHato>([[clave, 'descartada']]);
+    const resumenDescartada = resumirCoberturaAlertas([fila], [], CONFIG, yaDescartada, FECHA_REF);
+    expect(omitidasDe(resumenDescartada, 'secado_due', 'silenciada')).toBe(1);
+    expect(omitidasDe(resumenDescartada, 'secado_due', 'ya_generada')).toBe(0);
+  });
+
+  it('tratamiento_paso también distingue ya_generada de silenciada', () => {
+    const paso: PasoTratamientoPendienteInput = {
+      paso_id: 'paso-9',
+      animal_id: 'animal-2',
+      numero: 12,
+      nombre: 'CAMPANA',
+      fecha_programada: '2026-07-01',
+      descripcion: 'Aplicar estrumate',
+    };
+    const yaDescartado = new Map<string, EstadoAlertaHato>([['ttto:paso-9', 'descartada']]);
+    const resumen = resumirCoberturaAlertas([], [paso], CONFIG, yaDescartado, FECHA_REF);
+    expect(omitidasDe(resumen, 'tratamiento_paso', 'silenciada')).toBe(1);
+  });
+
+  describe('consistencia cruzada con generarAlertasPendientes — el conteo de "generadas" nunca puede divergir de lo que de verdad se generaría', () => {
+    const ANIMALES: AnimalHatoParaAlertas[] = [
+      animalBase({ animal_id: 'v1', ultimo_servicio_fecha: '2025-12-01', ultimo_evento_fecha: '2025-12-01' }), // secado_due
+      animalBase({ animal_id: 'v2', ultimo_chequeo_fecha: '2026-05-01' }), // rechequeo_due
+      animalBase({ animal_id: 'v3', ultimo_servicio_fecha: '2026-06-01', ultimo_evento_fecha: '2026-06-01' }), // servicio_sin_confirmacion
+      animalBase({ animal_id: 'v4', ultimo_servicio_fecha: '2025-10-25', ultimo_evento_fecha: '2025-10-25' }), // parto_proximo
+      animalBase({ animal_id: 'v5', estado: 'vendida' }), // no_activa
+      animalBase({ animal_id: 'v6', etapa: 'ternera', ultimo_chequeo_fecha: null }), // sin_ciclo_reproductivo + sin_chequeo
+      animalBase({
+        animal_id: 'v7',
+        ultimo_servicio_fecha: '2025-05-16',
+        ultimo_evento_fecha: '2026-01-10',
+      }), // evento_no_clasificado
+      animalBase({ animal_id: 'v8', ultimo_servicio_fecha: null, ultimo_secado_real_fecha: '2026-07-20' }), // sin_servicio_ancla
+      animalBase({ animal_id: 'v9', ultimo_servicio_fecha: '2026-07-20', ultimo_evento_fecha: '2026-07-20' }), // bajo_umbral
+    ];
+    const PASOS: PasoTratamientoPendienteInput[] = [
+      { paso_id: 'p1', animal_id: 'v1', numero: 1, nombre: 'A', fecha_programada: '2026-07-20', descripcion: null },
+      { paso_id: 'p2', animal_id: 'v2', numero: 2, nombre: 'B', fecha_programada: '2026-08-01', descripcion: null },
+    ];
+
+    it('la corrida "en frío" (sin reglas previas) coincide exactamente, tipo por tipo', () => {
+      const alertas = generarAlertasPendientes(ANIMALES, PASOS, CONFIG, new Set(), FECHA_REF);
+      const resumen = resumirCoberturaAlertas(ANIMALES, PASOS, CONFIG, SIN_REGLAS, FECHA_REF);
+
+      const tipos: TipoAlertaHato[] = [
+        'secado_due',
+        'rechequeo_due',
+        'servicio_sin_confirmacion',
+        'parto_proximo',
+        'tratamiento_paso',
+      ];
+      for (const tipo of tipos) {
+        const esperado = alertas.filter((a) => a.tipo === tipo).length;
+        expect(generadasDe(resumen, tipo), tipo).toBe(esperado);
+      }
+      expect(Object.values(resumen.por_tipo).reduce((acc, r) => acc + r.generadas, 0)).toBe(alertas.length);
+      // Sanity: el fixture debe ejercitar más de un tipo o esta prueba no probaría gran cosa.
+      expect(alertas.length).toBeGreaterThan(1);
+    });
+
+    it('la corrida "tibia" (todo lo generado antes ya existe) reduce "generadas" a 0 y las mueve a ya_generada', () => {
+      const primeraCorrida = generarAlertasPendientes(ANIMALES, PASOS, CONFIG, new Set(), FECHA_REF);
+      expect(primeraCorrida.length).toBeGreaterThan(0);
+
+      const reglasExistentes = new Map<string, EstadoAlertaHato>(
+        primeraCorrida.map((a) => [a.regla_clave, 'pendiente' as EstadoAlertaHato]),
+      );
+      const reglasComoSet = new Set(reglasExistentes.keys());
+
+      const segundaCorrida = generarAlertasPendientes(ANIMALES, PASOS, CONFIG, reglasComoSet, FECHA_REF);
+      expect(segundaCorrida).toEqual([]);
+
+      const resumen = resumirCoberturaAlertas(ANIMALES, PASOS, CONFIG, reglasExistentes, FECHA_REF);
+      expect(Object.values(resumen.por_tipo).reduce((acc, r) => acc + r.generadas, 0)).toBe(0);
+      const totalYaGenerada = Object.values(resumen.por_tipo).reduce((acc, r) => acc + r.omitidas.ya_generada, 0);
+      expect(totalYaGenerada).toBe(primeraCorrida.length);
+    });
   });
 });
 

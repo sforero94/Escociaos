@@ -162,6 +162,27 @@ describe('paridad de comportamiento nombrePresentacionAnimal / construirMensajeA
   });
 });
 
+describe('paridad de comportamiento resumirCoberturaAlertas', () => {
+  it('produce exactamente el mismo desglose de cobertura en ambas implementaciones', () => {
+    const reglasExistentes = new Map<string, edge.EstadoAlertaHato>([
+      ['ttto:paso-ajeno', 'descartada'],
+    ]);
+    const resumenFrontend = frontend.resumirCoberturaAlertas(ANIMALES, PASOS, CONFIG, reglasExistentes, FECHA_REF);
+    const resumenEdge = edge.resumirCoberturaAlertas(
+      ANIMALES as unknown as edge.AnimalHatoParaAlertas[],
+      PASOS as unknown as edge.PasoTratamientoPendienteInput[],
+      CONFIG,
+      reglasExistentes,
+      FECHA_REF,
+    );
+    expect(resumenEdge).toEqual(resumenFrontend);
+    // Sanity check: al menos una regla debe haberse generado para que la
+    // comparación no sea trivialmente "todo en cero" en ambos lados.
+    const totalGenerado = Object.values(resumenFrontend.por_tipo).reduce((acc, r) => acc + r.generadas, 0);
+    expect(totalGenerado).toBeGreaterThan(0);
+  });
+});
+
 describe('paridad de comportamiento debeReenviar / decidirAccionEscalamiento', () => {
   it('debeReenviar coincide en los casos límite', () => {
     const casos: Array<[frontend.EstadoAlertaHato, number, string | null, string]> = [

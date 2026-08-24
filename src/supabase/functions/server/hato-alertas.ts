@@ -67,7 +67,12 @@
 // ninguna migración existente) — no son un parámetro de negocio editable por
 // Gerencia como sí lo es `hato_alertas_config.horas_escalamiento`.
 
-import { derivarEstadoReproductivo, type EstadoActualHatoRow, type HatoConfig } from './calculos-hato.ts';
+import {
+  derivarEstadoReproductivo,
+  type EstadoActualHatoRow,
+  type EstadoReproductivo,
+  type HatoConfig,
+} from './calculos-hato.ts';
 import { esNumeroProvisional } from './importHato/overridesChapeta.ts';
 
 // ============================================================================
@@ -210,6 +215,28 @@ export function construirMensajeAlerta(ctx: ContextoMensajeAlerta): string {
 // BLOQUE 3 — Generación de alertas (fase "generar" del tick, plan §7.3)
 // ============================================================================
 
+// ----------------------------------------------------------------------------
+// Formato EXACTO de `regla_clave` por tipo -- UNA sola definición, reutilizada
+// tanto por `generarAlertasPendientes` (esta sección) como por
+// `resumirCoberturaAlertas` (instrumentación, bloque 3b más abajo) para que
+// las dos jamás puedan calcular una clave distinta para la misma regla.
+// ----------------------------------------------------------------------------
+function claveAlertaSecadoDue(animalId: string, fechaServicio: string): string {
+  return `secado:${animalId}:${fechaServicio}`;
+}
+function claveAlertaRechequeoDue(animalId: string, ultimoChequeoFecha: string): string {
+  return `rechq:${animalId}:${ultimoChequeoFecha}`;
+}
+function claveAlertaServicioSinConfirmacion(animalId: string, fechaServicio: string): string {
+  return `servconf:${animalId}:${fechaServicio}`;
+}
+function claveAlertaPartoProximo(animalId: string, fechaServicio: string): string {
+  return `parto:${animalId}:${fechaServicio}`;
+}
+function claveAlertaTratamientoPaso(pasoId: string): string {
+  return `ttto:${pasoId}`;
+}
+
 function agregarSiNueva(
   acumulado: AlertaGenerada[],
   reglasExistentes: ReadonlySet<string>,
@@ -254,7 +281,7 @@ export function generarAlertasPendientes(
       agregarSiNueva(alertas, reglasExistentes, {
         tipo: 'secado_due',
         animal_id: fila.animal_id,
-        regla_clave: `secado:${fila.animal_id}:${fila.ultimo_servicio_fecha}`,
+        regla_clave: claveAlertaSecadoDue(fila.animal_id, fila.ultimo_servicio_fecha),
         fecha_programada: derivado.fecha_secar,
         datos: {
           numero: fila.numero,
@@ -275,7 +302,7 @@ export function generarAlertasPendientes(
       agregarSiNueva(alertas, reglasExistentes, {
         tipo: 'rechequeo_due',
         animal_id: fila.animal_id,
-        regla_clave: `rechq:${fila.animal_id}:${fila.ultimo_chequeo_fecha}`,
+        regla_clave: claveAlertaRechequeoDue(fila.animal_id, fila.ultimo_chequeo_fecha),
         fecha_programada: fechaReferencia,
         datos: { numero: fila.numero, nombre: fila.nombre, ultimo_chequeo_fecha: fila.ultimo_chequeo_fecha },
         mensaje: construirMensajeAlerta({
@@ -291,7 +318,7 @@ export function generarAlertasPendientes(
       agregarSiNueva(alertas, reglasExistentes, {
         tipo: 'servicio_sin_confirmacion',
         animal_id: fila.animal_id,
-        regla_clave: `servconf:${fila.animal_id}:${fila.ultimo_servicio_fecha}`,
+        regla_clave: claveAlertaServicioSinConfirmacion(fila.animal_id, fila.ultimo_servicio_fecha),
         fecha_programada: fechaReferencia,
         datos: { numero: fila.numero, nombre: fila.nombre, fecha_servicio: fila.ultimo_servicio_fecha },
         mensaje: construirMensajeAlerta({
@@ -307,7 +334,7 @@ export function generarAlertasPendientes(
       agregarSiNueva(alertas, reglasExistentes, {
         tipo: 'parto_proximo',
         animal_id: fila.animal_id,
-        regla_clave: `parto:${fila.animal_id}:${fila.ultimo_servicio_fecha}`,
+        regla_clave: claveAlertaPartoProximo(fila.animal_id, fila.ultimo_servicio_fecha),
         fecha_programada: derivado.fecha_probable_parto,
         datos: {
           numero: fila.numero,
@@ -334,7 +361,7 @@ export function generarAlertasPendientes(
     agregarSiNueva(alertas, reglasExistentes, {
       tipo: 'tratamiento_paso',
       animal_id: paso.animal_id,
-      regla_clave: `ttto:${paso.paso_id}`,
+      regla_clave: claveAlertaTratamientoPaso(paso.paso_id),
       fecha_programada: paso.fecha_programada,
       datos: { paso_id: paso.paso_id, numero: paso.numero, nombre: paso.nombre, descripcion: paso.descripcion },
       mensaje: construirMensajeAlerta({
@@ -348,6 +375,303 @@ export function generarAlertasPendientes(
   }
 
   return alertas;
+}
+
+// ============================================================================
+// BLOQUE 3b — Cobertura del tick (instrumentación, hallazgo #4 del PO
+// 2026-08-24: "el motor corre todos los días sin fallar, pero nadie puede
+// saber si no tiene nada que alertar o si NO PUEDE alertar" -- 65 alertas
+// históricas, 1 respondida, 62 de 65 vacas sin `raza`). Decisión del dueño:
+// instrumentar primero, no tocar ningún umbral/regla/destinatario hasta que
+// el desglose responda la pregunta.
+//
+// `resumirCoberturaAlertas` camina el MISMO universo de animales/pasos que
+// `generarAlertasPendientes`, con las MISMAS claves de idempotencia
+// (`claveAlertaXxx`, arriba) y la MISMA llamada a `derivarEstadoReproductivo`
+// -- pero en vez de devolver las alertas a insertar, devuelve un CONTEO por
+// motivo de omisión. Es puramente observacional: no escribe nada, y no
+// decide nada que `generarAlertasPendientes` no decida ya -- si el conteo de
+// `generadas` de esta función alguna vez no coincidiera con lo que
+// `generarAlertasPendientes` insertó, el bug está en ESTA función, nunca al
+// revés (`hatoAlertas.test.ts` trae una prueba de consistencia cruzada para
+// eso).
+// ============================================================================
+
+/**
+ * Motivo por el que UNA regla de alerta no generó una alerta nueva para un
+ * animal/paso en este tick -- son las mismas ramas que
+ * `derivarEstadoReproductivo`/`generarAlertasPendientes` ya distinguen, no
+ * una taxonomía nueva:
+ *
+ *   no_activa               -- `estado` no es `activa` (vendida/muerta/descartada).
+ *   sin_ciclo_reproductivo  -- ternera, novilla sin ciclo aún, o parida
+ *                              reciente sin servicio posterior: no hay ancla
+ *                              desde la que proyectar secado/parto/confirmación.
+ *   evento_no_clasificado   -- hay un evento posterior al último que el motor
+ *                              sabe clasificar y NO es un aborto
+ *                              (`indeterminado` en `derivarEstadoReproductivo`)
+ *                              -- señal de que algo pasó que necesita
+ *                              revisión humana, no "nada que alertar".
+ *   sin_servicio_ancla      -- hay confirmación/secado_real pero NINGÚN
+ *                              `ultimo_servicio_fecha` que los ancle (S3 §2.2).
+ *   sin_chequeo             -- (solo `rechequeo_due`) el animal nunca tuvo un
+ *                              chequeo registrado.
+ *   fecha_futura            -- (solo `tratamiento_paso`) el paso todavía no
+ *                              llega a su fecha programada.
+ *   bajo_umbral             -- el ciclo está anclado y el dato existe, pero
+ *                              todavía no cruza el umbral configurado -- el
+ *                              caso NORMAL, nada raro, todavía no toca.
+ *   ya_generada             -- ya existe una alerta con esa `regla_clave`
+ *                              (idempotencia -- cualquier estado salvo
+ *                              `descartada`, ver `silenciada`).
+ *   silenciada              -- ya existe una alerta con esa `regla_clave` en
+ *                              estado `descartada` -- un humano ya la vio y
+ *                              la marcó "no útil" en `AlertasView.tsx`. El
+ *                              UNIQUE de la tabla no distingue por estado
+ *                              (mismo criterio que `ya_generada`), pero para
+ *                              esta pregunta SÍ importa separar "nadie la
+ *                              vio" de "alguien la descartó a propósito".
+ */
+export type RazonOmisionAlerta =
+  | 'no_activa'
+  | 'sin_ciclo_reproductivo'
+  | 'evento_no_clasificado'
+  | 'sin_servicio_ancla'
+  | 'sin_chequeo'
+  | 'fecha_futura'
+  | 'bajo_umbral'
+  | 'ya_generada'
+  | 'silenciada';
+
+const RAZONES_OMISION_ALERTA: readonly RazonOmisionAlerta[] = [
+  'no_activa',
+  'sin_ciclo_reproductivo',
+  'evento_no_clasificado',
+  'sin_servicio_ancla',
+  'sin_chequeo',
+  'fecha_futura',
+  'bajo_umbral',
+  'ya_generada',
+  'silenciada',
+];
+
+/** Conteo de UNA regla (`secado_due`, etc.) en un tick: cuántas alertas se
+ * generaron y, de las que no, por cuál motivo -- las 9 razones arrancan en 0
+ * aunque varias nunca aparezcan en una regla dada (p.ej. `rechequeo_due`
+ * nunca produce `sin_servicio_ancla`), así el consumidor nunca tiene que
+ * manejar `undefined`. */
+export interface ResumenReglaTipo {
+  generadas: number;
+  omitidas: Record<RazonOmisionAlerta, number>;
+}
+
+function resumenReglaTipoVacio(): ResumenReglaTipo {
+  const omitidas = {} as Record<RazonOmisionAlerta, number>;
+  for (const razon of RAZONES_OMISION_ALERTA) omitidas[razon] = 0;
+  return { generadas: 0, omitidas };
+}
+
+/** Resultado completo del tick de hoy: cuántos animales/pasos se evaluaron y,
+ * por cada uno de los 5 tipos de regla, cuántas alertas se generaron y por
+ * qué NO se generaron las demás. */
+export interface ResumenCoberturaAlertas {
+  fecha_referencia: string;
+  animales_evaluados: number;
+  /** Dato de DIAGNÓSTICO, no un motivo de omisión: la raza siempre cae a
+   * `meses_secado_por_raza._default` cuando falta (`calcularFechaSecar`,
+   * `calculosHato.ts`), así que un animal sin raza registrada NO queda
+   * excluido de ninguna alerta por eso solo -- ninguna rama de
+   * `clasificarBrechaCiclo` usa la raza para decidir. Se cuenta aparte para
+   * poder confirmar o descartar la hipótesis "sin raza -> sin alerta" con
+   * los datos del tick de hoy, en vez de con una lectura del código. */
+  animales_sin_raza: number;
+  pasos_tratamiento_evaluados: number;
+  por_tipo: Record<TipoAlertaHato, ResumenReglaTipo>;
+}
+
+/**
+ * Clasifica por qué un animal NO tiene un ciclo reproductivo anclado desde el
+ * que proyectar `secado_due`/`servicio_sin_confirmacion`/`parto_proximo` --
+ * las tres reglas que sí dependen del ciclo (`rechequeo_due` no; se evalúa
+ * aparte, más abajo). Devuelve `null` cuando el animal SÍ está en un ciclo
+ * anclado -- el único caso en que estas tres reglas pueden generarse; el
+ * caller entonces mira el booleano correspondiente de `derivado.alertas`.
+ *
+ * Espejo EXHAUSTIVO (`never`) de `EstadoReproductivo`: si
+ * `derivarEstadoReproductivo` gana un estado nuevo, esta función deja de
+ * compilar hasta decidir en qué balde cae -- nunca cae en un balde por
+ * default. Nunca reimplementa los UMBRALES de `derivarEstadoReproductivo`;
+ * solo LEE su `estado` de salida.
+ */
+function clasificarBrechaCiclo(
+  estado: EstadoReproductivo,
+  ultimoServicioFecha: string | null,
+): RazonOmisionAlerta | null {
+  switch (estado) {
+    case 'vendida':
+    case 'muerta':
+    case 'descartada':
+      return 'no_activa';
+    case 'cria':
+    case 'novilla':
+    case 'vacia_por_servir':
+    case 'parida_reciente':
+      return 'sin_ciclo_reproductivo';
+    case 'indeterminado':
+      return 'evento_no_clasificado';
+    case 'servida':
+    case 'preñada':
+    case 'proxima_a_secar':
+    case 'seca':
+      // Ciclo anclado SOLO si hay `ultimo_servicio_fecha` -- ver S3 §2.2 en
+      // `derivarEstadoReproductivo`: estos cuatro estados también se
+      // alcanzan sin servicio (confirmación/secado_real sueltos), y ese caso
+      // nunca puede generar estas tres alertas.
+      return ultimoServicioFecha ? null : 'sin_servicio_ancla';
+    default: {
+      const _exhaustivo: never = estado;
+      return _exhaustivo;
+    }
+  }
+}
+
+/** Decide el resultado de UNA regla para UN animal/paso: `null` significa
+ * "se generaría hoy" (o ya se generó, si el caller es `generarAlertasPendientes`
+ * -- esta función es puramente observacional y nunca inserta nada), o el
+ * motivo por el que no. */
+function resolverRazonOmision(
+  elegibleHoy: boolean,
+  razonSiNoElegible: RazonOmisionAlerta,
+  claveRegla: string,
+  reglasExistentes: ReadonlyMap<string, EstadoAlertaHato>,
+): RazonOmisionAlerta | null {
+  if (!elegibleHoy) return razonSiNoElegible;
+  const estadoExistente = reglasExistentes.get(claveRegla);
+  if (estadoExistente === undefined) return null; // nueva -- se generaría
+  return estadoExistente === 'descartada' ? 'silenciada' : 'ya_generada';
+}
+
+function acumularResultadoRegla(resumen: ResumenReglaTipo, razon: RazonOmisionAlerta | null): void {
+  if (razon === null) {
+    resumen.generadas += 1;
+  } else {
+    resumen.omitidas[razon] += 1;
+  }
+}
+
+/**
+ * Instrumentación del tick (hallazgo #4, PO 2026-08-24) -- ver la cabecera de
+ * este bloque. Puramente observacional: no escribe nada en `hato_alertas`, y
+ * no decide nada que `generarAlertasPendientes` no decida ya.
+ *
+ * `reglasExistentes` es un `Map`, no el `Set` de `generarAlertasPendientes`
+ * -- necesita el `estado` de la regla ya existente para distinguir
+ * `ya_generada` (nadie la resolvió, o se resolvió con una respuesta) de
+ * `silenciada` (un humano la descartó explícitamente en `AlertasView`), una
+ * distinción que un `Set` no puede expresar. El caller (`hato-alertas-tick.ts`)
+ * arma el `Map` a partir de la MISMA fila `{ regla_clave, estado }` de
+ * `hato_alertas`, y deriva el `Set` de sus claves para seguir llamando a
+ * `generarAlertasPendientes` sin tocar su firma -- ver la nota de diseño en
+ * la cabecera de `hato-alertas-tick.ts`.
+ */
+export function resumirCoberturaAlertas(
+  animales: AnimalHatoParaAlertas[],
+  pasosPendientes: PasoTratamientoPendienteInput[],
+  config: HatoConfig,
+  reglasExistentes: ReadonlyMap<string, EstadoAlertaHato>,
+  fechaReferencia: string,
+): ResumenCoberturaAlertas {
+  const porTipo: Record<TipoAlertaHato, ResumenReglaTipo> = {
+    secado_due: resumenReglaTipoVacio(),
+    rechequeo_due: resumenReglaTipoVacio(),
+    servicio_sin_confirmacion: resumenReglaTipoVacio(),
+    parto_proximo: resumenReglaTipoVacio(),
+    tratamiento_paso: resumenReglaTipoVacio(),
+  };
+
+  let animalesSinRaza = 0;
+
+  for (const fila of animales) {
+    if (!fila.raza) animalesSinRaza += 1;
+    const derivado = derivarEstadoReproductivo(fila, config, fechaReferencia);
+
+    // secado_due
+    {
+      const brecha = clasificarBrechaCiclo(derivado.estado, fila.ultimo_servicio_fecha);
+      let razon: RazonOmisionAlerta | null;
+      if (brecha) {
+        razon = brecha;
+      } else {
+        // brecha === null implica fila.ultimo_servicio_fecha truthy -- ver
+        // `clasificarBrechaCiclo`.
+        const clave = claveAlertaSecadoDue(fila.animal_id, fila.ultimo_servicio_fecha as string);
+        razon = resolverRazonOmision(derivado.alertas.secado_due, 'bajo_umbral', clave, reglasExistentes);
+      }
+      acumularResultadoRegla(porTipo.secado_due, razon);
+    }
+
+    // servicio_sin_confirmacion
+    {
+      const brecha = clasificarBrechaCiclo(derivado.estado, fila.ultimo_servicio_fecha);
+      let razon: RazonOmisionAlerta | null;
+      if (brecha) {
+        razon = brecha;
+      } else {
+        const clave = claveAlertaServicioSinConfirmacion(fila.animal_id, fila.ultimo_servicio_fecha as string);
+        razon = resolverRazonOmision(derivado.alertas.servicio_sin_confirmacion, 'bajo_umbral', clave, reglasExistentes);
+      }
+      acumularResultadoRegla(porTipo.servicio_sin_confirmacion, razon);
+    }
+
+    // parto_proximo
+    {
+      const brecha = clasificarBrechaCiclo(derivado.estado, fila.ultimo_servicio_fecha);
+      let razon: RazonOmisionAlerta | null;
+      if (brecha) {
+        razon = brecha;
+      } else {
+        const clave = claveAlertaPartoProximo(fila.animal_id, fila.ultimo_servicio_fecha as string);
+        razon = resolverRazonOmision(derivado.alertas.parto_proximo, 'bajo_umbral', clave, reglasExistentes);
+      }
+      acumularResultadoRegla(porTipo.parto_proximo, razon);
+    }
+
+    // rechequeo_due -- se evalúa aparte de las tres de arriba: no depende del
+    // ciclo de preñez, solo de `ultimo_chequeo_fecha` (`calcularRechequeoDue`,
+    // calculosHato.ts), aunque también exige `estado === 'activa'` (esa
+    // función devuelve SIN_ALERTAS entero para animales inactivos).
+    {
+      let razon: RazonOmisionAlerta | null;
+      if (fila.estado !== 'activa') {
+        razon = 'no_activa';
+      } else if (!fila.ultimo_chequeo_fecha) {
+        razon = 'sin_chequeo';
+      } else {
+        const clave = claveAlertaRechequeoDue(fila.animal_id, fila.ultimo_chequeo_fecha);
+        razon = resolverRazonOmision(derivado.alertas.rechequeo_due, 'bajo_umbral', clave, reglasExistentes);
+      }
+      acumularResultadoRegla(porTipo.rechequeo_due, razon);
+    }
+  }
+
+  for (const paso of pasosPendientes) {
+    let razon: RazonOmisionAlerta | null;
+    if (paso.fecha_programada > fechaReferencia) {
+      razon = 'fecha_futura';
+    } else {
+      const clave = claveAlertaTratamientoPaso(paso.paso_id);
+      razon = resolverRazonOmision(true, 'bajo_umbral', clave, reglasExistentes);
+    }
+    acumularResultadoRegla(porTipo.tratamiento_paso, razon);
+  }
+
+  return {
+    fecha_referencia: fechaReferencia,
+    animales_evaluados: animales.length,
+    animales_sin_raza: animalesSinRaza,
+    pasos_tratamiento_evaluados: pasosPendientes.length,
+    por_tipo: porTipo,
+  };
 }
 
 // ============================================================================
