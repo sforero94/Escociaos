@@ -1,13 +1,16 @@
 # Runbook — Drenaje del backlog
 
-**Estado: EN CURSO.** Última actualización 2026-08-24, tras ejecutar W0, W1 y la
+**Estado: CASI DRENADO.** Última actualización 2026-08-24, tras W0, W1 y la
 corrida de cierre (`reports/2026-08-24-drenaje-cierre.md`).
 
-**Lo que cambió en la última corrida, en tres líneas:** se cerró **#3** (estaba
-resuelto y nadie lo había visto); **#20** tiene migración escrita y revisada pero
-**la operación no puede aplicarla** — el carril aditivo ya no alcanza
-`storage.objects`; y **#11 y #22 no están bloqueados por esfuerzo sino por dos
-credenciales que sólo vos tenés**. Backlog **23 → 22**.
+**Lo que queda es §1.4 — tres migraciones aditivas, una por corrida.** Todo lo
+demás de §1 está cerrado: el P0 del webhook, el detector de deriva y los dos
+cierres de Notion. Se conservan abajo **tachados, con lo que costó averiguar**,
+porque ahí está la parte reutilizable.
+
+**Backlog 25 → 20.** Cerrados en esta tanda: #15, #35, #36, **#3**, **#11** (P0),
+**#22** (P1). Producción: edge function **v216**, clima sano, deriva en `false` y
+el detector corriendo solo todos los días.
 
 Si te dijeron «termina el trabajo», empezá por §1: son las tareas que quedan, en
 orden. El resto del documento es la referencia que las sostiene.
@@ -22,106 +25,57 @@ Fuente de verdad de los hallazgos: Notion `collection://b22d2385-a812-4d4a-8094-
 
 ## 1. LO QUE FALTA
 
-### 1.1 · P0 — cerrar el webhook de Telegram (lo más urgente)
+### ~~1.1 · P0 — cerrar el webhook de Telegram~~ · ✅ CERRADO 2026-08-24 18:10Z
 
-El PR #150 está fusionado en `main`: el webhook exige el encabezado
-`X-Telegram-Bot-Api-Secret-Token` contra la variable `TELEGRAM_WEBHOOK_SECRET`
-(401 si no coincide, 503 si falta — falla cerrado). **Pero la función desplegada
-sigue en v215 y no lo trae**, así que hoy el webhook está ABIERTO en producción:
-cualquiera que lea el repo público puede POSTear un update forjado con un chat_id
-conocido y actuar como ese usuario, incluido uno de rol Gerencia.
+Desplegada la **v216**. `POST` anónimo al webhook pasó de **aceptado** a **401**;
+controles en el mismo lote: `/hato/alertas/tick` → 401, `/ruta/que/no/existe` →
+404 (que es lo que prueba que el 401 es la puerta y no un catch-all). **Santiago
+confirmó un `/start` real y el bot respondió normal.**
 
-**`supabase secrets list` NO devuelve valores, sólo nombres y digests.** No
-intentes leer `TELEGRAM_WEBHOOK_SECRET`: **rotalo**. Generás uno nuevo y lo ponés
-en los dos lados; nunca necesitás conocer el viejo.
+**No hizo falta rotar nada, y eso es lo que hay que recordar.** La puerta
+**existía y la borró** `e799142` (2026-03-18): no era una protección que nunca se
+puso, era una **regresión que vivió cinco meses**. Y como Telegram **no caduca**
+el `secret_token` de un webhook, el registro de marzo seguía vigente — Telegram
+llevaba todo ese tiempo mandando el encabezado correcto contra un servidor que
+había dejado de mirarlo. **Desplegar bastó.**
 
-**Orden obligatorio — es al revés de lo intuitivo, y así no hay caída del bot:**
+> **La lección, para la próxima puerta que aparezca abierta:** antes de diseñar
+> una rotación de tres pasos, averiguá con `git log -S` si la validación existió
+> alguna vez y cuándo se creó el secreto (`supabase secrets list` da `updated_at`,
+> que es lo único útil que devuelve). Un secreto creado minutos después del token
+> del servicio es la firma de un alta que **sí** lo registró. La apuesta es barata
+> porque el peor caso — bot mudo — se arregla corriendo la rotación después, sin
+> revertir nada.
 
-1. Generá un secreto nuevo (32+ bytes aleatorios, urlsafe).
-2. `supabase secrets set TELEGRAM_WEBHOOK_SECRET=<nuevo>`
-3. Registralo en Telegram con el **mismo** valor:
-   ```
-   POST https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook
-     url=https://ywhtjwawnkeqlwxbvgup.supabase.co/functions/v1/make-server-1ccce916/telegram/webhook
-     secret_token=<nuevo>
-   ```
-4. **Recién ahora**: `npx supabase functions deploy make-server-1ccce916`
+**Antes de desplegar la edge function, comprobá el alcance real**:
+`git diff --stat <árbol-desplegado>..origin/main -- supabase/functions/make-server-1ccce916`.
+Acá fueron **2 ficheros**. Y revisá que no haya otra puerta mergeada cuya
+contraparte en base de datos no haya corrido (la mina de la 105).
 
-*Por qué en ese orden*: v215 no lee ese encabezado, así que Telegram puede
-mandarlo desde el paso 3 sin romper nada. Cuando el paso 4 activa la puerta, el
-encabezado ya está llegando. **Cero downtime.** Al revés, el bot rebota TODO con
-401 en el medio.
+### ~~1.2 · Secreto de CI para el detector de deriva~~ · ✅ CERRADO 2026-08-24 18:30Z
 
-> **El paso 3 necesita `TELEGRAM_BOT_TOKEN`, que tampoco es legible con
-> `secrets list`.** Buscalo en `.env` / `.env.local` o en la config local de
-> supabase. **Si no lo encontrás, PARÁ Y PEDILO.** No sigas al paso 4 sin haber
-> hecho el 3: rotar a medias deja el bot muerto y sólo se recupera revirtiendo el
-> deploy.
+Corrida `32762758337` en **verde**, 10 s. Reportó `OK: el despliegue vivo es
+posterior al ultimo commit`. Queda corriendo solo: cron diario 12:30 UTC (07:30
+Bogotá) más `workflow_dispatch`.
+
+> **El atasco no fue el `gh secret set`.** Santiago estaba en el **tope de 20
+> tokens personales de Supabase** y no podía crear otro. Tres cosas que
+> destrabaron y no conviene volver a averiguar:
 >
-> **Ya se buscó el 2026-08-24 y NO está en ningún disco** — ni en `.env`,
-> `.env.local`, `supabase/.temp`, ni en el repo (sólo referencias
-> `Deno.env.get(...)` en código). No vuelvas a gastar la corrida buscándolo.
-
-> **HALLAZGO DEL 2026-08-24 QUE PUEDE AHORRAR LA ROTACIÓN ENTERA: la puerta
-> existía y la borraron.** `git show e799142` (2026-03-18, *Add Telegram bot user
-> management*) **elimina** cuatro líneas que ya estaban vivas en producción:
+> 1. **Los acuña `npx supabase login`** — cada login deja uno listado en la cuenta
+>    (nombre tipo `cli_…`). Veinte son meses de logins en worktrees y máquinas
+>    distintas. **Un agente no puede acuñar uno**: hace falta el navegador o un
+>    token que ya exista, así que si alguien dice «los creó Claude», no fue así.
+> 2. **La columna que decide es «Last used», no el nombre.** Exactamente uno
+>    muestra *hoy* — el del llavero. Ése se conserva, el resto se borra.
+> 3. **Borrar un PAT no destruye nada**: lo peor es que algo tenga que volver a
+>    autenticarse (`npx supabase login`). Por eso **se borra primero y se crea
+>    después** — al revés seguís en el tope.
 >
-> ```ts
-> const secret = c.req.header("X-Telegram-Bot-Api-Secret-Token");
-> if (secret !== Deno.env.get("TELEGRAM_WEBHOOK_SECRET")) {
->   return c.json({ error: "Unauthorized" }, 401);
-> }
-> ```
->
-> Esto **no es una protección que nunca se puso: es una regresión de marzo.** Y
-> `supabase secrets list` fecha `TELEGRAM_WEBHOOK_SECRET` el 2026-03-18 a las
-> 21:18, **cuatro minutos después** de `TELEGRAM_BOT_TOKEN` (21:14) — la firma de
-> un alta que sí corrió `setWebhook(url, { secret_token })`.
->
-> Telegram **no caduca** el `secret_token` de un webhook. Si aquel registro sigue
-> vigente, el encabezado lleva llegando desde marzo con un valor que el secreto
-> guardado todavía iguala, y **el paso 4 solo — desplegar — cierra el P0 sin
-> rotar nada y sin caída**. No es demostrable sin el bot token: `getWebhookInfo`
-> tampoco revela si hay `secret_token`.
->
-> **Es decisión de Santiago, no del agente.** El peor caso de apostar es el bot
-> mudo, que se revierte redesplegando; el costo de rotar es un paso manual suyo.
-
-**Verificación, obligatoria antes de cantar victoria:**
-- `list_edge_functions` → `version > 215`
-- POST anónimo al webhook (cuerpo `{}`, sin encabezados) → **401**
-- Controles en el mismo lote: `/ruta/que/no/existe` → 404 · `/hato/alertas/tick` → 401
-- **Mandale un `/start` real desde Telegram y comprobá que responde.** Un 401
-  correcto y un bot muerto se ven idénticos desde afuera.
-- El clima no se rompió: `net._http_response` últimos ticks en 200 con `synced:1`,
-  y `select round(extract(epoch from (now()-max(timestamp)))/60) from clima_lecturas` ≤ 10
-
-**Si el bot queda mudo**: los dos valores no coinciden. **No toques el código del
-gate** — re-corré los pasos 2 y 3 con el mismo valor.
-
-### 1.2 · Secreto de CI para el detector de deriva
-
-El PR #152 agregó `.github/workflows/deteccion-deriva-despliegue.yml`. Necesita el
-secreto de repositorio **`SUPABASE_ACCESS_TOKEN`**. Santiago ya tiene varios tokens
-de Supabase; si podés obtener uno, `gh secret set SUPABASE_ACCESS_TOKEN`. Si no,
-dejalo anotado como pendiente suyo — **no inventes un token**.
-
-Después disparalo a mano (`gh workflow run`) y confirmá que sale **verde**. Sin el
-secreto sale rojo a propósito (falla cerrado).
-
-> **Estado 2026-08-24: sigue sin el secreto** (`gh secret list` vacío,
-> `gh run list` cero corridas). El token del CLI local vive en el llavero y
-> leerlo está bloqueado; **no busques una vía alternativa, escalalo**.
->
-> **Ya se validó todo lo que no depende del token**, no lo repitas: el camino de
-> fallo cerrado, los 8 tests unitarios, y la lógica contra producción —
-> `evaluarDeriva()` con el `updated_at` vivo y el `%cI` de `origin/main` devuelve
-> `hayDeriva: true`, o sea que **habría cantado el agujero del webhook**. Lo
-> único sin probar de punta a punta es la llamada a la Management API.
->
-> **Y ojo con el criterio de cierre: mientras la deriva sea real el workflow sale
-> ROJO con razón.** Sale verde recién después del despliegue que cierra #11. Un
-> rojo hoy no es un fallo del detector — es el detector funcionando.
+> **El token de CI va DEDICADO, nunca el del CLI.** Un PAT de Supabase es *de
+> cuenta, no de proyecto*, da Management API sobre todos y no se puede acotar a
+> solo-lectura; reusar el del CLI acopla CI a la sesión local y revocar uno mata
+> al otro.
 
 ### 1.3 · Cerrar en Notion lo que quede verificado
 
@@ -129,13 +83,14 @@ secreto sale rojo a propósito (falla cerrado).
 > Se ganó el 2026-08-24: ESCO-1 se cerró contra el merge y cuatro días después las
 > cinco rutas seguían abiertas en producción.
 
-| # | Cierra sólo si | Estado 2026-08-24 |
+| # | Cierra sólo si | Resultado |
 |---|---|---|
-| **#11** | el POST anónimo da 401 **y** el bot responde a un `/start` | abierto — falta el deploy |
-| **#3** | ~~`version > 215`~~ | ✅ **CERRADO** |
-| **#22** | el workflow corrió en **verde** | abierto — falta el secreto |
+| **#11** | el POST anónimo da 401 **y** el bot responde a un `/start` | ✅ **CERRADO** — las dos |
+| **#3** | ~~`version > 215`~~ | ✅ **CERRADO** — el criterio era un proxy falso |
+| **#22** | el workflow corrió en **verde** | ✅ **CERRADO** |
 
-Cualquiera que no cumpla su criterio: dejalo `In progress` y escribí por qué.
+Los tres cerrados. La regla se conserva para la próxima tanda: **cualquiera que
+no cumpla su criterio se deja `In progress` y se escribe por qué.**
 
 > **Por qué #3 cerró con la versión todavía en 215, y la lección que deja.** El
 > criterio de arriba era un **proxy**, y partía de una premisa falsa: suponía que
