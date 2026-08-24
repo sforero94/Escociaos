@@ -277,3 +277,61 @@ vuelve **con la puerta puesta**.
 
 **#20**: decisión de Santiago — se deja abierto en el tablero (`In progress`, PR
 #154 enlazado, bloqueante documentado). No se cierra como aceptado.
+
+---
+
+## ADENDA 2 — cierre de #11 y #22 (2026-08-24 18:30Z)
+
+**#11 · webhook de Telegram — `Done` / `Arreglado`.** Santiago confirmó un `/start`
+real: *«me respondió normal»*. Era la única comprobación que no se puede hacer
+desde fuera — un 401 correcto y un bot muerto se ven idénticos. **La apuesta
+salió bien: el registro de webhook de marzo seguía vigente**, o sea que Telegram
+llevaba cinco meses mandando el encabezado correcto contra un servidor que había
+dejado de mirarlo. No hizo falta rotar ningún secreto.
+
+**#22 · detector de deriva — `Done` / `Arreglado`.** Corrida
+[32762758337](https://github.com/sforero94/Escociaos/actions/runs/32762758337),
+job `deriva`, 10 s, **SUCCESS**:
+
+```
+edge function : make-server-1ccce916 (proyecto ywhtjwawnkeqlwxbvgup)
+desplegada    : 2026-08-24T18:10:34.792Z
+ultimo commit : 2026-08-24T16:25:54.000Z  (supabase/functions/make-server-1ccce916)
+OK: el despliegue vivo es posterior al ultimo commit del arbol desplegado.
+```
+
+La llamada a la Management API —la única pieza que no se había podido probar sin
+el token— funciona. Queda corriendo solo: cron diario 12:30 UTC (07:30 Bogotá).
+
+### El rodeo que costó el token, y que vale anotar
+
+Cargar el secreto **no fue un `gh secret set` y ya**. Santiago estaba en el tope
+de **20 tokens personales de Supabase** y no podía crear otro. Tres cosas que
+resolvieron el atasco y que conviene no volver a averiguar:
+
+1. **Los acuña `npx supabase login`.** Cada login deja un token listado en la
+   cuenta (nombre tipo `cli_…`). Veinte tokens son meses de logins en worktrees
+   y máquinas distintas, no algo que haya creado un agente — **un agente no puede
+   acuñar uno**: hace falta el navegador o un token que ya exista.
+2. **La columna que decide es «Last used», no el nombre.** Exactamente uno mostraba
+   *hoy* — el del llavero, el que esta sesión usó para `secrets list` y para el
+   despliegue. Ése se conserva; el resto, a la basura.
+3. **Borrar un PAT no destruye nada** — lo peor que pasa es que algo tenga que
+   volver a autenticarse (`npx supabase login`). Por eso el orden correcto es
+   **borrar primero, crear después**: al revés seguís en el tope. Verificado tras
+   la poda: el CLI local sigue autenticado y ve los 3 proyectos.
+
+**El token de CI es DEDICADO, no el del CLI.** Un PAT de Supabase es *de cuenta,
+no de proyecto*: da Management API sobre los tres proyectos y no se puede acotar
+a solo-lectura. Reusar el del CLI habría acoplado CI a la sesión local — revocar
+uno mata al otro.
+
+## Estado final de la corrida
+
+| | |
+|---|---|
+| **Backlog** | 23 → **20 abiertos** |
+| **Cerrados** | #3, #11 (P0), #22 (P1) — los tres `Arreglado` |
+| **Sin aplicar** | #20 (PR #154) — el carril no puede; decisión: queda abierto en el tablero |
+| **PRs abiertos** | #154 (migración 109), #155 (runbook) |
+| **Producción** | edge function **v216**, clima sano, deriva en `false`, detector automatizado |
