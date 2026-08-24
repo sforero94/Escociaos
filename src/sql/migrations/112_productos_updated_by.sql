@@ -226,7 +226,7 @@ REVOKE EXECUTE ON FUNCTION public.set_producto_updated_by() FROM anon;
 REVOKE EXECUTE ON FUNCTION public.set_producto_updated_by() FROM authenticated;
 
 COMMENT ON FUNCTION public.set_producto_updated_by() IS
-  'Migracion 112: sella productos.updated_by en cada UPDATE con COALESCE(auth.uid(), NEW.updated_by) -- en ESE orden. Desde el navegador auth.uid() nunca es nulo cuando este disparador corre (las politicas de UPDATE de productos exigen get_user_role(), que necesita fila viva en usuarios), asi que el usuario real SIEMPRE pisa: la columna no se congela, y ademas es INFALSIFICABLE -- un PATCH que mande updated_by a mano queda sobrescrito. Desde service_role (auth.uid() nulo) se respeta el id que traiga la sentencia, y si no trae ninguno se conserva el valor anterior. Ese arrastre es una brecha conocida y acotada: se cierra pasando el id explicito, como ya hace el pipeline de pesaje con created_by.'
+  'Migracion 112: sella productos.updated_by en cada UPDATE con COALESCE(auth.uid(), NEW.updated_by) -- en ESE orden. Desde el navegador auth.uid() nunca es nulo cuando este disparador corre (las politicas de UPDATE de productos exigen get_user_role(), que necesita fila viva en usuarios), asi que el usuario real SIEMPRE pisa: la columna no se congela, y ademas es INFALSIFICABLE -- un PATCH que mande updated_by a mano queda sobrescrito. Desde service_role (auth.uid() nulo) se respeta el id que traiga la sentencia, y si no trae ninguno se conserva el valor anterior. Ese arrastre es una brecha conocida y acotada: se cierra pasando el id explicito, como ya hace el pipeline de pesaje con created_by.';
 
 -- ---------------------------------------------------------------------------
 -- 3. El disparador.
@@ -237,7 +237,7 @@ CREATE TRIGGER set_updated_by_productos
   EXECUTE FUNCTION public.set_producto_updated_by();
 
 COMMENT ON COLUMN public.productos.updated_by IS
-  'Quien hizo la ultima actualizacion, sellado por el disparador set_updated_by_productos (migracion 112). CUIDADO AL INTERPRETARLO: si la escritura vino del navegador, describe exactamente la misma escritura que updated_at. Si vino de service_role (edge function) y esa llamada no paso un id explicito, la columna CONSERVA el valor anterior -- o sea que updated_by puede nombrar a alguien que no hizo la ultima edicion. Hoy el unico camino asi es toggleProductoActivo. NO se puede inferir de un updated_by no nulo que esa persona hizo el ultimo cambio; para atribucion por evento esta movimientos_inventario.'
+  'Quien hizo la ultima actualizacion, sellado por el disparador set_updated_by_productos (migracion 112). CUIDADO AL INTERPRETARLO: si la escritura vino del navegador, describe exactamente la misma escritura que updated_at. Si vino de service_role (edge function) y esa llamada no paso un id explicito, la columna CONSERVA el valor anterior -- o sea que updated_by puede nombrar a alguien que no hizo la ultima edicion. Hoy el unico camino asi es toggleProductoActivo. NO se puede inferir de un updated_by no nulo que esa persona hizo el ultimo cambio; para atribucion por evento esta movimientos_inventario.';
 
 -- ---------------------------------------------------------------------------
 -- 4. Post-condiciones.
