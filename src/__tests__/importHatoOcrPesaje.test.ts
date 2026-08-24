@@ -22,6 +22,7 @@ import {
   construirFilasPesajeInsertables,
   construirPromptOcrPesaje,
   construirRosterPesaje,
+  detectarRechazoLecturaPesaje,
   esCandidataRosterPesaje,
   esquemaJsonOcrPesaje,
   ETAPAS_ROSTER_PESAJE,
@@ -302,6 +303,74 @@ describe('procesarLecturaOcrPesaje', () => {
       roster,
     );
     expect(resultado.filasConfirmadas[0].celdasNoConfiables.sort()).toEqual(['s1_am', 's2_pm']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 4.b detectarRechazoLecturaPesaje -- finding #40 (2026-08-24): rechazar en
+//     vez de aceptar cuando la carga no reconoció NINGUNA vaca del roster.
+//     Caso real: la liquidación de El Pomar subida por error a esta ruta se
+//     "aceptaba" con un diff vacío y sin ninguna señal accionable.
+// ---------------------------------------------------------------------------
+
+describe('detectarRechazoLecturaPesaje', () => {
+  const roster = construirRosterPesaje(ROSTER_BASE);
+
+  it('no rechaza cuando al menos una fila ancló contra el roster', () => {
+    const ocr = procesarLecturaOcrPesaje(
+      [{ pagina: 1, filas: [filaOcr({ nombreImpreso: 'ALINA' })], avisos: [] }],
+      roster,
+    );
+    expect(detectarRechazoLecturaPesaje(ocr)).toBeNull();
+  });
+
+  it('rechaza cuando el modelo no reportó ninguna fila en ninguna foto (documento sin filas de vaca)', () => {
+    const ocr = procesarLecturaOcrPesaje([{ pagina: 1, filas: [], avisos: [] }], roster);
+    const rechazo = detectarRechazoLecturaPesaje(ocr);
+    expect(rechazo).not.toBeNull();
+    expect(rechazo?.nombresNoReconocidos).toEqual([]);
+    expect(rechazo?.detalle).toContain('No se reconoció ninguna vaca del hato');
+    expect(rechazo?.detalle).toContain('liquidación de El Pomar');
+    // Sin nombres leídos, el detalle no debe fingir haber leído algo.
+    expect(rechazo?.detalle).not.toContain('Se alcanzó a leer');
+  });
+
+  it('rechaza cuando SÍ se leyeron filas pero ninguna ancla contra el roster, y lista hasta 5 nombres sin duplicar', () => {
+    const ocr = procesarLecturaOcrPesaje(
+      [
+        {
+          pagina: 1,
+          filas: [
+            filaOcr({ nombreImpreso: 'PROVEEDOR', orden: 1 }),
+            filaOcr({ nombreImpreso: 'NIT', orden: 2 }),
+            filaOcr({ nombreImpreso: 'NIT', orden: 3 }), // duplicado -- no debe listarse dos veces
+            filaOcr({ nombreImpreso: 'SUBTOTAL', orden: 4 }),
+            filaOcr({ nombreImpreso: 'CANTIDAD', orden: 5 }),
+            filaOcr({ nombreImpreso: 'PRECIO', orden: 6 }),
+            filaOcr({ nombreImpreso: 'MES', orden: 7 }), // 6º nombre distinto -- se recorta a 5
+          ],
+          avisos: [],
+        },
+      ],
+      roster,
+    );
+    const rechazo = detectarRechazoLecturaPesaje(ocr);
+    expect(rechazo).not.toBeNull();
+    expect(rechazo?.nombresNoReconocidos).toHaveLength(5);
+    expect(rechazo?.nombresNoReconocidos).toEqual(['PROVEEDOR', 'NIT', 'SUBTOTAL', 'CANTIDAD', 'PRECIO']);
+    expect(rechazo?.detalle).toContain('Se alcanzó a leer: PROVEEDOR, NIT, SUBTOTAL, CANTIDAD, PRECIO');
+  });
+
+  it('agrega la carga de TODAS las fotos, no solo la primera -- cero filas confirmadas en toda la carga rechaza', () => {
+    const ocr = procesarLecturaOcrPesaje(
+      [
+        { pagina: 1, filas: [filaOcr({ nombreImpreso: 'DESCONOCIDA_1' })], avisos: [] },
+        { pagina: 2, filas: [filaOcr({ nombreImpreso: 'DESCONOCIDA_2' })], avisos: [] },
+      ],
+      roster,
+    );
+    expect(ocr.filasConfirmadas).toHaveLength(0);
+    expect(detectarRechazoLecturaPesaje(ocr)).not.toBeNull();
   });
 });
 

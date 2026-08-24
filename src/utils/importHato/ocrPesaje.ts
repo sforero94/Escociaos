@@ -770,3 +770,60 @@ export function construirPromptOcrPesaje(): string {
     "Responde ÚNICAMENTE con el JSON del esquema pedido. Sin explicaciones, sin markdown.",
   ].join('\n');
 }
+
+// ---------------------------------------------------------------------------
+// 8. Rechazo cuando NINGUNA fila de la carga ancló contra el roster
+// ---------------------------------------------------------------------------
+
+export interface RechazoLecturaPesaje {
+  /** Mensaje completo, listo para mostrar al usuario o para viajar en el
+   * `error` de la respuesta HTTP. */
+  detalle: string;
+  /** Nombres impresos leídos (si el modelo alcanzó a leer alguno) que no
+   * coincidieron con ninguna vaca del roster -- hasta 5, sin duplicados.
+   * Útil para que el humano confirme si el documento es otra cosa (p. ej.
+   * la liquidación de El Pomar, que no trae nombres de vaca en absoluto). */
+  nombresNoReconocidos: string[];
+}
+
+/**
+ * Finding #40 (mantenimiento 2026-08-24): antes de este chequeo, una carga
+ * cuyas fotos NO eran de la planilla de pesaje (p. ej. la liquidación
+ * quincenal de El Pomar, subida por error a esta ruta) se "aceptaba" --
+ * `success: true`, diff vacío -- sin ninguna señal que el usuario pudiera
+ * accionar. La foto (3,2 MB en el incidente real) quedaba guardada como
+ * capa cruda sin que del otro lado saliera ningún pesaje, y nada en la
+ * respuesta decía "esto no parece lo que buscabas".
+ *
+ * Regla: si NINGUNA fila de NINGUNA foto de la carga ancló contra el
+ * roster (cero `filasConfirmadas`, agregado sobre TODAS las fotos juntas --
+ * `procesarLecturaOcrPesaje` ya las combina), la lectura se RECHAZA en vez
+ * de aceptarse. No importa si la causa real es "esta no es la planilla de
+ * pesaje" o "la foto salió ilegible/mal encuadrada": en los dos casos
+ * aceptar en silencio produce el mismo daño (cero pesajes, cero
+ * explicación), así que el mensaje cubre ambas sin afirmar cuál es.
+ *
+ * Un roster VACÍO (nadie activo en ordeño/novilla, `esCandidataRosterPesaje`)
+ * es un problema de DATOS, no de la foto, y se rechaza ANTES de llegar
+ * acá, con su propio mensaje (`ejecutarPipelinePesajeFoto`) -- esta función
+ * nunca ve ese caso.
+ */
+export function detectarRechazoLecturaPesaje(ocr: ResultadoOcrPesaje): RechazoLecturaPesaje | null {
+  if (ocr.filasConfirmadas.length > 0) return null;
+
+  const nombresNoReconocidos = [
+    ...new Set(ocr.filasNoLeidas.map((f) => f.nombreImpreso.trim()).filter((n) => n !== '')),
+  ].slice(0, 5);
+
+  const muestra =
+    nombresNoReconocidos.length > 0
+      ? ` Se alcanzó a leer: ${nombresNoReconocidos.join(', ')} -- ninguno coincide con una vaca activa del hato.`
+      : '';
+
+  return {
+    nombresNoReconocidos,
+    detalle:
+      `No se reconoció ninguna vaca del hato en la(s) foto(s) subida(s).${muestra} ` +
+      'Puede que la foto no sea de la planilla de pesaje -- ¿era la liquidación de El Pomar? -- o que la letra no se alcance a leer. Revisa la foto y vuelve a intentar.',
+  };
+}

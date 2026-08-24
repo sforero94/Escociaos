@@ -53,7 +53,7 @@ import {
 
 const ROLES_PERMITIDOS = new Set(['Administrador', 'Gerencia']); // mismo set de escritura del módulo (053), igual que chequeo/foto.
 
-function respuestaError(c: Context, status: 400 | 401 | 403 | 500 | 502 | 503, error: string) {
+function respuestaError(c: Context, status: 400 | 401 | 403 | 422 | 500 | 502 | 503, error: string) {
   return c.json({ success: false, error }, status);
 }
 
