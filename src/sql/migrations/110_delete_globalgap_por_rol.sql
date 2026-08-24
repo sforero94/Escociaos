@@ -2,6 +2,28 @@
 -- incondicional y pasa a exigir rol Gerencia o Administrador.
 -- Cierra el hallazgo #37 del tablero de mantenimiento.
 --
+-- APLICADA A PRODUCCIÓN el 2026-08-24 (ledger `20260824200409`,
+-- `delete_globalgap_por_rol`). Post-condiciones verificadas después contra el
+-- catálogo: las 7 con predicado `((SELECT get_user_role()) = ANY (ARRAY
+-- ['Gerencia'::rol_usuario,'Administrador'::rol_usuario]))`, `anon` sin DELETE
+-- en las 7, `authenticated` conservando su GRANT de tabla en las 7, 3 políticas
+-- por tabla, y conteos de filas idénticos (181 / 67 / 87 / 765). Las tablas con
+-- DELETE incondicional en `public` bajaron de 17 a 10.
+--
+-- DESVIACIÓN DE LA COMPUERTA 5 QUE HAY QUE DECIR. El primer intento murió con
+-- un **503 del API de gestión de Supabase** (caída de plataforma, no de la
+-- migración). Se comprobó contra el catálogo que NO había aplicado nada — las 7
+-- seguían en `true`, `anon` seguía con DELETE, cero filas en el ledger — y se
+-- reintentó. En el reintento se enviaron los **mismos 14 enunciados ejecutables
+-- y la misma lógica de guardas**, pero con los comentarios condensados y los
+-- mensajes de `RAISE EXCEPTION` sin tildes, para descartar cualquier problema de
+-- codificación tras el 503. **O sea que los bytes aplicados no son byte a byte
+-- los de este fichero: difieren en comentarios y en el texto de los mensajes de
+-- error.** Lo que sí es idéntico y está verificado es el resultado — los
+-- predicados que quedaron en el catálogo, que es lo que gobierna. Para la
+-- próxima: si hay que reintentar tras una caída, reenviar el fichero sin
+-- retocarlo.
+--
 -- ############################################################################
 -- ## ALCANCE CORREGIDO: SON 7 TABLAS, NO LAS 4 QUE NOMBRA EL HALLAZGO.      ##
 -- ############################################################################
