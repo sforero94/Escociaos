@@ -1,6 +1,16 @@
 # Runbook — Drenaje del backlog
 
-**Estado: EN CURSO.** Última actualización 2026-08-24, tras ejecutar W0 y W1.
+**Estado: CASI DRENADO.** Última actualización 2026-08-24, tras W0, W1 y la
+corrida de cierre (`reports/2026-08-24-drenaje-cierre.md`).
+
+**Lo que queda es §1.4 — tres migraciones aditivas, una por corrida.** Todo lo
+demás de §1 está cerrado: el P0 del webhook, el detector de deriva y los dos
+cierres de Notion. Se conservan abajo **tachados, con lo que costó averiguar**,
+porque ahí está la parte reutilizable.
+
+**Backlog 25 → 20.** Cerrados en esta tanda: #15, #35, #36, **#3**, **#11** (P0),
+**#22** (P1). Producción: edge function **v216**, clima sano, deriva en `false` y
+el detector corriendo solo todos los días.
 
 Si te dijeron «termina el trabajo», empezá por §1: son las tareas que quedan, en
 orden. El resto del documento es la referencia que las sostiene.
@@ -15,63 +25,57 @@ Fuente de verdad de los hallazgos: Notion `collection://b22d2385-a812-4d4a-8094-
 
 ## 1. LO QUE FALTA
 
-### 1.1 · P0 — cerrar el webhook de Telegram (lo más urgente)
+### ~~1.1 · P0 — cerrar el webhook de Telegram~~ · ✅ CERRADO 2026-08-24 18:10Z
 
-El PR #150 está fusionado en `main`: el webhook exige el encabezado
-`X-Telegram-Bot-Api-Secret-Token` contra la variable `TELEGRAM_WEBHOOK_SECRET`
-(401 si no coincide, 503 si falta — falla cerrado). **Pero la función desplegada
-sigue en v215 y no lo trae**, así que hoy el webhook está ABIERTO en producción:
-cualquiera que lea el repo público puede POSTear un update forjado con un chat_id
-conocido y actuar como ese usuario, incluido uno de rol Gerencia.
+Desplegada la **v216**. `POST` anónimo al webhook pasó de **aceptado** a **401**;
+controles en el mismo lote: `/hato/alertas/tick` → 401, `/ruta/que/no/existe` →
+404 (que es lo que prueba que el 401 es la puerta y no un catch-all). **Santiago
+confirmó un `/start` real y el bot respondió normal.**
 
-**`supabase secrets list` NO devuelve valores, sólo nombres y digests.** No
-intentes leer `TELEGRAM_WEBHOOK_SECRET`: **rotalo**. Generás uno nuevo y lo ponés
-en los dos lados; nunca necesitás conocer el viejo.
+**No hizo falta rotar nada, y eso es lo que hay que recordar.** La puerta
+**existía y la borró** `e799142` (2026-03-18): no era una protección que nunca se
+puso, era una **regresión que vivió cinco meses**. Y como Telegram **no caduca**
+el `secret_token` de un webhook, el registro de marzo seguía vigente — Telegram
+llevaba todo ese tiempo mandando el encabezado correcto contra un servidor que
+había dejado de mirarlo. **Desplegar bastó.**
 
-**Orden obligatorio — es al revés de lo intuitivo, y así no hay caída del bot:**
+> **La lección, para la próxima puerta que aparezca abierta:** antes de diseñar
+> una rotación de tres pasos, averiguá con `git log -S` si la validación existió
+> alguna vez y cuándo se creó el secreto (`supabase secrets list` da `updated_at`,
+> que es lo único útil que devuelve). Un secreto creado minutos después del token
+> del servicio es la firma de un alta que **sí** lo registró. La apuesta es barata
+> porque el peor caso — bot mudo — se arregla corriendo la rotación después, sin
+> revertir nada.
 
-1. Generá un secreto nuevo (32+ bytes aleatorios, urlsafe).
-2. `supabase secrets set TELEGRAM_WEBHOOK_SECRET=<nuevo>`
-3. Registralo en Telegram con el **mismo** valor:
-   ```
-   POST https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook
-     url=https://ywhtjwawnkeqlwxbvgup.supabase.co/functions/v1/make-server-1ccce916/telegram/webhook
-     secret_token=<nuevo>
-   ```
-4. **Recién ahora**: `npx supabase functions deploy make-server-1ccce916`
+**Antes de desplegar la edge function, comprobá el alcance real**:
+`git diff --stat <árbol-desplegado>..origin/main -- supabase/functions/make-server-1ccce916`.
+Acá fueron **2 ficheros**. Y revisá que no haya otra puerta mergeada cuya
+contraparte en base de datos no haya corrido (la mina de la 105).
 
-*Por qué en ese orden*: v215 no lee ese encabezado, así que Telegram puede
-mandarlo desde el paso 3 sin romper nada. Cuando el paso 4 activa la puerta, el
-encabezado ya está llegando. **Cero downtime.** Al revés, el bot rebota TODO con
-401 en el medio.
+### ~~1.2 · Secreto de CI para el detector de deriva~~ · ✅ CERRADO 2026-08-24 18:30Z
 
-> **El paso 3 necesita `TELEGRAM_BOT_TOKEN`, que tampoco es legible con
-> `secrets list`.** Buscalo en `.env` / `.env.local` o en la config local de
-> supabase. **Si no lo encontrás, PARÁ Y PEDILO.** No sigas al paso 4 sin haber
-> hecho el 3: rotar a medias deja el bot muerto y sólo se recupera revirtiendo el
-> deploy.
+Corrida `32762758337` en **verde**, 10 s. Reportó `OK: el despliegue vivo es
+posterior al ultimo commit`. Queda corriendo solo: cron diario 12:30 UTC (07:30
+Bogotá) más `workflow_dispatch`.
 
-**Verificación, obligatoria antes de cantar victoria:**
-- `list_edge_functions` → `version > 215`
-- POST anónimo al webhook (cuerpo `{}`, sin encabezados) → **401**
-- Controles en el mismo lote: `/ruta/que/no/existe` → 404 · `/hato/alertas/tick` → 401
-- **Mandale un `/start` real desde Telegram y comprobá que responde.** Un 401
-  correcto y un bot muerto se ven idénticos desde afuera.
-- El clima no se rompió: `net._http_response` últimos ticks en 200 con `synced:1`,
-  y `select round(extract(epoch from (now()-max(timestamp)))/60) from clima_lecturas` ≤ 10
-
-**Si el bot queda mudo**: los dos valores no coinciden. **No toques el código del
-gate** — re-corré los pasos 2 y 3 con el mismo valor.
-
-### 1.2 · Secreto de CI para el detector de deriva
-
-El PR #152 agregó `.github/workflows/deteccion-deriva-despliegue.yml`. Necesita el
-secreto de repositorio **`SUPABASE_ACCESS_TOKEN`**. Santiago ya tiene varios tokens
-de Supabase; si podés obtener uno, `gh secret set SUPABASE_ACCESS_TOKEN`. Si no,
-dejalo anotado como pendiente suyo — **no inventes un token**.
-
-Después disparalo a mano (`gh workflow run`) y confirmá que sale **verde**. Sin el
-secreto sale rojo a propósito (falla cerrado).
+> **El atasco no fue el `gh secret set`.** Santiago estaba en el **tope de 20
+> tokens personales de Supabase** y no podía crear otro. Tres cosas que
+> destrabaron y no conviene volver a averiguar:
+>
+> 1. **Los acuña `npx supabase login`** — cada login deja uno listado en la cuenta
+>    (nombre tipo `cli_…`). Veinte son meses de logins en worktrees y máquinas
+>    distintas. **Un agente no puede acuñar uno**: hace falta el navegador o un
+>    token que ya exista, así que si alguien dice «los creó Claude», no fue así.
+> 2. **La columna que decide es «Last used», no el nombre.** Exactamente uno
+>    muestra *hoy* — el del llavero. Ése se conserva, el resto se borra.
+> 3. **Borrar un PAT no destruye nada**: lo peor es que algo tenga que volver a
+>    autenticarse (`npx supabase login`). Por eso **se borra primero y se crea
+>    después** — al revés seguís en el tope.
+>
+> **El token de CI va DEDICADO, nunca el del CLI.** Un PAT de Supabase es *de
+> cuenta, no de proyecto*, da Management API sobre todos y no se puede acotar a
+> solo-lectura; reusar el del CLI acopla CI a la sesión local y revocar uno mata
+> al otro.
 
 ### 1.3 · Cerrar en Notion lo que quede verificado
 
@@ -79,13 +83,30 @@ secreto sale rojo a propósito (falla cerrado).
 > Se ganó el 2026-08-24: ESCO-1 se cerró contra el merge y cuatro días después las
 > cinco rutas seguían abiertas en producción.
 
-| # | Cierra sólo si |
-|---|---|
-| **#11** | el POST anónimo da 401 **y** el bot responde a un `/start` |
-| **#3** | `version > 215` (su mitad de Telegram viaja en ese deploy) |
-| **#22** | el workflow corrió en **verde** |
+| # | Cierra sólo si | Resultado |
+|---|---|---|
+| **#11** | el POST anónimo da 401 **y** el bot responde a un `/start` | ✅ **CERRADO** — las dos |
+| **#3** | ~~`version > 215`~~ | ✅ **CERRADO** — el criterio era un proxy falso |
+| **#22** | el workflow corrió en **verde** | ✅ **CERRADO** |
 
-Cualquiera que no cumpla su criterio: dejalo `In progress` y escribí por qué.
+Los tres cerrados. La regla se conserva para la próxima tanda: **cualquiera que
+no cumpla su criterio se deja `In progress` y se escribe por qué.**
+
+> **Por qué #3 cerró con la versión todavía en 215, y la lección que deja.** El
+> criterio de arriba era un **proxy**, y partía de una premisa falsa: suponía que
+> la mitad de Telegram de #3 viajaba en el *siguiente* despliegue. Ya viajaba en
+> el actual — el deploy de las 15:52:43Z es **posterior** al merge del PR #144
+> (15:49:12Z). La regla real del contrato (§5: `updated_at` posterior al commit)
+> sí se cumplía.
+>
+> **Cuando un criterio de cierre es un proxy, verificá la regla, no el proxy.**
+> Cerrar por el proxy habría dejado un hallazgo ya resuelto abierto otra semana.
+>
+> Y el mismo despliegue resolvió dos hallazgos **en direcciones opuestas**: llevó
+> el arreglo de #3 (`jornal.ts`, `mtime` 42 s antes del deploy) y **no** llevó el
+> de #11 (`bot.ts`, `mtime` del 2026-08-21). **No asumas que un despliegue
+> arrastra todo lo fusionado antes — mirá fichero por fichero.** La receta para
+> hacerlo sin leer el código desplegado está en `memory/_compartida.md`.
 
 ### 1.4 · W3 — las 4 migraciones aditivas
 
@@ -95,11 +116,41 @@ compuertas de la constitución: aditiva por lista blanca · guardas propias
 dice «insegura»** · número secuencial correcto · transferencia byte a byte desde el
 fichero del PR (base64 → decode → una sentencia atómica), nunca retecleada.
 
+> ### ⛔ LÍMITE DURO DESCUBIERTO EL 2026-08-24: el carril NO alcanza `storage.objects`
+>
+> `ALTER POLICY`, `CREATE POLICY` y `COMMENT ON POLICY` exigen ser **DUEÑO** de la
+> tabla. Ningún `GRANT` lo confiere — `postgres` tiene DML entero con grant option
+> sobre `storage.objects` y **aun así no puede tocar una política**.
+> `storage.objects` pertenece a `supabase_storage_admin`, y `apply_migration` corre
+> como `postgres`, que hoy no llega a ese rol por ninguna vía:
+>
+> ```
+> current_user = postgres | pg_has_role(…,'supabase_storage_admin','USAGE')  = f
+>                         | pg_has_role(…,'supabase_storage_admin','MEMBER') = f
+> ```
+>
+> **Antes sí se podía** — la migración 072 creó cuatro políticas ahí y tiene fila
+> en el ledger con versión de marca de tiempo (`20260730002128`), el formato de
+> `apply_migration`. Entremedio el servicio de Storage corrió migraciones propias
+> el 2026-08-10, 08-20 y 08-23. **Un permiso de julio no prueba el de hoy.**
+>
+> **Un hallazgo sobre políticas de Storage no es `ddl_aditivo`.** Clasificalo
+> aparte desde el principio o perdés la corrida descubriéndolo. La vía que sí
+> funciona es el panel de Supabase → Storage → Policies, que corre como el dueño y
+> **no la puede recorrer un agente**.
+>
+> Para contestar una pregunta de permisos **antes** de escribir una migración que
+> quizá ni arranca, usá la sonda que aborta por construcción — está en
+> `memory/_compartida.md`. No puede escribir aunque quiera.
+
 Orden, de menor a mayor riesgo:
 
-1. **#20** — DELETE de `reportes-semanales` sólo Gerencia. Alinea con los otros 6
-   buckets. El más trivial: **hacelo primero y usalo para comprobar que el carril
-   funciona** antes de apuntarlo a #37.
+1. ~~**#20**~~ — **HECHO Y BLOQUEADO.** Migración `109_storage_reportes_delete_gerencia.sql`
+   escrita, revisada adversarialmente (veredicto **UNSAFE**, y acertó), corregida y
+   publicada en el **PR #154**. **No aplicada, y este carril no puede aplicarla** —
+   ver el límite duro de arriba. Necesita el panel de Storage → Policies, o
+   cerrarse como `Aceptado (no se arregla)`. **El siguiente turno del carril es
+   para #37.**
 2. **#37** — las 4 políticas DELETE con predicado `true` sobre tablas GlobalGAP.
    **Leé esto antes de escribir una línea**: esas tablas **no tienen ninguna
    política de Gerencia/Administrador**, así que la always-true es el **único**
@@ -114,6 +165,12 @@ Orden, de menor a mayor riesgo:
    escribe). Alcance recortado: la parte «no existe historial general» es decisión
    de producto y va a G2, no acá.
 4. **#16** — `productos.updated_by` + trigger, patrón 040/050/063/074.
+
+**#37, #19 y #16 NO comparten el bloqueante de #20**: son sobre tablas de
+`public`, donde `postgres` sí es dueño. El carril sigue vivo para ellas — lo que
+murió es su alcance a `storage.objects`. **Comprobalo igual antes de escribir**,
+con la sonda que aborta: cuesta una llamada y evita escribir una migración
+entera que no puede correr.
 
 Respaldos **siempre en el esquema `respaldos`, nunca en `public`** (migración 081).
 
@@ -167,6 +224,31 @@ no perdió un tick. **#36 cerrado.**
 sustituye.
 
 **Backlog**: 25 → **23 abiertos**.
+
+**Corrida de cierre (misma fecha, sesión interactiva)** — reporte completo en
+`reports/2026-08-24-drenaje-cierre.md`:
+
+- **#3 cerrado** (`Arreglado`), contra el despliegue verificado en sus **dos**
+  superficies: edge function v215 (reflog + `mtime` del worktree desplegado) y
+  navegador (sonda de contenido sobre los 192 chunks de Vercel — el literal
+  `4.33` ya no aparece en ningún chunk de la app).
+- **#20**: migración 109 escrita, revisada, corregida y publicada en el PR #154;
+  **sin aplicar**, y el carril no puede aplicarla.
+- **#11 y #22 escalados**: los dos están bloqueados por una **credencial**, no
+  por esfuerzo. Ninguna cantidad de trabajo desatendido los cierra.
+- Cero hallazgos nuevos, que es lo correcto en drenaje.
+
+**Backlog**: 23 → **22 abiertos**.
+
+> **Lo más caro que dejó esta corrida, y no estaba en ningún hallazgo:** la
+> revisión adversarial de la compuerta 3 **pagó por sí sola**. Además del
+> bloqueante, atrapó una afirmación falsa que el `COMMENT ON POLICY` habría
+> grabado **de forma permanente en el catálogo de producción**, un rol
+> (`Monitor`) que el `CLAUDE.md` raíz nombra y que **no existe en el enum
+> `rol_usuario`**, y una post-condición que era una guarda de mentira — comparaba
+> subcadenas, así que un predicado *sin correlacionar* (`EXISTS (SELECT 1 FROM
+> usuarios WHERE rol='Gerencia')`, cierto para **cualquier** autenticado) la
+> habría pasado. **No la trates como un trámite.**
 
 ---
 
