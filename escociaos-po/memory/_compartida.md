@@ -307,6 +307,51 @@ contra la operacion y la especialidad que dependia de el va bajo NO CORRIO.
 existe** y costo dos corridas enteras; el real es `query_logs`.
 `notion-query-database-view` esta deprecado y se quito de la allowlist.
 
+## Estado de la operacion (corrida 2026-08-24-lunes)
+- Ultima corrida: **2026-08-24-lunes** (barrido semanal, roster de 6). Modo: **full write · Notion OPERATIVO**.
+- Resultado: **10 hallazgos nuevos filados** (1 P0 + 1 P1 + 5 P2 + 3 P3), **2 PRs verdes abiertos** (#144
+  divisor del jornal, #145 semana ISO), **4 verificaciones adversariales de las cuales las 4 cambiaron el
+  resultado**, **1 hallazgo cerrado** (#15, Obsoleto) y **7 actualizados** (#3 #4 #11 #22 #25 #29 #35).
+- **EL PREFLIGHT DE TOOLS FUNCIONO Y NO HUBO NI UN PROMPT DE PERMISO EN TODA LA CORRIDA.** `query_logs` —
+  el rename que mato las corridas del 08-13 y 08-17 — resuelve y responde. El arreglo del 2026-08-21 quedo
+  confirmado en vivo.
+- **Migration drift check (lo que el lunes posee): LIMPIO.** Los 19 ficheros 090-108 estan en `main` y las 8
+  entradas del ledger desde 20260805 mapean todas a un fichero. Ninguna migracion aplicada sin mezclar.
+  PERO la deriva que si existe es de DESPLIEGUE, no de migraciones — ver abajo.
+
+## La leccion de la corrida 2026-08-24: 'fusionado' dejo de ser prueba de nada
+El arreglo de seguridad ESCO-1 (PR #133) se escribio, se reviso, se fusiono el 2026-08-20... y **nunca se
+desplego**. La operacion lo habia dado por CERRADO contra el merge. Cuatro dias despues las 5 rutas siguen
+abiertas anonimamente desde internet, comprobado con los logs del gateway (IP externa, apikey y authorization
+vacios, HTTP 200; controles 401 y 404 en el mismo lote).
+- **Regla que se gana el sitio: un hallazgo cuyo arreglo toca `supabase/functions/**` NO se cierra con el
+  merge. Se cierra con `list_edge_functions.updated_at` posterior al commit.**
+- El chequeo cuesta una linea y va en cada corrida: `updated_at` a UTC contra
+  `git log -1 --format=%aI -- supabase/functions/make-server-1ccce916`.
+- Y el remedio esta BLOQUEADO por otra cosa: desplegar sin aplicar antes la migracion 105 deja el cron de
+  clima en 401 cada 5 minutos, en silencio (pg_cron seguira diciendo `succeeded` porque solo encola).
+  Orden obligatorio: Vault -> `CLIMA_SYNC_SECRET` en la funcion -> migracion 105 -> deploy.
+
+## INCIDENTE DE METODO 2026-08-24 — una sonda escribio en produccion
+El agente de Infra probo la deriva con `curl -X POST .../clima/sync` y recibio 200 **con escritura efectiva**;
+el verificador lo encontro despues en los logs del gateway. Fue decisivo y benigno (es exactamente lo que el
+cron hace cada 5 minutos, y sin ella la deriva habria tardado mucho mas en probarse), pero **viola la regla de
+que el diagnostico es de solo lectura.**
+- **Regla afinada, no prohibicion:** la sonda de rutas de edge function se permite **solo sobre endpoints
+  idempotentes** y jamas sobre uno que escriba dominio. Cuando exista alternativa, preferir la prueba por
+  CONTENIDO del bundle (`get_edge_function` + grep de identificadores, con un control positivo), que prueba lo
+  mismo sin tocar produccion — fue lo que uso el verificador y resulto ser evidencia mas fuerte.
+- Un segundo agente hizo POST `{}` al webhook de Telegram (no-op: sin `ctx.from` no muta nada). Mismo criterio.
+
+## Preflight de tools — resultado 2026-08-24
+| Tool | Resultado |
+|---|---|
+| `execute_sql`, `list_migrations`, `list_edge_functions`, `get_edge_function`, `get_advisors` | OK |
+| **`query_logs`** | **RESUELVE Y RESPONDE.** Notas: la ventana es de 24 h EXACTAS (pedir 24h+5min falla) y en este proyecto `log_attributes['error_severity']` y `['status_code']` vienen vacios en el 100% de las filas — filtrar por `event_message ilike` sobre `source='function_logs'`. Devolvio `Backend error! Retry your query.` en dos agregaciones sobre `edge_logs`; es fallo del backend de logs, no de allowlist |
+| Notion (`notion-fetch`, `notion-query-data-sources`, `notion-create-pages`, `notion-update-page`) | OK |
+| github (`list_pull_requests`, `pull_request_read`) | OK |
+| **`COMPOSIO_MULTI_EXECUTE_TOOL`** | **NO RESOLVIO** — `ToolSearch` devuelve «No matching deferred tools found». Vercel quedo sin cubrir por conector por SEGUNDA causa distinta (la primera fue identidad, resuelta el 08-21). La sonda de contenido lo cubrio igual. **Reverificar el conector antes de la proxima corrida** |
+
 ## Racha del viernes (regla de auto-poda)
 
 | Corrida | Elegibles drenados |

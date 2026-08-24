@@ -128,6 +128,37 @@ prompt del agente en cada corrida.
 | Clima | Sync SANO: ultima lectura 0,04h · 363 lecturas en 24h · 0 duplicados · 89/90 dias con resumen · 0 valores fisicamente imposibles en 90 dias · `contador_congelado` **17 de 90 (~19%)**, subio de 16 — SEGUNDA subida consecutiva; si llega a 18+ escalar a Infra | 2026-08-10-lunes |
 | Inventario | Libro vs stock: **3 divergencias por el metodo correcto** (Sulcamag -8.000, Naturboro -20, TecniFeed Boro +18,69) — y en las 3 el que esta mal es el LIBRO, no el saldo. 0 productos con stock negativo. Proyeccion al cierre de las 2 aplicaciones abiertas: los 8 productos quedan POSITIVOS. La unica `verificaciones_inventario` (desde 2026-07-30) sigue ABANDONADA: 223 filas de detalle, **0 contadas** | 2026-08-10-lunes |
 
+
+## Corrida 2026-08-24-lunes
+- Baseline: hato_animales 179 (65 activa) · hato_eventos 766 (SIN CAMBIO desde 08-20) · partos 300 ·
+  chequeos 33 / chequeo_vacas 1.479 (ultimo 2026-07-09) · pesajes 549 · quincenal 82 · alertas 65 ·
+  hato_correcciones 10 · monitoreos 4.200 / 29 rondas (ultima 2026-07-29) · productos 341 (0 negativos) ·
+  movimientos_inventario **155, congelado desde 2026-08-05 19:29** (NO desde el 08-10: correccion del
+  verificador) · movimientos_diarios 157 / mdp 761 · aplicaciones 20 · compras 32 · fin_gastos 4.475 ·
+  gan_movimientos 53 / 369 cabezas · logs_auditoria 0.
+- Integridad referencial: 0 huerfanos en todas las relaciones probadas. Ganado concilia perfecto otra vez
+  (369 = 369 en los 34 potreros; agrupar por coalesce(potrero_destino_id, potrero_origen_id)).
+- METODO NUEVO: la proyeccion de inventario al cierre se calcula EXACTAMENTE como el payload —
+  sum(mdp.cantidad_utilizada) por producto, filtrando SOLO por movimientos_diarios.aplicacion_id de UNA
+  aplicacion. Nunca usar aplicaciones_productos (capa planeada). La conversion cc/g -> /1000 de
+  calculosCierreAplicacion.ts es CODIGO MUERTO: enum unidad_medida solo tiene Kilos, Litros, Unidades.
+- METODO NUEVO: aplicaciones.costo_total_mano_obra es un SNAPSHOT congelado al cierre, nunca re-derivado
+  (fetchDatosReporteCierre.ts:133). Para detectar divergencia: comparar contra sum(registros_trabajo.costo_jornal)
+  por a.tarea_id. Son 17 cerradas, 15 cuadran al centavo.
+- REFUTADO ESTA CORRIDA (no re-investigar): 'los registros de mano de obra se crearon DESPUES del cierre'.
+  Falso — `fecha_cierre` es una fecha TECLEADA por el usuario, no cuando corrio el cierre. La hora real esta
+  en aplicaciones_cierre.created_at. Los 199 registros existian y estaban finales antes del cierre, por 23 y
+  2 dias, y 0 tienen updated_at posterior. La causa real es que el operador tecleo $50.000 a mano.
+- REFUTADO ESTA CORRIDA: 'costo_jornal es una tarifa por jornal'. Es un TOTAL POR REGISTRO — laborCosts.ts:171
+  recupera la tarifa como costo_jornal/fraccion_jornal, y sum(costo_jornal*fraccion) no cuadra con ninguna
+  aplicacion cerrada.
+- REFUTADO ESTA CORRIDA: 'el cierre es el UNICO camino a movimientos_inventario'. Hay 39 Entrada y 12 Ajuste,
+  con tres escritores fuera del cierre (NuevoMovimientoModal.tsx:135, PurchaseHistory.tsx:385, NewPurchase.tsx:405).
+  El cierre es el unico escritor de 'Salida por Aplicacion'.
+- La normalizacion de responsables de la 107 SE SOSTIENE: exactamente 6 grafias, 0 rastro de 'Libardo'.
+- CLIMA recuperado: 288/288 el 08-22 y 08-23, contador_congelado 17/90 (bajo desde 19/90). La 103 opero por
+  primera vez sobre un incidente real (08-19 y 08-20 marcados cobertura_parcial).
+
 ## Archivo
 (vacio)
 

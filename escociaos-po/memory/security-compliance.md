@@ -83,5 +83,39 @@ prompt del agente en cada corrida.
 | Advisors security | **112 -> 13**. 7 rls_enabled_no_policy (4 conocidas + respaldos.backup_080/083/090, que son el fin deseado); 4 *_security_definer_executable (es_usuario_gerencia + get_user_role = ACEPTE PERMANENTE, y fn_cleanup_compra_dependencies, que SI valida a su llamante — cuerpo verificado, RAISE 42501); 1 auth_leaked_password_protection. Categorias `rls_policy_always_true` y `function_search_path_mutable` desaparecieron del linter (ver refutacion) | 2026-08-10-lunes |
 | RLS y cuentas | **89 tablas en public, 89 con RLS (100%), 267 politicas**. Delta vs 08-03 (91/88): -3 backups movidos a `respaldos`, +1 `hato_correcciones` (mig 084). **10 funciones SECURITY DEFINER** (+fn_hato_registrar_correccion), las 10 con `search_path` fijado; solo 3 alcanzables por roles de navegador. usuarios: 5 Gerencia + 2 Administrador. logs_auditoria 0 filas. hato_correcciones 0 filas, 5 triggers activos. `usuarios` sigue sin grant de UPDATE (073 se sostiene). **Edge function v197 -> v200**, verify_jwt=false. Storage: 7 buckets privados; reportes-semanales 43, facturas 5, hato-liquidaciones-fotos 4, photos 2, monitoreo-fotos 1, chequeos-fotos 0, hato-pesajes-fotos 0 | 2026-08-10-lunes |
 
+
+## Corrida 2026-08-24-lunes
+- Baseline: 97 tablas en public, 97 con RLS (100%), 280 politicas, 11 funciones SECURITY DEFINER (todas con
+  search_path fijado). Delta vs 08-10 (89/89/267/10): +8 tablas y +1 secdef. Advisors security 13 -> 21 lints,
+  sin categoria nueva — la subida es crecimiento de respaldos, no degradacion.
+- **EL DETECTOR DE POLITICAS always-true TENIA UN HUECO Y YA COSTO UN HALLAZGO TARDIO.** Filtraba por
+  `roles LIKE '%public%' OR '%anon%'`, asi que NO VE las politicas que apuntan solo a `{authenticated}`.
+  Corriendolo tal cual daba 1 fila y parecia que estaban cerradas. En realidad quedan 4 DELETE con qual=true
+  sobre aplicaciones_productos/calculos/lotes y movimientos_diarios_productos, mas UPDATE+DELETE sobre
+  contratistas. **Consulta correcta: pg_policies en public donde coalesce(qual,with_check) no mencione
+  auth.uid/get_user_role/es_usuario_gerencia/auth.role/auth.jwt, SIN condicionar el rol.**
+- Esas 4 tablas NO tienen politica de Gerencia/Administrador: tienen exactamente 3 politicas cada una
+  (select/insert/delete, todas true). La always-true no es redundante — es el UNICO camino de borrado, y es
+  lo que hace funcionar el borrar-y-reinsertar de CalculadoraAplicaciones.tsx:492/501/505. Acotar por
+  PROPIETARIO romperia ese flujo; hay que acotar por ROL.
+- has_table_privilege('anon', ...,'DELETE') es true en esas 4 (trampa del ALTER DEFAULT PRIVILEGES, mig 081),
+  pero anon no figura en ninguna politica. Estan a UNA politica 'TO public' de ser borrables anonimamente.
+- **VERIFICADO Y ESCALADO A P0**: los 2 ids de Telegram del repo publico son REALES. Metodo para volver a
+  comprobarlo sin exponerlos: extraer los literales de 9-12 digitos, md5 local, cotejar contra
+  md5(telegram_id::text) de telegram_usuarios. Uno es Gerencia (con modulo 'consultas' = toolset completo de
+  Esco, incluido el P&G), el otro Administrador. El webhook no valida nada en NINGUNO de los dos arboles
+  (diff -q identicos) y llama bot.handleUpdate directo en vez de webhookCallback(...,{secretToken}), que es
+  el unico sitio donde Grammy validaria. POST anonimo -> 200.
+- Vault tiene 2 secretos: acciones_tick_secret y hato_alertas_tick_secret. **clima_sync_secret NO EXISTE** —
+  o sea el paso 1 de los 4 de la 105 tampoco se hizo, no solo la migracion.
+- La 104 se sostiene: 0 politicas TO public con predicado true en verificaciones_*, anon sin privilegios.
+- Las 8 tablas nuevas nacieron bien cerradas (RLS por rol, GRANT por columna, cero anon). El patron
+  073/081/101 ya se aplica solo.
+- El contrato 'el paquete v1 de acciones no lleva cifras fin_*' SE VERIFICO y se cumple (9 corridas, 0 match
+  contra gasto|ingreso|utilidad|margen|pyg|flujo_caja|precio).
+- Brecha LATENTE de contratistas re-verificada por 3a corrida. Padron 2026-08-24 = 5 Gerencia + 3 Administrador,
+  sigue sin Verificador ni Monitor. **Revisar contratistas, el bucket reportes-semanales y las 4 DELETE de
+  aplicaciones JUNTAS cada corrida — son la MISMA clase latente y se activan todas el mismo dia.**
+
 ## Archivo
 (vacio)

@@ -122,6 +122,44 @@ prompt del agente en cada corrida.
 | Advisors performance (por SQL) | unindexed_fks **89** (era 88) · unused_index **43** (era 46) · no_primary_key **3** (era 1; los 2 nuevos son respaldos.backup_083 y backup_090, estado final buscado, NO es hallazgo). **El conteo de multiple_permissive_policies NO es comparable con el del advisor** — la consulta SQL agrupa por (tabla, cmd, roles) y da 54; el advisor cuenta pares y reporta ~479. No cruzar las dos cifras | 2026-08-10-lunes |
 | Tamanos de tabla | net._http_response 59 MB (72 filas) · reportes_semanales 2.448 kB · clima_lecturas 2.192 kB · monitoreos 1.960 kB (4.200) · fin_gastos 1.808 kB (4.464) · registros_trabajo 1.576 kB (2.579) · hato_chequeo_vacas 960 kB · hato_eventos 712 kB | 2026-08-10-lunes |
 
+
+## Corrida 2026-08-24-lunes
+- **LA SONDA DE RUTAS DE EDGE FUNCTION ES EL INSTRUMENTO MAS BARATO Y DECISIVO QUE TIENE ESTA ESPECIALIDAD**,
+  pero usarla tiene una condicion que esta corrida dejo clara: **solo sobre endpoints IDEMPOTENTES, jamas
+  sobre uno que escriba dominio.** El POST a /clima/sync probo la deriva en 3 segundos (200 anonimo, con
+  control positivo /hato/alertas/tick -> 401 y negativo /ruta/que/no/existe -> 404) y fue benigno porque es
+  exactamente lo que el cron hace cada 5 minutos — pero produjo una escritura efectiva, y la regla del §6 es
+  diagnostico de solo lectura. Preferir la prueba por CONTENIDO del bundle (get_edge_function + grep de
+  identificadores), que prueba lo mismo sin tocar produccion.
+- **PRUEBA POR CONTENIDO DEL BUNDLE DESPLEGADO** (la que cierra la escapatoria de 'quiza se desplego desde una
+  rama que ya traia el arreglo'): get_edge_function devuelve ~1,5M chars con las fuentes en linea; guardarlo a
+  fichero y contar identificadores del arreglo. Control obligatorio: contar tambien un identificador que SI
+  deba existir, para probar que el grep sirve.
+- Deriva de despliegue medida: v213, updated_at 2026-08-18T01:36:38Z, contra 2 commits del 2026-08-20T18:03Z.
+  **Lag 3d 17h**, contra 1h44m (08-03) y 25 s (08-06). Chequeo de una linea para cada corrida: convertir
+  list_edge_functions.updated_at a UTC y compararlo contra
+  `git log -1 --format=%aI -- supabase/functions/make-server-1ccce916`.
+- El entrypoint_path de la v213 apunta a un worktree LOCAL de Mac: los despliegues salen de un worktree ad-hoc,
+  no de un checkout de main. **Un despliegue puede no corresponder a ningun commit de main.**
+- METODO — la sonda de contenido del FRONTEND estuvo a punto de dar un falso positivo. Los chunks referenciados
+  desde el entry NO son el grafo completo: los componentes compartidos viven en chunks anidados. Bajar un nivel
+  mas, y validar con un control POSITIVO (una cadena que exista en las dos versiones) antes de concluir ausencia.
+  Sin ese control, 'no esta' significa 'no lo baje'.
+- BASELINE: DB 114 MB (76 MB son maquinaria: net._http_response 59 MB con 74 filas vivas, cron.job_run_details
+  17 MB / 45.786 filas). Storage 129 MB / 68 objetos (+24 MB en 14 dias). 4 pg_cron, 2.037 corridas en 7 dias,
+  0 fallos. Consulta de aplicacion mas lenta: fin_gastos via PostgREST 314,1 ms; v_hato_estado_actual ~140 ms.
+  Sin regresion.
+- BASELINE motor de acciones: diario 10:50 UTC, ~USD 0,011/corrida, 10-15 s, 5-9 acciones. `estado='parcial'`
+  en 8 de 9 corridas es el ESTADO NORMAL (tope de 90 chars), asi que **`estado` no sirve hoy como senal de
+  salud — usar count(acciones_recomendadas) por corrida.**
+- `query_logs` resuelve pero devolvio `Backend error! Retry your query.` en dos agregaciones sobre edge_logs.
+  Ademas NO resuelve log_attributes['error_severity'] ni ['status_code'] en este proyecto (cadena vacia en el
+  100% de las filas): filtrar por `event_message ilike` sobre source='function_logs'. La ventana es de 24 h
+  EXACTAS; pedir 24h+5min falla.
+- `COMPOSIO_MULTI_EXECUTE_TOOL` NO RESOLVIO en esta sesion pese a estar en la allowlist esperada. Vercel quedo
+  sin cubrir por conector; la sonda de contenido lo cubrio igual. **Reverificar el conector antes de la proxima
+  corrida** — es la segunda causa distinta que deja a Vercel fuera.
+
 ## Archivo
 (vacio)
 

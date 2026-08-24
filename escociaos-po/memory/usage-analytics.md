@@ -74,5 +74,33 @@ prompt del agente en cada corrida.
 | Pesajes de leche | mar 4 sesiones/80 filas · abr 4/80 · may 4/94 · jun 4/122 · **jul 0 · ago 0**. Ultimo dato 2026-06-24. **Las 376 filas son importacion, ninguna captura viva.** Miercoles perdidos con superficie viva: 3 | 2026-08-10-lunes |
 | Monitoreo por ronda | R24=153 obs/18 sublotes · R26=137/19 · R27=55/12 · R28=44/12 · R29=45/12 (**ABIERTA**, monitor Clara). El nivel 12 sublotes/4 lotes es el NUEVO normal desde la salida de Daniela, no una caida en curso | 2026-08-10-lunes |
 
+
+## Corrida 2026-08-24-lunes
+- **SE ROMPIO LA RACHA DE CERO**: el rol de campo del hato paso de 0 (4 corridas seguidas) a 174 filas en 28
+  dias. 169 pesajes con fuente='foto' en 6 sesiones, insertadas el 2026-08-11 y 08-12. Las 549 filas de
+  hato_pesajes_leche ya NO son todas importacion: 376 importacion + 173 foto.
+- hato_correcciones tiene sus primeras 10 filas (7 update a hato_animales, 2 delete y 1 update a hato_eventos),
+  2 personas. La tabla ya NO esta vacia: a partir de ahora SI sirve como senal de revision humana.
+- **REGLA NUEVA AL MEDIR ADOPCION POR FOTO: cotejar SIEMPRE objetos del bucket contra filas producidas.** Un
+  objeto sin filas es un intento FALLIDO, no un exito. El 2026-08-19 entro a hato-pesajes-fotos un objeto de
+  3.324.012 bytes byte-identico en tamano al que 57 s despues entro a hato-liquidaciones-fotos; el pesaje no
+  produjo ninguna fila, la liquidacion si.
+- chequeos-fotos sigue en 0 objetos y los 33 hato_chequeos se escribieron TODOS el 2026-07-23 (backfill).
+  Ningun chequeo se ha capturado nunca en vivo. Proximo esperado ~2026-09-08 (cadencia 65-71 dias).
+- Completitud del hato movida por primera vez: activas 68->65, sin raza 68->62, sin fecha_nacimiento 26->20,
+  sin madre 35->32, fichas completas 0->1.
+- **CORRECCION AL CLAUDE.md RAIZ: movimientos_diarios SI tiene created_by y esta poblada en 157/157 filas**,
+  desde 2026-01-06. El contrato dice que 'aplicaciones y movimientos_diarios* no tienen columna de capturador';
+  es falso para movimientos_diarios (si es cierto para aplicaciones y para movimientos_diarios_productos).
+- **fin_gastos: la caida a 1 fila en la semana no es abandono, es RUIDO.** La captura es por lotes y el rezago
+  mediano en agosto es 0 dias — el mejor de 2026 (abr 14, may 12, jun 9, jul 16). No reportar como abandono.
+- **Monitoreo: 16 dias sin observaciones NO es abandono.** Cadencia de apertura de ronda R26 04-25, R27 05-20,
+  R28 06-24, R29 07-29 -> proxima ~2026-09-01. R29 sigue abierta con 45 obs / 12 sublotes.
+- Esco chat: 85 conversaciones / 350 mensajes, 0 vacias, 44 de un solo turno. Semana del 08-10: pico de 60
+  mensajes y SEGUNDO usuario de la historia. esco_memorias 0 -> 1: la memoria de largo plazo se estreno.
+- telegram_usuarios = 4 (2 gerencia, 2 campo), 2 altas nuevas el 08-11 y 08-12.
+- SUPERFICIE NUEVA a vigilar cada lunes — acciones_recomendadas: nace 2026-08-17, 9 corridas, 63 acciones,
+  acciones_silencios = 2 (descartes humanos reales de Gerencia).
+
 ## Archivo
 (vacio)

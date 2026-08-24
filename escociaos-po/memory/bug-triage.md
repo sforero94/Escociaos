@@ -91,6 +91,31 @@ prompt del agente en cada corrida.
 | main@7c232f6 (anterior) | npm test 72 archivos / 1.725 tests · lint 1.031 warnings · tsc limpio | 2026-08-03-lunes |
 | main@b32585b verde | npm test **85 archivos / 2.030 tests** · lint 0 errores / 947 warnings · `tsc --noEmit` limpio. Con PR #110 sigue 85/2.030; con PR #111 sube a **86 / 2.036** y 946 warnings. Todos los guards de paridad en verde | 2026-08-10-lunes |
 
+
+## Corrida 2026-08-24-lunes
+- 2 PRs verdes abiertos: **#144** (divisor del jornal a 22, hallazgo #3) y **#145** (agrupacion semanal ISO en
+  UTC, hallazgo #27). Baseline main@2d0006e: vitest 128 ficheros / 2.934 tests verdes, lint 0 errores /
+  **904 warnings**, tsc limpio.
+- Nomina 2026 verificada: 20 de 21 empleados con horas_semanales = 44 (el 21.º, EMILIANO GARCIA, salario NULL
+  por diseno, mig 107). Divisor efectivo viejo = 44 × 4,33 / 8 = **23,815**. Jornalero tipo 2.508.098 ->
+  **$105.316 viejo vs $114.004 con 22**, subvaluacion del 7,6%.
+- Guard nuevo `src/__tests__/jornalDivisorContract.test.ts`. **Su lista FICHEROS_COSTO_JORNAL NO incluye
+  calculosCierreAplicacion.ts, que sigue en 4.33** — hallazgo filado esta corrida, y su arreglo DEPENDE del
+  merge de #144 (importa DIAS_LABORALES_MES).
+- 0 de 2.720 registros_trabajo tienen costo_jornal en 0 o NULL: el hueco de EMILIANO GARCIA (salario NULL ->
+  jornal $0 silencioso) es LATENTE, nunca se materializo. **No re-auditar.**
+- Bug de agrupacion semanal cuantificado: 677 de 4.200 monitoreos (16,1%) caen en lunes sobre 14 fechas, y 13
+  rondas quedaban partidas en dos grupos. La parte del 1-enero es latente (0 filas cruzan ano hoy).
+- **registros_trabajo.valor_jornal_empleado guarda DOS UNIDADES INCOMPATIBLES**: 2.461 filas el salario mensual
+  (1.423.500-1.800.000), 75 el valor de un jornal (47.450). Las 75 coinciden con costo_jornal/fraccion; ninguna
+  de las 2.461 lo hace. Columna poblada al 100%, asi que un NULL no distingue. **Nunca tratarla como una sola
+  unidad.**
+- CERO firmas de error de runtime en la ventana de 24 h: function_logs 1.401 lineas sin error/exception/fail,
+  postgres_logs 939 sin ERROR/FATAL/PANIC. Los unicos no-200 son las sondas del propio barrido — **cotejar
+  siempre los no-200 contra la ventana horaria de la corrida antes de reportarlos.**
+- `node_modules` NO existe en el checkout compartido: `npm ci` en el primer worktree (~2 min) y symlink desde el
+  segundo funciono sin incidentes.
+
 ## Archivo
 (vacio)
 

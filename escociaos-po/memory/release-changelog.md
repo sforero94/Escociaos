@@ -80,6 +80,39 @@ prompt del agente en cada corrida.
 | Cadencia (2a medicion, 9 semanas al 2026-08-10) | 23,8 commits/sem · 6,1 aterrizajes first-parent/sem · fix share **53,5%** (46 fix / 40 feat), SUBIENDO desde 46,8% · lag de deploy: frontend automatico, edge `ddc62cb` 25 s pero `23baf4d` 4+ dias. **El alza del fix share esta sesgada por UNA campaña**: el PR #109 (pipeline de Tailwind + recorrida de movil) aporta los 17 `fix` de la semana. Es amortizacion de deuda de UI, no calidad degradandose. La medicion limpia es la de Code Quality del 2026-09-07 | 2026-08-10-lunes |
 | Crons | 3/3 sanos, **0 fallos**: clima-sync 41.582 corridas, rollup 125, hato-alertas-tick 19/19 (ultima 2026-08-10) | 2026-08-10-lunes |
 
+
+## Corrida 2026-08-24-lunes
+- **EL LAG DE DESPLIEGUE DE LA EDGE FUNCTION ES AHORA LA METRICA IMPORTANTE DE ESTE ROL.** Paso de 25 s
+  (2026-08-06) a **3 dias 17 h** (2026-08-24). Chequeo de una linea, cada corrida: convertir
+  list_edge_functions.updated_at (epoch ms) a UTC y compararlo contra
+  `git log -1 --format=%aI -- supabase/functions/make-server-1ccce916`.
+- Cuando el despliegue vivo es ANTERIOR al commit por DIAS (no por segundos), el falso positivo conocido de
+  'desplegaron y despues commitearon' queda descartado sin necesidad de la comparacion byte a byte, que ademas
+  desborda el limite de tokens.
+- **ESCO-1 SE CERRO CONTRA EL MERGE Y NO CONTRA EL DESPLIEGUE, y ese es el error de proceso de la corrida.**
+  Regla del rol que hay que hacer cumplir explicitamente: un hallazgo cuyo arreglo toca `supabase/functions/**`
+  NO se cierra con el merge; se cierra con updated_at posterior al commit.
+- **LA 105 BLOQUEA EL DESPLIEGUE.** 0a7308c pone la puerta verificarAccesoClima en /clima/sync y /clima/backfill,
+  y el job 1 clima-sync-wu no manda el encabezado. Verificar SIEMPRE con
+  `select (command ilike '%x-clima-sync-secret%') from cron.job where jobid=1` antes de recomendar un deploy.
+  Orden obligatorio: Vault -> CLIMA_SYNC_SECRET en la funcion -> migracion 105 -> deploy.
+- **Hallazgo #15 CERRADO como Obsoleto**: los respaldos de 075/076 se borraron a proposito
+  (`20260803170340 drop_backups_075_076_monitoreo`, issue #96 item 12, aprobado por Santiago).
+  **Un respaldo backup_* que desaparece puede ser deliberado, y la unica forma de saberlo es
+  `select statements from supabase_migrations.schema_migrations where name ilike '%backup%'`.
+  La ausencia de la tabla no prueba descuido.**
+- **PR #118 (arregla #35) YA NO FUSIONA** desde que cf894d5 corrigio el estado de la 093. Verificado sin tocar
+  el arbol compartido con `git merge-tree --write-tree --messages 2d0006e refs/po/pr118` — **esa es la forma de
+  simular un merge en un checkout compartido.**
+- Los 15 'DESYNC' entre los dos arboles de edge function siguen siendo SOLO la primera linea `// ARCHIVO:`
+  (verificado con diff completo, no solo -w). Y index.tsx vs index.ts difiere de nombre a proposito. Ninguna de
+  las dos cosas es un hallazgo. No re-investigar.
+- **El fix share NO es interpretable en ventanas de 4 dias**: tres periodos seguidos con un sesgo identificable
+  distinto (Tailwind, features, cosecha del propio PO). Reportarlo mensual. Esta ventana: 72,2% fix, pero 5 de
+  los 13 fix son PRs de esta misma operacion.
+- Cadencia: 29 commits sin merge en 3,76 dias = 54/semana, pero TODO cabe en 27 horas y despues hay 2 dias 15 h
+  sin un solo commit. Es un pico, no un ritmo.
+
 ## Archivo
 (vacio)
 
