@@ -618,19 +618,19 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
 
 // ---------------------------------------------------------------------------
 // Instrumentación (hallazgo #4, PO 2026-08-24) -- persiste UNA fila por
-// corrida en `hato_alertas_tick_runs` (migración 113) y emite además una
+// corrida en `hato_alertas_tick_runs` (migración 116) y emite además una
 // línea de `console.log` estructurada. Dos canales a propósito, no
 // redundancia: `query_logs` (edge functions) tiene una ventana de 24h --
 // alcanza para revisar la corrida de esta madrugada, no para confirmar un
 // patrón de varios días ("una alerta cada quince días"). La tabla es la que
 // sobrevive más de 24h; el log es lo único que existe ANTES de que la
-// migración 113 se aplique (esta migración se entrega sin aplicar, ver su
+// migración 116 se aplique (esta migración se entrega sin aplicar, ver su
 // cabecera).
 //
 // Contrato de esta función: NUNCA lanza, y su fallo NUNCA cambia la
 // respuesta del tick ni qué alerta se generó -- todo lo que decide "qué
 // generar/enviar/escalar" ya corrió antes de que esta función exista. Si la
-// tabla todavía no existe (migración 113 sin aplicar) o el INSERT falla por
+// tabla todavía no existe (migración 116 sin aplicar) o el INSERT falla por
 // cualquier otro motivo, se registra con `console.error` y se sigue --
 // mismo contrato de "no abortar por un fallo de instrumentación" que ya usa
 // el resto de este archivo para `hato_alertas_envios` (fase b, arriba).
@@ -679,7 +679,7 @@ async function registrarCorridaTick(
   });
   if (error) {
     // No aborta ni cambia la respuesta del tick -- ver el contrato en la
-    // cabecera de esta función. Motivo esperable hasta que la migración 113
+    // cabecera de esta función. Motivo esperable hasta que la migración 116
     // se aplique: la tabla todavía no existe (`42P01`).
     console.error(`[hato-alertas-tick] no se pudo registrar la corrida en hato_alertas_tick_runs: ${error.message}`);
   }
