@@ -174,9 +174,14 @@ LANGUAGE plpgsql
 SET search_path TO 'public', 'pg_temp'
 AS $function$
 BEGIN
-  -- `COALESCE(auth.uid(), NEW.updated_by)` -- NO `COALESCE(NEW.updated_by, auth.uid())`,
-  -- que es lo que pedía el hallazgo y está mal (ver el encabezado): con el orden
-  -- invertido la columna se congela en el primer editor.
+  -- OJO CON EL ORDEN DE LOS ARGUMENTOS: primero `auth.uid()`, después el valor
+  -- viejo. El orden inverso -- que es el que pedía el hallazgo -- congela la
+  -- columna en el primer editor. Ver el encabezado.
+  --
+  -- (Este comentario evita a propósito escribir el orden invertido de forma
+  -- literal: la post-condición 4.2c busca esa cadena dentro de
+  -- `pg_get_functiondef()`, que INCLUYE los comentarios del cuerpo, así que
+  -- escribirla acá abortaría la migración en falso.)
   --
   -- Con ESTE orden: desde el navegador `auth.uid()` no es nulo y SIEMPRE pisa, así
   -- que nunca se congela. Desde el `service_role` (`auth.uid()` nulo) se respeta lo
