@@ -15,7 +15,9 @@
 // lugar del repo que llama a `invocarModeloAcciones` (`acciones-motor.ts`)
 // Y a `validarSalidaMotor` (`acciones-validador.ts`) en la misma corrida.
 // Orden: ensamblar paquete → invocar el modelo → validar → (si corresponde,
-// §7.4) reintentar UNA vez a temperatura 0 → ordenar (`ordenarAcciones`) →
+// §7.4) reintentar UNA vez a temperatura 0 → (si la acción de índice 0 se
+// rechazó SÓLO por LONGITUD, hallazgo #41 PO Usage Analytics) reintentar
+// SÓLO esa acción una vez más, aparte → ordenar (`ordenarAcciones`) →
 // descartar lo silenciado (§5.2) → persistir corrida + acciones aceptadas.
 //
 // El pipeline SIGUE corriendo aunque el modelo falle o no esté disponible
@@ -49,7 +51,9 @@ import { crearDependenciasSupabase } from './acciones-paquete-io.ts';
 import {
   debeReintentar,
   invocarModeloAcciones,
+  invocarModeloReintentoLongitud,
   MODELO_ACCIONES_DEFAULT,
+  rechazoLongitudIndice0,
   sumarCostosUsd,
   TEMPERATURA_INICIAL,
   TEMPERATURA_REINTENTO,
@@ -290,6 +294,50 @@ export async function handleAccionesTick(c: Context): Promise<Response> {
       errorMotor = err instanceof Error ? err.message : String(err);
       aceptadas = [];
       rechazos = [];
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Reintento quirúrgico de la acción rango 0 rechazada por LONGITUD --
+  // hallazgo #41 (PO, Usage Analytics). Ver el header de
+  // `rechazoLongitudIndice0`/`invocarModeloReintentoLongitud` en
+  // acciones-motor.ts para la evidencia y el porqué. Distinto de
+  // `debeReintentar` de arriba (que sólo dispara si el validador rechazó
+  // TODAS las acciones): aquí puede haber acciones ya aceptadas y de todas
+  // formas se reintenta SÓLO la de índice 0, UNA vez, sin encadenar un
+  // segundo intento sobre este resultado -- nunca puede entrar en bucle.
+  // Corre sobre lo que haya quedado del bloque de arriba (con o sin el
+  // reintento de §7.4 ya consumido), así que `ultimoResultado`/`aceptadas`/
+  // `rechazos` son siempre los del intento MÁS RECIENTE.
+  // ---------------------------------------------------------------------
+  if (apiKey && ultimoResultado?.ok && ultimoResultado.salida) {
+    const salidaVigente = ultimoResultado.salida;
+    const rechazoLongitud = rechazoLongitudIndice0(rechazos);
+    if (rechazoLongitud) {
+      try {
+        const accionOriginal = salidaVigente.acciones[0];
+        const reintento = await invocarModeloReintentoLongitud(paquete, accionOriginal, rechazoLongitud.detalle, { apiKey, modelo });
+        tokensPrompt += reintento.tokensPrompt;
+        tokensCompletion += reintento.tokensCompletion;
+        costoUsd = sumarCostosUsd([costoUsd, reintento.costoUsd]);
+        intentosModelo += 1;
+
+        if (reintento.ok && reintento.accion) {
+          const accionesConReemplazo = [...salidaVigente.acciones];
+          accionesConReemplazo[0] = reintento.accion;
+          const revalidacion = validarSalidaMotor({ acciones: accionesConReemplazo }, paquete);
+          aceptadas = revalidacion.aceptadas;
+          rechazos = revalidacion.rechazos;
+        }
+        // Si `reintento.ok` es falso (fallo de red, JSON que no parseó,
+        // forma inválida), no se toca `aceptadas`/`rechazos`: la acción
+        // queda descartada con el rechazo ORIGINAL, ya registrado arriba --
+        // exactamente el "se cae igual que hoy" que pide el encargo.
+      } catch (err) {
+        // Defensa en profundidad: un fallo aquí nunca tumba el tick ni
+        // pierde lo que YA se validó -- se deja tal cual estaba.
+        console.error('[acciones-tick] el reintento de la acción rango 0 por LONGITUD falló:', err instanceof Error ? err.message : String(err));
+      }
     }
   }
 
