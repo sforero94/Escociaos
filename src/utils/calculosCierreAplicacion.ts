@@ -467,3 +467,91 @@ export function construirPayloadCierreAplicacion(params: {
     insumos_aplicados: Array.from(insumosMap.values()),
   };
 }
+
+// ---------------------------------------------------------------------------------------------
+// Mano de obra del Reporte de Cierre — SIEMPRE en vivo (hallazgo #39, decisión de Santiago
+// 2026-08-24)
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Entradas de `calcularCostosVivosAplicacion`: la suma de `fraccion_jornal`/`costo_jornal` que
+ * `fetchJornalesRealesPorLote(tareaId)` (`aplicacionesReales.ts`) ya trae por lote, más el
+ * snapshot que `aplicaciones`/`aplicaciones_cierre` congelaron al momento del cierre.
+ */
+export interface CostosVivosAplicacionInput {
+  jornalesVivos: number;
+  costoManoObraVivo: number;
+  costoTotalInsumos: number;
+  totalArboles: number;
+  snapshotJornales: number;
+  snapshotCostoManoObra: number;
+  snapshotValorJornal: number;
+}
+
+export interface CostosVivosAplicacion {
+  jornalesUtilizados: number;
+  costoTotalManoObra: number;
+  valorJornal: number;
+  costoTotalInsumos: number;
+  costoTotal: number;
+  costoPorArbol: number;
+  arbolesPorJornal: number;
+  /** `'registros_trabajo'` cuando hay al menos un jornal vivo que sumar; `'snapshot'` solo para
+   * aplicaciones sin `tarea_id` vinculada o sin ningún registro capturado — el mismo caso límite
+   * que `useReporteAplicacion.ts` ya trata así. Nunca cae a `'snapshot'` porque el número vivo
+   * "se vea mal": la decisión del dueño es no volver a mostrar un valor congelado a propósito. */
+  fuenteManoObra: 'registros_trabajo' | 'snapshot';
+}
+
+/**
+ * Hallazgo #39 de la operación de mantenimiento: dos aplicaciones de enero cerraron con una
+ * tarifa plana de $50.000/jornal tecleada a mano en el cierre, mientras `registros_trabajo` ya
+ * tenía el costo real (y mayor) de cada jornal. El Reporte de Cierre (`DetalleAplicacion.tsx` y
+ * el PDF de `generarPDFReporteCierre.ts`, vía `fetchDatosReporteCierre.ts`) leía el snapshot
+ * congelado en `aplicaciones.costo_total_mano_obra` / `jornales_utilizados` / `valor_jornal` —
+ * nunca recalculaba.
+ *
+ * Decisión del dueño (2026-08-24): la mano de obra se DERIVA EN VIVO de `registros_trabajo`,
+ * igual que ya hace `calculosCostoKg.ts` para el costo/kg y que ya hacía
+ * `useReporteAplicacion.ts` para la pantalla `/aplicaciones/:id/reporte` — un solo criterio en
+ * todo el sistema en vez de dos formas de calcular lo mismo (el mismo patrón de defecto que el
+ * hallazgo #3, dos divisores de jornal, y el #45, dos unidades en una columna). El snapshot deja
+ * de participar del Reporte de Cierre salvo en el único caso en que no hay nada vivo que leer:
+ * sin `tarea_id` vinculado o sin ningún `registros_trabajo` capturado (aplicaciones anteriores a
+ * la vinculación automática tarea↔aplicación). `registros_trabajo.costo_jornal` en sí NO se
+ * toca — sigue siendo el histórico correcto de lo que costó cada jornal al capturarlo (ver
+ * `jornalDivisorContract.test.ts`); lo único que cambia es de dónde lee el Reporte de Cierre.
+ *
+ * `costo_total`/`costo_por_arbol`/`arboles_por_jornal` se recalculan con la misma fórmula que ya
+ * usaban (`insumos + mano de obra`, `costo_total / árboles`, `árboles / jornales`) — no es una
+ * regla nueva, es la misma aritmética aplicada al insumo de mano de obra correcto en vez del
+ * congelado, para que las tarjetas del Reporte de Cierre no se contradigan entre sí.
+ */
+export function calcularCostosVivosAplicacion(input: CostosVivosAplicacionInput): CostosVivosAplicacion {
+  const {
+    jornalesVivos,
+    costoManoObraVivo,
+    costoTotalInsumos,
+    totalArboles,
+    snapshotJornales,
+    snapshotCostoManoObra,
+    snapshotValorJornal,
+  } = input;
+
+  const hayDatoVivo = jornalesVivos > 0;
+  const jornalesUtilizados = hayDatoVivo ? jornalesVivos : snapshotJornales;
+  const costoTotalManoObra = hayDatoVivo ? costoManoObraVivo : snapshotCostoManoObra;
+  const valorJornal = hayDatoVivo ? costoManoObraVivo / jornalesVivos : snapshotValorJornal;
+  const costoTotal = costoTotalInsumos + costoTotalManoObra;
+
+  return {
+    jornalesUtilizados,
+    costoTotalManoObra,
+    valorJornal,
+    costoTotalInsumos,
+    costoTotal,
+    costoPorArbol: totalArboles > 0 ? costoTotal / totalArboles : 0,
+    arbolesPorJornal: jornalesUtilizados > 0 ? totalArboles / jornalesUtilizados : 0,
+    fuenteManoObra: hayDatoVivo ? 'registros_trabajo' : 'snapshot',
+  };
+}

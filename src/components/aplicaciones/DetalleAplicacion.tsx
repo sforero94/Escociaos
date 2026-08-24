@@ -38,6 +38,8 @@ import { EstadoAplicacionBadge } from './shared/EstadoAplicacionBadge';
 import { generarPDFListaCompras } from '../../utils/generarPDFListaCompras';
 import { generarPDFReporteCierre } from '../../utils/generarPDFReporteCierre';
 import { fetchDatosReporteCierre } from '../../utils/fetchDatosReporteCierre';
+import { fetchJornalesRealesPorLote } from '../../utils/aplicacionesReales';
+import { calcularCostosVivosAplicacion } from '../../utils/calculosCierreAplicacion';
 import type { Aplicacion, ListaCompras } from '../../types/aplicaciones';
 import { toast } from 'sonner';
 import { formatearNumero, formatearMoneda } from '../../utils/format';
@@ -140,9 +142,41 @@ export function DetalleAplicacion({
         console.error('Failed to load aplicacion details:', appError);
       }
 
+      // Store full app data for closure summary — mano de obra SIEMPRE en vivo desde
+      // `registros_trabajo`, nunca el snapshot que `aplicaciones` congeló al cerrar
+      // (hallazgo #39: dos aplicaciones de enero cerraron con $50.000/jornal tecleado a mano
+      // mientras el costo real ya estaba calculado). Mismo criterio que `fetchDatosReporteCierre.ts`
+      // usa para el PDF de este mismo panel — ver `calcularCostosVivosAplicacion`.
+      let datosParaResumen = appData;
+      if (appData?.estado === 'Cerrada') {
+        const jornalesPorLote = await fetchJornalesRealesPorLote(appData.tarea_id);
+        const jornalesVivos = Array.from(jornalesPorLote.values()).reduce((sum, j) => sum + j.jornales, 0);
+        const costoManoObraVivo = Array.from(jornalesPorLote.values()).reduce((sum, j) => sum + j.costo, 0);
+        const totalArbolesApp = (appData.aplicaciones_lotes || []).reduce(
+          (sum: number, al: any) => sum + (al.lotes?.total_arboles || 0),
+          0,
+        );
 
-      // Store full app data for closure summary
-      setDatosCompletos(appData);
+        const costos = calcularCostosVivosAplicacion({
+          jornalesVivos,
+          costoManoObraVivo,
+          costoTotalInsumos: appData.costo_total_insumos || 0,
+          totalArboles: totalArbolesApp,
+          snapshotJornales: appData.jornales_utilizados || 0,
+          snapshotCostoManoObra: appData.costo_total_mano_obra || 0,
+          snapshotValorJornal: appData.valor_jornal || 0,
+        });
+
+        datosParaResumen = {
+          ...appData,
+          jornales_utilizados: costos.jornalesUtilizados,
+          costo_total_mano_obra: costos.costoTotalManoObra,
+          valor_jornal: costos.valorJornal,
+          costo_total: costos.costoTotal,
+          costo_por_arbol: costos.costoPorArbol,
+        };
+      }
+      setDatosCompletos(datosParaResumen);
 
       // Extraer lotes con IDs
       const lotesConId = appData?.aplicaciones_lotes?.map(
