@@ -4,6 +4,7 @@ import { MonitoreoSubNav } from './MonitoreoSubNav';
 import { useState } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
 import { obtenerFechaHoy } from '@/utils/fechas';
+import { calcularIncidencia, clasificarGravedad } from '../../utils/calculosMonitoreo';
 
 interface ResultadoCarga {
   exito: boolean;
@@ -172,20 +173,12 @@ export function CargaMasiva() {
             continue;
           }
 
-          // Calcular incidencia para determinar gravedad
-          const incidencia = (arbolesAfectados / arbolesMonitoreados) * 100;
-
-          // Determinar gravedad basado en incidencia
-          let gravedadTexto: 'Baja' | 'Media' | 'Alta' = 'Baja';
-          let gravedadNumerica: 1 | 2 | 3 = 1;
-
-          if (incidencia >= 30) {
-            gravedadTexto = 'Alta';
-            gravedadNumerica = 3;
-          } else if (incidencia >= 15) {
-            gravedadTexto = 'Media';
-            gravedadNumerica = 2;
-          }
+          // Gravedad por el criterio COMPARTIDO del modulo (cortes 10 % / 30 %), el mismo que
+          // usan `RegistroMonitoreo` y todas las pantallas del dashboard. No se re-derivan los
+          // umbrales aca: duplicarlos es lo que hizo que esta carga escribiera 'Media' desde el
+          // 15 % mientras cualquier lector la clasifica desde el 10 %.
+          const incidencia = calcularIncidencia(arbolesAfectados, arbolesMonitoreados);
+          const gravedad = clasificarGravedad(incidencia);
 
           // Preparar registro para insertar
           // NOTA: incidencia y severidad son calculadas automáticamente por la BD
@@ -197,8 +190,8 @@ export function CargaMasiva() {
             arboles_monitoreados: arbolesMonitoreados,
             arboles_afectados: arbolesAfectados,
             individuos_encontrados: individuosEncontrados,
-            gravedad_texto: gravedadTexto,
-            gravedad_numerica: gravedadNumerica,
+            gravedad_texto: gravedad.texto,
+            gravedad_numerica: gravedad.numerica,
             monitor: fila['Monitor']?.trim() || null,
             observaciones: fila['Observaciones']?.trim() || null
           });
