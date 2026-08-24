@@ -48,8 +48,8 @@ Todo el grafo está dimensionado contra esto, no contra suposiciones:
   "Edad" nace con 20 celdas en `—`, nunca en 0).
 - `hato_pesajes_leche`: 549 filas.
 - **El LAZO ABIERTO documentado en `src/components/hato/CLAUDE.md` está cerrado**: los 5 tipos de
-  `hato_alertas_config` ya tienen `destinatario_telegram_id = 8505349717` (Santiago) y están activos.
-- Telegram: Fernando Jiménez (`8587641614`) ya existe y está activo, con rol **Administrador**.
+  `hato_alertas_config` ya tienen `destinatario_telegram_id` poblado con el chat id de Santiago y están activos.
+- Telegram: Fernando Jiménez ya existe y está activo, con rol **Administrador** (su chat id vive en `telegram_usuarios`).
 
 ---
 

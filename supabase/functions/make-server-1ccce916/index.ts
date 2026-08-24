@@ -86,7 +86,12 @@ app.post("/make-server-1ccce916/reportes/generar-semanal", async (c) => {
   return await handleGenerarReporteSemanal(c);
 });
 
-// Telegram bot webhook
+// Telegram bot webhook -- auth por secreto compartido dentro del handler
+// (`handleWebhook` en telegram/bot.ts): el encabezado
+// `X-Telegram-Bot-Api-Secret-Token` que envía el propio Telegram cuando el
+// webhook se registró con `setWebhook(url, { secret_token })`. No hay JWT que
+// verificar acá (la función corre con verify_jwt=false y el llamante es
+// Telegram); sin secreto configurado el handler responde 503, nunca abierto.
 app.post("/make-server-1ccce916/telegram/webhook", async (c) => {
   return await handleWebhook(c);
 });

@@ -196,7 +196,7 @@ El Excel es posterior al chequeo, así que la lectura más probable es que esas 
 | `087`, `088` | — | **no existen** (hueco de renumeración de S6) |
 | `089` | Categorías calculadas: umbrales + `fecha_nacimiento` en la vista | ✅ aplicada |
 | `090` | Descarte de las 42 alertas históricas | ✅ aplicada |
-| `091` | Telegram de las alertas → Santiago (`8505349717`) | ✅ aplicada |
+| `091` | Telegram de las alertas → Santiago (chat id en `telegram_usuarios`) | ✅ aplicada |
 | `092` | Override real de categoría (ver abajo) | pendiente |
 
 **Edge functions desplegadas** a producción el 2026-08-06 (`make-server-1ccce916`, 3,6 MB): endpoints
@@ -503,7 +503,7 @@ Regla del módulo que sigue vigente: una vaca sin fila de pesaje es **"sin dato"
 
 | # | Qué falta | Bloquea | Estado |
 |---|---|---|---|
-| P-1 | Chat id de Telegram de Santiago | T8.1 (final de S6) | **Resuelto**: `telegram_id = 8505349717` (`telegram_usuarios`, rol `gerencia`). David García es 8605652486. |
+| P-1 | Chat id de Telegram de Santiago | T8.1 (final de S6) | **Resuelto**: la fila de Santiago en `telegram_usuarios` (rol `gerencia`) lleva su `telegram_id`; David García tiene el suyo en la misma tabla. Los valores viven sólo en la BD — no se copian a documentos ni a código (ver `src/__tests__/telegramWebhookSecretoGuard.test.ts`). |
 | P-2 | Informe de verificación de historia por nombre | Lista de altas/bajas/reactivaciones de S1 | **Resuelto** — ver §2.b |
 | P-3 | Arquitectura del override (in situ con traza vs evento correctivo) | Implementación de T4b en S3 | Delegado al `cto` en el diseño de S3 |
 | P-4 | Confirmación de la transcripción de los pesajes de junio faltantes | El cierre de S1 | Pendiente: S1 la propone, no la escribe |
