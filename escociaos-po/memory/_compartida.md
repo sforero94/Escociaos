@@ -414,3 +414,127 @@ orden no ocurrio porque los dos valores del secreto coincidian.**
 
 Tres viernes seguidos con el conjunto elegible vacio → el reporte recomienda pasar
 el viernes a mensual.
+
+## LIMITE DURO 2026-08-24: el carril `ddl_aditivo` ya NO alcanza `storage.objects`
+
+`ALTER POLICY`, `CREATE POLICY`, `DROP POLICY` y `COMMENT ON POLICY` exigen ser
+**DUENO** de la tabla. Ningun `GRANT` lo confiere, por completo que sea —
+`postgres` tiene `a*r*w*d*D*x*t*m*` sobre `storage.objects` (DML entero, con
+grant option) y aun asi no puede tocar una politica.
+
+`storage.objects` pertenece a `supabase_storage_admin`. **`apply_migration` corre
+como `postgres`**, y `postgres` hoy no llega a ese rol por ninguna via:
+
+```
+current_user = postgres | session_user = postgres
+pg_has_role(current_user,'supabase_storage_admin','USAGE')  = f
+pg_has_role(current_user,'supabase_storage_admin','MEMBER') = f
+pg_has_role(current_user, relowner_de_storage_objects,'USAGE') = f
+```
+
+**Antes si se podia.** La migracion 072 creo cuatro politicas sobre esa misma
+tabla y tiene fila en el ledger con version de marca de tiempo
+(`20260730002128`), que es el formato que genera `apply_migration`. Entremedio el
+servicio de Storage corrio migraciones propias el 2026-08-10, 08-20 y 08-23.
+**Un permiso de julio no prueba el permiso de hoy.**
+
+Consecuencias practicas:
+
+- Cualquier hallazgo sobre politicas de Storage **no es `ddl_aditivo`**. Se
+  clasifica aparte desde el principio, o se pierde una corrida entera
+  descubriendolo. Le paso a #20.
+- La via que si funciona: panel de Supabase -> Storage -> Policies, que pasa por
+  el servicio de Storage y corre como el dueno. No la puede recorrer un agente.
+- **`pg_auth_members` no guarda historia**, asi que no se puede saber cuando se
+  perdio la membresia. No gastes tokens buscandolo.
+
+[corrida: 2026-08-24-drenaje-cierre]
+
+## TECNICA 2026-08-24: la sonda que NO puede escribir
+
+El conector de solo lectura no puede contestar «con que rol corre
+`apply_migration`». El de escritura solo expone `apply_migration`. La salida es
+una migracion que **aborta por construccion**: un `DO $$ ... RAISE EXCEPTION $$`
+incondicional que mete las respuestas en el propio mensaje de error.
+
+```sql
+DO $$
+BEGIN
+  RAISE EXCEPTION 'SONDA :: current_user=% | usage=%',
+    current_user, pg_has_role(current_user,'supabase_storage_admin','USAGE');
+END $$;
+```
+
+La transaccion revierte, **no queda fila en `supabase_migrations.schema_migrations`**
+y no se muta nada — verificado despues: 0 filas, `max(version)` sin cambio,
+predicado intacto. Es la forma segura de contestar una pregunta de permisos
+antes de escribir una migracion que quiza ni arranca.
+
+**Contraste con el incidente de la sonda de `/clima/sync`** (2026-08-24, mas
+arriba): aquella escribio en produccion porque el endpoint sondeado NO era
+idempotente. La diferencia no es la intencion, es que **esta sonda no puede
+escribir aunque quiera**. Diseña la sonda para que el fallo sea el unico
+resultado posible.
+
+[corrida: 2026-08-24-drenaje-cierre]
+
+## Verificar un despliegue de edge function SIN leer el codigo desplegado
+
+`get_edge_function` desborda el limite de tokens (ya anotado). Pero el
+despliegue se hace desde un **worktree local**, y `list_edge_functions` devuelve
+su ruta en `entrypoint_path`. Eso permite fijar exactamente que se desplego:
+
+1. `entrypoint_path` -> el worktree usado.
+2. `git -C <worktree> reflog --date=iso` -> a que commit estaba y **cuando**.
+3. `stat -f '%Sm'` sobre los ficheros del arbol de la funcion -> cuando se
+   escribieron. Un fichero con `mtime` anterior al checkout es un fichero que el
+   checkout no toco.
+4. `git merge-base --is-ancestor <merge> <HEAD del worktree>` -> si el arreglo
+   viajaba.
+
+Caso real: el despliegue de las 15:52:43Z venia de un worktree puesto en
+`b70206e` a las **15:52:01Z** — 42 s antes. `jornal.ts` tenia `mtime` 15:52:01Z
+(el arreglo de #3 viajo), y `bot.ts` tenia `mtime` del 2026-08-21 (la puerta del
+webhook de #11 NO viajo). Los commits posteriores del worktree (16:09Z, 16:10Z)
+eran solo documentacion. **Dos hallazgos resueltos en direcciones opuestas con
+el mismo despliegue.**
+
+[corrida: 2026-08-24-drenaje-cierre]
+
+## Sonda de contenido contra Vercel: como se hace bien
+
+192 chunks; el codigo de un modulo vive en un chunk perezoso, no en
+`index-*.js`. El procedimiento:
+
+1. `curl` de `/` -> sacar `/assets/index-*.js`.
+2. `grep -oE '"\./[A-Za-z0-9._-]+\.js"|assets/[A-Za-z0-9._-]+\.js'` sobre el
+   bundle de entrada -> la lista de chunks perezosos.
+3. Bajar todos y buscar en el conjunto.
+
+**El control positivo se elige entre cadenas de dominio** (`fraccion_jornal`,
+`tarifa_jornal`), nunca nombres de funcion ni de constante exportada — el
+minificado se los come. Sin control valido, una *ausencia* no significa nada.
+
+**Un literal numerico si sobrevive al minificado** y sirve de sonda negativa:
+asi se probo que `WEEKS_PER_MONTH = 4.33` salio de produccion — `4.33` no
+aparece en ninguno de los 192 chunks de la app, solo en el vendor
+`jspdf.es.min`.
+
+[corrida: 2026-08-24-drenaje-cierre]
+
+## Corrida 2026-08-24-drenaje-cierre (sesion interactiva, §1 del runbook de drenaje)
+
+- **#3 CERRADO** contra el despliegue verificado, no contra el merge. El criterio
+  que traia el runbook (`version > 215`) partia de una premisa falsa: suponia que
+  la mitad de Telegram viajaba en el SIGUIENTE despliegue, y ya viajaba en el
+  actual. **Cuando un criterio de cierre es un proxy, verifica la regla, no el
+  proxy.**
+- **#20**: migracion 109 escrita, revisada y corregida; **no aplicada** (compuerta
+  3 UNSAFE, ver el limite duro de `storage.objects` arriba). PR #154.
+- **#11 y #22 siguen abiertos por CREDENCIAL, no por esfuerzo.** Ninguna cantidad
+  de trabajo desatendido los cierra: uno necesita `TELEGRAM_BOT_TOKEN` y el otro
+  un `SUPABASE_ACCESS_TOKEN` de repositorio. **Escalar temprano un bloqueo de
+  credencial vale mas que investigarlo bien.**
+- Backlog 23 -> 22. Cero hallazgos nuevos, que es lo correcto en drenaje.
+
+[corrida: 2026-08-24-drenaje-cierre]

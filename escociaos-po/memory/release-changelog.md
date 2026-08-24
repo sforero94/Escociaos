@@ -176,3 +176,24 @@ prompt del agente en cada corrida.
 | Cadencia (ventana corta 2026-08-10→08-18, 8 dias) | 34,1 commits/sem (sube desde 23,8) · fix share **31,8 %** (baja desde 53,5 %). **Empujon de features, no calidad degradandose** | 2026-08-20-jueves |
 | Motor de acciones | 5 corridas · 38 acciones · 9 publicadas hoy · `estado` hoy `ok` | 2026-08-20-jueves |
 | Handoff del hato a captura viva | **173 pesajes + 10 eventos** desde 2026-08-10 via Telegram — el hallazgo #8 ("nunca hizo el handoff") **cambio de estado en los hechos** | 2026-08-20-jueves |
+
+## Corrida 2026-08-24-drenaje-cierre
+
+- **Cuando el criterio de cierre de un hallazgo es un PROXY, verifica la regla y
+  no el proxy.** El runbook mandaba cerrar #3 si `version > 215`. La version sigue
+  en 215 y el arreglo **igual estaba vivo**: el despliegue (15:52:43Z) es
+  posterior al merge del PR #144 (15:49:12Z). La regla real del contrato §5 —
+  `list_edge_functions.updated_at` posterior al commit — si se cumplia. Cerrar por
+  el proxy habria dejado abierto un hallazgo ya resuelto durante otra semana.
+- **Un solo despliegue puede resolver dos hallazgos en direcciones OPUESTAS.** El
+  mismo v215 llevo el arreglo de #3 (`jornal.ts`, `mtime` 15:52:01Z, 42 s antes
+  del deploy) y **no** llevo el de #11 (`bot.ts`, `mtime` del 2026-08-21). No
+  asumas que un despliegue arrastra todo lo fusionado antes: mira fichero por
+  fichero. La receta esta en `_compartida.md` («Verificar un despliegue de edge
+  function SIN leer el codigo desplegado»).
+- **Un hallazgo puede tener dos superficies y hay que probar las dos.** #3 vivia
+  en la edge function Y en el navegador. La mitad de Vercel se probo con sonda de
+  contenido sobre los 192 chunks; receta y trampas en `_compartida.md`.
+- Cerrado esta corrida: **#3** (`Arreglado`). Backlog 23 -> 22.
+
+[corrida: 2026-08-24-drenaje-cierre]

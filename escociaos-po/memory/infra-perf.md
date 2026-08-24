@@ -237,3 +237,30 @@ prompt del agente en cada corrida.
   rollup es la restauracion de luz a media jornada: produce un dia parcial que pasa el gate de
   frescura de la 068 y se sella `ok`. Un dia sin NINGUNA lectura no inserta fila y es seguro.
   [corrida: 2026-08-20-jueves]
+
+## Corrida 2026-08-24-drenaje-cierre
+
+- **El detector de deriva (`scripts/check-deploy-drift.mjs`, PR #152) esta
+  fusionado, es correcto, y NO ha corrido nunca.** `gh run list` sobre
+  `deteccion-deriva-despliegue.yml` devuelve cero corridas y `gh secret list`
+  devuelve vacio: falta el secreto de repositorio `SUPABASE_ACCESS_TOKEN`. Sin el
+  el script sale 1 a proposito (falla cerrado), asi que **dispararlo antes de
+  cargarlo no prueba nada**.
+- **Validado todo lo que no depende del token**, y la logica acierta contra
+  produccion: con el `updated_at` real del despliegue vivo
+  (`1787586763349` = 2026-08-24T15:52:43.349Z) y
+  `git log -1 --format=%cI origin/main -- supabase/functions/make-server-1ccce916`
+  (2026-08-24T16:25:54Z), `evaluarDeriva()` devuelve `hayDeriva: true`,
+  `horasDeDeriva: 0.6`. Es exactamente el agujero del webhook de Telegram: **el
+  detector lo habria cantado**. Sus 8 tests unitarios pasan.
+- **Ojo con el criterio de cierre de #22**: mientras la deriva sea real, el
+  workflow sale ROJO **con razon**. Sale verde recien despues del despliegue que
+  cierra #11. Un rojo aqui no es un fallo del detector.
+- **El worktree no trae `node_modules` propio**: vive dentro del repo principal,
+  asi que Node resuelve hacia arriba y usa el de `/Users/santiagoforero/Codigo/Escociaos`.
+  Ese install esta incompleto (`@tailwindcss/node` declarado en `package.json` y
+  ausente de `node_modules`), y **`npm run typecheck` falla por eso, no por el
+  cambio de la sesion**. Se arregla con `npm ci` DENTRO del worktree. No
+  diagnostiques ese error como una regresion del PR.
+
+[corrida: 2026-08-24-drenaje-cierre]

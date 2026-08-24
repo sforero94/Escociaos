@@ -119,3 +119,36 @@ prompt del agente en cada corrida.
 
 ## Archivo
 (vacio)
+
+## Corrida 2026-08-24-drenaje-cierre
+
+- **CORRECCION AL PADRON: hoy son 5 Gerencia + 3 Administrador (8 activas, CERO
+  inactivas).** La memoria decia 5+2 desde el 2026-08-10. Sigue sin existir
+  ninguna cuenta Verificador, asi que las dos brechas latentes gemelas
+  (`contratistas` y el bucket `reportes-semanales`) **siguen latentes**. Volver a
+  contar el padron cada corrida antes de descartarlas.
+- **`Monitor` NO es una etiqueta de `public.rol_usuario`.** Contra `pg_enum` el
+  enum tiene exactamente tres: `{Administrador, Verificador, Gerencia}`. El
+  `CLAUDE.md` raiz nombra cuatro roles e incluye Monitor; sea lo que sea ese rol
+  (el bot de Telegram), **no vive en este enum**. Un hallazgo que diga «el dia que
+  exista una cuenta Monitor» esta mal redactado: el disparador real es
+  **Verificador**, y es el unico que queda.
+- **Politicas de Storage: 7 buckets, solo 5 con politicas.** `monitoreo-fotos`
+  (1 objeto) y `photos` (2) **no tienen ninguna** — son deny-all para el
+  navegador, que NO es lo mismo que «reservan el borrado». No los cuentes entre
+  los que aplican el patron 072.
+- **El webhook de Telegram fue una REGRESION, no una omision.** `git show e799142`
+  (2026-03-18) elimina cuatro lineas que ya validaban
+  `X-Telegram-Bot-Api-Secret-Token` contra `TELEGRAM_WEBHOOK_SECRET` y devolvian
+  401. Y `supabase secrets list` muestra que ese secreto se creo el 2026-03-18 a
+  las 21:18, **cuatro minutos despues** de `TELEGRAM_BOT_TOKEN` (21:14) — la firma
+  de un alta que si registro el webhook con `secret_token`. **Consecuencia
+  operativa: es plausible que Telegram lleve desde marzo mandando el encabezado
+  correcto, y que baste con desplegar.** No es demostrable sin el bot token
+  (`getWebhookInfo` no revela si hay `secret_token`).
+- **`supabase secrets list` devuelve nombres, `updated_at` y digests sha256 — nunca
+  valores.** No vuelvas a intentar leer un secreto por ahi. Y los digests SI
+  sirven: son la unica forma de fechar cuando se creo o roto cada secreto, que es
+  como se dato la regresion de arriba.
+
+[corrida: 2026-08-24-drenaje-cierre]
