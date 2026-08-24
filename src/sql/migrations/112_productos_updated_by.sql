@@ -16,9 +16,15 @@
 -- (`fin_gastos`, `fin_transacciones_ganado`), 063 (`fin_ingresos`) y 074
 -- (`monitoreos`, `registros_trabajo`). `productos` nunca recibió el suyo.
 --
--- POR QUÉ IMPORTA, con un caso concreto: bloquea la investigación del faltante
--- de Naturboro. La escritura del 2026-08-05 19:31:49 que sacó 20 L del libro no
--- se puede atribuir a nadie -- sólo inferir por marcas de tiempo.
+-- POR QUÉ IMPORTA, y con qué límite. El hallazgo lo motiva el faltante de
+-- Naturboro: la escritura del 2026-08-05 19:31:49 que sacó 20 L del libro no se
+-- puede atribuir a nadie. **Esto NO desbloquea esa investigación**: no hay backfill,
+-- así que el pasado sigue irrecuperable. Y `updated_by` es UNA SOLA ranura que la
+-- siguiente escritura pisa, mientras `cantidad_actual` se reescribe en cada
+-- movimiento de inventario y en cada cierre de aplicación -- la atribución POR
+-- EVENTO ya vive en `movimientos_inventario`. Lo que esta columna dará es quién
+-- tocó el producto **la última vez**, que es útil y es poco. Cierra el patrón de
+-- atribución que 040/050/063/074 dejaron a medias, no un caso forense concreto.
 --
 -- ---------------------------------------------------------------------------
 -- CORRECCIÓN AL DISEÑO QUE TRAÍA EL HALLAZGO -- leer antes de "simplificar" esto
@@ -46,13 +52,26 @@
 -- Por eso la asignación es **incondicional**: `updated_by` describe la MISMA
 -- escritura que `updated_at`, así que se mueven juntas o no sirven.
 --
--- CONSECUENCIA ACEPTADA, dicha de frente: cuando escribe el `service_role` -- el
--- bot de Telegram, una migración, una edge function -- `auth.uid()` es NULL y la
--- columna queda en NULL. Es deliberado y es el criterio de todo el proyecto:
--- **"sin dato" antes que un dato inventado.** Conservar el editor anterior
--- afirmaría que esa persona hizo la última edición, que es falso. Un NULL dice
--- la verdad: la última escritura no es atribuible. Es la misma brecha aceptada
--- que documentan 050/063/074 para el bot.
+-- QUIÉN ESCRIBE DE VERDAD ESTA TABLA -- comprobado, no supuesto. **El bot de
+-- Telegram NO toca `productos`** (`grep` sobre `telegram/`: cero coincidencias), y
+-- `importar-productos.tsx` sólo hace `.insert()`. El único escritor recurrente por
+-- `service_role` es `toggleProductoActivo`
+-- (`src/supabase/functions/server/productos.tsx:82-86`), y es una **acción humana**:
+-- verifica el Bearer, comprueba el rol y **tiene el `userId` en la mano**
+-- (`acceso.userId`) -- y lo descarta.
+--
+-- Por eso el orden del COALESCE importa tanto. Con la asignación incondicional que
+-- proponía el borrador, ocultar un producto **borraría** la atribución humana previa
+-- y la sustituiría por un NULL rotulado «no atribuible», cuando sí era atribuible; y
+-- además cerraría la única puerta limpia para arreglarlo. Con `COALESCE(auth.uid(),
+-- NEW.updated_by)` esa puerta queda abierta: basta que `toggleProductoActivo` pase
+-- `updated_by: acceso.userId` en su UPDATE. **Eso es un cambio de código aparte, no
+-- de esta migración**, y queda reportado.
+--
+-- La brecha que sí permanece: una escritura por `service_role` que NO pase el id
+-- deja el valor anterior en pie. Es menos malo que las dos alternativas -- congelar
+-- la columna (COALESCE al revés) o borrar una atribución que existía (incondicional)
+-- -- y se cierra pasando el id, no cambiando el disparador.
 --
 -- ---------------------------------------------------------------------------
 -- LO QUE NO HACE
@@ -75,9 +94,24 @@
 -- 082 parte 2).
 --
 -- FILAS AFECTADAS: **cero**. Un `CREATE TRIGGER` no actualiza ninguna fila.
--- `productos.updated_by` sigue NULL en las 341 hasta que alguien edite un
--- producto. Sin FK que pueda fallar: `updated_by` referencia `auth.users(id)` y
--- `auth.uid()` sólo puede devolver un id que existe ahí.
+-- `productos.updated_by` sigue NULL en las 341 hasta que alguien edite un producto.
+--
+-- POR QUÉ LA FK NO PUEDE FALLAR -- y el motivo NO es el que parece. `updated_by`
+-- referencia `auth.users(id)`, y sería cómodo decir que «`auth.uid()` sólo puede
+-- devolver un id que existe ahí». **Eso es falso**: el cuerpo real de `auth.uid()`
+-- en producción es una lectura SIN VALIDAR de un claim del JWT
+-- (`current_setting('request.jwt.claim.sub')`), que perfectamente puede traer un
+-- uuid huérfano. Lo que de verdad cierra el riesgo es la RLS: las dos únicas
+-- políticas de UPDATE sobre `productos` exigen `get_user_role()` = Administrador o
+-- Gerencia, `get_user_role()` es `SELECT rol FROM usuarios WHERE id = auth.uid()`,
+-- y `usuarios.id` referencia `auth.users(id)` **ON DELETE CASCADE**. Si el usuario
+-- de Auth desapareciera, su fila de `usuarios` se va con él, `get_user_role()`
+-- devuelve NULL, ninguna política casa y el UPDATE se deniega **antes** de que el
+-- disparador llegue a correr. Y el `service_role`, que sí saltea RLS, no lleva
+-- claim `sub`: `auth.uid()` es NULL y la FK ni se comprueba.
+--
+-- Vale la pena tenerlo escrito bien, porque quien copie este patrón a una tabla
+-- cuya RLS no exija fila viva en `usuarios` NO tendrá esa protección.
 
 -- ---------------------------------------------------------------------------
 -- 1. Pre-condiciones.
@@ -140,12 +174,16 @@ LANGUAGE plpgsql
 SET search_path TO 'public', 'pg_temp'
 AS $function$
 BEGIN
-  -- INCONDICIONAL, no COALESCE: en un BEFORE UPDATE `NEW.updated_by` arrastra el
-  -- valor viejo, así que un COALESCE congelaría la columna en el primer editor
-  -- mientras `updated_at` sigue avanzando. NULL cuando escribe el service_role
-  -- (bot, migración, edge function) es la respuesta honesta: esa escritura no es
-  -- atribuible, y decir que la hizo el editor anterior sería falso.
-  NEW.updated_by := auth.uid();
+  -- `COALESCE(auth.uid(), NEW.updated_by)` -- NO `COALESCE(NEW.updated_by, auth.uid())`,
+  -- que es lo que pedía el hallazgo y está mal (ver el encabezado): con el orden
+  -- invertido la columna se congela en el primer editor.
+  --
+  -- Con ESTE orden: desde el navegador `auth.uid()` no es nulo y SIEMPRE pisa, así
+  -- que nunca se congela. Desde el `service_role` (`auth.uid()` nulo) se respeta lo
+  -- que traiga la sentencia -- que es lo que permite a una edge function atribuir
+  -- explícitamente, el mismo patrón que ya usa el pipeline de pesaje al pasar
+  -- `created_by` desde `telegram_usuarios.usuario_id`.
+  NEW.updated_by := COALESCE(auth.uid(), NEW.updated_by);
   RETURN NEW;
 END;
 $function$;
@@ -252,7 +290,14 @@ END $$;
 --
 --   DROP TRIGGER IF EXISTS set_updated_by_productos ON public.productos;
 --   DROP FUNCTION IF EXISTS public.set_producto_updated_by();
---   COMMENT ON COLUMN public.productos.updated_by IS NULL;
+--   COMMENT ON COLUMN public.productos.updated_by IS 'ID del usuario que realizó la última actualización';
 --
--- No hay datos que revertir: la migración no escribe ninguna fila.
+-- OJO con el comentario: la columna YA tenía uno ('ID del usuario que realizó la
+-- última actualización'). Un `IS NULL` en el rollback lo DESTRUIRÍA en vez de
+-- restaurarlo, así que el rollback lo repone literal.
+--
+-- Y «no hay datos que revertir» sólo es cierto en t=0: revertida una semana
+-- después, las filas escritas mientras el disparador vivía conservan su
+-- `updated_by`. Eso no es un problema (el dato es correcto), pero no es un
+-- rollback a cero.
 -- ---------------------------------------------------------------------------
