@@ -34,6 +34,11 @@ import type {
 import type { HojaCruda } from './importHato/tipos.ts';
 import { construirHatoConfigDesdeFilas, type FilaHatoConfig } from './hato-config-desde-tabla.ts';
 import { derivarEstadoReproductivo, etiquetaEstadoReproductivo, type EstadoActualHatoRow } from './calculos-hato.ts';
+import {
+  construirUmbralesCategoriaHatoDesdeFilas,
+  resolverEtapaEfectiva,
+  type HatoEstadoActualRow,
+} from './hato-aggregation.ts';
 
 const TAMANO_MAXIMO_BYTES = 20 * 1024 * 1024; // 20 MB -- una planilla real pesa unos pocos cientos de KB.
 const ROLES_PERMITIDOS = new Set(['Administrador', 'Gerencia']); // mismo patrón de escritura que el resto de hato_* (migración 053).
@@ -188,6 +193,20 @@ export async function handleHatoChequeoPreview(c: Context): Promise<Response> {
     return respuestaError(c, 500, err instanceof Error ? err.message : String(err));
   }
 
+  let umbralesCategoria;
+  try {
+    umbralesCategoria = construirUmbralesCategoriaHatoDesdeFilas((filasConfig ?? []) as FilaHatoConfig[]);
+  } catch (err) {
+    return respuestaError(c, 500, err instanceof Error ? err.message : String(err));
+  }
+
+  // Mismo criterio de "hoy" que `hato-alertas-tick.ts` (UTC) -- las edge
+  // functions quedan deliberadamente fuera del arreglo de "hoy en hora
+  // local" (CLAUDE.md, "Hoy siempre se toma en hora LOCAL"). Se calcula una
+  // sola vez y se reutiliza tanto para la etapa efectiva (paso 4) como para
+  // "Estado registrado" (paso 4b) -- antes cada paso tenía su propia fecha.
+  const hoy = new Date().toISOString().slice(0, 10);
+
   // --- 3. Extract + Normalize (motor compartido con el pipeline histórico) -
   const generadoEn = new Date().toISOString();
   const salida = normalizarHojas(hojas, generadoEn, config);
@@ -197,17 +216,34 @@ export async function handleHatoChequeoPreview(c: Context): Promise<Response> {
 
   let animales: AnimalHatoActual[] = [];
   if (numerosEnHoja.length > 0) {
+    // Finding #23 (P2, mantenimiento 2026-08-24): esta consulta leía
+    // `hato_animales.etapa` cruda -- el campo manual, que nadie mantiene
+    // desde que las migraciones 089/092 volvieron la categoría CALCULADA
+    // (`num_partos`/`fecha_nacimiento`, con `etapa_forzada` como override
+    // explícito). El campo en sí no gobierna ningún filtro en
+    // `construirDiffChequeo` (el match es solo por número), pero SÍ viaja en
+    // `AnimalHatoActual.etapa` -- ahora sale de `v_hato_estado_actual` (la
+    // MISMA vista que ya se consulta en el paso 4b) y se calcula con
+    // `resolverEtapaEfectiva`, mismo criterio que
+    // `useAnimalesParaPlanillaChequeo.ts` (frontend) y `hato-chequeo-foto.ts`
+    // (endpoint gemelo) -- las tres copias deben coincidir.
     const { data, error } = await supabase
-      .from('hato_animales')
-      .select('id, numero, nombre, etapa, estado')
+      .from('v_hato_estado_actual')
+      .select('*')
       // Migración 066: `numero` ya no es UNIQUE global -- solo lo es entre
       // animales `activa`. Un chequeo describe el hato VIVO, así que se
       // filtra a `activa` para no traer dos filas con el mismo número
       // (una vendida/muerta + una activa) y perder una en el Map por número.
       .eq('estado', 'activa')
       .in('numero', numerosEnHoja);
-    if (error) return respuestaError(c, 500, `No se pudo leer hato_animales: ${error.message}`);
-    animales = (data ?? []) as AnimalHatoActual[];
+    if (error) return respuestaError(c, 500, `No se pudo leer v_hato_estado_actual: ${error.message}`);
+    animales = ((data ?? []) as unknown as HatoEstadoActualRow[]).map((fila) => ({
+      id: fila.animal_id,
+      numero: fila.numero as number,
+      nombre: fila.nombre,
+      etapa: resolverEtapaEfectiva(fila, umbralesCategoria, hoy).etapa,
+      estado: fila.estado,
+    }));
   }
 
   const animalIds = animales.map((a) => a.id);
@@ -253,13 +289,12 @@ export async function handleHatoChequeoPreview(c: Context): Promise<Response> {
       )
       .in('animal_id', animalIds);
     if (error) return respuestaError(c, 500, `No se pudo leer v_hato_estado_actual: ${error.message}`);
-    // Mismo criterio de "hoy" que `hato-alertas-tick.ts` (UTC) -- las edge
-    // functions quedan deliberadamente fuera del arreglo de "hoy en hora
-    // local" (CLAUDE.md, "Hoy siempre se toma en hora LOCAL"): un desfase de
-    // un día en esta comparación de referencia no cambia la CLASIFICACIÓN
-    // reproductiva de una vaca de un día para otro salvo en el borde exacto
-    // de un umbral, y el conflicto que esto detecta ya es de días/semanas.
-    const hoy = new Date().toISOString().slice(0, 10);
+    // `hoy` (UTC) se calcula una sola vez, arriba, y se reutiliza acá -- ver
+    // esa definición para el criterio completo (mismo que
+    // `hato-alertas-tick.ts`): un desfase de un día en esta comparación de
+    // referencia no cambia la CLASIFICACIÓN reproductiva de una vaca de un
+    // día para otro salvo en el borde exacto de un umbral, y el conflicto
+    // que esto detecta ya es de días/semanas.
     estadosRegistrados = (data ?? []).map((fila: Record<string, unknown>) => {
       const derivado = derivarEstadoReproductivo(fila as unknown as EstadoActualHatoRow, config, hoy);
       return {
