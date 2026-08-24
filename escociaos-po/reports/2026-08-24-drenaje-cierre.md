@@ -237,3 +237,43 @@ porque la deriva es real. Sale verde recién después del despliegue que cierra
 - **Lectura del token del CLI de Supabase** — bloqueada por el clasificador de
   permisos al intentar leer el llavero. No se buscó ninguna vía alternativa a
   propósito; se escaló.
+
+---
+
+## ADENDA — despliegue autorizado en vivo (2026-08-24 18:10:34Z)
+
+Santiago eligió **desplegar y probar** en vez de rotar los tres pasos, sobre la
+evidencia de la regresión de marzo. **v215 → v216.**
+
+**Alcance verificado antes de desplegar** — sólo dos ficheros cambian respecto de
+lo que corría (`git diff --stat b70206e..origin/main` sobre el árbol de la
+función): `index.ts` (7 líneas) y `telegram/bot.ts` (+60). Es exactamente el
+PR #150 y nada más. `bot.ts` idéntico en los dos árboles, y las **16 divergencias
+entre árboles son PREEXISTENTES** (mismo conteo en `b70206e` y en `origin/main`):
+este despliegue no las introduce. Ninguna otra puerta de seguridad quedó sin
+contraparte en base de datos — los cuatro secretos de tick están provisionados.
+
+| Sonda | Resultado |
+|---|---|
+| `POST /telegram/webhook` anónimo, sin encabezados | **401** `{"error":"No autorizado."}` — antes lo aceptaba |
+| `POST /telegram/webhook` con encabezado **incorrecto** | **401** |
+| control · `POST /hato/alertas/tick` | 401 — las otras puertas siguen vivas |
+| control · `POST /ruta/que/no/existe` | 404 — el enrutado funciona, o sea que el 401 es la puerta y no un catch-all |
+| `list_edge_functions.version` | **216** |
+
+**El clima no se rompió**: el tick del cron de las 18:10 — el mismo minuto del
+despliegue — devolvió **200**; última lectura hace 1 min, 444 lecturas en la
+ventana de 24 h, los últimos 5 POST en 200.
+
+**La deriva se cerró**: `evaluarDeriva()` con el `updated_at` nuevo
+(`1787595034792` = 18:10:34Z) contra el último commit del árbol de la función
+(16:25:54Z) devuelve `hayDeriva: false`. Antes devolvía `true` con 0,6 h.
+
+**Pendiente para cerrar #11**: un `/start` real desde Telegram. *Un 401 correcto
+y un bot muerto se ven idénticos desde afuera.* **Si el bot queda mudo NO hay que
+revertir** — significa que el registro de marzo no seguía vigente, y se arregla
+corriendo los pasos 1–3 de la rotación: el gate ya desplegado queda bien y el bot
+vuelve **con la puerta puesta**.
+
+**#20**: decisión de Santiago — se deja abierto en el tablero (`In progress`, PR
+#154 enlazado, bloqueante documentado). No se cierra como aceptado.
