@@ -66,6 +66,17 @@
 -- así que no hay a qué acotar sin una migración nueva más un backfill de autoría
 -- irrecuperable.
 --
+-- INVENTARIO COMPLETO DE CONSUMIDORES (9 sitios, los nueve en el navegador,
+-- corregido por la revisión adversarial — el borrador citaba sólo la Calculadora):
+--   src/components/aplicaciones/CalculadoraAplicaciones.tsx:492,501,505,506
+--   src/components/aplicaciones/AplicacionesList.tsx:238-316 (251,274,295,305)
+-- Los dos flujos **ya exigen Gerencia o Administrador antes de tocar la primera
+-- de las siete**: el de edición hace `UPDATE aplicaciones` con `if (error) throw`
+-- en la línea inmediatamente anterior, y el de borrado termina en
+-- `DELETE FROM aplicaciones` — y `aplicaciones` sólo tiene dos políticas `ALL`
+-- acotadas a esos dos roles. O sea que el rol ya estaba siendo exigido aguas
+-- arriba; esta migración lo hace cierto también aguas abajo.
+--
 -- LA PRUEBA DE QUE ACOTAR POR ROL NO ROMPE NADA ya está en la base: la hermana
 -- `aplicaciones_mezclas`, que ese MISMO flujo borra en la línea 504, tiene desde
 -- siempre dos políticas `ALL` acotadas por `(SELECT get_user_role())` a Gerencia
@@ -107,6 +118,47 @@
 --
 -- FILAS AFECTADAS: cero. Un `ALTER POLICY` no borra nada, y toda cuenta activa
 -- ya es Gerencia o Administrador. La guarda 1.4 aborta si el padrón cambió.
+--
+-- ---------------------------------------------------------------------------
+-- LO QUE ESTA MIGRACIÓN **NO** CIERRA -- leer antes de dar #37 por resuelto
+-- ---------------------------------------------------------------------------
+-- **El borrado en CASCADA sigue abierto, y salta RLS por diseño.** Seis padres
+-- tienen `ON DELETE CASCADE` hacia estas siete tablas:
+--
+--   aplicaciones          -> calculos, compras, lotes
+--   aplicaciones_mezclas  -> calculos, productos
+--   movimientos_diarios   -> los tres `movimientos_diarios_*`
+--   empleados             -> md_empleados, md_trabajadores
+--   contratistas          -> md_trabajadores
+--   lotes                 -> md_empleados, md_trabajadores
+--
+-- Las acciones de integridad referencial de PostgreSQL corren como dueño de la
+-- tabla hija con `SECURITY_NOFORCE_RLS`, y las siete son `relowner = postgres`
+-- con `relforcerowsecurity = false`. **La RLS del hijo no se evalúa en una
+-- cascada.** Eso tiene dos consecuencias opuestas y las dos importan:
+--
+--   BUENA: esta migración NO PUEDE romper ninguna cascada existente. Era el
+--   riesgo grande — `DailyMovementForm.tsx:716,771` y
+--   `DailyMovementsDashboard.tsx:484` borran el padre `movimientos_diarios`
+--   confiando en la cascada — y queda descartado por construcción.
+--
+--   MALA: tampoco la cierra. Tres de esos seis padres se borran MÁS
+--   ampliamente que el predicado nuevo: `contratistas`
+--   (`authenticated_delete_contratistas`, qual `true`), `lotes` («Usuarios
+--   autenticados pueden eliminar lotes», qual `true`) y `movimientos_diarios`
+--   (`created_by = auth.uid()`, sin rol).
+--
+-- Así que el día que exista una cuenta **Verificador**, seguiría pudiendo
+-- destruir `movimientos_diarios_trabajadores` y `_empleados` borrando un
+-- contratista o un lote. `lotes` está parcialmente frenado de rebote — tiene FKs
+-- `RESTRICT` desde `aplicaciones_lotes` y `aplicaciones_calculos`, así que un
+-- lote con aplicaciones no se puede borrar — pero **`contratistas` no tiene ese
+-- freno**, y ya figuraba como brecha latente conocida sin que nadie supiera que
+-- tenía una cascada hacia datos GlobalGAP.
+--
+-- **#37 no queda completo sin acotar también `contratistas` (y `lotes`).** Va
+-- como hallazgo propio: son tablas de otro dominio, con su propio análisis de
+-- quién las borra hoy.
 
 -- ---------------------------------------------------------------------------
 -- 1. Pre-condiciones. Cualquiera que falle aborta la transacción entera.
@@ -151,7 +203,7 @@ BEGIN
       AND array_length(p.polroles, 1) = 1;
 
     IF v_n <> 1 THEN
-      RAISE EXCEPTION 'PRE 1.1 (%): no se encontró exactamente 1 política DELETE incondicional `authenticated_delete_%` PERMISSIVE y sólo TO authenticated; hay %. Alguien la tocó desde el barrido.', v_t, v_t, v_n;
+      RAISE EXCEPTION 'PRE 1.1 (%): no se encontró exactamente 1 política DELETE incondicional `authenticated_delete_%` PERMISSIVE y sólo TO authenticated; hay %. LA CAUSA MÁS PROBABLE ES QUE ESTA MIGRACIÓN YA SE APLICÓ -- comprobalo mirando si el predicado ya nombra get_user_role antes de asumir que alguien tocó la política. Este repo tiene historial de migraciones aplicadas sin fila en el ledger (067, 079, 108, 035-039, 041, 046, 093), así que la ausencia de fila NO prueba que no se aplicó.', v_t, v_t, v_n;
     END IF;
 
     -- 1.2 La tabla tiene EXACTAMENTE 3 políticas. Es la comprobación que prueba
@@ -223,6 +275,10 @@ ALTER POLICY authenticated_delete_movimientos_diarios_productos
   ON public.movimientos_diarios_productos
   USING ((SELECT public.get_user_role()) IN ('Gerencia'::public.rol_usuario, 'Administrador'::public.rol_usuario));
 
+-- `movimientos_diarios_empleados` tiene 0 filas: quedó muerta, reemplazada por
+-- `movimientos_diarios_trabajadores`. Se acota igual -- es gratis, y una tabla
+-- vacía con DELETE incondicional sigue siendo una puerta abierta el día que
+-- alguien la vuelva a usar.
 ALTER POLICY authenticated_delete_movimientos_diarios_empleados
   ON public.movimientos_diarios_empleados
   USING ((SELECT public.get_user_role()) IN ('Gerencia'::public.rol_usuario, 'Administrador'::public.rol_usuario));
