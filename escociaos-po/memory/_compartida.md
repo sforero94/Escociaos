@@ -375,6 +375,12 @@ un PR de 8 lineas de docs. El agente lo detecto y lo limpio solo antes de que yo
 - **La regla del arbol compartido (escrita el 2026-08-03) aplica al ORQUESTADOR igual que a
   los agentes.** Nunca crear ni cambiar de rama en el checkout compartido mientras haya
   agentes en vuelo; usar un worktree en ruta absoluta tambien para el trabajo propio.
+- **LA MITAD QUE FALTABA, y es la que de verdad protege**: el agente de infra diagnostico el
+  mismo incidente y saco una regla mejor — **en este checkout compartido, un worktree se basa
+  en `origin/main` EXPLICITAMENTE, nunca en `HEAD`.** Asi el agente queda inmune aunque el
+  orquestador se porte mal. Las dos mitades hacen falta: el orquestador no crea ramas en el
+  arbol compartido, Y los agentes no confian en HEAD. Ese agente lo detecto con
+  `git merge-base --is-ancestor` y lo corrigio con `git rebase --onto origin/main`.
 - **Chequeo barato de contaminacion antes de dar por bueno cualquier PR de agente**:
   `git diff --name-only origin/main origin/<rama>` — si aparece un fichero que el hallazgo
   no menciona, hay contaminacion. Las estadisticas del PR (adiciones/ficheros) la delatan

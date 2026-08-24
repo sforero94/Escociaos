@@ -160,6 +160,21 @@ prompt del agente en cada corrida.
   sin cubrir por conector; la sonda de contenido lo cubrio igual. **Reverificar el conector antes de la proxima
   corrida** — es la segunda causa distinta que deja a Vercel fuera.
 
+
+## Corrida 2026-08-24-drenaje
+- **`list_edge_functions.updated_at` viene en epoch MILISEGUNDOS.** Leerlo como segundos da
+  1970, que es anterior a cualquier commit, asi que un detector de deriva diria <<sin deriva>>
+  PARA SIEMPRE. Validar el rango 2020–2100 y reventar en vez de mentir.
+- **Para comparar contra el despliegue se usa `git log -1 --format=%cI` (committer date), NO
+  `%aI`.** La fecha de autor es cuando se ESCRIBIO el commit y puede ser dias anterior a
+  cuando aterrizo en `main`; usarla solo puede ESCONDER deriva. Correccion a lo que decia el
+  hallazgo #22 original, que pedia `%aI`.
+- En GitHub Actions: `fetch-depth: 0` es obligatorio para que `git log -1 -- <ruta>` encuentre
+  el commit, y **nunca tubear a `tee`** — el shell es `bash -e` SIN `pipefail`, asi que el
+  codigo de salida seria el de `tee` y el job no fallaria.
+- El despliegue de la edge function del 2026-08-24 (v215) se hizo a las 15:52 UTC; el commit
+  mas nuevo del arbol desplegado era de las 11:24. Deriva 0 hoy; durante ESCO-1 eran 153,8 h.
+
 ## Archivo
 (vacio)
 
