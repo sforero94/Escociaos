@@ -116,6 +116,28 @@ prompt del agente en cada corrida.
 - `node_modules` NO existe en el checkout compartido: `npm ci` en el primer worktree (~2 min) y symlink desde el
   segundo funciono sin incidentes.
 
+## Corrida 2026-08-24-drenaje-continuacion
+- **`eliminarCompraConReversion` revierte `cantidad_actual` pero NO `precio_unitario`.**
+  `NewPurchase.tsx:391-394` los escribe juntos en un solo UPDATE;
+  `PurchaseHistory.tsx:112-117` devuelve solo la cantidad. Consecuencia: borrar una compra
+  deja pegado al producto el precio de la compra borrada, **para siempre y sin rastro en el
+  ledger**. Y `productos.precio_unitario` alimenta el costo de insumos de costo/kg por lote
+  (`calculosCostoKg.ts`), asi que mueve una cifra financiera en silencio. Ya filado.
+  [corrida: 2026-08-24-drenaje-continuacion]
+- **CORRECCION AL PADRON DE MEMORIA: ya HAY CI en el repo.** La nota de 2026-08-20 decia
+  «no hay CI (`.github/` no existe)». Desde el 2026-08-24 existe
+  `.github/workflows/deteccion-deriva-despliegue.yml` — cron diario 12:30 UTC mas
+  `workflow_dispatch`, corre `scripts/check-deploy-drift.mjs`. **Sigue sin haber CI de
+  `npm test`/`lint`/`typecheck`**, que era el fondo de aquella nota: eso hay que correrlo a
+  mano antes de abrir un PR. [corrida: 2026-08-24-drenaje-continuacion]
+- **El ENUM `fraccion_jornal` tiene 4 etiquetas y JavaScript rompe una de ellas.**
+  `(1.0).toString()` en JS es `"1"`, que el ENUM (`0.25`/`0.5`/`0.75`/`1.0`) rechaza — y es
+  el valor por defecto de un registro nuevo. Era invisible porque el escritor no miraba
+  `{ error }`. Cubierto por la 106 + `etiquetaFraccionJornal()`, que **lanza** ante cualquier
+  valor fuera de las 4. Registrar horas extra (>1 jornal) **no se arregla devolviendo la
+  opcion a la UI**: hay que agregar la etiqueta al ENUM con su propia migracion.
+  [corrida: 2026-08-24-drenaje-continuacion]
+
 ## Archivo
 (vacio)
 

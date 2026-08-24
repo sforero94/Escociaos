@@ -406,6 +406,53 @@ cron mandando el encabezado, `list_edge_functions` en v215, sonda anonima 401 co
 `synced:1`, ultima lectura 1 minuto). **El bucle de 401 silencioso que era el riesgo del
 orden no ocurrio porque los dos valores del secreto coincidian.**
 
+## Corrida 2026-08-24-drenaje-continuacion — herramientas que fallan EN SILENCIO
+Las tres costaron trabajo real esta corrida. El patron es el mismo y el remedio tambien:
+**verificar el EFECTO, nunca el codigo de salida del comando.**
+
+- **`sed` de BSD (macOS) falla en silencio sobre cualquier caracter multibyte dentro de
+  corchetes.** `s/[Mm]igraci[oó]n 113/…/g` no reemplaza nada: BSD trata la expresion entre
+  corchetes **byte a byte**, asi que `[oó]` es el conjunto `{o, 0xC3, 0xB3}` y jamas coincide
+  con «o». Nueve citas sobrevivieron mientras un `echo "corregido: $f"` incondicional
+  informaba exito, **y el mensaje de commit afirmo en falso que no quedaba ninguna**. Con
+  acentos: **Python con conteo explicito de reemplazos**, nunca `sed`. Y nunca un `echo` de
+  exito que no dependa del resultado.
+- **`git push -q` oculta un push RECHAZADO.** Si la rama local no se llama igual que la de
+  arriba, bajo `push.default=simple` el push se rechaza; `-q` mas `tail -1` se comen el
+  mensaje y dos commits se quedan locales creyendose empujados. **Siempre refspec explicito
+  (`git push origin HEAD:<rama>`) y comparar `git rev-parse HEAD` contra
+  `git ls-remote origin <rama>` en la misma salida.**
+- **`pg_get_functiondef()` DEVUELVE LOS COMENTARIOS DEL CUERPO.** Una post-condicion que
+  busca un patron prohibido con `ILIKE` se dispara con el comentario que explica por que ese
+  patron esta mal. Si hay que nombrar el antipatron, nombralo **fuera** del cuerpo.
+
+## Corrida 2026-08-24-drenaje-continuacion — la compuerta 3 se gano el sitio dos veces
+En una sesion con go del dueno y prisa, **el verificador adversarial independiente corrigio
+dos migraciones de datos antes de que tocaran produccion**, y las dos veces con una prueba
+EXTERNA que el autor no habia buscado:
+
+- **La 118 apuntaba a la fila equivocada.** Habia dos `Entrada` identicas y el borrador
+  razono que eran intercambiables. La evidencia que decide **no estaba en la tabla del
+  hallazgo**: `compras` mostraba que la fila superviviente debia ser la que coincide en
+  ~0,5 s con el INSERT de la compra, firma de `NewPurchase.tsx` (`compras → productos →
+  movimiento`) que se repite en TODAS las compras de la tabla. **Guardar esa firma: sirve
+  para atribuir cualquier movimiento huerfano de inventario.**
+- **El argumento central de la 119 era CIRCULAR.** Sostenia que un saldo era de fiar porque
+  coincidia con el `saldo_anterior` **de la propia fila bajo sospecha**. El argumento valido
+  era `productos.updated_at`, dos minutos anterior a la compra corregida, mas una tabla
+  distinta (`verificaciones_detalle`) que ya lo decia seis dias despues.
+
+**Regla que se gana el sitio: si la prueba de que una fila es mala sale de la misma fila,
+no es prueba.** Buscar el artefacto de OTRA tabla o de OTRO momento antes de escribir.
+
+## Desviacion registrada de la compuerta 5 (2026-08-24)
+Tras un **503 de la API de administracion** en pleno `apply_migration`, el reintento se envio
+con los comentarios condensados y los mensajes sin acentos: **los bytes aplicados no fueron
+los bytes del fichero**. Se verifico primero contra el catalogo que nada se habia aplicado
+antes de reintentar, pero la desviacion es real y queda anotada. **Ante un 503, reintentar el
+MISMO contenido** — y si hay que cambiarlo, cambiar el fichero, empujarlo y reintentar desde
+ahi.
+
 ## Racha del viernes (regla de auto-poda)
 
 | Corrida | Elegibles drenados |
