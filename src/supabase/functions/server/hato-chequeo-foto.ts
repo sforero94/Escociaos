@@ -500,15 +500,35 @@ export async function handleHatoChequeoFoto(c: Context): Promise<Response> {
 
   let animales: AnimalHatoActual[] = [];
   if (numerosEnHoja.length > 0) {
+    // Finding #23 (P2, mantenimiento 2026-08-24, seguimiento de la primera
+    // pasada de este mismo finding): esta consulta leía `hato_animales.etapa`
+    // cruda -- mismo defecto ya corregido acá arriba en el paso 3 (roster) y
+    // en el paso 4 de `hato-chequeo-preview.ts`. El campo en sí no gobierna
+    // ningún filtro en `construirDiffChequeo` (el match es solo por
+    // número), pero SÍ viaja en `AnimalHatoActual.etapa` -- ahora sale de
+    // `v_hato_estado_actual` (la MISMA vista que ya arma el roster del paso
+    // 3) y se calcula con `resolverEtapaEfectiva`, mismo criterio que
+    // `useAnimalesParaPlanillaChequeo.ts` (frontend) y
+    // `hato-chequeo-preview.ts` (endpoint gemelo, ver su paso 4) -- las tres
+    // copias deben coincidir. Sin este fix, una novilla recién parida
+    // viajaba como 'novilla' en el diff de la ruta de foto y como 'vaca' en
+    // la ruta .xlsx -- la misma vaca descrita distinto según por dónde
+    // entrara el chequeo.
     const { data, error } = await supabase
-      .from('hato_animales')
-      .select('id, numero, nombre, etapa, estado')
+      .from('v_hato_estado_actual')
+      .select('*')
       // Migración 066: `numero` solo es único entre animales `activa`. Un
       // chequeo describe el hato VIVO -- mismo filtro que el preview.
       .eq('estado', 'activa')
       .in('numero', numerosEnHoja);
-    if (error) return respuestaError(c, 500, `No se pudo leer hato_animales: ${error.message}`);
-    animales = (data ?? []) as AnimalHatoActual[];
+    if (error) return respuestaError(c, 500, `No se pudo leer v_hato_estado_actual: ${error.message}`);
+    animales = ((data ?? []) as unknown as HatoEstadoActualRow[]).map((fila) => ({
+      id: fila.animal_id,
+      numero: fila.numero as number,
+      nombre: fila.nombre,
+      etapa: resolverEtapaEfectiva(fila, umbralesCategoria, hoy).etapa,
+      estado: fila.estado,
+    }));
   }
 
   const animalIds = animales.map((a) => a.id);
