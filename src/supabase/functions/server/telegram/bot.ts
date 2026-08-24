@@ -1090,7 +1090,67 @@ function splitMessage(text: string, maxLength: number): string[] {
 // WEBHOOK HANDLER
 // ============================================================================
 
+/**
+ * Compara dos secretos en tiempo constante.
+ *
+ * Se comparan los digests SHA-256, no las cadenas: así el bucle siempre
+ * recorre 32 bytes y el tiempo de respuesta no filtra ni cuántos caracteres
+ * acertó el atacante ni la longitud del secreto. Un `===` sobre strings
+ * corta en el primer byte distinto, que es exactamente la pista que
+ * permitiría adivinar el secreto byte a byte.
+ */
+async function secretosCoinciden(recibido: string, esperado: string): Promise<boolean> {
+  const enc = new TextEncoder();
+  const [a, b] = await Promise.all([
+    crypto.subtle.digest("SHA-256", enc.encode(recibido)),
+    crypto.subtle.digest("SHA-256", enc.encode(esperado)),
+  ]);
+  const va = new Uint8Array(a);
+  const vb = new Uint8Array(b);
+  let diff = 0;
+  for (let i = 0; i < va.length; i++) diff |= va[i] ^ vb[i];
+  return diff === 0;
+}
+
+/**
+ * Webhook de Telegram.
+ *
+ * AUTH: secreto compartido `X-Telegram-Bot-Api-Secret-Token`, el encabezado
+ * que el propio Telegram envía en cada update cuando el webhook se registró
+ * con `setWebhook(url, { secret_token })`. NO es un JWT: el llamante es
+ * Telegram, no una sesión humana, y la edge function corre con
+ * `verify_jwt=false` (lo necesitan el webhook y los pg_cron de 060/102/105),
+ * así que la puerta tiene que estar acá adentro.
+ *
+ * Sin este gate el endpoint aceptaba cualquier POST anónimo de internet: el
+ * middleware de auth del bot resuelve la identidad con `ctx.from.id`, que
+ * viene dentro del JSON que manda el llamante, o sea que bastaba con conocer
+ * (o adivinar) el `telegram_id` de un usuario activo para actuar en su
+ * nombre — incluido el de un usuario Gerencia, y con él todas las
+ * herramientas de escritura del bot.
+ *
+ * Falla CERRADO, mismo contrato que `HATO_ALERTAS_TICK_SECRET`,
+ * `ACCIONES_TICK_SECRET` y `CLIMA_SYNC_SECRET`: si la variable de entorno no
+ * está configurada responde 503 y no toca nada, nunca corre "abierto".
+ */
 export async function handleWebhook(c: HonoContext): Promise<Response> {
+  const secretoConfigurado = Deno.env.get("TELEGRAM_WEBHOOK_SECRET");
+  if (!secretoConfigurado) {
+    console.error(
+      "[Telegram] TELEGRAM_WEBHOOK_SECRET no está configurado -- webhook deshabilitado.",
+    );
+    return c.json({
+      error:
+        "TELEGRAM_WEBHOOK_SECRET no está configurado en este entorno -- el webhook de Telegram está deshabilitado hasta que se configure el secreto y se registre el webhook con setWebhook(url, { secret_token }).",
+    }, 503);
+  }
+
+  const recibido = c.req.header("X-Telegram-Bot-Api-Secret-Token");
+  if (!recibido || !(await secretosCoinciden(recibido, secretoConfigurado))) {
+    console.warn("[Telegram] Webhook rechazado: secreto ausente o inválido.");
+    return c.json({ error: "No autorizado." }, 401);
+  }
+
   try {
     const bot = getBot();
     const update = await c.req.json();

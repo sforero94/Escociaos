@@ -601,7 +601,7 @@ describe('agruparSuscriptoresPorClave', () => {
       alerta_clave: 'hato.secado_due',
       recibe: true,
       escalamiento: false,
-      telegram_id: '8505349717',
+      telegram_id: '111',
       ...overrides,
     };
   }
