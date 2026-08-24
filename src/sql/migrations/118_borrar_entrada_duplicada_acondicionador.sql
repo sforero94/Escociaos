@@ -8,17 +8,32 @@
 -- registrada DOS veces en `movimientos_inventario`, el 2026-05-07, con quince
 -- minutos de diferencia:
 --
---   4d07e09b-98cf-4535-ba2f-8d9402c215e7  creada 16:30:59  saldo 0,69 -> 8,69
---   bb6c4204-0b80-4d1d-a51a-6b2ff398fb11  creada 16:46:17  saldo 0,69 -> 8,69
+--   bb6c4204-0b80-4d1d-a51a-6b2ff398fb11  creada 16:30:59  saldo 0,69 -> 8,69
+--   4d07e09b-98cf-4535-ba2f-8d9402c215e7  creada 16:46:17  saldo 0,69 -> 8,69
 --
 -- **Las dos registran la MISMA transición de saldo.** Ése es el dato que decide
 -- todo: la segunda no sumó stock, sólo repitió el asiento. Y el movimiento
 -- siguiente (2026-05-15) arranca de `saldo_anterior = 8,69`, o sea que el
 -- inventario subió 8 kg, no 16.
 --
--- Consecuencia: **ninguna cifra de stock que alguien haya visto está mal**. Lo
--- que miente es el libro, y sólo si se lo lee sumando cantidades en vez de
--- siguiendo la cadena de saldos. `productos.cantidad_actual` no se toca.
+-- Consecuencia: **el saldo nunca fue acreditado con los segundos 8 kg**. Lo que
+-- miente es el libro, y sólo si se lo lee sumando cantidades en vez de siguiendo
+-- la cadena de saldos. `productos.cantidad_actual` no se toca.
+--
+-- Precisión que corrige al borrador: decir "ninguna cifra de stock estuvo nunca
+-- mal" era demasiado fuerte. El conteo físico del 2026-08-24 (`a41471a0`) subió
+-- el saldo de 2,85 a 3,80: el sistema estaba **0,95 kg bajo**, ya corregido esa
+-- mañana. Lo defendible es lo otro -- y ese conteo además **mata la hipótesis
+-- alternativa**: si de verdad hubieran llegado 16 kg y sólo se hubieran
+-- acreditado 8, el conteo habría encontrado el sistema ~8 kg bajo, no 0,95.
+--
+-- Tres artefactos independientes confirman que nunca hubo doble crédito:
+--   * `verificaciones_detalle` del 2026-07-30 registró `cantidad_teorica = 5,93`
+--     -- exactamente lo que predice UNA entrada de 8 kg; con dos daría 13,93.
+--   * `cantidad_actual` (0,76) coincide con el último `saldo_nuevo` (0,76).
+--     Acondicionador NO está entre los productos cuyo saldo diverge del libro.
+--   * 65028 es la ÚNICA (producto, factura, cantidad) duplicada entre las 39
+--     `Entrada` de la tabla.
 --
 -- ---------------------------------------------------------------------------
 -- POR QUÉ BORRAR Y NO COMPENSAR
@@ -34,9 +49,45 @@
 -- duplicados exactos -- y que dejan el respaldo en la base para que la
 -- evidencia sobreviva FUERA del libro, que es donde corresponde.
 --
--- SE BORRA LA SEGUNDA (16:46), no la primera. Son idénticas en todos los campos
--- salvo `id` y `created_at`, así que la elección es arbitraria en cuanto al
--- dato; se conserva la primera porque es la que el usuario quiso hacer.
+-- ---------------------------------------------------------------------------
+-- CUÁL DE LAS DOS SE BORRA -- corregido por el verificador independiente
+-- ---------------------------------------------------------------------------
+-- El borrador de esta migración apuntaba a la SEGUNDA (16:46) razonando que las
+-- dos eran intercambiables. **Estaba al revés.** La evidencia que lo decide no
+-- está en `movimientos_inventario` sino en `compras`:
+--
+--   compras 727a8fec, factura 65028, 8,00 kg
+--     created_at = 2026-05-11 16:46:16.729827
+--     updated_at = idéntico  -> nunca se editó: nació a las 16:46, no a las 16:30
+--
+-- `NewPurchase.tsx` escribe siempre en el mismo orden (líneas 371 -> 391 -> 405):
+-- inserta en `compras`, actualiza `productos`, inserta el movimiento. Esa firma
+-- se repite en TODAS las compras de la tabla:
+--
+--   65442  compra 12:41:05.994  ->  movimiento 12:41:06.666   (0,67 s)
+--   65885  compra 16:24:13.203  ->  movimiento 16:24:13.912   (0,71 s)
+--   4379   compra 20:07:54.452  ->  movimiento 20:07:55.076   (0,62 s)
+--   65028  compra 16:46:16.730  ->  movimiento 16:46:17.182   (0,45 s)  <-- bb6c4204
+--
+-- Así que **`bb6c4204` (16:46) es el movimiento de la compra que sobrevive, y
+-- `4d07e09b` (16:30) es el huérfano**: no tiene ninguna fila de `compras` detrás.
+--
+-- CÓMO QUEDÓ HUÉRFANO -- y la causa raíz es un defecto que cerramos HOY. El
+-- cuerpo de `handleDeletePurchase` anterior al PR #157 (hallazgo #28) restaba
+-- `cantidad_actual`, luego intentaba `.delete().eq('compra_id', ...)` contra una
+-- tabla que no tiene esa columna -- error tragado como "no bloqueante", así que
+-- la `Entrada` sobrevivía -- y luego insertaba `tipo_movimiento: 'Salida'`, que
+-- no es etiqueta válida del enum, así que tampoco escribía el movimiento
+-- compensatorio. Neto: **saldo revertido, fila del libro huérfana, compra
+-- borrada.** Eso explica por qué `bb6c4204` puede leer legítimamente
+-- `saldo_anterior = 0,69`: para cuando se creó, el saldo ya había vuelto.
+--
+-- Borrar el huérfano y conservar el documentado no cambia ningún número -- son
+-- idénticas en todas las columnas de negocio y ninguna FK del esquema referencia
+-- `movimientos_inventario` (comprobado en `pg_constraint`). Pero dejar el de las
+-- 16:30 haría de 65028 la ÚNICA compra de la tabla cuyo movimiento de inventario
+-- es anterior al documento que lo respalda. Cuesta cero hacerlo bien, y es
+-- trazabilidad de agroquímicos.
 --
 -- RESPALDO en el esquema `respaldos`, NUNCA en `public` (migración 081).
 --
@@ -52,8 +103,8 @@ BEGIN
   --     importa. Si alguna cambio, la premisa de "duplicado exacto" se cayo.
   SELECT count(*) INTO v_pareja
   FROM public.movimientos_inventario
-  WHERE id IN ('4d07e09b-98cf-4535-ba2f-8d9402c215e7'::uuid,
-               'bb6c4204-0b80-4d1d-a51a-6b2ff398fb11'::uuid)
+  WHERE id IN ('bb6c4204-0b80-4d1d-a51a-6b2ff398fb11'::uuid,
+               '4d07e09b-98cf-4535-ba2f-8d9402c215e7'::uuid)
     AND tipo_movimiento::text = 'Entrada'
     AND cantidad = 8.00
     AND factura = '65028'
@@ -68,7 +119,7 @@ BEGIN
   SELECT p.cantidad_actual INTO v_saldo_producto
   FROM public.productos p
   WHERE p.id = (SELECT producto_id FROM public.movimientos_inventario
-                 WHERE id = '4d07e09b-98cf-4535-ba2f-8d9402c215e7'::uuid);
+                 WHERE id = 'bb6c4204-0b80-4d1d-a51a-6b2ff398fb11'::uuid);
   PERFORM set_config('escociaos.mig118_saldo', v_saldo_producto::text, false);
 
   SELECT count(*) INTO v_total FROM public.movimientos_inventario;
@@ -77,16 +128,16 @@ END $$;
 
 CREATE TABLE respaldos.backup_118_entrada_duplicada AS
 SELECT * FROM public.movimientos_inventario
-WHERE id = 'bb6c4204-0b80-4d1d-a51a-6b2ff398fb11'::uuid;
+WHERE id = '4d07e09b-98cf-4535-ba2f-8d9402c215e7'::uuid;
 
 ALTER TABLE respaldos.backup_118_entrada_duplicada ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON respaldos.backup_118_entrada_duplicada FROM anon, authenticated;
 
 COMMENT ON TABLE respaldos.backup_118_entrada_duplicada IS
-  'La fila de movimientos_inventario que la migracion 118 borro: la segunda Entrada identica de 8 kg de Acondicionador sys (factura 65028, 2026-05-07, creada 16:46). Unica copia; el ROLLBACK del pie de la 118 la reinserta desde aqui.';
+  'La fila de movimientos_inventario que la migracion 118 borro: la Entrada HUERFANA de 8 kg de Acondicionador sys (factura 65028, 2026-05-07, creada 16:30) -- la que no tiene fila en compras detras, resto de un borrado de compra que el defecto del hallazgo #28 dejo a medias. Unica copia; el ROLLBACK del pie de la 118 la reinserta desde aqui.';
 
 DELETE FROM public.movimientos_inventario
-WHERE id = 'bb6c4204-0b80-4d1d-a51a-6b2ff398fb11'::uuid;
+WHERE id = '4d07e09b-98cf-4535-ba2f-8d9402c215e7'::uuid;
 
 DO $$
 DECLARE
@@ -100,14 +151,14 @@ BEGIN
   -- 4.1 Queda exactamente una de las dos, y es la primera.
   SELECT count(*) INTO v_quedan
   FROM public.movimientos_inventario
-  WHERE id IN ('4d07e09b-98cf-4535-ba2f-8d9402c215e7'::uuid,
-               'bb6c4204-0b80-4d1d-a51a-6b2ff398fb11'::uuid);
+  WHERE id IN ('bb6c4204-0b80-4d1d-a51a-6b2ff398fb11'::uuid,
+               '4d07e09b-98cf-4535-ba2f-8d9402c215e7'::uuid);
   IF v_quedan <> 1 THEN
     RAISE EXCEPTION 'POST 4.1: quedaron % de las 2 filas en vez de 1.', v_quedan;
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM public.movimientos_inventario WHERE id = '4d07e09b-98cf-4535-ba2f-8d9402c215e7'::uuid) THEN
-    RAISE EXCEPTION 'POST 4.1b: se borro la fila equivocada. La que debia sobrevivir es la de las 16:30.';
+  IF NOT EXISTS (SELECT 1 FROM public.movimientos_inventario WHERE id = 'bb6c4204-0b80-4d1d-a51a-6b2ff398fb11'::uuid) THEN
+    RAISE EXCEPTION 'POST 4.1b: se borro la fila equivocada. La que debia sobrevivir es la de las 16:46, que es la respaldada por la compra 727a8fec.';
   END IF;
 
   -- 4.2 El respaldo tiene la fila borrada.
@@ -121,7 +172,7 @@ BEGIN
   v_saldo_antes := nullif(current_setting('escociaos.mig118_saldo', true), '');
   SELECT p.cantidad_actual INTO v_saldo_ahora
   FROM public.productos p
-  WHERE p.id = (SELECT producto_id FROM public.movimientos_inventario WHERE id = '4d07e09b-98cf-4535-ba2f-8d9402c215e7'::uuid);
+  WHERE p.id = (SELECT producto_id FROM public.movimientos_inventario WHERE id = 'bb6c4204-0b80-4d1d-a51a-6b2ff398fb11'::uuid);
   IF v_saldo_antes IS NULL THEN
     RAISE WARNING 'POST 4.3: no se pudo leer el saldo previo; la comprobacion NO se ejecuto.';
   ELSIF v_saldo_ahora <> v_saldo_antes::numeric THEN
