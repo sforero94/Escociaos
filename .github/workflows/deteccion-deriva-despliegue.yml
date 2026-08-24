@@ -1,0 +1,50 @@
+# Detecta codigo mezclado a `main` que nunca llego a produccion.
+#
+# El 2026-08-20 se mezclo el arreglo de seguridad ESCO-1 y se dio por cerrado.
+# Cuatro dias despues seguia sin desplegarse, con cinco rutas de escritura
+# abiertas anonimamente en internet. Nada lo detectaba, porque nada comparaba
+# el despliegue vivo contra el repositorio.
+name: Deteccion de deriva de despliegue
+
+on:
+  schedule:
+    # 12:30 UTC = 07:30 Bogota, todos los dias. Un cron de GitHub Actions puede
+    # atrasarse; para este chequeo diario da igual.
+    - cron: '30 12 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deriva:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # OBLIGATORIO: con el checkout superficial por defecto (fetch-depth: 1)
+          # el ultimo commit que toca el arbol desplegado puede no estar en el
+          # historial, y `git log -- <ruta>` devuelve vacio. El script falla
+          # explicitamente en ese caso en vez de reportar "sin deriva".
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Sin dependencias: el script usa solo `fetch` y `git`, ambos ya presentes.
+      - name: Comprobar deriva
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        # Sin tuberia a `tee`: el shell por defecto de Actions es `bash -e`, SIN
+        # pipefail, asi que el codigo de salida de una tuberia es el de `tee` (0)
+        # y un fallo del script no tumbaria el job. Se guarda la salida, se
+        # publica en el resumen y se sale con el codigo real.
+        run: |
+          set +e
+          node scripts/check-deploy-drift.mjs > salida-deriva.txt 2>&1
+          estado=$?
+          { echo '```'; cat salida-deriva.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          cat salida-deriva.txt
+          exit $estado
