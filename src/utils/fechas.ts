@@ -348,3 +348,58 @@ export function calcularRangoFechasPorPeriodo(periodo: string): { fecha_desde: s
       };
   }
 }
+// ---------------------------------------------------------------------------
+// Semana ISO 8601
+// ---------------------------------------------------------------------------
+
+/**
+ * Semana ISO 8601 de una fecha `AAAA-MM-DD`, con su año ISO y el lunes/domingo
+ * que la delimitan.
+ *
+ * **Toda la aritmética es UTC y arranca de los tres números del string**, nunca
+ * de `new Date(iso)` leído con getters locales. Ese cruce es el defecto que esta
+ * función reemplaza: en UTC-5, `new Date('2026-01-05')` es medianoche UTC pero
+ * `getDate()` devuelve **4**, así que todo monitoreo de un lunes se agrupaba en
+ * la semana anterior (677 de 4.200 filas en producción, 2026-08-24).
+ *
+ * El **año que devuelve es el año ISO, no el del calendario**. No son lo mismo
+ * en el cambio de año: el 2027-01-01 es viernes y pertenece a la semana 53 de
+ * 2026, y el 2024-12-30 es lunes y pertenece a la semana 1 de 2025. Etiquetar
+ * una semana con el año del calendario produce combinaciones que no existen
+ * («Semana 53 · 2027»).
+ *
+ * @param fechaISO - Fecha en formato `AAAA-MM-DD` (se ignora cualquier hora)
+ */
+export function semanaISO(fechaISO: string): {
+  semana: number;
+  anioISO: number;
+  lunes: string;
+  domingo: string;
+} {
+  const [a, m, d] = fechaISO.slice(0, 10).split('-').map(Number);
+  const base = new Date(Date.UTC(a, m - 1, d));
+
+  // Jueves de la misma semana ISO: define el año ISO y el número de semana.
+  const jueves = new Date(base.getTime());
+  const diaSemana = jueves.getUTCDay() || 7; // lunes = 1 … domingo = 7
+  jueves.setUTCDate(jueves.getUTCDate() + 4 - diaSemana);
+
+  const anioISO = jueves.getUTCFullYear();
+  const inicioAnio = Date.UTC(anioISO, 0, 1);
+  const semana = Math.ceil(((jueves.getTime() - inicioAnio) / 86400000 + 1) / 7);
+
+  const lunes = new Date(base.getTime());
+  lunes.setUTCDate(lunes.getUTCDate() - (diaSemana - 1));
+  const domingo = new Date(lunes.getTime());
+  domingo.setUTCDate(domingo.getUTCDate() + 6);
+
+  return { semana, anioISO, lunes: aISOUTC(lunes), domingo: aISOUTC(domingo) };
+}
+
+/** Formatea una Date como `AAAA-MM-DD` leyendo sus componentes UTC. */
+function aISOUTC(fecha: Date): string {
+  const anio = fecha.getUTCFullYear();
+  const mes = String(fecha.getUTCMonth() + 1).padStart(2, '0');
+  const dia = String(fecha.getUTCDate()).padStart(2, '0');
+  return `${anio}-${mes}-${dia}`;
+}

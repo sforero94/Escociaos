@@ -87,15 +87,6 @@ const LISTA_BLANCA_UTC: { archivo: string; ocurrencias: number; razon: string }[
       'UTC; enumerarFechas() itera con cursor. Los tres son ida y vuelta UTC coherente.',
   },
   {
-    archivo: 'src/components/monitoreo/TablaMonitoreos.tsx',
-    ocurrencias: 2,
-    razon:
-      'agruparPorSemana() mezcla `new Date(fecha_monitoreo)` (UTC) con getDay()/getDate() ' +
-      'LOCALES. Está mal, pero el arreglo es la aritmética de semana entera, no el ' +
-      'recorte -- cambiar solo la lectura movería las etiquetas sin corregir el cálculo. ' +
-      'Congelado aquí a propósito para que no se cuele un sitio nuevo mientras tanto.',
-  },
-  {
     archivo: 'src/utils/accionesHechos.ts',
     ocurrencias: 1,
     razon:
