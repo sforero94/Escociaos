@@ -159,6 +159,30 @@ prompt del agente en cada corrida.
 - CLIMA recuperado: 288/288 el 08-22 y 08-23, contador_congelado 17/90 (bajo desde 19/90). La 103 opero por
   primera vez sobre un incidente real (08-19 y 08-20 marcados cobertura_parcial).
 
+## Corrida 2026-08-24-drenaje-continuacion
+- **La firma de escritura de `NewPurchase.tsx` es una herramienta forense, no un detalle.**
+  Escribe siempre `compras` → `productos` → `movimientos_inventario` con **~0,5 s** entre la
+  primera y la ultima (verificado en las 4 compras de la tabla: 0,67 s / 0,71 s / 0,62 s /
+  0,45 s). Ante dos movimientos gemelos, **el que cae dentro de ese medio segundo del INSERT
+  de la compra es el documentado; el otro es huerfano**. Asi se corrigio la migracion 118.
+  `movimientos_inventario` **no tiene ninguna FK que lo referencie** (comprobado en
+  `pg_constraint`), asi que borrar el huerfano no arrastra nada. [corrida: 2026-08-24-drenaje-continuacion]
+- **REFUTACION — `registros_trabajo.costo_jornal` YA INCLUYE la fraccion de jornal.**
+  Calcular `sum(costo_jornal * fraccion_jornal)` **infla ~40%** y hace parecer que 16
+  aplicaciones tienen el costo de mano de obra mal. El calculo correcto es
+  `sum(costo_jornal)` a secas, y cuadra al centavo con el snapshot en las 16. No re-abrir
+  esto como hallazgo. [corrida: 2026-08-24-drenaje-continuacion]
+- **El modulo de Verificacion de inventario NUNCA ha contado nada — es estado conocido, ya
+  filado.** `verificaciones_inventario` tiene **1 fila en toda la historia** (`4a595f8c`,
+  2026-07-30, «En proceso»), con 223 detalles y `contado = false` en los 223;
+  `select count(*) from verificaciones_detalle where contado` es **0 en toda la tabla**.
+  Los conteos fisicos que si ocurren entran como movimientos `Ajuste` manuales — y son **los
+  unicos 3 de los 160 movimientos con `responsable` NULL**. Esta filado como decision de
+  producto; **no volver a reportarlo como hallazgo de datos.** [corrida: 2026-08-24-drenaje-continuacion]
+- **Migraciones 110-119 aplicadas y verificadas contra el catalogo vivo el 2026-08-24**
+  (ledger `20260824200409` … `20260824222137`). La **109** sigue sin aplicar por el carril:
+  `storage.objects` exige propiedad. No re-auditar ninguna. [corrida: 2026-08-24-drenaje-continuacion]
+
 ## Archivo
 (vacio)
 
