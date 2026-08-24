@@ -10,7 +10,12 @@ export interface CostCalculationParams {
   salary: number;
   benefits: number;
   allowances: number;
-  weeklyHours: number;
+  /**
+   * @deprecated Ya NO participa en el cálculo. El jornal se deriva del salario
+   * mensual dividido por `DIAS_LABORALES_MES`, no de las horas semanales.
+   * Se conserva en la firma para no romper los call sites existentes.
+   */
+  weeklyHours?: number;
   fractionWorked: number;
 }
 
@@ -26,34 +31,42 @@ export interface CostCalculationResult {
 export const STANDARD_WORKDAY_HOURS = 8;
 
 /**
- * Average weeks per month for monthly salary calculations
+ * Días laborales por mes usados para derivar el costo de un jornal a partir del
+ * salario MENSUAL.
+ *
+ * **22 es una decisión del dueño (Santiago, 2026-08-20), no una fórmula legal.**
+ * Es el único divisor válido del proyecto y debe coincidir con el que usa Esco
+ * (`src/supabase/functions/server/chat.tsx`) y el bot de Telegram
+ * (`.../telegram/conversations/jornal.ts`). El guard estático
+ * `src/__tests__/jornalDivisorContract.test.ts` falla si alguno diverge.
+ *
+ * Antes de 2026-08 el jornal se derivaba de `horas_semanales × 4,33 ÷ 8`, que
+ * con las 44 horas semanales de toda la nómina daba un divisor de 23,815 y
+ * subvaluaba cada jornal un 7,6 %.
  */
-export const WEEKS_PER_MONTH = 4.33;
+export const DIAS_LABORALES_MES = 22;
 
 /**
  * Calculate labor costs using standardized formula
- * Formula: (salary + benefits + allowances) / (weeklyHours * WEEKS_PER_MONTH) * 8 * fractionWorked
+ * Formula: (salary + benefits + allowances) / DIAS_LABORALES_MES * fractionWorked
  * Note: Assumes salary is MONTHLY
+ *
+ * `weeklyHours` se ignora a propósito: el jornal es un día laboral completo,
+ * no un bloque de 8 horas prorrateado sobre la jornada semanal.
  */
 export function calculateLaborCost(params: CostCalculationParams): CostCalculationResult {
-  const { salary, benefits, allowances, weeklyHours, fractionWorked } = params;
+  const { salary, benefits, allowances, fractionWorked } = params;
 
   // Input validation
-  if (weeklyHours <= 0) {
-    throw new Error('Weekly hours must be greater than 0');
-  }
-
   if (fractionWorked < 0 || fractionWorked > 3) {
     throw new Error('Fraction worked must be between 0 and 3');
   }
 
-  // Calculate hourly rate from MONTHLY salary
-  // Convert weekly hours to monthly hours: weeklyHours * 4.33 (average weeks per month)
-  const monthlyHours = weeklyHours * WEEKS_PER_MONTH;
-  const hourlyRate = (salary + benefits + allowances) / monthlyHours;
+  // Costo de un jornal completo a partir del salario MENSUAL
+  const dailyCost = (salary + benefits + allowances) / DIAS_LABORALES_MES;
 
-  // Calculate daily cost (8 hours)
-  const dailyCost = hourlyRate * STANDARD_WORKDAY_HOURS;
+  // Tarifa horaria implícita (solo informativa)
+  const hourlyRate = dailyCost / STANDARD_WORKDAY_HOURS;
 
   // Calculate total cost for the fraction worked
   const totalCost = dailyCost * fractionWorked;
