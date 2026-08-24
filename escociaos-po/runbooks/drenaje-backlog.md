@@ -1,19 +1,31 @@
 # Runbook — Drenaje del backlog
 
-**Estado: CASI DRENADO.** Última actualización 2026-08-24, tras W0, W1 y la
-corrida de cierre (`reports/2026-08-24-drenaje-cierre.md`).
+**Estado: DRENADO. §1 está cerrada entera.** Última actualización 2026-08-24,
+tras W0, W1, la corrida de cierre y la continuación
+(`reports/2026-08-24-drenaje-continuacion.md`).
 
-**Lo que queda es §1.4 — tres migraciones aditivas, una por corrida.** Todo lo
-demás de §1 está cerrado: el P0 del webhook, el detector de deriva y los dos
-cierres de Notion. Se conservan abajo **tachados, con lo que costó averiguar**,
-porque ahí está la parte reutilizable.
+**No queda nada pendiente en §1.** Las cuatro migraciones de §1.4 se aplicaron
+—salvo la 109, que este carril no puede aplicar y aplicó Santiago a mano por el
+panel de Storage— y con ellas se fueron seis más: **110 a 119, diez en total**,
+todas verificadas contra el catálogo vivo y fusionadas a `main`. Todo se conserva
+abajo **tachado, con lo que costó averiguar**, porque ahí está la parte
+reutilizable.
 
-**Backlog 25 → 20.** Cerrados en esta tanda: #15, #35, #36, **#3**, **#11** (P0),
-**#22** (P1). Producción: edge function **v216**, clima sano, deriva en `false` y
-el detector corriendo solo todos los días.
+**Producción**: edge function **v216**, clima sano, deriva en `false` y el
+detector corriendo solo todos los días.
 
-Si te dijeron «termina el trabajo», empezá por §1: son las tareas que quedan, en
-orden. El resto del documento es la referencia que las sostiene.
+> **Lo más caro de olvidar de esta tanda no es una migración: es que un
+> verificador independiente me corrigió DOS veces antes de escribir en
+> producción.** La 118 apuntaba a la fila equivocada (la evidencia que decidía
+> estaba en `compras`, no en `movimientos_inventario`) y el argumento central de
+> la 119 era **circular** — sostenía que un saldo era de fiar porque coincidía con
+> un dato de la propia fila bajo sospecha. Las dos veces el veredicto llegó con
+> una prueba externa que yo no había buscado. **La compuerta 3 no es burocracia.**
+
+Si te dijeron «termina el trabajo», **este runbook ya no tiene trabajo que dar**.
+Lo que queda vivo son los hallazgos abiertos en Notion, que es la fuente de
+verdad. El resto del documento es la referencia que sostuvo el drenaje: leelo
+como manual de método, no como lista de tareas.
 
 **Antes de nada**: leé `escociaos-po/CLAUDE.md` (la constitución) y **verificá el
 estado real** contra Notion y contra el catálogo vivo. Este documento es de
@@ -108,7 +120,20 @@ no cumpla su criterio se deja `In progress` y se escribe por qué.**
 > arrastra todo lo fusionado antes — mirá fichero por fichero.** La receta para
 > hacerlo sin leer el código desplegado está en `memory/_compartida.md`.
 
-### 1.4 · W3 — las 4 migraciones aditivas
+### ~~1.4 · W3 — las 4 migraciones aditivas~~ · ✅ CERRADA 2026-08-24
+
+**Las cuatro salieron, y arrastraron seis más.** Aplicadas y verificadas contra
+el catálogo vivo: **110** (#37, y el alcance real eran **7 tablas, no 4**),
+**111** y **113** (#19), **112** (#16), **114** (#37 residual), **115** (#42),
+**116** (#4), **117** (#12), **118** (#43) y **119** (#29). La **109** sigue
+siendo la única que este carril no pudo aplicar — ver el límite duro de abajo, que
+se mantiene vigente y hay que releer antes de escribir cualquier migración de
+Storage.
+
+Lo que sigue de esta sección es la referencia con la que se hicieron. **El texto
+original se conserva sin editar**, incluidas las advertencias que resultaron
+ciertas.
+
 
 Ya están desbloqueadas (flag quitado en W0). **Una por corrida**, con las cinco
 compuertas de la constitución: aditiva por lista blanca · guardas propias
