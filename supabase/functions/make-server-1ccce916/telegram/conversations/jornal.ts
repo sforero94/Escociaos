@@ -26,9 +26,9 @@ const FRACCIONES = ["0.25", "0.5", "0.75", "1.0"] as const;
 const TASKS_PER_PAGE = 6;
 const WORKERS_PER_PAGE = 8;
 
-// Standard 8-hour workday, ~4.33 weeks per month
-const STANDARD_WORKDAY_HOURS = 8;
-const WEEKS_PER_MONTH = 4.33;
+// Días laborales por mes: decisión del dueño (Santiago, 2026-08-20).
+// Debe coincidir con DIAS_LABORALES_MES en src/utils/laborCosts.ts y en chat.tsx.
+const DIAS_LABORALES_MES = 22;
 
 // ---------------------------------------------------------------------------
 // Supabase helper
@@ -50,13 +50,12 @@ function calcEmpleadoCost(
   salario: number,
   prestaciones: number,
   auxilios: number,
-  horasSemanales: number,
+  _horasSemanales: number,
   fraccion: number,
 ): number {
-  const hrs = horasSemanales > 0 ? horasSemanales : 48;
-  const monthlyHours = hrs * WEEKS_PER_MONTH;
-  const hourlyRate = (salario + prestaciones + auxilios) / monthlyHours;
-  return Math.round(hourlyRate * STANDARD_WORKDAY_HOURS * fraccion * 100) / 100;
+  // horasSemanales se ignora a propósito: el jornal es un día laboral completo.
+  const costoJornal = (salario + prestaciones + auxilios) / DIAS_LABORALES_MES;
+  return Math.round(costoJornal * fraccion * 100) / 100;
 }
 
 function calcContratistaCost(tarifaJornal: number, fraccion: number): number {
