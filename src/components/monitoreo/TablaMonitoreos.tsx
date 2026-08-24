@@ -6,7 +6,7 @@ import { Label } from '../ui/label';
 import { Button } from '../ui/button';
 import { Search, Calendar, MapPin, Bug, Filter, X, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronUp } from 'lucide-react';
 import { toast } from 'sonner';
-import { formatearFecha, formatearFechaCorta } from '../../utils/fechas';
+import { formatearFecha, formatearFechaCorta, semanaISO } from '../../utils/fechas';
 
 interface Monitoreo {
   id: string;
@@ -185,37 +185,25 @@ export function TablaMonitoreos() {
     return direccionOrden === 'asc' ? comparacion : -comparacion;
   });
 
-  // ✅ NUEVO: Función para obtener número de semana ISO 8601
-  const getNumeroSemana = (fecha: Date): number => {
-    const d = new Date(Date.UTC(fecha.getFullYear(), fecha.getMonth(), fecha.getDate()));
-    const dayNum = d.getUTCDay() || 7;
-    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-    return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-  };
-
-  // ✅ NUEVO: Agrupar monitoreos por semana
+  // Agrupar monitoreos por semana ISO 8601.
+  // `semanaISO()` hace toda la aritmética en UTC a partir del string
+  // `AAAA-MM-DD` de la BD. Antes se mezclaba `new Date(fecha_monitoreo)`
+  // (medianoche UTC) con getDay()/getDate() LOCALES, y en UTC-5 eso corría cada
+  // fecha un día hacia atrás: todo monitoreo de un lunes caía en la semana
+  // anterior. El año de la etiqueta es el año ISO, no el del calendario.
   const agruparPorSemana = (monitoreos: Monitoreo[]): GrupoSemana[] => {
     const grupos = new Map<string, GrupoSemana>();
 
     monitoreos.forEach(m => {
-      const fecha = new Date(m.fecha_monitoreo);
-      const año = fecha.getFullYear();
-      const semana = getNumeroSemana(fecha);
-      const key = `${año}-S${semana}`;
+      const { semana, anioISO, lunes, domingo } = semanaISO(m.fecha_monitoreo);
+      const key = `${anioISO}-S${semana}`;
 
       if (!grupos.has(key)) {
-        // Calcular fechas de inicio y fin de la semana
-        const primerDia = new Date(fecha);
-        primerDia.setDate(fecha.getDate() - (fecha.getDay() || 7) + 1); // Lunes
-        const ultimoDia = new Date(primerDia);
-        ultimoDia.setDate(primerDia.getDate() + 6); // Domingo
-
         grupos.set(key, {
           semana,
-          año,
-          fechaInicio: primerDia.toISOString().split('T')[0],
-          fechaFin: ultimoDia.toISOString().split('T')[0],
+          año: anioISO,
+          fechaInicio: lunes,
+          fechaFin: domingo,
           registros: [],
           totalRegistros: 0
         });
