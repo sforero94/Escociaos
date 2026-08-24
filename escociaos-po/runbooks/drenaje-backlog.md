@@ -1,6 +1,13 @@
 # Runbook — Drenaje del backlog
 
-**Estado: EN CURSO.** Última actualización 2026-08-24, tras ejecutar W0 y W1.
+**Estado: EN CURSO.** Última actualización 2026-08-24, tras ejecutar W0, W1 y la
+corrida de cierre (`reports/2026-08-24-drenaje-cierre.md`).
+
+**Lo que cambió en la última corrida, en tres líneas:** se cerró **#3** (estaba
+resuelto y nadie lo había visto); **#20** tiene migración escrita y revisada pero
+**la operación no puede aplicarla** — el carril aditivo ya no alcanza
+`storage.objects`; y **#11 y #22 no están bloqueados por esfuerzo sino por dos
+credenciales que sólo vos tenés**. Backlog **23 → 22**.
 
 Si te dijeron «termina el trabajo», empezá por §1: son las tareas que quedan, en
 orden. El resto del documento es la referencia que las sostiene.
@@ -50,6 +57,35 @@ encabezado ya está llegando. **Cero downtime.** Al revés, el bot rebota TODO c
 > supabase. **Si no lo encontrás, PARÁ Y PEDILO.** No sigas al paso 4 sin haber
 > hecho el 3: rotar a medias deja el bot muerto y sólo se recupera revirtiendo el
 > deploy.
+>
+> **Ya se buscó el 2026-08-24 y NO está en ningún disco** — ni en `.env`,
+> `.env.local`, `supabase/.temp`, ni en el repo (sólo referencias
+> `Deno.env.get(...)` en código). No vuelvas a gastar la corrida buscándolo.
+
+> **HALLAZGO DEL 2026-08-24 QUE PUEDE AHORRAR LA ROTACIÓN ENTERA: la puerta
+> existía y la borraron.** `git show e799142` (2026-03-18, *Add Telegram bot user
+> management*) **elimina** cuatro líneas que ya estaban vivas en producción:
+>
+> ```ts
+> const secret = c.req.header("X-Telegram-Bot-Api-Secret-Token");
+> if (secret !== Deno.env.get("TELEGRAM_WEBHOOK_SECRET")) {
+>   return c.json({ error: "Unauthorized" }, 401);
+> }
+> ```
+>
+> Esto **no es una protección que nunca se puso: es una regresión de marzo.** Y
+> `supabase secrets list` fecha `TELEGRAM_WEBHOOK_SECRET` el 2026-03-18 a las
+> 21:18, **cuatro minutos después** de `TELEGRAM_BOT_TOKEN` (21:14) — la firma de
+> un alta que sí corrió `setWebhook(url, { secret_token })`.
+>
+> Telegram **no caduca** el `secret_token` de un webhook. Si aquel registro sigue
+> vigente, el encabezado lleva llegando desde marzo con un valor que el secreto
+> guardado todavía iguala, y **el paso 4 solo — desplegar — cierra el P0 sin
+> rotar nada y sin caída**. No es demostrable sin el bot token: `getWebhookInfo`
+> tampoco revela si hay `secret_token`.
+>
+> **Es decisión de Santiago, no del agente.** El peor caso de apostar es el bot
+> mudo, que se revierte redesplegando; el costo de rotar es un paso manual suyo.
 
 **Verificación, obligatoria antes de cantar victoria:**
 - `list_edge_functions` → `version > 215`
@@ -73,19 +109,49 @@ dejalo anotado como pendiente suyo — **no inventes un token**.
 Después disparalo a mano (`gh workflow run`) y confirmá que sale **verde**. Sin el
 secreto sale rojo a propósito (falla cerrado).
 
+> **Estado 2026-08-24: sigue sin el secreto** (`gh secret list` vacío,
+> `gh run list` cero corridas). El token del CLI local vive en el llavero y
+> leerlo está bloqueado; **no busques una vía alternativa, escalalo**.
+>
+> **Ya se validó todo lo que no depende del token**, no lo repitas: el camino de
+> fallo cerrado, los 8 tests unitarios, y la lógica contra producción —
+> `evaluarDeriva()` con el `updated_at` vivo y el `%cI` de `origin/main` devuelve
+> `hayDeriva: true`, o sea que **habría cantado el agujero del webhook**. Lo
+> único sin probar de punta a punta es la llamada a la Management API.
+>
+> **Y ojo con el criterio de cierre: mientras la deriva sea real el workflow sale
+> ROJO con razón.** Sale verde recién después del despliegue que cierra #11. Un
+> rojo hoy no es un fallo del detector — es el detector funcionando.
+
 ### 1.3 · Cerrar en Notion lo que quede verificado
 
 > **Un hallazgo se cierra cuando el arreglo está VIVO, no cuando está fusionado.**
 > Se ganó el 2026-08-24: ESCO-1 se cerró contra el merge y cuatro días después las
 > cinco rutas seguían abiertas en producción.
 
-| # | Cierra sólo si |
-|---|---|
-| **#11** | el POST anónimo da 401 **y** el bot responde a un `/start` |
-| **#3** | `version > 215` (su mitad de Telegram viaja en ese deploy) |
-| **#22** | el workflow corrió en **verde** |
+| # | Cierra sólo si | Estado 2026-08-24 |
+|---|---|---|
+| **#11** | el POST anónimo da 401 **y** el bot responde a un `/start` | abierto — falta el deploy |
+| **#3** | ~~`version > 215`~~ | ✅ **CERRADO** |
+| **#22** | el workflow corrió en **verde** | abierto — falta el secreto |
 
 Cualquiera que no cumpla su criterio: dejalo `In progress` y escribí por qué.
+
+> **Por qué #3 cerró con la versión todavía en 215, y la lección que deja.** El
+> criterio de arriba era un **proxy**, y partía de una premisa falsa: suponía que
+> la mitad de Telegram de #3 viajaba en el *siguiente* despliegue. Ya viajaba en
+> el actual — el deploy de las 15:52:43Z es **posterior** al merge del PR #144
+> (15:49:12Z). La regla real del contrato (§5: `updated_at` posterior al commit)
+> sí se cumplía.
+>
+> **Cuando un criterio de cierre es un proxy, verificá la regla, no el proxy.**
+> Cerrar por el proxy habría dejado un hallazgo ya resuelto abierto otra semana.
+>
+> Y el mismo despliegue resolvió dos hallazgos **en direcciones opuestas**: llevó
+> el arreglo de #3 (`jornal.ts`, `mtime` 42 s antes del deploy) y **no** llevó el
+> de #11 (`bot.ts`, `mtime` del 2026-08-21). **No asumas que un despliegue
+> arrastra todo lo fusionado antes — mirá fichero por fichero.** La receta para
+> hacerlo sin leer el código desplegado está en `memory/_compartida.md`.
 
 ### 1.4 · W3 — las 4 migraciones aditivas
 
@@ -95,11 +161,41 @@ compuertas de la constitución: aditiva por lista blanca · guardas propias
 dice «insegura»** · número secuencial correcto · transferencia byte a byte desde el
 fichero del PR (base64 → decode → una sentencia atómica), nunca retecleada.
 
+> ### ⛔ LÍMITE DURO DESCUBIERTO EL 2026-08-24: el carril NO alcanza `storage.objects`
+>
+> `ALTER POLICY`, `CREATE POLICY` y `COMMENT ON POLICY` exigen ser **DUEÑO** de la
+> tabla. Ningún `GRANT` lo confiere — `postgres` tiene DML entero con grant option
+> sobre `storage.objects` y **aun así no puede tocar una política**.
+> `storage.objects` pertenece a `supabase_storage_admin`, y `apply_migration` corre
+> como `postgres`, que hoy no llega a ese rol por ninguna vía:
+>
+> ```
+> current_user = postgres | pg_has_role(…,'supabase_storage_admin','USAGE')  = f
+>                         | pg_has_role(…,'supabase_storage_admin','MEMBER') = f
+> ```
+>
+> **Antes sí se podía** — la migración 072 creó cuatro políticas ahí y tiene fila
+> en el ledger con versión de marca de tiempo (`20260730002128`), el formato de
+> `apply_migration`. Entremedio el servicio de Storage corrió migraciones propias
+> el 2026-08-10, 08-20 y 08-23. **Un permiso de julio no prueba el de hoy.**
+>
+> **Un hallazgo sobre políticas de Storage no es `ddl_aditivo`.** Clasificalo
+> aparte desde el principio o perdés la corrida descubriéndolo. La vía que sí
+> funciona es el panel de Supabase → Storage → Policies, que corre como el dueño y
+> **no la puede recorrer un agente**.
+>
+> Para contestar una pregunta de permisos **antes** de escribir una migración que
+> quizá ni arranca, usá la sonda que aborta por construcción — está en
+> `memory/_compartida.md`. No puede escribir aunque quiera.
+
 Orden, de menor a mayor riesgo:
 
-1. **#20** — DELETE de `reportes-semanales` sólo Gerencia. Alinea con los otros 6
-   buckets. El más trivial: **hacelo primero y usalo para comprobar que el carril
-   funciona** antes de apuntarlo a #37.
+1. ~~**#20**~~ — **HECHO Y BLOQUEADO.** Migración `109_storage_reportes_delete_gerencia.sql`
+   escrita, revisada adversarialmente (veredicto **UNSAFE**, y acertó), corregida y
+   publicada en el **PR #154**. **No aplicada, y este carril no puede aplicarla** —
+   ver el límite duro de arriba. Necesita el panel de Storage → Policies, o
+   cerrarse como `Aceptado (no se arregla)`. **El siguiente turno del carril es
+   para #37.**
 2. **#37** — las 4 políticas DELETE con predicado `true` sobre tablas GlobalGAP.
    **Leé esto antes de escribir una línea**: esas tablas **no tienen ninguna
    política de Gerencia/Administrador**, así que la always-true es el **único**
@@ -114,6 +210,12 @@ Orden, de menor a mayor riesgo:
    escribe). Alcance recortado: la parte «no existe historial general» es decisión
    de producto y va a G2, no acá.
 4. **#16** — `productos.updated_by` + trigger, patrón 040/050/063/074.
+
+**#37, #19 y #16 NO comparten el bloqueante de #20**: son sobre tablas de
+`public`, donde `postgres` sí es dueño. El carril sigue vivo para ellas — lo que
+murió es su alcance a `storage.objects`. **Comprobalo igual antes de escribir**,
+con la sonda que aborta: cuesta una llamada y evita escribir una migración
+entera que no puede correr.
 
 Respaldos **siempre en el esquema `respaldos`, nunca en `public`** (migración 081).
 
@@ -167,6 +269,31 @@ no perdió un tick. **#36 cerrado.**
 sustituye.
 
 **Backlog**: 25 → **23 abiertos**.
+
+**Corrida de cierre (misma fecha, sesión interactiva)** — reporte completo en
+`reports/2026-08-24-drenaje-cierre.md`:
+
+- **#3 cerrado** (`Arreglado`), contra el despliegue verificado en sus **dos**
+  superficies: edge function v215 (reflog + `mtime` del worktree desplegado) y
+  navegador (sonda de contenido sobre los 192 chunks de Vercel — el literal
+  `4.33` ya no aparece en ningún chunk de la app).
+- **#20**: migración 109 escrita, revisada, corregida y publicada en el PR #154;
+  **sin aplicar**, y el carril no puede aplicarla.
+- **#11 y #22 escalados**: los dos están bloqueados por una **credencial**, no
+  por esfuerzo. Ninguna cantidad de trabajo desatendido los cierra.
+- Cero hallazgos nuevos, que es lo correcto en drenaje.
+
+**Backlog**: 23 → **22 abiertos**.
+
+> **Lo más caro que dejó esta corrida, y no estaba en ningún hallazgo:** la
+> revisión adversarial de la compuerta 3 **pagó por sí sola**. Además del
+> bloqueante, atrapó una afirmación falsa que el `COMMENT ON POLICY` habría
+> grabado **de forma permanente en el catálogo de producción**, un rol
+> (`Monitor`) que el `CLAUDE.md` raíz nombra y que **no existe en el enum
+> `rol_usuario`**, y una post-condición que era una guarda de mentira — comparaba
+> subcadenas, así que un predicado *sin correlacionar* (`EXISTS (SELECT 1 FROM
+> usuarios WHERE rol='Gerencia')`, cierto para **cualquier** autenticado) la
+> habría pasado. **No la trates como un trámite.**
 
 ---
 
