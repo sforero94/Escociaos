@@ -18,15 +18,15 @@ flag, no por falta de tiempo.
 
 Los dos hechos que gobiernan el orden:
 
-1. **19 de 25 llevan `Requiere aprobación = YES`.** La constitución (§5) dice que ese
+1. **18 de 25 llevan `Requiere aprobación = YES`.** La constitución (§5) dice que ese
    flag **anula `clase` por completo**: nada automático los toca. Tal cual están hoy,
-   una sesión desatendida puede trabajar en 6 de 25. **El primer acto de valor no es
+   una sesión desatendida puede trabajar en 7 de 25. **El primer acto de valor no es
    arreglar nada: es re-triar ese flag.**
 2. **Todo lo de edge function hace cola detrás de UN despliegue**, y ese despliegue
    necesita dos pasos que no son SQL y que sólo Santiago puede hacer (crear el secreto
    en Vault y ponerlo en los secretos de la función).
 
-De ahí el diseño: **agrupar los toques humanos en 2 sentadas de ~15 min** en vez de 19
+De ahí el diseño: **agrupar los toques humanos en 2 sentadas de ~15 min** en vez de 18
 interrupciones sueltas, y **batchear todo el trabajo de edge function en un solo deploy**.
 
 ```mermaid
@@ -102,6 +102,13 @@ estas tres cae y **anotarlo en el hallazgo**:
 
 **Salida de W0**: las dos agendas (G1 y G2) escritas, y N hallazgos desbloqueados.
 Si el re-triage no desbloquea al menos 4, algo se está leyendo de más — revisar.
+
+> **Corrida del 2026-08-24 — resultado real de W0**: 4 desbloqueados (`#20 #16 #19 #37`,
+> los cuatro `ddl_aditivo`, flag quitado) y 4 separados con el corte escrito en la fila
+> (`#11 #45 #12 #42`), en los que el flag **se queda** porque la mitad que decide es real.
+> El re-triage además destapó una decisión que nadie había hecho explícita: subir el
+> umbral de cobertura de lluvia de #42 **descarta lluvia real** (2026-07-09, 28,19 mm
+> sobre 268 lecturas). Está en la agenda de G2.
 
 ---
 
