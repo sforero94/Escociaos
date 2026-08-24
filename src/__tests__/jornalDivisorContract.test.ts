@@ -91,9 +91,17 @@ describe('divisor del jornal — decisión del dueño: 22', () => {
 });
 
 describe('guard estático — un solo divisor, en los tres árboles', () => {
-  /** Ficheros que calculan el costo de un jornal de empleado. */
+  /**
+   * Ficheros que calculan el costo de un jornal de empleado.
+   *
+   * `calculosCierreAplicacion.ts` NO estaba en esta lista, y por eso se escapó del PR #144:
+   * quedó como el único sitio del proyecto con la fórmula vieja (`horas_semanales * 4.33 / 8`)
+   * mientras los otros cinco ya dividían por 22. Un fichero que deriva un jornal y no está
+   * listado acá es un fichero que puede divergir en silencio — si aparece otro, va acá.
+   */
   const FICHEROS_COSTO_JORNAL = [
     'src/utils/laborCosts.ts',
+    'src/utils/calculosCierreAplicacion.ts',
     'src/supabase/functions/server/chat.tsx',
     'src/supabase/functions/server/telegram/conversations/jornal.ts',
     'supabase/functions/make-server-1ccce916/chat.tsx',
@@ -106,10 +114,19 @@ describe('guard estático — un solo divisor, en los tres árboles', () => {
     expect(contenido, `${rel} volvió a declarar WEEKS_PER_MONTH`).not.toMatch(/WEEKS_PER_MONTH/);
   });
 
-  it.each(FICHEROS_COSTO_JORNAL)('%s declara el divisor 22 y ningún otro', (rel) => {
+  it.each(FICHEROS_COSTO_JORNAL)('%s usa el divisor 22 y ningún otro', (rel) => {
     const contenido = leer(rel);
     const declaraciones = [...contenido.matchAll(/DIAS_LABORALES_MES\s*(?::\s*number\s*)?=\s*([0-9.]+)/g)];
-    expect(declaraciones.length, `${rel} no declara DIAS_LABORALES_MES`).toBeGreaterThan(0);
+    // Importar la constante es la forma PREFERIDA — sólo hay una copia del número. Los tres
+    // árboles de edge function no pueden importar desde `src/utils/`, así que ahí (y sólo ahí)
+    // la declaración local es legítima; en el navegador lo correcto es el import.
+    const importa = /import\s*\{[^}]*\bDIAS_LABORALES_MES\b[^}]*\}\s*from\s*['"][^'"]*laborCosts['"]/.test(
+      contenido,
+    );
+    expect(
+      declaraciones.length > 0 || importa,
+      `${rel} no declara NI importa DIAS_LABORALES_MES`,
+    ).toBe(true);
     for (const d of declaraciones) {
       expect(d[1], `${rel} declara un divisor distinto de 22`).toBe('22');
     }

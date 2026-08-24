@@ -8,6 +8,7 @@
  * no inline en el componente.
  */
 
+import { DIAS_LABORALES_MES } from '@/utils/laborCosts';
 import type { RegistroTrabajoCierre } from '@/types/aplicaciones';
 
 /**
@@ -328,19 +329,21 @@ export interface PayloadCierreAplicacion {
 }
 
 /**
- * Reproduce exactamente `reg.tarifa_jornal || (reg.salario ? Math.round(...) : 0)` — la fórmula
- * que `cerrarAplicacion()` (versión no transaccional) usaba inline para
- * `registros_trabajo.valor_jornal_empleado` de un registro NUEVO. Copia literal, no una
- * reinterpretación: `||` es truthy-check de JS (un `tarifa_jornal` de 0 cae al fallback), no
- * `??`.
+ * `reg.tarifa_jornal || (reg.salario ? salario mensual / DIAS_LABORALES_MES : 0)` para
+ * `registros_trabajo.valor_jornal_empleado` de un registro NUEVO. El `||` se conserva literal
+ * del original: es truthy-check de JS (un `tarifa_jornal` de 0 cae al fallback), no `??`.
+ *
+ * **El divisor NO se declara acá: se importa de `laborCosts.ts`.** Hay UN divisor del jornal en
+ * todo el proyecto —22 días laborales, decisión del dueño del 2026-08-20— y este fichero fue el
+ * único que se quedó con la fórmula vieja por horas semanales, cuyo divisor efectivo con las 44 h
+ * de la nómina real es 23,815: subvaluaba cada jornal nuevo del cierre un 7,6 %.
+ * `__tests__/jornalDivisorContract.test.ts` es la guarda que impide que vuelva a divergir.
  */
 function calcularValorJornalEmpleadoNuevo(reg: RegistroTrabajoCierre): number {
   if (reg.tarifa_jornal) return reg.tarifa_jornal;
   if (reg.salario) {
     return Math.round(
-      ((reg.salario + (reg.prestaciones || 0) + (reg.auxilios || 0)) /
-        ((reg.horas_semanales || 48) * 4.33)) *
-        8,
+      (reg.salario + (reg.prestaciones || 0) + (reg.auxilios || 0)) / DIAS_LABORALES_MES,
     );
   }
   return 0;
