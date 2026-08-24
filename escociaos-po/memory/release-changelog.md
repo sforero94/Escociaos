@@ -113,6 +113,17 @@ prompt del agente en cada corrida.
 - Cadencia: 29 commits sin merge en 3,76 dias = 54/semana, pero TODO cabe en 27 horas y despues hay 2 dias 15 h
   sin un solo commit. Es un pico, no un ritmo.
 
+- **SONDA DE CONTENIDO — el control positivo se elige entre cadenas de DOMINIO, no entre nombres de
+  funcion.** El 2026-08-24 use `obtenerFechaHoy` como control y dio 0: no sobrevive al minificado. No
+  invalido el resultado porque lo buscado era una PRESENCIA (`anioISO`, que si aparecio), y un hit prueba
+  presencia — un control roto solo hace ininterpretable una AUSENCIA. La segunda sonda uso `tarifa_jornal` /
+  `fraccion_jornal` / `salario` y funciono: ahi si se pudo afirmar que `4.33` tiene 0 ocurrencias y `/22` una.
+- #144 y #145 se mezclaron el 2026-08-24 15:49 UTC (main = b70206e). **#27 cerro (frontend puro, Vercel
+  despliega solo). #3 NO cerro: su mitad de Telegram vive en telegram/conversations/jornal.ts y necesita el
+  deploy de la edge function.** Mientras tanto hay una ventana real en la que el bot cotiza el jornal 8,25%
+  por debajo del navegador Y LO ESCRIBE a registros_trabajo.costo_jornal. Es el caso de libro de por que la
+  regla 'merge != deploy' importa.
+
 ## Archivo
 (vacio)
 
