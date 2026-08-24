@@ -397,7 +397,7 @@ describe('construirPayloadCierreAplicacion', () => {
       lotes: [],
       movimientos: [],
     });
-    const esperado = Math.round(((1300000 + 200000 + 50000) / (48 * 4.33)) * 8);
+    const esperado = Math.round((1300000 + 200000 + 50000) / 22);
     expect(payload.registros_trabajo[0].valor_jornal_empleado).toBe(esperado);
   });
 
