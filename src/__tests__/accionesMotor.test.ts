@@ -50,11 +50,18 @@ import {
   MAX_TOKENS_SALIDA,
   TEMPERATURA_INICIAL,
   TEMPERATURA_REINTENTO,
+  rechazoLongitudIndice0,
+  construirPromptSistemaReintentoLongitud,
+  construirEsquemaReintentoLongitud,
+  construirMensajeUsuarioReintentoLongitud,
+  interpretarRespuestaCrudaReintentoLongitud,
+  invocarModeloReintentoLongitud,
+  MAX_TOKENS_REINTENTO_LONGITUD,
   type LlamadaMotorResultado,
 } from '../supabase/functions/server/acciones-motor';
-import { validarSalidaMotor } from '../supabase/functions/server/acciones-validador';
-import type { PaqueteAcciones } from '../supabase/functions/server/acciones-tipos';
-import { hecho, paqueteConHechos, valor } from './fixtures/acciones.fixture';
+import { validarSalidaMotor, type Rechazo } from '../supabase/functions/server/acciones-validador';
+import type { AccionGenerada, PaqueteAcciones } from '../supabase/functions/server/acciones-tipos';
+import { accionGenerada, hecho, paqueteConHechos, salidaMotor, valor } from './fixtures/acciones.fixture';
 
 // ============================================================================
 // Tier A — aserciones estructurales (molde esco-evals.test.ts)
@@ -657,5 +664,419 @@ describe('invocarModeloAcciones — fixtures de respuesta, sin red', () => {
     const resultado = await invocarModeloAcciones(PAQUETE_FIXTURE, { apiKey: 'k' });
     expect(resultado.ok).toBe(true);
     expect(resultado.costoUsd).toBeNull();
+  });
+});
+
+// ============================================================================
+// Reintento quirúrgico de la acción rango 0 por LONGITUD -- hallazgo #41
+// (PO, Usage Analytics, 2026-08-24): el validador descartaba la acción de
+// índice 0 en 7 de las primeras 9 corridas, únicamente porque su plantilla
+// RENDERIZADA superaba el límite de 90 caracteres. Ver el header de
+// `rechazoLongitudIndice0`/`invocarModeloReintentoLongitud` en
+// acciones-motor.ts.
+// ============================================================================
+
+describe('acciones-tick.ts conecta el reintento quirúrgico (§10 Fase 3, mismo molde)', () => {
+  it('importa rechazoLongitudIndice0 e invocarModeloReintentoLongitud de acciones-motor.ts', () => {
+    expect(tickSource).toMatch(/rechazoLongitudIndice0/);
+    expect(tickSource).toMatch(/invocarModeloReintentoLongitud/);
+  });
+
+  it('invocarModeloReintentoLongitud se llama UNA sola vez -- nunca en un bucle', () => {
+    const ocurrencias = tickSource.split('invocarModeloReintentoLongitud(').length - 1;
+    // Una sola vez con paréntesis abierto -- la del import no cuenta (no
+    // trae `(` detrás), así que esto es la única LLAMADA real en el archivo.
+    expect(ocurrencias).toBe(1);
+    const inicio = tickSource.indexOf('rechazoLongitudIndice0(rechazos)');
+    const region = tickSource.slice(inicio, tickSource.indexOf('ordenarAcciones('));
+    expect(region).not.toMatch(/\bwhile\s*\(/);
+    // No se llama una segunda vez sobre su propio resultado dentro de esa región.
+    expect(region.split('invocarModeloReintentoLongitud(').length - 1).toBe(1);
+  });
+
+  it('el bloque va envuelto en try/catch (mismo criterio de defensa en profundidad)', () => {
+    const inicio = tickSource.indexOf('invocarModeloReintentoLongitud(paquete');
+    const antes = tickSource.slice(Math.max(0, inicio - 200), inicio);
+    expect(antes).toContain('try {');
+  });
+});
+
+describe('rechazoLongitudIndice0 -- elegibilidad del reintento, sin red', () => {
+  function rechazo(overrides: Partial<Rechazo>): Rechazo {
+    return { codigo: 'LONGITUD', accion_indice: 0, detalle: 'x', ...overrides };
+  }
+
+  it('detecta LONGITUD como única razón de rechazo de la acción de índice 0', () => {
+    const r = rechazo({ detalle: 'La plantilla renderizada mide 102 caracteres (máximo 90).' });
+    expect(rechazoLongitudIndice0([r])).toEqual(r);
+  });
+
+  it('null si no hay ningún rechazo de índice 0', () => {
+    expect(rechazoLongitudIndice0([rechazo({ accion_indice: 1 })])).toBeNull();
+  });
+
+  it('null si el rechazo de índice 0 NO es LONGITUD', () => {
+    expect(rechazoLongitudIndice0([rechazo({ codigo: 'CIFRA_LIBRE' })])).toBeNull();
+  });
+
+  it('null si la acción de índice 0 arrastra OTRO código además de LONGITUD -- "acórtala" no la arregla', () => {
+    const rechazos: Rechazo[] = [
+      rechazo({ codigo: 'LONGITUD' }),
+      rechazo({ codigo: 'CIFRA_LIBRE' }),
+    ];
+    expect(rechazoLongitudIndice0(rechazos)).toBeNull();
+  });
+
+  it('ignora un LONGITUD en otro índice -- sólo importa el índice 0', () => {
+    const rechazos: Rechazo[] = [rechazo({ codigo: 'LONGITUD', accion_indice: 2 })];
+    expect(rechazoLongitudIndice0(rechazos)).toBeNull();
+  });
+
+  it('lista vacía -> null', () => {
+    expect(rechazoLongitudIndice0([])).toBeNull();
+  });
+});
+
+describe('el prompt (fix #1 del hallazgo #41): el límite se declara sobre el texto RENDERIZADO', () => {
+  it('construirPromptSistema (el de siempre) ahora dice explícitamente que 90 se mide sobre las ranuras sustituidas', () => {
+    const prompt = construirPromptSistema();
+    expect(prompt).toMatch(/90 caracteres/);
+    expect(prompt.toUpperCase()).toContain('SUSTITUIDA');
+    expect(prompt).toContain('NUNCA sobre el texto crudo con llaves');
+  });
+
+  it('el prompt del reintento repite la misma aclaración y trae los marcadores de §9', () => {
+    const prompt = construirPromptSistemaReintentoLongitud();
+    expect(prompt).toContain(MARCADOR_INICIO_CONTEXTO);
+    expect(prompt).toContain(MARCADOR_FIN_CONTEXTO);
+    expect(prompt).toMatch(/90 caracteres/);
+    expect(prompt.toUpperCase()).toContain('SUSTITUIDA');
+  });
+});
+
+interface EsquemaReintentoLongitudForma {
+  additionalProperties: boolean;
+  required: string[];
+  properties: {
+    accion: {
+      additionalProperties: boolean;
+      required: string[];
+      properties: Record<string, { enum?: string[]; type?: string }>;
+    };
+  };
+}
+
+describe('construirEsquemaReintentoLongitud -- una sola acción, json_schema estricto', () => {
+  const esquema = construirEsquemaReintentoLongitud() as unknown as EsquemaReintentoLongitudForma;
+
+  it('envuelve UNA acción bajo la clave "accion", additionalProperties:false en todos los niveles', () => {
+    expect(esquema.additionalProperties).toBe(false);
+    expect(esquema.required).toEqual(['accion']);
+    const accion = esquema.properties.accion;
+    expect(accion.additionalProperties).toBe(false);
+    expect(accion.required.sort()).toEqual(Object.keys(accion.properties).sort());
+  });
+
+  it('el mismo catálogo cerrado de negocio/destino_id que el esquema completo', () => {
+    const accion = esquema.properties.accion;
+    expect(accion.properties.negocio.enum).toEqual(['hato_lechero', 'aguacate', 'ganado']);
+    expect(accion.properties.destino_id.enum).toHaveLength(19);
+  });
+
+  it('ranuras sigue siendo un ARREGLO', () => {
+    expect(esquema.properties.accion.properties.ranuras.type).toBe('array');
+  });
+});
+
+describe('construirMensajeUsuarioReintentoLongitud -- trae el rechazo, la acción original y el paquete entre marcadores', () => {
+  it('incluye el detalle del rechazo literal (viene de Rechazo.detalle, no se remide)', () => {
+    const paquete = paqueteConHechos([hecho({ id: 'agu.x', negocio: 'aguacate', destinos: ['agu.monitoreo'] })]);
+    const original = accionGenerada({
+      negocio: 'aguacate',
+      hecho_ids: ['agu.x'],
+      destino_id: 'agu.monitoreo',
+      plantilla: 'Confirmar el insumo antes de la aplicación de mañana en el lote grande.',
+    });
+    const mensaje = construirMensajeUsuarioReintentoLongitud(paquete, original, 'La plantilla renderizada mide 103 caracteres (máximo 90).');
+    expect(mensaje).toContain('La plantilla renderizada mide 103 caracteres (máximo 90).');
+    expect(mensaje).toContain('Confirmar el insumo antes de la aplicación de mañana en el lote grande.');
+  });
+
+  it('el paquete va entre los marcadores de §9', () => {
+    const paquete = paqueteConHechos([hecho({ id: 'agu.x', negocio: 'aguacate', destinos: ['agu.monitoreo'] })]);
+    const original = accionGenerada({ negocio: 'aguacate', hecho_ids: ['agu.x'], destino_id: 'agu.monitoreo', plantilla: 'x' });
+    const mensaje = construirMensajeUsuarioReintentoLongitud(paquete, original, 'detalle');
+    const ini = mensaje.indexOf(MARCADOR_INICIO_CONTEXTO);
+    const fin = mensaje.indexOf(MARCADOR_FIN_CONTEXTO);
+    expect(ini).toBeGreaterThan(-1);
+    expect(fin).toBeGreaterThan(ini);
+    expect(mensaje.slice(ini, fin)).toContain('agu.x');
+  });
+});
+
+describe('interpretarRespuestaCrudaReintentoLongitud -- forma mínima, nunca semántica', () => {
+  it('convierte { accion: {...} } a AccionGenerada con ranuras como Record', () => {
+    const accion = interpretarRespuestaCrudaReintentoLongitud({
+      accion: {
+        negocio: 'aguacate',
+        hecho_ids: ['agu.x'],
+        destino_id: 'agu.monitoreo',
+        plantilla: 'Confirmar {producto}.',
+        ranuras: [{ clave: 'producto', hecho_id: 'agu.x', campo: 'producto' }],
+      },
+    });
+    expect(accion.ranuras).toEqual({ producto: { hecho_id: 'agu.x', campo: 'producto' } });
+  });
+
+  it('lanza si falta la clave "accion"', () => {
+    expect(() => interpretarRespuestaCrudaReintentoLongitud({ foo: 'bar' })).toThrow();
+  });
+
+  it('lanza si "accion" no es un objeto', () => {
+    expect(() => interpretarRespuestaCrudaReintentoLongitud({ accion: 'no-objeto' })).toThrow();
+  });
+
+  it('lanza si accion.hecho_ids no es un arreglo', () => {
+    expect(() =>
+      interpretarRespuestaCrudaReintentoLongitud({
+        accion: { negocio: 'aguacate', hecho_ids: 'x', destino_id: 'agu.monitoreo', plantilla: 'x', ranuras: [] },
+      }),
+    ).toThrow();
+  });
+
+  it('lanza si accion.ranuras no es un arreglo', () => {
+    expect(() =>
+      interpretarRespuestaCrudaReintentoLongitud({
+        accion: { negocio: 'aguacate', hecho_ids: ['x'], destino_id: 'agu.monitoreo', plantilla: 'x', ranuras: {} },
+      }),
+    ).toThrow();
+  });
+});
+
+describe('invocarModeloReintentoLongitud -- fixtures de respuesta, sin red', () => {
+  const PAQUETE_REINTENTO: PaqueteAcciones = paqueteConHechos([
+    hecho({
+      id: 'agu.insumo_faltante',
+      negocio: 'aguacate',
+      destinos: ['agu.aplicacion_detalle'],
+      valores: { faltante: valor('4.694', 4694, 'kg'), producto: valor('Silicalmag'), dias: valor('1', 1, 'días') },
+    }),
+  ]) as unknown as PaqueteAcciones;
+
+  const ACCION_ORIGINAL: AccionGenerada = accionGenerada({
+    negocio: 'aguacate',
+    hecho_ids: ['agu.insumo_faltante'],
+    destino_id: 'agu.aplicacion_detalle',
+    plantilla: 'Confirmar {producto} antes de que empiece la aplicación programada de mañana en el lote.',
+    ranuras: { producto: { hecho_id: 'agu.insumo_faltante', campo: 'producto' } },
+  }) as unknown as AccionGenerada;
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+  });
+
+  it('la petición usa TEMPERATURA_REINTENTO, MAX_TOKENS_REINTENTO_LONGITUD, sin tools, strict:true', async () => {
+    mockFetch.mockResolvedValueOnce(
+      respuestaOpenRouter({
+        accion: {
+          negocio: 'aguacate',
+          hecho_ids: ['agu.insumo_faltante'],
+          destino_id: 'agu.aplicacion_detalle',
+          plantilla: 'Confirmar {producto}.',
+          ranuras: [{ clave: 'producto', hecho_id: 'agu.insumo_faltante', campo: 'producto' }],
+        },
+      }),
+    );
+
+    await invocarModeloReintentoLongitud(PAQUETE_REINTENTO, ACCION_ORIGINAL, 'La plantilla renderizada mide 98 caracteres (máximo 90).', { apiKey: 'test-key' });
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [, init] = mockFetch.mock.calls[0];
+    const body = JSON.parse(init.body as string);
+    expect(body.temperature).toBe(TEMPERATURA_REINTENTO);
+    expect(body.max_tokens).toBe(MAX_TOKENS_REINTENTO_LONGITUD);
+    expect(body.tools).toBeUndefined();
+    expect(body.response_format.json_schema.strict).toBe(true);
+    expect(body.messages[1].content).toContain('98 caracteres');
+  });
+
+  it('salida buena: la acción corregida, sustituida y revalidada, ahora pasa LONGITUD', async () => {
+    mockFetch.mockResolvedValueOnce(
+      respuestaOpenRouter({
+        accion: {
+          negocio: 'aguacate',
+          hecho_ids: ['agu.insumo_faltante'],
+          destino_id: 'agu.aplicacion_detalle',
+          plantilla: 'Confirmar {producto}.',
+          ranuras: [{ clave: 'producto', hecho_id: 'agu.insumo_faltante', campo: 'producto' }],
+        },
+      }),
+    );
+
+    const resultado = await invocarModeloReintentoLongitud(PAQUETE_REINTENTO, ACCION_ORIGINAL, 'detalle', { apiKey: 'k' });
+    expect(resultado.ok).toBe(true);
+    expect(resultado.accion).not.toBeNull();
+
+    const { aceptadas, rechazos } = validarSalidaMotor(salidaMotor([resultado.accion!]), PAQUETE_REINTENTO);
+    expect(rechazos).toEqual([]);
+    expect(aceptadas).toHaveLength(1);
+  });
+
+  it('JSON sintácticamente inválido -> ok=false', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ choices: [{ message: { content: '{ "accion": esto no es json' } }], usage: {} }),
+      text: async () => '',
+    });
+    const resultado = await invocarModeloReintentoLongitud(PAQUETE_REINTENTO, ACCION_ORIGINAL, 'detalle', { apiKey: 'k' });
+    expect(resultado.ok).toBe(false);
+    expect(resultado.accion).toBeNull();
+    expect(resultado.error).toMatch(/no parseó/);
+  });
+
+  it('forma inválida (falta "accion") -> ok=false, salidaCruda preservada', async () => {
+    mockFetch.mockResolvedValueOnce(respuestaOpenRouter({ resultado: 'sin la clave accion' }));
+    const resultado = await invocarModeloReintentoLongitud(PAQUETE_REINTENTO, ACCION_ORIGINAL, 'detalle', { apiKey: 'k' });
+    expect(resultado.ok).toBe(false);
+    expect(resultado.error).toMatch(/forma de la salida no es válida/);
+    expect(resultado.salidaCruda).toEqual({ resultado: 'sin la clave accion' });
+  });
+
+  it('HTTP no-ok (429): ok=false con el status en el mensaje', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 429, json: async () => ({}), text: async () => 'rate limited' });
+    const resultado = await invocarModeloReintentoLongitud(PAQUETE_REINTENTO, ACCION_ORIGINAL, 'detalle', { apiKey: 'k' });
+    expect(resultado.ok).toBe(false);
+    expect(resultado.error).toMatch(/429/);
+  });
+
+  it('respuesta vacía: ok=false, no revienta', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ choices: [{ message: { content: '' } }], usage: {} }),
+      text: async () => '',
+    });
+    const resultado = await invocarModeloReintentoLongitud(PAQUETE_REINTENTO, ACCION_ORIGINAL, 'detalle', { apiKey: 'k' });
+    expect(resultado.ok).toBe(false);
+    expect(resultado.error).toMatch(/vacía/);
+  });
+
+  it('la llamada revienta por red: ok=false, mensaje del error original', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('network down'));
+    const resultado = await invocarModeloReintentoLongitud(PAQUETE_REINTENTO, ACCION_ORIGINAL, 'detalle', { apiKey: 'k' });
+    expect(resultado.ok).toBe(false);
+    expect(resultado.error).toContain('network down');
+  });
+});
+
+describe('El ciclo completo simulado (lo que acciones-tick.ts hace con estas piezas)', () => {
+  it('detecta LONGITUD en índice 0, pide el reintento, reemplaza SÓLO esa acción y revalida el arreglo completo', async () => {
+    const paquete: PaqueteAcciones = paqueteConHechos([
+      hecho({
+        id: 'agu.insumo_faltante',
+        negocio: 'aguacate',
+        destinos: ['agu.aplicacion_detalle'],
+        valores: { relleno: valor('x'.repeat(80)), producto: valor('Silicalmag') },
+      }),
+      hecho({
+        id: 'hato.vacias_largas',
+        negocio: 'hato_lechero',
+        destinos: ['hato.lista_vacias'],
+        valores: { n: valor('11', 11) },
+      }),
+    ]) as unknown as PaqueteAcciones;
+
+    // Salida original del modelo: índice 0 demasiado larga (sólo por LONGITUD),
+    // índice 1 perfectamente válida.
+    const salidaOriginal = salidaMotor([
+      accionGenerada({
+        negocio: 'aguacate',
+        hecho_ids: ['agu.insumo_faltante'],
+        destino_id: 'agu.aplicacion_detalle',
+        plantilla: 'Confirmar esto: {relleno}',
+        ranuras: { relleno: { hecho_id: 'agu.insumo_faltante', campo: 'relleno' } },
+      }),
+      accionGenerada({
+        negocio: 'hato_lechero',
+        hecho_ids: ['hato.vacias_largas'],
+        destino_id: 'hato.lista_vacias',
+        plantilla: 'Revisar las {n} vacas vacías.',
+        ranuras: { n: { hecho_id: 'hato.vacias_largas', campo: 'n' } },
+      }),
+    ]);
+
+    const primeraValidacion = validarSalidaMotor(salidaOriginal, paquete);
+    expect(primeraValidacion.aceptadas).toHaveLength(1); // sólo la de hato_lechero
+    expect(primeraValidacion.rechazos.map((r) => r.codigo)).toContain('LONGITUD');
+
+    const rechazoLongitud = rechazoLongitudIndice0(primeraValidacion.rechazos);
+    expect(rechazoLongitud).not.toBeNull();
+
+    mockFetch.mockReset();
+    mockFetch.mockResolvedValueOnce(
+      respuestaOpenRouter({
+        accion: {
+          negocio: 'aguacate',
+          hecho_ids: ['agu.insumo_faltante'],
+          destino_id: 'agu.aplicacion_detalle',
+          plantilla: 'Confirmar {producto}.',
+          ranuras: [{ clave: 'producto', hecho_id: 'agu.insumo_faltante', campo: 'producto' }],
+        },
+      }),
+    );
+
+    const reintento = await invocarModeloReintentoLongitud(
+      paquete,
+      salidaOriginal.acciones[0],
+      rechazoLongitud!.detalle,
+      { apiKey: 'k' },
+    );
+    expect(reintento.ok).toBe(true);
+
+    const accionesConReemplazo = [...salidaOriginal.acciones];
+    accionesConReemplazo[0] = reintento.accion!;
+    const revalidacion = validarSalidaMotor({ acciones: accionesConReemplazo }, paquete);
+
+    // Ahora las DOS sobreviven -- la acción rango 0, antes descartada, se
+    // rescató sin perder la que ya estaba bien.
+    expect(revalidacion.aceptadas).toHaveLength(2);
+    expect(revalidacion.rechazos).toEqual([]);
+  });
+
+  it('si el reintento también falla, la acción se sigue descartando -- nunca un segundo reintento', async () => {
+    const paquete: PaqueteAcciones = paqueteConHechos([
+      hecho({
+        id: 'agu.insumo_faltante',
+        negocio: 'aguacate',
+        destinos: ['agu.aplicacion_detalle'],
+        valores: { relleno: valor('x'.repeat(80)) },
+      }),
+    ]) as unknown as PaqueteAcciones;
+
+    const salidaOriginal = salidaMotor([
+      accionGenerada({
+        negocio: 'aguacate',
+        hecho_ids: ['agu.insumo_faltante'],
+        destino_id: 'agu.aplicacion_detalle',
+        plantilla: 'Confirmar esto: {relleno}',
+        ranuras: { relleno: { hecho_id: 'agu.insumo_faltante', campo: 'relleno' } },
+      }),
+    ]);
+
+    const primeraValidacion = validarSalidaMotor(salidaOriginal, paquete);
+    const rechazoLongitud = rechazoLongitudIndice0(primeraValidacion.rechazos);
+    expect(rechazoLongitud).not.toBeNull();
+
+    mockFetch.mockReset();
+    mockFetch.mockRejectedValueOnce(new Error('OpenRouter caído'));
+
+    const reintento = await invocarModeloReintentoLongitud(paquete, salidaOriginal.acciones[0], rechazoLongitud!.detalle, { apiKey: 'k' });
+    expect(reintento.ok).toBe(false);
+
+    // acciones-tick.ts, ante `reintento.ok === false`, no toca aceptadas/rechazos
+    // -- se simula aquí no reemplazando nada: el rechazo original sigue en pie.
+    expect(primeraValidacion.aceptadas).toEqual([]);
+    expect(primeraValidacion.rechazos.map((r) => r.codigo)).toContain('LONGITUD');
   });
 });
