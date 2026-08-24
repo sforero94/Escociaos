@@ -158,10 +158,26 @@ END $$;
 
 -- ---------------------------------------------------------------------------
 -- 2. Capa 1 -- la política de INSERT se alinea con las otras dos de la tabla.
+--
+--    Se acota además `TO authenticated`: hoy es `TO PUBLIC`, que incluye a
+--    `anon`. Sin GRANT ya no alcanzaría, pero dejarla apuntando a PUBLIC es un
+--    precedente más flojo que el de la migración 104, que sí las estrechó.
 -- ---------------------------------------------------------------------------
 ALTER POLICY "Todos pueden crear logs"
   ON public.logs_auditoria
+  TO authenticated
   WITH CHECK ((SELECT public.get_user_role()) = 'Gerencia'::public.rol_usuario);
+
+-- El nombre quedó mintiendo: ya NO puede crear logs cualquiera. `ALTER POLICY`
+-- SÍ puede renombrar -- precedente aplicado en este mismo repo, migración 104
+-- líneas 298/310/324/362 -- así que se renombra en vez de dejar el catálogo
+-- diciendo una cosa y el comentario otra. El renombrado va DESPUÉS del cambio de
+-- predicado, para que las guardas previas encuentren el nombre viejo (lección de
+-- la 095: lo que busque una fila después de un renombrado tiene que aceptar las
+-- dos grafías; acá se resuelve con el orden).
+ALTER POLICY "Todos pueden crear logs"
+  ON public.logs_auditoria
+  RENAME TO "Solo Gerencia crea logs";
 
 -- ---------------------------------------------------------------------------
 -- 3. Capa 2 -- los GRANT. Es la que cierra de verdad, porque no depende de que
@@ -172,15 +188,18 @@ ALTER POLICY "Todos pueden crear logs"
 --    conecta como `authenticated`, y una política RLS no puede devolver filas si
 --    el rol no tiene el GRANT.
 -- ---------------------------------------------------------------------------
+-- `MAINTAIN` va en la lista explícita: es un privilegio real de PG 17 (VACUUM /
+-- ANALYZE / REINDEX) y `anon`/`authenticated` lo tienen hoy por el mismo
+-- `ALTER DEFAULT PRIVILEGES`. No es escritura de datos ni burla RLS, pero sin él
+-- en la lista el comentario de arriba sería literalmente falso.
 REVOKE ALL ON public.logs_auditoria FROM anon;
-REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON public.logs_auditoria FROM authenticated;
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ON public.logs_auditoria FROM authenticated;
 
 -- ---------------------------------------------------------------------------
--- 4. Que el catálogo diga la verdad: el nombre de la política quedó mintiendo
---    y `ALTER POLICY` no puede renombrar sin DROP.
+-- 4. Comentarios, para que el catálogo se explique solo.
 -- ---------------------------------------------------------------------------
-COMMENT ON POLICY "Todos pueden crear logs" ON public.logs_auditoria IS
-  'Migración 111: el nombre es histórico y quedó mintiendo -- ya NO puede crear logs cualquiera. Desde 2026-08-24 exige rol Gerencia, y además `anon` y `authenticated` perdieron el GRANT de INSERT, así que esta política no es lo único que lo impide. El modelo previsto (patrón de la migración 084 para hato_correcciones) es que la tabla la llene un disparador SECURITY DEFINER, que corre como su dueño y no necesita política alguna.';
+COMMENT ON POLICY "Solo Gerencia crea logs" ON public.logs_auditoria IS
+  'Migración 111: antes se llamaba "Todos pueden crear logs" y su WITH CHECK era `true` con TO PUBLIC -- o sea que aceptaba INSERT sin autenticar. Desde 2026-08-24 exige rol Gerencia y apunta sólo a authenticated, y además `anon` y `authenticated` perdieron el GRANT de INSERT: esta política no es lo único que lo impide. El modelo previsto (patrón de la migración 084 para hato_correcciones) es que la tabla la llene un disparador SECURITY DEFINER, que corre como su dueño y no necesita política alguna.';
 
 COMMENT ON TABLE public.logs_auditoria IS
   'Registro de auditoría. DECLARADA PERO NUNCA CONECTADA: 0 filas, 0 triggers, ninguna función la escribe y ningún código de la app la lee. Cerrada a escritura desde el navegador por la migración 111. Para conectarla, el patrón del proyecto es un disparador SECURITY DEFINER como fn_hato_registrar_correccion (migración 084), NO escrituras desde la app.';
@@ -198,7 +217,7 @@ BEGIN
   FROM pg_policy p
   JOIN pg_class c ON c.oid = p.polrelid
   JOIN pg_namespace n ON n.oid = c.relnamespace
-  WHERE n.nspname = 'public' AND c.relname = 'logs_auditoria' AND p.polname = 'Todos pueden crear logs';
+  WHERE n.nspname = 'public' AND c.relname = 'logs_auditoria' AND p.polname = 'Solo Gerencia crea logs';
 
   IF v_check IS NULL
      OR btrim(v_check) = 'true'
@@ -209,7 +228,7 @@ BEGIN
 
   -- 5.2 `anon` no conserva NINGÚN privilegio sobre la tabla.
   SELECT count(*) INTO v_n
-  FROM (VALUES ('SELECT'),('INSERT'),('UPDATE'),('DELETE'),('TRUNCATE'),('REFERENCES'),('TRIGGER')) v(priv)
+  FROM (VALUES ('SELECT'),('INSERT'),('UPDATE'),('DELETE'),('TRUNCATE'),('REFERENCES'),('TRIGGER'),('MAINTAIN')) v(priv)
   WHERE has_table_privilege('anon', 'public.logs_auditoria', v.priv);
 
   IF v_n <> 0 THEN
@@ -218,7 +237,7 @@ BEGIN
 
   -- 5.3 `authenticated` perdió la escritura...
   SELECT count(*) INTO v_n
-  FROM (VALUES ('INSERT'),('UPDATE'),('DELETE'),('TRUNCATE')) v(priv)
+  FROM (VALUES ('INSERT'),('UPDATE'),('DELETE'),('TRUNCATE'),('REFERENCES'),('TRIGGER'),('MAINTAIN')) v(priv)
   WHERE has_table_privilege('authenticated', 'public.logs_auditoria', v.priv);
 
   IF v_n <> 0 THEN
@@ -228,6 +247,24 @@ BEGIN
   -- 5.4 ...pero CONSERVA SELECT. Sin esto, la lectura de Gerencia queda muerta.
   IF NOT has_table_privilege('authenticated', 'public.logs_auditoria', 'SELECT') THEN
     RAISE EXCEPTION 'POST 5.4: `authenticated` perdió SELECT; la política de lectura de Gerencia dejaría de devolver filas.';
+  END IF;
+
+  -- 5.4b El renombrado ocurrió: el nombre viejo ya no está en el catálogo, y la
+  --      política apunta ahora sólo a `authenticated`, no a PUBLIC.
+  SELECT count(*) INTO v_n
+  FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'public' AND c.relname = 'logs_auditoria' AND p.polname = 'Todos pueden crear logs';
+  IF v_n <> 0 THEN
+    RAISE EXCEPTION 'POST 5.4b: la política vieja `Todos pueden crear logs` sigue en el catálogo; el renombrado no ocurrió.';
+  END IF;
+
+  SELECT count(*) INTO v_n
+  FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'public' AND c.relname = 'logs_auditoria' AND p.polname = 'Solo Gerencia crea logs'
+    AND (SELECT count(*) FROM pg_roles r WHERE r.oid = ANY(p.polroles) AND r.rolname = 'authenticated') = 1
+    AND array_length(p.polroles, 1) = 1;
+  IF v_n <> 1 THEN
+    RAISE EXCEPTION 'POST 5.4c: la política de INSERT no quedó acotada a TO authenticated.';
   END IF;
 
   -- 5.5 Siguen siendo 3 políticas y la tabla sigue vacía.
@@ -258,9 +295,10 @@ END $$;
 -- ---------------------------------------------------------------------------
 -- ROLLBACK (ejecutable, devuelve la tabla a como estaba):
 --
---   ALTER POLICY "Todos pueden crear logs" ON public.logs_auditoria WITH CHECK (true);
---   GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON public.logs_auditoria TO anon;
---   GRANT INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON public.logs_auditoria TO authenticated;
+--   ALTER POLICY "Solo Gerencia crea logs" ON public.logs_auditoria RENAME TO "Todos pueden crear logs";
+--   ALTER POLICY "Todos pueden crear logs" ON public.logs_auditoria TO PUBLIC WITH CHECK (true);
+--   GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ON public.logs_auditoria TO anon;
+--   GRANT INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN ON public.logs_auditoria TO authenticated;
 --   COMMENT ON POLICY "Todos pueden crear logs" ON public.logs_auditoria IS NULL;
 --   COMMENT ON TABLE public.logs_auditoria IS NULL;
 --
