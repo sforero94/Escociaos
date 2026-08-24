@@ -352,6 +352,54 @@ que el diagnostico es de solo lectura.**
 | github (`list_pull_requests`, `pull_request_read`) | OK |
 | **`COMPOSIO_MULTI_EXECUTE_TOOL`** | **NO RESOLVIO** — `ToolSearch` devuelve «No matching deferred tools found». Vercel quedo sin cubrir por conector por SEGUNDA causa distinta (la primera fue identidad, resuelta el 08-21). La sonda de contenido lo cubrio igual. **Reverificar el conector antes de la proxima corrida** |
 
+## Corrida 2026-08-24-drenaje (W0+W1, sesion interactiva)
+- **EL FLAG `Requiere aprobacion` ERA EL CUELLO DE BOTELLA REAL, no el volumen.** 18 de 25
+  hallazgos lo llevaban, y §5 dice que anula `clase` por completo: una sesion desatendida
+  podia trabajar en 7 de 25. El re-triage desbloqueo 4 (`#20 #16 #19 #37`, los cuatro
+  `ddl_aditivo`) y separo otros 4 (`#11 #45 #12 #42`).
+- **Criterio del re-triage, para repetirlo**: se quita el flag cuando (a) las filas
+  afectadas esperadas son CERO, (b) la politica ya esta elegida en otro sitio del sistema,
+  o (c) es un patron ya aplicado varias veces sin incidente. Se CONSERVA cuando el hallazgo
+  empaqueta una decision — y entonces se escribe el corte PARTE A / PARTE B en la propia
+  fila, en vez de crear filas nuevas que inflan el conteo.
+- **Un hallazgo puede estar sobredimensionado y eso lo bloquea entero.** #19 mezclaba
+  <<endurecer logs_auditoria>> (trivial, 0 filas, nada escribe) con <<no existe historial de
+  cambios general>> (decision de producto). Recortarlo lo desbloqueo. Buscar ese patron.
+- **Escribir SQL no es ejecutarlo.** Una migracion se puede redactar y dejar en un PR sin
+  permiso; lo que necesita go es aplicarla. #42 estaba bloqueado entero por confundir las dos.
+
+## ERROR PROPIO 2026-08-24 — el orquestador se salto su propia regla del arbol compartido
+Cree la rama del runbook EN el checkout compartido y despache 3 agentes mientras estaba
+activa. Los tres heredaron mi commit: el PR #148 nacio con 253 lineas del runbook dentro de
+un PR de 8 lineas de docs. El agente lo detecto y lo limpio solo antes de que yo llegara.
+- **La regla del arbol compartido (escrita el 2026-08-03) aplica al ORQUESTADOR igual que a
+  los agentes.** Nunca crear ni cambiar de rama en el checkout compartido mientras haya
+  agentes en vuelo; usar un worktree en ruta absoluta tambien para el trabajo propio.
+- **Chequeo barato de contaminacion antes de dar por bueno cualquier PR de agente**:
+  `git diff --name-only origin/main origin/<rama>` — si aparece un fichero que el hallazgo
+  no menciona, hay contaminacion. Las estadisticas del PR (adiciones/ficheros) la delatan
+  antes: <<8 lineas>> en el cuerpo contra 261 adiciones en las stats.
+
+## ERROR PROPIO 2026-08-24 — el barrido de secretos no miraba la propia operacion
+El P0 de la corrida del lunes era <<hay chat ids en el repo publico>>, y el barrido miro
+`src/` y `docs/` y **nunca miro `escociaos-po/`**. Habia un chat id de Gerencia en
+`escociaos-po/memory/usage-analytics.md:69` desde el 2026-08-10 (commit `8aae063`);
+sobrevivio dos corridas. Ademas aparecio un TERCER id en `docs/plan_hato_telegram_estados_agosto_2026.md:52`
+que el hallazgo original no listaba.
+- **Regla: los ficheros de la propia operacion son parte del repo publico y entran en todo
+  barrido de secretos.** La guarda del PR #150 ya incluye `escociaos-po` en sus
+  DIRECTORIOS, asi que queda cerrado por mecanismo.
+- **Al buscar ids con un regex de 9-11 digitos, los numeros de version de migracion
+  (`20260803170340`) son falsos positivos.** Filtrarlos antes de contar, o se reporta un
+  filtrado donde no lo hay.
+
+## Metodo confirmado 2026-08-24: cerrar contra el despliegue, no contra el merge
+Santiago desplego durante la corrida y **#36 se cerro con cuatro pruebas independientes**:
+cron mandando el encabezado, `list_edge_functions` en v215, sonda anonima 401 con controles
+404/401, y — la que de verdad importaba — el clima sin perder un tick (6 ticks 200 con
+`synced:1`, ultima lectura 1 minuto). **El bucle de 401 silencioso que era el riesgo del
+orden no ocurrio porque los dos valores del secreto coincidian.**
+
 ## Racha del viernes (regla de auto-poda)
 
 | Corrida | Elegibles drenados |
