@@ -49,6 +49,34 @@
 -- cinco minutos" y `updated_by` diría el nombre de quien la tocó en 2024. Un par
 -- de columnas que se contradicen miente con más autoridad que un NULL.
 --
+-- HONESTIDAD SOBRE LA SOLUCIÓN ELEGIDA: esa objeción **no desaparece del todo**,
+-- se reduce de escala. Con `COALESCE(auth.uid(), NEW.updated_by)` el par ya no
+-- puede contradecirse cuando escribe una persona desde el navegador -- que es el
+-- caso normal -- pero **sí puede** cuando escribe el `service_role` sin pasar id,
+-- hoy únicamente `toggleProductoActivo`. Pasa de ser la regla a ser un camino, y
+-- ese camino se cierra con un cambio de una línea en la app, no acá. El
+-- `COMMENT ON COLUMN` lo advierte para que nadie infiera de más.
+--
+-- Se consideró y se descartó una tercera forma que da las dos propiedades:
+-- `CASE WHEN auth.uid() IS NOT NULL THEN auth.uid() WHEN NEW.updated_by IS
+-- DISTINCT FROM OLD.updated_by THEN NEW.updated_by ELSE NULL END`. Distingue "la
+-- sentencia pasó un id" de "la sentencia calló" usando `OLD`. Su borde: si la
+-- edge function pasa el MISMO uuid que ya estaba, `IS DISTINCT FROM` es falso y
+-- anularía la atribución correcta. Se prefirió la forma simple porque **hoy nada
+-- lee esta columna** (cero lecturas en `src/`), así que ninguna pantalla puede
+-- mostrar un nombre viejo a nadie.
+--
+-- BENEFICIO EXTRA DEL ORDEN ELEGIDO, que conviene no perder: `updated_by` queda
+-- **infalsificable desde el navegador**. Con el orden inverso, un Administrador
+-- autenticado podía mandar `PATCH {"updated_by": "<otro uuid>"}` y el disparador
+-- lo honraba. Con éste, `auth.uid()` lo sobrescribe siempre.
+--
+-- SUPERFICIE NUEVA QUE ABRE, dicha para quien escriba el arreglo de la app: como
+-- el `service_role` saltea RLS, ahora **puede** meter un uuid arbitrario en una
+-- columna con FK `NO ACTION`. Hoy no hay camino vivo (cero escrituras a
+-- `updated_by` en `src/`), y `acceso.userId` sale de `supabase.auth.getUser(token)`,
+-- así que el arreglo propuesto es seguro -- pero es una obligación nueva.
+--
 -- Por eso la asignación es **incondicional**: `updated_by` describe la MISMA
 -- escritura que `updated_at`, así que se mueven juntas o no sirven.
 --
@@ -102,7 +130,7 @@
 -- en producción es una lectura SIN VALIDAR de un claim del JWT
 -- (`current_setting('request.jwt.claim.sub')`), que perfectamente puede traer un
 -- uuid huérfano. Lo que de verdad cierra el riesgo es la RLS: las dos únicas
--- políticas de UPDATE sobre `productos` exigen `get_user_role()` = Administrador o
+-- políticas que permiten UPDATE sobre `productos` exigen `get_user_role()` = Administrador o
 -- Gerencia, `get_user_role()` es `SELECT rol FROM usuarios WHERE id = auth.uid()`,
 -- y `usuarios.id` referencia `auth.users(id)` **ON DELETE CASCADE**. Si el usuario
 -- de Auth desapareciera, su fila de `usuarios` se va con él, `get_user_role()`
@@ -198,7 +226,7 @@ REVOKE EXECUTE ON FUNCTION public.set_producto_updated_by() FROM anon;
 REVOKE EXECUTE ON FUNCTION public.set_producto_updated_by() FROM authenticated;
 
 COMMENT ON FUNCTION public.set_producto_updated_by() IS
-  'Migración 112: sella `productos.updated_by` con `auth.uid()` en cada UPDATE. La asignación es INCONDICIONAL a propósito -- con COALESCE la columna se congelaría en el primer editor, porque en un BEFORE UPDATE NEW.updated_by arrastra el valor viejo. Escrituras del service_role (bot de Telegram, migraciones, edge functions) dejan NULL: brecha aceptada, igual que en 050/063/074.';
+  'Migracion 112: sella productos.updated_by en cada UPDATE con COALESCE(auth.uid(), NEW.updated_by) -- en ESE orden. Desde el navegador auth.uid() nunca es nulo cuando este disparador corre (las politicas de UPDATE de productos exigen get_user_role(), que necesita fila viva en usuarios), asi que el usuario real SIEMPRE pisa: la columna no se congela, y ademas es INFALSIFICABLE -- un PATCH que mande updated_by a mano queda sobrescrito. Desde service_role (auth.uid() nulo) se respeta el id que traiga la sentencia, y si no trae ninguno se conserva el valor anterior. Ese arrastre es una brecha conocida y acotada: se cierra pasando el id explicito, como ya hace el pipeline de pesaje con created_by.'
 
 -- ---------------------------------------------------------------------------
 -- 3. El disparador.
@@ -209,7 +237,7 @@ CREATE TRIGGER set_updated_by_productos
   EXECUTE FUNCTION public.set_producto_updated_by();
 
 COMMENT ON COLUMN public.productos.updated_by IS
-  'Quién hizo la ÚLTIMA actualización de la fila, sellado por el disparador `set_updated_by_productos` (migración 112). NULL significa "no atribuible" -- fila nunca editada desde la migración, o editada por el service_role (bot, migración, edge function), donde auth.uid() es NULL. Nunca se rellena con un valor heredado: se lee junto a `updated_at`, que describe la misma escritura.';
+  'Quien hizo la ultima actualizacion, sellado por el disparador set_updated_by_productos (migracion 112). CUIDADO AL INTERPRETARLO: si la escritura vino del navegador, describe exactamente la misma escritura que updated_at. Si vino de service_role (edge function) y esa llamada no paso un id explicito, la columna CONSERVA el valor anterior -- o sea que updated_by puede nombrar a alguien que no hizo la ultima edicion. Hoy el unico camino asi es toggleProductoActivo. NO se puede inferir de un updated_by no nulo que esa persona hizo el ultimo cambio; para atribucion por evento esta movimientos_inventario.'
 
 -- ---------------------------------------------------------------------------
 -- 4. Post-condiciones.
