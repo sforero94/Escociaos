@@ -37,6 +37,11 @@ import {
   type SexoCria,
   type TipoEstado,
 } from '@/utils/calculosHato';
+import {
+  calcularEtapaHato,
+  construirUmbralesCategoriaHatoDesdeFilas,
+  type UmbralesCategoriaHato,
+} from '@/utils/hatoCategorias';
 import type { EstadoActualHatoViewRow, TipoServicioHato } from '@/types/hato';
 import { obtenerFechaHoy } from '@/utils/fechas';
 
@@ -186,12 +191,42 @@ function ordenarPorNombreDeVaca(a: AnimalParaPlanillaChequeo, b: AnimalParaPlani
   return a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' });
 }
 
-/** Solo vacas adultas activas (etapa `vaca`, estado `activa`) -- ordeño y
- * horro por igual, terneras/novillas quedan fuera: la planilla de chequeo
- * histórica es específicamente el ciclo reproductivo de vacas adultas
- * (esquema TERNERAS es una tabla aparte, ver CLAUDE.md "Hato Lechero"). */
-function esCandidataAPlanilla(fila: EstadoActualHatoViewRow): boolean {
-  return fila.etapa === 'vaca' && fila.estado === 'activa';
+/** Solo vacas adultas activas (etapa EFECTIVA `vaca`, estado `activa`) --
+ * ordeño y horro por igual, terneras/novillas quedan fuera: la planilla de
+ * chequeo histórica es específicamente el ciclo reproductivo de vacas
+ * adultas (esquema TERNERAS es una tabla aparte, ver CLAUDE.md "Hato
+ * Lechero").
+ *
+ * Corrección (finding #23, mantenimiento 2026-08-24): antes comparaba contra
+ * `fila.etapa` CRUDA (el campo manual de `hato_animales`), que nadie
+ * mantiene desde que la migración 089/092 volvió la categoría CALCULADA
+ * (`num_partos`/`fecha_nacimiento`, con `etapa_forzada` como override
+ * explícito -- ver `calcularEtapaHato`, `hatoCategorias.ts`). Una novilla
+ * recién parida ya es 'vaca' para el resto del sistema (Tablero, Animales,
+ * Esco) apenas se registra el parto, pero seguía sin aparecer en esta
+ * planilla porque `hato_animales.etapa` no se actualiza sola -- su próximo
+ * chequeo se perdía en silencio (peor aún en la ruta de foto: una fila cuyo
+ * animal no está en el roster queda `no leída`, sin error visible). Mismo
+ * criterio que `hato-chequeo-foto.ts` y `hato-chequeo-preview.ts` (server) --
+ * las tres copias deben coincidir.
+ *
+ * Exportada para que `useAnimalesParaPlanillaChequeoRoster.test.ts` pueda
+ * probarla directo, sin montar el hook completo.
+ */
+export function esCandidataAPlanilla(
+  fila: EstadoActualHatoViewRow,
+  umbrales: UmbralesCategoriaHato,
+  fechaReferencia: string,
+): boolean {
+  const etapaEfectiva = calcularEtapaHato(
+    fila.etapa,
+    fila.etapa_forzada,
+    fila.num_partos,
+    fila.fecha_nacimiento,
+    umbrales,
+    fechaReferencia,
+  );
+  return etapaEfectiva.etapa === 'vaca' && fila.estado === 'activa';
 }
 
 export function useAnimalesParaPlanillaChequeo() {
@@ -229,6 +264,9 @@ export function useAnimalesParaPlanillaChequeo() {
       if (toroError) throw toroError;
 
       const config = construirHatoConfigDesdeFilas((configRows ?? []) as FilaHatoConfig[]);
+      // Mismas filas crudas de `hato_config` que ya se pidieron arriba --
+      // sin una segunda consulta (mismo patrón que `useHatoAnimales.ts`).
+      const umbralesCategoria = construirUmbralesCategoriaHatoDesdeFilas((configRows ?? []) as FilaHatoConfig[]);
       const hoy = obtenerFechaHoy();
       const nombrePorToroId = new Map<string, string>(
         ((toroRows ?? []) as { id: string; nombre: string }[]).map((t) => [t.id, t.nombre]),
@@ -236,7 +274,7 @@ export function useAnimalesParaPlanillaChequeo() {
       const ultimoPartoPorAnimal = indexarUltimoParto(partosRes.filas);
 
       const filas: AnimalParaPlanillaChequeo[] = ((estadoRows ?? []) as EstadoActualHatoViewRow[])
-        .filter(esCandidataAPlanilla)
+        .filter((fila) => esCandidataAPlanilla(fila, umbralesCategoria, hoy))
         .map((fila) => {
           const derivado = derivarEstadoReproductivo(filaVistaAFactRow(fila), config, hoy);
 

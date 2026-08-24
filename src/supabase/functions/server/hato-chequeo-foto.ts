@@ -50,6 +50,13 @@ import {
   type LecturaOcrPagina,
 } from './importHato/ocrChequeo.ts';
 import { construirHatoConfigDesdeFilas, type FilaHatoConfig } from './hato-config-desde-tabla.ts';
+import { derivarEstadoReproductivo } from './calculos-hato.ts';
+import {
+  categorizarAnimal,
+  construirUmbralesCategoriaHatoDesdeFilas,
+  resolverEtapaEfectiva,
+  type HatoEstadoActualRow,
+} from './hato-aggregation.ts';
 
 // --- Límites de entrada -----------------------------------------------------
 // La planilla real son ~2 páginas (35 vacas, carta horizontal, Fase 2). Se
@@ -375,8 +382,10 @@ export async function handleHatoChequeoFoto(c: Context): Promise<Response> {
     supabase.from('hato_toros').select('nombre').order('nombre'),
     // El MISMO universo que exporta la planilla (D-A del plan): vacas adultas
     // activas de `v_hato_estado_actual`. De acá sale el roster contra el que
-    // se cotejan las anclas de cada fila.
-    supabase.from('v_hato_estado_actual').select('animal_id, numero, nombre, etapa, estado'),
+    // se cotejan las anclas de cada fila. `select('*')` -- ver más abajo por
+    // qué se necesita la fila completa (finding #23) y no solo
+    // animal_id/numero/nombre/etapa/estado.
+    supabase.from('v_hato_estado_actual').select('*'),
   ]);
 
   if (configRes.error) return respuestaError(c, 500, `No se pudo leer hato_config: ${configRes.error.message}`);
@@ -392,12 +401,40 @@ export async function handleHatoChequeoFoto(c: Context): Promise<Response> {
     return respuestaError(c, 500, err instanceof Error ? err.message : String(err));
   }
 
-  const animalesRoster: AnimalRosterPlanilla[] = ((rosterRes.data ?? []) as Array<Record<string, unknown>>)
-    .filter((f) => f.etapa === 'vaca' && f.estado === 'activa')
-    .map((f) => ({
-      id: String(f.animal_id),
-      numero: (f.numero as number | null) ?? null,
-      nombre: (f.nombre as string | null) ?? null,
+  let umbralesCategoria;
+  try {
+    umbralesCategoria = construirUmbralesCategoriaHatoDesdeFilas((configRes.data ?? []) as FilaHatoConfig[]);
+  } catch (err) {
+    return respuestaError(c, 500, err instanceof Error ? err.message : String(err));
+  }
+
+  // Finding #23 (P2, mantenimiento 2026-08-24): el roster tiene que usar la
+  // etapa EFECTIVA (calculada, D-13/migración 092), nunca `hato_animales.etapa`
+  // cruda -- una novilla que ya parió es 'vaca' para el resto del sistema
+  // (Tablero, Animales, Esco) apenas se registra el parto, aunque nadie haya
+  // corregido a mano el campo manual. Antes de este fix esa vaca quedaba
+  // fuera del roster, su próxima fila de chequeo (por foto) no cotejaba
+  // contra ningún ancla válida y quedaba `no leída` sin error visible.
+  // `categorizarAnimal` (`hato-aggregation.ts`) solo devuelve
+  // 'hato_ordeno'/'horro' cuando `estado==='activa'` Y la etapa efectiva es
+  // 'vaca' (nunca 'ternera'/'novilla'/'toro') -- exactamente la condición
+  // que antes escribía `f.etapa === 'vaca' && f.estado === 'activa'`, ahora
+  // con la etapa calculada. Mismo criterio que
+  // `useAnimalesParaPlanillaChequeo.ts` (frontend) y `hato-chequeo-preview.ts`
+  // (endpoint gemelo) -- las tres copias deben coincidir.
+  const hoy = generadoEn.slice(0, 10);
+  const filasRoster = (rosterRes.data ?? []) as unknown as HatoEstadoActualRow[];
+  const animalesRoster: AnimalRosterPlanilla[] = filasRoster
+    .filter((fila) => {
+      const etapaEfectiva = resolverEtapaEfectiva(fila, umbralesCategoria, hoy);
+      const derivado = derivarEstadoReproductivo({ ...fila, etapa: etapaEfectiva.etapa }, config, hoy);
+      const categoria = categorizarAnimal(fila, etapaEfectiva.etapa, derivado.estado);
+      return categoria === 'hato_ordeno' || categoria === 'horro';
+    })
+    .map((fila) => ({
+      id: fila.animal_id,
+      numero: fila.numero,
+      nombre: fila.nombre,
     }));
   const roster = construirRosterPlanilla(animalesRoster);
 
