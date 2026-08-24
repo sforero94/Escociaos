@@ -17,14 +17,15 @@ la migración 118 apuntaba a la fila equivocada, y el argumento central de la 11
 era circular. Las dos se corrigieron y se aplicaron bien.
 
 ```
-P0: 0 · P1: 0 · P2: 2 · P3: 0   (nuevos)
+P0: 0 · P1: 0 · P2: 3 · P3: 0   (nuevos)  |  cerrados: 10
 ```
 
-Los dos hallazgos nuevos salieron de verificar la cirugía de datos, no de una
-barrida: **la pantalla de Verificación de inventario nunca ha contado nada**
-($117M teóricos, 0 de 223 productos, 25 días abierta) y **borrar una compra deja
-pegado su precio unitario al producto para siempre**, que es una cifra que entra
-al costo por kilo.
+**Backlog 15 → 8 abiertos.** Los tres hallazgos nuevos salieron de *verificar* —
+la cirugía de datos y los cierres— no de una barrida: **la pantalla de
+Verificación de inventario nunca ha contado nada** ($117M teóricos, 0 de 223
+productos, 25 días abierta), **borrar una compra deja pegado su precio unitario
+al producto para siempre** (cifra que entra al costo por kilo), y **el residuo
+real de #37 son 8 tablas más** de monitoreo y producción con borrado libre.
 
 ---
 
@@ -201,3 +202,100 @@ el efecto, no el comando.**
   API de administración, reintenté con los comentarios condensados y los mensajes
   sin acentos, así que los bytes aplicados ≠ los bytes del archivo. Es una
   desviación de la quinta compuerta y queda registrada como tal.
+
+---
+
+## Cierres — verificados dos veces, por separado
+
+Un agente independiente dictaminó cada hallazgo contra el catálogo vivo y contra
+el *bundle servido*, no contra el estado de fusión. **Después re-corrí yo mismo
+sus afirmaciones de base de datos** — las ocho coincidieron exactamente.
+
+**Cerrados (8):**
+
+| # | Resolución | Lo que lo prueba |
+|---|---|---|
+| 16 | Arreglado | `set_updated_by_productos` vivo, con el orden de `COALESCE` correcto |
+| 19 | Arreglado | `logs_auditoria` INSERT exige Gerencia · `anon` sin permiso · 9 triggers `trg_globalgap_correccion` |
+| 29 | Arreglado | migración 119 |
+| 37 | Arreglado (alcance nombrado) | las 7 tablas de la 110 + `contratistas`/`lotes` de la 114 |
+| 38 | **Obsoleto** | la fumigación **se cerró** el 24-ago 12:30 UTC; la guarda de la 106 no la bloqueó |
+| 39 | Arreglado | bundle servido: el snapshot ya sólo es respaldo |
+| 40 | Arreglado | `detectarRechazoLecturaPesaje` en ambos árboles + v219 + el texto del panel en el bundle |
+| 41 | Arreglado | reintento por longitud en ambos árboles + v219 |
+| 42 | Arreglado | `fn_clima_rollup_diario` viva con la reja de 30 min; conviven los 3 valores de confianza |
+| 43 | Arreglado | migración 118 |
+
+**#38 merece su párrafo, porque el hallazgo estaba equivocado y vos tenías razón
+a medias.** Decía que la fumigación de agosto **no se podía cerrar** por la
+guarda de inventario negativo de la 106. Se cerró — el 24 de agosto a las 12:30
+UTC, con fecha de cierre 19-ago — y con ese cierre se acabó el hueco del libro:
+entraron las 4 salidas por aplicación del 19-ago que faltaban desde el 31-jul. La
+aplicación que sí sigue abierta es **otra**, el Drench de agosto, en ejecución
+normal con movimientos hasta el 22. Eso reconcilia lo que dijiste con el dato.
+
+**Quedan abiertos (5), ninguno tocado por los 22 PRs de esta tanda:**
+
+- **#4** — lo que shipeó es **instrumentación, no el panel de control**, y así lo
+  fijó tu propia decisión: *instrumentar primero, no tocar ningún umbral, regla ni
+  destinatario hasta que el desglose responda la pregunta*. La tabla tiene 0 filas
+  y **eso es correcto**: el tick de hoy corrió once horas antes de que existiera.
+  **La primera fila real es la de mañana 05:45 Bogotá** — ese es el momento de
+  retomarlo. Se registró además la refutación de mi propia hipótesis intermedia:
+  el cuello **no es el despacho**.
+- **#45** — las dos unidades siguen conviviendo (`RegistrarTrabajoDialog.tsx:174`
+  y `telegram/conversations/jornal.ts` escriben salario **mensual**;
+  `calculosCierreAplicacion.ts:461` divide por 22).
+- **#46** — sin arreglar, **y la 114 lo ensanchó**: al acotar el DELETE de
+  `contratistas` y `lotes` por rol, el camino de «no borró nada pero dice que sí»
+  quedó alcanzable por roles que antes no lo alcanzaban.
+- **#47** — `authenticated_select_contratistas` sigue con `qual = true` sobre una
+  tabla con cédula y teléfono. La 114 sólo tocó el DELETE.
+- **#48** — `calcularGravedad` sigue duplicada en el bot de Telegram. El PR #151
+  arregló la copia de CargaMasiva, no ésta.
+
+### Un hallazgo nuevo más: el residuo real de #37
+
+El barrido **sin filtro de rol** (el filtro `roles LIKE '%public%'` es justamente
+lo que hizo que #37 naciera diciendo «4 tablas» cuando eran 7) muestra que
+**quedan 8**, todas `TO authenticated`: `apiarios`, `mon_colmenas`,
+`mon_conductividad`, `monitoreos`, `plagas_enfermedades_catalogo`, `produccion`,
+`rondas_monitoreo`, `sublotes`. Antes de la 110 eran **17**.
+
+La cadena de aplicaciones quedó cerrada; la de **monitoreo y producción**, con la
+misma anatomía, no — y `monitoreos` son 4.155 filas de la serie de plagas desde
+2025, que `globalgap_correcciones` **no** traza. Latente hoy (8 cuentas, todas
+Gerencia o Administrador, `anon` sin política); real el día que exista un
+**Verificador**. Filado aparte en vez de dejar #37 abierto a medias.
+
+---
+
+## Documentación: dos PRs, y el segundo corrige al primero
+
+- **PR #172** — las diez migraciones 110–119 no estaban en el `CLAUDE.md` raíz,
+  el fichero que cada sesión carga. Añadidas, más el rango (001–108 → 001–119) y
+  la ficha de `logs_auditoria`.
+- **PR #173** — **corrige un error que introdujo el #172.** Quedaron **dos
+  entradas numeradas 113**: la vieja de `hato_alertas_tick_runs`, anterior al
+  renumerado a 116, decía además «SIN APLICAR». Y sus cuatro sub-viñetas **no
+  eran sobre esa tabla**: son el muro de propiedad de `storage.objects`, lo más
+  reutilizable del bloque, así que se movieron bajo la 109 en vez de perderse.
+  De paso, la 109 pasó de «fusionada y SIN APLICAR» a **aplicada** — lo está,
+  por el panel de Storage, que corre como el dueño y **no deja fila en el
+  ledger**.
+
+Que el segundo PR exista es el mismo patrón del día: **el error no estuvo en
+hacer el trabajo, estuvo en no verificar su efecto.** Tres veces hoy.
+
+---
+
+## REQUIERE TU DECISIÓN
+
+1. **La pantalla de Verificación de inventario** — ¿se usa o se retira? Nunca ha
+   contado nada y los conteos reales entran por otra puerta, sin responsable.
+2. **#4, mañana después de las 05:45** — la primera corrida instrumentada del tick
+   contesta por fin si el motor de alertas no tiene nada que alertar o no puede.
+3. **Las 8 tablas del residuo de #37** — misma migración que la 110, pero hay que
+   comprobar antes si alguna pantalla borra-y-reinserta contra `monitoreos` o
+   `produccion`, porque ahí acotar por rol rompe producción. Es exactamente la
+   trampa que la 110 esquivó.

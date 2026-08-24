@@ -117,6 +117,32 @@ prompt del agente en cada corrida.
   sigue sin Verificador ni Monitor. **Revisar contratistas, el bucket reportes-semanales y las 4 DELETE de
   aplicaciones JUNTAS cada corrida — son la MISMA clase latente y se activan todas el mismo dia.**
 
+## Corrida 2026-08-24-drenaje-continuacion
+- **LA CONSULTA CORRECTA DEL BARRIDO always-true, para no volver a estrenar el hueco.**
+  `cmd IN ('DELETE','ALL') AND permissive='PERMISSIVE' AND btrim(qual)='true'` sobre
+  `pg_policies` de `public`, **SIN filtro de rol**. El detector historico filtraba
+  `roles LIKE '%public%'` y por eso no veia las `TO authenticated`, que son la mayoria.
+  Descontar siempre `reportes_semanales`: es `TO service_role` y no es de esta clase.
+- **Estado a 2026-08-24: quedan 8** (eran 17). La 110 cerro 7 tablas de la cadena GlobalGAP
+  y la 114 cerro `contratistas` y `lotes`. Las 8 restantes son de monitoreo y produccion:
+  `apiarios`, `mon_colmenas`, `mon_conductividad`, `monitoreos`,
+  `plagas_enfermedades_catalogo`, `produccion`, `rondas_monitoreo`, `sublotes`. **Ya filadas
+  como hallazgo propio** — no re-filar, y no volver a contar 17.
+- **LA RLS DE LA TABLA HIJA NO SE EVALUA DURANTE UNA CASCADA.** Las acciones de integridad
+  referencial de PostgreSQL corren como el dueno de la hija y con `SECURITY_NOFORCE_RLS`.
+  Consecuencia operativa: endurecer una hija **no cierra la puerta** si el padre sigue siendo
+  borrable por cualquiera. Es lo que obligo a la 114 despues de la 110. **Cada vez que se
+  acote el DELETE de una tabla, revisar quien la referencia con `ON DELETE CASCADE`.**
+- **Acotar por PROPIETARIO habria roto produccion en la 110, y esto se repite.** Esas tablas
+  no tienen ninguna politica de Gerencia/Administrador, asi que la always-true era el UNICO
+  camino de borrado — es lo que hace funcionar el borrar-y-reinsertar de
+  `CalculadoraAplicaciones.tsx:492/501/505` — y ninguna tiene `created_by`. **Antes de acotar
+  una always-true, buscar quien la usa para borrar-y-reinsertar.** Para las 8 que quedan los
+  sospechosos son la carga masiva de monitoreo y la captura de cosecha.
+- **La 109 SI esta aplicada, por el panel de Storage.** No deja fila en el ledger. Comprobar
+  en `pg_policies` sobre `storage.objects`; hoy `Authenticated users can delete reports`
+  lleva `u.rol = 'Gerencia'`. No re-abrir como pendiente.
+
 ## Archivo
 (vacio)
 

@@ -453,6 +453,25 @@ antes de reintentar, pero la desviacion es real y queda anotada. **Ante un 503, 
 MISMO contenido** — y si hay que cambiarlo, cambiar el fichero, empujarlo y reintentar desde
 ahi.
 
+## Verificar un despliegue POR CONTENIDO del bundle (2026-08-24)
+- **Un chunk chico se lee entero y prueba la ausencia ademas de la presencia.**
+  `fetchDatosReporteCierre-*.js` mide 3.442 bytes: se vuelca completo y se ve el antes y el
+  despues en la misma linea. **Por debajo de ~5 KB, volcar sale mas barato que tres greps** y
+  prueba mas.
+- **Una propiedad que el consumidor no desestructura NO aparece en el bundle.** Buscar
+  `fuenteManoObra` dio 0 ocurrencias con el arreglo vivo, porque el llamante desestructura 7
+  de los 8 campos. **Elegir el marcador entre lo que el llamante USA, no entre lo que la
+  interfaz declara** — si no, se concluye "no desplegado" sobre algo desplegado.
+- **En zsh, `git show $SHA:ruta` se rompe**: `:s` dispara los modificadores de historia.
+  Escribir siempre `git show "${SHA}:ruta"`.
+- **Nombres de columna que cuestan round-trips**: `movimientos_diarios_productos` se une por
+  `movimiento_diario_id` (no `movimiento_id`); `aplicaciones` tiene `codigo_aplicacion` y
+  `nombre_aplicacion` (no `codigo`/`nombre`) y `fecha_inicio_planeada`/`_ejecucion` (no
+  `fecha_inicio`); `movimientos_diarios` y `movimientos_inventario` usan `fecha_movimiento`
+  (no `fecha`); `compras` tiene `numero_factura` y `costo_unitario` (no `factura`/
+  `precio_unitario`) mientras que `movimientos_inventario` si tiene `factura`. Consultar
+  `information_schema.columns` primero.
+
 ## Racha del viernes (regla de auto-poda)
 
 | Corrida | Elegibles drenados |
