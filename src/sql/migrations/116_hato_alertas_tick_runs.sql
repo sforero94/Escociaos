@@ -1,5 +1,5 @@
 -- =====================================================================
--- 113: hato_alertas_tick_runs -- instrumentación del tick diario de
+-- 116: hato_alertas_tick_runs -- instrumentación del tick diario de
 -- alertas del Hato Lechero.
 -- Fecha: 2026-08-24
 -- Fuente: hallazgo #4 del PO (2026-08-24) -- "las alertas del hato están
@@ -56,7 +56,7 @@
 -- abajo son carga útil, no decoración.
 --
 -- VERIFICACIÓN CONTRA EL ESQUEMA VIVO antes de escribir esta migración:
---   - 113 es el siguiente número libre: la última migración en el árbol
+--   - 116 es el siguiente número libre: la última migración en el árbol
 --     es 112 (`productos_updated_by`, en una rama paralela sin fusionar
 --     todavía) y 109-112 no tienen ningún archivo `hato_alertas*` que
 --     colisione.
@@ -130,18 +130,18 @@ BEGIN
   WHERE c.relname = 'hato_alertas_tick_runs';
 
   IF v_politicas <> 1 THEN
-    RAISE EXCEPTION '113: se esperaba 1 política sobre hato_alertas_tick_runs, hay %.', v_politicas;
+    RAISE EXCEPTION '116: se esperaba 1 política sobre hato_alertas_tick_runs, hay %.', v_politicas;
   END IF;
 
   IF has_table_privilege('anon', 'hato_alertas_tick_runs', 'SELECT') THEN
-    RAISE EXCEPTION '113: anon no debería tener SELECT sobre hato_alertas_tick_runs.';
+    RAISE EXCEPTION '116: anon no debería tener SELECT sobre hato_alertas_tick_runs.';
   END IF;
 
   IF has_table_privilege('authenticated', 'hato_alertas_tick_runs', 'INSERT') THEN
-    RAISE EXCEPTION '113: authenticated no debería tener INSERT sobre hato_alertas_tick_runs -- solo service_role escribe (el handler del tick).';
+    RAISE EXCEPTION '116: authenticated no debería tener INSERT sobre hato_alertas_tick_runs -- solo service_role escribe (el handler del tick).';
   END IF;
 
-  RAISE NOTICE '113 OK: hato_alertas_tick_runs creada, RLS activo, 1 política SELECT, sin grants de escritura para anon/authenticated.';
+  RAISE NOTICE '116 OK: hato_alertas_tick_runs creada, RLS activo, 1 política SELECT, sin grants de escritura para anon/authenticated.';
 END $$;
 
 -- ---------------------------------------------------------------------------
