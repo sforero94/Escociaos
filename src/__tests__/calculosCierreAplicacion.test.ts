@@ -9,6 +9,7 @@ import {
   formatearListaConY,
   construirPayloadCierreAplicacion,
   etiquetaFraccionJornal,
+  calcularCostosVivosAplicacion,
   FRACCION_OPTIONS,
 } from '@/utils/calculosCierreAplicacion';
 import type { RegistroTrabajoCierre } from '@/types/aplicaciones';
@@ -422,5 +423,96 @@ describe('construirPayloadCierreAplicacion', () => {
     });
     expect(payload.registros_trabajo[0].empleado_id).toBeNull();
     expect(payload.registros_trabajo[0].contratista_id).toBeNull();
+  });
+});
+
+describe('calcularCostosVivosAplicacion — hallazgo #39 (mano de obra en vivo, nunca snapshot)', () => {
+  it('cuando hay jornales vivos, ignora el snapshot congelado por completo', () => {
+    // Forma real del hallazgo: el snapshot de cierre quedó en $50.000/jornal plano
+    // (60 jornales × 50.000 = 3.000.000), mientras registros_trabajo ya tenía el costo
+    // real de cada jornal, sumando 5.300.000 sobre esos mismos 60 jornales.
+    const resultado = calcularCostosVivosAplicacion({
+      jornalesVivos: 60,
+      costoManoObraVivo: 5_300_000,
+      costoTotalInsumos: 1_200_000,
+      totalArboles: 1000,
+      snapshotJornales: 60,
+      snapshotCostoManoObra: 3_000_000,
+      snapshotValorJornal: 50_000,
+    });
+
+    expect(resultado.jornalesUtilizados).toBe(60);
+    expect(resultado.costoTotalManoObra).toBe(5_300_000);
+    expect(resultado.valorJornal).toBeCloseTo(5_300_000 / 60, 2);
+    expect(resultado.fuenteManoObra).toBe('registros_trabajo');
+    // El total y el costo/árbol se recalculan con la mano de obra viva, no la congelada.
+    expect(resultado.costoTotal).toBe(1_200_000 + 5_300_000);
+    expect(resultado.costoPorArbol).toBeCloseTo((1_200_000 + 5_300_000) / 1000, 6);
+    expect(resultado.arbolesPorJornal).toBeCloseTo(1000 / 60, 6);
+  });
+
+  it('reproduce la segunda aplicación de enero del hallazgo (5.200.000 reales vs 3M congelados)', () => {
+    const resultado = calcularCostosVivosAplicacion({
+      jornalesVivos: 55,
+      costoManoObraVivo: 5_200_000,
+      costoTotalInsumos: 900_000,
+      totalArboles: 800,
+      snapshotJornales: 55,
+      snapshotCostoManoObra: 2_750_000, // 55 × 50.000
+      snapshotValorJornal: 50_000,
+    });
+
+    expect(resultado.costoTotalManoObra).toBe(5_200_000);
+    expect(resultado.costoTotalManoObra).not.toBe(2_750_000);
+    expect(resultado.fuenteManoObra).toBe('registros_trabajo');
+  });
+
+  it('sin jornales vivos (sin tarea vinculada o sin registros capturados) cae al snapshot', () => {
+    const resultado = calcularCostosVivosAplicacion({
+      jornalesVivos: 0,
+      costoManoObraVivo: 0,
+      costoTotalInsumos: 500_000,
+      totalArboles: 400,
+      snapshotJornales: 12,
+      snapshotCostoManoObra: 1_200_000,
+      snapshotValorJornal: 100_000,
+    });
+
+    expect(resultado.jornalesUtilizados).toBe(12);
+    expect(resultado.costoTotalManoObra).toBe(1_200_000);
+    expect(resultado.valorJornal).toBe(100_000);
+    expect(resultado.fuenteManoObra).toBe('snapshot');
+    expect(resultado.costoTotal).toBe(500_000 + 1_200_000);
+  });
+
+  it('sin árboles ni jornales, costoPorArbol y arbolesPorJornal son 0 (nunca división por cero)', () => {
+    const resultado = calcularCostosVivosAplicacion({
+      jornalesVivos: 0,
+      costoManoObraVivo: 0,
+      costoTotalInsumos: 0,
+      totalArboles: 0,
+      snapshotJornales: 0,
+      snapshotCostoManoObra: 0,
+      snapshotValorJornal: 0,
+    });
+
+    expect(resultado.costoPorArbol).toBe(0);
+    expect(resultado.arbolesPorJornal).toBe(0);
+    expect(resultado.costoTotal).toBe(0);
+    expect(resultado.fuenteManoObra).toBe('snapshot');
+  });
+
+  it('costo_total_insumos pasa intacto — el hallazgo #39 no toca insumos, solo mano de obra', () => {
+    const resultado = calcularCostosVivosAplicacion({
+      jornalesVivos: 10,
+      costoManoObraVivo: 900_000,
+      costoTotalInsumos: 2_345_678,
+      totalArboles: 200,
+      snapshotJornales: 10,
+      snapshotCostoManoObra: 500_000,
+      snapshotValorJornal: 50_000,
+    });
+
+    expect(resultado.costoTotalInsumos).toBe(2_345_678);
   });
 });

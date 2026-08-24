@@ -2,7 +2,8 @@
 // Fetches all closure data from Supabase for a closed application
 
 import { getSupabase } from './supabase/client';
-import { fetchDatosRealesAplicacion } from './aplicacionesReales';
+import { fetchDatosRealesAplicacion, fetchJornalesRealesPorLote } from './aplicacionesReales';
+import { calcularCostosVivosAplicacion } from './calculosCierreAplicacion';
 import type { DatosReporteCierre } from './generarPDFReporteCierre';
 
 export async function fetchDatosReporteCierre(aplicacionId: string): Promise<DatosReporteCierre> {
@@ -128,13 +129,31 @@ export async function fetchDatosReporteCierre(aplicacionId: string): Promise<Dat
   });
 
   // 8. Calculate derived values
-  const jornalesUtilizados = app.jornales_utilizados || 0;
-  const costoTotalInsumos = app.costo_total_insumos || 0;
-  const costoTotalManoObra = app.costo_total_mano_obra || 0;
-  const costoTotal = app.costo_total || (costoTotalInsumos + costoTotalManoObra);
-  const costoPorArbol = app.costo_por_arbol || (totalArboles > 0 ? costoTotal / totalArboles : 0);
-  const valorJornal = app.valor_jornal || cierre?.valor_jornal || 0;
-  const arbolesPorJornal = jornalesUtilizados > 0 ? totalArboles / jornalesUtilizados : 0;
+  // Mano de obra SIEMPRE en vivo desde `registros_trabajo` — nunca el snapshot que
+  // `aplicaciones`/`aplicaciones_cierre` congelaron al cerrar (hallazgo #39: dos aplicaciones de
+  // enero cerraron con $50.000/jornal tecleado a mano mientras el costo real ya estaba
+  // calculado). Ver `calcularCostosVivosAplicacion` para el porqué completo.
+  const jornalesPorLote = await fetchJornalesRealesPorLote(app.tarea_id);
+  const jornalesVivos = Array.from(jornalesPorLote.values()).reduce((sum, j) => sum + j.jornales, 0);
+  const costoManoObraVivo = Array.from(jornalesPorLote.values()).reduce((sum, j) => sum + j.costo, 0);
+
+  const {
+    jornalesUtilizados,
+    costoTotalInsumos,
+    costoTotalManoObra,
+    costoTotal,
+    costoPorArbol,
+    valorJornal,
+    arbolesPorJornal,
+  } = calcularCostosVivosAplicacion({
+    jornalesVivos,
+    costoManoObraVivo,
+    costoTotalInsumos: app.costo_total_insumos || 0,
+    totalArboles,
+    snapshotJornales: app.jornales_utilizados || 0,
+    snapshotCostoManoObra: app.costo_total_mano_obra || 0,
+    snapshotValorJornal: app.valor_jornal || cierre?.valor_jornal || 0,
+  });
 
   // Calculate dias_aplicacion
   let diasAplicacion = cierre?.dias_aplicacion || 0;
