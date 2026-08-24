@@ -20,28 +20,60 @@
 -- La MISMA factura **4379** (Río Claro, 160 bultos de 50 kg, $5.359.680) está
 -- registrada dos veces, contra dos productos distintos:
 --
---   Sulcamag    1d3e27f6-71a6-4f4b-9b48-26aa4db7642c  creada 2026-07-15 12:27
+--   Sulcamag    1d3e27f6-71a6-4f4b-9b48-26aa4db7642c
+--               fecha_movimiento 2026-07-06, creada 2026-07-15 12:27:24
 --               saldo_anterior 16,00 -> saldo_nuevo 8.016,00
---   Silicalmag  751a9e1c-3d6b-4e64-8c95-bc861261dee0  creada 2026-07-24 20:07
+--   Silicalmag  751a9e1c-3d6b-4e64-8c95-bc861261dee0
+--               fecha_movimiento 2026-07-06, creada 2026-07-24 20:07:55
 --               saldo_anterior  0,00 -> saldo_nuevo 8.000,00
+--
+-- OJO: las DOS tienen la MISMA `fecha_movimiento`, 2026-07-06. Las fechas del
+-- 15 y del 24 de julio son `created_at`, no fechas de movimiento -- el borrador
+-- de esta migración las presentaba mal. La corrección refuerza el caso: las dos
+-- filas son idénticas en fecha, factura, proveedor, cantidad, valor y responsable.
 --
 -- Y hoy, en producción:
 --
 --   Silicalmag  cantidad_actual = 8.000 kg  ...  libro = 8.000 kg   COHERENTE
 --   Sulcamag    cantidad_actual =    16 kg  ...  libro = 8.000 kg   NO
 --
--- La lectura es inequívoca: alguien cargó la compra contra el producto
--- equivocado, se dio cuenta nueve días después, la volvió a cargar contra
--- Silicalmag, **devolvió el saldo de Sulcamag a 16 kg** -- exactamente el
--- `saldo_anterior` que la propia fila mala registra -- y dejó la fila del libro.
+-- POR QUÉ LOS 16 kg SON DE FIAR -- y por qué el argumento del borrador NO servía.
 --
--- POR ESO NO HACE FALTA UN CONTEO FÍSICO PARA ESTA CORRECCIÓN. Los 16 kg no son
--- una cifra que haya que creerle a nadie: son el saldo que Sulcamag tenía ANTES
--- de la carga equivocada, escrito en la propia fila que se va a borrar, y al que
--- el producto volvió. Borrar un asiento fantasma es correcto tanto si el stock
--- real de Sulcamag son 16 kg como si son 14 -- son dos preguntas distintas. El
--- conteo físico sigue valiendo la pena; esta migración no depende de él, y
--- **tampoco lo sustituye**.
+-- El borrador decía: "los 16 kg son de fiar porque son el `saldo_anterior` que
+-- la propia fila mala registra". **Eso es circular** -- es la misma fila bajo
+-- sospecha. El verificador independiente lo señaló y aportó un argumento
+-- EXTERNO a esa fila, que es el que vale:
+--
+--   2026-07-15 12:27:24.836  movimiento Sulcamag         16,00 -> 8.016,00
+--   2026-07-24 20:05:47.226  productos.updated_at Sulcamag   <-- la reversión
+--   2026-07-24 20:07:54.452  compras INSERT     Silicalmag
+--   2026-07-24 20:07:54.804  productos.updated_at Silicalmag
+--   2026-07-24 20:07:55.076  movimiento         Silicalmag  0,00 -> 8.000,00
+--
+-- Las tres últimas, con 0,35 s y 0,27 s de separación, son el orden canónico de
+-- `NewPurchase`. Y la segunda línea es la clave: **el saldo de Sulcamag se
+-- reescribió a las 20:05:47, dos minutos ANTES de que existiera la compra de
+-- Silicalmag. Los 16,00 no los tecleó una persona: son `8.016,00 − 8.000,00`
+-- calculados por `eliminarCompraConReversion`.**
+--
+-- CORROBORACIÓN INDEPENDIENTE, de una tabla distinta y anterior a toda esta
+-- revisión: `verificaciones_detalle` del 2026-07-30 registró Sulcamag
+-- `cantidad_teorica = 16,00` y Silicalmag `8.000,00`, seis días después de la
+-- reparación.
+--
+-- Y SON DOS PRODUCTOS DISTINTOS, no dos nombres de lo mismo: Silicalmag es una
+-- Enmienda (Ca 30 / Mg 13), Sulcamag un Fertilizante (Mg 16 / S 13). Cuál quiso
+-- la finca lo dice el plan: `aplicaciones_productos` tiene 1 fila de Silicalmag
+-- (la "Enmienda" planificada) y CERO de Sulcamag. Sulcamag no aparece en ninguna
+-- aplicación, ningún movimiento diario ni ningún foco -- nunca se usó, que es
+-- justamente por qué sus 16,00 llevan intactos desde el 2026-01-05.
+--
+-- POR ESO NO HACE FALTA UN CONTEO FÍSICO PARA ESTA CORRECCIÓN. Y el peor caso
+-- también se sostiene: aun si los bultos fueran físicamente Sulcamag y la
+-- "corrección" hubiera sido ella misma el error, borrar una fila que afirma que
+-- entraron 8.000 kg a un producto cuyo saldo dice 16 **reduce** la contradicción.
+-- No puede empeorar el registro. El conteo físico sigue valiendo la pena; esta
+-- migración no depende de él y **tampoco lo sustituye**.
 --
 -- `productos.cantidad_actual` NO SE TOCA. La post-condición 4.3 lo prueba.
 --
@@ -51,6 +83,25 @@
 -- Precedente 075/076; la evidencia sobrevive en `respaldos`.
 --
 -- FILAS AFECTADAS: 1.
+--
+-- ---------------------------------------------------------------------------
+-- DOS COSAS QUE ESTA MIGRACIÓN **NO** ARREGLA, dichas para que no se re-descubran
+-- ---------------------------------------------------------------------------
+-- 1. **`Sulcamag.precio_unitario` sigue contaminado.** `NewPurchase.tsx:394`
+--    escribe `precio_unitario` en el MISMO UPDATE que `cantidad_actual`, y
+--    `eliminarCompraConReversion` revierte sólo `cantidad_actual`. Sulcamag
+--    carga hoy 669,96 -- byte a byte el de Silicalmag, y exactamente
+--    33.498 ÷ 50, el precio unitario de la factura 4379. Es residuo del mismo
+--    error. Se deja a propósito: su valor anterior es irrecuperable y
+--    **inventarlo sería peor**. Impacto acotado -- consumo cero, así que no toca
+--    costo/kg; aporta 16 × 669,96 = $10.719 al KPI de valor de inventario.
+-- 2. **Un número que Gerencia ve se va a mover.** `useInventoryDashboard.ts`
+--    agrega `abs(valor_movimiento)` por tipo: el total de Entradas pasa de
+--    $51.034.387 a $45.358.739 (**−$5.675.648**). Es la dirección correcta -- hoy
+--    las dos cifras están dobladas -- pero el tablero de Inventario va a bajar
+--    visiblemente. **P&G y Flujo de Caja NO se tocan**: nada en `src/utils/`,
+--    `src/components/finanzas/` ni `src/components/produccion/` lee
+--    `movimientos_inventario`; costo/kg lee `movimientos_diarios_productos`.
 
 DO $$
 DECLARE
@@ -85,8 +136,10 @@ BEGIN
     RAISE EXCEPTION 'PRE 1.2: no se encontro la Entrada correcta de 8.000 kg factura 4379 en Silicalmag (hay %). ABORTAR: sin ella, borrar la de Sulcamag destruiria el unico registro de la compra.', v_silicalmag;
   END IF;
 
-  -- 1.3 El saldo de Sulcamag es 16 kg, el mismo saldo_anterior de la fila mala.
-  --     Es la prueba de que alguien ya revirtio el efecto sobre el inventario.
+  -- 1.3 El saldo de Sulcamag es 16 kg. La prueba de que ya fue revertido NO es
+  --     que coincida con el saldo_anterior de la fila mala (eso seria circular),
+  --     sino productos.updated_at = 2026-07-24 20:05:47, dos minutos ANTES de que
+  --     existiera la compra de Silicalmag. Ver la cabecera.
   SELECT p.cantidad_actual INTO v_saldo
   FROM public.productos p
   WHERE p.id = (SELECT producto_id FROM public.movimientos_inventario WHERE id = '1d3e27f6-71a6-4f4b-9b48-26aa4db7642c'::uuid);
