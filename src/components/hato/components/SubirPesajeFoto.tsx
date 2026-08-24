@@ -89,8 +89,19 @@ export function SubirPesajeFoto({
   fotosIniciales?: File[];
   onCompletado?: () => void;
 }) {
-  const { subirFotos, iniciarManual, comprometer, limpiar, loading, error, resultado, comprometiendo, errorCommit, commitResultado } =
-    useSubirPesajeFoto();
+  const {
+    subirFotos,
+    iniciarManual,
+    comprometer,
+    limpiar,
+    loading,
+    error,
+    documentoRechazado,
+    resultado,
+    comprometiendo,
+    errorCommit,
+    commitResultado,
+  } = useSubirPesajeFoto();
   const produccion = useProduccionHato();
   const { profile } = useAuth();
   // Mismo conjunto de roles que la RLS de escritura de `hato_*` (migración 053).
@@ -339,7 +350,28 @@ export function SubirPesajeFoto({
             </div>
           )}
 
-          {error && (
+          {/* Finding #40: el servidor rechazó la carga EXPLÍCITAMENTE (422 --
+              ninguna vaca del roster ancló en ninguna foto) en vez de
+              "aceptar" con un diff vacío. La foto SIGUE guardada como capa
+              cruda (el mensaje del servidor ya lo dice); acá solo se ofrece
+              la salida: cerrar este diálogo y usar la tarjeta de al lado.
+              Ámbar, no rojo -- no es una falla técnica, es "revisa qué
+              subiste". */}
+          {error && documentoRechazado && (
+            <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium">Esta foto no parece la planilla de pesaje</p>
+                <p className="mt-1">{error}</p>
+                <p className="mt-1">
+                  Si querías cargar la liquidación de El Pomar, cierra este diálogo y usa la tarjeta
+                  &quot;Venta quincenal al camión&quot; que está al lado, en esta misma pestaña.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {error && !documentoRechazado && (
             <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               <AlertTriangle className="w-4 h-4 flex-shrink-0" />
               {error}

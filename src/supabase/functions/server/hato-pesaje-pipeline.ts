@@ -40,6 +40,7 @@ import { fechasPesajeMensuales } from './calculos-hato.ts';
 import {
   construirDiffPesaje,
   construirRosterPesaje,
+  detectarRechazoLecturaPesaje,
   esCandidataRosterPesaje,
   esquemaJsonOcrPesaje,
   construirPromptOcrPesaje,
@@ -163,7 +164,7 @@ export interface PipelinePesajeFotoResultado {
 
 export type ResultadoPipelinePesajeFoto =
   | { ok: true; resultado: PipelinePesajeFotoResultado }
-  | { ok: false; status: 500 | 502; error: string };
+  | { ok: false; status: 422 | 500 | 502; error: string };
 
 interface LlamadaModeloOk {
   ok: true;
@@ -353,6 +354,24 @@ export async function ejecutarPipelinePesajeFoto(params: {
 
   // --- 4. Anti-row-drift por nombre (lógica pura) ---------------------------
   const ocr = procesarLecturaOcrPesaje(lecturas, roster);
+
+  // --- 4.b Finding #40: RECHAZAR en vez de aceptar cuando ninguna fila de
+  //     NINGUNA foto ancló contra el roster -- ver `detectarRechazoLecturaPesaje`
+  //     (`ocrPesaje.ts`) para la regla completa. Antes de este chequeo el
+  //     pipeline seguía de largo con `filasConfirmadas` vacío, devolvía
+  //     `success: true` con un diff vacío, y la foto quedaba guardada en
+  //     Storage sin ninguna señal accionable -- exactamente lo que pasó con
+  //     la liquidación de El Pomar subida por error a esta ruta el
+  //     2026-08-19. La foto SIGUE guardándose (paso 1, arriba) -- este
+  //     rechazo nunca la descarta, solo evita fingir que hubo una lectura útil. ---
+  const rechazo = detectarRechazoLecturaPesaje(ocr);
+  if (rechazo) {
+    return {
+      ok: false,
+      status: 422,
+      error: `${rechazo.detalle}${rutasStorage.some((r) => r !== null) ? ' Las fotos sí quedaron guardadas.' : ''}`,
+    };
+  }
 
   // --- 5. Existentes en hato_pesajes_leche, para clasificar el diff --------
   const animalIdsLeidos = ocr.filasConfirmadas.map((f) => f.animalId);

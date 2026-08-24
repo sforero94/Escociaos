@@ -93,6 +93,13 @@ export interface CeldaParaCommit {
 export function useSubirPesajeFoto() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Finding #40 (2026-08-24): distingue el rechazo EXPLÍCITO del servidor
+  // (HTTP 422 -- ninguna vaca del roster ancló en ninguna foto, ver
+  // `detectarRechazoLecturaPesaje` en `ocrPesaje.ts`) de cualquier otro
+  // error (red, 500, 502...). `SubirPesajeFoto.tsx` lo usa para mostrar un
+  // panel accionable en vez del cajón de error genérico -- sin esta bandera
+  // tendría que adivinar el motivo comparando el TEXTO del mensaje.
+  const [documentoRechazado, setDocumentoRechazado] = useState(false);
   const [resultado, setResultado] = useState<PreviewPesajeRespuesta | null>(null);
   const [comprometiendo, setComprometiendo] = useState(false);
   const [errorCommit, setErrorCommit] = useState<string | null>(null);
@@ -110,6 +117,7 @@ export function useSubirPesajeFoto() {
   const subirFotos = useCallback(async (fotos: File[], anio: number, mes: number) => {
     setLoading(true);
     setError(null);
+    setDocumentoRechazado(false);
     setResultado(null);
     setCommitResultado(null);
     setErrorCommit(null);
@@ -133,6 +141,9 @@ export function useSubirPesajeFoto() {
       }
       const body = resultadoCuerpo.body;
       if (!res.ok || !body?.success) {
+        // 422 = rechazo explícito del servidor (ver `documentoRechazado`
+        // arriba), no un error de red/servidor genérico.
+        if (res.status === 422) setDocumentoRechazado(true);
         throw new Error(body?.error || `El servidor respondió ${res.status} al leer las fotos.`);
       }
 
@@ -233,6 +244,7 @@ export function useSubirPesajeFoto() {
   const limpiar = useCallback(() => {
     setResultado(null);
     setError(null);
+    setDocumentoRechazado(false);
     setCommitResultado(null);
     setErrorCommit(null);
   }, []);
@@ -244,6 +256,7 @@ export function useSubirPesajeFoto() {
     limpiar,
     loading,
     error,
+    documentoRechazado,
     resultado,
     comprometiendo,
     errorCommit,
