@@ -1,3 +1,19 @@
+-- ############################################################################
+-- ## OBSOLETO -- NO EJECUTAR.  Marcado el 2026-08-24.                       ##
+-- ############################################################################
+--
+-- Este script hace `DROP POLICY IF EXISTS` + `CREATE POLICY … FOR DELETE
+-- TO authenticated USING (true)` sobre nombres de politica que las migraciones
+-- **114** y **120** acotaron a Gerencia + Administrador. Correrlo hoy **revierte
+-- esas migraciones en silencio** y vuelve a abrir el borrado incondicional.
+--
+-- No es una migracion numerada, asi que nada de la maquinaria lo detiene: la
+-- unica proteccion es esta cabecera. Si necesitas cambiar estas politicas,
+-- escribi una migracion nueva con el siguiente numero libre.
+--
+-- Se conserva por valor historico. El contenido de abajo queda tal cual.
+-- ############################################################################
+
 -- ============================================================================
 -- Arreglar políticas RLS de la tabla monitoreos
 -- ============================================================================
