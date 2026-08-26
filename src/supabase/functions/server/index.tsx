@@ -7,7 +7,7 @@ import { crearUsuario, editarUsuario, eliminarUsuario } from "./usuarios.tsx";
 import { toggleProductoActivo } from "./productos.tsx";
 import { handleGenerarReporteSemanal } from "./generar-reporte-semanal-endpoint.ts";
 import { handleChatMessage } from "./chat.tsx";
-import { handleClimaSync, handleClimaBackfill, handleClimaForecast } from "./clima.tsx";
+import { handleClimaSync, handleClimaBackfill, handleClimaReintentoSinDato, handleClimaForecast } from "./clima.tsx";
 import { handleHatoChequeoPreview } from "./hato-chequeo-preview.ts";
 import { handleHatoChequeoCommit } from "./hato-chequeo-commit.ts";
 import { handleHatoChequeoFoto } from "./hato-chequeo-foto.ts";
@@ -116,6 +116,14 @@ app.post("/make-server-1ccce916/clima/sync", async (c) => {
 // de Ecowitt de una sola llamada.
 app.post("/make-server-1ccce916/clima/backfill", async (c) => {
   return await handleClimaBackfill(c);
+});
+
+// Reintento diario de días sin dato confiable de lluvia (migración 121,
+// pg_cron 'clima-reintento-sin-dato' a las 06:00 Bogotá). Mismo gate que
+// /clima/sync y /clima/backfill. Nunca inventa un valor: si Ecowitt todavía
+// no tiene el día completo, el día queda exactamente como estaba.
+app.post("/make-server-1ccce916/clima/reintentar-sin-dato", async (c) => {
+  return await handleClimaReintentoSinDato(c);
 });
 
 // Short-range forecast (OpenWeatherMap proxy) for the main dashboard's weather card

@@ -418,55 +418,108 @@ function parseEcowittHistory(histData: EcowittHistoryData, stationId: string) {
   return readings;
 }
 
-// Aggregate an array of parsed 5-min readings into a single daily summary row
-// for clima_resumen_diario. Readings must already be unit-converted (°C, km/h, mm).
-function aggregateReadingsToDaily(
-  readings: ReturnType<typeof parseEcowittHistory>,
-  fecha: string,
-  stationId: string
-) {
-  const nonNull = (vals: (number | null)[]): number[] =>
-    vals.filter((v): v is number => v !== null);
+// ============================================================================
+// Backfill de UN día: pide la History API de Ecowitt para ese día, inserta
+// las lecturas crudas en clima_lecturas (mismo camino que el sync de 5 min,
+// `handleClimaSync`) y deja que `fn_clima_rollup_diario` (068/103/115) sea
+// la ÚNICA lógica que decide `lluvia_confianza` -- nunca se reimplementa esa
+// clasificación acá.
+//
+// Antes esta función agregaba en TypeScript (`aggregateReadingsToDaily`,
+// eliminada) y escribía `clima_resumen_diario` directo con un simple
+// `max(lluvia_diaria_mm)`, sin aplicar ninguno de los tres chequeos de
+// confianza -- un backfill podía escribir 'ok' sobre un día con el contador
+// de lluvia congelado o capturado a medias, exactamente lo que esas
+// migraciones existen para impedir. Insertar en `clima_lecturas` y llamar
+// al mismo RPC que corre el cron nocturno hace que backfill manual,
+// reintento automático (migración 121) y rollup nocturno concuerden
+// siempre, por construcción -- no por disciplina de mantener dos copias de
+// la lógica sincronizadas.
+//
+// Usado por `handleClimaBackfill` (disparo manual) y
+// `handleClimaReintentoSinDato` (cron diario, migración 121).
+// ============================================================================
 
-  const temps = nonNull(readings.map(r => r.temp_c));
-  const humidity = nonNull(readings.map(r => r.humedad_pct));
-  const wind = nonNull(readings.map(r => r.viento_kmh));
-  const gust = nonNull(readings.map(r => r.rafaga_kmh));
-  const windDir = nonNull(readings.map(r => r.viento_dir));
-  const rain = nonNull(readings.map(r => r.lluvia_diaria_mm));
-  const solar = nonNull(readings.map(r => r.radiacion_wm2));
-  const uv = nonNull(readings.map(r => r.uv_index));
+interface ResultadoBackfillDia {
+  ok: boolean;
+  lecturas: number;
+  error?: string;
+}
 
-  const avg = (arr: number[]) => arr.length > 0 ? round2(arr.reduce((s, v) => s + v, 0) / arr.length) : null;
-  const min = (arr: number[]) => arr.length > 0 ? round2(Math.min(...arr)) : null;
-  const max = (arr: number[]) => arr.length > 0 ? round2(Math.max(...arr)) : null;
+async function backfillUnDia(
+  fecha: Date,
+  creds: { appKey: string; apiKey: string; mac: string },
+  sb: { supabaseUrl: string; serviceKey: string },
+  log: string,
+): Promise<ResultadoBackfillDia> {
+  const ecowittDateStr = formatEcowittDate(fecha);
 
-  // Circular mean for wind direction
-  let windDirMean: number | null = null;
-  if (windDir.length > 0) {
-    const sinSum = windDir.reduce((s, d) => s + Math.sin(d * Math.PI / 180), 0);
-    const cosSum = windDir.reduce((s, d) => s + Math.cos(d * Math.PI / 180), 0);
-    windDirMean = round2(((Math.atan2(sinSum / windDir.length, cosSum / windDir.length) * 180 / Math.PI) % 360 + 360) % 360);
+  const url = new URL('https://api.ecowitt.net/api/v3/device/history');
+  url.searchParams.set('application_key', creds.appKey);
+  url.searchParams.set('api_key', creds.apiKey);
+  url.searchParams.set('mac', creds.mac);
+  url.searchParams.set('start_date', `${ecowittDateStr} 00:00:00`);
+  url.searchParams.set('end_date', `${ecowittDateStr} 23:59:59`);
+  url.searchParams.set('call_back', 'outdoor.temperature,outdoor.humidity,wind,rainfall_piezo,solar_and_uvi');
+  url.searchParams.set('cycle_type', 'auto');
+
+  const apiRes = await fetch(url.toString());
+  if (!apiRes.ok) {
+    const body = await apiRes.text().catch(() => '');
+    return { ok: false, lecturas: 0, error: `Ecowitt API HTTP ${apiRes.status} — ${body}` };
   }
 
-  return {
-    fecha,
-    station_id: stationId,
-    temp_c_min: min(temps),
-    temp_c_max: max(temps),
-    temp_c_avg: avg(temps),
-    humedad_pct_min: min(humidity),
-    humedad_pct_max: max(humidity),
-    humedad_pct_avg: avg(humidity),
-    lluvia_total_mm: max(rain), // Ecowitt daily accumulator — max = day total
-    viento_kmh_avg: avg(wind),
-    rafaga_kmh_max: max(gust),
-    viento_dir_predominante: windDirMean,
-    radiacion_wm2_avg: avg(solar),
-    radiacion_wm2_max: max(solar),
-    uv_index_max: uv.length > 0 ? Math.max(...uv) : null,
-    lecturas_count: readings.length,
-  };
+  const response: EcowittHistoryResponse = await apiRes.json();
+  if (response.code !== 0) {
+    return { ok: false, lecturas: 0, error: `Ecowitt: ${response.msg}` };
+  }
+  if (!response.data || Object.keys(response.data).length === 0) {
+    return { ok: false, lecturas: 0, error: 'sin datos de Ecowitt para ese día' };
+  }
+
+  const readings = parseEcowittHistory(response.data as EcowittHistoryData, creds.mac);
+  if (readings.length === 0) {
+    return { ok: false, lecturas: 0, error: '0 lecturas parseadas' };
+  }
+
+  // Lecturas crudas -> clima_lecturas. `ignore-duplicates` sobre el
+  // UNIQUE(station_id, timestamp) de la migración 029 hace que reintentar
+  // un día ya cargado sea idempotente en vez de fallar.
+  const insertRes = await fetch(`${sb.supabaseUrl}/rest/v1/clima_lecturas`, {
+    method: 'POST',
+    headers: {
+      apikey: sb.serviceKey,
+      Authorization: `Bearer ${sb.serviceKey}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=minimal,resolution=ignore-duplicates',
+    },
+    body: JSON.stringify(readings),
+  });
+  if (!insertRes.ok) {
+    const errorText = await insertRes.text();
+    return { ok: false, lecturas: 0, error: `insert clima_lecturas falló — ${errorText}` };
+  }
+
+  // fn_clima_rollup_diario agrega, clasifica lluvia_confianza y escribe
+  // clima_resumen_diario -- y al final poda clima_lecturas > 24h, así que
+  // las lecturas históricas recién insertadas no se quedan pisando la
+  // ventana rodante del sync en vivo.
+  const rpcRes = await fetch(`${sb.supabaseUrl}/rest/v1/rpc/fn_clima_rollup_diario`, {
+    method: 'POST',
+    headers: {
+      apikey: sb.serviceKey,
+      Authorization: `Bearer ${sb.serviceKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ p_fecha: ecowittDateStr }),
+  });
+  if (!rpcRes.ok) {
+    const errorText = await rpcRes.text();
+    return { ok: false, lecturas: readings.length, error: `fn_clima_rollup_diario falló — ${errorText}` };
+  }
+
+  console.info(`${log} ${ecowittDateStr}: ${readings.length} lecturas reagregadas`);
+  return { ok: true, lecturas: readings.length };
 }
 
 export async function handleClimaBackfill(c: Context): Promise<Response> {
@@ -522,85 +575,24 @@ export async function handleClimaBackfill(c: Context): Promise<Response> {
     let totalDays = 0;
     const errors: string[] = [];
 
-    // Iterate day by day
+    // Iterate day by day -- backfillUnDia hace la pregunta a Ecowitt y deja
+    // que fn_clima_rollup_diario clasifique lluvia_confianza (ver el
+    // comentario de esa función).
     const current = new Date(fromDate);
     while (current <= toDate) {
       const dateStr = formatDateParam(current);
-      const ecowittDateStr = formatEcowittDate(current);
-      totalDays++;
 
       try {
-        // Fetch history for this day from Ecowitt
-        const url = new URL('https://api.ecowitt.net/api/v3/device/history');
-        url.searchParams.set('application_key', creds.appKey);
-        url.searchParams.set('api_key', creds.apiKey);
-        url.searchParams.set('mac', creds.mac);
-        url.searchParams.set('start_date', `${ecowittDateStr} 00:00:00`);
-        url.searchParams.set('end_date', `${ecowittDateStr} 23:59:59`);
-        url.searchParams.set('call_back', 'outdoor.temperature,outdoor.humidity,wind,rainfall_piezo,solar_and_uvi');
-        url.searchParams.set('cycle_type', 'auto');
-
-        const apiRes = await fetch(url.toString());
-
-        if (!apiRes.ok) {
-          const body = await apiRes.text().catch(() => '');
-          errors.push(`${dateStr}: Ecowitt API HTTP ${apiRes.status}`);
-          console.warn(`${log} ${dateStr}: Ecowitt API ${apiRes.status} — ${body}`);
-          current.setDate(current.getDate() + 1);
-          await sleep(100);
-          continue;
-        }
-
-        const response: EcowittHistoryResponse = await apiRes.json();
-
-        if (response.code !== 0) {
-          errors.push(`${dateStr}: ${response.msg}`);
-          console.warn(`${log} ${dateStr}: Ecowitt error — ${response.msg}`);
-          current.setDate(current.getDate() + 1);
-          await sleep(100);
-          continue;
-        }
-
-        if (!response.data || Object.keys(response.data).length === 0) {
-          console.info(`${log} ${dateStr}: no data`);
-          current.setDate(current.getDate() + 1);
-          await sleep(100);
-          continue;
-        }
-
-        // Parse historical data into readings
-        const readings = parseEcowittHistory(response.data as EcowittHistoryData, creds.mac);
-
-        if (readings.length === 0) {
-          console.info(`${log} ${dateStr}: no readings`);
-          current.setDate(current.getDate() + 1);
-          await sleep(100);
-          continue;
-        }
-
-        // Aggregate into daily summary and upsert into clima_resumen_diario
-        const dailySummary = aggregateReadingsToDaily(readings, ecowittDateStr, creds.mac);
-
-        const insertRes = await fetch(`${sb.supabaseUrl}/rest/v1/clima_resumen_diario?on_conflict=fecha,station_id`, {
-          method: 'POST',
-          headers: {
-            apikey: sb.serviceKey,
-            Authorization: `Bearer ${sb.serviceKey}`,
-            'Content-Type': 'application/json',
-            Prefer: 'return=minimal,resolution=merge-duplicates',
-          },
-          body: JSON.stringify(dailySummary),
-        });
-
-        if (!insertRes.ok) {
-          const errorText = await insertRes.text();
-          errors.push(`${dateStr}: insert failed — ${errorText}`);
-          console.error(`${log} ${dateStr}: insert failed — ${errorText}`);
-        } else {
+        const resultado = await backfillUnDia(current, creds, sb, log);
+        totalDays++;
+        if (resultado.ok) {
           totalSynced += 1;
-          console.info(`${log} ${dateStr}: daily summary inserted (${readings.length} readings aggregated)`);
+        } else {
+          errors.push(`${dateStr}: ${resultado.error}`);
+          console.warn(`${log} ${dateStr}: ${resultado.error}`);
         }
       } catch (err) {
+        totalDays++;
         errors.push(`${dateStr}: ${String(err)}`);
         console.error(`${log} ${dateStr}: ${err}`);
       }
@@ -616,6 +608,143 @@ export async function handleClimaBackfill(c: Context): Promise<Response> {
       synced: totalSynced,
       days: totalDays,
       errors: errors.length > 0 ? errors : undefined,
+    }, 200);
+  } catch (error) {
+    console.error(`${log} Unhandled error:`, error);
+    return c.json({ error: String(error) }, 500);
+  }
+}
+
+// ============================================================================
+// Handler: reintento diario de días sin dato confiable (migración 121)
+// POST /clima/reintentar-sin-dato -- disparado por el pg_cron
+// 'clima-reintento-sin-dato' a las 06:00 Bogotá.
+//
+// Pedido del dueño: "no quiero que registre null ni invente el 0. Quiero
+// que haga backfill del día una vez la estación recupere conexión y se
+// pueda consultar el dato real que sí existe en Ecowitt." El rollup
+// nocturno ya hace la mitad correcta -- nunca fabrica un cero -- pero nada
+// volvía a mirar un día ya sellado `sin_dato`. Esto es esa segunda mitad:
+// revisa los últimos DIAS_REINTENTO_SIN_DATO días y le vuelve a preguntar a
+// Ecowitt sólo por los que todavía no tienen un dato confiable. Si la
+// estación ya se reconectó y Ecowitt tiene el día completo en su nube
+// (buffer local que sube al volver la luz/el internet), el día pasa a
+// 'ok' con el número real. Si Ecowitt TODAVÍA no lo tiene, el día queda
+// exactamente como estaba -- nunca se inventa un valor para forzar que
+// "avance".
+//
+// Importante sobre `contador_congelado`: a diferencia de `cobertura_parcial`
+// (un hueco de captura, justo lo que este reintento puede recuperar),
+// `contador_congelado` es un bug del firmware del sensor -- el contador
+// acumulado de Ecowitt no se reinició, y eso ya quedó grabado así del lado
+// de Ecowitt, con estación conectada y las 288 lecturas del día presentes.
+// Reintentarlo es inofensivo (misma pregunta, misma respuesta previsible) y
+// se incluye por si el sensor se corrige o el valor cambia, pero no hay
+// garantía de que se resuelva -- es un problema de HARDWARE, no de
+// conexión.
+// ============================================================================
+
+/** Ventana hacia atrás que cada corrida revisa. 21 días cubre de sobra
+ *  cualquier corte de luz/internet razonable sin recorrer toda la historia
+ *  en cada disparo diario. */
+const DIAS_REINTENTO_SIN_DATO = 21;
+
+/** `lluvia_confianza` que vale la pena reintentar -- las dos que guardan
+ *  NULL por falta de dato (068/103). `sin_time_piezo` se deja afuera a
+ *  propósito: ese día ya tiene un número en el que se confía, no está en
+ *  NULL, reintentarlo no lo mejora. */
+const CONFIANZAS_A_REINTENTAR = new Set(['contador_congelado', 'cobertura_parcial']);
+
+export async function handleClimaReintentoSinDato(c: Context): Promise<Response> {
+  const log = '[clima-reintento-sin-dato]';
+
+  const acceso = await verificarAccesoClima(c);
+  if (acceso instanceof Response) return acceso;
+
+  try {
+    const creds = getEcowittCredentials();
+    if (!creds) return c.json({ error: 'Missing Ecowitt credentials' }, 500);
+    const sb = getSupabaseConfig();
+    if (!sb) return c.json({ error: 'Missing Supabase config' }, 500);
+
+    const ayer = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const desde = new Date(ayer.getTime() - (DIAS_REINTENTO_SIN_DATO - 1) * 24 * 60 * 60 * 1000);
+    const desdeStr = formatEcowittDate(desde);
+    const ayerStr = formatEcowittDate(ayer);
+
+    // Se pregunta a la base qué días están sin dato en vez de reintentar la
+    // ventana completa a ciegas -- un día ya 'ok' no necesita otra llamada
+    // a Ecowitt.
+    const queryUrl = `${sb.supabaseUrl}/rest/v1/clima_resumen_diario`
+      + `?station_id=eq.${encodeURIComponent(creds.mac)}`
+      + `&fecha=gte.${desdeStr}&fecha=lte.${ayerStr}`
+      + `&select=fecha,lluvia_confianza`;
+    const queryRes = await fetch(queryUrl, {
+      headers: { apikey: sb.serviceKey, Authorization: `Bearer ${sb.serviceKey}` },
+    });
+    if (!queryRes.ok) {
+      const body = await queryRes.text().catch(() => '');
+      console.error(`${log} No se pudo leer clima_resumen_diario (${queryRes.status}): ${body}`);
+      return c.json({ error: 'No se pudo leer clima_resumen_diario', details: body }, 502);
+    }
+    const filas: { fecha: string; lluvia_confianza: string }[] = await queryRes.json();
+    const confianzaPorFecha = new Map(filas.map((f) => [f.fecha, f.lluvia_confianza]));
+
+    const candidatos: Date[] = [];
+    for (let i = 0; i < DIAS_REINTENTO_SIN_DATO; i++) {
+      const d = new Date(ayer.getTime() - i * 24 * 60 * 60 * 1000);
+      const fechaStr = formatEcowittDate(d);
+      const confianza = confianzaPorFecha.get(fechaStr);
+      // Sin fila en absoluto ("sin_registro" del lado del frontend) o con
+      // una confianza que hoy vale NULL -- las dos son candidatas.
+      if (confianza === undefined || CONFIANZAS_A_REINTENTAR.has(confianza)) {
+        candidatos.push(d);
+      }
+    }
+
+    if (candidatos.length === 0) {
+      console.info(`${log} nada que reintentar en los últimos ${DIAS_REINTENTO_SIN_DATO} días`);
+      return c.json({ message: 'Nada que reintentar', candidatos: 0 }, 200);
+    }
+
+    console.info(`${log} ${candidatos.length} día(s) candidato(s): ${candidatos.map(formatEcowittDate).join(', ')}`);
+
+    const resultados: { fecha: string; consultaOk: boolean; error?: string }[] = [];
+    for (const dia of candidatos) {
+      const r = await backfillUnDia(dia, creds, sb, log);
+      resultados.push({ fecha: formatEcowittDate(dia), consultaOk: r.ok, error: r.ok ? undefined : r.error });
+      await sleep(150);
+    }
+
+    // Se vuelve a preguntar a la base cuántos candidatos quedaron 'ok'
+    // DESPUÉS del reintento -- "la consulta a Ecowitt no dio error" no es
+    // lo mismo que "el día se resolvió"; puede seguir incompleto del lado
+    // de Ecowitt. Si esta verificación en sí falla, se dice explícitamente
+    // (`resueltos: null`) en vez de reportar 0 como si nada se hubiera
+    // arreglado.
+    let resueltos: number | null = null;
+    const verifQueryUrl = `${sb.supabaseUrl}/rest/v1/clima_resumen_diario`
+      + `?station_id=eq.${encodeURIComponent(creds.mac)}`
+      + `&fecha=gte.${desdeStr}&fecha=lte.${ayerStr}`
+      + `&lluvia_confianza=eq.ok`
+      + `&select=fecha`;
+    const verifRes = await fetch(verifQueryUrl, {
+      headers: { apikey: sb.serviceKey, Authorization: `Bearer ${sb.serviceKey}` },
+    });
+    if (verifRes.ok) {
+      const fechasOk = new Set(((await verifRes.json()) as { fecha: string }[]).map((f) => f.fecha));
+      resueltos = candidatos.filter((d) => fechasOk.has(formatEcowittDate(d))).length;
+    } else {
+      console.warn(`${log} no se pudo verificar cuántos candidatos quedaron 'ok' tras el reintento`);
+    }
+
+    console.info(`${log} ${resueltos ?? '?'}/${candidatos.length} día(s) resuelto(s) a 'ok' en esta corrida`);
+
+    return c.json({
+      message: 'Reintento completo',
+      candidatos: candidatos.length,
+      resueltos,
+      resultados,
     }, 200);
   } catch (error) {
     console.error(`${log} Unhandled error:`, error);
