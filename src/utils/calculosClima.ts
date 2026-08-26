@@ -109,6 +109,87 @@ export function construirFranjaLluvia(
   return resultado;
 }
 
+// ============================================================================
+// Racha de días sin lluvia material (2026-08-26, pedido de Santiago)
+// ============================================================================
+
+/** Umbral por debajo del cual un día NO cuenta como "lluvia" para la racha
+ *  — una llovizna de 1-2mm no rompe una racha seca. Es una decisión de
+ *  producto, no una constante agronómica fija: ajustar acá si el umbral
+ *  cambia, nunca duplicarlo inline en el componente. */
+export const UMBRAL_LLUVIA_MATERIAL_MM = 10;
+
+export interface RachaSinLluvia {
+  /** Días consecutivos confirmados con lluvia < umbral, contados hacia atrás
+   *  desde el último día con resumen escrito (nunca "hoy": el rollup
+   *  nocturno recién escribe el resumen de hoy mañana en la madrugada). */
+  dias: number;
+  /** Día más antiguo y más reciente que entran en la racha — null si dias=0. */
+  desdeFecha: string | null;
+  hastaFecha: string | null;
+  /** Si la racha terminó porque hubo lluvia material, acá queda esa lluvia. */
+  ultimaLluviaFecha: string | null;
+  ultimaLluviaMm: number | null;
+  /** true si lo que cortó el conteo NO fue lluvia confirmada sino quedarse
+   *  sin dato confiable (contador congelado, cobertura parcial, o directamente
+   *  ninguna fila). La racha reportada es un piso, nunca un número exacto en
+   *  ese caso: no hay evidencia de que haya llovido en el hueco, pero tampoco
+   *  se puede afirmar que no llovió — mismo principio que `construirFranjaLluvia`,
+   *  nunca se inventa un día seco donde el dato no lo respalda. */
+  cortadaPorFaltaDeDato: boolean;
+  /** Fecha del primer día sin dato confiable que cortó el conteo, cuando
+   *  `cortadaPorFaltaDeDato` es true. */
+  fechaFaltaDeDato: string | null;
+}
+
+/**
+ * Cuenta hacia atrás desde `hastaISO` (normalmente hoy) los días consecutivos
+ * de lluvia por debajo de `umbralMm`, empezando en AYER — el resumen de hoy
+ * todavía no existe. Se detiene en el primer día con lluvia >= umbralMm
+ * (racha confirmada) o en el primer día sin dato confiable (racha "al menos
+ * X días", con `cortadaPorFaltaDeDato: true`). Nunca cruza un día sin dato
+ * asumiendo que fue seco — sería fabricar exactamente el cero que
+ * `lluviaConfiableDeResumen` existe para evitar.
+ */
+export function calcularRachaSinLluvia(
+  resumenes: ResumenDiario[],
+  hastaISO: string,
+  umbralMm: number = UMBRAL_LLUVIA_MATERIAL_MM,
+): RachaSinLluvia {
+  const porFecha = new Map(resumenes.map((r) => [r.fecha, r]));
+  const [anio, mes, dia] = hastaISO.split('-').map(Number);
+
+  let dias = 0;
+  let desdeFecha: string | null = null;
+  let hastaFecha: string | null = null;
+
+  // Tope de un año: red de seguridad si nunca aparece lluvia ni un hueco de
+  // dato (no debería pasar en la práctica), no una regla de negocio.
+  for (let i = 1; i <= 366; i++) {
+    const fechaDia = new Date(anio, mes - 1, dia - i);
+    const fechaStr = fechaAISODate(fechaDia);
+    const fila = porFecha.get(fechaStr);
+
+    if (!fila) {
+      return { dias, desdeFecha, hastaFecha, ultimaLluviaFecha: null, ultimaLluviaMm: null, cortadaPorFaltaDeDato: true, fechaFaltaDeDato: fechaStr };
+    }
+
+    const mm = lluviaConfiableDeResumen(fila);
+    if (mm === null) {
+      return { dias, desdeFecha, hastaFecha, ultimaLluviaFecha: null, ultimaLluviaMm: null, cortadaPorFaltaDeDato: true, fechaFaltaDeDato: fechaStr };
+    }
+    if (mm >= umbralMm) {
+      return { dias, desdeFecha, hastaFecha, ultimaLluviaFecha: fechaStr, ultimaLluviaMm: mm, cortadaPorFaltaDeDato: false, fechaFaltaDeDato: null };
+    }
+
+    dias++;
+    hastaFecha = hastaFecha ?? fechaStr;
+    desdeFecha = fechaStr;
+  }
+
+  return { dias, desdeFecha, hastaFecha, ultimaLluviaFecha: null, ultimaLluviaMm: null, cortadaPorFaltaDeDato: true, fechaFaltaDeDato: null };
+}
+
 // Cardinal direction from degrees (0-360)
 const CARDINALS = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'] as const;
 

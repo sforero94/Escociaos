@@ -9,11 +9,14 @@ import { fechaAISODate, obtenerFechaHoy } from '@/utils/fechas';
 import { formatNumber } from '@/utils/format';
 import {
   construirFranjaLluvia,
+  calcularRachaSinLluvia,
+  UMBRAL_LLUVIA_MATERIAL_MM,
   clasificarFrescuraLectura,
   etiquetaEdadLectura,
   minutosDesdeLectura,
 } from '@/utils/calculosClima';
 import { FranjaLluvia } from './FranjaLluvia';
+import { RachaSinLluvia } from './RachaSinLluvia';
 import type { ResumenClima } from '@/types/clima';
 
 interface DiaPronostico {
@@ -59,6 +62,14 @@ export function ClimaCard() {
   // llega como 'sin_dato', nunca como 0mm.
   const franjaLluvia10Dias = useMemo(
     () => construirFranjaLluvia(resumenesDiarios, 10, obtenerFechaHoy()),
+    [resumenesDiarios],
+  );
+
+  // Racha de días sin lluvia material (pedido de Santiago 2026-08-26): cuenta
+  // hacia atrás desde ayer, se corta ante lluvia >= umbral o ante el primer
+  // día sin dato confiable -- nunca asume seco donde el dato no lo respalda.
+  const rachaSinLluvia = useMemo(
+    () => calcularRachaSinLluvia(resumenesDiarios, obtenerFechaHoy()),
     [resumenesDiarios],
   );
 
@@ -130,6 +141,7 @@ export function ClimaCard() {
         {resumenSemana && <ResumenSemana resumen={resumenSemana} sunHoursSemana={sunHoursSemana} />}
 
         <FranjaLluvia dias={franjaLluvia10Dias} visibleEnMovil={7} />
+        <RachaSinLluvia racha={rachaSinLluvia} umbralMm={UMBRAL_LLUVIA_MATERIAL_MM} />
       </div>
     );
   }
@@ -197,6 +209,7 @@ export function ClimaCard() {
       {resumenSemana && <ResumenSemana resumen={resumenSemana} sunHoursSemana={sunHoursSemana} />}
 
       <FranjaLluvia dias={franjaLluvia10Dias} visibleEnMovil={7} />
+      <RachaSinLluvia racha={rachaSinLluvia} umbralMm={UMBRAL_LLUVIA_MATERIAL_MM} />
     </div>
   );
 }

@@ -17,6 +17,7 @@ export { EstadoHeader } from './EstadoHeader';
 export type { EstadoHeaderProps } from './EstadoHeader';
 export { ClimaCard } from './ClimaCard';
 export { FranjaLluvia } from './FranjaLluvia';
+export { RachaSinLluvia } from './RachaSinLluvia';
 export { QuickLinksRow } from './QuickLinksRow';
 export { DashboardKPICard } from './DashboardKPICard';
 export { PlagasKPICard } from './PlagasKPICard';
