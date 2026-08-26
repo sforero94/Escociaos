@@ -509,6 +509,119 @@ describe('construirFranjaLluvia', () => {
   });
 });
 
+describe('calcularRachaSinLluvia', () => {
+  let calcularRachaSinLluvia: (
+    resumenes: ResumenDiario[],
+    hastaISO: string,
+    umbralMm?: number,
+  ) => import('@/utils/calculosClima').RachaSinLluvia;
+
+  beforeAll(async () => {
+    const mod = await import('@/utils/calculosClima');
+    calcularRachaSinLluvia = mod.calcularRachaSinLluvia;
+  });
+
+  it('cuenta los días consecutivos por debajo del umbral, empezando en AYER -- nunca en hastaISO', () => {
+    const rows = [
+      // Termina la racha más atrás, para aislar la aserción de este test
+      // (que hastaISO se ignora) de la lógica de "se corta ante lluvia real".
+      resumenDia({ fecha: '2026-08-11', lluvia_total_mm: 20, lluvia_confianza: 'ok' }),
+      resumenDia({ fecha: '2026-08-12', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
+      resumenDia({ fecha: '2026-08-13', lluvia_total_mm: 0.5, lluvia_confianza: 'ok' }),
+      resumenDia({ fecha: '2026-08-14', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
+      // hastaISO trae una lluvia fuerte a propósito: si el conteo la mirara,
+      // la racha daría 0. Debe ignorarse -- el resumen de "hoy" no existe
+      // todavía en producción (el rollup nocturno lo escribe mañana).
+      resumenDia({ fecha: '2026-08-15', lluvia_total_mm: 40, lluvia_confianza: 'ok' }),
+    ];
+    const racha = calcularRachaSinLluvia(rows, '2026-08-15', 10);
+    expect(racha.dias).toBe(3);
+    expect(racha.desdeFecha).toBe('2026-08-12');
+    expect(racha.hastaFecha).toBe('2026-08-14');
+    expect(racha.cortadaPorFaltaDeDato).toBe(false);
+    expect(racha.ultimaLluviaFecha).toBe('2026-08-11');
+  });
+
+  it('una llovizna por debajo del umbral NO rompe la racha', () => {
+    const rows = [
+      resumenDia({ fecha: '2026-08-11', lluvia_total_mm: 15, lluvia_confianza: 'ok' }), // termina la racha
+      resumenDia({ fecha: '2026-08-12', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
+      resumenDia({ fecha: '2026-08-13', lluvia_total_mm: 2, lluvia_confianza: 'ok' }), // llovizna inmaterial
+      resumenDia({ fecha: '2026-08-14', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
+    ];
+    const racha = calcularRachaSinLluvia(rows, '2026-08-15', 10);
+    expect(racha.dias).toBe(3);
+    expect(racha.cortadaPorFaltaDeDato).toBe(false);
+  });
+
+  it('se corta en el primer día con lluvia >= umbral, y expone esa lluvia', () => {
+    const rows = [
+      resumenDia({ fecha: '2026-08-11', lluvia_total_mm: 25, lluvia_confianza: 'ok' }), // más atrás, no debe importar
+      resumenDia({ fecha: '2026-08-12', lluvia_total_mm: 15, lluvia_confianza: 'ok' }), // corta acá
+      resumenDia({ fecha: '2026-08-13', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
+      resumenDia({ fecha: '2026-08-14', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
+    ];
+    const racha = calcularRachaSinLluvia(rows, '2026-08-15', 10);
+    expect(racha.dias).toBe(2);
+    expect(racha.ultimaLluviaFecha).toBe('2026-08-12');
+    expect(racha.ultimaLluviaMm).toBe(15);
+    expect(racha.cortadaPorFaltaDeDato).toBe(false);
+  });
+
+  it('umbral configurable: la misma serie da rachas distintas según el umbral', () => {
+    const rows = [
+      resumenDia({ fecha: '2026-08-13', lluvia_total_mm: 3, lluvia_confianza: 'ok' }),
+      resumenDia({ fecha: '2026-08-14', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
+    ];
+    expect(calcularRachaSinLluvia(rows, '2026-08-15', 10).dias).toBe(2); // 3mm no rompe con umbral 10
+    expect(calcularRachaSinLluvia(rows, '2026-08-15', 1).dias).toBe(1); // 3mm sí rompe con umbral 1
+  });
+
+  it('un día sin dato confiable corta el conteo sin asumir que fue seco (contador congelado)', () => {
+    const rows = [
+      resumenDia({ fecha: '2026-08-11', lluvia_total_mm: 0, lluvia_confianza: 'ok' }), // más atrás del hueco, no cuenta
+      resumenDia({ fecha: '2026-08-12', lluvia_total_mm: null, lluvia_confianza: 'contador_congelado' }),
+      resumenDia({ fecha: '2026-08-13', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
+      resumenDia({ fecha: '2026-08-14', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
+    ];
+    const racha = calcularRachaSinLluvia(rows, '2026-08-15', 10);
+    expect(racha.dias).toBe(2); // sólo 13 y 14 -- se detiene en 12, no lo cruza
+    expect(racha.cortadaPorFaltaDeDato).toBe(true);
+    expect(racha.fechaFaltaDeDato).toBe('2026-08-12');
+    expect(racha.ultimaLluviaFecha).toBeNull();
+  });
+
+  it('un día `cobertura_parcial` corta el conteo igual que el contador congelado (migración 103)', () => {
+    const rows = [
+      resumenDia({ fecha: '2026-08-13', lluvia_total_mm: 0, lluvia_confianza: 'cobertura_parcial', lecturas_count: 167 }),
+      resumenDia({ fecha: '2026-08-14', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
+    ];
+    const racha = calcularRachaSinLluvia(rows, '2026-08-15', 10);
+    expect(racha.dias).toBe(1);
+    expect(racha.cortadaPorFaltaDeDato).toBe(true);
+    expect(racha.fechaFaltaDeDato).toBe('2026-08-13');
+  });
+
+  it('un día sin ninguna fila corta el conteo igual que uno sin dato confiable', () => {
+    const rows = [
+      resumenDia({ fecha: '2026-08-14', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
+      // 2026-08-13 no tiene fila -- la estación no sincronizó ese día
+    ];
+    const racha = calcularRachaSinLluvia(rows, '2026-08-15', 10);
+    expect(racha.dias).toBe(1);
+    expect(racha.cortadaPorFaltaDeDato).toBe(true);
+    expect(racha.fechaFaltaDeDato).toBe('2026-08-13');
+  });
+
+  it('sin historia en absoluto, la racha es 0 y queda marcada sin confirmar', () => {
+    const racha = calcularRachaSinLluvia([], '2026-08-15', 10);
+    expect(racha.dias).toBe(0);
+    expect(racha.cortadaPorFaltaDeDato).toBe(true);
+    expect(racha.desdeFecha).toBeNull();
+    expect(racha.hastaFecha).toBeNull();
+  });
+});
+
 // ===========================================================================
 // La puerta por la que TODO consumidor de clima_resumen_diario tiene que pasar
 // ===========================================================================
