@@ -23,27 +23,48 @@ function safeMin(values: number[]): number {
 // Lluvia confiable (migración 068)
 // ============================================================================
 
-// El rollup nocturno guarda lluvia_total_mm = NULL cuando detecta el contador
-// congelado, pero el backfill historico de la 068 solo marca lluvia_confianza
-// y deja el valor crudo intacto (a proposito, para auditoria). Por eso TODO
-// consumidor de clima_resumen_diario debe pasar por aqui: sumar
-// lluvia_total_mm directo revive el duplicado que la migracion detecto.
-// "Sin dato" es NULL, nunca 0.
+// El backfill historico de la 068 solo marca lluvia_confianza y deja el valor
+// crudo intacto (a proposito, para auditoria). Por eso TODO consumidor de
+// clima_resumen_diario debe pasar por aqui: sumar lluvia_total_mm directo
+// revive el duplicado que la migracion detecto. "Sin dato" es NULL, nunca 0.
 //
-// Migración 103: `cobertura_parcial` entra por la misma puerta. Un día del que
-// sólo se capturó una parte (corte de luz en la finca) no tiene total que
-// afirmar — el contador de lluvia es acumulado, así que el máximo de las
-// lecturas disponibles es una cota inferior, no una medición. El rollup lo
-// guarda como NULL, y esta puerta lo sostiene también para las filas que el
-// backfill de la 103 marcó. Es el espejo del bug de la 068: aquélla impedía un
-// duplicado fabricado, ésta impide un CERO fabricado.
-const CONFIANZAS_SIN_DATO = new Set(['contador_congelado', 'cobertura_parcial']);
+// MIGRACIÓN 122 — `cobertura_parcial` SALE de este conjunto.
+// Desde la 122 esa etiqueta dejó de significar "sin dato" y pasa a significar
+// "el valor es una COTA INFERIOR real": el rollup reconstruye la lluvia del día
+// desde `lluvia_evento_mm` (acumulador por evento, independiente del contador
+// diario) y guarda lo que efectivamente se midió en las horas capturadas. Las
+// filas históricas de `cobertura_parcial` traen `lluvia_total_mm = NULL` y se
+// siguen leyendo como sin dato — el NULL habla solo, no hace falta la etiqueta.
+//
+// `contador_congelado` SE QUEDA, y por una razón concreta: 24 de las 31 filas
+// marcadas así conservan un valor que ES el duplicado falso que la 068 detectó
+// (verificado 2026-08-27: las 24 tienen hoy_mm = ayer_mm exacto). Hasta que el
+// backfill de Ecowitt las reconstruya, ese número no se puede usar. El rollup
+// ya no escribe esta etiqueta salvo cuando no hay señal independiente.
+const CONFIANZAS_SIN_DATO = new Set(['contador_congelado']);
 
 export function lluviaConfiableDeResumen(
   fila: { lluvia_total_mm: number | null; lluvia_confianza?: string | null }
 ): number | null {
   if (fila.lluvia_confianza != null && CONFIANZAS_SIN_DATO.has(fila.lluvia_confianza)) return null;
   return fila.lluvia_total_mm;
+}
+
+/**
+ * `true` cuando el valor del día es una COTA INFERIOR y no un total: sólo se
+ * capturó parte de la jornada (migraciones 103/115), así que lo medido es "al
+ * menos esto", nunca "esto fue todo".
+ *
+ * La distinción importa y no es cosmética. Una cota inferior de 0 mm no informa
+ * NADA — "no llovió durante las horas que miramos" no es "no llovió" — mientras
+ * que una cota inferior de 8 mm sí es un hecho: llovió al menos 8 mm. Por eso
+ * los consumidores tratan distinto los dos casos en vez de meterlos en la misma
+ * bolsa.
+ */
+export function esCotaInferior(
+  fila: { lluvia_confianza?: string | null }
+): boolean {
+  return fila.lluvia_confianza === 'cobertura_parcial';
 }
 
 // ============================================================================
@@ -60,6 +81,62 @@ export interface DiaFranjaLluvia {
   mm: number | null;
   /** Sólo relevante cuando estado es 'sin_dato' */
   causa: 'contador_congelado' | 'cobertura_parcial' | 'sin_registro' | null;
+  /** El valor salió de las lecturas de 5 min en vivo, no de clima_resumen_diario:
+   *  el rollup nocturno todavía no corrió para ese día. Ver `lluviaDeLecturasVivas`. */
+  enVivo?: boolean;
+}
+
+/** Lectura mínima que necesita `lluviaDeLecturasVivas` — un subconjunto de
+ *  `LecturaClima`, para que la función sirva también en tests sin construir la
+ *  fila entera. */
+export interface LecturaLluviaViva {
+  timestamp: string;
+  lluvia_evento_mm: number | null;
+}
+
+/**
+ * Lluvia caída en `fechaISO` reconstruida desde las lecturas de 5 minutos en
+ * vivo (`clima_lecturas`), sumando los deltas POSITIVOS del acumulador por
+ * evento — exactamente el mismo método que `fn_clima_rollup_diario` usa desde
+ * la migración 122, para que la pantalla y la base nunca contesten distinto.
+ *
+ * Existe porque el rollup corre a las 00:15 y escribe el resumen de AYER: el
+ * día en curso no tiene fila en `clima_resumen_diario` hasta la madrugada
+ * siguiente, y la franja lo pintaba como "sin dato" toda la tarde y toda la
+ * noche aunque las lecturas estuvieran ahí.
+ *
+ * Devuelve `null` — nunca 0 — si no hay ni una lectura de ese día: "no vimos
+ * el día" y "no llovió" son cosas distintas.
+ *
+ * Sólo cuenta deltas dentro del día pero arrastra la línea base desde la última
+ * lectura anterior, así que una lluvia que empezó antes de medianoche no se
+ * cuenta de nuevo hoy.
+ */
+export function lluviaDeLecturasVivas(
+  lecturas: LecturaLluviaViva[],
+  fechaISO: string,
+): number | null {
+  if (lecturas.length === 0) return null;
+
+  const ordenadas = [...lecturas].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  let previo: number | null = null;
+  let total = 0;
+  let vioElDia = false;
+
+  for (const lectura of ordenadas) {
+    const fechaLectura = fechaAISODate(new Date(lectura.timestamp));
+    const valor = lectura.lluvia_evento_mm;
+
+    if (fechaLectura === fechaISO) {
+      vioElDia = true;
+      // Sólo deltas positivos: el acumulador se reinicia entre eventos y un
+      // delta negativo es ese reinicio, no lluvia negativa.
+      if (previo !== null && valor !== null && valor > previo) total += valor - previo;
+    }
+    if (valor !== null) previo = valor;
+  }
+
+  return vioElDia ? round2(total) : null;
 }
 
 // Arma la franja de los últimos `dias` días terminando en `hastaISO`
@@ -74,6 +151,10 @@ export function construirFranjaLluvia(
   resumenes: ResumenDiario[],
   dias: number,
   hastaISO: string,
+  /** Lecturas de 5 min en vivo (`clima_lecturas`). Cubren el día en curso, que
+   *  todavía no tiene fila en `clima_resumen_diario` porque el rollup corre a
+   *  las 00:15. Sin esto la última barra sale "sin dato" toda la tarde. */
+  lecturasVivas?: LecturaLluviaViva[],
 ): DiaFranjaLluvia[] {
   const porFecha = new Map(resumenes.map((r) => [r.fecha, r]));
   const [anio, mes, dia] = hastaISO.split('-').map(Number);
@@ -85,15 +166,30 @@ export function construirFranjaLluvia(
     const fila = porFecha.get(fechaStr);
 
     if (!fila) {
+      // Sin fila agregada todavía: si las lecturas en vivo cubren el día, se
+      // usa esa reconstrucción en vez de declarar "sin dato". Es el caso del
+      // día en curso, que antes salía rayado hasta la madrugada siguiente.
+      const mmVivo = lecturasVivas ? lluviaDeLecturasVivas(lecturasVivas, fechaStr) : null;
+      if (mmVivo !== null) {
+        resultado.push({
+          fecha: fechaStr,
+          estado: mmVivo > 0 ? 'lluvia' : 'seco',
+          mm: mmVivo,
+          causa: null,
+          enVivo: true,
+        });
+        continue;
+      }
       resultado.push({ fecha: fechaStr, estado: 'sin_dato', mm: null, causa: 'sin_registro' });
       continue;
     }
 
     const mm = lluviaConfiableDeResumen(fila);
-    if (mm === null) {
-      // Un día `cobertura_parcial` (migración 103) es 'sin_dato' igual que uno
-      // con el contador congelado, y JAMÁS 'seco': la fila trae 0.00 mm sólo
-      // porque no se capturó la tarde, no porque no haya llovido.
+    // Una COTA INFERIOR de 0 mm no informa nada: "no llovió durante las horas
+    // que miramos" no es "no llovió". Se pinta sin dato, JAMÁS como un cero
+    // real — es el bug que la 103 existe para impedir. Una cota inferior > 0 sí
+    // es un hecho (llovió al menos eso) y se pinta como lluvia.
+    if (mm === null || (esCotaInferior(fila) && mm === 0)) {
       const causa: DiaFranjaLluvia['causa'] =
         fila.lluvia_confianza === 'contador_congelado' ? 'contador_congelado'
         : fila.lluvia_confianza === 'cobertura_parcial' ? 'cobertura_parcial'
@@ -120,9 +216,9 @@ export function construirFranjaLluvia(
 export const UMBRAL_LLUVIA_MATERIAL_MM = 10;
 
 export interface RachaSinLluvia {
-  /** Días consecutivos confirmados con lluvia < umbral, contados hacia atrás
-   *  desde el último día con resumen escrito (nunca "hoy": el rollup
-   *  nocturno recién escribe el resumen de hoy mañana en la madrugada). */
+  /** Días consecutivos con lluvia < umbral, contados hacia atrás desde AYER
+   *  (el rollup nocturno recién escribe el resumen de hoy en la madrugada;
+   *  para el día en curso se usan las lecturas vivas). */
   dias: number;
   /** Día más antiguo y más reciente que entran en la racha — null si dias=0. */
   desdeFecha: string | null;
@@ -130,64 +226,100 @@ export interface RachaSinLluvia {
   /** Si la racha terminó porque hubo lluvia material, acá queda esa lluvia. */
   ultimaLluviaFecha: string | null;
   ultimaLluviaMm: number | null;
-  /** true si lo que cortó el conteo NO fue lluvia confirmada sino quedarse
-   *  sin dato confiable (contador congelado, cobertura parcial, o directamente
-   *  ninguna fila). La racha reportada es un piso, nunca un número exacto en
-   *  ese caso: no hay evidencia de que haya llovido en el hueco, pero tampoco
-   *  se puede afirmar que no llovió — mismo principio que `construirFranjaLluvia`,
-   *  nunca se inventa un día seco donde el dato no lo respalda. */
-  cortadaPorFaltaDeDato: boolean;
-  /** Fecha del primer día sin dato confiable que cortó el conteo, cuando
-   *  `cortadaPorFaltaDeDato` es true. */
-  fechaFaltaDeDato: string | null;
+  /** Cuántos días DENTRO del tramo no tienen un valor confiable. 0 = racha
+   *  enteramente confirmada. Se reporta al lado del número, en gris y chico:
+   *  el conteo no se corta por un hueco, pero tampoco se esconde que lo hubo. */
+  diasSinConfirmar: number;
 }
 
 /**
- * Cuenta hacia atrás desde `hastaISO` (normalmente hoy) los días consecutivos
- * de lluvia por debajo de `umbralMm`, empezando en AYER — el resumen de hoy
- * todavía no existe. Se detiene en el primer día con lluvia >= umbralMm
- * (racha confirmada) o en el primer día sin dato confiable (racha "al menos
- * X días", con `cortadaPorFaltaDeDato: true`). Nunca cruza un día sin dato
- * asumiendo que fue seco — sería fabricar exactamente el cero que
- * `lluviaConfiableDeResumen` existe para evitar.
+ * Cuenta hacia atrás desde `hastaISO` los días consecutivos con lluvia por
+ * debajo de `umbralMm`, empezando en AYER.
+ *
+ * DECISIÓN DE PRODUCTO (Santiago, 2026-08-27): **el conteo NO se detiene en un
+ * día sin dato.** La versión anterior cortaba en el primer hueco, y con ~20% de
+ * los días marcados sin dato eso hacía el indicador inservible: reportaba "5
+ * días" cuando la última lluvia ≥10 mm confirmada había sido 36 días antes. Un
+ * hueco de dato no es evidencia de que llovió; detenerse ahí trataba la
+ * ignorancia como si fuera una lluvia.
+ *
+ * Lo que SÍ corta el conteo es un día con lluvia confirmada ≥ umbral. Los días
+ * sin dato se cuentan dentro del tramo y se reportan aparte en
+ * `diasSinConfirmar`, para que el número siga siendo auditable sin volverse
+ * inútil.
+ *
+ * Se detiene también al quedarse sin historia (fecha anterior al resumen más
+ * viejo), para no inventar días secos donde simplemente no hay registro.
  */
 export function calcularRachaSinLluvia(
   resumenes: ResumenDiario[],
   hastaISO: string,
   umbralMm: number = UMBRAL_LLUVIA_MATERIAL_MM,
+  /** Lecturas de 5 min en vivo, para poder evaluar el día en curso — que aún
+   *  no tiene fila en `clima_resumen_diario`. */
+  lecturasVivas?: LecturaLluviaViva[],
 ): RachaSinLluvia {
   const porFecha = new Map(resumenes.map((r) => [r.fecha, r]));
   const [anio, mes, dia] = hastaISO.split('-').map(Number);
 
+  // Piso de la historia: más atrás de esto no hay con qué contestar, y contar
+  // días "secos" ahí sería inventarlos. Se toma el más viejo entre los
+  // resúmenes y las lecturas vivas — sin ninguna de las dos fuentes no hay
+  // racha que calcular y se devuelve 0, nunca los 366 del tope de seguridad.
+  const masViejoResumen = resumenes.reduce<string | null>(
+    (min, r) => (min === null || r.fecha < min ? r.fecha : min),
+    null,
+  );
+  const masViejaLectura = (lecturasVivas ?? []).reduce<string | null>(
+    (min, l) => {
+      const f = fechaAISODate(new Date(l.timestamp));
+      return min === null || f < min ? f : min;
+    },
+    null,
+  );
+  const fechaMasVieja =
+    masViejoResumen !== null && masViejaLectura !== null
+      ? (masViejoResumen < masViejaLectura ? masViejoResumen : masViejaLectura)
+      : (masViejoResumen ?? masViejaLectura);
+
+  if (fechaMasVieja === null) {
+    return { dias: 0, desdeFecha: null, hastaFecha: null, ultimaLluviaFecha: null, ultimaLluviaMm: null, diasSinConfirmar: 0 };
+  }
+
   let dias = 0;
+  let diasSinConfirmar = 0;
   let desdeFecha: string | null = null;
   let hastaFecha: string | null = null;
 
-  // Tope de un año: red de seguridad si nunca aparece lluvia ni un hueco de
-  // dato (no debería pasar en la práctica), no una regla de negocio.
+  // Tope de un año: red de seguridad, no una regla de negocio.
   for (let i = 1; i <= 366; i++) {
     const fechaDia = new Date(anio, mes - 1, dia - i);
     const fechaStr = fechaAISODate(fechaDia);
+
+    if (fechaStr < fechaMasVieja) break;
+
     const fila = porFecha.get(fechaStr);
+    const mm = fila
+      ? lluviaConfiableDeResumen(fila)
+      : (lecturasVivas ? lluviaDeLecturasVivas(lecturasVivas, fechaStr) : null);
+    // Una cota inferior no es un total: aunque diga 2 mm, ese día pudo haber
+    // llegado a 12. Cuenta dentro del tramo pero no como día confirmado.
+    const esCota = fila ? esCotaInferior(fila) : false;
 
-    if (!fila) {
-      return { dias, desdeFecha, hastaFecha, ultimaLluviaFecha: null, ultimaLluviaMm: null, cortadaPorFaltaDeDato: true, fechaFaltaDeDato: fechaStr };
-    }
-
-    const mm = lluviaConfiableDeResumen(fila);
-    if (mm === null) {
-      return { dias, desdeFecha, hastaFecha, ultimaLluviaFecha: null, ultimaLluviaMm: null, cortadaPorFaltaDeDato: true, fechaFaltaDeDato: fechaStr };
-    }
-    if (mm >= umbralMm) {
-      return { dias, desdeFecha, hastaFecha, ultimaLluviaFecha: fechaStr, ultimaLluviaMm: mm, cortadaPorFaltaDeDato: false, fechaFaltaDeDato: null };
+    // Corta la racha sólo una lluvia por encima del umbral. Con una cota
+    // inferior también corta: si ya sabemos que cayeron >= umbral mm, que
+    // hayan sido más no cambia la respuesta.
+    if (mm !== null && mm >= umbralMm) {
+      return { dias, desdeFecha, hastaFecha, ultimaLluviaFecha: fechaStr, ultimaLluviaMm: mm, diasSinConfirmar };
     }
 
     dias++;
+    if (mm === null || esCota) diasSinConfirmar++;
     hastaFecha = hastaFecha ?? fechaStr;
     desdeFecha = fechaStr;
   }
 
-  return { dias, desdeFecha, hastaFecha, ultimaLluviaFecha: null, ultimaLluviaMm: null, cortadaPorFaltaDeDato: true, fechaFaltaDeDato: null };
+  return { dias, desdeFecha, hastaFecha, ultimaLluviaFecha: null, ultimaLluviaMm: null, diasSinConfirmar };
 }
 
 // Cardinal direction from degrees (0-360)

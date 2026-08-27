@@ -9,34 +9,34 @@ interface RachaSinLluviaProps {
 }
 
 /**
- * Racha de días sin lluvia material (umbral configurable, `UMBRAL_LLUVIA_MATERIAL_MM`
- * en `calculosClima.ts`). Cuenta hacia atrás desde ayer -- nunca "hoy", cuyo
- * resumen todavía no existe. Si un día sin dato confiable corta el conteo
- * (contador congelado, cobertura parcial, o ninguna fila), lo dice
- * explícitamente en vez de mostrar un número que asumió en silencio que ese
- * día no llovió -- mismo principio que `FranjaLluvia`.
+ * Racha de días sin lluvia material (umbral en `UMBRAL_LLUVIA_MATERIAL_MM`,
+ * `calculosClima.ts`).
+ *
+ * El conteo NO se corta ante un día sin dato — ver la decisión documentada en
+ * `calcularRachaSinLluvia`. Si el tramo contiene días sin valor confiable se
+ * dice, pero en gris y chico: es una nota al pie del número, no una alarma.
+ * La versión anterior ponía un párrafo naranja que competía visualmente con el
+ * dato y además reportaba un número 7 veces menor al real.
  */
 export function RachaSinLluvia({ racha, umbralMm }: RachaSinLluviaProps) {
-  if (racha.dias === 0 && !racha.ultimaLluviaFecha && !racha.cortadaPorFaltaDeDato) return null;
+  if (racha.dias === 0 && !racha.ultimaLluviaFecha) return null;
 
   return (
-    <div className="pt-3 border-t border-gray-100 flex items-start gap-2">
-      <Umbrella className="w-3.5 h-3.5 text-brand-brown/40 shrink-0 mt-0.5" aria-hidden="true" />
-      <div className="text-xs">
-        <p className="text-foreground">
-          <span className="font-medium">{racha.dias}</span> días sin lluvia ≥{formatearMm(umbralMm)}
-          {racha.ultimaLluviaFecha && racha.ultimaLluviaMm !== null && (
-            <span className="text-brand-brown/60">
-              {' '}· última: {formatearMm(racha.ultimaLluviaMm)} el {formatearFechaCorta(racha.ultimaLluviaFecha)}
-            </span>
-          )}
-        </p>
-        {racha.cortadaPorFaltaDeDato && (
-          <p className="text-amber-600 mt-0.5">
-            No se puede confirmar más atrás del {racha.fechaFaltaDeDato ? formatearFechaCorta(racha.fechaFaltaDeDato) : 'último día'} — falta dato confiable de lluvia ese día
-          </p>
+    <div className="pt-3 border-t border-gray-100 flex items-baseline gap-2">
+      <Umbrella className="w-3.5 h-3.5 text-brand-brown/40 shrink-0 self-center" aria-hidden="true" />
+      <p className="text-xs text-foreground">
+        <span className="font-medium">{racha.dias}</span> días sin lluvia ≥{formatearMm(umbralMm)}
+        {racha.ultimaLluviaFecha && racha.ultimaLluviaMm !== null && (
+          <span className="text-brand-brown/60">
+            {' '}· última: {formatearMm(racha.ultimaLluviaMm)} el {formatearFechaCorta(racha.ultimaLluviaFecha)}
+          </span>
         )}
-      </div>
+        {racha.diasSinConfirmar > 0 && (
+          <span className="text-brand-brown/40">
+            {' '}({racha.diasSinConfirmar} sin dato)
+          </span>
+        )}
+      </p>
     </div>
   );
 }

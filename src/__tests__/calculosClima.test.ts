@@ -371,6 +371,7 @@ describe('construirFranjaLluvia', () => {
     resumenes: ResumenDiario[],
     dias: number,
     hastaISO: string,
+    lecturasVivas?: { timestamp: string; lluvia_evento_mm: number | null }[],
   ) => import('@/utils/calculosClima').DiaFranjaLluvia[];
 
   beforeAll(async () => {
@@ -455,7 +456,9 @@ describe('construirFranjaLluvia', () => {
   // no llovió en esas nueve horas — y en Aguadas la tarde es justamente cuando
   // llueve. Es el espejo del bug que motivó la 068: aquél fabricaba un
   // DUPLICADO, éste fabrica un CERO.
-  it('un día `cobertura_parcial` es "sin_dato" con su causa — JAMÁS "seco" (migración 103)', () => {
+  it('un día `cobertura_parcial` con 0 mm es "sin_dato" — JAMÁS "seco" (migración 103)', () => {
+    // Una COTA INFERIOR de 0 no informa nada: "no llovió en las horas que
+    // miramos" no es "no llovió".
     const rows = [
       resumenDia({
         fecha: '2026-08-19',
@@ -471,6 +474,32 @@ describe('construirFranjaLluvia', () => {
     expect(franja[0].mm).toBeNull();
     expect(franja[0].mm).not.toBe(0);
     expect(franja[0].causa).toBe('cobertura_parcial');
+  });
+
+  it('un día `cobertura_parcial` con lluvia medida SÍ se pinta — llovió al menos eso (migración 122)', () => {
+    // Desde la 122 el rollup guarda lo efectivamente medido en las horas
+    // capturadas en vez de tirar el día. 8 mm medidos son un hecho, no un hueco.
+    const rows = [
+      resumenDia({
+        fecha: '2026-08-19',
+        lluvia_total_mm: 8,
+        lluvia_confianza: 'cobertura_parcial',
+        lecturas_count: 167,
+      }),
+    ];
+    const franja = construirFranjaLluvia(rows, 1, '2026-08-19');
+
+    expect(franja[0].estado).toBe('lluvia');
+    expect(franja[0].mm).toBe(8);
+  });
+
+  it('un día `reconstruido` es un valor CONFIABLE, no un sin_dato (migración 122)', () => {
+    const rows = [
+      resumenDia({ fecha: '2026-08-13', lluvia_total_mm: 0.25, lluvia_confianza: 'reconstruido' }),
+    ];
+    const franja = construirFranjaLluvia(rows, 1, '2026-08-13');
+    expect(franja[0].estado).toBe('lluvia');
+    expect(franja[0].mm).toBe(0.25);
   });
 
   it('la MISMA fila marcada `ok` sí es un cero real — la confianza es lo único que las separa', () => {
@@ -491,7 +520,7 @@ describe('construirFranjaLluvia', () => {
       resumenDia({ fecha: '2026-08-18', lluvia_total_mm: null, lluvia_confianza: 'contador_congelado' }),
       resumenDia({ fecha: '2026-08-19', lluvia_total_mm: 0, lluvia_confianza: 'cobertura_parcial', lecturas_count: 167 }),
     ];
-    const franja = construirFranjaLluvia(rows, 3, '2026-08-19');
+    const franja = construirFranjaLluvia(rows, 3, '2026-08-19', undefined);
 
     expect(franja.map((d) => d.estado)).toEqual(['lluvia', 'sin_dato', 'sin_dato']);
     expect(franja.map((d) => d.causa)).toEqual([null, 'contador_congelado', 'cobertura_parcial']);
@@ -509,11 +538,118 @@ describe('construirFranjaLluvia', () => {
   });
 });
 
+// ===========================================================================
+// Reconstrucción desde las lecturas vivas (migración 122)
+// ===========================================================================
+// El rollup corre a las 00:15 y escribe el resumen de AYER, así que el día EN
+// CURSO no tiene fila en clima_resumen_diario hasta la madrugada siguiente. La
+// franja lo pintaba "sin dato" toda la tarde y toda la noche, TODOS los días —
+// era 1 de las 4 barras naranjas que se veían en el tablero.
+describe('lluviaDeLecturasVivas', () => {
+  let lluviaDeLecturasVivas: (
+    lecturas: { timestamp: string; lluvia_evento_mm: number | null }[],
+    fechaISO: string,
+  ) => number | null;
+
+  beforeAll(async () => {
+    const mod = await import('@/utils/calculosClima');
+    lluviaDeLecturasVivas = mod.lluviaDeLecturasVivas;
+  });
+
+  it('suma los deltas positivos del acumulador por evento', () => {
+    const lecturas = [
+      { timestamp: '2026-08-26T10:00:00Z', lluvia_evento_mm: 0 },
+      { timestamp: '2026-08-26T11:00:00Z', lluvia_evento_mm: 2 },
+      { timestamp: '2026-08-26T12:00:00Z', lluvia_evento_mm: 5 },
+    ];
+    expect(lluviaDeLecturasVivas(lecturas, '2026-08-26')).toBe(5);
+  });
+
+  it('ignora los deltas negativos — un reinicio del acumulador no es lluvia negativa', () => {
+    const lecturas = [
+      { timestamp: '2026-08-26T10:00:00Z', lluvia_evento_mm: 0 },
+      { timestamp: '2026-08-26T11:00:00Z', lluvia_evento_mm: 4 },
+      { timestamp: '2026-08-26T12:00:00Z', lluvia_evento_mm: 0 }, // reinicio
+      { timestamp: '2026-08-26T13:00:00Z', lluvia_evento_mm: 3 },
+    ];
+    expect(lluviaDeLecturasVivas(lecturas, '2026-08-26')).toBe(7);
+  });
+
+  it('no vuelve a contar la lluvia que ya venía acumulada de ayer', () => {
+    // El evento arranca ayer con 20 mm ya caídos; hoy caen 5 más. El día de hoy
+    // son 5, no 25.
+    const lecturas = [
+      { timestamp: '2026-08-25T23:00:00Z', lluvia_evento_mm: 20 },
+      { timestamp: '2026-08-26T01:00:00Z', lluvia_evento_mm: 22 },
+      { timestamp: '2026-08-26T02:00:00Z', lluvia_evento_mm: 25 },
+    ];
+    expect(lluviaDeLecturasVivas(lecturas, '2026-08-26')).toBe(5);
+  });
+
+  it('devuelve null — NUNCA 0 — si no hay ni una lectura de ese día', () => {
+    const lecturas = [{ timestamp: '2026-08-25T10:00:00Z', lluvia_evento_mm: 3 }];
+    expect(lluviaDeLecturasVivas(lecturas, '2026-08-26')).toBeNull();
+    expect(lluviaDeLecturasVivas([], '2026-08-26')).toBeNull();
+  });
+
+  it('un día visto y sin lluvia sí es 0 — eso no es "sin dato"', () => {
+    const lecturas = [
+      { timestamp: '2026-08-26T10:00:00Z', lluvia_evento_mm: 0 },
+      { timestamp: '2026-08-26T11:00:00Z', lluvia_evento_mm: 0 },
+    ];
+    expect(lluviaDeLecturasVivas(lecturas, '2026-08-26')).toBe(0);
+  });
+});
+
+describe('construirFranjaLluvia — día en curso desde lecturas vivas (migración 122)', () => {
+  let construirFranjaLluvia: (
+    resumenes: ResumenDiario[],
+    dias: number,
+    hastaISO: string,
+    lecturasVivas?: { timestamp: string; lluvia_evento_mm: number | null }[],
+  ) => import('@/utils/calculosClima').DiaFranjaLluvia[];
+
+  beforeAll(async () => {
+    const mod = await import('@/utils/calculosClima');
+    construirFranjaLluvia = mod.construirFranjaLluvia;
+  });
+
+  it('el día sin fila agregada usa las lecturas vivas en vez de salir "sin dato"', () => {
+    const franja = construirFranjaLluvia([], 1, '2026-08-26', [
+      { timestamp: '2026-08-26T10:00:00Z', lluvia_evento_mm: 0 },
+      { timestamp: '2026-08-26T11:00:00Z', lluvia_evento_mm: 3 },
+    ]);
+    expect(franja[0].estado).toBe('lluvia');
+    expect(franja[0].mm).toBe(3);
+    expect(franja[0].enVivo).toBe(true);
+  });
+
+  it('sin lecturas vivas que cubran el día, sigue siendo "sin dato" (no se inventa un 0)', () => {
+    const franja = construirFranjaLluvia([], 1, '2026-08-26', [
+      { timestamp: '2026-08-24T10:00:00Z', lluvia_evento_mm: 0 },
+    ]);
+    expect(franja[0].estado).toBe('sin_dato');
+    expect(franja[0].mm).toBeNull();
+  });
+
+  it('la fila agregada manda sobre las lecturas vivas cuando existe', () => {
+    const franja = construirFranjaLluvia(
+      [resumenDia({ fecha: '2026-08-26', lluvia_total_mm: 12, lluvia_confianza: 'ok' })],
+      1,
+      '2026-08-26',
+      [{ timestamp: '2026-08-26T10:00:00Z', lluvia_evento_mm: 99 }],
+    );
+    expect(franja[0].mm).toBe(12);
+    expect(franja[0].enVivo).toBeUndefined();
+  });
+});
+
 describe('calcularRachaSinLluvia', () => {
   let calcularRachaSinLluvia: (
     resumenes: ResumenDiario[],
     hastaISO: string,
     umbralMm?: number,
+    lecturasVivas?: { timestamp: string; lluvia_evento_mm: number | null }[],
   ) => import('@/utils/calculosClima').RachaSinLluvia;
 
   beforeAll(async () => {
@@ -521,43 +657,40 @@ describe('calcularRachaSinLluvia', () => {
     calcularRachaSinLluvia = mod.calcularRachaSinLluvia;
   });
 
-  it('cuenta los días consecutivos por debajo del umbral, empezando en AYER -- nunca en hastaISO', () => {
+  it('cuenta los dias consecutivos por debajo del umbral, empezando en AYER -- nunca en hastaISO', () => {
     const rows = [
-      // Termina la racha más atrás, para aislar la aserción de este test
-      // (que hastaISO se ignora) de la lógica de "se corta ante lluvia real".
       resumenDia({ fecha: '2026-08-11', lluvia_total_mm: 20, lluvia_confianza: 'ok' }),
       resumenDia({ fecha: '2026-08-12', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
       resumenDia({ fecha: '2026-08-13', lluvia_total_mm: 0.5, lluvia_confianza: 'ok' }),
       resumenDia({ fecha: '2026-08-14', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
-      // hastaISO trae una lluvia fuerte a propósito: si el conteo la mirara,
-      // la racha daría 0. Debe ignorarse -- el resumen de "hoy" no existe
-      // todavía en producción (el rollup nocturno lo escribe mañana).
+      // hastaISO trae una lluvia fuerte a proposito: si el conteo la mirara la
+      // racha daria 0. El resumen de "hoy" no existe todavia en produccion.
       resumenDia({ fecha: '2026-08-15', lluvia_total_mm: 40, lluvia_confianza: 'ok' }),
     ];
     const racha = calcularRachaSinLluvia(rows, '2026-08-15', 10);
     expect(racha.dias).toBe(3);
     expect(racha.desdeFecha).toBe('2026-08-12');
     expect(racha.hastaFecha).toBe('2026-08-14');
-    expect(racha.cortadaPorFaltaDeDato).toBe(false);
     expect(racha.ultimaLluviaFecha).toBe('2026-08-11');
+    expect(racha.diasSinConfirmar).toBe(0);
   });
 
   it('una llovizna por debajo del umbral NO rompe la racha', () => {
     const rows = [
-      resumenDia({ fecha: '2026-08-11', lluvia_total_mm: 15, lluvia_confianza: 'ok' }), // termina la racha
+      resumenDia({ fecha: '2026-08-11', lluvia_total_mm: 15, lluvia_confianza: 'ok' }),
       resumenDia({ fecha: '2026-08-12', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
-      resumenDia({ fecha: '2026-08-13', lluvia_total_mm: 2, lluvia_confianza: 'ok' }), // llovizna inmaterial
+      resumenDia({ fecha: '2026-08-13', lluvia_total_mm: 2, lluvia_confianza: 'ok' }),
       resumenDia({ fecha: '2026-08-14', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
     ];
     const racha = calcularRachaSinLluvia(rows, '2026-08-15', 10);
     expect(racha.dias).toBe(3);
-    expect(racha.cortadaPorFaltaDeDato).toBe(false);
+    expect(racha.diasSinConfirmar).toBe(0);
   });
 
-  it('se corta en el primer día con lluvia >= umbral, y expone esa lluvia', () => {
+  it('se corta en el primer dia con lluvia >= umbral, y expone esa lluvia', () => {
     const rows = [
-      resumenDia({ fecha: '2026-08-11', lluvia_total_mm: 25, lluvia_confianza: 'ok' }), // más atrás, no debe importar
-      resumenDia({ fecha: '2026-08-12', lluvia_total_mm: 15, lluvia_confianza: 'ok' }), // corta acá
+      resumenDia({ fecha: '2026-08-11', lluvia_total_mm: 25, lluvia_confianza: 'ok' }),
+      resumenDia({ fecha: '2026-08-12', lluvia_total_mm: 15, lluvia_confianza: 'ok' }),
       resumenDia({ fecha: '2026-08-13', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
       resumenDia({ fecha: '2026-08-14', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
     ];
@@ -565,58 +698,84 @@ describe('calcularRachaSinLluvia', () => {
     expect(racha.dias).toBe(2);
     expect(racha.ultimaLluviaFecha).toBe('2026-08-12');
     expect(racha.ultimaLluviaMm).toBe(15);
-    expect(racha.cortadaPorFaltaDeDato).toBe(false);
   });
 
-  it('umbral configurable: la misma serie da rachas distintas según el umbral', () => {
+  it('umbral configurable: la misma serie da rachas distintas segun el umbral', () => {
     const rows = [
       resumenDia({ fecha: '2026-08-13', lluvia_total_mm: 3, lluvia_confianza: 'ok' }),
       resumenDia({ fecha: '2026-08-14', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
     ];
-    expect(calcularRachaSinLluvia(rows, '2026-08-15', 10).dias).toBe(2); // 3mm no rompe con umbral 10
-    expect(calcularRachaSinLluvia(rows, '2026-08-15', 1).dias).toBe(1); // 3mm sí rompe con umbral 1
+    expect(calcularRachaSinLluvia(rows, '2026-08-15', 10).dias).toBe(2);
+    expect(calcularRachaSinLluvia(rows, '2026-08-15', 1).dias).toBe(1);
   });
 
-  it('un día sin dato confiable corta el conteo sin asumir que fue seco (contador congelado)', () => {
+  // -------------------------------------------------------------------------
+  // EL CAMBIO DE LA MIGRACION 122 -- un hueco de dato ya NO corta el conteo.
+  // -------------------------------------------------------------------------
+  // Antes se detenia en el primer dia sin dato, y con ~20% de los dias
+  // marcados sin dato eso reportaba "5 dias" cuando la ultima lluvia >= 10 mm
+  // confirmada habia sido 36 dias antes. Un hueco no es evidencia de lluvia.
+  it('un dia con el contador congelado NO corta la racha: se cuenta y se reporta aparte', () => {
     const rows = [
-      resumenDia({ fecha: '2026-08-11', lluvia_total_mm: 0, lluvia_confianza: 'ok' }), // más atrás del hueco, no cuenta
+      resumenDia({ fecha: '2026-08-10', lluvia_total_mm: 30, lluvia_confianza: 'ok' }),
+      resumenDia({ fecha: '2026-08-11', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
       resumenDia({ fecha: '2026-08-12', lluvia_total_mm: null, lluvia_confianza: 'contador_congelado' }),
       resumenDia({ fecha: '2026-08-13', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
       resumenDia({ fecha: '2026-08-14', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
     ];
     const racha = calcularRachaSinLluvia(rows, '2026-08-15', 10);
-    expect(racha.dias).toBe(2); // sólo 13 y 14 -- se detiene en 12, no lo cruza
-    expect(racha.cortadaPorFaltaDeDato).toBe(true);
-    expect(racha.fechaFaltaDeDato).toBe('2026-08-12');
-    expect(racha.ultimaLluviaFecha).toBeNull();
+    expect(racha.dias).toBe(4);              // 11, 12, 13 y 14 -- cruza el hueco
+    expect(racha.diasSinConfirmar).toBe(1);  // pero lo declara
+    expect(racha.ultimaLluviaFecha).toBe('2026-08-10');
   });
 
-  it('un día `cobertura_parcial` corta el conteo igual que el contador congelado (migración 103)', () => {
+  it('una cota inferior cuenta en el tramo pero no como dia confirmado', () => {
     const rows = [
-      resumenDia({ fecha: '2026-08-13', lluvia_total_mm: 0, lluvia_confianza: 'cobertura_parcial', lecturas_count: 167 }),
+      resumenDia({ fecha: '2026-08-13', lluvia_total_mm: 2, lluvia_confianza: 'cobertura_parcial', lecturas_count: 167 }),
+      resumenDia({ fecha: '2026-08-14', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
+    ];
+    const racha = calcularRachaSinLluvia(rows, '2026-08-15', 10);
+    expect(racha.dias).toBe(2);
+    expect(racha.diasSinConfirmar).toBe(1);
+  });
+
+  it('una cota inferior que YA supera el umbral si corta la racha', () => {
+    // Si sabemos que cayeron al menos 12 mm, que hayan sido mas no cambia la
+    // respuesta a "llovio >= 10 mm ese dia".
+    const rows = [
+      resumenDia({ fecha: '2026-08-13', lluvia_total_mm: 12, lluvia_confianza: 'cobertura_parcial', lecturas_count: 167 }),
       resumenDia({ fecha: '2026-08-14', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
     ];
     const racha = calcularRachaSinLluvia(rows, '2026-08-15', 10);
     expect(racha.dias).toBe(1);
-    expect(racha.cortadaPorFaltaDeDato).toBe(true);
-    expect(racha.fechaFaltaDeDato).toBe('2026-08-13');
+    expect(racha.ultimaLluviaFecha).toBe('2026-08-13');
+    expect(racha.ultimaLluviaMm).toBe(12);
   });
 
-  it('un día sin ninguna fila corta el conteo igual que uno sin dato confiable', () => {
+  it('se detiene al quedarse sin historia -- no inventa dias secos donde no hay registro', () => {
     const rows = [
+      resumenDia({ fecha: '2026-08-13', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
       resumenDia({ fecha: '2026-08-14', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
-      // 2026-08-13 no tiene fila -- la estación no sincronizó ese día
     ];
     const racha = calcularRachaSinLluvia(rows, '2026-08-15', 10);
-    expect(racha.dias).toBe(1);
-    expect(racha.cortadaPorFaltaDeDato).toBe(true);
-    expect(racha.fechaFaltaDeDato).toBe('2026-08-13');
+    expect(racha.dias).toBe(2);              // no cuenta 366
+    expect(racha.desdeFecha).toBe('2026-08-13');
   });
 
-  it('sin historia en absoluto, la racha es 0 y queda marcada sin confirmar', () => {
+  it('un dia sin fila dentro del tramo se cuenta como sin confirmar, no corta', () => {
+    const rows = [
+      resumenDia({ fecha: '2026-08-11', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
+      // falta 2026-08-12 y 2026-08-13
+      resumenDia({ fecha: '2026-08-14', lluvia_total_mm: 0, lluvia_confianza: 'ok' }),
+    ];
+    const racha = calcularRachaSinLluvia(rows, '2026-08-15', 10);
+    expect(racha.dias).toBe(4);
+    expect(racha.diasSinConfirmar).toBe(2);
+  });
+
+  it('sin historia en absoluto, la racha es 0', () => {
     const racha = calcularRachaSinLluvia([], '2026-08-15', 10);
     expect(racha.dias).toBe(0);
-    expect(racha.cortadaPorFaltaDeDato).toBe(true);
     expect(racha.desdeFecha).toBeNull();
     expect(racha.hastaFecha).toBeNull();
   });
@@ -632,21 +791,30 @@ describe('lluviaConfiableDeResumen', () => {
   let lluviaConfiableDeResumen: (
     fila: { lluvia_total_mm: number | null; lluvia_confianza?: string | null },
   ) => number | null;
+  let esCotaInferior: (fila: { lluvia_confianza?: string | null }) => boolean;
 
   beforeAll(async () => {
     const mod = await import('@/utils/calculosClima');
     lluviaConfiableDeResumen = mod.lluviaConfiableDeResumen;
+    esCotaInferior = mod.esCotaInferior;
   });
 
-  it('devuelve null para los dos estados de desconfianza, y el valor para los demás', () => {
+  it('sólo `contador_congelado` invalida el valor; el resto pasa (migración 122)', () => {
     const casos: Array<[string | null | undefined, number | null, number | null]> = [
       // [confianza, lluvia_total_mm, esperado]
       ['ok', 12.5, 12.5],
       ['ok', 0, 0],
       ['sin_time_piezo', 4.2, 4.2],
+      // El valor guardado en estas 24 filas es el duplicado falso que la 068
+      // detectó; no se puede usar hasta que el backfill lo reconstruya.
       ['contador_congelado', 15.75, null],
-      ['cobertura_parcial', 0, null],
-      ['cobertura_parcial', 18.03, null],
+      // MIGRACIÓN 122: `cobertura_parcial` deja de ser "sin dato" y pasa a ser
+      // una COTA INFERIOR con valor real. El NULL de las filas históricas sigue
+      // hablando solo — no hace falta que la etiqueta lo tape.
+      ['cobertura_parcial', 18.03, 18.03],
+      ['cobertura_parcial', null, null],
+      // Valor reconstruido desde la señal independiente: es confiable.
+      ['reconstruido', 3.3, 3.3],
       [undefined, 7, 7],
       [null, 7, 7],
     ];
@@ -656,5 +824,12 @@ describe('lluviaConfiableDeResumen', () => {
         lluviaConfiableDeResumen({ lluvia_total_mm: total, lluvia_confianza: confianza }),
       ).toBe(esperado);
     }
+  });
+
+  it('`esCotaInferior` marca sólo los días capturados a medias', () => {
+    expect(esCotaInferior({ lluvia_confianza: 'cobertura_parcial' })).toBe(true);
+    expect(esCotaInferior({ lluvia_confianza: 'ok' })).toBe(false);
+    expect(esCotaInferior({ lluvia_confianza: 'reconstruido' })).toBe(false);
+    expect(esCotaInferior({ lluvia_confianza: null })).toBe(false);
   });
 });

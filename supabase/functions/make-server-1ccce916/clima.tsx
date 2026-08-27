@@ -460,7 +460,18 @@ async function backfillUnDia(
   url.searchParams.set('mac', creds.mac);
   url.searchParams.set('start_date', `${ecowittDateStr} 00:00:00`);
   url.searchParams.set('end_date', `${ecowittDateStr} 23:59:59`);
-  url.searchParams.set('call_back', 'outdoor.temperature,outdoor.humidity,wind,rainfall_piezo,solar_and_uvi');
+  // `rainfall` (pluviómetro tradicional) va ADEMÁS de `rainfall_piezo` como
+  // respaldo: `parseEcowittHistory` hace `rainfall_piezo ?? rainfall`, así que
+  // si el piezo no viene para un día viejo, el día todavía se puede
+  // reconstruir en vez de perderse.
+  url.searchParams.set('call_back', 'outdoor.temperature,outdoor.humidity,wind,rainfall_piezo,rainfall,solar_and_uvi');
+  // `auto` y no `5min` a propósito: Ecowitt no sirve resolución de 5 minutos
+  // más allá de ~90 días, y pedirla explícitamente haría fallar los días de
+  // marzo–junio en vez de devolverlos en 30 min. La consecuencia es conocida y
+  // se maneja sola: un día que vuelve en 30 min trae ~48 lecturas, cae bajo el
+  // umbral de cobertura de la migración 103 y se guarda como `cobertura_parcial`
+  // — o sea con su valor real marcado como cota inferior, que es exactamente lo
+  // que es. Nunca como un total afirmado.
   url.searchParams.set('cycle_type', 'auto');
 
   const apiRes = await fetch(url.toString());
