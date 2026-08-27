@@ -2057,14 +2057,28 @@ interface FilaResumenClima {
  * cosas distintas, y confundirlas es exactamente lo que producia el bug de
  * lluvia duplicada.
  *
- * La migracion 103 agrega `cobertura_parcial` por la misma puerta: un dia que
- * la estacion capturo incompleto (corte de luz en la finca) tampoco tiene un
- * total que afirmar. Es el mismo error con el signo cambiado -- la 068 impedia
- * un DUPLICADO fabricado, la 103 impide un CERO fabricado.
+ * La migracion 103 agrego `cobertura_parcial` por la misma puerta, y la 122 la
+ * SACO: desde entonces ese dia trae un valor reconstruido desde una segunda
+ * senal independiente (`lluvia_evento_mm`), asi que es una cota inferior real y
+ * no un hueco. Solo la cota inferior de 0 mm sigue siendo "sin dato".
+ *
+ * Este espejo tiene que moverse cuando se mueve el original. Lo vigila
+ * `src/__tests__/climaConfianzaParidadEsco.test.ts`.
  */
+function esCotaInferior(fila: { lluvia_confianza?: string | null }): boolean {
+  return fila.lluvia_confianza === 'cobertura_parcial';
+}
+
 function lluviaConfiable(fila: { lluvia_total_mm: number | null; lluvia_confianza?: string | null }): number | null {
   if (fila.lluvia_confianza === 'contador_congelado') return null;
-  if (fila.lluvia_confianza === 'cobertura_parcial') return null;
+  // MIGRACION 122: `cobertura_parcial` ya NO es "sin dato". El rollup reconstruye
+  // la lluvia desde `lluvia_evento_mm` -- una senal independiente del contador
+  // diario -- y guarda lo que se midio en las horas capturadas. Eso es una COTA
+  // INFERIOR real: "llovio al menos esto", no "esto fue todo".
+  //
+  // La unica cota inferior que no informa nada es la de 0 mm: "no llovio durante
+  // las horas que miramos" no es "no llovio". Esa sigue valiendo null.
+  if (esCotaInferior(fila) && fila.lluvia_total_mm === 0) return null;
   return fila.lluvia_total_mm;
 }
 
@@ -2130,7 +2144,13 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
     // rango pedido. "Hace cuanto no llueve" no puede depender de que el modelo
     // acierte la ventana — esa adivinanza es la que rompia el loop.
     supabaseQuery('clima_resumen_diario',
-      'select=fecha,lluvia_total_mm,lluvia_confianza&lluvia_total_mm=gt.0&lluvia_confianza=eq.ok&order=fecha.desc&limit=1',
+      // `in.(...)` y no `eq.ok`: la 122 agrego `reconstruido` (un valor de plena
+      // confianza, reconstruido desde la senal de evento) y devolvio el valor a
+      // `cobertura_parcial`. Con `eq.ok` la ultima lluvia se saltaba esos dias y
+      // Esco reportaba una racha seca mas larga que la real -- el mismo error del
+      // incidente del 2026-08-16. El `lluvia_total_mm=gt.0` ya descarta la cota
+      // inferior de 0 mm, que es la unica que no afirma nada.
+      'select=fecha,lluvia_total_mm,lluvia_confianza&lluvia_total_mm=gt.0&lluvia_confianza=in.(ok,reconstruido,cobertura_parcial)&order=fecha.desc&limit=1',
     ) as Promise<Array<{ fecha: string; lluvia_total_mm: number }>>,
   ]);
 
@@ -2151,7 +2171,7 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
     temp_avg: r.temp_c_avg, temp_max: r.temp_c_max, temp_min: r.temp_c_min,
     humedad_avg: r.humedad_pct_avg, viento_avg: r.viento_kmh_avg,
     lluvia_mm: lluviaConfiable(r),
-    lluvia_sin_dato: r.lluvia_confianza === 'contador_congelado' || r.lluvia_confianza === 'cobertura_parcial',
+    lluvia_sin_dato: lluviaConfiable(r) === null,
     radiacion_avg: r.radiacion_wm2_avg, radiacion_max: r.radiacion_wm2_max,
   }));
 
@@ -2195,10 +2215,13 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
   // haria que Esco afirmara "N dias sin llover" incluyendo dias que nadie vio.
   let diasSinDatoDesdeEntonces = 0;
   if (ultimaLluviaFecha) {
+    // Se traen las dos etiquetas sospechosas y se filtran con la MISMA regla que
+    // el resto del modulo: un dia `cobertura_parcial` con lluvia medida NO es un
+    // dia sin dato (migracion 122), solo lo es el de 0 mm.
     const desdeRaw = await supabaseQuery('clima_resumen_diario',
-      `select=fecha&lluvia_confianza=in.(contador_congelado,cobertura_parcial)&fecha=gt.${e(ultimaLluviaFecha)}&limit=3000`,
-    ) as Array<{ fecha: string }>;
-    diasSinDatoDesdeEntonces = (desdeRaw ?? []).length;
+      `select=fecha,lluvia_total_mm,lluvia_confianza&lluvia_confianza=in.(contador_congelado,cobertura_parcial)&fecha=gt.${e(ultimaLluviaFecha)}&limit=3000`,
+    ) as Array<{ fecha: string; lluvia_total_mm: number | null; lluvia_confianza: string | null }>;
+    diasSinDatoDesdeEntonces = (desdeRaw ?? []).filter((d) => lluviaConfiable(d) === null).length;
   }
 
   const lluvia = {
@@ -2207,7 +2230,7 @@ async function execClimateData(args: Record<string, unknown>): Promise<string> {
     dias_sin_lluvia: ultimaLluviaFecha ? diasEntre(ultimaLluviaFecha, hoy) : null,
     dias_sin_dato_en_ese_lapso: diasSinDatoDesdeEntonces,
     nota: diasSinDatoDesdeEntonces > 0
-      ? `Hay ${diasSinDatoDesdeEntonces} dia(s) con el contador del pluviometro congelado desde la ultima lluvia registrada: en esos dias NO se sabe si llovio, asi que "dias sin lluvia" es un maximo. Reportalo como tal, nunca como certeza.`
+      ? `Hay ${diasSinDatoDesdeEntonces} dia(s) sin dato de lluvia utilizable desde la ultima lluvia registrada (contador del pluviometro congelado, o el dia capturado incompleto sin lluvia medida): en esos dias NO se sabe si llovio, asi que "dias sin lluvia" es un maximo. Reportalo como tal, nunca como certeza.`
       : 'Sin huecos de datos desde la ultima lluvia registrada.',
   };
 
