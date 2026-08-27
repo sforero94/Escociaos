@@ -124,6 +124,50 @@ prompt del agente en cada corrida.
   por debajo del navegador Y LO ESCRIBE a registros_trabajo.costo_jornal. Es el caso de libro de por que la
   regla 'merge != deploy' importa.
 
+## Corrida 2026-08-27-jueves
+
+### Estados aceptados
+- **`contador_congelado > 0` en `clima_resumen_diario` NO refuta la reparacion de la 122.** Al
+  2026-08-27 quedan 27 filas y **las 27 son de `station_id = 'wunderground-historico'`** (2020-2025);
+  la serie Ecowitt esta en cero, que es lo que la 122 afirma. **Agrupar SIEMPRE por `station_id` antes
+  de concluir nada sobre confianza de lluvia** — hay dos estaciones y solo una alimenta el sistema hoy.
+- **`hato_alertas_tick_runs` con `generadas = 0` es el motor funcionando**, no una falla: 179
+  evaluados / 176 sin raza / 0 generadas, tres dias seguidos `estado='ok'`. El cero es consecuencia
+  del dato faltante, y ese era justamente el punto de la migracion 116. **No filar como «el motor esta
+  caido».**
+- **`productos.updated_by` en 0 filas tras la 112 es correcto**: el trigger solo dispara en `UPDATE` de
+  sesion humana de navegador, y en 3 dias no hubo ninguno. Misma familia que `hato_correcciones`.
+
+### Navegacion
+- **`VERCEL_GET_*` por Composio exige `limit` como STRING** (`"3"`), no entero: un entero devuelve
+  `400 Invalid request data — Input should be a valid string on parameter 'limit'`. Ese 400 se lee
+  igual que «el conector sigue roto». **Composio quedo VERIFICADO el 2026-08-27** — fallo el 08-24 por
+  no resolver; hoy resuelve y devuelve el proyecto.
+- **Prueba de que una RUTA existe en el bundle desplegado, sin leerlo y sin escribir**: `POST` anonimo
+  a la ruta contra `POST` a una ruta hermana inventada. **401 = la ruta existe y su puerta esta puesta;
+  404 = no esta desplegada.** Mas barato que `get_edge_function` (~1 MB) y mas fuerte que comparar
+  timestamps. Cumple la regla de la sonda idempotente: el gate corta antes de tocar dominio.
+- **`net._http_response` no tiene columna `url`**, asi que no se puede correlacionar por endpoint.
+  Correlacionar por `created` al segundo contra `cron.job_run_details.start_time`, y **desempatar por
+  la FORMA del `content`, no por proximidad temporal** — dos jobs pueden disparar en el mismo minuto
+  (1 y 8 a las 11:00). Un `JOIN LATERAL` por cercania devuelve el cuerpo del job equivocado y se ve
+  perfectamente plausible.
+- **`status_code IS NULL` + `error_msg` con `Timeout of 5000 ms` NO significa que el endpoint fallara**
+  — es pg_net rindiendose, con la funcion corriendo del otro lado. Distinguir por el efecto en las
+  tablas de dominio, nunca por el `status_code`.
+
+### Baselines
+| Que | Valor | Corrida |
+|---|---|---|
+| Cadencia | Ventana de 3 dias, **NO interpretable como tendencia**: 63 commits, 41 aterrizajes, fix share 31/32 = 97%. **Es el drenaje del backlog, no calidad degradandose.** La medicion limpia es mensual | 2026-08-27-jueves |
+| Backlog | **8 abiertos** (eran 25 antes del drenaje). Mas viejo: 24 dias. **0 estancados** (>60 dias) | 2026-08-27-jueves |
+
+### Refutaciones
+| Fingerprint | Afirmacion | Por que murio | Corrida |
+|---|---|---|---|
+| release/clima/122-no-reparo-congelados | Quedan 27 `contador_congelado`, luego la reparacion historica de la 122 no funciono | Las 27 son de `wunderground-historico`, otra estacion. La serie Ecowitt esta en 0, exactamente como la 122 declara | 2026-08-27-jueves |
+| release/frontend/reconstruido-ausente-del-bundle | El bundle servido no contiene `reconstruido`, luego no es la build de #178 | El literal `'reconstruido'` **no existe en el fuente** de `calculosClima.ts` en `d1627f6` — es un valor solo de base de datos, el frontend no lo nombra. La build se probo con marcadores de dominio (`sin lluvia >=`) y control negativo (`text-amber-600 mt-0.5` ausente) | 2026-08-27-jueves |
+
 ## Archivo
 (vacio)
 

@@ -138,6 +138,56 @@ prompt del agente en cada corrida.
   opcion a la UI**: hay que agregar la etiqueta al ENUM con su propia migracion.
   [corrida: 2026-08-24-drenaje-continuacion]
 
+## Corrida 2026-08-27-jueves
+
+### Estados aceptados
+- **`chat.tsx` tiene su PROPIA puerta de confianza de lluvia (`lluviaConfiable`, ~linea 2065),
+  declarada como «espejo de `lluviaConfiableDeResumen()`», y no se puede importar** — vive en el arbol
+  Deno. Nadie la vigilaba y el PR #178 la dejo atras en un dia. Ahora la vigila
+  `src/__tests__/climaConfianzaParidadEsco.test.ts`, que ademas **PINEA `CONFIANZAS_SIN_DATO` a
+  exactamente `['contador_congelado']`**: mover el original sin mover el espejo da test rojo.
+  **Regla general: al tocar la logica de lluvia hay que contar CUATRO sitios, no uno** —
+  `calculosClima.ts`, `chat.tsx` (x2 arboles) y `acciones-paquete*.ts`.
+
+### Navegacion
+- **`clima_resumen_diario.lluvia_confianza` tiene CINCO valores desde la 122, y HAY DOS ESTACIONES en
+  esa tabla.** Estado 2026-08-27 **agrupando por `station_id`, que es la unica forma correcta de
+  leerlo**: estacion Ecowitt `84:1F:E8:35:D8:73` -> `ok` 135 / `cobertura_parcial` 25 / **
+  `contador_congelado` 0**; serie `wunderground-historico` -> `ok` 1.730 / **`contador_congelado` 27**
+  (2020-10-14 a 2025-08-31, 29,18 mm). **CORRECCION A MI PROPIA NOTA DE ESTA CORRIDA: escribi que
+  «el CLAUDE.md exagera la reparacion porque quedan 27». Es FALSO.** La 122 reparo la serie Ecowitt y
+  la dejo en 0, exactamente como afirma. Los 27 son de la otra estacion, que Ecowitt no puede
+  alcanzar. **Agrupar SIEMPRE por `station_id` antes de concluir cualquier cosa sobre confianza de
+  lluvia** — es el mismo error que la migracion 103 tuvo que evitar con su filtro
+  `station_id <> 'wunderground-historico'`. Lo que si es cierto de mi nota: las 25
+  `cobertura_parcial` TIENEN valor no nulo, asi que el comentario de `calculosClima.ts:35` que afirma
+  que traen `lluvia_total_mm = NULL` es falso contra produccion. Y `reconstruido` esta en 0 filas.
+- **CORRECCION a la nota del 2026-08-24 sobre `valor_jornal_empleado`.** Decia «columna poblada al
+  100%, asi que un NULL no distingue». Ya no: hay **149 NULL** de 2.758 filas (2.489 salario mensual /
+  120 por jornal). El NULL si distingue hoy, pero no es senal limpia de unidad.
+- **Un 401 en el log de una edge function NO prueba que el cron este roto — probar el disparo real
+  primero.** El 401 de `/clima/reintentar-sin-dato` del 2026-08-26 19:50:43 era una sonda manual sin
+  encabezado; el cron de verdad (jobid 8, 11:00 UTC) devolvio **200 en 5s**. Un 404 si habria probado
+  «no desplegado»; un 401 prueba «la ruta existe». Cotejar el `timestamp` del log contra el `schedule`
+  del `cron.job` antes de concluir.
+- **El rewind del arbol compartido de esta corrida produjo un FALSO P1 y casi lo filo.** Un `npm test`
+  corrido durante la ventana dio 2 ficheros / 10 tests rojos en `ClimaCard.tsx` — codigo de 7 dias
+  antes. Re-corrido sobre el arbol correcto: 136/3.063 verde. **Regla: antes de reportar un test rojo
+  en main, re-correrlo tras confirmar `git rev-parse HEAD origin/main`**; un rojo en un modulo que
+  acaba de cambiar es exactamente el que mas convence y mas engana.
+
+### Baselines
+| Que | Valor | Corrida |
+|---|---|---|
+| main@d1627f6 verde | npm test **136 ficheros / 3.063 tests**, todo verde · lint 0 errores / **904 warnings** · `tsc --noEmit` limpio. Con PR #179: **137 / 3.073**, 908 warnings, tsc limpio | 2026-08-27-jueves |
+| `registros_trabajo.valor_jornal_empleado` | total 2.758 · **mensual 2.489** (era 2.461 el 08-24, **+28**) · por jornal 120 · **NULL 149**. El hallazgo CRECE con cada captura | 2026-08-27-jueves |
+
+### Refutaciones
+| Fingerprint | Afirmacion | Por que murio | Corrida |
+|---|---|---|---|
+| bug-triage/clima/122-exagera-la-reparacion | Quedan 27 `contador_congelado`, luego CLAUDE.md exagera al decir que la 122 los dejo en 0 | Las 27 son **todas** de `wunderground-historico`; la estacion Ecowitt esta en 0, que es lo que la 122 declara. Mi cuadro agrupaba solo por `lluvia_confianza` y mezclaba dos series con proveniencia, epoca y semantica distintas. Confirmado por dos agentes independientes y por el verificador adversarial | 2026-08-27-jueves |
+| bug-triage/main/test-rojo-climacard | `npm test` en main da 10 tests rojos en `ClimaCard.tsx`, luego la suite dejo de ser senal (P1) | Artefacto del rebobinado del arbol de trabajo durante el arranque de la corrida. Re-corrido sobre `d1627f6`: **136 ficheros / 3.063 tests, todo verde** | 2026-08-27-jueves |
+
 ## Archivo
 (vacio)
 

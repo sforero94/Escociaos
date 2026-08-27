@@ -183,6 +183,69 @@ prompt del agente en cada corrida.
   (ledger `20260824200409` … `20260824222137`). La **109** sigue sin aplicar por el carril:
   `storage.objects` exige propiedad. No re-auditar ninguna. [corrida: 2026-08-24-drenaje-continuacion]
 
+## Corrida 2026-08-27-jueves
+
+### Estados aceptados
+- **La reparacion del clima de la migracion 122 SE SOSTIENE — verificada, no re-auditar cada corrida.**
+  Distribucion de la estacion Ecowitt al 2026-08-27: **135 `ok` / 25 `cobertura_parcial` / 0
+  `contador_congelado`**. CLAUDE.md dice 134/25/0; el +1 es el dia nuevo que el rollup agrega cada
+  noche — **usar linea base relativa, nunca el literal**. `reconstruido` no se ha disparado nunca.
+  0 valores imposibles en 180 dias, 0 duplicados (station,timestamp), 0 dias sin resumen en 90.
+- **Los 100 dias con `lluvia_mm_evento IS NULL` NO son el modo de fallo del backfill en paralelo.**
+  Son todos anteriores a la 122: el mas nuevo es 2026-08-25, escrito por el rollup el 08-26 05:15 UTC.
+  Ninguno pertenece al conjunto de 36 dias reparados. **La prueba de un backfill sigue siendo
+  `lluvia_mm_evento IS NOT NULL`, pero hay que acotarla a los dias efectivamente disparados** — sobre
+  la tabla entera marca 100 falsos positivos.
+- **Los 4 dias que la 115 dejo sin re-evaluar (2026-08-21/249, 07-09/268, 06-23/272, 08-06/279)
+  siguen sellados `ok` y ESO ES CORRECTO.** La posicion del hueco es irrecuperable y un contador
+  truncado da cota inferior, no total. **No refilar.**
+- **La cobertura del tick del hato (mig 116) NO indica un motor ciego.** `sin_ciclo_reproductivo: 45`
+  y `sin_chequeo: 29` sobre 179 asustan, pero por etapa las **35 vacas activas estan al 100%** en
+  ambas; los huecos son 24 novillas y 6 terneras, que la regla debe omitir. **Desglosar por `etapa`
+  SIEMPRE antes de leer un contador de cobertura como defecto.**
+- **El TIMEOUT de `pg_net` a los 5.000 ms no prueba que el endpoint fallo.** Corolario del hecho ya
+  ledgereado de que `succeeded` no prueba nada: **`timeout` tampoco prueba lo contrario. La unica
+  prueba es el efecto en los datos.**
+- **La migracion 119 CERRO la divergencia de Sulcamag.** Quedan **2**, no 3: Naturboro -20,00 y
+  TecniFeed Boro +18,69.
+- **La migracion 113 (`globalgap_correcciones`) funciona end-to-end con actividad humana real.**
+  38 filas, `corregido_por` no nulo en las 38. Caso 2026-08-26 20:37: borrado de 3 `movimientos_diarios`
+  + 12 mdp + 23 trabajadores de «Drench agosto», recapturados 20:41-20:51. **Recaptura, no perdida.**
+- **La migracion 117 se sostiene**: fronteras limpias (Baja max 9,09 · Media 10,00-28,57 · Alta min 30,00),
+  0 mal etiquetadas en 4.200.
+
+### Navegacion
+- Columnas que rompen queries escritas de memoria: **`clima_resumen_diario` NO tiene `updated_at`** —
+  no hay forma por SQL de saber si un backfill reescribio una fila; usar `lluvia_mm_evento` de testigo.
+  `registros_trabajo` usa **`fecha_trabajo`**. `monitoreos` no tiene `gravedad`: son **`gravedad_texto`**
+  (ENUM, castear a `::text`) y `gravedad_numerica`. `globalgap_correcciones` usa **`corregido_en`/
+  `corregido_por`**. **`v_hato_estado_actual` se une por `animal_id`, NO por `id`.** El ENUM
+  `estado_aplicacion` es **`'Cerrada'`**, no `'Cerrado'` — comparar con el literal malo aborta con 22P02.
+- **Firma forense del cierre de aplicacion**: `fn_cerrar_aplicacion` (106) escribe todas las
+  `Salida por Aplicacion` y la fila de `aplicaciones_cierre` con **el mismo `created_at` al microsegundo**.
+  Permite emparejar un cierre con sus movimientos sin ninguna FK.
+- **`NuevoMovimientoModal.tsx` no escribe `responsable` ni `factura`** (lineas 134-145). Por eso
+  `responsable IS NULL` identifica exactamente las filas de ese modal. **En modo `Ajuste` la cantidad
+  tecleada ES el saldo deseado, no el delta** (lineas 126-129).
+- **`cron.job` tiene 5 jobs activos** (era 4): 1 clima-sync-wu (*/5) · 2 clima-daily-rollup (15 5) ·
+  4 hato-alertas-tick (45 10) · 6 acciones-recomendadas-tick (50 10) · **8 clima-reintento-sin-dato (0 11)**.
+
+### Baselines
+| Que | Valor | Corrida |
+|---|---|---|
+| Deltas 72h | registros_trabajo +38 · mdp +16 · movimientos_inventario +7 (153->160) · movimientos_diarios +4 · fin_gastos +2 · hato_eventos +1 · hato_alertas +1 · **0 en monitoreos, rondas, aplicaciones, compras, productos, fin_ingresos, gan_movimientos y TODAS las hato_ de captura** | 2026-08-27-jueves |
+| Dominio | hato_animales 179 (**65 activa**: 35 vaca/24 novilla/6 ternera) · eventos 767 · chequeos 33 / chequeo_vacas 1.479 (ultimo 2026-07-09, **49 dias**) · pesajes 549 (**ultimo 2026-08-12**) · alertas 65 · globalgap_correcciones **38** (eran 0) · monitoreos 4.200/29 rondas · productos 341 · mov_inventario 160 · mov_diarios 161/mdp 777 · aplicaciones 20 (**1 abierta**) · fin_gastos 4.477 · fin_ingresos 232 · gan 369 cabezas · clima_resumen_diario 1.917 · logs_auditoria 0 | 2026-08-27-jueves |
+| Integridad | **0 huerfanos en TODAS las relaciones probadas** · 0 duplicados (aplicacion_id,lote_id,fecha) · 0 chapetas duplicadas · 0 provisionales · 0 pesajes duplicados · 0 modulos_acceso invalidos · 0 pendientes de ganado · 0 stock negativo. Sin cambio: 86 monitoreos con ronda_id NULL. Ganado 369 = 369 | 2026-08-27-jueves |
+| Inventario | Libro vs stock: **2 divergencias** (Naturboro -20,00 · TecniFeed Boro +18,69). Sulcamag CERRADO. 3 de 160 sin `responsable`. Proyeccion al cierre de la unica aplicacion abierta: los 4 productos POSITIVOS | 2026-08-27-jueves |
+| **VIGILAR** | **`hato_pesajes_leche` clavado en 2026-08-12.** Faltan 07-29, 08-19 y 08-26 (miercoles = `dia_pesaje_semanal`): **3 de las ultimas 6 sesiones**. No filado por ser de 1 dia. **Si el 09-02 tampoco entra, son 3 semanas seguidas y merece hallazgo propio** | 2026-08-27-jueves |
+
+### Refutaciones
+| Fingerprint | Afirmacion | Por que murio | Corrida |
+|---|---|---|---|
+| data-integrity/hato/motor-alertas-cobertura-ciega | Los contadores de `hato_alertas_tick_runs` prueban que el motor del hato esta ciego sobre la mayoria del hato | Desglosado por `etapa`: **vaca 35 -> 0 sin chequeo, 0 sin ciclo**. Novillas y terneras aportan el 100% de los huecos, correctamente. Lo unico que sobrevive es `raza`, por otra via, y se filo aparte como P3 | 2026-08-27-jueves |
+| data-integrity/clima/evento-null-backfill-fallido | Los dias con `lluvia_mm_evento IS NULL` son el modo de fallo silencioso del backfill en paralelo | Los 100 NULL son anteriores a la 122; ninguno estaba en el conjunto de 36 reparados | 2026-08-27-jueves |
+| data-integrity/inventario/ajustes-fabrican-stock | Los 3 `Ajuste` del 08-24 son stock inventado para burlar la guarda de la 106 | **Parcialmente refutada: el mecanismo es real, la acusacion no.** Las 3 traen razon declarada y dejan sobrante (0,76/0,18/0,18), no el minimo justo. **Regla reconfirmada: si la prueba de que una fila es mala sale de la misma fila o de su vecindad temporal, no es prueba.** Se reescribio a lo demostrable: falta `responsable` | 2026-08-27-jueves |
+
 ## Archivo
 (vacio)
 

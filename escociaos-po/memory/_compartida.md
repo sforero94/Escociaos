@@ -224,6 +224,79 @@ desempate importaba mas que cualquiera de los dos hallazgos. [corrida: 2026-08-1
   guarda estatica que impida reintroducir otro divisor.** No es refactor;
   cambia la cifra de $ por jornal / $ por kg. [corrida: 2026-08-20-jueves]
 
+## Corrida 2026-08-27-jueves (pulso operativo, roster de 4)
+- Modo: **full write · Notion OPERATIVO · preflight 9/9 sin un solo prompt de permiso.**
+- Resultado: **5 hallazgos filados** (4 P2 + 1 P3), **3 diferidos al lunes por el cap de 5**,
+  **1 PR verde abierto** (#179), **1 verificacion adversarial que cambio el resultado** (bajo el
+  unico P1 a P2), **0 hallazgos cerrados** y **1 corregido** (#45, se le desvinculo un PR que no lo
+  arreglaba). Backlog: 8 -> 13 abiertos.
+- **`COMPOSIO_MULTI_EXECUTE_TOOL` RECUPERADO.** Fallaba el 2026-08-24 («No matching deferred tools
+  found») y quedo marcado para reverificar; hoy resuelve y devuelve el proyecto de Vercel. Cerrado.
+- **Sin deriva de despliegue**: edge v221 (02:02:45Z) posterior al ultimo commit del arbol edge
+  (01:21:02Z). Frontend `d1627f6` PROMOTED. Migraciones 121 y 122 aplicadas.
+- **Migracion 120: fusionada el 2026-08-24 y AUN SIN APLICAR** (3 dias). Verificado contra
+  `pg_policies`: las 8 tablas conservan `DELETE USING(true) TO authenticated` y `anon` conserva el
+  GRANT de DELETE en las 8. **La constitucion marca P1 a los 7 dias — vence el 2026-08-31.**
+
+## ERROR PROPIO 2026-08-27 — el orquestador rebobino el arbol que sus propios agentes estaban leyendo
+La corrida arranco con **HEAD desprendido en `d1627f6`** (correcto, = `origin/main`) pero con la
+**rama local `main` 125 commits atras, clavada en `0a7308c` (2026-08-20)**. Los dos coexisten sin
+avisar: `git rev-parse HEAD` daba el commit bueno y `git rev-parse main` el viejo, y el chequeo de
+arranque solo miro `HEAD` contra `origin/main`, que coincidian.
+
+**Como estallo**: la verificacion de modo escritura del Phase 0 hace `git checkout -b <rama> &&
+git push --dry-run && git checkout main`. Ese `checkout main` final **rebobino el arbol de trabajo 7
+dias**, con los 4 agentes ya despachados y leyendo ficheros del disco. Duro ~90 segundos. En esa
+ventana un agente veia un `CLAUDE.md` **sin las migraciones 110-122**, un `BUG_REPORT.md` viejo, los
+reportes del drenaje del 08-24 **inexistentes**, y `src/utils/calculosClima.ts` sin nada del PR #178
+— o sea justo el codigo que era el centro del alcance del jueves.
+
+**Lo peor no es el rebobinado, es que no falla ruidosamente.** Un agente que buscara
+`esCotaInferior()` en la ventana no habria encontrado la funcion y habria concluido «no existe» en vez
+de «estoy en el arbol equivocado». **Y casi cuesta un falso P1**: Bug Triage corrio `npm test` durante
+la ventana, obtuvo 10 tests rojos en `ClimaCard.tsx` y estuvo a punto de filar «la suite dejo de ser
+senal». Re-corrido sobre el arbol correcto: 136 ficheros / 3.063 tests, todo verde.
+
+**Reglas que se ganan el sitio:**
+1. El chequeo de arranque es `git rev-parse HEAD main origin/main` — **los TRES**, no dos. Si `main`
+   difiere de `origin/main`, `git reset --hard origin/main` **ANTES de despachar**.
+2. **La verificacion de modo escritura va antes del despacho, nunca en paralelo con agentes vivos.**
+   Cualquier cosa que mueva el arbol es incompatible con tener lectores fuera.
+3. Un `git checkout <rama>` en esta operacion es una operacion **peligrosa**, no de navegacion.
+   Preferir `git push --dry-run origin HEAD:refs/heads/<rama>`, que prueba el mismo camino de auth
+   **sin tocar el arbol**.
+4. Comprobacion barata de que estas en el arbol vivo: que exista el fichero de la ultima migracion
+   (hoy `src/sql/migrations/122_clima_lluvia_tres_senales.sql`).
+
+**Mitigacion aplicada**: `git reset --hard origin/main` y aviso explicito a los 4 agentes por
+`SendMessage`, cada uno con lo que su especialidad tenia que releer. Los 4 confirmaron y rehicieron
+lo afectado.
+
+Es la misma familia de trampa ya anotada de la corrida 2026-08-20 («el ref local `main` puede estar
+semanas atrasado»). **Estaba escrita y la pise igual**, porque la nota decia como diagnosticarla y no
+decia que **la propia rutina de Phase 0 la dispara.**
+
+## CONTRADICCION SIN RESOLVER: donde vive `CHANGELOG.md`
+El brief de `release-changelog` manda «maintain `CHANGELOG.md` in the PO folder», o sea
+`escociaos-po/CHANGELOG.md`. La constitucion §6 limita el commit de memoria a **`escociaos-po/memory/**`
+y `escociaos-po/reports/**`, y dice que tocar cualquier otra ruta «es una violacion, no una
+conveniencia».** El agente escribio el fichero (130 lineas) y **el orquestador NO lo commiteo a `main`
+por su cuenta**: se plegó al reporte de la corrida, que si es ruta permitida.
+**Va a REQUIERE TU DECISION.** Las tres salidas: (a) ampliar la allowlist de §6 a
+`escociaos-po/CHANGELOG.md`; (b) mover el changelog a `escociaos-po/reports/CHANGELOG.md`; (c) que el
+changelog viaje siempre por PR. **No inventar una cuarta por comodidad en la proxima corrida.**
+
+## Racha del jueves (regla de auto-poda) — actualizada
+| Corrida | Hallazgos nuevos |
+|---|---|
+| 2026-08-06-jueves | 5 (racha de ceros: **0**) |
+| 2026-08-13-jueves | 0 filados — la Routine SI disparo; murio en prompts de permiso |
+| 2026-08-20-jueves | 6 (3 P1 + 3 P2). Racha de ceros: 0 |
+| **2026-08-27-jueves** | **5 filados + 3 diferidos por el cap. Racha de ceros: 0** |
+La auto-poda **no aplica**: cuatro jueves seguidos con hallazgos, y este encontro un defecto de
+usuario nacido 24 h antes (Esco vs pantalla) que el lunes habria dejado correr cuatro dias mas. **Ese
+es exactamente el caso de uso que justifica la corrida del jueves.**
+
 ## Archivo
 (vacio)
 

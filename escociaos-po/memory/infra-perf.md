@@ -175,6 +175,50 @@ prompt del agente en cada corrida.
 - El despliegue de la edge function del 2026-08-24 (v215) se hizo a las 15:52 UTC; el commit
   mas nuevo del arbol desplegado era de las 11:24. Deriva 0 hoy; durante ESCO-1 eran 153,8 h.
 
+## Corrida 2026-08-27-jueves
+
+### Estados aceptados
+- **El cron 121 `clima-reintento-sin-dato` (jobid 8) FUNCIONA — no re-verificar el "esta inerte hasta
+  desplegar".** Primera corrida real 2026-08-27T11:00:00Z, `POST /clima/reintentar-sin-dato 200 5s`,
+  2 candidatos, `0/2 resueltos a ok`. **Que resuelva 0 es CORRECTO**: los candidatos son 2026-08-19/20,
+  el apagon real de la finca, y Ecowitt tampoco tiene esas horas.
+- **Migracion 122 verificada: `contador_congelado` esta en CERO en la estacion Ecowitt** (135 `ok` +
+  25 `cobertura_parcial`). El rollup nuevo puebla `lluvia_mm_evento` desde el 2026-08-26.
+- **Residual conocido y DELIBERADAMENTE no filado: 100 de los 135 dias `ok` no tienen
+  `lluvia_mm_evento`** (2026-03-19 -> 08-25). Son los que la 122 nunca contrasto, y el cron de
+  reintento no los mira (solo toma `contador_congelado`/`cobertura_parcial`). **La evidencia apunta a
+  que estan bien**: en los 36 dias backfilleados `reconstruido` no se disparo ni una vez. Si alguna vez
+  hay motivo para dudar de un dia `ok`, esta es la poblacion; hoy no lo hay.
+
+### Navegacion
+- **Para saber si un cron de edge function de verdad HIZO algo, `query_logs` sobre `function_logs`
+  filtrando por el prefijo del `console.info` gana a todo lo demas.** `[clima-reintento-sin-dato]`
+  devolvio en una consulta: cuantos candidatos, cuantas lecturas reagrego por dia, y cuantos resolvio.
+  Eso contesto en 10 segundos lo que `cron.job_run_details` (siempre dice `succeeded`) y
+  `net._http_response` (dice TIMEOUT) no pueden. **Los endpoints de este repo loguean con prefijo entre
+  corchetes — usarlo como clave de busqueda.**
+- **El barrido de errores de edge function mas barato**: `event_message like '-->%' and event_message
+  not like '% 200 %'` agrupado, sobre `source='function_logs'`. Devuelve el 100% de las no-200 en una
+  fila por firma, sin depender de `log_attributes['status_code']` (vacio en este proyecto).
+- **El chequeo de drift entre los dos arboles de edge function da 0 hace 5 corridas.** 61 ficheros por
+  lado; solo difiere el banner generado `// ARCHIVO:` de la linea 1. **Considerar bajarlo a verificacion
+  mensual salvo que un PR toque ese arbol.**
+- **El conector Vercel por Composio FUNCIONA** (cuenta `vercel_tetric-hash`), segunda corrida sana.
+  `COMPOSIO_MULTI_EXECUTE_TOOL` **resolvio**, cerrando el «reverificar el conector» del 2026-08-24.
+  **Trampa nueva: `limit` va como STRING (`"3"`), no entero** — un entero devuelve
+  `400 Input should be a valid string`, que se lee igual que «el conector sigue roto».
+
+### Baselines
+| Que | Valor | Corrida |
+|---|---|---|
+| Infra | DB **115 MB** (1,4% de 8 GB, plano vs 114 MB del 08-24). **5 pg_cron**: **2.038 corridas en 7 dias, 0 fallos**. Edge **v221** (2026-08-27T02:02:45Z), al dia con `d1627f6`. Dos arboles de edge: **0 drift real**, 61 ficheros por lado. Vercel 5/5 READY/PROMOTED, ultimo `d1627f6` con build de **29,5 s**. Errores de edge en 24 h: **1 no-200 de ~325 peticiones** (un 401 manual). `clima_lecturas` viva, 289 filas, 0 min de atraso | 2026-08-27-jueves |
+| Consultas mas lentas | La mas lenta de aplicacion sigue siendo **`fn_clima_rollup_diario()` a 233,9 ms** (34 llamadas; subio de 229,7 ms el 08-20 pero corre 1 vez/dia y ahora hace mas trabajo por la 122: irrelevante). **Ninguna consulta de aplicacion problematica**; `v_hato_estado_actual` no aparece en el top-12 | 2026-08-27-jueves |
+
+### Refutaciones
+| Fingerprint | Afirmacion | Por que murio | Corrida |
+|---|---|---|---|
+| infra/clima/cron-121-inerte | El cron de la 121 sigue inerte devolviendo 404 porque el endpoint no esta desplegado (asi lo dice la entrada de la 121 en CLAUDE.md) | Corrio el 2026-08-27T11:00:00Z contra la v221 y devolvio **200**, procesando sus 2 candidatos. **La advertencia de CLAUDE.md quedo OBSOLETA con el despliegue de la v221** (02:02:45Z del mismo dia) | 2026-08-27-jueves |
+
 ## Archivo
 (vacio)
 
