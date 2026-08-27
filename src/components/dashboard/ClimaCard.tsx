@@ -51,7 +51,7 @@ function nombreDia(fechaISO: string): string {
  */
 export function ClimaCard() {
   const navigate = useNavigate();
-  const { lecturaActual, resumenPeriodos, resumenesDiarios, loading, estacionConfigurada } = useClimaData();
+  const { lecturaActual, resumenPeriodos, resumenesDiarios, rawLecturas, loading, estacionConfigurada } = useClimaData();
   const [pronostico, setPronostico] = useState<DiaPronostico[] | null>(null);
 
   const sunHoursSemana = useMemo(() => sunHoursUltimos7Dias(resumenesDiarios), [resumenesDiarios]);
@@ -60,17 +60,22 @@ export function ClimaCard() {
   // tablero). `construirFranjaLluvia` ya pasa por `lluviaConfiableDeResumen`
   // -- un día `contador_congelado` (migración 068) o sin fila en absoluto
   // llega como 'sin_dato', nunca como 0mm.
+  // `rawLecturas` (ventana viva de 5 min) va a las dos: el rollup nocturno
+  // corre a las 00:15 y escribe el resumen de AYER, así que el día EN CURSO no
+  // tiene fila en `clima_resumen_diario` hasta la madrugada siguiente. Sin las
+  // lecturas vivas la última barra de la franja salía "sin dato" toda la tarde
+  // y toda la noche, todos los días.
   const franjaLluvia10Dias = useMemo(
-    () => construirFranjaLluvia(resumenesDiarios, 10, obtenerFechaHoy()),
-    [resumenesDiarios],
+    () => construirFranjaLluvia(resumenesDiarios, 10, obtenerFechaHoy(), rawLecturas),
+    [resumenesDiarios, rawLecturas],
   );
 
-  // Racha de días sin lluvia material (pedido de Santiago 2026-08-26): cuenta
-  // hacia atrás desde ayer, se corta ante lluvia >= umbral o ante el primer
-  // día sin dato confiable -- nunca asume seco donde el dato no lo respalda.
+  // Racha de días sin lluvia material. Se corta SÓLO ante una lluvia confirmada
+  // >= umbral; un día sin dato no la corta, se cuenta y se reporta aparte (ver
+  // `calcularRachaSinLluvia`).
   const rachaSinLluvia = useMemo(
-    () => calcularRachaSinLluvia(resumenesDiarios, obtenerFechaHoy()),
-    [resumenesDiarios],
+    () => calcularRachaSinLluvia(resumenesDiarios, obtenerFechaHoy(), UMBRAL_LLUVIA_MATERIAL_MM, rawLecturas),
+    [resumenesDiarios, rawLecturas],
   );
 
   useEffect(() => {

@@ -10,8 +10,7 @@ function racha(overrides: Partial<RachaSinLluviaDatos>): RachaSinLluviaDatos {
     hastaFecha: null,
     ultimaLluviaFecha: null,
     ultimaLluviaMm: null,
-    cortadaPorFaltaDeDato: false,
-    fechaFaltaDeDato: null,
+    diasSinConfirmar: 0,
     ...overrides,
   };
 }
@@ -22,26 +21,36 @@ function render(r: RachaSinLluviaDatos, umbralMm = 10) {
 
 describe('RachaSinLluvia', () => {
   it('muestra el conteo y el umbral', () => {
-    const html = render(racha({ dias: 12 }));
-    expect(html).toContain('12');
+    const html = render(racha({ dias: 36 }));
+    expect(html).toContain('36');
     expect(html).toContain('10');
   });
 
   it('cuando la racha terminó en lluvia real, muestra esa fecha y su valor', () => {
-    const html = render(racha({ dias: 3, ultimaLluviaFecha: '2026-08-12', ultimaLluviaMm: 15 }));
-    expect(html).toContain('15');
+    const html = render(racha({ dias: 36, ultimaLluviaFecha: '2026-07-20', ultimaLluviaMm: 15.75 }));
+    // `formatearMm` no lleva decimales de 10 mm para arriba (formato colombiano)
+    expect(html).toContain('16 mm');
+    expect(html).toContain('20 jul 2026');
+  });
+
+  // El cambio de esta ronda: los días sin dato NO cortan el conteo ni generan
+  // un bloque naranja. Se declaran al lado del número, en gris.
+  it('los días sin dato se declaran discretamente, sin bloque de alarma', () => {
+    const html = render(racha({ dias: 36, diasSinConfirmar: 3 }));
+    expect(html).toContain('36');
+    expect(html).toContain('3 sin dato');
+    // Nada de la alarma naranja anterior
     expect(html).not.toContain('No se puede confirmar');
+    expect(html).not.toMatch(/text-amber-\d00/);
   });
 
-  it('cuando la racha se cortó por falta de dato, avisa en vez de mostrar el número como si fuera confiable', () => {
-    const html = render(racha({ dias: 2, cortadaPorFaltaDeDato: true, fechaFaltaDeDato: '2026-08-12' }));
-    expect(html).toContain('No se puede confirmar');
-    // La fecha del hueco aparece en el aviso, no se esconde
-    expect(html).toContain('ago');
+  it('sin días sin confirmar no dice nada extra', () => {
+    const html = render(racha({ dias: 36, diasSinConfirmar: 0 }));
+    expect(html).not.toContain('sin dato');
   });
 
-  it('no pinta nada si no hay racha y tampoco hay hueco de dato que reportar', () => {
-    const html = render(racha({ dias: 0, cortadaPorFaltaDeDato: false }));
+  it('no pinta nada si no hay racha ni lluvia previa que reportar', () => {
+    const html = render(racha({ dias: 0 }));
     expect(html).toBe('');
   });
 });

@@ -29,7 +29,13 @@ export interface LecturaClima {
 //   lecturas de 5 min esperadas, típicamente por corte de luz en la finca);
 //   lluvia_total_mm viene NULL, porque el contador es acumulado y un día
 //   truncado sólo da una cota inferior, nunca un total — ver migración 103.
-export type LluviaConfianza = 'ok' | 'contador_congelado' | 'sin_time_piezo' | 'cobertura_parcial';
+// 'reconstruido' = el contador diario estaba vencido por frescura o en
+//   desacuerdo con la señal independiente, así que lluvia_total_mm sale de
+//   `lluvia_mm_evento` (suma de deltas del acumulador por evento) en vez del
+//   contador — ver migración 122. ES UN VALOR CONFIABLE, no un "sin dato".
+// Desde la 122, 'cobertura_parcial' tampoco significa "sin dato": significa que
+//   lluvia_total_mm es una COTA INFERIOR (sólo se capturó parte del día).
+export type LluviaConfianza = 'ok' | 'contador_congelado' | 'sin_time_piezo' | 'cobertura_parcial' | 'reconstruido';
 
 export interface ResumenDiario {
   fecha: string;
@@ -42,6 +48,11 @@ export interface ResumenDiario {
   humedad_pct_avg: number | null;
   lluvia_total_mm: number | null;
   lluvia_confianza: LluviaConfianza;
+  /** Lluvia del día reconstruida desde `lluvia_evento_mm` (señal independiente
+   *  del contador acumulado). Se guarda siempre, coincida o no con
+   *  `lluvia_total_mm`, para poder auditar por qué un día quedó reconstruido.
+   *  NULL en toda fila anterior a la migración 122. */
+  lluvia_mm_evento?: number | null;
   viento_kmh_avg: number | null;
   rafaga_kmh_max: number | null;
   viento_dir_predominante: number | null;
