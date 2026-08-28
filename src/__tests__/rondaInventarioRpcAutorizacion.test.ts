@@ -25,6 +25,18 @@ import { resolve } from 'node:path';
 const RUTA_MIGRACION = resolve(__dirname, '../sql/migrations/126_ronda_inventario_rpcs.sql');
 let SQL_126: string;
 
+// `fn_ronda_proponer_ajuste` fue enmendada en vivo por la migración 130
+// (2026-08-28, `CREATE OR REPLACE`, ver ese archivo) -- NUNCA se edita el
+// archivo de la 126 (regla del repo: no se toca una migración aplicada), así
+// que el cuerpo que 126.sql muestra para esa función ya NO es el que corre
+// hoy en producción. El describe de más abajo `fn_ronda_proponer_ajuste --
+// B-5...` sigue siendo válido: valida lo que 126 introdujo (autorización
+// David/Uriel), y nada de eso se tocó. El describe `-- guarda de estado
+// (migración 130)`, después de `fn_ronda_aplicar_ajuste`, valida lo que 130
+// agregó, leyendo el archivo de la 130.
+const RUTA_MIGRACION_130 = resolve(__dirname, '../sql/migrations/130_fn_ronda_proponer_ajuste_guarda_estado.sql');
+let SQL_130: string;
+
 const NOMBRES_RPC = [
   'fn_ronda_abrir',
   'fn_ronda_confirmar_hallazgos',
@@ -51,6 +63,7 @@ function extraerBloque(nombreFuncion: string): string {
 
 beforeAll(() => {
   SQL_126 = readFileSync(RUTA_MIGRACION, 'utf-8');
+  SQL_130 = readFileSync(RUTA_MIGRACION_130, 'utf-8');
 });
 
 describe('contrato de forma -- las 10 RPC + fn_ronda_validar_actor existen con la firma esperada', () => {
@@ -202,6 +215,41 @@ describe('fn_ronda_proponer_ajuste -- B-5: "David o Uriel" (corrección del orqu
 
   it('el delta se calcula server-side de los valores YA congelados (R-4), nunca de lo que mande el cliente', () => {
     expect(cuerpo).toContain('v_delta := v_excepcion.cantidad_fisica - v_excepcion.teorico_conteo');
+  });
+});
+
+describe('fn_ronda_proponer_ajuste -- ADVERSARIAL 9: guarda de estado (hallazgo del orquestador, migración 130, 2026-08-28)', () => {
+  // Hallazgo durante la revisión de Fase 4: `fn_ronda_proponer_ajuste` era la
+  // ÚNICA de las diez RPC del ciclo que no revalidaba el `estado` actual de
+  // la excepción antes de escribir -- sólo exigía `explicacion_david_en IS
+  // NOT NULL`, una condición que queda cierta para siempre una vez que David
+  // explica. Un `callback_data` de Telegram reenviado (`rpa:<id>:c<n>:ok`,
+  // bot.ts) podía volver a llamarla sobre una excepción YA decidida o
+  // aplicada y resetear su estado a 'ajuste_propuesto' en silencio, abriendo
+  // la puerta a una segunda decisión y una segunda aplicación del mismo
+  // ajuste. Ver el encabezado de 130_fn_ronda_proponer_ajuste_guarda_estado.sql
+  // para el análisis completo. Este describe defiende que la guarda no se
+  // pierda en un PR posterior -- mismo criterio que el resto del archivo.
+  it('rechaza proponer sobre una excepción que no está en estado "explicada"', () => {
+    expect(SQL_130).toContain("IF v_excepcion.estado <> 'explicada' THEN");
+    expect(SQL_130).toContain('RAISE EXCEPTION');
+  });
+
+  it('la guarda de estado va DESPUÉS de la de explicacion_david_en -- ambas condiciones se exigen, ninguna reemplaza a la otra', () => {
+    const idxExplicacion = SQL_130.indexOf('IF v_excepcion.explicacion_david_en IS NULL THEN');
+    const idxEstado = SQL_130.indexOf("IF v_excepcion.estado <> 'explicada' THEN");
+    expect(idxExplicacion).toBeGreaterThan(-1);
+    expect(idxEstado).toBeGreaterThan(idxExplicacion);
+  });
+
+  it('no toca la autorización B-5 (David o Uriel, nunca Santiago) que corrigió la 126', () => {
+    expect(SQL_130).toContain("ARRAY['inventario_ronda', 'inventario_explicacion']");
+    expect(SQL_130).not.toContain("ARRAY['inventario_ronda', 'inventario_explicacion', 'inventario_aprobacion']");
+  });
+
+  it('CREATE OR REPLACE, nunca DROP+CREATE -- no abre una ventana sin la función (precedente 077)', () => {
+    expect(SQL_130).toContain('CREATE OR REPLACE FUNCTION fn_ronda_proponer_ajuste');
+    expect(SQL_130).not.toMatch(/DROP\s+FUNCTION\s+fn_ronda_proponer_ajuste/i);
   });
 });
 

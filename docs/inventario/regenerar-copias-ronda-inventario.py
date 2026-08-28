@@ -51,6 +51,12 @@ ORIGEN_DIR = os.path.join(ROOT, 'src/utils/rondaInventario')
 #   - alcanceTxt.ts: el .txt del alcance que se manda al abrir la ronda. No
 #     depende de los otros tres -- reimplementa su propio formateador local,
 #     mismo criterio que preview.ts/reporteCierre.ts (ver su cabecera).
+#
+# Fase 4 (Telegram, David y Santiago) agrega un módulo más:
+#   - resolucion.ts: mensajes puros para /explicar, /proponer y /aprobar
+#     (B-1/B-2/B-5/B-6/B-7) -- importa causaPorIndice/indiceDeCausa de
+#     causasRaiz.ts (mismo criterio de un solo dueño del catálogo que ya
+#     seguían interpretarNota.ts/preview.ts).
 MODULOS = [
     'causasRaiz.ts',
     'interpretarNota.ts',
@@ -58,6 +64,7 @@ MODULOS = [
     'resolverHallazgos.ts',
     'alcanceTxt.ts',
     'reporteCierre.ts',
+    'resolucion.ts',
 ]
 
 DESTINOS = [

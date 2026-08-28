@@ -61,6 +61,28 @@ export const TELEGRAM_MODULES: TelegramModulo[] = [
   // `inventario_explicacion` (David) e `inventario_aprobacion` (Santiago) --
   // son de la Fase 4 (David y Santiago), fuera de esta pantalla todavía.
   { key: 'inventario_ronda', label: 'Ronda de inventario', description: 'Abrir/cerrar la ronda mensual de conteo, consultar existencias y reportar hallazgos por nota de voz' },
+  // Fase 4 de docs/brief_tecnico_verificacion_inventario.md (§3.2/§7.2): los
+  // dos módulos que cierran el ciclo de una excepción de la ronda, aparte del
+  // de Uriel de arriba. Ninguno de los dos existía todavía cuando se escribió
+  // el comentario de `inventario_ronda`.
+  //
+  // `inventario_explicacion` (David) confirma/explica cada discrepancia y
+  // captura el movimiento cuando hay respaldo (B-1/B-2), y puede además
+  // proponer un ajuste (B-5) -- no marcado `sensitive`: igual que
+  // `inventario_ronda`, no expone valoración por sí mismo, sólo cantidades y
+  // movimientos.
+  { key: 'inventario_explicacion', label: 'Explicación de discrepancias (David)', description: 'Confirmar o explicar cada discrepancia de la ronda, capturar el movimiento cuando hay respaldo, y proponer el ajuste cuando no lo hay' },
+  // `inventario_aprobacion` (Santiago) SÍ se marca `sensitive`: aunque el
+  // mensaje de aprobación tampoco lleva precio ni valoración (R-15/CA-13
+  // sigue valiendo para Telegram -- ver la cabecera de
+  // `src/utils/rondaInventario/resolucion.ts`), sí expone la causa raíz y el
+  // delta de cada discrepancia sin respaldo (pérdida, sustracción...), que es
+  // información de control interno -- el mismo criterio de cautela que ya
+  // usa `consultas`, aplicado a un dato más acotado. La guarda real vive en
+  // el RPC (`fn_ronda_decidir_ajuste` exige el vínculo con
+  // `usuarios.rol = 'Gerencia'`, migración 126, §6.1 del brief técnico); esta
+  // marca es sólo la advertencia visual de la pantalla de configuración.
+  { key: 'inventario_aprobacion', label: 'Aprobación de ajustes (Santiago)', description: 'Clasificar la causa raíz y aprobar o desestimar cada ajuste de inventario sin respaldo — exclusivo de Gerencia', sensitive: true },
   { key: 'consultas', label: 'Consultas IA', description: 'Acceso a Esco IA — solo para usuarios autorizados', sensitive: true },
 ];
 

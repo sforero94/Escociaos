@@ -66,3 +66,32 @@ const CAUSAS_POR_CLAVE: ReadonlyMap<string, CausaRaiz> = new Map(CAUSAS_RAIZ.map
 export function buscarCausaRaiz(clave: string): CausaRaiz | undefined {
   return CAUSAS_POR_CLAVE.get(clave);
 }
+
+// ---------------------------------------------------------------------------
+// Índice 1-based (== `orden`) -- Fase 4 (Telegram, David y Santiago),
+// §7.2/§13 del brief técnico: `/proponer` y `/aprobar` codifican la causa
+// elegida en un `callback_data` de Telegram junto con un `excepcion_id`
+// (UUID, 36 bytes) y, para `/aprobar`, además la decisión -- la CLAVE de la
+// causa más larga (`movimiento_no_capturado`, 23 bytes) no cabe ahí sin
+// superar el límite de 64 bytes de Telegram para `callback_data`. El índice
+// (1 dígito, las 7 causas) sí. `bot.ts` nunca construye este índice a mano:
+// siempre pasa por acá, para que el mapeo índice<->clave tenga un solo
+// dueño y no pueda desincronizarse entre quien codifica el botón y quien
+// decodifica el callback.
+// ---------------------------------------------------------------------------
+
+const CAUSAS_POR_INDICE: ReadonlyMap<number, CausaRaiz> = new Map(CAUSAS_RAIZ.map((c) => [c.orden, c]));
+
+/** Causa raíz por su `orden` (1-7). `undefined` si el índice no corresponde
+ * a ninguna causa del catálogo -- el llamador lo trata como un
+ * `callback_data` corrupto/reenviado, nunca como una causa por defecto. */
+export function causaPorIndice(indice: number): CausaRaiz | undefined {
+  return CAUSAS_POR_INDICE.get(indice);
+}
+
+/** El `orden` (índice 1-based) de una causa por su clave -- inverso de
+ * `causaPorIndice`. `undefined` si la clave no existe (misma cautela que
+ * `buscarCausaRaiz`). */
+export function indiceDeCausa(clave: string): number | undefined {
+  return buscarCausaRaiz(clave)?.orden;
+}

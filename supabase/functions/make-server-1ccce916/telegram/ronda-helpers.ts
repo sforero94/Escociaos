@@ -31,6 +31,8 @@ import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 import type { FilaPreview } from '../rondaInventario/preview.ts';
 import { formatearCantidad } from '../rondaInventario/preview.ts';
 import type { AlcanceItem, HallazgoParaConfirmar } from '../rondaInventario/resolverHallazgos.ts';
+import type { CasoExcepcion, CasoProponer, CasoSantiago } from '../rondaInventario/resolucion.ts';
+import { buscarCausaRaiz } from '../rondaInventario/causasRaiz.ts';
 
 // ---------------------------------------------------------------------------
 // "Hoy" en Bogotá — mismo criterio que `hoyBogota()` de `pesajeLeche.ts:82-86`
@@ -47,6 +49,20 @@ export function primerDiaMesBogota(): string {
   const anio = bogota.getUTCFullYear();
   const mes = String(bogota.getUTCMonth() + 1).padStart(2, '0');
   return `${anio}-${mes}-01`;
+}
+
+/** "Hoy" en Bogotá, 'AAAA-MM-DD' -- MISMO criterio que `primerDiaMesBogota()`
+ * de arriba y que `hoyBogota()` de `pesajeLeche.ts`/`eventoHato.ts`: nunca
+ * `new Date().toISOString().slice(0, 10)` a secas (la trampa "hoy" del
+ * CLAUDE.md raíz -- de 19:00 a medianoche en Bogotá esa expresión ya da
+ * mañana). Fase 4 (§13 de la tarea de esta sesión) la necesita para
+ * `fecha_movimiento` cuando Santiago aplica un ajuste aprobado el mismo día
+ * (`fn_ronda_aplicar_ajuste`, migración 126) -- ese RPC exige la fecha, nunca
+ * la infiere. */
+export function hoyBogota(): string {
+  const ahora = new Date();
+  const bogota = new Date(ahora.getTime() - 5 * 60 * 60 * 1000);
+  return bogota.toISOString().slice(0, 10);
 }
 
 // ---------------------------------------------------------------------------
@@ -292,4 +308,215 @@ export function payloadActorTelegram(telegramUsuarioId: string): {
  * site. */
 export function mensajeErrorRpc(error: { message?: string } | null | undefined): string {
   return error?.message?.trim() || 'error desconocido al llamar al sistema';
+}
+
+// ---------------------------------------------------------------------------
+// Fase 4 (Telegram, David y Santiago) — §7.2/§13 del brief técnico. Cierra
+// el ciclo de una excepción: David confirma/explica y captura con respaldo
+// (B-1/B-2, `/explicar`), David o Uriel proponen el ajuste (B-5, `/proponer`),
+// Santiago aprueba o desestima y lo aplica (B-6/B-7, `/aprobar`).
+// ---------------------------------------------------------------------------
+
+interface ProductoEmbebido {
+  nombre: string;
+  unidad_medida: string;
+}
+
+/** Todas las columnas de `rondas_excepciones` que necesita ALGÚN paso de
+ * Fase 4, con el producto embebido — un solo tipo y un solo `select` para
+ * `/explicar`, `/proponer`, `/aprobar` y la conversación `excepcionDavid`, en
+ * vez de tres formas casi iguales de la misma fila (cada call site usa sólo
+ * los campos que le tocan). */
+export interface ExcepcionDetalleRonda {
+  id: string;
+  ronda_id: string;
+  producto_id: string;
+  estado: EstadoExcepcionInventario;
+  cantidad_fisica: number;
+  teorico_conteo: number;
+  observacion_uriel: string | null;
+  explicacion_citada: string | null;
+  explicacion_david: string | null;
+  causa_sugerida: string | null;
+  propuesta_causa: string | null;
+  propuesta_nota: string | null;
+  propuesta_por_usuario: string | null;
+  propuesta_por_telegram: string | null;
+  producto: ProductoEmbebido | null;
+}
+
+const SELECT_EXCEPCION_DETALLE =
+  'id, ronda_id, producto_id, estado, cantidad_fisica, teorico_conteo, observacion_uriel, ' +
+  'explicacion_citada, explicacion_david, causa_sugerida, propuesta_causa, propuesta_nota, ' +
+  'propuesta_por_usuario, propuesta_por_telegram, producto:productos(nombre, unidad_medida)';
+
+/** Una excepción por id, con el producto embebido — lo que la conversación
+ * `excepcionDavid` y cada paso de `/proponer`/`/aprobar` necesitan para
+ * re-leer el estado ANTES de mostrar el siguiente botón (una excepción puede
+ * haber cambiado de estado entre dos toques — p. ej. otra corrida de
+ * `/explicar` la resolvió, o Santiago ya decidió —, y el `RAISE EXCEPTION`
+ * del RPC correspondiente es la autoridad final, pero mostrar el mensaje
+ * correcto de una vez es mejor experiencia que un error genérico). */
+export async function obtenerExcepcionDetalle(
+  supabase: SupabaseClient,
+  excepcionId: string,
+): Promise<ExcepcionDetalleRonda | null> {
+  const { data, error } = await supabase
+    .from('rondas_excepciones')
+    .select(SELECT_EXCEPCION_DETALLE)
+    .eq('id', excepcionId)
+    .maybeSingle();
+  if (error) {
+    console.error('[ronda] obtenerExcepcionDetalle error:', error.message);
+    return null;
+  }
+  return (data as unknown as ExcepcionDetalleRonda | null) ?? null;
+}
+
+/** `ExcepcionDetalleRonda` (snake_case, columnas de la tabla) ->
+ * `CasoExcepcion` (camelCase, lo que `resolucion.ts` espera) — el mapeo que
+ * TODOS los pasos de Fase 4 necesitan para renderizar el caso base. */
+export function excepcionComoCaso(excepcion: ExcepcionDetalleRonda): CasoExcepcion {
+  return {
+    productoNombre: excepcion.producto?.nombre ?? '(producto sin nombre)',
+    unidad: excepcion.producto?.unidad_medida ?? null,
+    fisico: excepcion.cantidad_fisica,
+    teorico: excepcion.teorico_conteo,
+    observacionUriel: excepcion.observacion_uriel,
+  };
+}
+
+/** `ExcepcionDetalleRonda` -> `CasoProponer` — agrega la explicación de
+ * David y la etiqueta de la causa que sugirió el intérprete (si la hubo;
+ * D-T8/CA-34: nunca vinculante, sólo pista). */
+export function excepcionComoCasoProponer(excepcion: ExcepcionDetalleRonda): CasoProponer {
+  return {
+    ...excepcionComoCaso(excepcion),
+    explicacionDavid: excepcion.explicacion_david,
+    causaSugeridaEtiqueta: excepcion.causa_sugerida
+      ? (buscarCausaRaiz(excepcion.causa_sugerida)?.etiqueta ?? excepcion.causa_sugerida)
+      : null,
+  };
+}
+
+/** `ExcepcionDetalleRonda` -> `CasoSantiago` — agrega la explicación de
+ * David, la causa PROPUESTA (no la sugerida por el intérprete: la que David
+ * o Uriel eligieron al proponer) y su nota. `propuestoPor` viaja aparte
+ * porque resolverlo es async (`resolverNombreActor`, más abajo) — no puede
+ * vivir en este mapeo síncrono. */
+export function excepcionComoCasoSantiago(excepcion: ExcepcionDetalleRonda, propuestoPor: string): CasoSantiago {
+  return {
+    ...excepcionComoCaso(excepcion),
+    explicacionDavid: excepcion.explicacion_david,
+    propuestaCausaEtiqueta: excepcion.propuesta_causa
+      ? (buscarCausaRaiz(excepcion.propuesta_causa)?.etiqueta ?? excepcion.propuesta_causa)
+      : '(sin causa)',
+    propuestaNota: excepcion.propuesta_nota,
+    propuestoPor,
+  };
+}
+
+/** Nombre legible de quien propuso/decidió/etc, vía `fn_ronda_actor_nombre`
+ * (migración 126) — el MISMO `COALESCE` (telegram_usuarios.nombre_display ->
+ * usuarios.nombre_completo/email -> 'Ronda de inventario') que ya usan los
+ * RPC de captura y aplicación al escribir `movimientos_inventario.responsable`.
+ * Se llama por RPC en vez de reimplementar el `COALESCE` acá, para que esa
+ * regla tenga un solo dueño (mismo criterio D-T2 del catálogo de causas). */
+export async function resolverNombreActor(
+  supabase: SupabaseClient,
+  usuarioId: string | null,
+  telegramId: string | null,
+): Promise<string> {
+  const { data, error } = await supabase.rpc('fn_ronda_actor_nombre', {
+    p_usuario: usuarioId,
+    p_telegram: telegramId,
+  });
+  if (error) {
+    console.error('[ronda] resolverNombreActor error:', error.message);
+    return 'alguien del sistema';
+  }
+  return (data as string | null) ?? 'alguien del sistema';
+}
+
+/** El MISMO vínculo `telegram_usuarios.usuario_id -> usuarios.rol` que la
+ * guarda de Gerencia de `fn_ronda_decidir_ajuste` (migración 126, §6.1 del
+ * brief técnico, literal — nunca `es_usuario_gerencia()`, que con
+ * `service_role` da falso siempre). El RPC ya la protege — esto es sólo para
+ * no mostrarle a un usuario de Telegram con `inventario_aprobacion` pero sin
+ * vínculo de Gerencia una lista de ajustes que después no va a poder
+ * decidir, lo que le devolvería un error de permisos en vez de la
+ * explicación clara de "no tienes acceso" que ya usan los demás módulos. */
+export async function esUsuarioTelegramGerencia(
+  supabase: SupabaseClient,
+  telegramUsuarioId: string,
+): Promise<boolean> {
+  const { data: tgUser, error: errorTg } = await supabase
+    .from('telegram_usuarios')
+    .select('usuario_id')
+    .eq('id', telegramUsuarioId)
+    .maybeSingle();
+  if (errorTg) {
+    console.error('[ronda] esUsuarioTelegramGerencia (telegram_usuarios) error:', errorTg.message);
+    return false;
+  }
+  if (!tgUser?.usuario_id) return false;
+
+  const { data: usuario, error: errorUsuario } = await supabase
+    .from('usuarios')
+    .select('rol')
+    .eq('id', tgUser.usuario_id)
+    .maybeSingle();
+  if (errorUsuario) {
+    console.error('[ronda] esUsuarioTelegramGerencia (usuarios) error:', errorUsuario.message);
+    return false;
+  }
+  return usuario?.rol === 'Gerencia';
+}
+
+/** `/explicar` (B-1): excepciones que todavía no pasaron por David —
+ * `reportada` (sin cita del audio) o `explicacion_precargada` (con cita, sin
+ * confirmar/corregir todavía, CA-38). */
+export async function obtenerExcepcionesPendientesDavid(supabase: SupabaseClient): Promise<ExcepcionDetalleRonda[]> {
+  const { data, error } = await supabase
+    .from('rondas_excepciones')
+    .select(SELECT_EXCEPCION_DETALLE)
+    .in('estado', ['reportada', 'explicacion_precargada'])
+    .order('reportada_en', { ascending: true });
+  if (error) {
+    console.error('[ronda] obtenerExcepcionesPendientesDavid error:', error.message);
+    return [];
+  }
+  return (data as unknown as ExcepcionDetalleRonda[]) ?? [];
+}
+
+/** `/proponer` (B-5): excepciones ya `explicada` por David (CA-38 exige ese
+ * paso antes de poder proponer, `fn_ronda_proponer_ajuste` lo vuelve a
+ * exigir) y sin ajuste propuesto todavía — el estado ya lo garantiza: en
+ * cuanto se propone, pasa a `ajuste_propuesto` y deja de aparecer acá. */
+export async function obtenerExcepcionesParaProponer(supabase: SupabaseClient): Promise<ExcepcionDetalleRonda[]> {
+  const { data, error } = await supabase
+    .from('rondas_excepciones')
+    .select(SELECT_EXCEPCION_DETALLE)
+    .eq('estado', 'explicada')
+    .order('explicacion_david_en', { ascending: true });
+  if (error) {
+    console.error('[ronda] obtenerExcepcionesParaProponer error:', error.message);
+    return [];
+  }
+  return (data as unknown as ExcepcionDetalleRonda[]) ?? [];
+}
+
+/** `/aprobar` (B-6): excepciones con un ajuste propuesto, esperando la
+ * decisión de Santiago. */
+export async function obtenerExcepcionesPropuestasParaSantiago(supabase: SupabaseClient): Promise<ExcepcionDetalleRonda[]> {
+  const { data, error } = await supabase
+    .from('rondas_excepciones')
+    .select(SELECT_EXCEPCION_DETALLE)
+    .eq('estado', 'ajuste_propuesto')
+    .order('propuesta_en', { ascending: true });
+  if (error) {
+    console.error('[ronda] obtenerExcepcionesPropuestasParaSantiago error:', error.message);
+    return [];
+  }
+  return (data as unknown as ExcepcionDetalleRonda[]) ?? [];
 }

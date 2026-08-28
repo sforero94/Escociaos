@@ -27,13 +27,17 @@ beforeAll(async () => {
 // ---------------------------------------------------------------------------
 
 describe('TELEGRAM_MODULES', () => {
-  it('exports exactly 7 modules', () => {
-    expect(TELEGRAM_MODULES).toHaveLength(7);
+  it('exports exactly 9 modules', () => {
+    expect(TELEGRAM_MODULES).toHaveLength(9);
   });
 
   it('contains the expected module keys', () => {
     const keys = TELEGRAM_MODULES.map((m) => m.key);
-    expect(keys).toEqual(['labores', 'monitoreo', 'gastos', 'ingresos', 'hato_produccion', 'inventario_ronda', 'consultas']);
+    expect(keys).toEqual([
+      'labores', 'monitoreo', 'gastos', 'ingresos', 'hato_produccion',
+      'inventario_ronda', 'inventario_explicacion', 'inventario_aprobacion',
+      'consultas',
+    ]);
   });
 
   // Fase 3 de docs/brief_tecnico_verificacion_inventario.md (§3.2): el alta
@@ -56,6 +60,36 @@ describe('TELEGRAM_MODULES', () => {
   it('inventario_ronda NO está marcado sensitive (a diferencia de consultas)', () => {
     const modulo = TELEGRAM_MODULES.find((m) => m.key === 'inventario_ronda');
     expect(modulo?.sensitive).toBeFalsy();
+  });
+
+  // Fase 4 (§3.2/§7.2 del brief técnico): los dos módulos que cierran el
+  // ciclo de una excepción de la ronda, además del de Uriel de arriba.
+  it('incluye inventario_explicacion -- el módulo de David (Fase 4)', () => {
+    const modulo = TELEGRAM_MODULES.find((m) => m.key === 'inventario_explicacion');
+    expect(modulo).toBeDefined();
+    expect(modulo?.label.length).toBeGreaterThan(0);
+  });
+
+  it('inventario_explicacion NO está marcado sensitive -- no expone valoración, sólo cantidades y movimientos', () => {
+    const modulo = TELEGRAM_MODULES.find((m) => m.key === 'inventario_explicacion');
+    expect(modulo?.sensitive).toBeFalsy();
+  });
+
+  it('incluye inventario_aprobacion -- el módulo de Santiago (Fase 4)', () => {
+    const modulo = TELEGRAM_MODULES.find((m) => m.key === 'inventario_aprobacion');
+    expect(modulo).toBeDefined();
+    expect(modulo?.label.length).toBeGreaterThan(0);
+  });
+
+  // El mensaje de aprobación no lleva precio ni valoración (R-15/CA-13 sigue
+  // valiendo, ver resolucion.ts), pero sí expone la causa raíz y el delta de
+  // una discrepancia sin respaldo -- información de control interno que
+  // justifica la misma cautela visual que `consultas`. La guarda real de
+  // acceso vive en el RPC (`fn_ronda_decidir_ajuste`, exclusivo de Gerencia),
+  // esta marca es sólo la advertencia de la pantalla de configuración.
+  it('inventario_aprobacion SÍ está marcado sensitive -- expone causa/delta de discrepancias', () => {
+    const modulo = TELEGRAM_MODULES.find((m) => m.key === 'inventario_aprobacion');
+    expect(modulo?.sensitive).toBe(true);
   });
 
   it('each module has key, label, and description', () => {

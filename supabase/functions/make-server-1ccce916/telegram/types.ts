@@ -29,6 +29,23 @@ export interface TelegramUsuario {
 
 export interface SessionData {
   // grammy conversations stores its state here automatically
+
+  // Fase 4 de docs/brief_tecnico_verificacion_inventario.md (§7.2/§13,
+  // David y Santiago): decidir/proponer un ajuste NO es una conversación de
+  // Grammy (D-T9 la reserva para asistentes genuinos; Santiago es el usuario
+  // más pesado de Esco y una conversación activa lo bloquearía -- ver
+  // bot.ts). Pero la causa "otro" del catálogo exige nota (R-7), y una nota
+  // es texto libre -- este campo es el único puente entre el callback que la
+  // pide y el `bot.on("message:text")` que la recibe. Se limpia apenas se
+  // usa (éxito, error o cancelación); si queda huérfano no rompe nada más
+  // que ESE flujo puntual, y el próximo `/proponer`/`/aprobar` lo vuelve a
+  // fijar antes de leerlo.
+  pendienteNotaRonda?: {
+    tipo: 'proponer' | 'decidir';
+    excepcionId: string;
+    causaClave: string;
+    decision?: 'aprobado' | 'desestimado';
+  } | null;
 }
 
 export interface BotContextFlavor {

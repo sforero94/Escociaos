@@ -20,6 +20,7 @@ import { ingresoConversation } from "./conversations/ingreso.ts";
 import { pesajeLecheConversation } from "./conversations/pesajeLeche.ts";
 import { eventoHatoConversation } from "./conversations/eventoHato.ts";
 import { cierreRondaConversation } from "./conversations/cierreRonda.ts";
+import { excepcionDavidConversation } from "./conversations/excepcionDavid.ts";
 // `produccionQuincenal` (litros al camión) se retiró del bot -- SOW 3 de
 // docs/plan_hato_produccion_rework.md §2.3: la quincena pasó a ser un
 // registro financiero (`fin_ingreso_id NOT NULL`, migración 070) y el bot
@@ -51,6 +52,17 @@ import {
   type PreviewGuardado,
   type RondaInventarioRow,
   type TranscritoRondaRow,
+  // Fase 4 (David y Santiago) -- §7.2/§13 del brief técnico.
+  excepcionComoCaso,
+  excepcionComoCasoProponer,
+  excepcionComoCasoSantiago,
+  esUsuarioTelegramGerencia,
+  hoyBogota,
+  obtenerExcepcionDetalle,
+  obtenerExcepcionesParaProponer,
+  obtenerExcepcionesPendientesDavid,
+  obtenerExcepcionesPropuestasParaSantiago,
+  resolverNombreActor,
 } from "./ronda-helpers.ts";
 import { resolverHallazgos } from "../rondaInventario/resolverHallazgos.ts";
 import type { RespuestaModeloInterprete } from "../rondaInventario/interpretarNota.ts";
@@ -58,6 +70,7 @@ import {
   aplicarCorreccion,
   construirPreview,
   construirTextoConCorrecciones,
+  formatearCantidad,
   intentosPreviewAgotados,
   MAX_INTENTOS_PREVIEW,
   previewConfirmable,
@@ -65,6 +78,15 @@ import {
   type PreviewRonda,
 } from "../rondaInventario/preview.ts";
 import { construirTextoAlcanceTxt } from "../rondaInventario/alcanceTxt.ts";
+import { CAUSAS_RAIZ, causaPorIndice } from "../rondaInventario/causasRaiz.ts";
+import {
+  etiquetaDecision,
+  renderCasoProponer,
+  renderCasoSantiago,
+  renderConfirmacionDecision,
+  renderConfirmacionPropuesta,
+  renderLineaPendienteDavid,
+} from "../rondaInventario/resolucion.ts";
 
 // ============================================================================
 // SUPABASE CLIENT (service role — same pattern as chat.ts)
@@ -182,6 +204,7 @@ function getBot(): Bot<BotContext> {
   bot.use(createConversation(pesajeLecheConversation, "pesajeLeche"));
   bot.use(createConversation(eventoHatoConversation, "eventoHato"));
   bot.use(createConversation(cierreRondaConversation, "cierreRonda"));
+  bot.use(createConversation(excepcionDavidConversation, "excepcionDavid"));
 
   // ==========================================================================
   // HELPERS
@@ -209,6 +232,12 @@ function getBot(): Bot<BotContext> {
     }
     if (mods.includes("inventario_ronda")) {
       kb.text("🧮 Ronda de inventario", "start_ronda").row();
+    }
+    if (mods.includes("inventario_explicacion")) {
+      kb.text("🗣️ Explicar discrepancias", "start_explicar").row();
+    }
+    if (mods.includes("inventario_aprobacion")) {
+      kb.text("✅ Aprobar ajustes", "start_aprobar").row();
     }
     if (mods.includes("consultas")) {
       kb.text("💬 Preguntarle a Esco", "start_consulta").row();
@@ -552,7 +581,414 @@ function getBot(): Bot<BotContext> {
     await enviarAlcanceTxt(ctx, sb, ronda);
   });
 
+  // ==========================================================================
+  // RONDA DE INVENTARIO — David y Santiago (Fase 4,
+  // docs/brief_tecnico_verificacion_inventario.md §7.2/§13). Cierra el ciclo
+  // de una excepción: David confirma/explica y captura con respaldo
+  // (B-1/B-2, `/explicar` -> conversación `excepcionDavid`), David o Uriel
+  // proponen el ajuste (B-5, `/proponer`), Santiago aprueba/desestima y lo
+  // aplica (B-6/B-7, `/aprobar`).
+  //
+  // `/proponer` y `/aprobar` NO son conversaciones (§7.2, literal): son
+  // callbacks en dos pasos (elegir causa -> confirmar). Santiago es el
+  // usuario más pesado de Esco -- una conversación activa lo bloquearía. El
+  // `callback_data` codifica la causa por su ÍNDICE (1-7, `causaPorIndice`/
+  // `indiceDeCausa` de `causasRaiz.ts`), nunca por la clave: la clave más
+  // larga (`movimiento_no_capturado`, 23 bytes) no cabe junto a un
+  // `excepcion_id` (UUID, 36 bytes) dentro del límite de 64 bytes que
+  // Telegram impone a `callback_data`.
+  // ==========================================================================
+
+  function tieneAccesoExplicacion(ctx: BotContext): boolean {
+    return !!ctx.telegramUser?.modulos_permitidos?.includes("inventario_explicacion");
+  }
+
+  function tieneAccesoAprobacion(ctx: BotContext): boolean {
+    return !!ctx.telegramUser?.modulos_permitidos?.includes("inventario_aprobacion");
+  }
+
+  // B-5: "el ajuste lo puede proponer David o Uriel" -- MISMA autorización
+  // que `fn_ronda_proponer_ajuste` (migración 126, corregida 2026-08-28 tras
+  // la revisión del dueño): cualquiera de los dos módulos habilita.
+  function tieneAccesoProponer(ctx: BotContext): boolean {
+    const mods = ctx.telegramUser?.modulos_permitidos ?? [];
+    return mods.includes("inventario_ronda") || mods.includes("inventario_explicacion");
+  }
+
+  const ETIQUETAS_ESTADO_EXCEPCION: Record<string, string> = {
+    reportada: "reportada",
+    explicacion_precargada: "con la cita de Uriel sin confirmar",
+    explicada: "ya explicada",
+    cerrada_sin_ajuste: "cerrada sin ajuste",
+    resuelta_con_captura: "ya resuelta con captura",
+    ajuste_propuesto: "con un ajuste propuesto",
+    ajuste_aprobado: "con un ajuste ya aprobado",
+    ajuste_desestimado: "con un ajuste desestimado",
+    ajuste_aplicado: "con un ajuste ya aplicado",
+  };
+
+  /** Teclado con una fila por causa ACTIVA del catálogo (D-T2: sólo
+   * `activo`), en el orden de `CAUSAS_RAIZ` (== `orden`, el mismo que la
+   * semilla SQL). `construirCallback` arma el `callback_data` de cada fila --
+   * distinto entre `/proponer` (`rpa:`) y `/aprobar` (`rda:...:<decision>:`). */
+  function tecladoCausas(construirCallback: (indice: number) => string): InlineKeyboard {
+    const kb = new InlineKeyboard();
+    for (const causa of CAUSAS_RAIZ.filter((c) => c.activo)) {
+      kb.text(causa.etiqueta, construirCallback(causa.orden)).row();
+    }
+    return kb;
+  }
+
+  // ---- /explicar (David, B-1/B-2) --------------------------------------------
+
+  bot.command("explicar", async (ctx) => {
+    if (!tieneAccesoExplicacion(ctx)) {
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
+    const sb = getSupabaseAdmin();
+    const pendientes = await obtenerExcepcionesPendientesDavid(sb);
+    if (pendientes.length === 0) {
+      await ctx.reply("No tienes discrepancias pendientes de explicar. 🎉");
+      return;
+    }
+    await ctx.reply(`Tienes ${pendientes.length} discrepancia(s) pendiente(s):`);
+    for (const excepcion of pendientes) {
+      const kb = new InlineKeyboard().text("Explicar", `ronda_expl:${excepcion.id}`);
+      await ctx.reply(renderLineaPendienteDavid(excepcionComoCaso(excepcion)), { reply_markup: kb });
+    }
+  });
+
+  bot.callbackQuery("start_explicar", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!tieneAccesoExplicacion(ctx)) {
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
+    const sb = getSupabaseAdmin();
+    const pendientes = await obtenerExcepcionesPendientesDavid(sb);
+    if (pendientes.length === 0) {
+      await ctx.reply("No tienes discrepancias pendientes de explicar. 🎉");
+      return;
+    }
+    await ctx.reply(`Tienes ${pendientes.length} discrepancia(s) pendiente(s):`);
+    for (const excepcion of pendientes) {
+      const kb = new InlineKeyboard().text("Explicar", `ronda_expl:${excepcion.id}`);
+      await ctx.reply(renderLineaPendienteDavid(excepcionComoCaso(excepcion)), { reply_markup: kb });
+    }
+  });
+
+  bot.callbackQuery(/^ronda_expl:([0-9a-f-]+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!tieneAccesoExplicacion(ctx)) {
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
+    const excepcionId = ctx.match?.[1];
+    if (!excepcionId) return;
+    await ctx.conversation.enter("excepcionDavid", excepcionId);
+  });
+
+  // ---- /proponer (David o Uriel, B-5) ----------------------------------------
+
+  bot.command("proponer", async (ctx) => {
+    if (!tieneAccesoProponer(ctx)) {
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
+    const sb = getSupabaseAdmin();
+    const pendientes = await obtenerExcepcionesParaProponer(sb);
+    if (pendientes.length === 0) {
+      await ctx.reply("No hay discrepancias esperando una propuesta de ajuste.");
+      return;
+    }
+    await ctx.reply(`Hay ${pendientes.length} discrepancia(s) explicada(s) sin ajuste propuesto todavía:`);
+    for (const excepcion of pendientes) {
+      const caso = excepcionComoCasoProponer(excepcion);
+      const kb = tecladoCausas((indice) => `rpa:${excepcion.id}:c${indice}`);
+      await ctx.reply(renderCasoProponer(caso), { reply_markup: kb });
+    }
+  });
+
+  bot.callbackQuery(/^rpa:([0-9a-f-]+):c([1-7])$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!tieneAccesoProponer(ctx)) return;
+    const excepcionId = ctx.match?.[1];
+    const indice = Number(ctx.match?.[2]);
+    if (!excepcionId || !indice) return;
+    const causa = causaPorIndice(indice);
+    if (!causa) return; // callback_data corrupto/reenviado -- R-18, nunca se inventa una causa
+
+    const sb = getSupabaseAdmin();
+    const excepcion = await obtenerExcepcionDetalle(sb, excepcionId);
+    if (!excepcion) {
+      await ctx.reply("Esa discrepancia ya no existe.");
+      return;
+    }
+    if (excepcion.estado !== "explicada") {
+      await ctx.reply(`Esa discrepancia ya no está esperando una propuesta -- está ${ETIQUETAS_ESTADO_EXCEPCION[excepcion.estado] ?? excepcion.estado}.`);
+      return;
+    }
+    const productoNombre = excepcion.producto?.nombre ?? "(producto sin nombre)";
+
+    if (causa.exigeNota) {
+      if (!ctx.telegramUser) return;
+      ctx.session.pendienteNotaRonda = { tipo: "proponer", excepcionId, causaClave: causa.clave };
+      await ctx.editMessageText(`Causa: ${causa.etiqueta}. Esa causa exige una nota -- escribila (o *cancelar*).`, { parse_mode: "Markdown" }).catch(() => {});
+      return;
+    }
+
+    await ctx.editMessageText(renderConfirmacionPropuesta(productoNombre, causa.etiqueta), {
+      reply_markup: new InlineKeyboard().text("✅ Confirmar", `rpa:${excepcionId}:c${indice}:ok`).text("❌ Cambiar causa", `rpa:${excepcionId}:volver`),
+    }).catch(() => {});
+  });
+
+  bot.callbackQuery(/^rpa:([0-9a-f-]+):volver$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!tieneAccesoProponer(ctx)) return;
+    const excepcionId = ctx.match?.[1];
+    if (!excepcionId) return;
+    const sb = getSupabaseAdmin();
+    const excepcion = await obtenerExcepcionDetalle(sb, excepcionId);
+    if (!excepcion || excepcion.estado !== "explicada") {
+      await ctx.reply("Esa discrepancia ya no está esperando una propuesta.");
+      return;
+    }
+    const caso = excepcionComoCasoProponer(excepcion);
+    const kb = tecladoCausas((indice) => `rpa:${excepcion.id}:c${indice}`);
+    await ctx.editMessageText(renderCasoProponer(caso), { reply_markup: kb }).catch(() => {});
+  });
+
+  bot.callbackQuery(/^rpa:([0-9a-f-]+):c([1-7]):ok$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!tieneAccesoProponer(ctx) || !ctx.telegramUser) return;
+    const excepcionId = ctx.match?.[1];
+    const indice = Number(ctx.match?.[2]);
+    const causa = indice ? causaPorIndice(indice) : undefined;
+    if (!excepcionId || !causa) return;
+
+    const sb = getSupabaseAdmin();
+    const { error } = await sb.rpc("fn_ronda_proponer_ajuste", {
+      payload: {
+        ...payloadActorTelegram(ctx.telegramUser.id),
+        excepcion_id: excepcionId,
+        propuesta_causa: causa.clave,
+        propuesta_nota: null,
+      },
+    });
+    if (error) {
+      await ctx.reply(`❌ No se pudo proponer el ajuste: ${mensajeErrorRpc(error)}`);
+      return;
+    }
+    await ctx.editMessageText(`✅ Ajuste propuesto (${causa.etiqueta}). Queda pendiente de la aprobación de Santiago.`).catch(() => {});
+  });
+
+  // ---- /aprobar (Santiago, B-6/B-7) ------------------------------------------
+
+  async function enviarListaAprobar(ctx: BotContext) {
+    const sb = getSupabaseAdmin();
+    const pendientes = await obtenerExcepcionesPropuestasParaSantiago(sb);
+    if (pendientes.length === 0) {
+      await ctx.reply("No hay ajustes propuestos esperando tu aprobación.");
+      return;
+    }
+    await ctx.reply(`Hay ${pendientes.length} ajuste(s) propuesto(s) esperando tu decisión:`);
+    for (const excepcion of pendientes) {
+      const propuestoPor = await resolverNombreActor(sb, excepcion.propuesta_por_usuario, excepcion.propuesta_por_telegram);
+      const caso = excepcionComoCasoSantiago(excepcion, propuestoPor);
+      const kb = new InlineKeyboard()
+        .text(`✅ ${etiquetaDecision("aprobado")}`, `rda:${excepcion.id}:A`)
+        .text(`❌ ${etiquetaDecision("desestimado")}`, `rda:${excepcion.id}:D`);
+      await ctx.reply(renderCasoSantiago(caso), { reply_markup: kb });
+    }
+  }
+
+  // Doble guarda en los DOS puntos de entrada (comando y botón del menú): el
+  // módulo (`inventario_aprobacion`) más el MISMO vínculo de Gerencia que
+  // exige `fn_ronda_decidir_ajuste` (§6.1 del brief técnico). El RPC ya
+  // protege la decisión -- esto evita mostrarle la lista a alguien con el
+  // módulo pero sin el vínculo, que de otro modo vería los casos y recién al
+  // tocar Aprobar/Desestimar se encontraría con un error de permisos.
+  async function tieneAccesoAprobacionGerencia(ctx: BotContext): Promise<boolean> {
+    if (!tieneAccesoAprobacion(ctx) || !ctx.telegramUser) return false;
+    return await esUsuarioTelegramGerencia(getSupabaseAdmin(), ctx.telegramUser.id);
+  }
+
+  bot.command("aprobar", async (ctx) => {
+    if (!(await tieneAccesoAprobacionGerencia(ctx))) {
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
+    await enviarListaAprobar(ctx);
+  });
+
+  bot.callbackQuery("start_aprobar", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!(await tieneAccesoAprobacionGerencia(ctx))) {
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
+    await enviarListaAprobar(ctx);
+  });
+
+  bot.callbackQuery(/^rda:([0-9a-f-]+):(A|D)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!tieneAccesoAprobacion(ctx)) return;
+    const excepcionId = ctx.match?.[1];
+    const letraDecision = ctx.match?.[2] as "A" | "D" | undefined;
+    if (!excepcionId || !letraDecision) return;
+    const decision = letraDecision === "A" ? "aprobado" as const : "desestimado" as const;
+
+    const sb = getSupabaseAdmin();
+    const excepcion = await obtenerExcepcionDetalle(sb, excepcionId);
+    if (!excepcion) {
+      await ctx.reply("Esa discrepancia ya no existe.");
+      return;
+    }
+    if (excepcion.estado !== "ajuste_propuesto") {
+      await ctx.reply(`Ese ajuste ya no está esperando tu decisión -- está ${ETIQUETAS_ESTADO_EXCEPCION[excepcion.estado] ?? excepcion.estado}.`);
+      return;
+    }
+    const productoNombre = excepcion.producto?.nombre ?? "(producto sin nombre)";
+    const kb = tecladoCausas((indice) => `rda:${excepcionId}:${letraDecision}:c${indice}`);
+    await ctx.editMessageText(`${productoNombre} -- ${etiquetaDecision(decision)}. ¿Cuál es la causa raíz?`, { reply_markup: kb }).catch(() => {});
+  });
+
+  bot.callbackQuery(/^rda:([0-9a-f-]+):(A|D):c([1-7])$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!tieneAccesoAprobacion(ctx)) return;
+    const excepcionId = ctx.match?.[1];
+    const letraDecision = ctx.match?.[2] as "A" | "D" | undefined;
+    const indice = Number(ctx.match?.[3]);
+    if (!excepcionId || !letraDecision || !indice) return;
+    const decision = letraDecision === "A" ? "aprobado" as const : "desestimado" as const;
+    const causa = causaPorIndice(indice);
+    if (!causa) return; // callback_data corrupto/reenviado
+
+    const sb = getSupabaseAdmin();
+    const excepcion = await obtenerExcepcionDetalle(sb, excepcionId);
+    if (!excepcion) {
+      await ctx.reply("Esa discrepancia ya no existe.");
+      return;
+    }
+    if (excepcion.estado !== "ajuste_propuesto") {
+      await ctx.reply(`Ese ajuste ya no está esperando tu decisión -- está ${ETIQUETAS_ESTADO_EXCEPCION[excepcion.estado] ?? excepcion.estado}.`);
+      return;
+    }
+    const productoNombre = excepcion.producto?.nombre ?? "(producto sin nombre)";
+
+    if (causa.exigeNota) {
+      if (!ctx.telegramUser) return;
+      ctx.session.pendienteNotaRonda = { tipo: "decidir", excepcionId, causaClave: causa.clave, decision };
+      await ctx.editMessageText(`Causa: ${causa.etiqueta}. Esa causa exige una nota -- escribila (o *cancelar*).`, { parse_mode: "Markdown" }).catch(() => {});
+      return;
+    }
+
+    await ctx.editMessageText(renderConfirmacionDecision(productoNombre, decision, causa.etiqueta), {
+      reply_markup: new InlineKeyboard()
+        .text("✅ Confirmar", `rda:${excepcionId}:${letraDecision}:c${indice}:ok`)
+        .text("❌ Cambiar causa", `rda:${excepcionId}:${letraDecision}`),
+    }).catch(() => {});
+  });
+
+  bot.callbackQuery(/^rda:([0-9a-f-]+):(A|D):c([1-7]):ok$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!tieneAccesoAprobacion(ctx) || !ctx.telegramUser) return;
+    const excepcionId = ctx.match?.[1];
+    const letraDecision = ctx.match?.[2] as "A" | "D" | undefined;
+    const indice = Number(ctx.match?.[3]);
+    const causa = indice ? causaPorIndice(indice) : undefined;
+    if (!excepcionId || !letraDecision || !causa) return;
+    const decision = letraDecision === "A" ? "aprobado" as const : "desestimado" as const;
+
+    const sb = getSupabaseAdmin();
+    const { error } = await sb.rpc("fn_ronda_decidir_ajuste", {
+      payload: {
+        ...payloadActorTelegram(ctx.telegramUser.id),
+        excepcion_id: excepcionId,
+        decision,
+        decision_causa: causa.clave,
+        decision_nota: null,
+      },
+    });
+    if (error) {
+      await ctx.reply(`❌ No se pudo registrar la decisión: ${mensajeErrorRpc(error)}`);
+      return;
+    }
+    const etiquetaResultado = decision === "aprobado" ? "Aprobado" : "Desestimado";
+    await ctx.editMessageText(`${decision === "aprobado" ? "✅" : "❌"} ${etiquetaResultado} (${causa.etiqueta}).`).catch(() => {});
+
+    if (decision === "desestimado") {
+      await ctx.reply("Ajuste desestimado -- no se toca el inventario.");
+      return;
+    }
+    await aplicarAjusteRondaYResponder(ctx, sb, excepcionId, false);
+  });
+
+  // B-7: Santiago aprueba y el bot aplica de una vez (§13 de la tarea de esta
+  // sesión: "aplicar de una vez es lo más simple y lo que menos deja
+  // colgado" -- B-7 dice que quién ejecuta es detalle de implementación).
+  // Si el teórico vivo cambió desde el conteo, `fn_ronda_aplicar_ajuste`
+  // (CA-2) NO aplica en silencio: devuelve `{aplicado:false,...}` y este
+  // helper se lo muestra a Santiago con un botón para forzarlo.
+  async function aplicarAjusteRondaYResponder(
+    ctx: BotContext,
+    sb: SupabaseClient,
+    excepcionId: string,
+    confirmarCambioTeorico: boolean,
+  ) {
+    if (!ctx.telegramUser) return;
+    const { data, error } = await sb.rpc("fn_ronda_aplicar_ajuste", {
+      payload: {
+        ...payloadActorTelegram(ctx.telegramUser.id),
+        excepcion_id: excepcionId,
+        fecha_movimiento: hoyBogota(),
+        confirmar_cambio_teorico: confirmarCambioTeorico,
+      },
+    });
+    if (error) {
+      await ctx.reply(`El ajuste quedó aprobado, pero no se pudo aplicar automáticamente: ${mensajeErrorRpc(error)}\n\nAvisa a un administrador -- queda pendiente de aplicar.`);
+      return;
+    }
+    const resultado = data as {
+      aplicado?: boolean;
+      motivo?: string;
+      teorico_al_conteo?: number;
+      teorico_hoy?: number;
+      delta?: number;
+    } | null;
+
+    if (resultado?.aplicado === false && resultado.motivo === "teorico_cambio") {
+      const kb = new InlineKeyboard().text("⚠️ Aplicar de todas formas", `rda:${excepcionId}:forzar`);
+      const fmt = (n: number | undefined) => (n === undefined ? "—" : formatearCantidad(n));
+      await ctx.reply(
+        [
+          "El teórico del sistema cambió desde el conteo -- el ajuste NO se aplicó todavía:",
+          `Teórico al contar: ${fmt(resultado.teorico_al_conteo)}`,
+          `Teórico hoy: ${fmt(resultado.teorico_hoy)}`,
+          `El ajuste seguiría aplicando la misma diferencia (delta ${fmt(resultado.delta)}) sobre el saldo de HOY.`,
+          "",
+          "¿Lo aplico igual?",
+        ].join("\n"),
+        { reply_markup: kb },
+      );
+      return;
+    }
+
+    await ctx.reply("✅ Ajuste aplicado al inventario.");
+  }
+
+  bot.callbackQuery(/^rda:([0-9a-f-]+):forzar$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!tieneAccesoAprobacion(ctx) || !ctx.telegramUser) return;
+    const excepcionId = ctx.match?.[1];
+    if (!excepcionId) return;
+    const sb = getSupabaseAdmin();
+    await aplicarAjusteRondaYResponder(ctx, sb, excepcionId, true);
+  });
+
   bot.command("cancelar", async (ctx) => {
+    ctx.session.pendienteNotaRonda = null;
     await ctx.conversation.exit();
     await ctx.reply("Operación cancelada.");
     await sendMainMenu(ctx);
@@ -572,6 +1008,9 @@ function getBot(): Bot<BotContext> {
         "/ronda — Ver o abrir la ronda de inventario en curso",
         "/existencias <producto> — Consultar cantidad y unidad de un producto",
         "/cerrarronda — Cerrar la ronda de inventario en curso",
+        "/explicar — Explicar discrepancias de la ronda de inventario",
+        "/proponer — Proponer un ajuste de inventario",
+        "/aprobar — Aprobar o desestimar ajustes de inventario",
         "/cancelar — Cancelar operación actual",
         "/ayuda — Ver esta ayuda",
         "",
@@ -1465,6 +1904,83 @@ function getBot(): Bot<BotContext> {
   });
 
   // ==========================================================================
+  // RONDA DE INVENTARIO — nota de causa "otro" (David/Santiago, exige nota,
+  // R-7). Puente entre el callback que la pide (`/proponer`, `/aprobar`) y el
+  // próximo mensaje de texto. NO es una conversación (§7.2): sólo intercepta
+  // cuando `ctx.session.pendienteNotaRonda` está fijado, y se limpia apenas
+  // se usa -- mismo criterio de "estado en la sesión persistida, no en
+  // memoria" que el bucle de preview de la nota de voz de Uriel de arriba
+  // (`obtenerTranscritoPendienteMasReciente`), acá con la sesión de Grammy en
+  // vez de una tabla porque no hay ninguna fila de dominio a la que colgarle
+  // este estado transitorio (ver types.ts).
+  //
+  // Registrada DESPUÉS del bucle de preview de Uriel y ANTES del fallback de
+  // Esco -- a propósito, y no sólo por orden temático: `bot.on("message:text")`
+  // se resuelve por orden de REGISTRO, y el guard estático de
+  // `telegramChat.test.ts` ubica el handler de Esco por el PRIMER
+  // `bot.on("message:text"` del archivo (el de arriba, de Uriel). Un tercer
+  // handler registrado ANTES de ese correría el riesgo real de interceptar
+  // un texto que le tocaba a Uriel -- Santiago/David y Uriel son personas
+  // distintas en la práctica (módulos distintos), pero nada en el código lo
+  // garantiza, así que se ordena por el mismo criterio que ya usa el resto
+  // del archivo: el flujo más específico y menos frecuente va último.
+  // ==========================================================================
+
+  bot.on("message:text", async (ctx, next) => {
+    const pendiente = ctx.session.pendienteNotaRonda;
+    if (!pendiente || !ctx.telegramUser) return next();
+    const texto = ctx.message.text?.trim();
+    if (!texto) return next();
+
+    if (texto.toLowerCase() === "cancelar" || texto.toLowerCase() === "/cancelar") {
+      ctx.session.pendienteNotaRonda = null;
+      await ctx.reply("Cancelado. La causa no quedó guardada.");
+      return;
+    }
+
+    const sb = getSupabaseAdmin();
+    ctx.session.pendienteNotaRonda = null;
+
+    if (pendiente.tipo === "proponer") {
+      const { error } = await sb.rpc("fn_ronda_proponer_ajuste", {
+        payload: {
+          ...payloadActorTelegram(ctx.telegramUser.id),
+          excepcion_id: pendiente.excepcionId,
+          propuesta_causa: pendiente.causaClave,
+          propuesta_nota: texto,
+        },
+      });
+      if (error) {
+        await ctx.reply(`❌ No se pudo proponer el ajuste: ${mensajeErrorRpc(error)}`);
+        return;
+      }
+      await ctx.reply("✅ Ajuste propuesto. Queda pendiente de la aprobación de Santiago.");
+      return;
+    }
+
+    // pendiente.tipo === 'decidir'
+    const { error } = await sb.rpc("fn_ronda_decidir_ajuste", {
+      payload: {
+        ...payloadActorTelegram(ctx.telegramUser.id),
+        excepcion_id: pendiente.excepcionId,
+        decision: pendiente.decision,
+        decision_causa: pendiente.causaClave,
+        decision_nota: texto,
+      },
+    });
+    if (error) {
+      await ctx.reply(`❌ No se pudo registrar la decisión: ${mensajeErrorRpc(error)}`);
+      return;
+    }
+    if (pendiente.decision === "desestimado") {
+      await ctx.reply("❌ Ajuste desestimado -- no se toca el inventario.");
+      return;
+    }
+    await ctx.reply("✅ Aprobado.");
+    await aplicarAjusteRondaYResponder(ctx, sb, pendiente.excepcionId, false);
+  });
+
+  // ==========================================================================
   // FREE-TEXT FALLBACK — Esco AI engine with conversation persistence
   // ==========================================================================
 
@@ -1574,6 +2090,9 @@ function getBot(): Bot<BotContext> {
     { command: "ronda", description: "Ver o abrir la ronda de inventario" },
     { command: "existencias", description: "Consultar existencias de un producto" },
     { command: "cerrarronda", description: "Cerrar la ronda de inventario en curso" },
+    { command: "explicar", description: "Explicar discrepancias de la ronda de inventario" },
+    { command: "proponer", description: "Proponer un ajuste de inventario" },
+    { command: "aprobar", description: "Aprobar o desestimar ajustes de inventario" },
     { command: "cancelar", description: "Cancelar operación actual" },
     { command: "ayuda", description: "Ver ayuda" },
   ]).catch((err) => console.error("[Telegram] setMyCommands error:", err));
