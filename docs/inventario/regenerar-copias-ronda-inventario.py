@@ -57,6 +57,16 @@ ORIGEN_DIR = os.path.join(ROOT, 'src/utils/rondaInventario')
 #     (B-1/B-2/B-5/B-6/B-7) -- importa causaPorIndice/indiceDeCausa de
 #     causasRaiz.ts (mismo criterio de un solo dueño del catálogo que ya
 #     seguían interpretarNota.ts/preview.ts).
+#
+# Fase 5 (recordatorio, alerta del día 15, reporte de cierre) agrega:
+#   - tick.ts: lógica pura de los CUATRO trabajos del tick diario
+#     (ronda-inventario-tick.ts, de la misma fase) -- claves de idempotencia
+#     de rondas_avisos, las tres condiciones de envío, la clasificación de
+#     movimientos con la ronda abierta (P-3), el cálculo del valor de
+#     inventario y el texto del mensaje del día 15. No importa nada propio
+#     (mismo criterio que causasRaiz.ts: cero dependencias dentro del
+#     directorio, para que el generador no tenga que resolver un import
+#     transitivo nuevo).
 MODULOS = [
     'causasRaiz.ts',
     'interpretarNota.ts',
@@ -65,6 +75,7 @@ MODULOS = [
     'alcanceTxt.ts',
     'reporteCierre.ts',
     'resolucion.ts',
+    'tick.ts',
 ]
 
 DESTINOS = [

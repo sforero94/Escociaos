@@ -98,6 +98,18 @@ const LISTA_BLANCA_UTC: { archivo: string; ocurrencias: number; razon: string }[
       '`@/utils/fechas` (sin copia en el árbol Deno), así que toda su aritmética de fecha ' +
       'es local a este archivo, igual que el `diasEntre` de `accionesOrden.ts`.',
   },
+  {
+    archivo: 'src/utils/rondaInventario/tick.ts',
+    ocurrencias: 1,
+    razon:
+      'sumarDiasFecha() -- Fase 5 de la ronda de inventario (A-4, posponer el ' +
+      'recordatorio) -- construye la Date explícitamente vía Date.UTC(anio, mes-1, dia) ' +
+      'a partir de un `AAAA-MM-DD` ya parseado -- nunca del reloj -- y la vuelve a leer ' +
+      'con toISOString().slice(0,10); ida y vuelta UTC coherente, MISMO patrón que ' +
+      'sumarDias() de accionesHechos.ts (arriba). Módulo puro espejado a los dos árboles ' +
+      'de edge function (docs/inventario/regenerar-copias-ronda-inventario.py): no puede ' +
+      'importar `fechaAISODate`/`obtenerFechaHoy` de `@/utils/fechas`.',
+  },
 ];
 
 /** Quita comentarios antes de buscar el patrón. Varios archivos DOCUMENTAN el

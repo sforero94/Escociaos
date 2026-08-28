@@ -63,6 +63,11 @@ import {
   obtenerExcepcionesPendientesDavid,
   obtenerExcepcionesPropuestasParaSantiago,
   resolverNombreActor,
+  // Fase 5 (recordatorio/alerta del día 15/reporte de cierre) -- §8/§13.
+  // `nombrePeriodoRonda` vivía como función local acá mismo hasta que el
+  // tick (`ronda-inventario-tick.ts`) también la necesitó -- un solo dueño
+  // del formato "septiembre 2026", ver su comentario en ronda-helpers.ts.
+  nombrePeriodoRonda,
 } from "./ronda-helpers.ts";
 import { resolverHallazgos } from "../rondaInventario/resolverHallazgos.ts";
 import type { RespuestaModeloInterprete } from "../rondaInventario/interpretarNota.ts";
@@ -87,6 +92,14 @@ import {
   renderConfirmacionPropuesta,
   renderLineaPendienteDavid,
 } from "../rondaInventario/resolucion.ts";
+// Fase 5 (§8/§13 del brief técnico) -- `claveRecordatorioBase`/`sumarDiasFecha`
+// son las MISMAS funciones puras que usa `ronda-inventario-tick.ts` para
+// decidir cuándo reenviar el recordatorio tras una postergación (A-4): el
+// botón "Posponer" sólo escribe el `detalle.posponer_hasta` que el tick va a
+// leer, con la MISMA clave y la MISMA aritmética de fechas -- un solo dueño
+// de las dos, nunca un cálculo de fechas duplicado entre quien pospone y
+// quien decide si ya toca reenviar.
+import { claveRecordatorioBase, sumarDiasFecha } from "../rondaInventario/tick.ts";
 
 // ============================================================================
 // SUPABASE CLIENT (service role — same pattern as chat.ts)
@@ -394,16 +407,6 @@ function getBot(): Bot<BotContext> {
   // RONDA DE INVENTARIO — Uriel (Fase 3, docs/brief_tecnico_verificacion_inventario.md §7.2/§13)
   // ==========================================================================
 
-  const MESES_RONDA = [
-    "enero", "febrero", "marzo", "abril", "mayo", "junio",
-    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
-  ];
-
-  function nombrePeriodoRonda(periodoIso: string): string {
-    const [anio, mes] = periodoIso.split("-");
-    return `${MESES_RONDA[Number(mes) - 1] ?? mes} ${anio}`;
-  }
-
   function tieneAccesoRonda(ctx: BotContext): boolean {
     return !!ctx.telegramUser?.modulos_permitidos?.includes("inventario_ronda");
   }
@@ -526,15 +529,15 @@ function getBot(): Bot<BotContext> {
     await ctx.conversation.enter("cierreRonda");
   });
 
-  // Apertura manual (§7.2/§13 de la tarea de esta sesión): hasta que exista
-  // el tick de la Fase 5, el recordatorio automático no dispara -- sin este
-  // botón Uriel no podría empezar la primera ronda de punta a punta.
-  bot.callbackQuery("ronda_abrir_manual", async (ctx) => {
-    await ctx.answerCallbackQuery();
-    if (!tieneAccesoRonda(ctx) || !ctx.telegramUser) {
-      await ctx.reply("No tienes acceso a este módulo.");
-      return;
-    }
+  /** Abre la ronda del mes actual -- la MISMA acción para el botón manual
+   * ("🚀 Abrir ronda de este mes" de `/ronda`, cuando no hay ninguna en
+   * curso) y para el botón "Empezar" del recordatorio automático (Fase 5,
+   * §8.1/§8.4 del brief técnico). Un solo cuerpo: el `callback_data`
+   * distinto de cada botón (`ronda_abrir_manual` / `ronda_recordatorio_empezar`)
+   * sólo sirve para distinguir el origen en logs si hiciera falta -- nunca
+   * cambia el comportamiento. */
+  async function abrirRondaDelMes(ctx: BotContext): Promise<void> {
+    if (!ctx.telegramUser) return;
     const sb = getSupabaseAdmin();
     const periodo = primerDiaMesBogota();
     const { data, error } = await sb.rpc("fn_ronda_abrir", {
@@ -564,6 +567,20 @@ function getBot(): Bot<BotContext> {
 
     const ronda = await obtenerRondaEnCurso(sb);
     if (ronda) await enviarAlcanceTxt(ctx, sb, ronda);
+  }
+
+  // Apertura manual (§7.2/§13 de la tarea de esta sesión): hasta que exista
+  // el tick de la Fase 5, el recordatorio automático no dispara -- sin este
+  // botón Uriel no podría empezar la primera ronda de punta a punta. Sigue
+  // vivo igual ahora que el tick existe: Uriel puede adelantarse al
+  // recordatorio del día 1 sin esperarlo.
+  bot.callbackQuery("ronda_abrir_manual", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!tieneAccesoRonda(ctx) || !ctx.telegramUser) {
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
+    await abrirRondaDelMes(ctx);
   });
 
   bot.callbackQuery(/^ronda_alcance:([0-9a-f-]+)$/, async (ctx) => {
@@ -579,6 +596,67 @@ function getBot(): Bot<BotContext> {
       return;
     }
     await enviarAlcanceTxt(ctx, sb, ronda);
+  });
+
+  // ==========================================================================
+  // RONDA DE INVENTARIO — recordatorio automático (Fase 5,
+  // docs/brief_tecnico_verificacion_inventario.md §8.1/§8.4/§13). El tick
+  // (`ronda-inventario-tick.ts`, disparado por el pg_cron de la migración
+  // 127) ENVÍA el mensaje con los botones `[Empezar]`/`[Posponer]`; lo que
+  // sigue acá es lo que los RESUELVE -- mismo reparto que el resto del
+  // módulo (el tick decide y dispara, `bot.ts` atiende la respuesta humana).
+  //
+  // A-4 no especifica la mecánica de posponer ("que el sistema me vuelva a
+  // buscar", sin más detalle) -- se resolvió acá con tres botones rápidos
+  // (Mañana/+3 días/+1 semana), sin conversación, mismo estilo que el resto
+  // de este módulo (nunca un asistente de Grammy para una sola decisión).
+  // ==========================================================================
+
+  bot.callbackQuery("ronda_recordatorio_empezar", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!tieneAccesoRonda(ctx) || !ctx.telegramUser) {
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
+    await abrirRondaDelMes(ctx);
+  });
+
+  bot.callbackQuery("ronda_recordatorio_posponer", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!tieneAccesoRonda(ctx)) return;
+    const kb = new InlineKeyboard()
+      .text("Mañana", "ronda_posponer:1")
+      .row()
+      .text("En 3 días", "ronda_posponer:3")
+      .row()
+      .text("La próxima semana", "ronda_posponer:7");
+    await ctx.editMessageText("¿En cuántos días te recuerdo de nuevo?", { reply_markup: kb }).catch(() => {});
+  });
+
+  /** Escribe `detalle.posponer_hasta` en la MISMA fila (clave base,
+   * `recordatorio:AAAA-MM`) que el tick usó para el envío original --
+   * `upsert` porque, en teoría, esa fila ya existe siempre (el tick la crea
+   * ANTES de enviar el mensaje que trae este botón), pero un `upsert` no
+   * revienta si por algún motivo no estuviera. No toca `enviado_en` (el
+   * `INSERT`/`UPDATE` de Supabase sólo escribe las columnas que se le
+   * pasan) -- el tick vuelve a leer esta fila el día de la postergación para
+   * decidir si hoy toca reenviar (`decidirRecordatorio`, `tick.ts`). */
+  bot.callbackQuery(/^ronda_posponer:(1|3|7)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!tieneAccesoRonda(ctx)) return;
+    const dias = Number(ctx.match?.[1]) as 1 | 3 | 7;
+    const sb = getSupabaseAdmin();
+    const periodo = primerDiaMesBogota();
+    const posponerHasta = sumarDiasFecha(hoyBogota(), dias);
+    const { error } = await sb
+      .from("rondas_avisos")
+      .upsert({ clave: claveRecordatorioBase(periodo), ronda_id: null, detalle: { posponer_hasta: posponerHasta } }, { onConflict: "clave" });
+    if (error) {
+      console.error("[Telegram] ronda: error al posponer recordatorio:", error.message);
+      await ctx.reply("No se pudo posponer -- intenta de nuevo.");
+      return;
+    }
+    await ctx.editMessageText(`Listo -- te vuelvo a escribir el ${posponerHasta}.`).catch(() => {});
   });
 
   // ==========================================================================

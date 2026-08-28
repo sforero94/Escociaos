@@ -65,6 +65,33 @@ export function hoyBogota(): string {
   return bogota.toISOString().slice(0, 10);
 }
 
+/** MISMA conversión que `hoyBogota()`, pero para un instante ARBITRARIO
+ * (no "ahora") -- Fase 5 (§8/§13 de la tarea de esta sesión) la necesita
+ * para convertir `rondas_inventario.abierta_en`/`cerrada_en` (TIMESTAMPTZ)
+ * a la fecha de calendario Bogotá que usa el resto del módulo (R-13: nunca
+ * UTC). `iso` puede venir con cualquier offset -- `new Date(iso)` ya lo
+ * normaliza a UTC antes de restar las 5 horas de Bogotá. */
+export function fechaBogotaDe(iso: string): string {
+  const instante = new Date(iso);
+  const bogota = new Date(instante.getTime() - 5 * 60 * 60 * 1000);
+  return bogota.toISOString().slice(0, 10);
+}
+
+/** Nombre de un período en español ("septiembre 2026") a partir de su
+ * `periodo` 'AAAA-MM-01' -- un solo dueño para que `bot.ts` (mensajes de
+ * `/ronda`, `cierreRonda.ts`) y el tick (`ronda-inventario-tick.ts`, Fase 5)
+ * nunca lo formateen de dos formas distintas. Vivía como función local
+ * dentro de `bot.ts` hasta que el tick también lo necesitó. */
+const MESES_RONDA = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+];
+
+export function nombrePeriodoRonda(periodoIso: string): string {
+  const [anio, mes] = periodoIso.split('-');
+  return `${MESES_RONDA[Number(mes) - 1] ?? mes} ${anio}`;
+}
+
 // ---------------------------------------------------------------------------
 // Tipos — espejo de la migración 125, verificados contra
 // `src/types/rondaInventario.ts` (Fase 6).
@@ -84,8 +111,11 @@ export type EstadoExcepcionInventario =
   | 'ajuste_aplicado';
 
 /** Los tres desenlaces terminales (CA-10) — NUNCA se funden entre sí ni con
- * los estados intermedios. Usado para clasificar el resumen de `/ronda`. */
-const ESTADOS_TERMINALES: readonly EstadoExcepcionInventario[] = [
+ * los estados intermedios. Usado para clasificar el resumen de `/ronda` y,
+ * desde Fase 5, para filtrar "excepciones sin desenlace terminal" del
+ * bloque de excepciones vencidas (P-2/M-4, §8.1) -- exportada para que el
+ * tick no vuelva a escribir esta lista de cuatro strings por su cuenta. */
+export const ESTADOS_TERMINALES: readonly EstadoExcepcionInventario[] = [
   'cerrada_sin_ajuste',
   'resuelta_con_captura',
   'ajuste_desestimado',
