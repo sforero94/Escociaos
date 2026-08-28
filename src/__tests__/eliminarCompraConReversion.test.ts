@@ -44,6 +44,9 @@ interface StubOptions {
   productoUpdateError?: { message: string } | null;
   compraDeleteError?: { message: string } | null;
   rpcError?: { message: string } | null;
+  /** Compra anterior del mismo producto que sobrevive al borrado (null = no hay ninguna). */
+  compraAnterior?: { costo_unitario: number } | null;
+  compraAnteriorError?: { message: string } | null;
 }
 
 /** Registro de llamadas por tabla/método, en el orden real en que ocurrieron. */
@@ -81,7 +84,26 @@ function crearSupabaseStub(options: StubOptions = {}) {
     }),
   };
 
+  // Cadena de la consulta a la compra anterior:
+  //   .select().eq().neq().order().order().limit().maybeSingle()
+  const compraAnteriorFiltros = {
+    eq: vi.fn(() => compraAnteriorFiltros),
+    neq: vi.fn(() => compraAnteriorFiltros),
+    order: vi.fn(() => compraAnteriorFiltros),
+    limit: vi.fn(() => compraAnteriorFiltros),
+    maybeSingle: vi.fn(() =>
+      Promise.resolve({
+        data: options.compraAnterior ?? null,
+        error: options.compraAnteriorError ?? null,
+      }),
+    ),
+  };
+
   const comprasMock = {
+    select: vi.fn(() => {
+      orden.push('compras.select');
+      return compraAnteriorFiltros;
+    }),
     delete: vi.fn(() => {
       orden.push('compras.delete');
       return { eq: vi.fn(() => Promise.resolve({ error: options.compraDeleteError ?? null })) };
@@ -107,7 +129,7 @@ function crearSupabaseStub(options: StubOptions = {}) {
     rpc,
     storage: { from: vi.fn(() => ({ remove: storageRemove })) },
     // Expuestos para inspeccionar llamadas desde los tests
-    _spies: { productosMock, movimientosMock, comprasMock, rpc, storageRemove },
+    _spies: { productosMock, movimientosMock, comprasMock, compraAnteriorFiltros, rpc, storageRemove },
     _orden: orden,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
@@ -181,6 +203,97 @@ describe('eliminarCompraConReversion', () => {
     );
 
     expect(supabase._spies.comprasMock.delete).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Finding #50: `NewPurchase.tsx` escribe `cantidad_actual` Y `precio_unitario` en un
+   * mismo UPDATE, pero la reversión sólo devolvía la cantidad. Resultado: el producto se
+   * quedaba con el precio de la compra borrada para siempre y sin rastro en el ledger —
+   * y `productos.precio_unitario` alimenta el costo de insumos de costo/kg por lote
+   * (`calculosCostoKg.ts`) y el KPI de valor de inventario.
+   *
+   * Caso probado en producción (2026-07-24): Sulcamag quedó con `precio_unitario` 669,96
+   * —el de la factura 4379, cargada contra el producto equivocado y luego revertida—
+   * mientras `cantidad_actual` sí volvió a 16,00.
+   */
+  describe('reversión de precio_unitario (finding #50)', () => {
+    it('restaura el precio de la compra anterior del mismo producto, en el MISMO update que la cantidad', async () => {
+      const supabase = crearSupabaseStub({
+        cantidadActualProducto: 100,
+        compraAnterior: { costo_unitario: 4200 },
+      });
+      const compra = crearCompra({ cantidad: 20, costo_unitario: 5000 });
+
+      await eliminarCompraConReversion(supabase, compra, 'consuelo@escocia.co');
+
+      expect(supabase._spies.productosMock.update).toHaveBeenCalledTimes(1);
+      const [payloadProducto] = supabase._spies.productosMock.update.mock.calls[0];
+      expect(payloadProducto.cantidad_actual).toBe(80);
+      expect(payloadProducto.precio_unitario).toBe(4200);
+      // Jamás se conserva el precio de la compra que se está borrando.
+      expect(payloadProducto.precio_unitario).not.toBe(5000);
+    });
+
+    it('sin compra anterior deja precio_unitario en NULL — nunca conserva el de la compra borrada', async () => {
+      const supabase = crearSupabaseStub({
+        cantidadActualProducto: 100,
+        compraAnterior: null,
+      });
+      const compra = crearCompra({ cantidad: 20, costo_unitario: 669.96 });
+
+      await eliminarCompraConReversion(supabase, compra, 'consuelo@escocia.co');
+
+      const [payloadProducto] = supabase._spies.productosMock.update.mock.calls[0];
+      expect(payloadProducto).toHaveProperty('precio_unitario');
+      expect(payloadProducto.precio_unitario).toBeNull();
+    });
+
+    it('excluye la compra que se está borrando y toma la más reciente que queda', async () => {
+      const supabase = crearSupabaseStub({
+        cantidadActualProducto: 100,
+        compraAnterior: { costo_unitario: 4200 },
+      });
+      const compra = crearCompra({ id: 'compra-1', producto_id: 'prod-1', cantidad: 20 });
+
+      await eliminarCompraConReversion(supabase, compra, 'consuelo@escocia.co');
+
+      const filtros = supabase._spies.compraAnteriorFiltros;
+      expect(filtros.eq).toHaveBeenCalledWith('producto_id', 'prod-1');
+      expect(filtros.neq).toHaveBeenCalledWith('id', 'compra-1');
+      expect(filtros.order).toHaveBeenCalledWith('fecha_compra', { ascending: false });
+      expect(filtros.order).toHaveBeenCalledWith('created_at', { ascending: false });
+      expect(filtros.limit).toHaveBeenCalledWith(1);
+    });
+
+    it('si la lectura de la compra anterior falla, aborta ANTES de escribir el ledger y el stock', async () => {
+      const supabase = crearSupabaseStub({
+        cantidadActualProducto: 100,
+        compraAnteriorError: { message: 'timeout' },
+      });
+      const compra = crearCompra({ cantidad: 20 });
+
+      await expect(
+        eliminarCompraConReversion(supabase, compra, 'consuelo@escocia.co'),
+      ).rejects.toThrow(/compra anterior/i);
+
+      expect(supabase._spies.movimientosMock.insert).not.toHaveBeenCalled();
+      expect(supabase._spies.productosMock.update).not.toHaveBeenCalled();
+      expect(supabase._spies.comprasMock.delete).not.toHaveBeenCalled();
+    });
+
+    it('la compra anterior se lee antes de escribir nada', async () => {
+      const supabase = crearSupabaseStub({
+        cantidadActualProducto: 100,
+        compraAnterior: { costo_unitario: 4200 },
+      });
+
+      await eliminarCompraConReversion(supabase, crearCompra({ cantidad: 20 }), null);
+
+      expect(supabase._orden).toContain('compras.select');
+      expect(supabase._orden.indexOf('compras.select')).toBeLessThan(
+        supabase._orden.indexOf('movimientos_inventario.insert'),
+      );
+    });
   });
 
   it('la limpieza de gasto pendiente y de la factura son no bloqueantes: un error ahí no impide eliminar la compra', async () => {

@@ -61,6 +61,15 @@ interface Purchase {
  * sin dejar rastro. No es atómico (llamado desde el navegador, sin RPC), pero el
  * orden garantiza que nunca se pierde la trazabilidad silenciosamente.
  *
+ * `precio_unitario` se revierte junto con la cantidad, en el MISMO update, porque
+ * `NewPurchase.tsx` los escribe juntos: revertir sólo la cantidad dejaba pegado al
+ * producto el precio de la compra borrada, para siempre y sin rastro en el ledger.
+ * Eso mueve una cifra financiera en silencio -- `productos.precio_unitario` alimenta
+ * el costo de insumos de costo/kg por lote (`calculosCostoKg.ts`) y el KPI de valor
+ * de inventario. Se restaura el precio de la compra más reciente que SOBREVIVE al
+ * borrado; si no queda ninguna, `NULL` (sin dato), nunca el precio borrado -- el
+ * sistema distingue "sin dato" de cero, y el precio viejo es una afirmación falsa.
+ *
  * Exportada (en vez de quedar inline en `handleDeletePurchase`) para poder probar esta
  * secuencia sin renderizar el componente -- este repo no tiene @testing-library/react.
  */
@@ -85,7 +94,29 @@ export async function eliminarCompraConReversion(
     throw new Error('No se puede eliminar la compra porque resultaría en inventario negativo');
   }
 
-  // 2. Dejar el rastro en el ledger ANTES de tocar el stock -- si esto falla, se
+  // 2. Averiguar a qué precio hay que volver: el de la compra más reciente del mismo
+  // producto que sobrevive a este borrado. Se lee ANTES de escribir nada, así un fallo
+  // de lectura aborta con el inventario y el ledger todavía intactos.
+  const { data: compraAnterior, error: compraAnteriorError } = await supabase
+    .from('compras')
+    .select('costo_unitario')
+    .eq('producto_id', purchase.producto_id)
+    .neq('id', purchase.id)
+    .order('fecha_compra', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (compraAnteriorError) {
+    throw new Error('Error al obtener la compra anterior del producto: ' + compraAnteriorError.message);
+  }
+
+  // Sin compra anterior no hay precio conocido: `null` es "sin dato". Conservar el de
+  // la compra que se está borrando sería afirmar un precio que ya no respalda ningún
+  // documento.
+  const precioARestaurar = compraAnterior?.costo_unitario ?? null;
+
+  // 3. Dejar el rastro en el ledger ANTES de tocar el stock -- si esto falla, se
   // aborta acá y el inventario queda intacto.
   const { error: movementAjusteError } = await supabase
     .from('movimientos_inventario')
@@ -108,18 +139,20 @@ export async function eliminarCompraConReversion(
     throw new Error('Error al registrar el movimiento de ajuste de inventario: ' + movementAjusteError.message);
   }
 
-  // 3. Revertir el stock del producto -- solo después de que el ledger quedó escrito.
+  // 4. Revertir el stock Y el precio del producto -- solo después de que el ledger
+  // quedó escrito, y los dos en el mismo update en que la compra los escribió.
   const { error: inventoryError } = await supabase
     .from('productos')
     .update({
       cantidad_actual: nuevaCantidad,
+      precio_unitario: precioARestaurar,
       updated_at: new Date().toISOString(),
     })
     .eq('id', purchase.producto_id);
 
   if (inventoryError) throw new Error('Error al actualizar inventario: ' + inventoryError.message);
 
-  // 4. Eliminar gasto pendiente asociado (si existe)
+  // 5. Eliminar gasto pendiente asociado (si existe)
   // Uses SECURITY DEFINER RPC to bypass fin_gastos RLS (Administrador can't delete directly)
   const { error: gastoError } = await supabase
     .rpc('fn_cleanup_compra_dependencies', { p_compra_id: purchase.id });
@@ -129,7 +162,7 @@ export async function eliminarCompraConReversion(
     // Non-blocking: FK is ON DELETE SET NULL as safety net
   }
 
-  // 5. Eliminar factura de Storage (si existe)
+  // 6. Eliminar factura de Storage (si existe)
   if (purchase.link_factura) {
     const { error: storageError } = await supabase.storage
       .from('facturas')
@@ -140,7 +173,7 @@ export async function eliminarCompraConReversion(
     }
   }
 
-  // 6. Eliminar la compra
+  // 7. Eliminar la compra
   const { error: deleteError } = await supabase
     .from('compras')
     .delete()
