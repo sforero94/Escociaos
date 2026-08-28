@@ -120,7 +120,7 @@ function fraseVia(via: ViaExcepcion): string {
 
 function renderFila(fila: FilaPreview): string {
   if (!fila.productoIdentificado) {
-    return `«${fila.productoMencionado}» -- producto no identificado, elegí uno de la lista`;
+    return `«${fila.productoMencionado}» -- producto no identificado, elige uno de la lista`;
   }
   if (fila.fisico === null || fila.teorico === null) {
     return `${fila.nombreProducto}: falta la cantidad física para poder confirmar`;

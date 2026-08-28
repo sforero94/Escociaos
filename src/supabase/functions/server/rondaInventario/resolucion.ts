@@ -141,7 +141,7 @@ export function renderLineaProponer(caso: CasoProponer): string {
 export function renderCasoProponer(caso: CasoProponer): string {
   const lineas = [renderCasoDavid(caso)];
   if (caso.explicacionDavid) lineas.push(`Explicación de David: ${caso.explicacionDavid}`);
-  if (caso.causaSugeridaEtiqueta) lineas.push(`El sistema sugiere: ${caso.causaSugeridaEtiqueta} (no vinculante -- elegí la causa vos)`);
+  if (caso.causaSugeridaEtiqueta) lineas.push(`El sistema sugiere: ${caso.causaSugeridaEtiqueta} (no vinculante -- la causa la eliges tú)`);
   lineas.push('', '¿Cuál es la causa raíz?');
   return lineas.join('\n');
 }

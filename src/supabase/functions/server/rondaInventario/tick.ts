@@ -320,6 +320,6 @@ export function construirMensajeRecordatorio(periodoNombre: string): string {
   return [
     `🧮 Es hora de la ronda de inventario de ${periodoNombre}.`,
     '',
-    'Recorré bodega y contrastá lo físico contra lo que dice el sistema. Cuando estés listo, tocá Empezar.',
+    'Recorre bodega y contrasta lo físico contra lo que dice el sistema. Cuando estés listo, toca Empezar.',
   ].join('\n');
 }

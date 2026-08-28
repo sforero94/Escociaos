@@ -460,7 +460,7 @@ function getBot(): Bot<BotContext> {
     await ctx.reply(
       [
         "No hay ninguna ronda en curso.",
-        "Normalmente te la recuerdo por acá la primera semana del mes. Si ya te toca recorrer y no llegó el recordatorio, podés abrirla vos mismo.",
+        "Normalmente te la recuerdo por acá la primera semana del mes. Si ya te toca recorrer y no llegó el recordatorio, puedes abrirla tú mismo.",
       ].join("\n"),
       { reply_markup: kb },
     );
@@ -1942,7 +1942,7 @@ function getBot(): Bot<BotContext> {
         .eq("id", pendiente.id)
         .eq("estado", "preview_pendiente");
       await ctx.reply(
-        "Ya probamos varias veces y no logramos afinar esta nota. Lo que narraste queda guardado sin confirmar -- un administrador puede revisarlo, o probá contándolo de nuevo en una nota de voz nueva.",
+        "Ya probamos varias veces y no logramos afinar esta nota. Lo que narraste queda guardado sin confirmar -- un administrador puede revisarlo, o prueba contándolo de nuevo en una nota de voz nueva.",
       );
       return;
     }
