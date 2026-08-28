@@ -1,6 +1,7 @@
 import { Context } from 'https://deno.land/x/hono@v4.0.0/mod.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { parseOpenWeatherForecast } from './external-tools.ts';
+import { debeReagregarDia } from './clima-reagregacion.ts';
 
 // ============================================================================
 // Ecowitt Cloud API Types
@@ -443,6 +444,8 @@ function parseEcowittHistory(histData: EcowittHistoryData, stationId: string) {
 interface ResultadoBackfillDia {
   ok: boolean;
   lecturas: number;
+  /** El día se dejó intacto porque reagregarlo habría bajado su cobertura. */
+  omitido?: boolean;
   error?: string;
 }
 
@@ -451,6 +454,10 @@ async function backfillUnDia(
   creds: { appKey: string; apiKey: string; mac: string },
   sb: { supabaseUrl: string; serviceKey: string },
   log: string,
+  /** `clima_resumen_diario.lecturas_count` de la fila que ya existe. Sólo lo
+   *  pasa el reintento automático (migración 121); el backfill manual lo deja
+   *  sin definir a propósito, porque es una acción humana deliberada. */
+  lecturasPrevias?: number | null,
 ): Promise<ResultadoBackfillDia> {
   const ecowittDateStr = formatEcowittDate(fecha);
 
@@ -491,6 +498,21 @@ async function backfillUnDia(
   const readings = parseEcowittHistory(response.data as EcowittHistoryData, creds.mac);
   if (readings.length === 0) {
     return { ok: false, lecturas: 0, error: '0 lecturas parseadas' };
+  }
+
+  // Guarda de no-empeorar (ver `clima-reagregacion.ts` para el mecanismo
+  // completo). El rollup agrega sobre `clima_lecturas`, que la migración 036
+  // poda a 24 h, así que reagregar un día viejo con una respuesta PARCIAL de
+  // Ecowitt baja su `lecturas_count` — y ése es exactamente el predicado del
+  // umbral de cobertura de la 103. Se comprueba acá, antes de insertar y antes
+  // del rollup, porque después de que el rollup corre la fila anterior ya no se
+  // puede reconstruir: las lecturas que la sostenían fueron podadas hace días.
+  if (!debeReagregarDia(readings.length, lecturasPrevias)) {
+    console.info(
+      `${log} ${ecowittDateStr}: Ecowitt devolvió ${readings.length} lectura(s) y la fila ya declara `
+      + `${lecturasPrevias} — se deja intacta (reagregar habría bajado la cobertura)`,
+    );
+    return { ok: true, lecturas: readings.length, omitido: true };
   }
 
   // Lecturas crudas -> clima_lecturas. `ignore-duplicates` sobre el
@@ -640,9 +662,18 @@ export async function handleClimaBackfill(c: Context): Promise<Response> {
 // Ecowitt sólo por los que todavía no tienen un dato confiable. Si la
 // estación ya se reconectó y Ecowitt tiene el día completo en su nube
 // (buffer local que sube al volver la luz/el internet), el día pasa a
-// 'ok' con el número real. Si Ecowitt TODAVÍA no lo tiene, el día queda
-// exactamente como estaba -- nunca se inventa un valor para forzar que
+// 'ok' con el número real. Nunca se inventa un valor para forzar que
 // "avance".
+//
+// Cuidado con lo que "queda como estaba" quiere decir. Con respuesta VACÍA
+// de Ecowitt es literal: no se escribe nada. Con respuesta PARCIAL no lo era
+// -- el rollup agrega sobre `clima_lecturas`, podada a 24 h por la migración
+// 036, así que reagregar un día viejo con menos lecturas de las que la fila
+// declara BAJABA su `lecturas_count`, que es el predicado del umbral de
+// cobertura de la 103. Pasó en producción con 2026-08-19 (167 -> 105) en la
+// primera corrida de este cron. Lo cierra `debeReagregarDia`, que se consulta
+// antes de tocar nada: un día sólo se reagrega si su cobertura no puede
+// retroceder.
 //
 // Importante sobre `contador_congelado`: a diferencia de `cobertura_parcial`
 // (un hueco de captura, justo lo que este reintento puede recuperar),
@@ -689,7 +720,7 @@ export async function handleClimaReintentoSinDato(c: Context): Promise<Response>
     const queryUrl = `${sb.supabaseUrl}/rest/v1/clima_resumen_diario`
       + `?station_id=eq.${encodeURIComponent(creds.mac)}`
       + `&fecha=gte.${desdeStr}&fecha=lte.${ayerStr}`
-      + `&select=fecha,lluvia_confianza`;
+      + `&select=fecha,lluvia_confianza,lecturas_count`;
     const queryRes = await fetch(queryUrl, {
       headers: { apikey: sb.serviceKey, Authorization: `Bearer ${sb.serviceKey}` },
     });
@@ -698,18 +729,21 @@ export async function handleClimaReintentoSinDato(c: Context): Promise<Response>
       console.error(`${log} No se pudo leer clima_resumen_diario (${queryRes.status}): ${body}`);
       return c.json({ error: 'No se pudo leer clima_resumen_diario', details: body }, 502);
     }
-    const filas: { fecha: string; lluvia_confianza: string }[] = await queryRes.json();
-    const confianzaPorFecha = new Map(filas.map((f) => [f.fecha, f.lluvia_confianza]));
+    const filas: { fecha: string; lluvia_confianza: string; lecturas_count: number | null }[] =
+      await queryRes.json();
+    const filaPorFecha = new Map(filas.map((f) => [f.fecha, f]));
 
-    const candidatos: Date[] = [];
+    // `lecturasPrevias` viaja con el candidato porque es lo que la guarda de
+    // no-empeorar necesita ver antes de reagregar (ver `backfillUnDia`).
+    const candidatos: { fecha: Date; lecturasPrevias: number | null }[] = [];
     for (let i = 0; i < DIAS_REINTENTO_SIN_DATO; i++) {
       const d = new Date(ayer.getTime() - i * 24 * 60 * 60 * 1000);
       const fechaStr = formatEcowittDate(d);
-      const confianza = confianzaPorFecha.get(fechaStr);
+      const fila = filaPorFecha.get(fechaStr);
       // Sin fila en absoluto ("sin_registro" del lado del frontend) o con
       // una confianza que hoy vale NULL -- las dos son candidatas.
-      if (confianza === undefined || CONFIANZAS_A_REINTENTAR.has(confianza)) {
-        candidatos.push(d);
+      if (fila === undefined || CONFIANZAS_A_REINTENTAR.has(fila.lluvia_confianza)) {
+        candidatos.push({ fecha: d, lecturasPrevias: fila?.lecturas_count ?? null });
       }
     }
 
@@ -718,14 +752,20 @@ export async function handleClimaReintentoSinDato(c: Context): Promise<Response>
       return c.json({ message: 'Nada que reintentar', candidatos: 0 }, 200);
     }
 
-    console.info(`${log} ${candidatos.length} día(s) candidato(s): ${candidatos.map(formatEcowittDate).join(', ')}`);
+    console.info(`${log} ${candidatos.length} día(s) candidato(s): ${candidatos.map((cand) => formatEcowittDate(cand.fecha)).join(', ')}`);
 
-    const resultados: { fecha: string; consultaOk: boolean; error?: string }[] = [];
+    const resultados: { fecha: string; consultaOk: boolean; omitido?: boolean; error?: string }[] = [];
     for (const dia of candidatos) {
-      const r = await backfillUnDia(dia, creds, sb, log);
-      resultados.push({ fecha: formatEcowittDate(dia), consultaOk: r.ok, error: r.ok ? undefined : r.error });
+      const r = await backfillUnDia(dia.fecha, creds, sb, log, dia.lecturasPrevias);
+      resultados.push({
+        fecha: formatEcowittDate(dia.fecha),
+        consultaOk: r.ok,
+        omitido: r.omitido,
+        error: r.ok ? undefined : r.error,
+      });
       await sleep(150);
     }
+    const omitidos = resultados.filter((r) => r.omitido).length;
 
     // Se vuelve a preguntar a la base cuántos candidatos quedaron 'ok'
     // DESPUÉS del reintento -- "la consulta a Ecowitt no dio error" no es
@@ -744,17 +784,21 @@ export async function handleClimaReintentoSinDato(c: Context): Promise<Response>
     });
     if (verifRes.ok) {
       const fechasOk = new Set(((await verifRes.json()) as { fecha: string }[]).map((f) => f.fecha));
-      resueltos = candidatos.filter((d) => fechasOk.has(formatEcowittDate(d))).length;
+      resueltos = candidatos.filter((d) => fechasOk.has(formatEcowittDate(d.fecha))).length;
     } else {
       console.warn(`${log} no se pudo verificar cuántos candidatos quedaron 'ok' tras el reintento`);
     }
 
-    console.info(`${log} ${resueltos ?? '?'}/${candidatos.length} día(s) resuelto(s) a 'ok' en esta corrida`);
+    console.info(
+      `${log} ${resueltos ?? '?'}/${candidatos.length} día(s) resuelto(s) a 'ok' en esta corrida`
+      + (omitidos > 0 ? `, ${omitidos} dejado(s) intacto(s) por cobertura menor` : ''),
+    );
 
     return c.json({
       message: 'Reintento completo',
       candidatos: candidatos.length,
       resueltos,
+      omitidos,
       resultados,
     }, 200);
   } catch (error) {
