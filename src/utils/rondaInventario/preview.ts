@@ -185,6 +185,27 @@ export function aplicarCorreccion(correccionesPrevias: readonly Correccion[], te
   return [...correccionesPrevias, { texto, en }];
 }
 
+/**
+ * CA-35, literal: "la corrección re-interpreta el TRANSCRITO ORIGINAL + el
+ * historial de correcciones acumuladas, nunca edita el transcrito [ni
+ * reinterpreta] sólo la corrección aislada". Esto es lo que el handler de
+ * Telegram le pasa a la etapa (2) del pipeline (`interpretarTranscrito`,
+ * `ronda-voz-pipeline.ts`) en cada vuelta del bucle -- nunca el transcrito
+ * solo, nunca la corrección sola. Sin correcciones, devuelve el transcrito
+ * tal cual (no agrega ningún encabezado a algo que no lo necesita).
+ */
+export function construirTextoConCorrecciones(transcritoOriginal: string, correcciones: readonly Correccion[]): string {
+  if (correcciones.length === 0) return transcritoOriginal;
+  const listado = correcciones.map((c, i) => `${i + 1}. ${c.texto}`).join('\n');
+  return [
+    'Nota de voz original del verificador:',
+    transcritoOriginal,
+    '',
+    'Correcciones que el verificador hizo DESPUÉS de esa nota, en orden -- tenlas en cuenta por encima de la nota original donde se contradigan:',
+    listado,
+  ].join('\n');
+}
+
 /** `MAX_INTENTOS_PREVIEW` de §7.3 del brief técnico: 3-4 intentos, se toma
  * el extremo generoso (4). Una sola constante, usada tanto por el handler
  * que cuenta los intentos como por el texto que le explica a Uriel que el

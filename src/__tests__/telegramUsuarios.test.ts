@@ -27,13 +27,35 @@ beforeAll(async () => {
 // ---------------------------------------------------------------------------
 
 describe('TELEGRAM_MODULES', () => {
-  it('exports exactly 6 modules', () => {
-    expect(TELEGRAM_MODULES).toHaveLength(6);
+  it('exports exactly 7 modules', () => {
+    expect(TELEGRAM_MODULES).toHaveLength(7);
   });
 
   it('contains the expected module keys', () => {
     const keys = TELEGRAM_MODULES.map((m) => m.key);
-    expect(keys).toEqual(['labores', 'monitoreo', 'gastos', 'ingresos', 'hato_produccion', 'consultas']);
+    expect(keys).toEqual(['labores', 'monitoreo', 'gastos', 'ingresos', 'hato_produccion', 'inventario_ronda', 'consultas']);
+  });
+
+  // Fase 3 de docs/brief_tecnico_verificacion_inventario.md (§3.2): el alta
+  // de Uriel es una fila de `telegram_usuarios` con
+  // `modulos_permitidos = '{inventario_ronda}'`, creada desde ESTA pantalla
+  // (Configuración -> Telegram). Sin esta clave en la lista, no habría forma
+  // de dársela desde la UI sin editar la base a mano.
+  it('incluye inventario_ronda -- el módulo de Uriel (Fase 3, docs/brief_tecnico_verificacion_inventario.md §3.2)', () => {
+    const modulo = TELEGRAM_MODULES.find((m) => m.key === 'inventario_ronda');
+    expect(modulo).toBeDefined();
+    expect(modulo?.label.length).toBeGreaterThan(0);
+  });
+
+  // §3.3 del brief técnico: darle `consultas` a Uriel rompería R-15/CA-13 el
+  // primer día (Esco expone precios). No se marca `sensitive` porque no es
+  // igual de peligroso que `consultas` -- no expone valoración por sí
+  // mismo -- pero tampoco se le da nunca junto con `consultas` a la misma
+  // persona por descuido; eso queda en la disciplina de quien configura, no
+  // en este archivo.
+  it('inventario_ronda NO está marcado sensitive (a diferencia de consultas)', () => {
+    const modulo = TELEGRAM_MODULES.find((m) => m.key === 'inventario_ronda');
+    expect(modulo?.sensitive).toBeFalsy();
   });
 
   it('each module has key, label, and description', () => {

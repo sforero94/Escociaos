@@ -43,10 +43,20 @@ ORIGEN_DIR = os.path.join(ROOT, 'src/utils/rondaInventario')
 # importa nada propio; interpretarNota.ts y preview.ts importan de
 # causasRaiz.ts (y preview.ts además de interpretarNota.ts, sólo tipos);
 # reporteCierre.ts importa de causasRaiz.ts.
+#
+# Fase 3 (Telegram, Uriel) agrega dos módulos:
+#   - resolverHallazgos.ts: orquesta resolverProducto/derivarFisico/derivarVia
+#     (interpretarNota.ts) en una FilaPreview (preview.ts) -- el handler de
+#     voz de Telegram lo necesita dos veces (nota inicial + cada corrección).
+#   - alcanceTxt.ts: el .txt del alcance que se manda al abrir la ronda. No
+#     depende de los otros tres -- reimplementa su propio formateador local,
+#     mismo criterio que preview.ts/reporteCierre.ts (ver su cabecera).
 MODULOS = [
     'causasRaiz.ts',
     'interpretarNota.ts',
     'preview.ts',
+    'resolverHallazgos.ts',
+    'alcanceTxt.ts',
     'reporteCierre.ts',
 ]
 

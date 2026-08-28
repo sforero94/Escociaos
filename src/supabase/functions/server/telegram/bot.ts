@@ -7,7 +7,7 @@
 // All initialization is lazy (inside getBot()) to avoid BOOT_ERROR on
 // Supabase Edge Functions, where top-level side effects can fail.
 
-import { Bot, session, InlineKeyboard } from "npm:grammy@1";
+import { Bot, session, InlineKeyboard, InputFile } from "npm:grammy@1";
 import { conversations, createConversation } from "npm:@grammyjs/conversations@2";
 import { createClient, SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { Context as HonoContext } from "npm:hono";
@@ -19,6 +19,7 @@ import { gastoConversation } from "./conversations/gasto.ts";
 import { ingresoConversation } from "./conversations/ingreso.ts";
 import { pesajeLecheConversation } from "./conversations/pesajeLeche.ts";
 import { eventoHatoConversation } from "./conversations/eventoHato.ts";
+import { cierreRondaConversation } from "./conversations/cierreRonda.ts";
 // `produccionQuincenal` (litros al camión) se retiró del bot -- SOW 3 de
 // docs/plan_hato_produccion_rework.md §2.3: la quincena pasó a ser un
 // registro financiero (`fin_ingreso_id NOT NULL`, migración 070) y el bot
@@ -28,6 +29,42 @@ import { eventoHatoConversation } from "./conversations/eventoHato.ts";
 import { llmToolLoop, getSystemPrompt } from "../chat.tsx";
 import { construirMensajeAlertaYaResuelta, construirMensajeCierreAlertaBroadcast } from "../hato-alertas.ts";
 import { cerrarAlertaEnEnvios } from "./enviar.ts";
+
+// --- Ronda de inventario (Fase 3, Telegram/Uriel) ---------------------------
+// docs/brief_tecnico_verificacion_inventario.md §5/§7/§13. Pipeline de voz
+// (I/O puro contra OpenRouter) + helpers de consulta/mapeo sobre las tablas
+// `rondas_*` (migración 125) + la lógica PURA espejada de
+// `src/utils/rondaInventario/*` (docs/inventario/regenerar-copias-ronda-inventario.py).
+import { ejecutarPipelineVozRonda, interpretarTranscrito } from "../ronda-voz-pipeline.ts";
+import {
+  alcanceComoItems,
+  buscarExistenciasRonda,
+  mensajeErrorRpc,
+  obtenerAlcanceRonda,
+  obtenerResumenExcepcionesRonda,
+  obtenerRondaEnCurso,
+  obtenerTranscritoPendienteMasReciente,
+  obtenerTranscritoPorId,
+  payloadActorTelegram,
+  primerDiaMesBogota,
+  renderExistenciaLinea,
+  type PreviewGuardado,
+  type RondaInventarioRow,
+  type TranscritoRondaRow,
+} from "./ronda-helpers.ts";
+import { resolverHallazgos } from "../rondaInventario/resolverHallazgos.ts";
+import type { RespuestaModeloInterprete } from "../rondaInventario/interpretarNota.ts";
+import {
+  aplicarCorreccion,
+  construirPreview,
+  construirTextoConCorrecciones,
+  intentosPreviewAgotados,
+  MAX_INTENTOS_PREVIEW,
+  previewConfirmable,
+  renderPreviewTelegram,
+  type PreviewRonda,
+} from "../rondaInventario/preview.ts";
+import { construirTextoAlcanceTxt } from "../rondaInventario/alcanceTxt.ts";
 
 // ============================================================================
 // SUPABASE CLIENT (service role — same pattern as chat.ts)
@@ -144,6 +181,7 @@ function getBot(): Bot<BotContext> {
   bot.use(createConversation(ingresoConversation, "ingreso"));
   bot.use(createConversation(pesajeLecheConversation, "pesajeLeche"));
   bot.use(createConversation(eventoHatoConversation, "eventoHato"));
+  bot.use(createConversation(cierreRondaConversation, "cierreRonda"));
 
   // ==========================================================================
   // HELPERS
@@ -168,6 +206,9 @@ function getBot(): Bot<BotContext> {
     if (mods.includes("hato_produccion")) {
       kb.text("🐄 Pesaje semanal (leche)", "start_pesajeLeche").row();
       kb.text("📋 Registrar evento del hato", "start_eventoHato").row();
+    }
+    if (mods.includes("inventario_ronda")) {
+      kb.text("🧮 Ronda de inventario", "start_ronda").row();
     }
     if (mods.includes("consultas")) {
       kb.text("💬 Preguntarle a Esco", "start_consulta").row();
@@ -320,6 +361,197 @@ function getBot(): Bot<BotContext> {
     await ctx.conversation.enter("eventoHato");
   });
 
+  // ==========================================================================
+  // RONDA DE INVENTARIO — Uriel (Fase 3, docs/brief_tecnico_verificacion_inventario.md §7.2/§13)
+  // ==========================================================================
+
+  const MESES_RONDA = [
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+  ];
+
+  function nombrePeriodoRonda(periodoIso: string): string {
+    const [anio, mes] = periodoIso.split("-");
+    return `${MESES_RONDA[Number(mes) - 1] ?? mes} ${anio}`;
+  }
+
+  function tieneAccesoRonda(ctx: BotContext): boolean {
+    return !!ctx.telegramUser?.modulos_permitidos?.includes("inventario_ronda");
+  }
+
+  /** `.txt` del alcance completo (§7.2: reemplazo literal de la hoja
+   * impresa del Sheet de David) -- se manda al abrir la ronda y cada vez que
+   * Uriel toca "Ver alcance completo". R-15/CA-13: nunca precio. */
+  async function enviarAlcanceTxt(ctx: BotContext, sb: SupabaseClient, ronda: RondaInventarioRow) {
+    const alcance = await obtenerAlcanceRonda(sb, ronda.id);
+    const texto = construirTextoAlcanceTxt(
+      ronda.periodo,
+      alcance.map((a) => ({ nombre: a.nombre_producto, cantidad: a.cantidad_teorica, unidad: a.unidad })),
+    );
+    await ctx.replyWithDocument(
+      new InputFile(new TextEncoder().encode(texto), `alcance-ronda-${ronda.periodo}.txt`),
+    );
+  }
+
+  async function manejarComandoRonda(ctx: BotContext) {
+    const sb = getSupabaseAdmin();
+    const ronda = await obtenerRondaEnCurso(sb);
+
+    if (ronda) {
+      const resumen = await obtenerResumenExcepcionesRonda(sb, ronda.id);
+      const kb = new InlineKeyboard()
+        .text("📄 Ver alcance completo", `ronda_alcance:${ronda.id}`)
+        .row()
+        .text("🔒 Cerrar ronda", "start_cierreRonda");
+      await ctx.reply(
+        [
+          `🧮 Ronda de ${nombrePeriodoRonda(ronda.periodo)} — en curso.`,
+          ronda.es_linea_base
+            ? "Esta es la ronda de LÍNEA BASE: compara por primera vez contra el sistema, no contra ningún Sheet aparte."
+            : null,
+          `Hallazgos reportados: ${resumen.total} (${resumen.pendientes} todavía en curso).`,
+          resumen.transcritosSinConfirmar > 0
+            ? `⚠️ ${resumen.transcritosSinConfirmar} nota(s) de voz narrada(s) sin confirmar todavía.`
+            : null,
+          "",
+          "Mándame una nota de voz con lo que encontraste al recorrer, o usa /existencias <producto> para consultar el teórico del sistema.",
+          "Cuando termines de recorrer, usa /cerrarronda.",
+        ]
+          .filter((l): l is string => l !== null)
+          .join("\n"),
+        { reply_markup: kb },
+      );
+      return;
+    }
+
+    const kb = new InlineKeyboard().text("🚀 Abrir ronda de este mes", "ronda_abrir_manual");
+    await ctx.reply(
+      [
+        "No hay ninguna ronda en curso.",
+        "Normalmente te la recuerdo por acá la primera semana del mes. Si ya te toca recorrer y no llegó el recordatorio, podés abrirla vos mismo.",
+      ].join("\n"),
+      { reply_markup: kb },
+    );
+  }
+
+  bot.command("ronda", async (ctx) => {
+    if (!tieneAccesoRonda(ctx)) {
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
+    await manejarComandoRonda(ctx);
+  });
+
+  // A-2/R-15: cantidad y unidad, NUNCA precio -- reemplaza la hoja impresa
+  // del Sheet de David. Contra el alcance CONGELADO de la ronda en curso,
+  // nunca contra todo el catálogo.
+  bot.command("existencias", async (ctx) => {
+    if (!tieneAccesoRonda(ctx)) {
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
+    const texto = ctx.match?.trim();
+    if (!texto) {
+      await ctx.reply("Escribe /existencias seguido del nombre del producto. Ej: /existencias silicalmag");
+      return;
+    }
+    const sb = getSupabaseAdmin();
+    const ronda = await obtenerRondaEnCurso(sb);
+    if (!ronda) {
+      await ctx.reply("No hay ninguna ronda en curso -- no hay nada que consultar todavía.");
+      return;
+    }
+    const resultados = await buscarExistenciasRonda(sb, ronda.id, texto);
+    if (resultados.length === 0) {
+      await ctx.reply(`No encontré ningún producto del alcance de esta ronda que coincida con "${texto}".`);
+      return;
+    }
+    await ctx.reply(resultados.map(renderExistenciaLinea).join("\n"));
+  });
+
+  // A-5/R-2: cerrar declarando qué se recorrió -- asistente genuino
+  // (conversación `cierreRonda`, §7.2 del brief técnico).
+  bot.command("cerrarronda", async (ctx) => {
+    if (!tieneAccesoRonda(ctx)) {
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
+    await ctx.conversation.enter("cierreRonda");
+  });
+
+  bot.callbackQuery("start_ronda", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!tieneAccesoRonda(ctx)) {
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
+    await manejarComandoRonda(ctx);
+  });
+
+  bot.callbackQuery("start_cierreRonda", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!tieneAccesoRonda(ctx)) {
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
+    await ctx.conversation.enter("cierreRonda");
+  });
+
+  // Apertura manual (§7.2/§13 de la tarea de esta sesión): hasta que exista
+  // el tick de la Fase 5, el recordatorio automático no dispara -- sin este
+  // botón Uriel no podría empezar la primera ronda de punta a punta.
+  bot.callbackQuery("ronda_abrir_manual", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!tieneAccesoRonda(ctx) || !ctx.telegramUser) {
+      await ctx.reply("No tienes acceso a este módulo.");
+      return;
+    }
+    const sb = getSupabaseAdmin();
+    const periodo = primerDiaMesBogota();
+    const { data, error } = await sb.rpc("fn_ronda_abrir", {
+      payload: { ...payloadActorTelegram(ctx.telegramUser.id), periodo },
+    });
+    if (error) {
+      await ctx.reply(`No se pudo abrir la ronda: ${mensajeErrorRpc(error)}`);
+      return;
+    }
+    const info = data as { ronda_id?: string; productos_en_alcance?: number; es_linea_base?: boolean } | null;
+    if (!info?.ronda_id) {
+      await ctx.reply("La ronda se abrió, pero no pude leer la respuesta completa. Usa /ronda para ver el estado.");
+      return;
+    }
+    await ctx.reply(
+      [
+        `✅ Ronda de ${nombrePeriodoRonda(periodo)} abierta.`,
+        info.es_linea_base
+          ? "Es la ronda de LÍNEA BASE: compara por primera vez el inventario físico contra el sistema, no contra ningún Sheet aparte."
+          : null,
+        `Alcance: ${info.productos_en_alcance ?? 0} producto(s) con existencia.`,
+        "Te mando la lista completa en un archivo aparte.",
+      ]
+        .filter((l): l is string => l !== null)
+        .join("\n"),
+    );
+
+    const ronda = await obtenerRondaEnCurso(sb);
+    if (ronda) await enviarAlcanceTxt(ctx, sb, ronda);
+  });
+
+  bot.callbackQuery(/^ronda_alcance:([0-9a-f-]+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!tieneAccesoRonda(ctx)) return;
+    const rondaId = ctx.match?.[1];
+    if (!rondaId) return;
+    const sb = getSupabaseAdmin();
+    const { data } = await sb.from("rondas_inventario").select("id, periodo, estado, es_linea_base, abierta_en, alcance_declarado, alcance_nota").eq("id", rondaId).maybeSingle();
+    const ronda = data as RondaInventarioRow | null;
+    if (!ronda) {
+      await ctx.reply("Esa ronda ya no existe.");
+      return;
+    }
+    await enviarAlcanceTxt(ctx, sb, ronda);
+  });
+
   bot.command("cancelar", async (ctx) => {
     await ctx.conversation.exit();
     await ctx.reply("Operación cancelada.");
@@ -337,8 +569,13 @@ function getBot(): Bot<BotContext> {
         "/ingreso — Registrar un ingreso",
         "/pesaje — Cargar la planilla de pesaje de leche por foto",
         "/evento — Registrar monta, inseminación, secado, parto o aborto",
+        "/ronda — Ver o abrir la ronda de inventario en curso",
+        "/existencias <producto> — Consultar cantidad y unidad de un producto",
+        "/cerrarronda — Cerrar la ronda de inventario en curso",
         "/cancelar — Cancelar operación actual",
         "/ayuda — Ver esta ayuda",
+        "",
+        "Si tienes la ronda de inventario en curso, también puedes mandarme una nota de voz con lo que encontraste.",
         "",
         "También puedes escribirme cualquier pregunta sobre la finca y te responderé con datos reales.",
       ].join("\n"),
@@ -690,6 +927,322 @@ function getBot(): Bot<BotContext> {
   });
 
   // ==========================================================================
+  // RONDA DE INVENTARIO — pipeline de voz + bucle de preview (A-8/A-9/A-10,
+  // docs/brief_tecnico_verificacion_inventario.md §5.2/§7.3). Fuera de toda
+  // conversación de Grammy (D-T9): el estado del bucle vive en
+  // `rondas_transcritos`, no en una sesión.
+  // ==========================================================================
+
+  /** Idéntico a `descargarBytesTelegram` de `pesajeLeche.ts:216-224` (no
+   * exportado ahí, mismo criterio de duplicación ya establecido entre los
+   * pipelines de este árbol -- ver `extraerJson` en
+   * `hato-chequeo-foto.ts`/`hato-pesaje-pipeline.ts`/`ronda-voz-pipeline.ts`). */
+  async function descargarBytesTelegramRonda(fileId: string, botToken: string): Promise<Uint8Array> {
+    const fileRes = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
+    const fileData = await fileRes.json();
+    const filePath = fileData?.result?.file_path;
+    if (!filePath) throw new Error(`Telegram no devolvió la ruta del archivo ${fileId}`);
+    const descarga = await fetch(`https://api.telegram.org/file/bot${botToken}/${filePath}`);
+    if (!descarga.ok) throw new Error(`No se pudo descargar el archivo de Telegram (${descarga.status})`);
+    return new Uint8Array(await descarga.arrayBuffer());
+  }
+
+  /** Manda el preview (o, si no es confirmable, el mensaje que pide
+   * completarlo/identificarlo por texto -- `renderPreviewTelegram` ya trae
+   * ese texto, CA-30) con los botones [Confirmar]/[Descartar] cuando
+   * corresponde. `[Corregir]` no es un botón aparte: el texto libre que
+   * Uriel mande a continuación ES la corrección (§7.3). */
+  async function enviarMensajePreview(ctx: BotContext, transcritoId: string, preview: PreviewRonda, intentosPreview: number) {
+    const texto = renderPreviewTelegram(preview);
+    if (!previewConfirmable(preview)) {
+      const restantes = MAX_INTENTOS_PREVIEW - intentosPreview;
+      await ctx.reply(`${texto}\n\n(te quedan ${Math.max(restantes, 0)} corrección(es) antes de que ceda)`);
+      return;
+    }
+    const kb = new InlineKeyboard()
+      .text("✅ Confirmar", `ronda_prev:confirmar:${transcritoId}`)
+      .text("❌ Descartar", `ronda_prev:descartar:${transcritoId}`);
+    await ctx.reply(texto, { reply_markup: kb });
+  }
+
+  /** Resuelve los hallazgos crudos del intérprete contra el alcance, guarda
+   * el resultado en `rondas_transcritos.preview` (para no tener que volver a
+   * llamar al modelo si Uriel pide corregir) y manda el mensaje. */
+  async function guardarYEnviarPreview(
+    ctx: BotContext,
+    sb: SupabaseClient,
+    transcritoId: string,
+    respuesta: RespuestaModeloInterprete,
+    crudo: unknown,
+    alcanceItems: ReturnType<typeof alcanceComoItems>,
+    intentosPreview: number,
+  ) {
+    const resueltos = resolverHallazgos(respuesta.hallazgos, alcanceItems);
+    const preview = construirPreview(resueltos.map((r) => r.fila), respuesta.observacionesLibres, respuesta.avisos);
+    const previewGuardado: PreviewGuardado = {
+      filas: preview.filas,
+      paraConfirmar: resueltos.map((r) => r.paraConfirmar),
+      observacionesLibres: preview.observacionesLibres,
+      avisos: preview.avisos,
+    };
+
+    const { error } = await sb
+      .from("rondas_transcritos")
+      .update({ interpretacion: crudo, preview: previewGuardado, intentos_preview: intentosPreview })
+      .eq("id", transcritoId)
+      .eq("estado", "preview_pendiente");
+    if (error) {
+      console.error("[Telegram] ronda: no se pudo guardar el preview:", error.message);
+      await ctx.reply("Hubo un error guardando lo que entendí. Intenta de nuevo.");
+      return;
+    }
+
+    await enviarMensajePreview(ctx, transcritoId, preview, intentosPreview);
+  }
+
+  async function manejarNotaDeVoz(ctx: BotContext, fileId: string, tipo: string, duracionSeg: number | undefined) {
+    if (!tieneAccesoRonda(ctx) || !ctx.telegramUser) return; // silencioso: no es un usuario de la ronda
+    const apiKey = Deno.env.get("OPENROUTER_API_KEY");
+    if (!apiKey) {
+      // Falla CERRADA -- copia literal del patrón de pesajeLeche.ts:244-248.
+      // Nunca degrada a registrar sin preview.
+      await ctx.reply("La lectura por voz no está disponible ahora mismo (falta configuración del servidor). Avisa a un administrador.");
+      return;
+    }
+    const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN")!;
+    const telegramUsuarioId = ctx.telegramUser.id;
+
+    const sb = getSupabaseAdmin();
+    const ronda = await obtenerRondaEnCurso(sb);
+    if (!ronda) {
+      await ctx.reply("No hay ninguna ronda en curso -- no hay nada que registrar todavía. Usa /ronda para ver el estado.");
+      return;
+    }
+
+    await ctx.replyWithChatAction("typing");
+
+    let bytes: Uint8Array;
+    try {
+      bytes = await descargarBytesTelegramRonda(fileId, botToken);
+    } catch (err) {
+      console.error("[Telegram] ronda: descarga de audio falló:", err instanceof Error ? err.message : err);
+      await ctx.reply("No pude descargar la nota de voz. Intenta enviarla de nuevo.");
+      return;
+    }
+
+    const alcance = await obtenerAlcanceRonda(sb, ronda.id);
+    const alcanceItems = alcanceComoItems(alcance);
+
+    const resultado = await ejecutarPipelineVozRonda({ bytes, tipo, nombreArchivo: `nota-${Date.now()}.ogg`, apiKey });
+
+    if (!resultado.ok) {
+      if (resultado.etapa === "transcripcion") {
+        // Ver la cabecera de ronda-voz-pipeline.ts: el par OGG/Opus de
+        // Telegram contra el endpoint de OpenRouter no se pudo probar en
+        // esta sesión (sin OPENROUTER_API_KEY). Si esto dispara en
+        // producción por un error de FORMATO, la degradación de §5.7
+        // (comando /hallazgo estructurado) queda pendiente -- no
+        // implementada acá, ver el reporte de la sesión.
+        await ctx.reply(
+          `No pude entender la nota de voz: ${resultado.error}\n\nIntenta grabarla de nuevo. Si el problema sigue, avisa a un administrador.`,
+        );
+        return;
+      }
+      // La transcripción SÍ tuvo éxito -- se guarda igual como borrador sin
+      // confirmar (A-10/CA-37: lo narrado no se pierde ni si el intérprete
+      // falla del todo).
+      const { error: errorInsert } = await sb.from("rondas_transcritos").insert({
+        ronda_id: ronda.id,
+        transcrito: resultado.transcrito,
+        actor_telegram_id: telegramUsuarioId,
+        duracion_audio_seg: duracionSeg ?? null,
+        estado: "sin_confirmar",
+      });
+      if (errorInsert) {
+        console.error("[Telegram] ronda: no se pudo guardar el transcrito tras fallo de interpretación:", errorInsert.message);
+      }
+      await ctx.reply(
+        `Te entendí, pero no pude interpretar los hallazgos (${resultado.error}). Lo que dijiste quedó guardado -- avisa a un administrador, o intenta con otra nota de voz.`,
+      );
+      return;
+    }
+
+    const previewInicial = construirPreview(
+      resolverHallazgos(resultado.respuesta.hallazgos, alcanceItems).map((r) => r.fila),
+    );
+    if (previewInicial.filas.length === 0 && resultado.respuesta.observacionesLibres.length === 0) {
+      // No es un error -- Uriel pudo haber mandado una nota de contexto sin
+      // ningún hallazgo puntual. Se guarda igual (capa cruda, CA-36), pero NO
+      // se abre un ciclo de preview vacío (nada que confirmar) ni se marca
+      // 'confirmado' (eso implicaría que pasó por el botón/RPC, y no pasó) ni
+      // 'sin_confirmar' (CA-37 cuenta ese estado como "hallazgos narrados sin
+      // confirmar" en el reporte de cierre -- contar acá inflaría ese número
+      // con una nota que no tenía ningún hallazgo). 'descartado' es el
+      // desenlace terminal que menos tergiversa: no queda nada pendiente ni
+      // se cuenta como deuda.
+      await sb.from("rondas_transcritos").insert({
+        ronda_id: ronda.id,
+        transcrito: resultado.transcrito,
+        actor_telegram_id: telegramUsuarioId,
+        duracion_audio_seg: duracionSeg ?? null,
+        estado: "descartado",
+        preview: { filas: [], paraConfirmar: [], observacionesLibres: [], avisos: resultado.respuesta.avisos },
+      });
+      await ctx.reply("No encontré ningún hallazgo concreto en esa nota (ni una observación libre). Si querías reportar algo, intenta ser más específico.");
+      return;
+    }
+
+    const { data: transcritoCreado, error: errorInsert } = await sb
+      .from("rondas_transcritos")
+      .insert({
+        ronda_id: ronda.id,
+        transcrito: resultado.transcrito,
+        correcciones: [],
+        interpretacion: resultado.crudoInterpretacion,
+        intentos_preview: 1,
+        estado: "preview_pendiente",
+        actor_telegram_id: telegramUsuarioId,
+        duracion_audio_seg: duracionSeg ?? null,
+      })
+      .select("id")
+      .single();
+
+    if (errorInsert || !transcritoCreado) {
+      console.error("[Telegram] ronda: no se pudo guardar el transcrito:", errorInsert?.message);
+      await ctx.reply("Entendí tu nota, pero hubo un error guardándola. Intenta de nuevo.");
+      return;
+    }
+
+    await guardarYEnviarPreview(ctx, sb, transcritoCreado.id, resultado.respuesta, resultado.crudoInterpretacion, alcanceItems, 1);
+  }
+
+  bot.on("message:voice", async (ctx) => {
+    const voice = ctx.message.voice;
+    if (!voice) return;
+    await manejarNotaDeVoz(ctx, voice.file_id, voice.mime_type || "audio/ogg", voice.duration);
+  });
+
+  bot.on("message:audio", async (ctx) => {
+    const audio = ctx.message.audio;
+    if (!audio) return;
+    await manejarNotaDeVoz(ctx, audio.file_id, (audio.mime_type || "audio/ogg").toLowerCase(), audio.duration);
+  });
+
+  /** A-9/CA-35: Confirmar registra (vía `fn_ronda_confirmar_hallazgos`);
+   * Descartar cierra el ciclo sin registrar nada. El `callback_data` trae el
+   * `transcrito_id` explícito -- la autorización real de a quién pertenece
+   * el transcrito no se valida por el botón, la valida `fn_ronda_validar_actor`
+   * dentro del RPC (para Confirmar) o el `.eq('actor_telegram_id', ...)` de
+   * abajo (para Descartar, que no tiene RPC propio). */
+  bot.callbackQuery(/^ronda_prev:(confirmar|descartar):([0-9a-f-]+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!tieneAccesoRonda(ctx) || !ctx.telegramUser) return;
+    const accion = ctx.match?.[1] as "confirmar" | "descartar" | undefined;
+    const transcritoId = ctx.match?.[2];
+    if (!accion || !transcritoId) return;
+
+    const sb = getSupabaseAdmin();
+
+    if (accion === "descartar") {
+      const { data, error } = await sb
+        .from("rondas_transcritos")
+        .update({ estado: "descartado" })
+        .eq("id", transcritoId)
+        .eq("actor_telegram_id", ctx.telegramUser.id)
+        .eq("estado", "preview_pendiente")
+        .select("id")
+        .maybeSingle();
+      if (error) {
+        console.error("[Telegram] ronda: error al descartar:", error.message);
+        await ctx.reply("No se pudo descartar. Intenta de nuevo.");
+        return;
+      }
+      if (!data) {
+        await ctx.reply("Esa nota ya no está pendiente de confirmación (puede que ya la hayas confirmado o descartado).");
+        return;
+      }
+      await ctx.editMessageText("❌ Descartado. Lo que narraste en esa nota no quedó registrado.").catch(() => {});
+      return;
+    }
+
+    // accion === 'confirmar'
+    const transcrito = await obtenerTranscritoPorId(sb, transcritoId);
+    if (!transcrito || transcrito.actor_telegram_id !== ctx.telegramUser.id) {
+      await ctx.reply("No encontré esa nota, o no es tuya.");
+      return;
+    }
+    if (transcrito.estado !== "preview_pendiente") {
+      await ctx.reply("Esa nota ya no está pendiente de confirmación.");
+      return;
+    }
+    const preview = transcrito.preview;
+    if (!preview || preview.filas.length === 0 || preview.paraConfirmar.some((h) => h === null)) {
+      await ctx.reply("Todavía falta identificar o completar algún hallazgo antes de poder confirmar. Corrígelo por texto.");
+      return;
+    }
+
+    const hallazgosPayload = preview.paraConfirmar.map((h) => ({
+      producto_id: h!.productoId,
+      cantidad_fisica: h!.cantidadFisica,
+      fisico_origen: h!.fisicoOrigen,
+      observacion_uriel: h!.observacionUriel,
+      explicacion_citada: h!.explicacionCitada,
+      causa_clave: h!.causaClave,
+      causa_confianza: h!.causaConfianza,
+    }));
+
+    const { data: resultadoRpc, error: errorRpc } = await sb.rpc("fn_ronda_confirmar_hallazgos", {
+      payload: {
+        ...payloadActorTelegram(ctx.telegramUser.id),
+        transcrito_id: transcritoId,
+        hallazgos: hallazgosPayload,
+      },
+    });
+
+    if (errorRpc) {
+      await ctx.reply(`❌ No se pudo confirmar: ${mensajeErrorRpc(errorRpc)}`);
+      return;
+    }
+
+    const datos = resultadoRpc as { excepciones_creadas?: number } | null;
+    const kbDeshacer = new InlineKeyboard().text("↩️ Deshacer", `ronda_undo:${transcritoId}`);
+    await ctx.editMessageText(`✅ Registrado: ${datos?.excepciones_creadas ?? preview.filas.length} hallazgo(s).`).catch(() => {});
+    await ctx.reply(
+      "Si te equivocaste (por ejemplo, dictaste mal una cantidad), tienes esta ventana para deshacerlo mientras David todavía no lo haya revisado.",
+      { reply_markup: kbDeshacer },
+    );
+  });
+
+  /** P-1 (§6.5/§7.4 del brief técnico) -- mismo patrón que `hato_ev_undo`
+   * (bot.ts, evento del hato): el botón se quita del mensaje al usarse, la
+   * autorización real la valida el RPC (la ventana de tres condiciones de
+   * §6.5), y fuera de la ventana se explica en vez de fallar genérico -- las
+   * excepciones de `fn_ronda_deshacer_confirmacion` ya están escritas en
+   * español para leerse tal cual. */
+  bot.callbackQuery(/^ronda_undo:([0-9a-f-]+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!tieneAccesoRonda(ctx) || !ctx.telegramUser) return;
+    const transcritoId = ctx.match?.[1];
+    if (!transcritoId) return;
+
+    const sb = getSupabaseAdmin();
+    const { data, error } = await sb.rpc("fn_ronda_deshacer_confirmacion", {
+      payload: { ...payloadActorTelegram(ctx.telegramUser.id), transcrito_id: transcritoId },
+    });
+
+    if (error) {
+      await ctx.reply(`No se pudo deshacer: ${mensajeErrorRpc(error)}`);
+      return;
+    }
+
+    const datos = data as { excepciones_borradas?: number } | null;
+    await ctx.editMessageText("↩️ Deshecho.").catch(() => {});
+    await ctx.reply(
+      `Los ${datos?.excepciones_borradas ?? "N"} hallazgo(s) no quedaron registrados. Lo que narraste sigue guardado -- puedes corregirlo y confirmarlo de nuevo.`,
+    );
+  });
+
+  // ==========================================================================
   // MEMORY PROPOSAL DETECTOR — inspects llmToolLoop's toolInteractions
   // ==========================================================================
 
@@ -846,6 +1399,72 @@ function getBot(): Bot<BotContext> {
   }
 
   // ==========================================================================
+  // RONDA DE INVENTARIO — corrección por texto libre del preview pendiente
+  // (§7.3 del brief técnico). Registrada JUSTO ANTES del fallback de Esco de
+  // abajo, a propósito: es la que decide si un mensaje de texto es una
+  // corrección de la ronda o si le pasa el turno a Esco -- `next()` cuando
+  // no hay nada pendiente que corregir. Para Uriel eso cae en "No tienes
+  // acceso a consultas" (§3.3: nunca tiene el módulo `consultas`), igual que
+  // hoy.
+  // ==========================================================================
+
+  /** Máximo `MAX_INTENTOS_PREVIEW` (4, §7.3) intentos de preview por nota. */
+  bot.on("message:text", async (ctx, next) => {
+    if (!tieneAccesoRonda(ctx) || !ctx.telegramUser) return next();
+    const texto = ctx.message.text?.trim();
+    if (!texto) return next();
+
+    const sb = getSupabaseAdmin();
+    const pendiente = await obtenerTranscritoPendienteMasReciente(sb, ctx.telegramUser.id);
+    if (!pendiente) return next();
+
+    if (intentosPreviewAgotados(pendiente.intentos_preview)) {
+      await sb
+        .from("rondas_transcritos")
+        .update({ estado: "sin_confirmar" })
+        .eq("id", pendiente.id)
+        .eq("estado", "preview_pendiente");
+      await ctx.reply(
+        "Ya probamos varias veces y no logramos afinar esta nota. Lo que narraste queda guardado sin confirmar -- un administrador puede revisarlo, o probá contándolo de nuevo en una nota de voz nueva.",
+      );
+      return;
+    }
+
+    const apiKey = Deno.env.get("OPENROUTER_API_KEY");
+    if (!apiKey) {
+      await ctx.reply("La lectura por voz no está disponible ahora mismo. Avisa a un administrador.");
+      return;
+    }
+
+    await ctx.replyWithChatAction("typing");
+
+    const correcciones = aplicarCorreccion(pendiente.correcciones, texto, new Date().toISOString());
+    const textoCombinado = construirTextoConCorrecciones(pendiente.transcrito, correcciones);
+
+    const resultado = await interpretarTranscrito(textoCombinado, apiKey);
+    if (!resultado.ok) {
+      // No consume un intento: no se llegó a mostrar un preview nuevo.
+      await ctx.reply(`No pude reinterpretar tu corrección: ${resultado.error}. Intenta de nuevo.`);
+      return;
+    }
+
+    const alcance = await obtenerAlcanceRonda(sb, pendiente.ronda_id);
+    const alcanceItems = alcanceComoItems(alcance);
+    const nuevosIntentos = pendiente.intentos_preview + 1;
+
+    const { error: errorCorrecciones } = await sb
+      .from("rondas_transcritos")
+      .update({ correcciones })
+      .eq("id", pendiente.id)
+      .eq("estado", "preview_pendiente");
+    if (errorCorrecciones) {
+      console.error("[Telegram] ronda: no se pudo guardar la corrección:", errorCorrecciones.message);
+    }
+
+    await guardarYEnviarPreview(ctx, sb, pendiente.id, resultado.respuesta, resultado.crudo, alcanceItems, nuevosIntentos);
+  });
+
+  // ==========================================================================
   // FREE-TEXT FALLBACK — Esco AI engine with conversation persistence
   // ==========================================================================
 
@@ -952,6 +1571,9 @@ function getBot(): Bot<BotContext> {
     { command: "ingreso", description: "Registrar un ingreso" },
     { command: "pesaje", description: "Cargar pesaje de leche por foto" },
     { command: "evento", description: "Registrar evento del hato" },
+    { command: "ronda", description: "Ver o abrir la ronda de inventario" },
+    { command: "existencias", description: "Consultar existencias de un producto" },
+    { command: "cerrarronda", description: "Cerrar la ronda de inventario en curso" },
     { command: "cancelar", description: "Cancelar operación actual" },
     { command: "ayuda", description: "Ver ayuda" },
   ]).catch((err) => console.error("[Telegram] setMyCommands error:", err));

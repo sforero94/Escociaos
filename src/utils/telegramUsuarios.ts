@@ -52,6 +52,15 @@ export const TELEGRAM_MODULES: TelegramModulo[] = [
   { key: 'gastos', label: 'Gastos', description: 'Registrar gastos' },
   { key: 'ingresos', label: 'Ingresos', description: 'Registrar ingresos' },
   { key: 'hato_produccion', label: 'Producción Hato Lechero', description: 'Pesaje semanal de leche y producción quincenal (litros al camión)' },
+  // Fase 3 de docs/brief_tecnico_verificacion_inventario.md (§3.2/§3.3): el
+  // módulo de Uriel para la ronda mensual de inventario -- abrir/cerrar la
+  // ronda, consultar el teórico (cantidad y unidad, NUNCA precio), mandar
+  // notas de voz y confirmar el preview. Deliberadamente NO se marca
+  // `sensitive`: no expone valoración por sí mismo (a diferencia de
+  // `consultas`, que sí puede). Los otros dos módulos del mismo diseño --
+  // `inventario_explicacion` (David) e `inventario_aprobacion` (Santiago) --
+  // son de la Fase 4 (David y Santiago), fuera de esta pantalla todavía.
+  { key: 'inventario_ronda', label: 'Ronda de inventario', description: 'Abrir/cerrar la ronda mensual de conteo, consultar existencias y reportar hallazgos por nota de voz' },
   { key: 'consultas', label: 'Consultas IA', description: 'Acceso a Esco IA — solo para usuarios autorizados', sensitive: true },
 ];
 
