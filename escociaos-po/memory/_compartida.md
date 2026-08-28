@@ -769,3 +769,34 @@ fuente vieja incrementa la version y actualiza `updated_at` igual.**
   (`acciones-render.ts`, `acciones-tipos.ts`, `importHato/tipos.ts`, `telegram/types.ts`) porque son
   solo tipos y el bundling los borra. **No confundir eso con la ausencia de un modulo de runtime.**
 [corrida: 2026-08-28-viernes]
+
+## Cierre definitivo de la corrida 2026-08-28-viernes
+- **v224 desplegada y VERIFICADA POR CONTENIDO**: trae los dos arreglos que la v223 se habia dejado
+  fuera. `debeReagregarDia` ×4 (llamada en `clima.tsx:510`, antes del insert) y
+  `clima-reagregacion.ts` presente; `esCotaInferior` ×2 en `chat.tsx`. Controles positivos presentes,
+  controles negativos en 0 (`confianzaPorFecha` y las 4 cadenas que los fixes borran).
+  `ezbr_sha256` paso de `3469d16c…` a `4fba67c3…`. Los 58 ficheros del bundle son byte-identicos al
+  arbol de `c5447e5`/`2d68222`/`82de429`. **Hallazgos #52 y #53 cerrados como Arreglado.**
+  [corrida: 2026-08-28-viernes]
+- **La regla de los tres testigos se probo en las DOS direcciones el mismo dia**, que es lo que la
+  vuelve confiable: sobre la v223 devolvio NO (identificador nuevo ausente, control negativo
+  presente) y sobre la v224 devolvio SI (nuevo presente, negativo ausente), con los controles
+  positivos presentes en ambas. Un metodo que solo se ha visto decir que si no esta probado.
+  [corrida: 2026-08-28-viernes]
+- **El bundle trae 58 ficheros y el repo 62, y eso es CORRECTO** — no es despliegue incompleto.
+  `acciones-tipos.ts`, `importHato/tipos.ts` y `telegram/types.ts` solo se alcanzan por
+  `import type`, asi que el grafo de modulos de Deno nunca los incluye; `acciones-render.ts` no lo
+  importa nadie. **No confundir esta ausencia esperada con la de un modulo de runtime** —
+  `clima-reagregacion.ts` SI tiene que estar, y su ausencia fue justamente lo que delato a la v223.
+  [corrida: 2026-08-28-viernes]
+- **Confirmacion conductual pendiente y gratuita**: la corrida del cron de la 121 del 2026-08-29 a
+  las 06:00 Bogota deberia registrar `N dejado(s) intacto(s) por cobertura menor` en vez de bajar
+  `lecturas_count` del 2026-08-19. **Si vuelve a bajarlo, el arreglo no funciona y hay que reabrir
+  el #53** — es la unica prueba de comportamiento que se puede tener sin sondear un endpoint que
+  escribe datos de dominio. Tarea del lunes. [corrida: 2026-08-28-viernes]
+
+## Estado final de la corrida 2026-08-28-viernes
+**4 hallazgos drenados y cerrados** (#47 #50 #51 #54) **+ 2 cerrados en el turno en vivo** (#52 #53)
+= **6 cerrados**. 2 migraciones aplicadas (120 y 123), 4 PRs fusionados, 1 edge function desplegada
+y verificada. **Cero migraciones fusionadas-sin-aplicar y cero aplicadas-sin-fusionar.**
+Backlog abierto al cierre: **7 hallazgos** (era 13).
