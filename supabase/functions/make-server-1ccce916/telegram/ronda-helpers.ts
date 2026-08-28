@@ -201,6 +201,45 @@ export async function obtenerAlcanceRonda(supabase: SupabaseClient, rondaId: str
   return (data ?? []) as AlcanceRondaRow[];
 }
 
+export interface AlcanceRondaConCategoriaRow extends AlcanceRondaRow {
+  categoria: string;
+}
+
+/** MISMA consulta que `obtenerAlcanceRonda`, con `productos.categoria`
+ * embebido -- función APARTE (no se agrega el campo a la de arriba) para no
+ * tocar la forma de retorno de la que ya usan `resolverHallazgos.ts` y
+ * `/existencias`. `categoria` no se congela en `rondas_inventario_alcance`
+ * (R-5 es sobre la CANTIDAD, no sobre la taxonomía del producto) -- se lee
+ * en vivo de `productos` vía el `producto_id` del snapshot, mismo criterio
+ * que ya usa `resolverNombreActor`/`fn_ronda_actor_nombre` para no congelar
+ * datos que no son la medición que R-5 protege. Pedido de Santiago
+ * probando en vivo (2026-08-28): el `.md` del alcance agrupado por
+ * categoría, para que refleje cómo está organizada la bodega. */
+export async function obtenerAlcanceRondaConCategoria(
+  supabase: SupabaseClient,
+  rondaId: string,
+): Promise<AlcanceRondaConCategoriaRow[]> {
+  const { data, error } = await supabase
+    .from('rondas_inventario_alcance')
+    .select('producto_id, cantidad_teorica, unidad, nombre_producto, producto:productos(categoria)')
+    .eq('ronda_id', rondaId)
+    .order('nombre_producto', { ascending: true });
+  if (error) {
+    console.error('[ronda] obtenerAlcanceRondaConCategoria error:', error.message);
+    return [];
+  }
+  return ((data ?? []) as Array<AlcanceRondaRow & { producto: { categoria: string } | { categoria: string }[] | null }>).map((fila) => {
+    const producto = Array.isArray(fila.producto) ? fila.producto[0] : fila.producto;
+    return {
+      producto_id: fila.producto_id,
+      cantidad_teorica: fila.cantidad_teorica,
+      unidad: fila.unidad,
+      nombre_producto: fila.nombre_producto,
+      categoria: producto?.categoria ?? 'Otros',
+    };
+  });
+}
+
 /** A-2/R-15: cantidad y unidad, NUNCA precio. Hasta `limite` coincidencias
  * por nombre, contra el alcance CONGELADO de la ronda (no contra todo el
  * catálogo — Uriel sólo debe ver lo que puede contar hoy). */

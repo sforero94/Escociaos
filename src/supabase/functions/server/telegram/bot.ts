@@ -42,6 +42,7 @@ import {
   buscarExistenciasRonda,
   mensajeErrorRpc,
   obtenerAlcanceRonda,
+  obtenerAlcanceRondaConCategoria,
   obtenerResumenExcepcionesRonda,
   obtenerRondaEnCurso,
   obtenerTranscritoPendienteMasReciente,
@@ -82,7 +83,7 @@ import {
   renderPreviewTelegram,
   type PreviewRonda,
 } from "../rondaInventario/preview.ts";
-import { construirTextoAlcanceTxt } from "../rondaInventario/alcanceTxt.ts";
+import { construirAlcanceMd } from "../rondaInventario/alcanceTxt.ts";
 import { CAUSAS_RAIZ, causaPorIndice } from "../rondaInventario/causasRaiz.ts";
 import {
   etiquetaDecision,
@@ -411,17 +412,21 @@ function getBot(): Bot<BotContext> {
     return !!ctx.telegramUser?.modulos_permitidos?.includes("inventario_ronda");
   }
 
-  /** `.txt` del alcance completo (§7.2: reemplazo literal de la hoja
-   * impresa del Sheet de David) -- se manda al abrir la ronda y cada vez que
-   * Uriel toca "Ver alcance completo". R-15/CA-13: nunca precio. */
-  async function enviarAlcanceTxt(ctx: BotContext, sb: SupabaseClient, ronda: RondaInventarioRow) {
-    const alcance = await obtenerAlcanceRonda(sb, ronda.id);
-    const texto = construirTextoAlcanceTxt(
+  /** `.md` del alcance completo (§7.2: reemplazo literal de la hoja impresa
+   * del Sheet de David) -- se manda al abrir la ronda y cada vez que Uriel
+   * toca "Ver alcance completo". R-15/CA-13: nunca precio. Tabla agrupada
+   * por categoría (Fertilizante/Enmienda, agroquímicos, Herramienta/Equipo,
+   * Otros -- `ORDEN_CATEGORIA` en `alcanceTxt.ts`), pedido de Santiago
+   * probando en vivo (2026-08-28) para que refleje cómo está organizada la
+   * bodega físicamente. */
+  async function enviarAlcanceMd(ctx: BotContext, sb: SupabaseClient, ronda: RondaInventarioRow) {
+    const alcance = await obtenerAlcanceRondaConCategoria(sb, ronda.id);
+    const texto = construirAlcanceMd(
       ronda.periodo,
-      alcance.map((a) => ({ nombre: a.nombre_producto, cantidad: a.cantidad_teorica, unidad: a.unidad })),
+      alcance.map((a) => ({ categoria: a.categoria, nombre: a.nombre_producto, cantidad: a.cantidad_teorica, unidad: a.unidad })),
     );
     await ctx.replyWithDocument(
-      new InputFile(new TextEncoder().encode(texto), `alcance-ronda-${ronda.periodo}.txt`),
+      new InputFile(new TextEncoder().encode(texto), `alcance-ronda-${ronda.periodo}.md`),
     );
   }
 
@@ -566,7 +571,7 @@ function getBot(): Bot<BotContext> {
     );
 
     const ronda = await obtenerRondaEnCurso(sb);
-    if (ronda) await enviarAlcanceTxt(ctx, sb, ronda);
+    if (ronda) await enviarAlcanceMd(ctx, sb, ronda);
   }
 
   // Apertura manual (§7.2/§13 de la tarea de esta sesión): hasta que exista
@@ -595,7 +600,7 @@ function getBot(): Bot<BotContext> {
       await ctx.reply("Esa ronda ya no existe.");
       return;
     }
-    await enviarAlcanceTxt(ctx, sb, ronda);
+    await enviarAlcanceMd(ctx, sb, ronda);
   });
 
   // ==========================================================================
