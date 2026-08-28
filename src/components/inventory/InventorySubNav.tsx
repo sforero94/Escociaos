@@ -31,11 +31,11 @@ export function InventorySubNav() {
       path: '/inventario/compras',
     },
     {
-      id: 'verificaciones',
-      label: 'Verificaciones',
-      subtitle: 'Conteos físicos',
+      id: 'rondas',
+      label: 'Rondas de Inventario',
+      subtitle: 'Conteo físico mensual',
       icon: ClipboardCheck,
-      path: '/inventario/verificaciones',
+      path: '/inventario/rondas',
     },
     {
       id: 'productos',

@@ -18,6 +18,8 @@ const ProductDetail = lazy(() => import('./components/inventory/ProductDetail').
 const InventoryMovements = lazy(() => import('./components/inventory/InventoryMovements').then(m => ({ default: m.InventoryMovements })));
 const ImportarProductosPage = lazy(() => import('./components/inventory/ImportarProductosPage').then(m => ({ default: m.ImportarProductosPage })));
 const VerificacionesList = lazy(() => import('./components/inventory/VerificacionesList').then(m => ({ default: m.VerificacionesList })));
+const RondasList = lazy(() => import('./components/inventory/RondasList').then(m => ({ default: m.RondasList })));
+const RondaDetalle = lazy(() => import('./components/inventory/RondaDetalle').then(m => ({ default: m.RondaDetalle })));
 const ComingSoon = lazy(() => import('./components/shared/ComingSoon').then(m => ({ default: m.ComingSoon })));
 const MovementsDashboard = lazy(() => import('./components/inventory/MovementsDashboard').then(m => ({ default: m.MovementsDashboard })));
 const PurchaseHistory = lazy(() => import('./components/inventory/PurchaseHistory').then(m => ({ default: m.PurchaseHistory })));
@@ -88,9 +90,19 @@ function LayoutRoutes() {
               <Route path="producto/:id" element={<ProductDetail />} />
               <Route path="movimientos" element={<InventoryMovements />} />
               <Route path="importar" element={<ImportarProductosPage />} />
+              <Route path="rondas">
+                <Route index element={<RondasList />} />
+                <Route path=":id" element={<RondaDetalle />} />
+              </Route>
+              {/* Legado, Fase 6 (D-T11): reemplazado en la navegación por
+                  /inventario/rondas. Se conserva de sólo lectura por
+                  continuidad histórica -- su única fila es un registro de
+                  prueba rotulado (migración 124, CA-25). Sin ruta `:id`: el
+                  viejo ComingSoon de "Detalle de Verificación" no cumplía
+                  ninguna promesa real (CA-27) y VerificacionesList ya no
+                  ofrece ningún botón que lleve ahí. */}
               <Route path="verificaciones">
                 <Route index element={<VerificacionesList />} />
-                <Route path=":id" element={<ComingSoon moduleName="Detalle de Verificación" />} />
               </Route>
             </Route>
 

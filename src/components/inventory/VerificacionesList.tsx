@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ClipboardCheck, Loader2, Calendar, User, CheckCircle2, XCircle, Clock, AlertTriangle } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { ClipboardCheck, Loader2, Calendar, User, CheckCircle2, XCircle, Clock, AlertTriangle, ArrowRight } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { InventorySubNav } from './InventorySubNav';
 import { formatearFechaCorta } from '../../utils/fechas';
@@ -26,8 +26,19 @@ interface Verificacion {
 }
 
 /**
- * Lista de todas las verificaciones físicas de inventario
- * Muestra estado, progreso y permite ver detalles o aprobar/rechazar
+ * Lista de todas las verificaciones físicas de inventario.
+ *
+ * LEGADO (Fase 6, docs/plan_verificacion_inventario.md D-T11): este módulo
+ * fue reemplazado en la navegación principal por «Rondas de Inventario»
+ * (`/inventario/rondas`, `RondasList.tsx`) -- el rediseño completo con
+ * separación de funciones, excepción por defecto y trazabilidad de R-8/CA-12.
+ * Se conserva de sólo lectura por continuidad histórica: su única fila
+ * (`4a595f8c…`) es un registro de prueba rotulado por la migración 124
+ * (CA-25), no una ronda real. `NuevaVerificacion.tsx`/`ConteoFisico.tsx` ya
+ * no existen -- la migración 124 revocó la escritura sobre
+ * `verificaciones_inventario`/`verificaciones_detalle`, así que ningún botón
+ * de esta pantalla promete una acción que no puede cumplir (CA-27,
+ * `getAccionButton` más abajo).
  */
 export function VerificacionesList() {
   const [verificaciones, setVerificaciones] = useState<Verificacion[]>([]);
@@ -161,6 +172,18 @@ export function VerificacionesList() {
     <div className="space-y-6">
       {/* Navegación */}
       <InventorySubNav />
+
+      {/* Legado -- ver el docstring del archivo */}
+      <Link
+        to="/inventario/rondas"
+        className="flex items-center justify-between gap-3 bg-primary/5 border border-primary/20 rounded-xl px-4 py-3 text-sm text-foreground hover:bg-primary/10 transition-colors"
+      >
+        <span>
+          Este módulo quedó reemplazado por <span className="text-primary">Rondas de Inventario</span>. Se
+          conserva de sólo lectura por continuidad histórica.
+        </span>
+        <ArrowRight className="w-4 h-4 text-primary flex-shrink-0" />
+      </Link>
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
