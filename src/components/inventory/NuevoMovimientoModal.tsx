@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Package, Search, AlertCircle, CheckCircle, X } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
+import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogBody, DialogFooter } from '../ui/dialog';
@@ -24,6 +25,7 @@ interface NuevoMovimientoModalProps {
 }
 
 export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimientoModalProps) {
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -141,6 +143,10 @@ export function NuevoMovimientoModal({ isOpen, onClose, onSuccess }: NuevoMovimi
           unidad: selectedProduct.unidad_medida,
           saldo_anterior: saldoAnterior,
           saldo_nuevo: nuevoSaldo,
+          // `movimientos_inventario` no tiene trigger de atribución: si el escritor no
+          // estampa el responsable, la fila queda sin autor para siempre. Email, igual
+          // que NewPurchase y que `fn_cerrar_aplicacion` (auth.jwt() ->> 'email').
+          responsable: user?.email || null,
           observaciones: observaciones || null,
           provisional: false
         } as any);
