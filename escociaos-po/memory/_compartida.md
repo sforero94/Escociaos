@@ -741,3 +741,31 @@ evitar, y encima sin la legibilidad forense.
 - **Hallazgo #53 NO se cerro con el merge**, por la regla del 2026-08-24: un arreglo bajo
   `supabase/functions/**` se cierra con `list_edge_functions.updated_at` posterior al commit, nunca
   con la fusion. Queda `In progress` hasta que el despliegue confirme. [corrida: 2026-08-28-viernes]
+
+## CORRECCION A LA REGLA DE CIERRE DE EDGE FUNCTIONS (2026-08-28) — `updated_at` NO ALCANZA
+La regla que dejo la corrida del 2026-08-24 decia: un hallazgo cuyo arreglo toca
+`supabase/functions/**` se cierra con `list_edge_functions.updated_at` posterior al commit.
+**Esa regla es INSUFICIENTE y hoy dio un falso verde.**
+
+Que paso: `functions deploy` del 2026-08-28 14:30:57 UTC devolvio exito y subio la **v223**, con
+`updated_at` **posterior** al commit del arreglo (11:40:08 UTC). Pasaba la regla. Pero el bundle
+publicado era el arbol del commit `62649c1` (2026-08-27 01:21), **dos commits atras**: le faltaban
+`935a5aa` (puerta de lluvia de Esco, hallazgo #52) y `c5447e5` (reintento de clima, #183/#53).
+Causa: el deploy corrio contra un checkout que no tenia `main` al dia. **Un deploy exitoso desde
+fuente vieja incrementa la version y actualiza `updated_at` igual.**
+
+- **REGLA NUEVA, que reemplaza a la del 08-24: un hallazgo de edge function se cierra probando el
+  CONTENIDO del bundle desplegado**, no su marca de tiempo. `get_edge_function` -> guardar a fichero
+  con python -> grep de un identificador que SOLO exista despues del arreglo.
+- **El grep necesita tres testigos, no uno**: (a) el identificador NUEVO, (b) un **control positivo**
+  que ya existiera antes — sin el, "0 apariciones" no distingue "version vieja" de "el bundle no trae
+  fuente", y (c) idealmente un **control NEGATIVO**: un identificador que el arreglo ELIMINA. El (c)
+  es el que remata, porque no dice solo "falta lo nuevo" sino "esta lo viejo". Hoy fue
+  `confianzaPorFecha`, que `debeReagregarDia` reemplaza.
+- **`ezbr_sha256` SI es util y hay que mirarlo**: si no cambia entre dos versiones, la fuente no
+  cambio. Hoy era identico entre v222 y v223 y fue el primer indicio de que algo no cuadraba.
+  **Un despliegue que no mueve el hash no desplego nada.**
+- Cuidado al interpretar ausencias: 4 ficheros del repo no aparecen en el bundle
+  (`acciones-render.ts`, `acciones-tipos.ts`, `importHato/tipos.ts`, `telegram/types.ts`) porque son
+  solo tipos y el bundling los borra. **No confundir eso con la ausencia de un modulo de runtime.**
+[corrida: 2026-08-28-viernes]
