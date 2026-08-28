@@ -677,3 +677,42 @@ aparece en ninguno de los 192 chunks de la app, solo en el vendor
 - Backlog 23 -> 22. Cero hallazgos nuevos, que es lo correcto en drenaje.
 
 [corrida: 2026-08-24-drenaje-cierre]
+
+## Racha del viernes (regla de auto-poda del drenaje)
+| Corrida | Conjunto elegible | Racha de vacios |
+|---|---|---|
+| 2026-08-28-viernes | **6 elegibles** (5 `codigo` + 1 `ddl_aditivo`) | **0** |
+
+## Estado de la operacion (corrida 2026-08-28-viernes — PRIMER viernes)
+- Primera corrida de la Routine del viernes (`trig_01AbCfQPNmRh7Jq8fX8yktSe`), estrenada segun lo
+  previsto. Modo: **full write · Notion OPERATIVO · preflight sin un solo prompt de permiso.**
+- Resultado: **3 PRs verdes** (#180 #181 #183), **1 migracion aplicada** (123, PR #182 sin fusionar),
+  **4 hallazgos drenados** de 6 elegibles, **0 hallazgos nuevos** (correcto: el viernes no fila).
+- **El carril `ddl_aditivo` desatendido funciono de punta a punta por primera vez**: cinco puertas,
+  revision adversarial independiente con veredicto SAFE, pre-estado, aplicacion, post-estado.
+
+## Preflight de tools — resultado 2026-08-28
+| Tool | Resultado |
+|---|---|
+| `execute_sql` (solo lectura) | OK — `supabase_read_only_user`, `default_transaction_read_only = on` |
+| `apply_migration` (`Supabase_Escritura`) | **OK — primera aplicacion desatendida del viernes, exitosa** |
+| Notion (`notion-query-data-sources`, `notion-update-page`) | OK |
+| github (`list_pull_requests`, `pull_request_read`, `create_pull_request`) | OK |
+| `COMPOSIO_MULTI_EXECUTE_TOOL` | **No probado** — el drenaje del viernes no lee Vercel. Sigue sin reverificar desde el fallo del 2026-08-24; **es tarea del lunes**, no del viernes |
+
+## LECCION DE METODO 2026-08-28 — la puerta 5 (fidelidad de bytes) no es transferible tal como esta escrita
+El runbook manda transferir la migracion **por contenido** (base64 del fichero, decodificar, aplicar).
+**No se pudo**: el base64 de un fichero de 24 KB son **31.700 caracteres**, y leerlo se trunca a
+~22.000 — o sea que re-emitirlo exigiria transcribirlo igual, que es justo lo que la puerta queria
+evitar, y encima sin la legibilidad forense.
+- **Lo que se hizo**: aplicar el **cuerpo ejecutable verbatim** (lineas 197-382 del fichero; todo lo
+  anterior son comentarios de cabecera), leido de una sola vez y sin retipear. **Las sentencias que
+  corrieron son identicas byte a byte a las del PR**; lo que no viajo fue la cabecera documental.
+  Se declaro asi en el reporte en vez de afirmar fidelidad total.
+- **Beneficio lateral no previsto**: el ledger queda LEGIBLE. Con base64 habria quedado un blob
+  opaco, y este repo recupera cuerpos de migracion desde `schema_migrations.statements` (asi se
+  reconstruyeron 067, 079 y 108). La puerta, tal como esta redactada, **destruiria esa capacidad**.
+- **Propuesta para el runbook** (decision de Santiago, no aplicada): reescribir la puerta 5 como
+  "transferir el cuerpo ejecutable sin retipear, y verificar el post-estado", o exigir que la
+  migracion se mantenga por debajo de un tamano que el base64 si pueda cruzar.
+  [corrida: 2026-08-28-viernes]

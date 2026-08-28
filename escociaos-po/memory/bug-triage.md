@@ -240,3 +240,38 @@ prompt del agente en cada corrida.
 
 ## Baselines (corrida 2026-08-20-jueves)
 | main@8306dbf | npm test **119 archivos / 2.818 tests con 8 EN ROJO** (`requiereDecisionSeccion.test.tsx`, entorno sin `.env.local`) · lint 0 errores · `tsc --noEmit` limpio. Con PR #130 queda 119/2.818 **todo verde**; con #130+#131, **120 / 2.821** | 2026-08-20-jueves |
+
+## Drenaje del viernes (corrida 2026-08-28-viernes)
+- **`movimientos_inventario` no tiene NINGUN trigger de atribucion** — verificado contra
+  `pg_trigger` (0 no internos). El `responsable` lo estampa el escritor o no lo estampa nadie.
+  Los 4 escritores son `NuevoMovimientoModal`, `NewPurchase`, `PurchaseHistory` (los 3 TS, ahora
+  vigilados por `movimientoInventarioResponsable.test.ts`) y el RPC `fn_cerrar_aplicacion`
+  (mig. 106, via `auth.jwt() ->> 'email'`). [corrida: 2026-08-28-viernes]
+- **El formato de `movimientos_inventario.responsable` es EMAIL, confirmado contra los datos**:
+  157 de 157 filas atribuidas. Un escritor nuevo que guarde un nombre parte la columna en dos
+  sin que nada falle. Para auditar el hueco, agrupar por `tipo_movimiento`, no solo por
+  `responsable`. [corrida: 2026-08-28-viernes]
+- **Este repo NO tiene `@testing-library/react` ni jsdom** (solo vitest). Un defecto dentro de un
+  componente se prueba con guard estatico o extrayendo un helper exportado. **No proponer un test
+  de render.** [corrida: 2026-08-28-viernes]
+- **Un test de orden con `indexOf(a) < indexOf(b)` PASA EN VACIO cuando `a` no esta** (`-1 < 0`).
+  Detectado en vivo escribiendo el guard de #50, solo porque se esperaban 5 rojos y salieron 4.
+  **Todo test de orden lleva un `toContain` delante.** [corrida: 2026-08-28-viernes]
+- **`clima_resumen_diario.station_id` de la estacion Ecowitt lleva un ESPACIO AL FINAL**
+  (`'84:1F:E8:35:D8:73 '`). Igualdad literal devuelve **0 filas** y parece "no hay datos".
+  Consultar siempre con `like '84:1F:E8:35:D8:73%'`. [corrida: 2026-08-28-viernes]
+- **En clima, una comprobacion DESPUES del rollup no puede reparar nada** — la fila anterior se
+  apoyaba en lecturas ya podadas a 24 h. La guarda tiene que prevenir, no detectar. Es lo que
+  hace `debeReagregarDia` (PR #183). [corrida: 2026-08-28-viernes]
+- **Para un rojo-antes-del-verde honesto sobre codigo que no se puede importar** (`clima.tsx`,
+  `chat.tsx` — usan `https://deno.land/x/hono` y `jsr:`, sin alias en `vite.config.ts`): crear un
+  modulo puro Deno-free en el arbol de edge function (patron `ganado-inventario.ts`) como STUB que
+  modela el comportamiento actual, correr el test, y recien ahi implementar.
+  [corrida: 2026-08-28-viernes]
+- **CORRIGE una entrada del 2026-08-20**: ya NO es cierto que "no hay CI en el repo". Existe
+  `.github/workflows/deteccion-deriva-despliegue.yml`. **Sigue sin haber gate de PR** — no corre
+  lint/typecheck/test sobre un PR — asi que la regla de correr `npm test` a mano antes de reportar
+  cobertura se mantiene. [corrida: 2026-08-28-viernes]
+
+## Baselines (corrida 2026-08-28-viernes)
+| `main@f98f83a` | npm test **137 ficheros / 3.073 tests, todo verde** · lint **0 errores / 908 warnings** · `tsc --noEmit` limpio | 2026-08-28-viernes |

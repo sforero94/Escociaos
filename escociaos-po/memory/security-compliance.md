@@ -178,3 +178,39 @@ prompt del agente en cada corrida.
   como se dato la regresion de arriba.
 
 [corrida: 2026-08-24-drenaje-cierre]
+
+## Drenaje del viernes (corrida 2026-08-28-viernes)
+- **Hallazgo #47 CERRADO por la migracion 123, APLICADA a produccion el 2026-08-28** por el carril
+  `ddl_aditivo` desatendido (PR #182 sin fusionar). `authenticated_select_contratistas` pasa de
+  `qual = true` a `((SELECT get_user_role()) = ANY (ARRAY['Gerencia','Administrador']))`, y `anon`
+  pierde el GRANT de SELECT. **Cero filas tocadas** (7 antes y despues).
+  [corrida: 2026-08-28-viernes]
+- **`contratistas.cedula` y `.telefono` estan en NULL en las 7 filas** (verificado en vivo por el
+  autor y re-verificado por el revisor). El dano material de HOY era **cero**; la exposicion era
+  estructural, no una fuga en curso. Confirma P2 latente. **No re-reportar como fuga activa.**
+  [corrida: 2026-08-28-viernes]
+- **Al acotar una tabla por RLS hay que barrer TAMBIEN los caminos de ESCRITURA, no solo los
+  `select()`.** La revision adversarial encontro 13 lectores contra los 10 del autor: los 3 extra son
+  `Contratistas.tsx:147/158/207` (update/insert/delete), porque **`UPDATE` y `DELETE` reusan la
+  politica de SELECT cuando la sentencia referencia una columna**. [corrida: 2026-08-28-viernes]
+- **`calcular_costo_jornal()` es un lector de `contratistas` DENTRO de la base y es SECURITY
+  INVOKER** (`prosecdef=false`), trigger BEFORE INSERT/UPDATE sobre `registros_trabajo`. Si el SELECT
+  no encuentra fila, `costo_jornal` queda **NULL**, no 0. **Barrer siempre `pg_get_functiondef` y
+  `pg_rewrite` ademas del repo antes de acotar una tabla.** [corrida: 2026-08-28-viernes]
+- **Una vista sin columnas PII NO es salida en este esquema, y el motivo es general**: los tres roles
+  de la app (Gerencia/Administrador/Verificador) comparten el MISMO rol de Postgres `authenticated`,
+  asi que un `GRANT SELECT (col)` por columna no los distingue, y la RLS es por fila. Solo queda
+  politica por rol, o vista + cambio de codigo (que ya no es `ddl_aditivo`).
+  [corrida: 2026-08-28-viernes]
+- **`Verificador` no tiene NINGUN `RoleGuard allowedRoles` en todo el repo**; su superficie disenada
+  son las `verificaciones_*`. Eso justifica dejarlo fuera de los predicados de labores/aplicaciones.
+  [corrida: 2026-08-28-viernes]
+- **CLASE DE HALLAZGO SIN FILAR (el viernes no fila) — politicas `INSERT`/`UPDATE` con predicado
+  `true`.** El barrido historico de always-true solo cubrio `cmd IN ('DELETE','ALL')`, asi que INSERT
+  y UPDATE **nunca se barrieron en todo el esquema**. Confirmado en `contratistas` (2 politicas) y en
+  `registros_trabajo` (`WITH CHECK (true)`). **Consulta para el lunes: `cmd IN ('INSERT','UPDATE')`
+  sobre `pg_policies` de `public`, sin filtro de rol.** [corrida: 2026-08-28-viernes]
+- **La migracion 120 sigue FUSIONADA Y SIN APLICAR.** Verificado hoy contra `pg_policies`: las 8
+  tablas conservan `DELETE USING (true)`. Fusionada el 2026-08-25 (PR #176), asi que **el umbral de
+  7 dias de la constitucion vence el 2026-08-31**. Su PR dice "Awaiting your go" y en esta sesion no
+  hubo turno humano, asi que no se aplico. [corrida: 2026-08-28-viernes]
