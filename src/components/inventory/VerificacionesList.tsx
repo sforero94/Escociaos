@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ClipboardCheck, Plus, Eye, Loader2, Calendar, User, CheckCircle2, XCircle, Clock, AlertTriangle } from 'lucide-react';
+import { ClipboardCheck, Plus, Loader2, Calendar, User, CheckCircle2, XCircle, Clock, AlertTriangle } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
-import { useAuth } from '../../contexts/AuthContext';
 import { InventorySubNav } from './InventorySubNav';
 import { formatearFechaCorta } from '../../utils/fechas';
 
@@ -34,7 +33,6 @@ export function VerificacionesList() {
   const [verificaciones, setVerificaciones] = useState<Verificacion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [estadoFilter, setEstadoFilter] = useState<string>('todas');
-  const { profile } = useAuth();
   const navigate = useNavigate();
   const supabase = getSupabase();
 
@@ -125,12 +123,21 @@ export function VerificacionesList() {
   // Removed - now using formatearFechaCorta from utils/fechas
 
   /**
-   * Determinar la acción principal según el estado y el rol
+   * Determinar la acción principal según el estado.
+   *
+   * Fase 0 de higiene (docs/plan_verificacion_inventario.md D-5/CA-27):
+   * este módulo tenía dos botones que eran callejones sin salida.
+   * "Revisar y Aprobar" enlazaba a `/inventario/verificaciones/revisar/:id`,
+   * una ruta que no existe en App.tsx y que caía en el catch-all,
+   * redirigiendo al tablero en silencio. "Ver Detalle" enlazaba a `:id`, que
+   * hoy solo renderiza un `ComingSoon`. Ningún botón visible debe prometer
+   * una pantalla que no existe, así que los dos se retiran acá. La pantalla
+   * de revisión (y el rol que debería verla) es una fase posterior del
+   * rediseño — no de esta.
    */
   const getAccionButton = (verificacion: Verificacion) => {
-    const esGerencia = profile?.rol === 'Administrador' || profile?.rol === 'Gerente';
-
-    // Si está en proceso y el usuario es el verificador, puede continuar
+    // Si está en proceso, puede continuar el conteo — la única acción con una
+    // pantalla real detrás hoy.
     if (verificacion.estado === 'En proceso') {
       return (
         <Link
@@ -143,29 +150,9 @@ export function VerificacionesList() {
       );
     }
 
-    // Si está pendiente de aprobación y el usuario es gerencia, puede revisar
-    if (verificacion.estado === 'Pendiente Aprobación' && esGerencia) {
-      return (
-        <Link
-          to={`/inventario/verificaciones/revisar/${verificacion.id}`}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl transition-all duration-200 font-medium shadow-lg"
-        >
-          <AlertTriangle className="w-4 h-4" />
-          Revisar y Aprobar
-        </Link>
-      );
-    }
-
-    // Para todos los demás casos, solo ver detalle
-    return (
-      <Link
-        to={`/inventario/verificaciones/${verificacion.id}`}
-        className="inline-flex items-center gap-2 px-4 py-2 border-2 border-primary text-primary hover:bg-background rounded-xl transition-all duration-200 font-medium"
-      >
-        <Eye className="w-4 h-4" />
-        Ver Detalle
-      </Link>
-    );
+    // Para el resto de los estados no hay, hoy, ninguna pantalla real a la
+    // que enlazar: no se muestra ningún botón en vez de uno que no cumple.
+    return null;
   };
 
   if (isLoading) {
@@ -274,7 +261,9 @@ export function VerificacionesList() {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {verificacionesFiltradas.map((verificacion) => (
+          {verificacionesFiltradas.map((verificacion) => {
+            const accion = getAccionButton(verificacion);
+            return (
             <div
               key={verificacion.id}
               className="bg-white/80 backdrop-blur-sm rounded-2xl border-2 border-primary/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)] hover:shadow-[0_6px_28px_rgba(115,153,28,0.12)] transition-all duration-200"
@@ -365,11 +354,14 @@ export function VerificacionesList() {
               )}
 
               {/* Acción principal */}
-              <div className="pt-4 border-t border-primary/10">
-                {getAccionButton(verificacion)}
-              </div>
+              {accion && (
+                <div className="pt-4 border-t border-primary/10">
+                  {accion}
+                </div>
+              )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
