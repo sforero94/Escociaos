@@ -16,6 +16,7 @@ import { handleHatoPesajeFoto } from "./hato-pesaje-foto.ts";
 import { handleHatoPesajeCommit } from "./hato-pesaje-commit.ts";
 import { handleHatoAlertasTick } from "./hato-alertas-tick.ts";
 import { handleAccionesTick } from "./acciones-tick.ts";
+import { handleRondaInventarioTick } from "./ronda-inventario-tick.ts";
 import { handleWebhook } from "./telegram/bot.ts";
 
 const app = new Hono();
@@ -196,6 +197,15 @@ app.post("/make-server-1ccce916/hato/alertas/tick", async (c) => {
 // configurada, nunca tumba el tick.
 app.post("/make-server-1ccce916/acciones/tick", async (c) => {
   return await handleAccionesTick(c);
+});
+
+// Ronda de inventario: recordatorio, alerta del día 15 y reporte de cierre
+// (Fase 5, docs/brief_tecnico_verificacion_inventario.md §8/§13). Tick
+// diario disparado por pg_cron (migración 127, 07:00 Bogotá) con secreto
+// compartido (x-inventario-tick-secret), más disparo manual con
+// JWT+Gerencia -- ver ronda-inventario-tick.ts.
+app.post("/make-server-1ccce916/inventario/ronda/tick", async (c) => {
+  return await handleRondaInventarioTick(c);
 });
 
 // Handle preflight OPTIONS at Deno.serve level to ensure CORS works

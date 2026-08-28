@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { ClipboardCheck, Plus, Eye, Loader2, Calendar, User, CheckCircle2, XCircle, Clock, AlertTriangle } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { ClipboardCheck, Loader2, Calendar, User, CheckCircle2, XCircle, Clock, AlertTriangle, ArrowRight } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
-import { useAuth } from '../../contexts/AuthContext';
 import { InventorySubNav } from './InventorySubNav';
 import { formatearFechaCorta } from '../../utils/fechas';
 
@@ -27,14 +26,24 @@ interface Verificacion {
 }
 
 /**
- * Lista de todas las verificaciones físicas de inventario
- * Muestra estado, progreso y permite ver detalles o aprobar/rechazar
+ * Lista de todas las verificaciones físicas de inventario.
+ *
+ * LEGADO (Fase 6, docs/plan_verificacion_inventario.md D-T11): este módulo
+ * fue reemplazado en la navegación principal por «Rondas de Inventario»
+ * (`/inventario/rondas`, `RondasList.tsx`) -- el rediseño completo con
+ * separación de funciones, excepción por defecto y trazabilidad de R-8/CA-12.
+ * Se conserva de sólo lectura por continuidad histórica: su única fila
+ * (`4a595f8c…`) es un registro de prueba rotulado por la migración 124
+ * (CA-25), no una ronda real. `NuevaVerificacion.tsx`/`ConteoFisico.tsx` ya
+ * no existen -- la migración 124 revocó la escritura sobre
+ * `verificaciones_inventario`/`verificaciones_detalle`, así que ningún botón
+ * de esta pantalla promete una acción que no puede cumplir (CA-27,
+ * `getAccionButton` más abajo).
  */
 export function VerificacionesList() {
   const [verificaciones, setVerificaciones] = useState<Verificacion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [estadoFilter, setEstadoFilter] = useState<string>('todas');
-  const { profile } = useAuth();
   const navigate = useNavigate();
   const supabase = getSupabase();
 
@@ -125,47 +134,27 @@ export function VerificacionesList() {
   // Removed - now using formatearFechaCorta from utils/fechas
 
   /**
-   * Determinar la acción principal según el estado y el rol
+   * Determinar la acción principal según el estado.
+   *
+   * Fase 0 de higiene (docs/plan_verificacion_inventario.md D-5/CA-27):
+   * este módulo tenía botones que eran callejones sin salida. "Revisar y
+   * Aprobar" enlazaba a `/inventario/verificaciones/revisar/:id`, una ruta
+   * que no existe en App.tsx y que caía en el catch-all, redirigiendo al
+   * tablero en silencio; "Ver Detalle" enlazaba a `:id`, que hoy solo
+   * renderiza un `ComingSoon`.
+   *
+   * La migración 124 revocó la escritura sobre `verificaciones_inventario` /
+   * `verificaciones_detalle`, así que "Continuar Conteo" (que guardaba en
+   * `ConteoFisico.tsx`) y "Nueva Verificación" (que insertaba en
+   * `NuevaVerificacion.tsx`) dejaron de poder cumplir su promesa también —
+   * `App.tsx` ya no enruta ni `nueva` ni `conteo/:id`. Ningún botón visible
+   * debe prometer una pantalla que no existe o que va a fallar al escribir,
+   * así que no queda ninguna acción con una pantalla real detrás hoy. La
+   * pantalla de revisión (y el flujo completo de captura) es el rediseño de
+   * `docs/plan_verificacion_inventario.md`, no de esta higiene puntual.
    */
-  const getAccionButton = (verificacion: Verificacion) => {
-    const esGerencia = profile?.rol === 'Administrador' || profile?.rol === 'Gerente';
-
-    // Si está en proceso y el usuario es el verificador, puede continuar
-    if (verificacion.estado === 'En proceso') {
-      return (
-        <Link
-          to={`/inventario/verificaciones/conteo/${verificacion.id}`}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl transition-all duration-200 font-medium"
-        >
-          <Clock className="w-4 h-4" />
-          Continuar Conteo
-        </Link>
-      );
-    }
-
-    // Si está pendiente de aprobación y el usuario es gerencia, puede revisar
-    if (verificacion.estado === 'Pendiente Aprobación' && esGerencia) {
-      return (
-        <Link
-          to={`/inventario/verificaciones/revisar/${verificacion.id}`}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl transition-all duration-200 font-medium shadow-lg"
-        >
-          <AlertTriangle className="w-4 h-4" />
-          Revisar y Aprobar
-        </Link>
-      );
-    }
-
-    // Para todos los demás casos, solo ver detalle
-    return (
-      <Link
-        to={`/inventario/verificaciones/${verificacion.id}`}
-        className="inline-flex items-center gap-2 px-4 py-2 border-2 border-primary text-primary hover:bg-background rounded-xl transition-all duration-200 font-medium"
-      >
-        <Eye className="w-4 h-4" />
-        Ver Detalle
-      </Link>
-    );
+  const getAccionButton = (_verificacion: Verificacion) => {
+    return null;
   };
 
   if (isLoading) {
@@ -184,6 +173,18 @@ export function VerificacionesList() {
       {/* Navegación */}
       <InventorySubNav />
 
+      {/* Legado -- ver el docstring del archivo */}
+      <Link
+        to="/inventario/rondas"
+        className="flex items-center justify-between gap-3 bg-primary/5 border border-primary/20 rounded-xl px-4 py-3 text-sm text-foreground hover:bg-primary/10 transition-colors"
+      >
+        <span>
+          Este módulo quedó reemplazado por <span className="text-primary">Rondas de Inventario</span>. Se
+          conserva de sólo lectura por continuidad histórica.
+        </span>
+        <ArrowRight className="w-4 h-4 text-primary flex-shrink-0" />
+      </Link>
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -195,13 +196,6 @@ export function VerificacionesList() {
             {verificaciones.length} verificaciones registradas
           </p>
         </div>
-        <Link
-          to="/inventario/verificaciones/nueva"
-          className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white hover:from-primary-dark hover:to-secondary-dark rounded-xl transition-all duration-200 font-medium shadow-lg"
-        >
-          <Plus className="w-5 h-5" />
-          Nueva Verificación
-        </Link>
       </div>
 
       {/* Filtros */}
@@ -262,19 +256,12 @@ export function VerificacionesList() {
               ? 'Aún no hay verificaciones registradas'
               : `No hay verificaciones con estado "${estadoFilter}"`}
           </p>
-          {estadoFilter === 'todas' && (
-            <Link
-              to="/inventario/verificaciones/nueva"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white hover:from-primary-dark hover:to-secondary-dark rounded-xl transition-all duration-200 font-medium"
-            >
-              <Plus className="w-5 h-5" />
-              Iniciar Primera Verificación
-            </Link>
-          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {verificacionesFiltradas.map((verificacion) => (
+          {verificacionesFiltradas.map((verificacion) => {
+            const accion = getAccionButton(verificacion);
+            return (
             <div
               key={verificacion.id}
               className="bg-white/80 backdrop-blur-sm rounded-2xl border-2 border-primary/10 p-6 shadow-[0_4px_24px_rgba(115,153,28,0.08)] hover:shadow-[0_6px_28px_rgba(115,153,28,0.12)] transition-all duration-200"
@@ -365,11 +352,14 @@ export function VerificacionesList() {
               )}
 
               {/* Acción principal */}
-              <div className="pt-4 border-t border-primary/10">
-                {getAccionButton(verificacion)}
-              </div>
+              {accion && (
+                <div className="pt-4 border-t border-primary/10">
+                  {accion}
+                </div>
+              )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -1462,7 +1462,7 @@ async function execInventoryMovements(args: Record<string, unknown>): Promise<st
   const [movimientos, verificaciones] = await Promise.all([
     supabaseQuery('movimientos_inventario', movQuery),
     supabaseQuery('verificaciones_inventario',
-      `select=id,fecha_inicio,fecha_fin,estado,usuario_verificador,observaciones_generales,verificaciones_detalle(producto:productos(nombre),cantidad_teorica,cantidad_fisica,diferencia,porcentaje_diferencia,valor_diferencia,estado_diferencia)&order=fecha_inicio.desc&limit=10`),
+      `select=id,fecha_inicio,fecha_fin,estado,usuario_verificador,observaciones_generales,verificaciones_detalle(producto:productos(nombre),contado,cantidad_teorica,cantidad_fisica,diferencia,porcentaje_diferencia,valor_diferencia,estado_diferencia)&order=fecha_inicio.desc&limit=10`),
   ]);
 
   let filteredMov = movimientos as Array<Record<string, unknown>>;
@@ -1503,13 +1503,19 @@ async function execInventoryMovements(args: Record<string, unknown>): Promise<st
     }
   }
 
-  // Extract discrepancias from verificaciones
+  // Extract discrepancias from verificaciones.
+  // D-2 (docs/plan_verificacion_inventario.md): un renglon con `diferencia`
+  // NULL es "no contado", no una discrepancia -- `null !== 0` es `true` en
+  // JS, asi que el chequeo viejo contaba los 223 renglones sin contar de la
+  // verificacion de prueba como si fueran faltantes reales. Solo cuenta como
+  // discrepancia un renglon que SI se conto (`contado === true`) y cuya
+  // diferencia real es distinta de cero.
   const discrepancias: unknown[] = [];
   const verifList = verificaciones as Array<Record<string, unknown>>;
   for (const v of verifList) {
     const detalles = (v.verificaciones_detalle as Array<Record<string, unknown>>) || [];
     for (const d of detalles) {
-      if ((d.diferencia as number) !== 0) {
+      if (d.contado === true && d.diferencia != null && Number(d.diferencia) !== 0) {
         discrepancias.push({ ...d, verificacion_id: v.id, fecha: v.fecha_inicio });
       }
     }
