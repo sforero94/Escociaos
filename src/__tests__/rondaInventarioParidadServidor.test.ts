@@ -144,6 +144,7 @@ describe('paridad de comportamiento preview', () => {
     via: 'captura_david',
     explicacionCitada: 'es por error en el sistema',
     fragmentoLiteral: 'deberían haber 100 kg y hay 90 kg',
+    fueraDeAlcance: false,
   };
 
   it('construirPreview / renderPreviewTelegram / previewConfirmable coinciden en ambas implementaciones', () => {

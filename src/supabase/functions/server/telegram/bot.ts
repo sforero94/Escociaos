@@ -43,6 +43,7 @@ import {
   mensajeErrorRpc,
   obtenerAlcanceRonda,
   obtenerAlcanceRondaConCategoria,
+  obtenerProductosFueraDeAlcance,
   obtenerResumenExcepcionesRonda,
   obtenerRondaEnCurso,
   obtenerTranscritoPendienteMasReciente,
@@ -70,7 +71,7 @@ import {
   // del formato "septiembre 2026", ver su comentario en ronda-helpers.ts.
   nombrePeriodoRonda,
 } from "./ronda-helpers.ts";
-import { resolverHallazgos } from "../rondaInventario/resolverHallazgos.ts";
+import { resolverHallazgos, type ProductoFueraDeAlcance } from "../rondaInventario/resolverHallazgos.ts";
 import type { RespuestaModeloInterprete } from "../rondaInventario/interpretarNota.ts";
 import {
   aplicarCorreccion,
@@ -1498,8 +1499,9 @@ function getBot(): Bot<BotContext> {
     crudo: unknown,
     alcanceItems: ReturnType<typeof alcanceComoItems>,
     intentosPreview: number,
+    productosFueraDeAlcance: readonly ProductoFueraDeAlcance[] = [],
   ) {
-    const resueltos = resolverHallazgos(respuesta.hallazgos, alcanceItems);
+    const resueltos = resolverHallazgos(respuesta.hallazgos, alcanceItems, productosFueraDeAlcance);
     const preview = construirPreview(resueltos.map((r) => r.fila), respuesta.observacionesLibres, respuesta.avisos);
     const previewGuardado: PreviewGuardado = {
       filas: preview.filas,
@@ -1554,6 +1556,9 @@ function getBot(): Bot<BotContext> {
 
     const alcance = await obtenerAlcanceRonda(sb, ronda.id);
     const alcanceItems = alcanceComoItems(alcance);
+    // CA-4: candidatos fuera del alcance congelado (producto en cero al
+    // abrir la ronda) -- ver obtenerProductosFueraDeAlcance.
+    const productosFueraDeAlcance = await obtenerProductosFueraDeAlcance(sb);
 
     const resultado = await ejecutarPipelineVozRonda({ bytes, tipo, nombreArchivo: `nota-${Date.now()}.ogg`, apiKey });
 
@@ -1590,7 +1595,7 @@ function getBot(): Bot<BotContext> {
     }
 
     const previewInicial = construirPreview(
-      resolverHallazgos(resultado.respuesta.hallazgos, alcanceItems).map((r) => r.fila),
+      resolverHallazgos(resultado.respuesta.hallazgos, alcanceItems, productosFueraDeAlcance).map((r) => r.fila),
     );
     if (previewInicial.filas.length === 0 && resultado.respuesta.observacionesLibres.length === 0) {
       // No es un error -- Uriel pudo haber mandado una nota de contexto sin
@@ -1635,7 +1640,7 @@ function getBot(): Bot<BotContext> {
       return;
     }
 
-    await guardarYEnviarPreview(ctx, sb, transcritoCreado.id, resultado.respuesta, resultado.crudoInterpretacion, alcanceItems, 1);
+    await guardarYEnviarPreview(ctx, sb, transcritoCreado.id, resultado.respuesta, resultado.crudoInterpretacion, alcanceItems, 1, productosFueraDeAlcance);
   }
 
   bot.on("message:voice", async (ctx) => {
@@ -1711,6 +1716,10 @@ function getBot(): Bot<BotContext> {
       explicacion_citada: h!.explicacionCitada,
       causa_clave: h!.causaClave,
       causa_confianza: h!.causaConfianza,
+      // CA-4: el RPC (migración 131) re-verifica esto server-side contra
+      // productos.cantidad_actual antes de agregarlo al alcance -- nunca
+      // confía ciegamente en esta bandera.
+      fuera_de_alcance: h!.fueraDeAlcance,
     }));
 
     const { data: resultadoRpc, error: errorRpc } = await sb.rpc("fn_ronda_confirmar_hallazgos", {
@@ -1972,6 +1981,7 @@ function getBot(): Bot<BotContext> {
 
     const alcance = await obtenerAlcanceRonda(sb, pendiente.ronda_id);
     const alcanceItems = alcanceComoItems(alcance);
+    const productosFueraDeAlcance = await obtenerProductosFueraDeAlcance(sb);
     const nuevosIntentos = pendiente.intentos_preview + 1;
 
     const { error: errorCorrecciones } = await sb
@@ -1983,7 +1993,7 @@ function getBot(): Bot<BotContext> {
       console.error("[Telegram] ronda: no se pudo guardar la corrección:", errorCorrecciones.message);
     }
 
-    await guardarYEnviarPreview(ctx, sb, pendiente.id, resultado.respuesta, resultado.crudo, alcanceItems, nuevosIntentos);
+    await guardarYEnviarPreview(ctx, sb, pendiente.id, resultado.respuesta, resultado.crudo, alcanceItems, nuevosIntentos, productosFueraDeAlcance);
   });
 
   // ==========================================================================

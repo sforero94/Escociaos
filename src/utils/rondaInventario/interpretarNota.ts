@@ -325,8 +325,10 @@ export interface ProductoEnAlcance {
   nombre: string;
 }
 
+export type OrigenResolucion = 'alcance' | 'fuera_de_alcance';
+
 export type ResolucionProducto =
-  | { estado: 'identificado'; productoId: string; nombreProducto: string }
+  | { estado: 'identificado'; productoId: string; nombreProducto: string; origen: OrigenResolucion }
   | { estado: 'no_identificado' };
 
 /** Normaliza un nombre de producto para comparar: minúsculas, sin tildes,
@@ -355,15 +357,41 @@ export function normalizarNombreProducto(nombre: string): string {
  * no debería ocurrir con nombres reales de catálogo, pero un dato sucio
  * puede producirlo), tampoco se adjudica solo -- mismo criterio que
  * `validarAnclaFila` sobre chapetas ambiguas en ocrChequeo.ts.
+ *
+ * `fueraDeAlcance` (opcional, hallazgo real de Santiago probando en vivo
+ * 2026-08-28) -- CA-4, literal: "los productos en cero no entran solos;
+ * Uriel puede reportar uno igual si lo encuentra". Un producto que SÍ existe
+ * en el catálogo pero estaba en 0 (o inactivo) al abrir la ronda queda fuera
+ * de `rondas_inventario_alcance` por diseño (`fn_ronda_abrir` sólo congela
+ * `cantidad_actual > 0`) -- así que sin esta segunda lista, ese producto es
+ * estructuralmente imposible de identificar por más veces que Uriel lo
+ * corrija por texto. Se prueba SÓLO si no hay ningún match (ni único ni
+ * ambiguo) en el alcance congelado -- el alcance real de la ronda manda
+ * siempre primero; nunca se usa para desambiguar un empate ahí (esa
+ * ambigüedad sigue siendo `no_identificado`, R-20). El llamador (Fase 3,
+ * `resolverHallazgos.ts`) es responsable de tratar `origen: 'fuera_de_alcance'`
+ * como teórico=0 y de agregar el producto al alcance congelado de la ronda
+ * al confirmar (`fn_ronda_confirmar_hallazgos`, migración 131) -- este
+ * módulo no toca ninguna tabla, sólo resuelve el nombre.
  */
-export function resolverProducto(productoMencionado: string, alcance: readonly ProductoEnAlcance[]): ResolucionProducto {
+export function resolverProducto(
+  productoMencionado: string,
+  alcance: readonly ProductoEnAlcance[],
+  fueraDeAlcance: readonly ProductoEnAlcance[] = [],
+): ResolucionProducto {
   const buscado = normalizarNombreProducto(productoMencionado);
   if (buscado === '') return { estado: 'no_identificado' };
 
-  const coincidencias = alcance.filter((p) => normalizarNombreProducto(p.nombre) === buscado);
-  if (coincidencias.length !== 1) return { estado: 'no_identificado' };
+  const enAlcance = alcance.filter((p) => normalizarNombreProducto(p.nombre) === buscado);
+  if (enAlcance.length === 1) {
+    return { estado: 'identificado', productoId: enAlcance[0].productoId, nombreProducto: enAlcance[0].nombre, origen: 'alcance' };
+  }
+  if (enAlcance.length > 1) return { estado: 'no_identificado' };
 
-  return { estado: 'identificado', productoId: coincidencias[0].productoId, nombreProducto: coincidencias[0].nombre };
+  // enAlcance.length === 0 -- recién acá se prueba fuera del alcance.
+  const fuera = fueraDeAlcance.filter((p) => normalizarNombreProducto(p.nombre) === buscado);
+  if (fuera.length !== 1) return { estado: 'no_identificado' };
+  return { estado: 'identificado', productoId: fuera[0].productoId, nombreProducto: fuera[0].nombre, origen: 'fuera_de_alcance' };
 }
 
 // ---------------------------------------------------------------------------

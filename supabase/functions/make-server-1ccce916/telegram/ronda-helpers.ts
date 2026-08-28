@@ -30,7 +30,7 @@
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 import type { FilaPreview } from '../rondaInventario/preview.ts';
 import { formatearCantidad } from '../rondaInventario/preview.ts';
-import type { AlcanceItem, HallazgoParaConfirmar } from '../rondaInventario/resolverHallazgos.ts';
+import type { AlcanceItem, HallazgoParaConfirmar, ProductoFueraDeAlcance } from '../rondaInventario/resolverHallazgos.ts';
 import type { CasoExcepcion, CasoProponer, CasoSantiago } from '../rondaInventario/resolucion.ts';
 import { buscarCausaRaiz } from '../rondaInventario/causasRaiz.ts';
 
@@ -351,6 +351,33 @@ export function alcanceComoItems(alcance: readonly AlcanceRondaRow[]): AlcanceIt
     nombre: a.nombre_producto,
     cantidadTeorica: a.cantidad_teorica,
     unidad: a.unidad,
+  }));
+}
+
+/** CA-4 (hallazgo real de Santiago probando en vivo, 2026-08-28): "los
+ * productos en cero no entran solos; Uriel puede reportar uno igual si lo
+ * encuentra". Candidatos para el fallback de `resolverProducto` cuando un
+ * hallazgo no matchea nada del alcance congelado -- productos que SÍ existen
+ * en el catálogo pero con `cantidad_actual <= 0` (por eso `fn_ronda_abrir`
+ * nunca los congeló, esa función sólo selecciona `> 0`). Deliberadamente
+ * SIN filtro de `activo`: CA-4 no lo pide, y el hallazgo real de Santiago
+ * (15-15-15) era justamente un producto inactivo. ~150 filas hoy -- se trae
+ * completo, sin paginar, porque `resolverProducto` sólo hace coincidencia
+ * exacta normalizada (D-T7), no una búsqueda que se beneficie de acotar
+ * server-side. */
+export async function obtenerProductosFueraDeAlcance(supabase: SupabaseClient): Promise<ProductoFueraDeAlcance[]> {
+  const { data, error } = await supabase
+    .from('productos')
+    .select('id, nombre, unidad_medida')
+    .lte('cantidad_actual', 0);
+  if (error) {
+    console.error('[ronda] obtenerProductosFueraDeAlcance error:', error.message);
+    return [];
+  }
+  return ((data ?? []) as Array<{ id: string; nombre: string; unidad_medida: string }>).map((p) => ({
+    productoId: p.id,
+    nombre: p.nombre,
+    unidad: p.unidad_medida,
   }));
 }
 

@@ -27,6 +27,7 @@ import {
   resolverHallazgo,
   resolverHallazgos,
   type AlcanceItem,
+  type ProductoFueraDeAlcance,
 } from '@/utils/rondaInventario/resolverHallazgos';
 
 const ALCANCE_FIXTURE_1: AlcanceItem[] = [
@@ -82,6 +83,7 @@ describe('resolverHallazgo -- fixture #1 (§11.1, literal)', () => {
       explicacionCitada: 'es por error en el sistema',
       causaClave: 'error_captura_previa',
       causaConfianza: 'alta',
+      fueraDeAlcance: false,
     });
   });
 
@@ -101,6 +103,7 @@ describe('resolverHallazgo -- fixture #1 (§11.1, literal)', () => {
       explicacionCitada: null,
       causaClave: null,
       causaConfianza: 'ninguna',
+      fueraDeAlcance: false,
     });
   });
 
@@ -154,5 +157,68 @@ describe('resolverHallazgos -- mapea en orden, uno a uno', () => {
 
   it('arreglo vacío -> arreglo vacío', () => {
     expect(resolverHallazgos([], ALCANCE_FIXTURE_1)).toEqual([]);
+  });
+});
+
+// -----------------------------------------------------------------------
+// CA-4: "los productos en cero no entran solos; Uriel puede reportar uno
+// igual si lo encuentra" -- hallazgo real de Santiago probando en vivo en
+// producción, 2026-08-28 ("15-15-15", un fertilizante que existe en el
+// catálogo pero con cantidad_actual=0 y activo=false, así que no estaba en
+// el alcance congelado de la ronda).
+// -----------------------------------------------------------------------
+
+const FUERA_DE_ALCANCE_FIXTURE: ProductoFueraDeAlcance[] = [
+  { productoId: 'prod-15-15-15', nombre: '15-15-15', unidad: 'Kilos' },
+];
+
+const HALLAZGO_15_15_15: HallazgoCrudo = {
+  productoMencionado: '15-15-15',
+  productoConfianza: 'alta',
+  fragmentoLiteral: 'tres bultos de 50 kilos de 15-15-15',
+  cantidadFisicaPresente: true,
+  cantidadFisica: 150,
+  cantidadFaltantePresente: false,
+  cantidadFaltante: 0,
+  causaClave: '',
+  causaConfianza: 'ninguna',
+  explicacionDavidCitada: '',
+};
+
+describe('resolverHallazgo -- CA-4: producto fuera del alcance congelado (en cero/inactivo)', () => {
+  it('sin la lista de fuera de alcance, sigue "no identificado" -- comportamiento previo intacto', () => {
+    const { fila, paraConfirmar } = resolverHallazgo(HALLAZGO_15_15_15, ALCANCE_FIXTURE_1);
+    expect(fila.productoIdentificado).toBe(false);
+    expect(paraConfirmar).toBeNull();
+  });
+
+  it('con la lista de fuera de alcance, se identifica y el teórico es 0 (nunca lo que dijo Uriel, R-19)', () => {
+    const { fila, paraConfirmar } = resolverHallazgo(HALLAZGO_15_15_15, ALCANCE_FIXTURE_1, FUERA_DE_ALCANCE_FIXTURE);
+    expect(fila.productoIdentificado).toBe(true);
+    expect(fila.productoId).toBe('prod-15-15-15');
+    expect(fila.teorico).toBe(0);
+    expect(fila.fisico).toBe(150);
+    expect(fila.unidad).toBe('Kilos');
+    expect(fila.fueraDeAlcance).toBe(true);
+
+    expect(paraConfirmar).not.toBeNull();
+    expect(paraConfirmar?.fueraDeAlcance).toBe(true);
+    expect(paraConfirmar?.productoId).toBe('prod-15-15-15');
+    expect(paraConfirmar?.cantidadFisica).toBe(150);
+  });
+
+  it('el alcance congelado SIEMPRE se prueba primero -- un match ahí nunca cede paso al de fuera de alcance', () => {
+    const fueraDeAlcanceConTrampa: ProductoFueraDeAlcance[] = [
+      { productoId: 'prod-otro-id', nombre: 'Silicalmag', unidad: 'Kilos' },
+    ];
+    const { fila } = resolverHallazgo(HALLAZGO_SILICALMAG, ALCANCE_FIXTURE_1, fueraDeAlcanceConTrampa);
+    expect(fila.productoId).toBe('prod-silicalmag');
+    expect(fila.fueraDeAlcance).toBe(false);
+  });
+
+  it('resolverHallazgos (plural) también recibe y usa la lista de fuera de alcance', () => {
+    const resueltos = resolverHallazgos([HALLAZGO_15_15_15], ALCANCE_FIXTURE_1, FUERA_DE_ALCANCE_FIXTURE);
+    expect(resueltos[0].fila.productoIdentificado).toBe(true);
+    expect(resueltos[0].fila.fueraDeAlcance).toBe(true);
   });
 });

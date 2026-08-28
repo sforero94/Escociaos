@@ -53,6 +53,12 @@ export interface FilaPreview {
    * es un paso posterior (fuera de este archivo, capa de excepciones). */
   explicacionCitada: string | null;
   fragmentoLiteral: string;
+  /** CA-4: `true` si el producto se identificó FUERA del alcance congelado
+   * -- existía en el catálogo pero en cero/inactivo al abrir la ronda
+   * (`resolverHallazgos.ts`). El teórico de estas filas siempre es 0. Se
+   * muestra distinto en el preview para que quien confirma sepa que este
+   * producto se va a AGREGAR al alcance de la ronda, no que ya estaba. */
+  fueraDeAlcance: boolean;
 }
 
 export interface PreviewRonda {
@@ -131,8 +137,12 @@ function renderFila(fila: FilaPreview): string {
     : formatearCantidad(fila.fisico);
 
   const causaTexto = fila.causaEtiqueta ? `${fila.causaEtiqueta} -- ` : '';
+  // CA-4: este producto no estaba en el alcance que se congeló al abrir la
+  // ronda (estaba en cero) -- avisa que confirmar lo agrega, para que no se
+  // lea como si el sistema ya lo estuviera contando.
+  const fueraDeAlcanceTexto = fila.fueraDeAlcance ? ' (no estaba en el alcance -- se agrega al confirmar)' : '';
 
-  return `${fila.nombreProducto}: hay ${fisicoTexto}, deberían haber ${formatearCantidad(fila.teorico)}. ${causaTexto}${fraseVia(fila.via)}`;
+  return `${fila.nombreProducto}${fueraDeAlcanceTexto}: hay ${fisicoTexto}, deberían haber ${formatearCantidad(fila.teorico)}. ${causaTexto}${fraseVia(fila.via)}`;
 }
 
 /**
