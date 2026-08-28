@@ -1,9 +1,13 @@
 import { Link, useLocation } from 'react-router-dom';
-import { List, Plus } from 'lucide-react';
+import { List } from 'lucide-react';
 
 /**
- * Barra de navegación del módulo de Verificaciones
- * Permite navegar entre las diferentes secciones
+ * Barra de navegación del módulo de Verificaciones.
+ *
+ * "Nueva Verificación" se retiró: App.tsx ya no enruta `nueva` (la migración
+ * 124 revocó la escritura sobre `verificaciones_inventario` /
+ * `verificaciones_detalle`, así que crear una fila nueva ya no puede
+ * cumplirse). Ver docs/plan_verificacion_inventario.md CA-27.
  */
 export function VerificacionesNav() {
   const location = useLocation();
@@ -13,11 +17,6 @@ export function VerificacionesNav() {
       path: '/inventario/verificaciones',
       label: 'Todas las Verificaciones',
       icon: List,
-    },
-    {
-      path: '/inventario/verificaciones/nueva',
-      label: 'Nueva Verificación',
-      icon: Plus,
     },
   ];
 

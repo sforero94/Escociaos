@@ -1,7 +1,7 @@
 # Brief técnico — Ronda mensual de inventario
 
-**CTO · 2026-08-28 · revisión 1 (cierre de §15) · revisión 2 (sincronización con `main`)**
-**Estado: diseño técnico CERRADO — sin preguntas abiertas. Listo para implementación.**
+**CTO · 2026-08-28 · rev. 1 (cierre de §15) · rev. 2 (sincronización con `main`) · rev. 3 (Fase 0 aplicada)**
+**Estado: diseño técnico CERRADO. Fase 0 APLICADA. Fases 1-6 en ejecución.**
 Producto de referencia: [`docs/plan_verificacion_inventario.md`](plan_verificacion_inventario.md) — **entrada, no objeto de discusión**.
 Contesta el §10.1 de ese documento y todos los puntos que marca «es del CTO» / «lo decide el brief técnico».
 
@@ -61,7 +61,7 @@ Contesta el §10.1 de ese documento y todos los puntos que marca «es del CTO» 
 >
 > | # | Hecho | Efecto acá |
 > |---|---|---|
-> | 1 | **El 123 ya está tomado**: `123_select_contratistas_por_rol.sql` (PR #182), sin relación con inventario. Máximo aplicado en el ledger = **123** | **Las cinco migraciones propuestas se renumeran 123→127 ⇒ 124→128.** Ver §4, §6, §8.2, §10, §11.2 y la tabla de fases |
+> | 1 | **El 123 ya está tomado**: `123_select_contratistas_por_rol.sql` (PR #182), sin relación con inventario. Máximo aplicado en el ledger = **123** | **Las cinco migraciones propuestas se renumeran 123→127 ⇒ 124→128** *(y otra vez a **125–129** en la revisión 3 — ver abajo).* Ver §4, §6, §8.2, §10, §11.2 y la tabla de fases |
 > | 2 | **La pieza 3 del saneamiento ya está hecha** — `c842333` hace que `eliminarCompraConReversion` restaure `precio_unitario` desde la compra que sobrevive, o `NULL` si no queda ninguna | §11.1 y §11.2 reescritas. **§1.1 afirmaba lo contrario y estaba quedando falsa** |
 > | 3 | **`NuevoMovimientoModal` ya estampa `responsable`** — `83e662f`, con test estático (`movimientoInventarioResponsable.test.ts`) | §14 riesgo 7 pasa de «sin mitigación» a **parcialmente mitigado**, con el residuo exacto |
 > | 4 | **`vista_resumen_verificaciones` existe** y hace `JOIN` de las dos tablas retiradas | §10: se resuelve **dejarla viva**, con su razón. Ya no es un punto por verificar |
@@ -107,11 +107,36 @@ cambió dos decisiones operativas. Se conserva la lista como registro de qué se
 
 | # | Qué había que comprobar | Resultado (2026-08-28) | Efecto |
 |---|---|---|---|
-| 1 | **El número de migración libre real.** El `CLAUDE.md` avisa que el ledger no es autoritativo en ninguna dirección (067/079/108 corrieron sin archivo; 035-039/041/046/093 están aplicadas sin fila) | **123 ya está tomado** por `123_select_contratistas_por_rol.sql` (PR #182), y el máximo aplicado en `supabase_migrations.schema_migrations` **es 123** | **El primer hueco es el 124.** Las cinco propuestas quedan 124–128 |
+| 1 | **El número de migración libre real.** El `CLAUDE.md` avisa que el ledger no es autoritativo en ninguna dirección (067/079/108 corrieron sin archivo; 035-039/041/046/093 están aplicadas sin fila) | **123 ya está tomado** por `123_select_contratistas_por_rol.sql` (PR #182), y el máximo aplicado en `supabase_migrations.schema_migrations` **es 123** | **El primer hueco era el 124** — y lo tomó la Fase 0 (ver revisión 3). Las cinco propuestas quedan **125–129** |
 | 2 | **Si `vista_resumen_verificaciones` existe** y qué lee | **Existe.** `JOIN verificaciones_inventario + verificaciones_detalle`, con `GROUP BY` | **No queda huérfana**, porque §10 congela las tablas en vez de borrarlas. Se resuelve dejarla viva — §10 |
 | 3 | **Si Uriel ya existe** en `empleados` o en `contratistas` | **No existe en ninguna de las dos** | Confirma §3.1 tal cual: no hay ficha que reusar, y no se le inventa una |
 | 4 | **El estado real de `productos.precio_unitario`** | De 226 activos: **3 en NULL, 8 en 0**; 193 con existencia > 0 | Achica la pieza 1 de §11.2, **pero no la elimina** — ver abajo |
 | 5 | **Las cifras 226/33/193** | Vigentes | Siguen siendo orden de magnitud: el alcance se resuelve *al abrir la ronda* (CA-4), nunca contra una constante escrita |
+
+> ## Revisión 3 — 2026-08-28: la Fase 0 se aplicó y volvió a correr la numeración
+>
+> El rótulo D-1 **terminó siendo su propio archivo de migración**, no una parte de la de retiro de legado como
+> preveía este documento: **`124_rotular_verificacion_prueba.sql`, ya aplicada a producción** (commit
+> `e2c0033`). Es la decisión correcta y por eso el número saltó: D-1 es `Must` e **independiente** del rediseño
+> (§13, Fase 0), mientras que la de retiro depende de que exista `fn_ronda_aplicar_ajuste` para poder dropear
+> su predecesora rota. Embebidas en un solo archivo, la higiene habría quedado rehén de la Fase 6.
+>
+> **Efecto: las cinco propuestas corren un número más, a 125–129.** Es la segunda renumeración en cuatro días
+> — la primera porque `123` se ocupó mientras se cerraba el brief, ésta porque la Fase 0 gastó el `124`. La
+> lección operativa, ya escrita en el cierre del documento: **el número se mira justo antes de crear el
+> fichero**, nunca se hereda de un documento.
+>
+> **Y la 124 real hizo MÁS de lo que este documento le asignaba a la Fase 0.** Además del rótulo de tres marcas,
+> ejecutó dos cosas que §10 tenía puestas en la migración de retiro: los `COMMENT ON TABLE` de las dos tablas
+> y el `REVOKE INSERT, UPDATE, DELETE, TRUNCATE ... FROM authenticated, anon`. Con eso, **el alcance de la
+> `128_retirar_verificaciones_legado.sql` se reduce a dos sentencias** (§10).
+>
+> **Una consecuencia viva que hay que mirar, y que no es teórica del todo** — detalle y recomendación en §10:
+> el `REVOKE` de la 124 dejó a `NuevaVerificacion.tsx` y `ConteoFisico.tsx` **sin el GRANT que necesitan para
+> escribir**, pero sus rutas y sus tres botones de entrada **siguen renderizándose**. Es decir: hoy «Nueva
+> Verificación» lleva a un `permission denied`. La 124 lo anticipó y lo llamó costo teórico (nadie usa el
+> módulo desde hace un año, D-1), y tiene razón sobre el impacto — pero **CA-27 es `Must`** y dice que un botón
+> que no puede cumplir su promesa no se renderiza.
 
 > **Cuidado con el nombre de la tabla de contratistas.** La migración 026 declara
 > `contratista_id uuid REFERENCES terceros(id)`, pero la tabla viva —y la que tiene `src/types/database.ts`—
@@ -263,7 +288,7 @@ No hace falta una tabla de envíos: `enviar.ts` ya audita todo saliente en `tele
 
 ---
 
-## 4. Esquema de datos — propuesta de migración `124_ronda_inventario_esquema.sql`
+## 4. Esquema de datos — propuesta de migración `125_ronda_inventario_esquema.sql`
 
 ### 4.0 Por qué tablas nuevas y no `verificaciones_*`
 
@@ -828,7 +853,7 @@ es exactamente lo que R-20 convierte en fricción.
 
 ---
 
-## 6. RPC y transaccionalidad — propuesta de migración `125_ronda_inventario_rpcs.sql`
+## 6. RPC y transaccionalidad — propuesta de migración `126_ronda_inventario_rpcs.sql`
 
 ### 6.1 D-T4 y D-T5 — el problema del `service_role`, resuelto explícitamente
 
@@ -1211,7 +1236,7 @@ Los tres minutos vecinos están ocupados: 05:45 `hato-alertas-tick` (060), 05:50
    pierde entre notificaciones nocturnas.
 3. Bogotá es UTC-5 sin horario de verano (mismo cálculo de 030/036/060/102), así que 07:00 Bogotá = 12:00 UTC.
 
-`cron.schedule` hace upsert por `jobname`, así que la migración `126_ronda_inventario_cron.sql` es idempotente
+`cron.schedule` hace upsert por `jobname`, así que la migración `127_ronda_inventario_cron.sql` es idempotente
 sin `unschedule` previo. Y es **segura de aplicar antes de que el endpoint exista**: hasta el despliegue el POST
 devuelve 404, `pg_net` lo registra en `net._http_response` y no pasa nada (mismo argumento de 060 y 102).
 
@@ -1313,7 +1338,13 @@ construirlo antes es construir una pantalla vacía (§13, Fase 7).
 
 ## 10. D-T11 — qué pasa con el código muerto y con las tablas viejas
 
-Propuesta de migración `127_retirar_verificaciones_legado.sql` + el borrado de componentes.
+Propuesta de migración `128_retirar_verificaciones_legado.sql` + el borrado de componentes.
+
+> **Alcance reducido tras la Fase 0 (rev. 3).** La migración **124, ya aplicada**, se llevó tres de las cinco
+> cosas que esta sección le asignaba a la de retiro: el rótulo D-1, los `COMMENT ON TABLE` y el `REVOKE` de
+> escritura. **A la `128` le quedan dos sentencias**: `DROP FUNCTION aplicar_ajustes_verificacion(integer, text)`
+> y `COMMENT ON VIEW vista_resumen_verificaciones`. El borrado de las pantallas y de las rutas **no tiene
+> contraparte SQL** — son ficheros React y líneas de `App.tsx`, nada de esquema.
 
 | Artefacto | Destino | Motivo |
 |---|---|---|
@@ -1321,14 +1352,16 @@ Propuesta de migración `127_retirar_verificaciones_legado.sql` + el borrado de 
 | `NuevaVerificacion.tsx` | **Borrar** | D-3: crea 226 renglones sin selección posible. La apertura nueva es un toque + `fn_ronda_abrir` |
 | `VerificacionesList.tsx` | **Reescribir** como `RondasList.tsx` | D-7 (`'Gerente'`) muere con ella — pero D-7 es `Must` e independiente, así que **el string se corrige en la Fase 0** y la reescritura puede llegar después sin bloquear la higiene |
 | `VerificacionesNav.tsx` | Absorber en la pantalla nueva | — |
-| Rutas `verificaciones/nueva`, `conteo/:id`, `:id` (`ComingSoon`) | **Borrar** de `App.tsx:92-97` | CA-27 |
+| Rutas `verificaciones/nueva`, `conteo/:id`, `:id` (`ComingSoon`) y los 3 botones que llevan a ellas | **Borrar** de `App.tsx:93-98`, `VerificacionesList.tsx:186,254` y `VerificacionesNav.tsx:18` | CA-27. **Sube de la Fase 6 a la Fase 0** — ver «la consecuencia viva» abajo |
 | `aplicar_ajustes_verificacion(integer, text)` | **`DROP FUNCTION`** | Cero call sites, firma rota (`integer` contra columna `uuid`) — y dejar una función muerta llamada «aplicar ajustes de verificación» al lado de una que **sí** aplica ajustes es exactamente cómo alguien llama a la equivocada. Se dropea en la misma migración que crea `fn_ronda_aplicar_ajuste` |
 | `vista_resumen_verificaciones` | **Se deja viva.** No se dropea | Verificado 2026-08-28: existe y hace `JOIN verificaciones_inventario + verificaciones_detalle GROUP BY`. Ver abajo |
-| `verificaciones_inventario` / `verificaciones_detalle` | **Conservar, congelar y rotular** | CA-25: la fila del 30 de julio y sus 223 renglones **no se borran ni se reescriben** |
+| `verificaciones_inventario` / `verificaciones_detalle` | **Conservar, congelar y rotular** — **HECHO** en la migración 124 (aplicada) | CA-25: la fila del 30 de julio y sus 223 renglones **no se borran ni se reescriben** |
 
-**Cómo se rotula la verificación histórica sin mentir (D-1/CA-25).** Poner `estado = 'Rechazada'` a secas sería
-peor que no hacer nada: se leería como *«una ronda real que se rechazó»*, que es literalmente lo que D-1 quiere
-impedir. La propuesta usa tres marcas, ninguna destructiva:
+**Cómo se rotuló la verificación histórica sin mentir (D-1/CA-25) — ejecutado en la migración 124.** Poner
+`estado = 'Rechazada'` a secas habría sido peor que no hacer nada: se leería como *«una ronda real que se
+rechazó»*, que es literalmente lo que D-1 quiere impedir. Se usaron tres marcas, ninguna destructiva (lo que
+sigue es lo que este brief propuso; el fichero aplicado lo implementa con guardas `RAISE EXCEPTION` de pre y
+post condición al estilo 080/081/099):
 
 ```sql
 UPDATE verificaciones_inventario
@@ -1352,6 +1385,30 @@ El `REVOKE` es lo que de verdad las retira: un `GRANT` ausente le gana a cualqui
 081), así que las políticas que la 104 dejó para Administrador/Gerencia/Verificador quedan inertes para
 escritura y vivas para `SELECT`. `service_role` conserva acceso por `rolbypassrls`, que es lo que permite esta
 misma migración.
+
+### 10.1 La consecuencia viva del `REVOKE`, y por qué CA-27 sube a la Fase 0
+
+**Estado real tras aplicar la 124** (verificado en el árbol el 2026-08-28):
+
+| | |
+|---|---|
+| En la base | `authenticated` **ya no tiene** `INSERT`/`UPDATE` sobre las dos tablas |
+| En la app | `App.tsx:93-98` conserva las rutas `nueva` y `conteo/:id`, y **tres sitios siguen renderizando el botón** que lleva a ellas (`VerificacionesList.tsx:186` y `:254`, `VerificacionesNav.tsx:18`) |
+
+O sea: **hoy «Nueva Verificación» lleva a un `permission denied`.** La propia migración 124 lo anticipó y lo
+calificó de costo teórico, y tiene razón sobre el *impacto* — D-1 probó que nadie usa el módulo desde hace un
+año. Pero el *criterio* es otro: **CA-27 es `Must`** y dice que un botón que no puede cumplir su promesa no se
+renderiza. Antes de la Fase 0 ese botón al menos creaba una fila; ahora falla. La higiene dejó el módulo
+**menos** consistente con CA-27 que antes, no más.
+
+**Decisión: quitar esas rutas y esos tres botones se mueve de la Fase 6 a la Fase 0**, como su tarea pendiente.
+No depende de nada del rediseño: es borrar líneas. Y deliberadamente **no** arrastra el borrado de
+`ConteoFisico.tsx` / `NuevaVerificacion.tsx` ni la reescritura de `VerificacionesList.tsx`, que sí esperan a la
+Fase 6 — la lista puede seguir viva como lectura de la única fila ya rotulada, que es exactamente lo que la
+124 dejó funcionando (`SELECT` intacto, a propósito).
+
+Es la aplicación del mismo criterio con el que la 124 se separó de la 128: **lo que es higiene independiente se
+entrega solo, y no espera a la fase que lo reemplaza.**
 
 **`vista_resumen_verificaciones` se queda, y la razón es la decisión de congelar en vez de borrar.** Se
 comprobó el 2026-08-28: existe y agrega las dos tablas retiradas con un `GROUP BY`. Como las tablas siguen
@@ -1412,7 +1469,7 @@ testigo está en el `CLAUDE.md`: Sulcamag quedó en 669,96 y **el valor anterior
 | # | Pieza | Tamaño | Nota |
 |---|---|---|---|
 | **1** | **Medir — parcialmente hecho.** Ya se sabe (2026-08-28): de 226 activos, **3 en NULL y 8 en 0**. Falta la mitad que importa: de los **193 con existencia**, en cuántos el `precio_unitario` **discrepa** de su última `compras.costo_unitario` ÷ presentación, y cuántos **no tienen ninguna fila en `compras`** | **S** *(reducida)* | El conteo de nulos resultó chico y tranquilizador, pero **no es el que decide**: Sulcamag no es NULL ni cero. Y un precio malo sobre un producto en cero no afecta la valoración. Lo que queda por correr es la consulta de **discrepancia**, acotada a los 193 |
-| **2** | **Reconstruir desde `compras`.** Migración `128_…` que recalcula `precio_unitario` desde la compra más reciente vigente, con la misma derivación que `ProductForm`, guardas al estilo 099 (conteos pre y post, `RAISE EXCEPTION`) y respaldo en el esquema **`respaldos`** (081, nunca en `public`) | **M** | Los productos **sin historia de compra no se reconstruyen**: quedan como están y se **listan**. Esa lista es el residuo manual, y es un dato, no una estimación |
+| **2** | **Reconstruir desde `compras`.** Migración `129_…` que recalcula `precio_unitario` desde la compra más reciente vigente, con la misma derivación que `ProductForm`, guardas al estilo 099 (conteos pre y post, `RAISE EXCEPTION`) y respaldo en el esquema **`respaldos`** (081, nunca en `public`) | **M** | Los productos **sin historia de compra no se reconstruyen**: quedan como están y se **listan**. Esa lista es el residuo manual, y es un dato, no una estimación |
 | **3** | ~~**Cerrar la fuga.**~~ **YA ESTÁ HECHA** — `c842333` en `main`, con test (`eliminarCompraConReversion.test.ts`) | **0** | Queda **un residuo que el arreglo destapa**, y ahora es alcanzable de verdad: `MovementsDashboard.tsx:199-201` hace `(p.precio_unitario \|\| 0)`, así que un `NULL` —que antes casi no ocurría y ahora es el resultado **correcto** de borrar la última compra— entra al KPI de valor de inventario como **cero, en silencio**. Antes el KPI sobre-reportaba con un precio viejo; ahora sub-reporta con un cero. La dirección mejoró; el silencio no. Hay que pintar «sin dato», misma familia que `lluviaConfiableDeResumen`. **S** |
 | **4** | **Firmar.** Gerencia pone `inventario_parametros.valoracion_publicable = true` | trivial | Hasta entonces **CA-20 se cumple por construcción**, no por disciplina |
 
@@ -1449,17 +1506,18 @@ código y no hay nada que negociar.
 
 | Fase | Entregables | Criterio de aceptación | Tamaño | Depende de |
 |---|---|---|---|---|
-| **0 · Higiene** | D-1 (rótulo de la fila de prueba) · D-2 (Esco, **dos** árboles) · D-3 (`'Gerente'` → `'Gerencia'`) · CA-27 (quitar el botón `revisar/:id` y la ruta `ComingSoon`) · verificar que D-4 sigue intacto | Esco reporta **0** discrepancias, no 223. Ninguna acción visible lleva a una ruta inexistente | **S** | nada |
+| **0 · Higiene** — **APLICADA salvo un pendiente** | ✅ D-1 (**migración 124**, aplicada: rótulo + `COMMENT ON TABLE` + `REVOKE`) · ✅ D-2 (Esco, **dos** árboles) · ✅ D-3 (`'Gerente'` → `'Gerencia'`) · ✅ D-4 verificado intacto · ⬜ **CA-27: quitar las rutas `nueva`/`conteo/:id`/`:id` y sus TRES botones** (§10.1) | Esco reporta **0** discrepancias, no 223. **Ninguna acción visible lleva a una ruta inexistente ni a un `permission denied`** | **S** | nada |
 | **0b · Precios** (paralelo) | Las piezas **1 (reducida), 2 y 4** de §11.2 — la 3 ya la cerró `c842333` en `main` — más el residuo de «sin dato» en el KPI de valor de inventario | `valoracion_publicable = true` firmado por Gerencia | **S-M** (era M) | nada. Bloquea sólo CA-20 |
-| **1 · Fundaciones** | **Spike de STT (día 1)** · migración 124 · `src/utils/rondaInventario/*` · el generador de copias + `--check` · los tests con fixtures | Los tests de §12 (unitaria + paridad) en verde. El spike responde sí/no sobre OGG/Opus | **L** | 0 |
-| **2 · RPC** | Migración 125 · `fn_ronda_validar_actor` + los 10 RPC (incluido el `Deshacer` de P-1) · tests adversariales de autorización · la suite de la ventana de §6.5 | El conjunto adversarial completo en verde | **M** | 1 |
+| **1 · Fundaciones** | **Spike de STT (día 1)** · migración 125 · `src/utils/rondaInventario/*` · el generador de copias + `--check` · los tests con fixtures | Los tests de §12 (unitaria + paridad) en verde. El spike responde sí/no sobre OGG/Opus | **L** | 0 |
+| **2 · RPC** | Migración 126 · `fn_ronda_validar_actor` + los 10 RPC (incluido el `Deshacer` de P-1) · tests adversariales de autorización · la suite de la ventana de §6.5 | El conjunto adversarial completo en verde | **M** | 1 |
 | **3 · Telegram — Uriel** | Alta de Uriel · `/ronda` · `/existencias` · el `.txt` del alcance · handler de voz · bucle de preview · **botón `Deshacer` (P-1)** · conversación `cierreRonda` | Uriel abre, narra, corrige, confirma, **deshace** y cierra una ronda de punta a punta, sin ver un solo precio | **L** | 1, 2 |
 | **4 · Telegram — David y Santiago** | Conversación `excepcionDavid` · callbacks de aprobación · aplicación | Los tres desenlaces alcanzables y distinguibles. CA-38 sostenida: una cita no habilita ninguna vía | **M** | 2, 3 |
-| **5 · Recordatorio, alerta y reporte** | Migración 126 · endpoint del tick con sus **cuatro** trabajos · 3 filas de `alertas_catalogo` · `reporteCierre.ts` · el mensaje del día 15 con sus dos bloques (P-2) | El reporte se emite congelado; el aviso de mes omitido sale **una** vez; el bloque de excepciones vencidas sale **también en un mes con la ronda hecha** | **M** | 3, 4 |
-| **6 · Historial web** | `/inventario/rondas` + `:id` · borrado de `ConteoFisico`/`NuevaVerificacion` · migración 127 · herramienta de Esco | Los tres desenlaces se ven distintos; un producto fuera del alcance sale `—` | **M** | 1 (puede correr en paralelo a 4 y 5) |
+| **5 · Recordatorio, alerta y reporte** | Migración 127 · endpoint del tick con sus **cuatro** trabajos · 3 filas de `alertas_catalogo` · `reporteCierre.ts` · el mensaje del día 15 con sus dos bloques (P-2) | El reporte se emite congelado; el aviso de mes omitido sale **una** vez; el bloque de excepciones vencidas sale **también en un mes con la ronda hecha** | **M** | 3, 4 |
+| **6 · Historial web** | `/inventario/rondas` + `:id` · borrado de `ConteoFisico`/`NuevaVerificacion` y reescritura de `VerificacionesList` · **migración 128, ya reducida a dos sentencias** (§10) · herramienta de Esco | Los tres desenlaces se ven distintos; un producto fuera del alcance sale `—` | **M** | 1 (puede correr en paralelo a 4 y 5) · el `DROP FUNCTION` exige que **2** ya haya creado `fn_ronda_aplicar_ajuste` |
 | **7 · Patrones** (`Should`) | C-4 (M-7) y C-5 | Sólo tiene sentido con **tres rondas** cerradas | **S** | 6 + tres rondas reales |
 
-**Hitos.** Fin de 0: el módulo deja de mentir. Fin de 2: el motor existe y está probado sin ninguna UI. Fin de
+**Hitos.** Fin de 0: el módulo deja de mentir — **falta sólo el pendiente de CA-27 de §10.1**, que es lo que
+hoy impide darla por cerrada. Fin de 2: el motor existe y está probado sin ninguna UI. Fin de
 3: **Uriel puede hacer la ronda de verdad** — es el hito que mueve M-1, la métrica madre. Fin de 5: el ciclo se
 cierra solo, sin que nadie tenga que acordarse. Fin de 6: existe historial auditable.
 
@@ -1565,20 +1623,24 @@ para que nadie lo descubra el día que Uriel pregunte por qué el bot no le cont
 
 *Fuente: `docs/plan_verificacion_inventario.md` (brief de producto del CPO, cerrado 2026-08-28), las tres
 decisiones del dueño del 2026-08-28 recogidas en §15, el código citado en §1.1 con archivo y línea, las
-migraciones 026/060/070/072/073/077/081/082/084/093/096/099/102/104/105/106/107/113/119/120/121/122/123, las
+migraciones 026/060/070/072/073/077/081/082/084/093/096/099/102/104/105/106/107/113/119/120/121/122/123/124, las
 consultas a la API y a la documentación de OpenRouter del 2026-08-28, y la verificación contra el catálogo vivo
 del 2026-08-28 (§1.2). La revisión 2 sincroniza con `f98f83a..49d2206` de `main` — commits `c842333`
 (`precio_unitario` en la reversión de compra), `83e662f` (`responsable` en el ajuste manual) y la migración
 123.*
 
 ***No queda ninguna pregunta abierta ni ninguna decisión pendiente: lo que sigue es implementación.***
-*Las Fases 0, 0b y 1 nunca estuvieron bloqueadas por P-1/P-2/P-3, y **la verificación de §1.2 contra el
-catálogo vivo ya se hizo** (2026-08-28): las cinco migraciones propuestas son **124–128**, porque el 123 lo
-tomó `123_select_contratistas_por_rol.sql`. **No queda ninguna condición dura de arranque.** La única cautela
-que sobrevive es de método, no de este documento: el `CLAUDE.md` advierte que el ledger y el repo no son
-superconjunto uno del otro, así que **volver a mirar el primer hueco libre justo antes de crear los ficheros**
-sigue costando una consulta y sigue valiendo la pena — el 123 se ocupó en los cuatro días que este brief tardó
-en cerrarse.*
+*La **Fase 0 ya se aplicó** (salvo el pendiente de CA-27 de §10.1) y las Fases 1-6 están en ejecución. Las
+cinco migraciones propuestas son **125–129**: el `123` lo tomó `123_select_contratistas_por_rol.sql` y el
+`124`, `124_rotular_verificacion_prueba.sql` — el rótulo D-1, que terminó siendo su propio archivo en vez de ir
+embebido en la de retiro de legado, como este documento preveía.*
+
+> **Dos renumeraciones en cuatro días, y las dos por la misma causa: el número se hereda de un documento en vez
+> de mirarse.** El `123` se ocupó mientras el brief se cerraba; el `124`, mientras se implementaba su propia
+> Fase 0. **Ningún número escrito acá es autoritativo en el momento en que alguien crea el fichero.** El
+> `CLAUDE.md` ya advierte que el ledger y el repo no son superconjunto uno del otro; a eso hay que sumarle que
+> **el trabajo en paralelo consume huecos**. La regla operativa, para el equipo que sigue: `ls src/sql/migrations/`
+> y una consulta al ledger **inmediatamente antes** de nombrar el archivo, nunca al planificarlo.
 
 ***Ninguna decisión de producto de §3.4, §5.1, §5.2, §5.3, §8.1, §9 o §11 del brief de producto se reabre en
 este documento.** Donde una resulta cara, el costo está escrito como costo — §14 riesgos 6 y 7.*

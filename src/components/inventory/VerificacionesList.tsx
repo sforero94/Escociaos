@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { ClipboardCheck, Plus, Loader2, Calendar, User, CheckCircle2, XCircle, Clock, AlertTriangle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ClipboardCheck, Loader2, Calendar, User, CheckCircle2, XCircle, Clock, AlertTriangle } from 'lucide-react';
 import { getSupabase } from '../../utils/supabase/client';
 import { InventorySubNav } from './InventorySubNav';
 import { formatearFechaCorta } from '../../utils/fechas';
@@ -126,32 +126,23 @@ export function VerificacionesList() {
    * Determinar la acción principal según el estado.
    *
    * Fase 0 de higiene (docs/plan_verificacion_inventario.md D-5/CA-27):
-   * este módulo tenía dos botones que eran callejones sin salida.
-   * "Revisar y Aprobar" enlazaba a `/inventario/verificaciones/revisar/:id`,
-   * una ruta que no existe en App.tsx y que caía en el catch-all,
-   * redirigiendo al tablero en silencio. "Ver Detalle" enlazaba a `:id`, que
-   * hoy solo renderiza un `ComingSoon`. Ningún botón visible debe prometer
-   * una pantalla que no existe, así que los dos se retiran acá. La pantalla
-   * de revisión (y el rol que debería verla) es una fase posterior del
-   * rediseño — no de esta.
+   * este módulo tenía botones que eran callejones sin salida. "Revisar y
+   * Aprobar" enlazaba a `/inventario/verificaciones/revisar/:id`, una ruta
+   * que no existe en App.tsx y que caía en el catch-all, redirigiendo al
+   * tablero en silencio; "Ver Detalle" enlazaba a `:id`, que hoy solo
+   * renderiza un `ComingSoon`.
+   *
+   * La migración 124 revocó la escritura sobre `verificaciones_inventario` /
+   * `verificaciones_detalle`, así que "Continuar Conteo" (que guardaba en
+   * `ConteoFisico.tsx`) y "Nueva Verificación" (que insertaba en
+   * `NuevaVerificacion.tsx`) dejaron de poder cumplir su promesa también —
+   * `App.tsx` ya no enruta ni `nueva` ni `conteo/:id`. Ningún botón visible
+   * debe prometer una pantalla que no existe o que va a fallar al escribir,
+   * así que no queda ninguna acción con una pantalla real detrás hoy. La
+   * pantalla de revisión (y el flujo completo de captura) es el rediseño de
+   * `docs/plan_verificacion_inventario.md`, no de esta higiene puntual.
    */
-  const getAccionButton = (verificacion: Verificacion) => {
-    // Si está en proceso, puede continuar el conteo — la única acción con una
-    // pantalla real detrás hoy.
-    if (verificacion.estado === 'En proceso') {
-      return (
-        <Link
-          to={`/inventario/verificaciones/conteo/${verificacion.id}`}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl transition-all duration-200 font-medium"
-        >
-          <Clock className="w-4 h-4" />
-          Continuar Conteo
-        </Link>
-      );
-    }
-
-    // Para el resto de los estados no hay, hoy, ninguna pantalla real a la
-    // que enlazar: no se muestra ningún botón en vez de uno que no cumple.
+  const getAccionButton = (_verificacion: Verificacion) => {
     return null;
   };
 
@@ -182,13 +173,6 @@ export function VerificacionesList() {
             {verificaciones.length} verificaciones registradas
           </p>
         </div>
-        <Link
-          to="/inventario/verificaciones/nueva"
-          className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white hover:from-primary-dark hover:to-secondary-dark rounded-xl transition-all duration-200 font-medium shadow-lg"
-        >
-          <Plus className="w-5 h-5" />
-          Nueva Verificación
-        </Link>
       </div>
 
       {/* Filtros */}
@@ -249,15 +233,6 @@ export function VerificacionesList() {
               ? 'Aún no hay verificaciones registradas'
               : `No hay verificaciones con estado "${estadoFilter}"`}
           </p>
-          {estadoFilter === 'todas' && (
-            <Link
-              to="/inventario/verificaciones/nueva"
-              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white hover:from-primary-dark hover:to-secondary-dark rounded-xl transition-all duration-200 font-medium"
-            >
-              <Plus className="w-5 h-5" />
-              Iniciar Primera Verificación
-            </Link>
-          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

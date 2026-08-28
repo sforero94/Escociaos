@@ -18,8 +18,6 @@ const ProductDetail = lazy(() => import('./components/inventory/ProductDetail').
 const InventoryMovements = lazy(() => import('./components/inventory/InventoryMovements').then(m => ({ default: m.InventoryMovements })));
 const ImportarProductosPage = lazy(() => import('./components/inventory/ImportarProductosPage').then(m => ({ default: m.ImportarProductosPage })));
 const VerificacionesList = lazy(() => import('./components/inventory/VerificacionesList').then(m => ({ default: m.VerificacionesList })));
-const NuevaVerificacion = lazy(() => import('./components/inventory/NuevaVerificacion').then(m => ({ default: m.NuevaVerificacion })));
-const ConteoFisico = lazy(() => import('./components/inventory/ConteoFisico').then(m => ({ default: m.ConteoFisico })));
 const ComingSoon = lazy(() => import('./components/shared/ComingSoon').then(m => ({ default: m.ComingSoon })));
 const MovementsDashboard = lazy(() => import('./components/inventory/MovementsDashboard').then(m => ({ default: m.MovementsDashboard })));
 const PurchaseHistory = lazy(() => import('./components/inventory/PurchaseHistory').then(m => ({ default: m.PurchaseHistory })));
@@ -92,8 +90,6 @@ function LayoutRoutes() {
               <Route path="importar" element={<ImportarProductosPage />} />
               <Route path="verificaciones">
                 <Route index element={<VerificacionesList />} />
-                <Route path="nueva" element={<NuevaVerificacion />} />
-                <Route path="conteo/:id" element={<ConteoFisico />} />
                 <Route path=":id" element={<ComingSoon moduleName="Detalle de Verificación" />} />
               </Route>
             </Route>
