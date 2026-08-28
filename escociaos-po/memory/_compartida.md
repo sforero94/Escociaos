@@ -716,3 +716,28 @@ evitar, y encima sin la legibilidad forense.
   "transferir el cuerpo ejecutable sin retipear, y verificar el post-estado", o exigir que la
   migracion se mantenga por debajo de un tamano que el base64 si pueda cruzar.
   [corrida: 2026-08-28-viernes]
+
+## Cierre en vivo de la corrida 2026-08-28-viernes (turno humano posterior)
+- **Migracion 120 APLICADA** el 2026-08-28 con go explicito de Santiago, respondiendo a la propuesta
+  que la corrida habia filado. 8 politicas always-true -> 0, 7 tablas acotadas, `anon` sin DELETE en
+  las 8, `authenticated` conservandolo, 4.200 filas de `monitoreos` y 205 de `produccion` sin tocar.
+  **Ya no hay migraciones fusionadas sin aplicar ni aplicadas sin fusionar.** [corrida: 2026-08-28-viernes]
+- **Los 4 PRs fusionados en orden**: #182 (migracion 123, primero, para sincronizar main con lo que
+  produccion ya corria) -> #180 -> #181 -> #183 (ultimo, porque es el que exige redespliegue).
+  Suite sobre `main` fusionado: **139 ficheros / 3.093 tests verde**, typecheck limpio, lint 0 errores.
+  [corrida: 2026-08-28-viernes]
+- **TRAMPA NUEVA Y CARA: los worktrees de los agentes envenenan `npm test` en el checkout principal.**
+  El `Agent` con `isolation: "worktree"` los crea en `.claude/worktrees/agent-*`, **dentro del repo**,
+  y vitest los recoge como fuentes: la suite paso de 139 ficheros a **689**, con 12 tests en rojo que
+  eran copias de fixtures de otras ramas, no defectos. Casi se reporta como regresion de la fusion.
+  **Regla: `git worktree remove --force` sobre todos los worktrees de agente ANTES de correr la suite
+  de verificacion final.** `git worktree list` los delata. [corrida: 2026-08-28-viernes]
+- **El bundler de edge function falla por timeout de red, y parece un error del cambio.**
+  `functions deploy` devolvio `400 Failed to bundle the function (reason: Fetch
+  'https://deno.land/x/hono@v4.0.0/mod.ts' timed out after 10s)`. **No es del codigo**: se comprobo
+  que el PR no tocaba ninguna linea con `hono`. Es transitorio y se resuelve reintentando.
+  **Antes de culpar al diff, comprobar si la linea que el error senala esta en el diff.**
+  [corrida: 2026-08-28-viernes]
+- **Hallazgo #53 NO se cerro con el merge**, por la regla del 2026-08-24: un arreglo bajo
+  `supabase/functions/**` se cierra con `list_edge_functions.updated_at` posterior al commit, nunca
+  con la fusion. Queda `In progress` hasta que el despliegue confirme. [corrida: 2026-08-28-viernes]
