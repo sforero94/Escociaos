@@ -19,7 +19,7 @@ import {
   vejezPesajes,
   fechaAnclaProduccion,
   proyectarHato,
-  rangoVacasMedidas,
+  promedioLitrosPorVaca,
   reconstruirEstadoAFecha,
   contarVacasEnOrdenoAFecha,
   resolverLitrosQuincenal,
@@ -530,16 +530,21 @@ describe('proyectarHato', () => {
 });
 
 // ============================================================================
-// FIX 4 (QA rework) -- rangoVacasMedidas
+// promedioLitrosPorVaca + `vacasAportantes` -- la normalizacion que
+// reemplazo al sub-label ambar de cobertura (FIX 4 del QA rework): el
+// tracker ahora grafica el total (barra) Y el promedio por vaca (linea),
+// asi que la comparabilidad entre semanas con distinto numero de vacas se
+// resuelve con un dato, no con una advertencia.
 // ============================================================================
 
-describe('rangoVacasMedidas', () => {
-  function semanaMedida(overrides: Partial<SemanaProyeccion> = {}): SemanaProyeccion {
+describe('promedioLitrosPorVaca', () => {
+  function semana(overrides: Partial<SemanaProyeccion> = {}): SemanaProyeccion {
     return {
       semana: 0,
       litrosDia: 100,
       tipo: 'medido',
-      vacasBase: ['v1', 'v2'],
+      vacasBase: ['v1', 'v2', 'v3', 'v4'],
+      vacasAportantes: ['v1', 'v2', 'v3', 'v4'],
       vacasEntran: [],
       vacasSalen: [],
       planas: [],
@@ -547,45 +552,109 @@ describe('rangoVacasMedidas', () => {
     };
   }
 
-  it('cobertura constante: min === max', () => {
-    const semanas = [
-      semanaMedida({ semana: -1, vacasBase: ['v1', 'v2', 'v3'] }),
-      semanaMedida({ semana: 0, vacasBase: ['v1', 'v2', 'v4'] }),
+  it('divide el total entre las vacas que APORTARON', () => {
+    expect(promedioLitrosPorVaca(semana())).toBe(25);
+  });
+
+  it('semana sin dato (backlog): null, nunca 0', () => {
+    expect(promedioLitrosPorVaca(semana({ litrosDia: null, vacasAportantes: [] }))).toBeNull();
+  });
+
+  it('sin vacas aportantes: null, nunca division por cero', () => {
+    expect(promedioLitrosPorVaca(semana({ litrosDia: 0, vacasAportantes: [] }))).toBeNull();
+  });
+
+  it('NO usa vacasBase como denominador -- en una semana proyectada esa lista incluye vacas que no aportaron', () => {
+    const s = semana({
+      tipo: 'proyectado',
+      litrosDia: 60,
+      vacasBase: ['v1', 'v2', 'v3', 'v4', 'v5', 'v6'], // lista completa del horizonte
+      vacasAportantes: ['v1', 'v2', 'v3'], // 3 secadas / sin nivel base no aportaron
+    });
+    expect(promedioLitrosPorVaca(s)).toBe(20); // 60/3, no 60/6
+  });
+
+  it('la cobertura real de la ventana queda expuesta: dos semanas con el mismo total y distinto numero de vacas dan promedios distintos', () => {
+    const marzo = semana({ litrosDia: 400, vacasAportantes: Array.from({ length: 20 }, (_, i) => `v${i}`) });
+    const junio = semana({ litrosDia: 400, vacasAportantes: Array.from({ length: 28 }, (_, i) => `v${i}`) });
+    expect(promedioLitrosPorVaca(marzo)).toBe(20);
+    expect(promedioLitrosPorVaca(junio)).toBeCloseTo(14.2857, 4);
+  });
+});
+
+describe('proyectarHato -- vacasAportantes', () => {
+  function estadoProy(overrides: Partial<EstadoReproductivoProyeccion> = {}): EstadoReproductivoProyeccion {
+    return { animalId: 'v1', enOrdeno: true, fechaProbableParto: null, fechaSecar: null, ...overrides };
+  }
+
+  it('semana medida: son exactamente las vacas pesadas (una fila por vaca, sin repetidos)', () => {
+    const r = proyectarHato({
+      pesajes: [
+        pesaje({ animal_id: 'v1', fecha: '2026-07-28', litros_total: 15 }),
+        pesaje({ animal_id: 'v2', fecha: '2026-07-27', litros_total: 12 }),
+      ],
+      partos: new Map(),
+      estadosReproductivos: [],
+      curvaHato: [],
+      fechaReferencia: '2026-07-28',
+      horizonteSemanas: 0,
+      ventanaMedidaSemanas: 1,
+    });
+    expect(r[0].vacasAportantes.sort()).toEqual(['v1', 'v2']);
+    expect(promedioLitrosPorVaca(r[0])).toBe(13.5); // 27/2
+  });
+
+  it('semana medida sin pesajes: vacasAportantes vacio y promedio null -- nunca 0 vacas', () => {
+    const r = proyectarHato({
+      pesajes: [],
+      partos: new Map(),
+      estadosReproductivos: [],
+      curvaHato: [],
+      fechaReferencia: '2026-07-28',
+      horizonteSemanas: 0,
+      ventanaMedidaSemanas: 1,
+    });
+    expect(r[0].vacasAportantes).toEqual([]);
+    expect(promedioLitrosPorVaca(r[0])).toBeNull();
+  });
+
+  it('semana proyectada: excluye a la vaca ya secada, aunque siga en vacasBase', () => {
+    const pesajes = [
+      pesaje({ animal_id: 'v1', fecha: '2026-07-28', litros_total: 20 }),
+      pesaje({ animal_id: 'v2', fecha: '2026-07-28', litros_total: 10 }),
     ];
-    expect(rangoVacasMedidas(semanas)).toEqual({ min: 3, max: 3 });
+    const r = proyectarHato({
+      pesajes,
+      partos: new Map(),
+      estadosReproductivos: [
+        estadoProy({ animalId: 'v1' }),
+        estadoProy({ animalId: 'v2', fechaSecar: '2026-08-04' }), // sale en la semana 1
+      ],
+      curvaHato: [],
+      fechaReferencia: '2026-07-28',
+      horizonteSemanas: 1,
+      ventanaMedidaSemanas: 0,
+    });
+    const proyectada = r.find((s) => s.tipo === 'proyectado')!;
+    expect(proyectada.vacasBase.sort()).toEqual(['v1', 'v2']); // la lista base no cambia
+    expect(proyectada.vacasAportantes).toEqual(['v1']); // el denominador si
+    expect(promedioLitrosPorVaca(proyectada)).toBe(20);
   });
 
-  it('cobertura que varía (caso real 20->28 vacas): min y max distintos', () => {
-    const semanas = [
-      semanaMedida({ semana: -3, vacasBase: Array.from({ length: 20 }, (_, i) => `v${i}`) }),
-      semanaMedida({ semana: 0, vacasBase: Array.from({ length: 28 }, (_, i) => `v${i}`) }),
-    ];
-    expect(rangoVacasMedidas(semanas)).toEqual({ min: 20, max: 28 });
-  });
-
-  it('ignora semanas proyectadas -- solo cuenta las medidas', () => {
-    const semanas = [
-      semanaMedida({ semana: 0, vacasBase: ['v1', 'v2'] }),
-      { semana: 1, litrosDia: 999, tipo: 'proyectado' as const, vacasBase: ['v1', 'v2', 'v3', 'v4', 'v5'], vacasEntran: [], vacasSalen: [], planas: [] },
-    ];
-    expect(rangoVacasMedidas(semanas)).toEqual({ min: 2, max: 2 });
-  });
-
-  it('ignora semanas medidas SIN dato (backlog) -- una semana en blanco no cuenta como 0 vacas', () => {
-    const semanas = [
-      semanaMedida({ semana: -1, litrosDia: null, vacasBase: [] }),
-      semanaMedida({ semana: 0, litrosDia: 100, vacasBase: ['v1', 'v2', 'v3'] }),
-    ];
-    expect(rangoVacasMedidas(semanas)).toEqual({ min: 3, max: 3 });
-  });
-
-  it('ninguna semana medida con dato: null', () => {
-    const semanas = [semanaMedida({ litrosDia: null, vacasBase: [] })];
-    expect(rangoVacasMedidas(semanas)).toBeNull();
-  });
-
-  it('arreglo vacío: null', () => {
-    expect(rangoVacasMedidas([])).toBeNull();
+  it('semana proyectada sin ninguna contribucion: vacasAportantes vacio junto al litrosDia null', () => {
+    const r = proyectarHato({
+      pesajes: [], // v1 nunca pesada -- no hay nivel del cual proyectar
+      partos: new Map(),
+      estadosReproductivos: [estadoProy()],
+      curvaHato: [],
+      fechaReferencia: '2026-07-28',
+      horizonteSemanas: 1,
+      ventanaMedidaSemanas: 0,
+    });
+    const proyectada = r.find((s) => s.tipo === 'proyectado')!;
+    expect(proyectada.litrosDia).toBeNull();
+    expect(proyectada.vacasAportantes).toEqual([]);
+    expect(promedioLitrosPorVaca(proyectada)).toBeNull();
   });
 });
 

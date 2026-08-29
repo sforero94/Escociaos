@@ -835,6 +835,15 @@ export interface SemanaProyeccion {
    * largo del horizonte, salvo las que entran/salen). Vacío en semanas
    * medidas. */
   vacasBase: string[];
+  /** Vacas que REALMENTE aportaron litros a `litrosDia` esta semana -- el
+   * único denominador honesto para un promedio por vaca. NO es
+   * `vacasBase.length`: en una semana proyectada `vacasBase` es la lista
+   * completa y constante del horizonte, de la que se descuentan las ya
+   * secadas y a la que se suman las que paren, y una vaca sin nivel base
+   * (o una que entra sin bucket de curva) no suma nada. En una semana
+   * medida es el conjunto de vacas efectivamente pesadas. Vacío cuando
+   * `litrosDia` es `null` -- "sin dato" nunca es "0 vacas". */
+  vacasAportantes: string[];
   /** Vacas cuyo `fecha_probable_parto` cae exactamente en esta semana. */
   vacasEntran: string[];
   /** Vacas cuyo `fecha_secar` cae exactamente en esta semana -- dejan de
@@ -884,11 +893,13 @@ export function proyectarHato(input: ProyectarHatoInput): SemanaProyeccion[] {
     const pesajesSemana = pesajes.filter((p) => p.fecha >= inicio && p.fecha <= fin);
     const litrosDia =
       pesajesSemana.length === 0 ? null : pesajesSemana.reduce((acc, p) => acc + p.litros_total, 0);
+    const vacasPesadas = [...new Set(pesajesSemana.map((p) => p.animal_id))];
     resultado.push({
       semana: -i,
       litrosDia,
       tipo: 'medido',
-      vacasBase: [...new Set(pesajesSemana.map((p) => p.animal_id))],
+      vacasBase: vacasPesadas,
+      vacasAportantes: vacasPesadas,
       vacasEntran: [],
       vacasSalen: [],
       planas: [],
@@ -905,6 +916,7 @@ export function proyectarHato(input: ProyectarHatoInput): SemanaProyeccion[] {
     const planas: string[] = [];
     const entranSemana: string[] = [];
     const salenSemana: string[] = [];
+    const aportantes: string[] = [];
 
     for (const vaca of vacasBase) {
       if (vaca.fechaSecar) {
@@ -929,6 +941,7 @@ export function proyectarHato(input: ProyectarHatoInput): SemanaProyeccion[] {
 
       if (forma === null) planas.push(vaca.animalId);
       litrosDia += forma !== null ? nivel * forma : nivel;
+      aportantes.push(vaca.animalId);
       huboContribucion = true;
     }
 
@@ -943,6 +956,7 @@ export function proyectarHato(input: ProyectarHatoInput): SemanaProyeccion[] {
       const bucket = mapaCurva.get(semanasEnLactancia);
       if (bucket && bucket.litros !== null) {
         litrosDia += bucket.litros;
+        aportantes.push(vaca.animalId);
         huboContribucion = true;
       } else {
         planas.push(vaca.animalId); // sin curva de referencia para su semana de lactancia -- no se suma nada
@@ -954,6 +968,10 @@ export function proyectarHato(input: ProyectarHatoInput): SemanaProyeccion[] {
       litrosDia: huboContribucion ? litrosDia : null,
       tipo: 'proyectado',
       vacasBase: vacasBase.map((v) => v.animalId),
+      // `huboContribucion === false` => `litrosDia` es `null`: sin dato no
+      // hay vacas que contar, y un denominador vacío nunca debe poder
+      // acompañar a un numerador inexistente.
+      vacasAportantes: huboContribucion ? aportantes : [],
       vacasEntran: entranSemana,
       vacasSalen: salenSemana,
       planas,
@@ -964,27 +982,25 @@ export function proyectarHato(input: ProyectarHatoInput): SemanaProyeccion[] {
 }
 
 /**
- * Rango [mín, máx] de vacas pesadas entre las semanas MEDIDAS de una
- * proyección (QA fix, `docs/hato/qa-produccion-rework.md` FIX 4, §5.2
- * "COBERTURA DE PESAJE INCOMPLETA"): la línea `medido` del tracker es una
- * SUMA cruda del hato, consistente en unidades (litros/día), pero con un
- * denominador que se mueve -- 20 vacas pesadas en marzo, 28 en junio 2026,
- * así que ~34% del salto de la serie es más vacas pesadas, no más leche
- * por vaca. Esta función no normaliza nada (`proyectarHato` sigue
- * plotteando el total del hato -- es una pregunta de hato, no por vaca);
- * solo declara la cobertura para que el caller decida mostrarla cuando
- * varía (sub-label visible, nunca solo en el tooltip).
+ * Litros/día POR VACA de una semana de la proyección -- la normalización
+ * que vuelve comparables entre sí semanas con distinto número de vacas en
+ * ordeño (el denominador que el total crudo del hato esconde: 20 vacas
+ * pesadas en marzo 2026, 28 en junio).
  *
- * Cuenta SOLO semanas con dato (`litrosDia !== null`) -- una semana en
- * blanco (backlog) no tiene vacas que contar, no es un 0 vacas. `null` si
- * ninguna semana medida tiene dato.
+ * Convive con el total, no lo reemplaza: el dueño hace DOS preguntas
+ * distintas -- "cuánta leche voy a tener" (total, la barra) y "qué tan bien
+ * está produciendo cada vaca" (este promedio, la línea). Por eso el
+ * denominador es `vacasAportantes` y no `vacasBase`: dividir el total
+ * proyectado entre la lista base completa (que incluye vacas ya secadas o
+ * sin nivel del cual proyectar) daría un promedio deflactado que no
+ * corresponde a ninguna vaca real.
+ *
+ * `null` -- nunca 0 -- cuando la semana no tiene dato o no tiene ninguna
+ * vaca aportante, misma regla que el resto del módulo.
  */
-export function rangoVacasMedidas(semanas: SemanaProyeccion[]): { min: number; max: number } | null {
-  const conteos = semanas
-    .filter((s) => s.tipo === 'medido' && s.litrosDia !== null)
-    .map((s) => s.vacasBase.length);
-  if (conteos.length === 0) return null;
-  return { min: Math.min(...conteos), max: Math.max(...conteos) };
+export function promedioLitrosPorVaca(semana: SemanaProyeccion): number | null {
+  if (semana.litrosDia === null || semana.vacasAportantes.length === 0) return null;
+  return semana.litrosDia / semana.vacasAportantes.length;
 }
 
 // ============================================================================
