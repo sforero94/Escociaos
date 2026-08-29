@@ -105,6 +105,39 @@ describe('Handler de texto libre con persistencia', () => {
 });
 
 // ============================================================================
+// Ronda de inventario — el bucle de corrección por texto libre reconoce
+// "cancelar" (incidente real 2026-08-28: una nota vieja sin confirmar se
+// tragaba en silencio cualquier texto posterior -- incluidas preguntas a
+// Esco sin relación -- porque este handler, a diferencia de TODOS los
+// demás flujos de bot.ts, nunca reconocía la palabra de salida).
+// ============================================================================
+
+describe('Ronda de inventario -- corrección por texto libre reconoce "cancelar"', () => {
+  const handlerSection = botSource.slice(
+    botSource.indexOf('RONDA DE INVENTARIO — corrección por texto libre del preview pendiente'),
+    botSource.indexOf('FREE-TEXT FALLBACK — Esco AI engine'),
+  );
+
+  it('existe la sección del handler (si esto falla, el marcador de arriba/abajo cambió de texto)', () => {
+    expect(handlerSection.length).toBeGreaterThan(0);
+  });
+
+  it('reconoce "cancelar" (y variantes) ANTES de la revisión de intentos agotados', () => {
+    const idxCancelar = handlerSection.indexOf('"cancelar"');
+    const idxAgotados = handlerSection.indexOf('intentosPreviewAgotados(pendiente.intentos_preview)');
+    expect(idxCancelar).toBeGreaterThan(-1);
+    expect(idxAgotados).toBeGreaterThan(-1);
+    expect(idxAgotados).toBeGreaterThan(idxCancelar);
+  });
+
+  it('cancelar marca la fila "descartado" -- misma acción que el botón ❌ Descartar, nunca una expiración silenciosa', () => {
+    expect(handlerSection).toContain('estado: "descartado"');
+    expect(handlerSection).toContain('.eq("actor_telegram_id", ctx.telegramUser.id)');
+    expect(handlerSection).toContain('.eq("estado", "preview_pendiente")');
+  });
+});
+
+// ============================================================================
 // Chart to QuickChart conversion
 // ============================================================================
 

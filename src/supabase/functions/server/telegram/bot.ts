@@ -2061,6 +2061,34 @@ function getBot(): Bot<BotContext> {
     const pendiente = await obtenerTranscritoPendienteMasReciente(sb, ctx.telegramUser.id);
     if (!pendiente) return next();
 
+    // Hallazgo real de Santiago (2026-08-28): a diferencia de TODOS los
+    // demás flujos de este archivo (cierreRonda, excepcionDavid,
+    // pendienteNotaRonda), este bucle nunca reconoció "cancelar" -- así que
+    // una nota vieja sin confirmar (acá, de casi 3 horas antes) se tragaba
+    // en silencio cualquier mensaje de texto posterior, incluidas preguntas
+    // a Esco sin ninguna relación, reinterpretándolas como correcciones y
+    // devolviendo cifras inventadas. Mismo botón que "❌ Descartar" (mismo
+    // UPDATE, mismas tres condiciones `id`/`actor_telegram_id`/estado) --
+    // "cancelar" por texto es la misma acción explícita que tocar el botón,
+    // nunca una expiración silenciosa por inactividad (CA-37 exige que un
+    // borrador sin confirmar se pueda seguir contando, nunca que desaparezca
+    // solo).
+    if (texto.toLowerCase() === "cancelar" || texto.toLowerCase() === "/cancelar" || texto.toLowerCase() === "descartar") {
+      const { error: errorDescartar } = await sb
+        .from("rondas_transcritos")
+        .update({ estado: "descartado" })
+        .eq("id", pendiente.id)
+        .eq("actor_telegram_id", ctx.telegramUser.id)
+        .eq("estado", "preview_pendiente");
+      if (errorDescartar) {
+        console.error("[Telegram] ronda: error al descartar por texto:", errorDescartar.message);
+        await ctx.reply("No se pudo descartar. Intenta de nuevo.");
+        return;
+      }
+      await ctx.reply("❌ Descartado. Lo que narraste en esa nota no quedó registrado.");
+      return;
+    }
+
     if (intentosPreviewAgotados(pendiente.intentos_preview)) {
       await sb
         .from("rondas_transcritos")
