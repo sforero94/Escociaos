@@ -37,6 +37,18 @@ let SQL_126: string;
 const RUTA_MIGRACION_130 = resolve(__dirname, '../sql/migrations/130_fn_ronda_proponer_ajuste_guarda_estado.sql');
 let SQL_130: string;
 
+// `fn_ronda_confirmar_hallazgos` fue enmendada en vivo por la migración 131
+// (2026-08-28, CA-4, ver ese archivo) -- mismo criterio que la 130 arriba:
+// nunca se toca 126, se lee 131 aparte.
+const RUTA_MIGRACION_131 = resolve(__dirname, '../sql/migrations/131_fn_ronda_confirmar_hallazgos_fuera_de_alcance.sql');
+let SQL_131: string;
+
+// `fn_ronda_proponer_ajuste` fue enmendada OTRA VEZ por la migración 132
+// (2026-08-28, exige cantidad_fisica_confirmada, ver ese archivo) -- mismo
+// criterio que 130/131 arriba: nunca se toca 126 ni 130, se lee 132 aparte.
+const RUTA_MIGRACION_132 = resolve(__dirname, '../sql/migrations/132_fn_ronda_proponer_ajuste_cantidad_confirmada.sql');
+let SQL_132: string;
+
 const NOMBRES_RPC = [
   'fn_ronda_abrir',
   'fn_ronda_confirmar_hallazgos',
@@ -64,6 +76,8 @@ function extraerBloque(nombreFuncion: string): string {
 beforeAll(() => {
   SQL_126 = readFileSync(RUTA_MIGRACION, 'utf-8');
   SQL_130 = readFileSync(RUTA_MIGRACION_130, 'utf-8');
+  SQL_131 = readFileSync(RUTA_MIGRACION_131, 'utf-8');
+  SQL_132 = readFileSync(RUTA_MIGRACION_132, 'utf-8');
 });
 
 describe('contrato de forma -- las 10 RPC + fn_ronda_validar_actor existen con la firma esperada', () => {
@@ -183,6 +197,51 @@ describe('fn_ronda_confirmar_hallazgos -- ADVERSARIAL 4: doble confirmación no 
   });
 });
 
+describe('fn_ronda_confirmar_hallazgos -- ADVERSARIAL 9: CA-4, producto en cero (hallazgo real de Santiago, migración 131, 2026-08-28)', () => {
+  // Santiago, probando en vivo en producción, narró "15-15-15" -- un
+  // fertilizante que existe en `productos` pero con cantidad_actual=0 y
+  // activo=false, así que `fn_ronda_abrir` (126) nunca lo congeló en
+  // rondas_inventario_alcance. CA-4 del brief de producto YA decía "los
+  // productos en cero no entran solos; Uriel puede reportar uno igual si lo
+  // encuentra" -- era un gap real entre el brief y el código de la Fase 2,
+  // no una reinterpretación. Este describe defiende que la rama nueva no se
+  // pierda en un PR posterior.
+  it('re-verifica server-side antes de confiar en la bandera del cliente -- nunca agrega al alcance en silencio', () => {
+    expect(SQL_131).toContain("v_fuera_de_alcance := COALESCE((v_h ->> 'fuera_de_alcance')::BOOLEAN, FALSE);");
+    expect(SQL_131).toContain('SELECT id, cantidad_actual, unidad_medida, precio_unitario, nombre');
+    expect(SQL_131).toContain('FROM productos WHERE id = v_producto_id');
+  });
+
+  it('rechaza el caso si el producto ya tiene existencia > 0 -- no es CA-4, puede ser P-3, no se agrega solo', () => {
+    expect(SQL_131).toContain('IF v_producto_vivo.cantidad_actual > 0 THEN');
+    expect(SQL_131).toContain('no es un caso CA-4');
+  });
+
+  it('el INSERT a rondas_inventario_alcance usa teórico 0 y las MISMAS columnas que fn_ronda_abrir (126)', () => {
+    expect(SQL_131).toContain(
+      'INSERT INTO rondas_inventario_alcance (ronda_id, producto_id, cantidad_teorica, unidad, precio_unitario, nombre_producto)',
+    );
+    expect(SQL_131).toContain(
+      'VALUES (v_transcrito.ronda_id, v_producto_vivo.id, 0, v_producto_vivo.unidad_medida, v_producto_vivo.precio_unitario, v_producto_vivo.nombre)',
+    );
+  });
+
+  it('el INSERT es idempotente -- ON CONFLICT sobre la PK real de la tabla (ronda_id, producto_id)', () => {
+    expect(SQL_131).toContain('ON CONFLICT (ronda_id, producto_id) DO NOTHING');
+  });
+
+  it('un hallazgo SIN fuera_de_alcance no pasa por la rama nueva -- comportamiento previo intacto', () => {
+    // La guarda original -- "no está en el alcance congelado" -- sigue
+    // presente sin condicionar, para el camino de siempre.
+    expect(SQL_131).toContain('el producto % no está en el alcance congelado de la ronda % (P-3)');
+  });
+
+  it('CREATE OR REPLACE, nunca DROP+CREATE -- no abre una ventana sin la función (precedente 077)', () => {
+    expect(SQL_131).toContain('CREATE OR REPLACE FUNCTION fn_ronda_confirmar_hallazgos');
+    expect(SQL_131).not.toMatch(/DROP\s+FUNCTION\s+fn_ronda_confirmar_hallazgos/i);
+  });
+});
+
 describe('fn_ronda_proponer_ajuste -- B-5: "David o Uriel" (corrección del orquestador, 2026-08-28)', () => {
   let cuerpo: string;
   beforeAll(() => {
@@ -250,6 +309,51 @@ describe('fn_ronda_proponer_ajuste -- ADVERSARIAL 9: guarda de estado (hallazgo 
   it('CREATE OR REPLACE, nunca DROP+CREATE -- no abre una ventana sin la función (precedente 077)', () => {
     expect(SQL_130).toContain('CREATE OR REPLACE FUNCTION fn_ronda_proponer_ajuste');
     expect(SQL_130).not.toMatch(/DROP\s+FUNCTION\s+fn_ronda_proponer_ajuste/i);
+  });
+});
+
+describe('fn_ronda_proponer_ajuste -- ADVERSARIAL 10: cantidad física siempre reconfirmada a mano (hallazgo real de Santiago, migración 132, 2026-08-28)', () => {
+  // "tres bultos de 50 kilos" se había interpretado como cantidad_fisica=3 --
+  // ver el encabezado de 132_fn_ronda_proponer_ajuste_cantidad_confirmada.sql
+  // para el análisis completo. Este describe defiende que la reconfirmación
+  // no se pierda en un PR posterior -- mismo criterio que el resto del
+  // archivo.
+  it('exige cantidad_fisica_confirmada -- rechaza el payload si falta', () => {
+    expect(SQL_132).toContain("v_cantidad_confirmada NUMERIC := (payload ->> 'cantidad_fisica_confirmada')::NUMERIC;");
+    expect(SQL_132).toContain('IF v_cantidad_confirmada IS NULL THEN');
+    expect(SQL_132).toContain('cantidad_fisica_confirmada es requerida');
+  });
+
+  it('rechaza una cantidad_fisica_confirmada negativa, pero 0 es un valor válido (nunca <=)', () => {
+    expect(SQL_132).toContain('IF v_cantidad_confirmada < 0 THEN');
+    expect(SQL_132).not.toContain('IF v_cantidad_confirmada <= 0 THEN');
+  });
+
+  it('el delta se calcula contra la cantidad CONFIRMADA, nunca contra la que congeló el intérprete de voz', () => {
+    expect(SQL_132).toContain('v_delta := v_cantidad_confirmada - v_excepcion.teorico_conteo');
+    expect(SQL_132).not.toContain('v_delta := v_excepcion.cantidad_fisica - v_excepcion.teorico_conteo');
+  });
+
+  it('sobrescribe rondas_excepciones.cantidad_fisica con el valor confirmado -- el reporte de cierre refleja lo que un humano confirmó', () => {
+    expect(SQL_132).toContain('cantidad_fisica = v_cantidad_confirmada');
+  });
+
+  it('conserva la guarda de estado de la 130 -- no se puede volver a proponer sobre una excepción ya decidida/aplicada', () => {
+    expect(SQL_132).toContain("IF v_excepcion.estado <> 'explicada' THEN");
+  });
+
+  it('no toca la autorización B-5 (David o Uriel, nunca Santiago)', () => {
+    expect(SQL_132).toContain("ARRAY['inventario_ronda', 'inventario_explicacion']");
+    expect(SQL_132).not.toContain("ARRAY['inventario_ronda', 'inventario_explicacion', 'inventario_aprobacion']");
+  });
+
+  it('CREATE OR REPLACE, nunca DROP+CREATE -- no abre una ventana sin la función (precedente 077)', () => {
+    expect(SQL_132).toContain('CREATE OR REPLACE FUNCTION fn_ronda_proponer_ajuste');
+    expect(SQL_132).not.toMatch(/DROP\s+FUNCTION\s+fn_ronda_proponer_ajuste/i);
+  });
+
+  it('sigue SECURITY INVOKER -- la 132 sólo cambia el cálculo del delta, nunca el modelo de seguridad', () => {
+    expect(SQL_132).toContain('LANGUAGE plpgsql SECURITY INVOKER SET search_path = public, pg_temp');
   });
 });
 

@@ -58,7 +58,27 @@ function nombrePeriodo(periodoIso: string): string {
 
 export async function cierreRondaConversation(conversation: Conversation<BotContext>, ctx: BotContext) {
   try {
-    const telegramUsuarioId = ctx.telegramUser?.id;
+    // NUNCA `ctx.telegramUser?.id` acá -- ver el comentario idéntico en
+    // excepcionDavid.ts (hallazgo real de Santiago probando en vivo,
+    // 2026-08-28): esa propiedad custom no sobrevive confiablemente el
+    // replay del plugin de conversaciones. Se reconsulta por `ctx.from.id`
+    // (nativo de grammY), envuelto en `external()` como el resto de este
+    // archivo.
+    const telegramId = ctx.from?.id;
+    if (!telegramId) {
+      await ctx.reply('Tu cuenta de Telegram no está vinculada -- avisa a un administrador.');
+      return;
+    }
+    const telegramUsuario = await conversation.external(async () => {
+      const { data } = await getSupabaseAdmin()
+        .from('telegram_usuarios')
+        .select('id')
+        .eq('telegram_id', telegramId)
+        .eq('activo', true)
+        .maybeSingle();
+      return data as { id: string } | null;
+    });
+    const telegramUsuarioId = telegramUsuario?.id;
     if (!telegramUsuarioId) {
       await ctx.reply('Tu cuenta de Telegram no está vinculada -- avisa a un administrador.');
       return;
@@ -165,7 +185,7 @@ export async function cierreRondaConversation(conversation: Conversation<BotCont
         'Voy a cerrar la ronda con:',
         `- Alcance: ${alcanceDeclarado}${alcanceNota ? ` -- ${alcanceNota}` : ''}`,
         '',
-        '¿Confirmás?',
+        '¿Confirmas?',
       ].join('\n'),
       { reply_markup: kbConfirmar },
     );

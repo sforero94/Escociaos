@@ -30,7 +30,7 @@
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 import type { FilaPreview } from '../rondaInventario/preview.ts';
 import { formatearCantidad } from '../rondaInventario/preview.ts';
-import type { AlcanceItem, HallazgoParaConfirmar } from '../rondaInventario/resolverHallazgos.ts';
+import type { AlcanceItem, HallazgoParaConfirmar, ProductoFueraDeAlcance } from '../rondaInventario/resolverHallazgos.ts';
 import type { CasoExcepcion, CasoProponer, CasoSantiago } from '../rondaInventario/resolucion.ts';
 import { buscarCausaRaiz } from '../rondaInventario/causasRaiz.ts';
 
@@ -201,6 +201,45 @@ export async function obtenerAlcanceRonda(supabase: SupabaseClient, rondaId: str
   return (data ?? []) as AlcanceRondaRow[];
 }
 
+export interface AlcanceRondaConCategoriaRow extends AlcanceRondaRow {
+  categoria: string;
+}
+
+/** MISMA consulta que `obtenerAlcanceRonda`, con `productos.categoria`
+ * embebido -- función APARTE (no se agrega el campo a la de arriba) para no
+ * tocar la forma de retorno de la que ya usan `resolverHallazgos.ts` y
+ * `/existencias`. `categoria` no se congela en `rondas_inventario_alcance`
+ * (R-5 es sobre la CANTIDAD, no sobre la taxonomía del producto) -- se lee
+ * en vivo de `productos` vía el `producto_id` del snapshot, mismo criterio
+ * que ya usa `resolverNombreActor`/`fn_ronda_actor_nombre` para no congelar
+ * datos que no son la medición que R-5 protege. Pedido de Santiago
+ * probando en vivo (2026-08-28): el `.md` del alcance agrupado por
+ * categoría, para que refleje cómo está organizada la bodega. */
+export async function obtenerAlcanceRondaConCategoria(
+  supabase: SupabaseClient,
+  rondaId: string,
+): Promise<AlcanceRondaConCategoriaRow[]> {
+  const { data, error } = await supabase
+    .from('rondas_inventario_alcance')
+    .select('producto_id, cantidad_teorica, unidad, nombre_producto, producto:productos(categoria)')
+    .eq('ronda_id', rondaId)
+    .order('nombre_producto', { ascending: true });
+  if (error) {
+    console.error('[ronda] obtenerAlcanceRondaConCategoria error:', error.message);
+    return [];
+  }
+  return ((data ?? []) as Array<AlcanceRondaRow & { producto: { categoria: string } | { categoria: string }[] | null }>).map((fila) => {
+    const producto = Array.isArray(fila.producto) ? fila.producto[0] : fila.producto;
+    return {
+      producto_id: fila.producto_id,
+      cantidad_teorica: fila.cantidad_teorica,
+      unidad: fila.unidad,
+      nombre_producto: fila.nombre_producto,
+      categoria: producto?.categoria ?? 'Otros',
+    };
+  });
+}
+
 /** A-2/R-15: cantidad y unidad, NUNCA precio. Hasta `limite` coincidencias
  * por nombre, contra el alcance CONGELADO de la ronda (no contra todo el
  * catálogo — Uriel sólo debe ver lo que puede contar hoy). */
@@ -312,6 +351,33 @@ export function alcanceComoItems(alcance: readonly AlcanceRondaRow[]): AlcanceIt
     nombre: a.nombre_producto,
     cantidadTeorica: a.cantidad_teorica,
     unidad: a.unidad,
+  }));
+}
+
+/** CA-4 (hallazgo real de Santiago probando en vivo, 2026-08-28): "los
+ * productos en cero no entran solos; Uriel puede reportar uno igual si lo
+ * encuentra". Candidatos para el fallback de `resolverProducto` cuando un
+ * hallazgo no matchea nada del alcance congelado -- productos que SÍ existen
+ * en el catálogo pero con `cantidad_actual <= 0` (por eso `fn_ronda_abrir`
+ * nunca los congeló, esa función sólo selecciona `> 0`). Deliberadamente
+ * SIN filtro de `activo`: CA-4 no lo pide, y el hallazgo real de Santiago
+ * (15-15-15) era justamente un producto inactivo. ~150 filas hoy -- se trae
+ * completo, sin paginar, porque `resolverProducto` sólo hace coincidencia
+ * exacta normalizada (D-T7), no una búsqueda que se beneficie de acotar
+ * server-side. */
+export async function obtenerProductosFueraDeAlcance(supabase: SupabaseClient): Promise<ProductoFueraDeAlcance[]> {
+  const { data, error } = await supabase
+    .from('productos')
+    .select('id, nombre, unidad_medida')
+    .lte('cantidad_actual', 0);
+  if (error) {
+    console.error('[ronda] obtenerProductosFueraDeAlcance error:', error.message);
+    return [];
+  }
+  return ((data ?? []) as Array<{ id: string; nombre: string; unidad_medida: string }>).map((p) => ({
+    productoId: p.id,
+    nombre: p.nombre,
+    unidad: p.unidad_medida,
   }));
 }
 
@@ -517,6 +583,43 @@ export async function obtenerExcepcionesPendientesDavid(supabase: SupabaseClient
     return [];
   }
   return (data as unknown as ExcepcionDetalleRonda[]) ?? [];
+}
+
+export interface DestinatarioModuloRonda {
+  telegramId: string;
+  telegramUsuarioId: string;
+}
+
+/** Suscritos ACTIVOS de un módulo de la ronda (`inventario_ronda` /
+ * `inventario_explicacion` / `inventario_aprobacion`) con Telegram
+ * VINCULADO -- pedido de Santiago probando en vivo (2026-08-28): cuando
+ * Uriel confirma un hallazgo, quien tenga `inventario_explicacion` debe
+ * recibir un aviso empujado, no tener que acordarse de correr `/explicar`.
+ * A diferencia de `resolverDestinatarios` de `ronda-inventario-tick.ts`
+ * (que lee `telegram_alertas_suscripciones`, el catálogo de LAS TRES
+ * alertas de §3.4 -- recordatorio/día 15/reporte de cierre), esto NO es una
+ * alerta del catálogo 096: es un aviso por-evento, uno por cada hallazgo
+ * confirmado, a cualquiera con el módulo -- no hay nada que suscribir u
+ * omitir, mismo criterio que ya usa `tieneAccesoExplicacion`/
+ * `tieneAccesoAprobacion` en bot.ts para gatear comandos por módulo. */
+export async function obtenerDestinatariosModuloRonda(
+  supabase: SupabaseClient,
+  modulo: string,
+): Promise<DestinatarioModuloRonda[]> {
+  const { data, error } = await supabase
+    .from('telegram_usuarios')
+    .select('id, telegram_id')
+    .eq('activo', true)
+    .not('telegram_id', 'is', null)
+    .contains('modulos_permitidos', [modulo]);
+  if (error) {
+    console.error(`[ronda] obtenerDestinatariosModuloRonda(${modulo}) error:`, error.message);
+    return [];
+  }
+  return ((data ?? []) as Array<{ id: string; telegram_id: number }>).map((u) => ({
+    telegramId: String(u.telegram_id),
+    telegramUsuarioId: u.id,
+  }));
 }
 
 /** `/proponer` (B-5): excepciones ya `explicada` por David (CA-38 exige ese

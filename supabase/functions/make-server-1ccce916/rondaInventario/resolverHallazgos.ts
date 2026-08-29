@@ -70,6 +70,15 @@ export interface AlcanceItem extends ProductoEnAlcance {
   unidad: string;
 }
 
+/** Un producto del catálogo que existe pero NO está en el alcance congelado
+ * de la ronda (`cantidad_actual <= 0` al abrir, o dado de alta después) --
+ * CA-4, ver el comentario de `resolverProducto` en `interpretarNota.ts`. Sin
+ * `cantidadTeorica`: por definición es 0 -- no viene de
+ * `rondas_inventario_alcance`, viene de `productos` directo. */
+export interface ProductoFueraDeAlcance extends ProductoEnAlcance {
+  unidad: string;
+}
+
 /** El fragmento de payload que `fn_ronda_confirmar_hallazgos` espera dentro
  * de `hallazgos[]` (migración 126, §6.2 del brief técnico) -- nombres de
  * campo en camelCase acá; el handler de Telegram los traduce a snake_case al
@@ -90,6 +99,13 @@ export interface HallazgoParaConfirmar {
   explicacionCitada: string | null;
   causaClave: string | null;
   causaConfianza: ConfianzaInterprete;
+  /** CA-4: `true` si el producto se resolvió fuera del alcance congelado
+   * (existía en el catálogo pero en cero/inactivo). El llamador de
+   * `fn_ronda_confirmar_hallazgos` viaja esto como `fuera_de_alcance` en el
+   * payload -- el RPC (migración 131) lo re-verifica server-side contra
+   * `productos.cantidad_actual` antes de agregarlo al alcance de la ronda,
+   * nunca confía en esta bandera ciegamente. */
+  fueraDeAlcance: boolean;
 }
 
 export interface HallazgoResuelto {
@@ -116,6 +132,7 @@ function filaNoIdentificada(hallazgo: HallazgoCrudo, via: ViaExcepcion): FilaPre
     via,
     explicacionCitada: hallazgo.explicacionDavidCitada || null,
     fragmentoLiteral: hallazgo.fragmentoLiteral,
+    fueraDeAlcance: false,
   };
 }
 
@@ -137,23 +154,35 @@ function filaNoIdentificada(hallazgo: HallazgoCrudo, via: ViaExcepcion): FilaPre
  *      producto no se pudo resolver (el preview igual necesita mostrar algo
  *      coherente en esa columna).
  */
-export function resolverHallazgo(hallazgo: HallazgoCrudo, alcance: readonly AlcanceItem[]): HallazgoResuelto {
+export function resolverHallazgo(
+  hallazgo: HallazgoCrudo,
+  alcance: readonly AlcanceItem[],
+  fueraDeAlcance: readonly ProductoFueraDeAlcance[] = [],
+): HallazgoResuelto {
   const via = derivarVia(hallazgo);
-  const resolucion = resolverProducto(hallazgo.productoMencionado, alcance);
+  const resolucion = resolverProducto(hallazgo.productoMencionado, alcance, fueraDeAlcance);
 
   if (resolucion.estado === 'no_identificado') {
     return { fila: filaNoIdentificada(hallazgo, via), paraConfirmar: null };
   }
 
-  const item = alcance.find((p) => p.productoId === resolucion.productoId);
+  const esFueraDeAlcance = resolucion.origen === 'fuera_de_alcance';
+  const item: AlcanceItem | ProductoFueraDeAlcance | undefined = esFueraDeAlcance
+    ? fueraDeAlcance.find((p) => p.productoId === resolucion.productoId)
+    : alcance.find((p) => p.productoId === resolucion.productoId);
   // No debería poder pasar (resolverProducto sólo devuelve un productoId que
-  // vino del propio `alcance`), pero si pasara, tratar como no identificado
-  // en vez de arriesgar un `teorico`/`unidad` inventados.
+  // vino de una de las dos listas que él mismo recibió), pero si pasara,
+  // tratar como no identificado en vez de arriesgar un `teorico`/`unidad`
+  // inventados.
   if (!item) {
     return { fila: filaNoIdentificada(hallazgo, via), paraConfirmar: null };
   }
 
-  const fisicoResuelto = derivarFisico(hallazgo, item.cantidadTeorica);
+  // CA-4: un producto fuera del alcance congelado no tiene `cantidadTeorica`
+  // -- el teórico ES 0 (nunca se contó como existencia al abrir la ronda).
+  const teoricoFoto = esFueraDeAlcance ? 0 : (item as AlcanceItem).cantidadTeorica;
+
+  const fisicoResuelto = derivarFisico(hallazgo, teoricoFoto);
   const causa = hallazgo.causaClave ? buscarCausaRaiz(hallazgo.causaClave) : undefined;
 
   const fila: FilaPreview = {
@@ -164,12 +193,13 @@ export function resolverHallazgo(hallazgo: HallazgoCrudo, alcance: readonly Alca
     unidad: item.unidad,
     fisico: fisicoResuelto.estado === 'resuelto' ? fisicoResuelto.fisico : null,
     fisicoOrigen: fisicoResuelto.estado === 'resuelto' ? fisicoResuelto.origen : null,
-    teorico: item.cantidadTeorica,
+    teorico: teoricoFoto,
     causaClave: hallazgo.causaClave || null,
     causaEtiqueta: causa ? causa.etiqueta : null,
     via,
     explicacionCitada: hallazgo.explicacionDavidCitada || null,
     fragmentoLiteral: hallazgo.fragmentoLiteral,
+    fueraDeAlcance: esFueraDeAlcance,
   };
 
   if (fisicoResuelto.estado !== 'resuelto') {
@@ -184,6 +214,7 @@ export function resolverHallazgo(hallazgo: HallazgoCrudo, alcance: readonly Alca
     explicacionCitada: hallazgo.explicacionDavidCitada || null,
     causaClave: hallazgo.causaClave || null,
     causaConfianza: hallazgo.causaConfianza,
+    fueraDeAlcance: esFueraDeAlcance,
   };
 
   return { fila, paraConfirmar };
@@ -195,6 +226,7 @@ export function resolverHallazgo(hallazgo: HallazgoCrudo, alcance: readonly Alca
 export function resolverHallazgos(
   hallazgos: readonly HallazgoCrudo[],
   alcance: readonly AlcanceItem[],
+  fueraDeAlcance: readonly ProductoFueraDeAlcance[] = [],
 ): HallazgoResuelto[] {
-  return hallazgos.map((h) => resolverHallazgo(h, alcance));
+  return hallazgos.map((h) => resolverHallazgo(h, alcance, fueraDeAlcance));
 }

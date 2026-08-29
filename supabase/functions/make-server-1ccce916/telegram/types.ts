@@ -46,6 +46,21 @@ export interface SessionData {
     causaClave: string;
     decision?: 'aprobado' | 'desestimado';
   } | null;
+
+  // Migración 132 (2026-08-28, hallazgo real de Santiago probando en vivo):
+  // quien propone un ajuste sin respaldo (B-5) tiene que reconfirmar a mano
+  // la cantidad física ANTES de elegir la causa -- nunca se infiere del
+  // valor que congeló el intérprete de voz al reportar (esa fue exactamente
+  // la falla: "tres bultos de 50 kilos" se había interpretado como "3").
+  // Mismo criterio de puente que `pendienteNotaRonda` -- dos campos, no uno,
+  // porque son dos pasos DISTINTOS del mismo flujo: `pendienteCantidadRonda`
+  // marca "esperando que escriban el número"; `cantidadConfirmadaRonda`
+  // guarda el número YA confirmado hasta que el toque final en `:ok` lo
+  // manda en el payload de `fn_ronda_proponer_ajuste`. Si queda huérfano no
+  // rompe nada más que ESE flujo puntual -- el próximo `/proponer` los
+  // vuelve a fijar antes de leerlos.
+  pendienteCantidadRonda?: { excepcionId: string } | null;
+  cantidadConfirmadaRonda?: { excepcionId: string; cantidad: number } | null;
 }
 
 export interface BotContextFlavor {

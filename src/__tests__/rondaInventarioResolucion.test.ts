@@ -13,6 +13,7 @@ import {
   etiquetaDecision,
   renderCasoDavid,
   renderCasoProponer,
+  renderCasoProponerInicio,
   renderCasoSantiago,
   renderCitaDavid,
   renderConfirmacionDecision,
@@ -131,7 +132,7 @@ describe('renderCitaDavid', () => {
     const texto = renderCitaDavid('es por error en el sistema');
     expect(texto).toContain('"es por error en el sistema"');
     expect(texto).toMatch(/confirm/i);
-    expect(texto).toMatch(/corregís|corregir/i);
+    expect(texto).toMatch(/corriges|corregir/i);
   });
 });
 
@@ -167,6 +168,25 @@ describe('renderCasoProponer', () => {
 
   it('no menciona ninguna sugerencia cuando el intérprete no propuso causa', () => {
     expect(renderCasoProponer(CASO_PROPONER)).not.toMatch(/sugiere/i);
+  });
+});
+
+describe('renderCasoProponerInicio (migración 132)', () => {
+  it('incluye la explicación de David pero NUNCA pregunta la causa -- ese paso viene después de reconfirmar la cantidad', () => {
+    const texto = renderCasoProponerInicio(CASO_PROPONER);
+    expect(texto).toContain('Explicación de David: no se capturó la salida a la aplicación del jueves');
+    expect(texto).not.toContain('¿Cuál es la causa raíz?');
+  });
+
+  it('invita a tocar el botón para reportar la cantidad', () => {
+    expect(renderCasoProponerInicio(CASO_PROPONER)).toContain('Toca el botón para reportar la cantidad física real');
+  });
+
+  it('muestra la causa sugerida como pista NO vinculante cuando existe (D-T8/CA-34)', () => {
+    const caso: CasoProponer = { ...CASO_PROPONER, causaSugeridaEtiqueta: 'Error de captura previa' };
+    const texto = renderCasoProponerInicio(caso);
+    expect(texto).toContain('El sistema sugiere: Error de captura previa');
+    expect(texto).toMatch(/no vinculante/i);
   });
 });
 
@@ -225,21 +245,21 @@ describe('etiquetaDecision', () => {
 describe('renderConfirmacionDecision', () => {
   it('arma la pregunta de confirmación con el verbo correcto para aprobar', () => {
     expect(renderConfirmacionDecision('Silicalmag', 'aprobado', 'Movimiento no capturado')).toBe(
-      'Vas a aprobar el ajuste de "Silicalmag" con causa "Movimiento no capturado". ¿Confirmás?',
+      'Vas a aprobar el ajuste de "Silicalmag" con causa "Movimiento no capturado". ¿Confirmas?',
     );
   });
 
   it('arma la pregunta de confirmación con el verbo correcto para desestimar', () => {
     expect(renderConfirmacionDecision('Silicalmag', 'desestimado', 'Error de conteo')).toBe(
-      'Vas a desestimar el ajuste de "Silicalmag" con causa "Error de conteo". ¿Confirmás?',
+      'Vas a desestimar el ajuste de "Silicalmag" con causa "Error de conteo". ¿Confirmas?',
     );
   });
 });
 
-describe('renderConfirmacionPropuesta', () => {
-  it('arma la pregunta de confirmación de la propuesta', () => {
-    expect(renderConfirmacionPropuesta('Silicalmag', 'Movimiento no capturado')).toBe(
-      'Vas a proponer el ajuste de "Silicalmag" con causa "Movimiento no capturado". ¿Confirmás?',
+describe('renderConfirmacionPropuesta (migración 132: incluye la cantidad reconfirmada)', () => {
+  it('arma la pregunta de confirmación de la propuesta con la cantidad confirmada', () => {
+    expect(renderConfirmacionPropuesta('Silicalmag', 'Movimiento no capturado', 90, 'Kilos')).toBe(
+      'Vas a proponer el ajuste de "Silicalmag" (cantidad física confirmada: 90 Kilos) con causa "Movimiento no capturado". ¿Confirmas?',
     );
   });
 });

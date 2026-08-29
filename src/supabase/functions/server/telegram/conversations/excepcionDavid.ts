@@ -110,7 +110,34 @@ export async function excepcionDavidConversation(
   excepcionId: string,
 ) {
   try {
-    const telegramUsuarioId = ctx.telegramUser?.id;
+    // NUNCA `ctx.telegramUser?.id` acá -- es una propiedad custom que la
+    // auth middleware de bot.ts pone en `ctx` ANTES del plugin de
+    // conversaciones (línea 182 vs 214), pero el plugin REPLAYA el builder
+    // completo en cada update mientras la conversación está activa
+    // (por eso TODA lectura de base de este archivo está envuelta en
+    // `conversation.external()` -- ver el resto de este archivo), y esa
+    // propiedad custom no sobrevivía el replay: es la ÚNICA conversación de
+    // bot.ts que se entra con un argumento extra (`excepcionId`) y la ÚNICA
+    // que reventaba con "no vinculada" pese a tener la cuenta activa
+    // (hallazgo real de Santiago probando en vivo, 2026-08-28). Se
+    // reconsulta acá, por `ctx.from.id` -- SIEMPRE nativo de grammY, nunca
+    // inyectado por middleware propio -- envuelto en `external()` como toda
+    // lectura de este archivo.
+    const telegramId = ctx.from?.id;
+    if (!telegramId) {
+      await ctx.reply('Tu cuenta de Telegram no está vinculada -- avisa a un administrador.');
+      return;
+    }
+    const telegramUsuario = await conversation.external(async () => {
+      const { data } = await getSupabaseAdmin()
+        .from('telegram_usuarios')
+        .select('id')
+        .eq('telegram_id', telegramId)
+        .eq('activo', true)
+        .maybeSingle();
+      return data as { id: string } | null;
+    });
+    const telegramUsuarioId = telegramUsuario?.id;
     if (!telegramUsuarioId) {
       await ctx.reply('Tu cuenta de Telegram no está vinculada -- avisa a un administrador.');
       return;
@@ -184,7 +211,7 @@ export async function excepcionDavidConversation(
         while (explicacionDavid === null) {
           const r = await conversation.wait();
           if (r.message?.voice || r.message?.audio) {
-            await ctx.reply('Necesito esto por texto -- escribí tu explicación, o *cancelar*.', { parse_mode: 'Markdown' });
+            await ctx.reply('Necesito esto por texto -- escribe tu explicación, o *cancelar*.', { parse_mode: 'Markdown' });
             continue;
           }
           const texto = r.message?.text?.trim();
@@ -193,7 +220,7 @@ export async function excepcionDavidConversation(
             return conversation.halt();
           }
           if (!texto) {
-            await ctx.reply('Necesito un texto -- escribí tu explicación, o *cancelar*.', { parse_mode: 'Markdown' });
+            await ctx.reply('Necesito un texto -- escribe tu explicación, o *cancelar*.', { parse_mode: 'Markdown' });
             continue;
           }
           explicacionDavid = texto;
@@ -205,7 +232,7 @@ export async function excepcionDavidConversation(
       while (explicacionDavid === null) {
         const r = await conversation.wait();
         if (r.message?.voice || r.message?.audio) {
-          await ctx.reply('Necesito esto por texto -- escribí tu explicación, o *cancelar*.', { parse_mode: 'Markdown' });
+          await ctx.reply('Necesito esto por texto -- escribe tu explicación, o *cancelar*.', { parse_mode: 'Markdown' });
           continue;
         }
         const texto = r.message?.text?.trim();
@@ -214,7 +241,7 @@ export async function excepcionDavidConversation(
           return conversation.halt();
         }
         if (!texto) {
-          await ctx.reply('Necesito un texto -- escribí tu explicación, o *cancelar*.', { parse_mode: 'Markdown' });
+          await ctx.reply('Necesito un texto -- escribe tu explicación, o *cancelar*.', { parse_mode: 'Markdown' });
           continue;
         }
         explicacionDavid = texto;
@@ -262,7 +289,7 @@ export async function excepcionDavidConversation(
         await r.answerCallbackQuery();
         await r.editMessageText('Quedó registrada tu explicación. Nada más por ahora.');
         await ctx.reply(
-          'La discrepancia quedó "explicada". Si más adelante hace falta un ajuste sin respaldo (pérdida, sustracción...), cualquiera de los dos -- vos o Uriel -- puede proponerlo con /proponer.',
+          'La discrepancia quedó "explicada". Si más adelante hace falta un ajuste sin respaldo (pérdida, sustracción...), cualquiera de los dos -- tú o Uriel -- puede proponerlo con /proponer.',
         );
         return conversation.halt();
       }
@@ -281,7 +308,7 @@ export async function excepcionDavidConversation(
       const texto = r.message?.text;
       if (texto && esCancelacionTexto(texto)) {
         await ctx.reply(
-          'La discrepancia quedó "explicada". Si más adelante hace falta un ajuste sin respaldo (pérdida, sustracción...), cualquiera de los dos -- vos o Uriel -- puede proponerlo con /proponer.',
+          'La discrepancia quedó "explicada". Si más adelante hace falta un ajuste sin respaldo (pérdida, sustracción...), cualquiera de los dos -- tú o Uriel -- puede proponerlo con /proponer.',
         );
         return conversation.halt();
       }
@@ -292,7 +319,7 @@ export async function excepcionDavidConversation(
         [
           'Listo -- tu explicación quedó guardada.',
           '',
-          'Si más adelante hace falta un ajuste sin respaldo (pérdida, sustracción, o cualquier otra causa), vos o Uriel pueden proponerlo con /proponer. Si no hace falta nada más, Santiago lo va a ver igual en el historial de la ronda.',
+          'Si más adelante hace falta un ajuste sin respaldo (pérdida, sustracción, o cualquier otra causa), tú o Uriel pueden proponerlo con /proponer. Si no hace falta nada más, Santiago lo va a ver igual en el historial de la ronda.',
         ].join('\n'),
       );
       return;
@@ -318,7 +345,7 @@ export async function excepcionDavidConversation(
       }
       if (r.callbackQuery?.data === 'expl_cancelar') {
         await r.answerCallbackQuery();
-        await ctx.reply('Cancelado. La explicación ya quedó guardada -- podés retomar la captura con /explicar cuando quieras.');
+        await ctx.reply('Cancelado. La explicación ya quedó guardada -- puedes retomar la captura con /explicar cuando quieras.');
         return conversation.halt();
       }
       if (r.callbackQuery?.data === 'expl_tipo_entrada') {
@@ -341,7 +368,7 @@ export async function excepcionDavidConversation(
       }
       const texto = r.message?.text;
       if (texto && esCancelacionTexto(texto)) {
-        await ctx.reply('Cancelado. La explicación ya quedó guardada -- podés retomar la captura con /explicar cuando quieras.');
+        await ctx.reply('Cancelado. La explicación ya quedó guardada -- puedes retomar la captura con /explicar cuando quieras.');
         return conversation.halt();
       }
     }
@@ -356,12 +383,12 @@ export async function excepcionDavidConversation(
       }
       const texto = r.message?.text?.trim();
       if (texto && esCancelacionTexto(texto)) {
-        await ctx.reply('Cancelado. La explicación ya quedó guardada -- podés retomar la captura con /explicar cuando quieras.');
+        await ctx.reply('Cancelado. La explicación ya quedó guardada -- puedes retomar la captura con /explicar cuando quieras.');
         return conversation.halt();
       }
       const parsed = texto ? parseCantidadPositiva(texto) : null;
       if (parsed === null) {
-        await ctx.reply('No entendí ese número -- probá de nuevo (ej: 12 o 12,5), o escribe *cancelar*.', { parse_mode: 'Markdown' });
+        await ctx.reply('No entendí ese número -- prueba de nuevo (ej: 12 o 12,5), o escribe *cancelar*.', { parse_mode: 'Markdown' });
         continue;
       }
       cantidad = parsed;
@@ -385,13 +412,13 @@ export async function excepcionDavidConversation(
     while (fechaMovimiento === null) {
       const r = await conversation.wait();
       if (r.message?.voice || r.message?.audio) {
-        await ctx.reply('Toca un botón, o escribí la fecha por texto (DD/MM), o *cancelar*.', { parse_mode: 'Markdown' });
+        await ctx.reply('Toca un botón, o escribe la fecha por texto (DD/MM), o *cancelar*.', { parse_mode: 'Markdown' });
         continue;
       }
       if (!pidiendoFechaTexto) {
         if (r.callbackQuery?.data === 'expl_cancelar') {
           await r.answerCallbackQuery();
-          await ctx.reply('Cancelado. La explicación ya quedó guardada -- podés retomar la captura con /explicar cuando quieras.');
+          await ctx.reply('Cancelado. La explicación ya quedó guardada -- puedes retomar la captura con /explicar cuando quieras.');
           return conversation.halt();
         }
         if (r.callbackQuery?.data === 'expl_fecha_hoy') {
@@ -409,13 +436,13 @@ export async function excepcionDavidConversation(
       }
       const texto = r.message?.text?.trim();
       if (texto && esCancelacionTexto(texto)) {
-        await ctx.reply('Cancelado. La explicación ya quedó guardada -- podés retomar la captura con /explicar cuando quieras.');
+        await ctx.reply('Cancelado. La explicación ya quedó guardada -- puedes retomar la captura con /explicar cuando quieras.');
         return conversation.halt();
       }
       if (!pidiendoFechaTexto) continue; // callback no reconocido -- se ignora
       const parsed = texto ? parseDDMM(texto, hoy) : null;
       if (parsed === null) {
-        await ctx.reply('Formato inválido -- probá DD/MM (ej: 12/08), o escribe *cancelar*.', { parse_mode: 'Markdown' });
+        await ctx.reply('Formato inválido -- prueba DD/MM (ej: 12/08), o escribe *cancelar*.', { parse_mode: 'Markdown' });
         continue;
       }
       await ctx.reply(`Fecha: ${fechaLegible(parsed)}.`);
@@ -428,22 +455,22 @@ export async function excepcionDavidConversation(
       : tipoMovimiento === 'Salida por Aplicación'
       ? 'lote de la aplicación'
       : 'observación';
-    await ctx.reply(`¿Querés agregar un ${etiquetaCampoOpcional}? Escribilo, o escribí "no" para omitir.`);
+    await ctx.reply(`¿Quieres agregar un ${etiquetaCampoOpcional}? Escríbelo, o escribe "no" para omitir.`);
     let campoOpcional: string | null = null;
     let pidiendoCampoOpcional = true;
     while (pidiendoCampoOpcional) {
       const r = await conversation.wait();
       if (r.message?.voice || r.message?.audio) {
-        await ctx.reply('Necesito esto por texto -- escribilo, "no" para omitir, o *cancelar*.', { parse_mode: 'Markdown' });
+        await ctx.reply('Necesito esto por texto -- escríbelo, "no" para omitir, o *cancelar*.', { parse_mode: 'Markdown' });
         continue;
       }
       const texto = r.message?.text?.trim();
       if (texto && esCancelacionTexto(texto)) {
-        await ctx.reply('Cancelado. La explicación ya quedó guardada -- podés retomar la captura con /explicar cuando quieras.');
+        await ctx.reply('Cancelado. La explicación ya quedó guardada -- puedes retomar la captura con /explicar cuando quieras.');
         return conversation.halt();
       }
       if (!texto) {
-        await ctx.reply('Escribí el texto, "no" para omitir, o *cancelar*.', { parse_mode: 'Markdown' });
+        await ctx.reply('Escribe el texto, "no" para omitir, o *cancelar*.', { parse_mode: 'Markdown' });
         continue;
       }
       campoOpcional = texto.toLowerCase() === 'no' ? null : texto;
@@ -464,7 +491,7 @@ export async function excepcionDavidConversation(
         `- Fecha: ${fechaLegible(fechaMovimiento)}`,
         campoOpcional ? `- ${etiquetaCampoOpcional}: ${campoOpcional}` : null,
         '',
-        '¿Confirmás?',
+        '¿Confirmas?',
       ]
         .filter((l): l is string => l !== null)
         .join('\n'),
@@ -479,7 +506,7 @@ export async function excepcionDavidConversation(
       }
       if (r.callbackQuery?.data === 'expl_cancelar') {
         await r.answerCallbackQuery();
-        await ctx.reply('Cancelado. La explicación ya quedó guardada -- podés retomar la captura con /explicar cuando quieras.');
+        await ctx.reply('Cancelado. La explicación ya quedó guardada -- puedes retomar la captura con /explicar cuando quieras.');
         return conversation.halt();
       }
       if (r.callbackQuery?.data === 'expl_confirmar_captura') {
@@ -488,7 +515,7 @@ export async function excepcionDavidConversation(
       }
       const texto = r.message?.text;
       if (texto && esCancelacionTexto(texto)) {
-        await ctx.reply('Cancelado. La explicación ya quedó guardada -- podés retomar la captura con /explicar cuando quieras.');
+        await ctx.reply('Cancelado. La explicación ya quedó guardada -- puedes retomar la captura con /explicar cuando quieras.');
         return conversation.halt();
       }
     }

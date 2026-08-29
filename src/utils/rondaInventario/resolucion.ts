@@ -100,7 +100,7 @@ export function renderCasoDavid(caso: CasoExcepcion): string {
 /** La cita del audio de Uriel sobre lo que David habría dicho (CA-38) --
  * SIEMPRE mostrada como cita, nunca como la palabra confirmada de David. */
 export function renderCitaDavid(explicacionCitada: string): string {
-  return `Uriel citó que dijiste: "${explicacionCitada}"\n\n¿Confirmás esto tal cual, o lo corregís?`;
+  return `Uriel citó que dijiste: "${explicacionCitada}"\n\n¿Confirmas esto tal cual, o lo corriges?`;
 }
 
 // ---------------------------------------------------------------------------
@@ -121,12 +121,26 @@ export function renderLineaProponer(caso: CasoProponer): string {
   return `${caso.productoNombre} — ${fraseDelta(delta)}`;
 }
 
-export function renderCasoProponer(caso: CasoProponer): string {
+function lineasCasoProponer(caso: CasoProponer): string[] {
   const lineas = [renderCasoDavid(caso)];
   if (caso.explicacionDavid) lineas.push(`Explicación de David: ${caso.explicacionDavid}`);
-  if (caso.causaSugeridaEtiqueta) lineas.push(`El sistema sugiere: ${caso.causaSugeridaEtiqueta} (no vinculante -- elegí la causa vos)`);
-  lineas.push('', '¿Cuál es la causa raíz?');
-  return lineas.join('\n');
+  if (caso.causaSugeridaEtiqueta) lineas.push(`El sistema sugiere: ${caso.causaSugeridaEtiqueta} (no vinculante -- la causa la eliges tú)`);
+  return lineas;
+}
+
+export function renderCasoProponer(caso: CasoProponer): string {
+  return [...lineasCasoProponer(caso), '', '¿Cuál es la causa raíz?'].join('\n');
+}
+
+// Migración 132 (2026-08-28, hallazgo real de Santiago probando en vivo):
+// "tres bultos de 50 kilos" se había interpretado como cantidad_fisica=3 --
+// quien propone (David o Uriel) tiene que reconfirmar a mano la cantidad
+// física real ANTES de elegir la causa. Este es el PRIMER mensaje de
+// `/proponer`, así que nunca pregunta la causa todavía -- `renderCasoProponer`
+// (arriba) sigue siendo el que se usa recién DESPUÉS de que la cantidad quede
+// confirmada (bot.ts).
+export function renderCasoProponerInicio(caso: CasoProponer): string {
+  return [...lineasCasoProponer(caso), '', 'Toca el botón para reportar la cantidad física real y proponer un ajuste.'].join('\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -168,11 +182,22 @@ export function renderConfirmacionDecision(
   decision: 'aprobado' | 'desestimado',
   causaEtiqueta: string,
 ): string {
-  return `Vas a ${etiquetaDecision(decision).toLowerCase()} el ajuste de "${productoNombre}" con causa "${causaEtiqueta}". ¿Confirmás?`;
+  return `Vas a ${etiquetaDecision(decision).toLowerCase()} el ajuste de "${productoNombre}" con causa "${causaEtiqueta}". ¿Confirmas?`;
 }
 
-export function renderConfirmacionPropuesta(productoNombre: string, causaEtiqueta: string): string {
-  return `Vas a proponer el ajuste de "${productoNombre}" con causa "${causaEtiqueta}". ¿Confirmás?`;
+// Migración 132: quien propone (David o Uriel) ya reconfirmó a mano la
+// cantidad física ANTES de llegar acá (bot.ts pide el número y sólo entonces
+// muestra el teclado de causas) -- se repite en esta pantalla para que la
+// confirmación final muestre los tres datos juntos (producto, cantidad,
+// causa) y no sólo dos.
+export function renderConfirmacionPropuesta(
+  productoNombre: string,
+  causaEtiqueta: string,
+  cantidadConfirmada: number,
+  unidad: string,
+): string {
+  const cantidadTexto = `${formatearCantidadResolucion(cantidadConfirmada)}${unidad ? ` ${unidad}` : ''}`;
+  return `Vas a proponer el ajuste de "${productoNombre}" (cantidad física confirmada: ${cantidadTexto}) con causa "${causaEtiqueta}". ¿Confirmas?`;
 }
 
 // ---------------------------------------------------------------------------

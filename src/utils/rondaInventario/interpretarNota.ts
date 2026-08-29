@@ -205,13 +205,14 @@ export function construirPromptInterprete(catalogoCausas: readonly CausaRaiz[] =
     '1. NO conoces la cantidad teórica de ningún producto y NO debes inventarla ni repetirla como si la supieras. Si el verificador dice "deberían haber 100 y hay 90", tu trabajo es registrar el FÍSICO (90, cantidad_fisica_presente=true) y el fragmento literal -- el sistema compara contra su propio dato, no contra lo que tú creas haber entendido.',
     '2. "producto_mencionado" es el nombre TAL COMO SONÓ, sin corregirlo ni normalizarlo -- ni siquiera si te parece un error de pronunciación de un producto conocido. La resolución contra el catálogo real la hace otro sistema, no tú.',
     '3. Si el verificador da la cantidad física directamente ("hay 90 kilos"), usa cantidad_fisica_presente=true. Si en cambio dice cuánto falta o sobra ("faltan 3", "sobran 2"), usa cantidad_faltante_presente=true con un número siempre positivo -- deja que el fragmento_literal aclare si es falta o sobra.',
-    '4. Clasifica la causa SOLO si el audio la deja clara. Usa una de estas claves del catálogo (o cadena vacía si no aplica ninguna con confianza):',
+    '4. Si el verificador menciona una cantidad de EMPAQUES (bultos, sacos, bolsas, canecas, cajas, costales) y el contenido de cada uno ("tres bultos de 50 kilos", "dos canecas de 20 litros"), calcula el TOTAL -- cantidad de empaques × contenido de cada uno -- y reporta ESE total como cantidad_fisica (o cantidad_faltante), nunca el número de empaques solo. Ejemplo literal: "tres bultos de 50 kilos" -> cantidad_fisica=150, NUNCA 3. Si el verificador ya dio el total directamente ("hay 150 kilos"), usa ese número tal cual, no lo dividas.',
+    '5. Clasifica la causa SOLO si el audio la deja clara. Usa una de estas claves del catálogo (o cadena vacía si no aplica ninguna con confianza):',
     causasTexto,
-    '5. causa_confianza=\'alta\' únicamente si el verificador fue explícito sobre la causa. Ante cualquier duda usa \'baja\' o \'ninguna\' -- nunca fuerces \'alta\' para parecer útil.',
-    '6. Si el audio cita lo que David dijo sobre ese hallazgo ("David dice que...", "según David..."), transcribe esa cita literal en explicacion_david_citada. Es una CITA de lo que el verificador reporta que David dijo -- no es la confirmación de David, y el sistema la trata así.',
-    '7. Un producto mencionado que no reconoces del rubro de insumos agrícolas de la finca igual se reporta como hallazgo -- no lo descartes ni lo muevas a observaciones_libres por tu cuenta: esa decisión la toma el servidor comparando contra el catálogo real, no tú.',
-    '8. "observaciones_libres" es SOLO para comentarios generales de la ronda que no se refieren a un producto específico (por ejemplo, sobre el estado de la bodega). No dupliques ahí un hallazgo que ya reportaste en "hallazgos".',
-    '9. Si algo del audio es ambiguo o no estás seguro de haberlo entendido bien, dilo en "avisos" en vez de adivinar.',
+    '6. causa_confianza=\'alta\' únicamente si el verificador fue explícito sobre la causa. Ante cualquier duda usa \'baja\' o \'ninguna\' -- nunca fuerces \'alta\' para parecer útil.',
+    '7. Si el audio cita lo que David dijo sobre ese hallazgo ("David dice que...", "según David..."), transcribe esa cita literal en explicacion_david_citada. Es una CITA de lo que el verificador reporta que David dijo -- no es la confirmación de David, y el sistema la trata así.',
+    '8. Un producto mencionado que no reconoces del rubro de insumos agrícolas de la finca igual se reporta como hallazgo -- no lo descartes ni lo muevas a observaciones_libres por tu cuenta: esa decisión la toma el servidor comparando contra el catálogo real, no tú.',
+    '9. "observaciones_libres" es SOLO para comentarios generales de la ronda que no se refieren a un producto específico (por ejemplo, sobre el estado de la bodega). No dupliques ahí un hallazgo que ya reportaste en "hallazgos".',
+    '10. Si algo del audio es ambiguo o no estás seguro de haberlo entendido bien, dilo en "avisos" en vez de adivinar.',
     '',
     'Responde ÚNICAMENTE con el JSON del esquema pedido. Sin explicaciones, sin markdown.',
   ].join('\n');
@@ -325,8 +326,10 @@ export interface ProductoEnAlcance {
   nombre: string;
 }
 
+export type OrigenResolucion = 'alcance' | 'fuera_de_alcance';
+
 export type ResolucionProducto =
-  | { estado: 'identificado'; productoId: string; nombreProducto: string }
+  | { estado: 'identificado'; productoId: string; nombreProducto: string; origen: OrigenResolucion }
   | { estado: 'no_identificado' };
 
 /** Normaliza un nombre de producto para comparar: minúsculas, sin tildes,
@@ -355,15 +358,41 @@ export function normalizarNombreProducto(nombre: string): string {
  * no debería ocurrir con nombres reales de catálogo, pero un dato sucio
  * puede producirlo), tampoco se adjudica solo -- mismo criterio que
  * `validarAnclaFila` sobre chapetas ambiguas en ocrChequeo.ts.
+ *
+ * `fueraDeAlcance` (opcional, hallazgo real de Santiago probando en vivo
+ * 2026-08-28) -- CA-4, literal: "los productos en cero no entran solos;
+ * Uriel puede reportar uno igual si lo encuentra". Un producto que SÍ existe
+ * en el catálogo pero estaba en 0 (o inactivo) al abrir la ronda queda fuera
+ * de `rondas_inventario_alcance` por diseño (`fn_ronda_abrir` sólo congela
+ * `cantidad_actual > 0`) -- así que sin esta segunda lista, ese producto es
+ * estructuralmente imposible de identificar por más veces que Uriel lo
+ * corrija por texto. Se prueba SÓLO si no hay ningún match (ni único ni
+ * ambiguo) en el alcance congelado -- el alcance real de la ronda manda
+ * siempre primero; nunca se usa para desambiguar un empate ahí (esa
+ * ambigüedad sigue siendo `no_identificado`, R-20). El llamador (Fase 3,
+ * `resolverHallazgos.ts`) es responsable de tratar `origen: 'fuera_de_alcance'`
+ * como teórico=0 y de agregar el producto al alcance congelado de la ronda
+ * al confirmar (`fn_ronda_confirmar_hallazgos`, migración 131) -- este
+ * módulo no toca ninguna tabla, sólo resuelve el nombre.
  */
-export function resolverProducto(productoMencionado: string, alcance: readonly ProductoEnAlcance[]): ResolucionProducto {
+export function resolverProducto(
+  productoMencionado: string,
+  alcance: readonly ProductoEnAlcance[],
+  fueraDeAlcance: readonly ProductoEnAlcance[] = [],
+): ResolucionProducto {
   const buscado = normalizarNombreProducto(productoMencionado);
   if (buscado === '') return { estado: 'no_identificado' };
 
-  const coincidencias = alcance.filter((p) => normalizarNombreProducto(p.nombre) === buscado);
-  if (coincidencias.length !== 1) return { estado: 'no_identificado' };
+  const enAlcance = alcance.filter((p) => normalizarNombreProducto(p.nombre) === buscado);
+  if (enAlcance.length === 1) {
+    return { estado: 'identificado', productoId: enAlcance[0].productoId, nombreProducto: enAlcance[0].nombre, origen: 'alcance' };
+  }
+  if (enAlcance.length > 1) return { estado: 'no_identificado' };
 
-  return { estado: 'identificado', productoId: coincidencias[0].productoId, nombreProducto: coincidencias[0].nombre };
+  // enAlcance.length === 0 -- recién acá se prueba fuera del alcance.
+  const fuera = fueraDeAlcance.filter((p) => normalizarNombreProducto(p.nombre) === buscado);
+  if (fuera.length !== 1) return { estado: 'no_identificado' };
+  return { estado: 'identificado', productoId: fuera[0].productoId, nombreProducto: fuera[0].nombre, origen: 'fuera_de_alcance' };
 }
 
 // ---------------------------------------------------------------------------

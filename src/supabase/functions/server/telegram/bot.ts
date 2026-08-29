@@ -29,7 +29,7 @@ import { excepcionDavidConversation } from "./conversations/excepcionDavid.ts";
 // no toca dinero y se mantiene intacto.
 import { llmToolLoop, getSystemPrompt } from "../chat.tsx";
 import { construirMensajeAlertaYaResuelta, construirMensajeCierreAlertaBroadcast } from "../hato-alertas.ts";
-import { cerrarAlertaEnEnvios } from "./enviar.ts";
+import { cerrarAlertaEnEnvios, enviarMensajeTelegram } from "./enviar.ts";
 
 // --- Ronda de inventario (Fase 3, Telegram/Uriel) ---------------------------
 // docs/brief_tecnico_verificacion_inventario.md §5/§7/§13. Pipeline de voz
@@ -42,6 +42,8 @@ import {
   buscarExistenciasRonda,
   mensajeErrorRpc,
   obtenerAlcanceRonda,
+  obtenerAlcanceRondaConCategoria,
+  obtenerProductosFueraDeAlcance,
   obtenerResumenExcepcionesRonda,
   obtenerRondaEnCurso,
   obtenerTranscritoPendienteMasReciente,
@@ -60,6 +62,7 @@ import {
   hoyBogota,
   obtenerExcepcionDetalle,
   obtenerExcepcionesParaProponer,
+  obtenerDestinatariosModuloRonda,
   obtenerExcepcionesPendientesDavid,
   obtenerExcepcionesPropuestasParaSantiago,
   resolverNombreActor,
@@ -69,7 +72,7 @@ import {
   // del formato "septiembre 2026", ver su comentario en ronda-helpers.ts.
   nombrePeriodoRonda,
 } from "./ronda-helpers.ts";
-import { resolverHallazgos } from "../rondaInventario/resolverHallazgos.ts";
+import { resolverHallazgos, type ProductoFueraDeAlcance } from "../rondaInventario/resolverHallazgos.ts";
 import type { RespuestaModeloInterprete } from "../rondaInventario/interpretarNota.ts";
 import {
   aplicarCorreccion,
@@ -82,11 +85,12 @@ import {
   renderPreviewTelegram,
   type PreviewRonda,
 } from "../rondaInventario/preview.ts";
-import { construirTextoAlcanceTxt } from "../rondaInventario/alcanceTxt.ts";
+import { construirAlcanceMd } from "../rondaInventario/alcanceTxt.ts";
 import { CAUSAS_RAIZ, causaPorIndice } from "../rondaInventario/causasRaiz.ts";
 import {
   etiquetaDecision,
   renderCasoProponer,
+  renderCasoProponerInicio,
   renderCasoSantiago,
   renderConfirmacionDecision,
   renderConfirmacionPropuesta,
@@ -411,17 +415,21 @@ function getBot(): Bot<BotContext> {
     return !!ctx.telegramUser?.modulos_permitidos?.includes("inventario_ronda");
   }
 
-  /** `.txt` del alcance completo (§7.2: reemplazo literal de la hoja
-   * impresa del Sheet de David) -- se manda al abrir la ronda y cada vez que
-   * Uriel toca "Ver alcance completo". R-15/CA-13: nunca precio. */
-  async function enviarAlcanceTxt(ctx: BotContext, sb: SupabaseClient, ronda: RondaInventarioRow) {
-    const alcance = await obtenerAlcanceRonda(sb, ronda.id);
-    const texto = construirTextoAlcanceTxt(
+  /** `.md` del alcance completo (§7.2: reemplazo literal de la hoja impresa
+   * del Sheet de David) -- se manda al abrir la ronda y cada vez que Uriel
+   * toca "Ver alcance completo". R-15/CA-13: nunca precio. Tabla agrupada
+   * por categoría (Fertilizante/Enmienda, agroquímicos, Herramienta/Equipo,
+   * Otros -- `ORDEN_CATEGORIA` en `alcanceTxt.ts`), pedido de Santiago
+   * probando en vivo (2026-08-28) para que refleje cómo está organizada la
+   * bodega físicamente. */
+  async function enviarAlcanceMd(ctx: BotContext, sb: SupabaseClient, ronda: RondaInventarioRow) {
+    const alcance = await obtenerAlcanceRondaConCategoria(sb, ronda.id);
+    const texto = construirAlcanceMd(
       ronda.periodo,
-      alcance.map((a) => ({ nombre: a.nombre_producto, cantidad: a.cantidad_teorica, unidad: a.unidad })),
+      alcance.map((a) => ({ categoria: a.categoria, nombre: a.nombre_producto, cantidad: a.cantidad_teorica, unidad: a.unidad })),
     );
     await ctx.replyWithDocument(
-      new InputFile(new TextEncoder().encode(texto), `alcance-ronda-${ronda.periodo}.txt`),
+      new InputFile(new TextEncoder().encode(texto), `alcance-ronda-${ronda.periodo}.md`),
     );
   }
 
@@ -460,7 +468,7 @@ function getBot(): Bot<BotContext> {
     await ctx.reply(
       [
         "No hay ninguna ronda en curso.",
-        "Normalmente te la recuerdo por acá la primera semana del mes. Si ya te toca recorrer y no llegó el recordatorio, podés abrirla vos mismo.",
+        "Normalmente te la recuerdo por acá la primera semana del mes. Si ya te toca recorrer y no llegó el recordatorio, puedes abrirla tú mismo.",
       ].join("\n"),
       { reply_markup: kb },
     );
@@ -566,7 +574,7 @@ function getBot(): Bot<BotContext> {
     );
 
     const ronda = await obtenerRondaEnCurso(sb);
-    if (ronda) await enviarAlcanceTxt(ctx, sb, ronda);
+    if (ronda) await enviarAlcanceMd(ctx, sb, ronda);
   }
 
   // Apertura manual (§7.2/§13 de la tarea de esta sesión): hasta que exista
@@ -595,7 +603,7 @@ function getBot(): Bot<BotContext> {
       await ctx.reply("Esa ronda ya no existe.");
       return;
     }
-    await enviarAlcanceTxt(ctx, sb, ronda);
+    await enviarAlcanceMd(ctx, sb, ronda);
   });
 
   // ==========================================================================
@@ -676,6 +684,44 @@ function getBot(): Bot<BotContext> {
   // `excepcion_id` (UUID, 36 bytes) dentro del límite de 64 bytes que
   // Telegram impone a `callback_data`.
   // ==========================================================================
+
+  /** Push a quien tenga `inventario_explicacion` apenas se confirma un
+   * hallazgo -- pedido de Santiago probando en vivo (2026-08-28): antes de
+   * esto, confirmar sólo creaba la excepción calladamente (diseño pull,
+   * `/explicar`); David nunca se enteraba sin acordarse de chequear. NO es
+   * una alerta del catálogo 096 (§3.4 del brief técnico enumera sólo tres:
+   * recordatorio/día 15/reporte de cierre) -- es un aviso por-evento, a
+   * cualquier suscrito ACTIVO del módulo, sin nada que configurar en la
+   * pantalla de Telegram. Mismo texto y mismo botón `Explicar` que ya usa la
+   * lista de `/explicar` -- un solo dueño del renderizado. Best-effort: un
+   * fallo de envío (chat bloqueado, nadie vinculado todavía) no revierte ni
+   * bloquea la confirmación, que ya quedó escrita.
+   */
+  async function enviarAvisoNuevasExcepciones(sb: SupabaseClient, excepcionIds: readonly string[]) {
+    if (excepcionIds.length === 0) return;
+    const destinatarios = await obtenerDestinatariosModuloRonda(sb, "inventario_explicacion");
+    if (destinatarios.length === 0) return;
+
+    for (const excepcionId of excepcionIds) {
+      const excepcion = await obtenerExcepcionDetalle(sb, excepcionId);
+      if (!excepcion) continue;
+      const texto = `🔔 Nueva discrepancia para explicar:\n${renderLineaPendienteDavid(excepcionComoCaso(excepcion))}`;
+      const botones = [{ texto: "Explicar", callbackData: `ronda_expl:${excepcionId}` }];
+      for (const destinatario of destinatarios) {
+        const resultado = await enviarMensajeTelegram(sb, {
+          telegramId: destinatario.telegramId,
+          telegramUsuarioId: destinatario.telegramUsuarioId,
+          texto,
+          botones,
+          tipoMensaje: "ronda_aviso_excepcion",
+          flujo: "ronda_inventario",
+        });
+        if (!resultado.ok) {
+          console.error(`[Telegram] ronda: aviso de excepción ${excepcionId} a ${destinatario.telegramId} falló:`, resultado.error);
+        }
+      }
+    }
+  }
 
   function tieneAccesoExplicacion(ctx: BotContext): boolean {
     return !!ctx.telegramUser?.modulos_permitidos?.includes("inventario_explicacion");
@@ -767,6 +813,20 @@ function getBot(): Bot<BotContext> {
     await ctx.conversation.enter("excepcionDavid", excepcionId);
   });
 
+  // Migración 132 (2026-08-28, hallazgo real de Santiago probando en vivo):
+  // "tres bultos de 50 kilos" se había interpretado como cantidad_fisica=3 --
+  // quien propone (David o Uriel) tiene que reconfirmar a mano la cantidad
+  // física real ANTES de elegir la causa, nunca inferida del valor que
+  // congeló el intérprete de voz. A diferencia de `parseCantidadPositiva` de
+  // `excepcionDavid.ts` (captura CON respaldo, donde un movimiento real
+  // siempre es > 0), acá 0 es un valor válido -- "no queda nada" es
+  // exactamente lo que un ajuste sin respaldo puede tener que reportar.
+  function parseCantidadRondaConfirmada(raw: string): number | null {
+    const limpio = raw.trim().replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
+    const num = Number(limpio);
+    return Number.isFinite(num) && num >= 0 ? num : null;
+  }
+
   // ---- /proponer (David o Uriel, B-5) ----------------------------------------
 
   bot.command("proponer", async (ctx) => {
@@ -783,9 +843,40 @@ function getBot(): Bot<BotContext> {
     await ctx.reply(`Hay ${pendientes.length} discrepancia(s) explicada(s) sin ajuste propuesto todavía:`);
     for (const excepcion of pendientes) {
       const caso = excepcionComoCasoProponer(excepcion);
-      const kb = tecladoCausas((indice) => `rpa:${excepcion.id}:c${indice}`);
-      await ctx.reply(renderCasoProponer(caso), { reply_markup: kb });
+      const kb = new InlineKeyboard().text("🔢 Reportar cantidad y proponer", `rpa:${excepcion.id}:iniciar`);
+      await ctx.reply(renderCasoProponerInicio(caso), { reply_markup: kb });
     }
+  });
+
+  bot.callbackQuery(/^rpa:([0-9a-f-]+):iniciar$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!tieneAccesoProponer(ctx) || !ctx.telegramUser) return;
+    const excepcionId = ctx.match?.[1];
+    if (!excepcionId) return;
+
+    const sb = getSupabaseAdmin();
+    const excepcion = await obtenerExcepcionDetalle(sb, excepcionId);
+    if (!excepcion) {
+      await ctx.reply("Esa discrepancia ya no existe.");
+      return;
+    }
+    if (excepcion.estado !== "explicada") {
+      await ctx.reply(`Esa discrepancia ya no está esperando una propuesta -- está ${ETIQUETAS_ESTADO_EXCEPCION[excepcion.estado] ?? excepcion.estado}.`);
+      return;
+    }
+    const productoNombre = excepcion.producto?.nombre ?? "(producto sin nombre)";
+    const unidad = excepcion.producto?.unidad_medida ?? "";
+    const fisicoTexto = `${formatearCantidad(excepcion.cantidad_fisica)}${unidad ? ` ${unidad}` : ""}`;
+
+    ctx.session.cantidadConfirmadaRonda = null;
+    ctx.session.pendienteCantidadRonda = { excepcionId };
+    await ctx.editMessageText(
+      [
+        `¿Cuánto hay FÍSICAMENTE de "${productoNombre}" en este momento?`,
+        `El sistema había entendido ${fisicoTexto} -- escribe el número real (o *cancelar*).`,
+      ].join("\n"),
+      { parse_mode: "Markdown" },
+    ).catch(() => {});
   });
 
   bot.callbackQuery(/^rpa:([0-9a-f-]+):c([1-7])$/, async (ctx) => {
@@ -807,16 +898,25 @@ function getBot(): Bot<BotContext> {
       await ctx.reply(`Esa discrepancia ya no está esperando una propuesta -- está ${ETIQUETAS_ESTADO_EXCEPCION[excepcion.estado] ?? excepcion.estado}.`);
       return;
     }
+    // Migración 132: sin cantidad reconfirmada no hay causa que elegir --
+    // manda de vuelta a /proponer en vez de dejar avanzar con un número que
+    // nadie retecleó (el mismo bug que originó esta migración).
+    const cantidadConfirmada = ctx.session.cantidadConfirmadaRonda;
+    if (!cantidadConfirmada || cantidadConfirmada.excepcionId !== excepcionId) {
+      await ctx.reply("Primero tienes que reportar la cantidad física real -- usa /proponer para retomar esta discrepancia.");
+      return;
+    }
     const productoNombre = excepcion.producto?.nombre ?? "(producto sin nombre)";
 
     if (causa.exigeNota) {
       if (!ctx.telegramUser) return;
       ctx.session.pendienteNotaRonda = { tipo: "proponer", excepcionId, causaClave: causa.clave };
-      await ctx.editMessageText(`Causa: ${causa.etiqueta}. Esa causa exige una nota -- escribila (o *cancelar*).`, { parse_mode: "Markdown" }).catch(() => {});
+      await ctx.editMessageText(`Causa: ${causa.etiqueta}. Esa causa exige una nota -- escríbela (o *cancelar*).`, { parse_mode: "Markdown" }).catch(() => {});
       return;
     }
 
-    await ctx.editMessageText(renderConfirmacionPropuesta(productoNombre, causa.etiqueta), {
+    const unidad = excepcion.producto?.unidad_medida ?? "";
+    await ctx.editMessageText(renderConfirmacionPropuesta(productoNombre, causa.etiqueta, cantidadConfirmada.cantidad, unidad), {
       reply_markup: new InlineKeyboard().text("✅ Confirmar", `rpa:${excepcionId}:c${indice}:ok`).text("❌ Cambiar causa", `rpa:${excepcionId}:volver`),
     }).catch(() => {});
   });
@@ -832,6 +932,11 @@ function getBot(): Bot<BotContext> {
       await ctx.reply("Esa discrepancia ya no está esperando una propuesta.");
       return;
     }
+    const cantidadConfirmada = ctx.session.cantidadConfirmadaRonda;
+    if (!cantidadConfirmada || cantidadConfirmada.excepcionId !== excepcionId) {
+      await ctx.reply("Primero tienes que reportar la cantidad física real -- usa /proponer para retomar esta discrepancia.");
+      return;
+    }
     const caso = excepcionComoCasoProponer(excepcion);
     const kb = tecladoCausas((indice) => `rpa:${excepcion.id}:c${indice}`);
     await ctx.editMessageText(renderCasoProponer(caso), { reply_markup: kb }).catch(() => {});
@@ -844,6 +949,12 @@ function getBot(): Bot<BotContext> {
     const indice = Number(ctx.match?.[2]);
     const causa = indice ? causaPorIndice(indice) : undefined;
     if (!excepcionId || !causa) return;
+    const cantidadConfirmada = ctx.session.cantidadConfirmadaRonda;
+    if (!cantidadConfirmada || cantidadConfirmada.excepcionId !== excepcionId) {
+      await ctx.reply("Primero tienes que reportar la cantidad física real -- usa /proponer para retomar esta discrepancia.");
+      return;
+    }
+    ctx.session.cantidadConfirmadaRonda = null;
 
     const sb = getSupabaseAdmin();
     const { error } = await sb.rpc("fn_ronda_proponer_ajuste", {
@@ -852,6 +963,7 @@ function getBot(): Bot<BotContext> {
         excepcion_id: excepcionId,
         propuesta_causa: causa.clave,
         propuesta_nota: null,
+        cantidad_fisica_confirmada: cantidadConfirmada.cantidad,
       },
     });
     if (error) {
@@ -958,7 +1070,7 @@ function getBot(): Bot<BotContext> {
     if (causa.exigeNota) {
       if (!ctx.telegramUser) return;
       ctx.session.pendienteNotaRonda = { tipo: "decidir", excepcionId, causaClave: causa.clave, decision };
-      await ctx.editMessageText(`Causa: ${causa.etiqueta}. Esa causa exige una nota -- escribila (o *cancelar*).`, { parse_mode: "Markdown" }).catch(() => {});
+      await ctx.editMessageText(`Causa: ${causa.etiqueta}. Esa causa exige una nota -- escríbela (o *cancelar*).`, { parse_mode: "Markdown" }).catch(() => {});
       return;
     }
 
@@ -1493,8 +1605,9 @@ function getBot(): Bot<BotContext> {
     crudo: unknown,
     alcanceItems: ReturnType<typeof alcanceComoItems>,
     intentosPreview: number,
+    productosFueraDeAlcance: readonly ProductoFueraDeAlcance[] = [],
   ) {
-    const resueltos = resolverHallazgos(respuesta.hallazgos, alcanceItems);
+    const resueltos = resolverHallazgos(respuesta.hallazgos, alcanceItems, productosFueraDeAlcance);
     const preview = construirPreview(resueltos.map((r) => r.fila), respuesta.observacionesLibres, respuesta.avisos);
     const previewGuardado: PreviewGuardado = {
       filas: preview.filas,
@@ -1549,6 +1662,9 @@ function getBot(): Bot<BotContext> {
 
     const alcance = await obtenerAlcanceRonda(sb, ronda.id);
     const alcanceItems = alcanceComoItems(alcance);
+    // CA-4: candidatos fuera del alcance congelado (producto en cero al
+    // abrir la ronda) -- ver obtenerProductosFueraDeAlcance.
+    const productosFueraDeAlcance = await obtenerProductosFueraDeAlcance(sb);
 
     const resultado = await ejecutarPipelineVozRonda({ bytes, tipo, nombreArchivo: `nota-${Date.now()}.ogg`, apiKey });
 
@@ -1585,7 +1701,7 @@ function getBot(): Bot<BotContext> {
     }
 
     const previewInicial = construirPreview(
-      resolverHallazgos(resultado.respuesta.hallazgos, alcanceItems).map((r) => r.fila),
+      resolverHallazgos(resultado.respuesta.hallazgos, alcanceItems, productosFueraDeAlcance).map((r) => r.fila),
     );
     if (previewInicial.filas.length === 0 && resultado.respuesta.observacionesLibres.length === 0) {
       // No es un error -- Uriel pudo haber mandado una nota de contexto sin
@@ -1630,7 +1746,7 @@ function getBot(): Bot<BotContext> {
       return;
     }
 
-    await guardarYEnviarPreview(ctx, sb, transcritoCreado.id, resultado.respuesta, resultado.crudoInterpretacion, alcanceItems, 1);
+    await guardarYEnviarPreview(ctx, sb, transcritoCreado.id, resultado.respuesta, resultado.crudoInterpretacion, alcanceItems, 1, productosFueraDeAlcance);
   }
 
   bot.on("message:voice", async (ctx) => {
@@ -1706,6 +1822,10 @@ function getBot(): Bot<BotContext> {
       explicacion_citada: h!.explicacionCitada,
       causa_clave: h!.causaClave,
       causa_confianza: h!.causaConfianza,
+      // CA-4: el RPC (migración 131) re-verifica esto server-side contra
+      // productos.cantidad_actual antes de agregarlo al alcance -- nunca
+      // confía ciegamente en esta bandera.
+      fuera_de_alcance: h!.fueraDeAlcance,
     }));
 
     const { data: resultadoRpc, error: errorRpc } = await sb.rpc("fn_ronda_confirmar_hallazgos", {
@@ -1721,13 +1841,19 @@ function getBot(): Bot<BotContext> {
       return;
     }
 
-    const datos = resultadoRpc as { excepciones_creadas?: number } | null;
+    const datos = resultadoRpc as { excepciones_creadas?: number; excepcion_ids?: string[] } | null;
     const kbDeshacer = new InlineKeyboard().text("↩️ Deshacer", `ronda_undo:${transcritoId}`);
     await ctx.editMessageText(`✅ Registrado: ${datos?.excepciones_creadas ?? preview.filas.length} hallazgo(s).`).catch(() => {});
     await ctx.reply(
       "Si te equivocaste (por ejemplo, dictaste mal una cantidad), tienes esta ventana para deshacerlo mientras David todavía no lo haya revisado.",
       { reply_markup: kbDeshacer },
     );
+
+    // Pedido de Santiago probando en vivo (2026-08-28): que a David le
+    // llegue algo apenas se confirma, en vez de tener que acordarse de
+    // correr /explicar. Best-effort -- un fallo de envío no tumba la
+    // confirmación, que ya quedó registrada.
+    await enviarAvisoNuevasExcepciones(sb, datos?.excepcion_ids ?? []);
   });
 
   /** P-1 (§6.5/§7.4 del brief técnico) -- mismo patrón que `hato_ev_undo`
@@ -1935,6 +2061,34 @@ function getBot(): Bot<BotContext> {
     const pendiente = await obtenerTranscritoPendienteMasReciente(sb, ctx.telegramUser.id);
     if (!pendiente) return next();
 
+    // Hallazgo real de Santiago (2026-08-28): a diferencia de TODOS los
+    // demás flujos de este archivo (cierreRonda, excepcionDavid,
+    // pendienteNotaRonda), este bucle nunca reconoció "cancelar" -- así que
+    // una nota vieja sin confirmar (acá, de casi 3 horas antes) se tragaba
+    // en silencio cualquier mensaje de texto posterior, incluidas preguntas
+    // a Esco sin ninguna relación, reinterpretándolas como correcciones y
+    // devolviendo cifras inventadas. Mismo botón que "❌ Descartar" (mismo
+    // UPDATE, mismas tres condiciones `id`/`actor_telegram_id`/estado) --
+    // "cancelar" por texto es la misma acción explícita que tocar el botón,
+    // nunca una expiración silenciosa por inactividad (CA-37 exige que un
+    // borrador sin confirmar se pueda seguir contando, nunca que desaparezca
+    // solo).
+    if (texto.toLowerCase() === "cancelar" || texto.toLowerCase() === "/cancelar" || texto.toLowerCase() === "descartar") {
+      const { error: errorDescartar } = await sb
+        .from("rondas_transcritos")
+        .update({ estado: "descartado" })
+        .eq("id", pendiente.id)
+        .eq("actor_telegram_id", ctx.telegramUser.id)
+        .eq("estado", "preview_pendiente");
+      if (errorDescartar) {
+        console.error("[Telegram] ronda: error al descartar por texto:", errorDescartar.message);
+        await ctx.reply("No se pudo descartar. Intenta de nuevo.");
+        return;
+      }
+      await ctx.reply("❌ Descartado. Lo que narraste en esa nota no quedó registrado.");
+      return;
+    }
+
     if (intentosPreviewAgotados(pendiente.intentos_preview)) {
       await sb
         .from("rondas_transcritos")
@@ -1942,7 +2096,7 @@ function getBot(): Bot<BotContext> {
         .eq("id", pendiente.id)
         .eq("estado", "preview_pendiente");
       await ctx.reply(
-        "Ya probamos varias veces y no logramos afinar esta nota. Lo que narraste queda guardado sin confirmar -- un administrador puede revisarlo, o probá contándolo de nuevo en una nota de voz nueva.",
+        "Ya probamos varias veces y no logramos afinar esta nota. Lo que narraste queda guardado sin confirmar -- un administrador puede revisarlo, o prueba contándolo de nuevo en una nota de voz nueva.",
       );
       return;
     }
@@ -1967,6 +2121,7 @@ function getBot(): Bot<BotContext> {
 
     const alcance = await obtenerAlcanceRonda(sb, pendiente.ronda_id);
     const alcanceItems = alcanceComoItems(alcance);
+    const productosFueraDeAlcance = await obtenerProductosFueraDeAlcance(sb);
     const nuevosIntentos = pendiente.intentos_preview + 1;
 
     const { error: errorCorrecciones } = await sb
@@ -1978,7 +2133,7 @@ function getBot(): Bot<BotContext> {
       console.error("[Telegram] ronda: no se pudo guardar la corrección:", errorCorrecciones.message);
     }
 
-    await guardarYEnviarPreview(ctx, sb, pendiente.id, resultado.respuesta, resultado.crudo, alcanceItems, nuevosIntentos);
+    await guardarYEnviarPreview(ctx, sb, pendiente.id, resultado.respuesta, resultado.crudo, alcanceItems, nuevosIntentos, productosFueraDeAlcance);
   });
 
   // ==========================================================================
@@ -2005,6 +2160,51 @@ function getBot(): Bot<BotContext> {
   // ==========================================================================
 
   bot.on("message:text", async (ctx, next) => {
+    // Migración 132: primer paso del nuevo /proponer -- espera el número
+    // real ANTES de cualquier causa. Va antes que `pendienteNotaRonda` en
+    // este mismo handler (nunca un tercer `bot.on("message:text"` propio --
+    // ver el comentario de la cabecera sobre el guard estático de
+    // `telegramChat.test.ts`, que ubica al de Esco por el PRIMER
+    // `bot.on("message:text"` del archivo).
+    const pendienteCantidad = ctx.session.pendienteCantidadRonda;
+    if (pendienteCantidad && ctx.telegramUser) {
+      const textoCantidad = ctx.message.text?.trim();
+      if (textoCantidad) {
+        if (textoCantidad.toLowerCase() === "cancelar" || textoCantidad.toLowerCase() === "/cancelar") {
+          ctx.session.pendienteCantidadRonda = null;
+          await ctx.reply("Cancelado. El ajuste no quedó propuesto.");
+          return;
+        }
+        const cantidad = parseCantidadRondaConfirmada(textoCantidad);
+        if (cantidad === null) {
+          await ctx.reply("No entendí ese número -- escribe la cantidad física real (ej: 150 o 12,5), o *cancelar*.", { parse_mode: "Markdown" });
+          return;
+        }
+        ctx.session.pendienteCantidadRonda = null;
+
+        const sb = getSupabaseAdmin();
+        const excepcion = await obtenerExcepcionDetalle(sb, pendienteCantidad.excepcionId);
+        if (!excepcion) {
+          await ctx.reply("Esa discrepancia ya no existe.");
+          return;
+        }
+        if (excepcion.estado !== "explicada") {
+          await ctx.reply(`Esa discrepancia ya no está esperando una propuesta -- está ${ETIQUETAS_ESTADO_EXCEPCION[excepcion.estado] ?? excepcion.estado}.`);
+          return;
+        }
+        ctx.session.cantidadConfirmadaRonda = { excepcionId: pendienteCantidad.excepcionId, cantidad };
+        const unidad = excepcion.producto?.unidad_medida ?? "";
+        await ctx.reply(`Cantidad física confirmada: ${formatearCantidad(cantidad)}${unidad ? ` ${unidad}` : ""}.`);
+        const caso = excepcionComoCasoProponer(excepcion);
+        const kb = tecladoCausas((indice) => `rpa:${excepcion.id}:c${indice}`);
+        await ctx.reply(renderCasoProponer(caso), { reply_markup: kb });
+        return;
+      }
+    }
+    return next();
+  });
+
+  bot.on("message:text", async (ctx, next) => {
     const pendiente = ctx.session.pendienteNotaRonda;
     if (!pendiente || !ctx.telegramUser) return next();
     const texto = ctx.message.text?.trim();
@@ -2020,12 +2220,24 @@ function getBot(): Bot<BotContext> {
     ctx.session.pendienteNotaRonda = null;
 
     if (pendiente.tipo === "proponer") {
+      // Migración 132: la cantidad ya se reconfirmó ANTES de llegar a este
+      // paso -- `rpa:...:c<n>` (causa "otro") sólo fija `pendienteNotaRonda`
+      // cuando `cantidadConfirmadaRonda` ya existe (mismo guard que la causa
+      // sin nota). Si por lo que sea se perdió, no se inventa un número: se
+      // corta y se manda de vuelta a /proponer.
+      const cantidadConfirmada = ctx.session.cantidadConfirmadaRonda;
+      if (!cantidadConfirmada || cantidadConfirmada.excepcionId !== pendiente.excepcionId) {
+        await ctx.reply("Se perdió la cantidad física reportada -- usa /proponer para retomar esta discrepancia.");
+        return;
+      }
+      ctx.session.cantidadConfirmadaRonda = null;
       const { error } = await sb.rpc("fn_ronda_proponer_ajuste", {
         payload: {
           ...payloadActorTelegram(ctx.telegramUser.id),
           excepcion_id: pendiente.excepcionId,
           propuesta_causa: pendiente.causaClave,
           propuesta_nota: texto,
+          cantidad_fisica_confirmada: cantidadConfirmada.cantidad,
         },
       });
       if (error) {

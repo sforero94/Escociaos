@@ -79,6 +79,7 @@ function resolverFilaPreview(hallazgo: HallazgoCrudo, alcance: readonly Producto
       via: derivarVia(hallazgo),
       explicacionCitada: hallazgo.explicacionDavidCitada || null,
       fragmentoLiteral: hallazgo.fragmentoLiteral,
+      fueraDeAlcance: false,
     };
   }
 
@@ -103,6 +104,7 @@ function resolverFilaPreview(hallazgo: HallazgoCrudo, alcance: readonly Producto
     via: derivarVia(hallazgo),
     explicacionCitada: hallazgo.explicacionDavidCitada || null,
     fragmentoLiteral: hallazgo.fragmentoLiteral,
+    fueraDeAlcance: false,
   };
 }
 
@@ -213,7 +215,7 @@ describe('fixture #1 -- §11.1 del brief de producto (literal)', () => {
         '- Silicalmag: hay 90, deberían haber 100. Error de captura previa -- David lo resuelve',
         '- Martillos: hay 5 (derivado), deberían haber 8. pasa a Santiago',
         '',
-        '¿Confirmás? [Confirmar] [Corregir] [Descartar]',
+        '¿Confirmas? [Confirmar] [Corregir] [Descartar]',
       ].join('\n'),
     );
   });
@@ -242,7 +244,54 @@ describe('adversarial: "Silicio" que no resuelve', () => {
       estado: 'identificado',
       productoId: 'prod-silicalmag',
       nombreProducto: 'Silicalmag',
+      origen: 'alcance',
     });
+  });
+});
+
+describe('CA-4: "los productos en cero no entran solos; Uriel puede reportar uno igual si lo encuentra"', () => {
+  // Hallazgo real de Santiago probando en vivo en producción (2026-08-28):
+  // "15-15-15" existe en `productos` (Fertilizante) pero con
+  // cantidad_actual=0 y activo=false -- `fn_ronda_abrir` sólo congela
+  // `cantidad_actual > 0`, así que nunca entra al alcance de la ronda. Sin
+  // una segunda lista, ese producto es estructuralmente imposible de
+  // identificar por más veces que se corrija por texto.
+  const alcance: ProductoEnAlcance[] = [{ productoId: 'prod-silicalmag', nombre: 'Silicalmag' }];
+  const fueraDeAlcance: ProductoEnAlcance[] = [{ productoId: 'prod-15-15-15', nombre: '15-15-15' }];
+
+  it('sin la segunda lista, un producto fuera del alcance sigue no_identificado (comportamiento previo intacto)', () => {
+    expect(resolverProducto('15-15-15', alcance)).toEqual({ estado: 'no_identificado' });
+  });
+
+  it('con la segunda lista, se identifica -- origen "fuera_de_alcance"', () => {
+    expect(resolverProducto('15-15-15', alcance, fueraDeAlcance)).toEqual({
+      estado: 'identificado',
+      productoId: 'prod-15-15-15',
+      nombreProducto: '15-15-15',
+      origen: 'fuera_de_alcance',
+    });
+  });
+
+  it('el alcance congelado manda siempre primero -- nunca se prueba fuera de alcance si ya hay match ahí', () => {
+    const fueraDeAlcanceConTrampa: ProductoEnAlcance[] = [{ productoId: 'prod-otro-id', nombre: 'Silicalmag' }];
+    expect(resolverProducto('Silicalmag', alcance, fueraDeAlcanceConTrampa)).toEqual({
+      estado: 'identificado',
+      productoId: 'prod-silicalmag',
+      nombreProducto: 'Silicalmag',
+      origen: 'alcance',
+    });
+  });
+
+  it('una ambigüedad DENTRO del alcance congelado sigue no_identificado -- nunca cede a fuera de alcance para desempatar', () => {
+    const alcanceAmbiguo: ProductoEnAlcance[] = [
+      { productoId: 'prod-a', nombre: 'Urea' },
+      { productoId: 'prod-b', nombre: 'urea' }, // normaliza igual -- caso degenerado, R-20
+    ];
+    expect(resolverProducto('Urea', alcanceAmbiguo, fueraDeAlcance)).toEqual({ estado: 'no_identificado' });
+  });
+
+  it('sin match en ninguna de las dos listas, sigue no_identificado', () => {
+    expect(resolverProducto('Producto Inexistente', alcance, fueraDeAlcance)).toEqual({ estado: 'no_identificado' });
   });
 });
 
