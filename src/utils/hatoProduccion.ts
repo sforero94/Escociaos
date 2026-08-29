@@ -804,10 +804,6 @@ export interface EstadoReproductivoProyeccion {
 
 export interface ProyectarHatoInput {
   pesajes: PesajeLecheVaca[];
-  /** animalId -> fecha del último parto conocido. */
-  partos: Map<string, string>;
-  estadosReproductivos: EstadoReproductivoProyeccion[];
-  curvaHato: PuntoCurvaHato[];
   fechaReferencia: string;
   /** Semanas hacia adelante a proyectar (decisión 13: 2). */
   horizonteSemanas: number;
@@ -818,6 +814,19 @@ export interface ProyectarHatoInput {
    * el default que la decisión pide, documentado como decisión de
    * implementación. */
   ventanaMedidaSemanas?: number;
+  /** Semanas de historia sobre las que se ajusta la tendencia de CADA vaca
+   * (decisión del dueño 2026-08-29: "la tendencia de las últimas 4
+   * semanas"). El tracker pasa aquí su misma `ventanaMedidaSemanas`, para
+   * que la tendencia se calcule exactamente sobre las semanas que el
+   * usuario está viendo en pantalla y no sobre una ventana invisible. */
+  semanasTendencia?: number;
+  /** SOLO PARA DECLARAR EL SUPUESTO, NUNCA PARA APLICARLO. La proyección
+   * congela el hato en las vacas del último pesaje (ver `proyectarHato`),
+   * así que un parto o un secado previsto NO entra ni sale del total; este
+   * arreglo existe únicamente para poder decirle al usuario, en la UI, qué
+   * está dejando fuera ese supuesto. Omitirlo no cambia una sola cifra:
+   * solo deja `vacasEntran`/`vacasSalen` vacíos. */
+  estadosReproductivos?: EstadoReproductivoProyeccion[];
 }
 
 export interface SemanaProyeccion {
@@ -827,23 +836,31 @@ export interface SemanaProyeccion {
   semana: number;
   /** Litros/día TOTALES DEL HATO para esa semana (NUNCA litros/quincena,
    * ver cabecera del archivo). `null` cuando es una semana medida sin
-   * ningún pesaje (backlog, riesgo R-7) o una semana proyectada sin
-   * ninguna vaca con base suficiente para proyectar -- nunca 0. */
+   * ningún pesaje (backlog, riesgo R-7) o una semana proyectada sin ninguna
+   * vaca en el hato congelado -- nunca 0. */
   litrosDia: number | null;
   tipo: 'medido' | 'proyectado';
-  /** Vacas en ordeño que forman la base del pronóstico (constantes a lo
-   * largo del horizonte, salvo las que entran/salen). Vacío en semanas
-   * medidas. */
+  /** Las vacas que componen `litrosDia`: las efectivamente PESADAS si la
+   * semana es medida, y el HATO CONGELADO del último pesaje si es
+   * proyectada (por construcción, el mismo conjunto en todas las semanas
+   * proyectadas). Es también el denominador exacto de
+   * `promedioLitrosPorVaca`. Vacío cuando `litrosDia` es `null` -- "sin
+   * dato" nunca es "0 vacas". */
   vacasBase: string[];
-  /** Vacas cuyo `fecha_probable_parto` cae exactamente en esta semana. */
+  /** INFORMATIVO, NO APLICADO: vacas cuyo `fecha_probable_parto` cae en
+   * esta semana y que la proyección NO suma, porque el hato se congela en
+   * el último pesaje. Se muestra en la UI como lo que el supuesto deja
+   * fuera -- nunca se descuenta de `litrosDia`. */
   vacasEntran: string[];
-  /** Vacas cuyo `fecha_secar` cae exactamente en esta semana -- dejan de
-   * contribuir desde esta semana en adelante. */
+  /** INFORMATIVO, NO APLICADO: vacas del hato congelado cuyo `fecha_secar`
+   * cae en esta semana y que la proyección sigue contando, por la misma
+   * razón. Mismo contrato de declaración que `vacasEntran`. */
   vacasSalen: string[];
-  /** Vacas proyectadas PLANAS (al nivel `actual`, sin escalar por la curva
-   * del hato) porque a `curvaHato` le faltó alguno de los dos buckets que
-   * hacían falta para calcular la forma -- nunca se extrapola con una
-   * forma que no se conoce. */
+  /** Vacas proyectadas PLANAS (sostenidas en su último valor medido)
+   * porque no tienen dos semanas con dato dentro de la ventana de
+   * tendencia -- con un solo punto no hay pendiente que calcular, y una
+   * pendiente inventada es peor que una recta horizontal. Nunca se
+   * extrapola con una tendencia que no se conoce. */
   planas: string[];
 }
 
@@ -855,25 +872,73 @@ function semanaDesdeReferencia(fechaReferencia: string, fecha: string): number {
 }
 
 /**
- * Pronóstico bottom-up de litros/día del hato (decisión 13): cada vaca en
- * ordeño se proyecta sobre su propia curva de lactancia (escalada a su
- * nivel actual), se suman las que van a parir dentro del horizonte y se
- * restan (dejan de contribuir) las que van a secarse. Nunca es una línea
- * de tendencia a nivel de hato.
+ * Pendiente (litros por semana) de la recta de mínimos cuadrados sobre los
+ * puntos `(semana, litros)` de UNA vaca. `0` con menos de dos semanas
+ * distintas: con un solo punto no hay tendencia, y devolver cualquier otra
+ * cosa sería inventarla.
+ *
+ * Se ajusta sobre los puntos que existen, sin rellenar las semanas sin
+ * pesaje: una semana que la vaca no fue pesada no es un cero de producción
+ * (regla 1 del módulo), así que imputarla arrastraría la pendiente hacia
+ * abajo y haría que el hato "cayera" por un hueco de captura.
+ */
+export function tendenciaSemanalVaca(puntos: Array<{ semana: number; litros: number }>): number {
+  if (puntos.length < 2) return 0;
+  const n = puntos.length;
+  const mediaX = puntos.reduce((acc, p) => acc + p.semana, 0) / n;
+  const mediaY = puntos.reduce((acc, p) => acc + p.litros, 0) / n;
+  let num = 0;
+  let den = 0;
+  for (const p of puntos) {
+    num += (p.semana - mediaX) * (p.litros - mediaY);
+    den += (p.semana - mediaX) ** 2;
+  }
+  if (den === 0) return 0; // todos los puntos en la misma semana -- no hay eje sobre el cual haya tendencia
+  return num / den;
+}
+
+/**
+ * Serie del tracker: `ventanaMedidaSemanas` semanas MEDIDAS hacia atrás +
+ * `horizonteSemanas` semanas PROYECTADAS hacia adelante, todo en litros/día
+ * del hato.
+ *
+ * MÉTODO DE PROYECCIÓN (decisión del dueño 2026-08-29, reemplaza el
+ * bottom-up sobre curva de lactancia de la decisión 13): **el hato se
+ * congela en las vacas del ÚLTIMO PESAJE** y cada una se extrapola con
+ * **su propia tendencia de las últimas `semanasTendencia` semanas**, desde
+ * su último valor medido. O sea:
+ *
+ *     litros(vaca, k) = max(0, último_valor + pendiente_de_su_tendencia × k)
+ *
+ * Tres consecuencias que son el punto del método, no efectos colaterales:
+ *   1. **El número de vacas no cambia en el horizonte.** No entran las que
+ *      van a parir ni salen las que van a secarse. Eso hace que la
+ *      variación proyectada sea SOLO productividad por vaca, sin que un
+ *      cambio de tamaño del hato la contamine -- que es exactamente lo que
+ *      la línea de promedio medido deja ver hacia atrás.
+ *   2. **La proyección se ancla en lo medido, no en una recta ajustada.**
+ *      El nivel de partida de cada vaca es su litraje del último pesaje;
+ *      la tendencia solo aporta la pendiente. Así la primera semana
+ *      proyectada continúa desde el último dato real y no aparece un salto
+ *      que nadie midió.
+ *   3. **Nunca proyecta litros negativos.** Una pendiente de caída
+ *      sostenida llevaría la recta bajo cero varias semanas adelante; se
+ *      corta en 0, que es el piso físico.
+ *
+ * Lo que el método NO modela queda DECLARADO, no escondido: los partos y
+ * secados previstos dentro del horizonte viajan en
+ * `vacasEntran`/`vacasSalen` para que la UI los muestre como el margen del
+ * supuesto (mismo contrato de declaración que `planas`, riesgo R-6).
  */
 export function proyectarHato(input: ProyectarHatoInput): SemanaProyeccion[] {
   const {
     pesajes,
-    partos,
-    estadosReproductivos,
-    curvaHato,
     fechaReferencia,
     horizonteSemanas,
     ventanaMedidaSemanas = 4,
+    semanasTendencia = 4,
+    estadosReproductivos = [],
   } = input;
-
-  const mapaCurva = new Map(curvaHato.map((p) => [p.semana, p]));
-  const rendimientos = new Map(rendimientoPorVaca(pesajes, partos, fechaReferencia).map((r) => [r.animalId, r]));
 
   const resultado: SemanaProyeccion[] = [];
 
@@ -895,65 +960,83 @@ export function proyectarHato(input: ProyectarHatoInput): SemanaProyeccion[] {
     });
   }
 
+  if (horizonteSemanas < 1) return resultado;
+
+  // --- Hato congelado: las vacas del ÚLTIMO PESAJE ---------------------------
+  // La ventana de la semana 0 se recalcula aquí en vez de leerse del tramo
+  // de arriba a propósito: con `ventanaMedidaSemanas = 0` ese tramo no
+  // existe, y la proyección no debe depender de cuántas semanas medidas
+  // pidió dibujar el llamador.
+  const inicioSemana0 = sumarDias(fechaReferencia, -6);
+  const rosterUltimoPesaje = [
+    ...new Set(pesajes.filter((p) => p.fecha >= inicioSemana0 && p.fecha <= fechaReferencia).map((p) => p.animal_id)),
+  ];
+
+  // Valor por (vaca, semana) dentro de la ventana de tendencia. Se PROMEDIA
+  // si una vaca tiene dos pesajes en la misma semana -- sumarlos diría que
+  // produjo el doble ese día, que es la trampa de unidades del módulo en
+  // miniatura.
+  const puntosPorVaca = new Map<string, Map<number, number[]>>();
+  const inicioTendencia = sumarDias(fechaReferencia, -(semanasTendencia * 7 - 1));
+  for (const p of pesajes) {
+    if (p.fecha < inicioTendencia || p.fecha > fechaReferencia) continue;
+    const semana = -Math.floor(diferenciaDias(p.fecha, fechaReferencia) / 7);
+    if (!puntosPorVaca.has(p.animal_id)) puntosPorVaca.set(p.animal_id, new Map());
+    const porSemana = puntosPorVaca.get(p.animal_id)!;
+    if (!porSemana.has(semana)) porSemana.set(semana, []);
+    porSemana.get(semana)!.push(p.litros_total);
+  }
+
+  interface ProyeccionVaca {
+    animalId: string;
+    base: number;
+    pendiente: number;
+    plana: boolean;
+  }
+  const proyeccionesVaca: ProyeccionVaca[] = [];
+  for (const animalId of rosterUltimoPesaje) {
+    const porSemana = puntosPorVaca.get(animalId);
+    if (!porSemana) continue; // imposible por construcción (está en el roster), pero nunca se divide a ciegas
+    const puntos = [...porSemana.entries()]
+      .map(([semana, litros]) => ({ semana, litros: litros.reduce((a, b) => a + b, 0) / litros.length }))
+      .sort((a, b) => a.semana - b.semana);
+    const ultimo = puntos[puntos.length - 1];
+    const pendiente = tendenciaSemanalVaca(puntos);
+    proyeccionesVaca.push({
+      animalId,
+      base: ultimo.litros,
+      pendiente,
+      plana: puntos.length < 2,
+    });
+  }
+
   // --- Semanas proyectadas: 1 .. horizonteSemanas -----------------------------
-  const vacasBase = estadosReproductivos.filter((e) => e.enOrdeno);
-  const idsVacasBase = new Set(vacasBase.map((v) => v.animalId));
+  const idsRoster = new Set(rosterUltimoPesaje);
+  const planas = proyeccionesVaca.filter((v) => v.plana).map((v) => v.animalId);
 
   for (let k = 1; k <= horizonteSemanas; k++) {
-    let litrosDia = 0;
-    let huboContribucion = false;
-    const planas: string[] = [];
+    // Declaración del supuesto (NO se aplica): quién pariría y quién se
+    // secaría en esta semana según el modelo reproductivo.
     const entranSemana: string[] = [];
     const salenSemana: string[] = [];
-
-    for (const vaca of vacasBase) {
-      if (vaca.fechaSecar) {
-        const semanaSalida = semanaDesdeReferencia(fechaReferencia, vaca.fechaSecar);
-        if (semanaSalida <= k) {
-          if (semanaSalida === k) salenSemana.push(vaca.animalId);
-          continue; // ya seca en o antes de esta semana -- no contribuye
-        }
-      }
-
-      const nivel = rendimientos.get(vaca.animalId)?.actual ?? null;
-      if (nivel === null) continue; // sin pesajes recientes -- no hay base desde la cual proyectar
-
-      const fechaParto = partos.get(vaca.animalId);
-      const semanaBase = fechaParto ? semanasDesdeParto(fechaReferencia, fechaParto) : null;
-      const bucketBase = semanaBase !== null ? mapaCurva.get(semanaBase) : undefined;
-      const bucketFuturo = semanaBase !== null ? mapaCurva.get(semanaBase + k) : undefined;
-      const forma =
-        bucketBase && bucketFuturo && bucketBase.litros !== null && bucketFuturo.litros !== null && bucketBase.litros > 0
-          ? bucketFuturo.litros / bucketBase.litros
-          : null;
-
-      if (forma === null) planas.push(vaca.animalId);
-      litrosDia += forma !== null ? nivel * forma : nivel;
-      huboContribucion = true;
-    }
-
     for (const vaca of estadosReproductivos) {
-      if (idsVacasBase.has(vaca.animalId)) continue; // ya evaluada arriba
-      if (!vaca.fechaProbableParto) continue;
-      const semanaEntrada = semanaDesdeReferencia(fechaReferencia, vaca.fechaProbableParto);
-      if (semanaEntrada > k || semanaEntrada < 1) continue; // aún no entra, o ya entró antes de este horizonte
-      if (semanaEntrada === k) entranSemana.push(vaca.animalId);
-
-      const semanasEnLactancia = k - semanaEntrada;
-      const bucket = mapaCurva.get(semanasEnLactancia);
-      if (bucket && bucket.litros !== null) {
-        litrosDia += bucket.litros;
-        huboContribucion = true;
-      } else {
-        planas.push(vaca.animalId); // sin curva de referencia para su semana de lactancia -- no se suma nada
+      if (!idsRoster.has(vaca.animalId) && vaca.fechaProbableParto) {
+        if (semanaDesdeReferencia(fechaReferencia, vaca.fechaProbableParto) === k) entranSemana.push(vaca.animalId);
+      }
+      if (idsRoster.has(vaca.animalId) && vaca.fechaSecar) {
+        if (semanaDesdeReferencia(fechaReferencia, vaca.fechaSecar) === k) salenSemana.push(vaca.animalId);
       }
     }
+
+    const litrosDia = proyeccionesVaca.reduce((acc, v) => acc + Math.max(0, v.base + v.pendiente * k), 0);
 
     resultado.push({
       semana: k,
-      litrosDia: huboContribucion ? litrosDia : null,
+      // Sin ninguna vaca en el hato congelado no hay pronóstico posible --
+      // `null`, jamás el 0 que produciría el `reduce` sobre una lista vacía.
+      litrosDia: proyeccionesVaca.length === 0 ? null : litrosDia,
       tipo: 'proyectado',
-      vacasBase: vacasBase.map((v) => v.animalId),
+      vacasBase: proyeccionesVaca.map((v) => v.animalId),
       vacasEntran: entranSemana,
       vacasSalen: salenSemana,
       planas,
@@ -964,27 +1047,29 @@ export function proyectarHato(input: ProyectarHatoInput): SemanaProyeccion[] {
 }
 
 /**
- * Rango [mín, máx] de vacas pesadas entre las semanas MEDIDAS de una
- * proyección (QA fix, `docs/hato/qa-produccion-rework.md` FIX 4, §5.2
- * "COBERTURA DE PESAJE INCOMPLETA"): la línea `medido` del tracker es una
- * SUMA cruda del hato, consistente en unidades (litros/día), pero con un
- * denominador que se mueve -- 20 vacas pesadas en marzo, 28 en junio 2026,
- * así que ~34% del salto de la serie es más vacas pesadas, no más leche
- * por vaca. Esta función no normaliza nada (`proyectarHato` sigue
- * plotteando el total del hato -- es una pregunta de hato, no por vaca);
- * solo declara la cobertura para que el caller decida mostrarla cuando
- * varía (sub-label visible, nunca solo en el tooltip).
+ * Litros/día POR VACA de una semana de la proyección -- la normalización
+ * que vuelve comparables entre sí semanas con distinto número de vacas en
+ * ordeño (el denominador que el total crudo del hato esconde: 20 vacas
+ * pesadas en marzo 2026, 28 en junio).
  *
- * Cuenta SOLO semanas con dato (`litrosDia !== null`) -- una semana en
- * blanco (backlog) no tiene vacas que contar, no es un 0 vacas. `null` si
- * ninguna semana medida tiene dato.
+ * Convive con el total, no lo reemplaza: el dueño hace DOS preguntas
+ * distintas -- "cuánta leche voy a tener" (total, la barra) y "qué tan bien
+ * está produciendo cada vaca" (este promedio, la línea).
+ *
+ * El denominador es `vacasBase`, que bajo el método de proyección vigente
+ * (hato congelado en el último pesaje) es siempre el conjunto exacto que
+ * compone `litrosDia`, semana medida o proyectada. El tracker solo lo
+ * grafica sobre las semanas MEDIDAS -- el promedio no se proyecta
+ * (decisión del dueño 2026-08-29): con el hato congelado, proyectarlo
+ * sería el total proyectado dividido entre una constante, o sea la misma
+ * barra otra vez y no información nueva.
+ *
+ * `null` -- nunca 0 -- cuando la semana no tiene dato o no tiene ninguna
+ * vaca, misma regla que el resto del módulo.
  */
-export function rangoVacasMedidas(semanas: SemanaProyeccion[]): { min: number; max: number } | null {
-  const conteos = semanas
-    .filter((s) => s.tipo === 'medido' && s.litrosDia !== null)
-    .map((s) => s.vacasBase.length);
-  if (conteos.length === 0) return null;
-  return { min: Math.min(...conteos), max: Math.max(...conteos) };
+export function promedioLitrosPorVaca(semana: SemanaProyeccion): number | null {
+  if (semana.litrosDia === null || semana.vacasBase.length === 0) return null;
+  return semana.litrosDia / semana.vacasBase.length;
 }
 
 // ============================================================================

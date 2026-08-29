@@ -162,7 +162,6 @@ export function ProduccionView() {
             {/* 1. Tracker de productividad (decisión 13) -- todos los roles. */}
             <TrackerProductividad
               pesajes={datos.pesajes}
-              partos={datos.partos}
               estadosReproductivos={datos.estadosReproductivos}
               fechaReferencia={fechaAncla}
               vejez={vejez}

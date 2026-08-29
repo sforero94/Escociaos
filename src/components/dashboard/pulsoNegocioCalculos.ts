@@ -92,14 +92,9 @@ export function calcularPulsoHato(
   const fechaUltimoPesaje = fechaAnclaProduccion(pesajes, hoy);
   const semanas = proyectarHato({
     pesajes,
-    // `partos`/`estadosReproductivos`/`curvaHato` sólo los usa el tramo
-    // PROYECTADO de `proyectarHato` (semanas 1..horizonteSemanas) -- con
-    // `horizonteSemanas: 0` ese tramo nunca se ejecuta, así que aquí van
-    // vacíos a propósito (no hace falta traer partos/curva sólo para
-    // descartarlos).
-    partos: new Map(),
-    estadosReproductivos: [],
-    curvaHato: [],
+    // Sólo el tramo MEDIDO: con `horizonteSemanas: 0` el tramo proyectado
+    // nunca se ejecuta, así que ni siquiera hay que pasarle el
+    // `estadosReproductivos` opcional con que declara su supuesto.
     fechaReferencia: fechaUltimoPesaje,
     horizonteSemanas: 0,
     ventanaMedidaSemanas: SEMANAS_SERIE_PULSO_HATO,
