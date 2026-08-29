@@ -585,6 +585,43 @@ export async function obtenerExcepcionesPendientesDavid(supabase: SupabaseClient
   return (data as unknown as ExcepcionDetalleRonda[]) ?? [];
 }
 
+export interface DestinatarioModuloRonda {
+  telegramId: string;
+  telegramUsuarioId: string;
+}
+
+/** Suscritos ACTIVOS de un módulo de la ronda (`inventario_ronda` /
+ * `inventario_explicacion` / `inventario_aprobacion`) con Telegram
+ * VINCULADO -- pedido de Santiago probando en vivo (2026-08-28): cuando
+ * Uriel confirma un hallazgo, quien tenga `inventario_explicacion` debe
+ * recibir un aviso empujado, no tener que acordarse de correr `/explicar`.
+ * A diferencia de `resolverDestinatarios` de `ronda-inventario-tick.ts`
+ * (que lee `telegram_alertas_suscripciones`, el catálogo de LAS TRES
+ * alertas de §3.4 -- recordatorio/día 15/reporte de cierre), esto NO es una
+ * alerta del catálogo 096: es un aviso por-evento, uno por cada hallazgo
+ * confirmado, a cualquiera con el módulo -- no hay nada que suscribir u
+ * omitir, mismo criterio que ya usa `tieneAccesoExplicacion`/
+ * `tieneAccesoAprobacion` en bot.ts para gatear comandos por módulo. */
+export async function obtenerDestinatariosModuloRonda(
+  supabase: SupabaseClient,
+  modulo: string,
+): Promise<DestinatarioModuloRonda[]> {
+  const { data, error } = await supabase
+    .from('telegram_usuarios')
+    .select('id, telegram_id')
+    .eq('activo', true)
+    .not('telegram_id', 'is', null)
+    .contains('modulos_permitidos', [modulo]);
+  if (error) {
+    console.error(`[ronda] obtenerDestinatariosModuloRonda(${modulo}) error:`, error.message);
+    return [];
+  }
+  return ((data ?? []) as Array<{ id: string; telegram_id: number }>).map((u) => ({
+    telegramId: String(u.telegram_id),
+    telegramUsuarioId: u.id,
+  }));
+}
+
 /** `/proponer` (B-5): excepciones ya `explicada` por David (CA-38 exige ese
  * paso antes de poder proponer, `fn_ronda_proponer_ajuste` lo vuelve a
  * exigir) y sin ajuste propuesto todavía — el estado ya lo garantiza: en

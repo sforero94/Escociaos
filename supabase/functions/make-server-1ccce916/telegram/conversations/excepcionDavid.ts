@@ -110,7 +110,34 @@ export async function excepcionDavidConversation(
   excepcionId: string,
 ) {
   try {
-    const telegramUsuarioId = ctx.telegramUser?.id;
+    // NUNCA `ctx.telegramUser?.id` acá -- es una propiedad custom que la
+    // auth middleware de bot.ts pone en `ctx` ANTES del plugin de
+    // conversaciones (línea 182 vs 214), pero el plugin REPLAYA el builder
+    // completo en cada update mientras la conversación está activa
+    // (por eso TODA lectura de base de este archivo está envuelta en
+    // `conversation.external()` -- ver el resto de este archivo), y esa
+    // propiedad custom no sobrevivía el replay: es la ÚNICA conversación de
+    // bot.ts que se entra con un argumento extra (`excepcionId`) y la ÚNICA
+    // que reventaba con "no vinculada" pese a tener la cuenta activa
+    // (hallazgo real de Santiago probando en vivo, 2026-08-28). Se
+    // reconsulta acá, por `ctx.from.id` -- SIEMPRE nativo de grammY, nunca
+    // inyectado por middleware propio -- envuelto en `external()` como toda
+    // lectura de este archivo.
+    const telegramId = ctx.from?.id;
+    if (!telegramId) {
+      await ctx.reply('Tu cuenta de Telegram no está vinculada -- avisa a un administrador.');
+      return;
+    }
+    const telegramUsuario = await conversation.external(async () => {
+      const { data } = await getSupabaseAdmin()
+        .from('telegram_usuarios')
+        .select('id')
+        .eq('telegram_id', telegramId)
+        .eq('activo', true)
+        .maybeSingle();
+      return data as { id: string } | null;
+    });
+    const telegramUsuarioId = telegramUsuario?.id;
     if (!telegramUsuarioId) {
       await ctx.reply('Tu cuenta de Telegram no está vinculada -- avisa a un administrador.');
       return;

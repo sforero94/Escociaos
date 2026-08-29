@@ -29,7 +29,7 @@ import { excepcionDavidConversation } from "./conversations/excepcionDavid.ts";
 // no toca dinero y se mantiene intacto.
 import { llmToolLoop, getSystemPrompt } from "../chat.tsx";
 import { construirMensajeAlertaYaResuelta, construirMensajeCierreAlertaBroadcast } from "../hato-alertas.ts";
-import { cerrarAlertaEnEnvios } from "./enviar.ts";
+import { cerrarAlertaEnEnvios, enviarMensajeTelegram } from "./enviar.ts";
 
 // --- Ronda de inventario (Fase 3, Telegram/Uriel) ---------------------------
 // docs/brief_tecnico_verificacion_inventario.md §5/§7/§13. Pipeline de voz
@@ -62,6 +62,7 @@ import {
   hoyBogota,
   obtenerExcepcionDetalle,
   obtenerExcepcionesParaProponer,
+  obtenerDestinatariosModuloRonda,
   obtenerExcepcionesPendientesDavid,
   obtenerExcepcionesPropuestasParaSantiago,
   resolverNombreActor,
@@ -682,6 +683,44 @@ function getBot(): Bot<BotContext> {
   // `excepcion_id` (UUID, 36 bytes) dentro del límite de 64 bytes que
   // Telegram impone a `callback_data`.
   // ==========================================================================
+
+  /** Push a quien tenga `inventario_explicacion` apenas se confirma un
+   * hallazgo -- pedido de Santiago probando en vivo (2026-08-28): antes de
+   * esto, confirmar sólo creaba la excepción calladamente (diseño pull,
+   * `/explicar`); David nunca se enteraba sin acordarse de chequear. NO es
+   * una alerta del catálogo 096 (§3.4 del brief técnico enumera sólo tres:
+   * recordatorio/día 15/reporte de cierre) -- es un aviso por-evento, a
+   * cualquier suscrito ACTIVO del módulo, sin nada que configurar en la
+   * pantalla de Telegram. Mismo texto y mismo botón `Explicar` que ya usa la
+   * lista de `/explicar` -- un solo dueño del renderizado. Best-effort: un
+   * fallo de envío (chat bloqueado, nadie vinculado todavía) no revierte ni
+   * bloquea la confirmación, que ya quedó escrita.
+   */
+  async function enviarAvisoNuevasExcepciones(sb: SupabaseClient, excepcionIds: readonly string[]) {
+    if (excepcionIds.length === 0) return;
+    const destinatarios = await obtenerDestinatariosModuloRonda(sb, "inventario_explicacion");
+    if (destinatarios.length === 0) return;
+
+    for (const excepcionId of excepcionIds) {
+      const excepcion = await obtenerExcepcionDetalle(sb, excepcionId);
+      if (!excepcion) continue;
+      const texto = `🔔 Nueva discrepancia para explicar:\n${renderLineaPendienteDavid(excepcionComoCaso(excepcion))}`;
+      const botones = [{ texto: "Explicar", callbackData: `ronda_expl:${excepcionId}` }];
+      for (const destinatario of destinatarios) {
+        const resultado = await enviarMensajeTelegram(sb, {
+          telegramId: destinatario.telegramId,
+          telegramUsuarioId: destinatario.telegramUsuarioId,
+          texto,
+          botones,
+          tipoMensaje: "ronda_aviso_excepcion",
+          flujo: "ronda_inventario",
+        });
+        if (!resultado.ok) {
+          console.error(`[Telegram] ronda: aviso de excepción ${excepcionId} a ${destinatario.telegramId} falló:`, resultado.error);
+        }
+      }
+    }
+  }
 
   function tieneAccesoExplicacion(ctx: BotContext): boolean {
     return !!ctx.telegramUser?.modulos_permitidos?.includes("inventario_explicacion");
@@ -1735,13 +1774,19 @@ function getBot(): Bot<BotContext> {
       return;
     }
 
-    const datos = resultadoRpc as { excepciones_creadas?: number } | null;
+    const datos = resultadoRpc as { excepciones_creadas?: number; excepcion_ids?: string[] } | null;
     const kbDeshacer = new InlineKeyboard().text("↩️ Deshacer", `ronda_undo:${transcritoId}`);
     await ctx.editMessageText(`✅ Registrado: ${datos?.excepciones_creadas ?? preview.filas.length} hallazgo(s).`).catch(() => {});
     await ctx.reply(
       "Si te equivocaste (por ejemplo, dictaste mal una cantidad), tienes esta ventana para deshacerlo mientras David todavía no lo haya revisado.",
       { reply_markup: kbDeshacer },
     );
+
+    // Pedido de Santiago probando en vivo (2026-08-28): que a David le
+    // llegue algo apenas se confirma, en vez de tener que acordarse de
+    // correr /explicar. Best-effort -- un fallo de envío no tumba la
+    // confirmación, que ya quedó registrada.
+    await enviarAvisoNuevasExcepciones(sb, datos?.excepcion_ids ?? []);
   });
 
   /** P-1 (§6.5/§7.4 del brief técnico) -- mismo patrón que `hato_ev_undo`
