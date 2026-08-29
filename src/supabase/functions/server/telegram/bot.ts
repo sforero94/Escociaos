@@ -90,6 +90,7 @@ import { CAUSAS_RAIZ, causaPorIndice } from "../rondaInventario/causasRaiz.ts";
 import {
   etiquetaDecision,
   renderCasoProponer,
+  renderCasoProponerInicio,
   renderCasoSantiago,
   renderConfirmacionDecision,
   renderConfirmacionPropuesta,
@@ -812,6 +813,20 @@ function getBot(): Bot<BotContext> {
     await ctx.conversation.enter("excepcionDavid", excepcionId);
   });
 
+  // Migración 132 (2026-08-28, hallazgo real de Santiago probando en vivo):
+  // "tres bultos de 50 kilos" se había interpretado como cantidad_fisica=3 --
+  // quien propone (David o Uriel) tiene que reconfirmar a mano la cantidad
+  // física real ANTES de elegir la causa, nunca inferida del valor que
+  // congeló el intérprete de voz. A diferencia de `parseCantidadPositiva` de
+  // `excepcionDavid.ts` (captura CON respaldo, donde un movimiento real
+  // siempre es > 0), acá 0 es un valor válido -- "no queda nada" es
+  // exactamente lo que un ajuste sin respaldo puede tener que reportar.
+  function parseCantidadRondaConfirmada(raw: string): number | null {
+    const limpio = raw.trim().replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
+    const num = Number(limpio);
+    return Number.isFinite(num) && num >= 0 ? num : null;
+  }
+
   // ---- /proponer (David o Uriel, B-5) ----------------------------------------
 
   bot.command("proponer", async (ctx) => {
@@ -828,9 +843,40 @@ function getBot(): Bot<BotContext> {
     await ctx.reply(`Hay ${pendientes.length} discrepancia(s) explicada(s) sin ajuste propuesto todavía:`);
     for (const excepcion of pendientes) {
       const caso = excepcionComoCasoProponer(excepcion);
-      const kb = tecladoCausas((indice) => `rpa:${excepcion.id}:c${indice}`);
-      await ctx.reply(renderCasoProponer(caso), { reply_markup: kb });
+      const kb = new InlineKeyboard().text("🔢 Reportar cantidad y proponer", `rpa:${excepcion.id}:iniciar`);
+      await ctx.reply(renderCasoProponerInicio(caso), { reply_markup: kb });
     }
+  });
+
+  bot.callbackQuery(/^rpa:([0-9a-f-]+):iniciar$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (!tieneAccesoProponer(ctx) || !ctx.telegramUser) return;
+    const excepcionId = ctx.match?.[1];
+    if (!excepcionId) return;
+
+    const sb = getSupabaseAdmin();
+    const excepcion = await obtenerExcepcionDetalle(sb, excepcionId);
+    if (!excepcion) {
+      await ctx.reply("Esa discrepancia ya no existe.");
+      return;
+    }
+    if (excepcion.estado !== "explicada") {
+      await ctx.reply(`Esa discrepancia ya no está esperando una propuesta -- está ${ETIQUETAS_ESTADO_EXCEPCION[excepcion.estado] ?? excepcion.estado}.`);
+      return;
+    }
+    const productoNombre = excepcion.producto?.nombre ?? "(producto sin nombre)";
+    const unidad = excepcion.producto?.unidad_medida ?? "";
+    const fisicoTexto = `${formatearCantidad(excepcion.cantidad_fisica)}${unidad ? ` ${unidad}` : ""}`;
+
+    ctx.session.cantidadConfirmadaRonda = null;
+    ctx.session.pendienteCantidadRonda = { excepcionId };
+    await ctx.editMessageText(
+      [
+        `¿Cuánto hay FÍSICAMENTE de "${productoNombre}" en este momento?`,
+        `El sistema había entendido ${fisicoTexto} -- escribe el número real (o *cancelar*).`,
+      ].join("\n"),
+      { parse_mode: "Markdown" },
+    ).catch(() => {});
   });
 
   bot.callbackQuery(/^rpa:([0-9a-f-]+):c([1-7])$/, async (ctx) => {
@@ -852,16 +898,25 @@ function getBot(): Bot<BotContext> {
       await ctx.reply(`Esa discrepancia ya no está esperando una propuesta -- está ${ETIQUETAS_ESTADO_EXCEPCION[excepcion.estado] ?? excepcion.estado}.`);
       return;
     }
+    // Migración 132: sin cantidad reconfirmada no hay causa que elegir --
+    // manda de vuelta a /proponer en vez de dejar avanzar con un número que
+    // nadie retecleó (el mismo bug que originó esta migración).
+    const cantidadConfirmada = ctx.session.cantidadConfirmadaRonda;
+    if (!cantidadConfirmada || cantidadConfirmada.excepcionId !== excepcionId) {
+      await ctx.reply("Primero tienes que reportar la cantidad física real -- usa /proponer para retomar esta discrepancia.");
+      return;
+    }
     const productoNombre = excepcion.producto?.nombre ?? "(producto sin nombre)";
 
     if (causa.exigeNota) {
       if (!ctx.telegramUser) return;
       ctx.session.pendienteNotaRonda = { tipo: "proponer", excepcionId, causaClave: causa.clave };
-      await ctx.editMessageText(`Causa: ${causa.etiqueta}. Esa causa exige una nota -- escribila (o *cancelar*).`, { parse_mode: "Markdown" }).catch(() => {});
+      await ctx.editMessageText(`Causa: ${causa.etiqueta}. Esa causa exige una nota -- escríbela (o *cancelar*).`, { parse_mode: "Markdown" }).catch(() => {});
       return;
     }
 
-    await ctx.editMessageText(renderConfirmacionPropuesta(productoNombre, causa.etiqueta), {
+    const unidad = excepcion.producto?.unidad_medida ?? "";
+    await ctx.editMessageText(renderConfirmacionPropuesta(productoNombre, causa.etiqueta, cantidadConfirmada.cantidad, unidad), {
       reply_markup: new InlineKeyboard().text("✅ Confirmar", `rpa:${excepcionId}:c${indice}:ok`).text("❌ Cambiar causa", `rpa:${excepcionId}:volver`),
     }).catch(() => {});
   });
@@ -877,6 +932,11 @@ function getBot(): Bot<BotContext> {
       await ctx.reply("Esa discrepancia ya no está esperando una propuesta.");
       return;
     }
+    const cantidadConfirmada = ctx.session.cantidadConfirmadaRonda;
+    if (!cantidadConfirmada || cantidadConfirmada.excepcionId !== excepcionId) {
+      await ctx.reply("Primero tienes que reportar la cantidad física real -- usa /proponer para retomar esta discrepancia.");
+      return;
+    }
     const caso = excepcionComoCasoProponer(excepcion);
     const kb = tecladoCausas((indice) => `rpa:${excepcion.id}:c${indice}`);
     await ctx.editMessageText(renderCasoProponer(caso), { reply_markup: kb }).catch(() => {});
@@ -889,6 +949,12 @@ function getBot(): Bot<BotContext> {
     const indice = Number(ctx.match?.[2]);
     const causa = indice ? causaPorIndice(indice) : undefined;
     if (!excepcionId || !causa) return;
+    const cantidadConfirmada = ctx.session.cantidadConfirmadaRonda;
+    if (!cantidadConfirmada || cantidadConfirmada.excepcionId !== excepcionId) {
+      await ctx.reply("Primero tienes que reportar la cantidad física real -- usa /proponer para retomar esta discrepancia.");
+      return;
+    }
+    ctx.session.cantidadConfirmadaRonda = null;
 
     const sb = getSupabaseAdmin();
     const { error } = await sb.rpc("fn_ronda_proponer_ajuste", {
@@ -897,6 +963,7 @@ function getBot(): Bot<BotContext> {
         excepcion_id: excepcionId,
         propuesta_causa: causa.clave,
         propuesta_nota: null,
+        cantidad_fisica_confirmada: cantidadConfirmada.cantidad,
       },
     });
     if (error) {
@@ -1003,7 +1070,7 @@ function getBot(): Bot<BotContext> {
     if (causa.exigeNota) {
       if (!ctx.telegramUser) return;
       ctx.session.pendienteNotaRonda = { tipo: "decidir", excepcionId, causaClave: causa.clave, decision };
-      await ctx.editMessageText(`Causa: ${causa.etiqueta}. Esa causa exige una nota -- escribila (o *cancelar*).`, { parse_mode: "Markdown" }).catch(() => {});
+      await ctx.editMessageText(`Causa: ${causa.etiqueta}. Esa causa exige una nota -- escríbela (o *cancelar*).`, { parse_mode: "Markdown" }).catch(() => {});
       return;
     }
 
@@ -2065,6 +2132,51 @@ function getBot(): Bot<BotContext> {
   // ==========================================================================
 
   bot.on("message:text", async (ctx, next) => {
+    // Migración 132: primer paso del nuevo /proponer -- espera el número
+    // real ANTES de cualquier causa. Va antes que `pendienteNotaRonda` en
+    // este mismo handler (nunca un tercer `bot.on("message:text"` propio --
+    // ver el comentario de la cabecera sobre el guard estático de
+    // `telegramChat.test.ts`, que ubica al de Esco por el PRIMER
+    // `bot.on("message:text"` del archivo).
+    const pendienteCantidad = ctx.session.pendienteCantidadRonda;
+    if (pendienteCantidad && ctx.telegramUser) {
+      const textoCantidad = ctx.message.text?.trim();
+      if (textoCantidad) {
+        if (textoCantidad.toLowerCase() === "cancelar" || textoCantidad.toLowerCase() === "/cancelar") {
+          ctx.session.pendienteCantidadRonda = null;
+          await ctx.reply("Cancelado. El ajuste no quedó propuesto.");
+          return;
+        }
+        const cantidad = parseCantidadRondaConfirmada(textoCantidad);
+        if (cantidad === null) {
+          await ctx.reply("No entendí ese número -- escribe la cantidad física real (ej: 150 o 12,5), o *cancelar*.", { parse_mode: "Markdown" });
+          return;
+        }
+        ctx.session.pendienteCantidadRonda = null;
+
+        const sb = getSupabaseAdmin();
+        const excepcion = await obtenerExcepcionDetalle(sb, pendienteCantidad.excepcionId);
+        if (!excepcion) {
+          await ctx.reply("Esa discrepancia ya no existe.");
+          return;
+        }
+        if (excepcion.estado !== "explicada") {
+          await ctx.reply(`Esa discrepancia ya no está esperando una propuesta -- está ${ETIQUETAS_ESTADO_EXCEPCION[excepcion.estado] ?? excepcion.estado}.`);
+          return;
+        }
+        ctx.session.cantidadConfirmadaRonda = { excepcionId: pendienteCantidad.excepcionId, cantidad };
+        const unidad = excepcion.producto?.unidad_medida ?? "";
+        await ctx.reply(`Cantidad física confirmada: ${formatearCantidad(cantidad)}${unidad ? ` ${unidad}` : ""}.`);
+        const caso = excepcionComoCasoProponer(excepcion);
+        const kb = tecladoCausas((indice) => `rpa:${excepcion.id}:c${indice}`);
+        await ctx.reply(renderCasoProponer(caso), { reply_markup: kb });
+        return;
+      }
+    }
+    return next();
+  });
+
+  bot.on("message:text", async (ctx, next) => {
     const pendiente = ctx.session.pendienteNotaRonda;
     if (!pendiente || !ctx.telegramUser) return next();
     const texto = ctx.message.text?.trim();
@@ -2080,12 +2192,24 @@ function getBot(): Bot<BotContext> {
     ctx.session.pendienteNotaRonda = null;
 
     if (pendiente.tipo === "proponer") {
+      // Migración 132: la cantidad ya se reconfirmó ANTES de llegar a este
+      // paso -- `rpa:...:c<n>` (causa "otro") sólo fija `pendienteNotaRonda`
+      // cuando `cantidadConfirmadaRonda` ya existe (mismo guard que la causa
+      // sin nota). Si por lo que sea se perdió, no se inventa un número: se
+      // corta y se manda de vuelta a /proponer.
+      const cantidadConfirmada = ctx.session.cantidadConfirmadaRonda;
+      if (!cantidadConfirmada || cantidadConfirmada.excepcionId !== pendiente.excepcionId) {
+        await ctx.reply("Se perdió la cantidad física reportada -- usa /proponer para retomar esta discrepancia.");
+        return;
+      }
+      ctx.session.cantidadConfirmadaRonda = null;
       const { error } = await sb.rpc("fn_ronda_proponer_ajuste", {
         payload: {
           ...payloadActorTelegram(ctx.telegramUser.id),
           excepcion_id: pendiente.excepcionId,
           propuesta_causa: pendiente.causaClave,
           propuesta_nota: texto,
+          cantidad_fisica_confirmada: cantidadConfirmada.cantidad,
         },
       });
       if (error) {

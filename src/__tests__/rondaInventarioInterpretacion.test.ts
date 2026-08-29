@@ -215,7 +215,7 @@ describe('fixture #1 -- §11.1 del brief de producto (literal)', () => {
         '- Silicalmag: hay 90, deberían haber 100. Error de captura previa -- David lo resuelve',
         '- Martillos: hay 5 (derivado), deberían haber 8. pasa a Santiago',
         '',
-        '¿Confirmás? [Confirmar] [Corregir] [Descartar]',
+        '¿Confirmas? [Confirmar] [Corregir] [Descartar]',
       ].join('\n'),
     );
   });

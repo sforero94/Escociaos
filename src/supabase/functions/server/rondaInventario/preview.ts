@@ -183,8 +183,8 @@ export function renderPreviewTelegram(preview: PreviewRonda): string {
   }
 
   bloques.push('', previewConfirmable(preview)
-    ? '¿Confirmás? [Confirmar] [Corregir] [Descartar]'
-    : 'Falta identificar o completar algún hallazgo antes de poder confirmar. Corregí por texto.');
+    ? '¿Confirmas? [Confirmar] [Corregir] [Descartar]'
+    : 'Falta identificar o completar algún hallazgo antes de poder confirmar. Corrige por texto.');
 
   return bloques.join('\n');
 }

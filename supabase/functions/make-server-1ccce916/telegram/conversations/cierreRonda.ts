@@ -185,7 +185,7 @@ export async function cierreRondaConversation(conversation: Conversation<BotCont
         'Voy a cerrar la ronda con:',
         `- Alcance: ${alcanceDeclarado}${alcanceNota ? ` -- ${alcanceNota}` : ''}`,
         '',
-        '¿Confirmás?',
+        '¿Confirmas?',
       ].join('\n'),
       { reply_markup: kbConfirmar },
     );

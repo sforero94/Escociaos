@@ -461,7 +461,7 @@ export async function excepcionDavidConversation(
     while (pidiendoCampoOpcional) {
       const r = await conversation.wait();
       if (r.message?.voice || r.message?.audio) {
-        await ctx.reply('Necesito esto por texto -- escribilo, "no" para omitir, o *cancelar*.', { parse_mode: 'Markdown' });
+        await ctx.reply('Necesito esto por texto -- escríbelo, "no" para omitir, o *cancelar*.', { parse_mode: 'Markdown' });
         continue;
       }
       const texto = r.message?.text?.trim();
@@ -470,7 +470,7 @@ export async function excepcionDavidConversation(
         return conversation.halt();
       }
       if (!texto) {
-        await ctx.reply('Escribí el texto, "no" para omitir, o *cancelar*.', { parse_mode: 'Markdown' });
+        await ctx.reply('Escribe el texto, "no" para omitir, o *cancelar*.', { parse_mode: 'Markdown' });
         continue;
       }
       campoOpcional = texto.toLowerCase() === 'no' ? null : texto;
@@ -491,7 +491,7 @@ export async function excepcionDavidConversation(
         `- Fecha: ${fechaLegible(fechaMovimiento)}`,
         campoOpcional ? `- ${etiquetaCampoOpcional}: ${campoOpcional}` : null,
         '',
-        '¿Confirmás?',
+        '¿Confirmas?',
       ]
         .filter((l): l is string => l !== null)
         .join('\n'),
