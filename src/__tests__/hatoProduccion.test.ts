@@ -20,6 +20,7 @@ import {
   fechaAnclaProduccion,
   proyectarHato,
   promedioLitrosPorVaca,
+  tendenciaSemanalVaca,
   reconstruirEstadoAFecha,
   contarVacasEnOrdenoAFecha,
   resolverLitrosQuincenal,
@@ -356,41 +357,13 @@ describe('fechaAnclaProduccion', () => {
 });
 
 // ============================================================================
-// c) proyectarHato
+// c) proyectarHato -- tramo medido
 // ============================================================================
 
-describe('proyectarHato', () => {
-  function estado(overrides: Partial<EstadoReproductivoProyeccion> = {}): EstadoReproductivoProyeccion {
-    return { animalId: 'v1', enOrdeno: true, fechaProbableParto: null, fechaSecar: null, ...overrides };
-  }
-
-  it('proyección con curva incompleta (falta un bucket) -> se proyecta PLANA al nivel actual y la vaca entra en `planas`', () => {
-    const pesajes = [pesaje({ animal_id: 'v1', fecha: '2026-07-01', litros_total: 20 })];
-    const partos = new Map([['v1', '2026-05-01']]); // semana base = semanasDesdeParto('2026-07-28','2026-05-01')
-    const curvaHato = [{ semana: 12, litros: 25, nVacas: 5 }]; // falta el bucket de semana+1 y semana+2
-    const r = proyectarHato({
-      pesajes,
-      partos,
-      estadosReproductivos: [estado()],
-      curvaHato,
-      fechaReferencia: '2026-07-28',
-      horizonteSemanas: 2,
-      ventanaMedidaSemanas: 1,
-    });
-    const proyectadas = r.filter((s) => s.tipo === 'proyectado');
-    expect(proyectadas).toHaveLength(2);
-    for (const semana of proyectadas) {
-      expect(semana.planas).toContain('v1');
-      expect(semana.litrosDia).toBe(20); // plano al nivel actual (promedio de la ventana móvil)
-    }
-  });
-
+describe('proyectarHato -- semanas medidas', () => {
   it('semana medida sin ningún pesaje (backlog) -> litrosDia null, nunca 0', () => {
     const r = proyectarHato({
       pesajes: [], // sin ningún pesaje -- backlog total
-      partos: new Map(),
-      estadosReproductivos: [],
-      curvaHato: [],
       fechaReferencia: '2026-07-28',
       horizonteSemanas: 1,
       ventanaMedidaSemanas: 2,
@@ -407,9 +380,6 @@ describe('proyectarHato', () => {
     ];
     const r = proyectarHato({
       pesajes,
-      partos: new Map(),
-      estadosReproductivos: [],
-      curvaHato: [],
       fechaReferencia: '2026-07-28',
       horizonteSemanas: 0,
       ventanaMedidaSemanas: 1,
@@ -418,71 +388,12 @@ describe('proyectarHato', () => {
     expect(r[0].tipo).toBe('medido');
     expect(r[0].litrosDia).toBe(27);
     expect(r[0].vacasBase.sort()).toEqual(['v1', 'v2']);
-  });
-
-  it('vaca sin pesajes recientes (nivel=null) no contribuye y no revienta la suma', () => {
-    const r = proyectarHato({
-      pesajes: [], // v1 nunca pesada -- rendimientoPorVaca no la devuelve
-      partos: new Map(),
-      estadosReproductivos: [estado()],
-      curvaHato: [],
-      fechaReferencia: '2026-07-28',
-      horizonteSemanas: 1,
-      ventanaMedidaSemanas: 0,
-    });
-    const proyectada = r.find((s) => s.tipo === 'proyectado')!;
-    expect(proyectada.litrosDia).toBeNull(); // ninguna vaca base contribuyó -- sin dato, no 0
-    expect(proyectada.planas).toEqual([]); // no es "plana" -- directamente no hay base
-  });
-
-  it('vaca que entra (fecha_probable_parto dentro del horizonte) aporta la curva del hato desde su semana 0', () => {
-    const curvaHato = [
-      { semana: 0, litros: 8, nVacas: 4 },
-      { semana: 1, litros: 12, nVacas: 4 },
-    ];
-    const r = proyectarHato({
-      pesajes: [],
-      partos: new Map(),
-      estadosReproductivos: [
-        estado({ animalId: 'nueva', enOrdeno: false, fechaProbableParto: '2026-08-04' }), // +7 días = semana 1
-      ],
-      curvaHato,
-      fechaReferencia: '2026-07-28',
-      horizonteSemanas: 2,
-      ventanaMedidaSemanas: 0,
-    });
-    const semana1 = r.find((s) => s.tipo === 'proyectado' && s.semana === 1)!;
-    const semana2 = r.find((s) => s.tipo === 'proyectado' && s.semana === 2)!;
-    expect(semana1.vacasEntran).toEqual(['nueva']);
-    expect(semana1.litrosDia).toBe(8); // semana 0 de su lactancia
-    expect(semana2.vacasEntran).toEqual([]); // solo se marca "entra" en su semana exacta
-    expect(semana2.litrosDia).toBe(12); // semana 1 de su lactancia
-  });
-
-  it('vaca que va a secarse dentro del horizonte deja de contribuir desde su semana de salida', () => {
-    const pesajes = [pesaje({ animal_id: 'v1', fecha: '2026-07-28', litros_total: 20 })];
-    const r = proyectarHato({
-      pesajes,
-      partos: new Map(),
-      estadosReproductivos: [estado({ fechaSecar: '2026-08-04' })], // +7 días = semana 1
-      curvaHato: [],
-      fechaReferencia: '2026-07-28',
-      horizonteSemanas: 2,
-      ventanaMedidaSemanas: 0,
-    });
-    const semana1 = r.find((s) => s.tipo === 'proyectado' && s.semana === 1)!;
-    const semana2 = r.find((s) => s.tipo === 'proyectado' && s.semana === 2)!;
-    expect(semana1.vacasSalen).toEqual(['v1']);
-    expect(semana1.litrosDia).toBeNull(); // ya no contribuye desde su semana de salida
-    expect(semana2.litrosDia).toBeNull();
+    expect(promedioLitrosPorVaca(r[0])).toBe(13.5);
   });
 
   it('horizonteSemanas=0: solo produce semanas medidas, ninguna proyectada', () => {
     const r = proyectarHato({
       pesajes: [],
-      partos: new Map(),
-      estadosReproductivos: [],
-      curvaHato: [],
       fechaReferencia: '2026-07-28',
       horizonteSemanas: 0,
       ventanaMedidaSemanas: 2,
@@ -506,9 +417,6 @@ describe('proyectarHato', () => {
 
     const conHoyLiteral = proyectarHato({
       pesajes,
-      partos: new Map(),
-      estadosReproductivos: [],
-      curvaHato: [],
       fechaReferencia: hoy,
       horizonteSemanas: 0,
       ventanaMedidaSemanas: 4,
@@ -517,9 +425,6 @@ describe('proyectarHato', () => {
 
     const conAncla = proyectarHato({
       pesajes,
-      partos: new Map(),
-      estadosReproductivos: [],
-      curvaHato: [],
       fechaReferencia: ancla,
       horizonteSemanas: 0,
       ventanaMedidaSemanas: 4,
@@ -530,11 +435,243 @@ describe('proyectarHato', () => {
 });
 
 // ============================================================================
-// promedioLitrosPorVaca + `vacasAportantes` -- la normalizacion que
-// reemplazo al sub-label ambar de cobertura (FIX 4 del QA rework): el
-// tracker ahora grafica el total (barra) Y el promedio por vaca (linea),
-// asi que la comparabilidad entre semanas con distinto numero de vacas se
-// resuelve con un dato, no con una advertencia.
+// c2) tendenciaSemanalVaca + proyectarHato -- tramo proyectado
+//
+// Metodo vigente (decision del duenio 2026-08-29): hato CONGELADO en las
+// vacas del ultimo pesaje + tendencia de las ultimas 4 semanas de cada
+// vaca. Reemplaza el bottom-up sobre curva de lactancia: ya no entran
+// vacas por parto ni salen por secado.
+// ============================================================================
+
+describe('tendenciaSemanalVaca', () => {
+  it('serie creciente: pendiente positiva en litros por semana', () => {
+    const puntos = [
+      { semana: -3, litros: 10 },
+      { semana: -2, litros: 12 },
+      { semana: -1, litros: 14 },
+      { semana: 0, litros: 16 },
+    ];
+    expect(tendenciaSemanalVaca(puntos)).toBeCloseTo(2, 10);
+  });
+
+  it('serie decreciente: pendiente negativa', () => {
+    const puntos = [
+      { semana: -2, litros: 20 },
+      { semana: -1, litros: 18 },
+      { semana: 0, litros: 16 },
+    ];
+    expect(tendenciaSemanalVaca(puntos)).toBeCloseTo(-2, 10);
+  });
+
+  it('serie plana: pendiente 0', () => {
+    expect(tendenciaSemanalVaca([{ semana: -1, litros: 15 }, { semana: 0, litros: 15 }])).toBe(0);
+  });
+
+  it('un solo punto: 0 -- con un dato no hay tendencia, e inventarla seria peor', () => {
+    expect(tendenciaSemanalVaca([{ semana: 0, litros: 15 }])).toBe(0);
+  });
+
+  it('sin puntos: 0', () => {
+    expect(tendenciaSemanalVaca([])).toBe(0);
+  });
+
+  it('ajusta sobre los puntos que existen, sin imputar la semana sin pesaje como 0', () => {
+    // Hueco en la semana -1: la vaca no fue pesada, no produjo cero.
+    const conHueco = tendenciaSemanalVaca([
+      { semana: -3, litros: 10 },
+      { semana: -2, litros: 12 },
+      { semana: 0, litros: 16 },
+    ]);
+    expect(conHueco).toBeGreaterThan(0); // sigue subiendo
+    expect(conHueco).toBeCloseTo(2, 1); // y con la misma pendiente, no arrastrada hacia abajo
+  });
+});
+
+describe('proyectarHato -- tramo proyectado (hato congelado + tendencia por vaca)', () => {
+  function estadoProy(overrides: Partial<EstadoReproductivoProyeccion> = {}): EstadoReproductivoProyeccion {
+    return { animalId: 'v1', enOrdeno: true, fechaProbableParto: null, fechaSecar: null, ...overrides };
+  }
+
+  /** Una vaca con 4 semanas de pesajes, subiendo `paso` litros por semana. */
+  function serieVaca(animalId: string, base: number, paso: number): PesajeLecheVaca[] {
+    return [0, 1, 2, 3].map((i) =>
+      pesaje({
+        animal_id: animalId,
+        fecha: `2026-07-${String(28 - i * 7).padStart(2, '0')}`,
+        litros_total: base - paso * i,
+      }),
+    );
+  }
+
+  it('proyecta a cada vaca desde su ULTIMO valor medido, con su propia pendiente', () => {
+    // v1: 14,16,18,20 -> ultimo 20, pendiente +2/sem
+    const r = proyectarHato({
+      pesajes: serieVaca('v1', 20, 2),
+      fechaReferencia: '2026-07-28',
+      horizonteSemanas: 2,
+      ventanaMedidaSemanas: 4,
+      semanasTendencia: 4,
+    });
+    const s1 = r.find((s) => s.tipo === 'proyectado' && s.semana === 1)!;
+    const s2 = r.find((s) => s.tipo === 'proyectado' && s.semana === 2)!;
+    expect(s1.litrosDia).toBeCloseTo(22, 10); // 20 + 2*1
+    expect(s2.litrosDia).toBeCloseTo(24, 10); // 20 + 2*2
+    expect(s1.planas).toEqual([]);
+  });
+
+  it('el numero de vacas NO cambia en el horizonte: es el del ultimo pesaje', () => {
+    const pesajes = [...serieVaca('v1', 20, 2), ...serieVaca('v2', 10, 1)];
+    const r = proyectarHato({
+      pesajes,
+      fechaReferencia: '2026-07-28',
+      horizonteSemanas: 2,
+      ventanaMedidaSemanas: 4,
+    });
+    const proyectadas = r.filter((s) => s.tipo === 'proyectado');
+    for (const s of proyectadas) expect(s.vacasBase.sort()).toEqual(['v1', 'v2']);
+  });
+
+  it('una vaca pesada hace 3 semanas pero NO en la ultima no entra al hato congelado', () => {
+    const pesajes = [
+      ...serieVaca('v1', 20, 2),
+      pesaje({ animal_id: 'vieja', fecha: '2026-07-07', litros_total: 30 }), // 3 semanas atras
+    ];
+    const r = proyectarHato({
+      pesajes,
+      fechaReferencia: '2026-07-28',
+      horizonteSemanas: 1,
+      ventanaMedidaSemanas: 4,
+    });
+    const s1 = r.find((s) => s.tipo === 'proyectado')!;
+    expect(s1.vacasBase).toEqual(['v1']); // 'vieja' no estuvo en el ultimo pesaje
+    expect(s1.litrosDia).toBeCloseTo(22, 10); // y sus 30 L no entran al total
+  });
+
+  it('vaca con UN solo pesaje: se sostiene plana en su ultimo valor y queda declarada en `planas`', () => {
+    const r = proyectarHato({
+      pesajes: [pesaje({ animal_id: 'v1', fecha: '2026-07-28', litros_total: 18 })],
+      fechaReferencia: '2026-07-28',
+      horizonteSemanas: 2,
+      ventanaMedidaSemanas: 4,
+    });
+    const proyectadas = r.filter((s) => s.tipo === 'proyectado');
+    for (const s of proyectadas) {
+      expect(s.litrosDia).toBe(18); // plana, nunca extrapolada con una pendiente inventada
+      expect(s.planas).toEqual(['v1']);
+    }
+  });
+
+  it('nunca proyecta litros negativos: una caida sostenida se corta en 0', () => {
+    // v1: 9,6,3,... ultimo 3, pendiente -3/sem -> semana 2 daria -3
+    const pesajes = [
+      pesaje({ animal_id: 'v1', fecha: '2026-07-28', litros_total: 3 }),
+      pesaje({ animal_id: 'v1', fecha: '2026-07-21', litros_total: 6 }),
+      pesaje({ animal_id: 'v1', fecha: '2026-07-14', litros_total: 9 }),
+    ];
+    const r = proyectarHato({
+      pesajes,
+      fechaReferencia: '2026-07-28',
+      horizonteSemanas: 3,
+      ventanaMedidaSemanas: 4,
+    });
+    const litros = r.filter((s) => s.tipo === 'proyectado').map((s) => s.litrosDia);
+    expect(litros[0]).toBeCloseTo(0, 10); // 3 - 3
+    expect(litros[1]).toBe(0); // clamp, no -3
+    expect(litros[2]).toBe(0); // clamp, no -6
+  });
+
+  it('dos pesajes de la MISMA vaca en la MISMA semana se promedian, no se suman', () => {
+    const pesajes = [
+      pesaje({ animal_id: 'v1', fecha: '2026-07-28', litros_total: 20 }),
+      pesaje({ animal_id: 'v1', fecha: '2026-07-26', litros_total: 10 }), // misma semana
+    ];
+    const r = proyectarHato({
+      pesajes,
+      fechaReferencia: '2026-07-28',
+      horizonteSemanas: 1,
+      ventanaMedidaSemanas: 4,
+    });
+    const s1 = r.find((s) => s.tipo === 'proyectado')!;
+    expect(s1.litrosDia).toBe(15); // el promedio, no los 30 que serian sumarlos
+  });
+
+  it('sin ningun pesaje en la ultima semana: litrosDia null y vacasBase vacio -- nunca 0', () => {
+    const r = proyectarHato({
+      pesajes: [pesaje({ animal_id: 'v1', fecha: '2026-06-01', litros_total: 20 })], // muy viejo
+      fechaReferencia: '2026-07-28',
+      horizonteSemanas: 2,
+      ventanaMedidaSemanas: 4,
+    });
+    for (const s of r.filter((x) => x.tipo === 'proyectado')) {
+      expect(s.litrosDia).toBeNull();
+      expect(s.vacasBase).toEqual([]);
+    }
+  });
+
+  it('el parto previsto se DECLARA en vacasEntran pero NO se suma al total', () => {
+    const r = proyectarHato({
+      pesajes: serieVaca('v1', 20, 2),
+      fechaReferencia: '2026-07-28',
+      horizonteSemanas: 2,
+      ventanaMedidaSemanas: 4,
+      estadosReproductivos: [
+        estadoProy({ animalId: 'v1' }),
+        estadoProy({ animalId: 'nueva', enOrdeno: false, fechaProbableParto: '2026-08-04' }), // semana 1
+      ],
+    });
+    const s1 = r.find((s) => s.tipo === 'proyectado' && s.semana === 1)!;
+    const s2 = r.find((s) => s.tipo === 'proyectado' && s.semana === 2)!;
+    expect(s1.vacasEntran).toEqual(['nueva']); // declarado
+    expect(s1.litrosDia).toBeCloseTo(22, 10); // pero el total sigue siendo solo v1
+    expect(s1.vacasBase).toEqual(['v1']);
+    expect(s2.vacasEntran).toEqual([]); // solo se marca en su semana exacta
+  });
+
+  it('el secado previsto se DECLARA en vacasSalen pero la vaca SIGUE contando', () => {
+    const r = proyectarHato({
+      pesajes: serieVaca('v1', 20, 2),
+      fechaReferencia: '2026-07-28',
+      horizonteSemanas: 2,
+      ventanaMedidaSemanas: 4,
+      estadosReproductivos: [estadoProy({ animalId: 'v1', fechaSecar: '2026-08-04' })], // semana 1
+    });
+    const s1 = r.find((s) => s.tipo === 'proyectado' && s.semana === 1)!;
+    const s2 = r.find((s) => s.tipo === 'proyectado' && s.semana === 2)!;
+    expect(s1.vacasSalen).toEqual(['v1']); // declarado
+    expect(s1.litrosDia).toBeCloseTo(22, 10); // el hato congelado no la descuenta
+    expect(s2.litrosDia).toBeCloseTo(24, 10);
+  });
+
+  it('sin `estadosReproductivos` las cifras son IDENTICAS -- ese input no toca ningun numero', () => {
+    const base = { pesajes: serieVaca('v1', 20, 2), fechaReferencia: '2026-07-28', horizonteSemanas: 2 };
+    const sin = proyectarHato(base);
+    const con = proyectarHato({
+      ...base,
+      estadosReproductivos: [estadoProy({ animalId: 'v1', fechaSecar: '2026-08-04', fechaProbableParto: '2026-08-04' })],
+    });
+    expect(con.map((s) => s.litrosDia)).toEqual(sin.map((s) => s.litrosDia));
+    expect(con.map((s) => s.vacasBase)).toEqual(sin.map((s) => s.vacasBase));
+  });
+
+  it('semanasTendencia acota la historia usada: una caida vieja no arrastra la pendiente reciente', () => {
+    const pesajes = [
+      pesaje({ animal_id: 'v1', fecha: '2026-07-28', litros_total: 20 }),
+      pesaje({ animal_id: 'v1', fecha: '2026-07-21', litros_total: 18 }),
+      pesaje({ animal_id: 'v1', fecha: '2026-07-07', litros_total: 40 }), // fuera de una ventana de 2 semanas
+    ];
+    const ventana2 = proyectarHato({ pesajes, fechaReferencia: '2026-07-28', horizonteSemanas: 1, semanasTendencia: 2 });
+    const ventana4 = proyectarHato({ pesajes, fechaReferencia: '2026-07-28', horizonteSemanas: 1, semanasTendencia: 4 });
+    expect(ventana2.find((s) => s.tipo === 'proyectado')!.litrosDia).toBeCloseTo(22, 10); // solo la subida reciente
+    expect(ventana4.find((s) => s.tipo === 'proyectado')!.litrosDia!).toBeLessThan(20); // la caida vieja pesa
+  });
+});
+
+// ============================================================================
+// promedioLitrosPorVaca -- la normalizacion que reemplazo al sub-label
+// ambar de cobertura (FIX 4 del QA rework): el tracker grafica el total
+// (barra) Y el promedio por vaca de las semanas MEDIDAS (linea), asi que
+// la comparabilidad entre semanas con distinto numero de vacas se resuelve
+// con un dato, no con una advertencia.
 // ============================================================================
 
 describe('promedioLitrosPorVaca', () => {
@@ -544,7 +681,6 @@ describe('promedioLitrosPorVaca', () => {
       litrosDia: 100,
       tipo: 'medido',
       vacasBase: ['v1', 'v2', 'v3', 'v4'],
-      vacasAportantes: ['v1', 'v2', 'v3', 'v4'],
       vacasEntran: [],
       vacasSalen: [],
       planas: [],
@@ -552,112 +688,25 @@ describe('promedioLitrosPorVaca', () => {
     };
   }
 
-  it('divide el total entre las vacas que APORTARON', () => {
+  it('divide el total entre las vacas que componen la semana', () => {
     expect(promedioLitrosPorVaca(semana())).toBe(25);
   });
 
   it('semana sin dato (backlog): null, nunca 0', () => {
-    expect(promedioLitrosPorVaca(semana({ litrosDia: null, vacasAportantes: [] }))).toBeNull();
+    expect(promedioLitrosPorVaca(semana({ litrosDia: null, vacasBase: [] }))).toBeNull();
   });
 
-  it('sin vacas aportantes: null, nunca division por cero', () => {
-    expect(promedioLitrosPorVaca(semana({ litrosDia: 0, vacasAportantes: [] }))).toBeNull();
+  it('sin vacas: null, nunca division por cero', () => {
+    expect(promedioLitrosPorVaca(semana({ litrosDia: 0, vacasBase: [] }))).toBeNull();
   });
 
-  it('NO usa vacasBase como denominador -- en una semana proyectada esa lista incluye vacas que no aportaron', () => {
-    const s = semana({
-      tipo: 'proyectado',
-      litrosDia: 60,
-      vacasBase: ['v1', 'v2', 'v3', 'v4', 'v5', 'v6'], // lista completa del horizonte
-      vacasAportantes: ['v1', 'v2', 'v3'], // 3 secadas / sin nivel base no aportaron
-    });
-    expect(promedioLitrosPorVaca(s)).toBe(20); // 60/3, no 60/6
-  });
-
-  it('la cobertura real de la ventana queda expuesta: dos semanas con el mismo total y distinto numero de vacas dan promedios distintos', () => {
-    const marzo = semana({ litrosDia: 400, vacasAportantes: Array.from({ length: 20 }, (_, i) => `v${i}`) });
-    const junio = semana({ litrosDia: 400, vacasAportantes: Array.from({ length: 28 }, (_, i) => `v${i}`) });
+  it('expone la cobertura real: dos semanas con el mismo total y distinto numero de vacas dan promedios distintos', () => {
+    const marzo = semana({ litrosDia: 400, vacasBase: Array.from({ length: 20 }, (_, i) => `v${i}`) });
+    const junio = semana({ litrosDia: 400, vacasBase: Array.from({ length: 28 }, (_, i) => `v${i}`) });
     expect(promedioLitrosPorVaca(marzo)).toBe(20);
     expect(promedioLitrosPorVaca(junio)).toBeCloseTo(14.2857, 4);
   });
 });
-
-describe('proyectarHato -- vacasAportantes', () => {
-  function estadoProy(overrides: Partial<EstadoReproductivoProyeccion> = {}): EstadoReproductivoProyeccion {
-    return { animalId: 'v1', enOrdeno: true, fechaProbableParto: null, fechaSecar: null, ...overrides };
-  }
-
-  it('semana medida: son exactamente las vacas pesadas (una fila por vaca, sin repetidos)', () => {
-    const r = proyectarHato({
-      pesajes: [
-        pesaje({ animal_id: 'v1', fecha: '2026-07-28', litros_total: 15 }),
-        pesaje({ animal_id: 'v2', fecha: '2026-07-27', litros_total: 12 }),
-      ],
-      partos: new Map(),
-      estadosReproductivos: [],
-      curvaHato: [],
-      fechaReferencia: '2026-07-28',
-      horizonteSemanas: 0,
-      ventanaMedidaSemanas: 1,
-    });
-    expect(r[0].vacasAportantes.sort()).toEqual(['v1', 'v2']);
-    expect(promedioLitrosPorVaca(r[0])).toBe(13.5); // 27/2
-  });
-
-  it('semana medida sin pesajes: vacasAportantes vacio y promedio null -- nunca 0 vacas', () => {
-    const r = proyectarHato({
-      pesajes: [],
-      partos: new Map(),
-      estadosReproductivos: [],
-      curvaHato: [],
-      fechaReferencia: '2026-07-28',
-      horizonteSemanas: 0,
-      ventanaMedidaSemanas: 1,
-    });
-    expect(r[0].vacasAportantes).toEqual([]);
-    expect(promedioLitrosPorVaca(r[0])).toBeNull();
-  });
-
-  it('semana proyectada: excluye a la vaca ya secada, aunque siga en vacasBase', () => {
-    const pesajes = [
-      pesaje({ animal_id: 'v1', fecha: '2026-07-28', litros_total: 20 }),
-      pesaje({ animal_id: 'v2', fecha: '2026-07-28', litros_total: 10 }),
-    ];
-    const r = proyectarHato({
-      pesajes,
-      partos: new Map(),
-      estadosReproductivos: [
-        estadoProy({ animalId: 'v1' }),
-        estadoProy({ animalId: 'v2', fechaSecar: '2026-08-04' }), // sale en la semana 1
-      ],
-      curvaHato: [],
-      fechaReferencia: '2026-07-28',
-      horizonteSemanas: 1,
-      ventanaMedidaSemanas: 0,
-    });
-    const proyectada = r.find((s) => s.tipo === 'proyectado')!;
-    expect(proyectada.vacasBase.sort()).toEqual(['v1', 'v2']); // la lista base no cambia
-    expect(proyectada.vacasAportantes).toEqual(['v1']); // el denominador si
-    expect(promedioLitrosPorVaca(proyectada)).toBe(20);
-  });
-
-  it('semana proyectada sin ninguna contribucion: vacasAportantes vacio junto al litrosDia null', () => {
-    const r = proyectarHato({
-      pesajes: [], // v1 nunca pesada -- no hay nivel del cual proyectar
-      partos: new Map(),
-      estadosReproductivos: [estadoProy()],
-      curvaHato: [],
-      fechaReferencia: '2026-07-28',
-      horizonteSemanas: 1,
-      ventanaMedidaSemanas: 0,
-    });
-    const proyectada = r.find((s) => s.tipo === 'proyectado')!;
-    expect(proyectada.litrosDia).toBeNull();
-    expect(proyectada.vacasAportantes).toEqual([]);
-    expect(promedioLitrosPorVaca(proyectada)).toBeNull();
-  });
-});
-
 // ============================================================================
 // e) reconstruirEstadoAFecha / contarVacasEnOrdenoAFecha
 // ============================================================================
