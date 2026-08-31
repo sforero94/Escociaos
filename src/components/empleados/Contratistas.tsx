@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
+import { deleteDevolvioFilas } from '@/utils/supabase/deleteDevolvioFilas';
 import { useFormPersistence } from '@/hooks/useFormPersistence';
 import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
 import { ConfirmDialog } from '../ui/confirm-dialog';
@@ -203,10 +204,16 @@ const Contratistas: React.FC = () => {
         return;
       }
 
-      // Eliminar contratista
-      const { error } = await supabase.from('contratistas').delete().eq('id', id);
+      // Eliminar contratista. `.select()` es carga útil: sin él, RLS que
+      // filtra la fila (migración 114) vuelve `{ error: null }` y el toast
+      // de éxito miente. ESCO-46.
+      const { data, error } = await supabase.from('contratistas').delete().eq('id', id).select();
 
       if (error) throw error;
+      if (!deleteDevolvioFilas(data)) {
+        showAlert('error', 'No tienes permisos para eliminar este contratista.');
+        return;
+      }
 
       showAlert('success', 'Contratista eliminado exitosamente');
       await fetchContratistas();
