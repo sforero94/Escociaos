@@ -241,3 +241,48 @@ prompt del agente en cada corrida.
 - Cerrado esta corrida: **#3** (`Arreglado`). Backlog 23 -> 22.
 
 [corrida: 2026-08-24-drenaje-cierre]
+
+---
+
+## Corrida 2026-08-31-lunes
+
+**Baselines**
+
+| Que | Valor |
+|---|---|
+| Estado de despliegue | HEAD `cc19bdb` · **frontend Vercel AL DIA**, probado por contenido (`"No tienes permisos para eliminar"` de `c60c9ef` presente en `Contratistas--runZII5.js`, control positivo `tarifa_jornal` presente) · **edge function v236 REGRESADA al bundle de la v224** (`ezbr_sha256` `4fba67c3…` identico), 11 commits / 17 ficheros / +6.062 lineas fuera de produccion · **migraciones 001-132 todas aplicadas**. Cero fusionadas-sin-aplicar, cero aplicadas-sin-fusionar |
+| Crons | **6 jobs, todos `active`** (nuevo: jobid 9 `ronda-inventario-tick`, 12:00 UTC). **Los 6 sin `timeout_milliseconds`** — el #55 crece a tres jobs |
+| Backlog | **6 abiertos al inicio → 18 al cierre** (13 filados, 1 cerrado). Mas viejo: 28 dias (#4). **0 estancados** |
+| Cadencia (6,58 dias) | 90 commits sin merge = **95,7/sem** (record) · 54 aterrizajes = **57,4/sem** · fix share **78,8%** — **NO interpretable**, cuarta ventana seguida con sesgo distinto (ahora: drenaje del viernes). **80 de 90 commits caben en DOS dias**: es un pico doble, no un ritmo |
+
+**Primera semana con el drenaje del viernes en operacion, y el efecto es medible**: el 28-ago concentra 24 commits sin
+merge y 4 PRs (#180-#183) fusionados en 23 segundos, contra un backlog que **no crecio** hasta esta corrida. La rutina
+hace lo que se diseno para hacer.
+
+**Navegacion (nuevo)**
+- **La regla de los tres testigos tiene un ATAJO DE UN PASO cuando lo que se sospecha es una REVERSION**: comparar
+  `ezbr_sha256` contra el hash de la ultima version verificada por contenido, que esta memoria ya guarda. Si coincide
+  exacto, el bundle vivo es aquel arbol y **no hace falta leer 1 MB de `get_edge_function`**. Hoy la v236 devolvio el
+  hash de la v224 y eso fijo el cutoff sin una sola descarga. **Guardar SIEMPRE el hash de toda version verificada.**
+- **Con el cutoff fijado, la consecuencia release-side se calcula con
+  `git diff --stat <sha-del-bundle> HEAD -- supabase/functions/make-server-1ccce916/`**, separando los **modulos de
+  runtime nuevos** de los de solo-tipos: la ausencia de `acciones-tipos.ts`, `importHato/tipos.ts`,
+  `telegram/types.ts` y `acciones-render.ts` es **esperada**; la de cualquier otro `.ts` con exports de runtime, no.
+- **Un modulo puede estar MEDIO vivo y hay que decirlo asi**: la ronda tiene frontend en Vercel y las 9 migraciones
+  aplicadas, pero cero superficie servidor. No es «el modulo no existe» sino **«el modulo es de solo lectura y el cron
+  dispara al vacio»**.
+
+**Estados aceptados**
+- **`verificaciones_inventario` 1 fila / `verificaciones_detalle` 223 con `contado=false` es el estado CORRECTO y
+  congelado.** #49 cerrado esta corrida como `Aceptado (no se arregla)` — superado por la ronda, no arreglado.
+  **No re-filar.**
+- **La entrada `132_fn_ronda_proponer_ajuste_cantidad_confirmada` del ledger lleva el prefijo numerico DENTRO del
+  campo `name`**, a diferencia de las otras diez de esa tanda. Un barrido que empareje `name` contra el fichero la
+  marca como huerfana. Cosmetico, ya anotado, **no re-investigar**.
+- **`escociaos-po/CHANGELOG.md` NUNCA se creo** pese a que el brief lo manda desde la primera corrida
+  (`.claude/agents/release-changelog.md:52`). El contenido existe repartido en `escociaos-po/reports/`. **NO se filo
+  por el cupo de 12**; es P3 `decision` y hay dos salidas legitimas y opuestas: crearlo con bootstrap desde los
+  reportes, o **retirar el mandato del brief** si el reporte por corrida ya cubre la necesidad. Lo que no es
+  defendible es el estado actual: un entregable obligatorio que lleva un mes sin producirse y que ninguna corrida
+  reporto como faltante. **La entrada de changelog de esta semana esta escrita dentro de
+  `escociaos-po/reports/2026-08-31-lunes.md`, lista para migrar si se decide crearlo.**

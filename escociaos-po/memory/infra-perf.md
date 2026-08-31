@@ -308,3 +308,27 @@ prompt del agente en cada corrida.
   diagnostiques ese error como una regresion del PR.
 
 [corrida: 2026-08-24-drenaje-cierre]
+
+---
+
+## Corrida 2026-08-31-lunes
+
+**Refutacion (fila nueva del ledger):**
+
+| Fingerprint | Afirmacion | Por que murio | Corrida |
+|---|---|---|---|
+| `infra/edge/cierre-por-updated_at` | Un despliegue de edge function con `updated_at` posterior al ultimo commit del arbol edge esta al dia | v236 tiene `updated_at` 2026-08-30T20:49:18Z contra un ultimo commit de 2026-08-29T02:21:02Z — **pasa la regla y aun asi le faltan 13 modulos de runtime y el modulo de inventario completo**. La regla de 2026-08-28 (cierre por contenido) ya lo decia; hoy queda probado que aplica tambien al **chequeo periodico**, no solo al cierre de un hallazgo. `scripts/check-deploy-drift.mjs` implementa la regla refutada — filado | 2026-08-31-lunes |
+
+**Baselines:**
+
+| Que | Valor | Corrida |
+|---|---|---|
+| Infra | DB **116 MB** (1,4 % de 8 GB; 77 MB siguen siendo maquinaria: `net._http_response` 59 MB/72 filas, `cron.job_run_details` 18 MB/0 vivas). **6 pg_cron activos**, los 6 `succeeded`, nuevo `ronda-inventario-tick` (jobid 9, `0 12 * * *`). Edge **v236** (2026-08-30T20:49:18Z) — **REGRESIVA, bundle = v224**. Vercel 5/5 READY/PROMOTED, alias en `cc19bdb` = HEAD. Errores edge 24 h: **1 no-200 de ~325** (un 500 en `/usuarios/crear`). `clima_lecturas` 292 filas, 3 min de atraso | 2026-08-31-lunes |
+| Advisors (por SQL) | unindexed_fks **107** (era 89 — el salto son las 8 tablas `rondas_*`, 0–2 filas; fuera de alcance a proposito) · unused_idx **77** (era 80) · sin_pk **14** (eran 9; los 5 nuevos son respaldos de 107/129 en `respaldos`, estado final buscado). **Ninguno es hallazgo** | 2026-08-31-lunes |
+| Consultas mas lentas | La mas lenta de aplicacion sigue siendo **`fn_clima_rollup_diario()` a 231,4 ms** (38 llamadas, 1x/dia) — plano contra 233,9 ms del 08-27. Ninguna consulta de aplicacion problematica | 2026-08-31-lunes |
+
+**Navegacion:**
+- **`get_edge_function` ya NO revienta el contexto**: el harness lo persiste solo a `tool-results/mcp-Supabase-get_edge_function-*.txt` y se le hace `grep` ahi. La nota vieja de «guardar a fichero con python» quedo obsoleta. Coste real: cero contexto.
+- **`net._http_response` retiene ~HORAS, no dias.** Buscar ahi la respuesta de un cron de hace 2 dias no devuelve nada, y **eso NO es evidencia de que no corriera**. Para un job diario la ventana util es el mismo dia; si no, ir a `function_logs` por prefijo o al efecto en tablas de dominio.
+- El cron 127 `ronda-inventario-tick` (jobid 9) **si disparo y el POST si llego**: `--> POST /make-server-1ccce916/inventario/ronda/tick 200 2s` el 2026-08-30T12:00:03Z. **Ese 200 es la prueba de que el modulo SI estuvo desplegado y luego se perdio** — el deploy regresivo fue 8 h despues.
+- **NO se filo** (deliberadamente): `/usuarios/crear` devuelve 500 en vez de 409 ante correo duplicado (P3, 1 ocurrencia en 24 h, doble clic). Cortado por el cupo de 12. Arreglo: capturar `error.code === 'email_exists'` en `usuarios.tsx` y deshabilitar el submit en vuelo.

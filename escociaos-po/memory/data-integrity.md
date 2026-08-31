@@ -311,3 +311,56 @@ prompt del agente en cada corrida.
 | Integridad referencial | **0 huerfanos en todas las relaciones probadas** (md↔aplicaciones, mdp↔md, mdp↔productos, md↔lotes). 0 mdp con cantidad invalida · 0 md con fecha futura · 0 gastos futuros (bug UTC no reaparecio) · 0 gastos/ingresos nuevos sin `created_by` · 0 gastos en estado != Confirmado · 0 productos con stock negativo · 0 movimientos ganado pendientes. Sin cambio: 86 monitoreos con ronda_id NULL (#7) · 1 md fuera de ventana (#24) · 3 divergencias libro-vs-stock, identicas (#29: Sulcamag −8.000, Naturboro −20, TecniFeed Boro +18,69) · 2 eventos post-salida · verificacion de inventario del 2026-07-30 sigue abandonada, 223 detalles / 0 contados | 2026-08-20-jueves |
 | Clima | **Sync CAIDO al momento del barrido**: ultima lectura 9,1 h (2026-08-19 21:05 Bogota), 71/71 respuestas `No data available` en 12 h, cron OK. Ayer 164/288 lecturas (57%) con hueco de 7 h. `contador_congelado` **19/90 (21,1%) y 8/30** — la memoria de Infra lo tiene como «plano 5/30 (17%), no refilar»; **subio, conviene que Infra lo re-mida** | 2026-08-20-jueves |
 | Conteos de dominio | hato_animales 179 · hato_eventos 766 · partos 300 · chequeos 33 / chequeo_vacas 1.479 (ultimo 2026-07-09, 42 dias — dentro del intervalo normal, no es hallazgo) · pesajes 549 (ultimo 2026-08-12; falta la semana del 07-29 y la del 08-19) · quincenal 82 · alertas 64 (ultima creada 08-09) · hato_correcciones 10 (eran 0) · monitoreos 4.200 / 29 rondas (ultima 2026-07-29, 22 dias — ambar en SaludDatos, rojo a los 28) · productos 341 · movimientos_inventario 155 · movimientos_diarios 154 / mdp 749 · gan_movimientos 53 / gan_inventario 34 potreros / **369 cabezas** · acciones_corridas 5 / acciones_recomendadas 38 | 2026-08-20-jueves |
+
+---
+
+## Corrida 2026-08-31-lunes
+
+**Baselines** (deltas vs `2026-08-27-jueves`)
+
+| Que | Valor |
+|---|---|
+| Dominio | hato_animales 179 (65 activa) · eventos 767 (=) · chequeos 33 / chequeo_vacas 1.479 (ultimo 2026-07-09, **53 dias**) · **pesajes 601 (+52, ultimo 2026-08-26 — la alerta VIGILAR se RESUELVE)** · quincenal 82 (=) · alertas 65 (=) · hato_correcciones 10 · globalgap_correcciones **51** (+13) · **monitoreos 4.244 (+44) / 30 rondas (+1: Ronda 30, 2026-08-26→28)** · productos 341 · mov_inventario **161** (+1) · mov_diarios 164 / mdp 789 · aplicaciones 20 (2 abiertas) · compras 32 (=) · **fin_gastos 4.477 (SIN CAMBIO en 4 dias)** · fin_ingresos 232 (=) · registros_trabajo 2.787 · gan 369 cabezas · clima_resumen_diario 1.920 · logs_auditoria 0 |
+| Integridad | **0 huerfanos en TODAS las relaciones probadas** · 0 duplicados en Ronda 30 · 0 chapetas duplicadas · 0 provisionales activas · 0 partos <270 dias · 0 stock negativo · 0 gastos futuros/no-Confirmado · **ganado 369 = 369, 0 divergencias en 34 potreros**. Sin cambio: 86 monitoreos con ronda_id NULL (#7, ACEPTADO) · 1 md fuera de ventana (#24, ACEPTADO) |
+| Inventario | Libro vs stock: **2 divergencias, identicas** (Naturboro −20,00 · TecniFeed Boro +18,69) — #29 sin cambio |
+| Clima | Sync SANO (ultima lectura 0,01 h, 292 en ventana, 0 duplicados station+timestamp). **137 `ok` / 26 `cobertura_parcial` / 0 `contador_congelado`**. **1 dia sin resumen en 90: 2026-08-28** (filado) |
+
+**Estados aceptados / confirmados**
+- **La ronda de inventario (124-132) corrio su primer ciclo completo y esta SANA.** 1 ronda `2026-08-01`,
+  `es_linea_base=true`, abierta 08-28 23:14Z, cerrada 08-29 12:46Z, 195 productos en alcance, 1 excepcion resuelta,
+  1 reporte, 2 avisos idempotentes. **Los 195 del alcance NO son un hueco de cobertura**: `fn_ronda_abrir` congela
+  `productos WHERE cantidad_actual > 0` (126:416-426) — los 33 activos que quedan fuera tienen saldo 0.
+  **Incluye productos `activo=false` A PROPOSITO** (mismas lineas). No re-investigar ninguna de las dos cosas.
+- **El aviso `mes_omitido:2026-08` del 08-29 NO es falsa alarma** pese a lo que sugiere el nombre de la clave: se
+  disparo con la ronda `en_curso` (cerro 46 min despues) y el texto que manda es «La ronda de agosto **no se ha
+  cerrado**» (`tick.ts:277`), que era cierto. **Refutado antes de filar — no re-abrir.**
+- **`hato_alertas`: los estados reales son `descartada` (63) | `confirmada` (2)** — corrige la nota que decia
+  «descartada | enviada». Las 2 `enviada` de la corrida previa se respondieron.
+- **RESOLUCION #49 (cerrado esta corrida):** `verificaciones_inventario` en 1 fila y `verificaciones_detalle` en 223
+  con `contado=false` es el estado **CORRECTO y congelado**, no un sintoma. La 124 rotulo la fila `Rechazada`; la 128
+  hizo `DROP FUNCTION aplicar_ajustes_verificacion`. **No re-filar ninguna variante de «la verificacion de inventario
+  nunca conto nada».**
+
+**Navegacion (nuevo)**
+- **`clima_resumen_diario.station_id` lleva un ESPACIO AL FINAL**: `'84:1F:E8:35:D8:73 '`, longitud 18. Viene del
+  secreto `ECOWITT_MAC`. Consistente en todas las tablas, asi que hoy no rompe nada — pero **cualquier predicado
+  escrito de memoria sin el espacio devuelve 0 filas EN SILENCIO.**
+- **El sync en vivo escribe timestamps con segundos != 0 y el backfill de la History API con `:00` exactos.** Es la
+  huella forense para distinguir un dia en vivo de uno backfilleado sin ninguna columna extra — y es tambien la causa
+  de que el `UNIQUE(station_id,timestamp)` no atrape los duplicados (filado).
+- **Un dia que falla en el reintento del clima NO deja linea en los logs.** `backfillUnDia` devuelve `{ok:false,error}`
+  y el llamante solo lo mete en el array de respuesta. **Si un dia candidato no aparece en los logs con resultado
+  propio, FALLO** — es la unica forma de detectarlo. Filado.
+- Columnas que rompen queries escritas de memoria: `rondas_inventario` usa **`periodo`** (`date`, dia 1 del mes) y
+  `abierta_en`/`cerrada_en`, NO `mes`/`anio`/`fecha_apertura`; `rondas_inventario_alcance` no tiene `id` (PK compuesta);
+  `rondas_avisos` se identifica por **`clave`** (`mes_omitido:AAAA-MM`), sin `id`; `hato_alertas_tick_runs` usa
+  `ejecutado_at`, no `created_at`.
+
+**Cambios de vigilancia**
+- **RETIRAR la alerta VIGILAR de `hato_pesajes_leche`**: la sesion del 2026-08-26 entro con 52 pesajes.
+- **NUEVO VIGILAR — `hato_chequeos` clavado en 2026-07-09, 53 dias.** El modulo es bimensual, sigue en ventana, pero
+  es el intervalo mas largo registrado. **A los 65 dias merece hallazgo propio.**
+- **NUEVO VIGILAR — `fin_gastos` sin una sola fila nueva en 4 dias** (4.477 el 08-27 y el 08-31), contra un ritmo
+  historico de ~10 por semana. No es defecto de datos; si sigue plano el jueves, es senal para Usage Analytics.
+- **NO se filo por el cupo de 12**: la fila historica de `rondas_excepciones` dice 3 donde la realidad fue 150 kg
+  (P3, `datos`). Su SQL exacta quedo dentro del hallazgo de «sin unidad de medida», PARTE B.

@@ -104,3 +104,63 @@ prompt del agente en cada corrida.
 
 ## Archivo
 (vacio)
+
+---
+
+## Corrida 2026-08-31-lunes
+
+**Pulso semanal 2026-08-25 → 08-31** (vs semana previa / prom 4 sem)
+
+| Tabla | Esta sem | Previa | Prom 4s |
+|---|---|---|---|
+| `registros_trabajo` | 67 | 87 | 67,3 |
+| `monitoreos` | **44** | 0 | 17,0 |
+| `hato_pesajes_leche` | **52** | 0 | 59,3 |
+| `movimientos_inventario` | 8 | 0 | 6,5 |
+| `chat_messages` (Esco) | 22 | 0 | 20,5 |
+| **`rondas_inventario`** | **1 (primera)** | 0 | — |
+| `fin_gastos` | 2 | 1 | 12,8 |
+| `hato_chequeos` | 0 | 0 | 0 (esperado, proximo ~09-08) |
+
+**Quien escribe (7d):** David Garcia 119 · Martha Vega 52 · Consuelito 2 · Santiago 0 · bot 1.
+**Escriben 4 de 10 cuentas.** `usuarios` 7 → **10** (Fernando Jimenez 08-12 Administrador · Uriel Parada 08-28
+**primer Verificador de la historia** · «Grok Bot» 08-30 **rol Gerencia**).
+
+| Metrica | Valor |
+|---|---|
+| Ronda de inventario (NUEVA serie) | Nacio 2026-08-28. **1 ronda, ciclo completo cerrado en 13,5 h**, alcance 195 · 2 transcritos (1 confirmado, 1 `sin_confirmar` con `intentos_preview=4`) · 1 excepcion · 1 reporte · 2 avisos · **actor unico: la cuenta Telegram de Gerencia en los 6 campos de actor** |
+| Hato: pesaje y fotos | 601 filas (376 importacion + **225 foto**) · bucket `hato-pesajes-fotos` **8 objetos, solo 3 produjeron filas** · rezago de captura 10 d (planilla 08-19) y 3 d (08-26) |
+| Hato: motor de alertas | **7 corridas de `hato_alertas_tick_runs`, todas `ok`, todas `generadas=0`** · cobertura: 179 evaluados, 114 no_activa, **45 `sin_ciclo_reproductivo`, 20 `bajo_umbral`**; **29 `sin_chequeo`** en `rechequeo_due`; `tratamiento_paso` en 0 (protocolos vacios) · 176/179 sin raza |
+| Hato: completitud | activas **65**, sin raza 62, sin fecha_nacimiento 20, sin madre 32, fichas completas 1. **Cero movimiento en 7 dias** |
+| Motor de acciones | 16 corridas (eran 9), 14 `parcial` / 2 `ok` · 85 acciones, 77 vigentes · **`acciones_silencios` 2 → 8** |
+| Esco chat | 88 conversaciones / 372 mensajes · semana: 3 conv / 22 msgs, **1 usuario** · `esco_memorias` sigue en 1 |
+
+**Estados aceptados nuevos**
+- **La trampa de fecha UTC esta cerrada y verificada, INCLUIDO el camino del bot.** 0 filas nuevas con
+  `fecha > (created_at at time zone 'America/Bogota')::date` en 9 tablas. Las 19 historicas de `fin_gastos` son todas
+  de navegador, **la ultima del 2026-08-03**, previas al arreglo. **Ninguna del bot.** *No volver a buscarla salvo que
+  aparezca una fila nueva.* [corrida: 2026-08-31-lunes]
+- **`acciones_corridas` en `estado='parcial'` NO es un fallo**: significa que las guardas de validacion rechazaron
+  parte de las 9 acciones propuestas, que es el comportamiento contratado. Lo unico vigilable es que **las mismas dos
+  rechazadas se repiten a diario** (`hato.lista_hato` con hecho `sin_dato`, `agu.cobertura_ronda` parcial sin ancla).
+  P3, no filado. [corrida: 2026-08-31-lunes]
+- **La cadencia de ronda de monitoreo se cumplio**: R30 abrio 2026-08-26 (prediccion previa: ~2026-09-01). 12 sublotes
+  / 4 lotes / ~44 obs sigue siendo el normal post-salida de Daniela.
+- **#25 sigue cerrado y no se refila**: `chequeos-fotos` 0 objetos. Estreno decidido para el chequeo de septiembre.
+
+**Navegacion nueva**
+- **Al medir la ronda de inventario, el actor NUNCA esta en `*_por_usuario`** — esos 4 campos estan todos en NULL
+  porque el bot escribe con service role. La atribucion vive en los campos **`*_por_telegram`**, que apuntan a
+  `telegram_usuarios.id` (NO a `usuarios.id`). **Contar actores distintos ahi es la unica forma de distinguir ensayo
+  de adopcion.** [corrida: 2026-08-31-lunes]
+- **`hato_alertas_tick_runs.cobertura` (mig 116) es ahora LA fuente para «por que el motor no genera»** — reparte los
+  179 animales por razon de omision y por regla. **Leerla antes de cualquier hipotesis sobre umbrales o despacho.**
+  Corrige el diagnostico del 2026-08-10, que trataba el problema como de DESPACHO: el cuello es que el motor **no
+  tiene a quien evaluar**. [corrida: 2026-08-31-lunes]
+- Columnas que costaron round-trips: `registros_trabajo.fecha_trabajo` (no `fecha`), `monitoreos.fecha_monitoreo`,
+  `rondas_monitoreo` tiene `nombre`/`fecha_inicio`, `hato_correcciones` usa `tabla`/`corregido_en`/`corregido_por`,
+  `acciones_corridas` usa `generado_at`, `telegram_usuarios` usa `nombre_display`/`rol_bot`,
+  `movimientos_inventario.tipo_movimiento` es ENUM y necesita `::text` para `string_agg`.
+- **NO se filo por el cupo de 12**: pesaje por foto, 5 de 8 subidas historicas sin producir filas y 4 intentos en 6 h
+  esta semana (P2, confianza **Media** — desde SQL no se distingue una cancelacion deliberada de un fallo). **Para que
+  suba de Media hace falta instrumentar el desenlace de `/hato/pesaje/foto`, como la 116 hizo con el tick.**

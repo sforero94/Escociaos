@@ -800,3 +800,61 @@ fuente vieja incrementa la version y actualiza `updated_at` igual.**
 = **6 cerrados**. 2 migraciones aplicadas (120 y 123), 4 PRs fusionados, 1 edge function desplegada
 y verificada. **Cero migraciones fusionadas-sin-aplicar y cero aplicadas-sin-fusionar.**
 Backlog abierto al cierre: **7 hallazgos** (era 13).
+
+---
+
+## Corrida 2026-08-31-lunes — estado de la operacion
+- Roster de 6 (no era primer lunes). Modo: **full write · Notion OPERATIVO · preflight 5/5 sin un solo prompt de permiso.**
+- Resultado: **13 hallazgos filados** (2 P1 + 11 P2), **3 verificaciones adversariales de las cuales UNA cambio el resultado**
+  (el P1 de conteo negativo bajo a P2), **1 hallazgo cerrado** (#49, superado por la ronda) y **1 ampliado** (#55, de 2 a 3 jobs).
+- **Dead-man: OK.** Ultima corrida 2026-08-28-viernes, hueco de 3 dias.
+- **Migration drift check (lo que el lunes posee): LIMPIO en la base, SUCIO en la documentacion.** Los 24 ficheros
+  109-132 estan en `main` y las 11 entradas del ledger desde `20260828` mapean todas a un fichero. Cero aplicadas-sin-mezclar.
+  **PERO el CLAUDE.md raiz dice que la 120 esta SIN APLICAR y lleva aplicada desde el 08-28**, y la 123/131/132 no
+  figuran en ninguna parte. Filado. La deriva de migraciones ya no es de fechas: es de documentacion.
+
+## COMPOSIO/VERCEL: REVERIFICADO Y SANO — cerrar la tarea pendiente del 2026-08-24
+`COMPOSIO_MULTI_EXECUTE_TOOL` **resuelve y responde**. `VERCEL_GET_DEPLOYMENTS` (account `vercel_tetric-hash`,
+`limit` como **STRING**) devolvio 5/5 READY/PROMOTED con el alias de produccion en `cc19bdb` = HEAD.
+El fallo del 08-24 («No matching deferred tools found») **no reproduce**. **Tercera corrida sana: dejar de
+tratarlo como dudoso y quitar la tarea de reverificacion del lunes.** [corrida: 2026-08-31-lunes]
+
+## LA LECCION CARA DE ESTA CORRIDA: el despliegue de edge function se rompio POR SEGUNDA VEZ EN TRES DIAS, igual
+La v236 (2026-08-30 20:49Z) republico el bundle de la **v224** (08-28). Misma causa que la v223: `functions deploy`
+desde un worktree local que no tiene `main` al dia. **Ya no es anecdota, es un patron con dos ocurrencias y un
+detector ciego.**
+- **REGLA: todo despliegue de edge function va precedido de `git fetch && git checkout <sha de main>` y seguido de
+  una prueba POR CONTENIDO.** Nunca por `updated_at`.
+- **ATAJO DE UN PASO cuando lo que se sospecha es una REVERSION**: comparar `ezbr_sha256` contra el hash de la
+  ultima version verificada por contenido, que esta memoria ya guarda. Si coincide exacto, el bundle vivo es aquel
+  arbol y **no hace falta descargar 1,5 MB**. Hoy la v236 devolvio el hash de la v224 y eso fijo el cutoff sin una
+  sola descarga. **Guardar SIEMPRE el hash de toda version verificada por contenido.**
+- **Hash vigente al cierre: `4fba67c3f9f80ee58af6015fc1f7bd9f362ee7afb2ad497a67e6e69d05acc909` (v236, REGRESIVO
+  — el proximo despliegue sano TIENE que moverlo).**
+- **La prueba mas fuerte no es el grep: es el DIFF DE FUENTE.** El bundle publica TypeScript legible y sin minificar,
+  asi que se puede diffear el `index.ts` desplegado contra el del repo. Hoy: 208 lineas contra 218, faltando el
+  import y el `app.post` de la ruta. Eso mata de raiz toda objecion de «artefacto de bundler», que es la primera
+  que levanta un verificador honesto.
+- **Conteo de ficheros del bundle = la senal de deriva mas barata**, y no obliga a elegir identificadores. Hoy 58
+  contra 75 en el arbol de despliegue, **de los cuales 4 faltan CORRECTAMENTE** (solo-tipos o sin importador:
+  `acciones-render.ts`, `acciones-tipos.ts`, `importHato/tipos.ts`, `telegram/types.ts`). La comparacion honesta
+  es **71 alcanzables en runtime contra 58**.
+- **Un modulo puede estar MEDIO vivo, y hay que reportarlo asi.** La ronda de inventario tiene frontend en Vercel y
+  las 9 migraciones aplicadas, pero cero superficie servidor. No es «el modulo no existe»: es **«el modulo es de
+  solo lectura y el cron dispara al vacio»**, que es lo que el usuario ve.
+[corrida: 2026-08-31-lunes]
+
+## Preflight de tools — resultado 2026-08-31
+| Tool | Resultado |
+|---|---|
+| `execute_sql` (solo lectura) | OK — `supabase_read_only_user`, `default_transaction_read_only = on` |
+| `list_migrations`, `list_edge_functions`, `get_edge_function`, `get_advisors` | OK |
+| `query_logs` | OK — **sin `Backend error!` esta corrida**; `source='function_logs'` + `event_message ilike` funciono como documentado |
+| Notion (`notion-fetch`, `notion-query-data-sources`, `notion-create-pages`, `notion-update-page`) | OK |
+| github (`list_pull_requests`) | OK — 0 PRs abiertos |
+| **`COMPOSIO_MULTI_EXECUTE_TOOL`** | **OK — RESUELVE. Vercel cubierto. Cierra el pendiente del 08-24** |
+
+**Trampa nueva de Notion, barata pero costo un round-trip:** la propiedad de fecha NO se consulta como `"Detectado"`.
+Hay que usar las columnas expandidas **`"date:Detectado:start"`** (idem `:end`, `:is_datetime`). Y al crear/actualizar,
+**un espacio de mas en el nombre de una propiedad (`"Impacto "`) aborta el create entero** con validation_error.
+[corrida: 2026-08-31-lunes]

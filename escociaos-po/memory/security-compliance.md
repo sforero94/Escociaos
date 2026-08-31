@@ -214,3 +214,63 @@ prompt del agente en cada corrida.
   tablas conservan `DELETE USING (true)`. Fusionada el 2026-08-25 (PR #176), asi que **el umbral de
   7 dias de la constitucion vence el 2026-08-31**. Su PR dice "Awaiting your go" y en esta sesion no
   hubo turno humano, asi que no se aplico. [corrida: 2026-08-28-viernes]
+
+---
+
+## Corrida 2026-08-31-lunes
+
+- **EL DISPARADOR SE ACTIVO. Existe una cuenta Verificador activa desde el 2026-08-28 22:32 UTC**
+  (`uriel@escocia.com`, id `8aeb0207-...`, `modulos_acceso='{}'`), **pero `last_sign_in_at IS NULL`: nunca se ha
+  autenticado.** Padron 2026-08-31: **6 Gerencia + 3 Administrador + 1 Verificador = 10 activas** (era 5+3 el 08-24).
+  Las brechas gemelas que la memoria venia siguiendo como latentes **dejaron de descartarse por padron**. Volver a
+  contar el padron cada corrida sigue valiendo, ahora para ver si aparece un SEGUNDO rol no privilegiado —
+  **o una segunda cuenta no humana**. [corrida: 2026-08-31-lunes]
+- **LA CLASE INSERT/UPDATE always-true EXISTE Y SON 20 TABLAS.** El 08-28 se anoto como «clase sin filar»; hoy se
+  midio, se verifico adversarialmente y se filo como P1. Consulta canonica, guardarla al lado de la de DELETE:
+  `pg_policies` en `public` con `permissive='PERMISSIVE' AND cmd IN ('INSERT','UPDATE') AND 'authenticated'=ANY(roles)
+  AND btrim(coalesce(qual,'true'))='true' AND btrim(coalesce(with_check,'true'))='true'`.
+  **Ojo con el `coalesce(...,'true')`**: una politica INSERT tiene `qual` NULL y una UPDATE puede tener `with_check`
+  NULL; sin el coalesce se pierden. El verificador re-corrio con semantica POR COMANDO y obtuvo la misma lista de 20.
+  **Las dos salidas de escape fallan las dos**: 0 politicas RESTRICTIVE, y `authenticated` tiene el GRANT de INSERT y
+  UPDATE en las 20 (o sea que el cierre por GRANT de la 073 no esta puesto aqui). [corrida: 2026-08-31-lunes]
+- **Los triggers de correccion son `AFTER UPDATE OR DELETE` — NO trazan INSERT.** Verificado con `pg_get_triggerdef`
+  sobre los 6 `trg_globalgap_correccion` (113) y los 5 `trg_hato_correccion` (084). **Simetria que importa: en las 8
+  tablas GlobalGAP el UPDATE esta cerrado y el INSERT abierto, y el trigger traza UPDATE pero no INSERT — el camino
+  abierto es exactamente el no trazado.** Enunciado preciso, corregido por el verificador: UPDATE sin traza en 12
+  tablas (no tienen trigger); INSERT sin traza por cualquier bitacora en las 20, con atribucion (no traza) solo en
+  `monitoreos` y `registros_trabajo`. **`trg_hato_correccion` NO aplica a ninguna de las 20** — citarlo fue un error
+  del hallador. [corrida: 2026-08-31-lunes]
+- **CUENTA NO HUMANA CON MAXIMO PRIVILEGIO: `bot@escocia.com` («Grok Bot»), rol Gerencia, los 4 modulos**, creada
+  2026-08-30 23:47Z y con sesion iniciada un minuto despues. Creada a mano desde Configuracion -> Usuarios (el 500 de
+  `/usuarios/crear` de esa misma marca de tiempo es el doble clic). Filada como P2 `decision`. **Cumple la condicion
+  de reapertura que dejamos escrita al cerrar el #44** («si el padron crece mas alla de la gente conocida») — pero
+  **NO se refila el #44**, que sigue cerrado por indisponibilidad de plan. [corrida: 2026-08-31-lunes]
+- **El modulo ronda de inventario (125-132) paso su barrido de seguridad SIN UN SOLO HALLAZGO.** 8 tablas con RLS,
+  `anon` sin ningun privilegio en las 8 (**la trampa de la 081 no se disparo — segunda corrida consecutiva que el
+  patron 073/081/101 se aplica solo**), 12 RPC todos `SECURITY INVOKER` con `search_path` fijado,
+  `fn_ronda_emitir_reporte` restringido a `service_role`. **`fn_ronda_validar_actor` NO es puenteable y no hay que
+  reinvestigarlo**: exige exactamente uno de usuario/telegram, y con `auth.uid()` presente rechaza el actor de
+  Telegram y exige `p_usuario = (SELECT auth.uid())`. [corrida: 2026-08-31-lunes]
+- **Migracion 120 APLICADA el 2026-08-28** (ledger `20260828142056`). El barrido always-true de DELETE/ALL devuelve
+  hoy **1 sola fila**, `reportes_semanales TO service_role`, que se descuenta siempre. Las 17 historicas estan
+  cerradas por 110/114/120/123. **El CLAUDE.md raiz dice lo contrario y esta mal — filado aparte.**
+  [corrida: 2026-08-31-lunes]
+- **La 109 cerro el DELETE del bucket `reportes-semanales` pero NO el SELECT ni el UPDATE**, que siguen con predicado
+  pelado `bucket_id='reportes-semanales'` TO authenticated (49 objetos). **Para un archivo, sobrescribir equivale a
+  destruir**, y `reporteSemanalService.ts` sube con `upsert`, que es justo ese camino. **Regla que se gana el sitio:
+  al endurecer un bucket de archivo, cerrar UPDATE junto con DELETE — cerrar solo DELETE es media puerta.**
+  **NO se filo esta corrida por el cupo de 12**; conserva su limite duro ya ledgereado: `ALTER POLICY` sobre
+  `storage.objects` exige ser DUENO y `apply_migration` corre como `postgres`, que no lo es — **la unica via es el
+  panel de Supabase -> Storage -> Policies, a mano, y no deja fila en el ledger.** [corrida: 2026-08-31-lunes]
+- Baseline 2026-08-31: **advisors security 25 lints** (era 21), sin categoria nueva — la subida es crecimiento de
+  `respaldos`. Los 5 gates fail-closed presentes en el arbol desplegado (`INVENTARIO_TICK_SECRET` incluido, 503 sin
+  secreto, `ronda-inventario-tick.ts:91-125`). Storage: 5 de 7 buckets con politicas, todos `public=false`.
+  Secretos: `.env`/`.env.local` en `.gitignore`, sin historial; cero service-role keys.
+- **Los 2 `telegram_id` que quedan en el repo publico viven en `src/sql/migrations/091_...sql`, que la guarda
+  `telegramWebhookSecretoGuard.test.ts` EXENTA a proposito.** Fuera de migraciones: cero. **No re-filar como fuga
+  nueva.** [corrida: 2026-08-31-lunes]
+- **Comentario rancio, NO es hallazgo:** `generar-reporte-semanal-endpoint.ts:25-27` (en los DOS arboles) afirma «no
+  hay ninguna cuenta Verificador ni Monitor activa». Falso desde el 08-28. El gate NO depende de esa premisa (es
+  lista explicita de roles), asi que no hay agujero. **Leccion general: un comentario que justifica una decision de
+  seguridad citando el padron CADUCA cuando el padron cambia. Al barrer, `grep -rn 'no hay ninguna cuenta'` y
+  similares — son premisas fechadas.** [corrida: 2026-08-31-lunes]

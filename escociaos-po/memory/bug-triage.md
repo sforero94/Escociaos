@@ -275,3 +275,55 @@ prompt del agente en cada corrida.
 
 ## Baselines (corrida 2026-08-28-viernes)
 | `main@f98f83a` | npm test **137 ficheros / 3.073 tests, todo verde** · lint **0 errores / 908 warnings** · `tsc --noEmit` limpio | 2026-08-28-viernes |
+
+---
+
+## Corrida 2026-08-31-lunes
+
+**Refutacion (fila nueva del ledger) — el verificador BAJO un P1 a P2:**
+
+| Fingerprint | Afirmacion | Por que murio | Corrida |
+|---|---|---|---|
+| `bug/ronda/conteo-negativo-llega-a-inventario` | Un conteo fisico negativo derivado por el interprete llegaria a `fn_ronda_aplicar_ajuste` y posteria un movimiento de −150 kg | **FALSO contra el cuerpo vivo.** La migracion **132** (`d6bae22`, aplicada) agrego a `fn_ronda_proponer_ajuste`: `IF v_cantidad_confirmada IS NULL THEN RAISE` y **`IF v_cantidad_confirmada < 0 THEN RAISE EXCEPTION`**, y sobrescribe `cantidad_fisica` con la cifra que teclea un humano. `fn_ronda_decidir_ajuste` exige `estado='ajuste_propuesto'`, `fn_ronda_aplicar_ajuste` exige `'ajuste_aprobado'` **y aborta si `v_nuevo < 0`**. `fn_ronda_resolver_con_captura` rechaza `cantidad <= 0`. **Dos guardas server-side independientes, una especificamente `< 0`.** Sobrevive el tramo interprete→preview→`rondas_excepciones`, filado como P2 | 2026-08-31-lunes |
+
+**Leccion de metodo:** la 132 se escribio para OTRO bug («tres bultos de 50 kilos» → `cantidad_fisica=3`) y cerro este
+**de refilon**. Antes de llamar P1 a un camino de corrupcion, **leer el cuerpo VIVO de cada RPC de la cadena con
+`pg_get_functiondef`** — 130/131/132 reemplazaron funciones de la 126, asi que el fichero de migracion y el cuerpo
+vivo divergen. [corrida: 2026-08-31-lunes]
+
+**Estados aceptados**
+- **La primera ronda real y CERRADA es la mejor fuente de defectos del modulo** (`1c1d8566-...`, periodo 2026-08-01,
+  abierta 08-28 23:14Z, cerrada 08-29 12:46Z). Produjo **cuatro** defectos distintos esta corrida. **Leerla antes de
+  teorizar sobre el flujo.** En particular, **`rondas_transcritos.correcciones` es una bitacora forense de primera**:
+  guarda cada texto que el bucle de preview se trago, con timestamp.
+- **El alcance de la ronda incluye productos `activo=false` A PROPOSITO** (126:416-425). No es bug, no refilar.
+- **El motor de alertas del hato NO esta roto: no aplica a nadie.** 7 corridas, 0 generadas, cobertura por razon que
+  cierra exacto (114 `no_activa` = 179−65 activas). Los 29 `sin_chequeo` son novillas/terneras — el roster del chequeo
+  es `etapa='vaca' AND estado='activa'`. **No re-auditar.**
+- **Clima sigue reparado**: Ecowitt 137 `ok` / 26 `cobertura_parcial` / **0 `contador_congelado`**; los 27 congelados
+  son todos `wunderground-historico`. Confirma la refutacion `bug-triage/clima/122-exagera-la-reparacion`.
+- **`tick.ts:153` `toISOString().slice(0,10)`** esta en la lista blanca clase (c) de `hatoFechaLocalGuard.test.ts:102`,
+  UTC-coherente por construccion. **No es bug, no refilar.**
+- Los dos huecos conocidos de `src/components/inventory/CLAUDE.md` (`cerrada_sin_ajuste` inalcanzable; R-16 texto
+  libre) **no se refilaron** y no deben refilarse.
+
+**Baselines**
+
+| Que | Valor | Corrida |
+|---|---|---|
+| `main@cc19bdb` verde | `npx vitest run` **154 ficheros / 3.386 tests, todo verde** | 2026-08-31-lunes |
+| `movimientos_inventario.responsable` | 158 atribuidas: **157 email + 1 nombre display** ('Santiago Forero', escrita por `fn_ronda_actor_nombre`) + 3 NULL. **La prediccion del 08-28 se cumplio en 24 h** | 2026-08-31-lunes |
+| Reportes semanales | 27 / 27 con `url_storage`, ultima S34 (2026-08-24) | 2026-08-31-lunes |
+
+**Navegacion**
+- **`vitest run --reporter=basic` REVIENTA en este repo** (el reporter `basic` fue retirado; falla al cargar el modulo
+  y sale con **exit 0, que parece verde**). Correr `npx vitest run` a secas.
+- Recordatorio que se pago caro el 08-28: `git worktree remove --force` sobre los `.claude/worktrees/agent-*` ANTES de
+  correr la suite. Esta corrida se verifico que no habia ninguno.
+
+**BUG_REPORT.md — delta propuesto (NO aplicado; el orquestador no lo commiteo por ser fuera de las rutas permitidas)**
+- Issues 1, 2, 4, 5: siguen cerrados. Issue 6: sigue no reproducible (27/27 reportes con `url_storage`).
+- **Issue 3b: SIGUE ABIERTO, sin cambio.** `src/utils/fetchDatosReporteSemanal.ts:512-524` sigue valuando en **0** el
+  inventario consumido sin nada por comprar. Es `clase: decision` para Santiago, no un PR.
+- La cabecera del fichero esta rancia: dice «24 reportes ... hasta la semana 31» y hoy son **27 hasta la S34**; su
+  propio bloque SQL citado ya no reproduce el resultado que afirma.
