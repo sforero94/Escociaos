@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
+import { deleteDevolvioFilas } from '@/utils/supabase/deleteDevolvioFilas';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Input } from '../ui/input';
@@ -167,6 +168,15 @@ export function LotesConfig() {
 
       if (error) {
         throw error;
+      }
+
+      // `.select()` ya estaba; faltaba mirar `data`. RLS (migración 114)
+      // filtra la fila y PostgREST devuelve `[]` sin error. ESCO-46.
+      if (!deleteDevolvioFilas(data)) {
+        toast.error('No tienes permisos para eliminar este lote.');
+        setDeleteDialogOpen(false);
+        setLoteToDelete(null);
+        return;
       }
       
       toast.success('Lote eliminado exitosamente');

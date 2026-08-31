@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
+import { deleteDevolvioFilas } from '@/utils/supabase/deleteDevolvioFilas';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Input } from '../ui/input';
@@ -193,12 +194,21 @@ export function SublotesConfig() {
     if (!subloteToDelete) return;
 
     try {
-      const { error } = await supabase
+      // Mismo flujo que lotes (Configuración). Sin `.select()`, un DELETE
+      // filtrado por RLS se ve como éxito. ESCO-46.
+      const { data, error } = await supabase
         .from('sublotes')
         .delete()
-        .eq('id', subloteToDelete.id);
+        .eq('id', subloteToDelete.id)
+        .select();
 
       if (error) throw error;
+      if (!deleteDevolvioFilas(data)) {
+        toast.error('No tienes permisos para eliminar este sublote.');
+        setDeleteDialogOpen(false);
+        setSubloteToDelete(null);
+        return;
+      }
       
       toast.success('Sublote eliminado exitosamente');
       await cargarDatos();
