@@ -806,3 +806,24 @@ never simplified.
 The same preference is saved as a user-level output style at
 `~/.claude/output-styles/simplified-technical-english.md`, which survives across projects.
 This entry exists so the rule also reaches sessions that do not load that style.
+
+#### Español Técnico Simplificado
+
+When Santiago writes in Spanish, reply in Spanish and apply the same discipline. ASD-STE100
+is an English-only standard, so this is its principles carried across — not a translation of
+its approved word list. The rules that differ from the English ones, because Spanish makes
+them easy to break:
+
+- **Evita el gerundio.** "El sistema valida el actor", nunca "El sistema está validando el
+  actor", y nunca el gerundio de consecuencia.
+- **Voz activa, y eso incluye la pasiva refleja.** "La migración cierra la política", no "se
+  cierra la política".
+- **Sin perífrasis verbales** — "proceder a", "llevar a cabo", "dar lugar a" — usa el verbo
+  directo.
+- Instrucciones en imperativo: "Ejecuta las pruebas."
+
+El resto es igual: voz activa, una idea por frase, máximo 20 palabras (procedimiento) o 25
+(descripción), el mismo término para la misma cosa, sin sinónimos ni modismos, y máximo 3
+palabras en un grupo nominal.
+
+Las mismas excepciones aplican: esto no cambia nada de lo que se escribe al repositorio.
