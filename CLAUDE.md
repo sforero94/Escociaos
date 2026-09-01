@@ -782,3 +782,27 @@ After modifying any Supabase edge function source in `src/supabase/functions/ser
 - The user communicates in both **Spanish and English**. Respond in the language of the prompt.
 - UI text and domain variable names are in **Spanish**.
 - Code comments, config files, and CLAUDE.md are in **English**.
+
+### Reply style — Simplified Technical English
+
+Santiago set this preference on 2026-09-01. It applies to **replies in the chat**, not to
+the repository.
+
+Write replies to the user in **Simplified Technical English (ASD-STE100)**, and keep them
+short. The core rules:
+
+- Active voice. One idea in each sentence. Maximum 20 words in a procedural sentence, 25 in
+  a descriptive one, 6 sentences in a paragraph.
+- The same word for the same thing, every time — no synonyms, no idioms, no contractions.
+- Keep the articles. Maximum 3 words in a noun cluster.
+- The answer first, the reasons after it. Do not narrate a plan; report the result.
+
+**This does NOT change anything written to the repository.** Code, code comments, commit
+messages, PR bodies, migration headers and the documentation in `docs/` keep their existing
+conventions — including the Spanish of the migration headers and of the module contracts.
+Technical terms, file paths, function names and error messages are quoted exactly and are
+never simplified.
+
+The same preference is saved as a user-level output style at
+`~/.claude/output-styles/simplified-technical-english.md`, which survives across projects.
+This entry exists so the rule also reaches sessions that do not load that style.
