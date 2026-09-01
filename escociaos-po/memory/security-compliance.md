@@ -274,3 +274,24 @@ prompt del agente en cada corrida.
   lista explicita de roles), asi que no hay agujero. **Leccion general: un comentario que justifica una decision de
   seguridad citando el padron CADUCA cuando el padron cambia. Al barrer, `grep -rn 'no hay ninguna cuenta'` y
   similares — son premisas fechadas.** [corrida: 2026-08-31-lunes]
+
+### Estado ACEPTADO — la cuenta `bot@escocia.com` («Grok Bot»), decision de Santiago 2026-08-31
+**NO volver a filar esta cuenta como hallazgo.** Es un bot que Santiago diseno para correr la app en una maquina
+virtual y hacer verificaciones visuales desde el celular: reporta fallos y a veces hace modificaciones. **Simula un
+usuario, y por eso tiene usuario propio a proposito** — es lo que hace que sus acciones queden atribuidas.
+
+- **El rol Gerencia esta JUSTIFICADO, no es un exceso.** La recomendacion del hallazgo (bajarlo a Administrador sin
+  finanzas) **se retiro**: verifica la aplicacion ENTERA, y las 13 tablas `fin_*` cuelgan de `es_usuario_gerencia()`,
+  asi que con Administrador las pantallas de Finanzas le saldrian en ceros y **reportaria fallos falsos**.
+  *Leccion de metodo: no recomendar bajar un privilegio sin conocer el proposito de la cuenta. La opcion (a) estaba
+  bien planteada como condicional y la condicion resulto no cumplirse.*
+- **La eleccion de usuario propio compra trazabilidad real** y conviene tenerlo presente al evaluar otros bots: una
+  sesion de navegador tiene `auth.uid()`, asi que dispara los triggers de atribucion y queda trazada por
+  `globalgap_correcciones`/`hato_correcciones`. El bot de Telegram, con service role, no.
+- **Huecos de traza OFRECIDOS Y DECLINADOS** («deja asi»): los triggers de correccion no trazan INSERT;
+  `aplicaciones*`/`movimientos_diarios*` no tienen capturador; `logs_auditoria` sigue vacia. O sea que una
+  modificacion del bot a `lotes`, `sublotes` o `produccion` **no deja ni atribucion ni traza**. Aceptado.
+- Estado al cerrar: **0 escrituras**, una sola sesion (2026-08-30 23:48Z).
+- **REABRIR SI**: aparece una SEGUNDA cuenta no humana, el bot empieza a escribir en `fin_*`, o el proyecto sube a
+  plan Pro (entonces la proteccion de contrasenas filtradas del #44 se vuelve activable).
+[corrida: 2026-08-31-lunes]
