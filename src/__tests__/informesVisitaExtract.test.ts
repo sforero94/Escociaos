@@ -146,7 +146,7 @@ describe('cabecera barata', () => {
 
 describe('endpoint de propuestas', () => {
   it('nombra el redespliegue cuando el servidor responde 404', () => {
-    expect(MENSAJE_ENDPOINT_NO_DESPLEGADO).toMatch(/make-server-1ccce916/);
+    expect(MENSAJE_ENDPOINT_NO_DESPLEGADO).toMatch(/informes-visita-proponer/);
   });
 });
 

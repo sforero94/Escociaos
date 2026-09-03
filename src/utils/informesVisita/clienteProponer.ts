@@ -6,9 +6,9 @@ import type { InformeVisitaCabecera, SnippetPropuesto } from '@/types/informesVi
 
 const EDGE_FUNCTION_BASE = `https://${projectId}.supabase.co/functions/v1`;
 
-/** 404 = the route exists in git, not in the deployed `make-server-1ccce916`. */
+/** 404 = the standalone propose function is not deployed. */
 export const MENSAJE_ENDPOINT_NO_DESPLEGADO =
-  'El endpoint de propuestas no está desplegado. Hay que redesplegar la edge function make-server-1ccce916.';
+  'El endpoint de propuestas no está desplegado. Hay que desplegar la edge function informes-visita-proponer.';
 
 export interface PropuestaSnippetsRespuesta {
   cabecera: InformeVisitaCabecera;
@@ -42,7 +42,7 @@ export async function pedirSnippetsAlModelo(opts: {
   }
 
   const res = await fetch(
-    `${EDGE_FUNCTION_BASE}/make-server-1ccce916/informes-visita/snippets/proponer`,
+    `${EDGE_FUNCTION_BASE}/informes-visita-proponer`,
     {
       method: 'POST',
       headers: {
