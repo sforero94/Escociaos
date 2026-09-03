@@ -21,7 +21,7 @@ import {
   insumoEstaEnFuente,
 } from '@/utils/informesVisita/esco';
 import { persistirInforme } from '@/utils/informesVisita/persistir';
-import { proponerTemas, sanitizarTemas, TEMAS_INFORME } from '@/utils/informesVisita/temas';
+import { proponerTemasDeNota, sanitizarTemas, TEMAS_INFORME } from '@/utils/informesVisita/temas';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -190,6 +190,7 @@ function snip(parcial: Partial<SnippetPropuesto> & { clave: string; texto: strin
     insumo: null,
     plaga: null,
     foto_indice: null,
+    temas: [],
     ...parcial,
   };
 }
@@ -230,6 +231,20 @@ describe('puerta confirmar antes de persistir', () => {
     expect(snippetsListosParaPersistir([], [])).toEqual([]);
   });
 
+  it('anexa la nota abierta con los chips de esa nota', () => {
+    const extra = snip({
+      clave: 'nota-visita',
+      texto: 'Hablamos de bodega y de un faltante de Proxam.',
+      origen: 'conversacion',
+      cita_word: null,
+      temas: ['inventario'],
+    });
+    const listas = snippetsListosParaPersistir([], [], [extra]);
+    expect(listas).toHaveLength(1);
+    expect(listas[0].origen).toBe('conversacion');
+    expect(listas[0].temas).toEqual(['inventario']);
+  });
+
   it('persistirInforme no escribe si las propuestas no están decididas', async () => {
     const buf = await construirDocxSintetico();
     const extraido = await extraerDocx(buf);
@@ -239,8 +254,7 @@ describe('puerta confirmar antes de persistir', () => {
       cabecera: extraerCabecera(extraido.texto, '2026-07-28'),
       propuestas: [snip({ clave: 'a', texto: 'A' })],
       decisiones: [],
-      temas: [],
-      notas: '',
+      extras: [],
       fotos: extraido.fotos,
       texto: extraido.texto,
       sinTexto: extraido.sinTexto,
@@ -260,8 +274,6 @@ describe('ESCO — fuente y citas', () => {
         fenologia: 'llenado',
         materia_seca: '21%',
         proyeccion_cosecha: '40 t',
-        temas: ['fumigación', 'monitoreo'],
-        notas: 'Se habló de riego en el lote 3.',
         sin_texto: false,
         texto_extraido: 'Proxam 2 cc/L carencia 15 días',
       }],
@@ -275,6 +287,7 @@ describe('ESCO — fuente y citas', () => {
         insumo: 'Proxam',
         plaga: 'Phytophthora',
         foto_id: null,
+        temas: ['fumigación', 'monitoreo'],
       }],
       fotos: [{ id: 'foto-1', informe_id: 'inf-1', pie_de_foto: 'clorosis en este sector', orden: 0 }],
     });
@@ -283,8 +296,7 @@ describe('ESCO — fuente y citas', () => {
     expect(r.advertencia).toContain('ronda_monitoreo');
     expect(r.snippets[0].cita).toEqual({ informe_id: 'inf-1', snippet_id: 'snip-1' });
     expect(r.informes[0].cita).toEqual({ informe_id: 'inf-1' });
-    expect(r.informes[0].temas).toEqual(['fumigación', 'monitoreo']);
-    expect(r.informes[0].extracto_notas).toContain('riego');
+    expect(r.snippets[0].temas).toEqual(['fumigación', 'monitoreo']);
     expect(r.insumos_en_fuente).toEqual(['Proxam']);
     expect(insumoEstaEnFuente('Proxam', r, [])).toBe(true);
     expect(insumoEstaEnFuente('Glifosato', r, [])).toBe(false);
@@ -293,15 +305,25 @@ describe('ESCO — fuente y citas', () => {
 });
 
 describe('temas de visita', () => {
-  it('preselecciona fertilización, monitoreo y observaciones desde el texto y los tipos', () => {
-    const temas = proponerTemas(
-      'Fertilización edáfica. Incidencia de ácaro 12%. Observación de clorosis.',
-      [{ tipo: 'monitoreo', texto: 'Ácaro 12%' }, { tipo: 'rec_drench', texto: 'Proxam en drench' }],
+  it('preselecciona fertilización y monitoreo desde UNA nota, no desde el informe entero', () => {
+    const temas = proponerTemasDeNota(
+      'Fertilización edáfica. Incidencia de ácaro 12%.',
+      'monitoreo',
     );
     expect(temas).toContain('fertilización');
     expect(temas).toContain('monitoreo');
-    expect(temas).toContain('observaciones');
     expect(temas.every((t) => (TEMAS_INFORME as readonly string[]).includes(t))).toBe(true);
+  });
+
+  it('una nota de Compsus no hereda fertilización de otra nota del mismo Word', () => {
+    const compsus = proponerTemasDeNota(
+      'La incidencia de Compsus es baja, con solo dos individuos avistados.',
+      'monitoreo',
+    );
+    expect(compsus).toEqual(['monitoreo']);
+    const edafica = proponerTemasDeNota('Fertilización edáfica con Silicalmag.', 'rec_edafica');
+    expect(edafica).toContain('fertilización');
+    expect(edafica).not.toEqual(compsus);
   });
 
   it('no inventa un tema que no está en el catálogo', () => {
@@ -316,8 +338,9 @@ describe('sin embeddings', () => {
   it('la 134 no crea observaciones_agronomicas ni columnas vector', () => {
     const sql = readFileSync(resolve(__dirname, '../sql/migrations/134_informes_visita_agronomicos.sql'), 'utf-8');
     expect(sql).toMatch(/CREATE TABLE public\.informes_visita_snippets/);
-    expect(sql).toMatch(/temas\s+TEXT\[\]/);
+    expect(sql).toMatch(/informes_visita_snippets_temas_catalogo/);
     expect(sql).toMatch(/planeacion labores/);
+    expect(sql).not.toMatch(/informes_visita_temas_catalogo/);
     expect(sql).not.toMatch(/CREATE TABLE public\.observaciones_agronomicas/);
     expect(sql).not.toMatch(/CREATE TYPE public\.tipo_observacion_agronomica/);
     expect(sql).not.toMatch(/CREATE EXTENSION/i);

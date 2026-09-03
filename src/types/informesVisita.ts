@@ -51,6 +51,7 @@ export interface SnippetPropuesto {
   insumo: string | null;
   plaga: string | null;
   foto_indice: number | null;
+  temas: string[];
 }
 
 export type AccionDecision = 'confirmar' | 'descartar';
@@ -84,8 +85,6 @@ export interface InformeVisitaRow {
   fenologia: string | null;
   materia_seca: string | null;
   proyeccion_cosecha: string | null;
-  temas: string[];
-  notas: string | null;
   archivo_path: string;
   archivo_nombre: string;
   texto_extraido: string | null;
@@ -112,6 +111,7 @@ export interface InformeVisitaSnippetRow {
   insumo: string | null;
   plaga: string | null;
   foto_id: string | null;
+  temas: string[];
   created_at: string;
 }
 

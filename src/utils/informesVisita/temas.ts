@@ -1,4 +1,4 @@
-/** Temas de visita. El usuario confirma o cambia chips; no son tipos de snippet. */
+/** Temas por nota. El usuario confirma o cambia chips; no son tipos de snippet. */
 
 export const TEMAS_INFORME = [
   'fertilización',
@@ -53,23 +53,27 @@ export function sanitizarTemas(raw: unknown): TemaInforme[] {
 }
 
 /**
- * Preselección barata: palabras del Word + tipo de snippet propuesto.
+ * Preselección barata de UNA nota: palabras de su texto + tipo de snippet.
  * El usuario confirma o cambia los chips antes de guardar.
  */
-export function proponerTemas(
-  texto: string,
-  snippets: Array<{ tipo?: string | null; texto?: string | null }> = [],
-): TemaInforme[] {
+export function proponerTemasDeNota(texto: string, tipo?: string | null): TemaInforme[] {
   const hay = new Set<TemaInforme>();
-  const cuerpo = normalizar(
-    [texto, ...snippets.map((s) => s.texto ?? '')].join('\n'),
-  );
+  const cuerpo = normalizar(texto);
   for (const tema of TEMAS_INFORME) {
     if (PALABRAS[tema].test(cuerpo)) hay.add(tema);
   }
-  for (const s of snippets) {
-    const mapped = s.tipo ? TIPO_SNIPPET_A_TEMA[s.tipo] : undefined;
-    if (mapped) hay.add(mapped);
-  }
+  const mapped = tipo ? TIPO_SNIPPET_A_TEMA[tipo] : undefined;
+  if (mapped) hay.add(mapped);
   return TEMAS_INFORME.filter((t) => hay.has(t));
+}
+
+/** Si el snippet ya trae temas válidos, los conserva. Si no, propone. */
+export function asegurarTemasSnippet<T extends { texto: string; tipo?: string | null; temas?: unknown }>(
+  s: T,
+): T & { temas: TemaInforme[] } {
+  const ya = sanitizarTemas(s.temas);
+  return {
+    ...s,
+    temas: ya.length > 0 ? ya : proponerTemasDeNota(s.texto, s.tipo),
+  };
 }

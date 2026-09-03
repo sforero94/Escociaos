@@ -5,7 +5,6 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { DateInput } from '@/components/ui/date-input';
 import { useAuth } from '@/contexts/AuthContext';
 import { getSupabase } from '@/utils/supabase/client';
@@ -16,9 +15,9 @@ import {
   TIPOS_SNIPPET,
   type InformeVisitaSnippetRow,
 } from '@/types/informesVisita';
-import { TEMAS_INFORME } from '@/utils/informesVisita/temas';
+import { TEMAS_INFORME, sanitizarTemas } from '@/utils/informesVisita/temas';
 import { esTablaInformesAusente, MENSAJE_MIGRACION_PENDIENTE } from '@/utils/informesVisita/migracion';
-import { chipsDeSnippet } from './EditarSnippetDialog';
+import { TemasChips } from './TemasChips';
 
 interface FilaLista extends InformeVisitaSnippetRow {
   informe?: {
@@ -80,33 +79,6 @@ export function InformesVisitaPage() {
         idsInforme = dateIds;
       }
 
-      if (tema) {
-        const { data: porTema, error: temaErr } = await sb
-          .from('informes_visita')
-          .select('id')
-          .contains('temas', [tema]);
-        if (temaErr) throw temaErr;
-        const temaIds = ((porTema ?? []) as Array<{ id: string }>).map((r) => r.id);
-        if (temaIds.length === 0) {
-          setFilas([]);
-          setInformesCoincidentes([]);
-          setCargando(false);
-          return;
-        }
-        if (idsInforme) {
-          const permitidos = new Set(idsInforme);
-          idsInforme = temaIds.filter((id) => permitidos.has(id));
-        } else {
-          idsInforme = temaIds;
-        }
-        if (idsInforme.length === 0) {
-          setFilas([]);
-          setInformesCoincidentes([]);
-          setCargando(false);
-          return;
-        }
-      }
-
       if (q) {
         const [{ data: infData, error: infErr }, { data: snipData, error: snipErr }] = await Promise.all([
           sb.from('informes_visita').select('id, fecha_visita, agronoma, archivo_nombre').textSearch('texto_busqueda', q, { type: 'plain', config: 'spanish' }),
@@ -143,6 +115,7 @@ export function InformesVisitaPage() {
           .order('created_at', { ascending: false })
           .range(desde, hasta);
         if (tipo) query = query.eq('tipo', tipo);
+        if (tema) query = query.contains('temas', [tema]);
         if (plaga.trim()) query = query.ilike('plaga', `%${plaga.trim()}%`);
         if (insumo.trim()) query = query.ilike('insumo', `%${insumo.trim()}%`);
         if (idsInforme) query = query.in('informe_id', idsInforme);
@@ -169,7 +142,7 @@ export function InformesVisitaPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Informes de visita</h1>
           <p className="text-gray-500 mt-1">
-            Ideas del Word de la agrónoma, temas de la visita y notas. No es el monitoreo de rondas de la app.
+            Ideas del Word de la agrónoma, con temas por nota. No es el monitoreo de rondas de la app.
           </p>
         </div>
         {puedeEscribir && (
@@ -268,9 +241,7 @@ export function InformesVisitaPage() {
         </p>
       ) : (
         <div className="rounded-xl border border-border divide-y">
-          {filas.map((f) => {
-            const chips = chipsDeSnippet(f);
-            return (
+          {filas.map((f) => (
               <Link
                 key={f.id}
                 to={`/informes-visita/${f.informe_id}`}
@@ -278,9 +249,7 @@ export function InformesVisitaPage() {
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2 mb-1">
-                    {chips.map((c) => (
-                      <Badge key={c} variant="secondary">{c}</Badge>
-                    ))}
+                    <TemasChips compacto soloLectura seleccionados={sanitizarTemas(f.temas)} />
                     <span className="text-sm text-gray-500">
                       {f.informe?.fecha_visita ? formatearFecha(f.informe.fecha_visita) : ''}
                     </span>
@@ -289,8 +258,7 @@ export function InformesVisitaPage() {
                 </div>
                 <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
               </Link>
-            );
-          })}
+          ))}
         </div>
       )}
     </div>

@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  ETIQUETAS_TIPO_SNIPPET,
-  TIPOS_SNIPPET,
   type SnippetPropuesto,
 } from '@/types/informesVisita';
+import { sanitizarTemas, type TemaInforme } from '@/utils/informesVisita/temas';
+import { TemasChips } from './TemasChips';
 
 export function EditarSnippetDialog({
   abierto,
@@ -22,16 +21,12 @@ export function EditarSnippetDialog({
   onGuardar: (edicion: Partial<Omit<SnippetPropuesto, 'clave' | 'origen'>>) => void;
 }) {
   const [texto, setTexto] = useState('');
-  const [tipo, setTipo] = useState('');
-  const [insumo, setInsumo] = useState('');
-  const [plaga, setPlaga] = useState('');
+  const [temas, setTemas] = useState<TemaInforme[]>([]);
 
   useEffect(() => {
     if (!snippet) return;
     setTexto(snippet.texto);
-    setTipo(snippet.tipo ?? '');
-    setInsumo(snippet.insumo ?? '');
-    setPlaga(snippet.plaga ?? '');
+    setTemas(sanitizarTemas(snippet.temas));
   }, [snippet]);
 
   function handleSubmit(e: FormEvent) {
@@ -40,9 +35,7 @@ export function EditarSnippetDialog({
     if (!t) return;
     onGuardar({
       texto: t,
-      tipo: tipo || null,
-      insumo: insumo.trim() || null,
-      plaga: plaga.trim() || null,
+      temas,
     });
   }
 
@@ -69,26 +62,8 @@ export function EditarSnippetDialog({
               </p>
             )}
             <div>
-              <Label htmlFor="snip-tipo">Tipo (opcional)</Label>
-              <select
-                id="snip-tipo"
-                className="border-input bg-input-background h-11 w-full rounded-md border px-3 text-sm"
-                value={tipo}
-                onChange={(e) => setTipo(e.target.value)}
-              >
-                <option value="">Sin tipo</option>
-                {TIPOS_SNIPPET.map((t) => (
-                  <option key={t} value={t}>{ETIQUETAS_TIPO_SNIPPET[t]}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <Label htmlFor="snip-insumo">Insumo (opcional)</Label>
-              <Input id="snip-insumo" value={insumo} onChange={(e) => setInsumo(e.target.value)} />
-            </div>
-            <div>
-              <Label htmlFor="snip-plaga">Plaga (opcional)</Label>
-              <Input id="snip-plaga" value={plaga} onChange={(e) => setPlaga(e.target.value)} />
+              <Label>Temas</Label>
+              <TemasChips compacto seleccionados={temas} onChange={setTemas} />
             </div>
           </DialogBody>
           <DialogFooter>
@@ -99,18 +74,6 @@ export function EditarSnippetDialog({
       </DialogContent>
     </Dialog>
   );
-}
-
-export function chipsDeSnippet(s: Pick<SnippetPropuesto, 'tipo' | 'insumo' | 'plaga'>): string[] {
-  const chips: string[] = [];
-  if (s.tipo && s.tipo in ETIQUETAS_TIPO_SNIPPET) {
-    chips.push(ETIQUETAS_TIPO_SNIPPET[s.tipo as keyof typeof ETIQUETAS_TIPO_SNIPPET]);
-  } else if (s.tipo) {
-    chips.push(s.tipo);
-  }
-  if (s.insumo) chips.push(s.insumo);
-  if (s.plaga) chips.push(s.plaga);
-  return chips;
 }
 
 export function useFotoUrls(fotos: Array<{ bytes: Uint8Array; mime: string }>): string[] {

@@ -2,6 +2,7 @@ import { getSupabase } from '@/utils/supabase/client';
 import { projectId } from '@/utils/supabase/info.tsx';
 import { extraerCabecera } from './cabecera';
 import { parsearRespuestaSnippets } from './snippets';
+import { asegurarTemasSnippet } from './temas';
 import type { InformeVisitaCabecera, SnippetPropuesto } from '@/types/informesVisita';
 
 const EDGE_FUNCTION_BASE = `https://${projectId}.supabase.co/functions/v1`;
@@ -76,7 +77,7 @@ export async function pedirSnippetsAlModelo(opts: {
   if (body.cabecera && Array.isArray(body.snippets)) {
     return {
       cabecera: body.cabecera,
-      snippets: body.snippets,
+      snippets: body.snippets.map(asegurarTemasSnippet),
       descartadosPorCita: body.descartadosPorCita ?? 0,
     };
   }
@@ -84,7 +85,10 @@ export async function pedirSnippetsAlModelo(opts: {
   // Fallback: el endpoint devolvió el JSON del modelo crudo.
   if (body.bruto) {
     const parsed = parsearRespuestaSnippets(body.bruto, opts.texto, opts.nFotos, opts.fechaFallback);
-    return parsed;
+    return {
+      ...parsed,
+      snippets: parsed.snippets.map(asegurarTemasSnippet),
+    };
   }
 
   return propuestaVacia(opts.texto, opts.fechaFallback);

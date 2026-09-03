@@ -38,11 +38,12 @@ export function aplicarDecisiones(
 
 /**
  * Puerta hacia el persistidor. Lanza si alguna propuesta del modelo no tiene
- * confirm/discard. Las notas de visita ya no son snippets: van en informes_visita.notas.
+ * confirm/discard. extras (nota abierta) ya son humanos y se anexan.
  */
 export function snippetsListosParaPersistir(
   propuestas: SnippetPropuesto[],
   decisiones: DecisionSnippet[],
+  extras: SnippetPropuesto[] = [],
 ): SnippetPropuesto[] {
   const { confirmadas, pendientes } = aplicarDecisiones(propuestas, decisiones);
   if (propuestas.length > 0 && decisiones.length === 0) {
@@ -51,5 +52,6 @@ export function snippetsListosParaPersistir(
   if (pendientes.length > 0) {
     throw new ConfirmacionIncompletaError(pendientes);
   }
-  return confirmadas;
+  const extra = extras.filter((e) => e.texto.trim().length > 0);
+  return [...confirmadas, ...extra];
 }

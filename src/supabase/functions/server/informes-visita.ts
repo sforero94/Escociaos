@@ -20,8 +20,6 @@ export interface InformeEsco {
   fenologia: string | null;
   materia_seca: string | null;
   proyeccion_cosecha: string | null;
-  temas: string[];
-  notas: string | null;
   sin_texto: boolean;
   texto_extraido: string | null;
 }
@@ -36,6 +34,7 @@ export interface SnippetEsco {
   insumo: string | null;
   plaga: string | null;
   foto_id: string | null;
+  temas: string[];
 }
 
 export interface FotoEsco {
@@ -61,12 +60,9 @@ export interface RespuestaEscoInformes {
     fenologia: string | null;
     materia_seca: string | null;
     proyeccion_cosecha: string | null;
-    temas: string[];
-    notas: string | null;
     sin_texto: boolean;
     cita: { informe_id: string };
     extracto_texto: string | null;
-    extracto_notas: string | null;
   }>;
   snippets: Array<SnippetEsco & { cita: { informe_id: string; snippet_id: string } }>;
   pies_de_foto: Array<{ informe_id: string; foto_id: string; pie_de_foto: string; cita: { informe_id: string; foto_id: string } }>;
@@ -107,12 +103,9 @@ export function formatearRespuestaEsco(opts: {
       fenologia: i.fenologia,
       materia_seca: i.materia_seca,
       proyeccion_cosecha: i.proyeccion_cosecha,
-      temas: i.temas ?? [],
-      notas: i.notas,
       sin_texto: i.sin_texto,
       cita: { informe_id: i.id },
       extracto_texto: extracto(i.texto_extraido),
-      extracto_notas: extracto(i.notas),
     })),
     snippets: opts.snippets.map((s) => ({
       ...s,

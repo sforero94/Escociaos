@@ -3,7 +3,6 @@ import { Link, useParams } from 'react-router-dom';
 import { Download, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { getSupabase } from '@/utils/supabase/client';
 import { formatearFecha } from '@/utils/fechas';
 import {
@@ -13,7 +12,8 @@ import {
   type InformeVisitaSnippetRow,
 } from '@/types/informesVisita';
 import { esTablaInformesAusente, MENSAJE_MIGRACION_PENDIENTE } from '@/utils/informesVisita/migracion';
-import { chipsDeSnippet } from './EditarSnippetDialog';
+import { sanitizarTemas } from '@/utils/informesVisita/temas';
+import { TemasChips } from './TemasChips';
 
 export function InformeDetallePage() {
   const { id } = useParams<{ id: string }>();
@@ -149,21 +149,6 @@ export function InformeDetallePage() {
         {informe.sin_texto && <Dato etiqueta="Texto" valor="sin texto para extraer" />}
       </dl>
 
-      {(informe.temas?.length ?? 0) > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {informe.temas.map((t) => (
-            <Badge key={t} variant="secondary">{t}</Badge>
-          ))}
-        </div>
-      )}
-
-      {informe.notas && (
-        <div className="rounded-xl border border-border bg-card p-4">
-          <h2 className="text-sm font-semibold text-gray-500 mb-2">Notas</h2>
-          <p className="whitespace-pre-wrap">{informe.notas}</p>
-        </div>
-      )}
-
       {fotos.length > 0 && (
         <div>
           <h2 className="text-lg font-semibold mb-3">Fotos del Word</h2>
@@ -204,19 +189,14 @@ export function InformeDetallePage() {
         ) : (
           <div className="space-y-3">
             {snippets.map((s) => {
-              const chips = chipsDeSnippet(s);
               const foto = s.foto_id ? fotoPorId.get(s.foto_id) : undefined;
               return (
                 <div key={s.id} className="rounded-xl border border-border bg-card p-4 space-y-2">
-                  <div className="flex flex-wrap gap-2">
-                    {chips.map((c) => (
-                      <Badge key={c} variant="secondary">{c}</Badge>
-                    ))}
-                  </div>
                   <p>{s.texto}</p>
                   {s.cita_word && (
                     <p className="text-xs text-muted-foreground italic">«{s.cita_word}»</p>
                   )}
+                  <TemasChips compacto soloLectura seleccionados={sanitizarTemas(s.temas)} />
                   {foto?.url && (
                     <img src={foto.url} alt={foto.pie_de_foto || ''} className="w-full max-h-40 object-cover rounded-lg" />
                   )}

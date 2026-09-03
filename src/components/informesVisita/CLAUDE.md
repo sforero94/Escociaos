@@ -12,8 +12,8 @@ No hay embeddings ni pgvector: FTS español.
   aparece en texto/cita también se descarta.
 -   El humano confirma / edita / ignora (swipe) **antes** de persistir.
   `snippetsListosParaPersistir` lanza si queda alguna propuesta sin decidir.
-  Temas de visita (chips de catálogo fijo) y un único campo `notas` viven en
-  `informes_visita`. La UI ya no crea snippets de `origen = conversacion`.
+  Cada nota lleva chips de tema (catálogo fijo). Un campo abierto añade una
+  nota de `origen = conversacion` con los mismos chips.
 - Sin texto extraíble: se guarda el archivo y se muestra «sin texto para extraer».
   Cero ideas inventadas.
 - Chips `tipo` / `insumo` / `plaga` son pistas, no un formulario de 69 campos.

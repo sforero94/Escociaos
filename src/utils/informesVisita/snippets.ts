@@ -176,6 +176,7 @@ export function parsearRespuestaSnippets(
       insumo,
       plaga: textoONulo(s.plaga),
       foto_indice: fotoIndice,
+      temas: [],
     });
   });
 

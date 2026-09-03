@@ -14,7 +14,7 @@ import { extraerCabecera } from '@/utils/informesVisita/cabecera';
 import { pedirSnippetsAlModelo } from '@/utils/informesVisita/clienteProponer';
 import { persistirInforme } from '@/utils/informesVisita/persistir';
 import { snippetsListosParaPersistir } from '@/utils/informesVisita/confirmar';
-import { proponerTemas, type TemaInforme } from '@/utils/informesVisita/temas';
+import { sanitizarTemas, type TemaInforme } from '@/utils/informesVisita/temas';
 import {
   MENSAJE_SIN_TEXTO,
   type AccionDecision,
@@ -50,8 +50,8 @@ export function SubirInformePage() {
   const [cabecera, setCabecera] = useState<InformeVisitaCabecera>(cabeceraVacia(obtenerFechaHoy()));
   const [decisiones, setDecisiones] = useState<Record<string, { accion: AccionDecision; edicion?: Partial<Omit<SnippetPropuesto, 'clave' | 'origen'>> }>>({});
   const [, setHistorial] = useState<string[]>([]);
-  const [temas, setTemas] = useState<TemaInforme[]>([]);
   const [notas, setNotas] = useState('');
+  const [temasNota, setTemasNota] = useState<TemaInforme[]>([]);
   const [editandoClave, setEditandoClave] = useState<string | null>(null);
   const [descartadosPorCita, setDescartadosPorCita] = useState(0);
   const [errorPropuesta, setErrorPropuesta] = useState<string | null>(null);
@@ -132,8 +132,8 @@ export function SubirInformePage() {
       setCabecera(p.cabecera.fecha_visita ? p.cabecera : { ...p.cabecera, fecha_visita: hoy });
       setDecisiones({});
       setHistorial([]);
-      setTemas(proponerTemas(extraido.texto, snippets));
       setNotas('');
+      setTemasNota([]);
       setDescartadosPorCita(descartados);
       if (p.sinTexto) toast.warning(MENSAJE_SIN_TEXTO);
       else if (snippets.length > 0) {
@@ -145,6 +145,24 @@ export function SubirInformePage() {
     } finally {
       setExtrayendo(false);
     }
+  }
+
+  function cambiarTemas(clave: string, temas: TemaInforme[]) {
+    setPropuesta((p) => {
+      if (!p) return p;
+      return {
+        ...p,
+        snippets: p.snippets.map((s) => (s.clave === clave ? { ...s, temas } : s)),
+      };
+    });
+    setDecisiones((prev) => {
+      const d = prev[clave];
+      if (!d) return prev;
+      return {
+        ...prev,
+        [clave]: { ...d, edicion: { ...d.edicion, temas } },
+      };
+    });
   }
 
   function decidir(clave: string, accion: AccionDecision) {
@@ -203,17 +221,31 @@ export function SubirInformePage() {
 
   async function handleGuardar() {
     if (!archivo || !archivoBytes || !propuesta || !listo) return;
+    const extraNota: SnippetPropuesto[] = [];
+    const textoNota = notas.trim();
+    if (textoNota) {
+      extraNota.push({
+        clave: 'nota-visita',
+        texto: textoNota,
+        cita_word: null,
+        origen: 'conversacion',
+        tipo: null,
+        insumo: null,
+        plaga: null,
+        foto_indice: null,
+        temas: sanitizarTemas(temasNota),
+      });
+    }
     setGuardando(true);
     try {
-      snippetsListosParaPersistir(propuesta.snippets, listaDecisiones);
+      snippetsListosParaPersistir(propuesta.snippets, listaDecisiones, extraNota);
       const resultado = await persistirInforme({
         archivo,
         archivoBytes,
         cabecera,
         propuestas: propuesta.snippets,
         decisiones: listaDecisiones,
-        temas,
-        notas,
+        extras: extraNota,
         fotos: propuesta.fotos,
         texto: propuesta.texto,
         sinTexto: propuesta.sinTexto,
@@ -279,7 +311,7 @@ export function SubirInformePage() {
             <p className="font-medium">No se pudieron proponer ideas</p>
             <p className="text-sm mt-1">{errorPropuesta}</p>
             <p className="text-sm mt-1">
-              El archivo y las fotos sí se leyeron. Completa la cabecera, revisa los temas y añade notas si hace falta.
+              El archivo y las fotos sí se leyeron. Completa la cabecera y añade una nota si hace falta.
             </p>
           </div>
         </div>
@@ -322,25 +354,23 @@ export function SubirInformePage() {
               onUndo={deshacer}
               onEditar={setEditandoClave}
               onConfirmarRestantes={confirmarRestantes}
+              onTemasChange={cambiarTemas}
             />
           )}
 
           <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-            <h2 className="text-lg font-semibold">Temas de la visita</h2>
+            <h2 className="text-lg font-semibold">Notas</h2>
             <p className="text-sm text-gray-500">
-              El sistema marca los temas que aparecen en el Word. Confirma o cambia los chips.
+              Algo que se habló en la visita y no está en el informe. Marca los temas de esta nota.
             </p>
-            <TemasChips seleccionados={temas} onChange={setTemas} />
-            <div>
-              <Label htmlFor="notas-visita">Notas</Label>
-              <Textarea
-                id="notas-visita"
-                value={notas}
-                onChange={(e) => setNotas(e.target.value)}
-                rows={4}
-                placeholder="Algo que se habló en la visita y no está en el informe."
-              />
-            </div>
+            <TemasChips compacto seleccionados={temasNota} onChange={setTemasNota} />
+            <Textarea
+              id="notas-visita"
+              value={notas}
+              onChange={(e) => setNotas(e.target.value)}
+              rows={4}
+              placeholder="Escribe la nota…"
+            />
           </div>
 
           <div className="flex gap-3">

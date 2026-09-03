@@ -22,6 +22,7 @@ export interface SnippetPropuesto {
   insumo: string | null;
   plaga: string | null;
   foto_indice: number | null;
+  temas: string[];
 }
 
 const MESES: Record<string, string> = {
@@ -310,6 +311,7 @@ export function parsearRespuestaSnippets(
       insumo,
       plaga: textoONulo(s.plaga),
       foto_indice: fotoIndice,
+      temas: [],
     });
   });
 

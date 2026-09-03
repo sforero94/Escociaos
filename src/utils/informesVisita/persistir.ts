@@ -7,7 +7,7 @@ import {
   type SnippetPropuesto,
 } from '@/types/informesVisita';
 import { snippetsListosParaPersistir } from './confirmar';
-import { sanitizarTemas, type TemaInforme } from './temas';
+import { sanitizarTemas } from './temas';
 
 export interface PersistirInformeInput {
   archivo: File;
@@ -15,8 +15,7 @@ export interface PersistirInformeInput {
   cabecera: InformeVisitaCabecera;
   propuestas: SnippetPropuesto[];
   decisiones: DecisionSnippet[];
-  temas: TemaInforme[];
-  notas: string;
+  extras: SnippetPropuesto[];
   fotos: FotoExtraida[];
   texto: string;
   sinTexto: boolean;
@@ -33,13 +32,11 @@ function nombreSeguro(nombre: string): string {
 }
 
 /**
- * Persiste cabecera + temas + notas + fotos + SOLO snippets confirmados.
+ * Persiste cabecera + fotos + SOLO snippets confirmados o la nota abierta.
  * Si hay propuestas sin decidir, lanza y no escribe nada.
  */
 export async function persistirInforme(input: PersistirInformeInput): Promise<PersistirInformeResultado> {
-  const confirmadas = snippetsListosParaPersistir(input.propuestas, input.decisiones);
-  const temas = sanitizarTemas(input.temas);
-  const notas = input.notas.trim() || null;
+  const confirmadas = snippetsListosParaPersistir(input.propuestas, input.decisiones, input.extras);
   const informeId = crypto.randomUUID();
   const sb = getSupabase() as any;
   const archivoPath = `${informeId}/original.docx`;
@@ -77,8 +74,6 @@ export async function persistirInforme(input: PersistirInformeInput): Promise<Pe
     fenologia: input.cabecera.fenologia,
     materia_seca: input.cabecera.materia_seca,
     proyeccion_cosecha: input.cabecera.proyeccion_cosecha,
-    temas,
-    notas,
     archivo_path: archivoPath,
     archivo_nombre: input.archivo.name,
     texto_extraido: input.sinTexto ? null : (input.texto || null),
@@ -117,6 +112,7 @@ export async function persistirInforme(input: PersistirInformeInput): Promise<Pe
         tipo: s.tipo,
         insumo: s.insumo,
         plaga: s.plaga,
+        temas: sanitizarTemas(s.temas),
         foto_id: s.foto_indice !== null ? (fotoIdPorOrden.get(s.foto_indice) ?? null) : null,
       })),
     );

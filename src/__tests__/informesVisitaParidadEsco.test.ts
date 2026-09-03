@@ -57,8 +57,6 @@ describe('paridad de comportamiento del formateador', () => {
         fenologia: 'llenado',
         materia_seca: '21%',
         proyeccion_cosecha: '40 t',
-        temas: ['fumigación'],
-        notas: 'Se habló de riego.',
         sin_texto: false,
         texto_extraido: 'Proxam 2 cc/L',
       }],
@@ -72,6 +70,7 @@ describe('paridad de comportamiento del formateador', () => {
         insumo: 'Proxam',
         plaga: 'Phytophthora',
         foto_id: null,
+        temas: ['fumigación'],
       }],
       fotos: [{ id: 'foto-1', informe_id: 'inf-1', pie_de_foto: 'clorosis', orden: 0 }],
     };

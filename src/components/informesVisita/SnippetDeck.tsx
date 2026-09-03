@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Check, Pencil, Undo2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import type { AccionDecision, FotoExtraida, SnippetPropuesto } from '@/types/informesVisita';
-import { chipsDeSnippet } from './EditarSnippetDialog';
+import type { TemaInforme } from '@/utils/informesVisita/temas';
+import { sanitizarTemas } from '@/utils/informesVisita/temas';
+import { TemasChips } from './TemasChips';
 
 const UMBRAL_SWIPE = 80;
 
@@ -17,6 +18,7 @@ export function SnippetDeck({
   onUndo,
   onEditar,
   onConfirmarRestantes,
+  onTemasChange,
 }: {
   snippets: SnippetPropuesto[];
   fotos: FotoExtraida[];
@@ -27,6 +29,7 @@ export function SnippetDeck({
   onUndo: () => void;
   onEditar: (clave: string) => void;
   onConfirmarRestantes: () => void;
+  onTemasChange: (clave: string, temas: TemaInforme[]) => void;
 }) {
   const pendientes = snippets.filter((s) => !decisiones[s.clave]);
   const actual = pendientes[0] ?? null;
@@ -41,7 +44,7 @@ export function SnippetDeck({
   useEffect(() => {
     if (bloqueado || !actual) return;
     function onKey(e: KeyboardEvent) {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLButtonElement) return;
       if (e.key === 'ArrowRight') {
         e.preventDefault();
         onDecision(actual.clave, 'confirmar');
@@ -100,7 +103,7 @@ export function SnippetDeck({
   const fotoUrl = actual.foto_indice !== null ? fotoUrls[actual.foto_indice] : undefined;
   const foto = actual.foto_indice !== null ? fotos[actual.foto_indice] : undefined;
   const rotacion = Math.max(-8, Math.min(8, dx / 20));
-  const chips = chipsDeSnippet(actual);
+  const temas = sanitizarTemas(actual.temas);
 
   return (
     <div className="space-y-3">
@@ -147,16 +150,14 @@ export function SnippetDeck({
             />
           )}
           <p className="text-base text-foreground leading-relaxed">{actual.texto}</p>
-          {chips.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {chips.map((c) => (
-                <Badge key={c} variant="secondary">{c}</Badge>
-              ))}
-            </div>
-          )}
           {actual.cita_word && (
             <p className="text-xs text-muted-foreground italic">«{actual.cita_word}»</p>
           )}
+          <TemasChips
+            compacto
+            seleccionados={temas}
+            onChange={(next) => onTemasChange(actual.clave, next)}
+          />
         </article>
       </div>
 
