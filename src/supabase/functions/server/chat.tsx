@@ -63,6 +63,7 @@ import {
   type HatoPesajeRow,
   type HatoProduccionQuincenalDbRow,
 } from './hato-aggregation.ts';
+import { formatearRespuestaEsco } from './informes-visita.ts';
 
 // ============================================================================
 // TIPOS
@@ -261,7 +262,7 @@ const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'get_monitoring_data',
-    description: 'Obtiene datos de monitoreo fitosanitario: plagas, incidencia, severidad por lote.',
+    description: 'Obtiene datos de monitoreo fitosanitario de las RONDAS de la app (tablas rondas_monitoreo / monitoreos): plagas, incidencia, severidad por lote. NO uses esta herramienta para el informe de visita agronómica en Word: eso es get_informes_visita, una fuente distinta.',
     parameters: {
       type: 'object',
       properties: {
@@ -269,6 +270,23 @@ const TOOLS: ToolDefinition[] = [
         pest_name: { type: 'string', description: 'Nombre parcial de la plaga (opcional)' },
         date_from: { type: 'string', description: 'Fecha inicio YYYY-MM-DD (opcional)' },
         date_to: { type: 'string', description: 'Fecha fin YYYY-MM-DD (opcional)' },
+      },
+    },
+  },
+  {
+    name: 'get_informes_visita',
+    description: 'Consulta INFORMES DE VISITA AGRONÓMICA (Word mensual + notas taggeadas por tema). Fuente DISTINTA de get_monitoring_data / rondas_monitoreo / monitoreos. Devuelve ideas confirmadas (snippets: una idea por fila, no MECE) con chips de tema, y cabecera. Cita siempre informe_id y snippet_id. NUNCA inventes un insumo que no esté en insumos_en_fuente o en el texto del snippet. No hay embeddings: FTS español + filtro de tema + ventana de visitas recientes si hay pocos hits. Sirve para patrones entre meses, una duda puntual (ej. Proxam) o el resumen de una visita.',
+    parameters: {
+      type: 'object',
+      properties: {
+        date_from: { type: 'string', description: 'Fecha de visita desde YYYY-MM-DD (opcional)' },
+        date_to: { type: 'string', description: 'Fecha de visita hasta YYYY-MM-DD (opcional)' },
+        tipo: { type: 'string', description: 'monitoreo | rec_edafica | rec_foliar | rec_drench | observacion | labor (opcional)' },
+        tema: { type: 'string', description: 'fertilización | fumigación | inventario | monitoreo | planeacion labores | observaciones | alertas | ideas (opcional)' },
+        plaga: { type: 'string', description: 'Nombre parcial de plaga/enfermedad (opcional)' },
+        insumo: { type: 'string', description: 'Nombre comercial parcial (opcional)' },
+        query: { type: 'string', description: 'Búsqueda FTS español en el texto del snippet (incluye temas) y del Word (opcional)' },
+        informe_id: { type: 'string', description: 'UUID de un informe específico (opcional)' },
       },
     },
   },
@@ -677,6 +695,7 @@ async function executeTool(name: string, args: Record<string, unknown>, userId?:
       case 'get_labor_summary': result = await execLaborSummary(args); break;
       case 'get_employee_activity': result = await execEmployeeActivity(args); break;
       case 'get_monitoring_data': result = await execMonitoringData(args); break;
+      case 'get_informes_visita': result = await execInformesVisita(args); break;
       case 'get_application_summary': result = await execApplicationSummary(args); break;
       case 'get_inventory_status': result = await execInventoryStatus(args); break;
       case 'get_financial_summary': result = await execFinancialSummary(args); break;
@@ -1040,6 +1059,172 @@ async function execMonitoringData(args: Record<string, unknown>): Promise<string
     resumen_floracion: floracionTotal,
     detalle: filtered.slice(0, 20),
   });
+}
+
+const UMBRAL_FTS_INFORMES = 3;
+const MAX_VISITAS_VENTANA = 8;
+const SNIPPET_SELECT = 'id,informe_id,texto,cita_word,origen,tipo,insumo,plaga,foto_id,temas';
+const INFORME_SELECT = 'id,fecha_visita,agronoma,finca,especie,fenologia,materia_seca,proyeccion_cosecha,sin_texto,texto_extraido';
+
+function aplicarFiltrosSnippet(
+  q: string,
+  opts: { tipo?: string; tema?: string; plaga?: string; insumo?: string; informe_id?: string },
+): string {
+  let s = q;
+  if (opts.tipo) s += `&tipo=eq.${e(opts.tipo)}`;
+  if (opts.tema) s += `&temas=cs.${e(`{"${opts.tema.trim()}"}`)}`;
+  if (opts.plaga) s += `&plaga=ilike.${e(`%${opts.plaga}%`)}`;
+  if (opts.insumo) s += `&insumo=ilike.${e(`%${opts.insumo}%`)}`;
+  if (opts.informe_id) s += `&informe_id=eq.${e(opts.informe_id)}`;
+  return s;
+}
+
+function mapInformeEsco(i: Record<string, unknown>) {
+  return {
+    id: i.id as string,
+    fecha_visita: i.fecha_visita as string,
+    agronoma: (i.agronoma as string) ?? null,
+    finca: (i.finca as string) ?? null,
+    especie: (i.especie as string) ?? null,
+    fenologia: (i.fenologia as string) ?? null,
+    materia_seca: (i.materia_seca as string) ?? null,
+    proyeccion_cosecha: (i.proyeccion_cosecha as string) ?? null,
+    sin_texto: Boolean(i.sin_texto),
+    texto_extraido: (i.texto_extraido as string) ?? null,
+  };
+}
+
+function mapSnippetEsco(s: Record<string, unknown>) {
+  return {
+    id: s.id as string,
+    informe_id: s.informe_id as string,
+    texto: s.texto as string,
+    cita_word: (s.cita_word as string) ?? null,
+    origen: (s.origen as string) ?? 'informe',
+    tipo: (s.tipo as string) ?? null,
+    insumo: (s.insumo as string) ?? null,
+    plaga: (s.plaga as string) ?? null,
+    foto_id: (s.foto_id as string) ?? null,
+    temas: Array.isArray(s.temas) ? (s.temas as string[]) : [],
+  };
+}
+
+async function execInformesVisita(args: Record<string, unknown>): Promise<string> {
+  const validated = validateDates(args);
+  const { date_from, date_to } = validated;
+  const { tipo, tema, plaga, insumo, query, informe_id } = args as {
+    tipo?: string;
+    tema?: string;
+    plaga?: string;
+    insumo?: string;
+    query?: string;
+    informe_id?: string;
+  };
+  const q = typeof query === 'string' ? query.trim() : '';
+  const filtros = { tipo, tema, plaga, insumo, informe_id };
+
+  try {
+    let infVentanaQ = `select=${INFORME_SELECT}&order=fecha_visita.desc&limit=${MAX_VISITAS_VENTANA}`;
+    if (informe_id) infVentanaQ += `&id=eq.${e(informe_id)}`;
+    if (date_from) infVentanaQ += `&fecha_visita=gte.${e(date_from)}`;
+    if (date_to) infVentanaQ += `&fecha_visita=lte.${e(date_to)}`;
+    const informesVentana = await supabaseQuery('informes_visita', infVentanaQ) as Array<Record<string, unknown>>;
+
+    const porId = new Map<string, Record<string, unknown>>();
+    for (const inf of informesVentana) porId.set(inf.id as string, inf);
+
+    const snippetsPorId = new Map<string, Record<string, unknown>>();
+    let ventanaCompleta = false;
+
+    const cargarSnippetsDeInformes = async (ids: string[]) => {
+      if (ids.length === 0) return;
+      const snipQ = aplicarFiltrosSnippet(
+        `select=${SNIPPET_SELECT}&informe_id=in.(${ids.join(',')})&order=created_at.desc&limit=500`,
+        { tipo, tema, plaga, insumo },
+      );
+      const filas = await supabaseQuery('informes_visita_snippets', snipQ) as Array<Record<string, unknown>>;
+      for (const s of filas) snippetsPorId.set(s.id as string, s);
+    };
+
+    if (q) {
+      const ftsSnip = aplicarFiltrosSnippet(
+        `select=${SNIPPET_SELECT}&texto_busqueda=plfts(spanish).${e(q)}&order=created_at.desc&limit=100`,
+        filtros,
+      );
+      const hitsSnip = await supabaseQuery('informes_visita_snippets', ftsSnip) as Array<Record<string, unknown>>;
+      for (const s of hitsSnip) snippetsPorId.set(s.id as string, s);
+
+      let ftsWord = `select=${INFORME_SELECT}&texto_busqueda=plfts(spanish).${e(q)}&order=fecha_visita.desc&limit=${MAX_VISITAS_VENTANA}`;
+      if (informe_id) ftsWord += `&id=eq.${e(informe_id)}`;
+      if (date_from) ftsWord += `&fecha_visita=gte.${e(date_from)}`;
+      if (date_to) ftsWord += `&fecha_visita=lte.${e(date_to)}`;
+      const hitsWord = await supabaseQuery('informes_visita', ftsWord) as Array<Record<string, unknown>>;
+      for (const inf of hitsWord) porId.set(inf.id as string, inf);
+      await cargarSnippetsDeInformes(hitsWord.map((i) => i.id as string));
+
+      if (snippetsPorId.size < UMBRAL_FTS_INFORMES && informesVentana.length > 0) {
+        await cargarSnippetsDeInformes(informesVentana.map((i) => i.id as string));
+        ventanaCompleta = true;
+      }
+    } else {
+      await cargarSnippetsDeInformes(informesVentana.map((i) => i.id as string));
+    }
+
+    const idsFaltantes = [...new Set([...snippetsPorId.values()].map((s) => s.informe_id as string))]
+      .filter((id) => !porId.has(id));
+    if (idsFaltantes.length > 0) {
+      const extra = await supabaseQuery(
+        'informes_visita',
+        `select=${INFORME_SELECT}&id=in.(${idsFaltantes.join(',')})`,
+      ) as Array<Record<string, unknown>>;
+      for (const inf of extra) porId.set(inf.id as string, inf);
+    }
+
+    const hayFiltroChip = Boolean(tipo || tema || plaga || insumo);
+    let informes = [...porId.values()];
+    if (hayFiltroChip || q) {
+      const idsConSnippet = new Set([...snippetsPorId.values()].map((s) => s.informe_id as string));
+      if (hayFiltroChip) {
+        informes = informes.filter((i) => idsConSnippet.has(i.id as string));
+      }
+    }
+
+    const idsFinal = new Set(informes.map((i) => i.id as string));
+    const snippets = [...snippetsPorId.values()].filter((s) => idsFinal.has(s.informe_id as string));
+
+    let fotos: Array<Record<string, unknown>> = [];
+    if (idsFinal.size > 0) {
+      fotos = await supabaseQuery(
+        'informes_visita_fotos',
+        `select=id,informe_id,pie_de_foto,orden&informe_id=in.(${[...idsFinal].join(',')})&order=orden.asc&limit=500`,
+      ) as Array<Record<string, unknown>>;
+    }
+
+    return JSON.stringify(formatearRespuestaEsco({
+      informes: informes.map(mapInformeEsco),
+      snippets: snippets.map(mapSnippetEsco),
+      fotos: fotos.map((f) => ({
+        id: f.id as string,
+        informe_id: f.informe_id as string,
+        pie_de_foto: (f.pie_de_foto as string) ?? null,
+        orden: Number(f.orden) || 0,
+      })),
+      ventana_completa: ventanaCompleta,
+    }));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/42P01|does not exist|PGRST205|schema cache/i.test(msg)) {
+      return JSON.stringify({
+        fuente: 'informe_visita_agronomica',
+        error: 'Las tablas de informes de visita no existen. La migración 134 no está aplicada.',
+        total_informes: 0,
+        total_snippets: 0,
+        snippets: [],
+        informes: [],
+      });
+    }
+    throw err;
+  }
 }
 
 async function execApplicationSummary(args: Record<string, unknown>): Promise<string> {
@@ -3436,7 +3621,8 @@ IMPORTANTE: El JSON del grafico debe ser valido y estar en una sola linea o con 
 DOMINIOS DE DATOS DISPONIBLES:
 - Labores: tablero de tareas planeadas/en ejecucion (get_tareas: estado Banco/Programada/En Proceso/Completada/Cancelada, prioridad, categoria, lote, responsable, jornales estimados) y registros de trabajo / jornales YA ejecutados por empleado/contratista/lote (get_labor_summary)
 - Empleados y Contratistas: personal, cargos, salarios, tarifas
-- Monitoreo: plagas/enfermedades, incidencia, severidad, tendencias por lote. Incluye estado fenológico de floración (brotes, flor madura, cuaje)
+- Monitoreo: plagas/enfermedades, incidencia, severidad, tendencias por lote. Incluye estado fenológico de floración (brotes, flor madura, cuaje). Fuente: rondas_monitoreo / monitoreos (get_monitoring_data). NO es el informe de visita de la agrónoma.
+- Informes de visita agronómica (get_informes_visita): Word mensual de la agrónoma (cabecera + snippets confirmados, cada uno con chips de tema). Fuente DISTINTA de get_monitoring_data. Cita siempre informe_id y snippet_id. NUNCA inventes un insumo que no esté en insumos_en_fuente o en el texto del snippet. No hay embeddings: FTS español; si hay pocos hits, la herramienta rellena con la ventana de visitas recientes (ventana_completa=true).
 - Priorizacion de monitoreo (get_pest_risk_priorizacion): ranking en vivo de que lote/sublote x plaga amerita revision esta semana, basado en umbral economico Cartama (cuando existe), tendencia y estacionalidad historica de ESTA finca. Distinto de web_search_agronomic (esa es informacion externa, no datos de la finca)
 - Aplicaciones: fumigaciones, fertilizaciones, drench, productos usados, costos
 - Costos por lote: desglose insumos + mano de obra y costo por arbol para una aplicacion (get_application_cost_by_lote) o sumando todas las aplicaciones en un rango de fechas (get_cost_by_lote)

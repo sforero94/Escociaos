@@ -2,3 +2,6 @@
 
 [functions.make-server-1ccce916]
 verify_jwt = false
+
+[functions.informes-visita-proponer]
+verify_jwt = false
