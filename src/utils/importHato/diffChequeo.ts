@@ -282,7 +282,17 @@ function filaNoReconocida(fila: FilaChequeoNormalizada, numeroEsProvisional: boo
  * celda vino vacía, o el animal no aparece en `estadosRegistrados` (no
  * debería pasar para una fila con `animalId` resuelto, pero un mapa
  * incompleto no debe fabricar un conflicto falso).
+ *
+ * Issue #192: la planilla imprime `Estado (N)`. El conflicto es de ESTADO,
+ * no de meses -- se compara la etiqueta sin el sufijo `(N)` para que un
+ * mes que pasó entre la impresión y la subida no se lea como "el sistema
+ * cree otra cosa". El texto crudo (con `(N)` si venía) se conserva en
+ * `impreso` para que la UI muestre exactamente lo que decía el papel.
  */
+function etiquetaEstadoRegistradoParaDiff(texto: string): string {
+  return texto.replace(/\s*\(\d+\)\s*$/, '').trim();
+}
+
 function calcularConflictoEstadoRegistrado(
   estadoRegistradoImpreso: string | null,
   animalId: string,
@@ -292,7 +302,7 @@ function calcularConflictoEstadoRegistrado(
   if (!impreso) return null;
   const actual = estadosRegistradosPorAnimalId.get(animalId);
   if (actual === undefined) return null;
-  if (impreso === actual) return null;
+  if (etiquetaEstadoRegistradoParaDiff(impreso) === etiquetaEstadoRegistradoParaDiff(actual)) return null;
   return { impreso, actual };
 }
 

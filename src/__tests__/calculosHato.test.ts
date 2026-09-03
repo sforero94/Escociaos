@@ -12,6 +12,9 @@ import {
   descomponerSX,
   derivarSexoCria,
   derivarEstadoReproductivo,
+  fechaAperturaEstadoReproductivo,
+  mesesEnEstadoReproductivo,
+  textoEstadoReproductivoConMeses,
   calcularProductividad,
   detectarColisionesChapeta,
   calcularFechaUltimoDiaPesaje,
@@ -2012,5 +2015,86 @@ describe('quincenaAnterior (S5 -- atajo "quincena anterior" de /produccion en Te
 
   it('cruza el año al retroceder desde enero', () => {
     expect(quincenaAnterior({ anio: 2026, mes: 1, quincena: 1 })).toEqual({ anio: 2025, mes: 12, quincena: 2 });
+  });
+});
+
+describe('textoEstadoReproductivoConMeses (issue #192 -- Estado (N) en planilla de chequeo)', () => {
+  const filaBase: EstadoActualHatoRow = {
+    etapa: 'vaca',
+    raza: 'jersey',
+    estado: 'activa',
+    num_partos: 2,
+    ultimo_chequeo_fecha: '2026-09-09',
+    ultimo_servicio_fecha: null,
+    ultimo_parto_fecha: null,
+    ultimo_secado_real_fecha: null,
+    ultima_confirmacion_prenez_fecha: null,
+    ultimo_evento_fecha: null,
+    ultima_confirmacion_prenez_metodo: null,
+    ultimo_aborto_fecha: null,
+    ultimo_estado_chequeo: null,
+  };
+
+  it('Servida cuenta meses calendario cumplidos desde el servicio (piso)', () => {
+    const fila: EstadoActualHatoRow = { ...filaBase, ultimo_servicio_fecha: '2026-05-09' };
+    expect(fechaAperturaEstadoReproductivo('servida', fila)).toBe('2026-05-09');
+    expect(textoEstadoReproductivoConMeses('servida', '2026-05-09', '2026-09-09')).toBe('Servida (4)');
+    // El día 8 todavía no cumple el 5º mes.
+    expect(textoEstadoReproductivoConMeses('servida', '2026-05-09', '2026-09-08')).toBe('Servida (3)');
+  });
+
+  it('Vacía post-parto cuenta desde el parto', () => {
+    const fila: EstadoActualHatoRow = { ...filaBase, ultimo_parto_fecha: '2026-07-09' };
+    expect(fechaAperturaEstadoReproductivo('parida_reciente', fila)).toBe('2026-07-09');
+    expect(textoEstadoReproductivoConMeses('parida_reciente', '2026-07-09', '2026-09-09')).toBe('Vacía (2)');
+  });
+
+  it('Vacía abierta por aborto usa la fecha del aborto, no un parto más viejo', () => {
+    const fila: EstadoActualHatoRow = {
+      ...filaBase,
+      ultimo_parto_fecha: '2025-01-01',
+      ultimo_aborto_fecha: '2026-06-09',
+    };
+    expect(fechaAperturaEstadoReproductivo('vacia_por_servir', fila)).toBe('2026-06-09');
+    expect(textoEstadoReproductivoConMeses('vacia_por_servir', '2026-06-09', '2026-09-09')).toBe('Vacía (3)');
+  });
+
+  it('Seca cuenta desde el secado real', () => {
+    const fila: EstadoActualHatoRow = { ...filaBase, ultimo_secado_real_fecha: '2026-08-09' };
+    expect(fechaAperturaEstadoReproductivo('seca', fila)).toBe('2026-08-09');
+    expect(textoEstadoReproductivoConMeses('seca', '2026-08-09', '2026-09-09')).toBe('Seca (1)');
+  });
+
+  it('Confirmada se ancla a la palpación; Por secar sigue anclada al servicio', () => {
+    const fila: EstadoActualHatoRow = {
+      ...filaBase,
+      ultimo_servicio_fecha: '2026-01-09',
+      ultima_confirmacion_prenez_fecha: '2026-04-09',
+      ultima_confirmacion_prenez_metodo: 'palpacion',
+    };
+    expect(fechaAperturaEstadoReproductivo('preñada', fila)).toBe('2026-04-09');
+    expect(textoEstadoReproductivoConMeses('preñada', '2026-04-09', '2026-09-09')).toBe('Confirmada (5)');
+    expect(fechaAperturaEstadoReproductivo('proxima_a_secar', fila)).toBe('2026-01-09');
+    expect(textoEstadoReproductivoConMeses('proxima_a_secar', '2026-01-09', '2026-09-09')).toBe('Por secar (8)');
+  });
+
+  it('sin fecha de apertura: etiqueta pelada, nunca un (N) inventado', () => {
+    expect(fechaAperturaEstadoReproductivo('novilla', filaBase)).toBeNull();
+    expect(textoEstadoReproductivoConMeses('novilla', null, '2026-09-09')).toBe('Vacía');
+    expect(textoEstadoReproductivoConMeses('servida', null, '2026-09-09')).toBe('Servida');
+    expect(mesesEnEstadoReproductivo(null, '2026-09-09')).toBeNull();
+  });
+
+  it('un evento posterior a la fecha de referencia no inventa 0 -- se omite (N)', () => {
+    expect(mesesEnEstadoReproductivo('2026-10-01', '2026-09-09')).toBeNull();
+    expect(textoEstadoReproductivoConMeses('servida', '2026-10-01', '2026-09-09')).toBe('Servida');
+  });
+
+  it('0 meses cumplidos sí se imprime: el evento existe, el mes aún no cerró', () => {
+    expect(textoEstadoReproductivoConMeses('servida', '2026-09-01', '2026-09-09')).toBe('Servida (0)');
+  });
+
+  it('indeterminado nunca lleva (N): la etiqueta es un guion, no un estado de ciclo', () => {
+    expect(textoEstadoReproductivoConMeses('indeterminado', '2026-01-01', '2026-09-09')).toBe('—');
   });
 });

@@ -2211,6 +2211,93 @@ export function etiquetaEstadoReproductivo(estado: EstadoReproductivo): string {
   }
 }
 
+/**
+ * Fecha del evento que ABRE el estado reproductivo de la planilla de
+ * chequeo (issue #192). `N` en `Estado (N)` cuenta meses calendario
+ * cumplidos desde esta fecha -- nunca desde un "último cambio" genérico.
+ *
+ * Mapeo (solo eventos reales de `v_hato_estado_actual`, nunca una fecha
+ * inventada):
+ *   servida            → último servicio
+ *   preñada            → última confirmación por palpación (cae a servicio
+ *                        si esa fecha falta)
+ *   proxima_a_secar    → último servicio (no hay evento "entró a la ventana
+ *                        de secar"; sigue siendo la misma preñez)
+ *   seca               → último secado real
+ *   parida_reciente    → último parto
+ *   vacia_por_servir   → aborto si es el hecho que la dejó vacía; si no, parto
+ *   novilla / cria / indeterminado / terminales → `null` (sin evento de
+ *                        ciclo: la etiqueta sale sin `(N)`)
+ */
+export function fechaAperturaEstadoReproductivo(
+  estado: EstadoReproductivo,
+  fila: EstadoActualHatoRow,
+): string | null {
+  switch (estado) {
+    case 'servida':
+    case 'proxima_a_secar':
+      return fila.ultimo_servicio_fecha;
+    case 'preñada':
+      return fila.ultima_confirmacion_prenez_fecha ?? fila.ultimo_servicio_fecha;
+    case 'seca':
+      return fila.ultimo_secado_real_fecha;
+    case 'parida_reciente':
+      return fila.ultimo_parto_fecha;
+    case 'vacia_por_servir':
+      if (
+        fila.ultimo_aborto_fecha &&
+        (!fila.ultimo_parto_fecha || fila.ultimo_aborto_fecha > fila.ultimo_parto_fecha)
+      ) {
+        return fila.ultimo_aborto_fecha;
+      }
+      return fila.ultimo_parto_fecha;
+    case 'novilla':
+    case 'cria':
+    case 'indeterminado':
+    case 'vendida':
+    case 'muerta':
+    case 'descartada':
+      return null;
+    default: {
+      const _exhaustivo: never = estado;
+      void _exhaustivo;
+      return null;
+    }
+  }
+}
+
+/**
+ * Meses calendario cumplidos (piso) desde el evento de apertura hasta
+ * `fechaReferencia`. `null` cuando no hay fecha, o cuando la fecha de
+ * apertura es POSTERIOR a la referencia -- nunca se inventa un 0 a partir
+ * de un evento que todavía no había ocurrido.
+ */
+export function mesesEnEstadoReproductivo(
+  fechaApertura: string | null,
+  fechaReferencia: string | null,
+): number | null {
+  if (!fechaApertura || !fechaReferencia) return null;
+  if (fechaApertura > fechaReferencia) return null;
+  return calcularMesesPrenez(fechaApertura, fechaReferencia);
+}
+
+/**
+ * Texto de planilla/pantalla de chequeo: `Servida (4)`, `Vacía (2)`. Si
+ * falta la fecha de apertura, o el estado no tiene etiqueta de ciclo
+ * (`—`), se devuelve la etiqueta pelada -- nunca un `(N)` inventado.
+ */
+export function textoEstadoReproductivoConMeses(
+  estado: EstadoReproductivo,
+  fechaApertura: string | null,
+  fechaReferencia: string | null,
+): string {
+  const etiqueta = etiquetaEstadoReproductivo(estado);
+  if (etiqueta === '—') return etiqueta;
+  const meses = mesesEnEstadoReproductivo(fechaApertura, fechaReferencia);
+  if (meses == null) return etiqueta;
+  return `${etiqueta} (${meses})`;
+}
+
 // ============================================================================
 // BLOQUE 5 — PL / productividad
 // ============================================================================

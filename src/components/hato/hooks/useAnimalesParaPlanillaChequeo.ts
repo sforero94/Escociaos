@@ -31,6 +31,7 @@ import { construirHatoConfigDesdeFilas, type FilaHatoConfig } from '@/utils/hato
 import {
   derivarEstadoReproductivo,
   derivarSexoCria,
+  fechaAperturaEstadoReproductivo,
   type EstadoActualHatoRow,
   type CriaDestino,
   type EstadoReproductivo,
@@ -98,6 +99,10 @@ export interface AnimalParaPlanillaChequeo {
    * origen -- incluye los manuales de Telegram (`chequeo_vaca_id IS NULL`),
    * que es exactamente el mecanismo de sincronía que pide D-E. */
   estadoReproductivo: EstadoReproductivo;
+  /** Fecha del evento que abre `estadoReproductivo` (issue #192). `null`
+   * cuando ese estado no tiene evento de apertura (novilla, sin parto,
+   * indeterminado) -- la planilla imprime la etiqueta sin `(N)`. */
+  fechaAperturaEstado: string | null;
 }
 
 /** Lo que se necesita de un evento `parto` para resolver el sexo de la cría
@@ -306,6 +311,7 @@ export function useAnimalesParaPlanillaChequeo() {
             fechaSecar: derivado.fecha_secar,
             fechaProbableParto: derivado.fecha_probable_parto,
             estadoReproductivo: derivado.estado,
+            fechaAperturaEstado: fechaAperturaEstadoReproductivo(derivado.estado, filaVistaAFactRow(fila)),
           };
         })
         .sort(ordenarPorNombreDeVaca);

@@ -6,6 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   chipEstadoReproductivo,
+  chipEstadoReproductivoConMeses,
   chipVaciaEsProblema,
   chipClasificacionDiff,
   chipCategoriaHato,
@@ -39,6 +40,18 @@ describe('chipEstadoReproductivo', () => {
 
   it('usa la paleta verde (saludable) para "preñada"', () => {
     expect(chipEstadoReproductivo('preñada').className).toContain('green');
+  });
+});
+
+describe('chipEstadoReproductivoConMeses', () => {
+  it('agrega (N) a la etiqueta cuando hay meses; sin meses deja el chip igual', () => {
+    expect(chipEstadoReproductivoConMeses('servida', 4).label).toBe('Servida (4)');
+    expect(chipEstadoReproductivoConMeses('vacia_por_servir', 2).label).toBe('Vacía (2)');
+    expect(chipEstadoReproductivoConMeses('servida', null).label).toBe('Servida');
+  });
+
+  it('conserva el color del estado -- (N) es texto, no un estado nuevo', () => {
+    expect(chipEstadoReproductivoConMeses('servida', 4).className).toBe(chipEstadoReproductivo('servida').className);
   });
 });
 

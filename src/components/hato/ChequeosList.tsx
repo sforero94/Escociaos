@@ -84,7 +84,7 @@ import { obtenerFechaHoy } from '@/utils/fechas';
  * legible es del PDF de la Fase 2. `null` -> celda vacía SIEMPRE, nunca `0`
  * ni un valor inventado.
  */
-function filaPlanillaPrellenada(animal: AnimalParaPlanillaChequeo): FilaPlanillaChequeo {
+function filaPlanillaPrellenada(animal: AnimalParaPlanillaChequeo, fechaReferencia: string): FilaPlanillaChequeo {
   return {
     numero: animal.numero,
     nombre: animal.nombre,
@@ -96,11 +96,15 @@ function filaPlanillaPrellenada(animal: AnimalParaPlanillaChequeo): FilaPlanilla
     sexoCria: animal.sexoCriaRaw,
     fechaServicio: isoATextoDDMMYYYY(animal.ultimoServicioFecha),
     toro: textoCeldaToro(animal.toroNombre, animal.tipoServicio),
-    // "Estado registrado" (D-E, N22): lo que el motor de 5 estados cree HOY
-    // -- misma etiqueta en el `.xlsx` y en el PDF (a diferencia de `Sexo
-    // cría`, no hay un código crudo distinto que preservar: nadie escribe
-    // encima de esta columna).
-    estadoRegistrado: textoCeldaEstadoRegistrado(animal.estadoReproductivo),
+    // "Estado registrado" (D-E, N22 + issue #192): etiqueta de 5 estados
+    // con `(N)` meses desde el evento que abre ese estado. Misma cadena
+    // en el `.xlsx` y en el PDF. `fechaReferencia` es el `hoy` del título
+    // -- N y la fecha impresa no pueden desfasarse.
+    estadoRegistrado: textoCeldaEstadoRegistrado(
+      animal.estadoReproductivo,
+      animal.fechaAperturaEstado,
+      fechaReferencia,
+    ),
     estado: textoCeldaEstado(animal.ultimoEstadoChequeo),
     secar: isoATextoDDMMYYYY(animal.fechaSecar),
     partoProbable: isoATextoDDMMYYYY(animal.fechaProbableParto),
@@ -118,9 +122,9 @@ function filaPlanillaPrellenada(animal: AnimalParaPlanillaChequeo): FilaPlanilla
  * `etiquetaSexoCria` devuelve `null` cuando no hay sexo NI destino: la celda
  * sale vacía, nunca con un texto que parezca dato.
  */
-function filaPlanillaPdf(animal: AnimalParaPlanillaChequeo): FilaPlanillaChequeo {
+function filaPlanillaPdf(animal: AnimalParaPlanillaChequeo, fechaReferencia: string): FilaPlanillaChequeo {
   return {
-    ...filaPlanillaPrellenada(animal),
+    ...filaPlanillaPrellenada(animal, fechaReferencia),
     sexoCria: etiquetaSexoCria({
       sexoCria: animal.sexoCria,
       criaDestino: animal.criaDestino,
@@ -213,7 +217,7 @@ export function ChequeosList() {
         {
           tituloDocumento: construirTituloHojaChequeo(hoy),
           subtitulo: `${animalesParaPlanilla.length} vacas activas · las columnas en gris son de referencia, escriba solo en las blancas`,
-          filas: animalesParaPlanilla.map(filaPlanillaPdf),
+          filas: animalesParaPlanilla.map((animal) => filaPlanillaPdf(animal, hoy)),
         },
         `planilla-proximo-chequeo-${hoy}.pdf`,
       );
@@ -235,7 +239,7 @@ export function ChequeosList() {
         {
           tituloHoja: construirTituloHojaChequeo(hoy),
           nombreHoja: construirNombreHojaChequeo(hoy),
-          filas: animalesParaPlanilla.map(filaPlanillaPrellenada),
+          filas: animalesParaPlanilla.map((animal) => filaPlanillaPrellenada(animal, hoy)),
         },
         `planilla-proximo-chequeo-${hoy}.xlsx`,
       );
