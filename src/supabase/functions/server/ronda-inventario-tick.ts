@@ -162,6 +162,14 @@ async function resolverDestinatarios(sb: SupabaseClient, claveAlerta: string, mo
   for (const fila of (data ?? []) as FilaSuscripcionCruda[]) {
     const usuario = Array.isArray(fila.telegram_usuarios) ? fila.telegram_usuarios[0] : fila.telegram_usuarios;
     if (!usuario) continue;
+    // Un suscrito ACTIVO pero todavia SIN VINCULAR tiene `telegram_id` en NULL:
+    // `String(null)` es la cadena "null", que se cuela como destinatario
+    // fantasma. Eso derrota el guardia `destinatarios.length === 0` de los tres
+    // trabajos que reclaman su clave en `rondas_avisos` ANTES de enviar, asi
+    // que el aviso queda marcado como enviado y no se reintenta nunca. Mismo
+    // criterio que `obtenerDestinatariosModuloRonda` en telegram/ronda-helpers.ts,
+    // que ya filtra con `.not('telegram_id', 'is', null)`.
+    if (usuario.telegram_id === null || usuario.telegram_id === undefined) continue;
     if (moduloExigido && !(usuario.modulos_permitidos ?? []).includes(moduloExigido)) continue;
     destinatarios.push(String(usuario.telegram_id));
   }

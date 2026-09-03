@@ -172,6 +172,10 @@ function resolverFilasSuscripcion(filas: FilaSuscripcionCruda[]): FilaSuscripcio
     .map((f) => {
       const usuario = Array.isArray(f.telegram_usuarios) ? f.telegram_usuarios[0] : f.telegram_usuarios;
       if (usuario == null) return null;
+      // Sin vincular todavia => `telegram_id` NULL => `String(null)` = "null",
+      // un destinatario fantasma. Ver el mismo guardia en
+      // ronda-inventario-tick.ts y en telegram/ronda-helpers.ts.
+      if (usuario.telegram_id === null || usuario.telegram_id === undefined) return null;
       return {
         alerta_clave: f.alerta_clave,
         recibe: f.recibe,
