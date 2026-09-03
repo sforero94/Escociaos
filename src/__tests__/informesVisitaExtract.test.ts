@@ -1,21 +1,74 @@
 import { describe, expect, it } from 'vitest';
 import { extraerDocx, extraerTextoDeDocumentXml, esDocx } from '@/utils/informesVisita/docx';
-import { proponerInforme } from '@/utils/informesVisita/proponer';
+import { extraerCabecera } from '@/utils/informesVisita/cabecera';
 import {
   aplicarDecisiones,
   ConfirmacionIncompletaError,
-  filasListasParaPersistir,
+  snippetsListosParaPersistir,
 } from '@/utils/informesVisita/confirmar';
 import { construirDocxSintetico } from '@/utils/informesVisita/fixture';
-import { MENSAJE_SIN_TEXTO } from '@/types/informesVisita';
-import { resolverLoteId } from '@/utils/informesVisita/lotes';
+import { MENSAJE_SIN_TEXTO, type SnippetPropuesto } from '@/types/informesVisita';
 import { parsearFechaInforme } from '@/utils/informesVisita/fechasInforme';
+import {
+  citaEstaEnTexto,
+  insumoEstaEnSnippet,
+  parsearRespuestaSnippets,
+} from '@/utils/informesVisita/snippets';
+import { propuestaVacia } from '@/utils/informesVisita/clienteProponer';
 import {
   FUENTE_INFORME_VISITA,
   formatearRespuestaEsco,
   insumoEstaEnFuente,
 } from '@/utils/informesVisita/esco';
 import { persistirInforme } from '@/utils/informesVisita/persistir';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const FIXTURE_MODELO = {
+  cabecera: {
+    fecha_visita: '2026-07-28',
+    agronoma: 'Ana Ejemplo',
+    finca: 'Finca Ejemplo',
+    especie: 'Aguacate Hass',
+    fenologia: 'llenado de fruto',
+    materia_seca: '21%',
+    proyeccion_cosecha: '40 toneladas',
+  },
+  snippets: [
+    {
+      texto: 'Hay ácaro con incidencia 12% y severidad baja.',
+      cita_word: 'Ácaro. Incidencia 12%. Severidad baja.',
+      tipo: 'monitoreo',
+      insumo: '',
+      plaga: 'Ácaro',
+      foto_indice: -1,
+    },
+    {
+      texto: 'Aplicar Proxam 2 cc/L en drench contra Phytophthora, carencia 15 días.',
+      cita_word: 'Proxam 2 cc/L. Periodo de carencia 15 días.',
+      tipo: 'rec_drench',
+      insumo: 'Proxam',
+      plaga: 'Phytophthora',
+      foto_indice: -1,
+    },
+    {
+      texto: 'Inventé una recomendación que no está en el Word.',
+      cita_word: 'frase que no existe xyzzy12345',
+      tipo: 'observacion',
+      insumo: '',
+      plaga: '',
+      foto_indice: -1,
+    },
+    {
+      texto: 'Usar SuperInventado 5 kg porque sí.',
+      cita_word: 'Este sector presenta árboles con clorosis.',
+      tipo: 'observacion',
+      insumo: 'SuperInventado',
+      plaga: '',
+      foto_indice: -1,
+    },
+  ],
+};
 
 describe('esDocx', () => {
   it('acepta .docx y rechaza .doc y pdf', () => {
@@ -54,118 +107,108 @@ describe('extractor .docx sintético', () => {
   });
 });
 
-describe('proponerInforme', () => {
-  it('arma cabecera y filas de monitoreo, edáfica, foliar y drench', async () => {
+describe('cabecera barata', () => {
+  it('lee fecha, agrónoma y finca del fixture, no el fallback de hoy', async () => {
     const buf = await construirDocxSintetico();
     const extraido = await extraerDocx(buf);
-    const propuesta = proponerInforme({
-      texto: extraido.texto,
-      sinTexto: extraido.sinTexto,
-      fotos: extraido.fotos,
-      fechaFallback: '2026-01-01',
-    });
-
-    expect(propuesta.cabecera.fecha_visita).toBe('2026-07-28');
-    expect(propuesta.cabecera.finca).toBe('Finca Ejemplo');
-    expect(propuesta.cabecera.agronoma).toBe('Ana Ejemplo');
-    expect(propuesta.cabecera.materia_seca).toBe('21%');
-
-    const tipos = propuesta.filas.map((f) => f.tipo);
-    expect(tipos).toContain('monitoreo');
-    expect(tipos).toContain('rec_edafica');
-    expect(tipos).toContain('rec_foliar');
-    expect(tipos).toContain('rec_drench');
-    expect(tipos).toContain('observacion');
-
-    const acaro = propuesta.filas.find((f) => f.plaga_enfermedad?.toLowerCase().includes('caro'));
-    expect(acaro?.fecha_contexto).toBe('2026-07-09');
-    expect(acaro?.incidencia).toMatch(/12/);
-
-    const proxam = propuesta.filas.find((f) => f.insumo?.toLowerCase().includes('proxam'));
-    expect(proxam?.dosis).toBe(2);
-    expect(proxam?.periodo_carencia_dias).toBe(15);
-    expect(proxam?.via).toBe('drench');
-    expect(proxam?.plaga_enfermedad?.toLowerCase()).toContain('phytophthora');
-  });
-
-  it('sin texto no inventa filas', async () => {
-    const buf = await construirDocxSintetico({ sinTexto: true });
-    const extraido = await extraerDocx(buf);
-    const propuesta = proponerInforme({
-      texto: extraido.texto,
-      sinTexto: extraido.sinTexto,
-      fotos: extraido.fotos,
-      fechaFallback: '2026-07-28',
-    });
-    expect(propuesta.sinTexto).toBe(true);
-    expect(propuesta.filas).toEqual([]);
+    const cab = extraerCabecera(extraido.texto, '2026-09-03');
+    expect(cab.fecha_visita).toBe('2026-07-28');
+    expect(cab.finca).toBe('Finca Ejemplo');
+    expect(cab.agronoma).toBe('Ana Ejemplo');
+    expect(cab.materia_seca).toBe('21%');
   });
 });
 
-describe('puerta confirmar antes de persistir', () => {
-  it('descarta una, edita una y confirma el resto', async () => {
+describe('ancla de cita e insumo', () => {
+  it('acepta una frase literal y rechaza una inventada', () => {
+    const texto = 'Proxam 2 cc/L. Periodo de carencia 15 días.';
+    expect(citaEstaEnTexto('Proxam 2 cc/L. Periodo de carencia 15 días.', texto)).toBe(true);
+    expect(citaEstaEnTexto('frase que no existe xyzzy', texto)).toBe(false);
+    expect(insumoEstaEnSnippet('Proxam', 'aplicar drench', 'Proxam 2 cc/L')).toBe(true);
+    expect(insumoEstaEnSnippet('SuperInventado', 'clorosis en este sector', 'clorosis en este sector')).toBe(false);
+  });
+});
+
+describe('parsearRespuestaSnippets', () => {
+  it('conserva ideas ancladas y tira las sin cita o con insumo inventado', async () => {
     const buf = await construirDocxSintetico();
     const extraido = await extraerDocx(buf);
-    const propuesta = proponerInforme({
-      texto: extraido.texto,
-      sinTexto: extraido.sinTexto,
-      fotos: extraido.fotos,
-      fechaFallback: '2026-07-28',
-    });
-    expect(propuesta.filas.length).toBeGreaterThan(3);
-
-    const [a, b, ...resto] = propuesta.filas;
-    const decisiones = [
-      { clave: a.clave, accion: 'descartar' as const },
-      { clave: b.clave, accion: 'confirmar' as const, edicion: { insumo: 'Proxam editado' } },
-      ...resto.map((f) => ({ clave: f.clave, accion: 'confirmar' as const })),
-    ];
-
-    const { confirmadas, descartadas, pendientes } = aplicarDecisiones(propuesta.filas, decisiones);
-    expect(pendientes).toEqual([]);
-    expect(descartadas).toEqual([a.clave]);
-    expect(confirmadas).toHaveLength(propuesta.filas.length - 1);
-    expect(confirmadas[0].insumo).toBe('Proxam editado');
-
-    const listas = filasListasParaPersistir(propuesta.filas, decisiones);
-    expect(listas.some((f) => f.clave === a.clave)).toBe(false);
-    expect(listas).toHaveLength(confirmadas.length);
+    const parsed = parsearRespuestaSnippets(FIXTURE_MODELO, extraido.texto, extraido.fotos.length, '2026-01-01');
+    expect(parsed.cabecera.fecha_visita).toBe('2026-07-28');
+    expect(parsed.snippets).toHaveLength(2);
+    expect(parsed.descartadosPorCita).toBe(2);
+    expect(parsed.snippets.map((s) => s.insumo)).toEqual([null, 'Proxam']);
+    expect(parsed.snippets.every((s) => s.origen === 'informe')).toBe(true);
   });
 
-  it('lanza si se intenta persistir propuestas sin decidir', async () => {
-    const buf = await construirDocxSintetico();
-    const extraido = await extraerDocx(buf);
-    const propuesta = proponerInforme({
-      texto: extraido.texto,
-      sinTexto: extraido.sinTexto,
-      fotos: extraido.fotos,
-      fechaFallback: '2026-07-28',
-    });
-    expect(() => filasListasParaPersistir(propuesta.filas, [])).toThrow(ConfirmacionIncompletaError);
-    expect(() => filasListasParaPersistir(propuesta.filas, [
-      { clave: propuesta.filas[0].clave, accion: 'confirmar' },
+  it('sin texto no inventa snippets', () => {
+    const vacia = propuestaVacia('', '2026-07-28');
+    expect(vacia.snippets).toEqual([]);
+    const parsed = parsearRespuestaSnippets({ cabecera: {}, snippets: FIXTURE_MODELO.snippets }, '', 0, '2026-07-28');
+    expect(parsed.snippets).toEqual([]);
+    expect(parsed.descartadosPorCita).toBeGreaterThan(0);
+  });
+});
+
+function snip(parcial: Partial<SnippetPropuesto> & { clave: string; texto: string }): SnippetPropuesto {
+  return {
+    cita_word: 'cita',
+    origen: 'informe',
+    tipo: null,
+    insumo: null,
+    plaga: null,
+    foto_indice: null,
+    ...parcial,
+  };
+}
+
+describe('puerta confirmar antes de persistir', () => {
+  it('descarta una, edita una, confirma el resto y anexa conversación', () => {
+    const propuestas = [
+      snip({ clave: 'a', texto: 'A' }),
+      snip({ clave: 'b', texto: 'B' }),
+      snip({ clave: 'c', texto: 'C' }),
+    ];
+    const decisiones = [
+      { clave: 'a', accion: 'descartar' as const },
+      { clave: 'b', accion: 'confirmar' as const, edicion: { insumo: 'Proxam editado' } },
+      { clave: 'c', accion: 'confirmar' as const },
+    ];
+    const { confirmadas, descartadas, pendientes } = aplicarDecisiones(propuestas, decisiones);
+    expect(pendientes).toEqual([]);
+    expect(descartadas).toEqual(['a']);
+    expect(confirmadas).toHaveLength(2);
+    expect(confirmadas[0].insumo).toBe('Proxam editado');
+
+    const extra = snip({ clave: 'conv-1', texto: 'Se habló de riego', origen: 'conversacion', cita_word: null });
+    const listas = snippetsListosParaPersistir(propuestas, decisiones, [extra]);
+    expect(listas.some((f) => f.clave === 'a')).toBe(false);
+    expect(listas).toHaveLength(3);
+    expect(listas[2].origen).toBe('conversacion');
+  });
+
+  it('lanza si se intenta persistir propuestas sin decidir', () => {
+    const propuestas = [snip({ clave: 'a', texto: 'A' }), snip({ clave: 'b', texto: 'B' })];
+    expect(() => snippetsListosParaPersistir(propuestas, [])).toThrow(ConfirmacionIncompletaError);
+    expect(() => snippetsListosParaPersistir(propuestas, [
+      { clave: 'a', accion: 'confirmar' },
     ])).toThrow(ConfirmacionIncompletaError);
   });
 
   it('sin propuestas, la puerta deja persistir solo la cabecera', () => {
-    expect(filasListasParaPersistir([], [])).toEqual([]);
+    expect(snippetsListosParaPersistir([], [])).toEqual([]);
   });
 
   it('persistirInforme no escribe si las propuestas no están decididas', async () => {
     const buf = await construirDocxSintetico();
     const extraido = await extraerDocx(buf);
-    const propuesta = proponerInforme({
-      texto: extraido.texto,
-      sinTexto: extraido.sinTexto,
-      fotos: extraido.fotos,
-      fechaFallback: '2026-07-28',
-    });
     await expect(persistirInforme({
       archivo: new File([buf], 'fixture.docx'),
       archivoBytes: buf,
-      cabecera: propuesta.cabecera,
-      propuestas: propuesta.filas,
+      cabecera: extraerCabecera(extraido.texto, '2026-07-28'),
+      propuestas: [snip({ clave: 'a', texto: 'A' })],
       decisiones: [],
+      extras: [],
       fotos: extraido.fotos,
       texto: extraido.texto,
       sinTexto: extraido.sinTexto,
@@ -173,24 +216,8 @@ describe('puerta confirmar antes de persistir', () => {
   });
 });
 
-describe('resolverLoteId', () => {
-  const lotes = [
-    { id: 'l1', nombre: 'La Cumbre' },
-    { id: 'l2', nombre: 'El Bosque' },
-  ];
-
-  it('solo empareja igualdad clara', () => {
-    expect(resolverLoteId('La Cumbre', lotes)).toBe('l1');
-    expect(resolverLoteId('lote la cumbre', lotes)).toBe('l1');
-    expect(resolverLoteId('La Cumbre Norte', lotes)).toBeNull();
-    expect(resolverLoteId('Cumbre', lotes)).toBeNull();
-    expect(resolverLoteId('este sector presenta clorosis', lotes)).toBeNull();
-    expect(resolverLoteId(null, lotes)).toBeNull();
-  });
-});
-
 describe('ESCO — fuente y citas', () => {
-  it('cita informe y fila, lista insumos de la tabla y no mezcla con rondas', () => {
+  it('cita informe y snippet, lista insumos de chips y no mezcla con rondas', () => {
     const r = formatearRespuestaEsco({
       informes: [{
         id: 'inf-1',
@@ -204,23 +231,15 @@ describe('ESCO — fuente y citas', () => {
         sin_texto: false,
         texto_extraido: 'Proxam 2 cc/L carencia 15 días',
       }],
-      observaciones: [{
-        id: 'obs-1',
+      snippets: [{
+        id: 'snip-1',
         informe_id: 'inf-1',
-        fecha: '2026-07-28',
-        fecha_contexto: null,
+        texto: 'Aplicar Proxam 2 cc/L en drench contra Phytophthora.',
+        cita_word: 'Proxam 2 cc/L. Periodo de carencia 15 días.',
+        origen: 'informe',
         tipo: 'rec_drench',
-        lote: null,
-        plaga_enfermedad: 'Phytophthora',
-        accion: 'drench',
         insumo: 'Proxam',
-        dosis: 2,
-        unidad: 'cc/L',
-        periodo_carencia_dias: 15,
-        via: 'drench',
-        incidencia: null,
-        severidad: null,
-        notas: 'Proxam 2 cc/L',
+        plaga: 'Phytophthora',
         foto_id: null,
       }],
       fotos: [{ id: 'foto-1', informe_id: 'inf-1', pie_de_foto: 'clorosis en este sector', orden: 0 }],
@@ -228,11 +247,23 @@ describe('ESCO — fuente y citas', () => {
 
     expect(r.fuente).toBe(FUENTE_INFORME_VISITA);
     expect(r.advertencia).toContain('ronda_monitoreo');
-    expect(r.observaciones[0].cita).toEqual({ informe_id: 'inf-1', observacion_id: 'obs-1' });
+    expect(r.snippets[0].cita).toEqual({ informe_id: 'inf-1', snippet_id: 'snip-1' });
     expect(r.informes[0].cita).toEqual({ informe_id: 'inf-1' });
     expect(r.insumos_en_fuente).toEqual(['Proxam']);
-    expect(insumoEstaEnFuente('Proxam', r, ['Proxam 2 cc/L'])).toBe(true);
-    expect(insumoEstaEnFuente('Glifosato', r, ['Proxam 2 cc/L'])).toBe(false);
+    expect(insumoEstaEnFuente('Proxam', r, [])).toBe(true);
+    expect(insumoEstaEnFuente('Glifosato', r, [])).toBe(false);
+    expect(r.ventana_completa).toBe(false);
+  });
+});
+
+describe('sin embeddings', () => {
+  it('la 134 no crea observaciones_agronomicas ni columnas vector', () => {
+    const sql = readFileSync(resolve(__dirname, '../sql/migrations/134_informes_visita_agronomicos.sql'), 'utf-8');
+    expect(sql).toMatch(/CREATE TABLE public\.informes_visita_snippets/);
+    expect(sql).not.toMatch(/CREATE TABLE public\.observaciones_agronomicas/);
+    expect(sql).not.toMatch(/CREATE TYPE public\.tipo_observacion_agronomica/);
+    expect(sql).not.toMatch(/CREATE EXTENSION/i);
+    expect(sql).not.toMatch(/\bvector\s*\(/i);
   });
 });
 

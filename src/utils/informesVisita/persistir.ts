@@ -1,19 +1,20 @@
 import { getSupabase } from '@/utils/supabase/client';
 import {
   BUCKET_INFORMES_VISITA,
-  type DecisionFila,
-  type FilaPropuesta,
+  type DecisionSnippet,
   type FotoExtraida,
   type InformeVisitaCabecera,
+  type SnippetPropuesto,
 } from '@/types/informesVisita';
-import { filasListasParaPersistir } from './confirmar';
+import { snippetsListosParaPersistir } from './confirmar';
 
 export interface PersistirInformeInput {
   archivo: File;
   archivoBytes: ArrayBuffer;
   cabecera: InformeVisitaCabecera;
-  propuestas: FilaPropuesta[];
-  decisiones: DecisionFila[];
+  propuestas: SnippetPropuesto[];
+  decisiones: DecisionSnippet[];
+  extras: SnippetPropuesto[];
   fotos: FotoExtraida[];
   texto: string;
   sinTexto: boolean;
@@ -21,7 +22,7 @@ export interface PersistirInformeInput {
 
 export interface PersistirInformeResultado {
   informeId: string;
-  filasInsertadas: number;
+  snippetsInsertados: number;
   fotosInsertadas: number;
 }
 
@@ -30,11 +31,11 @@ function nombreSeguro(nombre: string): string {
 }
 
 /**
- * Persiste cabecera + fotos + SOLO las filas que pasaron la puerta de
- * confirmación. Si hay propuestas sin decidir, lanza y no escribe nada.
+ * Persiste cabecera + fotos + SOLO snippets confirmados o añadidos a mano.
+ * Si hay propuestas sin decidir, lanza y no escribe nada.
  */
 export async function persistirInforme(input: PersistirInformeInput): Promise<PersistirInformeResultado> {
-  const confirmadas = filasListasParaPersistir(input.propuestas, input.decisiones);
+  const confirmadas = snippetsListosParaPersistir(input.propuestas, input.decisiones, input.extras);
   const informeId = crypto.randomUUID();
   const sb = getSupabase() as any;
   const archivoPath = `${informeId}/original.docx`;
@@ -101,36 +102,27 @@ export async function persistirInforme(input: PersistirInformeInput): Promise<Pe
   }
 
   if (confirmadas.length > 0) {
-    const { error: obsErr } = await sb.from('observaciones_agronomicas').insert(
-      confirmadas.map((f) => ({
+    const { error: snipErr } = await sb.from('informes_visita_snippets').insert(
+      confirmadas.map((s) => ({
         informe_id: informeId,
-        fecha: f.fecha,
-        fecha_contexto: f.fecha_contexto,
-        tipo: f.tipo,
-        lote: f.lote,
-        lote_id: f.lote_id,
-        plaga_enfermedad: f.plaga_enfermedad,
-        accion: f.accion,
-        insumo: f.insumo,
-        dosis: f.dosis,
-        unidad: f.unidad,
-        periodo_carencia_dias: f.periodo_carencia_dias,
-        via: f.via,
-        incidencia: f.incidencia,
-        severidad: f.severidad,
-        notas: f.notas,
-        foto_id: f.foto_indice !== null ? (fotoIdPorOrden.get(f.foto_indice) ?? null) : null,
+        texto: s.texto,
+        cita_word: s.cita_word,
+        origen: s.origen,
+        tipo: s.tipo,
+        insumo: s.insumo,
+        plaga: s.plaga,
+        foto_id: s.foto_indice !== null ? (fotoIdPorOrden.get(s.foto_indice) ?? null) : null,
       })),
     );
-    if (obsErr) {
+    if (snipErr) {
       await sb.from('informes_visita').delete().eq('id', informeId);
-      throw new Error(`No se pudieron guardar las observaciones: ${obsErr.message}`);
+      throw new Error(`No se pudieron guardar los snippets: ${snipErr.message}`);
     }
   }
 
   return {
     informeId,
-    filasInsertadas: confirmadas.length,
+    snippetsInsertados: confirmadas.length,
     fotosInsertadas: fotosMeta.length,
   };
 }

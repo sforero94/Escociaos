@@ -1,56 +1,49 @@
--- Migración 134: informes de visita agronómica + observaciones (issue #189).
+-- Migración 134: informes de visita agronómica — snippets (issue #189).
 --
--- Un .docx mensual de la agrónoma entra a Escocia OS: archivo e imágenes en
--- Storage, texto extraído (FTS español), cabecera de visita y filas de
--- observación. Las filas las propone el cliente y el humano confirma ANTES
--- de persistir — esta migración no inventa filas ni carga el Word de Salazar.
+-- Pivot respecto al primer borrador de esta misma 134 (nunca aplicada):
+-- la unidad de trabajo NO es una fila estructurada (dosis, carencia, lote_id).
+-- Es un SNIPPET: una idea confirmada (diagnóstico + recomendación juntos,
+-- no MECE). El Word y su texto extraído son la capa de evidencia. No hay
+-- embeddings ni pgvector: la búsqueda es FTS español sobre el Word y sobre
+-- el texto del snippet.
 --
--- Numerada 134: el máximo en `src/sql/migrations/` es 133
--- (`133_insert_update_por_rol.sql`). NO APLICAR DESDE ESTE AGENTE. Schema/UI
--- /tests only — cero escrituras a datos de producción.
+-- Un .docx entra: archivo e imágenes en Storage, texto extraído, cabecera
+-- de visita. Un modelo propone snippets; el humano confirma / edita /
+-- ignora (swipe) ANTES de persistir. Puede añadir una nota de conversación
+-- que no estaba en el informe (origen = conversacion).
 --
--- NO se fusiona con `rondas_monitoreo` / `monitoreos`. Tablas nuevas:
---   informes_visita, informes_visita_fotos, observaciones_agronomicas.
--- ENUM tipo_observacion_agronomica: monitoreo | rec_edafica | rec_foliar |
---   rec_drench | observacion | labor.
+-- Numerada 134: el máximo aplicado en el repo es 133. Esta 134 NO se
+-- aplica desde este agente. Schema/UI/tests only. Cero escrituras a
+-- producción. Si un entorno llegó a crear `observaciones_agronomicas`
+-- del borrador anterior, la precondición aborta.
 --
--- lote es texto libre (sector). lote_id es FK a lotes SOLO si el cliente
--- encontró un match claro — la base no inventa el vínculo.
+-- NO se fusiona con `rondas_monitoreo` / `monitoreos`. Tablas:
+--   informes_visita, informes_visita_fotos, informes_visita_snippets.
 --
--- RLS patrón 044: SELECT authenticated; INSERT/UPDATE/DELETE Administrador
--- + Gerencia; predicado envuelto (SELECT get_user_role()) (093); REVOKE ALL
--- FROM anon (081). created_by COALESCE(auth.uid()) (040/050/063/074).
+-- RLS patrón 044: SELECT authenticated; INSERT/UPDATE/DELETE
+-- Administrador + Gerencia; predicado (SELECT get_user_role()) (093);
+-- REVOKE ALL FROM anon (081). created_by COALESCE(auth.uid()) (040).
 --
--- Storage: bucket privado `informes-visita`. CREATE POLICY sobre
--- storage.objects puede fallar si postgres ya no es dueño (lección 109).
--- El bloque de políticas se atrapa con insufficient_privilege y avisa:
--- aplicar esas cuatro políticas desde el panel de Storage, igual que 109.
--- El resto de la migración (tablas, FTS, RLS de public) no depende de eso.
---
--- ROLLBACK ejecutable comentado al pie.
+-- Storage: bucket privado `informes-visita`. Políticas de storage.objects
+-- en EXCEPTION insufficient_privilege (lección 109).
 
--- ---------------------------------------------------------------------------
--- 0. PRECONDICIONES
--- ---------------------------------------------------------------------------
 DO $$
 DECLARE
   v_tabla TEXT;
 BEGIN
   FOREACH v_tabla IN ARRAY ARRAY[
-    'informes_visita', 'informes_visita_fotos', 'observaciones_agronomicas'
+    'informes_visita', 'informes_visita_fotos', 'informes_visita_snippets',
+    'observaciones_agronomicas'
   ] LOOP
     IF to_regclass('public.' || v_tabla) IS NOT NULL THEN
-      RAISE EXCEPTION '134 ABORTADA: public.% ya existe. Revisar a mano.', v_tabla;
+      RAISE EXCEPTION '134 ABORTADA: public.% ya existe. Si es el borrador de filas, hacer ROLLBACK de esa 134 a mano antes de esta.', v_tabla;
     END IF;
   END LOOP;
 
   IF to_regtype('public.tipo_observacion_agronomica') IS NOT NULL THEN
-    RAISE EXCEPTION '134 ABORTADA: el tipo public.tipo_observacion_agronomica ya existe.';
+    RAISE EXCEPTION '134 ABORTADA: el tipo public.tipo_observacion_agronomica ya existe (borrador anterior).';
   END IF;
 
-  IF to_regclass('public.lotes') IS NULL THEN
-    RAISE EXCEPTION '134 ABORTADA: public.lotes no existe — hace falta para observaciones_agronomicas.lote_id.';
-  END IF;
   IF to_regclass('public.usuarios') IS NULL THEN
     RAISE EXCEPTION '134 ABORTADA: public.usuarios no existe — lo necesita created_by y la RLS.';
   END IF;
@@ -62,26 +55,6 @@ BEGIN
   END IF;
 END $$;
 
-
--- ---------------------------------------------------------------------------
--- 1. ENUM
--- ---------------------------------------------------------------------------
-CREATE TYPE public.tipo_observacion_agronomica AS ENUM (
-  'monitoreo',
-  'rec_edafica',
-  'rec_foliar',
-  'rec_drench',
-  'observacion',
-  'labor'
-);
-
-GRANT USAGE ON TYPE public.tipo_observacion_agronomica TO authenticated;
-REVOKE ALL ON TYPE public.tipo_observacion_agronomica FROM anon;
-
-
--- ---------------------------------------------------------------------------
--- 2. TABLAS
--- ---------------------------------------------------------------------------
 CREATE TABLE public.informes_visita (
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   fecha_visita         DATE NOT NULL,
@@ -108,11 +81,9 @@ CREATE TABLE public.informes_visita (
 );
 
 COMMENT ON TABLE public.informes_visita IS
-  'Cabecera de un informe de visita agronómica (.docx). Una visita → un '
-  'informe. Distinto de rondas_monitoreo: aquella es la ronda de plagas de '
-  'la app; esto es el Word mensual de la agrónoma. texto_busqueda es FTS '
-  'español sobre el Word. Las filas de observación viven en '
-  'observaciones_agronomicas y solo se insertan tras confirmación humana.';
+  'Cabecera + evidencia de un informe de visita agronómica (.docx). '
+  'Distinto de rondas_monitoreo. texto_busqueda es FTS español sobre el Word. '
+  'Las ideas confirmadas viven en informes_visita_snippets. Sin embeddings.';
 
 CREATE INDEX informes_visita_fecha_idx ON public.informes_visita (fecha_visita DESC);
 CREATE INDEX informes_visita_texto_busqueda_idx ON public.informes_visita USING GIN (texto_busqueda);
@@ -128,50 +99,41 @@ CREATE TABLE public.informes_visita_fotos (
 );
 
 COMMENT ON TABLE public.informes_visita_fotos IS
-  'Imágenes extraídas del .docx (evidencia, no OCR). pie_de_foto sale de '
-  'wp:docPr o del párrafo siguiente. Sin la foto, un "este sector" no tiene lote.';
+  'Imágenes extraídas del .docx (evidencia, no OCR).';
 
 CREATE INDEX informes_visita_fotos_informe_idx ON public.informes_visita_fotos (informe_id, orden);
 
-CREATE TABLE public.observaciones_agronomicas (
-  id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  informe_id              UUID NOT NULL REFERENCES public.informes_visita(id) ON DELETE CASCADE,
-  fecha                   DATE NOT NULL,
-  fecha_contexto          DATE,
-  tipo                    public.tipo_observacion_agronomica NOT NULL,
-  lote                    TEXT,
-  lote_id                 UUID REFERENCES public.lotes(id) ON DELETE SET NULL,
-  plaga_enfermedad        TEXT,
-  accion                  TEXT,
-  insumo                  TEXT,
-  dosis                   NUMERIC,
-  unidad                  TEXT,
-  periodo_carencia_dias   INTEGER,
-  via                     TEXT,
-  incidencia              TEXT,
-  severidad               TEXT,
-  notas                   TEXT,
-  foto_id                 UUID REFERENCES public.informes_visita_fotos(id) ON DELETE SET NULL,
-  created_by              UUID REFERENCES public.usuarios(id),
-  created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+CREATE TABLE public.informes_visita_snippets (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  informe_id   UUID NOT NULL REFERENCES public.informes_visita(id) ON DELETE CASCADE,
+  texto        TEXT NOT NULL,
+  cita_word    TEXT,
+  origen       TEXT NOT NULL CHECK (origen IN ('informe', 'conversacion')),
+  tipo         TEXT,
+  insumo       TEXT,
+  plaga        TEXT,
+  foto_id      UUID REFERENCES public.informes_visita_fotos(id) ON DELETE SET NULL,
+  texto_busqueda tsvector GENERATED ALWAYS AS (
+                   to_tsvector('spanish', coalesce(texto, ''))
+                 ) STORED,
+  created_by   UUID REFERENCES public.usuarios(id),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT informes_visita_snippets_texto_no_vacio CHECK (length(btrim(texto)) > 0)
 );
 
-COMMENT ON TABLE public.observaciones_agronomicas IS
-  'Filas confirmadas de un informe de visita. Nunca se escribe una propuesta '
-  'sin confirmación humana. lote es texto/sector; lote_id solo si hubo match '
-  'claro con lotes.nombre. No es monitoreos: no hay ronda_id ni sublote_id.';
+COMMENT ON TABLE public.informes_visita_snippets IS
+  'Ideas confirmadas de una visita. Una idea por fila, no MECE. origen '
+  'informe = salió del Word (cita_word es el ancla). origen conversacion = '
+  'la anotó un humano después. Chips tipo/insumo/plaga son pistas, no un '
+  'esquema rígido. FTS español en texto_busqueda. Sin embeddings.';
 
-CREATE INDEX observaciones_agronomicas_informe_idx ON public.observaciones_agronomicas (informe_id);
-CREATE INDEX observaciones_agronomicas_fecha_idx ON public.observaciones_agronomicas (fecha DESC);
-CREATE INDEX observaciones_agronomicas_tipo_idx ON public.observaciones_agronomicas (tipo);
-CREATE INDEX observaciones_agronomicas_plaga_idx ON public.observaciones_agronomicas (plaga_enfermedad);
-CREATE INDEX observaciones_agronomicas_insumo_idx ON public.observaciones_agronomicas (insumo);
+CREATE INDEX informes_visita_snippets_informe_idx ON public.informes_visita_snippets (informe_id);
+CREATE INDEX informes_visita_snippets_texto_idx ON public.informes_visita_snippets USING GIN (texto_busqueda);
+CREATE INDEX informes_visita_snippets_insumo_idx ON public.informes_visita_snippets (insumo);
+CREATE INDEX informes_visita_snippets_plaga_idx ON public.informes_visita_snippets (plaga);
+CREATE INDEX informes_visita_snippets_tipo_idx ON public.informes_visita_snippets (tipo);
 
-
--- ---------------------------------------------------------------------------
--- 3. TRIGGERS
--- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.set_informe_visita_created_by()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -191,8 +153,8 @@ CREATE TRIGGER trg_informes_visita_created_by
   FOR EACH ROW
   EXECUTE FUNCTION public.set_informe_visita_created_by();
 
-CREATE TRIGGER trg_observaciones_agronomicas_created_by
-  BEFORE INSERT ON public.observaciones_agronomicas
+CREATE TRIGGER trg_informes_visita_snippets_created_by
+  BEFORE INSERT ON public.informes_visita_snippets
   FOR EACH ROW
   EXECUTE FUNCTION public.set_informe_visita_created_by();
 
@@ -201,21 +163,17 @@ CREATE TRIGGER trg_informes_visita_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION public.update_updated_at_column();
 
-CREATE TRIGGER trg_observaciones_agronomicas_updated_at
-  BEFORE UPDATE ON public.observaciones_agronomicas
+CREATE TRIGGER trg_informes_visita_snippets_updated_at
+  BEFORE UPDATE ON public.informes_visita_snippets
   FOR EACH ROW
   EXECUTE FUNCTION public.update_updated_at_column();
 
-
--- ---------------------------------------------------------------------------
--- 4. RLS
--- ---------------------------------------------------------------------------
 DO $$
 DECLARE
   t TEXT;
 BEGIN
   FOREACH t IN ARRAY ARRAY[
-    'informes_visita', 'informes_visita_fotos', 'observaciones_agronomicas'
+    'informes_visita', 'informes_visita_fotos', 'informes_visita_snippets'
   ] LOOP
     EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
 
@@ -252,10 +210,6 @@ BEGIN
   END LOOP;
 END $$;
 
-
--- ---------------------------------------------------------------------------
--- 5. STORAGE — bucket + políticas (estas últimas pueden no correr aquí)
--- ---------------------------------------------------------------------------
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('informes-visita', 'informes-visita', false)
 ON CONFLICT (id) DO NOTHING;
@@ -295,36 +249,26 @@ EXCEPTION
     RAISE WARNING '134: no se pudieron crear políticas de storage.objects (postgres no es dueño, lección 109). Aplicar las cuatro políticas "Informes visita: *" desde el panel de Storage. Tablas y RLS de public sí quedaron.';
 END $$;
 
-
--- ---------------------------------------------------------------------------
--- 6. POSTCONDICIONES
--- ---------------------------------------------------------------------------
 DO $$
 DECLARE
   v_anon_select BOOLEAN;
 BEGIN
   IF to_regclass('public.informes_visita') IS NULL
      OR to_regclass('public.informes_visita_fotos') IS NULL
-     OR to_regclass('public.observaciones_agronomicas') IS NULL THEN
+     OR to_regclass('public.informes_visita_snippets') IS NULL THEN
     RAISE EXCEPTION '134 ABORTADA post: faltan tablas.';
   END IF;
 
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_enum e
-    JOIN pg_type t ON t.oid = e.enumtypid
-    WHERE t.typname = 'tipo_observacion_agronomica'
-    GROUP BY t.oid
-    HAVING COUNT(*) = 6
-  ) THEN
-    RAISE EXCEPTION '134 ABORTADA post: el ENUM no tiene 6 etiquetas.';
+  IF to_regclass('public.observaciones_agronomicas') IS NOT NULL THEN
+    RAISE EXCEPTION '134 ABORTADA post: observaciones_agronomicas no debía crearse.';
   END IF;
 
   IF NOT EXISTS (
     SELECT 1 FROM pg_indexes
     WHERE schemaname = 'public'
-      AND indexname = 'informes_visita_texto_busqueda_idx'
+      AND indexname = 'informes_visita_snippets_texto_idx'
   ) THEN
-    RAISE EXCEPTION '134 ABORTADA post: falta el índice GIN de FTS.';
+    RAISE EXCEPTION '134 ABORTADA post: falta el índice GIN de FTS de snippets.';
   END IF;
 
   SELECT has_table_privilege('anon', 'public.informes_visita', 'SELECT') INTO v_anon_select;
@@ -333,21 +277,17 @@ BEGIN
   END IF;
 END $$;
 
-
--- ---------------------------------------------------------------------------
 -- ROLLBACK (no ejecutar con la migración)
--- ---------------------------------------------------------------------------
 -- DROP POLICY IF EXISTS "Informes visita: subir" ON storage.objects;
 -- DROP POLICY IF EXISTS "Informes visita: leer" ON storage.objects;
 -- DROP POLICY IF EXISTS "Informes visita: actualizar" ON storage.objects;
 -- DROP POLICY IF EXISTS "Informes visita: eliminar" ON storage.objects;
 -- DELETE FROM storage.buckets WHERE id = 'informes-visita';
--- DROP TRIGGER IF EXISTS trg_observaciones_agronomicas_updated_at ON public.observaciones_agronomicas;
+-- DROP TRIGGER IF EXISTS trg_informes_visita_snippets_updated_at ON public.informes_visita_snippets;
 -- DROP TRIGGER IF EXISTS trg_informes_visita_updated_at ON public.informes_visita;
--- DROP TRIGGER IF EXISTS trg_observaciones_agronomicas_created_by ON public.observaciones_agronomicas;
+-- DROP TRIGGER IF EXISTS trg_informes_visita_snippets_created_by ON public.informes_visita_snippets;
 -- DROP TRIGGER IF EXISTS trg_informes_visita_created_by ON public.informes_visita;
 -- DROP FUNCTION IF EXISTS public.set_informe_visita_created_by();
--- DROP TABLE IF EXISTS public.observaciones_agronomicas;
+-- DROP TABLE IF EXISTS public.informes_visita_snippets;
 -- DROP TABLE IF EXISTS public.informes_visita_fotos;
 -- DROP TABLE IF EXISTS public.informes_visita;
--- DROP TYPE IF EXISTS public.tipo_observacion_agronomica;

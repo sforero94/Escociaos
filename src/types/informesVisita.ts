@@ -1,6 +1,6 @@
-/** Tipos del módulo de informes de visita agronómica (issue #189). */
+/** Tipos del módulo de informes de visita agronómica (issue #189, pivot snippets). */
 
-export const TIPOS_OBSERVACION_AGRONOMICA = [
+export const TIPOS_SNIPPET = [
   'monitoreo',
   'rec_edafica',
   'rec_foliar',
@@ -9,9 +9,9 @@ export const TIPOS_OBSERVACION_AGRONOMICA = [
   'labor',
 ] as const;
 
-export type TipoObservacionAgronomica = (typeof TIPOS_OBSERVACION_AGRONOMICA)[number];
+export type TipoSnippet = (typeof TIPOS_SNIPPET)[number];
 
-export const ETIQUETAS_TIPO_OBSERVACION: Record<TipoObservacionAgronomica, string> = {
+export const ETIQUETAS_TIPO_SNIPPET: Record<TipoSnippet, string> = {
   monitoreo: 'Monitoreo',
   rec_edafica: 'Fertilización edáfica',
   rec_foliar: 'Foliar',
@@ -19,6 +19,9 @@ export const ETIQUETAS_TIPO_OBSERVACION: Record<TipoObservacionAgronomica, strin
   observacion: 'Observación',
   labor: 'Labor',
 };
+
+export const ORIGENES_SNIPPET = ['informe', 'conversacion'] as const;
+export type OrigenSnippet = (typeof ORIGENES_SNIPPET)[number];
 
 export interface InformeVisitaCabecera {
   fecha_visita: string;
@@ -31,7 +34,6 @@ export interface InformeVisitaCabecera {
 }
 
 export interface FotoExtraida {
-  /** Nombre dentro del docx, p.ej. word/media/image1.jpeg */
   nombre: string;
   mime: string;
   bytes: Uint8Array;
@@ -39,34 +41,24 @@ export interface FotoExtraida {
   orden: number;
 }
 
-export interface FilaPropuesta {
-  /** Clave local de la propuesta. Nunca se persiste. */
+/** Una idea propuesta. Nunca se persiste hasta confirmar o añadir a mano. */
+export interface SnippetPropuesto {
   clave: string;
-  fecha: string;
-  fecha_contexto: string | null;
-  tipo: TipoObservacionAgronomica;
-  lote: string | null;
-  lote_id: string | null;
-  plaga_enfermedad: string | null;
-  accion: string | null;
+  texto: string;
+  cita_word: string | null;
+  origen: OrigenSnippet;
+  tipo: string | null;
   insumo: string | null;
-  dosis: number | null;
-  unidad: string | null;
-  periodo_carencia_dias: number | null;
-  via: string | null;
-  incidencia: string | null;
-  severidad: string | null;
-  notas: string | null;
-  /** Índice en el arreglo de fotos extraídas, no un id de base. */
+  plaga: string | null;
   foto_indice: number | null;
 }
 
 export type AccionDecision = 'confirmar' | 'descartar';
 
-export interface DecisionFila {
+export interface DecisionSnippet {
   clave: string;
   accion: AccionDecision;
-  edicion?: Partial<Omit<FilaPropuesta, 'clave'>>;
+  edicion?: Partial<Omit<SnippetPropuesto, 'clave' | 'origen'>>;
 }
 
 export interface ExtraccionDocx {
@@ -77,7 +69,7 @@ export interface ExtraccionDocx {
 
 export interface PropuestaInforme {
   cabecera: InformeVisitaCabecera;
-  filas: FilaPropuesta[];
+  snippets: SnippetPropuesto[];
   texto: string;
   sinTexto: boolean;
   fotos: FotoExtraida[];
@@ -108,25 +100,17 @@ export interface InformeVisitaFotoRow {
   nombre_original: string | null;
 }
 
-export interface ObservacionAgronomicaRow {
+export interface InformeVisitaSnippetRow {
   id: string;
   informe_id: string;
-  fecha: string;
-  fecha_contexto: string | null;
-  tipo: TipoObservacionAgronomica;
-  lote: string | null;
-  lote_id: string | null;
-  plaga_enfermedad: string | null;
-  accion: string | null;
+  texto: string;
+  cita_word: string | null;
+  origen: OrigenSnippet;
+  tipo: string | null;
   insumo: string | null;
-  dosis: number | null;
-  unidad: string | null;
-  periodo_carencia_dias: number | null;
-  via: string | null;
-  incidencia: string | null;
-  severidad: string | null;
-  notas: string | null;
+  plaga: string | null;
   foto_id: string | null;
+  created_at: string;
 }
 
 export const MENSAJE_SIN_TEXTO = 'sin texto para extraer';

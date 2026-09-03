@@ -1,35 +1,31 @@
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, Upload, Check, X, AlertTriangle } from 'lucide-react';
+import { Loader2, Upload, AlertTriangle, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
 import { DateInput } from '@/components/ui/date-input';
 import { RoleGuard } from '@/components/auth/RoleGuard';
-import { getSupabase } from '@/utils/supabase/client';
 import { obtenerFechaHoy } from '@/utils/fechas';
 import { extraerDocx, esDocx } from '@/utils/informesVisita/docx';
-import { proponerInforme } from '@/utils/informesVisita/proponer';
-import { aplicarDecisiones } from '@/utils/informesVisita/confirmar';
+import { extraerCabecera } from '@/utils/informesVisita/cabecera';
+import { pedirSnippetsAlModelo } from '@/utils/informesVisita/clienteProponer';
 import { persistirInforme } from '@/utils/informesVisita/persistir';
+import { snippetsListosParaPersistir } from '@/utils/informesVisita/confirmar';
 import {
-  ETIQUETAS_TIPO_OBSERVACION,
+  ETIQUETAS_TIPO_SNIPPET,
   MENSAJE_SIN_TEXTO,
-  TIPOS_OBSERVACION_AGRONOMICA,
+  TIPOS_SNIPPET,
   type AccionDecision,
-  type DecisionFila,
-  type FilaPropuesta,
+  type DecisionSnippet,
   type InformeVisitaCabecera,
   type PropuestaInforme,
-  type TipoObservacionAgronomica,
+  type SnippetPropuesto,
 } from '@/types/informesVisita';
-import type { LoteCatalogo } from '@/utils/informesVisita/lotes';
-import { resolverLoteId } from '@/utils/informesVisita/lotes';
-
-type DecisionMap = Record<string, { accion: AccionDecision; edicion: Partial<FilaPropuesta> }>;
+import { EditarSnippetDialog, useFotoUrls } from './EditarSnippetDialog';
+import { SnippetDeck } from './SnippetDeck';
 
 function cabeceraVacia(fecha: string): InformeVisitaCabecera {
   return {
@@ -52,23 +48,41 @@ export function SubirInformePage() {
   const [guardando, setGuardando] = useState(false);
   const [propuesta, setPropuesta] = useState<PropuestaInforme | null>(null);
   const [cabecera, setCabecera] = useState<InformeVisitaCabecera>(cabeceraVacia(obtenerFechaHoy()));
-  const [decisiones, setDecisiones] = useState<DecisionMap>({});
-  const [lotes, setLotes] = useState<LoteCatalogo[]>([]);
+  const [decisiones, setDecisiones] = useState<Record<string, { accion: AccionDecision; edicion?: Partial<Omit<SnippetPropuesto, 'clave' | 'origen'>> }>>({});
+  const [, setHistorial] = useState<string[]>([]);
+  const [extras, setExtras] = useState<SnippetPropuesto[]>([]);
+  const [nota, setNota] = useState('');
+  const [notaTipo, setNotaTipo] = useState('');
+  const [notaInsumo, setNotaInsumo] = useState('');
+  const [notaPlaga, setNotaPlaga] = useState('');
+  const [editandoClave, setEditandoClave] = useState<string | null>(null);
+  const [descartadosPorCita, setDescartadosPorCita] = useState(0);
 
-  const resumen = useMemo(() => {
-    if (!propuesta) return null;
-    const lista: DecisionFila[] = Object.entries(decisiones).map(([clave, d]) => ({
+  const fotoUrls = useFotoUrls(propuesta?.fotos ?? []);
+
+  const snippetsMostrados = useMemo(() => {
+    if (!propuesta) return [];
+    return propuesta.snippets.map((s) => {
+      const ed = decisiones[s.clave]?.edicion;
+      return ed ? { ...s, ...ed, clave: s.clave, origen: s.origen } : s;
+    });
+  }, [propuesta, decisiones]);
+
+  const snippetEditando = snippetsMostrados.find((s) => s.clave === editandoClave) ?? null;
+
+  const listaDecisiones: DecisionSnippet[] = useMemo(
+    () => Object.entries(decisiones).map(([clave, d]) => ({
       clave,
       accion: d.accion,
       edicion: d.edicion,
-    }));
-    return aplicarDecisiones(propuesta.filas, lista);
-  }, [propuesta, decisiones]);
+    })),
+    [decisiones],
+  );
 
   const listo = Boolean(
     propuesta
     && cabecera.fecha_visita
-    && (propuesta.filas.length === 0 || (resumen && resumen.pendientes.length === 0)),
+    && (propuesta.snippets.length === 0 || (propuesta.snippets.every((s) => decisiones[s.clave]))),
   );
 
   async function handleArchivo(file: File) {
@@ -80,24 +94,50 @@ export function SubirInformePage() {
     try {
       const bytes = await file.arrayBuffer();
       const extraido = await extraerDocx(bytes);
-      const sb = getSupabase() as any;
-      const { data: lotesData } = await sb.from('lotes').select('id, nombre').eq('activo', true);
-      const catalogo: LoteCatalogo[] = lotesData ?? [];
-      setLotes(catalogo);
-      const p = proponerInforme({
+      const hoy = obtenerFechaHoy();
+      let cab = extraerCabecera(extraido.texto, hoy);
+      let snippets: SnippetPropuesto[] = [];
+      let descartados = 0;
+
+      if (!extraido.sinTexto && extraido.texto.trim()) {
+        try {
+          const propuestaModelo = await pedirSnippetsAlModelo({
+            texto: extraido.texto,
+            piesDeFoto: extraido.fotos.map((f) => f.pieDeFoto ?? ''),
+            nFotos: extraido.fotos.length,
+            fechaFallback: hoy,
+          });
+          cab = propuestaModelo.cabecera;
+          snippets = propuestaModelo.snippets;
+          descartados = propuestaModelo.descartadosPorCita;
+        } catch (err) {
+          console.error(err);
+          toast.error(
+            err instanceof Error
+              ? `No se pudieron proponer ideas: ${err.message}`
+              : 'No se pudieron proponer ideas. Puedes guardar el archivo y añadir notas.',
+          );
+        }
+      }
+
+      const p: PropuestaInforme = {
+        cabecera: cab,
+        snippets,
         texto: extraido.texto,
         sinTexto: extraido.sinTexto,
         fotos: extraido.fotos,
-        fechaFallback: obtenerFechaHoy(),
-        lotes: catalogo,
-      });
+      };
       setArchivo(file);
       setArchivoBytes(bytes);
       setPropuesta(p);
-      setCabecera(p.cabecera.fecha_visita ? p.cabecera : { ...p.cabecera, fecha_visita: obtenerFechaHoy() });
+      setCabecera(p.cabecera.fecha_visita ? p.cabecera : { ...p.cabecera, fecha_visita: hoy });
       setDecisiones({});
-      if (p.sinTexto) {
-        toast.warning(MENSAJE_SIN_TEXTO);
+      setHistorial([]);
+      setExtras([]);
+      setDescartadosPorCita(descartados);
+      if (p.sinTexto) toast.warning(MENSAJE_SIN_TEXTO);
+      else if (snippets.length > 0) {
+        toast.success(`${snippets.length} idea(s) propuestas. Confirma o ignora cada una.`);
       }
     } catch (err) {
       console.error(err);
@@ -107,21 +147,24 @@ export function SubirInformePage() {
     }
   }
 
-  function setDecision(clave: string, accion: AccionDecision) {
+  function decidir(clave: string, accion: AccionDecision) {
     setDecisiones((prev) => ({
       ...prev,
-      [clave]: { accion, edicion: prev[clave]?.edicion ?? {} },
+      [clave]: { accion, edicion: prev[clave]?.edicion },
     }));
+    setHistorial((h) => [...h, clave]);
   }
 
-  function editarFila(clave: string, patch: Partial<FilaPropuesta>) {
-    setDecisiones((prev) => {
-      const actual = prev[clave] ?? { accion: 'confirmar' as AccionDecision, edicion: {} };
-      const edicion = { ...actual.edicion, ...patch };
-      if ('lote' in patch) {
-        edicion.lote_id = resolverLoteId(patch.lote ?? null, lotes);
-      }
-      return { ...prev, [clave]: { ...actual, edicion } };
+  function deshacer() {
+    setHistorial((h) => {
+      const clave = h[h.length - 1];
+      if (!clave) return h;
+      setDecisiones((prev) => {
+        const next = { ...prev };
+        delete next[clave];
+        return next;
+      });
+      return h.slice(0, -1);
     });
   }
 
@@ -129,28 +172,67 @@ export function SubirInformePage() {
     if (!propuesta) return;
     setDecisiones((prev) => {
       const next = { ...prev };
-      for (const f of propuesta.filas) {
-        if (!next[f.clave]) next[f.clave] = { accion: 'confirmar', edicion: {} };
+      const nuevas: string[] = [];
+      for (const s of propuesta.snippets) {
+        if (!next[s.clave]) {
+          next[s.clave] = { accion: 'confirmar' };
+          nuevas.push(s.clave);
+        }
       }
+      if (nuevas.length > 0) setHistorial((h) => [...h, ...nuevas]);
       return next;
     });
+  }
+
+  function guardarEdicion(edicion: Partial<Omit<SnippetPropuesto, 'clave' | 'origen'>>) {
+    if (!editandoClave) return;
+    const clave = editandoClave;
+    setDecisiones((prev) => {
+      const yaEstaba = Boolean(prev[clave]);
+      if (!yaEstaba) setHistorial((h) => [...h, clave]);
+      return {
+        ...prev,
+        [clave]: {
+          accion: prev[clave]?.accion ?? 'confirmar',
+          edicion: { ...prev[clave]?.edicion, ...edicion },
+        },
+      };
+    });
+    setEditandoClave(null);
+  }
+
+  function anadirConversacion() {
+    const texto = nota.trim();
+    if (!texto) return;
+    const snip: SnippetPropuesto = {
+      clave: `conv-${crypto.randomUUID()}`,
+      texto,
+      cita_word: null,
+      origen: 'conversacion',
+      tipo: notaTipo || null,
+      insumo: notaInsumo.trim() || null,
+      plaga: notaPlaga.trim() || null,
+      foto_indice: null,
+    };
+    setExtras((prev) => [...prev, snip]);
+    setNota('');
+    setNotaTipo('');
+    setNotaInsumo('');
+    setNotaPlaga('');
   }
 
   async function handleGuardar() {
     if (!archivo || !archivoBytes || !propuesta || !listo) return;
     setGuardando(true);
     try {
-      const lista: DecisionFila[] = propuesta.filas.map((f) => ({
-        clave: f.clave,
-        accion: decisiones[f.clave].accion,
-        edicion: decisiones[f.clave]?.edicion,
-      }));
+      snippetsListosParaPersistir(propuesta.snippets, listaDecisiones, extras);
       const resultado = await persistirInforme({
         archivo,
         archivoBytes,
         cabecera,
-        propuestas: propuesta.filas,
-        decisiones: lista,
+        propuestas: propuesta.snippets,
+        decisiones: listaDecisiones,
+        extras,
         fotos: propuesta.fotos,
         texto: propuesta.texto,
         sinTexto: propuesta.sinTexto,
@@ -158,7 +240,7 @@ export function SubirInformePage() {
       toast.success(
         propuesta.sinTexto
           ? `Informe guardado. ${MENSAJE_SIN_TEXTO}.`
-          : `Informe guardado con ${resultado.filasInsertadas} observación(es).`,
+          : `Informe guardado con ${resultado.snippetsInsertados} idea(s).`,
       );
       navigate(`/informes-visita/${resultado.informeId}`);
     } catch (err) {
@@ -171,11 +253,11 @@ export function SubirInformePage() {
 
   return (
     <RoleGuard allowedRoles={['Administrador', 'Gerencia']}>
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-2xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Subir informe de visita</h1>
         <p className="text-gray-500 mt-1">
-          Solo .docx. El sistema propone filas; tú confirmas, editas o descartas antes de guardar.
+          Solo .docx. El sistema propone ideas. Tú confirmas, editas o ignoras cada una antes de guardar.
         </p>
       </div>
 
@@ -195,7 +277,7 @@ export function SubirInformePage() {
         />
         <Button type="button" variant="outline" onClick={() => inputRef.current?.click()} disabled={extrayendo}>
           {extrayendo ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
-          {archivo ? archivo.name : 'Elegir .docx'}
+          {extrayendo ? 'Extrayendo ideas…' : (archivo ? archivo.name : 'Elegir .docx')}
         </Button>
       </div>
 
@@ -204,9 +286,15 @@ export function SubirInformePage() {
           <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
           <div>
             <p className="font-medium capitalize">{MENSAJE_SIN_TEXTO}</p>
-            <p className="text-sm mt-1">Se guarda el archivo y las fotos. No se inventan observaciones.</p>
+            <p className="text-sm mt-1">Se guarda el archivo y las fotos. No se inventan ideas.</p>
           </div>
         </div>
+      )}
+
+      {propuesta && descartadosPorCita > 0 && (
+        <p className="text-sm text-amber-800">
+          Se descartaron {descartadosPorCita} propuesta(s) del modelo porque no tenían una cita literal en el Word.
+        </p>
       )}
 
       {propuesta && (
@@ -229,30 +317,63 @@ export function SubirInformePage() {
             )}
           </div>
 
-          {propuesta.filas.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <h2 className="text-lg font-semibold">Filas propuestas ({propuesta.filas.length})</h2>
-                <Button type="button" variant="outline" size="sm" onClick={confirmarRestantes}>
-                  Confirmar restantes
-                </Button>
-              </div>
-              {resumen && resumen.pendientes.length > 0 && (
-                <p className="text-sm text-amber-800">
-                  Faltan {resumen.pendientes.length} fila(s) por confirmar o descartar.
-                </p>
-              )}
-              {propuesta.filas.map((fila) => (
-                <FilaEditor
-                  key={fila.clave}
-                  fila={{ ...fila, ...decisiones[fila.clave]?.edicion }}
-                  accion={decisiones[fila.clave]?.accion}
-                  onDecision={(a) => setDecision(fila.clave, a)}
-                  onEdit={(patch) => editarFila(fila.clave, patch)}
-                />
-              ))}
-            </div>
+          {propuesta.snippets.length > 0 && (
+            <SnippetDeck
+              snippets={snippetsMostrados}
+              fotos={propuesta.fotos}
+              fotoUrls={fotoUrls}
+              decisiones={Object.fromEntries(Object.entries(decisiones).map(([k, v]) => [k, v.accion]))}
+              bloqueado={Boolean(editandoClave)}
+              onDecision={decidir}
+              onUndo={deshacer}
+              onEditar={setEditandoClave}
+              onConfirmarRestantes={confirmarRestantes}
+            />
           )}
+
+          <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+            <h2 className="text-lg font-semibold">Nota de conversación</h2>
+            <p className="text-sm text-gray-500">
+              Algo que se habló en la visita y no está en el informe.
+            </p>
+            <Textarea value={nota} onChange={(e) => setNota(e.target.value)} rows={4} placeholder="Escribe la idea…" />
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div>
+                <Label>Tipo</Label>
+                <select
+                  className="border-input bg-input-background h-11 w-full rounded-md border px-3 text-sm"
+                  value={notaTipo}
+                  onChange={(e) => setNotaTipo(e.target.value)}
+                >
+                  <option value="">Sin tipo</option>
+                  {TIPOS_SNIPPET.map((t) => (
+                    <option key={t} value={t}>{ETIQUETAS_TIPO_SNIPPET[t]}</option>
+                  ))}
+                </select>
+              </div>
+              <CampoTexto label="Insumo" value={notaInsumo || null} onChange={(v) => setNotaInsumo(v ?? '')} />
+              <CampoTexto label="Plaga" value={notaPlaga || null} onChange={(v) => setNotaPlaga(v ?? '')} />
+            </div>
+            <Button type="button" variant="outline" onClick={anadirConversacion} disabled={!nota.trim()}>
+              <Plus className="w-4 h-4 mr-1" /> Añadir nota
+            </Button>
+            {extras.length > 0 && (
+              <ul className="space-y-2 text-sm">
+                {extras.map((ex) => (
+                  <li key={ex.clave} className="rounded-lg border border-border p-3">
+                    {ex.texto}
+                    <button
+                      type="button"
+                      className="block mt-1 text-xs text-red-700"
+                      onClick={() => setExtras((prev) => prev.filter((e) => e.clave !== ex.clave))}
+                    >
+                      Quitar
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           <div className="flex gap-3">
             <Button type="button" variant="outline" onClick={() => navigate('/informes-visita')}>Cancelar</Button>
@@ -263,6 +384,13 @@ export function SubirInformePage() {
           </div>
         </>
       )}
+
+      <EditarSnippetDialog
+        abierto={Boolean(editandoClave)}
+        snippet={snippetEditando}
+        onCerrar={() => setEditandoClave(null)}
+        onGuardar={guardarEdicion}
+      />
     </div>
     </RoleGuard>
   );
@@ -272,100 +400,15 @@ function CampoTexto({
   label,
   value,
   onChange,
-  disabled,
 }: {
   label: string;
   value: string | null;
   onChange: (v: string | null) => void;
-  disabled?: boolean;
 }) {
   return (
     <div>
       <Label>{label}</Label>
-      <Input value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} disabled={disabled} />
-    </div>
-  );
-}
-
-function FilaEditor({
-  fila,
-  accion,
-  onDecision,
-  onEdit,
-}: {
-  fila: FilaPropuesta;
-  accion?: AccionDecision;
-  onDecision: (a: AccionDecision) => void;
-  onEdit: (patch: Partial<FilaPropuesta>) => void;
-}) {
-  const descartada = accion === 'descartar';
-  return (
-    <div className={`rounded-xl border p-4 space-y-3 ${descartada ? 'opacity-50 bg-muted/40' : 'bg-card'} ${accion === 'confirmar' ? 'border-primary/40' : 'border-border'}`}>
-      <div className="flex flex-wrap items-center gap-2 justify-between">
-        <Badge variant="secondary">{ETIQUETAS_TIPO_OBSERVACION[fila.tipo]}</Badge>
-        <div className="flex gap-2">
-          <Button type="button" size="sm" variant={accion === 'confirmar' ? 'default' : 'outline'} onClick={() => onDecision('confirmar')}>
-            <Check className="w-4 h-4 mr-1" /> Confirmar
-          </Button>
-          <Button type="button" size="sm" variant={accion === 'descartar' ? 'destructive' : 'outline'} onClick={() => onDecision('descartar')}>
-            <X className="w-4 h-4 mr-1" /> Descartar
-          </Button>
-        </div>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div>
-          <Label>Tipo</Label>
-          <select
-            className="border-input bg-input-background h-11 w-full rounded-md border px-3 text-sm"
-            value={fila.tipo}
-            disabled={descartada}
-            onChange={(e) => onEdit({ tipo: e.target.value as TipoObservacionAgronomica })}
-          >
-            {TIPOS_OBSERVACION_AGRONOMICA.map((t) => (
-              <option key={t} value={t}>{ETIQUETAS_TIPO_OBSERVACION[t]}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <Label>Fecha</Label>
-          <DateInput value={fila.fecha} onChange={(v) => onEdit({ fecha: v })} disabled={descartada} />
-        </div>
-        <div>
-          <Label>Fecha contexto</Label>
-          <DateInput value={fila.fecha_contexto ?? ''} onChange={(v) => onEdit({ fecha_contexto: v || null })} disabled={descartada} />
-        </div>
-        <CampoTexto label="Lote / sector" value={fila.lote} onChange={(v) => onEdit({ lote: v })} disabled={descartada} />
-        <CampoTexto label="Plaga / enfermedad" value={fila.plaga_enfermedad} onChange={(v) => onEdit({ plaga_enfermedad: v })} disabled={descartada} />
-        <CampoTexto label="Insumo" value={fila.insumo} onChange={(v) => onEdit({ insumo: v })} disabled={descartada} />
-        <div>
-          <Label>Dosis</Label>
-          <Input
-            type="number"
-            value={fila.dosis ?? ''}
-            onChange={(e) => onEdit({ dosis: e.target.value === '' ? null : Number(e.target.value) })}
-            disabled={descartada}
-            onWheel={(e) => e.currentTarget.blur()}
-          />
-        </div>
-        <CampoTexto label="Unidad" value={fila.unidad} onChange={(v) => onEdit({ unidad: v })} disabled={descartada} />
-        <div>
-          <Label>Carencia (días)</Label>
-          <Input
-            type="number"
-            value={fila.periodo_carencia_dias ?? ''}
-            onChange={(e) => onEdit({ periodo_carencia_dias: e.target.value === '' ? null : Number(e.target.value) })}
-            disabled={descartada}
-            onWheel={(e) => e.currentTarget.blur()}
-          />
-        </div>
-        <CampoTexto label="Vía" value={fila.via} onChange={(v) => onEdit({ via: v })} disabled={descartada} />
-        <CampoTexto label="Incidencia" value={fila.incidencia} onChange={(v) => onEdit({ incidencia: v })} disabled={descartada} />
-        <CampoTexto label="Severidad" value={fila.severidad} onChange={(v) => onEdit({ severidad: v })} disabled={descartada} />
-        <div className="sm:col-span-3">
-          <Label>Notas</Label>
-          <Textarea value={fila.notas ?? ''} onChange={(e) => onEdit({ notas: e.target.value || null })} disabled={descartada} />
-        </div>
-      </div>
+      <Input value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} />
     </div>
   );
 }

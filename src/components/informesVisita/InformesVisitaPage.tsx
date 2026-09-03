@@ -12,13 +12,14 @@ import { getSupabase } from '@/utils/supabase/client';
 import { fetchAll } from '@/utils/supabase/fetchAll';
 import { formatearFecha } from '@/utils/fechas';
 import {
-  ETIQUETAS_TIPO_OBSERVACION,
-  TIPOS_OBSERVACION_AGRONOMICA,
-  type ObservacionAgronomicaRow,
-  type TipoObservacionAgronomica,
+  ETIQUETAS_TIPO_SNIPPET,
+  TIPOS_SNIPPET,
+  type InformeVisitaSnippetRow,
 } from '@/types/informesVisita';
+import { esTablaInformesAusente, MENSAJE_MIGRACION_PENDIENTE } from '@/utils/informesVisita/migracion';
+import { chipsDeSnippet } from './EditarSnippetDialog';
 
-interface FilaLista extends ObservacionAgronomicaRow {
+interface FilaLista extends InformeVisitaSnippetRow {
   informe?: {
     fecha_visita: string;
     agronoma: string | null;
@@ -33,6 +34,7 @@ export function InformesVisitaPage() {
   const puedeEscribir = hasRole(['Administrador', 'Gerencia']);
   const [filas, setFilas] = useState<FilaLista[]>([]);
   const [cargando, setCargando] = useState(true);
+  const [migracionPendiente, setMigracionPendiente] = useState(false);
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
   const [tipo, setTipo] = useState<string>('');
@@ -54,20 +56,49 @@ export function InformesVisitaPage() {
 
   async function cargar() {
     setCargando(true);
+    setMigracionPendiente(false);
     try {
       const sb = getSupabase() as any;
-      let idsInforme: string[] | null = null;
       const q = busquedaAplicada.trim();
+      let idsInforme: string[] | null = null;
+
+      if (fechaDesde || fechaHasta) {
+        let infFecha = sb.from('informes_visita').select('id');
+        if (fechaDesde) infFecha = infFecha.gte('fecha_visita', fechaDesde);
+        if (fechaHasta) infFecha = infFecha.lte('fecha_visita', fechaHasta);
+        const { data: porFecha, error: fechaErr } = await infFecha;
+        if (fechaErr) throw fechaErr;
+        const dateIds = ((porFecha ?? []) as Array<{ id: string }>).map((r) => r.id);
+        if (dateIds.length === 0) {
+          setFilas([]);
+          setInformesCoincidentes([]);
+          setCargando(false);
+          return;
+        }
+        idsInforme = dateIds;
+      }
+
       if (q) {
-        const { data, error } = await sb
-          .from('informes_visita')
-          .select('id, fecha_visita, agronoma, archivo_nombre')
-          .textSearch('texto_busqueda', q, { type: 'plain', config: 'spanish' });
-        if (error) throw error;
-        const ids = ((data ?? []) as Array<{ id: string }>).map((r) => r.id);
-        idsInforme = ids;
-        setInformesCoincidentes(data ?? []);
-        if (ids.length === 0) {
+        const [{ data: infData, error: infErr }, { data: snipData, error: snipErr }] = await Promise.all([
+          sb.from('informes_visita').select('id, fecha_visita, agronoma, archivo_nombre').textSearch('texto_busqueda', q, { type: 'plain', config: 'spanish' }),
+          sb.from('informes_visita_snippets').select('informe_id').textSearch('texto_busqueda', q, { type: 'plain', config: 'spanish' }),
+        ]);
+        if (infErr) throw infErr;
+        if (snipErr) throw snipErr;
+        const ids = new Set<string>([
+          ...((infData ?? []) as Array<{ id: string }>).map((r) => r.id),
+          ...((snipData ?? []) as Array<{ informe_id: string }>).map((r) => r.informe_id),
+        ]);
+        const coincidentes = (infData ?? []) as Array<{ id: string; fecha_visita: string; agronoma: string | null; archivo_nombre: string | null }>;
+        if (idsInforme) {
+          const permitidos = new Set(idsInforme);
+          idsInforme = [...ids].filter((id) => permitidos.has(id));
+          setInformesCoincidentes(coincidentes.filter((i) => permitidos.has(i.id)));
+        } else {
+          idsInforme = [...ids];
+          setInformesCoincidentes(coincidentes);
+        }
+        if (idsInforme.length === 0) {
           setFilas([]);
           setCargando(false);
           return;
@@ -78,14 +109,12 @@ export function InformesVisitaPage() {
 
       const { filas: rows } = await fetchAll<FilaLista>((desde, hasta) => {
         let query = sb
-          .from('observaciones_agronomicas')
+          .from('informes_visita_snippets')
           .select('*, informe:informes_visita(fecha_visita, agronoma, finca, archivo_nombre)')
-          .order('fecha', { ascending: false })
+          .order('created_at', { ascending: false })
           .range(desde, hasta);
-        if (fechaDesde) query = query.gte('fecha', fechaDesde);
-        if (fechaHasta) query = query.lte('fecha', fechaHasta);
         if (tipo) query = query.eq('tipo', tipo);
-        if (plaga.trim()) query = query.ilike('plaga_enfermedad', `%${plaga.trim()}%`);
+        if (plaga.trim()) query = query.ilike('plaga', `%${plaga.trim()}%`);
         if (insumo.trim()) query = query.ilike('insumo', `%${insumo.trim()}%`);
         if (idsInforme) query = query.in('informe_id', idsInforme);
         return query;
@@ -93,7 +122,11 @@ export function InformesVisitaPage() {
       setFilas(rows);
     } catch (err) {
       console.error(err);
-      toast.error('No se pudieron cargar las observaciones');
+      if (esTablaInformesAusente(err)) {
+        setMigracionPendiente(true);
+      } else {
+        toast.error('No se pudieron cargar las ideas de visita');
+      }
       setFilas([]);
       setInformesCoincidentes([]);
     } finally {
@@ -107,7 +140,7 @@ export function InformesVisitaPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Informes de visita</h1>
           <p className="text-gray-500 mt-1">
-            Observaciones del Word de la agrónoma. No es el monitoreo de rondas de la app.
+            Ideas del Word de la agrónoma y notas de la visita. No es el monitoreo de rondas de la app.
           </p>
         </div>
         {puedeEscribir && (
@@ -118,9 +151,16 @@ export function InformesVisitaPage() {
         )}
       </div>
 
+      {migracionPendiente && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
+          <p className="font-medium">{MENSAJE_MIGRACION_PENDIENTE}</p>
+          <p className="text-sm mt-1">Cuando Santiago dé el go, se aplica la 134 y esta pantalla deja de estar vacía.</p>
+        </div>
+      )}
+
       <div className="rounded-xl border border-border bg-card p-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div className="sm:col-span-2 lg:col-span-3">
-          <Label htmlFor="fts">Buscar en el texto del Word</Label>
+          <Label htmlFor="fts">Buscar en las ideas y en el Word</Label>
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -148,8 +188,8 @@ export function InformesVisitaPage() {
             onChange={(e) => setTipo(e.target.value)}
           >
             <option value="">Todos</option>
-            {TIPOS_OBSERVACION_AGRONOMICA.map((t) => (
-              <option key={t} value={t}>{ETIQUETAS_TIPO_OBSERVACION[t]}</option>
+            {TIPOS_SNIPPET.map((t) => (
+              <option key={t} value={t}>{ETIQUETAS_TIPO_SNIPPET[t]}</option>
             ))}
           </select>
         </div>
@@ -181,35 +221,37 @@ export function InformesVisitaPage() {
           <Loader2 className="w-6 h-6 animate-spin text-primary" />
         </div>
       ) : filas.length === 0 ? (
-        <p className="text-gray-500 text-center py-12">No hay observaciones con esos filtros.</p>
+        <p className="text-gray-500 text-center py-12">
+          {migracionPendiente ? 'Sin tablas todavía.' : 'No hay ideas con esos filtros.'}
+        </p>
       ) : (
         <div className="rounded-xl border border-border divide-y">
-          {filas.map((f) => (
-            <Link
-              key={f.id}
-              to={`/informes-visita/${f.informe_id}`}
-              className="flex flex-col sm:flex-row sm:items-center gap-2 p-4 hover:bg-gray-50"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-2 mb-1">
-                  <Badge variant="secondary">{ETIQUETAS_TIPO_OBSERVACION[f.tipo as TipoObservacionAgronomica] ?? f.tipo}</Badge>
-                  <span className="text-sm text-gray-500">{formatearFecha(f.fecha)}</span>
-                  {f.fecha_contexto && (
-                    <span className="text-xs text-gray-400">contexto {formatearFecha(f.fecha_contexto)}</span>
-                  )}
+          {filas.map((f) => {
+            const chips = chipsDeSnippet(f);
+            return (
+              <Link
+                key={f.id}
+                to={`/informes-visita/${f.informe_id}`}
+                className="flex flex-col sm:flex-row sm:items-center gap-2 p-4 hover:bg-gray-50"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                    {chips.map((c) => (
+                      <Badge key={c} variant="secondary">{c}</Badge>
+                    ))}
+                    {f.origen === 'conversacion' && (
+                      <Badge variant="outline">Conversación</Badge>
+                    )}
+                    <span className="text-sm text-gray-500">
+                      {f.informe?.fecha_visita ? formatearFecha(f.informe.fecha_visita) : ''}
+                    </span>
+                  </div>
+                  <p className="font-medium text-foreground line-clamp-2">{f.texto}</p>
                 </div>
-                <p className="font-medium text-foreground truncate">
-                  {f.insumo || f.plaga_enfermedad || f.notas || 'Sin detalle'}
-                </p>
-                <p className="text-sm text-gray-500 truncate">
-                  {[f.lote, f.dosis != null ? `${f.dosis} ${f.unidad ?? ''}`.trim() : null, f.periodo_carencia_dias != null ? `carencia ${f.periodo_carencia_dias} d` : null]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </p>
-              </div>
-              <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
-            </Link>
-          ))}
+                <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>

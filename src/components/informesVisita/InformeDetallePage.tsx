@@ -8,20 +8,21 @@ import { getSupabase } from '@/utils/supabase/client';
 import { formatearFecha } from '@/utils/fechas';
 import {
   BUCKET_INFORMES_VISITA,
-  ETIQUETAS_TIPO_OBSERVACION,
   type InformeVisitaFotoRow,
   type InformeVisitaRow,
-  type ObservacionAgronomicaRow,
-  type TipoObservacionAgronomica,
+  type InformeVisitaSnippetRow,
 } from '@/types/informesVisita';
+import { esTablaInformesAusente, MENSAJE_MIGRACION_PENDIENTE } from '@/utils/informesVisita/migracion';
+import { chipsDeSnippet } from './EditarSnippetDialog';
 
 export function InformeDetallePage() {
   const { id } = useParams<{ id: string }>();
   const [informe, setInforme] = useState<InformeVisitaRow | null>(null);
   const [fotos, setFotos] = useState<Array<InformeVisitaFotoRow & { url?: string }>>([]);
-  const [filas, setFilas] = useState<ObservacionAgronomicaRow[]>([]);
+  const [snippets, setSnippets] = useState<InformeVisitaSnippetRow[]>([]);
   const [cargando, setCargando] = useState(true);
   const [textoAbierto, setTextoAbierto] = useState(false);
+  const [migracionPendiente, setMigracionPendiente] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -30,6 +31,7 @@ export function InformeDetallePage() {
 
   async function cargar(informeId: string) {
     setCargando(true);
+    setMigracionPendiente(false);
     try {
       const sb = getSupabase() as any;
       const { data: inf, error: infErr } = await sb
@@ -58,16 +60,21 @@ export function InformeDetallePage() {
       }
       setFotos(conUrl);
 
-      const { data: obs, error: obsErr } = await sb
-        .from('observaciones_agronomicas')
+      const { data: snips, error: snipErr } = await sb
+        .from('informes_visita_snippets')
         .select('*')
         .eq('informe_id', informeId)
-        .order('fecha', { ascending: true });
-      if (obsErr) throw obsErr;
-      setFilas(obs ?? []);
+        .order('created_at', { ascending: true });
+      if (snipErr) throw snipErr;
+      setSnippets(snips ?? []);
     } catch (err) {
       console.error(err);
-      toast.error('No se pudo cargar el informe');
+      if (esTablaInformesAusente(err)) {
+        setMigracionPendiente(true);
+        setInforme(null);
+      } else {
+        toast.error('No se pudo cargar el informe');
+      }
     } finally {
       setCargando(false);
     }
@@ -94,6 +101,15 @@ export function InformeDetallePage() {
     );
   }
 
+  if (migracionPendiente) {
+    return (
+      <div className="max-w-3xl mx-auto py-12 text-center text-gray-500">
+        {MENSAJE_MIGRACION_PENDIENTE}{' '}
+        <Link to="/informes-visita" className="text-primary underline">Volver</Link>
+      </div>
+    );
+  }
+
   if (!informe) {
     return (
       <div className="max-w-3xl mx-auto py-12 text-center text-gray-500">
@@ -103,8 +119,10 @@ export function InformeDetallePage() {
     );
   }
 
+  const fotoPorId = new Map(fotos.map((f) => [f.id, f]));
+
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
           <p className="text-sm text-gray-500">
@@ -165,31 +183,34 @@ export function InformeDetallePage() {
       )}
 
       <div>
-        <h2 className="text-lg font-semibold mb-3">Observaciones ({filas.length})</h2>
-        {filas.length === 0 ? (
-          <p className="text-gray-500">Este informe no tiene filas confirmadas.</p>
+        <h2 className="text-lg font-semibold mb-3">Ideas ({snippets.length})</h2>
+        {snippets.length === 0 ? (
+          <p className="text-gray-500">Este informe no tiene ideas confirmadas.</p>
         ) : (
           <div className="space-y-3">
-            {filas.map((f) => (
-              <div key={f.id} className="rounded-xl border border-border bg-card p-4">
-                <div className="flex flex-wrap gap-2 mb-2">
-                  <Badge variant="secondary">{ETIQUETAS_TIPO_OBSERVACION[f.tipo as TipoObservacionAgronomica] ?? f.tipo}</Badge>
-                  <span className="text-sm text-gray-500">{formatearFecha(f.fecha)}</span>
+            {snippets.map((s) => {
+              const chips = chipsDeSnippet(s);
+              const foto = s.foto_id ? fotoPorId.get(s.foto_id) : undefined;
+              return (
+                <div key={s.id} className="rounded-xl border border-border bg-card p-4 space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    {chips.map((c) => (
+                      <Badge key={c} variant="secondary">{c}</Badge>
+                    ))}
+                    {s.origen === 'conversacion' && (
+                      <Badge variant="outline">Conversación</Badge>
+                    )}
+                  </div>
+                  <p>{s.texto}</p>
+                  {s.cita_word && (
+                    <p className="text-xs text-muted-foreground italic">«{s.cita_word}»</p>
+                  )}
+                  {foto?.url && (
+                    <img src={foto.url} alt={foto.pie_de_foto || ''} className="w-full max-h-40 object-cover rounded-lg" />
+                  )}
                 </div>
-                <p className="font-medium">{f.insumo || f.plaga_enfermedad || '—'}</p>
-                <p className="text-sm text-gray-600 mt-1">
-                  {[
-                    f.lote,
-                    f.dosis != null ? `${f.dosis} ${f.unidad ?? ''}`.trim() : null,
-                    f.periodo_carencia_dias != null ? `carencia ${f.periodo_carencia_dias} días` : null,
-                    f.via,
-                    f.incidencia ? `inc. ${f.incidencia}` : null,
-                    f.severidad ? `sev. ${f.severidad}` : null,
-                  ].filter(Boolean).join(' · ')}
-                </p>
-                {f.notas && <p className="text-sm mt-2">{f.notas}</p>}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

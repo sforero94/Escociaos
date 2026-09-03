@@ -1,12 +1,13 @@
 /**
  * Formato de respuesta de Esco para informes de visita.
- * Fuente distinta de rondas_monitoreo / monitoreos. Cita informe y fila.
- * Los insumos salen de las filas o del texto: nunca se inventan.
+ * Fuente distinta de rondas_monitoreo / monitoreos. Cita informe y snippet.
+ * Los insumos salen de chips o del texto del snippet: nunca se inventan.
+ * No hay embeddings: FTS español + ventana de visitas.
  */
 
 export const FUENTE_INFORME_VISITA = 'informe_visita_agronomica';
 export const ADVERTENCIA_FUENTE =
-  'Fuente: informe de visita agronómica (Word). No es ronda_monitoreo ni monitoreos de la app.';
+  'Fuente: informe de visita agronómica (Word / nota de visita). No es ronda_monitoreo ni monitoreos de la app.';
 
 export interface InformeEsco {
   id: string;
@@ -21,23 +22,15 @@ export interface InformeEsco {
   texto_extraido: string | null;
 }
 
-export interface ObservacionEsco {
+export interface SnippetEsco {
   id: string;
   informe_id: string;
-  fecha: string;
-  fecha_contexto: string | null;
-  tipo: string;
-  lote: string | null;
-  plaga_enfermedad: string | null;
-  accion: string | null;
+  texto: string;
+  cita_word: string | null;
+  origen: string;
+  tipo: string | null;
   insumo: string | null;
-  dosis: number | null;
-  unidad: string | null;
-  periodo_carencia_dias: number | null;
-  via: string | null;
-  incidencia: string | null;
-  severidad: string | null;
-  notas: string | null;
+  plaga: string | null;
   foto_id: string | null;
 }
 
@@ -52,8 +45,9 @@ export interface RespuestaEscoInformes {
   fuente: typeof FUENTE_INFORME_VISITA;
   advertencia: typeof ADVERTENCIA_FUENTE;
   total_informes: number;
-  total_observaciones: number;
+  total_snippets: number;
   insumos_en_fuente: string[];
+  ventana_completa: boolean;
   informes: Array<{
     id: string;
     fecha_visita: string;
@@ -67,7 +61,7 @@ export interface RespuestaEscoInformes {
     cita: { informe_id: string };
     extracto_texto: string | null;
   }>;
-  observaciones: Array<ObservacionEsco & { cita: { informe_id: string; observacion_id: string } }>;
+  snippets: Array<SnippetEsco & { cita: { informe_id: string; snippet_id: string } }>;
   pies_de_foto: Array<{ informe_id: string; foto_id: string; pie_de_foto: string; cita: { informe_id: string; foto_id: string } }>;
 }
 
@@ -80,12 +74,13 @@ function extracto(texto: string | null, limite = 400): string | null {
 
 export function formatearRespuestaEsco(opts: {
   informes: InformeEsco[];
-  observaciones: ObservacionEsco[];
+  snippets: SnippetEsco[];
   fotos: FotoEsco[];
+  ventana_completa?: boolean;
 }): RespuestaEscoInformes {
   const insumos = [...new Set(
-    opts.observaciones
-      .map((o) => o.insumo?.trim())
+    opts.snippets
+      .map((s) => s.insumo?.trim())
       .filter((s): s is string => Boolean(s)),
   )].sort();
 
@@ -93,8 +88,9 @@ export function formatearRespuestaEsco(opts: {
     fuente: FUENTE_INFORME_VISITA,
     advertencia: ADVERTENCIA_FUENTE,
     total_informes: opts.informes.length,
-    total_observaciones: opts.observaciones.length,
+    total_snippets: opts.snippets.length,
     insumos_en_fuente: insumos,
+    ventana_completa: Boolean(opts.ventana_completa),
     informes: opts.informes.map((i) => ({
       id: i.id,
       fecha_visita: i.fecha_visita,
@@ -108,9 +104,9 @@ export function formatearRespuestaEsco(opts: {
       cita: { informe_id: i.id },
       extracto_texto: extracto(i.texto_extraido),
     })),
-    observaciones: opts.observaciones.map((o) => ({
-      ...o,
-      cita: { informe_id: o.informe_id, observacion_id: o.id },
+    snippets: opts.snippets.map((s) => ({
+      ...s,
+      cita: { informe_id: s.informe_id, snippet_id: s.id },
     })),
     pies_de_foto: opts.fotos
       .filter((f) => Boolean(f.pie_de_foto?.trim()))
@@ -123,7 +119,7 @@ export function formatearRespuestaEsco(opts: {
   };
 }
 
-/** Un insumo solo se afirma si está en filas o en el texto extraído. */
+/** Un insumo solo se afirma si está en chips o en el texto del snippet. */
 export function insumoEstaEnFuente(
   nombre: string,
   respuesta: RespuestaEscoInformes,
@@ -132,5 +128,6 @@ export function insumoEstaEnFuente(
   const n = nombre.trim().toLowerCase();
   if (!n) return false;
   if (respuesta.insumos_en_fuente.some((i) => i.toLowerCase() === n)) return true;
+  if (respuesta.snippets.some((s) => s.texto.toLowerCase().includes(n))) return true;
   return textos.some((t) => t.toLowerCase().includes(n));
 }

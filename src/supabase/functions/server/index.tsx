@@ -17,6 +17,7 @@ import { handleHatoPesajeCommit } from "./hato-pesaje-commit.ts";
 import { handleHatoAlertasTick } from "./hato-alertas-tick.ts";
 import { handleAccionesTick } from "./acciones-tick.ts";
 import { handleRondaInventarioTick } from "./ronda-inventario-tick.ts";
+import { handleProponerSnippets } from "./informes-visita-proponer.ts";
 import { handleWebhook } from "./telegram/bot.ts";
 
 const app = new Hono();
@@ -206,6 +207,11 @@ app.post("/make-server-1ccce916/acciones/tick", async (c) => {
 // JWT+Gerencia -- ver ronda-inventario-tick.ts.
 app.post("/make-server-1ccce916/inventario/ronda/tick", async (c) => {
   return await handleRondaInventarioTick(c);
+});
+
+// Informes de visita agronómica: el modelo propone snippets. Nunca escribe DB.
+app.post("/make-server-1ccce916/informes-visita/snippets/proponer", async (c) => {
+  return await handleProponerSnippets(c);
 });
 
 // Handle preflight OPTIONS at Deno.serve level to ensure CORS works
