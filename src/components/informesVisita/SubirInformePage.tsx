@@ -57,6 +57,7 @@ export function SubirInformePage() {
   const [notaPlaga, setNotaPlaga] = useState('');
   const [editandoClave, setEditandoClave] = useState<string | null>(null);
   const [descartadosPorCita, setDescartadosPorCita] = useState(0);
+  const [errorPropuesta, setErrorPropuesta] = useState<string | null>(null);
 
   const fotoUrls = useFotoUrls(propuesta?.fotos ?? []);
 
@@ -91,6 +92,7 @@ export function SubirInformePage() {
       return;
     }
     setExtrayendo(true);
+    setErrorPropuesta(null);
     try {
       const bytes = await file.arrayBuffer();
       const extraido = await extraerDocx(bytes);
@@ -112,11 +114,11 @@ export function SubirInformePage() {
           descartados = propuestaModelo.descartadosPorCita;
         } catch (err) {
           console.error(err);
-          toast.error(
-            err instanceof Error
-              ? `No se pudieron proponer ideas: ${err.message}`
-              : 'No se pudieron proponer ideas. Puedes guardar el archivo y añadir notas.',
-          );
+          const msg = err instanceof Error
+            ? err.message
+            : 'No se pudieron proponer ideas. Puedes guardar el archivo y añadir notas.';
+          setErrorPropuesta(msg);
+          toast.error(`No se pudieron proponer ideas: ${msg}`);
         }
       }
 
@@ -287,6 +289,19 @@ export function SubirInformePage() {
           <div>
             <p className="font-medium capitalize">{MENSAJE_SIN_TEXTO}</p>
             <p className="text-sm mt-1">Se guarda el archivo y las fotos. No se inventan ideas.</p>
+          </div>
+        </div>
+      )}
+
+      {errorPropuesta && (
+        <div className="flex items-start gap-3 rounded-xl border border-red-300 bg-red-50 p-4 text-red-950">
+          <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium">No se pudieron proponer ideas</p>
+            <p className="text-sm mt-1">{errorPropuesta}</p>
+            <p className="text-sm mt-1">
+              El archivo y las fotos sí se leyeron. Completa la cabecera y añade notas si hace falta.
+            </p>
           </div>
         </div>
       )}

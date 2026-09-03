@@ -14,7 +14,7 @@ import {
   insumoEstaEnSnippet,
   parsearRespuestaSnippets,
 } from '@/utils/informesVisita/snippets';
-import { propuestaVacia } from '@/utils/informesVisita/clienteProponer';
+import { MENSAJE_ENDPOINT_NO_DESPLEGADO, propuestaVacia } from '@/utils/informesVisita/clienteProponer';
 import {
   FUENTE_INFORME_VISITA,
   formatearRespuestaEsco,
@@ -116,6 +116,37 @@ describe('cabecera barata', () => {
     expect(cab.finca).toBe('Finca Ejemplo');
     expect(cab.agronoma).toBe('Ana Ejemplo');
     expect(cab.materia_seca).toBe('21%');
+  });
+
+  it('lee etiquetas de tabla Word (pipe) y no cae al día de hoy', () => {
+    const texto = [
+      'INFORME TÉCNICO AGRONÓMICO',
+      'Fecha de visita | 28 de julio de 2026',
+      'Agrónoma | Ana Ejemplo',
+      'Finca | Finca Ejemplo',
+    ].join('\n');
+    const cab = extraerCabecera(texto, '2026-09-03');
+    expect(cab.fecha_visita).toBe('2026-07-28');
+    expect(cab.agronoma).toBe('Ana Ejemplo');
+    expect(cab.finca).toBe('Finca Ejemplo');
+  });
+
+  it('si no hay etiqueta Fecha, usa la primera fecha del cuerpo', () => {
+    const texto = 'Visita realizada el 9 de julio de 2026 en aguacate Hass.';
+    const cab = extraerCabecera(texto, '2026-09-03');
+    expect(cab.fecha_visita).toBe('2026-07-09');
+  });
+
+  it('un mes en el título no inventa un día', () => {
+    const texto = 'INFORME TÉCNICO AGRONÓMICO JULIO 2026';
+    const cab = extraerCabecera(texto, '2026-09-03');
+    expect(cab.fecha_visita).toBe('2026-09-03');
+  });
+});
+
+describe('endpoint de propuestas', () => {
+  it('nombra el redespliegue cuando el servidor responde 404', () => {
+    expect(MENSAJE_ENDPOINT_NO_DESPLEGADO).toMatch(/make-server-1ccce916/);
   });
 });
 

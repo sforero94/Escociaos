@@ -1,24 +1,35 @@
 import type { InformeVisitaCabecera } from '@/types/informesVisita';
-import { parsearFechaInforme } from './fechasInforme';
+import { extraerPrimeraFechaDelTexto, parsearFechaInforme } from './fechasInforme';
 
+/**
+ * Valor a la derecha de una etiqueta. Acepta `:`, `|` (tablas Word) o un
+ * salto de línea (etiqueta y valor en celdas/párrafos distintos).
+ */
 function campo(texto: string, etiqueta: RegExp): string | null {
-  const m = etiqueta.exec(texto);
-  if (!m) return null;
-  const v = (m[1] ?? '').trim();
+  const mismaLinea = new RegExp(`(?:${etiqueta.source})\\s*[:|–-]\\s*([^\\n]+)`, etiqueta.flags);
+  const m1 = mismaLinea.exec(texto);
+  if (m1) {
+    const v = (m1[1] ?? '').trim();
+    if (v.length > 0) return v;
+  }
+  const dosLineas = new RegExp(`(?:${etiqueta.source})\\s*\\n\\s*([^\\n]+)`, etiqueta.flags);
+  const m2 = dosLineas.exec(texto);
+  if (!m2) return null;
+  const v = (m2[1] ?? '').trim();
   return v.length > 0 ? v : null;
 }
 
 /** Cabecera barata desde etiquetas del Word. El modelo puede completar huecos. */
 export function extraerCabecera(texto: string, fechaFallback: string): InformeVisitaCabecera {
-  const fechaCruda = campo(texto, /fecha(?:\s+de\s+visita)?\s*:\s*([^\n]+)/i);
+  const fechaCruda = campo(texto, /fecha(?:\s+de\s+(?:la\s+)?visita)?/i);
   return {
-    fecha_visita: parsearFechaInforme(fechaCruda) ?? fechaFallback,
-    agronoma: campo(texto, /agr[oó]nom[ao]\s*:\s*([^\n]+)/i),
-    finca: campo(texto, /finca\s*:\s*([^\n]+)/i),
-    especie: campo(texto, /especie\s*:\s*([^\n]+)/i),
-    fenologia: campo(texto, /fenolog[ií]a\s*:\s*([^\n]+)/i),
-    materia_seca: campo(texto, /materia\s+seca\s*:\s*([^\n]+)/i),
-    proyeccion_cosecha: campo(texto, /proyecci[oó]n(?:\s+de\s+cosecha)?\s*:\s*([^\n]+)/i),
+    fecha_visita: parsearFechaInforme(fechaCruda) ?? extraerPrimeraFechaDelTexto(texto) ?? fechaFallback,
+    agronoma: campo(texto, /agr[oó]nom[ao]|elaborad[oa]\s+por/i),
+    finca: campo(texto, /finca/i),
+    especie: campo(texto, /especie/i),
+    fenologia: campo(texto, /fenolog[ií]a/i),
+    materia_seca: campo(texto, /materia\s+seca/i),
+    proyeccion_cosecha: campo(texto, /proyecci[oó]n(?:\s+de\s+cosecha)?/i),
   };
 }
 

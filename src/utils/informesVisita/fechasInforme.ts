@@ -49,3 +49,20 @@ export function parsearFechaInforme(crudo: string | null | undefined): string | 
 
   return null;
 }
+
+/** Primera fecha parseable en el texto. No inventa un día a partir de “julio 2026”. */
+export function extraerPrimeraFechaDelTexto(texto: string): string | null {
+  if (!texto.trim()) return null;
+  const ventana = texto.slice(0, 5000);
+  const candidatos = [
+    ...ventana.matchAll(/(\d{1,2}\s+de\s+[A-Za-zÁÉÍÓÚáéíóúü]+\s+(?:de\s+)?\d{4})/g),
+    ...ventana.matchAll(/(\d{1,2}\s+[A-Za-zÁÉÍÓÚáéíóúü]{3,}\s+\d{4})/g),
+    ...ventana.matchAll(/(\d{1,2}[/.\\-]\d{1,2}[/.\\-]\d{4})/g),
+    ...ventana.matchAll(/(\d{4}-\d{2}-\d{2})/g),
+  ];
+  for (const m of candidatos) {
+    const parsed = parsearFechaInforme(m[1]);
+    if (parsed) return parsed;
+  }
+  return null;
+}

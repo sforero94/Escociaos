@@ -75,6 +75,16 @@ describe('paridad parser snippets', () => {
     expect(cabEdge(TEXTO, '2026-09-03')).toEqual(cabFront(TEXTO, '2026-09-03'));
   });
 
+  it('extraerCabecera lee tabla Word (pipe) igual en ambas copias', () => {
+    const texto = [
+      'Fecha de visita | 28 de julio de 2026',
+      'Agrónoma | Ana Ejemplo',
+      'Finca | Finca Ejemplo',
+    ].join('\n');
+    expect(cabEdge(texto, '2026-09-03')).toEqual(cabFront(texto, '2026-09-03'));
+    expect(cabFront(texto, '2026-09-03').fecha_visita).toBe('2026-07-28');
+  });
+
   it('las dos copias Deno del parser están en sync', () => {
     const raiz = resolve(__dirname, '../..');
     const a = readFileSync(resolve(raiz, 'src/supabase/functions/server/informes-visita-snippets.ts'), 'utf-8');

@@ -32,6 +32,8 @@ Bucket privado `informes-visita`.
 - Pure: `src/utils/informesVisita/`
 - UI: este directorio (`SnippetDeck`, swipe)
 - Edge: `informes-visita-proponer.ts` (LLM, no escribe DB) + copias Deno de
-  `snippets.ts` / `esco.ts`
+  `snippets.ts` / `esco.ts`. A 404 on `/informes-visita/snippets/proponer`
+  means `make-server-1ccce916` is not redeployed. Propose does not write DB,
+  so that deploy is safe without migration 134. Persist still needs 134.
 - Tests: `src/__tests__/informesVisitaExtract.test.ts` (fixture sintético; nunca
   el Word real de Salazar)
