@@ -302,6 +302,28 @@ describe('construirDiffChequeo — conflicto "registrado vs. papel" (D-E, N23, d
     expect(resultado.filas[0].conflictoEstadoRegistrado).toBeNull();
   });
 
+  it('Estado (N) impreso contra la misma etiqueta pelada no es conflicto -- N no es el estado', () => {
+    const animales = [animal({ id: 'a1', numero: 201, nombre: 'CAMPESINA' })];
+    const filas = [fila({ fila: 3, numero: 201, nombre: 'CAMPESINA', estadoRegistrado: 'Servida (4)' })];
+
+    const resultado = construirDiffChequeo(filas, animales, [], [estadoRegistrado({ animalId: 'a1', estado: 'Servida' })]);
+
+    expect(resultado.filas[0].conflictoEstadoRegistrado).toBeNull();
+    expect(resultado.resumen.conConflictoEstadoRegistrado).toBe(0);
+  });
+
+  it('Estado (N) impreso contra OTRA etiqueta sí es conflicto -- se conserva el texto del papel', () => {
+    const animales = [animal({ id: 'a1', numero: 201, nombre: 'CAMPESINA' })];
+    const filas = [fila({ fila: 3, numero: 201, nombre: 'CAMPESINA', estadoRegistrado: 'Servida (4)' })];
+
+    const resultado = construirDiffChequeo(filas, animales, [], [estadoRegistrado({ animalId: 'a1', estado: 'Confirmada' })]);
+
+    expect(resultado.filas[0].conflictoEstadoRegistrado).toEqual({
+      impreso: 'Servida (4)',
+      actual: 'Confirmada',
+    });
+  });
+
   it('filas `nuevo`/`no_reconocido` nunca llevan conflicto -- no hay animal contra el cual recalcular', () => {
     const filaNueva = fila({ fila: 2, numero: 500, nombre: 'NUEVA', estadoRegistrado: 'Servida' });
     const filaSinNumero = fila({ fila: 5, numero: null, nombre: 'SIN NUMERO', estadoRegistrado: 'Servida' });

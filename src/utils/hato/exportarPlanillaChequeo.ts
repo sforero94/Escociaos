@@ -55,7 +55,7 @@
 // continua (requisito duro de B5.1: "nunca repetir el header, rompe la
 // extracción del parser de subida").
 
-import { etiquetaEstadoReproductivo, type EstadoReproductivo, type TipoEstado } from '@/utils/calculosHato';
+import { textoEstadoReproductivoConMeses, type EstadoReproductivo, type TipoEstado } from '@/utils/calculosHato';
 
 /** Las 13 columnas del template (13 históricas menos `TP`, más "Estado
  * registrado" de B5.4 -- D-E, docs/plan_hato_telegram_estados_agosto_2026.md
@@ -255,22 +255,30 @@ export function textoCeldaEstado(tipo: TipoEstado | null | undefined): string | 
  * `EstadoReproductivo` (`etiquetaEstadoReproductivo`, calculosHato.ts), la
  * MISMA que ve el resto de la app (`chipEstadoReproductivo`, `hatoUi.ts`).
  *
+ * Issue #192: cuando hay fecha del evento que abre el estado, el texto es
+ * `Estado (N)` con `N` = meses calendario cumplidos (piso) desde esa fecha
+ * (`textoEstadoReproductivoConMeses`). Sin fecha, la etiqueta pelada --
+ * nunca un `(N)` inventado. El diff (N23) compara la etiqueta SIN `(N)`
+ * (`diffChequeo.ts`), así que imprimir los meses no fabrica un conflicto
+ * el día que `N` sube entre la impresión y la subida.
+ *
  * A diferencia de `textoCeldaToro`/`textoCeldaEstado` (que escriben códigos
  * CRUDOS re-parseables porque esas dos columnas son DILIGENCIADAS), esta
  * columna es de solo REFERENCIA -- nadie la vuelve a escribir a mano, así que
  * no hay razón para que el `.xlsx` y el PDF muestren textos distintos como sí
- * ocurre con `Sexo cría` (ver `exportarPlanillaChequeoPDF.ts`). El diff
- * (`importHato/diffChequeo.ts`, N23) compara esta MISMA etiqueta -- impresa
- * vs. recalculada al momento de aprobar -- para marcar el conflicto explícito
- * que pide D-E.
+ * ocurre con `Sexo cría` (ver `exportarPlanillaChequeoPDF.ts`).
  *
  * `null` -> celda vacía, nunca un texto inventado: sin `EstadoReproductivo`
  * conocido (la fila no tiene animal resuelto, p. ej. B5.2 de un chequeo
  * histórico que no guardó este dato) no hay nada que imprimir.
  */
-export function textoCeldaEstadoRegistrado(estado: EstadoReproductivo | null | undefined): string | null {
+export function textoCeldaEstadoRegistrado(
+  estado: EstadoReproductivo | null | undefined,
+  fechaApertura: string | null = null,
+  fechaReferencia: string | null = null,
+): string | null {
   if (!estado) return null;
-  return etiquetaEstadoReproductivo(estado);
+  return textoEstadoReproductivoConMeses(estado, fechaApertura, fechaReferencia);
 }
 
 /** Anchos de columna (`!cols`, caracteres) -- angostos a propósito: las 13
@@ -281,7 +289,7 @@ export function textoCeldaEstadoRegistrado(estado: EstadoReproductivo | null | u
  * artefacto de MÁQUINA (nunca se imprime tal cual -- para eso está el PDF),
  * así que este ancho es cosmético para quien lo abra en Excel, no un
  * presupuesto físico como el de `exportarPlanillaChequeoPDF.ts`. */
-const ANCHOS_COLUMNAS_PLANILLA: readonly number[] = [6, 20, 6, 8, 11, 12, 13, 14, 16, 9, 11, 13, 18];
+const ANCHOS_COLUMNAS_PLANILLA: readonly number[] = [6, 20, 6, 8, 11, 12, 13, 14, 18, 9, 11, 13, 18];
 
 export type XLSXModule = typeof import('xlsx');
 

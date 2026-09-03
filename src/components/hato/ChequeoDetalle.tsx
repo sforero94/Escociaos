@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button';
 import { useHatoChequeoDetalle, type ChequeoVacaDetalle } from './hooks/useHatoChequeoDetalle';
 import { HatoPageHeader } from './components/HatoPageHeader';
 import { EstadoChip } from './components/EstadoChip';
-import { chipTipoEstado, chipNumeroProvisional } from '@/utils/hatoUi';
+import { chipTipoEstado, chipNumeroProvisional, chipEstadoReproductivoConMeses } from '@/utils/hatoUi';
 import { ordenarPorValor, type DireccionOrdenAnimales as DireccionOrden } from '@/utils/ordenarAnimalesHato';
 import { formatShortDate, formatNumber } from '@/utils/format';
 import {
@@ -154,7 +154,9 @@ function FilaChequeoVaca({ fila }: { fila: ChequeoVacaDetalle }) {
       </td>
       <td className="px-3 py-2.5 whitespace-nowrap"><CeldaSoloRaw raw={fila.tp_raw} /></td>
       <td className="px-3 py-2.5 whitespace-nowrap">
-        {fila.estado != null ? (
+        {fila.estadoReproductivo != null ? (
+          <EstadoChip chip={chipEstadoReproductivoConMeses(fila.estadoReproductivo, fila.mesesEnEstado)} />
+        ) : fila.estado != null ? (
           <EstadoChip chip={chipTipoEstado(fila.estado)} />
         ) : fila.estado_raw ? (
           <span className="text-gray-400 italic" title="Dato crudo de la planilla, sin normalizar">{fila.estado_raw}</span>

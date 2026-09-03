@@ -98,6 +98,21 @@ export function chipEstadoReproductivo(estado: EstadoReproductivo): ChipEstilo {
 }
 
 /**
+ * Mismo chip que `chipEstadoReproductivo`, con `(N)` en la etiqueta cuando
+ * hay meses conocidos (issue #192, planilla/pantalla de chequeo). `null`
+ * deja la etiqueta pelada -- nunca un `(N)` inventado. No se usa en ficha
+ * ni en reportes.
+ */
+export function chipEstadoReproductivoConMeses(
+  estado: EstadoReproductivo,
+  meses: number | null,
+): ChipEstilo {
+  const chip = chipEstadoReproductivo(estado);
+  if (meses == null) return chip;
+  return { ...chip, label: `${chip.label} (${meses})` };
+}
+
+/**
  * Chip de la **columna de señales** de la lista del hato (D-D, 2026-08-13:
  * "5 estados + columna de alertas que digan cuál — si es aborto o algo
  * diferente"). `null` = nada que revisar, la celda queda vacía.

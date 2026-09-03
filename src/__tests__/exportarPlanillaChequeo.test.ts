@@ -117,6 +117,12 @@ describe('textoCeldaEstadoRegistrado (D-E, B5.4 -- N21/N22 del plan de agosto 20
     expect(textoCeldaEstadoRegistrado(null)).toBeNull();
     expect(textoCeldaEstadoRegistrado(undefined)).toBeNull();
   });
+
+  it('con fecha de apertura imprime Estado (N); sin fecha deja la etiqueta pelada', () => {
+    expect(textoCeldaEstadoRegistrado('servida', '2026-05-09', '2026-09-09')).toBe('Servida (4)');
+    expect(textoCeldaEstadoRegistrado('vacia_por_servir', '2026-07-09', '2026-09-09')).toBe('Vacía (2)');
+    expect(textoCeldaEstadoRegistrado('servida', null, '2026-09-09')).toBe('Servida');
+  });
 });
 
 describe('construirAOAPlanillaChequeo', () => {
