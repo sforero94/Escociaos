@@ -149,6 +149,21 @@ export function InformeDetallePage() {
         {informe.sin_texto && <Dato etiqueta="Texto" valor="sin texto para extraer" />}
       </dl>
 
+      {(informe.temas?.length ?? 0) > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {informe.temas.map((t) => (
+            <Badge key={t} variant="secondary">{t}</Badge>
+          ))}
+        </div>
+      )}
+
+      {informe.notas && (
+        <div className="rounded-xl border border-border bg-card p-4">
+          <h2 className="text-sm font-semibold text-gray-500 mb-2">Notas</h2>
+          <p className="whitespace-pre-wrap">{informe.notas}</p>
+        </div>
+      )}
+
       {fotos.length > 0 && (
         <div>
           <h2 className="text-lg font-semibold mb-3">Fotos del Word</h2>
@@ -197,9 +212,6 @@ export function InformeDetallePage() {
                     {chips.map((c) => (
                       <Badge key={c} variant="secondary">{c}</Badge>
                     ))}
-                    {s.origen === 'conversacion' && (
-                      <Badge variant="outline">Conversación</Badge>
-                    )}
                   </div>
                   <p>{s.texto}</p>
                   {s.cita_word && (

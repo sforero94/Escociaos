@@ -275,16 +275,17 @@ const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'get_informes_visita',
-    description: 'Consulta INFORMES DE VISITA AGRONÓMICA (Word mensual + notas de conversación). Fuente DISTINTA de get_monitoring_data / rondas_monitoreo / monitoreos. Devuelve ideas confirmadas (snippets: una idea por fila, no MECE) y cabecera de visita. Cita siempre informe_id y snippet_id. NUNCA inventes un insumo que no esté en insumos_en_fuente o en el texto del snippet. No hay embeddings: FTS español + ventana de visitas recientes si hay pocos hits. Sirve para patrones entre meses, una duda puntual (ej. Proxam) o el resumen de una visita.',
+    description: 'Consulta INFORMES DE VISITA AGRONÓMICA (Word mensual + temas de visita + notas). Fuente DISTINTA de get_monitoring_data / rondas_monitoreo / monitoreos. Devuelve ideas confirmadas (snippets: una idea por fila, no MECE), cabecera, temas y notas. Cita siempre informe_id y snippet_id. NUNCA inventes un insumo que no esté en insumos_en_fuente o en el texto del snippet. No hay embeddings: FTS español + ventana de visitas recientes si hay pocos hits. Sirve para patrones entre meses, una duda puntual (ej. Proxam) o el resumen de una visita.',
     parameters: {
       type: 'object',
       properties: {
         date_from: { type: 'string', description: 'Fecha de visita desde YYYY-MM-DD (opcional)' },
         date_to: { type: 'string', description: 'Fecha de visita hasta YYYY-MM-DD (opcional)' },
         tipo: { type: 'string', description: 'monitoreo | rec_edafica | rec_foliar | rec_drench | observacion | labor (opcional)' },
+        tema: { type: 'string', description: 'fertilización | fumigación | inventario | monitoreo | planeacion labores | observaciones | alertas | ideas (opcional)' },
         plaga: { type: 'string', description: 'Nombre parcial de plaga/enfermedad (opcional)' },
         insumo: { type: 'string', description: 'Nombre comercial parcial (opcional)' },
-        query: { type: 'string', description: 'Búsqueda FTS español en el texto del snippet y del Word (opcional)' },
+        query: { type: 'string', description: 'Búsqueda FTS español en el texto del snippet, del Word y de las notas (opcional)' },
         informe_id: { type: 'string', description: 'UUID de un informe específico (opcional)' },
       },
     },
@@ -1063,7 +1064,7 @@ async function execMonitoringData(args: Record<string, unknown>): Promise<string
 const UMBRAL_FTS_INFORMES = 3;
 const MAX_VISITAS_VENTANA = 8;
 const SNIPPET_SELECT = 'id,informe_id,texto,cita_word,origen,tipo,insumo,plaga,foto_id';
-const INFORME_SELECT = 'id,fecha_visita,agronoma,finca,especie,fenologia,materia_seca,proyeccion_cosecha,sin_texto,texto_extraido';
+const INFORME_SELECT = 'id,fecha_visita,agronoma,finca,especie,fenologia,materia_seca,proyeccion_cosecha,temas,notas,sin_texto,texto_extraido';
 
 function aplicarFiltrosSnippet(
   q: string,
@@ -1087,6 +1088,8 @@ function mapInformeEsco(i: Record<string, unknown>) {
     fenologia: (i.fenologia as string) ?? null,
     materia_seca: (i.materia_seca as string) ?? null,
     proyeccion_cosecha: (i.proyeccion_cosecha as string) ?? null,
+    temas: Array.isArray(i.temas) ? (i.temas as string[]) : [],
+    notas: (i.notas as string) ?? null,
     sin_texto: Boolean(i.sin_texto),
     texto_extraido: (i.texto_extraido as string) ?? null,
   };
@@ -1109,8 +1112,9 @@ function mapSnippetEsco(s: Record<string, unknown>) {
 async function execInformesVisita(args: Record<string, unknown>): Promise<string> {
   const validated = validateDates(args);
   const { date_from, date_to } = validated;
-  const { tipo, plaga, insumo, query, informe_id } = args as {
+  const { tipo, tema, plaga, insumo, query, informe_id } = args as {
     tipo?: string;
+    tema?: string;
     plaga?: string;
     insumo?: string;
     query?: string;
@@ -1124,6 +1128,9 @@ async function execInformesVisita(args: Record<string, unknown>): Promise<string
     if (informe_id) infVentanaQ += `&id=eq.${e(informe_id)}`;
     if (date_from) infVentanaQ += `&fecha_visita=gte.${e(date_from)}`;
     if (date_to) infVentanaQ += `&fecha_visita=lte.${e(date_to)}`;
+    if (typeof tema === 'string' && tema.trim()) {
+      infVentanaQ += `&temas=cs.${e(`{"${tema.trim()}"}`)}`;
+    }
     const informesVentana = await supabaseQuery('informes_visita', infVentanaQ) as Array<Record<string, unknown>>;
 
     const porId = new Map<string, Record<string, unknown>>();
@@ -1154,6 +1161,9 @@ async function execInformesVisita(args: Record<string, unknown>): Promise<string
       if (informe_id) ftsWord += `&id=eq.${e(informe_id)}`;
       if (date_from) ftsWord += `&fecha_visita=gte.${e(date_from)}`;
       if (date_to) ftsWord += `&fecha_visita=lte.${e(date_to)}`;
+      if (typeof tema === 'string' && tema.trim()) {
+        ftsWord += `&temas=cs.${e(`{"${tema.trim()}"}`)}`;
+      }
       const hitsWord = await supabaseQuery('informes_visita', ftsWord) as Array<Record<string, unknown>>;
       for (const inf of hitsWord) porId.set(inf.id as string, inf);
       await cargarSnippetsDeInformes(hitsWord.map((i) => i.id as string));
@@ -3618,7 +3628,7 @@ DOMINIOS DE DATOS DISPONIBLES:
 - Labores: tablero de tareas planeadas/en ejecucion (get_tareas: estado Banco/Programada/En Proceso/Completada/Cancelada, prioridad, categoria, lote, responsable, jornales estimados) y registros de trabajo / jornales YA ejecutados por empleado/contratista/lote (get_labor_summary)
 - Empleados y Contratistas: personal, cargos, salarios, tarifas
 - Monitoreo: plagas/enfermedades, incidencia, severidad, tendencias por lote. Incluye estado fenológico de floración (brotes, flor madura, cuaje). Fuente: rondas_monitoreo / monitoreos (get_monitoring_data). NO es el informe de visita de la agrónoma.
-- Informes de visita agronómica (get_informes_visita): Word mensual de la agrónoma (cabecera + snippets confirmados: una idea por fila, no MECE) y notas de conversación de la visita. Fuente DISTINTA de get_monitoring_data. Cita siempre informe_id y snippet_id. NUNCA inventes un insumo que no esté en insumos_en_fuente o en el texto del snippet. No hay embeddings: FTS español; si hay pocos hits, la herramienta rellena con la ventana de visitas recientes (ventana_completa=true).
+- Informes de visita agronómica (get_informes_visita): Word mensual de la agrónoma (cabecera + temas de visita + notas + snippets confirmados: una idea por fila, no MECE). Fuente DISTINTA de get_monitoring_data. Cita siempre informe_id y snippet_id. NUNCA inventes un insumo que no esté en insumos_en_fuente o en el texto del snippet. No hay embeddings: FTS español; si hay pocos hits, la herramienta rellena con la ventana de visitas recientes (ventana_completa=true).
 - Priorizacion de monitoreo (get_pest_risk_priorizacion): ranking en vivo de que lote/sublote x plaga amerita revision esta semana, basado en umbral economico Cartama (cuando existe), tendencia y estacionalidad historica de ESTA finca. Distinto de web_search_agronomic (esa es informacion externa, no datos de la finca)
 - Aplicaciones: fumigaciones, fertilizaciones, drench, productos usados, costos
 - Costos por lote: desglose insumos + mano de obra y costo por arbol para una aplicacion (get_application_cost_by_lote) o sumando todas las aplicaciones en un rango de fechas (get_cost_by_lote)

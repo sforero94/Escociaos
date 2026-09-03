@@ -16,6 +16,7 @@ import {
   TIPOS_SNIPPET,
   type InformeVisitaSnippetRow,
 } from '@/types/informesVisita';
+import { TEMAS_INFORME } from '@/utils/informesVisita/temas';
 import { esTablaInformesAusente, MENSAJE_MIGRACION_PENDIENTE } from '@/utils/informesVisita/migracion';
 import { chipsDeSnippet } from './EditarSnippetDialog';
 
@@ -38,6 +39,7 @@ export function InformesVisitaPage() {
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
   const [tipo, setTipo] = useState<string>('');
+  const [tema, setTema] = useState<string>('');
   const [plaga, setPlaga] = useState('');
   const [insumo, setInsumo] = useState('');
   const [busqueda, setBusqueda] = useState('');
@@ -52,7 +54,7 @@ export function InformesVisitaPage() {
   useEffect(() => {
     void cargar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fechaDesde, fechaHasta, tipo, plaga, insumo, busquedaAplicada]);
+  }, [fechaDesde, fechaHasta, tipo, tema, plaga, insumo, busquedaAplicada]);
 
   async function cargar() {
     setCargando(true);
@@ -76,6 +78,33 @@ export function InformesVisitaPage() {
           return;
         }
         idsInforme = dateIds;
+      }
+
+      if (tema) {
+        const { data: porTema, error: temaErr } = await sb
+          .from('informes_visita')
+          .select('id')
+          .contains('temas', [tema]);
+        if (temaErr) throw temaErr;
+        const temaIds = ((porTema ?? []) as Array<{ id: string }>).map((r) => r.id);
+        if (temaIds.length === 0) {
+          setFilas([]);
+          setInformesCoincidentes([]);
+          setCargando(false);
+          return;
+        }
+        if (idsInforme) {
+          const permitidos = new Set(idsInforme);
+          idsInforme = temaIds.filter((id) => permitidos.has(id));
+        } else {
+          idsInforme = temaIds;
+        }
+        if (idsInforme.length === 0) {
+          setFilas([]);
+          setInformesCoincidentes([]);
+          setCargando(false);
+          return;
+        }
       }
 
       if (q) {
@@ -140,7 +169,7 @@ export function InformesVisitaPage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Informes de visita</h1>
           <p className="text-gray-500 mt-1">
-            Ideas del Word de la agrónoma y notas de la visita. No es el monitoreo de rondas de la app.
+            Ideas del Word de la agrónoma, temas de la visita y notas. No es el monitoreo de rondas de la app.
           </p>
         </div>
         {puedeEscribir && (
@@ -179,6 +208,19 @@ export function InformesVisitaPage() {
         <div>
           <Label>Fecha hasta</Label>
           <DateInput value={fechaHasta} onChange={setFechaHasta} />
+        </div>
+        <div>
+          <Label>Tema</Label>
+          <select
+            className="border-input bg-input-background h-11 w-full rounded-md border px-3 text-sm"
+            value={tema}
+            onChange={(e) => setTema(e.target.value)}
+          >
+            <option value="">Todos</option>
+            {TEMAS_INFORME.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
         </div>
         <div>
           <Label>Tipo</Label>
@@ -239,9 +281,6 @@ export function InformesVisitaPage() {
                     {chips.map((c) => (
                       <Badge key={c} variant="secondary">{c}</Badge>
                     ))}
-                    {f.origen === 'conversacion' && (
-                      <Badge variant="outline">Conversación</Badge>
-                    )}
                     <span className="text-sm text-gray-500">
                       {f.informe?.fecha_visita ? formatearFecha(f.informe.fecha_visita) : ''}
                     </span>

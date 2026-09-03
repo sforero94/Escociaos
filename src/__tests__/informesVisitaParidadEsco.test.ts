@@ -57,6 +57,8 @@ describe('paridad de comportamiento del formateador', () => {
         fenologia: 'llenado',
         materia_seca: '21%',
         proyeccion_cosecha: '40 t',
+        temas: ['fumigación'],
+        notas: 'Se habló de riego.',
         sin_texto: false,
         texto_extraido: 'Proxam 2 cc/L',
       }],

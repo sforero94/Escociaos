@@ -21,6 +21,7 @@ import {
   insumoEstaEnFuente,
 } from '@/utils/informesVisita/esco';
 import { persistirInforme } from '@/utils/informesVisita/persistir';
+import { proponerTemas, sanitizarTemas, TEMAS_INFORME } from '@/utils/informesVisita/temas';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -194,7 +195,7 @@ function snip(parcial: Partial<SnippetPropuesto> & { clave: string; texto: strin
 }
 
 describe('puerta confirmar antes de persistir', () => {
-  it('descarta una, edita una, confirma el resto y anexa conversación', () => {
+  it('descarta una, edita una y confirma el resto', () => {
     const propuestas = [
       snip({ clave: 'a', texto: 'A' }),
       snip({ clave: 'b', texto: 'B' }),
@@ -211,11 +212,10 @@ describe('puerta confirmar antes de persistir', () => {
     expect(confirmadas).toHaveLength(2);
     expect(confirmadas[0].insumo).toBe('Proxam editado');
 
-    const extra = snip({ clave: 'conv-1', texto: 'Se habló de riego', origen: 'conversacion', cita_word: null });
-    const listas = snippetsListosParaPersistir(propuestas, decisiones, [extra]);
+    const listas = snippetsListosParaPersistir(propuestas, decisiones);
     expect(listas.some((f) => f.clave === 'a')).toBe(false);
-    expect(listas).toHaveLength(3);
-    expect(listas[2].origen).toBe('conversacion');
+    expect(listas).toHaveLength(2);
+    expect(listas.every((f) => f.origen === 'informe')).toBe(true);
   });
 
   it('lanza si se intenta persistir propuestas sin decidir', () => {
@@ -239,7 +239,8 @@ describe('puerta confirmar antes de persistir', () => {
       cabecera: extraerCabecera(extraido.texto, '2026-07-28'),
       propuestas: [snip({ clave: 'a', texto: 'A' })],
       decisiones: [],
-      extras: [],
+      temas: [],
+      notas: '',
       fotos: extraido.fotos,
       texto: extraido.texto,
       sinTexto: extraido.sinTexto,
@@ -259,6 +260,8 @@ describe('ESCO — fuente y citas', () => {
         fenologia: 'llenado',
         materia_seca: '21%',
         proyeccion_cosecha: '40 t',
+        temas: ['fumigación', 'monitoreo'],
+        notas: 'Se habló de riego en el lote 3.',
         sin_texto: false,
         texto_extraido: 'Proxam 2 cc/L carencia 15 días',
       }],
@@ -280,6 +283,8 @@ describe('ESCO — fuente y citas', () => {
     expect(r.advertencia).toContain('ronda_monitoreo');
     expect(r.snippets[0].cita).toEqual({ informe_id: 'inf-1', snippet_id: 'snip-1' });
     expect(r.informes[0].cita).toEqual({ informe_id: 'inf-1' });
+    expect(r.informes[0].temas).toEqual(['fumigación', 'monitoreo']);
+    expect(r.informes[0].extracto_notas).toContain('riego');
     expect(r.insumos_en_fuente).toEqual(['Proxam']);
     expect(insumoEstaEnFuente('Proxam', r, [])).toBe(true);
     expect(insumoEstaEnFuente('Glifosato', r, [])).toBe(false);
@@ -287,10 +292,32 @@ describe('ESCO — fuente y citas', () => {
   });
 });
 
+describe('temas de visita', () => {
+  it('preselecciona fertilización, monitoreo y observaciones desde el texto y los tipos', () => {
+    const temas = proponerTemas(
+      'Fertilización edáfica. Incidencia de ácaro 12%. Observación de clorosis.',
+      [{ tipo: 'monitoreo', texto: 'Ácaro 12%' }, { tipo: 'rec_drench', texto: 'Proxam en drench' }],
+    );
+    expect(temas).toContain('fertilización');
+    expect(temas).toContain('monitoreo');
+    expect(temas).toContain('observaciones');
+    expect(temas.every((t) => (TEMAS_INFORME as readonly string[]).includes(t))).toBe(true);
+  });
+
+  it('no inventa un tema que no está en el catálogo', () => {
+    expect(sanitizarTemas(['monitoreo', 'ganado', 'planeacion labores', 'monitoreo'])).toEqual([
+      'monitoreo',
+      'planeacion labores',
+    ]);
+  });
+});
+
 describe('sin embeddings', () => {
   it('la 134 no crea observaciones_agronomicas ni columnas vector', () => {
     const sql = readFileSync(resolve(__dirname, '../sql/migrations/134_informes_visita_agronomicos.sql'), 'utf-8');
     expect(sql).toMatch(/CREATE TABLE public\.informes_visita_snippets/);
+    expect(sql).toMatch(/temas\s+TEXT\[\]/);
+    expect(sql).toMatch(/planeacion labores/);
     expect(sql).not.toMatch(/CREATE TABLE public\.observaciones_agronomicas/);
     expect(sql).not.toMatch(/CREATE TYPE public\.tipo_observacion_agronomica/);
     expect(sql).not.toMatch(/CREATE EXTENSION/i);

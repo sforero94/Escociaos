@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, Upload, AlertTriangle, Plus } from 'lucide-react';
+import { Loader2, Upload, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,10 +14,9 @@ import { extraerCabecera } from '@/utils/informesVisita/cabecera';
 import { pedirSnippetsAlModelo } from '@/utils/informesVisita/clienteProponer';
 import { persistirInforme } from '@/utils/informesVisita/persistir';
 import { snippetsListosParaPersistir } from '@/utils/informesVisita/confirmar';
+import { proponerTemas, type TemaInforme } from '@/utils/informesVisita/temas';
 import {
-  ETIQUETAS_TIPO_SNIPPET,
   MENSAJE_SIN_TEXTO,
-  TIPOS_SNIPPET,
   type AccionDecision,
   type DecisionSnippet,
   type InformeVisitaCabecera,
@@ -26,6 +25,7 @@ import {
 } from '@/types/informesVisita';
 import { EditarSnippetDialog, useFotoUrls } from './EditarSnippetDialog';
 import { SnippetDeck } from './SnippetDeck';
+import { TemasChips } from './TemasChips';
 
 function cabeceraVacia(fecha: string): InformeVisitaCabecera {
   return {
@@ -50,11 +50,8 @@ export function SubirInformePage() {
   const [cabecera, setCabecera] = useState<InformeVisitaCabecera>(cabeceraVacia(obtenerFechaHoy()));
   const [decisiones, setDecisiones] = useState<Record<string, { accion: AccionDecision; edicion?: Partial<Omit<SnippetPropuesto, 'clave' | 'origen'>> }>>({});
   const [, setHistorial] = useState<string[]>([]);
-  const [extras, setExtras] = useState<SnippetPropuesto[]>([]);
-  const [nota, setNota] = useState('');
-  const [notaTipo, setNotaTipo] = useState('');
-  const [notaInsumo, setNotaInsumo] = useState('');
-  const [notaPlaga, setNotaPlaga] = useState('');
+  const [temas, setTemas] = useState<TemaInforme[]>([]);
+  const [notas, setNotas] = useState('');
   const [editandoClave, setEditandoClave] = useState<string | null>(null);
   const [descartadosPorCita, setDescartadosPorCita] = useState(0);
   const [errorPropuesta, setErrorPropuesta] = useState<string | null>(null);
@@ -135,7 +132,8 @@ export function SubirInformePage() {
       setCabecera(p.cabecera.fecha_visita ? p.cabecera : { ...p.cabecera, fecha_visita: hoy });
       setDecisiones({});
       setHistorial([]);
-      setExtras([]);
+      setTemas(proponerTemas(extraido.texto, snippets));
+      setNotas('');
       setDescartadosPorCita(descartados);
       if (p.sinTexto) toast.warning(MENSAJE_SIN_TEXTO);
       else if (snippets.length > 0) {
@@ -203,38 +201,19 @@ export function SubirInformePage() {
     setEditandoClave(null);
   }
 
-  function anadirConversacion() {
-    const texto = nota.trim();
-    if (!texto) return;
-    const snip: SnippetPropuesto = {
-      clave: `conv-${crypto.randomUUID()}`,
-      texto,
-      cita_word: null,
-      origen: 'conversacion',
-      tipo: notaTipo || null,
-      insumo: notaInsumo.trim() || null,
-      plaga: notaPlaga.trim() || null,
-      foto_indice: null,
-    };
-    setExtras((prev) => [...prev, snip]);
-    setNota('');
-    setNotaTipo('');
-    setNotaInsumo('');
-    setNotaPlaga('');
-  }
-
   async function handleGuardar() {
     if (!archivo || !archivoBytes || !propuesta || !listo) return;
     setGuardando(true);
     try {
-      snippetsListosParaPersistir(propuesta.snippets, listaDecisiones, extras);
+      snippetsListosParaPersistir(propuesta.snippets, listaDecisiones);
       const resultado = await persistirInforme({
         archivo,
         archivoBytes,
         cabecera,
         propuestas: propuesta.snippets,
         decisiones: listaDecisiones,
-        extras,
+        temas,
+        notas,
         fotos: propuesta.fotos,
         texto: propuesta.texto,
         sinTexto: propuesta.sinTexto,
@@ -300,7 +279,7 @@ export function SubirInformePage() {
             <p className="font-medium">No se pudieron proponer ideas</p>
             <p className="text-sm mt-1">{errorPropuesta}</p>
             <p className="text-sm mt-1">
-              El archivo y las fotos sí se leyeron. Completa la cabecera y añade notas si hace falta.
+              El archivo y las fotos sí se leyeron. Completa la cabecera, revisa los temas y añade notas si hace falta.
             </p>
           </div>
         </div>
@@ -347,47 +326,21 @@ export function SubirInformePage() {
           )}
 
           <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-            <h2 className="text-lg font-semibold">Nota de conversación</h2>
+            <h2 className="text-lg font-semibold">Temas de la visita</h2>
             <p className="text-sm text-gray-500">
-              Algo que se habló en la visita y no está en el informe.
+              El sistema marca los temas que aparecen en el Word. Confirma o cambia los chips.
             </p>
-            <Textarea value={nota} onChange={(e) => setNota(e.target.value)} rows={4} placeholder="Escribe la idea…" />
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div>
-                <Label>Tipo</Label>
-                <select
-                  className="border-input bg-input-background h-11 w-full rounded-md border px-3 text-sm"
-                  value={notaTipo}
-                  onChange={(e) => setNotaTipo(e.target.value)}
-                >
-                  <option value="">Sin tipo</option>
-                  {TIPOS_SNIPPET.map((t) => (
-                    <option key={t} value={t}>{ETIQUETAS_TIPO_SNIPPET[t]}</option>
-                  ))}
-                </select>
-              </div>
-              <CampoTexto label="Insumo" value={notaInsumo || null} onChange={(v) => setNotaInsumo(v ?? '')} />
-              <CampoTexto label="Plaga" value={notaPlaga || null} onChange={(v) => setNotaPlaga(v ?? '')} />
+            <TemasChips seleccionados={temas} onChange={setTemas} />
+            <div>
+              <Label htmlFor="notas-visita">Notas</Label>
+              <Textarea
+                id="notas-visita"
+                value={notas}
+                onChange={(e) => setNotas(e.target.value)}
+                rows={4}
+                placeholder="Algo que se habló en la visita y no está en el informe."
+              />
             </div>
-            <Button type="button" variant="outline" onClick={anadirConversacion} disabled={!nota.trim()}>
-              <Plus className="w-4 h-4 mr-1" /> Añadir nota
-            </Button>
-            {extras.length > 0 && (
-              <ul className="space-y-2 text-sm">
-                {extras.map((ex) => (
-                  <li key={ex.clave} className="rounded-lg border border-border p-3">
-                    {ex.texto}
-                    <button
-                      type="button"
-                      className="block mt-1 text-xs text-red-700"
-                      onClick={() => setExtras((prev) => prev.filter((e) => e.clave !== ex.clave))}
-                    >
-                      Quitar
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
 
           <div className="flex gap-3">

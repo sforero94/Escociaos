@@ -10,9 +10,10 @@ No hay embeddings ni pgvector: FTS español.
 - El modelo propone snippets. Cada snippet de origen `informe` necesita
   `cita_word` literal en el Word; si no, se descarta. Un chip `insumo` que no
   aparece en texto/cita también se descarta.
-- El humano confirma / edita / ignora (swipe) **antes** de persistir.
+-   El humano confirma / edita / ignora (swipe) **antes** de persistir.
   `snippetsListosParaPersistir` lanza si queda alguna propuesta sin decidir.
-  Se puede añadir una nota de `origen = conversacion` que no estaba en el Word.
+  Temas de visita (chips de catálogo fijo) y un único campo `notas` viven en
+  `informes_visita`. La UI ya no crea snippets de `origen = conversacion`.
 - Sin texto extraíble: se guarda el archivo y se muestra «sin texto para extraer».
   Cero ideas inventadas.
 - Chips `tipo` / `insumo` / `plaga` son pistas, no un formulario de 69 campos.

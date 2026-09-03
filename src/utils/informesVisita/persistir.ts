@@ -7,6 +7,7 @@ import {
   type SnippetPropuesto,
 } from '@/types/informesVisita';
 import { snippetsListosParaPersistir } from './confirmar';
+import { sanitizarTemas, type TemaInforme } from './temas';
 
 export interface PersistirInformeInput {
   archivo: File;
@@ -14,7 +15,8 @@ export interface PersistirInformeInput {
   cabecera: InformeVisitaCabecera;
   propuestas: SnippetPropuesto[];
   decisiones: DecisionSnippet[];
-  extras: SnippetPropuesto[];
+  temas: TemaInforme[];
+  notas: string;
   fotos: FotoExtraida[];
   texto: string;
   sinTexto: boolean;
@@ -31,11 +33,13 @@ function nombreSeguro(nombre: string): string {
 }
 
 /**
- * Persiste cabecera + fotos + SOLO snippets confirmados o añadidos a mano.
+ * Persiste cabecera + temas + notas + fotos + SOLO snippets confirmados.
  * Si hay propuestas sin decidir, lanza y no escribe nada.
  */
 export async function persistirInforme(input: PersistirInformeInput): Promise<PersistirInformeResultado> {
-  const confirmadas = snippetsListosParaPersistir(input.propuestas, input.decisiones, input.extras);
+  const confirmadas = snippetsListosParaPersistir(input.propuestas, input.decisiones);
+  const temas = sanitizarTemas(input.temas);
+  const notas = input.notas.trim() || null;
   const informeId = crypto.randomUUID();
   const sb = getSupabase() as any;
   const archivoPath = `${informeId}/original.docx`;
@@ -73,6 +77,8 @@ export async function persistirInforme(input: PersistirInformeInput): Promise<Pe
     fenologia: input.cabecera.fenologia,
     materia_seca: input.cabecera.materia_seca,
     proyeccion_cosecha: input.cabecera.proyeccion_cosecha,
+    temas,
+    notas,
     archivo_path: archivoPath,
     archivo_nombre: input.archivo.name,
     texto_extraido: input.sinTexto ? null : (input.texto || null),

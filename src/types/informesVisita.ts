@@ -84,6 +84,8 @@ export interface InformeVisitaRow {
   fenologia: string | null;
   materia_seca: string | null;
   proyeccion_cosecha: string | null;
+  temas: string[];
+  notas: string | null;
   archivo_path: string;
   archivo_nombre: string;
   texto_extraido: string | null;

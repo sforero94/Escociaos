@@ -9,8 +9,8 @@
 --
 -- Un .docx entra: archivo e imágenes en Storage, texto extraído, cabecera
 -- de visita. Un modelo propone snippets; el humano confirma / edita /
--- ignora (swipe) ANTES de persistir. Puede añadir una nota de conversación
--- que no estaba en el informe (origen = conversacion).
+-- ignora (swipe) ANTES de persistir. Temas de visita (chips, catálogo
+-- fijo) y un único campo notas viven en la cabecera, no en snippets.
 --
 -- Numerada 134: el máximo aplicado en el repo es 133. Esta 134 NO se
 -- aplica desde este agente. Schema/UI/tests only. Cero escrituras a
@@ -64,12 +64,17 @@ CREATE TABLE public.informes_visita (
   fenologia            TEXT,
   materia_seca         TEXT,
   proyeccion_cosecha   TEXT,
+  temas                TEXT[] NOT NULL DEFAULT '{}',
+  notas                TEXT,
   archivo_path         TEXT NOT NULL,
   archivo_nombre       TEXT NOT NULL,
   texto_extraido       TEXT,
   sin_texto            BOOLEAN NOT NULL DEFAULT false,
   texto_busqueda       tsvector GENERATED ALWAYS AS (
-                         to_tsvector('spanish', coalesce(texto_extraido, ''))
+                         to_tsvector(
+                           'spanish',
+                           coalesce(texto_extraido, '') || ' ' || coalesce(notas, '')
+                         )
                        ) STORED,
   created_by           UUID REFERENCES public.usuarios(id),
   created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -77,16 +82,31 @@ CREATE TABLE public.informes_visita (
   CONSTRAINT informes_visita_sin_texto_coherente CHECK (
     (sin_texto = true AND texto_extraido IS NULL)
     OR (sin_texto = false)
+  ),
+  CONSTRAINT informes_visita_temas_catalogo CHECK (
+    temas <@ ARRAY[
+      'fertilización',
+      'fumigación',
+      'inventario',
+      'monitoreo',
+      'planeacion labores',
+      'observaciones',
+      'alertas',
+      'ideas'
+    ]::text[]
   )
 );
 
 COMMENT ON TABLE public.informes_visita IS
   'Cabecera + evidencia de un informe de visita agronómica (.docx). '
-  'Distinto de rondas_monitoreo. texto_busqueda es FTS español sobre el Word. '
-  'Las ideas confirmadas viven en informes_visita_snippets. Sin embeddings.';
+  'Distinto de rondas_monitoreo. temas = chips de visita confirmados por el '
+  'humano. notas = un solo campo abierto. texto_busqueda es FTS español sobre '
+  'el Word y las notas. Las ideas confirmadas viven en informes_visita_snippets. '
+  'Sin embeddings.';
 
 CREATE INDEX informes_visita_fecha_idx ON public.informes_visita (fecha_visita DESC);
 CREATE INDEX informes_visita_texto_busqueda_idx ON public.informes_visita USING GIN (texto_busqueda);
+CREATE INDEX informes_visita_temas_idx ON public.informes_visita USING GIN (temas);
 
 CREATE TABLE public.informes_visita_fotos (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -124,9 +144,10 @@ CREATE TABLE public.informes_visita_snippets (
 
 COMMENT ON TABLE public.informes_visita_snippets IS
   'Ideas confirmadas de una visita. Una idea por fila, no MECE. origen '
-  'informe = salió del Word (cita_word es el ancla). origen conversacion = '
-  'la anotó un humano después. Chips tipo/insumo/plaga son pistas, no un '
-  'esquema rígido. FTS español en texto_busqueda. Sin embeddings.';
+  'informe = salió del Word (cita_word es el ancla). origen conversacion queda '
+  'en el CHECK por si hay historia; la UI ya no escribe notas ahí. Chips '
+  'tipo/insumo/plaga son pistas del Word, no un esquema rígido. FTS español '
+  'en texto_busqueda. Sin embeddings.';
 
 CREATE INDEX informes_visita_snippets_informe_idx ON public.informes_visita_snippets (informe_id);
 CREATE INDEX informes_visita_snippets_texto_idx ON public.informes_visita_snippets USING GIN (texto_busqueda);
@@ -269,6 +290,15 @@ BEGIN
       AND indexname = 'informes_visita_snippets_texto_idx'
   ) THEN
     RAISE EXCEPTION '134 ABORTADA post: falta el índice GIN de FTS de snippets.';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'informes_visita'
+      AND column_name = 'temas'
+  ) THEN
+    RAISE EXCEPTION '134 ABORTADA post: falta informes_visita.temas.';
   END IF;
 
   SELECT has_table_privilege('anon', 'public.informes_visita', 'SELECT') INTO v_anon_select;
