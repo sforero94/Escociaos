@@ -23,10 +23,12 @@ No hay embeddings ni pgvector: FTS español.
   pocos hits, rellena con la ventana de visitas recientes (`ventana_completa`).
   No mezcla esta fuente con rondas de monitoreo. No inventa insumos.
 
-## Tablas (migración 134, **sin aplicar**)
+## Tablas (migraciones 134–136, **aplicadas**)
 
 `informes_visita`, `informes_visita_fotos`, `informes_visita_snippets`.
-Bucket privado `informes-visita`.
+Bucket privado `informes-visita`. Chips en `informes_visita_snippets.temas`
+(la 136). La 134 que corrió dejó `temas`/`notas` en la cabecera; no se re-ejecuta.
+La 135 agregó la columna con CHECK sin tildes; la 136 lo corrige.
 
 ## Archivos
 
@@ -36,6 +38,6 @@ Bucket privado `informes-visita`.
   same handler inside `make-server-1ccce916`. The browser calls the
   standalone slug. `verify_jwt = false`; the handler checks JWT +
   Administrador/Gerencia. Propose does not write DB, so that deploy is
-  safe without migration 134. Persist still needs 134.
+  safe without the tables. Persist needs 134–136 (applied 2026-09-03).
 - Tests: `src/__tests__/informesVisitaExtract.test.ts` (fixture sintético; nunca
   el Word real de Salazar)

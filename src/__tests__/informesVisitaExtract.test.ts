@@ -346,6 +346,25 @@ describe('sin embeddings', () => {
     expect(sql).not.toMatch(/CREATE EXTENSION/i);
     expect(sql).not.toMatch(/\bvector\s*\(/i);
   });
+
+  it('la 135 agrega temas al snippet (catálogo sin tildes; la 136 lo corrige)', () => {
+    const sql = readFileSync(resolve(__dirname, '../sql/migrations/135_snippets_temas_por_nota.sql'), 'utf-8');
+    expect(sql).toMatch(/ADD COLUMN temas/);
+    expect(sql).toMatch(/informes_visita_snippets_temas_catalogo/);
+    expect(sql).toMatch(/fertilizacion/);
+    expect(sql).not.toMatch(/CREATE EXTENSION/i);
+    expect(sql).not.toMatch(/\bvector\s*\(/i);
+  });
+
+  it('la 136 pone tildes, FTS IMMUTABLE y quita temas de la cabecera', () => {
+    const sql = readFileSync(resolve(__dirname, '../sql/migrations/136_snippets_temas_catalogo_y_fts.sql'), 'utf-8');
+    expect(sql).toMatch(/fn_informes_visita_snippet_fts/);
+    expect(sql).toMatch(/fertilización/);
+    expect(sql).toMatch(/DROP COLUMN IF EXISTS temas/);
+    expect(sql).toMatch(/DROP COLUMN IF EXISTS notas/);
+    expect(sql).not.toMatch(/CREATE EXTENSION/i);
+    expect(sql).not.toMatch(/\bvector\s*\(/i);
+  });
 });
 
 describe('extraerTextoDeDocumentXml', () => {
