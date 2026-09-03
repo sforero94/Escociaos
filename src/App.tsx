@@ -34,6 +34,9 @@ const RegistrosMonitoreo = lazy(() => import('./components/monitoreo/RegistrosMo
 const CargaMasiva = lazy(() => import('./components/monitoreo/CargaMasiva').then(m => ({ default: m.CargaMasiva })));
 const CatalogoPlagas = lazy(() => import('./components/monitoreo/CatalogoPlagas').then(m => ({ default: m.CatalogoPlagas })));
 const ConfigApiarios = lazy(() => import('./components/monitoreo/ConfigApiarios').then(m => ({ default: m.ConfigApiarios })));
+const InformeDetallePage = lazy(() => import('./components/informesVisita/InformeDetallePage').then(m => ({ default: m.InformeDetallePage })));
+const InformesVisitaPage = lazy(() => import('./components/informesVisita/InformesVisitaPage').then(m => ({ default: m.InformesVisitaPage })));
+const SubirInformePage = lazy(() => import('./components/informesVisita/SubirInformePage').then(m => ({ default: m.SubirInformePage })));
 const ClimaDashboard = lazy(() => import('./components/clima/ClimaDashboard').then(m => ({ default: m.ClimaDashboard })));
 const ClimaHistorico = lazy(() => import('./components/clima/ClimaHistorico').then(m => ({ default: m.ClimaHistorico })));
 const ConfiguracionDashboard = lazy(() => import('./components/configuracion/ConfiguracionDashboard').then(m => ({ default: m.ConfiguracionDashboard })));
@@ -122,6 +125,13 @@ function LayoutRoutes() {
             <Route path="monitoreo/carga-masiva" element={<CargaMasiva />} />
             <Route path="monitoreo/catalogo" element={<CatalogoPlagas />} />
             <Route path="monitoreo/apiarios" element={<ConfigApiarios />} />
+
+            {/* Informes de visita agronómica (issue #189) — no es rondas_monitoreo */}
+            <Route path="informes-visita">
+              <Route index element={<InformesVisitaPage />} />
+              <Route path="nuevo" element={<SubirInformePage />} />
+              <Route path=":id" element={<InformeDetallePage />} />
+            </Route>
 
             {/* Clima */}
             <Route path="clima" element={<ClimaDashboard />} />

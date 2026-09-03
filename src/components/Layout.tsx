@@ -17,6 +17,7 @@ import {
   FileText,
   PanelLeftClose,
   PanelLeftOpen,
+  BookOpen,
   Cloud,
   Beef,
   ClipboardCheck,
@@ -104,6 +105,7 @@ const NAV: NavEntry[] = [
     id: 'aguacate', label: 'Aguacate', icon: AvocadoIcon, modulo: 'aguacate', children: [
       { id: 'labores', label: 'Labores', icon: Wrench, path: '/labores' },
       { id: 'monitoreo', label: 'Monitoreo', icon: Activity, path: '/monitoreo' },
+      { id: 'informes-visita', label: 'Informes visita', icon: BookOpen, path: '/informes-visita' },
       { id: 'aplicaciones', label: 'Aplicaciones', icon: Sprout, path: '/aplicaciones' },
       { id: 'inventario', label: 'Inventario', icon: Package, path: '/inventario/dashboard' },
       { id: 'clima', label: 'Clima', icon: Cloud, path: '/clima' },

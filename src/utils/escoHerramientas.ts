@@ -14,7 +14,7 @@
 import { formatNumber } from '@/utils/format';
 
 /**
- * Las 33 herramientas de Esco, en el lenguaje del dominio.
+ * Las 34 herramientas de Esco, en el lenguaje del dominio.
  *
  * Cada etiqueta nombra LA FUENTE consultada, no la accion ("Gastos e ingresos", no
  * "Consultando gastos"): el encabezado de la traza ya dice que se esta consultando, y
@@ -28,6 +28,7 @@ export const ETIQUETAS_HERRAMIENTAS: Record<string, string> = {
 
   // Monitoreo
   get_monitoring_data: 'Monitoreo de plagas',
+  get_informes_visita: 'Informes de visita agronómica',
   get_pest_risk_priorizacion: 'Priorización de scouting',
   get_conductivity_data: 'Conductividad del suelo',
   get_beehive_data: 'Colmenas y apiarios',
