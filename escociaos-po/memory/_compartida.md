@@ -858,3 +858,69 @@ detector ciego.**
 Hay que usar las columnas expandidas **`"date:Detectado:start"`** (idem `:end`, `:is_datetime`). Y al crear/actualizar,
 **un espacio de mas en el nombre de una propiedad (`"Impacto "`) aborta el create entero** con validation_error.
 [corrida: 2026-08-31-lunes]
+
+---
+
+## Corrida 2026-09-03-jueves — estado de la operacion
+- Roster de 4 (pulso operativo). Modo: **full write · Notion OPERATIVO · preflight sin un solo prompt de permiso.**
+- Resultado: **4 hallazgos filados** (3 P2 + 1 P3), **2 P1 CERRADOS**, **4 hallazgos actualizados con
+  evidencia nueva**, **1 PR verde abierto** (#191). Backlog 17 -> 19.
+- **Dead-man: OK.** Ultima corrida 2026-08-31-lunes, hueco de 3 dias.
+- **Cero verificaciones adversariales, y es correcto**: ningun hallazgo nuevo llego a P0/P1, asi que la
+  compuerta del Phase 2 no aplicaba. **Dos agentes se auto-refutaron antes de filar** (los duplicados de
+  `registros_trabajo` y las acciones recomendadas rancias), que es la compuerta funcionando mas barato.
+- **Migration drift: LIMPIO EN LA BASE, SUCIO EN LA DOCUMENTACION, otra vez.** Cero fusionadas-sin-aplicar
+  y cero aplicadas-sin-fusionar. La 133 se aplico **5 min 24 s** despues de su merge, asi que el reloj de
+  7 dias nunca arranco. Pero el `CLAUDE.md` raiz sigue diciendo «SIN APLICAR» de la 120 **y** de la 133.
+
+## LA LECCION DE ESTA CORRIDA: el jueves justifico su existencia por segunda vez seguida
+El hallazgo del destinatario `"null"` de Telegram nacio el **2026-09-01** y se encontro el **09-03**. Sin
+la corrida del jueves habria vivido hasta el lunes 09-07, con el ciclo mensual de la ronda de inventario
+detenido seis dias en vez de dos. **Ese es exactamente el caso de uso del tercer dia**, y es el segundo
+jueves consecutivo que lo demuestra.
+
+- **Los tres agentes vieron el MISMO sintoma y ninguno solo tenia el defecto.** Infra lo anoto como
+  «nadie ha abierto la ronda de septiembre, es adopcion, no es mio»; Release lo anoto como urgencia
+  subida del hallazgo de segregacion de funciones; Bug Triage encontro la causa en el codigo. **El
+  sintoma «una accion esperada no ocurrio» se reparte entre especialidades y cada una lo archiva como
+  ajeno.** Regla: cuando dos agentes reportan la misma ausencia desde angulos distintos, eso NO es
+  ruido duplicado — es una causa comun sin dueno, y hay que perseguirla.
+- **Un fallo silencioso no deja error: deja una accion que no ocurrio.** No hubo ni una linea de error
+  en 24 h de logs, los 6 crones dijeron `succeeded`, el endpoint devolvio 200 y `rondas_avisos` registro
+  el aviso como enviado. Todo verde, y el recordatorio no le llego a nadie. **Buscar la fila de efecto
+  aguas abajo, no el error aguas arriba.**
+
+## Racha del jueves (regla de auto-poda) — actualizada
+| Corrida | Hallazgos nuevos |
+|---|---|
+| 2026-08-06-jueves | 5 (racha de ceros: **0**) |
+| 2026-08-13-jueves | 0 filados — la Routine SI disparo; murio en prompts de permiso |
+| 2026-08-20-jueves | 6 (3 P1 + 3 P2). Racha de ceros: 0 |
+| 2026-08-27-jueves | 5 filados + 3 diferidos por el cap. Racha de ceros: 0 |
+| **2026-09-03-jueves** | **4 filados (3 P2 + 1 P3) + 2 P1 cerrados. Racha de ceros: 0** |
+La auto-poda **no aplica**: cinco jueves seguidos con hallazgos.
+
+## Preflight de tools — resultado 2026-09-03
+| Tool | Resultado |
+|---|---|
+| `execute_sql` (solo lectura) | OK — `supabase_read_only_user`, `default_transaction_read_only = on` |
+| `list_edge_functions`, `get_edge_function`, `query_logs` | OK |
+| Notion (`notion-fetch`, `notion-query-data-sources`, `notion-create-pages`, `notion-update-page`) | OK |
+| github (`list_pull_requests`, `pull_request_read`, `create_pull_request`) | OK |
+| `COMPOSIO_MULTI_EXECUTE_TOOL` | OK — cuarta corrida sana |
+| `Supabase_Escritura` / `apply_migration` | **NO PROBADO — dormante a proposito.** Corrida desatendida: no hay nadie que pueda dar un go |
+
+**Trampa de Notion, nueva esta corrida:** `notion-update-page` toma `page_id`, `command` y `properties`
+**al nivel superior**, NO envueltos en un objeto `data` como si hace `notion-query-data-sources`. Los dos
+tools viven en el mismo conector y no comparten la forma. Costo un round-trip.
+
+## LA REGLA DEL ARBOL LOCAL SE GANO EL SITIO POR TERCERA VEZ
+El checkout arranco con `HEAD = origin/main = 297a230` (correcto) pero la **rama local `main` clavada en
+`f98f83a`, 106 commits atras**. Identica a la trampa del 2026-08-27 y del 08-20.
+- **Lo que la evito esta vez**: `git rev-parse HEAD main origin/main` — los TRES — como primer comando,
+  y corregir **antes** de despachar.
+- **Y la correccion barata que conviene fijar: `git branch -f main origin/main`, NO `git reset --hard`.**
+  Con HEAD desprendido, `reset --hard` mueve HEAD y no arregla la rama; `branch -f` mueve el ref **sin
+  tocar el arbol de trabajo**, asi que es seguro aunque hubiera lectores fuera. Es la unica forma que
+  no puede reproducir el incidente del 08-27, donde fue la propia rutina de Phase 0 la que rebobino el
+  arbol bajo los agentes.

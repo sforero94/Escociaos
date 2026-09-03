@@ -332,3 +332,39 @@ prompt del agente en cada corrida.
 - **`net._http_response` retiene ~HORAS, no dias.** Buscar ahi la respuesta de un cron de hace 2 dias no devuelve nada, y **eso NO es evidencia de que no corriera**. Para un job diario la ventana util es el mismo dia; si no, ir a `function_logs` por prefijo o al efecto en tablas de dominio.
 - El cron 127 `ronda-inventario-tick` (jobid 9) **si disparo y el POST si llego**: `--> POST /make-server-1ccce916/inventario/ronda/tick 200 2s` el 2026-08-30T12:00:03Z. **Ese 200 es la prueba de que el modulo SI estuvo desplegado y luego se perdio** — el deploy regresivo fue 8 h despues.
 - **NO se filo** (deliberadamente): `/usuarios/crear` devuelve 500 en vez de 409 ante correo duplicado (P3, 1 ocurrencia en 24 h, doble clic). Cortado por el cupo de 12. Arreglo: capturar `error.code === 'email_exists'` en `usuarios.tsx` y deshabilitar el submit en vuelo.
+
+
+## Corrida 2026-09-03-jueves
+
+### Estados aceptados
+- **HASH VIGENTE VERIFICADO POR CONTENIDO: `487359f9568e1a5d353fd78ede4091a76d54a53cc5445eba7a341c591d5547e0`
+  (v238, 2026-09-01T01:53:38.221Z, SANA).** Reemplaza al `4fba67c3...` de la v236 (regresiva) y al
+  `3469d16c...` de la v223. El bundle es byte-identico al arbol de despliegue de `297a230`.
+- **El P1 de la v236 quedo CERRADO en 4 llamadas.** La regresion la arreglo un despliegue del
+  2026-09-01 01:53Z, **10 horas antes** del tick de arranque de septiembre (12:00Z), asi que el dano
+  que el hallazgo predecia NO ocurrio. `rondas_avisos` tiene `recordatorio:2026-09` con
+  `enviado_en = 2026-09-01T12:00:03Z`.
+
+### Navegacion
+- **EL CONTEO DE FICHEROS ES EL PRIMER PASO, NO EL TERCERO.** `get_edge_function` -> volcar a disco ->
+  `find | wc -l` de los dos lados. 71 contra 71 alcanzables cerro la pregunta antes de elegir un solo
+  identificador. Con la v236 daba 58 contra 71. **Cuesta una llamada y no exige acertar el marcador.**
+- **Volcar el bundle a disco y diffear TODO el arbol es mas barato que el metodo de los tres testigos,
+  y prueba mas.** Un `python3` que escribe los 71 ficheros, `comm` de las dos listas y un bucle de
+  `diff -q`: da a la vez los ausentes, los sobrantes y los que difieren. Los tres testigos siguen
+  valiendo cuando solo se sospecha de UN arreglo; para «se perdio un modulo entero», esto.
+- **`rondas_avisos.clave` es la prueba conductual del tick de inventario** — formato
+  `recordatorio:AAAA-MM`, `mes_omitido:AAAA-MM`, `reporte_cierre:<ronda_id>`. Una fila ahi prueba que
+  el tick **hizo algo**, cosa que `cron.job_run_details` ('succeeded' siempre) no puede.
+  Columnas reales: `clave, ronda_id, enviado_en, detalle` — **no hay columna `tipo`**.
+- `rondas_inventario` se identifica por **`periodo`**, no por `mes`/`anio`.
+
+### Baselines
+| Que | Valor | Corrida |
+|---|---|---|
+| Infra | Edge **v238** (2026-09-01T01:53:38Z), **71/71 ficheros, byte-identica a `297a230`**. Vercel 4/4 READY, alias PROMOTED en `297a230` = HEAD, build **28,3 s**. **6 pg_cron activos, 0 fallos en 3 dias**; ronda-inventario-tick (jobid 9) 200 el 09-02. Errores de edge en 24 h: **0 no-200**. `clima_lecturas` 289 filas, **1 min de atraso**; 288/288 los dias 08-30 a 09-02, los cuatro `ok` | 2026-09-03-jueves |
+
+### Refutaciones
+| Fingerprint | Afirmacion | Por que murio | Corrida |
+|---|---|---|---|
+| `infra/edge/v236-regresiva-vigente` | La superficie servidor de la ronda de inventario sigue ausente y el arranque de septiembre se rompe | La v238 la restauro el 2026-09-01 01:53Z. Los 71 ficheros del bundle son byte-identicos al arbol de HEAD, `index.ts` incluido con su ruta `/inventario/ronda/tick`, y el aviso `recordatorio:2026-09` se escribio a las 12:00:03Z de ese mismo dia | 2026-09-03-jueves |

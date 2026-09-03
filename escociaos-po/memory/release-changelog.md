@@ -286,3 +286,44 @@ hace lo que se diseno para hacer.
   defendible es el estado actual: un entregable obligatorio que lleva un mes sin producirse y que ninguna corrida
   reporto como faltante. **La entrada de changelog de esta semana esta escrita dentro de
   `escociaos-po/reports/2026-08-31-lunes.md`, lista para migrar si se decide crearlo.**
+
+
+## Corrida 2026-09-03-jueves
+
+### Baselines
+| Que | Valor |
+|---|---|
+| Estado de despliegue | HEAD `297a230` · edge **v238** (2026-09-01T01:53:38Z), hash **`487359f9568e1a5d353fd78ede4091a76d54a53cc5445eba7a341c591d5547e0`** — GUARDADO, es el nuevo punto de comparacion para el atajo de reversion · migraciones **001-133 todas aplicadas**, cero fusionadas-sin-aplicar y cero aplicadas-sin-fusionar · frontend sin nada que desplegar (0 ficheros de `src/` en la ventana) |
+| Backlog | **17 abiertos** al inicio; 2 cerrados y 4 nuevos -> **19** al cierre. Mas viejo: 31 dias. **0 estancados (>60 dias)** |
+| Cadencia (mensual, 4 semanas 08-06 -> 09-03) | 28,5 commits/sem · 17,3 aterrizajes/sem · fix share **81,0 %** (51 fix / 12 feat), sube desde 53,5 % y 31,8 %. **Primera ventana mensual completa desde el 08-10 y aun asi sesgada**: 30 de 114 son `docs` y el pico del 28-ago aporta la mayoria de los fix, que son iteracion sobre codigo naciente, no regresiones. Handoff a Code Quality con esa advertencia |
+| Ventana propia | 5 commits en 2,5 dias. **Cero ficheros de `src/`.** Una semana silenciosa, y eso es informacion |
+
+### Navegacion (nuevo)
+- **La prueba de despliegue mas fuerte no es el hash ni el grep: es una FILA DE DOMINIO escrita por el
+  codigo desplegado.** El cierre del P1 de la v236 se apoyo en `rondas_avisos.clave =
+  'recordatorio:2026-09'`, `enviado_en 2026-09-01 12:00:03Z`, tres segundos despues del cron. Ninguna
+  objecion de «artefacto de bundler» sobrevive a eso. **Cuando el codigo desplegado tiene un cron,
+  buscar primero la fila que ese cron escribe** — sale mas barato que descargar 1,5 MB.
+- **El agujero de un despliegue regresivo se ve como un HUECO en la tabla de efectos, no como un error.**
+  `rondas_avisos` tiene filas el 08-29, 08-30 y 09-01 y **ninguna el 08-31**, que es exactamente la
+  ventana de la v236 (desplegada 08-30 20:49Z, corregida 09-01 01:53Z). El `cron.job_run_details` del
+  08-31 dice `succeeded` igual. **Un hueco de un dia entre filas regulares es la firma de un bundle
+  regresivo, y se lee sin tocar el bundle.**
+- **La sonda de ruta anonima quedo probada en las dos direcciones el mismo dia**: 401 en
+  `/inventario/ronda/tick` y en `/hato/alertas/tick` (control positivo), 404 en
+  `/inventario/ronda/no-existe-control` (control negativo). **Un control negativo con el prefijo REAL
+  vale mas que uno con prefijo inventado** — descarta que el 404 venga del enrutador de nivel superior.
+
+### Estados aceptados
+- **La migracion 133 se aplico 5 min 24 s despues de su merge** (merge `297a230` 2026-09-01T02:18:11Z,
+  ledger `20260901022335`). El reloj de 7 dias de la constitucion **nunca arranco**. No re-abrir como
+  deriva: el `CLAUDE.md:341` que dice «SIN APLICAR» es documentacion rancia, no estado real.
+- **`rondas_inventario` con una sola fila `cerrada` no refuta que el tick funcione.** El tick manda el
+  recordatorio; la ronda la abre un humano por Telegram. Verificar el efecto en `rondas_avisos`.
+- **`supabase_migrations.schema_migrations` no tiene columna `inserted_at`.** La marca de tiempo esta
+  DENTRO de `version` (`AAAAMMDDHHMMSS`).
+
+### Pendiente
+- `escociaos-po/CHANGELOG.md` sigue sin existir; **filado esta corrida** como P3 `decision` con las tres
+  salidas ya registradas y recomendacion explicita por la (b), `escociaos-po/reports/CHANGELOG.md`.
+  **No inventar una cuarta.** La entrada de changelog de esta semana esta en el reporte de la corrida.

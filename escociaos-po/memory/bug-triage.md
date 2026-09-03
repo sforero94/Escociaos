@@ -327,3 +327,39 @@ vivo divergen. [corrida: 2026-08-31-lunes]
   inventario consumido sin nada por comprar. Es `clase: decision` para Santiago, no un PR.
 - La cabecera del fichero esta rancia: dice «24 reportes ... hasta la semana 31» y hoy son **27 hasta la S34**; su
   propio bloque SQL citado ya no reproduce el resultado que afirma.
+
+
+## Corrida 2026-09-03-jueves
+
+### Estados aceptados
+- **Migraciones 120 y 133 estan las DOS APLICADAS** — 120 el 2026-08-28 (ledger `20260828142056`),
+  133 el 2026-09-01 (`20260901022335`, cinco minutos despues de fusionarse el PR #188). Los dos
+  barridos always-true (DELETE/ALL y INSERT/UPDATE) devuelven **0 filas**, y `anon` no tiene grant de
+  escritura en las 20 tablas. El `CLAUDE.md` raiz, lineas 312 y 341, sigue diciendo «ESCRITA,
+  FUSIONADA Y SIN APLICAR» de las dos. **No re-abrir el P1 de ESCO-58.**
+
+### Navegacion (nuevo)
+- **TRAMPA: un suscriptor de Telegram puede existir ANTES que su `telegram_id`.**
+  `telegram_usuarios.telegram_id` es NULL hasta que la persona canjea su codigo de vinculacion, y las
+  filas de `telegram_alertas_suscripciones` se crean antes. Cualquier resolvedor que haga
+  `String(usuario.telegram_id)` filtrando solo por `activo` fabrica el destinatario literal `"null"`.
+  Guardado ahora por `src/__tests__/telegramDestinatarioVinculadoGuard.test.ts` sobre 6 ficheros.
+  **Al auditar despacho de alertas, contar TRES resolvedores, no uno.**
+- **El `rondas_avisos` claim-before-send vuelve PERMANENTE a un destinatario fantasma, no transitorio.**
+  La guarda de lista vacia es el unico camino de reintento; cualquier cosa que mantenga la lista no
+  vacia quema la clave para siempre. Una alerta perdida asi no deja error — solo la accion que falta.
+- **Nombres de columna que costaron round-trips**: `rondas_avisos` es (`clave`, `ronda_id`,
+  `enviado_en`, `detalle`) — no `tipo`. `telegram_usuarios` usa `nombre_display` y `activo`, no
+  `nombre`/`estado`. `telegram_alertas_suscripciones` se une por `alerta_clave` (texto), **no** por un
+  `alerta_id` — `alertas_catalogo` no tiene `id`, su PK es `clave`. `rondas_inventario` tiene
+  `abierta_por_telegram`, no `abierta_por_telegram_id`. `acciones_corridas` no tiene `created_at`.
+
+### Baselines
+- **`main@297a230`**: `npx vitest run` 154 ficheros / 3.386 tests verde · lint 0 errores / 900
+  warnings · `tsc --noEmit` limpio. Con el PR #191: **155 / 3.393**, 900 warnings, tsc limpio.
+- **Senal de silencio 2026-09-03**: cero lineas de error en `function_logs` y `postgres_logs` en 24 h;
+  los 6 pg_cron `succeeded` desde el lunes; clima con la ultima lectura a 27 s. Ronda de inventario:
+  1 ronda (`cerrada`), 1 excepcion (`resuelta_con_captura`).
+- **`BUG_REPORT.md` sin cambios desde el lunes.** Issues 1/2/4/5 cerrados, 6 no reproducible, **3b
+  sigue abierto** (`src/utils/fetchDatosReporteSemanal.ts:512-524`, inventario consumido valorado en 0
+  — `clase: decision`, decision de Santiago, no un PR). La cabecera del fichero sigue rancia.

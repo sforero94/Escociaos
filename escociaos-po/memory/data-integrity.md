@@ -364,3 +364,46 @@ prompt del agente en cada corrida.
   historico de ~10 por semana. No es defecto de datos; si sigue plano el jueves, es senal para Usage Analytics.
 - **NO se filo por el cupo de 12**: la fila historica de `rondas_excepciones` dice 3 donde la realidad fue 150 kg
   (P3, `datos`). Su SQL exacta quedo dentro del hallazgo de «sin unidad de medida», PARTE B.
+
+
+## Corrida 2026-09-03-jueves
+
+### Baselines (deltas vs 2026-08-31-lunes)
+| Que | Valor |
+|---|---|
+| Dominio | hato_animales 179 · eventos 767 (=, ultimo 08-24) · chequeos 33 / chequeo_vacas 1.479 (**ultimo 2026-07-09, 56 dias**) · pesajes 601 (=, ultima fecha 2026-08-26) · quincenal 83 (+1) · alertas 66 (+1, generada hoy) · hato_correcciones 11 (+1) · **globalgap_correcciones 115 (+64)** · monitoreos 4.244 (=) / 30 rondas · productos 341 · mov_inventario 161 (=) · mov_diarios 166 (+2) / mdp 797 (+8) · registros_trabajo 2.801 (+14 neto, 45 creados / 31 borrados) · aplicaciones 20 (2 abiertas) · compras 32 (=) · fin_gastos 4.479 (+2) · fin_ingresos 233 (+1) · gan_movimientos 53 (=) · clima_resumen_diario 1.923 · acciones_corridas 19 / acciones_recomendadas 91 · logs_auditoria 0 |
+| Integridad | 0 huerfanos en TODAS las relaciones probadas · 0 duplicados (app,lote,fecha) · 0 stock negativo · 0 fechas futuras · 0 chapetas duplicadas · 0 provisionales · 0 pesajes duplicados. Sin cambio: 86 monitoreos con ronda_id NULL · 1 md fuera de ventana · 2 eventos post-salida · 1 chequeo vacio |
+| Inventario | Libro vs stock: **2 divergencias identicas** (Naturboro -20,00 · TecniFeed Boro +18,69). Proyeccion al cierre de «Drench agosto» (23 md, 08-04 -> 09-01): los 4 productos POSITIVOS, minimo 0,95 L |
+| Clima | Sync SANO (ultima lectura 1 min, 288 en 24h, 0 duplicados). **2026-08-28 sigue ausente tras 6 reintentos diarios**; lecturas_count>288 sigue en 08-27 (349) y 08-29 (311) y **NO se propago** |
+
+### Estados aceptados
+- **Los 64 `globalgap_correcciones` del 2026-09-01 son RECAPTURA, no perdida.** 6 md + 20 mdp + 34 mdt
+  borrados 13:13-14:32 por el usuario 6b80a109 sobre «Drench agosto», y **los conteos recapturados
+  coinciden EXACTO** (20 mdp / 34 mdt para las 5 fechas del lote de las 13:00). Mismo patron ya
+  ledgereado del 2026-08-26. **Metodo para verificar una recaptura: sumar np/nt de los md nuevos por
+  fecha contra los conteos borrados en `globalgap_correcciones`, no confiar en el delta neto.**
+- **El motor de alertas del hato genero su primera alerta en 25 dias y es CORRECTA.** PACIENCIA #101:
+  servicio 2025-12-17 + 9 meses = parto 2026-09-17, disparada 14 dias antes, con `secado_real`
+  2026-08-11 coherente. No es alerta sobre dato rancio.
+- **`num_vacas_ordeno` NULL en `hato_produccion_quincenal` es lo NORMAL: 72 de 83 filas.** No filar.
+
+### Refutaciones
+| Fingerprint | Afirmacion | Por que murio | Corrida |
+|---|---|---|---|
+| data-integrity/labores/registros-trabajo-duplicados | Los 10 grupos duplicados de (fecha_trabajo, empleado, tarea) son doble registro de la recaptura del 09-01 | Refutada al incluir `lote_id`: **0 grupos duplicados sobre (fecha, empleado, contratista, lote, tarea) en TODA la tabla**. Los 10 son la misma persona en lotes distintos el mismo dia, que es el modelo correcto. **La clave de duplicado de `registros_trabajo` incluye `lote_id` y `tarea_id`, siempre.** Lo que SI sobrevivio, por otra via, es la suma diaria >1,0 jornal — filado aparte | 2026-09-03-jueves |
+| data-integrity/acciones/recomendadas-rancias-acumuladas | Las 83 acciones con `caducada_at IS NULL` de 18 corridas se le muestran a Gerencia | Refutada leyendo el consumidor: `useAccionesRecomendadas.ts:117-124` filtra `.eq('corrida_id', corridaVigente.id)` ademas de `.is('caducada_at', null)`. Las filas viejas nunca se renderizan | 2026-09-03-jueves |
+
+### Navegacion
+- **`fraccion_jornal` es un ENUM de texto**: para sumarlo hay que castear `fraccion_jornal::text::numeric`.
+  Un `::numeric` directo aborta.
+- **`acciones_recomendadas` NO se borra cada madrugada** pese a lo que sugiere el CLAUDE.md raiz sobre
+  la 101. Se acumula (91 filas / 19 corridas) y el aislamiento lo da `corrida_id` en el consumidor.
+- **`rondas_avisos` guarda los avisos de cadencia con `ronda_id` NULL** (`mes_omitido:2026-08`,
+  `recordatorio:2026-09`); solo `reporte_cierre:<uuid>` lo lleva. Contar avisos por `ronda_id` subestima.
+- El `content` de `net._http_response` para `clima-reintento-sin-dato` viene **NULL**, no vacio.
+
+### Cambios de vigilancia
+- **NUEVO VIGILAR — `hato_chequeos` clavado en 2026-07-09 lleva 56 dias.** Umbral fijado el 08-31: 65
+  dias; **vence el 2026-09-12.**
+- **`hato_pesajes_leche`: la sesion del miercoles 2026-09-02 aun no entra**, pero las dos anteriores se
+  capturaron juntas el 08-29 con 3 dias de retraso. **No filar antes del lunes 09-07.**
