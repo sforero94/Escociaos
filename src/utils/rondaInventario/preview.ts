@@ -229,3 +229,82 @@ export const MAX_INTENTOS_PREVIEW = 4;
 export function intentosPreviewAgotados(intentosPreview: number): boolean {
   return intentosPreview >= MAX_INTENTOS_PREVIEW;
 }
+
+// ---------------------------------------------------------------------------
+// Ventana de vigencia del borrador como destinatario de una corrección por
+// TEXTO LIBRE (ESCO-62)
+// ---------------------------------------------------------------------------
+
+/**
+ * Minutos durante los que un borrador `preview_pendiente` sigue capturando
+ * el texto libre que su autor mande a continuación (§7.3: "el texto libre
+ * que Uriel mande después ES la corrección").
+ *
+ * Existe porque esa captura NO tenía ningún límite de edad: la consulta de
+ * `obtenerTranscritoPendienteMasReciente` filtraba sólo por actor + estado,
+ * y el handler de `bot.ts` consume el mensaje (nunca cede el turno) cada vez
+ * que esa consulta devuelve una fila. Caso real, `rondas_transcritos`
+ * 98e62e81-…: una nota de las 23:29 UTC del 2026-08-28 se comió dos
+ * preguntas para Esco de las 02:15 del 29 -- **2 h 45 min después** --, las
+ * reinterpretó como correcciones, agotó `MAX_INTENTOS_PREVIEW` y dejó el
+ * hallazgo narrado en `sin_confirmar`. El propio usuario volvió a preguntar
+ * lo mismo por la web 4 min 30 s más tarde (`chat_messages`), que es la
+ * prueba de que nunca quiso corregir nada.
+ *
+ * 30 minutos es **decisión de la operación de mantenimiento, pendiente de
+ * confirmación de Santiago**: es holgadamente mayor que cualquier tiempo de
+ * confirmación observado (la única nota confirmada de la primera ronda real
+ * se resolvió en un intento) y bastante menor que las 2 h 45 min del caso
+ * que rompió.
+ *
+ * Lo que esta ventana NO hace: **no muta la fila**. El borrador sigue en
+ * `preview_pendiente`, sobrevive a un redespliegue y sigue contando como
+ * "hallazgo narrado sin confirmar" en el reporte de cierre (CA-37). Deja de
+ * INTERCEPTAR texto, nada más. Los botones [Confirmar]/[Descartar]/[Deshacer]
+ * llevan su propio `transcrito_id` en el `callback_data` y no pasan por esta
+ * ventana -- siguen funcionando con el borrador tan viejo como sea.
+ */
+export const MINUTOS_VENTANA_CORRECCION_TEXTO = 30;
+
+/**
+ * Instante ISO (UTC) a partir del cual un borrador todavía captura texto:
+ * lo que va como `.gte('created_at', …)` en la consulta del pendiente.
+ *
+ * Devuelve el `toISOString()` COMPLETO, nunca recortado a `AAAA-MM-DD` --
+ * `rondas_transcritos.created_at` es `timestamptz` y la comparación es de
+ * instantes, no de días calendario (por eso no aplica la trampa "hoy" del
+ * CLAUDE.md raíz, que es sobre recortar la fecha).
+ */
+export function limiteVentanaCorreccionTexto(ahora: Date = new Date()): string {
+  return new Date(ahora.getTime() - MINUTOS_VENTANA_CORRECCION_TEXTO * 60 * 1000).toISOString();
+}
+
+/**
+ * `true` si el borrador creado en `creadoEn` todavía está dentro de la
+ * ventana. Misma regla que `limiteVentanaCorreccionTexto`, expresada del
+ * lado del dato en vez del lado de la consulta -- el borde de los 30 min
+ * exactos es INCLUSIVO en las dos (`>=`), para que la fila que la base
+ * devuelve y la que este predicado acepta sean siempre la misma.
+ */
+export function correccionPorTextoVigente(creadoEn: string, ahora: Date = new Date()): boolean {
+  const creado = new Date(creadoEn).getTime();
+  if (Number.isNaN(creado)) return false;
+  return creado >= new Date(limiteVentanaCorreccionTexto(ahora)).getTime();
+}
+
+/**
+ * Hora de pared en Bogotá, 'HH:MM', de un instante ISO. Mismo criterio de
+ * conversión que `primerDiaMesBogota()`/`hoyBogota()` (Bogotá es UTC-5 sin
+ * horario de verano; no se usa `Intl` con timezone para no depender de la
+ * tzdata del runtime de Deno).
+ *
+ * Sólo para MOSTRAR: es lo que hace que el aviso de intercepción nombre la
+ * nota concreta ("tu nota de las 18:29") en vez de dejar al verificador
+ * adivinando cuál de sus mensajes se está reinterpretando.
+ */
+export function horaBogota(iso: string): string {
+  const bogota = new Date(new Date(iso).getTime() - 5 * 60 * 60 * 1000);
+  const hh = String(bogota.getUTCHours()).padStart(2, '0');
+  const mm = String(bogota.getUTCMinutes()).padStart(2, '0');
+  return `${hh}:${mm}`;
+}

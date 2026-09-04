@@ -29,7 +29,7 @@
 
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 import type { FilaPreview } from '../rondaInventario/preview.ts';
-import { formatearCantidad } from '../rondaInventario/preview.ts';
+import { formatearCantidad, limiteVentanaCorreccionTexto } from '../rondaInventario/preview.ts';
 import type { AlcanceItem, HallazgoParaConfirmar, ProductoFueraDeAlcance } from '../rondaInventario/resolverHallazgos.ts';
 import type { CasoExcepcion, CasoProponer, CasoSantiago } from '../rondaInventario/resolucion.ts';
 import { buscarCausaRaiz } from '../rondaInventario/causasRaiz.ts';
@@ -162,6 +162,10 @@ export interface TranscritoRondaRow {
   intentos_preview: number;
   estado: 'preview_pendiente' | 'confirmado' | 'sin_confirmar' | 'descartado';
   actor_telegram_id: string | null;
+  /** Instante de creacion del borrador. Lo consume la ventana de vigencia
+   * de `obtenerTranscritoPendienteMasReciente` y el aviso de interceptacion
+   * de `bot.ts`, que nombra la hora de la nota. */
+  created_at: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -306,16 +310,32 @@ export async function obtenerResumenExcepcionesRonda(
  * la más reciente, que es la que Uriel tiene fresca en la cabeza. Los
  * botones [Confirmar]/[Descartar]/[Deshacer] de CADA mensaje siguen
  * llevando su propio `transcrito_id` en el `callback_data` y no dependen de
- * esta función. */
+ * esta función.
+ *
+ * ACOTADO EN EL TIEMPO (ESCO-62): sólo devuelve el borrador si se creó
+ * dentro de `MINUTOS_VENTANA_CORRECCION_TEXTO` (ver `preview.ts`). Sin ese
+ * `.gte`, la consulta filtraba únicamente por actor + estado y el handler de
+ * `bot.ts` consume el mensaje siempre que devuelve fila: un borrador sin
+ * confirmar de hace horas se tragaba en silencio cada texto posterior de ese
+ * usuario. Caso real 98e62e81-…: dos preguntas para Esco de 2 h 45 min
+ * después entraron como correcciones, agotaron `MAX_INTENTOS_PREVIEW` y
+ * dejaron el hallazgo narrado en `sin_confirmar`.
+ *
+ * La fila NO se toca (CA-37): sigue `preview_pendiente`, sobrevive a un
+ * redespliegue y sigue contando como hallazgo narrado sin confirmar en el
+ * reporte de cierre. Lo único que caduca es su capacidad de INTERCEPTAR
+ * texto libre -- los botones, que llevan su `transcrito_id`, siguen
+ * funcionando por `obtenerTranscritoPorId` sin ninguna ventana. */
 export async function obtenerTranscritoPendienteMasReciente(
   supabase: SupabaseClient,
   telegramUsuarioId: string,
 ): Promise<TranscritoRondaRow | null> {
   const { data, error } = await supabase
     .from('rondas_transcritos')
-    .select('id, ronda_id, transcrito, correcciones, preview, intentos_preview, estado, actor_telegram_id')
+    .select('id, ronda_id, transcrito, correcciones, preview, intentos_preview, estado, actor_telegram_id, created_at')
     .eq('actor_telegram_id', telegramUsuarioId)
     .eq('estado', 'preview_pendiente')
+    .gte('created_at', limiteVentanaCorreccionTexto())
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -329,7 +349,7 @@ export async function obtenerTranscritoPendienteMasReciente(
 export async function obtenerTranscritoPorId(supabase: SupabaseClient, transcritoId: string): Promise<TranscritoRondaRow | null> {
   const { data, error } = await supabase
     .from('rondas_transcritos')
-    .select('id, ronda_id, transcrito, correcciones, preview, intentos_preview, estado, actor_telegram_id')
+    .select('id, ronda_id, transcrito, correcciones, preview, intentos_preview, estado, actor_telegram_id, created_at')
     .eq('id', transcritoId)
     .maybeSingle();
   if (error) {
