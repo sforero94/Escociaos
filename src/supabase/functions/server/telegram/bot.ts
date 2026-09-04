@@ -79,6 +79,7 @@ import {
   construirPreview,
   construirTextoConCorrecciones,
   formatearCantidad,
+  horaBogota,
   intentosPreviewAgotados,
   MAX_INTENTOS_PREVIEW,
   previewConfirmable,
@@ -2106,6 +2107,16 @@ function getBot(): Bot<BotContext> {
       await ctx.reply("La lectura por voz no está disponible ahora mismo. Avisa a un administrador.");
       return;
     }
+
+    // ESCO-62: la intercepcion nunca es silenciosa mientras la ventana sigue
+    // vigente. Antes, un texto cualquiera desaparecia dentro del bucle de
+    // preview sin que el verificador supiera que lo estaban leyendo como una
+    // correccion de una nota anterior -- y la unica salida ("cancelar", commit
+    // 2516b3f) exigia conocer la palabra de antemano. Ahora el mensaje nombra
+    // la nota concreta por su hora y ofrece la salida en el mismo renglon.
+    await ctx.reply(
+      `Estoy tomando esto como corrección de tu nota de las ${horaBogota(pendiente.created_at)} -- escribe cancelar si no era eso.`,
+    );
 
     await ctx.replyWithChatAction("typing");
 
