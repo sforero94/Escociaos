@@ -757,6 +757,11 @@ export async function handleClimaReintentoSinDato(c: Context): Promise<Response>
     const resultados: { fecha: string; consultaOk: boolean; omitido?: boolean; error?: string }[] = [];
     for (const dia of candidatos) {
       const r = await backfillUnDia(dia.fecha, creds, sb, log, dia.lecturasPrevias);
+      // El cuerpo de la respuesta no llega a ningún lado: pg_net corta a los
+      // 5 s y guarda `content = NULL`, y pg_cron reporta `succeeded` igual.
+      // Sin esta línea, un día que falla NO deja rastro y no se distingue de
+      // uno que nadie intentó (2026-08-28: 7 reintentos, 0 líneas de log).
+      if (!r.ok) console.error(`${log} ${formatEcowittDate(dia.fecha)}: NO recuperado -- ${r.error}`);
       resultados.push({
         fecha: formatEcowittDate(dia.fecha),
         consultaOk: r.ok,
