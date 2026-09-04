@@ -924,3 +924,68 @@ El checkout arranco con `HEAD = origin/main = 297a230` (correcto) pero la **rama
   tocar el arbol de trabajo**, asi que es seguro aunque hubiera lectores fuera. Es la unica forma que
   no puede reproducir el incidente del 08-27, donde fue la propia rutina de Phase 0 la que rebobino el
   arbol bajo los agentes.
+
+---
+
+## Corrida 2026-09-04-viernes (drenaje) — estado de la operacion
+- Modo: **full write · Notion OPERATIVO · preflight sin un solo prompt de permiso.**
+- Resultado: **3 PRs verdes abiertos** (#194 #195 #196), **3 hallazgos drenados** de 8 elegibles,
+  **0 migraciones aplicadas**, **0 hallazgos nuevos** (correcto: el viernes no fila).
+- **Dead-man: OK.** Corrida anterior 2026-09-03-jueves, hueco de **1 dia**.
+- **Migraciones: LIMPIO.** Ficheros 120-136 en `main`, ledger hasta `20260903182508` (136).
+  Cero fusionadas-sin-aplicar y cero aplicadas-sin-fusionar.
+
+## POR QUE NO CORRIO EL CARRIL `ddl_aditivo` ESTE VIERNES
+No por falta de trabajo: **el backlog tiene exactamente un hallazgo `ddl_aditivo` y lleva
+`Requiere aprobacion` marcado** (los tres crones que expiran en pg_net a los 5 s). §5 dice que
+ese flag anula `clase` por completo, asi que el unico candidato de la clase es inelegible por
+construccion. **`apply_migration` quedo sin probar esta corrida** — no hubo nada que aplicar.
+
+Vale la pena mirarlo la proxima vez que se re-triage el backlog: es el mismo cuello de botella
+que el drenaje del 2026-08-24 documento («el flag `Requiere aprobacion` era el cuello real, no
+el volumen»). Con un solo candidato de la clase y el flag puesto, **el carril desatendido mas
+valioso de la operacion se queda parado**.
+
+## CORRECCION A LA COMPROBACION DE CONTAMINACION (se gano el sitio hoy)
+La regla escrita el 2026-08-24 dice comprobar contaminacion con
+`git diff --name-only origin/main origin/<rama>`. **Eso es un diff de DOS puntos y da falsos
+positivos en cuanto `main` avanza durante la corrida.** Hoy el commit del reporte parcial movio
+`origin/main`, y las tres ramas —cortadas antes— aparecieron **borrando
+`escociaos-po/reports/2026-09-04-viernes.md`**, que ninguna habia tocado.
+- **La comprobacion correcta es de TRES puntos: `git diff --name-only origin/main...<rama>`**,
+  que diffea contra la **base de fusion** y por tanto muestra lo que la fusion realmente
+  introduce. Con tres puntos las tres ramas dieron exactamente sus ficheros y nada mas.
+- El diff de dos puntos no es inutil: sirve para ver el estado relativo. Pero **para contaminacion
+  es el de tres puntos**, o se persigue un fantasma cada vez que la rama esta un commit por detras.
+
+## LA REGLA DEL ARBOL LOCAL SE GANO EL SITIO POR CUARTA VEZ
+Arranque con `HEAD = 01e3690 = origin/main` (correcto) y la **rama local `main` clavada en
+`f98f83a`, 106 commits atras** — identica al 2026-08-20, al 08-27 y al 09-03. Corregida **antes
+de despachar** con `git branch -f main origin/main`.
+**Cuatro corridas seguidas con la misma condicion ya no es mala suerte: el sandbox se clona con
+la rama local desactualizada por construccion.** Dejar de tratarlo como trampa que detectar y
+tratarlo como **paso de arranque obligatorio**: `git fetch origin main && git branch -f main origin/main`.
+
+## Preflight de tools — resultado 2026-09-04
+| Tool | Resultado |
+|---|---|
+| `execute_sql` (solo lectura) | OK — `supabase_read_only_user`, `default_transaction_read_only = on` |
+| `query_logs` | OK — fue la evidencia decisiva de ESCO-64 (`source='function_logs'`) |
+| Notion (`notion-query-data-sources`, `notion-fetch`, `notion-update-page`) | OK |
+| github (`list_pull_requests`, `pull_request_read`, `create_pull_request`) | OK |
+| `apply_migration` (`Supabase_Escritura`) | **NO PROBADO** — no hubo migracion elegible (ver arriba) |
+| `COMPOSIO_MULTI_EXECUTE_TOOL` | **No probado** — el drenaje del viernes no lee Vercel |
+
+## Racha del viernes (regla de auto-poda del drenaje) — actualizada
+| Corrida | Conjunto elegible | Racha de vacios |
+|---|---|---|
+| 2026-08-28-viernes | 6 elegibles (5 `codigo` + 1 `ddl_aditivo`) | 0 |
+| **2026-09-04-viernes** | **8 elegibles (8 `codigo`, 0 `ddl_aditivo`)** | **0** |
+La auto-poda no aplica: dos viernes, los dos con trabajo real que drenar.
+
+## El CI de este repo no prueba nada de codigo
+Los tres PRs de hoy traen **un solo check: el despliegue de preview de Vercel**. No hay workflow
+de tests en GitHub Actions. **Consecuencia para el que revise un PR de la operacion: el verde de
+GitHub no dice que la suite pase.** La prueba real es la que corre el agente en su worktree y
+transcribe al cuerpo del PR (rojo primero, verde despues). Pedirla siempre; no aceptar «CI verde»
+como sustituto.

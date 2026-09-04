@@ -363,3 +363,79 @@ vivo divergen. [corrida: 2026-08-31-lunes]
 - **`BUG_REPORT.md` sin cambios desde el lunes.** Issues 1/2/4/5 cerrados, 6 no reproducible, **3b
   sigue abierto** (`src/utils/fetchDatosReporteSemanal.ts:512-524`, inventario consumido valorado en 0
   — `clase: decision`, decision de Santiago, no un PR). La cabecera del fichero sigue rancia.
+
+## Corrida 2026-09-04-viernes (drenaje) — estados aceptados
+
+- **ESCO-60 cerrado por codigo; la mitad DDL sigue abierta y verificada.** PR #194 pone la
+  guarda de signo en `derivarFisico` (`interpretarNota.ts`). **Del lado del servidor NO hay
+  ninguna guarda de signo en la confirmacion**: `rondas_excepciones` no tiene `CHECK` sobre
+  `cantidad_fisica` (0 de 9 constraints) y el cuerpo vivo de `fn_ronda_confirmar_hallazgos`
+  solo comprueba `IS NULL`. La 132 si la puso, pero en `fn_ronda_proponer_ajuste`, un estado
+  mas adelante. **Reclasificar el residuo como `ddl_aditivo`**; filas afectadas esperadas: cero.
+- **El `-150` de la primera ronda NUNCA se persistio.** La unica fila de `rondas_excepciones`
+  es `cantidad_fisica = 3`, `fisico_origen = 'dictado'`, `resuelta_con_captura`. Uriel
+  corrigio por texto. **El defecto era del preview, no de los datos** — no buscar filas
+  corruptas.
+- **`'incompleto'` se propaga solo hasta el boton.** `resolverHallazgo` pone `fisico: null`
+  **y** `paraConfirmar: null`, y `previewConfirmable` ya rechaza el `null`. Al agregar una
+  condicion nueva a `derivarFisico` **no hace falta tocar `preview.ts` ni Telegram**.
+- **ESCO-62 cerrado por codigo (PR #196), con una parte de la accion filada REFUTADA.** El
+  punto 4 de la accion —descartar una correccion cuyo `producto_confianza` sea `ninguna`— **no
+  se implemento, y con evidencia**: `productoConfianza` lo parsea `parsearRespuestaModelo` y
+  **no lo consume nadie** (`resolverProducto` empareja por nombre normalizado exacto, D-T7).
+  Convertirlo en guarda de persistencia seria una regla de producto nueva, y ademas **colisiona
+  con un camino disenado**: una nota cuyo producto todavia no se identifica es justo el caso en
+  que el usuario sigue corrigiendo, asi que impedir esas correcciones evitaria que
+  `MAX_INTENTOS_PREVIEW` se alcance nunca y mataria el terminal `sin_confirmar` del §7.3.
+  **Tampoco habria atrapado este defecto**: la reinterpretacion siempre incluye el transcrito
+  ORIGINAL, asi que un mensaje fuera de tema igual devuelve los hallazgos originales con
+  confianza alta. Va a Santiago como `decision` aparte, no como bug.
+- **CA-37 se preserva acotando la ventana, no mutando la fila.** El borrador sigue
+  `preview_pendiente` y sigue contando como hallazgo narrado-sin-confirmar; lo unico que
+  expira es su capacidad de **interceptar texto libre**. Los botones
+  `[Confirmar]`/`[Descartar]`/`[Deshacer]` llevan su `transcrito_id` en `callback_data` y
+  resuelven por `obtenerTranscritoPorId`, **que no tiene ventana** — un borrador de cualquier
+  edad sigue siendo confirmable por boton. Verificado contra `src/components/inventory/CLAUDE.md`.
+- **`MINUTOS_VENTANA_CORRECCION_TEXTO = 30` es eleccion de la operacion, NO de Santiago.**
+  Pendiente de su visto bueno; cambiarlo es una constante y un numero en el test.
+
+## Navegacion (corrida 2026-09-04-viernes)
+
+- **`rondas_excepciones` NO tiene columna `cantidad_teorica`; se llama `teorico_conteo`.**
+- **El generador de la ronda reescribe los 16 ficheros pero solo cambia los que difieren**, asi
+  que el diff queda minimo. Correr `python3 docs/inventario/regenerar-copias-ronda-inventario.py`
+  y despues `--check`; `git status` confirma el alcance real.
+- **Un `regexp_matches` con `{0,300}` sobre `pg_get_functiondef` revienta con `2201B invalid
+  repetition count`.** Para leer un cuerpo largo usar
+  `unnest(string_to_array(pg_get_functiondef(oid), E'\n'))`, que ademas lo devuelve legible.
+- **`ronda-helpers.ts` y `bot.ts` NO se pueden importar desde vitest** (arrastran
+  `jsr:@supabase/supabase-js@2` y `grammy`). El patron valido es el que ya usa el repo: unidad
+  sobre los helpers puros + **guarda estatica** sobre los DOS arboles de edge function.
+- **`node_modules` no existe en el checkout compartido ni en los worktrees de agente.** Symlink
+  desde un worktree hermano que si lo tenga (`ln -s <hermano>/node_modules node_modules`) — esta
+  en `.gitignore`. Borrarlo al terminar.
+
+## Baseline verde (corrida 2026-09-04-viernes)
+| Que | Valor |
+|---|---|
+| `main@01e3690` | `npx vitest run` **157 ficheros / 3.433 tests** · lint **0 errores / 906 warnings** · `tsc --noEmit` limpio |
+| con PR #194 | 157 / 3.435 |
+| con PR #195 | 158 / 3.438 |
+| con PR #196 | 158 / 3.445 |
+
+Los 906 warnings de lint son preexistentes y **ninguno de los tres PR anade uno solo** (el de
+#196 lo midio guardando el cambio con `stash` y recontando).
+
+## Corrida 2026-09-04-viernes — tres hechos mas que costaron trabajo
+
+- **La correccion por texto de la ronda reinterpreta SIEMPRE el transcrito original + todo el
+  historial** (`construirTextoConCorrecciones`, CA-35). Consecuencia contraintuitiva: un mensaje
+  fuera de tema igual produce un preview con los hallazgos originales y confianza alta — por eso
+  los cuatro intentos del caso `98e62e81` devolvieron preview. **No sirve mirar la salida del
+  interprete para detectar «este texto no era una correccion».**
+- **`hatoFechaLocalGuard.test.ts` prohibe el RECORTE de `toISOString()`, no la llamada.** Un
+  `toISOString()` completo contra una columna `timestamptz` es correcto y no dispara la guarda —
+  la comparacion es de instantes, no de dias calendario.
+- **`rondas_transcritos` sigue con 2 filas** (una `sin_confirmar` con 4 intentos y 3 correcciones,
+  una `confirmado` con 1 intento). **La `sin_confirmar` es la evidencia forense de ESCO-62: no
+  tocarla.**

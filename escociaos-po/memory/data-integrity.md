@@ -407,3 +407,31 @@ prompt del agente en cada corrida.
   dias; **vence el 2026-09-12.**
 - **`hato_pesajes_leche`: la sesion del miercoles 2026-09-02 aun no entra**, pero las dos anteriores se
   capturaron juntas el 08-29 con 3 dias de retraso. **No filar antes del lunes 09-07.**
+
+## Corrida 2026-09-04-viernes (drenaje) — clima
+
+**Navegacion**
+- **El bucle de candidatos del reintento de clima descarta `r.ok === false` en silencio —
+  CONFIRMADO en el codigo y en los logs (PR #195).** `handleClimaReintentoSinDato` mete `r.error`
+  en el array `resultados` del cuerpo HTTP, que `pg_net` tira (`content = NULL`, timeout 5.000 ms).
+  **La firma para detectarlo: contar los candidatos que anuncia la linea `N dia(s) candidato(s)`
+  contra las lineas de resultado individuales. Si sobran candidatos, los que faltan fallaron.**
+  El 2026-09-04: 4 anunciados, 3 con linea.
+- **El backfill MANUAL si registra sus fallos** (`clima.tsx:625`, `console.warn`). **La asimetria
+  entre los dos bucles es la prueba de que el silencio del automatico es defecto, no diseno.**
+- **`DIAS_REINTENTO_SIN_DATO = 21`** (`clima.tsx:692`). Un dia sale de la ventana de recuperacion
+  21 dias despues. Para 2026-08-28 el corte es **2026-09-18**.
+
+**Estados aceptados**
+- **2026-08-28 sigue ausente tras SIETE reintentos** (08-29 … 09-04, todos `succeeded`,
+  `return_message = "1 row"`). El arreglo de codigo esta en PR #195, **sin desplegar**. La
+  recuperacion del dia es **paso humano** (endpoint de escritura) y vence el 2026-09-18.
+- **`reconstruido` se disparo por PRIMERA VEZ el 2026-09-03** (`lluvia_confianza =
+  'reconstruido'`, `lluvia_total_mm = 0.00`, `lluvia_mm_evento = 0.00`, 288 lecturas). **La
+  memoria anterior decia «`reconstruido` no se ha disparado nunca» — ya no es cierto.** Es la
+  regla de las tres senales de la 122 operando como se diseno, no un defecto.
+
+**Baseline clima al 2026-09-04 11:27 UTC**
+Sync SANO (lectura de hace 2 min, 200/`synced:1` cada 5 min) · **1 solo dia sin fila en los
+ultimos 90: 2026-08-28** (sin cambio desde el 08-31) · 08-27 sigue en 349 lecturas y 08-29 en
+311, o sea `lecturas_count > 288` **vigente y sin propagarse**.
