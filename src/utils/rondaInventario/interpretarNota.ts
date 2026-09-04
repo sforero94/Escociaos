@@ -411,20 +411,35 @@ export type ResolucionFisico =
  *   1. `cantidadFisicaPresente` -> fisico = cantidadFisica, origen = 'dictado'.
  *   2. si no, `cantidadFaltantePresente` -> fisico = teoricoFoto - cantidadFaltante,
  *      origen = 'derivado'. El preview lo rotula "derivado" -- nunca se
- *      presenta como si Uriel lo hubiera dictado (CA-31).
+ *      presenta como si Uriel lo hubiera dictado (CA-31). **Sólo si la resta
+ *      no cruza el cero**: una existencia física negativa no existe, así que
+ *      un faltante mayor que el teórico significa que la lectura está mal, no
+ *      que haya menos que nada.
  *   3. si no -> el hallazgo queda incompleto y NO se puede confirmar hasta
  *      que Uriel dé la cifra (no se adivina un físico).
  *
  * `teoricoFoto` es el de `rondas_inventario_alcance` (la foto congelada de
  * R-5), nunca un número que el modelo haya dicho -- el esquema de salida ni
  * siquiera tiene esa ranura (D-T8).
+ *
+ * POR QUÉ `incompleto` Y NO UN RECORTE A 0. Un 0 recortado es una cifra
+ * plausible: se confirma sin fricción y entra como excepción a un registro de
+ * trazabilidad que Gerencia firma, escondiendo que el intérprete leyó mal.
+ * `incompleto` reusa el camino que ya existe (fila con `fisico: null` ->
+ * `previewConfirmable` en falso -> «Falta identificar o completar algún
+ * hallazgo antes de poder confirmar») y obliga a corregir, que es el sesgo
+ * hacia la vía más controlada del módulo (R-18). Caso real que lo motivó:
+ * «Tres bultos de 50 kilos de 15-15-15» sobre un teórico de 0 produjo
+ * `fisico: -150`, con el signo invertido -- lo narrado era un sobrante.
  */
 export function derivarFisico(hallazgo: HallazgoCrudo, teoricoFoto: number): ResolucionFisico {
   if (hallazgo.cantidadFisicaPresente) {
     return { estado: 'resuelto', fisico: hallazgo.cantidadFisica, origen: 'dictado' };
   }
   if (hallazgo.cantidadFaltantePresente) {
-    return { estado: 'resuelto', fisico: teoricoFoto - hallazgo.cantidadFaltante, origen: 'derivado' };
+    const derivado = teoricoFoto - hallazgo.cantidadFaltante;
+    if (derivado < 0) return { estado: 'incompleto' };
+    return { estado: 'resuelto', fisico: derivado, origen: 'derivado' };
   }
   return { estado: 'incompleto' };
 }
