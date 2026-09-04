@@ -360,6 +360,60 @@ describe('adversarial: "faltan 3" sin cantidad física dictada -> derivado, rotu
     };
     expect(derivarFisico(hallazgo, 8)).toEqual({ estado: 'incompleto' });
   });
+
+  // Caso LITERAL de la primera ronda real (`rondas_transcritos`
+  // `98e62e81-a5a2-48ea-ba08-e785ac8f75a0`): el intérprete leyó «Tres bultos
+  // de 50 kilos de 15-15-15» como un FALTANTE de 150 kg sobre un teórico de
+  // 0, y el preview mostró `fisico: -150`. El signo estaba invertido -- lo
+  // narrado era un sobrante de +150 -- pero eso no se puede adivinar acá.
+  // Una existencia física negativa no existe, así que la resta sólo es un
+  // físico válido cuando no cruza el cero. Se devuelve `incompleto` en vez
+  // de recortar a 0: un 0 recortado es una cifra plausible que esconde una
+  // lectura mala, y el módulo prefiere siempre el camino más controlado
+  // (R-18) -- Uriel corrige y vuelve a confirmar.
+  it('faltante mayor que el teórico -> incompleto, nunca un físico negativo (caso real de la ronda de agosto)', () => {
+    const hallazgo: HallazgoCrudo = {
+      productoMencionado: '15-15-15',
+      productoConfianza: 'alta',
+      fragmentoLiteral: 'Tres bultos de 50 kilos de 15-15-15',
+      cantidadFisicaPresente: false,
+      cantidadFisica: 0,
+      cantidadFaltantePresente: true,
+      cantidadFaltante: 150,
+      causaClave: '',
+      causaConfianza: 'ninguna',
+      explicacionDavidCitada: '',
+    };
+
+    expect(derivarFisico(hallazgo, 0)).toEqual({ estado: 'incompleto' });
+
+    // Y el preview que se arma con eso NO se puede confirmar: la fila queda
+    // con `fisico: null`, así que `previewConfirmable` deja el botón
+    // [Confirmar] apagado y Uriel tiene que corregir por texto (A-9).
+    const alcance: ProductoEnAlcanceConTeorico[] = [
+      { productoId: 'p-15', nombre: '15-15-15', teoricoFoto: 0 },
+    ];
+    const fila = resolverFilaPreview(hallazgo, alcance);
+    expect(fila.fisico).toBeNull();
+    expect(fila.fisicoOrigen).toBeNull();
+    expect(previewConfirmable(construirPreview([fila]))).toBe(false);
+  });
+
+  it('el faltante que llega EXACTO al teórico sigue siendo un físico válido de 0', () => {
+    const hallazgo: HallazgoCrudo = {
+      productoMencionado: 'Martillos',
+      productoConfianza: 'alta',
+      fragmentoLiteral: 'faltan los 8 martillos',
+      cantidadFisicaPresente: false,
+      cantidadFisica: 0,
+      cantidadFaltantePresente: true,
+      cantidadFaltante: 8,
+      causaClave: '',
+      causaConfianza: 'ninguna',
+      explicacionDavidCitada: '',
+    };
+    expect(derivarFisico(hallazgo, 8)).toEqual({ estado: 'resuelto', fisico: 0, origen: 'derivado' });
+  });
 });
 
 describe('adversarial: producto no catalogado -> observación libre, no un hallazgo', () => {
