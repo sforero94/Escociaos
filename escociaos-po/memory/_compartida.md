@@ -989,3 +989,23 @@ de tests en GitHub Actions. **Consecuencia para el que revise un PR de la operac
 GitHub no dice que la suite pase.** La prueba real es la que corre el agente en su worktree y
 transcribe al cuerpo del PR (rojo primero, verde despues). Pedirla siempre; no aceptar «CI verde»
 como sustituto.
+
+## Cierre en vivo de la corrida 2026-09-04-viernes (Santiago fusiono el mismo dia)
+Los **cuatro** PRs quedaron fusionados entre las 12:34 y las 12:35 UTC, ~45 min despues de
+cerrar la corrida: #191 (jueves) -> #194 -> #195 -> #196. `origin/main` en `265f48e`.
+Los tres arreglos del viernes verificados **por contenido** sobre `main`: `derivado < 0` en
+`interpretarNota.ts`, `NO recuperado` en `clima.tsx`, `MINUTOS_VENTANA_CORRECCION_TEXTO` en
+`preview.ts`.
+
+**NINGUNO DE LOS TRES HALLAZGOS SE CIERRA CON ESTO, y los tres siguen `In progress`.** Los
+cuatro PRs tocan `supabase/functions/**`, asi que **hay cuatro arreglos en `main` y cero en
+produccion** hasta que se despliegue la edge function. Es exactamente el estado que produjo
+el incidente de ESCO-1/PR #133 (fusionado el 08-20, sin desplegar, cinco rutas abiertas
+anonimamente cuatro dias despues) y que la operacion dio por CERRADO contra el merge.
+
+**Tarea de la proxima corrida (lunes): comprobar el despliegue POR CONTENIDO del bundle,
+nunca por `updated_at`.** Identificadores nuevos a grepear, uno por hallazgo:
+`derivado < 0` / `NO recuperado` / `limiteVentanaCorreccionTexto`, cada uno con su control
+positivo, y confirmar que `ezbr_sha256` se movio. **Si el hash no se movio, no se desplego
+nada** — dos despliegues de los ultimos tres dias republicaron un bundle viejo.
+[corrida: 2026-09-04-viernes]
