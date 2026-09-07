@@ -451,3 +451,18 @@ Los 906 warnings de lint son preexistentes y **ninguno de los tres PR anade uno 
 - **NO FILAR**: clima 09-05 (`lluvia_total_mm 0.25` vs `evento 0.00`, `ok`) y 09-03 (`reconstruido` a 0.00) son **correctos** — el suelo de tolerancia de 0,5 mm es un cuanto del pluviometro y la 122 lo documenta como deliberado. 2026-08-27 con `lecturas_count=349` marcado `cobertura_parcial` es la regla de fin de dia de la 115, no una contradiccion del umbral 240.
 - **Columnas que costaron round-trips**: `movimientos_inventario` **no tiene `fecha`** (usar `created_at`); `informes_visita` usa **`agronoma`**, no `agronomo`.
 - **`git push -u origin <rama>` encadenado tras un `git commit` con heredoc empujo el commit PADRE**, y `create_pull_request` fallo con "No commits between main and <rama>". Un `git push origin HEAD:<rama>` a secas lo arreglo. **Verificar con `git ls-remote origin <rama>` antes de llamar a `create_pull_request`.** Paso DOS veces esta corrida.
+
+### Correccion post-corrida 2026-09-07-lunes — el PR #199 contenia al #198 entero
+**Un PR abierto por esta operacion decia «solo documentacion» y traia 10 ficheros.** La rama
+`claude/po-bug-triage-bug-report-al-dia` se corto de la rama del #198 en vez de `main`, asi que
+arrastraba el commit `78ba0b5` debajo del de documentacion: `BUG_REPORT.md` **mas** `paginar-select.ts`
+en los dos arboles, los tres endpoints de chequeo en los dos arboles, y la prueba guarda.
+**El riesgo concreto**: fusionar el #199 por su titulo habria desplegado el arreglo de paginacion y seis
+ficheros de edge function bajo un PR que dice no tocar codigo — y el #198 podria haberse cerrado despues
+como redundante sin que nadie lo leyera.
+Corregido reconstruyendo la rama desde `origin/main` con solo `BUG_REPORT.md`, en un **worktree aislado**,
+y `--force-with-lease` anclado al sha viejo. Rama nueva: `132cc1c`, 1 commit, 1 fichero.
+**LA REGLA QUE FALTABA, y es la hermana de la del `git push -u`**: despues de abrir un PR, comprobar
+`git diff --name-only origin/main...<rama>` y cotejarlo contra lo que el PR dice que toca. **El conteo
+`changed_files` de la API lo canta gratis**: 10 ficheros en un PR de documentacion fue la senal.
+Cortar SIEMPRE la rama de `origin/main`, nunca de la rama del PR anterior.
