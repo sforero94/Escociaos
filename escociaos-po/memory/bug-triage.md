@@ -439,3 +439,15 @@ Los 906 warnings de lint son preexistentes y **ninguno de los tres PR anade uno 
 - **`rondas_transcritos` sigue con 2 filas** (una `sin_confirmar` con 4 intentos y 3 correcciones,
   una `confirmado` con 1 intento). **La `sin_confirmar` es la evidencia forense de ESCO-62: no
   tocarla.**
+
+## Corrida 2026-09-07-lunes
+- **Baseline `main@1a97b2d`**: `vitest run` **160 ficheros / 3.459 tests** verde · lint **0 errores / 906 warnings** · `tsc --noEmit` limpio.
+- **PRs abiertos**: #198 (paginar el historico de chequeo del hato) y #199 (BUG_REPORT.md al dia). Los dos rojo-antes / verde-despues.
+- **`BUG_REPORT.md` re-verificado entero**: 1, 2, 3a, 4, 5 siguen cerrados; 6 sigue no reproducible (**28/28 con `url_storage`**); **3b sigue ABIERTO y su alcance crecio de 7 a 8 aplicaciones** — `fetchDatosReporteSemanal.ts:511-522` sin cambios. 3b es **decision**, no arreglo: que precio valora un insumo sacado de bodega.
+- **ESTE REPO YA TIENE CUATRO COPIAS del bucle de paginacion**: `fetchAll` (navegador), `supabaseQueryAll` (`chat.tsx`), `paginar` (`acciones-paquete-io.ts`, privado) y el nuevo `paginarSelect` (`paginar-select.ts`). **Contar cuatro al auditar el tope de 1.000 filas.**
+- **Lista de vigilancia de paginacion (tablas >900 filas, 2026-09-07)**: `fin_gastos` 4.479 · `monitoreos` 4.244 · `registros_trabajo` 2.839 · `clima_resumen_diario` 1.927 · `hato_chequeo_vacas` 1.479 · `movimientos_diarios_trabajadores` 1.056. **La ultima esta COMPROBADA Y A SALVO**: su unico lector (`DailyMovementsDashboard.tsx:251`) acota por una aplicacion y la peor tiene 143 filas.
+- **`clima_resumen_diario` no tiene solape de fechas entre sus dos estaciones**: `wunderground-historico` 2020-07-01→2025-11-04 (1.757 filas), Ecowitt 2026-03-18→2026-09-06 (170). **Hay un hueco de 4,5 meses sin ninguna estacion (2025-11-05 → 2026-03-17).** Un lector que omita `station_id` no duplica hoy, pero es suerte, no diseno.
+- **Ecowitt: solo 3 dias faltan** (2026-03-28, 03-29 y 08-28, el ultimo es el #64) y `contador_congelado` sigue en **0** — la reparacion de la 122 aguanta.
+- **NO FILAR**: clima 09-05 (`lluvia_total_mm 0.25` vs `evento 0.00`, `ok`) y 09-03 (`reconstruido` a 0.00) son **correctos** — el suelo de tolerancia de 0,5 mm es un cuanto del pluviometro y la 122 lo documenta como deliberado. 2026-08-27 con `lecturas_count=349` marcado `cobertura_parcial` es la regla de fin de dia de la 115, no una contradiccion del umbral 240.
+- **Columnas que costaron round-trips**: `movimientos_inventario` **no tiene `fecha`** (usar `created_at`); `informes_visita` usa **`agronoma`**, no `agronomo`.
+- **`git push -u origin <rama>` encadenado tras un `git commit` con heredoc empujo el commit PADRE**, y `create_pull_request` fallo con "No commits between main and <rama>". Un `git push origin HEAD:<rama>` a secas lo arreglo. **Verificar con `git ls-remote origin <rama>` antes de llamar a `create_pull_request`.** Paso DOS veces esta corrida.

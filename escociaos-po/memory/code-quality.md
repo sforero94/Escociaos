@@ -63,3 +63,14 @@ prompt del agente en cada corrida. **Solo corre el primer lunes de cada mes.**
 
 ## Archivo
 (vacio)
+
+## Corrida 2026-09-07-lunes (run mensual)
+- **EL BASELINE MEJORA, NO SE DEGRADA.** vs 2026-08-03: lint **1.031 → 906 warnings** (-12%; `no-explicit-any` 715→652, `no-unused-vars` 195→143) · tests **72 ficheros/1.725 → 160/3.459** (+100%) · `tsc` limpio en ambos. `laborCosts.ts` y `fetchDatosReporteCierre.ts`, dos motores de dinero que estaban sin test hace un mes, ya tienen importador de test.
+- **Paridad de los dos arboles edge, medida exacta**: 77 modulos, **54 byte-identicos, 23 que difieren SOLO en la primera linea `// ARCHIVO:`, 0 con deriva real.**
+- **PRs abiertos**: #197 (guarda de paridad del arbol COMPLETO — verificada fallando ante deriva inyectada, no solo pasando en limpio) y #200 (contrato de inventario al dia con 131 y 132).
+- **Motores puros vivos SIN test, lista actualizada**: `calculosAplicaciones.ts` (367 lineas, 3 importadores, **DOSIS + lista de compras, GlobalGAP**), `calculosReporteAplicacion.ts` (241), `reportesFinancierosComun.ts` (135), `reporteSemanalService.ts` (549). Comprobacion: `grep -rl "utils/<modulo>['\"]" src/__tests__/`.
+- **De los 5 generadores de copias, `regenerar-copias-servidor.py` y `regenerar-copias-liquidacion-pomar.py` NO tienen `--check`**; los otros tres si, cableados a un test.
+- **La deriva del ledger de migraciones es medible en un comando**: por cada `src/sql/migrations/NNN_*.sql`, `grep '\*\*NNN\*\*'` sobre `CLAUDE.md`. Hoy: **123, 131 y 132 sin entrada**, mas **120 y 133 rotuladas SIN APLICAR estando aplicadas**.
+- **`CLAUDE.md` raiz: 180.849 bytes / 846 lineas, +7,7% en 7 dias. La seccion `### Migrations` son 111.344 bytes = 62% del fichero.** Propuesta de mover el ledger a `docs/` = decision de Santiago, NUNCA dentro de una barrida.
+- **NO RE-REPORTAR**: los formateos numericos inline (deuda difusa, descartada dos veces). El `any` se concentra en `src/components/finanzas` (146), `fetchDatosReporteSemanal.ts` (95, frontera de dominio real) y `useReporteAplicacion.ts` (38); solo el segundo compra seguridad de verdad y es trabajo propio (M/L), nunca parte de una barrida.
+- **REGRESION DE WORKTREES** — ver `_compartida.md` y el hallazgo contra la operacion de esta corrida.

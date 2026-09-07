@@ -327,3 +327,14 @@ hace lo que se diseno para hacer.
 - `escociaos-po/CHANGELOG.md` sigue sin existir; **filado esta corrida** como P3 `decision` con las tres
   salidas ya registradas y recomendacion explicita por la (b), `escociaos-po/reports/CHANGELOG.md`.
   **No inventar una cuarta.** La entrada de changelog de esta semana esta en el reporte de la corrida.
+
+## Corrida 2026-09-07-lunes
+- **Estado de despliegue**: `make-server-1ccce916` **v238 del 2026-09-01T01:53:38Z, CERO despliegues en la ventana** — 18 ficheros / +1143/-23 varados, 4 modulos de runtime nuevos. `informes-visita-proponer` **v2 (2026-09-03T12:03:08Z) SI desplegada y viva**. Frontend Vercel AL DIA verificado por CONTENIDO. Migraciones 001-136 todas aplicadas, cero en ambas direcciones.
+- **EL ATAJO MAS BARATO NO ES EL HASH, ES LA SONDA HTTP.** Ver `_compartida.md`. Si `version`, `updated_at` y `ezbr_sha256` estan los tres identicos al baseline, ademas, no hubo despliegue **en absoluto** — distinguir eso de una reversion importa al escribir la accion: la reversion pide arreglar el worktree, el no-despliegue pide simplemente desplegar.
+- **`hato_alertas_tick_runs` es la prueba de dominio que cerro el #4, y su FORMA vale para el futuro**: 14 filas, la primera la manana siguiente al merge del PR #168. **Una tabla que SOLO escribe el codigo del arreglo, con su primera fila justo despues del merge, es evidencia mas fuerte y mas barata que cualquier grep de bundle. Buscarla siempre antes de descargar el bundle.**
+- **Un hueco en `rondas_avisos` NO siempre es un bundle regresivo.** El verificador lo probo: `resolverDestinatarios` devuelve `["null","8505349717"]`, longitud 2, asi que la guarda de `length===0` nunca dispara y **el recordatorio de septiembre SI se entrego**. Antes de culpar al despliegue, comprobar si alguna clave quedo reclamada sin envio — y si hay un co-destinatario valido.
+- **`supabase/functions/informes-visita-proponer/` es un TERCER arbol** y ninguna guarda lo cubre (`arbolEdgeFunctionParidad.test.ts:46-47` e `informesVisitaParidadSnippets.test.ts:90-98` fijan los dos de siempre). Filado esta corrida.
+- **Para el defecto del destinatario fantasma la columna es `telegram_usuarios.telegram_id IS NULL`, no `usuario_id`.** Un join por `usuario_id` da 0 y hace parecer que no aplica.
+- **Backlog**: 19 abiertos al inicio, 12 nuevos, 1 cerrado (#4). **0 estancados (>60 dias).**
+- **Cadencia**: 22 commits en 6,6 dias = 23,3/sem, **feature-pesada** (el modulo Informes de visita). **Lag de despliegue del edge function: 6 dias — en rojo por TERCERA vez en tres semanas** (v223 regresiva, v236 republico un bundle viejo, ahora un no-despliegue).
+- **`CHANGELOG.md` sigue sin existir — QUINTA corrida.** #71 bloqueado en decision de Santiago. La entrada de esta semana quedo escrita en el reporte de la corrida.

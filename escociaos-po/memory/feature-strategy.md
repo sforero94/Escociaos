@@ -59,3 +59,11 @@ prompt del agente en cada corrida. **Solo corre el primer lunes de cada mes.**
 
 ## Archivo
 (vacio)
+
+## Corrida 2026-09-07-lunes
+- **Recomendacion del mes: TERMINAR, NO EMPEZAR.** 19 hallazgos abiertos al inicio, seis de ellos defectos de la ronda de inventario en su primera semana de vida. Dos modulos a medio desplegar. Solo **1** propuesta paso la barra de evidencia (registro de desenlace de la captura por foto del hato).
+- **REFUTADO — no hay backlog reproductivo en el hato.** Verificado 2026-09-07: **27 de 27 vacas en ordeno tienen parto registrado**; de 14 activas servidas hace >280 d, **0** carecen de parto posterior. El hueco de 73 dias desde el ultimo parto (2026-06-26) es variabilidad normal (2025-04, 2025-07 y 2026-02 tambien tuvieron cero). **No proponer una superficie de captura reproductiva masiva ni un «fix del backlog de partos».**
+- **`sin_ciclo_reproductivo = 45` NO es hambre de datos**: son la mitad no productiva del hato (30 de 65 activas jamas tuvieron evento). El motor las omite **correctamente**. Refina el #68 sin reemplazarlo.
+- **`hato_chequeo_vacas.estado` normalizado en 5 de 39 filas NO es defecto del parser**: `estado_raw` es NULL en 107 de 120 filas desde febrero — el veterinario deja la columna en blanco salvo problema. **No re-investigar.**
+- **Ya ledgereado, no volver**: persistir `raza` desde el parser (#56) — el parser cubre 2 de 4 razas y el dueno decidio que Martha la dicta. Prediccion de plagas / ML: NO-GO registrado.
+- **Columnas que costaron round-trips**: `hato_chequeo_vacas` no tiene `ultimo_servicio` (es `tipo_servicio`); `rondas_inventario` no tiene `alcance_total` (es `alcance_nota`).

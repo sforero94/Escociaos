@@ -1009,3 +1009,56 @@ nunca por `updated_at`.** Identificadores nuevos a grepear, uno por hallazgo:
 positivo, y confirmar que `ezbr_sha256` se movio. **Si el hash no se movio, no se desplego
 nada** — dos despliegues de los ultimos tres dias republicaron un bundle viejo.
 [corrida: 2026-09-04-viernes]
+
+## Corrida 2026-09-07-lunes
+
+### Preflight de tools — resultado 2026-09-07
+| Tool | Resultado |
+|---|---|
+| `execute_sql` · `get_advisors` · `query_logs` · `list_edge_functions` · `get_edge_function` | OK |
+| `notion-query-data-sources` · `notion-fetch` · `notion-create-pages` · `notion-update-page` | OK |
+| `COMPOSIO_MULTI_EXECUTE_TOOL` (`VERCEL_GET_DEPLOYMENTS`) | OK — quinta corrida sana |
+| `mcp__github__actions_list` sobre `thinksid/escocia-backups` | **NO CORRIO** — fuera del alcance de repos de la sesion (`Allowed repositories: sforero94/escociaos`). Misma brecha que el 2026-08-20. **NO es fallo de allowlist de tools: el chequeo de respaldos NO se puede correr desde aqui.** No volver a filarlo como problema de preflight |
+
+**Cero prompts de permiso en toda la corrida.**
+
+### REGRESION DE LA REGLA DE WORKTREES — la leccion mas cara de esta corrida
+Los agentes volvieron a compartir `/home/user/Escociaos`. Medido: 11:19 arbol limpio; 11:23 seis
+ficheros modificados + 2 sin seguimiento de OTRO agente; 11:26 **local main en `78ba0b5` sin
+publicar** mientras `origin/main` seguia en `1a97b2d`. El orquestador lo corroboro desde el otro
+lado: el verificador del despliegue reporto `HEAD => 78ba0b5` y lo marco como discrepancia.
+**La regla existia desde el 2026-08-03 y funciono el 08-06, pero vivia SOLO en memoria y no en el
+prompt de despacho, asi que se perdio sola.** Una regla que solo vive en memoria es una regla que
+se degrada. Va al hallazgo contra la operacion de esta corrida.
+**Al cerrar: el orquestador comprobo `git branch -r --contains 78ba0b5` ANTES de hacer
+`reset --hard`** — estaba a salvo en la rama del PR #198. **Comprobar siempre eso antes de resetear;
+un reset sobre un commit no publicado destruye trabajo de otro agente.**
+
+### La sonda HTTP: la prueba de despliegue mas barata que existe
+Para saber si la edge function esta al dia **no hace falta descargar 1,5-2 MB de bundle ni comparar
+hashes**. Se le pide una ruta que solo exista en el codigo nuevo y se mira el codigo de estado, con
+`GET /make-server-1ccce916/health` como control positivo:
+- `/health` → 200 y la ruta nueva → **404** = el bundle es anterior a esa ruta. Concluyente.
+- Elegir una ruta que corte por autenticacion ANTES de tocar la base (devuelve 401), asi la sonda
+  es de solo lectura. Ej. `POST /make-server-1ccce916/inventario/ronda/tick` → 401.
+**No depende de `updated_at` ni de ningun hash guardado**, que es justo lo que fallo dos veces.
+
+### Un hash certificado sano CADUCA
+El mismo `ezbr_sha256` que la corrida del 09-03 certifico sano quedo rancio cuando `main` avanzo el
+09-04. **Anotar siempre el commit contra el que se certifico**, nunca el hash a secas.
+
+### El proyecto tiene DOS edge functions desde el 2026-09-03
+`make-server-1ccce916` **y** `informes-visita-proponer` (standalone, v2, sirve el modulo Informes de
+visita y es la que el frontend llama). Un chequeo de deriva que solo mire la principal reporta «nada
+desplegado» una semana en que si se desplego algo — y al reves, desplegar la standalone no arrastra
+la principal. Ademas `supabase/functions/informes-visita-proponer/` es un **TERCER arbol** de edge
+function y ninguna guarda de paridad lo cubre.
+
+### Estado de la operacion (corrida 2026-09-07-lunes)
+- Roster completo de 8 (primer lunes). Modo **full write · Notion OPERATIVO**.
+- **12 hallazgos nuevos** (1 P1 + 9 P2 + 2 P3), **4 PRs verdes abiertos** (#197 #198 #199 #200),
+  **1 cerrado** (#4 Arreglado), 1 actualizado (#68).
+- **Verificacion adversarial: 2 de 2 P1 CAMBIARON el resultado.** Uno bajo a P2 (impacto refutado),
+  el otro se confirmo y crecio. Ningun P1 llego a Notion como lo trajo su agente.
+- **Migration drift: LIMPIO.** Ledger tope `20260903182508` = 136; ficheros 120-136 en `main`.
+- **Code Quality devolvio pasado el limite de 90 min**; se filo 1 de sus 5 hallazgos por el cap de 12.

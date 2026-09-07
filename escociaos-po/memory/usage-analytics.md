@@ -164,3 +164,15 @@ prompt del agente en cada corrida.
 - **NO se filo por el cupo de 12**: pesaje por foto, 5 de 8 subidas historicas sin producir filas y 4 intentos en 6 h
   esta semana (P2, confianza **Media** — desde SQL no se distingue una cancelacion deliberada de un fallo). **Para que
   suba de Media hace falta instrumentar el desenlace de `/hato/pesaje/foto`, como la 116 hizo con el tick.**
+
+## Corrida 2026-09-07-lunes
+- **Pulso 09-01→09-07**: `registros_trabajo` **83** (prev 34, prom4s 59,5) · `telegram_mensajes` **115** (prev 2 — **108 son la rafaga del hato de hoy**) · `movimientos_diarios` 12 · `acciones_recomendadas` 18 · `hato_pesajes_leche` **0** · `monitoreos` **0** · `chat_messages` 0 · `rondas_inventario` **0** · `informes_visita` 1 (serie nueva).
+- **Quien escribe (7d)**: David Garcia 96 · Consuelito 2 · Martha Vega 1 · bot 1. **3 de 10 cuentas.** Fernando Jimenez: 0 escrituras pero **2 alertas respondidas** — es consumidor, no capturador.
+- **NO FILAR, es cadencia y no abandono**: `monitoreos` en 0 (R30 cerro el 08-28; las rondas abren cada ~33-35 dias, proxima ~2026-09-23/30). `hato_chequeos` en 0 (**la ventana de septiembre arranca el 09-08**; a partir del 09-15 SI es senal).
+- **`hato_produccion_quincenal` se puso AL DIA** (ago-Q2 capturada el 09-01). Ya no es senal de alarma.
+- **Completitud del hato CONGELADA 14 dias**: 65 activas · 62 sin raza · 20 sin fecha nacimiento · 32 sin madre · **1 ficha completa**. Identico al 08-31.
+- **Captura por foto del hato: 9 objetos, solo 3 produjeron filas.** Dos pares BYTE-IDENTICOS = reintento del mismo archivo. **Cotejar siempre objetos de Storage contra filas producidas antes de leer una subida como adopcion** — la foto se sube ANTES del OCR por contrato, asi que un objeto sin filas es un intento fallido o abandonado, no un exito.
+- **`hato_alertas_tick_runs.cobertura` tiene `bajo_umbral` como PREAVISO DE RAFAGA**: un tipo con N animales en `bajo_umbral` estables durante dias son N alertas que saldran todas el mismo dia. Mirar ese numero, no solo `generadas`.
+- **Al medir adopcion de la ronda, cruzar `telegram_alertas_suscripciones` contra `telegram_usuarios.telegram_id IS NOT NULL`.** Un suscriptor sin vincular cuenta como destinatario en la configuracion y como cero en la entrega, y `rondas_avisos` marca el aviso como enviado igual.
+- **UPDATE #67**: Uriel Parada nunca se vinculo; su codigo expiro el 2026-09-04 17:33. **UPDATE #73**: el recordatorio salio el 09-01 y la clave quedo consumida; 6 dias despues no hay ronda de septiembre.
+- **`informes-visita`: 52 objetos de Storage contra 25 filas.** Los ~27 huerfanos son el save fallido del 09-03 que la 136 no limpio. **No contarlo como adopcion.**

@@ -435,3 +435,14 @@ prompt del agente en cada corrida.
 Sync SANO (lectura de hace 2 min, 200/`synced:1` cada 5 min) · **1 solo dia sin fila en los
 ultimos 90: 2026-08-28** (sin cambio desde el 08-31) · 08-27 sigue en 349 lecturas y 08-29 en
 311, o sea `lecturas_count > 288` **vigente y sin propagarse**.
+
+## Corrida 2026-09-07-lunes
+- **Baselines**: hato_animales 179 · eventos 768 · chequeos 33 / chequeo_vacas **1.479 (ultimo chequeo 2026-07-09, 60 dias)** · pesajes 601 (ultima fecha 2026-08-26) · **hato_alertas 103 (+37)** · monitoreos 4.244 / 30 rondas · productos 341 · aplicaciones 21 · registros_trabajo 2.839 · fin_gastos 4.479 · clima_resumen_diario 1.927 · logs_auditoria 0.
+- **Integridad**: 0 huerfanos en 19 relaciones. Libro vs stock: **1 sola divergencia** (TecniFeed Boro +18,69); **Naturboro CERRADA** (eran 2). Los 2 cierres nuevos cuadran a 0,0000 en los 8 productos.
+- **REFUTADO — `data-integrity/hato/motor-alertas-hambriento`**: el motor NO esta hambriento, es **BIMODAL**. `dias_rechequeo_due=60` sobre un chequeo que es evento de hato entero hace vencer a las ~40 vacas el mismo dia: 0 alertas durante 58 dias y el hato completo el 59. El tick del 09-07 genero **36** alertas / **108** mensajes. Los ceros del #68 y el alud son el MISMO defecto.
+- **`hato_alertas` estados reales**: `descartada|confirmada|enviada|respondida`. **El escalamiento SI ha disparado**: 46 de 103 con `escalada_at`, **45 el mismo dia (2026-08-04)**.
+- **Navegacion**: `hato_alertas` no tiene `mensaje` ni `creada_en` (es `created_at`); `hato_alertas_envios` usa `enviado_at`; `hato_alertas_tick_runs` usa `ejecutado_at`. **Tres tablas de la misma familia, tres nombres de fecha distintos.**
+- **Firma forense de una tormenta de alertas**: los 108 envios comparten `enviado_at` al MILISEGUNDO — el bucle de `hato-alertas-tick.ts:428-429` no tiene ni pausa ni lote.
+- **`regla_clave` de rechequeo es `rechq:{animal_id}:{ultimo_chequeo_fecha}`** — anclada al ultimo chequeo, no a hoy. Por eso no se repite al dia siguiente, **pero si entera 60 dias despues de cada chequeo nuevo**.
+- **VIGILAR 2026-09-12**: `hato_chequeos` clavado en 2026-07-09 (umbral 65 dias).
+- **NO FILAR**: `hato_pesajes_leche` del 2026-09-02 esta dentro del ritmo de captura observado; lo cubre el hallazgo de captura por foto. El unico CHECK sin validar de la base es `realtime.messages_payload_exclusive`, tabla de plataforma — no es nuestro.
