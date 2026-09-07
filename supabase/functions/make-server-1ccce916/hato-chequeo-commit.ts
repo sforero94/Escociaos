@@ -55,6 +55,7 @@ import {
   type FilaUltimaCriaHistorico,
 } from './importHato/commitChequeo.ts';
 import { construirHatoConfigDesdeFilas, type FilaHatoConfig } from './hato-config-desde-tabla.ts';
+import { paginarSelect } from './paginar-select.ts';
 
 const ROLES_PERMITIDOS = new Set(['Administrador', 'Gerencia']); // mismo patrón de escritura que el resto de hato_* (migración 053), igual que preview.
 
@@ -242,10 +243,13 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
   // deduplicar el `parto` que `descomponerSX` deriva más abajo).
   let historicoUltimaCria: FilaUltimaCriaHistorico[] = [];
   if (animalIds.length > 0) {
-    const { data, error } = await supabase
-      .from('hato_chequeo_vacas')
-      .select('animal_id, pl, num_partos, fecha_servicio, toro, tipo_servicio, fecha_secar, fecha_probable_parto, estado, ultima_cria_raw, created_at, hato_chequeos(fecha)')
-      .in('animal_id', animalIds);
+    const { filas: data, error } = await paginarSelect<Record<string, unknown>>((desde, hasta) =>
+      supabase
+        .from('hato_chequeo_vacas')
+        .select('animal_id, pl, num_partos, fecha_servicio, toro, tipo_servicio, fecha_secar, fecha_probable_parto, estado, ultima_cria_raw, created_at, hato_chequeos(fecha)')
+        .in('animal_id', animalIds)
+        .range(desde, hasta),
+    );
     if (error) return respuestaError(c, 500, { error: `No se pudo leer hato_chequeo_vacas: ${error.message}` });
     historico = (data ?? []).map((fila: Record<string, unknown>) => {
       const chequeoRow = fila.hato_chequeos as { fecha: string } | { fecha: string }[] | null;
