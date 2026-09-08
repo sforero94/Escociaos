@@ -47,6 +47,12 @@ import {
   atribucionDesdeFilaTelegram,
   construirCallbackDeshacerEvento,
 } from "../eventoHatoUndo.ts";
+import {
+  avisoFechaLejana,
+  fechaLegible,
+  leerFecha,
+  type LecturaFecha,
+} from "../fechaDDMM.ts";
 
 function getSupabaseAdmin() {
   const url = Deno.env.get("SUPABASE_URL")!;
@@ -83,28 +89,10 @@ function esCancelar(texto: string): boolean {
   return t === "/cancelar" || t === "cancelar" || t === "/cancel";
 }
 
-function parseDDMM(texto: string): string | null {
-  const m = texto.trim().match(/^(\d{1,2})[/\-.](\d{1,2})$/);
-  if (!m) return null;
-  const dia = parseInt(m[1], 10);
-  const mes = parseInt(m[2], 10);
-  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return null;
-  const anio = Number(hoyBogota().slice(0, 4));
-  const iso = `${anio}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
-  // Una fecha futura casi siempre es el año pasado mal escrito (p. ej. "28/12"
-  // registrado en enero). Se corrige al año anterior en vez de guardar un
-  // hecho que todavía no ocurrió.
-  return iso > hoyBogota() ? `${anio - 1}-${iso.slice(5)}` : iso;
-}
-
-function fechaLegible(iso: string): string {
-  const [a, m, d] = iso.split("-").map(Number);
-  const meses = [
-    "enero", "febrero", "marzo", "abril", "mayo", "junio",
-    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
-  ];
-  return `${d} de ${meses[m - 1]} ${a}`;
-}
+// `parseDDMM`/`fechaLegible` se movieron a `../fechaDDMM.ts` el 2026-09-08.
+// El parser no estaba mal —hacía DD/MM, que es lo que el paso promete— pero
+// resolvía en silencio un texto que se lee de dos formas, y eso corrió cuatro
+// servicios cuatro meses. Ver la cabecera de ese módulo.
 
 // ============================================================================
 // Tipos de evento que este flujo sabe registrar
@@ -371,12 +359,47 @@ export async function eventoHatoConversation(
           await ctx.reply("Operación cancelada.");
           return conversation.halt();
         }
-        const parsed = parseDDMM(texto);
-        if (parsed) {
-          fecha = parsed;
+        const leida = leerFecha(texto, hoy);
+        if (leida.tipo === "invalido") {
+          await paso.reply(
+            "No entendí esa fecha. Escribe DD/MM (ej: 12/08) o DD/MM/AAAA (ej: 12/08/2026), o /cancelar para salir.",
+          );
+          continue;
+        }
+        if (leida.tipo === "unico") {
+          fecha = leida.fecha.iso;
           break;
         }
-        await paso.reply("Formato inválido. Escribe DD/MM (ej: 12/08), o /cancelar para salir.");
+
+        // Ambigua: «5/9» es 5 de septiembre o 9 de mayo, y el sistema NO
+        // elige. Elegir en silencio es lo que corrió cuatro servicios de
+        // Martha el 2026-09-08 (ver la cabecera de `fechaDDMM.ts`). Las dos
+        // opciones se muestran en prosa —nunca «5/9», que es el texto que se
+        // está desambiguando— y la más cercana a hoy va primero.
+        const opciones: LecturaFecha[] = [leida.probable, leida.alterna];
+        const kbAmbigua = new InlineKeyboard()
+          .text(opciones[0].etiqueta, "fecha_amb_0")
+          .row()
+          .text(opciones[1].etiqueta, "fecha_amb_1")
+          .row()
+          .text("❌ Cancelar", "cancel_flow");
+        await paso.reply(`📅 "${texto.trim()}" se puede leer de dos formas. ¿Cuál es?`, {
+          reply_markup: kbAmbigua,
+        });
+
+        const cbAmb = await conversation.waitForCallbackQuery([
+          "fecha_amb_0",
+          "fecha_amb_1",
+          "cancel_flow",
+        ]);
+        await cbAmb.answerCallbackQuery();
+        if (cbAmb.callbackQuery.data === "cancel_flow") {
+          await ctx.reply("Operación cancelada.");
+          return conversation.halt();
+        }
+        fecha = opciones[cbAmb.callbackQuery.data === "fecha_amb_0" ? 0 : 1].iso;
+        await cbAmb.editMessageText(`📅 Fecha: ${fechaLegible(fecha)}`);
+        break;
       }
     } else {
       await cbFecha.editMessageText(`📅 Fecha: ${fechaLegible(fecha)}`);
@@ -473,6 +496,52 @@ export async function eventoHatoConversation(
 
     // ── Paso 6: advertencias (nunca bloquean) ─────────────────────────
     const advertencias: string[] = [];
+
+    // Antigüedad de la fecha. Los cuatro servicios corridos del 2026-09-08
+    // quedaron entre 122 y 183 días atrás y el flujo no dijo nada: el resumen
+    // mostraba «9 de mayo 2026» en prosa, pero quien acaba de teclear «9/5»
+    // lee el número que escribió, no el mes en letras. Acá se dice el número
+    // de DÍAS, que es lo que sí choca contra lo que la persona recuerda.
+    const avisoLejana = avisoFechaLejana(fecha, hoy);
+    if (avisoLejana) advertencias.push(avisoLejana);
+
+    // Duplicado exacto: la MISMA vaca, el MISMO tipo de evento, la MISMA
+    // fecha, el MISMO toro y el MISMO tipo de servicio ya están registrados
+    // por un camino manual. Eso nunca son dos hechos distintos — una vaca no
+    // se monta dos veces el mismo día con el mismo toro, ni pare dos veces.
+    // Es un reenvío del flujo, y pasó DOS veces el 2026-09-08 (ELECTRA #117
+    // con pajilla de Jericó, que además descontó el inventario dos veces, y
+    // FLACA #5182 con monta de Jersey, 16 minutos después). Acá se AVISA
+    // (contrato 4 de la cabecera); la garantía es el índice único parcial
+    // `hato_eventos_manual_unico` de la migración 139.
+    // La consulta se acota con `chequeo_vaca_id IS NULL` para mirar la misma
+    // población que ese índice: un servicio derivado de un chequeo NO es un
+    // duplicado de uno registrado en campo, es la planilla confirmándolo.
+    const duplicado = await conversation.external(async () => {
+      const sb = getSupabaseAdmin();
+      let q = sb
+        .from("hato_eventos")
+        .select("id")
+        .eq("animal_id", vaca!.animal_id)
+        .eq("tipo", def.tipo)
+        .eq("fecha", fecha)
+        .is("chequeo_vaca_id", null);
+      q = toro?.id ? q.eq("toro_id", toro.id) : q.is("toro_id", null);
+      q = def.tipoServicio ? q.eq("tipo_servicio", def.tipoServicio) : q.is("tipo_servicio", null);
+      const { data, error } = await q.limit(1);
+      if (error) {
+        // La verificación nunca tumba el flujo: si falla, el índice único
+        // sigue siendo la red. Peor que un duplicado es no poder registrar.
+        console.error("[Telegram] No se pudo verificar duplicados:", error.message);
+        return false;
+      }
+      return (data ?? []).length > 0;
+    });
+    if (duplicado) {
+      advertencias.push(
+        "Este mismo evento YA ESTÁ REGISTRADO para esta vaca en esta fecha. Si es el mismo, cancela: guardarlo otra vez lo duplica.",
+      );
+    }
 
     if (clave === "secado" && estadoActual.fecha_secar) {
       const dias = Math.round(
@@ -580,7 +649,17 @@ export async function eventoHatoConversation(
         })
         .select("id")
         .single();
-      if (error) throw new Error(`No se pudo guardar: ${error.message}`);
+      if (error) {
+        // 23505 = `hato_eventos_manual_unico` (139). Llega acá solo si Martha
+        // pasó por encima del aviso del paso 6, o si otro registró lo mismo
+        // mientras ella confirmaba. No es un error técnico que reportar.
+        if ((error as { code?: string }).code === "23505") {
+          throw new Error(
+            "Este evento ya estaba registrado para esta vaca en esta fecha. No se guardó de nuevo, así que no hay nada que deshacer.",
+          );
+        }
+        throw new Error(`No se pudo guardar: ${error.message}`);
+      }
 
       // Uso de pajilla: se registra DESPUÉS del evento y su fallo no tumba el
       // evento — la preñez es el hecho importante, el descuento de inventario
@@ -598,7 +677,15 @@ export async function eventoHatoConversation(
           .select("id")
           .single();
         if (usoErr) {
-          console.error("[Telegram] No se pudo descontar la pajilla:", usoErr.message);
+          // 23505 = `hato_pajillas_uso_unico` (139): esa pajilla ya estaba
+          // descontada para esta vaca y esta fecha. El inventario ya es
+          // correcto, así que no hay nada que arreglar ni que reportar.
+          const yaDescontada = (usoErr as { code?: string }).code === "23505";
+          console.error(
+            yaDescontada
+              ? "[Telegram] La pajilla ya estaba descontada para esta vaca y fecha; no se descuenta de nuevo."
+              : `[Telegram] No se pudo descontar la pajilla: ${usoErr.message}`,
+          );
         } else {
           usoId = uso!.id as string;
           // Anotar el id en datos: el callback de Deshacer ya no cabe dos

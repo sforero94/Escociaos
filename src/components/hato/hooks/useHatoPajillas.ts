@@ -107,7 +107,9 @@ export function useHatoPajillas() {
    * automáticamente el servicio a una pajilla queda fuera de alcance de esta
    * épica (plan §6, nota de cierre de Épica G). El stock puede quedar en 0 o
    * negativo: esta función no valida ni bloquea sobre eso, la UI solo
-   * advierte (G3). */
+   * advierte (G3). Lo único que SÍ rechaza es el duplicado exacto
+   * (mismo lote + misma vaca + misma fecha), que la migración 139 vuelve
+   * imposible en la base -- eso es un reenvío, no un segundo uso. */
   const registrarUso = useCallback(
     async (pajillaId: string, fechaUso: string, animalId: string | null): Promise<ResultadoEscrituraPajillas> => {
       setGuardando(true);
@@ -115,7 +117,20 @@ export function useHatoPajillas() {
         const { error: insertError } = await supabase
           .from('hato_pajillas_uso')
           .insert({ pajilla_id: pajillaId, fecha_uso: fechaUso, animal_id: animalId });
-        if (insertError) throw insertError;
+        if (insertError) {
+          // 23505 = `hato_pajillas_uso_unico` (migración 139): ese lote ya
+          // está descontado para esa vaca en esa fecha. Es un reenvío, no un
+          // segundo uso -- el caso que descontó dos veces la pajilla de
+          // Jericó sobre ELECTRA el 2026-09-08 (migración 138). El mensaje
+          // crudo de Postgres nombra el índice y no le dice nada a Martha.
+          if ((insertError as { code?: string }).code === '23505') {
+            return {
+              ok: false,
+              error: 'Esa pajilla ya está registrada como usada en esa vaca y esa fecha. No se descontó de nuevo.',
+            };
+          }
+          throw insertError;
+        }
         return { ok: true };
       } catch (err) {
         return { ok: false, error: err instanceof Error ? err.message : 'Error desconocido registrando el uso de la pajilla' };
