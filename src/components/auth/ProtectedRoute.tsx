@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { Loader2, Send } from 'lucide-react';
+import { Ban, Loader2, Send } from 'lucide-react';
 import { Button } from '../ui/button';
 
 interface ProtectedRouteProps {
@@ -26,6 +26,28 @@ export function ProtectedRoute({ children, fallback }: ProtectedRouteProps) {
   // Si no está autenticado, mostrar fallback o null
   if (!isAuthenticated) {
     return fallback ? <>{fallback}</> : null;
+  }
+
+  // Cuenta desactivada: el interruptor de Configuración ya cerró Finanzas
+  // (es_usuario_gerencia exige activo). get_user_role() alineado en la 137
+  // cierra el resto de RLS; esta pantalla evita una app a medias.
+  if (profile?.activo === false) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="text-center max-w-md">
+          <div className="w-16 h-16 rounded-2xl bg-red-100 flex items-center justify-center mx-auto mb-4">
+            <Ban className="w-8 h-8 text-red-600" />
+          </div>
+          <h2 className="text-xl font-semibold text-foreground mb-2">Cuenta desactivada</h2>
+          <p className="text-brand-brown/70 mb-6">
+            Tu cuenta fue desactivada. No puedes usar la aplicación. Habla con Gerencia si crees que es un error.
+          </p>
+          <Button variant="outline" onClick={signOut}>
+            Cerrar sesión
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   // Monitor users only have access to the Telegram bot

@@ -60,7 +60,8 @@ export async function getUserProfile(userId: string) {
       email: data.email,
       rol: data.rol || 'Administrador',
       modulos: (data as any).modulos_acceso ?? [],
-      created_at: data.created_at
+      created_at: data.created_at,
+      activo: data.activo,
     };
   } catch (error) {
     console.error('❌ Excepción en getUserProfile:', error);
