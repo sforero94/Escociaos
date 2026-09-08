@@ -19,6 +19,11 @@ import { gastoConversation } from "./conversations/gasto.ts";
 import { ingresoConversation } from "./conversations/ingreso.ts";
 import { pesajeLecheConversation } from "./conversations/pesajeLeche.ts";
 import { eventoHatoConversation } from "./conversations/eventoHato.ts";
+import {
+  elegirUsoIdParaDeshacer,
+  parsearCallbackDeshacerEvento,
+  usoIdDesdeDatosEvento,
+} from "./eventoHatoUndo.ts";
 import { cierreRondaConversation } from "./conversations/cierreRonda.ts";
 import { excepcionDavidConversation } from "./conversations/excepcionDavid.ts";
 // `produccionQuincenal` (litros al camión) se retiró del bot -- SOW 3 de
@@ -1393,18 +1398,18 @@ function getBot(): Bot<BotContext> {
   // borrar un evento derivado de un chequeo aprobado.
   // --------------------------------------------------------------------------
 
-  bot.callbackQuery(/^hato_ev_undo:([0-9a-f-]+):([0-9a-f-]+|-)$/, async (ctx) => {
-    const eventoId = ctx.match?.[1];
-    const usoId = ctx.match?.[2];
-    if (!eventoId) {
+  bot.callbackQuery(/^hato_ev_undo:/, async (ctx) => {
+    const parsed = parsearCallbackDeshacerEvento(ctx.callbackQuery.data ?? "");
+    if (!parsed) {
       await ctx.answerCallbackQuery({ text: "No se pudo procesar." });
       return;
     }
+    const eventoId = parsed.eventoId;
 
     const sb = getSupabaseAdmin();
     const { data: evento } = await sb
       .from("hato_eventos")
-      .select("id, fuente")
+      .select("id, fuente, animal_id, fecha, created_at, datos, tipo, tipo_servicio")
       .eq("id", eventoId)
       .maybeSingle();
 
@@ -1417,9 +1422,45 @@ function getBot(): Bot<BotContext> {
       return;
     }
 
+    // El callback ya no lleva el usoId (límite de 64 bytes). Se busca por
+    // datos.pajilla_uso_id o, si falta, por vaca+fecha del mismo instante.
+    // Solo se listan usos cuando el evento es una inseminación: deshacer un
+    // parto o una monta del mismo día no puede devolver la pajilla de otra.
+    let usos: Array<{
+      id: string;
+      animal_id: string | null;
+      fecha_uso: string;
+      created_at: string;
+    }> = [];
+    const esInseminacion =
+      evento.tipo === "servicio" && evento.tipo_servicio === "inseminacion";
+    if (
+      esInseminacion &&
+      !parsed.usoId &&
+      !usoIdDesdeDatosEvento(evento.datos)
+    ) {
+      const { data: usosData } = await sb
+        .from("hato_pajillas_uso")
+        .select("id, animal_id, fecha_uso, created_at")
+        .eq("animal_id", evento.animal_id)
+        .eq("fecha_uso", evento.fecha);
+      usos = (usosData ?? []) as typeof usos;
+    }
+
+    const usoId = elegirUsoIdParaDeshacer({
+      usoIdCallback: parsed.usoId,
+      datosEvento: evento.datos,
+      evento: {
+        animal_id: evento.animal_id as string,
+        fecha: evento.fecha as string,
+        created_at: evento.created_at as string,
+      },
+      usos,
+    });
+
     // El uso de pajilla se borra PRIMERO: si fallara después del evento, el
     // inventario quedaría descontado por un servicio que ya no existe.
-    if (usoId && usoId !== "-") {
+    if (usoId) {
       const { error: errorUso } = await sb.from("hato_pajillas_uso").delete().eq("id", usoId);
       if (errorUso) {
         await ctx.answerCallbackQuery({ text: "No se pudo devolver la pajilla. No borré nada." });
