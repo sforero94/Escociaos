@@ -1062,3 +1062,28 @@ function y ninguna guarda de paridad lo cubre.
   el otro se confirmo y crecio. Ningun P1 llego a Notion como lo trajo su agente.
 - **Migration drift: LIMPIO.** Ledger tope `20260903182508` = 136; ficheros 120-136 en `main`.
 - **Code Quality devolvio pasado el limite de 90 min**; se filo 1 de sus 5 hallazgos por el cap de 12.
+
+## REGLA DURA — ningun identificador de destinatario literal en `escociaos-po/**`
+Anadida el 2026-09-08, despues de que el commit de memoria del lunes (`4237f57`) publicara un
+`telegram_id` literal en un repositorio **publico**. Es la MISMA clase de P1 que la corrida del
+2026-08-17 ya habia encontrado, y la escribio la propia operacion el mismo dia en que filaba
+hallazgos sobre disciplina de secretos.
+
+**Se nombra la COLUMNA, nunca el valor**: `telegram_usuarios.telegram_id`, no el numero. Vale para
+telegram_id, chat id, telefono y cualquier identificador de una persona concreta. La constitucion
+§6 dice \"never write a token, key, or connection string\"; **los identificadores de destinatario
+cuentan como secretos a estos efectos** — la omision de no nombrarlos fue suficiente para que
+pasara.
+
+**Comprobacion antes de CUALQUIER commit de memoria** (una linea, sin dependencias):
+```
+grep -rnoE '\b[0-9]{9,10}\b' escociaos-po/
+```
+Tiene que devolver **0**. Hoy devuelve 0.
+
+**POR QUE LA GUARDA NO LO ATRAPO A TIEMPO, y es lo que hay que arreglar**: la prueba
+`src/__tests__/telegramWebhookSecretoGuard.test.ts` SI cubre `escociaos-po/**` y SI lo detecto —
+pero corre dentro de `npm test`, y **un commit de solo-memoria no dispara la suite**. El valor
+sobrevivio a la Fase 5 del lunes y solo aparecio al dia siguiente, cuando un agente corrio las
+pruebas por otro motivo y encontro `main` en rojo. Una guarda que solo corre en un carril que este
+commit no usa no protege este commit.
