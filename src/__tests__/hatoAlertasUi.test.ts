@@ -16,6 +16,7 @@ import {
   contarAlertasPorEstado,
   requiereRevisionSemanal,
   chipRespuestaAlerta,
+  etiquetaAlcanceHato,
   chipEstadoAlerta,
   alertasVencidasParaExpirar,
   type EstadoAlertaHato,
@@ -208,5 +209,20 @@ describe('alertasVencidasParaExpirar', () => {
     const copia = [...alertas];
     alertasVencidasParaExpirar(alertas, HOY);
     expect(alertas).toEqual(copia);
+  });
+});
+
+describe('etiquetaAlcanceHato — alerta DE HATO (animal_id null, rechequeo_due desde 2026-09-08)', () => {
+  it('nombra el conteo en plural', () => {
+    expect(etiquetaAlcanceHato(36)).toBe('36 vacas del hato');
+  });
+
+  it('usa el singular con una sola vaca', () => {
+    expect(etiquetaAlcanceHato(1)).toBe('1 vaca del hato');
+  });
+
+  it('sin conteo rotula el alcance, nunca inventa un número ni cae en "sin caravana"', () => {
+    expect(etiquetaAlcanceHato(null)).toBe('Todo el hato');
+    expect(etiquetaAlcanceHato(null)).not.toContain('0');
   });
 });

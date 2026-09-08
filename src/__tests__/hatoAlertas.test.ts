@@ -96,7 +96,60 @@ describe('generarAlertasPendientes — rechequeo_due', () => {
     const alertas = generarAlertasPendientes([fila], [], CONFIG, new Set(), FECHA_REF);
     const rechq = alertas.find((a) => a.tipo === 'rechequeo_due');
     expect(rechq).toBeDefined();
-    expect(rechq!.regla_clave).toBe('rechq:animal-1:2026-05-01');
+    // Alerta DE HATO: la clave lleva el literal `hato`, no el animal_id.
+    expect(rechq!.regla_clave).toBe('rechq:hato:2026-05-01');
+    expect(rechq!.animal_id).toBeNull();
+    expect(rechq!.datos.vacas_count).toBe(1);
+    expect(rechq!.mensaje).toContain('1 vaca necesita');
+  });
+
+  // --------------------------------------------------------------------------
+  // Decisión del dueño (Santiago, 2026-09-08): "una sola alerta del hato, no
+  // individual". El tick del 2026-09-07 generó 36 alertas y mandó 108 mensajes
+  // de Telegram a 3 personas dentro del mismo milisegundo, porque el chequeo es
+  // un evento de rebaño (una sola `fecha` para todas) y 2026-07-09 + 60 días
+  // cae el mismo día para cada vaca.
+  // --------------------------------------------------------------------------
+  it('36 vacas con el mismo último chequeo producen UNA sola alerta, no 36', () => {
+    const hato = Array.from({ length: 36 }, (_, i) =>
+      animalBase({ animal_id: `animal-${i + 1}`, numero: i + 1, nombre: `VACA${i + 1}`, ultimo_chequeo_fecha: '2026-05-01' }),
+    );
+    const alertas = generarAlertasPendientes(hato, [], CONFIG, new Set(), FECHA_REF);
+    const rechqs = alertas.filter((a) => a.tipo === 'rechequeo_due');
+    expect(rechqs).toHaveLength(1);
+    expect(rechqs[0].regla_clave).toBe('rechq:hato:2026-05-01');
+    expect(rechqs[0].animal_id).toBeNull();
+    expect(rechqs[0].datos.vacas_count).toBe(36);
+    expect(rechqs[0].mensaje).toContain('36 vacas necesitan');
+    expect(rechqs[0].mensaje).toContain('2026-05-01');
+    // El detalle viaja en `datos` para que se recupere sin una segunda consulta.
+    const detalle = rechqs[0].datos.animales as Array<{ numero: number | null; nombre: string | null }>;
+    expect(detalle).toHaveLength(36);
+    expect(detalle[0]).toMatchObject({ numero: 1, nombre: 'VACA1' });
+  });
+
+  it('NO asume un solo grupo: dos fechas de último chequeo producen dos alertas y ninguna vaca se pierde', () => {
+    // La segunda es una vaca comprada que llegó con otra fecha de chequeo.
+    const hato = [
+      ...Array.from({ length: 3 }, (_, i) =>
+        animalBase({ animal_id: `animal-${i + 1}`, numero: i + 1, ultimo_chequeo_fecha: '2026-05-01' }),
+      ),
+      animalBase({ animal_id: 'comprada', numero: 90, nombre: 'FORANEA', ultimo_chequeo_fecha: '2026-04-10' }),
+    ];
+    const alertas = generarAlertasPendientes(hato, [], CONFIG, new Set(), FECHA_REF);
+    const rechqs = alertas.filter((a) => a.tipo === 'rechequeo_due');
+    expect(rechqs).toHaveLength(2);
+    expect(rechqs.map((a) => a.regla_clave).sort()).toEqual(['rechq:hato:2026-04-10', 'rechq:hato:2026-05-01']);
+    const total = rechqs.reduce((acc, a) => acc + (a.datos.vacas_count as number), 0);
+    expect(total).toBe(4);
+  });
+
+  it('es idempotente: si la alerta del grupo ya existe, el tick no genera otra', () => {
+    const hato = Array.from({ length: 36 }, (_, i) =>
+      animalBase({ animal_id: `animal-${i + 1}`, numero: i + 1, ultimo_chequeo_fecha: '2026-05-01' }),
+    );
+    const alertas = generarAlertasPendientes(hato, [], CONFIG, new Set(['rechq:hato:2026-05-01']), FECHA_REF);
+    expect(alertas.filter((a) => a.tipo === 'rechequeo_due')).toHaveLength(0);
   });
 
   it('NO dispara si el último chequeo es reciente', () => {
@@ -398,6 +451,32 @@ describe('resumirCoberturaAlertas — instrumentación del tick (hallazgo #4, PO
     expect(omitidasDe(resumen, 'secado_due', 'bajo_umbral')).toBe(1);
     expect(omitidasDe(resumen, 'servicio_sin_confirmacion', 'bajo_umbral')).toBe(1);
     expect(omitidasDe(resumen, 'parto_proximo', 'bajo_umbral')).toBe(1);
+  });
+
+  it('agrupada: rechequeo_due cuenta ALERTAS, no animales -- 36 elegibles del mismo grupo dan 1 generada y 35 agrupadas', () => {
+    const hato = Array.from({ length: 36 }, (_, i) =>
+      animalBase({ animal_id: `animal-${i + 1}`, numero: i + 1, ultimo_chequeo_fecha: '2026-05-01' }),
+    );
+    const resumen = resumirCoberturaAlertas(hato, [], CONFIG, SIN_REGLAS, FECHA_REF);
+    expect(generadasDe(resumen, 'rechequeo_due')).toBe(1);
+    expect(omitidasDe(resumen, 'rechequeo_due', 'agrupada')).toBe(35);
+    // La suma por regla sigue cerrando contra animales_evaluados: es lo que
+    // permite distinguir "la regla no aplica a nadie" de "la regla está rota".
+    const r = resumen.por_tipo.rechequeo_due;
+    const total = r.generadas + Object.values(r.omitidas).reduce((a, b) => a + b, 0);
+    expect(total).toBe(resumen.animales_evaluados);
+  });
+
+  it('agrupada: dos fechas de último chequeo dan 2 generadas -- el segundo grupo nunca se pierde', () => {
+    const hato = [
+      ...Array.from({ length: 3 }, (_, i) =>
+        animalBase({ animal_id: `animal-${i + 1}`, numero: i + 1, ultimo_chequeo_fecha: '2026-05-01' }),
+      ),
+      animalBase({ animal_id: 'comprada', numero: 90, ultimo_chequeo_fecha: '2026-04-10' }),
+    ];
+    const resumen = resumirCoberturaAlertas(hato, [], CONFIG, SIN_REGLAS, FECHA_REF);
+    expect(generadasDe(resumen, 'rechequeo_due')).toBe(2);
+    expect(omitidasDe(resumen, 'rechequeo_due', 'agrupada')).toBe(2);
   });
 
   it('fecha_futura: solo tratamiento_paso usa este motivo, para un paso programado a futuro', () => {

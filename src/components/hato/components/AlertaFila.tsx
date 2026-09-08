@@ -24,6 +24,7 @@ import { chipEstadoAlerta } from '@/utils/hatoUi';
 import {
   LABEL_TIPO_ALERTA_HATO,
   chipRespuestaAlerta,
+  etiquetaAlcanceHato,
   type EstadoAlertaHato,
   type TipoAlertaHato,
 } from '@/utils/hatoAlertasUi';
@@ -43,6 +44,13 @@ const ICONO_TIPO_ALERTA: Record<TipoAlertaHato, typeof Droplet> = {
 
 function identidadAnimal(alerta: AlertaHatoEnriquecida): string {
   const { animalNumero, animalNombre, animalNumeroEsProvisional } = alerta;
+
+  // Alerta DE HATO (`rechequeo_due` desde 2026-09-08): no cuelga de un animal,
+  // así que "sin caravana" sería falso -- el alcance ES el grupo.
+  if (alerta.animal_id === null) {
+    const vacas = (alerta.datos as { vacas_count?: unknown } | null)?.vacas_count;
+    return etiquetaAlcanceHato(typeof vacas === 'number' ? vacas : null);
+  }
 
   if (animalNumero == null && !animalNombre) return 'sin caravana';
 
