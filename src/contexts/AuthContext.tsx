@@ -11,6 +11,8 @@ interface UserProfile {
   rol: string;
   modulos: string[];
   created_at?: string;
+  /** Ausente en el perfil temporal (rol ''). false = cuenta desactivada. */
+  activo?: boolean | null;
 }
 
 interface AuthContextType {

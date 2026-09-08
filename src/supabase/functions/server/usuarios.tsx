@@ -185,6 +185,12 @@ export async function editarUsuario(c: Context): Promise<Response> {
       }, 400);
     }
 
+    // Auth session: desactivar banea (~100 años); reactivar quita el baneo.
+    // 876000h es el valor de ESCO-81. Solo cuando `activo` viene explícito --
+    // no inferir `true` por omisión, que reactivaría un baneo en silencio.
+    const banDuration =
+      activo === false ? '876000h' : activo === true ? 'none' : undefined;
+
     // Actualizar usuario en auth.users (solo si hay password)
     if (password) {
       if (password.length < 6) {
@@ -202,6 +208,7 @@ export async function editarUsuario(c: Context): Promise<Response> {
             nombre_completo,
             rol,
           },
+          ...(banDuration ? { ban_duration: banDuration } : {}),
         }
       );
 
@@ -221,6 +228,7 @@ export async function editarUsuario(c: Context): Promise<Response> {
             nombre_completo,
             rol,
           },
+          ...(banDuration ? { ban_duration: banDuration } : {}),
         }
       );
 
