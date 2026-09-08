@@ -13,6 +13,17 @@
 // salían en `null` fijo desde `ChequeosList.tsx`, aunque la vista ya exponía
 // tres de los cuatro.
 //
+// "Lo que el sistema ya sabe" no es lo mismo que "lo que la vista devuelve",
+// y la `Fecha Servicio` es donde se nota (2026-09-08): la vista trae
+// `MAX(fecha)` de los eventos `servicio`, o sea el servicio que produjo la
+// última cría cuando la vaca ya parió. Impreso, eso contradice al `Estado
+// registrado` de la misma fila y le tapa a Martha la casilla donde tiene que
+// escribir el servicio nuevo. `celdasServicioParaPlanilla`
+// (`utils/hato/servicioVigente.ts`) anula fecha + toro + tipo cuando un parto
+// o un aborto posterior ya cerró ese ciclo. Es la ÚNICA puerta: el `.xlsx` y
+// el PDF leen los tres campos de este hook, así que ninguno de los dos
+// artefactos puede saltársela.
+//
 // Deliberadamente independiente de `useHatoAnimales.ts` (que alimenta
 // Tablero/Animales/Alertas y no expone "última cría"): esta sesión no toca
 // ese hook compartido -- lo usan `HatoDashboard.tsx`/`AnimalesList.tsx`, que
@@ -44,6 +55,7 @@ import {
   type UmbralesCategoriaHato,
 } from '@/utils/hatoCategorias';
 import type { EstadoActualHatoViewRow, TipoServicioHato } from '@/types/hato';
+import { celdasServicioParaPlanilla } from '@/utils/hato/servicioVigente';
 import { obtenerFechaHoy } from '@/utils/fechas';
 
 export interface AnimalParaPlanillaChequeo {
@@ -68,15 +80,25 @@ export interface AnimalParaPlanillaChequeo {
    * `null` = no determinable, nunca un valor por defecto. Hoy lo consume el
    * PDF de la Fase 2; el `.xlsx` imprime `sexoCriaRaw`. */
   sexoCria: SexoCria | null;
-  /** `ultimo_servicio_fecha` de la vista -- fecha del último servicio
-   * registrado. `null` = sin servicio conocido. */
+  /** Fecha del servicio ABIERTO, no `ultimo_servicio_fecha` a secas
+   * (2026-09-08). La vista devuelve `MAX(fecha)` sobre los eventos
+   * `servicio`, así que para una vaca ya parida trae el servicio que produjo
+   * esa cría -- correcto como dato, y contradictorio impreso al lado de un
+   * `Estado registrado` que dice `Vacía`. `celdasServicioParaPlanilla`
+   * (`utils/hato/servicioVigente.ts`) lo anula cuando un parto o un aborto
+   * posterior ya cerró el ciclo. `null` = no hay servicio que imprimir, y la
+   * casilla queda libre para que Martha escriba el nuevo. */
   ultimoServicioFecha: string | null;
   /** Nombre del toro del último servicio, resuelto contra `hato_toros`
    * (`ultimo_servicio_toro_id` es un uuid, no un nombre). `null` cuando el
-   * servicio no registró toro o el id no resuelve -- nunca el uuid crudo. */
+   * servicio no registró toro, cuando el id no resuelve, o cuando ese
+   * servicio ya está cerrado -- nunca el uuid crudo. Se anula SIEMPRE junto
+   * con `ultimoServicioFecha`: un toro sin su fecha reintroduce la misma
+   * contradicción. */
   toroNombre: string | null;
   /** `ultimo_tipo_servicio` -- gobierna el prefijo `Toro `/`Ins ` que
-   * `textoCeldaToro` reconstruye para que `parseToro` lo lea de vuelta. */
+   * `textoCeldaToro` reconstruye para que `parseToro` lo lea de vuelta. Se
+   * anula junto con los otros dos campos del servicio. */
   tipoServicio: TipoServicioHato | null;
   /** `ultimo_estado_chequeo` (migración 062) -- el `tipo` NORMALIZADO de
    * `parseEstado`, no el crudo. Hoy solo una minoría de vacas lo tiene; el
@@ -292,7 +314,17 @@ export function useAnimalesParaPlanillaChequeo() {
           const parto = ultimoPartoPorAnimal.get(fila.animal_id);
           const partoCoherente = parto && parto.fecha === fila.ultimo_parto_fecha ? parto : null;
 
+          // Las tres celdas del servicio viajan juntas y se anulan juntas
+          // cuando un parto/aborto posterior ya cerró ese ciclo -- ver la
+          // cabecera de `servicioVigente.ts`.
           const toroId = fila.ultimo_servicio_toro_id;
+          const servicio = celdasServicioParaPlanilla({
+            ultimoServicioFecha: fila.ultimo_servicio_fecha,
+            ultimoPartoFecha: fila.ultimo_parto_fecha,
+            ultimoAbortoFecha: fila.ultimo_aborto_fecha,
+            toroNombre: (toroId ? nombrePorToroId.get(toroId) : undefined) ?? null,
+            tipoServicio: fila.ultimo_tipo_servicio,
+          });
           return {
             numero: fila.numero,
             nombre: fila.nombre,
@@ -304,9 +336,9 @@ export function useAnimalesParaPlanillaChequeo() {
             sexoCria: partoCoherente
               ? derivarSexoCria({ sxRaw: partoCoherente.sxRaw, criaDestino: partoCoherente.criaDestino })
               : null,
-            ultimoServicioFecha: fila.ultimo_servicio_fecha,
-            toroNombre: (toroId ? nombrePorToroId.get(toroId) : undefined) ?? null,
-            tipoServicio: fila.ultimo_tipo_servicio,
+            ultimoServicioFecha: servicio.fechaServicio,
+            toroNombre: servicio.toroNombre,
+            tipoServicio: servicio.tipoServicio,
             ultimoEstadoChequeo: fila.ultimo_estado_chequeo,
             fechaSecar: derivado.fecha_secar,
             fechaProbableParto: derivado.fecha_probable_parto,
