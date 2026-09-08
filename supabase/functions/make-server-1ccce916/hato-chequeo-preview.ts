@@ -33,6 +33,7 @@ import type {
 } from './importHato/diffChequeo.ts';
 import type { HojaCruda } from './importHato/tipos.ts';
 import { construirHatoConfigDesdeFilas, type FilaHatoConfig } from './hato-config-desde-tabla.ts';
+import { paginarSelect } from './paginar-select.ts';
 import { derivarEstadoReproductivo, etiquetaEstadoReproductivo, type EstadoActualHatoRow } from './calculos-hato.ts';
 import {
   construirUmbralesCategoriaHatoDesdeFilas,
@@ -249,10 +250,13 @@ export async function handleHatoChequeoPreview(c: Context): Promise<Response> {
   const animalIds = animales.map((a) => a.id);
   let historico: FilaChequeoVacaHistorico[] = [];
   if (animalIds.length > 0) {
-    const { data, error } = await supabase
-      .from('hato_chequeo_vacas')
-      .select('animal_id, pl, num_partos, fecha_servicio, toro, tipo_servicio, fecha_secar, fecha_probable_parto, estado, created_at, hato_chequeos(fecha)')
-      .in('animal_id', animalIds);
+    const { filas: data, error } = await paginarSelect<Record<string, unknown>>((desde, hasta) =>
+      supabase
+        .from('hato_chequeo_vacas')
+        .select('animal_id, pl, num_partos, fecha_servicio, toro, tipo_servicio, fecha_secar, fecha_probable_parto, estado, created_at, hato_chequeos(fecha)')
+        .in('animal_id', animalIds)
+        .range(desde, hasta),
+    );
     if (error) return respuestaError(c, 500, `No se pudo leer hato_chequeo_vacas: ${error.message}`);
     historico = (data ?? []).map((fila: Record<string, unknown>) => {
       const chequeo = fila.hato_chequeos as { fecha: string } | { fecha: string }[] | null;
