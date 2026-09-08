@@ -24,7 +24,7 @@
 //
 //   secado_due                 -> `secado:{animal_id}:{fecha_servicio}`
 //   tratamiento_paso            -> `ttto:{paso_id}`
-//   rechequeo_due               -> `rechq:{animal_id}:{ultimo_chequeo_fecha}`
+//   rechequeo_due               -> `rechq:hato:{ultimo_chequeo_fecha}`  (DE HATO, no por animal)
 //   servicio_sin_confirmacion   -> `servconf:{animal_id}:{fecha_servicio}`
 //   parto_proximo               -> `parto:{animal_id}:{fecha_servicio}`
 //
@@ -107,7 +107,10 @@ export interface PasoTratamientoPendienteInput {
  * corresponde generar y con qué `regla_clave`/mensaje). */
 export interface AlertaGenerada {
   tipo: TipoAlertaHato;
-  animal_id: string;
+  /** `null` en las alertas DE HATO (`rechequeo_due`), que no cuelgan de
+   * ningún animal en particular -- `hato_alertas.animal_id` es nullable
+   * (verificado contra producción), así que esto no necesita migración. */
+  animal_id: string | null;
   regla_clave: string;
   fecha_programada: string;
   datos: Record<string, unknown>;
@@ -160,6 +163,10 @@ export interface ContextoMensajeAlerta {
   fecha_probable_parto?: string | null;
   fecha_servicio?: string | null;
   ultimo_chequeo_fecha?: string | null;
+  /** Solo `rechequeo_due`: cuántas vacas comparten ese `ultimo_chequeo_fecha`
+   * -- esa alerta es de hato, así que su mensaje nombra el conteo y la fecha,
+   * nunca un animal. */
+  vacas_count?: number;
   descripcion_paso?: string | null;
   fecha_programada?: string | null;
 }
@@ -181,8 +188,14 @@ export function construirMensajeAlerta(ctx: ContextoMensajeAlerta): string {
         ` (${ctx.fecha_programada ?? 'sin fecha registrada'})` +
         `${ctx.descripcion_paso ? `: "${ctx.descripcion_paso}"` : ''}. ¿Ya se hizo?`
       );
-    case 'rechequeo_due':
-      return `${presentacion} necesita rechequeo veterinario (último chequeo: ${ctx.ultimo_chequeo_fecha ?? 'sin registro'}). ¿Ya se hizo el rechequeo?`;
+    case 'rechequeo_due': {
+      // Alerta DE HATO: el chequeo es un evento de rebaño, así que el mensaje
+      // nombra el conteo y la fecha -- nunca `presentacion`, que describe a un
+      // animal. Ver la nota de agrupación en `generarAlertasPendientes`.
+      const vacas = ctx.vacas_count ?? 1;
+      const sujeto = vacas === 1 ? '1 vaca necesita' : `${vacas} vacas necesitan`;
+      return `${sujeto} rechequeo veterinario (último chequeo: ${ctx.ultimo_chequeo_fecha ?? 'sin registro'}). ¿Ya se hizo el rechequeo?`;
+    }
     case 'servicio_sin_confirmacion':
       return `${presentacion} fue servida el ${ctx.fecha_servicio ?? 'fecha desconocida'} y no hay confirmación de preñez. ¿Ya se confirmó o hay alguna novedad?`;
     case 'parto_proximo':
@@ -207,8 +220,12 @@ export function construirMensajeAlerta(ctx: ContextoMensajeAlerta): string {
 function claveAlertaSecadoDue(animalId: string, fechaServicio: string): string {
   return `secado:${animalId}:${fechaServicio}`;
 }
-function claveAlertaRechequeoDue(animalId: string, ultimoChequeoFecha: string): string {
-  return `rechq:${animalId}:${ultimoChequeoFecha}`;
+/** `rechequeo_due` es la única regla DE HATO: su clave no lleva `animal_id`,
+ * lleva el literal `hato` -- una alerta por `ultimo_chequeo_fecha`, no por
+ * animal. Compartida con `resumirCoberturaAlertas` (bloque 3b) para que las
+ * dos jamás calculen una clave distinta para la misma regla. */
+function claveAlertaRechequeoDue(ultimoChequeoFecha: string): string {
+  return `rechq:hato:${ultimoChequeoFecha}`;
 }
 function claveAlertaServicioSinConfirmacion(animalId: string, fechaServicio: string): string {
   return `servconf:${animalId}:${fechaServicio}`;
@@ -256,6 +273,9 @@ export function generarAlertasPendientes(
   fechaReferencia: string,
 ): AlertaGenerada[] {
   const alertas: AlertaGenerada[] = [];
+  // `rechequeo_due` se agrupa: ver el bucle que emite estas alertas después
+  // del recorrido de animales.
+  const rechequeoPorFecha = new Map<string, AnimalHatoParaAlertas[]>();
 
   for (const fila of animales) {
     const derivado = derivarEstadoReproductivo(fila, config, fechaReferencia);
@@ -282,19 +302,9 @@ export function generarAlertasPendientes(
     }
 
     if (derivado.alertas.rechequeo_due && fila.ultimo_chequeo_fecha) {
-      agregarSiNueva(alertas, reglasExistentes, {
-        tipo: 'rechequeo_due',
-        animal_id: fila.animal_id,
-        regla_clave: claveAlertaRechequeoDue(fila.animal_id, fila.ultimo_chequeo_fecha),
-        fecha_programada: fechaReferencia,
-        datos: { numero: fila.numero, nombre: fila.nombre, ultimo_chequeo_fecha: fila.ultimo_chequeo_fecha },
-        mensaje: construirMensajeAlerta({
-          tipo: 'rechequeo_due',
-          nombre: fila.nombre,
-          numero: fila.numero,
-          ultimo_chequeo_fecha: fila.ultimo_chequeo_fecha,
-        }),
-      });
+      const grupo = rechequeoPorFecha.get(fila.ultimo_chequeo_fecha);
+      if (grupo) grupo.push(fila);
+      else rechequeoPorFecha.set(fila.ultimo_chequeo_fecha, [fila]);
     }
 
     if (derivado.alertas.servicio_sin_confirmacion && fila.ultimo_servicio_fecha) {
@@ -333,6 +343,41 @@ export function generarAlertasPendientes(
         }),
       });
     }
+  }
+
+  // --------------------------------------------------------------------------
+  // `rechequeo_due` es una alerta DE HATO, no por animal (decisión del dueño,
+  // 2026-09-08: "una sola alerta del hato, no individual"). El chequeo es un
+  // evento de rebaño -- una sola `fecha` para todas las vacas -- así que con
+  // `dias_rechequeo_due` todas cruzan el umbral el mismo día: el tick del
+  // 2026-09-07 generó 36 alertas y mandó 108 mensajes de Telegram a 3
+  // personas dentro del mismo milisegundo (2026-07-09 + 60 = 2026-09-07).
+  //
+  // Se agrupa por `ultimo_chequeo_fecha` y se emite UNA alerta por grupo.
+  // NO se asume un solo grupo: una vaca comprada puede traer otra fecha de
+  // último chequeo, y perderla en silencio sería peor que la ráfaga.
+  // --------------------------------------------------------------------------
+  for (const [ultimoChequeoFecha, delGrupo] of rechequeoPorFecha) {
+    agregarSiNueva(alertas, reglasExistentes, {
+      tipo: 'rechequeo_due',
+      animal_id: null,
+      regla_clave: claveAlertaRechequeoDue(ultimoChequeoFecha),
+      fecha_programada: fechaReferencia,
+      // El detalle viaja en `datos` para que la cola de alertas y quien audite
+      // después sepan QUÉ vacas entraron sin una segunda consulta.
+      datos: {
+        ultimo_chequeo_fecha: ultimoChequeoFecha,
+        vacas_count: delGrupo.length,
+        animales: delGrupo.map((a) => ({ animal_id: a.animal_id, numero: a.numero, nombre: a.nombre })),
+      },
+      mensaje: construirMensajeAlerta({
+        tipo: 'rechequeo_due',
+        nombre: null,
+        numero: null,
+        ultimo_chequeo_fecha: ultimoChequeoFecha,
+        vacas_count: delGrupo.length,
+      }),
+    });
   }
 
   for (const paso of pasosPendientes) {
@@ -399,6 +444,14 @@ export function generarAlertasPendientes(
  *                              `ultimo_servicio_fecha` que los ancle (S3 §2.2).
  *   sin_chequeo             -- (solo `rechequeo_due`) el animal nunca tuvo un
  *                              chequeo registrado.
+ *   agrupada                -- (solo `rechequeo_due`) el animal SÍ cruza el
+ *                              umbral, pero `rechequeo_due` es una alerta DE
+ *                              HATO: la representa la alerta del grupo de su
+ *                              `ultimo_chequeo_fecha`, ya contada en la
+ *                              primera fila elegible de esa fecha. No es un
+ *                              fallo -- es lo que hace que `generadas` cuente
+ *                              ALERTAS y no animales, y lo que mantiene la
+ *                              suma por regla igual a `animales_evaluados`.
  *   fecha_futura            -- (solo `tratamiento_paso`) el paso todavía no
  *                              llega a su fecha programada.
  *   bajo_umbral             -- el ciclo está anclado y el dato existe, pero
@@ -421,6 +474,7 @@ export type RazonOmisionAlerta =
   | 'evento_no_clasificado'
   | 'sin_servicio_ancla'
   | 'sin_chequeo'
+  | 'agrupada'
   | 'fecha_futura'
   | 'bajo_umbral'
   | 'ya_generada'
@@ -432,6 +486,7 @@ const RAZONES_OMISION_ALERTA: readonly RazonOmisionAlerta[] = [
   'evento_no_clasificado',
   'sin_servicio_ancla',
   'sin_chequeo',
+  'agrupada',
   'fecha_futura',
   'bajo_umbral',
   'ya_generada',
@@ -573,6 +628,10 @@ export function resumirCoberturaAlertas(
   };
 
   let animalesSinRaza = 0;
+  // Espejo del agrupamiento de `generarAlertasPendientes`: la primera fila
+  // elegible de cada `ultimo_chequeo_fecha` representa a la alerta del grupo;
+  // las siguientes caen en `agrupada`.
+  const fechasRechequeoContadas = new Set<string>();
 
   for (const fila of animales) {
     if (!fila.raza) animalesSinRaza += 1;
@@ -629,9 +688,14 @@ export function resumirCoberturaAlertas(
         razon = 'no_activa';
       } else if (!fila.ultimo_chequeo_fecha) {
         razon = 'sin_chequeo';
+      } else if (!derivado.alertas.rechequeo_due) {
+        razon = 'bajo_umbral';
+      } else if (fechasRechequeoContadas.has(fila.ultimo_chequeo_fecha)) {
+        razon = 'agrupada';
       } else {
-        const clave = claveAlertaRechequeoDue(fila.animal_id, fila.ultimo_chequeo_fecha);
-        razon = resolverRazonOmision(derivado.alertas.rechequeo_due, 'bajo_umbral', clave, reglasExistentes);
+        fechasRechequeoContadas.add(fila.ultimo_chequeo_fecha);
+        const clave = claveAlertaRechequeoDue(fila.ultimo_chequeo_fecha);
+        razon = resolverRazonOmision(true, 'bajo_umbral', clave, reglasExistentes);
       }
       acumularResultadoRegla(porTipo.rechequeo_due, razon);
     }

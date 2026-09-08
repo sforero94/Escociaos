@@ -156,6 +156,18 @@ export function chipRespuestaAlerta(respuesta: string | null): ChipEstilo | null
   return { label: respuesta, className: 'bg-gray-100 text-gray-600 border-gray-200' };
 }
 
+/** Identidad de una alerta DE HATO en la cola (`animal_id === null`, hoy solo
+ * `rechequeo_due` desde 2026-09-08). No cuelga de ningún animal, así que la
+ * fila no puede decir "sin caravana" -- diría que falta un dato que nunca
+ * debió existir. `vacasCount` sale de `hato_alertas.datos.vacas_count`; si no
+ * viene (alerta de hato de otro origen, o `datos` incompleto) se rotula el
+ * alcance sin inventar un número, misma regla de "sin dato, nunca 0" que rige
+ * todo el módulo. */
+export function etiquetaAlcanceHato(vacasCount: number | null): string {
+  if (vacasCount === null || !Number.isFinite(vacasCount) || vacasCount < 0) return 'Todo el hato';
+  return vacasCount === 1 ? '1 vaca del hato' : `${vacasCount} vacas del hato`;
+}
+
 export { chipEstadoAlerta };
 
 // ============================================================================
