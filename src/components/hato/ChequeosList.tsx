@@ -60,6 +60,7 @@ import {
 } from '@/utils/hato/exportarPlanillaChequeoPDF';
 import type { AnimalParaPlanillaChequeo } from './hooks/useAnimalesParaPlanillaChequeo';
 import { obtenerFechaHoy } from '@/utils/fechas';
+import { mensajeErrorCargaDiferida } from '@/utils/errorCargaDiferida';
 
 /**
  * B5.1 -- planilla PRE-LLENADA para el PRÓXIMO chequeo (aún sin fecha real:
@@ -210,30 +211,6 @@ export function ChequeosList() {
     [chequeos, orden],
   );
 
-  /**
-   * Traduce el fallo real de una exportación a algo accionable. Antes las dos
-   * exportaciones tenían un `catch {}` PELADO y un toast fijo ("No se pudo
-   * generar el PDF"), así que el modo de fallo más probable de todos quedaba
-   * indistinguible de cualquier otro: `jspdf`/`jspdf-autotable`/`xlsx` entran
-   * por `import()` dinámico, o sea en un chunk aparte, y una pestaña que
-   * quedó abierta desde ANTES de un despliegue pide un hash de chunk que ya
-   * no existe. El navegador devuelve 404 y el `import()` rechaza. No es un
-   * error de datos ni de permisos: se arregla recargando, y el mensaje tiene
-   * que decirlo -- si no, el usuario reporta "no puedo generar la planilla" y
-   * el diagnóstico arranca de cero.
-   */
-  const mensajeErrorExportacion = (err: unknown, quePasaba: string): string => {
-    const detalle = err instanceof Error ? err.message : String(err);
-    // Firefox dice "error loading dynamically imported module", Chrome
-    // "Failed to fetch dynamically imported module", Safari "Importing a
-    // module script failed". Se cubren las tres por subcadena.
-    const esChunkViejo = /dynamically imported module|Importing a module script failed|Failed to fetch/i.test(detalle);
-    if (esChunkViejo) {
-      return `${quePasaba}: la página está desactualizada. Recárgala (Ctrl+Shift+R) e inténtalo de nuevo.`;
-    }
-    return `${quePasaba}: ${detalle}`;
-  };
-
   /** Ninguna de las dos exportaciones debe producir una planilla VACÍA en
    * silencio. Si el roster no cargó, la hoja saldría sin una sola vaca y
    * parecería un archivo válido -- el peor resultado posible para algo que se
@@ -269,7 +246,7 @@ export function ChequeosList() {
       toast.success('Planilla lista para imprimir. Corrija la fecha del título si el chequeo es otro día.');
     } catch (err) {
       console.error('[planilla chequeo] fallo generando el PDF', err);
-      toast.error(mensajeErrorExportacion(err, 'No se pudo generar el PDF de la planilla'));
+      toast.error(mensajeErrorCargaDiferida(err, 'No se pudo generar el PDF de la planilla'));
     } finally {
       setExportandoPdf(false);
     }
@@ -297,7 +274,7 @@ export function ChequeosList() {
       toast.success('Planilla exportada. Actualiza la fecha del título con la del chequeo real antes de subirla.');
     } catch (err) {
       console.error('[planilla chequeo] fallo exportando el .xlsx', err);
-      toast.error(mensajeErrorExportacion(err, 'No se pudo exportar la planilla'));
+      toast.error(mensajeErrorCargaDiferida(err, 'No se pudo exportar la planilla'));
     } finally {
       setExportando(false);
     }

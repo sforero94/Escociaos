@@ -5,6 +5,7 @@ import { SafeModeProvider } from './contexts/SafeModeContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { Login } from './components/Login';
 import { Layout } from './components/Layout';
+import { RouteErrorBoundary } from './components/shared/RouteErrorBoundary';
 import { Toaster } from './components/ui/sonner';
 import { ChatFAB } from './components/chat/ChatFAB';
 import { Loader2 } from 'lucide-react';
@@ -78,8 +79,14 @@ function RouteSpinner() {
 function LayoutRoutes() {
   return (
     <Layout>
+      {/* La barrera va DENTRO de `Suspense` y envolviendo a `Routes`: un
+          chunk de ruta que ya no existe (pestaña abierta desde antes de un
+          despliegue) rechaza dentro del render diferido, y sin barrera eso
+          desmonta la aplicación entera -- pantalla en blanco. Ver
+          `RouteErrorBoundary` y `utils/errorCargaDiferida.ts`. */}
       <Suspense fallback={<RouteSpinner />}>
-        <Routes>
+        <RouteErrorBoundary>
+          <Routes>
           {/* Dashboard - Ruta principal */}
           <Route index element={<Dashboard />} />
 
@@ -208,7 +215,8 @@ function LayoutRoutes() {
 
           {/* Ruta 404 - Redirigir al dashboard */}
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+          </Routes>
+        </RouteErrorBoundary>
       </Suspense>
     </Layout>
   );

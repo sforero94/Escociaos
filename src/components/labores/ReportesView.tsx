@@ -54,6 +54,8 @@ import { generarPDFReportesLabores } from '../../utils/generarPDFReportesLabores
 
 // Import types from main component
 import type { Tarea, Empleado, Contratista, TipoTarea } from './Labores';
+import { mensajeErrorCargaDiferida } from '@/utils/errorCargaDiferida';
+import { toast } from 'sonner';
 
 interface ReportesViewProps {
   tareas: Tarea[];
@@ -405,13 +407,21 @@ const ReportesView: React.FC<ReportesViewProps> = ({
   const exportarPDF = async () => {
     if (!estadisticasGenerales || registrosTrabajo.length === 0) return;
 
-    await generarPDFReportesLabores(
-      registrosTrabajo,
-      tiposTareas,
-      estadisticasGenerales,
-      fechaInicio,
-      fechaFin
-    );
+    // Sin este `try` el rechazo quedaba en un `onClick` `async` sin manejar:
+    // el usuario hacía clic y NO PASABA NADA, ni archivo ni mensaje. Es el
+    // peor de los modos de fallo, porque no deja ni qué reportar.
+    try {
+      await generarPDFReportesLabores(
+        registrosTrabajo,
+        tiposTareas,
+        estadisticasGenerales,
+        fechaInicio,
+        fechaFin
+      );
+    } catch (err) {
+      console.error('[reportes labores] fallo generando el PDF', err);
+      toast.error(mensajeErrorCargaDiferida(err, 'No se pudo generar el PDF'));
+    }
   };
 
   if (loading) {
