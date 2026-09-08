@@ -43,6 +43,10 @@ import {
   type HatoConfig,
 } from "../../calculos-hato.ts";
 import { construirHatoConfigDesdeFilas } from "../../hato-config-desde-tabla.ts";
+import {
+  atribucionDesdeFilaTelegram,
+  construirCallbackDeshacerEvento,
+} from "../eventoHatoUndo.ts";
 
 function getSupabaseAdmin() {
   const url = Deno.env.get("SUPABASE_URL")!;
@@ -198,8 +202,7 @@ export async function eventoHatoConversation(
   conversation: Conversation<BotContext>,
   ctx: BotContext,
 ) {
-  const usuarioId = ctx.telegramUser?.usuario_id ?? null;
-
+  let escrito = false;
   try {
     // ── Paso 1: ¿qué pasó? ────────────────────────────────────────────
     const kbTipo = new InlineKeyboard()
@@ -532,6 +535,31 @@ export async function eventoHatoConversation(
     // ── Paso 8: escribir ──────────────────────────────────────────────
     const guardado = await conversation.external(async () => {
       const sb = getSupabaseAdmin();
+      // `ctx.telegramUser` es flavor propio y no sobrevive el replay del
+      // plugin de conversaciones (hallazgo 2026-08-28 en excepcionDavid).
+      // `ctx.from.id` sí es nativo de grammY. Se reconsulta acá, en el
+      // instante de escribir: si se leyera al entrar al flujo, un replay
+      // tardío dejaría created_by y registrado_por en NULL — que es lo
+      // que quedó en las dos filas de Martha del 2026-09-08.
+      const telegramId = ctx.from?.id;
+      let filaTelegram: { usuario_id: string | null; nombre_display: string | null } | null =
+        null;
+      if (telegramId != null) {
+        const { data: tgUser } = await sb
+          .from("telegram_usuarios")
+          .select("usuario_id, nombre_display")
+          .eq("telegram_id", telegramId)
+          .eq("activo", true)
+          .maybeSingle();
+        filaTelegram = (tgUser as { usuario_id: string | null; nombre_display: string | null } | null) ??
+          null;
+      }
+      const { usuarioId, nombreDisplay } = atribucionDesdeFilaTelegram(filaTelegram);
+
+      const datosEvento: Record<string, unknown> = {
+        origen: "telegram",
+        registrado_por: nombreDisplay,
+      };
       const { data, error } = await sb
         .from("hato_eventos")
         .insert({
@@ -547,7 +575,7 @@ export async function eventoHatoConversation(
           fuente: "telegram",
           // chequeo_vaca_id se deja NULL: es lo que vuelve este evento
           // intocable por fn_hato_commit_chequeo (065).
-          datos: { origen: "telegram", registrado_por: ctx.telegramUser?.nombre_display ?? null },
+          datos: datosEvento,
           created_by: usuarioId,
         })
         .select("id")
@@ -573,23 +601,48 @@ export async function eventoHatoConversation(
           console.error("[Telegram] No se pudo descontar la pajilla:", usoErr.message);
         } else {
           usoId = uso!.id as string;
+          // Anotar el id en datos: el callback de Deshacer ya no cabe dos
+          // UUID (límite de 64 bytes). Si este UPDATE falla, el handler
+          // busca el uso por vaca+fecha+cercanía temporal.
+          const { error: linkErr } = await sb
+            .from("hato_eventos")
+            .update({ datos: { ...datosEvento, pajilla_uso_id: usoId } })
+            .eq("id", data!.id);
+          if (linkErr) {
+            console.error(
+              "[Telegram] No se pudo anotar pajilla_uso_id en el evento:",
+              linkErr.message,
+            );
+          }
         }
       }
       return { eventoId: data!.id as string, usoId };
     });
+    escrito = true;
 
-    const kbDeshacer = new InlineKeyboard().text(
-      "↩️ Deshacer",
-      `hato_ev_undo:${guardado.eventoId}:${guardado.usoId ?? "-"}`,
-    );
-    await ctx.reply(
-      `✅ Registrado.\n\n${resumen}\n\nSi te equivocaste de vaca, usa Deshacer.\nUsa /start para volver al menú.`,
-      { reply_markup: kbDeshacer, parse_mode: "Markdown" },
-    );
+    const textoExito =
+      `✅ Registrado.\n\n${resumen}\n\nSi te equivocaste de vaca, usa Deshacer.\nUsa /start para volver al menú.`;
+    const textoExitoSinBoton =
+      `✅ Registrado.\n\n${resumen}\n\nEl evento quedó guardado. Usa /start para volver al menú.`;
+    try {
+      const kbDeshacer = new InlineKeyboard().text(
+        "↩️ Deshacer",
+        construirCallbackDeshacerEvento(guardado.eventoId),
+      );
+      await ctx.reply(textoExito, { reply_markup: kbDeshacer, parse_mode: "Markdown" });
+    } catch (replyErr: unknown) {
+      const msgReply = replyErr instanceof Error ? replyErr.message : "Error desconocido";
+      console.error("[Telegram] Evento hato: escrito, fallo al enviar Deshacer:", msgReply);
+      await ctx.reply(textoExitoSinBoton, { parse_mode: "Markdown" });
+    }
   } catch (err: unknown) {
     if (err instanceof Error && err.message === "Conversation already halted") return;
     const msg = err instanceof Error ? err.message : "Error desconocido";
     console.error("[Telegram] Evento hato conversation error:", msg);
+    if (escrito) {
+      await ctx.reply("✅ El evento quedó guardado. Usa /start para volver al menú.");
+      return;
+    }
     await ctx.reply(`Error registrando el evento: ${msg}\n\nUsa /start para volver al menú.`);
   }
 }
