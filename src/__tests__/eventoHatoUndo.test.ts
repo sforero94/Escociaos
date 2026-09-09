@@ -266,23 +266,30 @@ describe('contrato del tratamiento en el código', () => {
       // solo si el camino del RPC RETORNA antes de ese insert.
       const idxRpc = fuente.indexOf('fn_hato_registrar_tratamiento');
       const idxRetorno = fuente.indexOf('return { tratamientoId: idTratamiento', idxRpc);
-      const idxInsertEventos = fuente.indexOf('.from("hato_eventos")');
+      const idxInsertEventos = fuente.indexOf('animal_id: vaca!.animal_id,\n          tipo: def.tipo,');
       expect(idxRpc).toBeGreaterThan(-1);
       expect(idxRetorno).toBeGreaterThan(idxRpc);
       expect(idxInsertEventos).toBeGreaterThan(idxRetorno);
+      // La verificación de duplicados de la 139 consulta `hato_eventos` por
+      // `def.tipo`, que para el tratamiento es `null`: `tipo=eq.null` no es
+      // `is.null` y no responde nada útil. Tiene que saltarse.
+      expect(fuente).toContain('def.esTratamiento ? null : await conversation.external');
     });
 
     it(`${ruta} lee la próxima fecha hacia ADELANTE, no hacia atrás`, () => {
       const fuente = leer(ruta);
-      // `parseDDMM` corrige toda fecha futura al año anterior, porque un
-      // hecho registrado ya ocurrió. Un paso programado es lo contrario:
-      // reusar `parseDDMM` acá guardaría "20/09" escrito en octubre como
-      // 2025 y la alerta saldría vencida el mismo día.
-      expect(fuente).toContain('parseDDMMFuturo');
-      const idxProx = fuente.indexOf('fechaProximoPaso = parsedProx');
-      const idxParse = fuente.lastIndexOf('parseDDMMFuturo(texto)');
+      // `leerFecha` retrocede un año cuando la lectura cae en el futuro,
+      // porque un hecho registrado ya ocurrió. Un paso programado es lo
+      // contrario: reusarla acá guardaría un "20/09" escrito en octubre en
+      // el año en curso, con la alerta vencida el mismo día que se creó.
+      expect(fuente).toContain('leerFechaFutura');
+      const idxParse = fuente.indexOf('leerFechaFutura(texto, hoy)');
+      const idxAsigna = fuente.indexOf('fechaProximoPaso = elegida');
       expect(idxParse).toBeGreaterThan(-1);
-      expect(idxProx).toBeGreaterThan(idxParse);
+      expect(idxAsigna).toBeGreaterThan(idxParse);
+      // Y la ambigüedad se pregunta igual que en el paso de fecha: que la
+      // fecha sea futura no vuelve menos ambiguo un "5/9".
+      expect(fuente).toContain('prox_amb_0');
     });
   }
 

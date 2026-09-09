@@ -13,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { generarPDFInformeEsco } from '@/utils/generarPDFInformeEsco';
 import type { ChartSpec } from '@/types/chat';
+import { mensajeErrorCargaDiferida } from '@/utils/errorCargaDiferida';
 
 interface ContentBlock {
   type: 'text' | 'chart';
@@ -83,8 +84,8 @@ export function ExportarInformeDialog({
       toast.success('Informe descargado exitosamente');
       onClose();
     } catch (err) {
-      console.error('Error generating PDF:', err);
-      toast.error('No se pudo generar el informe. Intenta de nuevo.');
+      console.error('[informe Esco] fallo generando el PDF', err);
+      toast.error(mensajeErrorCargaDiferida(err, 'No se pudo generar el informe'));
     } finally {
       setGenerating(false);
     }

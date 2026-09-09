@@ -13,6 +13,7 @@ import { construirPeriodos } from '../../utils/periodosReporte';
 import { construirPyG } from '../../utils/calculosPyG';
 import { construirFlujoCaja } from '../../utils/calculosFlujoCaja';
 import type { ModoReporte, VistaReporte } from '../../types/reportesFinancieros';
+import { mensajeErrorCargaDiferida } from '@/utils/errorCargaDiferida';
 
 /** Los datos financieros arrancan en 2023. */
 const PRIMER_ANIO = 2023;
@@ -77,8 +78,9 @@ function ReportesContenido() {
       );
       await generarPDFReportesFinancieros(tab === 'flujo' ? { flujo } : { pyg });
       toast.success('PDF generado');
-    } catch {
-      toast.error('No se pudo generar el PDF.');
+    } catch (err) {
+      console.error('[reportes finanzas] fallo generando el PDF', err);
+      toast.error(mensajeErrorCargaDiferida(err, 'No se pudo generar el PDF'));
     } finally {
       setExportando(false);
     }
@@ -91,8 +93,9 @@ function ReportesContenido() {
       const { exportarExcelReportes } = await import('../../utils/exportarExcelReportes');
       await exportarExcelReportes(pyg, flujo);
       toast.success('Excel generado');
-    } catch {
-      toast.error('No se pudo generar el Excel.');
+    } catch (err) {
+      console.error('[reportes finanzas] fallo generando el Excel', err);
+      toast.error(mensajeErrorCargaDiferida(err, 'No se pudo generar el Excel'));
     } finally {
       setExportando(false);
     }

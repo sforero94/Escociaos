@@ -14,6 +14,8 @@ import { HeroKPICards } from './HeroKPICards';
 import { TechnicalSection } from './TechnicalSection';
 import { EconomicSection } from './EconomicSection';
 import { ProductComparisonTable } from './ProductComparisonTable';
+import { mensajeErrorCargaDiferida } from '@/utils/errorCargaDiferida';
+import { toast } from 'sonner';
 
 interface ApplicationResultsDashboardProps {
   aplicacionId: string;
@@ -47,6 +49,12 @@ export function ApplicationResultsDashboard({ aplicacionId }: ApplicationResults
     try {
       const datos = await fetchDatosReporteCierre(aplicacionId);
       await generarPDFReporteCierre(datos);
+    } catch (err) {
+      // Antes esto era `try`/`finally` SIN `catch`: el rechazo quedaba sin
+      // manejar y el usuario veia el boton girar y volver, sin archivo y sin
+      // mensaje.
+      console.error('[reporte de cierre] fallo generando el PDF', err);
+      toast.error(mensajeErrorCargaDiferida(err, 'No se pudo generar el PDF'));
     } finally {
       setGenerandoPDF(false);
     }

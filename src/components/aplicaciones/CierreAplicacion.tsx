@@ -36,6 +36,8 @@ import {
   AlertDialogAction,
 } from '@/components/ui/alert-dialog';
 import type { Aplicacion, RegistroTrabajoCierre, ResumenLaboresCierre } from '../../types/aplicaciones';
+import { mensajeErrorCargaDiferida } from '@/utils/errorCargaDiferida';
+import { toast } from 'sonner';
 
 interface CierreAplicacionProps {
   aplicacion: Aplicacion;
@@ -558,50 +560,57 @@ export function CierreAplicacion({ aplicacion }: CierreAplicacionProps) {
   };
 
   const handleDescargarPDF = async () => {
-    const fechaInicio = new Date(datosFinales.fechaInicioReal);
-    const fechaFin = new Date(datosFinales.fechaFinReal);
-    const diasCalc = Math.ceil((fechaFin.getTime() - fechaInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    const valorJornalProm = totalJornales > 0 ? costoManoObra / totalJornales : 0;
-    const arbolesJornal = totalJornales > 0 ? totalArboles / totalJornales : 0;
+    try {
+      const fechaInicio = new Date(datosFinales.fechaInicioReal);
+      const fechaFin = new Date(datosFinales.fechaFinReal);
+      const diasCalc = Math.ceil((fechaFin.getTime() - fechaInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      const valorJornalProm = totalJornales > 0 ? costoManoObra / totalJornales : 0;
+      const arbolesJornal = totalJornales > 0 ? totalArboles / totalJornales : 0;
 
-    await generarPDFReporteCierre({
-      nombre: aplicacion.nombre_aplicacion || '',
-      tipo_aplicacion: aplicacion.tipo_aplicacion || '',
-      proposito: aplicacion.proposito ?? undefined,
-      fecha_inicio_planeada: aplicacion.fecha_inicio_planeada ?? undefined,
-      fecha_inicio_ejecucion: datosFinales.fechaInicioReal,
-      fecha_cierre: datosFinales.fechaFinReal,
-      dias_aplicacion: diasCalc,
-      lotes: lotes.map((l) => ({ nombre: l.nombre, arboles: l.arboles })),
-      total_arboles: totalArboles,
-      costo_total_insumos: costoInsumos,
-      costo_total_mano_obra: costoManoObra,
-      costo_total: costoTotal,
-      costo_por_arbol: costoPorArbol,
-      jornales_utilizados: totalJornales,
-      valor_jornal: Math.round(valorJornalProm),
-      arboles_por_jornal: arbolesJornal,
-      comparacion_productos: resumenInsumos.map((i) => {
-        const diferencia = i.aplicado - i.planeado;
-        const porcentajeDesviacion = i.planeado > 0 ? (diferencia / i.planeado) * 100 : 0;
-        let costoProducto = 0;
-        movimientos.forEach((mov) => {
-          if (mov.producto_nombre === i.nombre) {
-            costoProducto += mov.cantidad_utilizada * mov.costo_unitario;
-          }
-        });
-        return {
-          producto_nombre: i.nombre,
-          producto_unidad: i.unidad,
-          cantidad_planeada: i.planeado,
-          cantidad_real: i.aplicado,
-          diferencia,
-          porcentaje_desviacion: porcentajeDesviacion,
-          costo_total: costoProducto,
-        };
-      }),
-      observaciones_cierre: datosFinales.observaciones || undefined,
-    });
+      await generarPDFReporteCierre({
+        nombre: aplicacion.nombre_aplicacion || '',
+        tipo_aplicacion: aplicacion.tipo_aplicacion || '',
+        proposito: aplicacion.proposito ?? undefined,
+        fecha_inicio_planeada: aplicacion.fecha_inicio_planeada ?? undefined,
+        fecha_inicio_ejecucion: datosFinales.fechaInicioReal,
+        fecha_cierre: datosFinales.fechaFinReal,
+        dias_aplicacion: diasCalc,
+        lotes: lotes.map((l) => ({ nombre: l.nombre, arboles: l.arboles })),
+        total_arboles: totalArboles,
+        costo_total_insumos: costoInsumos,
+        costo_total_mano_obra: costoManoObra,
+        costo_total: costoTotal,
+        costo_por_arbol: costoPorArbol,
+        jornales_utilizados: totalJornales,
+        valor_jornal: Math.round(valorJornalProm),
+        arboles_por_jornal: arbolesJornal,
+        comparacion_productos: resumenInsumos.map((i) => {
+          const diferencia = i.aplicado - i.planeado;
+          const porcentajeDesviacion = i.planeado > 0 ? (diferencia / i.planeado) * 100 : 0;
+          let costoProducto = 0;
+          movimientos.forEach((mov) => {
+            if (mov.producto_nombre === i.nombre) {
+              costoProducto += mov.cantidad_utilizada * mov.costo_unitario;
+            }
+          });
+          return {
+            producto_nombre: i.nombre,
+            producto_unidad: i.unidad,
+            cantidad_planeada: i.planeado,
+            cantidad_real: i.aplicado,
+            diferencia,
+            porcentaje_desviacion: porcentajeDesviacion,
+            costo_total: costoProducto,
+          };
+        }),
+        observaciones_cierre: datosFinales.observaciones || undefined,
+      });
+    } catch (err) {
+      // Antes no habia `try` ninguno: el rechazo moria en un `onClick`
+      // `async` sin manejar -- clic sin archivo y sin mensaje.
+      console.error('[cierre aplicacion] fallo generando el PDF', err);
+      toast.error(mensajeErrorCargaDiferida(err, 'No se pudo generar el PDF del cierre'));
+    }
   };
 
   // Cálculos derivados

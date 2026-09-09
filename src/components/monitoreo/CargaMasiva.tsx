@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { getSupabase } from '../../utils/supabase/client';
 import { obtenerFechaHoy } from '@/utils/fechas';
 import { calcularIncidencia, clasificarGravedad } from '../../utils/calculosMonitoreo';
+import { mensajeErrorCargaDiferida } from '@/utils/errorCargaDiferida';
 
 interface ResultadoCarga {
   exito: boolean;
@@ -19,6 +20,21 @@ export function CargaMasiva() {
   const [resultado, setResultado] = useState<ResultadoCarga | null>(null);
 
   const handleDownloadTemplate = async () => {
+    try {
+      await construirYDescargarPlantilla();
+    } catch (err) {
+      console.error('[carga masiva monitoreo] fallo generando la plantilla', err);
+      setResultado({
+        exito: false,
+        mensaje: mensajeErrorCargaDiferida(err, 'No se pudo generar la plantilla'),
+      });
+    }
+  };
+
+  // Sin el `try` de arriba, un rechazo acá quedaba en un `onClick` `async`
+  // sin manejar: el usuario hacía clic y no pasaba nada, ni archivo ni
+  // mensaje.
+  const construirYDescargarPlantilla = async () => {
     const XLSX = await import('xlsx');
 
     // Crear datos de ejemplo para la plantilla
@@ -227,10 +243,12 @@ export function CargaMasiva() {
       }
 
     } catch (error: any) {
+      console.error('[carga masiva monitoreo] fallo procesando el archivo', error);
+      const mensaje = mensajeErrorCargaDiferida(error, 'Error al procesar el archivo');
       setResultado({
         exito: false,
-        mensaje: `Error al procesar el archivo: ${error.message}`,
-        errores: [error.message]
+        mensaje,
+        errores: [mensaje]
       });
     } finally {
       setUploading(false);

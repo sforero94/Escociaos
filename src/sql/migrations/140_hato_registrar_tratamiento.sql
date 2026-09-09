@@ -1,6 +1,18 @@
 -- =====================================================================
--- 138: Hato Lechero — registrar un tratamiento desde la app y desde Telegram
+-- 140: Hato Lechero — registrar un tratamiento desde la app y desde Telegram
 -- Fecha: 2026-09-09
+--
+-- APLICADA a producción el 2026-09-09 (ledger `20260909001828`,
+-- `hato_registrar_tratamiento`).
+--
+-- **Se numeró 138 al escribirla y hubo que renumerarla a 140.** Una sesión
+-- paralela fusionó 138 y 139 a `main` mientras esta corría, y su rastro
+-- estaba a la vista en `respaldos.backup_138_*` / `backup_139_*` — o sea que
+-- el catálogo vivo tenía la respuesta y el número salió del último fichero
+-- del repo, que es justo lo que el CLAUDE.md dice que no se haga. Costó una
+-- renumeración; la próxima vez, mirar `respaldos` y `origin/main` ANTES de
+-- elegir el número. La fila del ledger no lleva número en el nombre, así que
+-- el cambio de nombre del fichero no la desalinea.
 --
 -- POR QUÉ
 -- -------
@@ -112,7 +124,7 @@ END $$;
 
 COMMENT ON COLUMN hato_tratamientos.fuente IS
   'De dónde vino la fila: web | telegram | importacion | chequeo. NULL = '
-  'histórico anterior a la 138. Gobierna el Deshacer de Telegram, que solo '
+  'histórico anterior a la 140. Gobierna el Deshacer de Telegram, que solo '
   'puede borrar sus propias filas.';
 
 -- ---------------------------------------------------------------------
@@ -205,7 +217,7 @@ END $$;
 
 COMMENT ON FUNCTION fn_hato_registrar_tratamiento(uuid, text, date, text, date, text, text, uuid) IS
   'Registra un tratamiento y su paso de seguimiento opcional en UNA '
-  'transacción (migración 138). SECURITY INVOKER: la RLS de la 055 es la '
+  'transacción (migración 140). SECURITY INVOKER: la RLS de la 055 es la '
   'puerta del camino web; el bot llama con service_role. `created_by` '
   'viaja explícito porque auth.uid() es NULL bajo service_role.';
 
@@ -270,7 +282,7 @@ BEGIN
     RAISE EXCEPTION 'Post: authenticated perdió EXECUTE — la web no podría guardar.';
   END IF;
 
-  RAISE NOTICE '138 OK: fuente creada, RPC INVOKER con search_path pineado, anon sin EXECUTE.';
+  RAISE NOTICE '140 OK: fuente creada, RPC INVOKER con search_path pineado, anon sin EXECUTE.';
 END $$;
 
 COMMIT;

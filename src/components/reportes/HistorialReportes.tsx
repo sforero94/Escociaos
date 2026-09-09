@@ -20,6 +20,7 @@ import {
 } from '../../utils/reporteSemanalService';
 import type { ReporteSemanalMetadata } from '../../types/reporteSemanal';
 import { formatearFechaCorta, formatearFechaHora } from '../../utils/fechas';
+import { mensajeErrorCargaDiferida } from '@/utils/errorCargaDiferida';
 
 function SlideFrame({ html, scale }: { html: string; scale: number }) {
   const srcDoc = `<!DOCTYPE html><html><head><style>body{margin:0;overflow:hidden;width:1280px;}</style></head><body>${html}</body></html>`;
@@ -164,8 +165,9 @@ export function HistorialReportes() {
         descargarBlob(blob, filename);
       }
       toast.success('PDF descargado');
-    } catch {
-      toast.error('Error al descargar el reporte');
+    } catch (err) {
+      console.error('[historial reportes] fallo descargando el PDF', err);
+      toast.error(mensajeErrorCargaDiferida(err, 'No se pudo descargar el reporte'));
     } finally {
       setDescargando(null);
     }

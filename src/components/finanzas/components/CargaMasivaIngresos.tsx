@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { parsearFechaFlexible, obtenerFechaHoy } from '../../../utils/fechas';
 import type { Negocio, Region, CategoriaIngreso, Comprador, MedioPago } from '../../../types/finanzas';
+import { mensajeErrorCargaDiferida } from '@/utils/errorCargaDiferida';
 
 interface CargaMasivaIngresosProps {
   open: boolean;
@@ -221,8 +222,9 @@ export function CargaMasivaIngresos({
       const fileName = `plantilla_ingresos_${obtenerFechaHoy()}.xlsx`;
       XLSX.writeFile(wb, fileName);
 
-    } catch (error: any) {
-      onError('Error al generar la plantilla');
+    } catch (err) {
+      console.error('[carga masiva ingresos] fallo generando la plantilla', err);
+      onError(mensajeErrorCargaDiferida(err, 'No se pudo generar la plantilla'));
     }
   };
 
@@ -474,8 +476,9 @@ export function CargaMasivaIngresos({
         setLoading(false);
       }
 
-    } catch (error: any) {
-      onError(`Error al procesar el archivo: ${error.message}`);
+    } catch (err) {
+      console.error('[carga masiva ingresos] fallo procesando el archivo', err);
+      onError(mensajeErrorCargaDiferida(err, 'Error al procesar el archivo'));
     } finally {
       setLoading(false);
       // Reset file input
