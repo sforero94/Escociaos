@@ -246,7 +246,12 @@ function getBot(): Bot<BotContext> {
   // siendo una acción de un usuario registrado.
   bot.command("cancelar", async (ctx) => {
     ctx.session.pendienteNotaRonda = null;
-    await ctx.conversation.exit();
+    // `exitAll()`, NUNCA `exit()`. La firma es `exit(name: string)`: con el
+    // nombre de UNA conversación. Llamarla sin argumento no falla y no avisa —
+    // el plugin evalúa `data[undefined]`, no encuentra la clave y retorna. Era
+    // un no-op, y por eso nadie lo notó: sin conversación abierta el comando
+    // igual contestaba «Operación cancelada» y pintaba el menú.
+    await ctx.conversation.exitAll();
     await ctx.reply("Operación cancelada.");
     await sendMainMenu(ctx);
   });
