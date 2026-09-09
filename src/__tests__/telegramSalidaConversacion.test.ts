@@ -68,10 +68,19 @@ describe('salida de conversación del bot de Telegram', () => {
         expect(cancelar).toBeGreaterThan(instala);
       });
 
-      it('la salida llama a ctx.conversation.exit()', () => {
+      it('la salida llama a exitAll(), nunca al exit() pelado', () => {
         const desde = texto.indexOf(REGISTRO_CANCELAR);
-        const cuerpo = texto.slice(desde, desde + 400);
-        expect(cuerpo).toContain('ctx.conversation.exit()');
+        const cuerpo = texto.slice(desde, desde + 900);
+        expect(cuerpo).toContain('ctx.conversation.exitAll()');
+      });
+
+      // `exit(name: string)` pide el nombre de UNA conversación. Sin argumento
+      // el plugin evalúa `data[undefined]`, no encuentra la clave y retorna:
+      // no lanza, no avisa, no cierra nada. Así estuvo el bot hasta el
+      // 2026-09-09, y nadie lo vio porque sin conversación abierta el comando
+      // igual contestaba «Operación cancelada».
+      it('en ningún lado se llama a exit() sin nombre', () => {
+        expect(texto).not.toContain('conversation.exit()');
       });
     });
   }
