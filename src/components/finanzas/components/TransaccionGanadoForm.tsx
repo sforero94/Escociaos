@@ -26,6 +26,7 @@ import { formatCurrency, formatNumber } from '@/utils/format';
 import { cn } from '@/components/ui/utils';
 import { toast } from 'sonner';
 import { obtenerFechaHoy } from '@/utils/fechas';
+import { mensajeErrorTransaccionGanado } from '@/utils/mensajeError';
 
 interface TransaccionGanadoFormProps {
   open: boolean;
@@ -413,9 +414,9 @@ export function TransaccionGanadoForm({ open, onOpenChange, transaccion, default
             await confirmarPendiente({ movimientoId: pendiente.id, filas: filasReparto });
             toast.success('Venta registrada e inventario actualizado');
           } catch (inventarioError: unknown) {
-            const message = inventarioError instanceof Error ? inventarioError.message : 'Error desconocido';
             toast.error(
-              'La venta quedó en Finanzas. Confirma el potrero en Inventario → Movimientos. ' + message
+              'La venta quedó en Finanzas. Confirma el potrero en Inventario → Movimientos. ' +
+                mensajeErrorTransaccionGanado(inventarioError)
             );
           }
         } else {
@@ -428,8 +429,7 @@ export function TransaccionGanadoForm({ open, onOpenChange, transaccion, default
       onSuccess();
       onOpenChange(false);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Error desconocido';
-      toast.error('Error: ' + message);
+      toast.error('Error: ' + mensajeErrorTransaccionGanado(error));
     } finally {
       setSaving(false);
     }
