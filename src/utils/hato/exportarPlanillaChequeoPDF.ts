@@ -316,12 +316,32 @@ export function construirFilasPlanillaPDF(filas: readonly FilaPlanillaChequeo[])
  * (`Tratamiento` 36 -> 44, `Estado` 18 -> 20), que es de donde habían salido.
  * Cualquier columna nueva exige quitar de otra, bajar más la letra o aceptar
  * una página más.
+ *
+ * **`PL` 7 -> 10mm (2026-09-09).** La columna pasó a imprimir el promedio
+ * MEDIDO de los pesajes, que lleva un decimal, y a 7mm `27.7` no cabía: se
+ * partía en dos renglones (`27` / `.7`) y la planilla impresa quedaba
+ * ilegible justo en la cifra nueva. Medido con `getTextWidth`: `27.7` a 9pt
+ * pide 9,53mm con padding; 10mm deja margen y empareja con la columna `#`.
+ *
+ * **De dónde salen los 3mm, y por qué NO de `# Partos`.** El pedido original
+ * era sacárselos a `# Partos`, que a simple vista sobra para un solo dígito.
+ * No puede: su encabezado se parte en `#` / `Partos`, y la palabra `Partos` a
+ * 8pt bold pide 12,12mm -- la columna ya está en 12, o sea **0,12mm por
+ * DEBAJO de su propio piso**. Quitarle ancho partiría `Partos` a mitad de
+ * palabra. Los 3mm salen del ancho de página que estaba SIN ASIGNAR: la
+ * tabla sumaba 256 de los 259,4 útiles. Total nuevo: 259mm.
+ *
+ * Estado del presupuesto tras el cambio (medido, no estimado): todas las
+ * columnas quedan en su piso o apenas encima; las dos únicas con holgura real
+ * son `Estado` (+7,3) y `Tratamiento` (+13,9), y esa holgura es deliberada --
+ * son las dos que se escriben a mano. **La próxima columna que necesite
+ * ancho tiene que salir de una de esas dos, o de una página más.**
  */
 export const ANCHOS_COLUMNAS_PDF_MM: readonly number[] = [
   10, // # (cabe `999*`: la marca de provisional suma un carácter)
   24, // Nombre (BRILLANTINA, el más largo del hato, mide 20,4mm a 9pt)
-  7, // PL
-  12, // # Partos
+  10, // PL -- lleva UN DECIMAL desde 2026-09-09, ver la nota de abajo
+  12, // # Partos -- ya está en su piso: no puede ceder (ver la nota de abajo)
   19.5, // Última Cría
   14.5, // Sexo cría -- sólo el sexo (D-2026-08-14); el piso lo pone `Gemelar`
   19.5, // Fecha Servicio

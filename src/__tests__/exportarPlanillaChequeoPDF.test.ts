@@ -282,7 +282,12 @@ describe('layout del PDF -- presupuesto de ancho y clasificación de columnas', 
       // número provisional CON su marca: `999*`. Se deriva de la función real.
       '#': textoCeldaNumero(999),
       Nombre: 'BRILLANTINA',
-      PL: '18',
+      // PL lleva UN DECIMAL desde 2026-09-09 (promedio medido de los
+      // pesajes). El fixture decia '18' -- un entero -- y por eso este test
+      // paso en verde mientras la planilla impresa partia `27.7` en dos
+      // renglones. El peor caso real: el maximo historico de
+      // `hato_pesajes_leche` es 30,5 L/dia, asi que dos enteros y un decimal.
+      PL: '30.5',
       '# Partos': '12',
       'Última Cría': '22/12/2026',
       // Derivada de la función REAL, nunca un literal: si alguien cambia la
