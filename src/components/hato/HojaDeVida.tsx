@@ -44,6 +44,7 @@ import { HistorialCorreccionesCard } from './components/HistorialCorreccionesCar
 import { CurvaSemanalProduccion } from './components/CurvaSemanalProduccion';
 import { CurvaProduccionLeche } from './components/CurvaProduccionLeche';
 import { TratamientosCard } from './components/TratamientosCard';
+import { RegistrarTratamientoDialog } from './components/RegistrarTratamientoDialog';
 import { HatoPageHeader } from './components/HatoPageHeader';
 import { VentaAnimalesHatoDialog } from './components/VentaAnimalesHatoDialog';
 import { MuerteAnimalDialog } from './components/MuerteAnimalDialog';
@@ -53,6 +54,7 @@ import { chipEstadoReproductivo, chipVaciaEsProblema, chipProximaAReemplazo, chi
 import { ordenarPorValor, type DireccionOrdenAnimales as DireccionOrden } from '@/utils/ordenarAnimalesHato';
 import { formatShortDate, formatNumber, capitalize } from '@/utils/format';
 import { obtenerFechaHoy } from '@/utils/fechas';
+import { useRegistrarTratamientoHato } from './hooks/useRegistrarTratamientoHato';
 import type { ChequeoHistorialItem } from './hooks/useHatoAnimal';
 import type { HatoEventoRow } from '@/types/hato';
 
@@ -84,7 +86,13 @@ function CabeceraOrdenableChequeo({
 export function HojaDeVida() {
   const { id } = useParams<{ id: string }>();
   const { detalle, loading, error, reload } = useHatoAnimal(id);
-  const { tratamientos, loading: tratamientosLoading, error: tratamientosError } = useHatoTratamientos(id);
+  const {
+    tratamientos,
+    loading: tratamientosLoading,
+    error: tratamientosError,
+    reload: recargarTratamientos,
+  } = useHatoTratamientos(id);
+  const { registrar: registrarTratamiento, guardando: guardandoTratamiento } = useRegistrarTratamientoHato();
   const { pesajes } = usePesajesVaca(id);
   const { profile } = useAuth();
   // Fecha del último `parto` de `detalle.eventos` (ya trae TODOS los
@@ -106,6 +114,7 @@ export function HojaDeVida() {
   const [marcarCicloOpen, setMarcarCicloOpen] = useState(false);
   const [eventoSeleccionado, setEventoSeleccionado] = useState<HatoEventoRow | null>(null);
   const [ventaOpen, setVentaOpen] = useState(false);
+  const [tratamientoOpen, setTratamientoOpen] = useState(false);
   const [muerteOpen, setMuerteOpen] = useState(false);
   // Desc por defecto (más reciente primero) -- mismo orden que ya traía
   // `useHatoAnimal` (T2, ronda agosto 2026: encabezado ahora interactivo).
@@ -261,7 +270,13 @@ export function HojaDeVida() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <CurvaSemanalProduccion pesajes={pesajes} fechaUltimoParto={fechaUltimoParto} />
-          <TratamientosCard tratamientos={tratamientos} loading={tratamientosLoading} error={tratamientosError} />
+          <TratamientosCard
+            tratamientos={tratamientos}
+            loading={tratamientosLoading}
+            error={tratamientosError}
+            puedeRegistrar={canEdit}
+            onRegistrar={() => setTratamientoOpen(true)}
+          />
         </div>
 
         {/* Curva por chequeo (PL bimestral) -- APARCADA, no borrada
@@ -332,6 +347,21 @@ export function HojaDeVida() {
             onOpenChange={setEditOpen}
             animal={animal}
             onGuardado={reload}
+          />
+          {/* La ficha monta el diálogo y la card solo avisa el clic: la card
+              es presentacional y no conoce hooks de escritura. `recargarTratamientos`
+              y no `reload`: el hook de tratamientos es una consulta independiente
+              de la ficha, y recargar la ficha entera no traería el tratamiento nuevo. */}
+          <RegistrarTratamientoDialog
+            open={tratamientoOpen}
+            onOpenChange={setTratamientoOpen}
+            animalId={animal.id}
+            animalEtiqueta={
+              animal.nombre ?? (animal.numero != null ? `#${animal.numero}` : 'sin caravana')
+            }
+            registrar={registrarTratamiento}
+            guardando={guardandoTratamiento}
+            onGuardado={recargarTratamientos}
           />
           <EditarEventoDialog
             open={!!eventoSeleccionado}

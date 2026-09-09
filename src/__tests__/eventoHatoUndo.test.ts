@@ -16,8 +16,10 @@ import {
   bytesCallbackData,
   callbackDeshacerEventoLegacy,
   construirCallbackDeshacerEvento,
+  construirCallbackDeshacerTratamiento,
   elegirUsoIdParaDeshacer,
   parsearCallbackDeshacerEvento,
+  parsearCallbackDeshacerTratamiento,
   usoIdDesdeDatosEvento,
 } from '../supabase/functions/server/telegram/eventoHatoUndo';
 
@@ -203,6 +205,110 @@ describe('las dos copias del árbol de edge functions están en sync', () => {
   });
 });
 
+// ===========================================================================
+// Deshacer de un TRATAMIENTO (migración 138, 2026-09-09)
+// ===========================================================================
+
+describe('Deshacer de un tratamiento', () => {
+  const TRATAMIENTO_ID = '0192837a-bcde-4f01-8234-56789abcdef0';
+
+  it('el callback cabe en el límite de Telegram', () => {
+    const callback = construirCallbackDeshacerTratamiento(TRATAMIENTO_ID);
+    expect(bytesCallbackData(callback)).toBeLessThanOrEqual(LIMITE_BYTES_CALLBACK_TELEGRAM);
+  });
+
+  it('va y vuelve', () => {
+    const callback = construirCallbackDeshacerTratamiento(TRATAMIENTO_ID.toUpperCase());
+    expect(parsearCallbackDeshacerTratamiento(callback)).toEqual({
+      tratamientoId: TRATAMIENTO_ID,
+    });
+  });
+
+  it('rechaza un id que no es UUID', () => {
+    expect(() => construirCallbackDeshacerTratamiento('12')).toThrow();
+    expect(parsearCallbackDeshacerTratamiento('hato_tr_undo:12')).toBeNull();
+    expect(parsearCallbackDeshacerTratamiento('basura')).toBeNull();
+  });
+
+  // Los dos botones se ven iguales y borran de tablas distintas. Si un
+  // prefijo aceptara el callback del otro, tocar "Deshacer" en un evento
+  // buscaría el id en `hato_tratamientos` (o al revés) y respondería "ya no
+  // existe" -- una mentira distinta del caso real, y el usuario no sabría
+  // si borró algo o no.
+  it('los dos prefijos no se cruzan', () => {
+    const deTratamiento = construirCallbackDeshacerTratamiento(TRATAMIENTO_ID);
+    const deEvento = construirCallbackDeshacerEvento(EVENTO_ID);
+    expect(parsearCallbackDeshacerEvento(deTratamiento)).toBeNull();
+    expect(parsearCallbackDeshacerTratamiento(deEvento)).toBeNull();
+  });
+});
+
+describe('contrato del tratamiento en el código', () => {
+  for (const ruta of COPIAS_CONVERSACION) {
+    it(`${ruta} escribe el tratamiento por el RPC, nunca con inserts sueltos`, () => {
+      const fuente = leer(ruta);
+      expect(fuente).toContain('fn_hato_registrar_tratamiento');
+      // La cabecera y su paso son dos filas en dos tablas: un insert suelto
+      // que falle deja el tratamiento guardado y el recordatorio inexistente.
+      expect(fuente).not.toMatch(/from\("hato_tratamiento_pasos"\)/);
+      expect(fuente).not.toMatch(/from\("hato_tratamientos"\)/);
+    });
+
+    it(`${ruta} no mete el tratamiento en hato_eventos`, () => {
+      const fuente = leer(ruta);
+      // Decisión del dueño: el tratamiento NO entra a la línea de tiempo, y
+      // el CHECK de `hato_eventos.tipo` (053) no lo admite. Un `tipo` nuevo
+      // sin decidir cómo lo clasifica `derivarEstadoReproductivo` tira al
+      // animal a `indeterminado` (trampa documentada en S3/T4a).
+      expect(fuente).toMatch(/tratamiento:\s*\{[^}]*tipo:\s*null/);
+      // El insert de `hato_eventos` toma su tipo de `def.tipo`, así que con
+      // `tipo: null` no hay forma de que el tratamiento llegue ahí -- pero
+      // solo si el camino del RPC RETORNA antes de ese insert.
+      const idxRpc = fuente.indexOf('fn_hato_registrar_tratamiento');
+      const idxRetorno = fuente.indexOf('return { tratamientoId: idTratamiento', idxRpc);
+      const idxInsertEventos = fuente.indexOf('animal_id: vaca!.animal_id,\n          tipo: def.tipo,');
+      expect(idxRpc).toBeGreaterThan(-1);
+      expect(idxRetorno).toBeGreaterThan(idxRpc);
+      expect(idxInsertEventos).toBeGreaterThan(idxRetorno);
+      // La verificación de duplicados de la 139 consulta `hato_eventos` por
+      // `def.tipo`, que para el tratamiento es `null`: `tipo=eq.null` no es
+      // `is.null` y no responde nada útil. Tiene que saltarse.
+      expect(fuente).toContain('def.esTratamiento ? null : await conversation.external');
+    });
+
+    it(`${ruta} lee la próxima fecha hacia ADELANTE, no hacia atrás`, () => {
+      const fuente = leer(ruta);
+      // `leerFecha` retrocede un año cuando la lectura cae en el futuro,
+      // porque un hecho registrado ya ocurrió. Un paso programado es lo
+      // contrario: reusarla acá guardaría un "20/09" escrito en octubre en
+      // el año en curso, con la alerta vencida el mismo día que se creó.
+      expect(fuente).toContain('leerFechaFutura');
+      const idxParse = fuente.indexOf('leerFechaFutura(texto, hoy)');
+      const idxAsigna = fuente.indexOf('fechaProximoPaso = elegida');
+      expect(idxParse).toBeGreaterThan(-1);
+      expect(idxAsigna).toBeGreaterThan(idxParse);
+      // Y la ambigüedad se pregunta igual que en el paso de fecha: que la
+      // fecha sea futura no vuelve menos ambiguo un "5/9".
+      expect(fuente).toContain('prox_amb_0');
+    });
+  }
+
+  for (const ruta of COPIAS_BOT) {
+    it(`${ruta} solo deshace tratamientos propios y sin pasos ya ejecutados`, () => {
+      const fuente = leer(ruta);
+      const inicio = fuente.indexOf('bot.callbackQuery(/^hato_tr_undo:/');
+      expect(inicio).toBeGreaterThan(-1);
+      const handler = fuente.slice(inicio, inicio + 2600);
+      // Un callback_data se puede reenviar: la autorización va en el handler,
+      // nunca en el botón.
+      expect(handler).toContain('tratamiento.fuente !== "telegram"');
+      // El paso cuelga con ON DELETE CASCADE: borrar la cabecera se lleva un
+      // paso que alguien ya marcó como hecho desde la alerta.
+      expect(handler).toContain('fecha_ejecutada');
+    });
+  }
+});
+
 describe('contrato en el código (no volver al callback largo ni al catch mentiroso)', () => {
   for (const ruta of COPIAS_CONVERSACION) {
     it(`${ruta} no concatena usoId en el callback`, () => {
@@ -224,7 +330,12 @@ describe('contrato en el código (no volver al callback largo ni al catch mentir
     it(`${ruta} no trata un fallo del reply de éxito como fallo de escritura`, () => {
       const fuente = leer(ruta);
       expect(fuente).toContain('let escrito = false');
-      expect(fuente).toContain('El evento quedó guardado');
+      // Copia actualizada el 2026-09-09: el flujo tambien registra
+      // tratamientos, que NO son eventos del ciclo, asi que el mensaje pasó
+      // de "El evento" a "El registro". La guarda sigue siendo el literal
+      // exacto a proposito -- lo que protege es que ese mensaje exista y
+      // salga DESPUES de `escrito = true`, nunca el catch de error.
+      expect(fuente).toContain('El registro quedó guardado');
       const idxEscrito = fuente.indexOf('escrito = true');
       const idxReply = fuente.lastIndexOf('ctx.reply(textoExito');
       const idxCatch = fuente.lastIndexOf('Error registrando el evento');

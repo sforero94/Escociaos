@@ -83,20 +83,53 @@ export function diasAtras(iso: string, hoy: string): number {
   );
 }
 
+/**
+ * Hacia dónde mira la fecha que se está leyendo.
+ *
+ * `pasado` — un hecho que se registra ya ocurrió, así que una lectura futura
+ * es el año anterior mal escrito («28/12» registrado en enero).
+ * `futuro` — un paso programado (la próxima dosis de un tratamiento) nunca
+ * está en el pasado, así que una lectura vencida es la del año que viene.
+ *
+ * Es un parámetro y no dos parsers porque el formato, la validación de
+ * calendario y —sobre todo— la regla de ambigüedad tienen que ser LAS
+ * MISMAS. Que una fecha sea futura no vuelve menos ambiguo un «5/9».
+ */
+export type DireccionFecha = "pasado" | "futuro";
+
 /** Construye la lectura si el (día, mes) es un calendario real. Rechaza
  * 31/02 y 31/04: un día que no existe no es una lectura, es un error. */
-function construir(dia: number, mes: number, anio: number, hoy: string): LecturaFecha | null {
+function construir(
+  dia: number,
+  mes: number,
+  anio: number,
+  hoy: string | null,
+  direccion: DireccionFecha,
+): LecturaFecha | null {
   if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return null;
   const d = new Date(Date.UTC(anio, mes - 1, dia));
   if (d.getUTCMonth() !== mes - 1 || d.getUTCDate() !== dia) return null;
   let iso = d.toISOString().slice(0, 10);
-  // Sin año explícito, una fecha futura casi siempre es el año pasado mal
-  // escrito («28/12» registrado en enero). Con año explícito se respeta lo
-  // que el usuario escribió: si se equivocó, la advertencia del flujo lo dice.
-  if (iso > hoy) {
-    const previo = new Date(Date.UTC(anio - 1, mes - 1, dia));
-    if (previo.getUTCMonth() === mes - 1 && previo.getUTCDate() === dia) {
-      iso = previo.toISOString().slice(0, 10);
+
+  // `hoy === null` = el usuario escribió el año. Se respeta lo que escribió,
+  // en las dos direcciones: si se equivocó, la advertencia del flujo lo dice.
+  if (hoy !== null) {
+    // El corrimiento de año solo se aplica si el día existe también en el año
+    // vecino. 29 de febrero: se deja la lectura tal cual antes que moverla al
+    // 1 de marzo, que sería inventar un día que el usuario no escribió.
+    const corrido =
+      direccion === "pasado"
+        ? iso > hoy
+          ? anio - 1
+          : null
+        : iso < hoy
+          ? anio + 1
+          : null;
+    if (corrido !== null) {
+      const vecino = new Date(Date.UTC(corrido, mes - 1, dia));
+      if (vecino.getUTCMonth() === mes - 1 && vecino.getUTCDate() === dia) {
+        iso = vecino.toISOString().slice(0, 10);
+      }
     }
   }
   return { iso, etiqueta: fechaLegible(iso) };
@@ -105,7 +138,11 @@ function construir(dia: number, mes: number, anio: number, hoy: string): Lectura
 /** Lee `D/M`, `D/M/AA` o `D/M/AAAA` (también con `-` o `.`).
  * `hoy` se pasa siempre — este módulo nunca mira el reloj, para que las
  * pruebas fijen la fecha (mismo contrato que `calculosHato.ts`). */
-export function leerFecha(texto: string, hoy: string): ResultadoFecha {
+export function leerFecha(
+  texto: string,
+  hoy: string,
+  direccion: DireccionFecha = "pasado",
+): ResultadoFecha {
   const m = texto.trim().match(/^(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2}|\d{4}))?$/);
   if (!m) return { tipo: "invalido" };
 
@@ -120,12 +157,14 @@ export function leerFecha(texto: string, hoy: string): ResultadoFecha {
   } else {
     anio = Number(hoy.slice(0, 4));
   }
-  // Con año explícito no se aplica el retroceso de año: el usuario ya dijo
-  // cuál es. Se logra pasando un `hoy` que nada puede superar.
-  const referencia = anioExplicito ? "9999-12-31" : hoy;
+  // Con año explícito no se corre el año: el usuario ya dijo cuál es. Se
+  // marca con `null`, no con un `hoy` centinela — un centinela tipo
+  // "9999-12-31" también alimentaría el `anio` de arriba y construiría la
+  // fecha en el año 9999.
+  const referencia = anioExplicito ? null : hoy;
 
-  const comoDiaMes = construir(primero, segundo, anio, referencia);
-  const comoMesDia = construir(segundo, primero, anio, referencia);
+  const comoDiaMes = construir(primero, segundo, anio, referencia, direccion);
+  const comoMesDia = construir(segundo, primero, anio, referencia, direccion);
 
   if (!comoDiaMes && !comoMesDia) return { tipo: "invalido" };
   if (!comoMesDia) return { tipo: "unico", fecha: comoDiaMes! };
@@ -140,6 +179,20 @@ export function leerFecha(texto: string, hoy: string): ResultadoFecha {
   return aDias <= bDias
     ? { tipo: "ambiguo", probable: comoDiaMes, alterna: comoMesDia }
     : { tipo: "ambiguo", probable: comoMesDia, alterna: comoDiaMes };
+}
+
+/**
+ * `leerFecha` para una fecha que MIRA HACIA ADELANTE: la próxima dosis de un
+ * tratamiento, el próximo control (migración 140).
+ *
+ * Existe como función con nombre, y no como un tercer argumento suelto en
+ * cada llamada, para que la elección sea legible en el sitio de uso: el
+ * defecto que se quiere impedir es reusar `leerFecha` sin notar que retrocede
+ * un año. Con `leerFecha`, un «20/09» escrito en octubre caería en el año en
+ * curso y la alerta saldría vencida el mismo día que se creó.
+ */
+export function leerFechaFutura(texto: string, hoy: string): ResultadoFecha {
+  return leerFecha(texto, hoy, "futuro");
 }
 
 /** Umbral del aviso de «esto pasó hace mucho». No bloquea (contrato 4 de

@@ -114,6 +114,41 @@ export function elegirUsoIdParaDeshacer(args: {
   return candidatos[0].id;
 }
 
+// ---------------------------------------------------------------------
+// Deshacer de un TRATAMIENTO (2026-09-09)
+// ---------------------------------------------------------------------
+// Prefijo propio porque el efecto es otro: un tratamiento vive en
+// `hato_tratamientos` y su paso de seguimiento cuelga con
+// `ON DELETE CASCADE`, así que borrar la cabecera se lleva el paso — y con
+// él la alerta que todavía no se había generado. Un `hato_ev_undo:` sobre
+// este id no encontraría nada en `hato_eventos` y respondería "ya no
+// existe", que es una mentira distinta del caso real.
+//
+// 13 + 36 = 49 bytes, holgadamente bajo el límite de 64 de Telegram; la
+// guarda se conserva igual, porque el límite fue un fallo real
+// (ver la cabecera de este archivo).
+
+export const PREFIJO_DESHACER_TRATAMIENTO = "hato_tr_undo:";
+
+export function construirCallbackDeshacerTratamiento(tratamientoId: string): string {
+  if (!esUuid(tratamientoId)) {
+    throw new Error("tratamientoId inválido para Deshacer");
+  }
+  const callback = `${PREFIJO_DESHACER_TRATAMIENTO}${tratamientoId.toLowerCase()}`;
+  if (bytesCallbackData(callback) > LIMITE_BYTES_CALLBACK_TELEGRAM) {
+    throw new Error("callback_data de Deshacer excede el límite de Telegram");
+  }
+  return callback;
+}
+
+export function parsearCallbackDeshacerTratamiento(data: string): { tratamientoId: string } | null {
+  const m = data.match(
+    /^hato_tr_undo:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i,
+  );
+  if (!m) return null;
+  return { tratamientoId: m[1].toLowerCase() };
+}
+
 /** Atribución que el bot escribe con service_role (auth.uid() es NULL). */
 export function atribucionDesdeFilaTelegram(
   fila: { usuario_id: string | null; nombre_display: string | null } | null,
