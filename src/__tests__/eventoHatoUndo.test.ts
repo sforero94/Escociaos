@@ -283,13 +283,29 @@ describe('contrato del tratamiento en el código', () => {
       // contrario: reusarla acá guardaría un "20/09" escrito en octubre en
       // el año en curso, con la alerta vencida el mismo día que se creó.
       expect(fuente).toContain('leerFechaFutura');
-      const idxParse = fuente.indexOf('leerFechaFutura(texto, hoy)');
+      const idxParse = fuente.indexOf('leerFechaFutura(texto, hoy, { requiereAnio: true })');
       const idxAsigna = fuente.indexOf('fechaProximoPaso = elegida');
       expect(idxParse).toBeGreaterThan(-1);
       expect(idxAsigna).toBeGreaterThan(idxParse);
       // Y la ambigüedad se pregunta igual que en el paso de fecha: que la
       // fecha sea futura no vuelve menos ambiguo un "5/9".
       expect(fuente).toContain('prox_amb_0');
+    });
+
+    it(`${ruta} exige año en las dos fechas del tratamiento (issue #213)`, () => {
+      const fuente = leer(ruta);
+      // Fecha del hecho: la bandera viaja con `def.esTratamiento`, no un
+      // chequeo de string suelto. Monta/parto siguen aceptando DD/MM.
+      expect(fuente).toContain(
+        'leerFecha(texto, hoy, "pasado", {\n          requiereAnio: Boolean(def.esTratamiento),\n        })',
+      );
+      expect(fuente).toContain('leerFechaFutura(texto, hoy, { requiereAnio: true })');
+      // El prompt de próxima dosis ya no muestra el ejemplo sin año.
+      const idxProx = fuente.indexOf('¿Qué día?');
+      expect(idxProx).toBeGreaterThan(-1);
+      const promptProx = fuente.slice(idxProx, idxProx + 180);
+      expect(promptProx).toContain('DD/MM/AAAA');
+      expect(promptProx).not.toMatch(/ej: 20\/09\)/);
     });
   }
 

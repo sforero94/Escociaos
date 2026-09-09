@@ -54,6 +54,7 @@ import {
   leerFecha,
   leerFechaFutura,
   type LecturaFecha,
+  type ResultadoFecha,
 } from "../fechaDDMM.ts";
 
 function getSupabaseAdmin() {
@@ -89,6 +90,18 @@ function hoyBogota(): string {
 function esCancelar(texto: string): boolean {
   const t = texto.trim().toLowerCase();
   return t === "/cancelar" || t === "cancelar" || t === "/cancel";
+}
+
+/** Copy of the date step. Tratamiento exige año (issue #213); el resto de
+ * `/evento` sigue aceptando DD/MM. */
+function mensajeFechaInvalida(leida: ResultadoFecha, requiereAnio: boolean): string {
+  if (requiereAnio) {
+    if (leida.tipo === "invalido" && leida.motivo === "sin_anio") {
+      return "Esa fecha no trae el año. Escríbela como DD/MM/AAAA (ej: 16/07/2026), o /cancelar para salir.";
+    }
+    return "No entendí esa fecha. Escribe DD/MM/AAAA (ej: 16/07/2026), o /cancelar para salir.";
+  }
+  return "No entendí esa fecha. Escribe DD/MM (ej: 12/08) o DD/MM/AAAA (ej: 12/08/2026), o /cancelar para salir.";
 }
 
 // `parseDDMM`/`fechaLegible` se movieron a `../fechaDDMM.ts` el 2026-09-08.
@@ -401,8 +414,11 @@ export async function eventoHatoConversation(
       // una fecha válida. Se repone el "❌ Cancelar" y además se acepta la
       // cancelación escrita (ver `esCancelar`).
       const kbCancelarFecha = new InlineKeyboard().text("❌ Cancelar", "cancel_flow");
+      const requiereAnioHecho = Boolean(def.esTratamiento);
       await cbFecha.editMessageText(
-        "📅 Escribe la fecha como DD/MM (ej: 12/08)\n\nO escribe /cancelar para salir.",
+        requiereAnioHecho
+          ? "📅 Escribe la fecha como DD/MM/AAAA (ej: 12/08/2026)\n\nO escribe /cancelar para salir."
+          : "📅 Escribe la fecha como DD/MM (ej: 12/08)\n\nO escribe /cancelar para salir.",
         { reply_markup: kbCancelarFecha },
       );
       // `conversation.wait()` a secas, no un filtro: este paso tiene que poder
@@ -430,11 +446,11 @@ export async function eventoHatoConversation(
           await ctx.reply("Operación cancelada.");
           return conversation.halt();
         }
-        const leida = leerFecha(texto, hoy);
+        const leida = leerFecha(texto, hoy, "pasado", {
+          requiereAnio: Boolean(def.esTratamiento),
+        });
         if (leida.tipo === "invalido") {
-          await paso.reply(
-            "No entendí esa fecha. Escribe DD/MM (ej: 12/08) o DD/MM/AAAA (ej: 12/08/2026), o /cancelar para salir.",
-          );
+          await paso.reply(mensajeFechaInvalida(leida, Boolean(def.esTratamiento)));
           continue;
         }
         if (leida.tipo === "unico") {
@@ -524,7 +540,7 @@ export async function eventoHatoConversation(
       if (cbProximo.callbackQuery.data === "prox_si") {
         const kbCancelarProx = new InlineKeyboard().text("❌ Cancelar", "cancel_flow");
         await cbProximo.editMessageText(
-          "📅 ¿Qué día? Escríbelo como DD/MM (ej: 20/09)\n\nO escribe /cancelar para salir.",
+          "📅 ¿Qué día? Escríbelo como DD/MM/AAAA (ej: 20/09/2026)\n\nO escribe /cancelar para salir.",
           { reply_markup: kbCancelarProx },
         );
         while (true) {
@@ -548,14 +564,12 @@ export async function eventoHatoConversation(
           }
 
           // `leerFechaFutura`, no `leerFecha`: un paso programado mira hacia
-          // adelante, así que una lectura ya vencida es la del año que viene.
-          // Con `leerFecha`, un "20/09" escrito en octubre caería en el año
-          // en curso y la alerta saldría vencida el mismo día que se creó.
-          const leida = leerFechaFutura(texto, hoy);
+          // adelante. `requiereAnio: true` (issue #213): sin año, un "16/07"
+          // escrito en septiembre se adelantaba a 2027. Con el año escrito
+          // el parser ya no corre el año; esta bandera cierra el hueco.
+          const leida = leerFechaFutura(texto, hoy, { requiereAnio: true });
           if (leida.tipo === "invalido") {
-            await paso.reply(
-              "No entendí esa fecha. Escribe DD/MM (ej: 20/09) o DD/MM/AAAA (ej: 20/09/2026), o /cancelar para salir.",
-            );
+            await paso.reply(mensajeFechaInvalida(leida, true));
             continue;
           }
 
