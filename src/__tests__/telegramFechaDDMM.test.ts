@@ -8,6 +8,8 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   DIAS_FECHA_LEJANA,
   avisoFechaLejana,
@@ -237,5 +239,83 @@ describe('leerFechaFutura — mira hacia adelante', () => {
     // Y 2026 no es bisiesto: ahí el 29 de febrero no es una lectura vencida,
     // es un día que no existe.
     expect(leerFechaFutura('29/2/2026', HOY).tipo).toBe('invalido');
+  });
+});
+
+/**
+ * Issue #213 — 💊 Tratamiento exige año. El 2026-09-08, dosis escritas como
+ * `16/07` y `23/07` en septiembre se guardaron en 2027. Con `requiereAnio`
+ * esas cadenas se rechazan; con el año escrito no hay corrimiento.
+ */
+describe('requiereAnio — tratamiento (issue #213)', () => {
+  const OPCIONES = { requiereAnio: true as const };
+
+  it('rechaza DD/MM sin año en las dos direcciones', () => {
+    expect(leerFecha('16/07', HOY, 'pasado', OPCIONES)).toEqual({
+      tipo: 'invalido',
+      motivo: 'sin_anio',
+    });
+    expect(leerFechaFutura('16/07', HOY, OPCIONES)).toEqual({
+      tipo: 'invalido',
+      motivo: 'sin_anio',
+    });
+    expect(leerFechaFutura('23/07', HOY, OPCIONES)).toEqual({
+      tipo: 'invalido',
+      motivo: 'sin_anio',
+    });
+    expect(leerFechaFutura('20/9', HOY, OPCIONES).tipo).toBe('invalido');
+  });
+
+  it('16/07/2026 queda en 2026 aunque hoy sea septiembre', () => {
+    const esperada = {
+      tipo: 'unico' as const,
+      fecha: { iso: '2026-07-16', etiqueta: '16 de julio 2026' },
+    };
+    expect(leerFecha('16/07/2026', HOY, 'pasado', OPCIONES)).toEqual(esperada);
+    expect(leerFechaFutura('16/07/2026', HOY, OPCIONES)).toEqual(esperada);
+    expect(leerFechaFutura('23/07/2026', HOY, OPCIONES)).toEqual({
+      tipo: 'unico',
+      fecha: { iso: '2026-07-23', etiqueta: '23 de julio 2026' },
+    });
+  });
+
+  it('sin la bandera, 16/07 sigue aceptándose (otros flujos de /evento)', () => {
+    expect(leerFechaFutura('16/07', HOY)).toEqual({
+      tipo: 'unico',
+      fecha: { iso: '2027-07-16', etiqueta: '16 de julio 2027' },
+    });
+    expect(leerFecha('16/07', HOY)).toEqual({
+      tipo: 'unico',
+      fecha: { iso: '2026-07-16', etiqueta: '16 de julio 2026' },
+    });
+  });
+
+  it('acepta AA de dos dígitos como año explícito', () => {
+    expect(leerFechaFutura('16/07/26', HOY, OPCIONES)).toEqual({
+      tipo: 'unico',
+      fecha: { iso: '2026-07-16', etiqueta: '16 de julio 2026' },
+    });
+  });
+
+  it('con año, un texto ambiguo sigue preguntando (no elige sola)', () => {
+    const r = leerFecha('5/9/2026', HOY, 'pasado', OPCIONES);
+    expect(r.tipo).toBe('ambiguo');
+    if (r.tipo !== 'ambiguo') return;
+    expect([r.probable.iso, r.alterna.iso].sort()).toEqual(['2026-05-09', '2026-09-05']);
+  });
+});
+
+describe('las dos copias de fechaDDMM.ts están en sync', () => {
+  it('son byte-idénticas', () => {
+    const raiz = resolve(__dirname, '../..');
+    const a = readFileSync(
+      resolve(raiz, 'src/supabase/functions/server/telegram/fechaDDMM.ts'),
+      'utf8',
+    );
+    const b = readFileSync(
+      resolve(raiz, 'supabase/functions/make-server-1ccce916/telegram/fechaDDMM.ts'),
+      'utf8',
+    );
+    expect(a).toBe(b);
   });
 });

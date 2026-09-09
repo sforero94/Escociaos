@@ -30,6 +30,11 @@
 // está tratando de ser MÁS preciso. El año no desambigua por sí solo
 // (`5/9/26` sigue siendo 5-sep o 9-may), pero fija el año en vez de dejarlo
 // a la heurística de «futuro = año pasado».
+//
+// SEGUNDO INCIDENTE, mismo día: en 💊 Tratamiento, `leerFechaFutura` adelantó
+// `16/07` y `23/07` (escritos en septiembre) a 2027. `OpcionesFecha.requiereAnio`
+// cierra ese hueco en el llamador: sin año el texto es inválido, y con año
+// el parser ya no corre. No se exige año en monta/parto/etc.
 
 /** Una lectura posible del texto, ya resuelta a ISO `AAAA-MM-DD`. */
 export interface LecturaFecha {
@@ -40,13 +45,29 @@ export interface LecturaFecha {
 }
 
 export type ResultadoFecha =
-  /** El texto no es una fecha. */
-  | { tipo: "invalido" }
+  /** El texto no es una fecha. `sin_anio` solo sale cuando el llamador
+   * pidió `requiereAnio` y el texto era DD/MM sin año — así el flujo puede
+   * decir "falta el año" en vez de "formato inválido". */
+  | { tipo: "invalido"; motivo?: "sin_anio" }
   /** Una sola lectura posible: se usa sin preguntar. */
   | { tipo: "unico"; fecha: LecturaFecha }
   /** Dos lecturas posibles. `probable` es la más cercana a hoy y va primero
    * en el teclado; `alterna` es la otra. El flujo DEBE preguntar. */
   | { tipo: "ambiguo"; probable: LecturaFecha; alterna: LecturaFecha };
+
+/** Opciones de `leerFecha` / `leerFechaFutura`. */
+export interface OpcionesFecha {
+  /**
+   * Si es true, un DD/MM sin año es inválido. El año no se infiere, así que
+   * tampoco se corre al año siguiente o al anterior.
+   *
+   * El flujo de 💊 Tratamiento (issue #213) lo exige: el 2026-09-08, dosis
+   * escritas como `16/07` y `23/07` en septiembre se guardaron en 2027 via
+   * `leerFechaFutura`. Con el año escrito (`16/07/2026`) el parser ya no
+   * corre el año — esa mitad ya existía; esta bandera cierra la otra.
+   */
+  requiereAnio?: boolean;
+}
 
 const MESES = [
   "enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -142,6 +163,7 @@ export function leerFecha(
   texto: string,
   hoy: string,
   direccion: DireccionFecha = "pasado",
+  opciones: OpcionesFecha = {},
 ): ResultadoFecha {
   const m = texto.trim().match(/^(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2}|\d{4}))?$/);
   if (!m) return { tipo: "invalido" };
@@ -154,6 +176,10 @@ export function leerFecha(
   if (m[3]) {
     anioExplicito = true;
     anio = m[3].length === 2 ? 2000 + parseInt(m[3], 10) : parseInt(m[3], 10);
+  } else if (opciones.requiereAnio) {
+    // No se infiere el año: inferirlo es lo que dispara el corrimiento
+    // silencioso (16/07 en septiembre → 2027). El llamador pide el año.
+    return { tipo: "invalido", motivo: "sin_anio" };
   } else {
     anio = Number(hoy.slice(0, 4));
   }
@@ -191,8 +217,12 @@ export function leerFecha(
  * un año. Con `leerFecha`, un «20/09» escrito en octubre caería en el año en
  * curso y la alerta saldría vencida el mismo día que se creó.
  */
-export function leerFechaFutura(texto: string, hoy: string): ResultadoFecha {
-  return leerFecha(texto, hoy, "futuro");
+export function leerFechaFutura(
+  texto: string,
+  hoy: string,
+  opciones: OpcionesFecha = {},
+): ResultadoFecha {
+  return leerFecha(texto, hoy, "futuro", opciones);
 }
 
 /** Umbral del aviso de «esto pasó hace mucho». No bloquea (contrato 4 de
