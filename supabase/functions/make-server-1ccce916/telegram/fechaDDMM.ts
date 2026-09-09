@@ -53,6 +53,23 @@ const MESES = [
   "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 ];
 
+/** "Hoy" en Bogotá (UTC-5), NUNCA en UTC. El servidor Deno corre en UTC y
+ * de las 19:00 en adelante `new Date().toISOString()` ya devuelve mañana —
+ * la misma trampa que el CLAUDE.md raíz documenta para el navegador.
+ * `jornal.ts` e `ingreso.ts` la tenían viva: fechaban con `new Date()` a
+ * secas y además tomaban el AÑO de ahí. */
+export function hoyBogota(): string {
+  const bogota = new Date(Date.now() - 5 * 60 * 60 * 1000);
+  return bogota.toISOString().slice(0, 10);
+}
+
+/** `iso` menos `n` días. Puro: no mira el reloj. */
+export function restarDias(iso: string, n: number): string {
+  return new Date(Date.parse(`${iso}T00:00:00Z`) - n * 86400000)
+    .toISOString()
+    .slice(0, 10);
+}
+
 /** «2026-09-05» → «5 de septiembre 2026». */
 export function fechaLegible(iso: string): string {
   const [a, m, d] = iso.split("-").map(Number);

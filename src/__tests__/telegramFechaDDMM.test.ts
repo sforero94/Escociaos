@@ -7,13 +7,15 @@
  * de dos formas. Estas pruebas fijan que ya no lo resuelve solo.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   DIAS_FECHA_LEJANA,
   avisoFechaLejana,
   diasAtras,
   fechaLegible,
+  hoyBogota,
   leerFecha,
+  restarDias,
 } from '../supabase/functions/server/telegram/fechaDDMM';
 
 const HOY = '2026-09-08';
@@ -134,5 +136,27 @@ describe('fechaLegible', () => {
   it('escribe el mes en letras', () => {
     expect(fechaLegible('2026-09-05')).toBe('5 de septiembre 2026');
     expect(fechaLegible('2026-01-31')).toBe('31 de enero 2026');
+  });
+});
+
+describe('hoyBogota / restarDias — la trampa de UTC', () => {
+  it('hoyBogota da el día de Bogotá, no el de UTC, a las 23:30 locales', () => {
+    // 2026-09-09 04:30 UTC son las 23:30 del 8 en Bogotá. `toISOString()` a
+    // secas diría "9": eso es lo que hacía que un jornal o un ingreso se
+    // guardara con fecha de mañana y desapareciera del historial.
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-09-09T04:30:00Z'));
+      expect(new Date().toISOString().slice(0, 10)).toBe('2026-09-09');
+      expect(hoyBogota()).toBe('2026-09-08');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('restarDias no mira el reloj y cruza el fin de mes', () => {
+    expect(restarDias('2026-09-08', 1)).toBe('2026-09-07');
+    expect(restarDias('2026-03-01', 1)).toBe('2026-02-28');
+    expect(restarDias('2026-01-01', 1)).toBe('2025-12-31');
   });
 });

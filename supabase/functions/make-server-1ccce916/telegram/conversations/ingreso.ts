@@ -13,6 +13,7 @@ import { Conversation } from "npm:@grammyjs/conversations@2";
 import { InlineKeyboard } from "npm:grammy@1";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import type { BotContext } from "../types.ts";
+import { hoyBogota, leerFecha, restarDias } from "../fechaDDMM.ts";
 
 function getSupabaseAdmin() {
   const url = Deno.env.get("SUPABASE_URL")!;
@@ -173,21 +174,14 @@ function formatDateSpanish(isoDate: string): string {
   return `${d} de ${months[m - 1]} ${y}`;
 }
 
-function todayISO(): string { return new Date().toISOString().slice(0, 10); }
+// `todayISO`/`yesterdayISO` fechaban en UTC: de las 19:00 en adelante
+// devolvían MAÑANA, y un ingreso con fecha futura desaparece del historial
+// (la trampa que el CLAUDE.md raíz documenta). Ahora es hora de Bogotá.
+// `parseDDMM` se retiró el 2026-09-09: vive en `../fechaDDMM.ts`, compartido
+// con `/evento`, y ya no resuelve sola una fecha ambigua.
+function todayISO(): string { return hoyBogota(); }
 
-function yesterdayISO(): string {
-  const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10);
-}
-
-function parseDDMM(text: string): string | null {
-  const match = text.trim().match(/^(\d{1,2})[/\-.](\d{1,2})$/);
-  if (!match) return null;
-  const day = parseInt(match[1], 10);
-  const month = parseInt(match[2], 10);
-  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
-  const year = new Date().getFullYear();
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
+function yesterdayISO(): string { return restarDias(hoyBogota(), 1); }
 
 function isGanadoNegocio(nombre: string): boolean {
   const lower = nombre.toLowerCase();
@@ -219,12 +213,38 @@ async function askFecha(
   if (choice === "fecha_hoy") return todayISO();
   if (choice === "fecha_ayer") return yesterdayISO();
 
-  await cbCtx.editMessageText("📅 Escribe la fecha en formato DD/MM (ej: 09/03)");
+  await cbCtx.editMessageText("📅 Escribe la fecha como DD/MM (ej: 09/03) o DD/MM/AAAA (ej: 09/03/2026)");
   while (true) {
     const textCtx = await conversation.waitFor("message:text");
-    const parsed = parseDDMM(textCtx.message.text);
-    if (parsed) return parsed;
-    await textCtx.reply("Formato inválido. Escribe la fecha como DD/MM (ej: 09/03)");
+    const leida = leerFecha(textCtx.message.text, hoyBogota());
+        if (leida.tipo === "ambiguo") {
+          // «5/9» es 5 de septiembre o 9 de mayo. No se elige en silencio:
+          // ese es el defecto que se cerró en `/evento` el 2026-09-08.
+          const ops = [leida.probable, leida.alterna];
+          const kbAmb = new InlineKeyboard()
+            .text(ops[0].etiqueta, "fecha_amb_0")
+            .row()
+            .text(ops[1].etiqueta, "fecha_amb_1")
+            .row()
+            .text("❌ Cancelar", "cancel_flow");
+          await textCtx.reply(
+            `📅 "${textCtx.message.text.trim()}" se puede leer de dos formas. ¿Cuál es?`,
+            { reply_markup: kbAmb },
+          );
+          const cbAmb = await conversation.waitForCallbackQuery([
+            "fecha_amb_0",
+            "fecha_amb_1",
+            "cancel_flow",
+          ]);
+          await cbAmb.answerCallbackQuery();
+          if (cbAmb.callbackQuery.data === "cancel_flow") {
+            await ctx.reply("Operación cancelada.");
+            return conversation.halt();
+          }
+          return ops[cbAmb.callbackQuery.data === "fecha_amb_0" ? 0 : 1].iso;
+        }
+        if (leida.tipo === "unico") return leida.fecha.iso;
+    await textCtx.reply("No entendí esa fecha. Escribe DD/MM (ej: 09/03) o DD/MM/AAAA (ej: 09/03/2026).");
   }
 }
 

@@ -46,10 +46,11 @@ const ALLOWLIST_FROM = new Set([
   // Selector de fincas (solo lee la columna `finca`, sin agregación financiera).
   // Corrido de 87 a 88 al importar `obtenerFechaHoy` en el arreglo de fecha local.
   'src/components/finanzas/components/TransaccionGanadoForm.tsx:88',
-  'src/supabase/functions/server/telegram/conversations/ingreso.ts:275',
+  // Corrido de 275 a 295 al mover `parseDDMM` a `../fechaDDMM.ts` (2026-09-09).
+  'src/supabase/functions/server/telegram/conversations/ingreso.ts:295',
   'src/supabase/functions/server/telegram/conversations/gasto.ts:290',
   // Árbol espejo (supabase/functions/make-server-1ccce916) — mismo motivo.
-  'supabase/functions/make-server-1ccce916/telegram/conversations/ingreso.ts:275',
+  'supabase/functions/make-server-1ccce916/telegram/conversations/ingreso.ts:295',
   'supabase/functions/make-server-1ccce916/telegram/conversations/gasto.ts:290',
 ]);
 

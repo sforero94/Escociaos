@@ -30,6 +30,7 @@ import { Conversation } from 'npm:@grammyjs/conversations@2';
 import { InlineKeyboard } from 'npm:grammy@1';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import type { BotContext } from '../types.ts';
+import { leerFecha } from '../fechaDDMM.ts';
 import {
   excepcionComoCaso,
   hoyBogota,
@@ -73,19 +74,9 @@ const ETIQUETAS_ESTADO: Record<string, string> = {
 // el botón de hoy.
 // ---------------------------------------------------------------------------
 
-function parseDDMM(texto: string, hoy: string): string | null {
-  const m = texto.trim().match(/^(\d{1,2})[/\-.](\d{1,2})$/);
-  if (!m) return null;
-  const dia = parseInt(m[1], 10);
-  const mes = parseInt(m[2], 10);
-  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return null;
-  const anio = Number(hoy.slice(0, 4));
-  const iso = `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
-  // Una fecha futura casi siempre es el año pasado mal escrito -- se corrige
-  // al año anterior en vez de guardar un hecho que todavía no ocurrió (mismo
-  // criterio que eventoHato.ts).
-  return iso > hoy ? `${anio - 1}-${iso.slice(5)}` : iso;
-}
+// `parseDDMM` se retiró el 2026-09-09: vive en `../fechaDDMM.ts`, compartido
+// con `/evento`, `/jornal` y `/ingreso`. Ya no resuelve sola una fecha que se
+// lee de dos formas — pregunta.
 
 function fechaLegible(iso: string): string {
   const [a, m, d] = iso.split('-').map(Number);
@@ -440,13 +431,34 @@ export async function excepcionDavidConversation(
         return conversation.halt();
       }
       if (!pidiendoFechaTexto) continue; // callback no reconocido -- se ignora
-      const parsed = texto ? parseDDMM(texto, hoy) : null;
-      if (parsed === null) {
-        await ctx.reply('Formato inválido -- prueba DD/MM (ej: 12/08), o escribe *cancelar*.', { parse_mode: 'Markdown' });
+      const leida = texto ? leerFecha(texto, hoy) : { tipo: 'invalido' as const };
+      if (leida.tipo === 'invalido') {
+        await ctx.reply('No entendí esa fecha -- prueba DD/MM (ej: 12/08) o DD/MM/AAAA, o escribe *cancelar*.', { parse_mode: 'Markdown' });
         continue;
       }
-      await ctx.reply(`Fecha: ${fechaLegible(parsed)}.`);
-      fechaMovimiento = parsed;
+      if (leida.tipo === 'ambiguo') {
+        // «5/9» es 5 de septiembre o 9 de mayo. No se elige en silencio.
+        const ops = [leida.probable, leida.alterna];
+        const kbAmb = new InlineKeyboard()
+          .text(ops[0].etiqueta, 'expl_amb_0')
+          .row()
+          .text(ops[1].etiqueta, 'expl_amb_1')
+          .row()
+          .text('❌ Cancelar', 'expl_cancelar');
+        await ctx.reply(`"${texto}" se puede leer de dos formas. ¿Cuál es?`, { reply_markup: kbAmb });
+        const cbAmb = await conversation.waitForCallbackQuery(['expl_amb_0', 'expl_amb_1', 'expl_cancelar']);
+        await cbAmb.answerCallbackQuery();
+        if (cbAmb.callbackQuery.data === 'expl_cancelar') {
+          await ctx.reply('Cancelado. La explicación ya quedó guardada -- puedes retomar la captura con /explicar cuando quieras.');
+          return conversation.halt();
+        }
+        const elegida = ops[cbAmb.callbackQuery.data === 'expl_amb_0' ? 0 : 1].iso;
+        await cbAmb.editMessageText(`Fecha: ${fechaLegible(elegida)}.`);
+        fechaMovimiento = elegida;
+        continue;
+      }
+      await ctx.reply(`Fecha: ${fechaLegible(leida.fecha.iso)}.`);
+      fechaMovimiento = leida.fecha.iso;
     }
 
     // Campo opcional -- depende del tipo (CA-8: "con su tipo, fecha y destino").
