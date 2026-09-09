@@ -220,6 +220,36 @@ function getBot(): Bot<BotContext> {
   );
 
   bot.use(conversations({ storage: conversationStorage }));
+
+  // --- SALIDA DE EMERGENCIA — va ANTES de los `createConversation` -----------
+  //
+  // ORIGEN: incidente del 2026-09-08. Dos usuarios quedaron con una
+  // conversación `/evento` abierta y el bot dejó de contestarles a TODO. No
+  // hubo ni un error en los registros: el webhook devolvía 200 y la sesión se
+  // leía y se escribía bien.
+  //
+  // `conversation.waitForCallbackQuery([...])` de @grammyjs/conversations@2
+  // DESCARTA la actualización que no encaja con el filtro. No la pasa al
+  // middleware de abajo. Así que mientras una conversación espera un botón, el
+  // bot se come cada mensaje de ese usuario — el comando de cancelar incluido,
+  // porque estaba registrado DESPUÉS de los `createConversation`. El usuario
+  // que perdía de vista el teclado (mensaje viejo, chat limpiado, otro
+  // dispositivo, un despliegue en medio del flujo) quedaba encerrado sin
+  // ninguna salida, y el síntoma era «el bot no sirve».
+  //
+  // La salida tiene que correr antes del middleware que reanuda la
+  // conversación. Acá `ctx.conversation` ya existe —lo instala
+  // `conversations()`— y ningún `createConversation` se ejecutó todavía.
+  //
+  // Va después del middleware de autenticación a propósito: cancelar sigue
+  // siendo una acción de un usuario registrado.
+  bot.command("cancelar", async (ctx) => {
+    ctx.session.pendienteNotaRonda = null;
+    await ctx.conversation.exit();
+    await ctx.reply("Operación cancelada.");
+    await sendMainMenu(ctx);
+  });
+
   bot.use(createConversation(jornalConversation, "jornal"));
   bot.use(createConversation(monitoreoConversation, "monitoreo"));
   bot.use(createConversation(gastoConversation, "gasto"));
@@ -1181,13 +1211,6 @@ function getBot(): Bot<BotContext> {
     if (!excepcionId) return;
     const sb = getSupabaseAdmin();
     await aplicarAjusteRondaYResponder(ctx, sb, excepcionId, true);
-  });
-
-  bot.command("cancelar", async (ctx) => {
-    ctx.session.pendienteNotaRonda = null;
-    await ctx.conversation.exit();
-    await ctx.reply("Operación cancelada.");
-    await sendMainMenu(ctx);
   });
 
   bot.command("ayuda", async (ctx) => {
