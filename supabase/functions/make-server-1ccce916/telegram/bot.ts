@@ -22,6 +22,7 @@ import { eventoHatoConversation } from "./conversations/eventoHato.ts";
 import {
   elegirUsoIdParaDeshacer,
   parsearCallbackDeshacerEvento,
+  parsearCallbackDeshacerTratamiento,
   usoIdDesdeDatosEvento,
 } from "./eventoHatoUndo.ts";
 import { cierreRondaConversation } from "./conversations/cierreRonda.ts";
@@ -1200,7 +1201,7 @@ function getBot(): Bot<BotContext> {
         "/gasto — Registrar un gasto",
         "/ingreso — Registrar un ingreso",
         "/pesaje — Cargar la planilla de pesaje de leche por foto",
-        "/evento — Registrar monta, inseminación, secado, parto o aborto",
+        "/evento — Registrar monta, inseminación, secado, parto, aborto o tratamiento",
         "/ronda — Ver o abrir la ronda de inventario en curso",
         "/existencias <producto> — Consultar cantidad y unidad de un producto",
         "/cerrarronda — Cerrar la ronda de inventario en curso",
@@ -1478,6 +1479,61 @@ function getBot(): Bot<BotContext> {
     // Se edita el mensaje para quitar el botón: un segundo toque sobre un id
     // ya borrado solo diría "ya no existe", pero deja al usuario dudando de
     // si borró dos cosas.
+    await ctx.editMessageText("↩️ Registro deshecho. No quedó nada guardado.\n\nUsa /evento para registrarlo de nuevo.");
+  });
+
+  // --------------------------------------------------------------------------
+  // DESHACER un tratamiento recién registrado por /evento (138).
+  //
+  // Gemelo del de arriba, con la misma guarda y por el mismo motivo: un
+  // `callback_data` se puede reenviar, así que la autorización no está en el
+  // botón sino acá. `fuente = 'telegram'` es lo que impide que este camino
+  // borre un tratamiento que escribió Martha desde la Hoja de Vida.
+  //
+  // Segunda guarda, propia de esta tabla: si alguien ya marcó el paso como
+  // hecho (desde la alerta), el tratamiento dejó de ser "lo que acabo de
+  // registrar" y borrarlo se llevaría por delante ese trabajo. El paso cuelga
+  // con `ON DELETE CASCADE`, así que un DELETE de la cabecera lo arrastra.
+  // --------------------------------------------------------------------------
+
+  bot.callbackQuery(/^hato_tr_undo:/, async (ctx) => {
+    const parsed = parsearCallbackDeshacerTratamiento(ctx.callbackQuery.data ?? "");
+    if (!parsed) {
+      await ctx.answerCallbackQuery({ text: "No se pudo procesar." });
+      return;
+    }
+
+    const sb = getSupabaseAdmin();
+    const { data: tratamiento } = await sb
+      .from("hato_tratamientos")
+      .select("id, fuente, hato_tratamiento_pasos(fecha_ejecutada)")
+      .eq("id", parsed.tratamientoId)
+      .maybeSingle();
+
+    if (!tratamiento) {
+      await ctx.answerCallbackQuery({ text: "Ese registro ya no existe." });
+      return;
+    }
+    if (tratamiento.fuente !== "telegram") {
+      await ctx.answerCallbackQuery({ text: "Ese tratamiento no se registró desde aquí." });
+      return;
+    }
+
+    const pasos = (tratamiento.hato_tratamiento_pasos ?? []) as Array<{ fecha_ejecutada: string | null }>;
+    if (pasos.some((paso) => paso.fecha_ejecutada != null)) {
+      await ctx.answerCallbackQuery({
+        text: "Ya marcaron un paso como hecho. Corrígelo desde la ficha de la vaca.",
+      });
+      return;
+    }
+
+    const { error } = await sb.from("hato_tratamientos").delete().eq("id", parsed.tratamientoId);
+    if (error) {
+      await ctx.answerCallbackQuery({ text: "No se pudo deshacer. Intenta de nuevo." });
+      return;
+    }
+
+    await ctx.answerCallbackQuery({ text: "Deshecho." });
     await ctx.editMessageText("↩️ Registro deshecho. No quedó nada guardado.\n\nUsa /evento para registrarlo de nuevo.");
   });
 

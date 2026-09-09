@@ -4,8 +4,14 @@
 // Cada tratamiento muestra el protocolo (o el nombre libre si no vino de un
 // protocolo del catálogo) + sus pasos programados/ejecutados. Vacío ->
 // "Sin tratamientos", nunca una tabla en blanco sin explicación.
+//
+// Desde 2026-09-09 la card deja de ser solo de lectura: gana la acción
+// "Registrar" (Administrador+Gerencia, como el resto de escrituras del
+// módulo). El diálogo lo monta la Hoja de Vida -- esta card sigue siendo
+// presentacional y solo avisa el clic.
 
-import { Loader2, AlertTriangle, Check, Circle } from 'lucide-react';
+import { Loader2, AlertTriangle, Check, Circle, Plus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { EstadoChip } from './EstadoChip';
 import { chipEstadoTratamiento } from '@/utils/hatoUi';
 import { formatShortDate } from '@/utils/format';
@@ -15,14 +21,26 @@ export function TratamientosCard({
   tratamientos,
   loading,
   error,
+  puedeRegistrar = false,
+  onRegistrar,
 }: {
   tratamientos: HatoTratamientoDetalle[];
   loading: boolean;
   error: string | null;
+  puedeRegistrar?: boolean;
+  onRegistrar?: () => void;
 }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <h2 className="text-sm font-semibold text-gray-900 mb-4">Tratamientos</h2>
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <h2 className="text-sm font-semibold text-gray-900">Tratamientos</h2>
+        {puedeRegistrar && onRegistrar && (
+          <Button type="button" variant="outline" size="sm" onClick={onRegistrar}>
+            <Plus className="w-4 h-4 mr-1.5" />
+            Registrar
+          </Button>
+        )}
+      </div>
 
       {loading ? (
         <div className="flex items-center justify-center py-6">

@@ -46,6 +46,7 @@ import { construirHatoConfigDesdeFilas } from "../../hato-config-desde-tabla.ts"
 import {
   atribucionDesdeFilaTelegram,
   construirCallbackDeshacerEvento,
+  construirCallbackDeshacerTratamiento,
 } from "../eventoHatoUndo.ts";
 
 function getSupabaseAdmin() {
@@ -97,6 +98,76 @@ function parseDDMM(texto: string): string | null {
   return iso > hoyBogota() ? `${anio - 1}-${iso.slice(5)}` : iso;
 }
 
+/**
+ * Pide una línea de texto libre y devuelve `null` si el usuario cancela.
+ *
+ * Mismo patrón que el paso de fecha: `conversation.wait()` a secas, porque
+ * el paso tiene que atender DOS cosas — el texto y el botón de cancelar —
+ * y `editMessageText` deja el mensaje anterior sin teclado. Lo que no sea
+ * ni una ni otra (una foto, un sticker) se ignora y se vuelve a preguntar.
+ *
+ * `opcional` agrega el botón "Sin nota": sin él, el único modo de saltarse
+ * un campo opcional sería escribir algo, que es justo lo contrario.
+ */
+async function pedirTexto(
+  conversation: Conversation<BotContext>,
+  ctx: BotContext,
+  args: { titulo: string; opcional: boolean; maximo: number },
+): Promise<{ cancelado: boolean; texto: string | null }> {
+  const kb = new InlineKeyboard();
+  if (args.opcional) kb.text("⏭️ Omitir", "txt_omitir");
+  kb.text("❌ Cancelar", "cancel_flow");
+  await ctx.reply(args.titulo, { reply_markup: kb, parse_mode: "Markdown" });
+
+  while (true) {
+    const paso = await conversation.wait();
+
+    const dataBoton = paso.callbackQuery?.data;
+    if (dataBoton) {
+      await paso.answerCallbackQuery();
+      if (dataBoton === "cancel_flow") return { cancelado: true, texto: null };
+      if (dataBoton === "txt_omitir" && args.opcional) return { cancelado: false, texto: null };
+      continue;
+    }
+
+    const texto = paso.message?.text;
+    if (!texto) continue;
+    if (esCancelar(texto)) return { cancelado: true, texto: null };
+
+    const limpio = texto.trim();
+    if (limpio === "") {
+      if (args.opcional) return { cancelado: false, texto: null };
+      await paso.reply("No puede ir vacío. Escríbelo, o /cancelar para salir.");
+      continue;
+    }
+    if (limpio.length > args.maximo) {
+      await paso.reply(`Es muy largo (máximo ${args.maximo} caracteres). Acórtalo, por favor.`);
+      continue;
+    }
+    return { cancelado: false, texto: limpio };
+  }
+}
+
+/**
+ * Fecha DD/MM hacia ADELANTE (la próxima dosis, el próximo control).
+ *
+ * `parseDDMM` corrige al año anterior toda fecha futura, porque un evento
+ * que ya pasó no puede estar en el futuro. Acá la regla es la opuesta y
+ * por eso no se reusa: un paso programado SIEMPRE mira hacia adelante, así
+ * que una fecha ya vencida es la del año que viene.
+ */
+function parseDDMMFuturo(texto: string): string | null {
+  const m = texto.trim().match(/^(\d{1,2})[/\-.](\d{1,2})$/);
+  if (!m) return null;
+  const dia = parseInt(m[1], 10);
+  const mes = parseInt(m[2], 10);
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return null;
+  const hoy = hoyBogota();
+  const anio = Number(hoy.slice(0, 4));
+  const iso = `${anio}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+  return iso < hoy ? `${anio + 1}-${iso.slice(5)}` : iso;
+}
+
 function fechaLegible(iso: string): string {
   const [a, m, d] = iso.split("-").map(Number);
   const meses = [
@@ -110,17 +181,32 @@ function fechaLegible(iso: string): string {
 // Tipos de evento que este flujo sabe registrar
 // ============================================================================
 
-type ClaveEvento = "monta" | "inseminacion" | "secado" | "parto" | "aborto";
+type ClaveEvento =
+  | "monta"
+  | "inseminacion"
+  | "secado"
+  | "parto"
+  | "aborto"
+  | "tratamiento";
 
 interface DefinicionEvento {
   etiqueta: string;
   /** `hato_eventos.tipo` real. `monta`/`inseminacion` son el MISMO tipo
    * (`servicio`) distinguidos por `tipo_servicio` — el CHECK de la tabla ya
-   * lo modela así desde 053, no se agrega ningún tipo nuevo. */
-  tipo: "servicio" | "secado_real" | "parto" | "aborto";
+   * lo modela así desde 053, no se agrega ningún tipo nuevo.
+   *
+   * `null` para el tratamiento: NO es un evento del ciclo reproductivo y no
+   * entra a `hato_eventos` (decisión del dueño 2026-09-09, "solo la card de
+   * Tratamientos"). Vive en `hato_tratamientos`, se escribe por RPC, y el
+   * CHECK de `hato_eventos.tipo` queda intacto. Cambiar esto sin decidir en
+   * el mismo commit cómo lo clasifica `derivarEstadoReproductivo` tira al
+   * animal a `indeterminado` — la trampa que documenta S3/T4a. */
+  tipo: "servicio" | "secado_real" | "parto" | "aborto" | null;
   tipoServicio?: "monta" | "inseminacion";
   /** ¿Pide toro del catálogo? */
   pideToro: boolean;
+  /** Camino de escritura aparte: `fn_hato_registrar_tratamiento` (138). */
+  esTratamiento?: boolean;
 }
 
 const EVENTOS: Record<ClaveEvento, DefinicionEvento> = {
@@ -129,6 +215,7 @@ const EVENTOS: Record<ClaveEvento, DefinicionEvento> = {
   secado: { etiqueta: "🌾 Secado", tipo: "secado_real", pideToro: false },
   parto: { etiqueta: "🐄 Parto", tipo: "parto", pideToro: false },
   aborto: { etiqueta: "⚠️ Aborto", tipo: "aborto", pideToro: false },
+  tratamiento: { etiqueta: "💊 Tratamiento", tipo: null, pideToro: false, esTratamiento: true },
 };
 
 /** Destinos de cría del CHECK de `hato_eventos.cria_destino` (053). */
@@ -213,6 +300,8 @@ export async function eventoHatoConversation(
       .text(EVENTOS.parto.etiqueta, "ev_parto")
       .row()
       .text(EVENTOS.aborto.etiqueta, "ev_aborto")
+      .text(EVENTOS.tratamiento.etiqueta, "ev_tratamiento")
+      .row()
       .text("❌ Cancelar", "cancel_flow");
 
     await ctx.reply("📋 *Registrar evento del hato*\n\n¿Qué pasó?", {
@@ -221,7 +310,8 @@ export async function eventoHatoConversation(
     });
 
     const cbTipo = await conversation.waitForCallbackQuery([
-      "ev_monta", "ev_inseminacion", "ev_secado", "ev_parto", "ev_aborto", "cancel_flow",
+      "ev_monta", "ev_inseminacion", "ev_secado", "ev_parto", "ev_aborto",
+      "ev_tratamiento", "cancel_flow",
     ]);
     await cbTipo.answerCallbackQuery();
     if (cbTipo.callbackQuery.data === "cancel_flow") {
@@ -385,6 +475,108 @@ export async function eventoHatoConversation(
     // ── Paso 5: datos propios del tipo de evento ──────────────────────
     let toro: ToroCatalogo | null = null;
     let criaDestino: string | null = null;
+    // Tratamiento (138). Tres campos y ninguno del catálogo: el nombre es
+    // texto libre a propósito (`hato_protocolos` sigue vacío) y la dosis,
+    // quién aplicó y el retiro de leche caben en la nota mientras se
+    // aprende cuáles se repiten lo bastante como para ser columna.
+    let nombreTratamiento: string | null = null;
+    let notaTratamiento: string | null = null;
+    let fechaProximoPaso: string | null = null;
+
+    if (def.esTratamiento) {
+      const rNombre = await pedirTexto(conversation, ctx, {
+        titulo: "💊 ¿Qué le aplicaste?\n\nEj: *Estrumate*",
+        opcional: false,
+        maximo: 120,
+      });
+      if (rNombre.cancelado) {
+        await ctx.reply("Operación cancelada.");
+        return conversation.halt();
+      }
+      nombreTratamiento = rNombre.texto;
+
+      // La próxima fecha es lo ÚNICO que enciende la alerta
+      // `tratamiento_paso` del motor (056/S6). Se pregunta siempre, y el
+      // mensaje dice qué pasa si se omite: dejarla vacía tiene que ser una
+      // decisión, no un descuido.
+      const kbProximo = new InlineKeyboard()
+        .text("📅 Sí, poner fecha", "prox_si")
+        .row()
+        .text("⏭️ No hace falta", "prox_no")
+        .text("❌ Cancelar", "cancel_flow");
+      await ctx.reply(
+        "⏰ ¿Hay que hacer algo más después (otra dosis, un control)?\n\n" +
+          "Si pones fecha, ese día te llega un recordatorio por aquí.",
+        { reply_markup: kbProximo },
+      );
+
+      const cbProximo = await conversation.waitForCallbackQuery(["prox_si", "prox_no", "cancel_flow"]);
+      await cbProximo.answerCallbackQuery();
+      if (cbProximo.callbackQuery.data === "cancel_flow") {
+        await ctx.reply("Operación cancelada.");
+        return conversation.halt();
+      }
+
+      if (cbProximo.callbackQuery.data === "prox_si") {
+        const kbCancelarProx = new InlineKeyboard().text("❌ Cancelar", "cancel_flow");
+        await cbProximo.editMessageText(
+          "📅 ¿Qué día? Escríbelo como DD/MM (ej: 20/09)\n\nO escribe /cancelar para salir.",
+          { reply_markup: kbCancelarProx },
+        );
+        while (true) {
+          const paso = await conversation.wait();
+
+          const dataBoton = paso.callbackQuery?.data;
+          if (dataBoton) {
+            await paso.answerCallbackQuery();
+            if (dataBoton === "cancel_flow") {
+              await ctx.reply("Operación cancelada.");
+              return conversation.halt();
+            }
+            continue;
+          }
+
+          const texto = paso.message?.text;
+          if (!texto) continue;
+          if (esCancelar(texto)) {
+            await ctx.reply("Operación cancelada.");
+            return conversation.halt();
+          }
+          // `parseDDMMFuturo`, no `parseDDMM`: un paso programado mira
+          // hacia adelante. Con `parseDDMM` un "20/09" escrito en octubre
+          // se guardaría en 2025 y la alerta saldría vencida al instante.
+          const parsedProx = parseDDMMFuturo(texto);
+          if (!parsedProx) {
+            await paso.reply("Formato inválido. Escribe DD/MM (ej: 20/09), o /cancelar para salir.");
+            continue;
+          }
+          // El RPC rechaza un paso anterior al inicio; se avisa acá para
+          // que el usuario corrija en el momento y no al final del flujo.
+          if (parsedProx < fecha) {
+            await paso.reply(
+              `Esa fecha (${fechaLegible(parsedProx)}) es anterior al tratamiento (${fechaLegible(fecha)}). Escribe otra, o /cancelar.`,
+            );
+            continue;
+          }
+          fechaProximoPaso = parsedProx;
+          break;
+        }
+      } else {
+        await cbProximo.editMessageText("⏰ Sin próxima fecha.");
+      }
+
+      const rNota = await pedirTexto(conversation, ctx, {
+        titulo:
+          "📝 ¿Algo más? (opcional)\n\nDosis, quién lo aplicó, días de retiro de la leche.",
+        opcional: true,
+        maximo: 500,
+      });
+      if (rNota.cancelado) {
+        await ctx.reply("Operación cancelada.");
+        return conversation.halt();
+      }
+      notaTratamiento = rNota.texto;
+    }
 
     if (def.pideToro) {
       const toros = await conversation.external(async () => {
@@ -515,6 +707,9 @@ export async function eventoHatoConversation(
       `📅 ${fechaLegible(fecha)}`,
       toro ? `🐂 ${toro.nombre}` : null,
       criaDestino ? `🍼 ${DESTINOS_CRIA.find((d) => d.clave === criaDestino)?.etiqueta}` : null,
+      nombreTratamiento ? `💊 ${nombreTratamiento}` : null,
+      fechaProximoPaso ? `⏰ Próximo: ${fechaLegible(fechaProximoPaso)}` : null,
+      notaTratamiento ? `📝 ${notaTratamiento}` : null,
       advertencias.length > 0 ? `\n⚠️ ${advertencias.join("\n⚠️ ")}` : null,
     ]
       .filter(Boolean)
@@ -555,6 +750,30 @@ export async function eventoHatoConversation(
           null;
       }
       const { usuarioId, nombreDisplay } = atribucionDesdeFilaTelegram(filaTelegram);
+
+      // Tratamiento: otra tabla y un solo RPC (138). La cabecera y su paso
+      // de seguimiento son dos filas en dos tablas y tienen que quedar
+      // juntas — con inserts sueltos, un fallo del segundo deja el
+      // tratamiento guardado y el recordatorio inexistente, sin que nadie
+      // lo note. No toca `hato_eventos` (decisión: fuera de la línea de
+      // tiempo), así que retorna antes de armar `datosEvento`.
+      if (def.esTratamiento) {
+        const { data: idTratamiento, error: errorTtto } = await sb.rpc(
+          "fn_hato_registrar_tratamiento",
+          {
+            p_animal_id: vaca!.animal_id,
+            p_nombre: nombreTratamiento,
+            p_fecha_inicio: fecha,
+            p_nota: notaTratamiento,
+            p_fecha_proximo_paso: fechaProximoPaso,
+            p_descripcion_paso: null,
+            p_fuente: "telegram",
+            p_created_by: usuarioId,
+          },
+        );
+        if (errorTtto) throw new Error(`No se pudo guardar: ${errorTtto.message}`);
+        return { tratamientoId: idTratamiento as string, eventoId: null, usoId: null };
+      }
 
       const datosEvento: Record<string, unknown> = {
         origen: "telegram",
@@ -616,18 +835,20 @@ export async function eventoHatoConversation(
           }
         }
       }
-      return { eventoId: data!.id as string, usoId };
+      return { tratamientoId: null, eventoId: data!.id as string, usoId };
     });
     escrito = true;
 
     const textoExito =
       `✅ Registrado.\n\n${resumen}\n\nSi te equivocaste de vaca, usa Deshacer.\nUsa /start para volver al menú.`;
     const textoExitoSinBoton =
-      `✅ Registrado.\n\n${resumen}\n\nEl evento quedó guardado. Usa /start para volver al menú.`;
+      `✅ Registrado.\n\n${resumen}\n\nEl registro quedó guardado. Usa /start para volver al menú.`;
     try {
       const kbDeshacer = new InlineKeyboard().text(
         "↩️ Deshacer",
-        construirCallbackDeshacerEvento(guardado.eventoId),
+        guardado.tratamientoId
+          ? construirCallbackDeshacerTratamiento(guardado.tratamientoId)
+          : construirCallbackDeshacerEvento(guardado.eventoId!),
       );
       await ctx.reply(textoExito, { reply_markup: kbDeshacer, parse_mode: "Markdown" });
     } catch (replyErr: unknown) {
@@ -640,7 +861,7 @@ export async function eventoHatoConversation(
     const msg = err instanceof Error ? err.message : "Error desconocido";
     console.error("[Telegram] Evento hato conversation error:", msg);
     if (escrito) {
-      await ctx.reply("✅ El evento quedó guardado. Usa /start para volver al menú.");
+      await ctx.reply("✅ El registro quedó guardado. Usa /start para volver al menú.");
       return;
     }
     await ctx.reply(`Error registrando el evento: ${msg}\n\nUsa /start para volver al menú.`);
