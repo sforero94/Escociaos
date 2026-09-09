@@ -60,6 +60,7 @@ import {
 } from '@/utils/hato/exportarPlanillaChequeoPDF';
 import type { AnimalParaPlanillaChequeo } from './hooks/useAnimalesParaPlanillaChequeo';
 import { obtenerFechaHoy } from '@/utils/fechas';
+import { mensajeErrorCargaDiferida } from '@/utils/errorCargaDiferida';
 
 /**
  * B5.1 -- planilla PRE-LLENADA para el PRÓXIMO chequeo (aún sin fecha real:
@@ -175,7 +176,11 @@ const EXTRACTORES_CHEQUEOS: Record<ColumnaOrdenableChequeos, (c: ChequeoListItem
 
 export function ChequeosList() {
   const { chequeos, loading, error, reload } = useHatoChequeos();
-  const { animales: animalesParaPlanilla, loading: cargandoAnimales } = useAnimalesParaPlanillaChequeo();
+  const {
+    animales: animalesParaPlanilla,
+    loading: cargandoAnimales,
+    error: errorAnimales,
+  } = useAnimalesParaPlanillaChequeo();
   const [mostrarSubida, setMostrarSubida] = useState(false);
   // UI audit (2026-08-06): antes el botón exterior solo abría el diálogo
   // VACÍO, y recién ADENTRO se repetía la misma elección "¿foto o archivo?"
@@ -206,7 +211,24 @@ export function ChequeosList() {
     [chequeos, orden],
   );
 
+  /** Ninguna de las dos exportaciones debe producir una planilla VACÍA en
+   * silencio. Si el roster no cargó, la hoja saldría sin una sola vaca y
+   * parecería un archivo válido -- el peor resultado posible para algo que se
+   * imprime y se lleva a la finca, donde no hay cómo reimprimir. */
+  const bloqueoExportacion = (): string | null => {
+    if (errorAnimales) return `No se pudo leer el hato: ${errorAnimales}`;
+    if (animalesParaPlanilla.length === 0) {
+      return 'No hay vacas activas para la planilla. Revisa el hato antes de exportar.';
+    }
+    return null;
+  };
+
   const handleImprimirPlanillaPDF = async () => {
+    const bloqueo = bloqueoExportacion();
+    if (bloqueo) {
+      toast.error(bloqueo);
+      return;
+    }
     setExportandoPdf(true);
     try {
       // Misma fecha placeholder y mismo título que el `.xlsx`
@@ -222,14 +244,20 @@ export function ChequeosList() {
         `planilla-proximo-chequeo-${hoy}.pdf`,
       );
       toast.success('Planilla lista para imprimir. Corrija la fecha del título si el chequeo es otro día.');
-    } catch {
-      toast.error('No se pudo generar el PDF de la planilla.');
+    } catch (err) {
+      console.error('[planilla chequeo] fallo generando el PDF', err);
+      toast.error(mensajeErrorCargaDiferida(err, 'No se pudo generar el PDF de la planilla'));
     } finally {
       setExportandoPdf(false);
     }
   };
 
   const handleExportarPlanilla = async () => {
+    const bloqueo = bloqueoExportacion();
+    if (bloqueo) {
+      toast.error(bloqueo);
+      return;
+    }
     setExportando(true);
     try {
       // `obtenerFechaHoy()` -- NUNCA `new Date().toISOString().slice(0, 10)`,
@@ -244,8 +272,9 @@ export function ChequeosList() {
         `planilla-proximo-chequeo-${hoy}.xlsx`,
       );
       toast.success('Planilla exportada. Actualiza la fecha del título con la del chequeo real antes de subirla.');
-    } catch {
-      toast.error('No se pudo exportar la planilla.');
+    } catch (err) {
+      console.error('[planilla chequeo] fallo exportando el .xlsx', err);
+      toast.error(mensajeErrorCargaDiferida(err, 'No se pudo exportar la planilla'));
     } finally {
       setExportando(false);
     }
@@ -310,6 +339,17 @@ export function ChequeosList() {
           <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 mb-6 text-sm text-red-700">
             <AlertTriangle className="w-4 h-4 flex-shrink-0" />
             {error}
+          </div>
+        )}
+
+        {/* El error del roster se muestra APARTE del de la lista de chequeos:
+            son dos consultas distintas y una puede fallar sola. Sin este
+            aviso, un roster caído solo se notaba al abrir una planilla vacía
+            -- y solo si alguien contaba las filas. */}
+        {errorAnimales && (
+          <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 mb-6 text-sm text-red-700">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            No se pudo leer el hato para la planilla: {errorAnimales}
           </div>
         )}
 

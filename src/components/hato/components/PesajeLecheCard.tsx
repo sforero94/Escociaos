@@ -36,6 +36,7 @@ import { descargarPlanillaPesajePDF } from '@/utils/hato/exportarPlanillaPesajeP
 import { fechasPorSemanaDelMes } from '@/utils/hato/exportarPlanillaPesaje';
 import { formatLongDate } from '@/utils/format';
 import { obtenerFechaHoy } from '@/utils/fechas';
+import { mensajeErrorCargaDiferida } from '@/utils/errorCargaDiferida';
 
 /** Mes actual como `AAAA-MM`, el formato que espera `<input type="month">`.
  * Vía `obtenerFechaHoy()` (hora local) -- nunca `toISOString()`, que en
@@ -94,8 +95,8 @@ export function PesajeLecheCard({ ultimaCarga, onGuardado }: { ultimaCarga: stri
       );
       toast.success('Planilla lista para imprimir.');
     } catch (err) {
-      const mensaje = err instanceof Error ? err.message : 'No se pudo generar el PDF de la planilla.';
-      toast.error(mensaje);
+      console.error('[planilla pesaje] fallo generando el PDF', err);
+      toast.error(mensajeErrorCargaDiferida(err, 'No se pudo generar el PDF de la planilla'));
     } finally {
       setExportandoPdf(false);
     }

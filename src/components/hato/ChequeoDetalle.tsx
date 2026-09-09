@@ -24,6 +24,7 @@ import { EstadoChip } from './components/EstadoChip';
 import { chipTipoEstado, chipNumeroProvisional, chipEstadoReproductivoConMeses } from '@/utils/hatoUi';
 import { ordenarPorValor, type DireccionOrdenAnimales as DireccionOrden } from '@/utils/ordenarAnimalesHato';
 import { formatShortDate, formatNumber } from '@/utils/format';
+import { mensajeErrorCargaDiferida } from '@/utils/errorCargaDiferida';
 import {
   descargarPlanillaChequeo,
   construirTituloHojaChequeo,
@@ -213,8 +214,9 @@ export function ChequeoDetalle() {
         `chequeo-${chequeo.fecha}.xlsx`,
       );
       toast.success('Chequeo exportado a Excel.');
-    } catch {
-      toast.error('No se pudo exportar el chequeo.');
+    } catch (err) {
+      console.error('[chequeo detalle] fallo exportando el .xlsx', err);
+      toast.error(mensajeErrorCargaDiferida(err, 'No se pudo exportar el chequeo'));
     } finally {
       setExportando(false);
     }

@@ -43,6 +43,7 @@ import { calcularCostosVivosAplicacion } from '../../utils/calculosCierreAplicac
 import type { Aplicacion, ListaCompras } from '../../types/aplicaciones';
 import { toast } from 'sonner';
 import { formatearNumero, formatearMoneda } from '../../utils/format';
+import { mensajeErrorCargaDiferida } from '@/utils/errorCargaDiferida';
 
 interface DetalleAplicacionProps {
   aplicacion: Aplicacion;
@@ -508,8 +509,9 @@ export function DetalleAplicacion({
 
       await generarPDFListaCompras(lista, configuracion as any, datosEmpresa);
 
-    } catch (error: any) {
-      toast.error('Error al generar el PDF');
+    } catch (err) {
+      console.error('[lista de compras] fallo generando el PDF', err);
+      toast.error(mensajeErrorCargaDiferida(err, 'No se pudo generar el PDF'));
     } finally {
       setDescargandoPDF(false);
     }
@@ -520,8 +522,9 @@ export function DetalleAplicacion({
     try {
       const datos = await fetchDatosReporteCierre(aplicacion.id);
       await generarPDFReporteCierre(datos);
-    } catch (error: any) {
-      toast.error('Error al generar el reporte de cierre: ' + (error?.message || 'Error desconocido'));
+    } catch (err) {
+      console.error('[reporte de cierre] fallo generando el PDF', err);
+      toast.error(mensajeErrorCargaDiferida(err, 'No se pudo generar el reporte de cierre'));
     } finally {
       setGenerandoReporte(false);
     }

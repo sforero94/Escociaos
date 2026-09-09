@@ -23,6 +23,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from '../ui/input-group'
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from '../ui/empty';
 import { Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableCell } from '../ui/table';
 import { cn } from '../ui/utils';
+import { mensajeErrorCargaDiferida } from '@/utils/errorCargaDiferida';
 import type {
   ConfiguracionAplicacion,
   Mezcla,
@@ -101,8 +102,9 @@ export function PasoListaCompras({
       const nuevaLista = generarListaCompras(productosNecesarios, inventarioActual);
       setLista(nuevaLista);
       onUpdate(nuevaLista);
-    } catch {
-      toast.error('Error al generar lista de compras');
+    } catch (err) {
+      console.error('[lista de compras] fallo generando el PDF', err);
+      toast.error(mensajeErrorCargaDiferida(err, 'No se pudo generar la lista de compras'));
     } finally {
       setCargando(false);
     }
