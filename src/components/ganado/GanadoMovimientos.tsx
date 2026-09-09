@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useGanadoInventario } from './hooks/useGanadoInventario';
 import { GanadoSubNav } from './GanadoSubNav';
 import { MovimientoFormDialog } from './components/MovimientoFormDialog';
+import { TransaccionGanadoForm } from '@/components/finanzas/components/TransaccionGanadoForm';
 import { ConfirmarPendienteDialog } from './components/ConfirmarPendienteDialog';
 import { MovimientosTabla } from './components/MovimientosTabla';
 import { BannerPendientes } from './components/BannerPendientes';
@@ -115,6 +116,7 @@ export function GanadoMovimientos() {
   const [fechaHasta, setFechaHasta] = useState('');
 
   const [showForm, setShowForm] = useState(false);
+  const [showVenta, setShowVenta] = useState(false);
   const [pendienteSeleccionado, setPendienteSeleccionado] = useState<GanMovimiento | null>(null);
 
   // Estado de carga propio de la página — igual que en GanadoDashboard.tsx,
@@ -220,14 +222,26 @@ export function GanadoMovimientos() {
             <p className="text-sm text-brand-brown/70">Compras, ventas, traslados y ajustes</p>
           </div>
           {canWrite && (
-            <Button
-              onClick={() => setShowForm(true)}
-              disabled={!!errorCarga}
-              title={errorCarga ? 'No disponible mientras los movimientos no se puedan leer' : undefined}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Registrar movimiento
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={() => setShowVenta(true)}
+                variant="outline"
+                className="border-amber-600 text-amber-700 hover:bg-amber-50"
+                disabled={!!errorCarga}
+                title={errorCarga ? 'No disponible mientras los movimientos no se puedan leer' : undefined}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Venta
+              </Button>
+              <Button
+                onClick={() => setShowForm(true)}
+                disabled={!!errorCarga}
+                title={errorCarga ? 'No disponible mientras los movimientos no se puedan leer' : undefined}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Registrar movimiento
+              </Button>
+            </div>
           )}
         </div>
 
@@ -300,6 +314,13 @@ export function GanadoMovimientos() {
         <MovimientosTabla agrupados={agrupadosFiltrados} canVerPlata={canVerPlata} loading={cargando} />
         </>
         )}
+
+        <TransaccionGanadoForm
+          open={showVenta}
+          onOpenChange={setShowVenta}
+          defaultTipo="venta"
+          onSuccess={loadData}
+        />
 
         <MovimientoFormDialog
           open={showForm}
