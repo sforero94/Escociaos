@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
 import { useFormPersistence } from '@/hooks/useFormPersistence';
 import { FormDraftBanner } from '@/components/shared/FormDraftBanner';
@@ -10,7 +10,20 @@ import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Plus } from 'lucide-react';
 import { ProveedorDialog } from '@/components/shared/ProveedorDialog';
 import { CompradorDialog } from './CompradorDialog';
+import { RepartoPotreros, FILA_REPARTO_VACIA } from '@/components/ganado/components/RepartoPotreros';
+import { useGanadoInventario } from '@/components/ganado/hooks/useGanadoInventario';
 import type { TransaccionGanado, Proveedor, Comprador } from '@/types/finanzas';
+import type { GanFinca, GanLote, GanPotrero } from '@/types/ganado';
+import type { RepartoFila } from '@/utils/calculosGanado';
+import { validarExistencias } from '@/utils/calculosGanado';
+import {
+  DESTARE_CHIPS_KG_CABEZA,
+  calcularPesosVentaGanado,
+  errorDestareVenta,
+  errorPotreroOrigenVenta,
+} from '@/utils/calculosVentaGanado';
+import { formatCurrency, formatNumber } from '@/utils/format';
+import { cn } from '@/components/ui/utils';
 import { toast } from 'sonner';
 import { obtenerFechaHoy } from '@/utils/fechas';
 
@@ -22,9 +35,9 @@ interface TransaccionGanadoFormProps {
   onSuccess: () => void;
   /**
    * Prefill hato lechero (S9, plan §7.2/§8): abre el formulario compartido
-   * desde la ficha de un animal (`VentaAnimalDialog`) en vez de duplicarlo.
-   * `undefined` en todo lo demás de la app (Ganado ceba) -- el comportamiento
-   * sin estas dos props es byte-a-byte el mismo de antes de S9.
+   * desde la ficha de un animal en vez de duplicarlo. Con estas props la
+   * venta no exige potrero de ceba ni destare (issue #215; el hato no
+   * toca gan_inventario). `undefined` en Finanzas e Inventario.
    */
   hatoAnimalId?: string;
   hatoCantidadCabezasDefault?: number;
@@ -42,14 +55,21 @@ interface TransaccionGanadoFormProps {
 
 const selectClass = 'w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-primary/20';
 
+function parseOpcional(value: string): number | null {
+  if (value.trim() === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function TransaccionGanadoForm({ open, onOpenChange, transaccion, defaultTipo = 'compra', onSuccess, hatoAnimalId, hatoCantidadCabezasDefault, onGuardadoTransaccion }: TransaccionGanadoFormProps) {
   const isEditing = !!transaccion;
+  const { fetchEstructura, fetchInventario, confirmarPendiente } = useGanadoInventario();
 
   const [formData, setFormData, clearFormData, wasRestored] = useFormPersistence({
     // Un `hatoAnimalId` distinto usa una key de borrador propia -- evita que
     // el flujo de venta de una vaca puntual choque con un borrador de ganado
     // de ceba sin relación guardado bajo la key genérica 'ganado-new-v1'.
-    key: transaccion?.id ? `ganado-edit-${transaccion.id}` : hatoAnimalId ? `ganado-hato-venta-${hatoAnimalId}` : 'ganado-new-v1',
+    key: transaccion?.id ? `ganado-edit-${transaccion.id}` : hatoAnimalId ? `ganado-hato-venta-${hatoAnimalId}` : 'ganado-new-v2',
     initialState: {
       fecha: obtenerFechaHoy(),
       tipo: defaultTipo as 'compra' | 'venta',
@@ -57,20 +77,47 @@ export function TransaccionGanadoForm({ open, onOpenChange, transaccion, default
       cliente_proveedor: '',
       cantidad_cabezas: hatoCantidadCabezasDefault != null ? String(hatoCantidadCabezasDefault) : '',
       kilos_pagados: '',
+      peso_total_kg: '',
+      destare_kg_cabeza: '',
       precio_kilo: '',
       valor_total: '',
+      valor_manual: 'false',
       observaciones: '',
     },
   });
   const [saving, setSaving] = useState(false);
+  const [filasReparto, setFilasReparto] = useState<RepartoFila[]>([{ ...FILA_REPARTO_VACIA }]);
+
+  useEffect(() => {
+    if (open) return;
+    setFilasReparto([{ ...FILA_REPARTO_VACIA }]);
+  }, [open]);
 
   // Catalog state
   const [fincas, setFincas] = useState<string[]>([]);
+  const [fincasGan, setFincasGan] = useState<GanFinca[]>([]);
+  const [lotes, setLotes] = useState<GanLote[]>([]);
+  const [potreros, setPotreros] = useState<GanPotrero[]>([]);
+  const [existencias, setExistencias] = useState<Record<string, { novillos: number; toros: number }>>({});
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [compradores, setCompradores] = useState<Comprador[]>([]);
   const [newFinca, setNewFinca] = useState(false);
   const [showProveedorDialog, setShowProveedorDialog] = useState(false);
   const [showCompradorDialog, setShowCompradorDialog] = useState(false);
+
+  const isCompra = formData.tipo === 'compra';
+  const isVentaCeba = formData.tipo === 'venta' && !hatoAnimalId;
+  const cantidadCabezas = Math.round(Number(formData.cantidad_cabezas) || 0);
+  const pesoTotalKg = parseOpcional(formData.peso_total_kg);
+  const destareKgCabeza = parseOpcional(formData.destare_kg_cabeza);
+  const precioKilo = parseOpcional(formData.precio_kilo);
+  const pesos = calcularPesosVentaGanado({
+    pesoTotalKg,
+    destareKgCabeza,
+    cantidadCabezas,
+    precioKilo,
+  });
+  const valorManual = formData.valor_manual === 'true';
 
   // Load catalogs
   useEffect(() => {
@@ -101,6 +148,31 @@ export function TransaccionGanadoForm({ open, onOpenChange, transaccion, default
     loadCompradores();
   }, [open]);
 
+  useEffect(() => {
+    if (!open || !isVentaCeba) return;
+    let cancelado = false;
+    (async () => {
+      try {
+        const [estructura, inventario] = await Promise.all([fetchEstructura(), fetchInventario()]);
+        if (cancelado) return;
+        setFincasGan(estructura.fincas);
+        setLotes(estructura.lotes);
+        setPotreros(estructura.potreros);
+        const map: Record<string, { novillos: number; toros: number }> = {};
+        inventario.forEach((r) => {
+          map[r.potrero_id] = { novillos: r.novillos, toros: r.toros };
+        });
+        setExistencias(map);
+      } catch {
+        // El formulario de finanzas sigue usable: el guard de potrero
+        // bloqueará el save de una venta de ceba si no hay catálogo.
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [open, isVentaCeba, fetchEstructura, fetchInventario]);
+
   const loadProveedores = async () => {
     const { data } = await getSupabase().from('fin_proveedores').select('*').eq('activo', true).order('nombre');
     if (data) setProveedores(data as Proveedor[]);
@@ -120,8 +192,11 @@ export function TransaccionGanadoForm({ open, onOpenChange, transaccion, default
         cliente_proveedor: transaccion.cliente_proveedor || '',
         cantidad_cabezas: String(transaccion.cantidad_cabezas || ''),
         kilos_pagados: String(transaccion.kilos_pagados || ''),
+        peso_total_kg: transaccion.peso_total_kg != null ? String(transaccion.peso_total_kg) : '',
+        destare_kg_cabeza: transaccion.destare_kg_cabeza != null ? String(transaccion.destare_kg_cabeza) : '',
         precio_kilo: String(transaccion.precio_kilo || ''),
         valor_total: String(transaccion.valor_total || ''),
+        valor_manual: 'true',
         observaciones: transaccion.observaciones || '',
       });
       // If editing and finca is not in the list, show text input
@@ -130,6 +205,26 @@ export function TransaccionGanadoForm({ open, onOpenChange, transaccion, default
       }
     }
   }, [transaccion, fincas]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (isEditing) return;
+    setFilasReparto((prev) => {
+      if (prev.length !== 1 || prev[0].toros !== 0) return prev;
+      const novillos = isVentaCeba ? cantidadCabezas : prev[0].novillos;
+      if (prev[0].novillos === novillos) return prev;
+      return [{ ...prev[0], novillos }];
+    });
+  }, [open, isEditing, isVentaCeba, cantidadCabezas]);
+
+  useEffect(() => {
+    if (!open || isEditing || !isVentaCeba || valorManual) return;
+    if (pesos.valorCalculado == null) return;
+    const actual = formData.valor_total;
+    const siguiente = String(pesos.valorCalculado);
+    if (actual === siguiente) return;
+    setFormData((prev) => ({ ...prev, valor_total: siguiente }));
+  }, [open, isEditing, isVentaCeba, valorManual, pesos.valorCalculado, formData.valor_total, setFormData]);
 
   const update = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -158,22 +253,86 @@ export function TransaccionGanadoForm({ open, onOpenChange, transaccion, default
     if (data) update('cliente_proveedor', (data as any).nombre);
   };
 
+  const nombrePotrero = useMemo(() => {
+    const map = new Map(potreros.map((p) => [p.id, p.nombre]));
+    return (id: string) => map.get(id) || 'El potrero';
+  }, [potreros]);
+
+  const handleDestareChip = (kg: number) => {
+    const actual = parseOpcional(formData.destare_kg_cabeza);
+    update('destare_kg_cabeza', actual === kg ? '' : String(kg));
+  };
+
+  const handleValorChange = (value: string) => {
+    setFormData((prev) => ({ ...prev, valor_total: value, valor_manual: 'true' }));
+  };
+
+  const handleRecalcularValor = () => {
+    if (pesos.valorCalculado == null) return;
+    setFormData((prev) => ({
+      ...prev,
+      valor_total: String(pesos.valorCalculado),
+      valor_manual: 'false',
+    }));
+  };
+
   const handleSubmit = async () => {
     if (!formData.fecha || !formData.valor_total) {
       toast.error('Fecha y valor total son requeridos');
       return;
     }
 
+    const destareError = isVentaCeba
+      ? errorDestareVenta({
+          pesoTotalKg,
+          destareKgCabeza,
+          cantidadCabezas,
+          precioKilo,
+        })
+      : null;
+    if (destareError) {
+      toast.error(destareError);
+      return;
+    }
+
+    const potreroError = errorPotreroOrigenVenta({
+      tipo: formData.tipo,
+      esHato: Boolean(hatoAnimalId),
+      esEdicion: isEditing,
+      filas: filasReparto,
+      cantidadCabezas,
+    });
+    if (potreroError) {
+      toast.error(potreroError);
+      return;
+    }
+
+    if (isVentaCeba && !isEditing && Object.keys(existencias).length > 0) {
+      const existenciasError = validarExistencias(filasReparto, existencias, nombrePotrero);
+      if (existenciasError) {
+        toast.error(existenciasError);
+        return;
+      }
+    }
+
     setSaving(true);
     try {
+      const kilosPagados = isVentaCeba
+        ? pesos.pesoNetoKg
+        : formData.kilos_pagados
+          ? Number(formData.kilos_pagados)
+          : null;
+
       const payload = {
         fecha: formData.fecha,
         tipo: formData.tipo,
         finca: formData.finca || null,
         cliente_proveedor: formData.cliente_proveedor || null,
-        cantidad_cabezas: Number(formData.cantidad_cabezas) || 0,
-        kilos_pagados: formData.kilos_pagados ? Number(formData.kilos_pagados) : null,
-        precio_kilo: formData.precio_kilo ? Number(formData.precio_kilo) : null,
+        cantidad_cabezas: cantidadCabezas,
+        kilos_pagados: kilosPagados,
+        peso_total_kg: isVentaCeba ? pesoTotalKg : null,
+        destare_kg_cabeza: isVentaCeba ? destareKgCabeza : null,
+        precio_kilo: precioKilo,
         valor_total: Number(formData.valor_total),
         observaciones: formData.observaciones || null,
         // Vínculo hato lechero (migración 059) -- solo al crear, nunca al
@@ -232,14 +391,40 @@ export function TransaccionGanadoForm({ open, onOpenChange, transaccion, default
           }
         }
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('fin_transacciones_ganado')
-          .insert(payload);
+          .insert(payload)
+          .select('id')
+          .single();
         if (error) throw error;
-        toast.success('Transaccion registrada');
+
+        if (isVentaCeba && data?.id) {
+          try {
+            const { data: pendiente, error: errorPendiente } = await supabase
+              .from('gan_movimientos')
+              .select('id')
+              .eq('transaccion_ganado_id', data.id)
+              .eq('estado', 'pendiente')
+              .maybeSingle();
+            if (errorPendiente) throw errorPendiente;
+            if (!pendiente?.id) {
+              throw new Error('No se creó el movimiento pendiente de inventario');
+            }
+            await confirmarPendiente({ movimientoId: pendiente.id, filas: filasReparto });
+            toast.success('Venta registrada e inventario actualizado');
+          } catch (inventarioError: unknown) {
+            const message = inventarioError instanceof Error ? inventarioError.message : 'Error desconocido';
+            toast.error(
+              'La venta quedó en Finanzas. Confirma el potrero en Inventario → Movimientos. ' + message
+            );
+          }
+        } else {
+          toast.success('Transaccion registrada');
+        }
       }
 
       clearFormData();
+      setFilasReparto([{ ...FILA_REPARTO_VACIA }]);
       onSuccess();
       onOpenChange(false);
     } catch (error: unknown) {
@@ -250,14 +435,18 @@ export function TransaccionGanadoForm({ open, onOpenChange, transaccion, default
     }
   };
 
-  const isCompra = formData.tipo === 'compra';
+  const titulo = isEditing
+    ? 'Editar Transaccion Ganado'
+    : isCompra
+      ? 'Nueva compra de ganado'
+      : 'Nueva venta de ganado';
 
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent size="md">
+        <DialogContent size={isVentaCeba ? 'lg' : 'md'}>
           <DialogHeader>
-            <DialogTitle>{isEditing ? 'Editar Transaccion Ganado' : 'Nueva Transaccion Ganado'}</DialogTitle>
+            <DialogTitle>{titulo}</DialogTitle>
           </DialogHeader>
           <DialogBody>
             <FormDraftBanner variant="restored" show={wasRestored} onDiscard={clearFormData} />
@@ -273,6 +462,7 @@ export function TransaccionGanadoForm({ open, onOpenChange, transaccion, default
                     value={formData.tipo}
                     onChange={(e) => update('tipo', e.target.value)}
                     className={selectClass}
+                    disabled={Boolean(hatoAnimalId)}
                   >
                     <option value="compra">Compra</option>
                     <option value="venta">Venta</option>
@@ -340,25 +530,174 @@ export function TransaccionGanadoForm({ open, onOpenChange, transaccion, default
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <Label>Cabezas</Label>
-                  <Input type="number" value={formData.cantidad_cabezas} onChange={(e) => update('cantidad_cabezas', e.target.value)} placeholder="0" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Kilos</Label>
-                  <Input type="number" value={formData.kilos_pagados} onChange={(e) => update('kilos_pagados', e.target.value)} placeholder="0" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>$/Kilo</Label>
-                  <Input type="number" value={formData.precio_kilo} onChange={(e) => update('precio_kilo', e.target.value)} placeholder="0" />
-                </div>
+              <div className="space-y-1.5">
+                <Label>Cabezas</Label>
+                <Input
+                  type="number"
+                  value={formData.cantidad_cabezas}
+                  onChange={(e) => update('cantidad_cabezas', e.target.value)}
+                  onWheel={(e) => e.currentTarget.blur()}
+                  placeholder="0"
+                />
               </div>
 
-              <div className="space-y-1.5">
-                <Label>Valor Total *</Label>
-                <Input type="number" value={formData.valor_total} onChange={(e) => update('valor_total', e.target.value)} placeholder="0" />
-              </div>
+              {isVentaCeba ? (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label>Peso total (báscula) kg</Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={formData.peso_total_kg}
+                        onChange={(e) => update('peso_total_kg', e.target.value)}
+                        onWheel={(e) => e.currentTarget.blur()}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Destare kg/cabeza</Label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {DESTARE_CHIPS_KG_CABEZA.map((kg) => {
+                          const activo = destareKgCabeza === kg;
+                          return (
+                            <button
+                              key={kg}
+                              type="button"
+                              onClick={() => handleDestareChip(kg)}
+                              className={cn(
+                                'px-3 py-1.5 text-sm rounded-xl border transition-colors',
+                                activo
+                                  ? 'border-primary bg-primary/10 text-primary'
+                                  : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                              )}
+                            >
+                              {kg}
+                            </button>
+                          );
+                        })}
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={formData.destare_kg_cabeza}
+                          onChange={(e) => update('destare_kg_cabeza', e.target.value)}
+                          onWheel={(e) => e.currentTarget.blur()}
+                          placeholder="Otro"
+                          className="w-24"
+                        />
+                      </div>
+                      <p className="text-xs text-brand-brown/60">Sin default. 10 y 15 son atajos; otro valor también vale.</p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-brand-brown/80 space-y-1">
+                    <p>
+                      Destare total:{' '}
+                      <strong>
+                        {pesos.destareTotalKg != null ? `${formatNumber(pesos.destareTotalKg, 1)} kg` : '—'}
+                      </strong>
+                      {destareKgCabeza != null && cantidadCabezas > 0
+                        ? ` (${formatNumber(destareKgCabeza, 1)} × ${formatNumber(cantidadCabezas)})`
+                        : ''}
+                    </p>
+                    <p>
+                      Peso neto (kilos pagados):{' '}
+                      <strong>
+                        {pesos.pesoNetoKg != null ? `${formatNumber(pesos.pesoNetoKg, 1)} kg` : '—'}
+                      </strong>
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label>$/Kilo (sobre neto)</Label>
+                      <Input
+                        type="number"
+                        value={formData.precio_kilo}
+                        onChange={(e) => update('precio_kilo', e.target.value)}
+                        onWheel={(e) => e.currentTarget.blur()}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Valor Total *</Label>
+                      <Input
+                        type="number"
+                        value={formData.valor_total}
+                        onChange={(e) => handleValorChange(e.target.value)}
+                        onWheel={(e) => e.currentTarget.blur()}
+                        placeholder="0"
+                      />
+                      {pesos.valorCalculado != null && (
+                        <p className="text-xs text-brand-brown/60">
+                          Cálculo: neto × precio = {formatCurrency(pesos.valorCalculado)}
+                          {valorManual && (
+                            <>
+                              {' · '}
+                              <button
+                                type="button"
+                                className="text-primary hover:underline"
+                                onClick={handleRecalcularValor}
+                              >
+                                Usar cálculo
+                              </button>
+                            </>
+                          )}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {!isEditing && (
+                    <RepartoPotreros
+                      label="Potrero de origen *"
+                      filas={filasReparto}
+                      onChange={setFilasReparto}
+                      fincas={fincasGan}
+                      lotes={lotes}
+                      potreros={potreros}
+                      existencias={existencias}
+                      disabled={saving}
+                    />
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label>Kilos</Label>
+                      <Input
+                        type="number"
+                        value={formData.kilos_pagados}
+                        onChange={(e) => update('kilos_pagados', e.target.value)}
+                        onWheel={(e) => e.currentTarget.blur()}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>$/Kilo</Label>
+                      <Input
+                        type="number"
+                        value={formData.precio_kilo}
+                        onChange={(e) => update('precio_kilo', e.target.value)}
+                        onWheel={(e) => e.currentTarget.blur()}
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label>Valor Total *</Label>
+                    <Input
+                      type="number"
+                      value={formData.valor_total}
+                      onChange={(e) => update('valor_total', e.target.value)}
+                      onWheel={(e) => e.currentTarget.blur()}
+                      placeholder="0"
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="space-y-1.5">
                 <Label>Observaciones</Label>
@@ -368,7 +707,7 @@ export function TransaccionGanadoForm({ open, onOpenChange, transaccion, default
           </DialogBody>
           <DialogFooter>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => { clearFormData(); onOpenChange(false); }} disabled={saving}>Cancelar</Button>
+              <Button variant="outline" onClick={() => { clearFormData(); setFilasReparto([{ ...FILA_REPARTO_VACIA }]); onOpenChange(false); }} disabled={saving}>Cancelar</Button>
               <Button onClick={handleSubmit} disabled={saving}>
                 {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                 {isEditing ? 'Guardar' : 'Registrar'}

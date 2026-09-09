@@ -118,7 +118,15 @@ export function IngresoDetalleDialog({
                   value={ganado?.cantidad_cabezas ? formatNumber(ganado.cantidad_cabezas) : null}
                 />
                 <Campo
-                  label="Kilos pagados"
+                  label="Peso total (báscula)"
+                  value={ganado?.peso_total_kg != null ? `${formatNumber(ganado.peso_total_kg, 1)} kg` : null}
+                />
+                <Campo
+                  label="Destare kg/cabeza"
+                  value={ganado?.destare_kg_cabeza != null ? formatNumber(ganado.destare_kg_cabeza, 1) : null}
+                />
+                <Campo
+                  label="Kilos pagados (neto)"
                   value={ganado?.kilos_pagados ? `${formatNumber(ganado.kilos_pagados)} kg` : null}
                 />
                 <Campo

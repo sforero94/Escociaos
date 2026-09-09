@@ -267,7 +267,12 @@ export interface TransaccionGanado {
   finca?: string;
   cliente_proveedor?: string;
   cantidad_cabezas: number;
+  /** Peso neto pagado (peso_total − destare). Legacy rows: the only weight captured. */
   kilos_pagados?: number;
+  /** Scale weight. Null on rows captured before destare existed. */
+  peso_total_kg?: number | null;
+  /** Shrink kg per head. Null = not captured; never defaulted to 10 or 15. */
+  destare_kg_cabeza?: number | null;
   precio_kilo?: number;
   valor_total: number;
   observaciones?: string;

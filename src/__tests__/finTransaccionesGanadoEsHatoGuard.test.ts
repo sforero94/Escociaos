@@ -44,8 +44,8 @@ const SUPABASE_FUNCTIONS = join(REPO_ROOT, 'supabase/functions');
  */
 const ALLOWLIST_FROM = new Set([
   // Selector de fincas (solo lee la columna `finca`, sin agregación financiera).
-  // Corrido de 87 a 88 al importar `obtenerFechaHoy` en el arreglo de fecha local.
-  'src/components/finanzas/components/TransaccionGanadoForm.tsx:88',
+  // Corrido a 135 al añadir destare/potrero en el formulario de venta (issue #215).
+  'src/components/finanzas/components/TransaccionGanadoForm.tsx:135',
   // Corrido de 275 a 295 al mover `parseDDMM` a `../fechaDDMM.ts` (2026-09-09).
   'src/supabase/functions/server/telegram/conversations/ingreso.ts:295',
   'src/supabase/functions/server/telegram/conversations/gasto.ts:290',
