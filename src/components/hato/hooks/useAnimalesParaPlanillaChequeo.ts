@@ -56,11 +56,18 @@ import {
 } from '@/utils/hatoCategorias';
 import type { EstadoActualHatoViewRow, TipoServicioHato } from '@/types/hato';
 import { celdasServicioParaPlanilla } from '@/utils/hato/servicioVigente';
+import { plMedidoPorAnimal, fechaDesdeParaPL, type PesajeParaPL } from '@/utils/hato/plDesdePesajes';
 import { obtenerFechaHoy } from '@/utils/fechas';
 
 export interface AnimalParaPlanillaChequeo {
   numero: number | null;
   nombre: string | null;
+  /** PL MEDIDO: promedio de `hato_pesajes_leche` de las últimas 8 semanas,
+   * un decimal (dueño, 2026-09-09). NO es `v_hato_estado_actual.pl`, que es
+   * el número estimado a mano en el chequeo anterior y se venía arrastrando
+   * -- las dos cifras difieren hasta en 18 L. `null` cuando la vaca no tiene
+   * ninguna lectura en las últimas 4 semanas (típicamente porque está seca):
+   * celda vacía, nunca 0. Ver `utils/hato/plDesdePesajes.ts`. */
   pl: number | null;
   numPartos: number;
   /** "Última Cría" -- fecha del último parto conocido, cruda de la vista
@@ -266,10 +273,16 @@ export function useAnimalesParaPlanillaChequeo() {
     setError(null);
     try {
       const supabase = getSupabase() as any;
+      // Un solo `hoy` para toda la carga: la consulta de pesajes y el motor
+      // deben mirar la MISMA fecha. Pedirla dos veces abre una ventana
+      // (mínima, pero real) en la que la corrida cruza la medianoche y el
+      // corte de la consulta ya no corresponde al del cálculo.
+      const hoy = obtenerFechaHoy();
       const [
         { data: configRows, error: configError },
         { data: estadoRows, error: estadoError },
         { data: toroRows, error: toroError },
+        { data: pesajeRows, error: pesajeError },
         partosRes,
       ] = await Promise.all([
         supabase.from('hato_config').select('clave, valor'),
@@ -277,6 +290,18 @@ export function useAnimalesParaPlanillaChequeo() {
         // 68 toros en producción, muy lejos del corte de 1.000 -- no necesita
         // paginar. `hato_eventos` sí (ver más abajo).
         supabase.from('hato_toros').select('id, nombre'),
+        // Solo la ventana de 8 semanas: acotarla server-side deja la
+        // consulta chica y es EXACTO, no un recorte aproximado -- una vaca
+        // cuya última lectura sea anterior a ese corte ya está vencida por
+        // la regla de 4 semanas, así que traerla no cambiaría su resultado.
+        // Sin `fetchAll` a propósito, y acá el techo es demostrable: 8
+        // pesajes semanales por el hato activo (65 vacas hoy) son ~520
+        // filas, lejos del corte de 1.000 de PostgREST. `hato_eventos`, que
+        // sí crece sin techo, sigue paginado más abajo.
+        supabase
+          .from('hato_pesajes_leche')
+          .select('animal_id, fecha, litros_total')
+          .gte('fecha', fechaDesdeParaPL(hoy)),
         fetchAll<FilaEventoParto>((desde, hasta) =>
           supabase
             .from('hato_eventos')
@@ -289,16 +314,17 @@ export function useAnimalesParaPlanillaChequeo() {
       if (configError) throw configError;
       if (estadoError) throw estadoError;
       if (toroError) throw toroError;
+      if (pesajeError) throw pesajeError;
 
       const config = construirHatoConfigDesdeFilas((configRows ?? []) as FilaHatoConfig[]);
       // Mismas filas crudas de `hato_config` que ya se pidieron arriba --
       // sin una segunda consulta (mismo patrón que `useHatoAnimales.ts`).
       const umbralesCategoria = construirUmbralesCategoriaHatoDesdeFilas((configRows ?? []) as FilaHatoConfig[]);
-      const hoy = obtenerFechaHoy();
       const nombrePorToroId = new Map<string, string>(
         ((toroRows ?? []) as { id: string; nombre: string }[]).map((t) => [t.id, t.nombre]),
       );
       const ultimoPartoPorAnimal = indexarUltimoParto(partosRes.filas);
+      const plPorAnimal = plMedidoPorAnimal((pesajeRows ?? []) as PesajeParaPL[], hoy);
 
       const filas: AnimalParaPlanillaChequeo[] = ((estadoRows ?? []) as EstadoActualHatoViewRow[])
         .filter((fila) => esCandidataAPlanilla(fila, umbralesCategoria, hoy))
@@ -328,7 +354,7 @@ export function useAnimalesParaPlanillaChequeo() {
           return {
             numero: fila.numero,
             nombre: fila.nombre,
-            pl: fila.pl,
+            pl: plPorAnimal.get(fila.animal_id) ?? null,
             numPartos: fila.num_partos,
             ultimoPartoFecha: fila.ultimo_parto_fecha,
             sexoCriaRaw: partoCoherente?.sxRaw ?? null,
