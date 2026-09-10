@@ -1178,3 +1178,110 @@ en el nombre del fichero y no en el `CLAUDE.md`. No se filo como hallazgo nuevo:
 una corrida de barrido. **Que lo mire el primer barrido que toque numeracion de migraciones.**
 
 [sesion: 2026-09-09-decisiones, interactiva, sin escrituras a produccion]
+
+---
+
+## Corrida 2026-09-10-jueves (pulso operativo, roster de 4)
+
+### Preflight de tools — resultado 2026-09-10
+| Tool | Resultado |
+|---|---|
+| `execute_sql` (solo lectura) | OK — `supabase_read_only_user`, `default_transaction_read_only = on` |
+| `list_edge_functions` · `get_edge_function` · `query_logs` · `get_advisors` · `list_migrations` | OK |
+| `notion-query-data-sources` · `notion-fetch` · `notion-create-pages` · `notion-update-page` | OK |
+| `COMPOSIO_MULTI_EXECUTE_TOOL` (`VERCEL_GET_*`) | OK — sexta corrida sana |
+| `mcp__github__list_pull_requests` | OK — 0 PR abiertos |
+| `Supabase_Escritura` / `apply_migration` | **NO PROBADO — dormante a proposito.** Corrida desatendida, nadie puede dar un go |
+
+**Cero prompts de permiso en toda la corrida.** Modo: **full write** (probado con `git push --dry-run`
+antes de despachar, no despues).
+
+### Estado de la operacion
+- Roster de 4 (jueves). Notion OPERATIVO. Dead-man: ultima corrida 2026-09-07-lunes, 3 dias. Sano.
+- **5 hallazgos nuevos** (1 P1 + 4 P2) — el tope del jueves, alcanzado exacto.
+- **1 cerrado** (#74, Arreglado, probado por forma de la clave de idempotencia).
+- **2 actualizados en vez de duplicados**: #78 (el detector de deriva no mira la segunda edge function)
+  y #69 (137 y 141 documentadas como «SIN APLICAR» estando aplicadas).
+- **15 fichas se cerraron entre el lunes y hoy**, 11 de ellas en una sesion del 2026-09-10 08:51–09:01Z.
+  El backlog abierto paso de 16 a 20 (16 − 1 cerrada + 5 nuevas).
+
+### LA REGLA DEL ARBOL COMPARTIDO SE PUSO EN EL PROMPT Y FUNCIONO
+Es la quinta corrida con la trampa y la primera en que **no ocurrio**. Lo que cambio: la regla dejo de
+vivir solo en memoria y viajo **literal en el prompt de despacho de los seis agentes**, con la lista de
+comandos prohibidos (`git checkout/reset/branch/commit/stash/pull/clean`, `npm install`, `npm ci`) y con
+el directorio de scratch asignado. Arbol limpio al cerrar. **Una regla que solo vive en memoria se
+degrada; la que viaja en el prompt se cumple.** Mantenerla en los dos sitios.
+- Corolario que costo un agente: a `bug-triage` hubo que prohibirle ademas `npm test`/`lint`/`typecheck`,
+  porque `node_modules` no esta instalado y instalarlo muta el arbol de los otros tres. Ningun hallazgo
+  dependio de la suite.
+- Arranque: `HEAD` desprendido en `3cd5509` y rama local `main` clavada en `1a97b2d`. Corregido con
+  `git branch -f main origin/main` (NO `reset --hard`), como fija la leccion del 2026-09-03.
+
+### LA SINTESIS ENTRE AGENTES DIO UNA CONCLUSION QUE NINGUNO PODIA ALCANZAR SOLO
+El verificador del P1 de fechas cerro con: «*'el despliegue no lleva el arreglo' es probable y no
+establecido; no inspeccione el bundle*». **Infra si lo habia inspeccionado**, en paralelo, y encontro
+los marcadores `sin_anio` x4 y `requiereAnio` x11 (que solo existen desde `ad0ce1b`, 2026-09-09
+09:16:48Z); Release lo acoto por abajo de forma independiente en `>= 9ced7ca` (2026-09-09 00:16Z) con
+filas de dominio. Los dos limites meten `15854aa` (el arreglo de ambiguedad, 2026-09-08 23:42Z) DENTRO
+del bundle desplegado. O sea: **el arreglo esta desplegado y la transposicion siguio ocurriendo**, que
+invierte la conclusion del hallazgo — no es «falta desplegar», es «el arreglo no cierra ese camino».
+**Cruzar siempre los `no_corrio` de un agente contra lo que otro si midio, ANTES de filar.**
+
+### Racha del jueves (regla de auto-poda) — actualizada
+| Corrida | Hallazgos nuevos |
+|---|---|
+| 2026-08-20-jueves | 6 · racha de ceros 0 |
+| 2026-08-27-jueves | 5 · racha 0 |
+| 2026-09-03-jueves | 4 · racha 0 |
+| **2026-09-10-jueves** | **5 (1 P1 + 4 P2) · racha de ceros: 0** |
+La auto-poda **no aplica**: seis jueves seguidos con hallazgos. El jueves se justifico otra vez — el P1
+de fechas se escribio el 09-09 por la noche y habria esperado al lunes.
+
+### LEDGER DE REFUTACIONES — corrida 2026-09-10
+- **`data-integrity/hato-chequeo/el chequeo del 2026-09-08 perdio los partos por vocabulario SX`
+  → REFUTADO.** El mecanismo es cierto (las 19 celdas `sx_raw` son 'Hembra'/'Macho', `parseSX` las deja
+  `desconocido` con su issue explicito, 0 eventos derivados). **Todo el impacto es falso**: para las 19
+  vacas el ultimo `parto` en `hato_eventos` es EXACTAMENTE el `ultima_cria_raw` que ese mismo chequeo
+  reporta (19 de 19 identicos), y **ninguna** tiene `ultima_cria` posterior a 2026-05-31 — o sea que no
+  hubo ningun parto en la ventana jul→sep y derivar cero **es la respuesta correcta**. Ademas
+  `v_hato_estado_actual` NO quedo rancia: `ultimo_chequeo_fecha`, `meses_prenez`, `pl` y las fechas
+  proyectadas salen de la fila del chequeo (cuerpo de vista de 062/094), no de los eventos, y las 19 leen
+  2026-09-08. **No re-investigar.**
+  - Tres correcciones de metodo que valen mas que el hallazgo: (a) `descomponerSX` emite `servicio`
+    **antes** del `switch` de SX (`calculos-hato.ts:1347-1360`), asi que un SX no reconocido **no puede**
+    suprimir un servicio — la cadena «SX desconocido → cero eventos» solo cubre parto/aborto;
+    (b) **SX es la columna de SEXO DE LA CRIA**, no la del parto — la fecha del parto vive en
+    `ultima_cria_raw`, que normalizo bien en las 19; (c) el chequeo **2024-05-20 derivo 0 eventos de 42
+    `sx_raw` no nulos**, asi que un chequeo con cero eventos NO es anomalo por si solo.
+  - **Lo que si queda en pie, como P3 latente y NO filado por el tope de 5**: el vocabulario cambio de
+    codigos a palabras entre el 2026-07-09 y el 2026-09-08, y el proximo chequeo que **si** traiga un
+    parto lo perdera en silencio. Arreglo: ampliar `VOCABULARIO_SX` (`ocrChequeo.ts:763`) y `parseSX`, o
+    rechazar la hoja en el preview. **Vigilar en el chequeo de noviembre.**
+- **`data-integrity/hato-eventos/once servicios con fecha DD/MM transpuesta` → CONFIRMADO, y CRECIO.**
+  El verificador tumbo las seis vias de refutacion y encontro **una quinta vaca** que el hallador no vio
+  (MARIPOSA #120, la mayor productora del grupo con 30 L) y **alertas equivocadas YA ENVIADAS**
+  (`servicio_sin_confirmacion` a MARIPOSA el 09-10 y a FLACA el 09-09, ambas `estado='enviada'`).
+
+### DOS TECNICAS DE PRUEBA QUE SE GANARON EL SITIO HOY
+1. **La forma de una CLAVE DE IDEMPOTENCIA es una prueba de despliegue gratuita.** El arreglo de #74
+   cambio `regla_clave` de `rechq:<animal_id>:<fecha>` a `rechq:hato:<fecha>`; **una sola fila** posterior
+   al despliegue lo demuestra sin bajar un byte de bundle. Buscar siempre si el arreglo cambia el valor de
+   una columna que el codigo escribe — vale mas que un hash y mas que un grep.
+2. **Un `404` que pasa a `401` sobre la MISMA ruta es prueba conductual de que hubo despliegue entremedio.**
+   Y las sondas de corridas anteriores siguen en `function_logs` 24 h, asi que sirven de linea base:
+   mirarlas antes de concluir «no se desplego nada».
+
+### UN ARREGLO QUE CAMBIA LA CLAVE DE IDEMPOTENCIA DEJA RESIDUO
+Las 36 alertas `rechequeo_due` por animal del 2026-09-07 no colisionan con la clave nueva, siguieron
+vivas y **escalaron solas** el 09-09 (`escaladas=37`, `mensajes_escalamiento=74`). Total: 182 mensajes de
+Telegram por un solo hecho de hato. **Al cerrar un hallazgo de este tipo, preguntar SIEMPRE que pasa con
+las filas que la regla vieja ya habia creado.**
+
+### ERROR PROPIO 2026-09-10 — se sobrescribio la Evidencia de una ficha en vez de anexarla
+Al actualizar #78 se mando `Evidencia` completa por `update_properties` y **se perdio el texto original
+de la corrida del lunes** (queda en el historial de versiones de Notion y en el informe del 09-07). Se
+dejo una nota de procedimiento dentro del propio campo. **`notion-update-page` no anexa a una propiedad:
+la reemplaza.** Para anexar sin perder, leer primero la propiedad y reenviar viejo+nuevo, o escribir la
+adicion como BLOQUE DE CUERPO con `insert_content` (que es lo que se hizo bien en #69). Ojo ademas:
+`update_content` opera sobre el CUERPO de la pagina, nunca sobre una propiedad — fallo con «No matches
+found» al intentar corregir asi el campo.

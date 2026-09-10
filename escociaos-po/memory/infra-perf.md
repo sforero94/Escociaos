@@ -378,3 +378,57 @@ prompt del agente en cada corrida.
 - **#55 con evidencia nueva**: los tres `net._http_response` de hoy llevan `status_code NULL` y `err = "Timeout of 5000 ms reached"`. **La duracion real del tick del hato fue 31.054 ms, 6x el presupuesto de pg_net**, y aun asi completo bien (36 generadas, 36 enviadas). El timeout sigue siendo cosmetico, pero 31 s es marca nueva.
 - **`mcp__github__actions_list` sobre `thinksid/escocia-backups` NO CORRE** desde esta sesion (alcance de repos). No es fallo de allowlist. **El chequeo de respaldos no es ejecutable aqui — dejar de intentarlo.**
 - **`postgrest_logs` lleva un ~12/hora estable de "Warp server error: Thread killed by timeout manager"** (296 en 24 h, plano en todas las horas). **Ruido de fondo, no senal de defecto.**
+
+---
+
+## Corrida 2026-09-10-jueves
+
+### Linea de salud
+Vercel 6/6 READY/PROMOTED, alias en `3cd5509` = HEAD, build 27,2 s, ultimo despliegue 2026-09-10T08:55:33Z
+· edge `make-server-1ccce916` **v248 (2026-09-09T09:22:25Z), VERIFICADA POR CONTENIDO, al dia con
+`origin/main`** · edge `informes-visita-proponer` **v2 (2026-09-03T12:03:08Z), DERIVADA 7 dias** · 6
+pg_cron, 876 corridas en 3 dias, 0 fallos · advisors de seguridad identicos al baseline · DB 120 MB ·
+`clima_lecturas` 0 min de atraso.
+
+### Verificacion por contenido de la v248 — los marcadores que sirven
+`sin_anio` x4 y `requiereAnio` x11 (solo existen desde `ad0ce1b`, 2026-09-09T09:16:48Z, el commit mas
+nuevo del arbol edge). Control positivo `leerFechaFutura` x7. Tambien `exitAll` x2 (`c808ec5`) y
+`fn_hato_registrar_tratamiento` x2.
+**El conteo de ficheros cierra la pregunta antes que cualquier grep**: bundle 78, repo 81, y la diferencia
+son EXACTAMENTE los 4 solo-tipo ya conocidos (`acciones-render.ts`, `acciones-tipos.ts`,
+`importHato/tipos.ts`, `telegram/types.ts`); 0 ficheros en el bundle que no esten en el repo.
+
+### El detector de deriva solo mira UNA de las dos edge functions
+`scripts/check-deploy-drift.mjs:23-24` fija `FUNCION_POR_DEFECTO` / `RUTA_DESPLEGADA_POR_DEFECTO` a
+`make-server-1ccce916`. El script **ya lee** `EDGE_FUNCTION` y `EDGE_FUNCTION_PATH` del entorno (lineas
+117, 128), asi que cubrir la segunda es cambio de **workflow**, no de codigo. Anexado al hallazgo #78.
+`informes-visita-proponer` se desplego **6h27m ANTES** del commit que la modifica (`3b3ffd3`) y no se ha
+vuelto a desplegar; probado por contenido (el repo declara `temas`, el bundle desplegado no contiene esa
+cadena). No rompe nada hoy: `clienteProponer.ts:80,90` rellena los chips en el navegador.
+
+### Firma nueva de error — primera aparicion 2026-09-08T20:55:09Z
+`[clima-sync] Supabase insert failed (504): {"message":"Gateway Timeout"}`, siempre con
+`--> POST /clima/sync 500 6s`. 0 en las 24 h previas, 5 el 08-09, 3 el 09-10.
+**Cada 500 cuesta exactamente una lectura**: los huecos de 10 min en `clima_lecturas` casan uno a uno con
+los 500. `postgres_logs` limpio en la misma ventana → el fallo es de PostgREST/gateway, no de la base.
+**El cron dice 864/864 sin fallos**, o sea que por el lado de `cron.job_run_details` esto es invisible.
+Arreglo propuesto y no filado (P3, tope de 5): un reintento acotado sobre 5xx; el write es idempotente por
+`UNIQUE(station_id, timestamp)` de la 029.
+
+### El cron 121 y el guardarrail `debeReagregarDia` FUNCIONAN — dejar de dudarlo
+Corrida 2026-09-10T11:00Z: 5 candidatos, `0/5 resueltos a 'ok', 3 dejado(s) intacto(s) por cobertura
+menor`, con la razon por dia en el log (`Ecowitt devolvió 206 lectura(s) y la fila ya declara 225`).
+**Ese mensaje es la forma mas barata de saber si un hueco es de la estacion o del sync**: si Ecowitt
+tampoco tiene las horas, el sync no tuvo la culpa.
+Consecuencia aceptada: un dia parcial **se queda parcial para siempre** cuando Ecowitt tampoco las tiene.
+
+### El tick del hato bajo de 31.054 ms a 11.899 ms
+(2026-09-10T10:45:14Z, 179 animales, HTTP 200 en 12 s). Ya no roza el presupuesto de `pg_net` como el
+09-07.
+
+### Sin novedad, para no re-mirarlo
+Las 23 tablas sin PK estan TODAS en `respaldos`, 0 en `public` — estado final buscado por la 081.
+`unused_idx` 80 (era 82 el lunes). Advisors: 26 `rls_enabled_no_policy`, 2 `anon_security_definer`
+(accept permanente), 3 `authenticated_security_definer`, 1 `auth_leaked_password_protection`.
+**El chequeo de respaldos de `thinksid/escocia-backups` sigue FUERA DEL ALCANCE de repos de la sesion.
+No es fallo de allowlist y no se vuelve a filar.**

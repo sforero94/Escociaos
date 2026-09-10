@@ -446,3 +446,66 @@ ultimos 90: 2026-08-28** (sin cambio desde el 08-31) · 08-27 sigue en 349 lectu
 - **`regla_clave` de rechequeo es `rechq:{animal_id}:{ultimo_chequeo_fecha}`** — anclada al ultimo chequeo, no a hoy. Por eso no se repite al dia siguiente, **pero si entera 60 dias despues de cada chequeo nuevo**.
 - **VIGILAR 2026-09-12**: `hato_chequeos` clavado en 2026-07-09 (umbral 65 dias).
 - **NO FILAR**: `hato_pesajes_leche` del 2026-09-02 esta dentro del ritmo de captura observado; lo cubre el hallazgo de captura por foto. El unico CHECK sin validar de la base es `realtime.messages_payload_exclusive`, tabla de plataforma — no es nuestro.
+
+---
+
+## Corrida 2026-09-10-jueves (ventana de 72 h)
+
+### Linea base de deltas (desde 2026-09-07 11:00Z)
+`hato_tratamientos` **0 → 28** (la tabla estrena uso real: 9 backfill del chequeo de julio + 19 de la
+ronda del 09-09) · `hato_chequeos` 33→34 (**2026-09-08; rompe la vigilancia de los 65 dias, intervalo
+real 61 — NO filar**) · `hato_chequeo_vacas` 1.479→1.498 · `hato_eventos` 767→783 (+16, todos `servicio`
+salvo 1 `secado_real`) · `hato_alertas` 103→118 · `fin_gastos` 4.479→4.519 · `fin_transacciones_ganado`
+94→95 · `gan_movimientos` 53→54 · `monitoreos` 4.244 (=) · `movimientos_inventario` 165 (=, ultimo
+2026-09-05) · `movimientos_diarios` 171 / `mdp` 802 (=) · `compras` 32 (=) · `registros_trabajo` 2.839 (=)
+· `hato_pesajes_leche` 601 (**=, ultima fecha 2026-08-26 — 15 dias, dos miercoles perdidos**) ·
+`informes_visita` 1 (=) · `logs_auditoria` 0.
+**`movimientos_inventario`, `movimientos_diarios*`, `compras`, `monitoreos`, `rondas_*` y
+`registros_trabajo`: CERO escrituras en la ventana** — el barrido GlobalGAP de este jueves no tenia nada
+que mirar.
+
+### Como se mide un chequeo por FOTO: eventos derivados, NUNCA filas escritas
+El 2026-09-08 escribio 19 filas correctas y **0 eventos**. Ningun conteo de filas muestra eso.
+**PERO OJO — esta corrida lo filo como P1 y el verificador lo REFUTO**: cero eventos era la respuesta
+CORRECTA (ninguna de las 19 vacas pario en la ventana; las 19 ya tenian su `parto` en la fecha exacta que
+el chequeo reporta). Ver el ledger de refutaciones en `_compartida.md`. **La metrica sigue siendo util
+como senal; no es por si sola un defecto.** Antes de filar: comprobar `ultima_cria_raw` contra
+`max(hato_eventos.fecha where tipo='parto')` por animal, y `max(ultima_cria)` de la ronda.
+
+### Deteccion barata de una transposicion de fecha, en cualquier tabla
+Comparar la distribucion de dia-del-mes de la ventana contra la historica:
+`count(*) FILTER (WHERE extract(day FROM fecha)=N) / count(*)`, por grupo.
+Dio **73,3% (11/15) en la ventana contra 3,2% (13/412) historico**, con el resto de dias plano (4-36).
+**Guardar esta consulta.** Y la prueba que de verdad cierra el caso no es estadistica sino biologica:
+MARIPOSA #120 quedaba servida **11 dias post-parto** contra `dias_espera_voluntaria_post_parto = 90`.
+
+### NO se puede voltear una fecha automaticamente
+En el mismo lote de 15, PIRINOLA (2026-08-01) y ELECTRA (2026-08-11) son plausibles tal como estan, y las
+tres filas con `pajilla_uso_id` (ELECTRA, MONZA, AMAPOLA) tienen fecha sana. La correccion exige el papel
+de Martha, fila por fila.
+
+### La chapeta 192 la comparten dos animales y NO es un duplicado
+GRANADA (`vendida`) y GALLETA (`activa`) — reciclaje legitimo bajo el indice parcial de la 066.
+`v_hato_estado_actual` devuelve las DOS filas, asi que **un JOIN por `numero` sobre esa vista duplica.
+Unir siempre por `animal_id`.** Duplicados entre activas: ninguna.
+
+### Otros hechos de la ventana
+- **La migracion 141 esta APLICADA** (ledger `20260909130404`), contra lo que dice el `CLAUDE.md` raiz.
+  `pg_get_functiondef` confirma la rama `peso_total_kg` viva en `fn_crear_movimiento_pendiente_ganado`.
+- **Ganado concilia: 357 = 357** (`gan_inventario` contra la suma de deltas confirmados). Bajo de 369 por
+  la venta de 12 cabezas del 09-09.
+- **`hato_tratamientos` estreno con 2 duplicados de 28**, y confirma la brecha que la 138 dejo escrita:
+  el patron es capturar por Telegram y volver a capturar por web horas despues (CAMILA #154 y ELECTRA
+  #117, las cuatro filas con `fecha_inicio=2026-09-09`). No filado por volumen; **vigilar si 2/28 sube**.
+- **Solo 6 de 28 tratamientos tienen paso de seguimiento** — y el paso es OPCIONAL por diseno
+  (`fn_hato_registrar_tratamiento`, `p_fecha_proximo_paso DEFAULT NULL`; sin paso el tratamiento nace
+  `completado`). **22 sin paso NO es un defecto. No refilarlo.**
+- Clima SANO al 2026-09-10 11:00Z: ultima lectura hace 3 min; 90 dias con `ok:83 / cobertura_parcial:5 /
+  reconstruido:1 / contador_congelado:0`; 1 solo dia sin resumen en 90 (el 2026-08-28, ya filado).
+- 0 stock negativo en `productos`.
+- **Tres respaldos nuevos rompen la convencion de nombre**: `respaldos.backup_20260908_jerico_merge`,
+  `backup_20260908_martha_dup`, `backup_20260909_cuca_cuna_fechas` usan fecha en vez del numero de
+  migracion (`backup_NNN_*`). Salen de sesiones de arreglo en vivo, no de migraciones. **Decidir si la
+  convencion admite las dos formas.**
+- **`animales_sin_raza` = 176 de 179** segun el resumen del tick, mientras el hallazgo #56 habla de 35
+  vacas. **O el contador mide otra cosa o el numero crecio mucho — verificar antes de tocar #56.**

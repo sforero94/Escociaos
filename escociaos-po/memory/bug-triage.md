@@ -466,3 +466,30 @@ y `--force-with-lease` anclado al sha viejo. Rama nueva: `132cc1c`, 1 commit, 1 
 `git diff --name-only origin/main...<rama>` y cotejarlo contra lo que el PR dice que toca. **El conteo
 `changed_files` de la API lo canta gratis**: 10 ficheros en un PR de documentacion fue la senal.
 Cortar SIEMPRE la rama de `origin/main`, nunca de la rama del PR anterior.
+
+---
+
+## Corrida 2026-09-10-jueves
+
+- **`fin_transacciones_ganado` NO tiene trigger de UPDATE** — verificado contra `pg_trigger`: solo
+  `trg_crear_movimiento_pendiente_ganado` (AFTER INSERT), `trigger_set_transaccion_ganado_created_by`
+  (BEFORE INSERT) y el de `updated_at`. **Editar una transaccion nunca vuelve a derivar su fila de
+  `gan_movimientos`.** Al auditar ganado: comparar `updated_at` de la transaccion contra `created_at` del
+  movimiento; si difieren, el movimiento esta rancio. Filado esta corrida.
+- **La regla `tratamiento_paso` del motor de alertas DISPARO POR PRIMERA VEZ el 2026-09-09** (2 alertas,
+  las dos `expirada`). Queda obsoleta la nota del 2026-08-31 «el motor no aplica a nadie» **en lo que toca
+  a esta regla**.
+- **`clima_lecturas` pierde lecturas por 504 de PostgREST, no solo por cortes de Ecowitt.** Las dos causas
+  se distinguen en `function_logs`: `[clima-sync] Supabase insert failed (504)` = perdida evitable;
+  `[clima-sync] Empty data from Ecowitt` = corte real de la estacion. 9 y ~60 respectivamente en 48 h.
+  **Antes de culpar al sensor por un `cobertura_parcial`, contar los 504.** No filado (P3, tope de 5).
+- **Firma benigna, NO filar**: `GET | 406 | /rest/v1/telegram_conversations?select=session&key=eq.<id>`
+  — 33 en 24 h. Es la lectura de sesion de grammy con `.single()` sobre 0 filas (PGRST116); ocurre en cada
+  conversacion nueva. No es un fallo.
+- **El estado de un hallazgo se lee por `max(created_at)` de las filas que lo alimentan, no por el conteo
+  a secas.** Los tres revisados este jueves (#70 jornales >1.0, #65 `lecturas_count`>288, #45 dos unidades)
+  estan **sin cambio** porque su tabla no recibio una sola escritura desde antes del lunes —
+  `registros_trabajo` lleva quieta desde 2026-09-05. Mas barato y mas honesto que recontar.
+  - #70: 42 grupos, `max(fecha_trabajo)=2026-08-26`, `max(created_at)=2026-09-01`.
+  - #65: 2 dias, `max(fecha)=2026-08-29`, `max(lecturas_count)=349`.
+  - #45: 2.558 mensual / 134 por jornal / 147 NULL de 2.839.

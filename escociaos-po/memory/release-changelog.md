@@ -338,3 +338,51 @@ hace lo que se diseno para hacer.
 - **Backlog**: 19 abiertos al inicio, 12 nuevos, 1 cerrado (#4). **0 estancados (>60 dias).**
 - **Cadencia**: 22 commits en 6,6 dias = 23,3/sem, **feature-pesada** (el modulo Informes de visita). **Lag de despliegue del edge function: 6 dias — en rojo por TERCERA vez en tres semanas** (v223 regresiva, v236 republico un bundle viejo, ahora un no-despliegue).
 - **`CHANGELOG.md` sigue sin existir — QUINTA corrida.** #71 bloqueado en decision de Santiago. La entrada de esta semana quedo escrita en el reporte de la corrida.
+
+---
+
+## Corrida 2026-09-10-jueves
+
+### Estado de despliegue
+HEAD `main` `3cd5509` · frontend Vercel **AL DIA, verificado POR CONTENIDO** (`destare_kg_cabeza` y
+`peso_total_kg` en `TransaccionGanadoForm-ClY_0Cwu.js`, 0 apariciones en el arbol de `1a97b2d` como
+control negativo, `kilos_pagados` como control positivo; y el literal
+`"[RouteErrorBoundary] la ruta falló al renderizar"` en `index-DJx7QYFE.js`) · edge
+`make-server-1ccce916` v248 · `informes-visita-proponer` v2 · **migraciones 001-141 todas aplicadas, cero
+deriva en las dos direcciones**.
+
+### Ventana 2026-09-07 11:00Z → 2026-09-10 08:55Z (3,0 dias)
+45 commits, 22 aterrizajes first-parent, **16 PR fusionados** (#197 #198 #199 #200 #202 #203 #205 #206
+#207 #208 #209 #210 #211 #212 #214 #216), **5 migraciones aplicadas** (137, 138, 139, 140 x2 con su
+renumeracion, 141), **0 PR abiertos al cierre**.
+**NO interpretable como tendencia**: 40 de los 45 commits caen en las noches del 08 y del 09 (drenaje).
+La medicion limpia sigue siendo la mensual.
+
+### LA PRUEBA DE DESPLIEGUE MAS BARATA DE ESTA CORRIDA
+**El cambio de FORMA DE UNA CLAVE DE IDEMPOTENCIA es una prueba de contenido gratuita.** El arreglo de
+#74 cambio `regla_clave` de `rechq:<animal_id>:<fecha>` a `rechq:hato:<fecha>`; **una sola fila** de
+`hato_alertas` posterior al despliegue lo demuestra sin bajar un byte de bundle. Buscar siempre si el
+arreglo cambia el valor de una columna que el codigo escribe — vale mas que un hash y mas que un grep.
+El bundle edge tambien se puede acotar POR ABAJO con dos filas de dominio de fechas distintas:
+`rechq:hato:*` (`6a93ded`, 09-08 15:56Z) y `hato_tratamientos.fuente='telegram'` (`9ced7ca`, 09-09
+00:16Z).
+
+### Lo que NO se pudo probar por contenido, y por que
+`ad0ce1b` / PR #214 («tratamiento exige fecha con año»): el cambio vive dentro de una conversacion de
+Telegram, no anade ruta HTTP y no deja firma en las filas que escribe. **Lo resolvio Infra en paralelo**
+con los marcadores `sin_anio`/`requiereAnio` del bundle. Leccion: cuando un agente no puede probar algo
+por su via, **el orquestador tiene que cruzarlo con lo que otro si midio antes de filar**.
+
+### Documentacion rancia detectada (anexado a #69, no filado aparte)
+El `CLAUDE.md` raiz declara **137 y 141** como «ESCRITA, SIN APLICAR» y **las dos estan aplicadas y
+verificadas en vivo** (`pg_get_functiondef(get_user_role)` ya filtra `activo`;
+`information_schema.columns` da `peso_total_kg` y `destare_kg_cabeza`). Falta ademas la entrada de la
+**139**, y `src/sql/migrations/` tiene **dos ficheros numerados 140**. Es la direccion OPUESTA al #69
+original — la entrada existe y miente — y por eso es mas dificil de detectar.
+
+### Cierres y no-cierres
+- **#74 CERRADO** (Arreglado), por forma de la clave. **Dejo residuo**: las 36 filas viejas escalaron
+  solas el 09-09 → hallazgo nuevo de esta corrida.
+- **#77 NO se cerro con el PR #197**: `arbolEdgeFunctionParidad.test.ts` cubre solo los dos arboles de
+  siempre; el tercero (`supabase/functions/informes-visita-proponer/`) sigue sin guarda.
+- **#78 y #66 siguen abiertos**: ningun PR de la ventana toco `.github/`.
