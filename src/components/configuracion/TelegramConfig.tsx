@@ -23,6 +23,7 @@ import {
   type RolBot,
   type EstadoVinculacion,
 } from '../../utils/telegramUsuarios';
+import { Link } from 'react-router-dom';
 import {
   agruparAlertasPorModulo,
   construirEstadoDesdeSuscripciones,
@@ -31,6 +32,8 @@ import {
   construirFilasParaGuardar,
   contarSuscripcionesUsuario,
   formatearResumenAlertas,
+  estadoInicialSuscripciones,
+  puedeRecibirAlertaTelegram,
   type AlertaCatalogoRow,
   type AlertaSuscripcionRow,
   type SuscripcionEstado,
@@ -102,6 +105,14 @@ export function TelegramConfig() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [todasSuscripciones]);
+
+  // Issue #217: a new campo user must not ship with every hato type ticked.
+  // Reseed when the role changes in the create form. Edit keeps the rows.
+  useEffect(() => {
+    if (modalOpen && modalMode === 'crear') {
+      setAlertasEstado(estadoInicialSuscripciones(rolBot, catalogoAlertas));
+    }
+  }, [rolBot, modalOpen, modalMode, catalogoAlertas]);
 
   const cargarUsuarios = async () => {
     try {
@@ -191,7 +202,7 @@ export function TelegramConfig() {
     setRolBot('campo');
     setModulosPermitidos(['labores']);
     setUsuarioVinculadoId(null);
-    setAlertasEstado({});
+    setAlertasEstado(estadoInicialSuscripciones('campo', catalogoAlertas));
     setModalOpen(true);
   };
 
@@ -289,7 +300,17 @@ export function TelegramConfig() {
       // `updated_by` (migración 096) no tiene trigger que lo llene -- a
       // diferencia del patrón `created_by` de 040/050/063/074, acá se
       // espera que quien escribe lo declare.
-      const filasConAutor = filas.map((f) => ({ ...f, updated_by: profile?.id ?? null }));
+      // Issue #217: a campo user cannot persist gerencia hato types, even
+      // if a stale checkbox is still on.
+      const filasConAutor = filas.map((f) => {
+        const permitido = puedeRecibirAlertaTelegram(rolBot, f.alerta_clave);
+        return {
+          ...f,
+          recibe: permitido && f.recibe,
+          escalamiento: permitido && f.escalamiento,
+          updated_by: profile?.id ?? null,
+        };
+      });
       const supabase = getSupabase() as any;
       const { error } = await supabase
         .from('telegram_alertas_suscripciones')
@@ -683,6 +704,14 @@ export function TelegramConfig() {
                   aparecerán solos cuando existan, sin tocar este código. */}
               <div>
                 <Label>Alertas</Label>
+                <p className="text-xs text-brand-brown/60 mt-1">
+                  Campo (Fernando) solo recibe Secado y Paso de tratamiento en Telegram.
+                  El resto se configura en{' '}
+                  <Link to="/hato-lechero/alertas?tab=quien" className="text-primary underline">
+                    Hato → Alertas → Quién recibe
+                  </Link>
+                  .
+                </p>
                 {catalogoAlertasError ? (
                   <p className="text-xs text-destructive mt-2">
                     No se pudo cargar el catálogo de alertas. Intenta de nuevo más tarde.
@@ -701,6 +730,7 @@ export function TelegramConfig() {
                         <div className="rounded-lg border border-secondary/30 divide-y divide-secondary/20">
                           {grupo.alertas.map((alerta) => {
                             const estado = alertasEstado[alerta.clave] ?? { recibe: false, escalamiento: false };
+                            const permitido = puedeRecibirAlertaTelegram(rolBot, alerta.clave);
                             return (
                               <div key={alerta.clave} className="flex items-start justify-between gap-3 p-2.5">
                                 <div className="min-w-0">
@@ -708,11 +738,17 @@ export function TelegramConfig() {
                                   {alerta.descripcion && (
                                     <p className="text-xs text-brand-brown/60 mt-0.5">{alerta.descripcion}</p>
                                   )}
+                                  {!permitido && (
+                                    <p className="text-xs text-amber-700 mt-0.5">
+                                      Campo no recibe este tipo en Telegram.
+                                    </p>
+                                  )}
                                 </div>
                                 <div className="flex flex-shrink-0 gap-4">
                                   <label className="flex flex-col items-center gap-1 text-xs text-brand-brown/70">
                                     <Checkbox
-                                      checked={estado.recibe}
+                                      checked={permitido && estado.recibe}
+                                      disabled={!permitido}
                                       onCheckedChange={() =>
                                         setAlertasEstado((prev) => alternarRecibe(prev, alerta.clave))
                                       }
@@ -721,7 +757,8 @@ export function TelegramConfig() {
                                   </label>
                                   <label className="flex flex-col items-center gap-1 text-xs text-brand-brown/70">
                                     <Checkbox
-                                      checked={estado.escalamiento}
+                                      checked={permitido && estado.escalamiento}
+                                      disabled={!permitido}
                                       onCheckedChange={() =>
                                         setAlertasEstado((prev) => alternarEscalamiento(prev, alerta.clave))
                                       }

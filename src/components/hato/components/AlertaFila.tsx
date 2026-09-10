@@ -1,20 +1,9 @@
 // ARCHIVO: components/hato/components/AlertaFila.tsx
-// DESCRIPCIÓN: Una fila de la cola de alertas (`AlertasView.tsx`, S6/V11).
-// Muestra tipo + animal + fecha + estado + respuesta/intentos, y expone
-// acciones de cierre (confirmar/descartar) cuando `onConfirmar`/
-// `onDescartar` vienen dados (gating de escritura decidido por el padre,
-// mismo patrón que `GanadoMovimientos.tsx`).
-//
-// Regla de identidad (migración 066): el NOMBRE va primero cuando el número
-// es provisional (800-999) o no existe -- Fernando lee la caravana física en
-// el corral, y un número provisional no es esa caravana. Con número
-// definitivo, número + nombre van juntos (plan §6 Épica C: "número +
-// nombre siempre juntos").
-//
-// `seleccionable`/`seleccionada`/`onToggleSeleccion` (T3a, ronda agosto
-// 2026): checkbox opcional para el descarte masivo de `AlertasView.tsx` --
-// solo se renderiza cuando el padre lo pasa (canWrite), mismo patrón de
-// gating que las acciones Confirmar/Descartar de abajo.
+// DESCRIPCIÓN: Una fila de la cola de alertas (`AlertasView.tsx`, S6/V11 +
+// issue #217). Muestra tipo + animal + fecha + estado + respuesta/intentos.
+// Acciones: Sí / Todavía no / Otra cosa (parity Telegram) en estados
+// abiertos; Confirmar en revisión semanal; Editar (cola only) y Descartar.
+// El padre decide el gating (`canWrite`).
 
 import { Loader2, Droplet, Syringe, Repeat, HelpCircle, Baby } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -25,10 +14,10 @@ import {
   LABEL_TIPO_ALERTA_HATO,
   chipRespuestaAlerta,
   etiquetaAlcanceHato,
-  type EstadoAlertaHato,
-  type TipoAlertaHato,
 } from '@/utils/hatoAlertasUi';
 import type { AlertaHatoEnriquecida } from '../hooks/useHatoAlertas';
+import { accionesAlertaFila } from '@/utils/hatoAlertasGestor';
+import type { RespuestaAlertaHato, TipoAlertaHato } from '@/utils/hatoAlertas';
 import { formatearFecha } from '@/utils/fechas';
 
 /** Ícono por tipo de alerta (JSX -- vive en el componente, no en la lógica
@@ -65,11 +54,24 @@ function identidadAnimal(alerta: AlertaHatoEnriquecida): string {
   return animalNombre ? `${numeroTexto} ${animalNombre}` : numeroTexto;
 }
 
+function notaDeAlerta(alerta: AlertaHatoEnriquecida): string | null {
+  const datos = alerta.datos;
+  if (!datos) return null;
+  const gestor = datos.nota_gestor;
+  const manual = datos.nota;
+  if (typeof gestor === 'string' && gestor.trim()) return gestor.trim();
+  if (typeof manual === 'string' && manual.trim()) return manual.trim();
+  return null;
+}
+
 export interface AlertaFilaProps {
   alerta: AlertaHatoEnriquecida;
   canWrite: boolean;
   actuando: boolean;
-  onCambiarEstado?: (id: string, estado: EstadoAlertaHato) => void;
+  onResponder?: (id: string, respuesta: RespuestaAlertaHato) => void;
+  onConfirmarRevision?: (id: string) => void;
+  onEditar?: (alerta: AlertaHatoEnriquecida) => void;
+  onDescartar?: (id: string) => void;
   /** T3a -- descarte masivo. Los tres vienen juntos: sin `onToggleSeleccion`
    * no se renderiza checkbox, ni siquiera si `seleccionable` es `true`. */
   seleccionable?: boolean;
@@ -81,15 +83,20 @@ export function AlertaFila({
   alerta,
   canWrite,
   actuando,
-  onCambiarEstado,
+  onResponder,
+  onConfirmarRevision,
+  onEditar,
+  onDescartar,
   seleccionable = false,
   seleccionada = false,
   onToggleSeleccion,
 }: AlertaFilaProps) {
   const chipRespuesta = chipRespuestaAlerta(alerta.respuesta);
-  const puedeResolver = canWrite && (alerta.estado === 'respondida' || alerta.estado === 'escalada' || alerta.estado === 'expirada');
   const IconoTipo = ICONO_TIPO_ALERTA[alerta.tipo];
   const mostrarCheckbox = seleccionable && canWrite && !!onToggleSeleccion;
+  const acciones = accionesAlertaFila(alerta.estado, canWrite);
+  const nota = notaDeAlerta(alerta);
+  const esManual = (alerta.datos as { origen?: unknown } | null)?.origen === 'manual';
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -108,6 +115,11 @@ export function AlertaFila({
             <span className="text-sm font-semibold text-gray-900">{LABEL_TIPO_ALERTA_HATO[alerta.tipo]}</span>
             <EstadoChip chip={chipEstadoAlerta(alerta.estado)} />
             {chipRespuesta && <EstadoChip chip={chipRespuesta} />}
+            {esManual && (
+              <span className="text-[11px] uppercase tracking-wide text-gray-500 border border-gray-200 rounded px-1.5 py-0.5">
+                Manual
+              </span>
+            )}
           </div>
           <p className="text-sm text-gray-600 truncate">{identidadAnimal(alerta)}</p>
           <p className="text-xs text-gray-500 mt-1">
@@ -115,26 +127,40 @@ export function AlertaFila({
             {alerta.intentos > 0 && ` · Intentos: ${alerta.intentos}`}
             {alerta.respondida_por && ` · Resuelta por: ${alerta.respondida_por}`}
           </p>
+          {nota && <p className="text-xs text-gray-600 mt-1">Nota: {nota}</p>}
         </div>
       </div>
 
-      {puedeResolver && onCambiarEstado && (
-        <div className="flex gap-2 flex-shrink-0">
-          <Button
-            size="sm"
-            disabled={actuando}
-            onClick={() => onCambiarEstado(alerta.id, 'confirmada')}
-          >
-            {actuando ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirmar'}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={actuando}
-            onClick={() => onCambiarEstado(alerta.id, 'descartada')}
-          >
-            Descartar
-          </Button>
+      {(acciones.responder || acciones.confirmarRevision || acciones.editar || acciones.descartar) && (
+        <div className="flex flex-wrap gap-2 flex-shrink-0">
+          {acciones.responder && onResponder && (
+            <>
+              <Button size="sm" disabled={actuando} onClick={() => onResponder(alerta.id, 'si')}>
+                {actuando ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Sí'}
+              </Button>
+              <Button size="sm" variant="outline" disabled={actuando} onClick={() => onResponder(alerta.id, 'no')}>
+                Todavía no
+              </Button>
+              <Button size="sm" variant="outline" disabled={actuando} onClick={() => onResponder(alerta.id, 'otro')}>
+                Otra cosa
+              </Button>
+            </>
+          )}
+          {acciones.confirmarRevision && onConfirmarRevision && (
+            <Button size="sm" disabled={actuando} onClick={() => onConfirmarRevision(alerta.id)}>
+              {actuando ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirmar'}
+            </Button>
+          )}
+          {acciones.editar && onEditar && (
+            <Button size="sm" variant="outline" disabled={actuando} onClick={() => onEditar(alerta)}>
+              Editar
+            </Button>
+          )}
+          {acciones.descartar && onDescartar && (
+            <Button size="sm" variant="outline" disabled={actuando} onClick={() => onDescartar(alerta.id)}>
+              Descartar
+            </Button>
+          )}
         </div>
       )}
     </div>

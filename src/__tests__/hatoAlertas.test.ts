@@ -26,6 +26,18 @@ import {
   etiquetaRespuestaAlerta,
   construirMensajeAlertaYaResuelta,
   construirMensajeCierreAlertaBroadcast,
+  TIPOS_ALERTA_TELEGRAM_CAMPO,
+  CLAVES_ALERTA_TELEGRAM_CAMPO,
+  CLAVES_ALERTA_HATO_GERENCIA,
+  esTipoAlertaTelegramCampo,
+  tipoDesdeClaveCatalogo,
+  moduloDesdeClaveCatalogo,
+  puedeRecibirAlertaTelegram,
+  destinatariosTelegramPermitidos,
+  estadoTrasRespuestaAlerta,
+  puedeResponderAlerta,
+  efectoDominioRespuestaAlerta,
+  payloadEventoSecadoDesdeAlerta,
   type AnimalHatoParaAlertas,
   type PasoTratamientoPendienteInput,
   type FilaSuscripcionAlerta,
@@ -977,5 +989,119 @@ describe('construirMensajeCierreAlertaBroadcast — edición del mensaje de los 
   it('las 3 respuestas producen etiquetas distintas', () => {
     const textos = (['si', 'no', 'otro'] as const).map((r) => construirMensajeCierreAlertaBroadcast('X', 'Martha', r));
     expect(new Set(textos).size).toBe(3);
+  });
+});
+
+describe('guardrail Telegram campo (issue #217)', () => {
+  it('campo solo puede recibir secado_due y tratamiento_paso', () => {
+    expect([...TIPOS_ALERTA_TELEGRAM_CAMPO].sort()).toEqual(['secado_due', 'tratamiento_paso']);
+    expect(esTipoAlertaTelegramCampo('secado_due')).toBe(true);
+    expect(esTipoAlertaTelegramCampo('tratamiento_paso')).toBe(true);
+    expect(esTipoAlertaTelegramCampo('servicio_sin_confirmacion')).toBe(false);
+    expect(esTipoAlertaTelegramCampo('rechequeo_due')).toBe(false);
+    expect(esTipoAlertaTelegramCampo('parto_proximo')).toBe(false);
+  });
+
+  it('las claves de catálogo coinciden con modulo.tipo', () => {
+    expect(CLAVES_ALERTA_TELEGRAM_CAMPO).toEqual(['hato.secado_due', 'hato.tratamiento_paso']);
+    expect(CLAVES_ALERTA_HATO_GERENCIA).toEqual([
+      'hato.rechequeo_due',
+      'hato.servicio_sin_confirmacion',
+      'hato.parto_proximo',
+    ]);
+  });
+
+  it('tipoDesdeClaveCatalogo / moduloDesdeClaveCatalogo no inventan un módulo', () => {
+    expect(tipoDesdeClaveCatalogo('hato.secado_due')).toBe('secado_due');
+    expect(moduloDesdeClaveCatalogo('hato.secado_due')).toBe('hato');
+    expect(tipoDesdeClaveCatalogo('sin_punto')).toBe('sin_punto');
+    expect(moduloDesdeClaveCatalogo('sin_punto')).toBe('');
+  });
+
+  it('Fernando (campo) no puede recibir un tipo de gerencia aunque la casilla esté marcada', () => {
+    expect(puedeRecibirAlertaTelegram('campo', 'hato.servicio_sin_confirmacion')).toBe(false);
+    expect(puedeRecibirAlertaTelegram('campo', 'hato.rechequeo_due')).toBe(false);
+    expect(puedeRecibirAlertaTelegram('campo', 'hato.parto_proximo')).toBe(false);
+    expect(puedeRecibirAlertaTelegram('campo', 'hato.secado_due')).toBe(true);
+    expect(puedeRecibirAlertaTelegram('campo', 'hato.tratamiento_paso')).toBe(true);
+  });
+
+  it('gerencia sí puede recibir cualquier tipo de hato (las suscripciones deciden)', () => {
+    expect(puedeRecibirAlertaTelegram('gerencia', 'hato.servicio_sin_confirmacion')).toBe(true);
+    expect(puedeRecibirAlertaTelegram('admin', 'hato.rechequeo_due')).toBe(true);
+  });
+
+  it('el guardrail es solo del hato: una clave de otro módulo no se bloquea a campo', () => {
+    expect(puedeRecibirAlertaTelegram('campo', 'aguacate.plaga')).toBe(true);
+  });
+
+  it('destinatariosTelegramPermitidos saca a campo de un tipo de gerencia y deja a gerencia', () => {
+    const roles = new Map([
+      ['fer', 'campo'],
+      ['santi', 'gerencia'],
+    ]);
+    expect(destinatariosTelegramPermitidos('servicio_sin_confirmacion', ['fer', 'santi'], roles)).toEqual(['santi']);
+    expect(destinatariosTelegramPermitidos('secado_due', ['fer', 'santi'], roles)).toEqual(['fer', 'santi']);
+  });
+
+  it('un telegram_id sin rol en el mapa no se filtra (fail-open, no es campo)', () => {
+    expect(destinatariosTelegramPermitidos('parto_proximo', ['desconocido'], new Map())).toEqual(['desconocido']);
+  });
+});
+
+describe('respuesta web/Telegram — mismo efecto de dominio', () => {
+  it('Sí → confirmada; Todavía no / Otra cosa → respondida', () => {
+    expect(estadoTrasRespuestaAlerta('si')).toBe('confirmada');
+    expect(estadoTrasRespuestaAlerta('no')).toBe('respondida');
+    expect(estadoTrasRespuestaAlerta('otro')).toBe('respondida');
+  });
+
+  it('se puede responder pendiente, enviada y escalada; no una ya cerrada', () => {
+    expect(puedeResponderAlerta('pendiente')).toBe(true);
+    expect(puedeResponderAlerta('enviada')).toBe(true);
+    expect(puedeResponderAlerta('escalada')).toBe(true);
+    expect(puedeResponderAlerta('confirmada')).toBe(false);
+    expect(puedeResponderAlerta('descartada')).toBe(false);
+    expect(puedeResponderAlerta('respondida')).toBe(false);
+  });
+
+  it('Sí en secado_due escribe secado_real; Sí en tratamiento_paso marca el paso', () => {
+    expect(efectoDominioRespuestaAlerta(
+      { tipo: 'secado_due', animal_id: 'a1', paso_id: null },
+      'si',
+    )).toEqual({ kind: 'secado_real', animal_id: 'a1' });
+    expect(efectoDominioRespuestaAlerta(
+      { tipo: 'tratamiento_paso', animal_id: 'a1', paso_id: 'p1' },
+      'si',
+    )).toEqual({ kind: 'tratamiento_paso', paso_id: 'p1' });
+  });
+
+  it('no/otro nunca tocan tablas clínicas', () => {
+    expect(efectoDominioRespuestaAlerta(
+      { tipo: 'secado_due', animal_id: 'a1', paso_id: null },
+      'no',
+    )).toEqual({ kind: 'ninguno' });
+    expect(efectoDominioRespuestaAlerta(
+      { tipo: 'tratamiento_paso', animal_id: 'a1', paso_id: 'p1' },
+      'otro',
+    )).toEqual({ kind: 'ninguno' });
+  });
+
+  it('Sí en un tipo de gerencia no inventa un evento', () => {
+    expect(efectoDominioRespuestaAlerta(
+      { tipo: 'servicio_sin_confirmacion', animal_id: 'a1', paso_id: null },
+      'si',
+    )).toEqual({ kind: 'ninguno' });
+  });
+
+  it('el payload de secado_real es el mismo que escribe el bot desde S6', () => {
+    expect(payloadEventoSecadoDesdeAlerta('a1', 'alert-1', '2026-09-10')).toEqual({
+      animal_id: 'a1',
+      tipo: 'secado_real',
+      fecha: '2026-09-10',
+      fecha_confianza: 'aproximada',
+      alerta_id: 'alert-1',
+      fuente: 'alerta',
+    });
   });
 });

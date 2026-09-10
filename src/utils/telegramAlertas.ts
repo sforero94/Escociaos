@@ -6,6 +6,11 @@
 // sin que este archivo cambie. Nada aquí asume una lista fija de módulos o
 // de claves de alerta — todo se deriva de las filas que llegan del catálogo.
 
+import {
+  CLAVES_ALERTA_TELEGRAM_CAMPO,
+  puedeRecibirAlertaTelegram,
+} from '@/utils/hatoAlertas';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -164,4 +169,45 @@ export function formatearResumenAlertas(resumen: ResumenSuscripciones): string {
   }
   const base = `${resumen.recibe} alerta${resumen.recibe === 1 ? '' : 's'}`;
   return resumen.escalamiento === 0 ? base : `${base} (${resumen.escalamiento} esc.)`;
+}
+
+// ---------------------------------------------------------------------------
+// Defaults of issue #217 — Fernando (campo) Telegram = secado + tratamiento;
+// gerencia types stay off Telegram unless someone turns them on from the
+// web manager. Keys live in hatoAlertas so they cannot drift from the tick.
+// ---------------------------------------------------------------------------
+
+export { CLAVES_ALERTA_TELEGRAM_CAMPO, puedeRecibirAlertaTelegram };
+
+/** Default checkboxes for a `rol_bot='campo'` user. Escalamiento is always
+ * off: campo answers in the corral, it does not escalate to itself. */
+export function suscripcionDefaultCampo(clave: string): { recibe: boolean; escalamiento: boolean } {
+  return {
+    recibe: (CLAVES_ALERTA_TELEGRAM_CAMPO as readonly string[]).includes(clave),
+    escalamiento: false,
+  };
+}
+
+/** Default for everyone else: web-only. Gerencia turns Telegram on from
+ * Hato → Alertas → Quién recibe, never as a ship-time surprise. */
+export function suscripcionDefaultGerencia(_clave: string): { recibe: boolean; escalamiento: boolean } {
+  return { recibe: false, escalamiento: false };
+}
+
+/**
+ * Seed the edit state of a NEW telegram user from their rol_bot, so the
+ * create-user form does not ship Fernando with every hato type ticked.
+ * Existing rows still win when editing (`construirEstadoDesdeSuscripciones`).
+ */
+export function estadoInicialSuscripciones(
+  rolBot: string,
+  catalogo: AlertaCatalogoRow[],
+): SuscripcionEstado {
+  const estado: SuscripcionEstado = {};
+  for (const alerta of catalogo) {
+    estado[alerta.clave] = rolBot === 'campo'
+      ? suscripcionDefaultCampo(alerta.clave)
+      : suscripcionDefaultGerencia(alerta.clave);
+  }
+  return estado;
 }

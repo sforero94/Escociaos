@@ -34,7 +34,13 @@ import { excepcionDavidConversation } from "./conversations/excepcionDavid.ts";
 // ese NOT NULL ni restringirse a Gerencia (decisión 5 del dueño). `/pesaje`
 // no toca dinero y se mantiene intacto.
 import { llmToolLoop, getSystemPrompt } from "../chat.tsx";
-import { construirMensajeAlertaYaResuelta, construirMensajeCierreAlertaBroadcast } from "../hato-alertas.ts";
+import {
+  construirMensajeAlertaYaResuelta,
+  construirMensajeCierreAlertaBroadcast,
+  efectoDominioRespuestaAlerta,
+  estadoTrasRespuestaAlerta,
+  payloadEventoSecadoDesdeAlerta,
+} from "../hato-alertas.ts";
 import { cerrarAlertaEnEnvios, enviarMensajeTelegram } from "./enviar.ts";
 
 // --- Ronda de inventario (Fase 3, Telegram/Uriel) ---------------------------
@@ -1575,7 +1581,7 @@ function getBot(): Bot<BotContext> {
 
     const sb = getSupabaseAdmin();
     const respondidaPor = ctx.telegramUser?.nombre_display ?? String(ctx.from?.id ?? "desconocido");
-    const nuevoEstado = respuesta === "si" ? "confirmada" : "respondida";
+    const nuevoEstado = estadoTrasRespuestaAlerta(respuesta);
 
     // Reclamo atómico de "quién llegó primero" (096): el UPDATE solo afecta
     // una fila si la alerta TODAVÍA está pendiente/enviada -- si otro
@@ -1625,29 +1631,30 @@ function getBot(): Bot<BotContext> {
 
     if (respuesta === "si") {
       // Efectos de dominio, append-only -- nunca se borra ni se sobreescribe
-      // evidencia. Solo dos tipos tienen un efecto de dominio definido más
-      // allá de marcar la alerta -- el resto (rechequeo_due,
-      // servicio_sin_confirmacion, parto_proximo) se resuelve con la sola
-      // confirmación (Martha/Fernando ya lo dejan constar por otra vía --
-      // chequeo, ficha -- este "sí" solo cierra el lazo de la alerta).
-      if (actualizada.tipo === "secado_due" && actualizada.animal_id) {
-        const { error: errorEvento } = await sb.from("hato_eventos").insert({
+      // evidencia. La decisión vive en `efectoDominioRespuestaAlerta` (misma
+      // función que el gestor web, issue #217): solo secado_due y
+      // tratamiento_paso escriben fuera de hato_alertas.
+      const efecto = efectoDominioRespuestaAlerta(
+        {
+          tipo: actualizada.tipo,
           animal_id: actualizada.animal_id,
-          tipo: "secado_real",
-          fecha: hoyIso,
-          fecha_confianza: "aproximada",
-          alerta_id: alertaId,
-          fuente: "alerta",
-        });
+          paso_id: actualizada.paso_id,
+        },
+        "si",
+      );
+      if (efecto.kind === "secado_real") {
+        const { error: errorEvento } = await sb.from("hato_eventos").insert(
+          payloadEventoSecadoDesdeAlerta(efecto.animal_id, alertaId, hoyIso),
+        );
         if (errorEvento) console.error("[Telegram] hato_eventos (secado_real) insert error:", errorEvento.message);
-      } else if (actualizada.tipo === "tratamiento_paso" && actualizada.paso_id) {
+      } else if (efecto.kind === "tratamiento_paso") {
         // hato_eventos.tipo (CHECK de la migración 053) no tiene ninguna
         // variante de "tratamiento" -- no hay un evento que insertar aquí,
         // solo se marca ejecutado el paso mismo (055).
         const { error: errorPaso } = await sb
           .from("hato_tratamiento_pasos")
           .update({ fecha_ejecutada: hoyIso })
-          .eq("id", actualizada.paso_id);
+          .eq("id", efecto.paso_id);
         if (errorPaso) console.error("[Telegram] hato_tratamiento_pasos update error:", errorPaso.message);
       }
     }

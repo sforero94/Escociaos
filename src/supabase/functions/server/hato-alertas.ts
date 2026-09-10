@@ -1054,3 +1054,147 @@ export function construirMensajeCierreAlertaBroadcast(
 ): string {
   return `✅ Resuelto por ${respondidaPor}: "${etiquetaRespuestaAlerta(respuesta)}"\n\n${mensajeOriginal}`;
 }
+
+// ============================================================================
+// BLOQUE 9 — Guardrail Telegram campo + efecto de dominio de la respuesta
+// (issue #217, gestor de alertas web)
+//
+// Routing is data-driven (`telegram_alertas_suscripciones`). This block is
+// the SAFETY NET so a bad checkbox cannot re-flood Fernando (rol_bot='campo')
+// with gerencia types (`servicio_sin_confirmacion`, `rechequeo_due`,
+// `parto_proximo`). Campo may receive only secado + tratamiento on Telegram.
+// Gerencia Telegram users can receive any type they subscribe to.
+//
+// The web manager answers with the SAME domain effects as the Telegram
+// callback `hato_alerta:{id}:{si|no|otro}` -- one function decides, two I/O
+// callers (bot + AlertasView) write. Never a second notification stack.
+// ============================================================================
+
+/** The only hato types a `rol_bot='campo'` user (Fernando) may receive on
+ * Telegram. Everything else is web-only for campo, even if a subscription
+ * row is on. */
+export const TIPOS_ALERTA_TELEGRAM_CAMPO: readonly TipoAlertaHato[] = [
+  'secado_due',
+  'tratamiento_paso',
+];
+
+export const CLAVES_ALERTA_TELEGRAM_CAMPO: readonly string[] = TIPOS_ALERTA_TELEGRAM_CAMPO.map(
+  (tipo) => claveAlertaCatalogo('hato', tipo),
+);
+
+export const CLAVES_ALERTA_HATO_GERENCIA: readonly string[] = [
+  claveAlertaCatalogo('hato', 'rechequeo_due'),
+  claveAlertaCatalogo('hato', 'servicio_sin_confirmacion'),
+  claveAlertaCatalogo('hato', 'parto_proximo'),
+];
+
+export type RespuestaAlertaHato = 'si' | 'no' | 'otro';
+
+/** Estados on which Telegram (and the web Sí/Todavía no/Otra cosa buttons)
+ * may still claim the row. Telegram historically only claimed pendiente/
+ * enviada; the web manager also claims `escalada` so a never-answered
+ * field alert can still close from the queue. */
+export const ESTADOS_ALERTA_RESPONSIBLES: readonly EstadoAlertaHato[] = [
+  'pendiente',
+  'enviada',
+  'escalada',
+];
+
+export function esTipoAlertaTelegramCampo(tipo: string): boolean {
+  return (TIPOS_ALERTA_TELEGRAM_CAMPO as readonly string[]).includes(tipo);
+}
+
+/** Inverse of `claveAlertaCatalogo` (`modulo.tipo` → `tipo`). A clave
+ * without a dot is returned as-is -- never invent a module. */
+export function tipoDesdeClaveCatalogo(clave: string): string {
+  const i = clave.indexOf('.');
+  return i < 0 ? clave : clave.slice(i + 1);
+}
+
+export function moduloDesdeClaveCatalogo(clave: string): string {
+  const i = clave.indexOf('.');
+  return i < 0 ? '' : clave.slice(0, i);
+}
+
+/**
+ * Can this Telegram user receive this catalog key on Telegram?
+ * - Non-campo roles: yes (subscriptions decide).
+ * - Campo + a non-hato key: yes (this guardrail is hato-only).
+ * - Campo + hato gerencia type: no, even if the checkbox is on.
+ */
+export function puedeRecibirAlertaTelegram(rolBot: string, claveAlerta: string): boolean {
+  if (rolBot !== 'campo') return true;
+  if (moduloDesdeClaveCatalogo(claveAlerta) !== 'hato') return true;
+  return esTipoAlertaTelegramCampo(tipoDesdeClaveCatalogo(claveAlerta));
+}
+
+/**
+ * Filters the broadcast recipient list AFTER subscriptions are resolved.
+ * `rolPorTelegramId` missing an id is treated as non-campo (fail open for
+ * gerencia accounts whose rol_bot was not joined) -- the flood we block is
+ * specifically `rol_bot='campo'`.
+ */
+export function destinatariosTelegramPermitidos(
+  tipo: TipoAlertaHato,
+  telegramIds: readonly string[],
+  rolPorTelegramId: ReadonlyMap<string, string>,
+): string[] {
+  if (esTipoAlertaTelegramCampo(tipo)) return [...telegramIds];
+  return telegramIds.filter((id) => rolPorTelegramId.get(id) !== 'campo');
+}
+
+export function estadoTrasRespuestaAlerta(respuesta: RespuestaAlertaHato): EstadoAlertaHato {
+  return respuesta === 'si' ? 'confirmada' : 'respondida';
+}
+
+export function puedeResponderAlerta(estado: EstadoAlertaHato): boolean {
+  return (ESTADOS_ALERTA_RESPONSIBLES as readonly string[]).includes(estado);
+}
+
+export type EfectoDominioRespuestaAlerta =
+  | { kind: 'secado_real'; animal_id: string }
+  | { kind: 'tratamiento_paso'; paso_id: string }
+  | { kind: 'ninguno' };
+
+/**
+ * Domain effect of answering an alert. Only `si` writes anything beyond the
+ * alerta row itself -- same contract as `telegram/bot.ts` since S6.
+ * `no`/`otro` leave the clinical tables untouched for Martha to review.
+ */
+export function efectoDominioRespuestaAlerta(
+  alerta: { tipo: TipoAlertaHato; animal_id: string | null; paso_id: string | null },
+  respuesta: RespuestaAlertaHato,
+): EfectoDominioRespuestaAlerta {
+  if (respuesta !== 'si') return { kind: 'ninguno' };
+  if (alerta.tipo === 'secado_due' && alerta.animal_id) {
+    return { kind: 'secado_real', animal_id: alerta.animal_id };
+  }
+  if (alerta.tipo === 'tratamiento_paso' && alerta.paso_id) {
+    return { kind: 'tratamiento_paso', paso_id: alerta.paso_id };
+  }
+  return { kind: 'ninguno' };
+}
+
+/** Row shape the bot and the web manager both INSERT into `hato_eventos`
+ * when Sí confirms a `secado_due`. One constructor, two callers. */
+export function payloadEventoSecadoDesdeAlerta(
+  animalId: string,
+  alertaId: string,
+  fecha: string,
+): {
+  animal_id: string;
+  tipo: 'secado_real';
+  fecha: string;
+  fecha_confianza: 'aproximada';
+  alerta_id: string;
+  fuente: 'alerta';
+} {
+  return {
+    animal_id: animalId,
+    tipo: 'secado_real',
+    fecha,
+    fecha_confianza: 'aproximada',
+    alerta_id: alertaId,
+    fuente: 'alerta',
+  };
+}

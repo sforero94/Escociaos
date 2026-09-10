@@ -105,6 +105,7 @@ import {
   decidirExpiracionTerminal,
   claveAlertaCatalogo,
   agruparSuscriptoresPorClave,
+  destinatariosTelegramPermitidos,
   type AnimalHatoParaAlertas,
   type PasoTratamientoPendienteInput,
   type AlertaGenerada,
@@ -164,11 +165,15 @@ interface FilaSuscripcionCruda {
   alerta_clave: string;
   recibe: boolean;
   escalamiento: boolean;
-  telegram_usuarios: { telegram_id: number } | { telegram_id: number }[] | null;
+  telegram_usuarios: { telegram_id: number; rol_bot: string } | { telegram_id: number; rol_bot: string }[] | null;
 }
 
-function resolverFilasSuscripcion(filas: FilaSuscripcionCruda[]): FilaSuscripcionAlerta[] {
-  return filas
+function resolverFilasSuscripcion(filas: FilaSuscripcionCruda[]): {
+  filas: FilaSuscripcionAlerta[];
+  rolPorTelegramId: Map<string, string>;
+} {
+  const rolPorTelegramId = new Map<string, string>();
+  const resueltas = filas
     .map((f) => {
       const usuario = Array.isArray(f.telegram_usuarios) ? f.telegram_usuarios[0] : f.telegram_usuarios;
       if (usuario == null) return null;
@@ -176,14 +181,17 @@ function resolverFilasSuscripcion(filas: FilaSuscripcionCruda[]): FilaSuscripcio
       // un destinatario fantasma. Ver el mismo guardia en
       // ronda-inventario-tick.ts y en telegram/ronda-helpers.ts.
       if (usuario.telegram_id === null || usuario.telegram_id === undefined) return null;
+      const telegram_id = String(usuario.telegram_id);
+      if (usuario.rol_bot) rolPorTelegramId.set(telegram_id, usuario.rol_bot);
       return {
         alerta_clave: f.alerta_clave,
         recibe: f.recibe,
         escalamiento: f.escalamiento,
-        telegram_id: String(usuario.telegram_id),
+        telegram_id,
       };
     })
     .filter((f): f is FilaSuscripcionAlerta => f !== null);
+  return { filas: resueltas, rolPorTelegramId };
 }
 
 interface FilaAlertaActiva {
@@ -258,14 +266,16 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
   //     aunque su fila de suscripción siga con recibe/escalamiento=true. ---
   const { data: filasSuscripcionesCrudas, error: errorSuscripciones } = await supabase
     .from('telegram_alertas_suscripciones')
-    .select('alerta_clave, recibe, escalamiento, telegram_usuarios!inner(telegram_id, activo)')
+    .select('alerta_clave, recibe, escalamiento, telegram_usuarios!inner(telegram_id, activo, rol_bot)')
     .eq('telegram_usuarios.activo', true);
   if (errorSuscripciones) {
     return respuestaError(c, 500, `No se pudieron leer las suscripciones de alertas: ${errorSuscripciones.message}`);
   }
-  const suscriptoresPorClave = agruparSuscriptoresPorClave(
-    resolverFilasSuscripcion((filasSuscripcionesCrudas ?? []) as FilaSuscripcionCruda[]),
+  const suscripcionesResueltas = resolverFilasSuscripcion(
+    (filasSuscripcionesCrudas ?? []) as FilaSuscripcionCruda[],
   );
+  const suscriptoresPorClave = agruparSuscriptoresPorClave(suscripcionesResueltas.filas);
+  const rolPorTelegramId = suscripcionesResueltas.rolPorTelegramId;
 
   // =========================================================================
   // (a) GENERAR
@@ -386,6 +396,7 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
   let enviadas = 0; // # de ALERTAS con al menos un envío exitoso en este tick
   let mensajesEnviados = 0; // # de mensajes de Telegram individuales enviados (broadcast)
   let saltadasSinDestinatario = 0;
+  let destinatariosFiltradosCampo = 0; // issue #217: campo blocked from gerencia types
 
   for (const alerta of activas) {
     const config = configPorTipo.get(alerta.tipo);
@@ -398,7 +409,13 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
     // no un único destinatario. `hato_alertas_config.destinatario_telegram_id`
     // ya no se lee -- ver cabecera del archivo.
     const clave = claveAlertaCatalogo(MODULO_ALERTAS, alerta.tipo);
-    const destinatarios = suscriptoresPorClave.get(clave)?.recibe ?? [];
+    const destinatariosBrutos = suscriptoresPorClave.get(clave)?.recibe ?? [];
+    const destinatarios = destinatariosTelegramPermitidos(
+      alerta.tipo,
+      destinatariosBrutos,
+      rolPorTelegramId,
+    );
+    destinatariosFiltradosCampo += destinatariosBrutos.length - destinatarios.length;
     if (destinatarios.length === 0) {
       saltadasSinDestinatario += 1;
       continue;
@@ -536,7 +553,13 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
     // a TODOS los suscritos con escalamiento=true para esta clave, no a un
     // único destinatario de la variable de entorno.
     const claveEscalamiento = claveAlertaCatalogo(MODULO_ALERTAS, alerta.tipo);
-    const destinatariosEscalamiento = suscriptoresPorClave.get(claveEscalamiento)?.escalamiento ?? [];
+    const destinatariosEscalamientoBrutos = suscriptoresPorClave.get(claveEscalamiento)?.escalamiento ?? [];
+    const destinatariosEscalamiento = destinatariosTelegramPermitidos(
+      alerta.tipo,
+      destinatariosEscalamientoBrutos,
+      rolPorTelegramId,
+    );
+    destinatariosFiltradosCampo += destinatariosEscalamientoBrutos.length - destinatariosEscalamiento.length;
     if (destinatariosEscalamiento.length > 0) {
       const mensajeBase = (alerta.datos?.mensaje as string | undefined) ?? 'Alerta del hato lechero (sin mensaje generado).';
       for (const telegramId of destinatariosEscalamiento) {
@@ -603,6 +626,7 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
     enviadas, // # de alertas con al menos un envío exitoso
     mensajes_enviados: mensajesEnviados, // # de mensajes de Telegram individuales (broadcast, 096)
     saltadas_sin_destinatario: saltadasSinDestinatario,
+    destinatarios_filtrados_campo: destinatariosFiltradosCampo,
     escaladas,
     mensajes_escalamiento: mensajesEscalamiento,
     expiradas: expiradas + expiradasAtascadas,
