@@ -1087,3 +1087,94 @@ pero corre dentro de `npm test`, y **un commit de solo-memoria no dispara la sui
 sobrevivio a la Fase 5 del lunes y solo aparecio al dia siguiente, cuando un agente corrio las
 pruebas por otro motivo y encontro `main` en rojo. Una guarda que solo corre en un carril que este
 commit no usa no protege este commit.
+
+## RONDA DE DECISIONES 2026-09-09 (sesion en vivo con Santiago, previa al viernes)
+
+Santiago pidio explicitamente: «hazme las preguntas para darte todo lo necesario de mi y dejamos
+que el run del viernes se encargue de lo que se tenga que encargar». O sea, la sesion NO ejecuto
+nada: recogio decisiones y las dejo filadas. **Todas estan escritas en las fichas de Notion**, que
+es lo que el viernes lee en Phase 0. Esta seccion es el resumen y las consecuencias de metodo.
+
+### Las siete decisiones
+
+| # | Hallazgo | Decision | Quien lo ejecuta |
+|---|---|---|---|
+| 67 | Rol efectivo de Uriel | **Sube a Administrador** (no predicado a medida) | Turno en vivo — `clase datos` |
+| 73 | Clave de recordatorio 2026-09 consumida | **GO: borrar la fila** | Turno en vivo — el go NO sobrevive la sesion |
+| 55 | pg_cron corta a los 5 s | **GO: 30 s en los TRES jobs** | Turno en vivo — reclasificada, ver abajo |
+| 71 | Donde vive `CHANGELOG.md` | **Opcion (b): `escociaos-po/reports/CHANGELOG.md`** | Viernes |
+| 56 | 35 vacas sin raza | **Se deja abierto**, riesgo aceptado | Nadie — no volver a preguntar |
+| 75 | Storage `reportes-semanales` abierto | **Lo aplica Santiago en el panel** | Santiago a mano |
+| — | Alcance del drenaje | **Maximo 4 artefactos, agrupados** | Viernes |
+
+### CONTRADICCION CERRADA: donde vive `CHANGELOG.md`
+
+La seccion «CONTRADICCION SIN RESOLVER» de mas arriba **queda resuelta**: opcion (b). La ruta
+`escociaos-po/reports/**` ya esta permitida por §6, asi que no hace falta tocar la constitucion.
+**No inventar una cuarta salida.** El brief de `release-changelog` hay que corregirlo para que
+apunte a la ruta nueva; eso es parte del trabajo del viernes.
+
+### DOS RECLASIFICACIONES HECHAS EN ESTA SESION, Y POR QUE NO SE DEJARON PARA EL VIERNES
+
+El runbook dice que ante una clase equivocada el viernes «writes the value back, and leaves it for
+next week». O sea, cada clase mal puesta cuesta **una semana**. Se corrigieron aqui:
+
+1. **#55 `ddl_aditivo` → `datos`.** El arreglo es `SELECT cron.alter_job(...)`, una llamada a
+   funcion. La compuerta 1 exige que **cada sentencia empiece** por una de las formas de la lista
+   blanca, y una llamada a funcion no esta. Es el mismo error de forma que el LIMITE DURO de
+   `storage.objects`: un hallazgo mal clasificado desde el principio se descubre tarde y caro.
+2. **#63 `codigo` → `ddl_aditivo`.** Es un `CREATE OR REPLACE FUNCTION`, que **si** esta en la
+   lista blanca. Con `codigo` habria entrado como PR de codigo, ocultando que corre DDL contra
+   produccion. Aviso dejado en la ficha para la compuerta 3: **cambia comportamiento vivo**
+   (el `responsable` pasa a ser el correo), que es justo el caso que el revisor adversarial debe
+   cazar. Toma la unica ranura de migracion del dia.
+
+### LECCION DE METODO: un «go» recogido no es un «go» gastado
+
+Tres de las cuatro autorizaciones de esta sesion (#67, #73, #55) son escrituras que **solo un turno
+en vivo puede ejecutar**, y §6 dice que un go «no sobrevive a la siguiente sesion». La sesion las
+recogio pero no las gasto, porque Santiago pidio explicitamente no ejecutar.
+
+**Consecuencia practica, y hay que decirla sin adornos: la proxima sesion en vivo necesita un go
+NUEVO sobre cada una.** Lo que queda ganado no es la autorizacion sino la **decision**: el rumbo ya
+esta elegido y registrado, asi que la pregunta se acorta a «¿corro esto ahora?» en vez de volver a
+abrir la discusion. Para #67 falta ademas filar la sentencia exacta: la ficha pedia decidir el rol,
+no ejecutar el cambio, y un go sin propuesta previa no autoriza nada.
+
+### EL ENCAJE CON EL TOPE DEL VIERNES (3 PR + 1 migracion) SALE EXACTO
+
+Siete hallazgos de codigo compiten por tres ranuras. Agrupados por fichero tocado, entran seis:
+
+- **PR A — documentacion**: #69 + #80. Los dos editan el `CLAUDE.md` raiz. **Van juntos o chocan.**
+- **PR B — guardas**: #48 + #66.
+- **PR C — despliegue**: #78 + #77.
+- **Migracion** (unica ranura): #63.
+- **Queda fuera**: #61 parte A. Es el sobrante consciente, no una omision silenciosa. #71 tambien
+  compite ahora que es `codigo`; si desplaza a alguno, decirlo en el informe.
+
+Los arboles espejo (#61, #63) **nunca en paralelo**: los toca el mismo script de regeneracion.
+
+### LO QUE EL VIERNES NO PUEDE TOCAR, Y CONVIENE NO REDESCUBRIRLO
+
+- **#82 es P1.** «P0 and P1 are never Friday's», sin importar la clase. La piedra angular del grafo
+  no es del viernes.
+- **#60, #62, #64, #72, #83 estan `In progress`.** La elegibilidad exige `Not started`. Sus PR ya
+  estan fusionados y **no queda una linea por escribir**: lo unico pendiente es verificar el
+  despliegue por CONTENIDO del bundle y cerrarlas. Eso es trabajo de cierre en vivo.
+- **#67, #73, #55, #56, #75, #85** son `datos` o `decision`. Nunca del viernes.
+
+### DATO DE ENTORNO: la edge function se desplego el 2026-09-09
+
+`make-server-1ccce916` figura en **v248, `updated_at` 2026-09-09 09:22:25Z**, posterior a los merges
+del 04 y del 08 de septiembre. **Eso NO cierra nada por si solo**: la regla vigente, ganada con dos
+incidentes (v223 y v236), es verificar por contenido del bundle y jamas por `updated_at` ni por el
+numero de version. Si el bundle carga los seis arreglos, se cierran #60, #62, #64, #72, #80 y #83.
+
+### SINTOMA NUEVO, SIN FILAR: dos ficheros con el numero 140
+
+`src/sql/migrations/` tiene `140_hato_registrar_tratamiento.sql` y
+`140_respaldo_pl_chequeo_vacas.sql`. Es la misma clase de deriva del ledger que describe #69, ahora
+en el nombre del fichero y no en el `CLAUDE.md`. No se filo como hallazgo nuevo: esta sesion no es
+una corrida de barrido. **Que lo mire el primer barrido que toque numeracion de migraciones.**
+
+[sesion: 2026-09-09-decisiones, interactiva, sin escrituras a produccion]
