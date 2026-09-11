@@ -132,10 +132,11 @@ export function tipoAlertaCampo(tipo: TipoAlertaHato): boolean {
   return (TIPOS_ALERTA_TELEGRAM_CAMPO as readonly string[]).includes(tipo);
 }
 
+/** Display order on Activas after campo: parto → servicio → rechequeo. */
 export const TEMAS_ALERTA_GERENCIA: readonly TipoAlertaHato[] = [
-  'rechequeo_due',
   'parto_proximo',
   'servicio_sin_confirmacion',
+  'rechequeo_due',
 ];
 
 export const TEMAS_ALERTA_CAMPO: readonly TipoAlertaHato[] = [

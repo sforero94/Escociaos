@@ -4,9 +4,8 @@
 // `hato_alertas_config` / `telegram_alertas_suscripciones`. No hay un
 // segundo sistema de notificaciones.
 //
-//   Activas — arriba: temas de gerencia (rechequeo y parto informativos;
-//             servicio con botones). Abajo: pendientes de campo (secado
-//             y tratamiento, por vaca).
+//   Activas — primero campo (secado y tratamiento), luego parto próximo,
+//             servicio sin confirmar y rechequeo al final.
 //   Historial — tabla de Completadas, estilo Snapshot de monitoreo.
 //   Configuración — matriz tipo × usuario (`recibe`) + tipos.
 
@@ -212,12 +211,6 @@ export function AlertasView() {
             ) : (
               <>
                 <section className="mb-10">
-                  {TEMAS_ALERTA_GERENCIA.map((tipo) => (
-                    <SeccionTema key={tipo} tipo={tipo} alertas={gerencia} {...propsFila} />
-                  ))}
-                </section>
-
-                <section>
                   <div className="flex items-center gap-2 mb-4">
                     <BellRing className="w-4 h-4 text-amber-600" />
                     <h2 className="text-sm font-semibold text-gray-900">
@@ -226,6 +219,12 @@ export function AlertasView() {
                   </div>
                   {TEMAS_ALERTA_CAMPO.map((tipo) => (
                     <SeccionTema key={tipo} tipo={tipo} alertas={campo} {...propsFila} />
+                  ))}
+                </section>
+
+                <section>
+                  {TEMAS_ALERTA_GERENCIA.map((tipo) => (
+                    <SeccionTema key={tipo} tipo={tipo} alertas={gerencia} {...propsFila} />
                   ))}
                 </section>
               </>

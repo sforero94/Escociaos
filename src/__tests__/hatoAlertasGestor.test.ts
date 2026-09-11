@@ -15,6 +15,8 @@ import {
   vistaEstadoAlerta,
   tipoAlertaInformativa,
   tipoAlertaCampo,
+  TEMAS_ALERTA_CAMPO,
+  TEMAS_ALERTA_GERENCIA,
   agruparRechequeoInformativo,
   agruparPartoInformativo,
   particionarAlertasGestor,
@@ -153,6 +155,16 @@ describe('vista Activas / Completadas', () => {
     expect(tipoAlertaCampo('secado_due')).toBe(true);
     expect(tipoAlertaCampo('tratamiento_paso')).toBe(true);
     expect(tipoAlertaCampo('servicio_sin_confirmacion')).toBe(false);
+  });
+
+  it('en Activas el orden de temas es campo, parto, servicio, rechequeo', () => {
+    expect([...TEMAS_ALERTA_CAMPO, ...TEMAS_ALERTA_GERENCIA]).toEqual([
+      'secado_due',
+      'tratamiento_paso',
+      'parto_proximo',
+      'servicio_sin_confirmacion',
+      'rechequeo_due',
+    ]);
   });
 });
 
