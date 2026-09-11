@@ -3,11 +3,10 @@
 //
 // `movimientoInventarioResponsable.test.ts` vigila los tres escritores TypeScript y
 // exige que estampen `user?.email`. No puede ver un RPC, y por eso el defecto #63 entró
-// sin que nada se pusiera rojo: `fn_ronda_actor_nombre` (migración 126) resolvía
-// `COALESCE(telegram_usuarios.nombre_display, usuarios.nombre_completo, usuarios.email,
-// 'Ronda de inventario')` -- un nombre PARA MOSTRAR le ganaba al correo -- y ese texto
-// viaja tal cual a `movimientos_inventario.responsable` desde `fn_ronda_resolver_con_captura`
-// y `fn_ronda_aplicar_ajuste`.
+// sin que nada se pusiera rojo: los dos RPC de ronda usaban el helper HUMANO
+// `fn_ronda_actor_nombre` para llenar una columna de IDENTIDAD. Ese helper debe seguir
+// siendo nombre-primero porque también alimenta mensajes visibles; los INSERT de
+// inventario deben usar el helper separado `fn_ronda_actor_correo`.
 //
 // Evidencia en producción (2026-09-11), con la 126 viva:
 //   SELECT responsable, count(*) FROM movimientos_inventario GROUP BY 1;
@@ -19,11 +18,12 @@
 // `santiago@thinksid.co` Administrador), el mismo hecho que ya costó un backfill mal
 // dirigido en la migración 063.
 //
-// Este guard lee `src/sql/migrations/`, encuentra cada `INSERT INTO movimientos_inventario`
-// que exista en una migración, saca POSICIONALMENTE la expresión que cae en la columna
-// `responsable`, y exige que esa expresión prefiera el correo. Mirar el fichero entero no
-// sirve: la palabra "email" puede aparecer en un comentario y el guard quedaría verde con
-// el INSERT igual de mudo.
+// Este guard lee `src/sql/migrations/`, resuelve la definición MÁS RECIENTE de cada
+// función (una migración nueva reemplaza el cuerpo, nunca se edita la aplicada), encuentra
+// sus `INSERT INTO movimientos_inventario`, saca POSICIONALMENTE la expresión que cae en
+// `responsable`, y exige el contrato correcto según el consumidor. Mirar todo el historial
+// como si siguiera vivo da un falso rojo: la 126 debe conservar para siempre sus cuerpos
+// obsoletos aunque una migración posterior reemplace ambos RPC.
 
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -103,11 +103,16 @@ function cuerpoParentesis(texto: string, desde: number): { cuerpo: string; fin: 
 
 interface SitioInsert {
   archivo: string;
+  funcion?: string;
   columnas: string[];
   valores: string[];
 }
 
-function insertsDeMovimientos(archivo: string, sqlSinComentarios: string): SitioInsert[] {
+function insertsDeMovimientos(
+  archivo: string,
+  sqlSinComentarios: string,
+  funcion?: string,
+): SitioInsert[] {
   const sitios: SitioInsert[] = [];
   const re = /INSERT\s+INTO\s+(?:public\s*\.\s*)?movimientos_inventario\s*\(/gi;
   let m: RegExpExecArray | null;
@@ -122,7 +127,7 @@ function insertsDeMovimientos(archivo: string, sqlSinComentarios: string): Sitio
     if (!mVals) {
       // INSERT … SELECT u otra forma que este guard no sabe leer. No se ignora en
       // silencio: se registra con las listas vacías y el caso de abajo lo denuncia.
-      sitios.push({ archivo, columnas: partirNivelCero(cols.cuerpo), valores: [] });
+      sitios.push({ archivo, funcion, columnas: partirNivelCero(cols.cuerpo), valores: [] });
       continue;
     }
     const iVals = cols.fin + 1 + mVals[0].length - 1;
@@ -131,6 +136,7 @@ function insertsDeMovimientos(archivo: string, sqlSinComentarios: string): Sitio
 
     sitios.push({
       archivo,
+      funcion,
       columnas: partirNivelCero(cols.cuerpo).map((c) => c.toLowerCase()),
       valores: partirNivelCero(vals.cuerpo),
     });
@@ -146,7 +152,10 @@ function ficherosMigracion(): string[] {
     .sort((a, b) => {
       const na = Number.parseInt(a.slice(0, 3), 10);
       const nb = Number.parseInt(b.slice(0, 3), 10);
-      if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
+      const aNumerado = Number.isFinite(na);
+      const bNumerado = Number.isFinite(nb);
+      if (aNumerado !== bNumerado) return aNumerado ? 1 : -1;
+      if (aNumerado && bNumerado && na !== nb) return na - nb;
       return a.localeCompare(b);
     });
 }
@@ -156,30 +165,104 @@ const FUENTES: { archivo: string; sql: string }[] = ficherosMigracion().map((f) 
   sql: quitarComentarios(readFileSync(join(process.cwd(), DIR_MIGRACIONES, f), 'utf-8')),
 }));
 
-/**
- * Último cuerpo de `nombre` en la serie de migraciones. "Último" es el que gana: una
- * función se corrige con `CREATE OR REPLACE` en una migración posterior y la 126 nunca
- * se edita (130/131/132 son precedente).
- */
-function ultimoCuerpoDeFuncion(nombre: string): { archivo: string; cuerpo: string } | null {
-  let encontrado: { archivo: string; cuerpo: string } | null = null;
-  const re = new RegExp(`CREATE\\s+(?:OR\\s+REPLACE\\s+)?FUNCTION\\s+(?:public\\s*\\.\\s*)?${nombre}\\s*\\(`, 'gi');
+interface DefinicionFuncion {
+  archivo: string;
+  nombre: string;
+  cuerpo: string;
+}
 
-  for (const { archivo, sql } of FUENTES) {
-    let m: RegExpExecArray | null;
-    re.lastIndex = 0;
-    while ((m = re.exec(sql)) !== null) {
-      const resto = sql.slice(m.index);
-      const mTag = /AS\s*\$([A-Za-z_]*)\$/i.exec(resto);
-      if (!mTag) continue;
-      const inicio = mTag.index + mTag[0].length;
-      const cierre = resto.indexOf(`$${mTag[1]}$`, inicio);
-      if (cierre === -1) continue;
-      encontrado = { archivo, cuerpo: resto.slice(inicio, cierre) };
+/** El regex de DDL no debe confundir un mensaje de error SQL con DDL ejecutable. */
+function estaEnCadenaSimple(texto: string, indice: number): boolean {
+  let enCadena = false;
+  for (let i = 0; i < indice; i++) {
+    if (texto[i] !== "'") continue;
+    if (enCadena && texto[i + 1] === "'") {
+      i++;
+      continue;
     }
+    enCadena = !enCadena;
+  }
+  return enCadena;
+}
+
+/** Extrae cuerpos en el orden en que aparecen dentro de una migración. */
+function definicionesDeFunciones(archivo: string, sql: string): DefinicionFuncion[] {
+  const definiciones: DefinicionFuncion[] = [];
+  const re = /CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:public\s*\.\s*)?([a-z_][a-z0-9_]*)\s*\(/gi;
+  let m: RegExpExecArray | null;
+
+  while ((m = re.exec(sql)) !== null) {
+    if (estaEnCadenaSimple(sql, m.index)) continue;
+    const resto = sql.slice(m.index);
+    const mTag = /AS\s*\$([A-Za-z_]*)\$/i.exec(resto);
+    if (!mTag) continue;
+    const inicio = mTag.index + mTag[0].length;
+    const cierre = resto.indexOf(`$${mTag[1]}$`, inicio);
+    if (cierre === -1) continue;
+    definiciones.push({
+      archivo,
+      nombre: m[1].toLowerCase(),
+      cuerpo: resto.slice(inicio, cierre),
+    });
+    // No busques `CREATE FUNCTION` dentro del cuerpo: puede ser SQL dinámico o texto.
+    re.lastIndex = m.index + cierre + `$${mTag[1]}$`.length;
   }
 
-  return encontrado;
+  return definiciones;
+}
+
+const DEFINICIONES = FUENTES.flatMap(({ archivo, sql }) => definicionesDeFunciones(archivo, sql));
+
+// Map conserva el orden de inserción y reemplaza el valor: exactamente la semántica de
+// CREATE OR REPLACE a través de una serie de migraciones ordenada.
+const ULTIMAS_DEFINICIONES = new Map<string, DefinicionFuncion>();
+for (const definicion of DEFINICIONES) {
+  ULTIMAS_DEFINICIONES.set(definicion.nombre, definicion);
+}
+
+function ultimoCuerpoDeFuncion(nombre: string): DefinicionFuncion | null {
+  return ULTIMAS_DEFINICIONES.get(nombre.toLowerCase()) ?? null;
+}
+
+/**
+ * Producción difiere de la copia de la 126 sólo en cuatro mensajes de error. Esos
+ * literales no cambian control ni datos, pero los argumentos que siguen a la cadena sí
+ * son ejecutables y deben conservarse. Este scanner sustituye exclusivamente la primera
+ * cadena SQL de cada `RAISE EXCEPTION`, respetando apóstrofos escapados como `''`.
+ */
+function normalizarMensajesRaiseException(cuerpo: string): string {
+  const re = /RAISE\s+EXCEPTION\s*/gi;
+  let salida = '';
+  let desde = 0;
+
+  while (re.exec(cuerpo) !== null) {
+    const inicioMensaje = re.lastIndex;
+    if (cuerpo[inicioMensaje] !== "'") continue;
+
+    let finMensaje = inicioMensaje + 1;
+    while (finMensaje < cuerpo.length) {
+      if (cuerpo[finMensaje] !== "'") {
+        finMensaje++;
+        continue;
+      }
+      if (cuerpo[finMensaje + 1] === "'") {
+        finMensaje += 2;
+        continue;
+      }
+      break;
+    }
+    if (finMensaje >= cuerpo.length) continue;
+
+    salida += cuerpo.slice(desde, inicioMensaje) + "'<mensaje>'";
+    desde = finMensaje + 1;
+    re.lastIndex = desde;
+  }
+
+  return salida + cuerpo.slice(desde);
+}
+
+function normalizarCuerpoParaInvariancia(cuerpo: string): string {
+  return normalizarMensajesRaiseException(cuerpo).replace(/\s+/g, ' ').trim();
 }
 
 /** ¿El cuerpo prefiere el correo a cualquier nombre para mostrar? */
@@ -199,19 +282,74 @@ function prefiereCorreo(cuerpo: string): { ok: boolean; motivo: string } {
   return { ok: true, motivo: '' };
 }
 
-const TODOS_LOS_SITIOS = FUENTES.flatMap(({ archivo, sql }) => insertsDeMovimientos(archivo, sql));
+const SITIOS_VIGENTES = [...ULTIMAS_DEFINICIONES.values()].flatMap((definicion) =>
+  insertsDeMovimientos(definicion.archivo, definicion.cuerpo, definicion.nombre),
+);
 
-describe('guard SQL: un RPC que escribe movimientos_inventario.responsable prefiere el correo', () => {
-  it('el guard encuentra los INSERT que sabe que existen (si no, dejó de mirar)', () => {
-    // 106 (fn_cerrar_aplicacion) + 126 (resolver_con_captura y aplicar_ajuste).
-    const archivos = new Set(TODOS_LOS_SITIOS.map((s) => s.archivo));
-    expect(archivos).toContain('src/sql/migrations/106_cierre_aplicacion_transaccional.sql');
-    expect(archivos).toContain('src/sql/migrations/126_ronda_inventario_rpcs.sql');
-    expect(TODOS_LOS_SITIOS.length).toBeGreaterThanOrEqual(3);
+const ESCRITORES_RONDA = [
+  'fn_ronda_resolver_con_captura',
+  'fn_ronda_aplicar_ajuste',
+];
+
+describe('guard SQL: identidad de inventario separada del nombre humano', () => {
+  it('ordena la serie numerada después de los SQL legado sin número', () => {
+    const archivos = ficherosMigracion();
+    const numeros = archivos
+      .map((archivo) => Number.parseInt(archivo.slice(0, 3), 10))
+      .filter(Number.isFinite);
+    expect(numeros).toEqual([...numeros].sort((a, b) => a - b));
+    expect(archivos.at(-1)).toMatch(/^\d{3}/);
+  });
+
+  it('ignora CREATE FUNCTION citados en comentarios o mensajes SQL', () => {
+    const muestra = quitarComentarios(`
+      -- CREATE FUNCTION falsa_comentario() RETURNS text AS $$ SELECT 'mal' $$;
+      DO $$ BEGIN
+        RAISE NOTICE 'CREATE OR REPLACE FUNCTION falsa_mensaje()';
+      END $$;
+      CREATE FUNCTION real() RETURNS text AS $$ SELECT 'primera' $$ LANGUAGE sql;
+      CREATE OR REPLACE FUNCTION real() RETURNS text AS $body$ SELECT 'vigente' $body$ LANGUAGE sql;
+    `);
+    const definiciones = definicionesDeFunciones('muestra.sql', muestra);
+    expect(definiciones.map((definicion) => definicion.nombre)).toEqual(['real', 'real']);
+    expect(definiciones.at(-1)?.cuerpo).toContain("'vigente'");
+  });
+
+  it('la invariancia ignora sólo el mensaje de RAISE EXCEPTION, no sus argumentos ni otros literales', () => {
+    const base = `
+      IF v_estado <> 'aprobado' THEN
+        RAISE EXCEPTION 'mensaje viejo con ''comillas'' y %', v_estado;
+      END IF;
+      SELECT 'literal de negocio';
+    `;
+    const soloMensajeCambia = base.replace(
+      "mensaje viejo con ''comillas'' y %",
+      'mensaje vivo distinto %',
+    );
+    const argumentoCambia = soloMensajeCambia.replace(', v_estado;', ', otro_estado;');
+    const literalNoErrorCambia = soloMensajeCambia.replace(
+      "'literal de negocio'",
+      "'otro literal'",
+    );
+
+    expect(normalizarCuerpoParaInvariancia(soloMensajeCambia))
+      .toBe(normalizarCuerpoParaInvariancia(base));
+    expect(normalizarCuerpoParaInvariancia(argumentoCambia))
+      .not.toBe(normalizarCuerpoParaInvariancia(base));
+    expect(normalizarCuerpoParaInvariancia(literalNoErrorCambia))
+      .not.toBe(normalizarCuerpoParaInvariancia(base));
+  });
+
+  it('el guard encuentra los tres escritores vigentes que sabe que existen', () => {
+    const funciones = new Set(SITIOS_VIGENTES.map((s) => s.funcion));
+    expect(funciones).toContain('fn_cerrar_aplicacion');
+    expect(funciones).toContain('fn_ronda_resolver_con_captura');
+    expect(funciones).toContain('fn_ronda_aplicar_ajuste');
+    expect(SITIOS_VIGENTES.length).toBeGreaterThanOrEqual(3);
   });
 
   it('cada INSERT nombra la columna `responsable` y alinea columnas con valores', () => {
-    for (const sitio of TODOS_LOS_SITIOS) {
+    for (const sitio of SITIOS_VIGENTES) {
       expect(
         sitio.valores.length,
         `${sitio.archivo}: INSERT INTO movimientos_inventario en una forma que este guard ` +
@@ -233,8 +371,8 @@ describe('guard SQL: un RPC que escribe movimientos_inventario.responsable prefi
     }
   });
 
-  it('la expresión que cae en `responsable` prefiere el correo, nunca un nombre para mostrar', () => {
-    for (const sitio of TODOS_LOS_SITIOS) {
+  it('cada expresión vigente que cae en `responsable` prefiere el correo', () => {
+    for (const sitio of SITIOS_VIGENTES) {
       const idx = sitio.columnas.indexOf('responsable');
       if (idx === -1) continue; // ya denunciado por el caso anterior
       const expr = sitio.valores[idx] ?? '';
@@ -274,19 +412,83 @@ describe('guard SQL: un RPC que escribe movimientos_inventario.responsable prefi
     }
   });
 
-  it('fn_ronda_actor_nombre resuelve el correo antes que nombre_display/nombre_completo', () => {
-    const definicion = ultimoCuerpoDeFuncion('fn_ronda_actor_nombre');
-    expect(definicion, 'ninguna migración define fn_ronda_actor_nombre').not.toBeNull();
+  it('los dos INSERT de ronda vigentes usan fn_ronda_actor_correo, no el helper de presentación', () => {
+    for (const nombre of ESCRITORES_RONDA) {
+      const sitios = SITIOS_VIGENTES.filter((sitio) => sitio.funcion === nombre);
+      expect(sitios, `el cuerpo vigente de ${nombre} ya no inserta el movimiento`).toHaveLength(1);
 
-    const cuerpo = (definicion as { cuerpo: string }).cuerpo;
-    // `toContain` ANTES de comparar índices: un test de orden con `indexOf(a) < indexOf(b)`
-    // pasa en vacío cuando `a` no está (-1 < 0).
-    expect(cuerpo.toLowerCase()).toContain('email');
+      const sitio = sitios[0];
+      const idx = sitio.columnas.indexOf('responsable');
+      expect(idx, `${nombre} no nombra la columna responsable`).toBeGreaterThanOrEqual(0);
+      expect(
+        sitio.valores[idx],
+        `${nombre} debe separar identidad de presentación: responsable recibe ` +
+          '`fn_ronda_actor_correo(…)`, nunca `fn_ronda_actor_nombre(…)`.',
+      ).toMatch(/^fn_ronda_actor_correo\s*\(/i);
+    }
+  });
 
+  it('interpreta como vigentes los RPC reemplazados, no sus INSERT obsoletos de la 126', () => {
+    for (const nombre of ESCRITORES_RONDA) {
+      const versiones = DEFINICIONES.filter((definicion) => definicion.nombre === nombre);
+      expect(
+        versiones.length,
+        `${nombre} debe tener el cuerpo original y un CREATE OR REPLACE posterior`,
+      ).toBeGreaterThanOrEqual(2);
+
+      const original = versiones[0];
+      const vigente = ultimoCuerpoDeFuncion(nombre);
+      expect(original.archivo).toBe('src/sql/migrations/126_ronda_inventario_rpcs.sql');
+      expect(insertsDeMovimientos(original.archivo, original.cuerpo)[0]?.valores.join(' '))
+        .toMatch(/fn_ronda_actor_nombre\s*\(/i);
+      expect(vigente?.archivo).toBe(versiones.at(-1)?.archivo);
+      expect(vigente?.archivo).not.toBe(original.archivo);
+      expect(insertsDeMovimientos(vigente!.archivo, vigente!.cuerpo)[0]?.valores.join(' '))
+        .toMatch(/fn_ronda_actor_correo\s*\(/i);
+
+      // Los RPC son largos y CREATE OR REPLACE sustituye el cuerpo entero. El arreglo
+      // autorizado cambia una llamada, no ofrece permiso para alterar reglas de negocio.
+      expect(
+        normalizarCuerpoParaInvariancia(vigente!.cuerpo),
+        `${nombre} cambió lógica, argumentos o un literal ajeno a los mensajes de ` +
+          '`RAISE EXCEPTION`, además del helper de atribución autorizado',
+      ).toBe(
+        normalizarCuerpoParaInvariancia(original.cuerpo).replace(
+          /fn_ronda_actor_nombre/g,
+          'fn_ronda_actor_correo',
+        ),
+      );
+    }
+  });
+
+  it('fn_ronda_actor_correo es email-first y conserva un respaldo no vacío', () => {
+    const definicion = ultimoCuerpoDeFuncion('fn_ronda_actor_correo');
+    expect(definicion, 'ninguna migración define fn_ronda_actor_correo').not.toBeNull();
+
+    const cuerpo = definicion!.cuerpo;
     const veredicto = prefiereCorreo(cuerpo);
     expect(
       veredicto.ok,
-      `fn_ronda_actor_nombre (${definicion?.archivo}) no prefiere el correo: ${veredicto.motivo}.`,
+      `fn_ronda_actor_correo (${definicion?.archivo}) no prefiere el correo: ${veredicto.motivo}.`,
     ).toBe(true);
+    expect(cuerpo).toMatch(/nombre_display/i);
+    expect(cuerpo).toContain('Ronda de inventario');
+  });
+
+  it('fn_ronda_actor_nombre sigue siendo nombre-first para las superficies humanas', () => {
+    const definicion = ultimoCuerpoDeFuncion('fn_ronda_actor_nombre');
+    expect(definicion, 'ninguna migración define fn_ronda_actor_nombre').not.toBeNull();
+
+    const cuerpo = definicion!.cuerpo.toLowerCase();
+    const iEmail = cuerpo.indexOf('email');
+    expect(iEmail, 'fn_ronda_actor_nombre perdió el fallback de correo').toBeGreaterThanOrEqual(0);
+    for (const nombre of ['nombre_display', 'nombre_completo']) {
+      const iNombre = cuerpo.indexOf(nombre);
+      expect(iNombre, `fn_ronda_actor_nombre perdió ${nombre}`).toBeGreaterThanOrEqual(0);
+      expect(
+        iNombre,
+        `fn_ronda_actor_nombre (${definicion?.archivo}) debe resolver ${nombre} antes que email`,
+      ).toBeLessThan(iEmail);
+    }
   });
 });
