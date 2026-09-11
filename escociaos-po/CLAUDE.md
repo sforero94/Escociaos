@@ -93,6 +93,27 @@ routine. Do not wait for Santiago to notice the noise.
 Scheduled runs happen in a fresh cloud sandbox where the repo's `.claude/agents/`
 may not be auto-registered. The reliable pattern, which works everywhere:
 
+0. **Give every agent its own `git worktree`, before dispatching any of them.**
+   One `npm ci` in the main checkout first; then one worktree per agent off
+   `origin/main`, each on its own branch, with `node_modules` symlinked to the
+   main checkout. Forbid them, in the dispatch prompt itself, to `cd` outside
+   their worktree or to run `git checkout` / `switch` / `reset --hard`. Full
+   recipe and cleanup: `runbooks/run-lunes.md` step 2b.
+
+   > **This step lives here, in the dispatch template, and not only in memory —
+   > because that is the entire lesson of finding #85.** The rule existed and
+   > worked on 2026-08-06, then regressed silently on 2026-09-07 by being absent
+   > from the dispatch prompt: agents shared a checkout again and one left an
+   > unpushed commit **on local `main`**, one `git push` from breaching the
+   > hardest guardrail in §6. A rule kept only in memory is a rule that decays.
+   >
+   > It also has a read-side cost, which is finding #92: agents sharing a
+   > checkout cannot run the suite (installing dependencies moves the tree under
+   > everyone), so the mitigation becomes turning the tests off — and that is how
+   > `main` stayed red from 2026-09-09 through a full Thursday pulse unseen.
+   > Read-only agents that only need a file should use
+   > `git show origin/main:<path>` rather than the shared working tree at all.
+
 1. Read the agent's file from `.claude/agents/` in the checkout.
 2. Read the agent's memory file from `escociaos-po/memory/` (§8) — this is
    mandatory, not optional; it is what stops run 7 rediscovering what run 3
@@ -183,6 +204,22 @@ Every run follows this. Do not skip phases; do not reorder them.
 
 **Phase 5 — File and remember**
 - Write every surviving finding to the Notion database using the schema in §5.
+- **Pre-commit check on the shared checkout, before the memory commit** — both
+  must hold, and if either fails, stop and investigate rather than committing:
+
+  ```sh
+  git status --short                      # must be EMPTY
+  git rev-parse main origin/main          # must be the SAME sha
+  ```
+
+  A dirty tree means an agent wrote outside its worktree. A local `main` ahead of
+  `origin/main` means an agent **committed application code to `main`**, and the
+  next `git push` from anywhere in that checkout sends it there. That is finding
+  #85, observed live on 2026-09-07 at 11:26 — `main` at `78ba0b5` with
+  `git branch -r --contains` returning nothing. **The guardrail held by luck that
+  run, not by design.** This check is what converts it back to design, and it
+  costs two commands.
+
 - Apply the approved memory deltas (§8) and commit them — this is the **only**
   direct write to `main` the operation is ever allowed.
 - Write the run report to `escociaos-po/reports/YYYY-MM-DD-<dia>.md` in the same
