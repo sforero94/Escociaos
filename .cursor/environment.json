@@ -1,0 +1,11 @@
+{
+  "name": "Escocia OS",
+  "install": "npm install",
+  "terminals": [
+    {
+      "name": "dev",
+      "command": "npm run dev",
+      "description": "Vite dev server on http://localhost:3000 (needs VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY set as secrets to reach the backend)."
+    }
+  ]
+}
