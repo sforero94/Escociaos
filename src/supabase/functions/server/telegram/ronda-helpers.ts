@@ -533,11 +533,12 @@ export function excepcionComoCasoSantiago(excepcion: ExcepcionDetalleRonda, prop
 }
 
 /** Nombre legible de quien propuso/decidió/etc, vía `fn_ronda_actor_nombre`
- * (migración 126) — el MISMO `COALESCE` (telegram_usuarios.nombre_display ->
- * usuarios.nombre_completo/email -> 'Ronda de inventario') que ya usan los
- * RPC de captura y aplicación al escribir `movimientos_inventario.responsable`.
- * Se llama por RPC en vez de reimplementar el `COALESCE` acá, para que esa
- * regla tenga un solo dueño (mismo criterio D-T2 del catálogo de causas). */
+ * (migración 126) — conserva el `COALESCE` de presentación
+ * (telegram_usuarios.nombre_display -> usuarios.nombre_completo/email ->
+ * 'Ronda de inventario'). Los dos RPC que escriben
+ * `movimientos_inventario.responsable` usan el helper separado
+ * `fn_ronda_actor_correo` desde la migración 143, porque esa columna exige una
+ * identidad de cuenta. Esta función sigue dueña sólo de la regla visible. */
 export async function resolverNombreActor(
   supabase: SupabaseClient,
   usuarioId: string | null,
