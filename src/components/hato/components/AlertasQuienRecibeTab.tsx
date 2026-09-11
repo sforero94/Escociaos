@@ -1,10 +1,11 @@
 // ARCHIVO: components/hato/components/AlertasQuienRecibeTab.tsx
-// DESCRIPCIÓN: Matriz telegram_usuarios × alertas_catalogo (issue #217).
-// Misma tabla que TelegramConfig. Un usuario `campo` no puede recibir tipos
-// de gerencia del hato — el checkbox se apaga y el guardrail del tick
-// vuelve a filtrar.
+// DESCRIPCIÓN: Matriz tipo × usuario sobre telegram_alertas_suscripciones
+// (issue #217). Filas = tipos del catálogo, columnas = usuarios Telegram,
+// casilla = recibe sí/no. Escalamiento no vive en esta superficie.
+// Un usuario `campo` no puede recibir tipos de gerencia — el checkbox se
+// apaga y el guardrail del tick vuelve a filtrar.
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Loader2, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -12,7 +13,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useAlertasRouting } from '../hooks/useAlertasRouting';
 import {
   agruparAlertasPorModulo,
-  alternarEscalamiento,
   alternarRecibe,
   construirEstadoDesdeSuscripciones,
   puedeRecibirAlertaTelegram,
@@ -34,9 +34,9 @@ export function AlertasQuienRecibeTab({
   canGerencia: boolean;
   updatedBy: string | null;
 }) {
-  const { catalogo, usuarios, suscripciones, loading, error, guardarSuscripciones } = useAlertasRouting();
+  const { catalogo, usuarios, suscripciones, loading, error, guardarSuscripcionesMatriz } = useAlertasRouting();
   const [estados, setEstados] = useState<Record<string, SuscripcionEstado>>({});
-  const [guardandoId, setGuardandoId] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
 
   const grupos = useMemo(() => agruparAlertasPorModulo(catalogo), [catalogo]);
 
@@ -85,98 +85,90 @@ export function AlertasQuienRecibeTab({
     );
   }
 
-  const handleGuardar = async (usuario: TelegramUsuarioRow) => {
-    setGuardandoId(usuario.id);
+  const handleToggle = (usuario: TelegramUsuarioRow, clave: string) => {
+    if (!puedeRecibirAlertaTelegram(usuario.rol_bot, clave)) return;
+    setEstados((prev) => ({
+      ...prev,
+      [usuario.id]: alternarRecibe(prev[usuario.id] ?? {}, clave),
+    }));
+  };
+
+  const handleGuardar = async () => {
+    setGuardando(true);
     try {
-      await guardarSuscripciones(usuario, estados[usuario.id] ?? {}, updatedBy);
-      toast.success(`Alertas de ${usuario.nombre_display} guardadas`);
+      await guardarSuscripcionesMatriz(estados, updatedBy);
+      toast.success('Quién recibe quedó guardado');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Error desconocido';
-      toast.error('No se pudieron guardar las alertas: ' + message);
+      toast.error('No se pudo guardar la matriz: ' + message);
     } finally {
-      setGuardandoId(null);
+      setGuardando(false);
     }
   };
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-gray-600">
-        Fernando (campo) solo puede recibir Secado y Paso de tratamiento en Telegram.
-        El resto de tipos del hato quedan en la cola web, salvo que Gerencia las reciba.
-      </p>
-      {usuarios.map((usuario) => {
-        const estado = estados[usuario.id] ?? {};
-        return (
-          <div key={usuario.id} className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="text-sm font-semibold text-gray-900">{usuario.nombre_display}</p>
-                <p className="text-xs text-gray-500">{ROL_LABEL[usuario.rol_bot] ?? usuario.rol_bot}</p>
-              </div>
-              <Button
-                size="sm"
-                disabled={guardandoId === usuario.id}
-                onClick={() => void handleGuardar(usuario)}
-              >
-                {guardandoId === usuario.id ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Guardar'}
-              </Button>
-            </div>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="text-sm text-gray-600 max-w-2xl">
+          Una fila por tipo de alerta, una columna por usuario. La casilla es Recibe.
+          Fernando (campo) solo puede recibir Secado y Paso de tratamiento.
+        </p>
+        <Button size="sm" disabled={guardando} onClick={() => void handleGuardar()}>
+          {guardando ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Guardar'}
+        </Button>
+      </div>
+      <div className="rounded-xl border border-gray-200 bg-white overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b text-left text-brand-brown/60">
+              <th className="py-2 px-3 min-w-[12rem] sticky left-0 bg-white">Tipo</th>
+              {usuarios.map((usuario) => (
+                <th key={usuario.id} className="py-2 px-3 text-center min-w-[7rem]">
+                  <span className="block font-medium text-gray-900">{usuario.nombre_display}</span>
+                  <span className="block text-[11px] font-normal text-gray-500">
+                    {ROL_LABEL[usuario.rol_bot] ?? usuario.rol_bot}
+                  </span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
             {grupos.map((grupo) => (
-              <div key={grupo.modulo}>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                  {grupo.label}
-                </p>
-                <div className="rounded-lg border border-gray-200 divide-y divide-gray-100">
-                  {grupo.alertas.map((alerta) => {
-                    const actual = estado[alerta.clave] ?? { recibe: false, escalamiento: false };
-                    const permitido = puedeRecibirAlertaTelegram(usuario.rol_bot, alerta.clave);
-                    return (
-                      <div key={alerta.clave} className="flex items-start justify-between gap-3 p-2.5">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-900">{alerta.nombre}</p>
-                          {!permitido && (
-                            <p className="text-xs text-amber-700 mt-0.5">
-                              Campo no recibe este tipo en Telegram.
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex flex-shrink-0 gap-4">
-                          <label className="flex flex-col items-center gap-1 text-xs text-gray-500">
+              <Fragment key={grupo.modulo}>
+                <tr className="bg-muted/40">
+                  <td
+                    colSpan={usuarios.length + 1}
+                    className="py-1.5 px-3 text-xs font-semibold uppercase tracking-wide text-brand-brown/70"
+                  >
+                    {grupo.label}
+                  </td>
+                </tr>
+                {grupo.alertas.map((alerta) => (
+                  <tr key={alerta.clave} className="border-b hover:bg-muted/50">
+                    <td className="py-2 px-3 sticky left-0 bg-white">{alerta.nombre}</td>
+                    {usuarios.map((usuario) => {
+                      const actual = estados[usuario.id]?.[alerta.clave] ?? { recibe: false, escalamiento: false };
+                      const permitido = puedeRecibirAlertaTelegram(usuario.rol_bot, alerta.clave);
+                      return (
+                        <td key={usuario.id} className="py-2 px-3 text-center">
+                          <div className="flex justify-center">
                             <Checkbox
                               checked={permitido && actual.recibe}
-                              disabled={!permitido}
-                              onCheckedChange={() =>
-                                setEstados((prev) => ({
-                                  ...prev,
-                                  [usuario.id]: alternarRecibe(prev[usuario.id] ?? {}, alerta.clave),
-                                }))
-                              }
+                              disabled={!permitido || guardando}
+                              onCheckedChange={() => handleToggle(usuario, alerta.clave)}
+                              aria-label={`${alerta.nombre} para ${usuario.nombre_display}`}
                             />
-                            Recibe
-                          </label>
-                          <label className="flex flex-col items-center gap-1 text-xs text-gray-500">
-                            <Checkbox
-                              checked={permitido && actual.escalamiento}
-                              disabled={!permitido}
-                              onCheckedChange={() =>
-                                setEstados((prev) => ({
-                                  ...prev,
-                                  [usuario.id]: alternarEscalamiento(prev[usuario.id] ?? {}, alerta.clave),
-                                }))
-                              }
-                            />
-                            Escalamiento
-                          </label>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </Fragment>
             ))}
-          </div>
-        );
-      })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

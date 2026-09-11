@@ -707,8 +707,8 @@ export function TelegramConfig() {
                 <p className="text-xs text-brand-brown/60 mt-1">
                   Campo (Fernando) solo recibe Secado y Paso de tratamiento en Telegram.
                   El resto se configura en{' '}
-                  <Link to="/hato-lechero/alertas?tab=quien" className="text-primary underline">
-                    Hato → Alertas → Quién recibe
+                  <Link to="/hato-lechero/alertas?tab=configuracion" className="text-primary underline">
+                    Hato → Alertas → Configuración
                   </Link>
                   .
                 </p>

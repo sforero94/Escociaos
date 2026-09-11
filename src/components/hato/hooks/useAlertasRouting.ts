@@ -1,9 +1,10 @@
 // ARCHIVO: components/hato/hooks/useAlertasRouting.ts
-// DESCRIPCIÓN: Catálogo + usuarios Telegram + suscripciones para la pestaña
-// "Quién recibe" (issue #217). Escribe en `telegram_alertas_suscripciones`
-// (RLS Gerencia-only, migración 096). El tick lee esas mismas filas; no hay
-// un segundo canal. Una clave que el guardrail prohíbe a `campo` se persiste
-// apagada aunque la casilla llegue marcada.
+// DESCRIPCIÓN: Catálogo + usuarios Telegram + suscripciones para
+// Configuración → Usuarios (issue #217). Escribe en
+// `telegram_alertas_suscripciones` (RLS Gerencia-only, migración 096).
+// El tick lee esas mismas filas; no hay un segundo canal. Una clave que
+// el guardrail prohíbe a `campo` se persiste apagada aunque la casilla
+// llegue marcada.
 
 import { useCallback, useEffect, useState } from 'react';
 import { getSupabase } from '@/utils/supabase/client';
@@ -50,10 +51,9 @@ export function useAlertasRouting() {
     reload();
   }, [reload]);
 
-  const guardarSuscripciones = useCallback(
-    async (usuario: TelegramUsuarioRow, estado: SuscripcionEstado, updatedBy: string | null) => {
-      if (catalogo.length === 0) return;
-      const filas = construirFilasParaGuardar(usuario.id, estado, catalogo).map((f) => {
+  const filasDeUsuario = useCallback(
+    (usuario: TelegramUsuarioRow, estado: SuscripcionEstado, updatedBy: string | null) => {
+      return construirFilasParaGuardar(usuario.id, estado, catalogo).map((f) => {
         const permitido = puedeRecibirAlertaTelegram(usuario.rol_bot, f.alerta_clave);
         return {
           ...f,
@@ -62,6 +62,30 @@ export function useAlertasRouting() {
           updated_by: updatedBy,
         };
       });
+    },
+    [catalogo],
+  );
+
+  const guardarSuscripciones = useCallback(
+    async (usuario: TelegramUsuarioRow, estado: SuscripcionEstado, updatedBy: string | null) => {
+      if (catalogo.length === 0) return;
+      const supabase = getSupabase() as any;
+      const { error: upsertError } = await supabase
+        .from('telegram_alertas_suscripciones')
+        .upsert(filasDeUsuario(usuario, estado, updatedBy), { onConflict: 'telegram_usuario_id,alerta_clave' });
+      if (upsertError) throw upsertError;
+      await reload();
+    },
+    [catalogo.length, filasDeUsuario, reload],
+  );
+
+  const guardarSuscripcionesMatriz = useCallback(
+    async (estados: Record<string, SuscripcionEstado>, updatedBy: string | null) => {
+      if (catalogo.length === 0) return;
+      const filas = usuarios.flatMap((usuario) =>
+        filasDeUsuario(usuario, estados[usuario.id] ?? {}, updatedBy),
+      );
+      if (filas.length === 0) return;
       const supabase = getSupabase() as any;
       const { error: upsertError } = await supabase
         .from('telegram_alertas_suscripciones')
@@ -69,8 +93,17 @@ export function useAlertasRouting() {
       if (upsertError) throw upsertError;
       await reload();
     },
-    [catalogo, reload],
+    [catalogo.length, filasDeUsuario, reload, usuarios],
   );
 
-  return { catalogo, usuarios, suscripciones, loading, error, reload, guardarSuscripciones };
+  return {
+    catalogo,
+    usuarios,
+    suscripciones,
+    loading,
+    error,
+    reload,
+    guardarSuscripciones,
+    guardarSuscripcionesMatriz,
+  };
 }

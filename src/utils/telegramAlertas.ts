@@ -189,7 +189,7 @@ export function suscripcionDefaultCampo(clave: string): { recibe: boolean; escal
 }
 
 /** Default for everyone else: web-only. Gerencia turns Telegram on from
- * Hato → Alertas → Quién recibe, never as a ship-time surprise. */
+ * Hato → Alertas → Configuración, never as a ship-time surprise. */
 export function suscripcionDefaultGerencia(_clave: string): { recibe: boolean; escalamiento: boolean } {
   return { recibe: false, escalamiento: false };
 }

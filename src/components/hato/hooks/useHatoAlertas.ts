@@ -214,35 +214,9 @@ export function useHatoAlertas() {
         .maybeSingle();
       if (updateError) throw updateError;
       if (!actualizada) {
-        throw new Error('Esa alerta ya no está abierta. Recarga la cola.');
+        throw new Error('Esa alerta ya no está abierta. Recarga la página.');
       }
       await aplicarEfectoDominio(actualizada as HatoAlertaRow, respuesta);
-      await reload();
-    },
-    [aplicarEfectoDominio, reload],
-  );
-
-  /** Weekly-review Confirmar: Sí domain effect on a row that was already
-   * answered or expired. Does not re-open a claimed Telegram race. */
-  const confirmarRevisionAlerta = useCallback(
-    async (id: string, respondidaPor: string | null) => {
-      const supabase = getSupabase() as any;
-      const { data: actualizada, error: updateError } = await supabase
-        .from('hato_alertas')
-        .update({
-          estado: 'confirmada',
-          respuesta: 'si',
-          respondida_por: respondidaPor,
-        })
-        .eq('id', id)
-        .in('estado', ['respondida', 'expirada'])
-        .select('id, tipo, animal_id, paso_id')
-        .maybeSingle();
-      if (updateError) throw updateError;
-      if (!actualizada) {
-        throw new Error('Esa alerta ya no espera revisión. Recarga la cola.');
-      }
-      await aplicarEfectoDominio(actualizada as HatoAlertaRow, 'si');
       await reload();
     },
     [aplicarEfectoDominio, reload],
@@ -292,7 +266,6 @@ export function useHatoAlertas() {
     actualizarEstadoAlerta,
     actualizarEstadoAlertas,
     responderAlerta,
-    confirmarRevisionAlerta,
     editarAlerta,
     crearAlertaManual,
   };

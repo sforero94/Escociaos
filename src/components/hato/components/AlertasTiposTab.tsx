@@ -94,7 +94,7 @@ export function AlertasTiposTab({ canWrite }: { canWrite: boolean }) {
   return (
     <div className="space-y-3">
       <p className="text-sm text-gray-600">
-        Un tipo pausado no se manda por Telegram. La cola web sigue mostrando lo que ya existe.
+        Un tipo pausado no se manda por Telegram. Las filas ya generadas siguen en Activas o Historial.
         Campo = Secado y Paso de tratamiento. El resto es web, salvo que Gerencia lo reciba.
       </p>
       {TIPOS_ALERTA_HATO.map((tipo) => {
