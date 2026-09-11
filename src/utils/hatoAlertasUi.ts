@@ -168,6 +168,26 @@ export function etiquetaAlcanceHato(vacasCount: number | null): string {
   return vacasCount === 1 ? '1 vaca del hato' : `${vacasCount} vacas del hato`;
 }
 
+export function etiquetaIdentidadAlerta(input: {
+  animal_id: string | null;
+  animalNumero: number | null;
+  animalNombre: string | null;
+  animalNumeroEsProvisional: boolean;
+  vacasCount?: number | null;
+}): string {
+  if (input.animal_id === null) {
+    return etiquetaAlcanceHato(input.vacasCount ?? null);
+  }
+  if (input.animalNumero == null && !input.animalNombre) return 'sin caravana';
+  const numeroTexto = input.animalNumero != null
+    ? (input.animalNumeroEsProvisional ? `#${input.animalNumero} (provisional)` : `#${input.animalNumero}`)
+    : 'sin caravana';
+  if (input.animalNumeroEsProvisional || input.animalNumero == null) {
+    return input.animalNombre ? `${input.animalNombre} · ${numeroTexto}` : numeroTexto;
+  }
+  return input.animalNombre ? `${numeroTexto} ${input.animalNombre}` : numeroTexto;
+}
+
 export { chipEstadoAlerta };
 
 // ============================================================================

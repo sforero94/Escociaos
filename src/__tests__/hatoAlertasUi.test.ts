@@ -17,6 +17,7 @@ import {
   requiereRevisionSemanal,
   chipRespuestaAlerta,
   etiquetaAlcanceHato,
+  etiquetaIdentidadAlerta,
   chipEstadoAlerta,
   alertasVencidasParaExpirar,
   type EstadoAlertaHato,
@@ -224,5 +225,26 @@ describe('etiquetaAlcanceHato — alerta DE HATO (animal_id null, rechequeo_due 
   it('sin conteo rotula el alcance, nunca inventa un número ni cae en "sin caravana"', () => {
     expect(etiquetaAlcanceHato(null)).toBe('Todo el hato');
     expect(etiquetaAlcanceHato(null)).not.toContain('0');
+  });
+});
+
+describe('etiquetaIdentidadAlerta', () => {
+  it('una alerta de hato usa el alcance, nunca "sin caravana"', () => {
+    expect(etiquetaIdentidadAlerta({
+      animal_id: null,
+      animalNumero: null,
+      animalNombre: null,
+      animalNumeroEsProvisional: false,
+      vacasCount: 4,
+    })).toBe('4 vacas del hato');
+  });
+
+  it('una vaca con chapeta muestra número y nombre', () => {
+    expect(etiquetaIdentidadAlerta({
+      animal_id: 'a1',
+      animalNumero: 117,
+      animalNombre: 'ELECTRA',
+      animalNumeroEsProvisional: false,
+    })).toBe('#117 ELECTRA');
   });
 });

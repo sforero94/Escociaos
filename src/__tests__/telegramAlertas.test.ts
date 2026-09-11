@@ -16,6 +16,10 @@ import {
   construirFilasParaGuardar,
   contarSuscripcionesUsuario,
   formatearResumenAlertas,
+  suscripcionDefaultCampo,
+  suscripcionDefaultGerencia,
+  estadoInicialSuscripciones,
+  puedeRecibirAlertaTelegram,
   type AlertaCatalogoRow,
   type AlertaSuscripcionRow,
   type SuscripcionEstado,
@@ -272,5 +276,36 @@ describe('formatearResumenAlertas', () => {
 
   it('caso raro pero legal: escalamiento sin recibir ninguna alerta', () => {
     expect(formatearResumenAlertas({ recibe: 0, escalamiento: 2 })).toBe('Sin alertas (2 esc.)');
+  });
+});
+
+describe('defaults de suscripción (issue #217)', () => {
+  it('campo recibe solo secado y tratamiento, nunca escalamiento', () => {
+    expect(suscripcionDefaultCampo('hato.secado_due')).toEqual({ recibe: true, escalamiento: false });
+    expect(suscripcionDefaultCampo('hato.tratamiento_paso')).toEqual({ recibe: true, escalamiento: false });
+    expect(suscripcionDefaultCampo('hato.servicio_sin_confirmacion')).toEqual({ recibe: false, escalamiento: false });
+    expect(suscripcionDefaultCampo('hato.rechequeo_due')).toEqual({ recibe: false, escalamiento: false });
+    expect(suscripcionDefaultCampo('hato.parto_proximo')).toEqual({ recibe: false, escalamiento: false });
+  });
+
+  it('gerencia arranca web-only: cero Telegram hasta que se configure', () => {
+    expect(suscripcionDefaultGerencia('hato.secado_due')).toEqual({ recibe: false, escalamiento: false });
+    expect(suscripcionDefaultGerencia('hato.servicio_sin_confirmacion')).toEqual({ recibe: false, escalamiento: false });
+  });
+
+  it('estadoInicialSuscripciones siembra el formulario de alta según el rol', () => {
+    const catalogo = [
+      alerta({ clave: 'hato.secado_due', orden: 1 }),
+      alerta({ clave: 'hato.servicio_sin_confirmacion', orden: 2 }),
+    ];
+    const campo = estadoInicialSuscripciones('campo', catalogo);
+    expect(campo['hato.secado_due']).toEqual({ recibe: true, escalamiento: false });
+    expect(campo['hato.servicio_sin_confirmacion']).toEqual({ recibe: false, escalamiento: false });
+    const gerencia = estadoInicialSuscripciones('gerencia', catalogo);
+    expect(gerencia['hato.secado_due']).toEqual({ recibe: false, escalamiento: false });
+  });
+
+  it('reexporta el guardrail para que TelegramConfig y el gestor usen la misma función', () => {
+    expect(puedeRecibirAlertaTelegram('campo', 'hato.servicio_sin_confirmacion')).toBe(false);
   });
 });
