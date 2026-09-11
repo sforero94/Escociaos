@@ -169,6 +169,13 @@ export interface ContextoMensajeAlerta {
   vacas_count?: number;
   descripcion_paso?: string | null;
   fecha_programada?: string | null;
+  /** Solo `tratamiento_paso`: el "hoy" del tick (`fechaReferencia`), para que
+   * el texto distinga un paso que vence HOY de uno ya VENCIDO. El selector de
+   * `generarAlertasPendientes` dispara con `fecha_programada <= fechaReferencia`,
+   * así que un paso atrasado entra igual que uno del día -- sin esta fecha el
+   * mensaje afirmaría "para hoy" al lado de una fecha de hace dos meses
+   * (ocurrió en producción el 2026-09-09). Ausente => no se afirma vencimiento. */
+  fecha_referencia?: string | null;
 }
 
 /**
@@ -182,12 +189,23 @@ export function construirMensajeAlerta(ctx: ContextoMensajeAlerta): string {
   switch (ctx.tipo) {
     case 'secado_due':
       return `${presentacion} se debe secar hoy (fecha programada: ${ctx.fecha_secar ?? 'sin fecha registrada'}). ¿Ya se secó?`;
-    case 'tratamiento_paso':
+    case 'tratamiento_paso': {
+      // El texto depende de la fecha: la regla dispara con
+      // `fecha_programada <= fechaReferencia`, así que un paso ATRASADO llega
+      // por el mismo camino que uno del día. Sin fecha de referencia no se
+      // afirma vencimiento -- afirmar "venció" sin con qué compararlo sería
+      // inventar, el mismo criterio de "sin dato, nunca 0" del resto del módulo.
+      const programada = ctx.fecha_programada;
+      const vencido =
+        programada != null && ctx.fecha_referencia != null && programada < ctx.fecha_referencia;
+      const cuando = vencido
+        ? `VENCIDO desde el ${programada}`
+        : `programado para hoy (${programada ?? 'sin fecha registrada'})`;
       return (
-        `Recordatorio: ${presentacion} tiene un paso de tratamiento programado para hoy` +
-        ` (${ctx.fecha_programada ?? 'sin fecha registrada'})` +
+        `Recordatorio: ${presentacion} tiene un paso de tratamiento ${cuando}` +
         `${ctx.descripcion_paso ? `: "${ctx.descripcion_paso}"` : ''}. ¿Ya se hizo?`
       );
+    }
     case 'rechequeo_due': {
       // Alerta DE HATO: el chequeo es un evento de rebaño, así que el mensaje
       // nombra el conteo y la fecha -- nunca `presentacion`, que describe a un
@@ -398,6 +416,7 @@ export function generarAlertasPendientes(
         numero: paso.numero,
         descripcion_paso: paso.descripcion,
         fecha_programada: paso.fecha_programada,
+        fecha_referencia: fechaReferencia,
       }),
     });
   }
