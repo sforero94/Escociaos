@@ -20,6 +20,12 @@ Same protocol as Monday (constitution §4) with these narrowings:
 **Phase 0** — identical boot (clone, contracts, write mode, dead-man check,
 dedupe set). Run id `YYYY-MM-DD-jueves`.
 
+> **Including step 2b: one `git worktree` per agent, `npm ci` once before dispatch.**
+> This is the run that proved why. On 2026-09-10 the four agents shared a checkout,
+> so `npm test` was forbidden to them — and a `main` that had been red since
+> 2026-09-09 went unreported through a complete operational pulse. **Thursday must
+> never again dispatch a roster that cannot run the suite.**
+
 **Phase 1** — 4 agents, each explicitly scoped to **what changed since Monday**:
 
 - `data-integrity` — **the last 72 hours of writes only**, not a full sweep.

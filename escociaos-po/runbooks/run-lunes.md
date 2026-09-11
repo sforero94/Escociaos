@@ -17,6 +17,33 @@ First Monday of the month adds: `feature-strategy` · `code-quality`.
 1. Run id: `YYYY-MM-DD-lunes`.
 2. Clone: `git clone --depth 50 https://github.com/sforero94/Escociaos.git /tmp/escociaos`.
    `npm ci` only if PRs are on the menu this run (lint/typecheck/test gate).
+
+   **2b. One worktree per agent — do this BEFORE dispatching anyone.** Agents that
+   share a single checkout cannot run the suite: installing dependencies moves the
+   tree under everyone else, so the mitigation becomes *turning the tests off*, and
+   a roster that cannot run the tests cannot see a red `main`. That is not
+   hypothetical — it is how `main` sat red for two days across a full Thursday
+   review (finding #92, 2026-09-11), and it is the read-side twin of #85.
+
+   ```sh
+   npm ci                                   # ONCE, in the main checkout, before dispatch
+   for a in <agent-slugs>; do
+     git worktree add -b claude/po-$a "$SCRATCH/wt/$a" origin/main
+     ln -s "$PWD/node_modules" "$SCRATCH/wt/$a/node_modules"
+   done
+   ```
+
+   Each agent gets its own worktree path and its own branch. **Forbid them to `cd`
+   outside it, and to run `git checkout` / `switch` / `reset --hard`** — those are
+   what move the tree under a sibling. The symlinked `node_modules` is what makes
+   one `npm ci` serve everyone.
+
+   Measured cost on 2026-09-11: one `npm ci` (~2 min) plus four `git worktree add`
+   (seconds). In exchange, four agents ran lint, typecheck and the full suite in
+   parallel without colliding, and the two-day-old red surfaced in the first five
+   minutes of the run.
+
+   Clean up with `git worktree remove --force <path>` then `git worktree prune`.
 3. Read `/tmp/escociaos/CLAUDE.md` in full (technical contract), then
    `/tmp/escociaos/escociaos-po/CLAUDE.md` (this operation's constitution) if
    you have not already — the bootstrapper prompt sent you here.
