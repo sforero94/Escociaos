@@ -74,3 +74,41 @@ prompt del agente en cada corrida. **Solo corre el primer lunes de cada mes.**
 - **`CLAUDE.md` raiz: 180.849 bytes / 846 lineas, +7,7% en 7 dias. La seccion `### Migrations` son 111.344 bytes = 62% del fichero.** Propuesta de mover el ledger a `docs/` = decision de Santiago, NUNCA dentro de una barrida.
 - **NO RE-REPORTAR**: los formateos numericos inline (deuda difusa, descartada dos veces). El `any` se concentra en `src/components/finanzas` (146), `fetchDatosReporteSemanal.ts` (95, frontera de dominio real) y `useReporteAplicacion.ts` (38); solo el segundo compra seguridad de verdad y es trabajo propio (M/L), nunca parte de una barrida.
 - **REGRESION DE WORKTREES** — ver `_compartida.md` y el hallazgo contra la operacion de esta corrida.
+
+## Corrida 2026-09-11-viernes (drenaje) — hallazgo #48
+
+### NAVEGACION — como se busca una constante de negocio duplicada en este repo
+**Por nombre NO sirve, y eso es el hallazgo entero.** El corte de gravedad tenia una copia llamada
+`calcularGravedad` y `grep clasificarGravedad` no la veia; `grep -rn calcularGravedad src/__tests__/`
+devolvia **cero**. Se busca **por FORMA**: un numero comparado cerca del rotulo que produce.
+
+Barrida validada sobre **879 ficheros** de `src/` + `supabase/` con **cero falsos positivos**: rotulo
+entre comillas + `(?:>=|<=|>|<)\s*\d+` en una ventana de ±3 lineas, contra una lista blanca explicita.
+Guarda resultante: **`src/__tests__/umbralGravedadContract.test.ts`**. Mismo patron que
+`jornalDivisorContract.test.ts`.
+
+**La guarda se valido plantando una sonda** con otro nombre (`nivelDeAfectacion`) y otra forma
+(`switch (true)`). Las dos redes la cazaron. Sonda retirada. **Una guarda estatica que no se probo
+contra una copia sintetica no esta probada.**
+
+### `src/supabase` NO LO MIRA NI `tsc` NI ESLINT
+`tsconfig.json` lo **excluye** y `eslint.config.js` lo **ignora**. Los dos arboles de edge function
+quedan fuera del typechecker y del linter. **Cualquier deuda que viva ahi solo la puede encontrar un
+test estatico.** Es la razon estructural de por que la cuarta copia sobrevivio: no habia herramienta
+que la leyera.
+
+### `priorizacion-scouting.ts` es el sitio correcto para logica pura compartida del arbol Deno
+**No tiene ni un import** y ya esta en el bundle desplegado (`chat.tsx` y `acciones-paquete.ts` lo
+importan). Importarlo desde una conversacion de Telegram **no cuesta bundle**. Es preferible a
+reimplementar.
+
+### Cuanto valia el agujero del #48 (medido, no estimado)
+`monitoreos` = **4.244 filas**, todas con `gravedad_texto`. **0** violan el corte 10/30 vigente.
+**658 violarian un corte 15/30** — ese era el radio expuesto. Util como plantilla: **cuantificar una
+duplicacion latente contando las filas que un umbral divergente habria marcado distinto.**
+
+### Baseline
+`main@0aba907`: lint **906 warnings** antes / **898** despues del PR #221 (ninguno nuevo; la baja es por
+el codigo borrado), `tsc` limpio, `npx vitest run` **173 ficheros / 3.717 tests con 1 ROJO PREEXISTENTE**
+(`hatoSchemaContract.test.ts`, prefijo de migracion `140` duplicado). **Ese rojo no es de ningun PR de
+esta corrida** — filado como hallazgo contra la operacion.

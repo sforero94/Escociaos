@@ -1285,3 +1285,138 @@ la reemplaza.** Para anexar sin perder, leer primero la propiedad y reenviar vie
 adicion como BLOQUE DE CUERPO con `insert_content` (que es lo que se hizo bien en #69). Ojo ademas:
 `update_content` opera sobre el CUERPO de la pagina, nunca sobre una propiedad — fallo con «No matches
 found» al intentar corregir asi el campo.
+## Corrida 2026-09-11-viernes (drenaje del backlog)
+
+- Modo: **full write · Notion OPERATIVO · preflight 5/5 sin un solo prompt de permiso.**
+- Conjunto elegible: **9 de 20 abiertos** (8 `codigo` + 1 `ddl_aditivo`). Tomados 4 por el cap
+  (3 `codigo` + 1 `ddl_aditivo`), **5 diferidos y ninguno descartado**: #66, #69, #71, #77, #78.
+- Pase de antiguedad: **vacio**. El hallazgo abierto mas viejo tiene 18 dias; el umbral son 60.
+
+### EL PATRON DE AISLAMIENTO QUE POR FIN FUNCIONA — adoptarlo en los tres runbooks
+El problema de «todos los agentes comparten UN checkout» (hallazgo #85, y el error propio del
+2026-08-27) tenia una mitigacion que costaba mas de lo que ahorraba: el 2026-09-10 se le PROHIBIO a
+`bug-triage` correr `npm test`/`lint`/`typecheck` porque `node_modules` no estaba instalado e
+instalarlo mutaba el arbol de los otros tres. **Con la suite apagada, un `main` rojo es invisible —
+y lo fue, durante dos dias.**
+
+La receta de hoy, medida y barata:
+1. `npm ci` **UNA vez**, en el checkout principal, **antes** de despachar a nadie (~2 min).
+2. `git worktree add -b claude/po-viernes-<slug> <scratchpad>/wt/<id> HEAD` — uno por agente.
+3. `ln -s /home/user/Escociaos/node_modules <worktree>/node_modules`.
+4. En el prompt del agente, prohibicion explicita de `cd` fuera de su worktree y de
+   `git checkout`/`switch`/`reset --hard`.
+
+Resultado: los 4 agentes corrieron lint + typecheck + suite entera en paralelo sin pisarse, y el rojo
+de `main` aparecio en los primeros cinco minutos. **Es la contraparte constructiva de #85**: aquel
+dice «no compartan arbol», esto dice como no compartirlo sin perder la suite.
+
+### LINEA BASE DE LA SUITE EN `main@0aba907` — `main` ESTA ROJO
+`npx vitest run` → **172 ficheros / 3.718 tests, 1 EN ROJO**. Lint **0 errores / 898 warnings**.
+`tsc --noEmit` limpio.
+
+El rojo es `hatoSchemaContract.test.ts:219`: **dos migraciones con prefijo `140`**
+(`140_hato_registrar_tratamiento.sql` + `140_respaldo_pl_chequeo_vacas.sql`), las dos rastreadas en
+HEAD desde `11c2a93` (2026-09-09). **Rojo desde el 09-09 y la corrida del jueves 09-10 no lo vio**,
+por la prohibicion de arriba. Filado como hallazgo contra la operacion (la unica clase que el viernes
+puede filar).
+
+**Al abrir un PR estos dias, ese rojo NO es del PR.** Verificarlo contra `main` antes de razonar
+sobre el, y no dejar que un agente concluya «la suite dejo de ser señal» — es el mismo susto que ya
+hubo el 2026-08-27.
+
+### `CLAUDE.md` MIENTE SOBRE TRES MIGRACIONES MAS, y en la direccion que el lunes NO vigila
+El lunes vigila **aplicada-sin-fusionar**. Hoy no hay ninguna: las 9 de `133`–`141` tienen fichero en
+`main` Y fila en el ledger. Lo que si hay es lo contrario — **fusionada y aplicada, pero documentada
+como SIN APLICAR**:
+
+| Migracion | `CLAUDE.md` | Ledger | Catalogo vivo |
+|---|---|---|---|
+| 133 `insert_update_por_rol` | l. 342 «ESCRITA, FUSIONADA Y SIN APLICAR» | `20260901022335` | barrido always-true INSERT/UPDATE = **0** (la ficha dice 33 sobre 20 tablas) |
+| 137 `get_user_role_respeta_activo` | l. 357 «ESCRITA, SIN APLICAR» | `20260908160300` | `get_user_role` **si** filtra `activo` |
+| 141 `venta_ganado_peso_destare` | l. 376 «ESCRITA, SIN APLICAR» | `20260909130404` | las 2 columnas nuevas existen |
+
+**Las dos primeras son endurecimientos de RLS**, asi que el coste no es cosmetico: un agente que crea
+el `CLAUDE.md` concluye que sigue abierto un agujero de INSERT/UPDATE sobre 20 tablas y que una cuenta
+desactivada pasa ~125 politicas. Las dos cosas son falsas hoy. Anexado como evidencia nueva al **#69**
+ya abierto (bloque de cuerpo, sin sobrescribir `Evidencia`) — el viernes no fila hallazgos nuevos.
+
+### TRAMPAS DE TOOLS NUEVAS ESTA CORRIDA
+- **`notion-update-page` exige un UUID crudo en `page_id`; una URL de Notion la RECHAZA** con
+  `validation_error: should be a valid uuid`. `notion-query-data-sources` si devuelve URLs. O sea que
+  el valor que sale de una consulta **no** se puede pasar tal cual a la actualizacion — hay que
+  extraer el id. (Complementa la nota del 2026-09-10 sobre que `update_properties` reemplaza y no
+  anexa.)
+- **`pg_get_functiondef` revienta con `42809: "array_agg" is an aggregate function`** si el barrido
+  toca funciones agregadas. Filtrar siempre `p.prokind = 'f'` y `lanname IN ('sql','plpgsql')`.
+  `prolang <> 'internal'::regnamespace::oid` **no** compila (`3F000: schema "internal" does not exist`) —
+  hay que unir contra `pg_language`.
+
+### ERROR PROPIO 2026-09-11 — se uso `reset --hard` donde la leccion dice `branch -f`
+Arranque: `HEAD` desprendido en `0aba907` (correcto) y rama local `main` en `1a97b2d`, 46 commits
+atras. Se corrigio con `git checkout main && git reset --hard origin/main`, que **rebobina el arbol de
+trabajo** — justo lo que el error propio del 2026-08-27 documenta y lo que la leccion del 2026-09-03
+manda evitar usando `git branch -f main origin/main`.
+
+**Sin consecuencia esta vez, y la razon importa mas que el error**: se hizo en Phase 0, **antes de
+despachar a nadie**, que es exactamente la condicion bajo la cual la leccion lo permite. Pero fue
+suerte de secuencia, no disciplina. **`git branch -f main origin/main` es la forma correcta y no
+tiene ningun caso en que sea peor.** Escrito aqui por tercera vez; si vuelve a pasar, el problema no
+es la memoria sino que la rutina de Phase 0 no lo tiene como comando literal.
+
+### Racha de auto-poda del viernes (regla del runbook)
+| Corrida | Elegibles | Vacias seguidas |
+|---|---|---|
+| 2026-08-28-viernes | 6 | 0 |
+| 2026-09-04-viernes | 8 | 0 |
+| **2026-09-11-viernes** | **9** | **0** |
+
+La auto-poda **no aplica** — tres viernes seguidos con trabajo. Pero la serie **6 → 8 → 9 elegibles
+contra un cap fijo de 4** dice que el viernes ya no drena mas rapido de lo que lunes y jueves llenan.
+Va a `REQUIERE TU DECISION`: subir el cap, o aceptar que el `codigo` P2/S se acumula.
+
+### GATE 4 CORREGIDO — el numero de migracion tambien hay que buscarlo en las RAMAS ABIERTAS
+La migracion 142 de esta corrida **no se aplico**: su revision adversarial la declaro `unsafe` y uno de
+los dos motivos fue que **el numero ya estaba tomado**.
+
+```
+origin/claude/po-viernes-actor-nombre-correo -> 142_fn_ronda_actor_nombre_prefiere_correo.sql
+origin/cursor/hato-gestor-alertas-fb81       -> 142_alertas_defaults_campo_secado_tratamiento.sql
+```
+
+La segunda es de la PR #218 (issue #217), abierta, sin fusionar, y con cabecera «NO APLICAR — espera el
+go del dueño». Fusionar las dos deja **dos ficheros `142_*`** = el bug del `140` reproducido el mismo
+dia en que se filo.
+
+**Lo importante: el agente comprobo las TRES fuentes que manda el runbook** — nombres de fichero en
+`main`, `supabase_migrations.schema_migrations`, y el esquema `respaldos` — **y las tres estaban
+limpias.** El runbook §Phase 2 gate 4 dice «max() sobre los nombres de fichero Y el ledger». **Le falta
+la tercera fuente.** Comando que hay que correr, y que hoy fue el unico que lo vio:
+
+```sh
+git fetch origin --prune
+for r in $(git for-each-ref --format='%(refname)' refs/remotes/origin); do
+  f=$(git ls-tree -r --name-only "$r" -- src/sql/migrations/ 2>/dev/null | grep -E "/${N}_" || true)
+  [ -n "$f" ] && echo "$r -> $f"
+done
+```
+
+Es la **tercera** renumeracion forzada en dos semanas (140 dos veces, ahora 142). El patron comun es
+siempre el mismo: **se eligio el numero mirando una fuente que no contenia al competidor.**
+
+### UN `CREATE OR REPLACE FUNCTION` PUEDE TENER LLAMANTES QUE `pg_proc` NO VE
+El otro motivo del `unsafe` de la 142: `fn_ronda_actor_nombre` no la llaman solo los 2 RPC que salen
+del barrido de `pg_proc`. La llama **TypeScript por RPC**, `ronda-helpers.ts:546`
+(`resolverNombreActor`), y de ahi a **dos sitios de presentacion**: `telegram/bot.ts:1029` y
+`ronda-inventario-tick.ts:589` (`cerradoPorNombre`, **la firma del informe de cierre**). El cambio
+habria puesto `-- sforero94@gmail.com` donde hoy dice `-- Santiago Forero`, y `martik07@gmail.com`
+donde dice `Martha Vega`.
+
+**Regla: el barrido de llamantes de una funcion NO es `pg_proc` + `pg_policy`. Es eso MAS
+`grep -rn '<nombre_funcion>' --include=*.ts --include=*.tsx src/ supabase/`**, porque cualquier
+`supabase.rpc('<nombre>')` es un llamante invisible al catalogo. Vale para toda la familia
+`fn_*` que el frontend o el bot invoquen.
+
+Corolario de diseno que se gano el sitio: **una funcion que sirve a la vez a una columna de atribucion
+y a un mensaje para un humano tiene dos duenos y ningun orden de `COALESCE` los contenta a los dos.**
+La forma correcta son dos helpers. El comentario de `ronda-helpers.ts:535-540` presume lo contrario
+explicitamente («para que esa regla tenga un solo dueño»), y esa presuncion es el defecto.

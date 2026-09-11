@@ -493,3 +493,73 @@ Cortar SIEMPRE la rama de `origin/main`, nunca de la rama del PR anterior.
   - #70: 42 grupos, `max(fecha_trabajo)=2026-08-26`, `max(created_at)=2026-09-01`.
   - #65: 2 dias, `max(fecha)=2026-08-29`, `max(lecturas_count)=349`.
   - #45: 2.558 mensual / 134 por jornal / 147 NULL de 2.839.
+
+## Corrida 2026-09-11-viernes (drenaje) — tres hallazgos tocados
+
+### Baseline — `main@0aba907` ESTA ROJO, y el rojo NO es tuyo
+`npx vitest run` → **173 ficheros / 3.717 tests, 1 EN ROJO**; lint **0 errores / 898 warnings**;
+`tsc --noEmit` limpio. El rojo es `hatoSchemaContract.test.ts` por el **prefijo `140` duplicado**
+(`140_hato_registrar_tratamiento.sql` + `140_respaldo_pl_chequeo_vacas.sql`), preexistente desde
+`11c2a93` (2026-09-09). **Los tres agentes de esta corrida lo confirmaron por separado**, uno de ellos
+guardando su rama con `stash` y re-corriendo sobre `origin/main` limpio. Al abrir un PR estos dias,
+comprobar el rojo contra `main` ANTES de razonar sobre el — y NO concluir «la suite dejo de ser señal»,
+que es el susto del 2026-08-27.
+
+### Estados aceptados (no re-investigar)
+- **`movimientos_inventario.responsable`: 165 filas / 162 atribuidas / 161 correo / 1 nombre**
+  (`'Santiago Forero'`, 2026-08-29). La prediccion del 08-28 se cumplio y **no volvio a crecer** entre
+  el 08-31 y el 09-11: sigue siendo UNA fila. Escritores: los 3 de TypeScript + los 2 RPC de ronda via
+  `fn_ronda_actor_nombre`.
+- **La fila `'Santiago Forero'` coincide con el `nombre_completo` de `sforero94@gmail.com` Y con el
+  `nombre_display` de Telegram del mismo `usuario_id`**; `santiago@thinksid.co` es «Santiago Admin».
+  O sea que las dos fuentes candidatas apuntan hoy a la misma cuenta. **Sigue siendo `clase datos` y
+  la decision es de Santiago — no repararlo por deduccion.**
+- **`tratamiento_paso` lleva 3 alertas, no 2.** La tercera (2026-09-11, Vaca 176 FABIOLA,
+  `fecha_programada` = ese mismo dia, `enviada`) **es correcta**. La regla dispara a diario y los casos
+  «vence hoy» y «vencido» conviven: al auditarla, contar los de hoy aparte de los atrasados.
+- **`usuarios`: 10 cuentas, 0 inactivas. `uriel@escocia.com` figura como Administrador**, no
+  Verificador — la memoria del 2026-09-03 lo daba como el primer Verificador. No investigado.
+- **Las 5 filas de `telegram_usuarios` tienen `usuario_id` poblado** (2026-09-11), asi que el correo es
+  alcanzable tambien por el camino de Telegram. La columna sigue siendo NULLABLE: el caso sin vinculo
+  existe en el modelo, no en los datos.
+
+### Navegacion
+- **`fn_ronda_validar_actor` (126) exige EXACTAMENTE UNO de `p_usuario`/`p_telegram`**
+  (`IF (p_usuario IS NULL) = (p_telegram IS NULL) THEN RAISE`), y los dos llamantes la invocan antes de
+  usar el nombre. Razonando sobre cualquier helper de actor de la ronda, **el caso «los dos presentes»
+  NO EXISTE** — no hace falta inventarle precedencia.
+- **La unidad de una excepcion de ronda y la de su movimiento salen de FUENTES DISTINTAS, a proposito.**
+  La excepcion la toma del alcance **congelado** (`rondas_inventario_alcance.unidad`, mismo snapshot que
+  `nombre_producto`, R-5); el movimiento la toma **viva** de `productos.unidad_medida`, porque puede ser
+  de un producto que nunca estuvo en el alcance (`entrada_fuera_de_alcance`, P-3) y ahi el snapshot no
+  tiene fila. **Cotejar las dos al auditar una ronda.**
+- **`sufijoUnidad` se exporta ahora desde `src/utils/rondaInventario/resolucion.ts`** y lo consumen
+  `preview.ts` y `reporteCierre.ts`. **No escribir un cuarto formateador de unidad en el modulo.** Queda
+  **una copia inline sin migrar**: `renderConfirmacionPropuesta` (mismo fichero), que toma
+  `unidad: string` no-nulable — no se toco por disciplina de alcance.
+- **`docs/hato/regenerar-copias-hato-alertas.py`** funciona igual que el de `importHato`: reescribe los
+  dos arboles de golpe y corre con `--check`. **Nunca editar a mano `hato-alertas.ts`.** Equivalente del
+  modulo de inventario: `docs/inventario/regenerar-copias-ronda-inventario.py --check` → `OK: 16 copias`.
+- **`hato_alertas` NO tiene columna `mensaje`**: el texto vive en `datos->>'mensaje'`. Consultarla por
+  `mensaje` devuelve `42703`.
+
+### TECNICA QUE SE GANA EL SITIO — validar una migracion contra produccion SIN escribir
+**El conector de solo lectura SI ejecuta un bloque `DO $$ … $$` que solo lee y hace `RAISE`.** Es la
+forma barata de probar la sintaxis y las guardas de una migracion contra el estado real **sin escribir
+nada**: la precondicion de la 142 se valido asi, y la postcondicion tambien — abortó con su mensaje
+correcto («el cuerpo todavia menciona nombre_completo»), demostrando que detecta el reemplazo que no
+tomo. Vale para cualquier migracion de esta clase, y convierte el gate 2 en algo comprobable en vez de
+argumentable.
+
+### Dos trampas de expresion regular sobre SQL
+- **`\bemail\b` NO casa `v_email`**: el guion bajo es caracter de palabra. Costo un rojo falso.
+  Usar `/email/i`.
+- **Un stripper de comentarios SQL tiene que respetar las comillas en las dos direcciones**: la 126
+  tiene un literal que contiene `--` (`'Captura directa -- ronda de inventario, excepcion …'`) y las
+  118/119/130/142 tienen bloques ROLLBACK con SQL entero comentado. Un stripper ingenuo rompe los dos.
+
+### Patron de fondo del motor de alertas del hato
+`construirMensajeAlerta` **afirma tiempo sin recibir la fecha de referencia**. Ese es el defecto del
+#89, y **`secado_due` (`hatoAlertas.ts:184`) tiene la MISMA forma** («se debe secar hoy (fecha
+programada: X)») y sigue sin arreglar, a proposito, por falta de evidencia propia. **Al tocar cualquier
+mensaje de este motor, preguntar primero si el texto afirma algo que el selector no garantiza.**
