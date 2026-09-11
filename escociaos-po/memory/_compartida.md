@@ -1475,3 +1475,25 @@ frenado, y salió con la forma que esa revisión proponía: **dos helpers en vez
 3. **La técnica de correr el bloque de precondiciones por el conector de solo lectura ANTES de
    aplicar funcionó otra vez.** Las 11 precondiciones pasaron, incluidos los dos md5, y eso se supo
    sin escribir nada.
+
+### UN PR QUE ATIENDE PARTE DE UN HALLAZGO NO LO CIERRA — LEER LA `Accion recomendada` ANTES DE MARCAR `Done`
+Error propio del 2026-09-11, atrapado por poco. El PR #226 fijó el patrón de worktree **en los
+runbooks** y se afirmó —en el cuerpo del PR y en una nota de Notion— que cerraba el hallazgo **#85**.
+No lo cerraba. Al ir a marcarlo `Done` se leyó su `Accion recomendada` y pedía **dos** cosas, y el PR
+había hecho una, **en un sitio distinto del que el hallazgo nombra**:
+
+1. la regla va en la **plantilla de despacho de `escociaos-po/CLAUDE.md`**, no en los runbooks — y ese
+   sitio ES la lección del hallazgo («a rule kept only in memory is a rule that decays»: la regla ya
+   existía, funcionaba el 2026-08-06, y regresó sola el 2026-09-07 por no estar en el prompt de
+   despacho);
+2. un **chequeo previo al commit de memoria** (`git status --short` vacío y `main == origin/main`) que
+   no existía en ningún sitio.
+
+**La regla que se lleva: antes de poner un hallazgo en `Done`, releer su `Accion recomendada` y
+cotejarla punto por punto contra lo que se hizo.** Un hallazgo bien filado enumera sus partes; darlo
+por cerrado desde el recuerdo del PR es cómo se pierde la mitad que no se hizo. Vale doble cuando el
+hallazgo es contra la operación, porque ahí no hay un test que se ponga rojo si queda a medias.
+
+**Corolario sobre dónde vive una regla de la operación**: los runbooks llevan la receta (comandos,
+limpieza), la constitución lleva la regla en el punto donde se ejecuta (§3 despacho, §4 Phase 5). Una
+regla que sólo vive en `memory/` se degrada; una que sólo vive en un runbook no la ve quien despacha.
