@@ -1,11 +1,41 @@
 -- =============================================================================
--- 140_respaldo_pl_chequeo_vacas.sql
+-- 143_respaldo_pl_chequeo_vacas.sql
 --
 -- RENUMERADA 138 -> 140 al integrar con `main`: dos sesiones paralelas ya
 -- habían tomado 138 (`pajillas_jerico_stock_cero`) y 139
 -- (`hato_duplicados_guardarrail`). El guard `hatoSchemaContract.test.ts` lo
 -- atrapó. Es la misma colisión que la 101/102 y las 124-130 -- verificar el
 -- catálogo VIVO antes de numerar, nunca un número heredado de un documento.
+--
+-- RENUMERADA OTRA VEZ, 140 -> 143 (2026-09-11). La renumeración anterior dejó
+-- DOS ficheros con prefijo `140` -- éste y `140_hato_registrar_tratamiento.sql`
+-- -- y `hatoSchemaContract.test.ts` llevaba desde el 2026-09-09 EN ROJO por eso,
+-- o sea que la suite entera dejó de ser señal durante dos días. Se mueve éste y
+-- no el otro por tener menos superficie de citas.
+--
+-- EL NÚMERO 143 ES SÓLO EL SIGUIENTE SLOT LIBRE, NO LA POSICIÓN CRONOLÓGICA.
+-- Mismo criterio que las 067 / 079 / 108. Esta migración corrió el 2026-09-09
+-- (ledger `20260909002311`), o sea ANTES que `140_hato_registrar_tratamiento`
+-- (`20260909002904`) y antes que la 141 (`20260909130404`). El orden de los
+-- nombres de fichero no reconstruye el orden de aplicación -- para eso está el
+-- ledger, que es quien manda.
+--
+-- EL LEDGER NO SE DESALINEA CON ESTE RENOMBRE, y por eso se puede hacer: sus
+-- filas se llaman `renombrar_respaldo_pl_a_140` y
+-- `hato_registrar_tratamiento_renumerada_140`, no se indexan por el nombre del
+-- fichero, y la clave es `version`. El `_a_140` de esa fila es un nombre
+-- histórico: describe la renumeración de 2026-09-09, no dónde vive el fichero
+-- hoy. NO se toca -- una fila del ledger de una migración ya aplicada no se
+-- edita.
+--
+-- EL CONTENIDO NO SE TOCA. Está aplicada. El renombre es del fichero y nada más.
+--
+-- AL ELEGIR EL SIGUIENTE NÚMERO, MIRÁ TAMBIÉN LAS RAMAS ABIERTAS. 142 está
+-- tomada por `142_alertas_defaults_campo_secado_tratamiento.sql`, en la rama de
+-- la PR #218, sin fusionar -- las tres fuentes que sí manda revisar el runbook
+-- (ficheros en `main`, `supabase_migrations.schema_migrations`, esquema
+-- `respaldos`) están limpias en 142, y aun así el número está ocupado. Es
+-- exactamente la forma en que nació esta colisión.
 --
 -- RESPALDO PREVIO al cambio de semántica de `hato_chequeo_vacas.pl`.
 --
