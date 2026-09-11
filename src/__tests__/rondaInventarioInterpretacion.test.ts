@@ -86,7 +86,8 @@ function resolverFilaPreview(hallazgo: HallazgoCrudo, alcance: readonly Producto
   // El teórico SIEMPRE sale del alcance congelado (R-5), nunca de lo que
   // dijo Uriel -- acá el fixture guarda el teórico junto al alcance para
   // simular `rondas_inventario_alcance.cantidad_teorica`.
-  const teorico = (alcance.find((p) => p.productoId === resolucion.productoId) as ProductoEnAlcanceConTeorico).teoricoFoto;
+  const itemAlcance = alcance.find((p) => p.productoId === resolucion.productoId) as ProductoEnAlcanceConTeorico;
+  const teorico = itemAlcance.teoricoFoto;
   const fisicoResuelto = derivarFisico(hallazgo, teorico);
   const causa = hallazgo.causaClave ? buscarCausaRaiz(hallazgo.causaClave) : undefined;
 
@@ -95,7 +96,9 @@ function resolverFilaPreview(hallazgo: HallazgoCrudo, alcance: readonly Producto
     productoIdentificado: true,
     productoId: resolucion.productoId,
     nombreProducto: resolucion.nombreProducto,
-    unidad: 'Kilos',
+    // La unidad sale del alcance congelado, igual que el teórico (R-5) --
+    // el fixture la guarda al lado para simular `rondas_inventario_alcance.unidad`.
+    unidad: itemAlcance.unidadFoto,
     fisico: fisicoResuelto.estado === 'resuelto' ? fisicoResuelto.fisico : null,
     fisicoOrigen: fisicoResuelto.estado === 'resuelto' ? fisicoResuelto.origen : null,
     teorico,
@@ -110,6 +113,7 @@ function resolverFilaPreview(hallazgo: HallazgoCrudo, alcance: readonly Producto
 
 interface ProductoEnAlcanceConTeorico extends ProductoEnAlcance {
   teoricoFoto: number;
+  unidadFoto: string | null;
 }
 
 function respuestaModelo(hallazgos: Array<Record<string, unknown>>, observacionesLibres: string[] = [], avisos: string[] = []) {
@@ -127,8 +131,8 @@ const TRANSCRITO_FIXTURE_1 =
  * teórico 100 kg, Martillos con teórico 8 unidades -- los mismos números que
  * el dueño escribió como salida esperada. */
 const ALCANCE_FIXTURE_1: ProductoEnAlcanceConTeorico[] = [
-  { productoId: 'prod-silicalmag', nombre: 'Silicalmag', teoricoFoto: 100 },
-  { productoId: 'prod-martillos', nombre: 'Martillos', teoricoFoto: 8 },
+  { productoId: 'prod-silicalmag', nombre: 'Silicalmag', teoricoFoto: 100, unidadFoto: 'Kilos' },
+  { productoId: 'prod-martillos', nombre: 'Martillos', teoricoFoto: 8, unidadFoto: 'Unidades' },
 ];
 
 /** La salida del modelo intérprete para este transcrito -- construida a
@@ -212,8 +216,11 @@ describe('fixture #1 -- §11.1 del brief de producto (literal)', () => {
     expect(renderPreviewTelegram(preview)).toBe(
       [
         'Esto entendí de tu nota:',
-        '- Silicalmag: hay 90, deberían haber 100. Error de captura previa -- David lo resuelve',
-        '- Martillos: hay 5 (derivado), deberían haber 8. pasa a Santiago',
+        // ESCO-61: cada cifra lleva la unidad del alcance congelado, y son
+        // dos unidades DISTINTAS en el mismo preview -- que es justo por lo
+        // que omitirlas hacía ilegible el informe.
+        '- Silicalmag: hay 90 Kilos, deberían haber 100 Kilos. Error de captura previa -- David lo resuelve',
+        '- Martillos: hay 5 Unidades (derivado), deberían haber 8 Unidades. pasa a Santiago',
         '',
         '¿Confirmas? [Confirmar] [Corregir] [Descartar]',
       ].join('\n'),
@@ -391,7 +398,7 @@ describe('adversarial: "faltan 3" sin cantidad física dictada -> derivado, rotu
     // con `fisico: null`, así que `previewConfirmable` deja el botón
     // [Confirmar] apagado y Uriel tiene que corregir por texto (A-9).
     const alcance: ProductoEnAlcanceConTeorico[] = [
-      { productoId: 'p-15', nombre: '15-15-15', teoricoFoto: 0 },
+      { productoId: 'p-15', nombre: '15-15-15', teoricoFoto: 0, unidadFoto: 'Kilos' },
     ];
     const fila = resolverFilaPreview(hallazgo, alcance);
     expect(fila.fisico).toBeNull();

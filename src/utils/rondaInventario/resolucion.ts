@@ -38,7 +38,17 @@ function formatearCantidadResolucion(valor: number): string {
   }).format(valor);
 }
 
-function sufijoUnidad(unidad: string | null): string {
+/** Unidad de medida como SUFIJO de una cantidad ya formateada -- ' Kilos',
+ * ' Litros', o cadena vacía si no se conoce (nunca una unidad inventada ni un
+ * marcador de relleno).
+ *
+ * Exportado desde acá porque es el único helper de unidad del módulo:
+ * `preview.ts` y `reporteCierre.ts` lo consumen en vez de reimplementarlo
+ * (ESCO-61 -- los dos imprimían cantidades peladas mientras esta pantalla
+ * intermedia sí mostraba la unidad, y esa asimetría produjo un reporte de
+ * cierre que se contradecía a sí mismo: «hay 3» contra «Entrada de 150» para
+ * el mismo producto, porque el 3 era en bultos y el 150 en kilos). */
+export function sufijoUnidad(unidad: string | null): string {
   return unidad ? ` ${unidad}` : '';
 }
 

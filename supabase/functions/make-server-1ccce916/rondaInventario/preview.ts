@@ -38,6 +38,7 @@
 
 import type { FisicoOrigen } from './interpretarNota.ts';
 import type { ViaExcepcion } from './causasRaiz.ts';
+import { sufijoUnidad } from './resolucion.ts';
 
 // ---------------------------------------------------------------------------
 // 1. Una fila del preview -- ya resuelta (producto, físico, vía)
@@ -149,9 +150,16 @@ function renderFila(fila: FilaPreview): string {
     return `${fila.nombreProducto}: falta la cantidad física para poder confirmar`;
   }
 
+  // ESCO-61: la unidad va SIEMPRE pegada a la cifra, en las dos. `fila.unidad`
+  // ya venía poblada desde el alcance congelado (`resolverHallazgos.ts`) y
+  // simplemente no se imprimía, así que «hay 3, deberían haber 0» no decía si
+  // eran bultos o kilos -- la misma ambigüedad que dejó un reporte de cierre
+  // contradiciéndose contra su propio movimiento de 150. `sufijoUnidad`
+  // devuelve cadena vacía cuando no hay unidad: nunca se inventa una.
+  const unidad = sufijoUnidad(fila.unidad);
   const fisicoTexto = fila.fisicoOrigen === 'derivado'
-    ? `${formatearCantidad(fila.fisico)} (derivado)`
-    : formatearCantidad(fila.fisico);
+    ? `${formatearCantidad(fila.fisico)}${unidad} (derivado)`
+    : `${formatearCantidad(fila.fisico)}${unidad}`;
 
   const causaTexto = fila.causaEtiqueta ? `${fila.causaEtiqueta} -- ` : '';
   // CA-4: este producto no estaba en el alcance que se congeló al abrir la
@@ -159,7 +167,7 @@ function renderFila(fila: FilaPreview): string {
   // lea como si el sistema ya lo estuviera contando.
   const fueraDeAlcanceTexto = fila.fueraDeAlcance ? ' (no estaba en el alcance -- se agrega al confirmar)' : '';
 
-  return `${fila.nombreProducto}${fueraDeAlcanceTexto}: hay ${fisicoTexto}, deberían haber ${formatearCantidad(fila.teorico)}. ${causaTexto}${fraseVia(fila.via)}`;
+  return `${fila.nombreProducto}${fueraDeAlcanceTexto}: hay ${fisicoTexto}, deberían haber ${formatearCantidad(fila.teorico)}${unidad}. ${causaTexto}${fraseVia(fila.via)}`;
 }
 
 /**

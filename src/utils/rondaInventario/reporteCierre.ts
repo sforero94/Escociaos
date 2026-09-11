@@ -18,6 +18,7 @@
 // conteo, aunque el render de §8.3 los agrupe bajo tres títulos.
 
 import type { ViaExcepcion } from './causasRaiz';
+import { sufijoUnidad } from './resolucion';
 
 // ---------------------------------------------------------------------------
 // 1. Formato colombiano local -- mismo motivo que preview.ts: este módulo se
@@ -114,6 +115,11 @@ export interface ExcepcionReporteCierre {
   estado: EstadoExcepcionRonda;
   fisico: number | null;
   teorico: number | null;
+  /** ESCO-61: unidad de medida de las dos cifras de arriba, tomada del
+   * alcance CONGELADO de la ronda (`rondas_inventario_alcance.unidad`, mismo
+   * snapshot del que sale `productoNombre` -- R-5). `null` cuando no se
+   * conoce: la cifra se imprime pelada, nunca con una unidad inventada. */
+  unidad: string | null;
   causaEtiqueta: string | null;
   via: ViaExcepcion | null;
 }
@@ -130,6 +136,11 @@ export interface MovimientoReporteCierre {
   productoNombre: string;
   tipoMovimiento: string;
   cantidad: number;
+  /** ESCO-61: unidad de medida de `cantidad` (`productos.unidad_medida`).
+   * Sin ella, un movimiento en kilos y una excepción contada en bultos se
+   * leían como la misma magnitud dentro del MISMO informe. `null` = no se
+   * conoce; se imprime la cifra pelada. */
+  unidad: string | null;
   origen: OrigenMovimientoRondaAbierta;
   responsable: string | null;
 }
@@ -209,8 +220,11 @@ const TITULOS: Record<DesenlaceReporte, string> = {
 };
 
 function renderExcepcion(e: ExcepcionReporteCierre): string {
+  // ESCO-61: la unidad va pegada a cada cifra, nunca al final de la frase --
+  // «sin cifra completa» no lleva unidad porque no hay cifra que calificar.
+  const unidad = sufijoUnidad(e.unidad);
   const cifras = e.fisico !== null && e.teorico !== null
-    ? `hay ${formatearCantidadCO(e.fisico)}, deberían haber ${formatearCantidadCO(e.teorico)}`
+    ? `hay ${formatearCantidadCO(e.fisico)}${unidad}, deberían haber ${formatearCantidadCO(e.teorico)}${unidad}`
     : 'sin cifra completa';
   const causa = e.causaEtiqueta ? ` -- ${e.causaEtiqueta}` : '';
   return `- ${e.productoNombre}: ${cifras}${causa}`;
@@ -224,7 +238,7 @@ const ETIQUETA_ORIGEN_MOVIMIENTO: Record<OrigenMovimientoRondaAbierta, string> =
 
 function renderMovimiento(m: MovimientoReporteCierre): string {
   const responsable = m.responsable ? ` -- ${m.responsable}` : '';
-  return `- ${m.productoNombre}: ${m.tipoMovimiento} de ${formatearCantidadCO(m.cantidad)} (${ETIQUETA_ORIGEN_MOVIMIENTO[m.origen]})${responsable}`;
+  return `- ${m.productoNombre}: ${m.tipoMovimiento} de ${formatearCantidadCO(m.cantidad)}${sufijoUnidad(m.unidad)} (${ETIQUETA_ORIGEN_MOVIMIENTO[m.origen]})${responsable}`;
 }
 
 /**
