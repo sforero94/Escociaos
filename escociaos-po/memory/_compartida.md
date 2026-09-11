@@ -1445,3 +1445,33 @@ grep -c "<simbolo del arreglo>" <fichero-que-deja-get_edge_function>
 0 = no desplegado, ≥1 = desplegado. Asi se comprobo en la misma pasada que `VENCIDO desde` (el
 arreglo del #89, PR #219, ya fusionado) **NO** esta en el paquete: fusionado y no desplegado, la
 distincion que la leccion del 2026-08-24 dice que hay que hacer siempre.
+
+### MIGRACION 143 APLICADA A PRODUCCION (2026-09-11 16:18 UTC, ledger `20260911161812`)
+Santiago la pidió explícitamente. Es la reescritura de la 142 que la revisión adversarial había
+frenado, y salió con la forma que esa revisión proponía: **dos helpers en vez de uno**.
+
+**Verificación de estado, antes y después** — no basta el `success` del tool:
+
+| | antes | después |
+|---|---|---|
+| `md5(fn_ronda_actor_nombre.prosrc)` | `a195b99a6942c61a0f828e3aaa1a7c19` | **idéntico** |
+| `fn_ronda_actor_correo` | no existe | existe, INVOKER/STABLE/sql, `search_path` pineado, ACL sin `anon` |
+| los dos escritores | usan `actor_nombre` | usan `actor_correo`, md5 = los pines de la postcondición |
+| `movimientos_inventario` | 165 / 161 con `@` / 1 sin | **idéntico** |
+
+**LO QUE SE GANA GUARDAR, y aplica a toda migración con `CREATE OR REPLACE`:**
+
+1. **Fijar el `md5(prosrc)` del cuerpo VIVO en la precondición.** Es lo único que impide que un
+   `CREATE OR REPLACE` pise en silencio un cambio hecho fuera del repo. Acá importó de verdad:
+   producción conservaba **cuatro mensajes `RAISE` más cortos** que el fichero 126, así que reproducir
+   «el fichero» habría revertido esos textos sin que nadie lo notara. La 143 reproduce el cuerpo
+   **vivo**. Corolario: **el fichero de una migración vieja NO es la fuente de verdad del cuerpo que
+   corre hoy.**
+2. **El conector de solo lectura NO puede ejecutar funciones con `GRANT` acotado** (`42501` en
+   `fn_ronda_actor_correo`, cuyo EXECUTE es sólo `authenticated` + `service_role`). Es el ACL
+   funcionando. Consecuencia práctica: el comportamiento de una función así se verifica **desde las
+   postcondiciones de la migración**, que corren como `postgres`, no desde el conector. Al verificar
+   después, limitarse al catálogo (`pg_proc`, `proacl`, `md5(prosrc)`).
+3. **La técnica de correr el bloque de precondiciones por el conector de solo lectura ANTES de
+   aplicar funcionó otra vez.** Las 11 precondiciones pasaron, incluidos los dos md5, y eso se supo
+   sin escribir nada.
