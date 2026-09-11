@@ -38,12 +38,33 @@ requirement and a decision that belong to a live exchange.
 
 ### Caps, per run
 
-- **3** `codigo` PRs.
+- **5** `codigo` PRs.
 - **1** `ddl_aditivo` migration. One. Not "one per finding".
 
 If more qualify, take the highest `Severidad × Esfuerzo⁻¹` (P2 before P3, S
 before M) and **say in the report how many were left and why**. Silent
 truncation is a reporting failure here exactly as it is on Monday.
+
+> **Why `codigo` went 3 → 5 (Santiago, 2026-09-11): «this run is intended to fix
+> and clean the queue, not add to it».** The eligible set ran 6 → 8 → 9 across
+> three consecutive Fridays against a fixed cap of 4 total, so the drain was
+> losing to the fill — which defeats the entire reason the Friday run exists
+> (constitution §3: *Monday and Thursday find; Friday finishes*). The deferred
+> work was not marginal: the five left on 2026-09-11 were all P2, effort S,
+> `Confianza: Alta` — ready work, not open questions.
+>
+> **The `ddl_aditivo` cap stays at 1, and raising it later would be a different
+> argument.** That one is not a throughput limit: it is the blast radius of the
+> single unattended production write the operation permits, and it is what makes
+> the five gates affordable per run. The same day the code cap rose, the adversarial
+> review returned `unsafe` and stopped a migration that would have put an e-mail
+> where the monthly report signs a name. One migration per run is what buys that
+> scrutiny.
+>
+> **Five, and not more, for a concrete reason**: each `codigo` agent needs its own
+> worktree (Phase 0 step 2b) and runs the full suite in it. Five is what the run
+> has been observed to carry inside the 90-minute deadline with the verification
+> gate intact. Raise it again only with a run that finishes early, not on appetite.
 
 ---
 
@@ -51,8 +72,13 @@ truncation is a reporting failure here exactly as it is on Monday.
 
 **Phase 0 — Boot**
 
-Identical to Monday (constitution §4), including the **tool preflight** and the
-**dead-man check**, plus one Friday-specific step:
+Identical to Monday (constitution §4), including the **tool preflight**, the
+**dead-man check** and **step 2b (one `git worktree` per agent, one `npm ci`
+before dispatch)** — non-negotiable here, because every Friday agent opens a PR
+and the constitution requires lint, typecheck and the suite green before it does.
+A shared checkout makes that gate unrunnable, which is how it gets skipped.
+
+Plus one Friday-specific step:
 
 - Read the open backlog from Notion and compute the eligible set above. **If it
   is empty, say so and stop.** A Friday with nothing to drain is the goal state,
