@@ -250,6 +250,25 @@ describe('generarAlertasPendientes — tratamiento_paso', () => {
     const alertas = generarAlertasPendientes([], [pasoFuturo], CONFIG, new Set(), FECHA_REF);
     expect(alertas).toHaveLength(0);
   });
+
+  // Caso real de producción (2026-09-09): las dos primeras alertas que esta
+  // regla generó en su vida traían fechas de julio y decían "para hoy". El
+  // selector dispara con `fecha_programada <= fechaReferencia`, así que un
+  // paso vencido entra igual que uno de hoy; el mensaje tiene que decirlo.
+  it('un paso VENCIDO no dice "para hoy" y nombra la fecha en que venció', () => {
+    const pasoVencido = { ...paso, fecha_programada: '2026-07-16' };
+    const alertas = generarAlertasPendientes([], [pasoVencido], CONFIG, new Set(), FECHA_REF);
+    expect(alertas).toHaveLength(1);
+    expect(alertas[0].mensaje).not.toContain('para hoy');
+    expect(alertas[0].mensaje).toContain('2026-07-16');
+  });
+
+  it('un paso programado para HOY sigue diciendo "para hoy"', () => {
+    const pasoDeHoy = { ...paso, fecha_programada: FECHA_REF };
+    const alertas = generarAlertasPendientes([], [pasoDeHoy], CONFIG, new Set(), FECHA_REF);
+    expect(alertas).toHaveLength(1);
+    expect(alertas[0].mensaje).toContain('para hoy');
+  });
 });
 
 describe('regla_clave — estabilidad e idempotencia', () => {
@@ -633,6 +652,43 @@ describe('construirMensajeAlerta', () => {
       fecha_programada: '2026-07-20',
     });
     expect(msg).toContain('Aplicar estrumate');
+  });
+
+  it('tratamiento_paso vencido: el texto depende de la fecha, no es "para hoy" fijo', () => {
+    const msg = construirMensajeAlerta({
+      tipo: 'tratamiento_paso',
+      nombre: 'CUCA',
+      numero: 141,
+      fecha_programada: '2026-07-16',
+      fecha_referencia: '2026-09-09',
+    });
+    expect(msg).not.toContain('para hoy');
+    expect(msg).toContain('2026-07-16');
+    expect(msg).toContain('CUCA');
+  });
+
+  it('tratamiento_paso del día: conserva "para hoy" con su fecha', () => {
+    const msg = construirMensajeAlerta({
+      tipo: 'tratamiento_paso',
+      nombre: 'FABIOLA',
+      numero: 176,
+      fecha_programada: '2026-09-11',
+      fecha_referencia: '2026-09-11',
+    });
+    expect(msg).toContain('para hoy');
+    expect(msg).toContain('2026-09-11');
+  });
+
+  it('tratamiento_paso sin fecha_programada: nunca afirma que venció, dice que no hay fecha', () => {
+    const msg = construirMensajeAlerta({
+      tipo: 'tratamiento_paso',
+      nombre: 'CUÑA',
+      numero: 43,
+      fecha_programada: null,
+      fecha_referencia: '2026-09-09',
+    });
+    expect(msg).toContain('sin fecha registrada');
+    expect(msg).not.toContain('VENCIDO');
   });
 
   it('cada tipo produce un texto distinto (no hay una plantilla genérica compartida por error)', () => {
