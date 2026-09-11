@@ -12,6 +12,15 @@ import { InlineKeyboard } from "npm:grammy@1";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 import type { BotContext } from "../types.ts";
+// El corte de gravedad (10 % / 30 %) es contrato del proyecto y tiene UNA sola
+// copia por árbol. `priorizacion-scouting.ts` es el puerto Deno de
+// `src/utils/calculosMonitoreo.ts` y no tiene ni un import propio, así que es el
+// sitio del que este árbol toma las funciones puras de monitoreo — igual que ya
+// hace `chat.tsx`. Antes acá vivía una TERCERA implementación llamada
+// `calcularGravedad`: coincidía en los números, pero ninguna guarda la veía
+// porque todas buscaban el nombre `clasificarGravedad`. La guarda que cierra ese
+// agujero es `src/__tests__/umbralGravedadContract.test.ts`, que busca por forma.
+import { clasificarGravedad } from "../../priorizacion-scouting.ts";
 
 const PLAGAS_PER_PAGE = 8;
 
@@ -19,15 +28,6 @@ function getSupabaseAdmin() {
   const url = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   return createClient(url, serviceKey, { auth: { persistSession: false } });
-}
-
-function calcularGravedad(incidencia: number): {
-  texto: "Baja" | "Media" | "Alta";
-  numerica: 1 | 2 | 3;
-} {
-  if (incidencia < 10) return { texto: "Baja", numerica: 1 };
-  if (incidencia < 30) return { texto: "Media", numerica: 2 };
-  return { texto: "Alta", numerica: 3 };
 }
 
 function gravedadEmoji(texto: string): string {
@@ -765,7 +765,7 @@ export async function monitoreoConversation(
           const severidad = arbolesMonitoreados > 0
             ? pd.individuos / arbolesMonitoreados
             : 0;
-          const gravedad = calcularGravedad(incidencia);
+          const gravedad = clasificarGravedad(incidencia);
 
           summaryLines.push(
             `🐛 *${pd.plagaNombre}*`,
@@ -873,7 +873,7 @@ export async function monitoreoConversation(
             const incidencia = arbolesMonitoreados > 0
               ? (pd.arbolesAfectados / arbolesMonitoreados) * 100
               : 0;
-            const gravedad = calcularGravedad(incidencia);
+            const gravedad = clasificarGravedad(incidencia);
 
             const record: Record<string, unknown> = {
               fecha_monitoreo: fechaMonitoreo,
