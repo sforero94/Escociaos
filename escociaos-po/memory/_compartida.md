@@ -1420,3 +1420,28 @@ Corolario de diseno que se gano el sitio: **una funcion que sirve a la vez a una
 y a un mensaje para un humano tiene dos duenos y ningun orden de `COALESCE` los contenta a los dos.**
 La forma correcta son dos helpers. El comentario de `ronda-helpers.ts:535-540` presume lo contrario
 explicitamente («para que esa regla tenga un solo dueño»), y esa presuncion es el defecto.
+
+### CORRECCION AL CLAUDE.md RAIZ — la 140 SI esta desplegada (comprobado 2026-09-11)
+La entrada de la migracion 140 dice: «Al 2026-09-09 la migracion esta aplicada y la edge function NO
+se ha desplegado (decision del dueno) … `/evento` sigue mostrando el menu viejo». **Es falso hoy.**
+`fn_hato_registrar_tratamiento` **ya esta en el paquete desplegado** (comprobado contra
+`get_edge_function` el 2026-09-11 14:50 UTC). O sea que `/evento → 💊 Tratamiento` esta vivo en
+Telegram.
+
+**Por que importa y no es una errata cosmetica**: esa frase es justo la que se consulta antes de un
+`functions deploy` para saber si el despliegue va a activar algo que el dueno decidio no activar — el
+chequeo que impone la leccion de la 105 (una mina armada en `main` que un deploy rutinario pisa). Con
+la nota vieja, el chequeo concluye «hay un gate sin desplegar, no despliegues» y **bloquea un
+despliegue que es seguro**. Falso positivo, que en esta operacion cuesta lo mismo que el negativo.
+
+**Metodo, que es lo que se guarda**: el estado de despliegue **no se deduce de `main` ni de una nota**
+— se lee del paquete que corre. `get_edge_function` devuelve ~1,9 M de caracteres, asi que **no se
+lee, se grepea** el fichero que el tool deja en disco:
+
+```sh
+grep -c "<simbolo del arreglo>" <fichero-que-deja-get_edge_function>
+```
+
+0 = no desplegado, ≥1 = desplegado. Asi se comprobo en la misma pasada que `VENCIDO desde` (el
+arreglo del #89, PR #219, ya fusionado) **NO** esta en el paquete: fusionado y no desplegado, la
+distincion que la leccion del 2026-08-24 dice que hay que hacer siempre.
