@@ -411,8 +411,11 @@ async function obtenerExcepcionesParaReporte(sb: SupabaseClient, rondaId: string
   // Nombre del producto: SNAPSHOT del alcance congelado (R-5), nunca un JOIN
   // vivo a `productos` -- un rename posterior no debe reescribir lo que
   // Uriel vio en campo (mismo criterio que `rondas_inventario_alcance` ya
-  // documenta).
+  // documenta). ESCO-61: la UNIDAD sale del mismo snapshot y por el mismo
+  // motivo -- es la unidad contra la que se contó, no la que el catálogo
+  // tenga hoy.
   const nombresPorProducto = new Map(alcance.map((a) => [a.producto_id, a.nombre_producto]));
+  const unidadesPorProducto = new Map(alcance.map((a) => [a.producto_id, a.unidad]));
 
   return ((excepciones ?? []) as Array<{
     producto_id: string;
@@ -432,6 +435,7 @@ async function obtenerExcepcionesParaReporte(sb: SupabaseClient, rondaId: string
       estado: fila.estado as EstadoExcepcionRonda,
       fisico: fila.cantidad_fisica,
       teorico: fila.teorico_conteo,
+      unidad: unidadesPorProducto.get(fila.producto_id) ?? null,
       causaEtiqueta,
       via: fila.via_propuesta,
     };
@@ -444,8 +448,15 @@ type FilaMovimientoInventario = {
   tipo_movimiento: string;
   cantidad: number;
   responsable: string | null;
-  producto: { nombre: string } | { nombre: string }[] | null;
+  producto: ProductoDeMovimiento | ProductoDeMovimiento[] | null;
 };
+
+/** ESCO-61: `unidad_medida` viaja junto al nombre para que la cantidad del
+ * movimiento no se imprima pelada. Se lee en VIVO de `productos` -- a
+ * diferencia de la excepción, que usa el snapshot congelado -- porque el
+ * movimiento puede ser de un producto que nunca estuvo en el alcance de la
+ * ronda (`entrada_fuera_de_alcance`, P-3), y ahí el snapshot no tiene fila. */
+type ProductoDeMovimiento = { nombre: string; unidad_medida: string | null };
 
 /**
  * R-9/CA-19 (§8.3 punto 4): "todo movimiento de inventario OCURRIDO con la
@@ -491,7 +502,7 @@ async function obtenerMovimientosRondaAbierta(sb: SupabaseClient, ronda: RondaCe
     if (fila.aplicacion_movimiento_id) movimientoIdsDeExcepcion.add(fila.aplicacion_movimiento_id);
   }
 
-  const SELECT_MOVIMIENTO = 'id, producto_id, tipo_movimiento, cantidad, responsable, producto:productos(nombre)';
+  const SELECT_MOVIMIENTO = 'id, producto_id, tipo_movimiento, cantidad, responsable, producto:productos(nombre, unidad_medida)';
   const [{ data: movimientosLigados, error: errorLigados }, { data: movimientosVentana, error: errorVentana }, alcance] = await Promise.all([
     movimientoIdsDeExcepcion.size > 0
       ? sb.from('movimientos_inventario').select(SELECT_MOVIMIENTO).in('id', [...movimientoIdsDeExcepcion])
@@ -530,6 +541,7 @@ async function obtenerMovimientosRondaAbierta(sb: SupabaseClient, ronda: RondaCe
       productoNombre: producto?.nombre ?? '(producto)',
       tipoMovimiento: m.tipo_movimiento,
       cantidad: Math.abs(m.cantidad),
+      unidad: producto?.unidad_medida ?? null,
       origen,
       responsable: m.responsable,
     };

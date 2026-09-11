@@ -174,9 +174,11 @@ describe('paridad de comportamiento reporteCierre', () => {
     },
     valoracion: { incluyeValoracion: false, valorTotalActual: null, valorTotalMesAnterior: null },
     excepciones: [
-      { productoNombre: 'Silicalmag', estado: 'ajuste_aplicado', fisico: 90, teorico: 100, causaEtiqueta: 'Error de captura previa', via: 'captura_david' },
+      { productoNombre: 'Silicalmag', estado: 'ajuste_aplicado', fisico: 90, teorico: 100, unidad: 'Kilos', causaEtiqueta: 'Error de captura previa', via: 'captura_david' },
     ],
-    movimientosRondaAbierta: [],
+    movimientosRondaAbierta: [
+      { productoNombre: 'Silicalmag', tipoMovimiento: 'Entrada', cantidad: 10, unidad: 'Kilos', origen: 'captura_excepcion', responsable: 'David' },
+    ],
     observacionesLibres: ['Se encontraron 2 canecas vacías sin identificar'],
     hallazgosNarradosSinConfirmar: 1,
   };
