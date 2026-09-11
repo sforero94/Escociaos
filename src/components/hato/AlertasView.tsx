@@ -11,8 +11,10 @@
 //      (`respondida`, `escalada`, `expirada` -- ver
 //      `requiereRevisionSemanal` en hatoAlertasUi.ts), con acciones
 //      Confirmar/Descartar gateadas a Administrador/Gerencia (RLS 056).
-//   2. "Cola completa" -- todas las alertas, filtrables por tipo/estado,
-//      para que Martha pueda auditar cualquier cosa que el motor generó.
+//   2. "Cola completa" -- todas las alertas, agrupadas por tema (`tipo`) en
+//      collapsibles (cerrados por defecto) y filtrables por tipo/estado,
+//      para que Martha pueda auditar sin ver el muro entero de golpe.
+//      Misma agrupación en "Revisión semanal".
 //
 // El tick diario (migración 060, pg_cron 05:45) todavía no tiene endpoint
 // (`/hato/alertas/tick` llega en una sesión posterior) -- hasta entonces
@@ -40,11 +42,11 @@ import { Loader2, AlertTriangle, BellRing, Inbox, Trash2, TimerOff } from 'lucid
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useHatoAlertas, type AlertaHatoEnriquecida } from './hooks/useHatoAlertas';
 import { AlertaFila } from './components/AlertaFila';
+import { AlertasGrupoTema } from './components/AlertasGrupoTema';
 import {
   TIPOS_ALERTA_HATO,
   ESTADOS_ALERTA_HATO,
@@ -53,6 +55,7 @@ import {
   ordenarAlertasHato,
   filtrarAlertasHato,
   contarAlertasPorEstado,
+  agruparAlertasPorTipo,
   requiereRevisionSemanal,
   alertasVencidasParaExpirar,
   type EstadoAlertaHato,
@@ -86,6 +89,12 @@ export function AlertasView() {
     () => ordenarAlertasHato(filtrarAlertasHato(alertas, { tipo: tipoFiltro, estado: estadoFiltro })),
     [alertas, tipoFiltro, estadoFiltro],
   );
+
+  // Colapsables por tema: no mostrar todas las filas de golpe. Se abre solo
+  // el grupo filtrado (o el único grupo presente) para no perder el atajo
+  // del select de tipo.
+  const gruposRevision = useMemo(() => agruparAlertasPorTipo(revisionSemanal), [revisionSemanal]);
+  const gruposCola = useMemo(() => agruparAlertasPorTipo(colaFiltrada), [colaFiltrada]);
 
   const conteoPorEstado = useMemo(() => contarAlertasPorEstado(alertas), [alertas]);
 
@@ -244,17 +253,35 @@ export function AlertasView() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {revisionSemanal.map((alerta) => (
-                    <AlertaFila
-                      key={alerta.id}
-                      alerta={alerta}
-                      canWrite={canWrite}
-                      actuando={idActuando === alerta.id}
-                      onCambiarEstado={handleCambiarEstado}
-                      seleccionable
-                      seleccionada={seleccionadas.has(alerta.id)}
-                      onToggleSeleccion={toggleSeleccion}
-                    />
+                  {gruposRevision.map((grupo) => (
+                    <AlertasGrupoTema
+                      key={`rev-${grupo.tipo}`}
+                      tipo={grupo.tipo}
+                      cantidad={grupo.alertas.length}
+                      forzarAbierto={gruposRevision.length === 1}
+                      seleccionable={canWrite}
+                      todasSeleccionadas={grupo.alertas.every((a) => seleccionadas.has(a.id))}
+                      onToggleSeleccionarTodas={(seleccionar) =>
+                        setSeleccionadas((prev) => {
+                          const next = new Set(prev);
+                          grupo.alertas.forEach((a) => (seleccionar ? next.add(a.id) : next.delete(a.id)));
+                          return next;
+                        })
+                      }
+                    >
+                      {grupo.alertas.map((alerta) => (
+                        <AlertaFila
+                          key={alerta.id}
+                          alerta={alerta}
+                          canWrite={canWrite}
+                          actuando={idActuando === alerta.id}
+                          onCambiarEstado={handleCambiarEstado}
+                          seleccionable
+                          seleccionada={seleccionadas.has(alerta.id)}
+                          onToggleSeleccion={toggleSeleccion}
+                        />
+                      ))}
+                    </AlertasGrupoTema>
                   ))}
                 </div>
               )}
@@ -262,24 +289,7 @@ export function AlertasView() {
 
             <section>
               <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
-                <div className="flex items-center gap-3">
-                  <h2 className="text-sm font-semibold text-gray-900">Cola completa ({colaFiltrada.length})</h2>
-                  {canWrite && colaFiltrada.length > 0 && (
-                    <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
-                      <Checkbox
-                        checked={colaFiltrada.every((a) => seleccionadas.has(a.id))}
-                        onCheckedChange={(checked) =>
-                          setSeleccionadas((prev) => {
-                            const next = new Set(prev);
-                            colaFiltrada.forEach((a) => (checked ? next.add(a.id) : next.delete(a.id)));
-                            return next;
-                          })
-                        }
-                      />
-                      Seleccionar todas
-                    </label>
-                  )}
-                </div>
+                <h2 className="text-sm font-semibold text-gray-900">Cola completa ({colaFiltrada.length})</h2>
                 <div className="flex flex-wrap items-center gap-2">
                   {/* Radix `Select.Item` no admite `value=""` -- `'todos'` es
                       el centinela (mismo patrón que `'sin_vaca'` en
@@ -321,17 +331,35 @@ export function AlertasView() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {colaFiltrada.map((alerta: AlertaHatoEnriquecida) => (
-                    <AlertaFila
-                      key={alerta.id}
-                      alerta={alerta}
-                      canWrite={canWrite}
-                      actuando={idActuando === alerta.id}
-                      onCambiarEstado={handleCambiarEstado}
-                      seleccionable
-                      seleccionada={seleccionadas.has(alerta.id)}
-                      onToggleSeleccion={toggleSeleccion}
-                    />
+                  {gruposCola.map((grupo) => (
+                    <AlertasGrupoTema
+                      key={`cola-${grupo.tipo}`}
+                      tipo={grupo.tipo}
+                      cantidad={grupo.alertas.length}
+                      forzarAbierto={Boolean(tipoFiltro) || gruposCola.length === 1}
+                      seleccionable={canWrite}
+                      todasSeleccionadas={grupo.alertas.every((a) => seleccionadas.has(a.id))}
+                      onToggleSeleccionarTodas={(seleccionar) =>
+                        setSeleccionadas((prev) => {
+                          const next = new Set(prev);
+                          grupo.alertas.forEach((a) => (seleccionar ? next.add(a.id) : next.delete(a.id)));
+                          return next;
+                        })
+                      }
+                    >
+                      {grupo.alertas.map((alerta: AlertaHatoEnriquecida) => (
+                        <AlertaFila
+                          key={alerta.id}
+                          alerta={alerta}
+                          canWrite={canWrite}
+                          actuando={idActuando === alerta.id}
+                          onCambiarEstado={handleCambiarEstado}
+                          seleccionable
+                          seleccionada={seleccionadas.has(alerta.id)}
+                          onToggleSeleccion={toggleSeleccion}
+                        />
+                      ))}
+                    </AlertasGrupoTema>
                   ))}
                 </div>
               )}

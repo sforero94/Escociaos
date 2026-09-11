@@ -14,6 +14,7 @@ import {
   ordenarAlertasHato,
   filtrarAlertasHato,
   contarAlertasPorEstado,
+  agruparAlertasPorTipo,
   requiereRevisionSemanal,
   chipRespuestaAlerta,
   etiquetaAlcanceHato,
@@ -109,6 +110,34 @@ describe('contarAlertasPorEstado', () => {
 
   it('con una cola vacía devuelve un objeto vacío, no un mapa de ceros', () => {
     expect(contarAlertasPorEstado([])).toEqual({});
+  });
+});
+
+describe('agruparAlertasPorTipo', () => {
+  it('omite temas sin alertas y respeta el orden de TIPOS_ALERTA_HATO', () => {
+    const alertas = [
+      { id: 'p', estado: 'pendiente' as EstadoAlertaHato, tipo: 'parto_proximo' as TipoAlertaHato, fecha_programada: '2026-07-02' },
+      { id: 's', estado: 'escalada' as EstadoAlertaHato, tipo: 'secado_due' as TipoAlertaHato, fecha_programada: '2026-07-01' },
+      { id: 's2', estado: 'pendiente' as EstadoAlertaHato, tipo: 'secado_due' as TipoAlertaHato, fecha_programada: '2026-07-03' },
+    ];
+    const grupos = agruparAlertasPorTipo(alertas);
+    expect(grupos.map((g) => g.tipo)).toEqual(['secado_due', 'parto_proximo']);
+    expect(grupos[0].label).toBe(LABEL_TIPO_ALERTA_HATO.secado_due);
+    expect(grupos[0].alertas.map((a) => a.id)).toEqual(['s', 's2']);
+    expect(grupos).toHaveLength(2);
+  });
+
+  it('con cola vacía no inventa grupos', () => {
+    expect(agruparAlertasPorTipo([])).toEqual([]);
+  });
+
+  it('no muta el arreglo original', () => {
+    const alertas = [
+      { id: '1', estado: 'pendiente' as EstadoAlertaHato, tipo: 'secado_due' as TipoAlertaHato, fecha_programada: '2026-07-01' },
+    ];
+    const copia = [...alertas];
+    agruparAlertasPorTipo(alertas);
+    expect(alertas).toEqual(copia);
   });
 });
 

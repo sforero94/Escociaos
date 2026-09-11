@@ -2,7 +2,8 @@
 // DESCRIPCIÓN: Lógica pura de presentación/derivación para AlertasView
 // (`/hato-lechero/alertas`, S6/V11, plan §6 Épica C, §7.5). Traduce las
 // filas crudas de `hato_alertas` (migración 056) a lo que la vista necesita
-// para ordenar, filtrar y agrupar -- NUNCA decide reglas de negocio nuevas
+// para ordenar, filtrar y agrupar por tema (`agruparAlertasPorTipo`) -- NUNCA
+// decide reglas de negocio nuevas
 // (esas viven en la edge function del tick diario, §7.3): este archivo solo
 // etiqueta y ordena lo que la cola ya contiene.
 //
@@ -129,6 +130,41 @@ export function contarAlertasPorEstado<T extends { estado: EstadoAlertaHato }>(
     conteo[a.estado] = (conteo[a.estado] ?? 0) + 1;
   }
   return conteo;
+}
+
+/** Un grupo de la cola por tema (`tipo`). Solo se emite si hay filas -- un
+ * tema vacío no aparece (misma regla "sin dato, nunca 0"). El orden de
+ * grupos sigue `TIPOS_ALERTA_HATO`; dentro de cada grupo se reusa
+ * `ordenarAlertasHato` (urgentes primero). */
+export interface GrupoAlertasPorTipo<T extends AlertaFiltrable & AlertaOrdenable> {
+  tipo: TipoAlertaHato;
+  label: string;
+  alertas: T[];
+}
+
+/** Agrupa la cola por tema para que la vista pueda colapsar cada tipo y no
+ * mostrar todas las filas de golpe. No muta el arreglo de entrada. */
+export function agruparAlertasPorTipo<T extends AlertaFiltrable & AlertaOrdenable>(
+  alertas: readonly T[],
+): GrupoAlertasPorTipo<T>[] {
+  const porTipo = new Map<TipoAlertaHato, T[]>();
+  for (const a of alertas) {
+    const lista = porTipo.get(a.tipo);
+    if (lista) lista.push(a);
+    else porTipo.set(a.tipo, [a]);
+  }
+
+  const grupos: GrupoAlertasPorTipo<T>[] = [];
+  for (const tipo of TIPOS_ALERTA_HATO) {
+    const filas = porTipo.get(tipo);
+    if (!filas || filas.length === 0) continue;
+    grupos.push({
+      tipo,
+      label: LABEL_TIPO_ALERTA_HATO[tipo],
+      alertas: ordenarAlertasHato(filas),
+    });
+  }
+  return grupos;
 }
 
 /** V11 (plan §6 C4): "el resumen a Martha se reserva para lo vencido/
