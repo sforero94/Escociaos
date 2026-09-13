@@ -109,6 +109,55 @@ export function calculateActualCostFromRecords(records: Array<{
 }
 
 /**
+ * Hallazgo ESCO-70: nada impedía que una misma persona (empleado o
+ * contratista) quedara registrada con más de un jornal completo el mismo
+ * día, repartida entre varios lotes/tareas -- 42 casos reales, hasta 2,25
+ * jornales en una fecha. Decisión de Santiago (2026-09-13): es error de
+ * captura masiva, y la guarda BLOQUEA (no solo advierte) sumar más de 1.0
+ * jornal por persona por día.
+ *
+ * Tolerancia 0.0001 igual que la consulta de diagnóstico del hallazgo, para
+ * que el redondeo de punto flotante no dispare un falso positivo en 1.0
+ * exacto.
+ */
+export const TOLERANCIA_EXCESO_JORNAL = 0.0001;
+
+export interface FraccionJornalPersona {
+  /** empleado_id o contratista_id -- el mismo valor identifica a la misma persona en ambos casos. */
+  personaId: string;
+  fraccion: number;
+}
+
+export interface ExcesoJornalPersona {
+  personaId: string;
+  totalJornales: number;
+}
+
+/**
+ * Suma, por persona, las fracciones YA registradas ese día más las que se
+ * están por registrar en esta misma operación (un envío puede repartir a la
+ * misma persona entre varios lotes de una sola vez). Devuelve solo las
+ * personas cuyo total supera 1.0 -- nunca decide qué hacer con eso, eso es
+ * responsabilidad del llamador (bloquear, en este caso).
+ */
+export function calcularExcesoJornalPorPersona(
+  fraccionesExistentes: FraccionJornalPersona[],
+  fraccionesNuevas: FraccionJornalPersona[],
+): ExcesoJornalPersona[] {
+  const totales = new Map<string, number>();
+  for (const { personaId, fraccion } of [...fraccionesExistentes, ...fraccionesNuevas]) {
+    totales.set(personaId, (totales.get(personaId) || 0) + fraccion);
+  }
+  const excesos: ExcesoJornalPersona[] = [];
+  for (const [personaId, totalJornales] of totales) {
+    if (totalJornales > 1 + TOLERANCIA_EXCESO_JORNAL) {
+      excesos.push({ personaId, totalJornales: Math.round(totalJornales * 100) / 100 });
+    }
+  }
+  return excesos;
+}
+
+/**
  * Format cost as currency string
  */
 export function formatCost(cost: number): string {
