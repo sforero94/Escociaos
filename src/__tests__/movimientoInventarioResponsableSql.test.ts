@@ -291,6 +291,64 @@ const ESCRITORES_RONDA = [
   'fn_ronda_aplicar_ajuste',
 ];
 
+/**
+ * Deltas de negocio AUTORIZADOS después de la 143, por función, sobre el cuerpo YA
+ * normalizado. Cada entrada es un anclaje literal y su reemplazo; el anclaje tiene que
+ * aparecer exactamente una vez o el test falla.
+ *
+ * Existe porque este guard compara el cuerpo vigente contra el de la 126 palabra por
+ * palabra, y un `CREATE OR REPLACE` posterior que sí cambia lógica lo pondría rojo por
+ * construcción. Aflojar la comparación mataría el guard; enumerar el delta exacto la
+ * conserva: cualquier OTRA diferencia sigue siendo roja.
+ *
+ * 146 (ESCO-61 parte C): `fn_ronda_resolver_con_captura` exige `cantidad_fisica_confirmada`
+ * -- el CONTEO FÍSICO reconfirmado a mano, distinto de la cantidad del movimiento -- y lo
+ * persiste en `rondas_excepciones.cantidad_fisica`. Misma garantía que la 132 le dio a la
+ * vía sin respaldo. Ninguno de los cuatro fragmentos toca `movimientos_inventario` ni los
+ * saldos, que es lo que este fichero vigila.
+ */
+const DELTAS_AUTORIZADOS: Record<string, ReadonlyArray<{ de: string; a: string }>> = {
+  fn_ronda_resolver_con_captura: [
+    {
+      de: "v_aplicacion_id UUID := NULLIF(payload ->> 'aplicacion_id', '')::UUID; v_excepcion RECORD;",
+      a:
+        "v_aplicacion_id UUID := NULLIF(payload ->> 'aplicacion_id', '')::UUID; " +
+        "v_cantidad_fisica_confirmada NUMERIC := (payload ->> 'cantidad_fisica_confirmada')::NUMERIC; " +
+        'v_excepcion RECORD;',
+    },
+    {
+      de: "IF v_fecha IS NULL THEN RAISE EXCEPTION '<mensaje>'; END IF; SELECT * INTO v_excepcion",
+      a:
+        "IF v_fecha IS NULL THEN RAISE EXCEPTION '<mensaje>'; END IF; " +
+        "IF v_cantidad_fisica_confirmada IS NULL THEN RAISE EXCEPTION '<mensaje>'; END IF; " +
+        "IF v_cantidad_fisica_confirmada < 0 THEN RAISE EXCEPTION '<mensaje>', v_cantidad_fisica_confirmada; END IF; " +
+        'SELECT * INTO v_excepcion',
+    },
+    {
+      de: "UPDATE rondas_excepciones SET estado = 'resuelta_con_captura', captura_movimiento_id",
+      a:
+        "UPDATE rondas_excepciones SET estado = 'resuelta_con_captura', " +
+        'cantidad_fisica = v_cantidad_fisica_confirmada, captura_movimiento_id',
+    },
+    {
+      de: "'saldo_nuevo', v_saldo_nuevo ); END",
+      a: "'saldo_nuevo', v_saldo_nuevo, 'cantidad_fisica_confirmada', v_cantidad_fisica_confirmada ); END",
+    },
+  ],
+};
+
+function aplicarDeltasAutorizados(nombre: string, normalizado: string): string {
+  let salida = normalizado;
+  for (const { de, a } of DELTAS_AUTORIZADOS[nombre] ?? []) {
+    expect(
+      salida.split(de).length - 1,
+      `el anclaje del delta autorizado de ${nombre} no aparece exactamente una vez: ${de}`,
+    ).toBe(1);
+    salida = salida.replace(de, a);
+  }
+  return salida;
+}
+
 describe('guard SQL: identidad de inventario separada del nombre humano', () => {
   it('ordena la serie numerada después de los SQL legado sin número', () => {
     const archivos = ficherosMigracion();
@@ -446,16 +504,20 @@ describe('guard SQL: identidad de inventario separada del nombre humano', () => 
       expect(insertsDeMovimientos(vigente!.archivo, vigente!.cuerpo)[0]?.valores.join(' '))
         .toMatch(/fn_ronda_actor_correo\s*\(/i);
 
-      // Los RPC son largos y CREATE OR REPLACE sustituye el cuerpo entero. El arreglo
-      // autorizado cambia una llamada, no ofrece permiso para alterar reglas de negocio.
+      // Los RPC son largos y CREATE OR REPLACE sustituye el cuerpo entero. Los arreglos
+      // autorizados están enumerados uno por uno (el helper de atribución de la 143, más
+      // DELTAS_AUTORIZADOS); nada de eso da permiso para alterar otra regla de negocio.
       expect(
         normalizarCuerpoParaInvariancia(vigente!.cuerpo),
         `${nombre} cambió lógica, argumentos o un literal ajeno a los mensajes de ` +
-          '`RAISE EXCEPTION`, además del helper de atribución autorizado',
+          '`RAISE EXCEPTION`, además del helper de atribución y de los deltas autorizados',
       ).toBe(
-        normalizarCuerpoParaInvariancia(original.cuerpo).replace(
-          /fn_ronda_actor_nombre/g,
-          'fn_ronda_actor_correo',
+        aplicarDeltasAutorizados(
+          nombre,
+          normalizarCuerpoParaInvariancia(original.cuerpo).replace(
+            /fn_ronda_actor_nombre/g,
+            'fn_ronda_actor_correo',
+          ),
         ),
       );
     }

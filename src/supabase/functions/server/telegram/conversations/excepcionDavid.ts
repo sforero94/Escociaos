@@ -11,9 +11,10 @@
 // que David elige de la lista.
 //
 // Asistente genuino (§7.2 lo pide explícito): confirmar/corregir la cita (o
-// explicar de cero) → ¿hay respaldo? → si lo hay, tipo/cantidad/fecha/destino
-// → confirmar. Cubre SOLO el camino (a) con respaldo (B-1/B-2); si NO hay
-// respaldo, la conversación TERMINA ahí — la excepción queda `explicada` y
+// explicar de cero) → ¿hay respaldo? → si lo hay, conteo físico reconfirmado
+// → tipo/cantidad/fecha/destino → confirmar. Cubre SOLO el camino (a) con
+// respaldo (B-1/B-2); si NO hay respaldo, la conversación TERMINA ahí — la
+// excepción queda `explicada` y
 // **NO propone el ajuste acá**: `/proponer` es un comando aparte que pueden
 // llamar tanto David como Uriel (B-5), no exclusivamente parte de este flujo.
 //
@@ -91,6 +92,24 @@ function parseCantidadPositiva(raw: string): number | null {
   const limpio = raw.trim().replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
   const num = Number(limpio);
   return Number.isFinite(num) && num > 0 ? num : null;
+}
+
+// Migración 146 (ESCO-61 parte C). El CONTEO FÍSICO es un número DISTINTO de
+// la cantidad del movimiento: David teclea cuánto entró o salió (el delta),
+// y eso nunca vuelve a mirar cuánto hay realmente en la bodega -- que es lo
+// que el intérprete de voz congeló en `rondas_excepciones.cantidad_fisica` y
+// lo que el informe de cierre imprime. Por eso se pregunta aparte, con la
+// misma redacción que `/proponer` (bot.ts, migración 132): una sola forma de
+// reconfirmar una cantidad física en todo el módulo.
+//
+// A diferencia de `parseCantidadPositiva` (el movimiento real siempre es
+// > 0), acá 0 es un valor válido -- "no queda nada" es una respuesta, no un
+// dato faltante. Mismo criterio que `parseCantidadRondaConfirmada` de
+// bot.ts.
+function parseCantidadFisicaConfirmada(raw: string): number | null {
+  const limpio = raw.trim().replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+  const num = Number(limpio);
+  return Number.isFinite(num) && num >= 0 ? num : null;
 }
 
 type TipoMovimientoCaptura = 'Entrada' | 'Salida por Aplicación' | 'Salida Otros';
@@ -316,7 +335,46 @@ export async function excepcionDavidConversation(
       return;
     }
 
-    // ── Paso 4: tipo, cantidad, fecha, destino (B-2/CA-8) ───────────────────
+    // ── Paso 4a: reconfirmar el CONTEO FÍSICO (migración 146, ESCO-61 C) ────
+    // Antes del movimiento, porque es el número que el intérprete de voz pudo
+    // haber leído en la unidad equivocada ("tres bultos de 50 kilos" -> 3).
+    // Se muestra lo que el sistema entendió Y se exige teclear el real --
+    // igual que `/proponer`; nunca un botón de "confirmar lo que dice ahí",
+    // que es aceptar el número del modelo con un toque.
+    const nombreProducto = excepcion.producto?.nombre ?? '(producto sin nombre)';
+    const unidadProducto = excepcion.producto?.unidad_medida ?? '';
+    const fisicoInterpretado = `${formatearCantidad(excepcion.cantidad_fisica)}${unidadProducto ? ` ${unidadProducto}` : ''}`;
+    await ctx.reply(
+      [
+        `¿Cuánto hay FÍSICAMENTE de "${nombreProducto}" en este momento?`,
+        `El sistema había entendido ${fisicoInterpretado} -- escribe el número real (o *cancelar*).`,
+      ].join('\n'),
+      { parse_mode: 'Markdown' },
+    );
+    let cantidadFisicaConfirmada: number | null = null;
+    while (cantidadFisicaConfirmada === null) {
+      const r = await conversation.wait();
+      if (r.message?.voice || r.message?.audio) {
+        await ctx.reply('Necesito un número por texto, o *cancelar*.', { parse_mode: 'Markdown' });
+        continue;
+      }
+      const texto = r.message?.text?.trim();
+      if (texto && esCancelacionTexto(texto)) {
+        await ctx.reply('Cancelado. La explicación ya quedó guardada -- puedes retomar la captura con /explicar cuando quieras.');
+        return conversation.halt();
+      }
+      const parsed = texto ? parseCantidadFisicaConfirmada(texto) : null;
+      if (parsed === null) {
+        await ctx.reply('No entendí ese número -- escribe la cantidad física real (ej: 150 o 12,5), o *cancelar*.', { parse_mode: 'Markdown' });
+        continue;
+      }
+      cantidadFisicaConfirmada = parsed;
+    }
+    await ctx.reply(
+      `Cantidad física confirmada: ${formatearCantidad(cantidadFisicaConfirmada)}${unidadProducto ? ` ${unidadProducto}` : ''}.`,
+    );
+
+    // ── Paso 4b: tipo, cantidad, fecha, destino (B-2/CA-8) ──────────────────
     const kbTipo = new InlineKeyboard()
       .text('📥 Entrada', 'expl_tipo_entrada')
       .row()
@@ -498,8 +556,9 @@ export async function excepcionDavidConversation(
     await ctx.reply(
       [
         'Voy a registrar:',
+        `- Conteo físico: ${formatearCantidad(cantidadFisicaConfirmada)}${unidad ? ` ${unidad}` : ''}`,
         `- Tipo: ${tipoMovimiento}`,
-        `- Cantidad: ${formatearCantidad(cantidad)}${unidad ? ` ${unidad}` : ''}`,
+        `- Cantidad del movimiento: ${formatearCantidad(cantidad)}${unidad ? ` ${unidad}` : ''}`,
         `- Fecha: ${fechaLegible(fechaMovimiento)}`,
         campoOpcional ? `- ${etiquetaCampoOpcional}: ${campoOpcional}` : null,
         '',
@@ -540,6 +599,9 @@ export async function excepcionDavidConversation(
           excepcion_id: excepcionId,
           tipo_movimiento: tipoMovimiento,
           cantidad,
+          // Migración 146: el conteo físico reconfirmado a mano. El RPC lo
+          // exige y sobrescribe con él `rondas_excepciones.cantidad_fisica`.
+          cantidad_fisica_confirmada: cantidadFisicaConfirmada,
           fecha_movimiento: fechaMovimiento,
           observaciones: tipoMovimiento === 'Salida Otros' ? campoOpcional : null,
           factura: tipoMovimiento === 'Entrada' ? campoOpcional : null,
