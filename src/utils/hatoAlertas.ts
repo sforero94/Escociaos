@@ -34,6 +34,15 @@
 // siempre fue `hato_animales.id`. Usar `numero` en la clave de idempotencia
 // rompería la idempotencia el día que Martha re-numere el hato completo.
 //
+// CUANDO UNA REGLA CAMBIA DE GRANULARIDAD, sus alertas viejas quedan
+// huérfanas: nadie las vuelve a generar (la clave nueva es otra) y nadie las
+// cierra, así que siguen escalando para siempre. Pasó con `rechequeo_due` al
+// pasar de `rechq:{animal_id}:{fecha}` a `rechq:hato:{fecha}` — 36 filas
+// atascadas el 2026-09-07/09, 182 mensajes por un solo evento. El BLOQUE 3c
+// las retira solas: compara la clave de cada alerta ABIERTA contra la forma
+// VIGENTE de su regla y marca `descartada` la que ya no corresponde. Ver ahí
+// por qué el mecanismo es conservador y qué nunca toca.
+//
 // Regla dura del dueño (cuarta ronda de decisiones, ver CLAUDE.md
 // "Provisional-period guardrails"): un mensaje de alerta SIEMPRE lidera con
 // el NOMBRE, nunca con un número provisional (800-999) ni con la ausencia de
@@ -451,9 +460,21 @@ export function generarAlertasPendientes(
  * una taxonomía nueva:
  *
  *   no_activa               -- `estado` no es `activa` (vendida/muerta/descartada).
- *   sin_ciclo_reproductivo  -- ternera, novilla sin ciclo aún, o parida
- *                              reciente sin servicio posterior: no hay ancla
- *                              desde la que proyectar secado/parto/confirmación.
+ *   sin_historia_reproductiva -- "NO APLICA": el animal nunca entró al ciclo
+ *                              reproductivo y está fuera del alcance del
+ *                              seguimiento automático POR DISEÑO (ternera y
+ *                              novilla, es decir `cria`/`novilla`, los dos
+ *                              estados que `derivarEstadoReproductivo` solo
+ *                              devuelve cuando no hay NINGÚN evento
+ *                              reproductivo). Decisión del dueño (Santiago,
+ *                              2026-09-13): las ~30 activas sin evento son
+ *                              novillas, no un hueco de datos.
+ *   sin_ciclo_reproductivo  -- "FALTA EL DATO": una VACA que sí está en
+ *                              alcance pero hoy no tiene ancla desde la que
+ *                              proyectar secado/parto/confirmación -- vacía
+ *                              por servir (incluida la que quedó vacía tras
+ *                              un aborto) o parida reciente sin servicio
+ *                              posterior.
  *   evento_no_clasificado   -- hay un evento posterior al último que el motor
  *                              sabe clasificar y NO es un aborto
  *                              (`indeterminado` en `derivarEstadoReproductivo`)
@@ -489,6 +510,7 @@ export function generarAlertasPendientes(
  */
 export type RazonOmisionAlerta =
   | 'no_activa'
+  | 'sin_historia_reproductiva'
   | 'sin_ciclo_reproductivo'
   | 'evento_no_clasificado'
   | 'sin_servicio_ancla'
@@ -501,6 +523,7 @@ export type RazonOmisionAlerta =
 
 const RAZONES_OMISION_ALERTA: readonly RazonOmisionAlerta[] = [
   'no_activa',
+  'sin_historia_reproductiva',
   'sin_ciclo_reproductivo',
   'evento_no_clasificado',
   'sin_servicio_ancla',
@@ -513,7 +536,7 @@ const RAZONES_OMISION_ALERTA: readonly RazonOmisionAlerta[] = [
 ];
 
 /** Conteo de UNA regla (`secado_due`, etc.) en un tick: cuántas alertas se
- * generaron y, de las que no, por cuál motivo -- las 9 razones arrancan en 0
+ * generaron y, de las que no, por cuál motivo -- TODAS las razones arrancan en 0
  * aunque varias nunca aparezcan en una regla dada (p.ej. `rechequeo_due`
  * nunca produce `sin_servicio_ancla`), así el consumidor nunca tiene que
  * manejar `undefined`. */
@@ -571,6 +594,14 @@ function clasificarBrechaCiclo(
       return 'no_activa';
     case 'cria':
     case 'novilla':
+      // "No aplica", no "falta el dato": ninguno de estos dos estados se
+      // alcanza con un evento reproductivo registrado -- `cria` es la etapa
+      // ternera y `novilla` solo sale de la rama sin NINGÚN servicio, parto,
+      // secado ni confirmación (`derivarEstadoReproductivo`, calculosHato.ts).
+      // Mezclarlos con la vaca que sí está en alcance escondía la única
+      // pregunta que esta instrumentación existe para contestar: ¿el motor no
+      // tiene a quién alertar, o no puede?
+      return 'sin_historia_reproductiva';
     case 'vacia_por_servir':
     case 'parida_reciente':
       return 'sin_ciclo_reproductivo';
@@ -738,6 +769,181 @@ export function resumirCoberturaAlertas(
     pasos_tratamiento_evaluados: pasosPendientes.length,
     por_tipo: porTipo,
   };
+}
+
+// ============================================================================
+// BLOQUE 3c — Retiro de alertas superadas por un cambio de regla (ESCO-93)
+//
+// Una alerta viva cuelga de su `regla_clave`. Si la regla que la produjo
+// cambia de GRANULARIDAD, la clave nueva ya no coincide con la vieja: el tick
+// genera la nueva y la vieja queda huérfana -- nadie la regenera (su
+// condición ya no se evalúa por animal) y nadie la cierra, así que escala
+// cada 48h y sigue paginando por Telegram para siempre. Ocurrió de verdad:
+// `rechequeo_due` pasó de `rechq:{animal_id}:{fecha}` (por vaca) a
+// `rechq:hato:{fecha}` (de hato) y dejó 36 filas atascadas del 2026-09-07,
+// 182 mensajes por un único evento de rebaño.
+//
+// El mecanismo es GENÉRICO -- no un parche para esa regla. Cada tipo declara
+// la FORMA VIGENTE de su clave; una alerta abierta cuya clave no encaja en la
+// forma vigente de su propia regla está superada y el tick la marca
+// `descartada`, con el motivo escrito en `datos`. Nunca se borra una fila:
+// `hato_alertas` es historia (mismo criterio que `gan_movimientos` o que la
+// reversa de la migración 108).
+//
+// TRES GUARDAS, y las tres son carga útil -- este mecanismo escribe sobre la
+// cola viva, así que se equivoca hacia NO retirar:
+//   1. Solo claves del PROPIO motor. Se exige que el primer segmento sea el
+//      prefijo que el constructor de ese tipo produce hoy (`secado`, `rechq`,
+//      ...). Una clave de otro espacio de nombres -- p.ej. la del gestor web,
+//      `manual:{tipo}:{animalId|hato}:{fecha}:{uuid}` (issue #217,
+//      `hatoAlertasGestor.ts`) -- nunca se evalúa ni se retira. Sin esta
+//      guarda, el primer tick borraría de la cola TODA alerta creada a mano.
+//   2. Solo alertas ABIERTAS (`puedeResponderAlerta`: pendiente/enviada/
+//      escalada). Una alerta ya resuelta, descartada o expirada no se vuelve
+//      a tocar.
+//   3. Segmentos opacos (ids) se aceptan como `[^:]+`, sin exigir forma de
+//      UUID. Un patrón más estricto retiraría MÁS filas, y de más es
+//      justamente la dirección que este mecanismo no puede permitirse: lo
+//      que pinea cada patrón son los LITERALES y la cantidad de segmentos
+//      (que es lo que un cambio de granularidad mueve), nunca el id.
+// ============================================================================
+
+/** Primer segmento de una `regla_clave` -- su espacio de nombres. */
+function prefijoClaveRegla(claveRegla: string): string {
+  const i = claveRegla.indexOf(':');
+  return i < 0 ? claveRegla : claveRegla.slice(0, i);
+}
+
+/** Prefijo que cada regla usa hoy, DERIVADO de su propio constructor (arriba)
+ * en vez de re-escrito como literal: así es imposible que el prefijo de esta
+ * tabla y el que produce el constructor se separen en silencio. Los valores
+ * de muestra son irrelevantes -- solo se lee lo que va antes del primer `:`. */
+const PREFIJO_CLAVE_POR_TIPO: Readonly<Record<TipoAlertaHato, string>> = {
+  secado_due: prefijoClaveRegla(claveAlertaSecadoDue('id', '0000-00-00')),
+  rechequeo_due: prefijoClaveRegla(claveAlertaRechequeoDue('0000-00-00')),
+  servicio_sin_confirmacion: prefijoClaveRegla(claveAlertaServicioSinConfirmacion('id', '0000-00-00')),
+  parto_proximo: prefijoClaveRegla(claveAlertaPartoProximo('id', '0000-00-00')),
+  tratamiento_paso: prefijoClaveRegla(claveAlertaTratamientoPaso('id')),
+};
+
+/** Segmento opaco (un id). Deliberadamente laxo -- ver guarda 3 arriba. */
+const SEGMENTO_ID = '[^:]+';
+/** Segmento de fecha ISO (`aaaa-mm-dd`). */
+const SEGMENTO_FECHA = '\\d{4}-\\d{2}-\\d{2}';
+
+/** Forma VIGENTE de la clave de cada regla. Lo que pinea es la estructura:
+ * los literales (`hato` en `rechequeo_due` es el que separa la clave de hato
+ * de la clave por animal que la precedió) y cuántos segmentos hay. */
+const FORMA_VIGENTE_POR_TIPO: Readonly<Record<TipoAlertaHato, RegExp>> = {
+  secado_due: new RegExp(`^secado:${SEGMENTO_ID}:${SEGMENTO_FECHA}$`),
+  rechequeo_due: new RegExp(`^rechq:hato:${SEGMENTO_FECHA}$`),
+  servicio_sin_confirmacion: new RegExp(`^servconf:${SEGMENTO_ID}:${SEGMENTO_FECHA}$`),
+  parto_proximo: new RegExp(`^parto:${SEGMENTO_ID}:${SEGMENTO_FECHA}$`),
+  tratamiento_paso: new RegExp(`^ttto:${SEGMENTO_ID}$`),
+};
+
+/** La misma forma vigente, legible -- va en el motivo de descarte para que
+ * quien audite la fila mañana entienda por qué se retiró sin leer este
+ * archivo. */
+const DESCRIPCION_FORMA_VIGENTE: Readonly<Record<TipoAlertaHato, string>> = {
+  secado_due: 'secado:{animal_id}:{fecha_servicio}',
+  rechequeo_due: 'rechq:hato:{ultimo_chequeo_fecha}',
+  servicio_sin_confirmacion: 'servconf:{animal_id}:{fecha_servicio}',
+  parto_proximo: 'parto:{animal_id}:{fecha_servicio}',
+  tratamiento_paso: 'ttto:{paso_id}',
+};
+
+/** Forma vigente de la clave de un tipo, en texto. */
+export function descripcionFormaClaveVigente(tipo: TipoAlertaHato): string {
+  return DESCRIPCION_FORMA_VIGENTE[tipo];
+}
+
+/** ¿Esta clave pertenece al espacio de nombres que el motor produce para este
+ * tipo? (guarda 1). Una clave `manual:...` del gestor web devuelve `false`. */
+export function esClaveDelMotor(tipo: TipoAlertaHato, claveRegla: string): boolean {
+  return prefijoClaveRegla(claveRegla) === PREFIJO_CLAVE_POR_TIPO[tipo];
+}
+
+/** ¿Esta clave tiene la forma que la regla produce HOY? */
+export function claveReglaVigente(tipo: TipoAlertaHato, claveRegla: string): boolean {
+  return FORMA_VIGENTE_POR_TIPO[tipo].test(claveRegla);
+}
+
+/** Valor de `datos.motivo_descarte` que deja este mecanismo -- constante para
+ * poder filtrar después "qué retiró el tick" contra "qué descartó un humano
+ * en el gestor". */
+export const MOTIVO_DESCARTE_REGLA_SUPERADA = 'regla_superada';
+
+/** Fila abierta de `hato_alertas` que este mecanismo evalúa. `tipo` es
+ * `string` y no `TipoAlertaHato` a propósito: la tabla puede traer un tipo
+ * que este motor no conoce (una regla de otro módulo, o una futura), y ese
+ * caso se SALTA en vez de romper. */
+export interface AlertaAbiertaParaRetiro {
+  id: string;
+  tipo: string;
+  estado: EstadoAlertaHato;
+  regla_clave: string;
+  datos: Record<string, unknown> | null;
+}
+
+/** Lo que el caller debe escribir: `estado = 'descartada'` y estos `datos`. */
+export interface AlertaRetiradaPorReglaSuperada {
+  id: string;
+  tipo: TipoAlertaHato;
+  regla_clave: string;
+  /** Forma que la regla produce hoy -- para el log del tick. */
+  forma_vigente: string;
+  /** `datos` original + el motivo. Nunca reemplaza el contenido previo: el
+   * mensaje y `enviada_en` siguen ahí para quien audite. */
+  datos: Record<string, unknown>;
+}
+
+/**
+ * Alertas ABIERTAS cuya `regla_clave` ya no tiene la forma que su propia
+ * regla produce hoy -- o sea, superadas por un cambio de granularidad de la
+ * regla. El caller (`hato-alertas-tick.ts`, fase 0) las marca `descartada`.
+ *
+ * Puramente decisoria: no escribe nada y no mira el reloj (el instante de
+ * retiro llega como parámetro, mismo contrato que el resto del archivo).
+ */
+export function alertasSuperadasPorCambioDeRegla(
+  abiertas: readonly AlertaAbiertaParaRetiro[],
+  fechaHoraReferencia: string,
+): AlertaRetiradaPorReglaSuperada[] {
+  const retiradas: AlertaRetiradaPorReglaSuperada[] = [];
+  for (const alerta of abiertas) {
+    // Guarda 2 -- `puedeResponderAlerta` (bloque 9) es la ÚNICA definición de
+    // "alerta abierta" del módulo; no se reescribe la lista de estados aquí.
+    if (!puedeResponderAlerta(alerta.estado)) continue;
+    // Tipo desconocido para este motor -> no se opina sobre su clave.
+    const prefijoEsperado = (PREFIJO_CLAVE_POR_TIPO as Record<string, string | undefined>)[alerta.tipo];
+    if (prefijoEsperado === undefined) continue;
+    const tipo = alerta.tipo as TipoAlertaHato;
+    // Guarda 1 -- clave de otro espacio de nombres (p.ej. `manual:` del gestor
+    // web). El `origen` es una segunda red por si el gestor cambiara el
+    // formato de su clave algún día.
+    if (alerta.datos?.origen === 'manual') continue;
+    if (!esClaveDelMotor(tipo, alerta.regla_clave)) continue;
+    if (claveReglaVigente(tipo, alerta.regla_clave)) continue;
+
+    const formaVigente = DESCRIPCION_FORMA_VIGENTE[tipo];
+    retiradas.push({
+      id: alerta.id,
+      tipo,
+      regla_clave: alerta.regla_clave,
+      forma_vigente: formaVigente,
+      datos: {
+        ...(alerta.datos ?? {}),
+        motivo_descarte: MOTIVO_DESCARTE_REGLA_SUPERADA,
+        motivo_descarte_detalle:
+          `La regla ${tipo} cambió de granularidad: hoy emite \`${formaVigente}\` y esta alerta quedó con una clave ` +
+          'que ya nadie regenera ni cierra. El tick la retiró para que no siguiera escalando (ESCO-93).',
+        descartada_en: fechaHoraReferencia,
+        descartada_por: 'tick_hato_alertas',
+      },
+    });
+  }
+  return retiradas;
 }
 
 // ============================================================================

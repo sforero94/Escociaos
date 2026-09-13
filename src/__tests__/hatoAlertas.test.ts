@@ -38,6 +38,12 @@ import {
   puedeResponderAlerta,
   efectoDominioRespuestaAlerta,
   payloadEventoSecadoDesdeAlerta,
+  alertasSuperadasPorCambioDeRegla,
+  esClaveDelMotor,
+  claveReglaVigente,
+  descripcionFormaClaveVigente,
+  MOTIVO_DESCARTE_REGLA_SUPERADA,
+  type AlertaAbiertaParaRetiro,
   type AnimalHatoParaAlertas,
   type PasoTratamientoPendienteInput,
   type FilaSuscripcionAlerta,
@@ -426,15 +432,39 @@ describe('resumirCoberturaAlertas — instrumentación del tick (hallazgo #4, PO
     expect(omitidasDe(resumen, 'rechequeo_due', 'no_activa')).toBe(1);
   });
 
-  it('sin_ciclo_reproductivo: una ternera (o una vaca que nunca tuvo servicio/parto/secado/confirmación) no compite por las 3 reglas ancladas al ciclo', () => {
+  // --------------------------------------------------------------------------
+  // ESCO-68 -- decisión del dueño (Santiago, 2026-09-13): las ~30 activas sin
+  // evento reproductivo son NOVILLAS, fuera del alcance del seguimiento
+  // reproductivo automático por diseño. El desglose debe separar "no aplica"
+  // (`sin_historia_reproductiva`) de "falta el dato" (`sin_ciclo_reproductivo`),
+  // que hasta ahora se contaban en el mismo balde.
+  // --------------------------------------------------------------------------
+  it('sin_historia_reproductiva: una NOVILLA sin evento reproductivo es "no aplica", nunca un hueco de datos', () => {
+    const novilla = animalBase({
+      etapa: 'novilla',
+      ultimo_servicio_fecha: null,
+      ultimo_parto_fecha: null,
+      ultimo_secado_real_fecha: null,
+      ultima_confirmacion_prenez_fecha: null,
+    });
+    const resumen = resumirCoberturaAlertas([novilla], [], CONFIG, SIN_REGLAS, FECHA_REF);
+    for (const tipo of ['secado_due', 'servicio_sin_confirmacion', 'parto_proximo'] as TipoAlertaHato[]) {
+      expect(omitidasDe(resumen, tipo, 'sin_historia_reproductiva'), tipo).toBe(1);
+      expect(omitidasDe(resumen, tipo, 'sin_ciclo_reproductivo'), tipo).toBe(0);
+    }
+  });
+
+  it('sin_historia_reproductiva: una ternera también es "no aplica" -- nunca entró al ciclo', () => {
     const ternera = animalBase({ etapa: 'ternera', ultimo_servicio_fecha: null, ultimo_chequeo_fecha: null });
     const resumenTernera = resumirCoberturaAlertas([ternera], [], CONFIG, SIN_REGLAS, FECHA_REF);
-    expect(omitidasDe(resumenTernera, 'secado_due', 'sin_ciclo_reproductivo')).toBe(1);
-    expect(omitidasDe(resumenTernera, 'servicio_sin_confirmacion', 'sin_ciclo_reproductivo')).toBe(1);
-    expect(omitidasDe(resumenTernera, 'parto_proximo', 'sin_ciclo_reproductivo')).toBe(1);
-    // rechequeo_due no depende del ciclo -- sin ultimo_chequeo_fecha cae en 'sin_chequeo', no en 'sin_ciclo_reproductivo'.
+    expect(omitidasDe(resumenTernera, 'secado_due', 'sin_historia_reproductiva')).toBe(1);
+    expect(omitidasDe(resumenTernera, 'servicio_sin_confirmacion', 'sin_historia_reproductiva')).toBe(1);
+    expect(omitidasDe(resumenTernera, 'parto_proximo', 'sin_historia_reproductiva')).toBe(1);
+    // rechequeo_due no depende del ciclo -- sin ultimo_chequeo_fecha cae en 'sin_chequeo'.
     expect(omitidasDe(resumenTernera, 'rechequeo_due', 'sin_chequeo')).toBe(1);
+  });
 
+  it('sin_ciclo_reproductivo: una VACA sin ancla sigue siendo "falta el dato" -- ese balde no se vacía', () => {
     const vacaSinCiclo = animalBase({
       etapa: 'vaca',
       ultimo_servicio_fecha: null,
@@ -444,6 +474,37 @@ describe('resumirCoberturaAlertas — instrumentación del tick (hallazgo #4, PO
     });
     const resumenVaca = resumirCoberturaAlertas([vacaSinCiclo], [], CONFIG, SIN_REGLAS, FECHA_REF);
     expect(omitidasDe(resumenVaca, 'secado_due', 'sin_ciclo_reproductivo')).toBe(1);
+    expect(omitidasDe(resumenVaca, 'secado_due', 'sin_historia_reproductiva')).toBe(0);
+
+    // Una vaca parida reciente (con historia, sin servicio posterior) también
+    // está EN alcance: es el otro caso legítimo de "falta el dato".
+    const paridaReciente = animalBase({
+      etapa: 'vaca',
+      ultimo_servicio_fecha: null,
+      ultimo_parto_fecha: '2026-07-10',
+      ultimo_evento_fecha: '2026-07-10',
+    });
+    const resumenParida = resumirCoberturaAlertas([paridaReciente], [], CONFIG, SIN_REGLAS, FECHA_REF);
+    expect(omitidasDe(resumenParida, 'secado_due', 'sin_ciclo_reproductivo')).toBe(1);
+    expect(omitidasDe(resumenParida, 'secado_due', 'sin_historia_reproductiva')).toBe(0);
+  });
+
+  it('la suma por regla sigue cerrando contra animales_evaluados tras separar los dos baldes', () => {
+    const hato = [
+      animalBase({ animal_id: 'n1', etapa: 'novilla' }),
+      animalBase({ animal_id: 'n2', etapa: 'novilla' }),
+      animalBase({ animal_id: 't1', etapa: 'ternera' }),
+      animalBase({ animal_id: 'v1', etapa: 'vaca' }),
+      animalBase({ animal_id: 'v2', etapa: 'vaca', ultimo_servicio_fecha: '2025-12-01', ultimo_evento_fecha: '2025-12-01' }),
+    ];
+    const resumen = resumirCoberturaAlertas(hato, [], CONFIG, SIN_REGLAS, FECHA_REF);
+    for (const tipo of ['secado_due', 'servicio_sin_confirmacion', 'parto_proximo'] as TipoAlertaHato[]) {
+      const r = resumen.por_tipo[tipo];
+      const total = r.generadas + Object.values(r.omitidas).reduce((a, b) => a + b, 0);
+      expect(total, tipo).toBe(resumen.animales_evaluados);
+      expect(omitidasDe(resumen, tipo, 'sin_historia_reproductiva'), tipo).toBe(3);
+      expect(omitidasDe(resumen, tipo, 'sin_ciclo_reproductivo'), tipo).toBe(1);
+    }
   });
 
   it('evento_no_clasificado: un evento posterior al servicio que no es aborto (indeterminado) no compite por las 3 reglas ancladas al ciclo', () => {
@@ -561,7 +622,7 @@ describe('resumirCoberturaAlertas — instrumentación del tick (hallazgo #4, PO
       animalBase({ animal_id: 'v3', ultimo_servicio_fecha: '2026-06-01', ultimo_evento_fecha: '2026-06-01' }), // servicio_sin_confirmacion
       animalBase({ animal_id: 'v4', ultimo_servicio_fecha: '2025-10-25', ultimo_evento_fecha: '2025-10-25' }), // parto_proximo
       animalBase({ animal_id: 'v5', estado: 'vendida' }), // no_activa
-      animalBase({ animal_id: 'v6', etapa: 'ternera', ultimo_chequeo_fecha: null }), // sin_ciclo_reproductivo + sin_chequeo
+      animalBase({ animal_id: 'v6', etapa: 'ternera', ultimo_chequeo_fecha: null }), // sin_historia_reproductiva + sin_chequeo
       animalBase({
         animal_id: 'v7',
         ultimo_servicio_fecha: '2025-05-16',
@@ -612,6 +673,148 @@ describe('resumirCoberturaAlertas — instrumentación del tick (hallazgo #4, PO
       const totalYaGenerada = Object.values(resumen.por_tipo).reduce((acc, r) => acc + r.omitidas.ya_generada, 0);
       expect(totalYaGenerada).toBe(primeraCorrida.length);
     });
+  });
+});
+
+describe('alertasSuperadasPorCambioDeRegla — retiro de reglas superadas (ESCO-93)', () => {
+  const AHORA = '2026-09-13T10:00:00.000Z';
+
+  function abierta(overrides: Partial<AlertaAbiertaParaRetiro> = {}): AlertaAbiertaParaRetiro {
+    return {
+      id: 'alerta-1',
+      tipo: 'rechequeo_due',
+      estado: 'escalada',
+      regla_clave: 'rechq:animal-1:2026-07-09',
+      datos: { mensaje: 'texto original', enviada_en: '2026-09-07T10:45:00.000Z' },
+      ...overrides,
+    };
+  }
+
+  it('la clave VIEJA per-animal de rechequeo_due (superada por la clave de hato) se retira', () => {
+    // El caso real: el tick del 2026-09-07 generó 36 alertas con la clave
+    // per-animal; la regla pasó a ser de hato y esas filas quedaron
+    // escalando sin que nada las regenerara ni las cerrara.
+    const retiradas = alertasSuperadasPorCambioDeRegla([abierta()], AHORA);
+    expect(retiradas).toHaveLength(1);
+    expect(retiradas[0].id).toBe('alerta-1');
+    expect(retiradas[0].regla_clave).toBe('rechq:animal-1:2026-07-09');
+    expect(retiradas[0].forma_vigente).toBe('rechq:hato:{ultimo_chequeo_fecha}');
+    expect(retiradas[0].datos.motivo_descarte).toBe(MOTIVO_DESCARTE_REGLA_SUPERADA);
+    expect(retiradas[0].datos.descartada_en).toBe(AHORA);
+    // El contenido previo se conserva -- nunca se pisa la historia de la fila.
+    expect(retiradas[0].datos.mensaje).toBe('texto original');
+    expect(retiradas[0].datos.enviada_en).toBe('2026-09-07T10:45:00.000Z');
+  });
+
+  it('la clave VIGENTE de hato NO se toca -- el retiro no puede comerse la alerta que la reemplazó', () => {
+    const vigente = abierta({ id: 'alerta-nueva', regla_clave: 'rechq:hato:2026-07-09' });
+    expect(alertasSuperadasPorCambioDeRegla([vigente], AHORA)).toEqual([]);
+  });
+
+  it('no toca las alertas de OTRAS reglas, ni las vigentes ni las ajenas', () => {
+    const intactas: AlertaAbiertaParaRetiro[] = [
+      abierta({ id: 's1', tipo: 'secado_due', regla_clave: 'secado:animal-9:2025-12-01' }),
+      abierta({ id: 'c1', tipo: 'servicio_sin_confirmacion', regla_clave: 'servconf:animal-9:2026-06-01' }),
+      abierta({ id: 'p1', tipo: 'parto_proximo', regla_clave: 'parto:animal-9:2025-10-25' }),
+      abierta({ id: 't1', tipo: 'tratamiento_paso', regla_clave: 'ttto:paso-9' }),
+    ];
+    expect(alertasSuperadasPorCambioDeRegla(intactas, AHORA)).toEqual([]);
+  });
+
+  it('NUNCA retira una alerta manual del gestor web -- su clave vive en otro espacio de nombres', () => {
+    // `manual:{tipo}:{animalId|hato}:{fecha}:{uuid}` (issue #217). Sin esta
+    // guarda, el primer tick habría vaciado la cola de alertas creadas a mano.
+    const manualPorClave = abierta({
+      id: 'm1',
+      tipo: 'rechequeo_due',
+      regla_clave: 'manual:rechequeo_due:hato:2026-09-10:abc-123',
+      datos: { origen: 'manual', nota: 'la puso Martha' },
+    });
+    // Y tampoco si algún día el gestor cambiara el formato de su clave: el
+    // marcador `origen: 'manual'` es la segunda red.
+    const manualPorOrigen = abierta({
+      id: 'm2',
+      tipo: 'rechequeo_due',
+      regla_clave: 'rechq:animal-7:2026-07-09',
+      datos: { origen: 'manual' },
+    });
+    expect(alertasSuperadasPorCambioDeRegla([manualPorClave, manualPorOrigen], AHORA)).toEqual([]);
+  });
+
+  it('solo retira alertas ABIERTAS -- una ya resuelta, descartada o expirada se queda como está', () => {
+    const cerradas: EstadoAlertaHato[] = ['respondida', 'confirmada', 'descartada', 'expirada'];
+    for (const estado of cerradas) {
+      expect(alertasSuperadasPorCambioDeRegla([abierta({ estado })], AHORA), estado).toEqual([]);
+    }
+    const abiertos: EstadoAlertaHato[] = ['pendiente', 'enviada', 'escalada'];
+    for (const estado of abiertos) {
+      expect(alertasSuperadasPorCambioDeRegla([abierta({ estado })], AHORA), estado).toHaveLength(1);
+    }
+  });
+
+  it('un tipo que este motor no conoce se salta, nunca se retira a ciegas', () => {
+    const ajena = abierta({ id: 'x1', tipo: 'inventario_ronda_recordatorio', regla_clave: 'ronda:2026-09' });
+    expect(alertasSuperadasPorCambioDeRegla([ajena], AHORA)).toEqual([]);
+  });
+
+  it('retira solo la fila superada dentro de una cola mixta', () => {
+    const cola: AlertaAbiertaParaRetiro[] = [
+      abierta({ id: 'vieja', regla_clave: 'rechq:animal-1:2026-07-09' }),
+      abierta({ id: 'nueva', regla_clave: 'rechq:hato:2026-07-09' }),
+      abierta({ id: 'secado', tipo: 'secado_due', regla_clave: 'secado:animal-2:2025-12-01' }),
+      abierta({ id: 'manual', regla_clave: 'manual:rechequeo_due:hato:2026-09-10:u1', datos: { origen: 'manual' } }),
+      abierta({ id: 'cerrada', estado: 'confirmada', regla_clave: 'rechq:animal-3:2026-07-09' }),
+    ];
+    expect(alertasSuperadasPorCambioDeRegla(cola, AHORA).map((a) => a.id)).toEqual(['vieja']);
+  });
+
+  it('guarda anti-deriva: la clave que cada constructor produce HOY pasa su propio patrón vigente', () => {
+    // Si alguien cambia el formato de una clave y olvida el patrón de este
+    // bloque, el tick empezaría a retirar las alertas que acaba de generar.
+    // Esta prueba se pone roja antes de que eso llegue a producción.
+    const fila = animalBase({
+      animal_id: 'animal-1',
+      ultimo_servicio_fecha: '2025-12-01',
+      ultimo_evento_fecha: '2025-12-01',
+      ultimo_chequeo_fecha: '2026-05-01',
+    });
+    const paso: PasoTratamientoPendienteInput = {
+      paso_id: 'paso-1',
+      animal_id: 'animal-1',
+      numero: 47,
+      nombre: 'ESTRELLA',
+      fecha_programada: '2026-07-01',
+      descripcion: null,
+    };
+    const generadas = generarAlertasPendientes([fila], [paso], CONFIG, new Set(), FECHA_REF);
+    const tiposCubiertos = new Set(generadas.map((a) => a.tipo));
+    expect(tiposCubiertos.size).toBeGreaterThan(1);
+    for (const alerta of generadas) {
+      expect(esClaveDelMotor(alerta.tipo, alerta.regla_clave), alerta.regla_clave).toBe(true);
+      expect(claveReglaVigente(alerta.tipo, alerta.regla_clave), alerta.regla_clave).toBe(true);
+    }
+    // Y lo recién generado nunca se retira a sí mismo en el mismo tick.
+    const comoAbiertas: AlertaAbiertaParaRetiro[] = generadas.map((a, i) => ({
+      id: `g${i}`,
+      tipo: a.tipo,
+      estado: 'pendiente',
+      regla_clave: a.regla_clave,
+      datos: a.datos,
+    }));
+    expect(alertasSuperadasPorCambioDeRegla(comoAbiertas, AHORA)).toEqual([]);
+  });
+
+  it('descripcionFormaClaveVigente documenta los 5 tipos', () => {
+    const tipos: TipoAlertaHato[] = [
+      'secado_due',
+      'rechequeo_due',
+      'servicio_sin_confirmacion',
+      'parto_proximo',
+      'tratamiento_paso',
+    ];
+    for (const tipo of tipos) {
+      expect(descripcionFormaClaveVigente(tipo), tipo).toBeTruthy();
+    }
   });
 });
 

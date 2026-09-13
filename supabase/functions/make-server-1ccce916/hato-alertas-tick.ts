@@ -19,6 +19,17 @@
 //
 // Tres fases (plan §7.3), en este orden estricto -- cada una alimenta el
 // estado que la siguiente necesita:
+//   (0) Retirar   -- ESCO-93, previa a todo lo demás: una alerta ABIERTA cuya
+//                    `regla_clave` ya no tiene la forma que su regla produce
+//                    hoy quedó superada por un cambio de granularidad de esa
+//                    regla -- nadie la regenera y nadie la cierra, así que
+//                    escala para siempre (pasó con las 36 filas per-animal de
+//                    `rechequeo_due` del 2026-09-07). El motor puro
+//                    `alertasSuperadasPorCambioDeRegla` decide cuáles son;
+//                    aquí solo se marcan `descartada` con el motivo en
+//                    `datos`. Va ANTES de (a) a propósito: así las fases
+//                    (b)/(c)/(d), que vuelven a consultar la tabla, ya no las
+//                    ven y no las despachan ni las escalan una vez más.
 //   (a) Generar   -- motor puro `generarAlertasPendientes` (hatoAlertas.ts)
 //                    sobre `v_hato_estado_actual` + pasos de tratamiento
 //                    pendientes + `HatoConfig` (058/062, vía
@@ -103,9 +114,12 @@ import {
   debeReenviar,
   decidirAccionEscalamiento,
   decidirExpiracionTerminal,
+  alertasSuperadasPorCambioDeRegla,
   claveAlertaCatalogo,
   agruparSuscriptoresPorClave,
   destinatariosTelegramPermitidos,
+  ESTADOS_ALERTA_RESPONSIBLES,
+  type AlertaAbiertaParaRetiro,
   type AnimalHatoParaAlertas,
   type PasoTratamientoPendienteInput,
   type AlertaGenerada,
@@ -276,6 +290,54 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
   );
   const suscriptoresPorClave = agruparSuscriptoresPorClave(suscripcionesResueltas.filas);
   const rolPorTelegramId = suscripcionesResueltas.rolPorTelegramId;
+
+  // =========================================================================
+  // (0) RETIRAR ALERTAS SUPERADAS POR UN CAMBIO DE REGLA (ESCO-93)
+  //
+  // Ver la cabecera del archivo y el BLOQUE 3c de `hato-alertas.ts`. El
+  // criterio de QUÉ está superado vive entero en el motor puro -- aquí solo
+  // se consulta, se escribe y se cuenta.
+  //
+  // Un fallo de esta fase NO aborta el tick: el peor caso es exactamente el
+  // comportamiento de antes (la alerta vieja sigue en la cola un día más),
+  // mismo contrato que el resto de las escrituras no críticas del archivo.
+  // =========================================================================
+
+  let retiradasReglaSuperada = 0;
+
+  const { data: filasAbiertas, error: errorAbiertas } = await supabase
+    .from('hato_alertas')
+    .select('id, tipo, estado, regla_clave, datos')
+    // Una sola definición de "abierta" en todo el módulo -- la misma que usa
+    // `puedeResponderAlerta` dentro del motor puro.
+    .in('estado', [...ESTADOS_ALERTA_RESPONSIBLES]);
+  if (errorAbiertas) {
+    console.error(
+      `[hato-alertas-tick] no se pudieron leer las alertas abiertas para el retiro por regla superada (fase 0, ESCO-93): ${errorAbiertas.message}`,
+    );
+  } else {
+    const superadas = alertasSuperadasPorCambioDeRegla(
+      (filasAbiertas ?? []) as AlertaAbiertaParaRetiro[],
+      fechaHoraReferencia,
+    );
+    for (const superada of superadas) {
+      const { error } = await supabase
+        .from('hato_alertas')
+        .update({ estado: 'descartada', datos: superada.datos })
+        .eq('id', superada.id);
+      if (error) {
+        console.error(
+          `[hato-alertas-tick] no se pudo retirar la alerta superada ${superada.id} (fase 0, ESCO-93):`,
+          error.message,
+        );
+        continue;
+      }
+      retiradasReglaSuperada += 1;
+      console.log(
+        `[hato-alertas-tick] alerta ${superada.id} (${superada.tipo}, clave ${superada.regla_clave}) descartada: su regla emite hoy ${superada.forma_vigente}.`,
+      );
+    }
+  }
 
   // =========================================================================
   // (a) GENERAR
@@ -622,6 +684,11 @@ export async function handleHatoAlertasTick(c: Context): Promise<Response> {
   const resultado = {
     success: true,
     fechaReferencia,
+    // ESCO-93. No se persiste en `hato_alertas_tick_runs`: esa tabla
+    // (migración 116) tiene columnas fijas y agregarle una exige su propia
+    // migración. Viaja en la respuesta HTTP y en la línea de log del tick,
+    // que es donde se lee una corrida puntual.
+    retiradas_regla_superada: retiradasReglaSuperada,
     generadas: alertasNuevas.length,
     enviadas, // # de alertas con al menos un envío exitoso
     mensajes_enviados: mensajesEnviados, // # de mensajes de Telegram individuales (broadcast, 096)
@@ -679,6 +746,7 @@ async function registrarCorridaTick(
     animales_evaluados: args.cobertura.animales_evaluados,
     animales_sin_raza: args.cobertura.animales_sin_raza,
     cobertura: args.cobertura.por_tipo,
+    retiradas_regla_superada: args.resultado.retiradas_regla_superada,
     generadas: args.resultado.generadas,
     enviadas: args.resultado.enviadas,
     escaladas: args.resultado.escaladas,

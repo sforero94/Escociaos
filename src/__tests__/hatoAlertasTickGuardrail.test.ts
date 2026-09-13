@@ -26,6 +26,19 @@ describe('tick: guardrail Telegram campo (issue #217)', () => {
     }
   });
 
+  it('ambas copias del tick retiran las alertas superadas por un cambio de regla (ESCO-93)', () => {
+    // La fase (0) tiene que EXISTIR en el handler, no solo estar descrita en
+    // un comentario: sin la llamada al motor, una regla re-afinada vuelve a
+    // dejar sus alertas viejas escalando para siempre.
+    for (const rel of COPIAS) {
+      const fuente = readFileSync(resolve(__dirname, '../..', rel), 'utf8');
+      expect(fuente, rel).toContain('alertasSuperadasPorCambioDeRegla(');
+      // Se marcan descartada, nunca se borran: `hato_alertas` es historia.
+      expect(fuente, rel).toMatch(/estado:\s*'descartada'/);
+      expect(fuente, rel).not.toMatch(/from\('hato_alertas'\)\s*\.delete\(/);
+    }
+  });
+
   it('las dos copias del tick siguen siendo idénticas en el filtro', () => {
     const [a, b] = COPIAS.map((rel) => readFileSync(resolve(__dirname, '../..', rel), 'utf8'));
     expect(a).toBe(b);

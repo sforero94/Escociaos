@@ -183,6 +183,40 @@ describe('paridad de comportamiento resumirCoberturaAlertas', () => {
   });
 });
 
+describe('paridad de comportamiento alertasSuperadasPorCambioDeRegla (ESCO-93)', () => {
+  const ABIERTAS: frontend.AlertaAbiertaParaRetiro[] = [
+    // Clave per-animal de rechequeo_due, superada por la clave de hato.
+    {
+      id: 'vieja',
+      tipo: 'rechequeo_due',
+      estado: 'escalada',
+      regla_clave: 'rechq:animal-1:2026-07-09',
+      datos: { mensaje: 'texto' },
+    },
+    { id: 'nueva', tipo: 'rechequeo_due', estado: 'enviada', regla_clave: 'rechq:hato:2026-07-09', datos: null },
+    { id: 'secado', tipo: 'secado_due', estado: 'pendiente', regla_clave: 'secado:animal-1:2025-12-01', datos: null },
+    {
+      id: 'manual',
+      tipo: 'rechequeo_due',
+      estado: 'pendiente',
+      regla_clave: 'manual:rechequeo_due:hato:2026-09-10:u1',
+      datos: { origen: 'manual' },
+    },
+  ];
+  const AHORA = '2026-09-13T10:00:00.000Z';
+
+  it('retira exactamente las mismas filas en ambas implementaciones', () => {
+    const retiradasFrontend = frontend.alertasSuperadasPorCambioDeRegla(ABIERTAS, AHORA);
+    const retiradasEdge = edge.alertasSuperadasPorCambioDeRegla(
+      ABIERTAS as unknown as edge.AlertaAbiertaParaRetiro[],
+      AHORA,
+    );
+    expect(retiradasEdge).toEqual(retiradasFrontend);
+    // Sanity: el fixture debe retirar algo y dejar algo intacto.
+    expect(retiradasFrontend.map((a) => a.id)).toEqual(['vieja']);
+  });
+});
+
 describe('paridad de comportamiento debeReenviar / decidirAccionEscalamiento', () => {
   it('debeReenviar coincide en los casos límite', () => {
     const casos: Array<[frontend.EstadoAlertaHato, number, string | null, string]> = [
