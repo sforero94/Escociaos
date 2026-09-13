@@ -49,13 +49,23 @@
 --     `FOR UPDATE` sobre `rondas_excepciones` y sobre `productos`, y la
 --     atribución por `fn_ronda_actor_correo` que puso la 143: todo intacto.
 --
+-- ESTADO: ESCRITA Y FUSIONADA, **SIN APLICAR** (2026-09-13). Se aplica
+-- DESPUÉS de `npx supabase functions deploy make-server-1ccce916`, y ese
+-- despliegue no lo pudo hacer la sesión que escribió esto (sin
+-- `SUPABASE_ACCESS_TOKEN`; el conector MCP de escritura aplica migraciones,
+-- no despliega funciones).
+--
 -- ORDEN DE APLICACIÓN -- INVERTIDO respecto de la 140, y por un motivo que
 -- conviene no olvidar: **primero `functions deploy`, después la migración.**
 -- El payload es `jsonb`, así que la versión vieja del RPC IGNORA la clave
--- nueva: desplegar antes es inofensivo. Al revés no lo es -- la migración
--- aplicada contra la conversación vieja hace que cada captura de David muera
--- con un RAISE. Falla cerrada y visible, nunca corrupción silenciosa, pero
--- evitable con el orden correcto.
+-- nueva: desplegar antes es inofensivo, y el único costo de esa ventana es
+-- que `cantidad_fisica` sigue sin reconfirmarse -- o sea, el estado de hoy.
+-- Al revés NO es inofensivo: la migración aplicada contra la conversación
+-- vieja hace que cada captura de David muera con un RAISE. Falla cerrada y
+-- visible, nunca corrupción silenciosa, pero evitable con el orden correcto.
+-- Es la lección de la 105 en espejo: allá la mina era código de seguridad
+-- mergeado sin su contraparte en base; acá sería la contraparte en base
+-- aplicada sin su código.
 --
 -- Verificado contra el catálogo vivo antes de escribir esto: `prosrc` de
 -- `fn_ronda_resolver_con_captura` con md5 `e2b4878c163624f971b194075e0bb774`
