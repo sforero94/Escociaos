@@ -87,6 +87,57 @@ export function errorDestareVenta(entrada: EntradaPesosVentaGanado): string | nu
   return null;
 }
 
+/**
+ * Mismo cálculo que `fn_crear_movimiento_pendiente_ganado` (migración 141):
+ * prefiere `peso_total_kg` (báscula); si no hay, cae a `kilos_pagados`
+ * (neto). Nunca se inventa un promedio con cero cabezas.
+ *
+ * Editar una `fin_transacciones_ganado` ya confirmada NO re-dispara ningún
+ * trigger (solo hay triggers AFTER INSERT) — esta función es la que permite
+ * que el formulario re-derive el mismo número a mano y lo escriba en el
+ * `gan_movimientos` ya confirmado (hallazgo ESCO-90), en vez de dejarlo
+ * congelado en el valor calculado al insertar.
+ */
+export function derivarPesoPromedioKgGanado({
+  pesoTotalKg,
+  kilosPagados,
+  cantidadCabezas,
+}: {
+  pesoTotalKg: number | null;
+  kilosPagados: number | null;
+  cantidadCabezas: number;
+}): number | null {
+  if (!Number.isFinite(cantidadCabezas) || cantidadCabezas <= 0) return null;
+  if (pesoTotalKg != null && Number.isFinite(pesoTotalKg)) {
+    return Math.round((pesoTotalKg / cantidadCabezas) * 10) / 10;
+  }
+  if (kilosPagados != null && Number.isFinite(kilosPagados)) {
+    return Math.round((kilosPagados / cantidadCabezas) * 10) / 10;
+  }
+  return null;
+}
+
+/**
+ * Editar `cantidad_cabezas` de una transacción que ya tiene un movimiento de
+ * inventario `confirmado` desincroniza el conteo de cabezas sin avisar y sin
+ * dejar rastro — `fn_gan_validar_cabezas_transaccion` (097) guarda escrituras
+ * a `gan_movimientos`, no ediciones de la transacción financiera. Se rechaza
+ * la edición entera en ese caso; el peso sí se puede corregir (ver
+ * `derivarPesoPromedioKgGanado`).
+ */
+export function errorEdicionCabezasConfirmado({
+  cambioCantidadCabezas,
+  hayMovimientoConfirmado,
+}: {
+  cambioCantidadCabezas: boolean;
+  hayMovimientoConfirmado: boolean;
+}): string | null {
+  if (cambioCantidadCabezas && hayMovimientoConfirmado) {
+    return 'No se puede cambiar la cantidad de cabezas: esta transacción ya tiene inventario confirmado. Si el conteo real cambió, regístralo como un ajuste aparte en Inventario → Ganado.';
+  }
+  return null;
+}
+
 export interface EntradaPotreroOrigenVenta {
   tipo: 'compra' | 'venta';
   esHato: boolean;

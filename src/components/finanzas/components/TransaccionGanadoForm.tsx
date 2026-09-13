@@ -21,6 +21,8 @@ import {
   calcularPesosVentaGanado,
   errorDestareVenta,
   errorPotreroOrigenVenta,
+  derivarPesoPromedioKgGanado,
+  errorEdicionCabezasConfirmado,
 } from '@/utils/calculosVentaGanado';
 import { formatCurrency, formatNumber } from '@/utils/format';
 import { cn } from '@/components/ui/utils';
@@ -316,6 +318,35 @@ export function TransaccionGanadoForm({ open, onOpenChange, transaccion, default
       }
     }
 
+    // ESCO-90: editar cantidad_cabezas sobre una transacción cuyo movimiento
+    // de inventario ya está confirmado desincroniza el conteo de gan_inventario
+    // sin avisar y sin dejar rastro -- no hay trigger AFTER UPDATE que lo
+    // vuelva a validar. Se rechaza la edición entera en ese caso, antes de
+    // escribir nada.
+    let movimientosConfirmados: { id: string; potrero_destino_id: string | null; potrero_origen_id: string | null; fecha: string; peso_promedio_kg: number | null; notas: string | null }[] = [];
+    if (isEditing) {
+      const supabaseCheck = getSupabase() as any;
+      const { data: movimientos, error: errorMovimientos } = await supabaseCheck
+        .from('gan_movimientos')
+        .select('id, potrero_destino_id, potrero_origen_id, fecha, peso_promedio_kg, notas')
+        .eq('transaccion_ganado_id', transaccion!.id)
+        .eq('estado', 'confirmado');
+      if (errorMovimientos) {
+        toast.error('No se pudo verificar el inventario ya confirmado: ' + errorMovimientos.message);
+        return;
+      }
+      movimientosConfirmados = movimientos ?? [];
+      const cambioCabezas = cantidadCabezas !== transaccion!.cantidad_cabezas;
+      const errorCabezas = errorEdicionCabezasConfirmado({
+        cambioCantidadCabezas: cambioCabezas,
+        hayMovimientoConfirmado: movimientosConfirmados.length > 0,
+      });
+      if (errorCabezas) {
+        toast.error(errorCabezas);
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const kilosPagados = isVentaCeba
@@ -366,6 +397,54 @@ export function TransaccionGanadoForm({ open, onOpenChange, transaccion, default
           .update(payload)
           .eq('id', transaccion!.id);
         if (error) throw error;
+
+        // ESCO-90: no hay trigger AFTER UPDATE sobre fin_transacciones_ganado
+        // -- si esta edición tiene movimiento(s) de inventario ya confirmados
+        // (cantidad_cabezas sin cambio, ya lo garantizó la guarda de arriba),
+        // el peso promedio congelado en INSERT queda desactualizado. Se
+        // re-deriva con la MISMA fórmula que fn_crear_movimiento_pendiente_ganado
+        // (migración 141) y se aplica a cada movimiento confirmado de esta
+        // transacción -- puede haber más de uno por el reparto multi-potrero
+        // (migración 097).
+        if (movimientosConfirmados.length > 0) {
+          const pesoPromedioNuevo = derivarPesoPromedioKgGanado({
+            pesoTotalKg: isVentaCeba ? pesoTotalKg : null,
+            kilosPagados,
+            cantidadCabezas,
+          });
+          for (const movimiento of movimientosConfirmados) {
+            if (movimiento.peso_promedio_kg === pesoPromedioNuevo) continue;
+            const { error: errorMovimiento } = await supabase
+              .from('gan_movimientos')
+              .update({ peso_promedio_kg: pesoPromedioNuevo })
+              .eq('id', movimiento.id);
+            if (errorMovimiento) {
+              console.error('No se pudo re-derivar peso_promedio_kg en gan_movimientos', errorMovimiento);
+              continue;
+            }
+            // gan_pesos_historico no tiene FK al movimiento (se INSERTa una
+            // vez, en confirmación, por potrero+fecha+peso) -- solo se
+            // corrige si hay EXACTAMENTE una fila que coincida con el valor
+            // VIEJO en ese potrero+fecha. Ante cualquier ambigüedad se deja
+            // intacta: adivinar cuál fila tocar es peor que dejarla vieja.
+            const potreroId = movimiento.potrero_destino_id ?? movimiento.potrero_origen_id;
+            if (potreroId && movimiento.peso_promedio_kg != null && pesoPromedioNuevo != null) {
+              const { data: historicos, error: errorHistoricos } = await supabase
+                .from('gan_pesos_historico')
+                .select('id')
+                .eq('potrero_id', potreroId)
+                .eq('fecha', movimiento.fecha)
+                .eq('peso_promedio_kg', movimiento.peso_promedio_kg);
+              if (!errorHistoricos && historicos?.length === 1) {
+                await supabase
+                  .from('gan_pesos_historico')
+                  .update({ peso_promedio_kg: pesoPromedioNuevo })
+                  .eq('id', historicos[0].id);
+              }
+            }
+          }
+        }
+
         toast.success('Transaccion actualizada');
       } else if (hatoAnimalId) {
         // Necesitamos la fila insertada (id + fecha) para que el caller pueda
