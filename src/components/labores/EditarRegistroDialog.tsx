@@ -143,14 +143,18 @@ const EditarRegistroDialog: React.FC<EditarRegistroDialogProps> = ({
       } else {
         const empleado = empleados.find(e => e.id === trabajadorId);
         if (!empleado) throw new Error('Empleado no encontrado');
-        costoJornal = calculateLaborCost({
+        // costo_jornal = lo pagado por la fracción trabajada; valor_jornal_empleado =
+        // la tarifa de UN jornal completo, no la fracción. Hallazgo #45: esta columna
+        // guardaba el salario mensual crudo, ~30 veces el valor real.
+        const laborCost = calculateLaborCost({
           salary: empleado.salario || 0,
           benefits: empleado.prestaciones_sociales || 0,
           allowances: empleado.auxilios_no_salariales || 0,
           weeklyHours: empleado.horas_semanales || 48,
           fractionWorked: fraccion,
-        }).totalCost;
-        valorJornalEmpleado = empleado.salario || 0;
+        });
+        costoJornal = laborCost.totalCost;
+        valorJornalEmpleado = laborCost.dailyCost;
       }
 
       const { error } = await getSupabase()

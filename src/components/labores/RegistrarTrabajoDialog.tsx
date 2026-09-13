@@ -127,6 +127,21 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
     }
   };
 
+  // Valor de UN jornal completo (la tarifa, no lo pagado por la fracción trabajada
+  // ese día — eso es costo_jornal). Hallazgo #45 de la operación de mantenimiento:
+  // esta columna guardaba el salario mensual crudo, ~30 veces el valor real de un
+  // jornal. `dailyCost` no depende de la fracción, así que se pasa 1 sin efecto.
+  const calcularValorJornalEmpleado = (trabajador: Trabajador): number => {
+    if (trabajador.type !== 'empleado') return 0;
+    return calculateLaborCost({
+      salary: trabajador.data.salario || 0,
+      benefits: trabajador.data.prestaciones_sociales || 0,
+      allowances: trabajador.data.auxilios_no_salariales || 0,
+      weeklyHours: trabajador.data.horas_semanales || 48,
+      fractionWorked: 1,
+    }).dailyCost;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -171,7 +186,7 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
               if (trabajador.type === 'empleado') {
                 registro.empleado_id = trabajador.data.id;
                 registro.contratista_id = null;
-                registro.valor_jornal_empleado = trabajador.data.salario || 0;
+                registro.valor_jornal_empleado = calcularValorJornalEmpleado(trabajador);
               } else {
                 registro.empleado_id = null;
                 registro.contratista_id = trabajador.data.id;
