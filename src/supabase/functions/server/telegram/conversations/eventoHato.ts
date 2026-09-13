@@ -463,16 +463,25 @@ export async function eventoHatoConversation(
         // Martha el 2026-09-08 (ver la cabecera de `fechaDDMM.ts`). Las dos
         // opciones se muestran en prosa —nunca «5/9», que es el texto que se
         // está desambiguando— y la más cercana a hoy va primero.
+        //
+        // Hallazgo ESCO-87 (2026-09-10): once servicios más se transpusieron
+        // DESPUÉS de que este mismo diálogo ya estaba desplegado y
+        // preguntando. La fecha correcta se calculó y se ofreció primero en
+        // todos los casos verificados -- el defecto no está en el parser, que
+        // ya no elige por su cuenta. Se marca el botón "probable" con ⭐ para
+        // que un toque apresurado en una ráfaga de registros tenga una señal
+        // visual extra antes de tocar el segundo botón por error.
         const opciones: LecturaFecha[] = [leida.probable, leida.alterna];
         const kbAmbigua = new InlineKeyboard()
-          .text(opciones[0].etiqueta, "fecha_amb_0")
+          .text(`⭐ ${opciones[0].etiqueta}`, "fecha_amb_0")
           .row()
           .text(opciones[1].etiqueta, "fecha_amb_1")
           .row()
           .text("❌ Cancelar", "cancel_flow");
-        await paso.reply(`📅 "${texto.trim()}" se puede leer de dos formas. ¿Cuál es?`, {
-          reply_markup: kbAmbigua,
-        });
+        await paso.reply(
+          `📅 "${texto.trim()}" se puede leer de dos formas. ¿Cuál es?\n\n⭐ = la más probable (la más cercana a hoy). Revisa antes de tocar.`,
+          { reply_markup: kbAmbigua },
+        );
 
         const cbAmb = await conversation.waitForCallbackQuery([
           "fecha_amb_0",
