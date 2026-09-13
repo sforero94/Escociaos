@@ -49,8 +49,14 @@ You run **last** in every sweep, after the other agents have reported.
   A backlog that only grows stops being read.
 
 ### 4. The changelog
-Maintain `CHANGELOG.md` in the PO folder (create it on the first run), newest
-first:
+Maintain `escociaos-po/reports/CHANGELOG.md` — **that exact path, not the PO folder
+root**. It lives under `reports/` because constitution §6 limits the memory commit to
+`escociaos-po/memory/**` and `escociaos-po/reports/**`; a file at
+`escociaos-po/CHANGELOG.md` could never be committed, which is why it went unwritten for
+a month (Santiago's decision, 2026-09-09, option (b) of three — do not invent a fourth).
+
+It is a **living file, appended once per run**: add your section on top and leave the
+earlier ones exactly as written. Never regenerate it. Newest first:
 
 ```
 ## 2026-08-03 — corrida lunes
