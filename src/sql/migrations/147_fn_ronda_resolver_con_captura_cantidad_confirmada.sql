@@ -1,4 +1,4 @@
--- Migración 146: fn_ronda_resolver_con_captura -- la cantidad FÍSICA también
+-- Migración 147: fn_ronda_resolver_con_captura -- la cantidad FÍSICA también
 -- se reconfirma a mano en la vía CON respaldo (hallazgo ESCO-61, parte C)
 --
 -- La 132 cerró la mitad SIN respaldo: quien propone un ajuste
@@ -81,10 +81,10 @@ DECLARE
   v_src TEXT;
 BEGIN
   IF to_regprocedure('public.fn_ronda_resolver_con_captura(jsonb)') IS NULL THEN
-    RAISE EXCEPTION '146 ABORTADA (pre): fn_ronda_resolver_con_captura(jsonb) no existe -- depende de 126/143.';
+    RAISE EXCEPTION '147 ABORTADA (pre): fn_ronda_resolver_con_captura(jsonb) no existe -- depende de 126/143.';
   END IF;
   IF to_regprocedure('public.fn_ronda_actor_correo(uuid, uuid)') IS NULL THEN
-    RAISE EXCEPTION '146 ABORTADA (pre): fn_ronda_actor_correo(uuid, uuid) no existe -- el cuerpo de abajo la usa (migración 143).';
+    RAISE EXCEPTION '147 ABORTADA (pre): fn_ronda_actor_correo(uuid, uuid) no existe -- el cuerpo de abajo la usa (migración 143).';
   END IF;
 
   SELECT p.prosrc INTO v_src
@@ -92,13 +92,13 @@ BEGIN
    WHERE n.nspname = 'public' AND p.proname = 'fn_ronda_resolver_con_captura';
 
   IF v_src ILIKE '%cantidad_fisica_confirmada%' THEN
-    RAISE EXCEPTION '146 ABORTADA (pre): fn_ronda_resolver_con_captura YA exige cantidad_fisica_confirmada -- lo más probable es que esta migración ya se aplicó. Revisar a mano antes de reintentar.';
+    RAISE EXCEPTION '147 ABORTADA (pre): fn_ronda_resolver_con_captura YA exige cantidad_fisica_confirmada -- lo más probable es que esta migración ya se aplicó. Revisar a mano antes de reintentar.';
   END IF;
 
   -- Nunca sobrescribir en silencio un cambio hecho fuera del repo (lección
   -- de la 143): si el cuerpo vivo no es el que se revisó, abortar.
   IF md5(v_src) <> 'e2b4878c163624f971b194075e0bb774' THEN
-    RAISE EXCEPTION '146 ABORTADA (pre): fn_ronda_resolver_con_captura difiere del cuerpo vivo revisado (md5 actual %). No sobrescribir un cambio vivo sin incorporarlo primero.', md5(v_src);
+    RAISE EXCEPTION '147 ABORTADA (pre): fn_ronda_resolver_con_captura difiere del cuerpo vivo revisado (md5 actual %). No sobrescribir un cambio vivo sin incorporarlo primero.', md5(v_src);
   END IF;
 END $$;
 
@@ -116,7 +116,7 @@ DECLARE
   v_factura        TEXT := NULLIF(payload ->> 'factura', '');
   v_lote_aplicacion TEXT := NULLIF(payload ->> 'lote_aplicacion', '');
   v_aplicacion_id  UUID := NULLIF(payload ->> 'aplicacion_id', '')::UUID;
-  -- Migración 146: el CONTEO FÍSICO reconfirmado a mano. Es un número
+  -- Migración 147: el CONTEO FÍSICO reconfirmado a mano. Es un número
   -- distinto de v_cantidad (que es el movimiento) y nunca se deriva de él.
   v_cantidad_fisica_confirmada NUMERIC := (payload ->> 'cantidad_fisica_confirmada')::NUMERIC;
 
@@ -137,7 +137,7 @@ BEGIN
   IF v_fecha IS NULL THEN
     RAISE EXCEPTION 'fn_ronda_resolver_con_captura: fecha_movimiento es requerida -- CA-8 exige la fecha REAL del movimiento.';
   END IF;
-  -- ═══ GUARDA NUEVA (146) ═══════════════════════════════════════════════
+  -- ═══ GUARDA NUEVA (147) ═══════════════════════════════════════════════
   -- La cantidad física SIEMPRE se reconfirma a mano, también por esta vía --
   -- nunca se conserva el valor que congeló el intérprete de voz. Un físico
   -- de 0 es un dato real (nunca se rechaza), pero el campo viene SIEMPRE.
@@ -218,7 +218,7 @@ COMMENT ON FUNCTION fn_ronda_resolver_con_captura(JSONB) IS
   'con FOR UPDATE sobre productos. cantidad se guarda como magnitud '
   'positiva (decisión documentada en la cabecera de la migración 126). La '
   'migración 143 atribuye responsable con fn_ronda_actor_correo. La '
-  'migración 146 exige cantidad_fisica_confirmada -- el CONTEO FÍSICO, '
+  'migración 147 exige cantidad_fisica_confirmada -- el CONTEO FÍSICO, '
   'distinto de la cantidad del movimiento -- y sobrescribe con él '
   'rondas_excepciones.cantidad_fisica, misma garantía que la 132 dio a la '
   'vía sin respaldo.';
@@ -236,46 +236,46 @@ BEGIN
    WHERE n.nspname = 'public' AND p.proname = 'fn_ronda_resolver_con_captura';
 
   IF v_def NOT ILIKE '%v_cantidad_fisica_confirmada NUMERIC := (payload ->> ''cantidad_fisica_confirmada'')::NUMERIC%' THEN
-    RAISE EXCEPTION '146 ABORTADA (post): la función no lee cantidad_fisica_confirmada del payload.';
+    RAISE EXCEPTION '147 ABORTADA (post): la función no lee cantidad_fisica_confirmada del payload.';
   END IF;
   IF v_def NOT ILIKE '%cantidad_fisica_confirmada es requerida%' THEN
-    RAISE EXCEPTION '146 ABORTADA (post): falta la guarda que exige cantidad_fisica_confirmada.';
+    RAISE EXCEPTION '147 ABORTADA (post): falta la guarda que exige cantidad_fisica_confirmada.';
   END IF;
   IF v_def NOT ILIKE '%v_cantidad_fisica_confirmada < 0%' THEN
-    RAISE EXCEPTION '146 ABORTADA (post): falta la guarda de negativos (0 sigue siendo válido).';
+    RAISE EXCEPTION '147 ABORTADA (post): falta la guarda de negativos (0 sigue siendo válido).';
   END IF;
   IF v_def NOT ILIKE '%cantidad_fisica = v_cantidad_fisica_confirmada%' THEN
-    RAISE EXCEPTION '146 ABORTADA (post): el UPDATE no sobrescribe rondas_excepciones.cantidad_fisica con el valor confirmado.';
+    RAISE EXCEPTION '147 ABORTADA (post): el UPDATE no sobrescribe rondas_excepciones.cantidad_fisica con el valor confirmado.';
   END IF;
   -- Lo heredado que NO se puede perder en un CREATE OR REPLACE.
   IF v_def NOT ILIKE '%v_excepcion.estado <> ''explicada''%' THEN
-    RAISE EXCEPTION '146 ABORTADA (post): la guarda CA-38 de estado "explicada" se perdió en este reemplazo.';
+    RAISE EXCEPTION '147 ABORTADA (post): la guarda CA-38 de estado "explicada" se perdió en este reemplazo.';
   END IF;
   IF v_def NOT ILIKE '%fn_ronda_actor_correo(v_actor_usuario, v_actor_telegram)%'
      OR v_def ILIKE '%fn_ronda_actor_nombre(%' THEN
-    RAISE EXCEPTION '146 ABORTADA (post): la atribución por fn_ronda_actor_correo (migración 143) no sobrevivió.';
+    RAISE EXCEPTION '147 ABORTADA (post): la atribución por fn_ronda_actor_correo (migración 143) no sobrevivió.';
   END IF;
   IF v_def NOT ILIKE '%fn_ronda_validar_actor(v_actor_usuario, v_actor_telegram, ''inventario_explicacion'')%' THEN
-    RAISE EXCEPTION '146 ABORTADA (post): la autorización por inventario_explicacion se perdió.';
+    RAISE EXCEPTION '147 ABORTADA (post): la autorización por inventario_explicacion se perdió.';
   END IF;
   IF v_def NOT ILIKE '%''Ajuste''%' THEN
-    RAISE EXCEPTION '146 ABORTADA (post): la guarda CA-8 sobre tipo_movimiento se perdió.';
+    RAISE EXCEPTION '147 ABORTADA (post): la guarda CA-8 sobre tipo_movimiento se perdió.';
   END IF;
 
   -- Seguridad y grants: prosecdef/proconfig, nunca el texto del DDL
   -- (pg_get_functiondef omite SECURITY INVOKER por ser el default -- lección
   -- de la 130).
   IF v_secdef IS DISTINCT FROM FALSE THEN
-    RAISE EXCEPTION '146 ABORTADA (post): la función quedó SECURITY DEFINER -- debía seguir SECURITY INVOKER.';
+    RAISE EXCEPTION '147 ABORTADA (post): la función quedó SECURITY DEFINER -- debía seguir SECURITY INVOKER.';
   END IF;
   IF NOT ('search_path=public, pg_temp' = ANY(COALESCE(v_searchp, ARRAY[]::TEXT[]))) THEN
-    RAISE EXCEPTION '146 ABORTADA (post): el search_path pineado no sobrevivió al CREATE OR REPLACE. proconfig actual: %', v_searchp;
+    RAISE EXCEPTION '147 ABORTADA (post): el search_path pineado no sobrevivió al CREATE OR REPLACE. proconfig actual: %', v_searchp;
   END IF;
   IF v_acl IS NULL OR v_acl NOT LIKE '%authenticated=X%' OR v_acl NOT LIKE '%service_role=X%' OR v_acl LIKE '%anon%' THEN
-    RAISE EXCEPTION '146 ABORTADA (post): el ACL de la función cambió respecto al esperado (authenticated+service_role, nunca anon). ACL actual: %', v_acl;
+    RAISE EXCEPTION '147 ABORTADA (post): el ACL de la función cambió respecto al esperado (authenticated+service_role, nunca anon). ACL actual: %', v_acl;
   END IF;
 
-  RAISE NOTICE '146 OK: fn_ronda_resolver_con_captura exige cantidad_fisica_confirmada y la persiste en rondas_excepciones.cantidad_fisica. 0 filas de dominio tocadas.';
+  RAISE NOTICE '147 OK: fn_ronda_resolver_con_captura exige cantidad_fisica_confirmada y la persiste en rondas_excepciones.cantidad_fisica. 0 filas de dominio tocadas.';
 END $$;
 
 -- ROLLBACK (no ejecutar salvo instrucción explícita del dueño): restaurar el
