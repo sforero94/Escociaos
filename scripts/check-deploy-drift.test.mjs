@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { evaluarDeriva, parsearUpdatedAt } from './check-deploy-drift.mjs';
+import {
+  evaluarDeriva,
+  parsearUpdatedAt,
+  evaluarDerivaPorHash,
+  rutaEstadoDriftPorHash,
+} from './check-deploy-drift.mjs';
 
 // El caso real: `updated_at` de la Management API llega en epoch MILISEGUNDOS.
 const DESPLIEGUE_2026_08_18_MS = 1787016998919; // 2026-08-18T01:36:38.919Z
@@ -65,5 +70,48 @@ describe('evaluarDeriva', () => {
     expect(() =>
       evaluarDeriva({ desplegadoEnMs: DESPLIEGUE_2026_08_18_MS, commitISO: '' }),
     ).toThrow(/fecha de commit invalida/);
+  });
+});
+
+describe('evaluarDerivaPorHash', () => {
+  it('siembra la linea base cuando no hay estado previo, sin marcar deriva', () => {
+    const r = evaluarDerivaPorHash({ hashActual: 'abc', commitActual: 'c1', estadoPrevio: null });
+    expect(r.hayDerivaPorHash).toBe(false);
+  });
+
+  it('NO marca deriva si el commit no cambio, aunque el hash sea el mismo (nada nuevo que desplegar)', () => {
+    const r = evaluarDerivaPorHash({
+      hashActual: 'abc',
+      commitActual: 'c1',
+      estadoPrevio: { commit: 'c1', hash: 'abc' },
+    });
+    expect(r.hayDerivaPorHash).toBe(false);
+  });
+
+  it('NO marca deriva si el commit cambio Y el hash tambien cambio (se desplego el contenido nuevo)', () => {
+    const r = evaluarDerivaPorHash({
+      hashActual: 'def',
+      commitActual: 'c2',
+      estadoPrevio: { commit: 'c1', hash: 'abc' },
+    });
+    expect(r.hayDerivaPorHash).toBe(false);
+  });
+
+  it('MARCA deriva si el commit cambio pero el hash publicado sigue igual — el caso real de v223/v236', () => {
+    const r = evaluarDerivaPorHash({
+      hashActual: 'abc',
+      commitActual: 'c2',
+      estadoPrevio: { commit: 'c1', hash: 'abc' },
+    });
+    expect(r.hayDerivaPorHash).toBe(true);
+    expect(r.motivo).toMatch(/republic/);
+  });
+});
+
+describe('rutaEstadoDriftPorHash', () => {
+  it('produce una ruta distinta por funcion, para no mezclar el estado de las dos edge functions', () => {
+    expect(rutaEstadoDriftPorHash('make-server-1ccce916')).not.toBe(
+      rutaEstadoDriftPorHash('informes-visita-proponer'),
+    );
   });
 });
