@@ -213,8 +213,11 @@ desempate importaba mas que cualquiera de los dos hallazgos. [corrida: 2026-08-1
   (c) delegar a otra sesion. [corrida: 2026-08-20-jueves]
 - `escociaos-po/CHANGELOG.md` quedo fuera del commit de memoria a proposito: §6
   solo permite `escociaos-po/memory/**` y `escociaos-po/reports/**`. Su contenido
-  se absorbio en el reporte de la corrida. Si se quiere un CHANGELOG.md propio,
-  necesita su propio PR. [corrida: 2026-08-03-lunes]
+  se absorbio en el reporte de la corrida. [corrida: 2026-08-03-lunes]
+  **OBSOLETO desde el 2026-09-13**: el changelog vive en
+  `escociaos-po/reports/CHANGELOG.md`, que **si** es ruta permitida, asi que entra en
+  el commit de memoria como cualquier reporte y no necesita PR propio. Ver la seccion
+  «CONTRADICCION RESUELTA» mas abajo.
 
 ## Reglas de negocio confirmadas por Santiago
 - **El divisor del jornal es 22** (Santiago, 2026-08-20). Cierra la ambiguedad
@@ -276,8 +279,16 @@ Es la misma familia de trampa ya anotada de la corrida 2026-08-20 («el ref loca
 semanas atrasado»). **Estaba escrita y la pise igual**, porque la nota decia como diagnosticarla y no
 decia que **la propia rutina de Phase 0 la dispara.**
 
-## CONTRADICCION SIN RESOLVER: donde vive `CHANGELOG.md`
-El brief de `release-changelog` manda «maintain `CHANGELOG.md` in the PO folder», o sea
+## CONTRADICCION RESUELTA (2026-09-13): donde vive `CHANGELOG.md`
+**RESUELTA. Opcion (b): el changelog vive en `escociaos-po/reports/CHANGELOG.md`.**
+Decision de Santiago del 2026-09-09, ejecutada el 2026-09-13 (hallazgo ESCO-71): el
+fichero se creo ahi, arrancado desde los 17 reportes reales que ya existian, y el brief
+de `release-changelog` se corrigio para que apunte a la ruta nueva. **No hace falta tocar
+la constitucion**: `escociaos-po/reports/**` ya esta en la lista blanca de §6. El fichero
+es **vivo y se APENDE una vez por corrida** — nunca se regenera, nunca se reescribe.
+**No inventar una cuarta salida.** Se deja abajo el planteo original como historia:
+
+El brief de `release-changelog` mandaba «maintain `CHANGELOG.md` in the PO folder», o sea
 `escociaos-po/CHANGELOG.md`. La constitucion §6 limita el commit de memoria a **`escociaos-po/memory/**`
 y `escociaos-po/reports/**`, y dice que tocar cualquier otra ruta «es una violacion, no una
 conveniencia».** El agente escribio el fichero (130 lineas) y **el orquestador NO lo commiteo a `main`
@@ -1109,10 +1120,15 @@ es lo que el viernes lee en Phase 0. Esta seccion es el resumen y las consecuenc
 
 ### CONTRADICCION CERRADA: donde vive `CHANGELOG.md`
 
-La seccion «CONTRADICCION SIN RESOLVER» de mas arriba **queda resuelta**: opcion (b). La ruta
+La seccion «CONTRADICCION RESUELTA» de mas arriba **queda resuelta**: opcion (b). La ruta
 `escociaos-po/reports/**` ya esta permitida por §6, asi que no hace falta tocar la constitucion.
 **No inventar una cuarta salida.** El brief de `release-changelog` hay que corregirlo para que
 apunte a la ruta nueva; eso es parte del trabajo del viernes.
+
+**EJECUTADO el 2026-09-13** (ESCO-71): `escociaos-po/reports/CHANGELOG.md` creado y arrancado
+desde los 17 reportes reales (la corrida `2026-07-31-dryrun-lunes` no aporta entradas: no
+escribio nada). El brief `.claude/agents/release-changelog.md` ya apunta a la ruta nueva y
+declara que el fichero **se apende una vez por corrida y nunca se regenera**.
 
 ### DOS RECLASIFICACIONES HECHAS EN ESTA SESION, Y POR QUE NO SE DEJARON PARA EL VIERNES
 
