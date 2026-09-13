@@ -17,7 +17,7 @@ import { TrabajadorMultiSelect } from '../shared/TrabajadorMultiSelect';
 import { JornalFractionMatrix } from '../shared/JornalFractionMatrix';
 
 // Import cost calculation utilities
-import { calculateLaborCost, calculateContractorCost } from '../../utils/laborCosts';
+import { calculateLaborCost, calculateContractorCost, calcularExcesoJornalPorPersona } from '../../utils/laborCosts';
 
 // Import shared types for matrix operations
 import type { WorkMatrix, ObservacionesMatrix } from '../../types/shared';
@@ -264,6 +264,49 @@ const RegistrarTrabajoDialog: React.FC<RegistrarTrabajoDialogProps> = ({
       if (duplicates.length > 0) {
         onError(`Ya existe registro de trabajo para esta fecha:\n${duplicates.join('\n')}`);
         return;
+      }
+
+      // ESCO-70: una misma persona repartida entre varios lotes/tareas el
+      // mismo día puede sumar más de un jornal sin que el chequeo de
+      // duplicados de arriba lo vea (ese compara por lote exacto, no por
+      // total del día). Se suma TODO lo que la persona ya tiene ese día en
+      // CUALQUIER tarea/lote, más lo que este envío está por agregar, y se
+      // bloquea si el total supera 1.0 -- decisión de Santiago 2026-09-13:
+      // es error de captura masiva, no una advertencia.
+      const personaIdsDelEnvio = Array.from(
+        new Set(registrosData.map(r => r.empleado_id || r.contratista_id).filter(Boolean)),
+      );
+      if (personaIdsDelEnvio.length > 0) {
+        const { data: registrosDelDia, error: errorJornalDia } = await getSupabase()
+          .from('registros_trabajo')
+          .select('empleado_id, contratista_id, fraccion_jornal')
+          .eq('fecha_trabajo', fechaTrabajo)
+          .or(
+            [
+              `empleado_id.in.(${personaIdsDelEnvio.join(',')})`,
+              `contratista_id.in.(${personaIdsDelEnvio.join(',')})`,
+            ].join(','),
+          );
+        if (errorJornalDia) throw errorJornalDia;
+
+        const excesos = calcularExcesoJornalPorPersona(
+          (registrosDelDia || []).map((r: any) => ({
+            personaId: r.empleado_id || r.contratista_id,
+            fraccion: parseFloat(r.fraccion_jornal),
+          })),
+          registrosData.map(r => ({
+            personaId: r.empleado_id || r.contratista_id,
+            fraccion: parseFloat(r.fraccion_jornal),
+          })),
+        );
+        if (excesos.length > 0) {
+          const nombres = excesos.map(({ personaId, totalJornales }) => {
+            const trabajador = selectedTrabajadores.find((t: Trabajador) => t.data.id === personaId);
+            return `${trabajador?.data.nombre || 'Desconocido'} quedaría con ${totalJornales} jornales`;
+          });
+          onError(`No se puede guardar: supera 1 jornal por día para esta persona.\n${nombres.join('\n')}`);
+          return;
+        }
       }
 
       console.log('📝 Attempting to insert work records:', JSON.stringify(registrosData, null, 2));
