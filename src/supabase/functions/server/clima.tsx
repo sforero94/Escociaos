@@ -515,9 +515,41 @@ async function backfillUnDia(
     return { ok: true, lecturas: readings.length, omitido: true };
   }
 
-  // Lecturas crudas -> clima_lecturas. `ignore-duplicates` sobre el
-  // UNIQUE(station_id, timestamp) de la migración 029 hace que reintentar
-  // un día ya cargado sea idempotente en vez de fallar.
+  // ESCO-65 parte A: la History API de Ecowitt y el sync en vivo de 5 min
+  // pueden describir la MISMA lectura física con timestamps que difieren
+  // por segundos -- no son duplicados exactos para el UNIQUE(station_id,
+  // timestamp) de la 029, así que `ignore-duplicates` no los atrapa y el
+  // día termina con más lecturas de las físicamente posibles (349/311 sobre
+  // un máximo de 288, verificado en 2026-08-27/29). El origen se reconstruye
+  // de UNA sola fuente: se borran las lecturas ya guardadas dentro del rango
+  // exacto que el nuevo lote de History va a cubrir, antes de insertarlo, en
+  // vez de fusionar dos fuentes que cuentan el mismo instante dos veces.
+  const timestamps = readings.map((r) => r.timestamp).sort();
+  const desdeTs = timestamps[0];
+  const hastaTs = timestamps[timestamps.length - 1];
+  const deleteRes = await fetch(
+    `${sb.supabaseUrl}/rest/v1/clima_lecturas`
+    + `?station_id=eq.${encodeURIComponent(creds.mac)}`
+    + `&timestamp=gte.${encodeURIComponent(desdeTs)}`
+    + `&timestamp=lte.${encodeURIComponent(hastaTs)}`,
+    {
+      method: 'DELETE',
+      headers: {
+        apikey: sb.serviceKey,
+        Authorization: `Bearer ${sb.serviceKey}`,
+        Prefer: 'return=minimal',
+      },
+    },
+  );
+  if (!deleteRes.ok) {
+    const errorText = await deleteRes.text();
+    return { ok: false, lecturas: 0, error: `delete clima_lecturas (dedup de origen) falló — ${errorText}` };
+  }
+
+  // Lecturas crudas -> clima_lecturas. `ignore-duplicates` queda como
+  // defensa adicional (dos lecturas del MISMO lote de History que sí
+  // compartan timestamp exacto), no como el mecanismo principal -- ese es
+  // el DELETE de arriba.
   const insertRes = await fetch(`${sb.supabaseUrl}/rest/v1/clima_lecturas`, {
     method: 'POST',
     headers: {
