@@ -10,6 +10,7 @@ import { Loader2, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { useAlertasRouting } from '../hooks/useAlertasRouting';
 import {
   agruparAlertasPorModulo,
@@ -117,58 +118,56 @@ export function AlertasQuienRecibeTab({
           {guardando ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Guardar'}
         </Button>
       </div>
-      <div className="rounded-xl border border-gray-200 bg-white overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b text-left text-brand-brown/60">
-              <th className="py-2 px-3 min-w-[12rem] sticky left-0 bg-white">Tipo</th>
-              {usuarios.map((usuario) => (
-                <th key={usuario.id} className="py-2 px-3 text-center min-w-[7rem]">
-                  <span className="block font-medium text-gray-900">{usuario.nombre_display}</span>
-                  <span className="block text-[11px] font-normal text-gray-500">
-                    {ROL_LABEL[usuario.rol_bot] ?? usuario.rol_bot}
-                  </span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {grupos.map((grupo) => (
-              <Fragment key={grupo.modulo}>
-                <tr className="bg-muted/40">
-                  <td
-                    colSpan={usuarios.length + 1}
-                    className="py-1.5 px-3 text-xs font-semibold uppercase tracking-wide text-brand-brown/70"
-                  >
-                    {grupo.label}
-                  </td>
-                </tr>
-                {grupo.alertas.map((alerta) => (
-                  <tr key={alerta.clave} className="border-b hover:bg-muted/50">
-                    <td className="py-2 px-3 sticky left-0 bg-white">{alerta.nombre}</td>
-                    {usuarios.map((usuario) => {
-                      const actual = estados[usuario.id]?.[alerta.clave] ?? { recibe: false, escalamiento: false };
-                      const permitido = puedeRecibirAlertaTelegram(usuario.rol_bot, alerta.clave);
-                      return (
-                        <td key={usuario.id} className="py-2 px-3 text-center">
-                          <div className="flex justify-center">
-                            <Checkbox
-                              checked={permitido && actual.recibe}
-                              disabled={!permitido || guardando}
-                              onCheckedChange={() => handleToggle(usuario, alerta.clave)}
-                              aria-label={`${alerta.nombre} para ${usuario.nombre_display}`}
-                            />
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </Fragment>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead sticky className="min-w-[12rem]">Tipo</TableHead>
+            {usuarios.map((usuario) => (
+              <TableHead key={usuario.id} className="text-center min-w-[7rem] normal-case tracking-normal">
+                <span className="block text-sm font-medium text-gray-900">{usuario.nombre_display}</span>
+                <span className="block text-[11px] font-normal text-gray-500">
+                  {ROL_LABEL[usuario.rol_bot] ?? usuario.rol_bot}
+                </span>
+              </TableHead>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {grupos.map((grupo) => (
+            <Fragment key={grupo.modulo}>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                <TableCell
+                  colSpan={usuarios.length + 1}
+                  className="py-1.5 text-xs font-semibold uppercase tracking-wide text-brand-brown/70 whitespace-normal"
+                >
+                  {grupo.label}
+                </TableCell>
+              </TableRow>
+              {grupo.alertas.map((alerta) => (
+                <TableRow key={alerta.clave}>
+                  <TableCell sticky>{alerta.nombre}</TableCell>
+                  {usuarios.map((usuario) => {
+                    const actual = estados[usuario.id]?.[alerta.clave] ?? { recibe: false, escalamiento: false };
+                    const permitido = puedeRecibirAlertaTelegram(usuario.rol_bot, alerta.clave);
+                    return (
+                      <TableCell key={usuario.id} className="text-center">
+                        <div className="flex justify-center">
+                          <Checkbox
+                            checked={permitido && actual.recibe}
+                            disabled={!permitido || guardando}
+                            onCheckedChange={() => handleToggle(usuario, alerta.clave)}
+                            aria-label={`${alerta.nombre} para ${usuario.nombre_display}`}
+                          />
+                        </div>
+                      </TableCell>
+                    );
+                  })}
+                </TableRow>
+              ))}
+            </Fragment>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }

@@ -5,6 +5,7 @@
 import { LABEL_TIPO_ALERTA_HATO, etiquetaIdentidadAlerta } from '@/utils/hatoAlertasUi';
 import { etiquetaResultadoHistorial } from '@/utils/hatoAlertasGestor';
 import { formatearFecha } from '@/utils/fechas';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import type { AlertaHatoEnriquecida } from '../hooks/useHatoAlertas';
 
 function identidad(alerta: AlertaHatoEnriquecida): string {
@@ -28,29 +29,27 @@ export function AlertaHistorialTabla({ alertas }: { alertas: AlertaHatoEnriqueci
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-left text-brand-brown/60">
-            <th className="py-2 px-3">Fecha</th>
-            <th className="py-2 px-3">Tipo</th>
-            <th className="py-2 px-3">Animal</th>
-            <th className="py-2 px-3">Resultado</th>
-            <th className="py-2 px-3">Por</th>
-          </tr>
-        </thead>
-        <tbody>
-          {alertas.map((alerta) => (
-            <tr key={alerta.id} className="border-b hover:bg-muted/50">
-              <td className="py-2 px-3 whitespace-nowrap">{formatearFecha(alerta.fecha_programada)}</td>
-              <td className="py-2 px-3">{LABEL_TIPO_ALERTA_HATO[alerta.tipo]}</td>
-              <td className="py-2 px-3">{identidad(alerta)}</td>
-              <td className="py-2 px-3">{etiquetaResultadoHistorial(alerta)}</td>
-              <td className="py-2 px-3 text-gray-600">{alerta.respondida_por || '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Fecha</TableHead>
+          <TableHead>Tipo</TableHead>
+          <TableHead>Animal</TableHead>
+          <TableHead>Resultado</TableHead>
+          <TableHead>Por</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody striped>
+        {alertas.map((alerta) => (
+          <TableRow key={alerta.id}>
+            <TableCell className="whitespace-nowrap">{formatearFecha(alerta.fecha_programada)}</TableCell>
+            <TableCell>{LABEL_TIPO_ALERTA_HATO[alerta.tipo]}</TableCell>
+            <TableCell>{identidad(alerta)}</TableCell>
+            <TableCell>{etiquetaResultadoHistorial(alerta)}</TableCell>
+            <TableCell className="text-gray-600">{alerta.respondida_por || '—'}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
   );
 }
