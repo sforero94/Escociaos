@@ -16,7 +16,7 @@
  * 150, sobre el mismo hecho.
  *
  * Esta suite es ESTRUCTURAL, igual que `rondaInventarioRpcAutorizacion.test.ts`:
- * lee la migración 146 y las DOS copias de `excepcionDavid.ts`. Vitest mockea
+ * lee la migración 147 y las DOS copias de `excepcionDavid.ts`. Vitest mockea
  * Supabase y nunca abre una conexión a Postgres (CLAUDE.md "Testing"), así
  * que lo que defiende hacia adelante es que nadie borre la guarda ni el paso
  * de la conversación sin que algo se ponga rojo.
@@ -28,9 +28,11 @@ import { resolve } from 'node:path';
 
 const RAIZ = resolve(__dirname, '../..');
 
-const RUTA_146 = resolve(
+// Renumerada de 146 a 147 el 2026-09-13: la 146 se la llevó
+// `146_hato_capturas_foto`, ya aplicada a producción.
+const RUTA_147 = resolve(
   __dirname,
-  '../sql/migrations/146_fn_ronda_resolver_con_captura_cantidad_confirmada.sql',
+  '../sql/migrations/147_fn_ronda_resolver_con_captura_cantidad_confirmada.sql',
 );
 
 const COPIAS_CONVERSACION = [
@@ -38,24 +40,24 @@ const COPIAS_CONVERSACION = [
   'supabase/functions/make-server-1ccce916/telegram/conversations/excepcionDavid.ts',
 ] as const;
 
-let SQL_146: string;
+let SQL_147: string;
 
 beforeAll(() => {
-  SQL_146 = readFileSync(RUTA_146, 'utf-8');
+  SQL_147 = readFileSync(RUTA_147, 'utf-8');
 });
 
 /** Cuerpo plpgsql de la función reemplazada, sin la cabecera de comentarios
  * ni los bloques DO de guardas -- para que ninguna comprobación pase sólo
  * porque el texto aparece en un comentario que la explica. */
 function cuerpoFuncion(): string {
-  const inicio = SQL_146.indexOf('CREATE OR REPLACE FUNCTION fn_ronda_resolver_con_captura');
+  const inicio = SQL_147.indexOf('CREATE OR REPLACE FUNCTION fn_ronda_resolver_con_captura');
   expect(inicio).toBeGreaterThan(-1);
-  const fin = SQL_146.indexOf('END $$;', inicio);
+  const fin = SQL_147.indexOf('END $$;', inicio);
   expect(fin).toBeGreaterThan(inicio);
-  return SQL_146.slice(inicio, fin + 'END $$;'.length);
+  return SQL_147.slice(inicio, fin + 'END $$;'.length);
 }
 
-describe('migración 146 -- fn_ronda_resolver_con_captura exige el conteo físico', () => {
+describe('migración 147 -- fn_ronda_resolver_con_captura exige el conteo físico', () => {
   it('lee cantidad_fisica_confirmada del payload, con el MISMO nombre de clave que la 132', () => {
     expect(cuerpoFuncion()).toContain(
       "v_cantidad_fisica_confirmada NUMERIC := (payload ->> 'cantidad_fisica_confirmada')::NUMERIC;",
@@ -110,16 +112,16 @@ describe('migración 146 -- fn_ronda_resolver_con_captura exige el conteo físic
     const cuerpo = cuerpoFuncion();
     // Los dos únicos UPDATE son los que la función ya hacía, dentro de su
     // propia transacción -- no hay DML de migración fuera del cuerpo.
-    const fueraDelCuerpo = SQL_146.replace(cuerpo, '');
+    const fueraDelCuerpo = SQL_147.replace(cuerpo, '');
     expect(fueraDelCuerpo).not.toMatch(/^\s*(UPDATE|DELETE|ALTER|DROP)\s/im);
   });
 
   it('fija el md5 del cuerpo vivo revisado antes de sobrescribir (lección de la 143)', () => {
-    expect(SQL_146).toContain("md5(v_src) <> 'e2b4878c163624f971b194075e0bb774'");
+    expect(SQL_147).toContain("md5(v_src) <> 'e2b4878c163624f971b194075e0bb774'");
   });
 
   it('aborta si la migración ya se aplicó', () => {
-    expect(SQL_146).toContain("v_src ILIKE '%cantidad_fisica_confirmada%'");
+    expect(SQL_147).toContain("v_src ILIKE '%cantidad_fisica_confirmada%'");
   });
 });
 

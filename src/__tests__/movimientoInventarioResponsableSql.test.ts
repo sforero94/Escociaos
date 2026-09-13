@@ -301,7 +301,7 @@ const ESCRITORES_RONDA = [
  * construcción. Aflojar la comparación mataría el guard; enumerar el delta exacto la
  * conserva: cualquier OTRA diferencia sigue siendo roja.
  *
- * 146 (ESCO-61 parte C): `fn_ronda_resolver_con_captura` exige `cantidad_fisica_confirmada`
+ * 147 (ESCO-61 parte C): `fn_ronda_resolver_con_captura` exige `cantidad_fisica_confirmada`
  * -- el CONTEO FÍSICO reconfirmado a mano, distinto de la cantidad del movimiento -- y lo
  * persiste en `rondas_excepciones.cantidad_fisica`. Misma garantía que la 132 le dio a la
  * vía sin respaldo. Ninguno de los cuatro fragmentos toca `movimientos_inventario` ni los

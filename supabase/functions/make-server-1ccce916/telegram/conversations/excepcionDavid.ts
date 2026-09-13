@@ -94,7 +94,8 @@ function parseCantidadPositiva(raw: string): number | null {
   return Number.isFinite(num) && num > 0 ? num : null;
 }
 
-// Migración 146 (ESCO-61 parte C). El CONTEO FÍSICO es un número DISTINTO de
+// Migración 147 (ESCO-61 parte C; renumerada de 146 el 2026-09-13). El CONTEO
+// FÍSICO es un número DISTINTO de
 // la cantidad del movimiento: David teclea cuánto entró o salió (el delta),
 // y eso nunca vuelve a mirar cuánto hay realmente en la bodega -- que es lo
 // que el intérprete de voz congeló en `rondas_excepciones.cantidad_fisica` y
@@ -335,7 +336,7 @@ export async function excepcionDavidConversation(
       return;
     }
 
-    // ── Paso 4a: reconfirmar el CONTEO FÍSICO (migración 146, ESCO-61 C) ────
+    // ── Paso 4a: reconfirmar el CONTEO FÍSICO (migración 147, ESCO-61 C) ────
     // Antes del movimiento, porque es el número que el intérprete de voz pudo
     // haber leído en la unidad equivocada ("tres bultos de 50 kilos" -> 3).
     // Se muestra lo que el sistema entendió Y se exige teclear el real --
@@ -599,7 +600,7 @@ export async function excepcionDavidConversation(
           excepcion_id: excepcionId,
           tipo_movimiento: tipoMovimiento,
           cantidad,
-          // Migración 146: el conteo físico reconfirmado a mano. El RPC lo
+          // Migración 147: el conteo físico reconfirmado a mano. El RPC lo
           // exige y sobrescribe con él `rondas_excepciones.cantidad_fisica`.
           cantidad_fisica_confirmada: cantidadFisicaConfirmada,
           fecha_movimiento: fechaMovimiento,
