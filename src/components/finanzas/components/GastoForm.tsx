@@ -37,7 +37,8 @@ import type {
   MedioPago
 } from '../../../types/finanzas';
 import { toast } from 'sonner';
-import { obtenerFechaHoy } from '@/utils/fechas';
+import { obtenerFechaHoy, esFechaFuturaSospechosa } from '@/utils/fechas';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 interface GastoFormProps {
   open: boolean;
@@ -195,25 +196,9 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
     setFormData(prev => ({ ...prev, proveedor_id: proveedorId }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const [mostrarConfirmacionFechaFutura, setMostrarConfirmacionFechaFutura] = useState(false);
 
-    // Validation — collect all errors at once
-    const newErrors: Record<string, string> = {};
-    if (!formData.nombre.trim()) newErrors.nombre = 'El nombre del gasto es obligatorio';
-    if (!formData.negocio_id) newErrors.negocio_id = 'Debe seleccionar un negocio';
-    if (!formData.region_id) newErrors.region_id = 'Debe seleccionar una región';
-    if (!formData.categoria_id) newErrors.categoria_id = 'Debe seleccionar una categoría';
-    if (!formData.concepto_id) newErrors.concepto_id = 'Debe seleccionar un concepto';
-    if (formData.valor <= 0) newErrors.valor = 'El valor debe ser mayor a cero';
-    if (!formData.medio_pago_id) newErrors.medio_pago_id = 'Debe seleccionar un medio de pago';
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      toast.error('Por favor completa los campos obligatorios');
-      return;
-    }
-
+  const guardarGasto = async () => {
     try {
       setSaving(true);
 
@@ -252,6 +237,37 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // Validation — collect all errors at once
+    const newErrors: Record<string, string> = {};
+    if (!formData.nombre.trim()) newErrors.nombre = 'El nombre del gasto es obligatorio';
+    if (!formData.negocio_id) newErrors.negocio_id = 'Debe seleccionar un negocio';
+    if (!formData.region_id) newErrors.region_id = 'Debe seleccionar una región';
+    if (!formData.categoria_id) newErrors.categoria_id = 'Debe seleccionar una categoría';
+    if (!formData.concepto_id) newErrors.concepto_id = 'Debe seleccionar un concepto';
+    if (formData.valor <= 0) newErrors.valor = 'El valor debe ser mayor a cero';
+    if (!formData.medio_pago_id) newErrors.medio_pago_id = 'Debe seleccionar un medio de pago';
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      toast.error('Por favor completa los campos obligatorios');
+      return;
+    }
+
+    // ESCO-91: una fecha más de un día en el futuro suele ser un error de
+    // tecleo -- el gasto se guarda bien y desaparece del historial/tablero
+    // (filtro `ytd`, tope hoy) hasta que la fecha real lo alcance, sin ningún
+    // aviso. Se pide confirmación explícita antes de guardar.
+    if (esFechaFuturaSospechosa(formData.fecha)) {
+      setMostrarConfirmacionFechaFutura(true);
+      return;
+    }
+
+    await guardarGasto();
   };
 
   const isEditing = !!gasto?.id;
@@ -501,6 +517,20 @@ export function GastoForm({ open, onOpenChange, gasto, onSuccess, onCancel }: Ga
       onOpenChange={setShowProveedorDialog}
       onSuccess={handleProveedorCreated}
       onError={(message) => toast.error(message)}
+    />
+
+    {/* ESCO-91: fecha más de un día en el futuro -- casi siempre un error de tecleo */}
+    <ConfirmDialog
+      open={mostrarConfirmacionFechaFutura}
+      onOpenChange={setMostrarConfirmacionFechaFutura}
+      title="¿Fecha en el futuro?"
+      description={`Estás guardando este gasto con fecha ${formData.fecha}, que todavía no llega. Si es un error de tecleo, corrígela antes de continuar; si es a propósito, confirma para guardarla igual.`}
+      confirmLabel="Guardar de todas formas"
+      cancelLabel="Corregir fecha"
+      onConfirm={() => {
+        setMostrarConfirmacionFechaFutura(false);
+        guardarGasto();
+      }}
     />
     </>
   );

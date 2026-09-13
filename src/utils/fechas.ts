@@ -128,9 +128,23 @@ export function formatearFechaHora(fecha: Date | string | null | undefined): str
 export function diferenciaEnDias(fecha1: Date | string, fecha2: Date | string): number {
   const d1 = typeof fecha1 === 'string' ? new Date(fecha1 + 'T00:00:00') : fecha1;
   const d2 = typeof fecha2 === 'string' ? new Date(fecha2 + 'T00:00:00') : fecha2;
-  
+
   const diff = Math.abs(d1.getTime() - d2.getTime());
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * Una fecha guardada más de un día en el futuro es casi siempre un error de
+ * tecleo, no una decisión deliberada — y con el filtro `fecha <= hoy` de los
+ * historiales (`ytd` por defecto), el registro se guarda bien y luego
+ * desaparece de pantalla sin ningún aviso hasta que "hoy" lo alcance
+ * (hallazgo ESCO-91: cuatro gastos capturados el 08-09 con fecha 13-09,
+ * invisibles en el historial y en el tablero durante cinco días). Un día de
+ * margen evita falsos positivos por desfase de huso horario al guardar.
+ */
+export function esFechaFuturaSospechosa(fecha: string, hoy: string = obtenerFechaHoy()): boolean {
+  if (!esFechaValida(fecha) || fecha <= hoy) return false;
+  return diferenciaEnDias(fecha, hoy) > 1;
 }
 
 /**
