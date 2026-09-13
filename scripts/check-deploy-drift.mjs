@@ -17,6 +17,8 @@
 // Salida: 0 = sin deriva. 1 = hay deriva, o no se pudo comprobar.
 
 import { execFileSync } from 'node:child_process';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import path from 'node:path';
 
 // --- Configuracion (todo sobreescribible por entorno) ---------------------
 export const PROYECTO_POR_DEFECTO = 'ywhtjwawnkeqlwxbvgup';
@@ -72,6 +74,76 @@ export function evaluarDeriva({ desplegadoEnMs, commitISO }) {
   };
 }
 
+/**
+ * Segunda señal, INDEPENDIENTE DEL RELOJ (hallazgo ESCO-66). El chequeo de
+ * arriba compara fechas: si un despliegue exitoso vuelve a publicar el MISMO
+ * contenido viejo, `updated_at` y `version` avanzan igual (pasó dos veces en
+ * tres días: v223 el 2026-08-28 y v236 el 2026-08-30) y el chequeo de reloj
+ * dice "sin deriva" sobre una regresión real.
+ *
+ * `ezbr_sha256` es el hash del contenido REALMENTE desplegado (lo confirma
+ * `list_edge_functions`/`get_edge_function` de la Management API). Un
+ * despliegue que no lo mueve no publicó nada nuevo, sin importar qué diga el
+ * reloj: "un despliegue que no mueve el hash no desplegó nada" — regla ya
+ * establecida por esta operación. Se compara contra el estado de la corrida
+ * ANTERIOR (persistido en el repo), nunca contra el propio commit actual —
+ * no hay forma de derivar el hash "correcto" sin re-construir el bundle.
+ *
+ * @param {{ hashActual: string, commitActual: string, estadoPrevio: { commit: string, hash: string } | null }} entrada
+ * @returns {{ hayDerivaPorHash: boolean, motivo: string }}
+ */
+export function evaluarDerivaPorHash({ hashActual, commitActual, estadoPrevio }) {
+  if (!estadoPrevio) {
+    return { hayDerivaPorHash: false, motivo: 'sin estado previo, primera corrida: se siembra la línea base' };
+  }
+  const commitCambio = estadoPrevio.commit !== commitActual;
+  const hashIgual = estadoPrevio.hash === hashActual;
+  if (commitCambio && hashIgual) {
+    return {
+      hayDerivaPorHash: true,
+      motivo:
+        `el árbol desplegado tiene un commit nuevo (antes ${estadoPrevio.commit}, ahora ` +
+        `${commitActual}) pero el hash del contenido publicado no cambió (${hashActual}) — ` +
+        `el despliegue republicó el mismo bundle viejo`,
+    };
+  }
+  return { hayDerivaPorHash: false, motivo: 'hash coherente con el commit del árbol' };
+}
+
+/**
+ * Ruta del fichero de estado para una función, dentro del repo (se comparte
+ * entre corridas vía commit del propio workflow — nunca vía cache de
+ * Actions, que puede vencer o purgarse sin avisar).
+ * @param {string} funcion
+ */
+export function rutaEstadoDriftPorHash(funcion) {
+  return path.join('scripts', 'deploy-drift-state', `${funcion}.json`);
+}
+
+/** @param {string} ruta */
+function leerEstadoPrevio(ruta) {
+  if (!existsSync(ruta)) return null;
+  try {
+    const contenido = JSON.parse(readFileSync(ruta, 'utf8'));
+    if (typeof contenido?.commit === 'string' && typeof contenido?.hash === 'string') {
+      return contenido;
+    }
+  } catch {
+    // Fichero corrupto o con forma vieja: se trata como "sin estado previo"
+    // en vez de reventar el chequeo por un problema del propio chequeo.
+  }
+  return null;
+}
+
+/**
+ * @param {string} ruta
+ * @param {{ commit: string, hash: string }} estado
+ */
+function escribirEstadoActual(ruta, estado) {
+  mkdirSync(path.dirname(ruta), { recursive: true });
+  writeFileSync(ruta, `${JSON.stringify(estado, null, 2)}\n`);
+}
+
 // -------------------------------------------------------------------------
 // Entrada/salida
 // -------------------------------------------------------------------------
@@ -100,9 +172,12 @@ export function fechaUltimoCommit(ruta) {
 }
 
 /**
+ * Un solo llamado a la Management API trae las dos señales: `updated_at`
+ * (reloj) y `ezbr_sha256` (contenido realmente publicado).
  * @param {{ proyecto: string, funcion: string, token: string }} opciones
+ * @returns {Promise<{ updatedAt: number|string, hash: string }>}
  */
-export async function updatedAtDelDespliegue({ proyecto, funcion, token }) {
+export async function datosDelDespliegue({ proyecto, funcion, token }) {
   const url = `https://api.supabase.com/v1/projects/${proyecto}/functions`;
   const respuesta = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
@@ -119,7 +194,12 @@ export async function updatedAtDelDespliegue({ proyecto, funcion, token }) {
   if (!encontrada) {
     throw new Error(`la edge function "${funcion}" no existe en el proyecto ${proyecto}`);
   }
-  return encontrada.updated_at;
+  if (typeof encontrada.ezbr_sha256 !== 'string' || !encontrada.ezbr_sha256) {
+    throw new Error(
+      `la edge function "${funcion}" no trajo ezbr_sha256 en la respuesta de la Management API`,
+    );
+  }
+  return { updatedAt: encontrada.updated_at, hash: encontrada.ezbr_sha256 };
 }
 
 async function main() {
@@ -139,26 +219,45 @@ async function main() {
     process.exit(1);
   }
 
-  const updatedAt = await updatedAtDelDespliegue({ proyecto, funcion, token });
+  const { updatedAt, hash } = await datosDelDespliegue({ proyecto, funcion, token });
   const commitISO = fechaUltimoCommit(ruta);
+  const commitSha = execFileSync('git', ['log', '-1', '--format=%H', '--', ruta], {
+    encoding: 'utf8',
+  }).trim();
   const { hayDeriva, desplegado, commit, horasDeDeriva } = evaluarDeriva({
     desplegadoEnMs: updatedAt,
     commitISO,
   });
 
+  const rutaEstado = rutaEstadoDriftPorHash(funcion);
+  const estadoPrevio = leerEstadoPrevio(rutaEstado);
+  const { hayDerivaPorHash, motivo } = evaluarDerivaPorHash({
+    hashActual: hash,
+    commitActual: commitSha,
+    estadoPrevio,
+  });
+  escribirEstadoActual(rutaEstado, { commit: commitSha, hash });
+
   console.log(`edge function : ${funcion} (proyecto ${proyecto})`);
   console.log(`desplegada    : ${desplegado.toISOString()}`);
   console.log(`ultimo commit : ${commit.toISOString()}  (${ruta})`);
+  console.log(`hash publicado: ${hash}`);
+  console.log(`chequeo hash  : ${motivo}`);
 
-  if (!hayDeriva) {
-    console.log('\nOK: el despliegue vivo es posterior al ultimo commit del arbol desplegado.');
+  if (!hayDeriva && !hayDerivaPorHash) {
+    console.log('\nOK: sin deriva de reloj y sin deriva de contenido.');
     return;
   }
 
-  console.error(
-    `\nDERIVA DE DESPLIEGUE: hay codigo en main desde hace ${horasDeDeriva} h que no esta ` +
-      `en produccion.\nDesplegar con:  npx supabase functions deploy ${funcion}`,
-  );
+  if (hayDeriva) {
+    console.error(
+      `\nDERIVA DE DESPLIEGUE (reloj): hay codigo en main desde hace ${horasDeDeriva} h que no ` +
+        `esta en produccion.\nDesplegar con:  npx supabase functions deploy ${funcion}`,
+    );
+  }
+  if (hayDerivaPorHash) {
+    console.error(`\nDERIVA DE DESPLIEGUE (contenido): ${motivo}.\nDesplegar de nuevo, y verificar que el hash cambie.`);
+  }
   process.exit(1);
 }
 

@@ -4,6 +4,19 @@
 # Cuatro dias despues seguia sin desplegarse, con cinco rutas de escritura
 # abiertas anonimamente en internet. Nada lo detectaba, porque nada comparaba
 # el despliegue vivo contra el repositorio.
+#
+# Dos endurecimientos sobre la version original (hallazgos ESCO-66/ESCO-78):
+# (1) el script ahora compara TAMBIEN el hash del contenido publicado
+#     (`ezbr_sha256`) contra la corrida anterior -- un despliegue que vuelve a
+#     publicar el mismo bundle viejo mueve `updated_at`/`version` igual, y esa
+#     era la mitad ciega del chequeo original (v223 el 2026-08-28, v236 el
+#     2026-08-30, las dos veces "verde" por reloj sobre una regresion real);
+# (2) corre en MATRIZ sobre las DOS edge functions del proyecto -- antes solo
+#     miraba `make-server-1ccce916` y `informes-visita-proponer` podia quedar
+#     desincronizada 7 dias sin que nada lo dijera; y (3) si el job falla,
+#     avisa por Telegram -- antes solo quedaba en rojo en la pestana Actions y
+#     mandaba correo a una cuenta que nadie lee, así que un fallo real (el que
+#     detecto esta misma tanda) paso varios dias sin que nadie se enterara.
 name: Deteccion de deriva de despliegue
 
 on:
@@ -14,11 +27,19 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write # el job commitea de vuelta su propio estado de hash (scripts/deploy-drift-state/)
 
 jobs:
   deriva:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - slug: make-server-1ccce916
+            path: supabase/functions/make-server-1ccce916
+          - slug: informes-visita-proponer
+            path: supabase/functions/informes-visita-proponer
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,9 +55,12 @@ jobs:
           node-version: '20'
 
       # Sin dependencias: el script usa solo `fetch` y `git`, ambos ya presentes.
-      - name: Comprobar deriva
+      - name: Comprobar deriva (${{ matrix.slug }})
+        id: chequeo
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          EDGE_FUNCTION_SLUG: ${{ matrix.slug }}
+          EDGE_FUNCTION_PATH: ${{ matrix.path }}
         # Sin tuberia a `tee`: el shell por defecto de Actions es `bash -e`, SIN
         # pipefail, asi que el codigo de salida de una tuberia es el de `tee` (0)
         # y un fallo del script no tumbaria el job. Se guarda la salida, se
@@ -45,6 +69,41 @@ jobs:
           set +e
           node scripts/check-deploy-drift.mjs > salida-deriva.txt 2>&1
           estado=$?
-          { echo '```'; cat salida-deriva.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          { echo "### ${{ matrix.slug }}"; echo '```'; cat salida-deriva.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           cat salida-deriva.txt
           exit $estado
+
+      # El estado de hash (scripts/deploy-drift-state/<slug>.json) se escribe
+      # SIEMPRE, incluso si el chequeo de arriba fallo -- si no se commitea, la
+      # proxima corrida no tiene con que comparar y la señal de contenido
+      # nunca arranca. `if: always()` es a proposito.
+      - name: Guardar estado de hash
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "scripts/deploy-drift-state/${{ matrix.slug }}.json" 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: estado de deteccion de deriva (${{ matrix.slug }})"
+            for intento in 1 2 3; do
+              git pull --rebase origin main && git push origin HEAD:main && break
+              sleep 5
+            done
+          fi
+
+      - name: Avisar por Telegram si hubo deriva
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "::warning::TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID no estan configurados como secretos del repositorio -- no se pudo avisar. Ver hallazgo ESCO-78."
+            exit 0
+          fi
+          mensaje="⚠️ Deriva de despliegue en *${{ matrix.slug }}* — ver ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d parse_mode="Markdown" \
+            --data-urlencode text="$mensaje" \
+            -o /dev/null -w "telegram respondio %{http_code}\n"
