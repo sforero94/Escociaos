@@ -7,6 +7,8 @@ import {
   calcularPesosVentaGanado,
   errorDestareVenta,
   errorPotreroOrigenVenta,
+  derivarPesoPromedioKgGanado,
+  errorEdicionCabezasConfirmado,
 } from '@/utils/calculosVentaGanado';
 import type { RepartoFila } from '@/utils/calculosGanado';
 
@@ -208,5 +210,55 @@ describe('errorPotreroOrigenVenta', () => {
         cantidadCabezas: cabezas,
       })
     ).toMatch(/12 cabezas/);
+  });
+});
+
+describe('derivarPesoPromedioKgGanado', () => {
+  it('prefiere peso_total_kg (báscula) sobre kilos_pagados, redondeado a 1 decimal', () => {
+    // El caso real de ESCO-90: 6261 / 12 = 521.75 -> 521.8, no 506.8 (kilos_pagados/12).
+    expect(
+      derivarPesoPromedioKgGanado({ pesoTotalKg: 6261, kilosPagados: 6081, cantidadCabezas: 12 })
+    ).toBe(521.8);
+  });
+
+  it('cae a kilos_pagados cuando no hay peso_total_kg', () => {
+    expect(
+      derivarPesoPromedioKgGanado({ pesoTotalKg: null, kilosPagados: 6081, cantidadCabezas: 12 })
+    ).toBe(506.8);
+  });
+
+  it('devuelve null sin ninguno de los dos pesos', () => {
+    expect(
+      derivarPesoPromedioKgGanado({ pesoTotalKg: null, kilosPagados: null, cantidadCabezas: 12 })
+    ).toBeNull();
+  });
+
+  it('nunca inventa un promedio con cero o cabezas inválidas', () => {
+    expect(
+      derivarPesoPromedioKgGanado({ pesoTotalKg: 100, kilosPagados: null, cantidadCabezas: 0 })
+    ).toBeNull();
+    expect(
+      derivarPesoPromedioKgGanado({ pesoTotalKg: 100, kilosPagados: null, cantidadCabezas: NaN })
+    ).toBeNull();
+  });
+});
+
+describe('errorEdicionCabezasConfirmado', () => {
+  it('rechaza cambiar cantidad_cabezas cuando ya hay movimiento confirmado', () => {
+    expect(
+      errorEdicionCabezasConfirmado({ cambioCantidadCabezas: true, hayMovimientoConfirmado: true })
+    ).toMatch(/inventario confirmado/);
+  });
+
+  it('permite cambiar cantidad_cabezas si todavía no hay movimiento confirmado (pendiente)', () => {
+    expect(
+      errorEdicionCabezasConfirmado({ cambioCantidadCabezas: true, hayMovimientoConfirmado: false })
+    ).toBeNull();
+  });
+
+  it('permite editar otros campos (peso, valor) aunque haya movimiento confirmado', () => {
+    expect(
+      errorEdicionCabezasConfirmado({ cambioCantidadCabezas: false, hayMovimientoConfirmado: true })
+    ).toBeNull();
   });
 });
