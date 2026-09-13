@@ -39,6 +39,7 @@
 
 import { Context } from 'npm:hono';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { cerrarCapturaFoto } from './hato-capturas-foto.ts';
 import { construirDiffChequeo } from './importHato/diffChequeo.ts';
 import type { AnimalHatoActual, FilaChequeoVacaHistorico } from './importHato/diffChequeo.ts';
 import { seleccionarUltimoChequeoPorAnimal } from './importHato/diffChequeo.ts';
@@ -109,9 +110,13 @@ interface BodyCommitChequeo {
   generadoEn?: string;
   chequeo?: { fecha?: string; veterinario?: string | null };
   filas?: FilaChequeoNormalizada[];
+  /** Fila de `hato_capturas_foto` que abrió esta carga (migración 146),
+   * devuelta por `/hato/chequeo/foto`. Ausente cuando el chequeo entró por
+   * `.xlsx`: esa ruta no guarda ninguna foto y no tiene captura que cerrar. */
+  capturaId?: string | null;
 }
 
-function validarBody(body: unknown): { chequeo: { fecha: string; veterinario: string | null }; filas: FilaChequeoNormalizada[] } | { error: string } {
+function validarBody(body: unknown): { chequeo: { fecha: string; veterinario: string | null }; filas: FilaChequeoNormalizada[]; capturaId: string | null } | { error: string } {
   if (typeof body !== 'object' || body === null) {
     return { error: 'El cuerpo de la solicitud debe ser un objeto JSON.' };
   }
@@ -131,9 +136,12 @@ function validarBody(body: unknown): { chequeo: { fecha: string; veterinario: st
     }
   }
 
+  const capturaId = typeof b.capturaId === 'string' && b.capturaId.trim() !== '' ? b.capturaId.trim() : null;
+
   return {
     chequeo: { fecha, veterinario: b.chequeo?.veterinario ?? null },
     filas: b.filas,
+    capturaId,
   };
 }
 
@@ -200,7 +208,20 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
   if ('error' in validado) {
     return respuestaError(c, 400, { error: validado.error });
   }
-  const { chequeo, filas } = validado;
+  const { chequeo, filas, capturaId } = validado;
+
+  /** Cierra la captura de la ruta por foto cuando el commit no escribe.
+   * No hace nada en la ruta `.xlsx` (`capturaId` nulo). */
+  const cerrarCapturaConFallo = async (detalle: string, filasEscritas: number | null) => {
+    await cerrarCapturaFoto({
+      supabase,
+      capturaId,
+      desenlace: 'error',
+      celdasConfirmadas: filas.length,
+      filasEscritas,
+      detalle,
+    });
+  };
 
   // --- 2. hato_config -- puerta de consistencia del entorno, igual que en
   //    preview. Ninguna función de este handler consume `HatoConfig`
@@ -214,12 +235,16 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
     .from('hato_config')
     .select('clave, valor');
   if (errorConfig) {
-    return respuestaError(c, 500, { error: `No se pudo leer hato_config: ${errorConfig.message}` });
+    const error = `No se pudo leer hato_config: ${errorConfig.message}`;
+    await cerrarCapturaConFallo(error, 0);
+    return respuestaError(c, 500, { error });
   }
   try {
     construirHatoConfigDesdeFilas((filasConfig ?? []) as FilaHatoConfig[]);
   } catch (err) {
-    return respuestaError(c, 500, { error: err instanceof Error ? err.message : String(err) });
+    const error = err instanceof Error ? err.message : String(err);
+    await cerrarCapturaConFallo(error, 0);
+    return respuestaError(c, 500, { error });
   }
 
   // --- 3. Estado FRESCO del hato -- nunca el diff que vio el cliente ---
@@ -231,7 +256,11 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
       .from('hato_animales')
       .select('id, numero, nombre, etapa, estado')
       .in('numero', numerosEnvidados);
-    if (error) return respuestaError(c, 500, { error: `No se pudo leer hato_animales: ${error.message}` });
+    if (error) {
+      const mensaje = `No se pudo leer hato_animales: ${error.message}`;
+      await cerrarCapturaConFallo(mensaje, 0);
+      return respuestaError(c, 500, { error: mensaje });
+    }
     animales = (data ?? []) as AnimalHatoActual[];
   }
 
@@ -250,7 +279,11 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
         .in('animal_id', animalIds)
         .range(desde, hasta),
     );
-    if (error) return respuestaError(c, 500, { error: `No se pudo leer hato_chequeo_vacas: ${error.message}` });
+    if (error) {
+      const mensaje = `No se pudo leer hato_chequeo_vacas: ${error.message}`;
+      await cerrarCapturaConFallo(mensaje, 0);
+      return respuestaError(c, 500, { error: mensaje });
+    }
     historico = (data ?? []).map((fila: Record<string, unknown>) => {
       const chequeoRow = fila.hato_chequeos as { fecha: string } | { fecha: string }[] | null;
       const fecha = Array.isArray(chequeoRow) ? chequeoRow[0]?.fecha : chequeoRow?.fecha;
@@ -306,7 +339,11 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
       .in('tipo', ['servicio', 'parto'])
       .is('chequeo_vaca_id', null)
       .lt('fecha', chequeo.fecha);
-    if (error) return respuestaError(c, 500, { error: `No se pudo leer hato_eventos: ${error.message}` });
+    if (error) {
+      const mensaje = `No se pudo leer hato_eventos: ${error.message}`;
+      await cerrarCapturaConFallo(mensaje, 0);
+      return respuestaError(c, 500, { error: mensaje });
+    }
     eventosManuales = (data ?? []).map((fila: Record<string, unknown>) => ({
       animalId: fila.animal_id as string,
       tipo: fila.tipo as string,
@@ -326,10 +363,9 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
   // --- 4. Revalidar el ALCANCE contra el diff fresco --------------------
   const { aceptadas, rechazadas } = validarFilasCommit(filas, diffFresco);
   if (rechazadas.length > 0) {
-    return respuestaError(c, 409, {
-      error: `${rechazadas.length} fila(s) ya no se pueden aprobar tal como llegaron -- el hato cambió desde la vista previa. No se escribió nada.`,
-      filasRechazadas: rechazadas,
-    });
+    const error = `${rechazadas.length} fila(s) ya no se pueden aprobar tal como llegaron -- el hato cambió desde la vista previa. No se escribió nada.`;
+    await cerrarCapturaConFallo(error, 0);
+    return respuestaError(c, 409, { error, filasRechazadas: rechazadas });
   }
 
   // --- 5. Derivar eventos + resolver toro_id (I/O: SELECT-o-INSERT) ----
@@ -345,7 +381,9 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
       if (creado) torosCreados += 1;
     }
   } catch (err) {
-    return respuestaError(c, 500, { error: err instanceof Error ? err.message : String(err) });
+    const error = err instanceof Error ? err.message : String(err);
+    await cerrarCapturaConFallo(error, 0);
+    return respuestaError(c, 500, { error });
   }
 
   const payload = construirPayloadCommit(chequeo, vacas, eventos, toroCache);
@@ -356,10 +394,23 @@ export async function handleHatoChequeoCommit(c: Context): Promise<Response> {
     p_created_by: acceso.userId,
   });
   if (errorRpc) {
-    return respuestaError(c, 500, { error: `No se pudo comprometer el chequeo: ${errorRpc.message}` });
+    const error = `No se pudo comprometer el chequeo: ${errorRpc.message}`;
+    await cerrarCapturaConFallo(error, 0);
+    return respuestaError(c, 500, { error });
   }
 
   const resultado = resultadoRpc as { chequeoId: string; filasEscritas: number; eventosEscritos: number };
+
+  // Desenlace REAL de la carga por foto: acá es donde "la foto produjo
+  // algo" deja de ser una conjetura. En la ruta `.xlsx` no hace nada.
+  await cerrarCapturaFoto({
+    supabase,
+    capturaId,
+    desenlace: 'ok',
+    celdasConfirmadas: filas.length,
+    filasEscritas: resultado.filasEscritas,
+  });
+
   return c.json({
     success: true,
     chequeoId: resultado.chequeoId,

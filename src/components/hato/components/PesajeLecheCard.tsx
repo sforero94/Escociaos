@@ -30,11 +30,13 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useProduccionHato } from '../hooks/useProduccionHato';
+import { useUltimaCapturaFoto } from '../hooks/useUltimaCapturaFoto';
 import { SubirPesajeFoto } from './SubirPesajeFoto';
 import { CapturaArchivo } from './CapturaArchivo';
 import { descargarPlanillaPesajePDF } from '@/utils/hato/exportarPlanillaPesajePDF';
 import { fechasPorSemanaDelMes } from '@/utils/hato/exportarPlanillaPesaje';
-import { formatLongDate } from '@/utils/format';
+import { describirUltimaCaptura } from '@/utils/hato/capturasFoto';
+import { formatLongDate, formatShortDate } from '@/utils/format';
 import { obtenerFechaHoy } from '@/utils/fechas';
 import { mensajeErrorCargaDiferida } from '@/utils/errorCargaDiferida';
 
@@ -48,6 +50,12 @@ function mesActualIso(): string {
 
 export function PesajeLecheCard({ ultimaCarga, onGuardado }: { ultimaCarga: string | null; onGuardado?: () => void }) {
   const hook = useProduccionHato();
+  // Hallazgo ESCO-76: "última carga" responde cuándo entró el último dato,
+  // no qué pasó con el último INTENTO. Las 9 cargas por foto de agosto y
+  // septiembre de 2026 dejaron 6 sin una sola fila y nadie lo vio, porque
+  // las dos preguntas se veían iguales desde esta tarjeta. Esta línea
+  // muestra la segunda.
+  const { captura, recargar: recargarCaptura } = useUltimaCapturaFoto('pesaje');
 
   const [periodo, setPeriodo] = useState(mesActualIso);
   const [anioTexto, mesTexto] = periodo.split('-');
@@ -72,6 +80,13 @@ export function PesajeLecheCard({ ultimaCarga, onGuardado }: { ultimaCarga: stri
       .catch(() => setDiaPesajeNombre(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // La fecha se formatea acá (locale/zona horaria); la regla de qué decir
+  // -- incluido "sin dato" en vez de 0 -- vive en la función pura.
+  const descripcionCaptura = describirUltimaCaptura(
+    captura,
+    captura ? formatShortDate(captura.creadoEn) : '',
+  );
 
   const abrirDialogo = (modo: 'foto' | 'manual', fotos: File[]) => {
     setModoDialogo(modo);
@@ -108,8 +123,11 @@ export function PesajeLecheCard({ ultimaCarga, onGuardado }: { ultimaCarga: stri
       <p className="text-xs text-gray-500">
         Mensual{diaPesajeNombre ? ` · se pesa los ${diaPesajeNombre}` : ''}
       </p>
-      <p className="text-xs text-gray-500 mb-3">
+      <p className="text-xs text-gray-500">
         {ultimaCarga ? `Última carga: ${formatLongDate(ultimaCarga)}` : 'Sin cargas registradas'}
+      </p>
+      <p className={`text-xs mb-3 ${descripcionCaptura.tono === 'alerta' ? 'text-amber-700' : 'text-gray-500'}`}>
+        {descripcionCaptura.texto}
       </p>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -155,13 +173,22 @@ export function PesajeLecheCard({ ultimaCarga, onGuardado }: { ultimaCarga: stri
         open={dialogoOpen}
         onOpenChange={(o) => {
           setDialogoOpen(o);
-          if (!o) setFotosParaSubir([]);
+          if (!o) {
+            setFotosParaSubir([]);
+            // Al cerrar, no solo al guardar: una carga que falló el OCR o
+            // que el usuario abandonó también tiene un desenlace que mostrar
+            // -- ese es justamente el caso que hoy se pierde.
+            void recargarCaptura();
+          }
         }}
         anioInicial={anio}
         mesInicial={mes}
         modoInicial={modoDialogo}
         fotosIniciales={fotosParaSubir}
-        onCompletado={onGuardado}
+        onCompletado={() => {
+          void recargarCaptura();
+          onGuardado?.();
+        }}
       />
     </div>
   );

@@ -38,6 +38,11 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { fechasPesajeMensuales } from './calculos-hato.ts';
 import {
+  cerrarCapturaFoto,
+  registrarCapturaFoto,
+  type OrigenCapturaFoto,
+} from './hato-capturas-foto.ts';
+import {
   construirDiffPesaje,
   construirRosterPesaje,
   detectarRechazoLecturaPesaje,
@@ -131,6 +136,13 @@ export interface PipelinePesajeFotoResultado {
   generadoEn: string;
   anio: number;
   mes: number;
+  /** Fila de `hato_capturas_foto` (migración 146) que registra ESTE
+   * intento. Viaja hasta el commit, que la cierra con el desenlace real.
+   * Es `null` cuando el registro falló -- la carga sigue igual, solo se
+   * pierde la traza (ver `hato-capturas-foto.ts`). Es un string, no un
+   * objeto, justamente para que sobreviva el `JSON.stringify` con que el
+   * bot de Telegram persiste este resultado en `conversation.external()`. */
+  capturaId: string | null;
   fechasPorSemana: Record<SemanaPesaje, string | null>;
   diff: CeldaDiffPesaje[];
   /** El roster que validó el ancla de esta lectura, como ARREGLO plano
@@ -270,8 +282,17 @@ export async function ejecutarPipelinePesajeFoto(params: {
   fotos: readonly FotoPesajeEntrada[];
   anio: number;
   mes: number;
+  /** Por dónde entró la carga (`hato_capturas_foto.origen`, migración
+   * 146). El endpoint HTTP manda `'web'`; el bot de Telegram, `'telegram'`
+   * -- los dos usan este MISMO pipeline, así que sin declararlo las dos
+   * vías quedarían indistinguibles en el registro. */
+  origen?: OrigenCapturaFoto;
+  /** Usuario verificado que sube la foto, para `created_by`. */
+  createdBy?: string | null;
 }): Promise<ResultadoPipelinePesajeFoto> {
   const { supabase, apiKey, fotos, anio, mes } = params;
+  const origen: OrigenCapturaFoto = params.origen ?? 'web';
+  const createdBy = params.createdBy ?? null;
   const generadoEn = new Date().toISOString();
 
   // --- 1. Guardar la capa cruda ANTES de leerla -----------------------------
@@ -291,24 +312,52 @@ export async function ejecutarPipelinePesajeFoto(params: {
     }
   }
 
+  // --- 1.b Registrar el INTENTO (hallazgo ESCO-76, migración 146) ----------
+  // Va acá y no más abajo a propósito: la foto ya está guardada y el modelo
+  // TODAVÍA no corrió, así que un fallo del modelo -- el caso que motivó el
+  // hallazgo -- queda registrado igual. Si este registro falla, `capturaId`
+  // es `null` y el pipeline sigue exactamente como antes.
+  const capturaId = await registrarCapturaFoto({
+    supabase,
+    tipo: 'pesaje',
+    origen,
+    createdBy,
+    storage: { bucket: BUCKET_FOTOS_PESAJE, prefijo: prefijoStorage, rutas: rutasStorage, errores: erroresStorage },
+    fotosRecibidas: fotos.length,
+    modelo: MODELO_VISION_PESAJE,
+    anio,
+    mes,
+  });
+
+  /** Cierra la captura con un desenlace de fallo y devuelve el error tal
+   * cual, para que cada `return` de error siga siendo una sola línea. */
+  const fallar = async (
+    status: 422 | 500 | 502,
+    error: string,
+    desenlace: 'ocr_fallo' | 'error',
+  ): Promise<ResultadoPipelinePesajeFoto> => {
+    await cerrarCapturaFoto({ supabase, capturaId, desenlace, detalle: error });
+    return { ok: false, status, error };
+  };
+
   // --- 2. hato_config.dia_pesaje_semanal + roster VIGENTE de la planilla ----
   const [configRes, rosterRes] = await Promise.all([
     supabase.from('hato_config').select('valor').eq('clave', 'dia_pesaje_semanal').maybeSingle(),
     supabase.from('hato_animales').select('id, nombre, etapa, estado').eq('estado', 'activa').in('etapa', ETAPAS_ROSTER_PESAJE),
   ]);
 
-  if (configRes.error) return { ok: false, status: 500, error: `No se pudo leer hato_config: ${configRes.error.message}` };
+  if (configRes.error) return await fallar(500, `No se pudo leer hato_config: ${configRes.error.message}`, 'error');
   const configValor = configRes.data?.valor as { iso?: unknown } | undefined;
   if (!configValor || typeof configValor.iso !== 'number' || configValor.iso < 1 || configValor.iso > 7) {
-    return {
-      ok: false,
-      status: 500,
-      error: 'hato_config.dia_pesaje_semanal no está configurado o tiene un valor inválido (migración 064) -- no se puede resolver a qué fecha corresponde cada semana.',
-    };
+    return await fallar(
+      500,
+      'hato_config.dia_pesaje_semanal no está configurado o tiene un valor inválido (migración 064) -- no se puede resolver a qué fecha corresponde cada semana.',
+      'error',
+    );
   }
   const diaPesajeIso = configValor.iso;
 
-  if (rosterRes.error) return { ok: false, status: 500, error: `No se pudo leer hato_animales: ${rosterRes.error.message}` };
+  if (rosterRes.error) return await fallar(500, `No se pudo leer hato_animales: ${rosterRes.error.message}`, 'error');
   const animalesRoster: AnimalRosterPesaje[] = (
     (rosterRes.data ?? []) as Array<{ id: string; nombre: string | null; etapa: string | null; estado: string | null }>
   )
@@ -317,11 +366,11 @@ export async function ejecutarPipelinePesajeFoto(params: {
   const roster = construirRosterPesaje(animalesRoster);
 
   if (roster.entradas.length === 0) {
-    return {
-      ok: false,
-      status: 500,
-      error: 'No hay vacas en ordeño activas con nombre en el hato: sin roster no se puede validar el ancla de ninguna fila.',
-    };
+    return await fallar(
+      500,
+      'No hay vacas en ordeño activas con nombre en el hato: sin roster no se puede validar el ancla de ninguna fila.',
+      'error',
+    );
   }
 
   const fechasArr = fechasPesajeMensuales(anio, mes, diaPesajeIso);
@@ -343,13 +392,13 @@ export async function ejecutarPipelinePesajeFoto(params: {
   }
 
   if (lecturas.length === 0) {
-    return {
-      ok: false,
-      status: 502,
-      error: `No se pudo leer ninguna de las fotos. ${erroresLectura.join(' | ')}${
+    return await fallar(
+      502,
+      `No se pudo leer ninguna de las fotos. ${erroresLectura.join(' | ')}${
         rutasStorage.some((r) => r !== null) ? ' Las fotos sí quedaron guardadas.' : ''
       }`,
-    };
+      'ocr_fallo',
+    );
   }
 
   // --- 4. Anti-row-drift por nombre (lógica pura) ---------------------------
@@ -366,11 +415,11 @@ export async function ejecutarPipelinePesajeFoto(params: {
   //     rechazo nunca la descarta, solo evita fingir que hubo una lectura útil. ---
   const rechazo = detectarRechazoLecturaPesaje(ocr);
   if (rechazo) {
-    return {
-      ok: false,
-      status: 422,
-      error: `${rechazo.detalle}${rutasStorage.some((r) => r !== null) ? ' Las fotos sí quedaron guardadas.' : ''}`,
-    };
+    return await fallar(
+      422,
+      `${rechazo.detalle}${rutasStorage.some((r) => r !== null) ? ' Las fotos sí quedaron guardadas.' : ''}`,
+      'ocr_fallo',
+    );
   }
 
   // --- 5. Existentes en hato_pesajes_leche, para clasificar el diff --------
@@ -383,7 +432,7 @@ export async function ejecutarPipelinePesajeFoto(params: {
       .select('id, animal_id, fecha, litros_am, litros_pm, litros_total')
       .in('animal_id', animalIdsLeidos)
       .in('fecha', fechasValidas);
-    if (error) return { ok: false, status: 500, error: `No se pudo leer hato_pesajes_leche: ${error.message}` };
+    if (error) return await fallar(500, `No se pudo leer hato_pesajes_leche: ${error.message}`, 'error');
     for (const fila of (data ?? []) as Array<{ id: string; animal_id: string; fecha: string; litros_am: number | null; litros_pm: number | null; litros_total: number }>) {
       if (!existentes.has(fila.animal_id)) existentes.set(fila.animal_id, new Map());
       existentes.get(fila.animal_id)!.set(fila.fecha, {
@@ -398,12 +447,20 @@ export async function ejecutarPipelinePesajeFoto(params: {
   const diff = construirDiffPesaje(ocr.filasConfirmadas, fechasPorSemana, existentes);
   const celdasNoConfiables = ocr.filasConfirmadas.reduce((n, f) => n + f.celdasNoConfiables.length, 0);
 
+  // Celdas con algún litraje leído. Se guarda AHORA, con la fila todavía
+  // `pendiente`: es el número que separa "el OCR no leyó nada" de "leyó y
+  // nadie aprobó", las dos causas que hoy se ven iguales. Un 0 acá es un
+  // cero MEDIDO, no un hueco -- por eso la columna es NULL hasta este punto.
+  const celdasLeidasOcr = diff.filter((c) => c.litrosAm !== null || c.litrosPm !== null).length;
+  await cerrarCapturaFoto({ supabase, capturaId, desenlace: 'pendiente', celdasLeidasOcr });
+
   return {
     ok: true,
     resultado: {
       generadoEn,
       anio,
       mes,
+      capturaId,
       fechasPorSemana,
       diff,
       rosterAnimales: animalesRoster,
@@ -561,8 +618,29 @@ export async function ejecutarCommitPesaje(params: {
   celdas: readonly CeldaCommitPesajeEntrada[];
   createdBy: string;
   fuente: string;
+  /** Fila de `hato_capturas_foto` que abrió esta carga (migración 146).
+   * Opcional: el modo "Ingresar a mano" no pasa por ninguna foto y no
+   * tiene captura que cerrar, y una carga cuyo registro falló trae `null`.
+   * En ambos casos el cierre no hace nada. */
+  capturaId?: string | null;
 }): Promise<ResultadoCommitPesaje> {
   const { supabase, anio, mes, celdas, createdBy, fuente } = params;
+  const capturaId = params.capturaId ?? null;
+
+  /** Cierra la captura con el desenlace de un commit que no escribió. */
+  const fallarCommit = async <T extends ResultadoCommitPesaje>(resultado: T): Promise<T> => {
+    if (!resultado.ok) {
+      await cerrarCapturaFoto({
+        supabase,
+        capturaId,
+        desenlace: 'error',
+        celdasConfirmadas: celdas.length,
+        filasEscritas: 0,
+        detalle: resultado.error,
+      });
+    }
+    return resultado;
+  };
 
   // --- 1. hato_config.dia_pesaje_semanal FRESCO -----------------------------
   const { data: configData, error: configError } = await supabase
@@ -570,14 +648,14 @@ export async function ejecutarCommitPesaje(params: {
     .select('valor')
     .eq('clave', 'dia_pesaje_semanal')
     .maybeSingle();
-  if (configError) return { ok: false, status: 500, error: `No se pudo leer hato_config: ${configError.message}` };
+  if (configError) return await fallarCommit({ ok: false, status: 500, error: `No se pudo leer hato_config: ${configError.message}` });
   const configValor = configData?.valor as { iso?: unknown } | undefined;
   if (!configValor || typeof configValor.iso !== 'number' || configValor.iso < 1 || configValor.iso > 7) {
-    return {
+    return await fallarCommit({
       ok: false,
       status: 500,
       error: 'hato_config.dia_pesaje_semanal no está configurado o tiene un valor inválido (migración 064).',
-    };
+    });
   }
   const fechasValidasHoy = new Set(fechasPesajeMensuales(anio, mes, configValor.iso as number));
 
@@ -589,7 +667,7 @@ export async function ejecutarCommitPesaje(params: {
     .in('id', animalIds)
     .in('etapa', ETAPAS_ROSTER_PESAJE);
   if (animalesError) {
-    return { ok: false, status: 500, error: `No se pudo leer hato_animales: ${animalesError.message}` };
+    return await fallarCommit({ ok: false, status: 500, error: `No se pudo leer hato_animales: ${animalesError.message}` });
   }
   const activasAhora = new Set(
     ((animalesData ?? []) as Array<{ id: string; etapa: string | null; estado: string | null }>)
@@ -614,12 +692,12 @@ export async function ejecutarCommitPesaje(params: {
   }
 
   if (aceptadas.length === 0) {
-    return {
+    return await fallarCommit({
       ok: false,
       status: 400,
       error: 'Ninguna celda pasó la revalidación -- el hato cambió desde la vista previa. No se escribió nada.',
       celdasRechazadas: rechazadas,
-    };
+    });
   }
 
   // --- 4. Existentes FRESCOS -------------------------------------------------
@@ -629,7 +707,7 @@ export async function ejecutarCommitPesaje(params: {
     .select('id, animal_id, fecha')
     .in('animal_id', [...new Set(aceptadas.map((c) => c.animalId))])
     .in('fecha', fechasEnLote);
-  if (existentesError) return { ok: false, status: 500, error: `No se pudo leer hato_pesajes_leche: ${existentesError.message}` };
+  if (existentesError) return await fallarCommit({ ok: false, status: 500, error: `No se pudo leer hato_pesajes_leche: ${existentesError.message}` });
   const idExistentePorClave = new Map<string, string>();
   for (const fila of (existentesData ?? []) as Array<{ id: string; animal_id: string; fecha: string }>) {
     idExistentePorClave.set(`${fila.animal_id}|${fila.fecha}`, fila.id);
@@ -648,7 +726,7 @@ export async function ejecutarCommitPesaje(params: {
         .from('hato_pesajes_leche')
         .update({ litros_am: celda.litrosAm, litros_pm: celda.litrosPm, litros_total: total, fuente })
         .eq('id', existenteId);
-      if (error) return { ok: false, status: 500, error: `No se pudo actualizar el pesaje de '${celda.animalId}' en ${celda.fecha}: ${error.message}` };
+      if (error) return await fallarCommit({ ok: false, status: 500, error: `No se pudo actualizar el pesaje de '${celda.animalId}' en ${celda.fecha}: ${error.message}` });
       actualizados += 1;
     } else {
       nuevasFilas.push({
@@ -665,9 +743,22 @@ export async function ejecutarCommitPesaje(params: {
 
   if (nuevasFilas.length > 0) {
     const { error } = await supabase.from('hato_pesajes_leche').insert(nuevasFilas);
-    if (error) return { ok: false, status: 500, error: `No se pudieron insertar los pesajes nuevos: ${error.message}` };
+    if (error) return await fallarCommit({ ok: false, status: 500, error: `No se pudieron insertar los pesajes nuevos: ${error.message}` });
     creados = nuevasFilas.length;
   }
+
+  // Desenlace REAL de la carga: acá es donde "la foto produjo algo" deja
+  // de ser una conjetura. `celdas_confirmadas` es lo que el humano aprobó y
+  // `filas_escritas` lo que de verdad entró -- si difieren, la diferencia
+  // son las celdas que la revalidación rechazó.
+  await cerrarCapturaFoto({
+    supabase,
+    capturaId,
+    desenlace: 'ok',
+    celdasConfirmadas: celdas.length,
+    filasEscritas: actualizados + creados,
+    detalle: rechazadas.length > 0 ? `${rechazadas.length} celda(s) rechazada(s) en la revalidación.` : null,
+  });
 
   return { ok: true, guardados: actualizados + creados, actualizados, creados, celdasRechazadas: rechazadas };
 }
