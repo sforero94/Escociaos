@@ -31,6 +31,7 @@
 
 import { Context } from 'npm:hono';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { cerrarCapturaFoto, registrarCapturaFoto } from './hato-capturas-foto.ts';
 import { normalizarHojas } from './importHato/normalizar.ts';
 import { construirDiffChequeo, seleccionarUltimoChequeoPorAnimal } from './importHato/diffChequeo.ts';
 import type {
@@ -377,6 +378,31 @@ export async function handleHatoChequeoFoto(c: Context): Promise<Response> {
     }
   }
 
+  // --- 2.b Registrar el INTENTO (hallazgo ESCO-76, migración 146) ----------
+  // Acá y no más abajo a propósito: la foto ya está en Storage y el modelo
+  // TODAVÍA no corrió, así que un fallo del modelo -- el caso que motivó el
+  // hallazgo -- queda registrado igual. Si el registro falla, `capturaId`
+  // es `null` y esta ruta se comporta exactamente como antes.
+  const capturaId = await registrarCapturaFoto({
+    supabase,
+    tipo: 'chequeo',
+    origen: 'web',
+    createdBy: acceso.userId,
+    storage: { bucket: BUCKET_FOTOS, prefijo: prefijoStorage, rutas: rutasStorage, errores: erroresStorage },
+    fotosRecibidas: fotos.length,
+    modelo: MODELO_VISION,
+    // `fecha` solo si un humano la mandó: la foto no trae título confiable
+    // y una fecha leída de la imagen nunca se persiste (ver paso 6).
+    fecha: fechaSolicitada,
+  });
+
+  /** Cierra la captura con un desenlace de fallo y devuelve la respuesta de
+   * error tal cual, para que cada rama de error siga siendo una línea. */
+  const fallar = async (status: 500 | 502, error: string, desenlace: 'ocr_fallo' | 'error'): Promise<Response> => {
+    await cerrarCapturaFoto({ supabase, capturaId, desenlace, detalle: error });
+    return respuestaError(c, status, error);
+  };
+
   // --- 3. Config del motor y vocabulario, leídos de la BD ------------------
   const [configRes, torosRes, rosterRes] = await Promise.all([
     supabase.from('hato_config').select('clave, valor'),
@@ -389,10 +415,10 @@ export async function handleHatoChequeoFoto(c: Context): Promise<Response> {
     supabase.from('v_hato_estado_actual').select('*'),
   ]);
 
-  if (configRes.error) return respuestaError(c, 500, `No se pudo leer hato_config: ${configRes.error.message}`);
-  if (torosRes.error) return respuestaError(c, 500, `No se pudo leer hato_toros: ${torosRes.error.message}`);
+  if (configRes.error) return await fallar(500, `No se pudo leer hato_config: ${configRes.error.message}`, 'error');
+  if (torosRes.error) return await fallar(500, `No se pudo leer hato_toros: ${torosRes.error.message}`, 'error');
   if (rosterRes.error) {
-    return respuestaError(c, 500, `No se pudo leer v_hato_estado_actual: ${rosterRes.error.message}`);
+    return await fallar(500, `No se pudo leer v_hato_estado_actual: ${rosterRes.error.message}`, 'error');
   }
 
   let config;
@@ -440,10 +466,10 @@ export async function handleHatoChequeoFoto(c: Context): Promise<Response> {
   const roster = construirRosterPlanilla(animalesRoster);
 
   if (roster.entradas.length === 0) {
-    return respuestaError(
-      c,
+    return await fallar(
       500,
       'No hay vacas activas con chapeta y nombre en el hato: sin roster no se puede validar el ancla de ninguna fila, y sin esa validación una lectura por foto no es confiable.',
+      'error',
     );
   }
 
@@ -464,12 +490,12 @@ export async function handleHatoChequeoFoto(c: Context): Promise<Response> {
   }
 
   if (lecturas.length === 0) {
-    return respuestaError(
-      c,
+    return await fallar(
       502,
       `No se pudo leer ninguna de las fotos. ${erroresLectura.join(' | ')}${
         rutasStorage.some((r) => r !== null) ? ' Las fotos sí quedaron guardadas.' : ''
       }`,
+      'ocr_fallo',
     );
   }
 
@@ -522,7 +548,7 @@ export async function handleHatoChequeoFoto(c: Context): Promise<Response> {
       // chequeo describe el hato VIVO -- mismo filtro que el preview.
       .eq('estado', 'activa')
       .in('numero', numerosEnHoja);
-    if (error) return respuestaError(c, 500, `No se pudo leer v_hato_estado_actual: ${error.message}`);
+    if (error) return await fallar(500, `No se pudo leer v_hato_estado_actual: ${error.message}`, 'error');
     animales = ((data ?? []) as unknown as HatoEstadoActualRow[]).map((fila) => ({
       id: fila.animal_id,
       numero: fila.numero as number,
@@ -544,7 +570,7 @@ export async function handleHatoChequeoFoto(c: Context): Promise<Response> {
         .in('animal_id', animalIds)
         .range(desde, hasta),
     );
-    if (error) return respuestaError(c, 500, `No se pudo leer hato_chequeo_vacas: ${error.message}`);
+    if (error) return await fallar(500, `No se pudo leer hato_chequeo_vacas: ${error.message}`, 'error');
     historico = (data ?? []).map((fila: Record<string, unknown>) => {
       const chequeo = fila.hato_chequeos as { fecha: string } | { fecha: string }[] | null;
       const fecha = Array.isArray(chequeo) ? chequeo[0]?.fecha : chequeo?.fecha;
@@ -569,11 +595,25 @@ export async function handleHatoChequeoFoto(c: Context): Promise<Response> {
 
   const celdasNoConfiables = ocr.filasConfirmadas.reduce((n, f) => n + f.celdasNoConfiables.length, 0);
 
+  // Filas que el OCR ancló contra el roster. Se guarda con la captura
+  // todavía `pendiente`: es el número que separa "el OCR no leyó nada" de
+  // "leyó y nadie aprobó", las dos causas que hoy se ven iguales. Un 0 acá
+  // es un cero MEDIDO, no un hueco.
+  await cerrarCapturaFoto({
+    supabase,
+    capturaId,
+    desenlace: 'pendiente',
+    celdasLeidasOcr: ocr.filasConfirmadas.length,
+  });
+
   // --- 8. Respuesta: misma forma que el preview + confianza ----------------
   return c.json({
     success: true,
     archivo: ARCHIVO_LOGICO,
     generadoEn,
+    // Viaja al commit, que cierra la fila con el desenlace real. Ausente en
+    // la ruta `.xlsx` (`/hato/chequeo/preview`), que no guarda ninguna foto.
+    capturaId,
     chequeoFecha: fechaSolicitada,
     chequeoFechaSugerida,
     hojas: salida.hojas,

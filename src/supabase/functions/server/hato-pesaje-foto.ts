@@ -182,7 +182,19 @@ export async function handleHatoPesajeFoto(c: Context): Promise<Response> {
   }
 
   // --- 2. Pipeline compartido con el bot de Telegram (N11) ------------------
-  const resultado = await ejecutarPipelinePesajeFoto({ supabase, apiKey, fotos, anio, mes });
+  // `origen`/`createdBy` alimentan el registro del intento
+  // (`hato_capturas_foto`, migración 146): el pipeline lo inserta como
+  // `pendiente` apenas guarda la foto y ANTES de llamar al modelo, así que
+  // un fallo del OCR queda registrado igual. Ver `hato-capturas-foto.ts`.
+  const resultado = await ejecutarPipelinePesajeFoto({
+    supabase,
+    apiKey,
+    fotos,
+    anio,
+    mes,
+    origen: 'web',
+    createdBy: acceso.userId,
+  });
   if (!resultado.ok) {
     return respuestaError(c, resultado.status, resultado.error);
   }
@@ -193,6 +205,8 @@ export async function handleHatoPesajeFoto(c: Context): Promise<Response> {
     generadoEn: resultado.resultado.generadoEn,
     anio: resultado.resultado.anio,
     mes: resultado.resultado.mes,
+    // Viaja al commit, que cierra la fila con el desenlace real.
+    capturaId: resultado.resultado.capturaId,
     fechasPorSemana: resultado.resultado.fechasPorSemana,
     diff: resultado.resultado.diff,
     ocr: resultado.resultado.ocr,

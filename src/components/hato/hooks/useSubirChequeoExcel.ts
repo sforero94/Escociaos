@@ -36,6 +36,11 @@ export interface PreviewChequeoRespuesta {
   success: true;
   archivo: string;
   generadoEn: string;
+  /** SOLO en la ruta por FOTO: fila de `hato_capturas_foto` (migración 146)
+   * que registra ESE intento de carga. Viaja de vuelta en el commit, que la
+   * cierra con el desenlace real. Ausente/`null` en la ruta `.xlsx`, que no
+   * guarda ninguna foto y no tiene captura que cerrar. */
+  capturaId?: string | null;
   /** Fecha del chequeo resuelta del manifiesto (`null` si no se pudo
    * resolver) -- precarga `chequeo.fecha` del commit sin que el cliente
    * tenga que re-derivarla. */
@@ -269,6 +274,8 @@ export function useSubirChequeoExcel() {
             generadoEn: resultado.generadoEn,
             chequeo: { fecha: fechaChequeo, veterinario: veterinario ?? null },
             filas: filasAprobables,
+            // Solo la ruta por foto trae una captura que cerrar.
+            capturaId: resultado.capturaId ?? null,
           }),
         });
 

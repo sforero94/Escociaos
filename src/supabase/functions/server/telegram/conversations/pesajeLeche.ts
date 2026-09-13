@@ -381,7 +381,19 @@ export async function pesajeLecheConversation(
         const bytes = await descargarBytesTelegram(fotos[i].fileId, botToken);
         fotosEntrada.push({ pagina: i + 1, nombre: fotos[i].nombre, tipo: fotos[i].tipo, bytes });
       }
-      return await ejecutarPipelinePesajeFoto({ supabase: sb, apiKey, fotos: fotosEntrada, anio: anioFinal, mes: mesFinal });
+      // `origen: 'telegram'` + `createdBy` alimentan el registro del intento
+      // (`hato_capturas_foto`, migración 146): este es el MISMO pipeline que
+      // usa el endpoint web, así que sin declarar el origen las dos vías
+      // quedarían indistinguibles en el registro.
+      return await ejecutarPipelinePesajeFoto({
+        supabase: sb,
+        apiKey,
+        fotos: fotosEntrada,
+        anio: anioFinal,
+        mes: mesFinal,
+        origen: "telegram",
+        createdBy: usuarioId,
+      });
     });
 
     if (!lectura.ok) {
@@ -491,6 +503,8 @@ export async function pesajeLecheConversation(
         celdas: celdasParaGuardar,
         createdBy: usuarioId,
         fuente: "telegram",
+        // Cierra la fila que abrió el pipeline al subir la foto.
+        capturaId: lectura.resultado.capturaId,
       });
     });
 

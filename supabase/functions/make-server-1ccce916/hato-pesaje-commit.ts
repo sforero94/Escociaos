@@ -84,9 +84,13 @@ interface BodyCommitPesaje {
   anio?: number;
   mes?: number;
   celdas?: Array<Partial<CeldaDiffPesaje>>;
+  /** Fila de `hato_capturas_foto` que abrió esta carga (migración 146),
+   * devuelta por `/hato/pesaje/foto`. Ausente en el modo "Ingresar a
+   * mano", que no pasa por ninguna foto: ahí no hay captura que cerrar. */
+  capturaId?: string | null;
 }
 
-function validarBody(body: unknown): { anio: number; mes: number; celdas: CeldaCommitPesajeEntrada[] } | { error: string } {
+function validarBody(body: unknown): { anio: number; mes: number; celdas: CeldaCommitPesajeEntrada[]; capturaId: string | null } | { error: string } {
   if (typeof body !== 'object' || body === null) {
     return { error: 'El cuerpo de la solicitud debe ser un objeto JSON.' };
   }
@@ -120,7 +124,9 @@ function validarBody(body: unknown): { anio: number; mes: number; celdas: CeldaC
     return { error: 'Ninguna de las celdas enviadas trae AM o PM -- no hay litros que guardar.' };
   }
 
-  return { anio: b.anio as number, mes: b.mes as number, celdas };
+  const capturaId = typeof b.capturaId === 'string' && b.capturaId.trim() !== '' ? b.capturaId.trim() : null;
+
+  return { anio: b.anio as number, mes: b.mes as number, celdas, capturaId };
 }
 
 // ---------------------------------------------------------------------------
@@ -144,7 +150,7 @@ export async function handleHatoPesajeCommit(c: Context): Promise<Response> {
   }
   const validado = validarBody(body);
   if ('error' in validado) return respuestaError(c, 400, { error: validado.error });
-  const { anio, mes, celdas } = validado;
+  const { anio, mes, celdas, capturaId } = validado;
 
   // --- 2. Revalidación + escritura, compartida con el bot (N13) -------------
   const resultado = await ejecutarCommitPesaje({
@@ -154,6 +160,7 @@ export async function handleHatoPesajeCommit(c: Context): Promise<Response> {
     celdas,
     createdBy: acceso.userId,
     fuente: 'foto',
+    capturaId,
   });
 
   if (!resultado.ok) {

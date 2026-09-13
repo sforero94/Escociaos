@@ -63,6 +63,12 @@ export interface PreviewPesajeRespuesta {
   generadoEn: string;
   anio: number;
   mes: number;
+  /** Fila de `hato_capturas_foto` (migración 146) que registra ESTE intento
+   * de carga. Viaja de vuelta en el commit, que la cierra con el desenlace
+   * real. `null` en el modo "Ingresar a mano" (no hay foto que registrar) y
+   * cuando el registro del intento falló -- en los dos casos el flujo sigue
+   * igual, solo se pierde la traza. */
+  capturaId: string | null;
   fechasPorSemana: Record<SemanaPesaje, string | null>;
   diff: CeldaDiffPesaje[];
   ocr: ReporteOcrPesaje;
@@ -161,7 +167,12 @@ export function useSubirPesajeFoto() {
   /** Aprueba las celdas que el usuario confirmó (posiblemente corregidas a
    * mano, D-6) -- nunca reenvía la foto. `anio`/`mes` viajan de nuevo porque
    * el commit revalida `hato_config.dia_pesaje_semanal` en fresco (puede
-   * haber cambiado desde la vista previa). */
+   * haber cambiado desde la vista previa).
+   *
+   * `capturaId` sale del estado (`resultado`), no de un parámetro nuevo: es
+   * el mismo intento que abrió esta vista previa y el llamador no tiene por
+   * qué acarrearlo. En el modo manual es `null` y el servidor no cierra
+   * ninguna fila. */
   const comprometer = useCallback(async (celdas: CeldaParaCommit[], anio: number, mes: number) => {
     if (celdas.length === 0) throw new Error('No hay celdas para aprobar.');
 
@@ -173,7 +184,7 @@ export function useSubirPesajeFoto() {
       const res = await fetch(`${EDGE_FUNCTION_BASE}/make-server-1ccce916/hato/pesaje/commit`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ anio, mes, celdas }),
+        body: JSON.stringify({ anio, mes, celdas, capturaId: resultado?.capturaId ?? null }),
       });
 
       const resultadoCuerpo = await leerCuerpoEdgeFunction<CommitPesajeRespuesta & { error?: string }>(res);
@@ -193,7 +204,7 @@ export function useSubirPesajeFoto() {
     } finally {
       setComprometiendo(false);
     }
-  }, []);
+  }, [resultado]);
 
   /** Modo "Ingresar a mano" (UI rework de Producción, 2026-08-06) -- arma la
    * MISMA forma de `resultado` que devuelve `subirFotos`, pero con el diff
@@ -216,6 +227,8 @@ export function useSubirPesajeFoto() {
       generadoEn: new Date().toISOString(),
       anio,
       mes,
+      // Sin foto no hay captura que registrar ni que cerrar.
+      capturaId: null,
       fechasPorSemana,
       diff,
       ocr: {
