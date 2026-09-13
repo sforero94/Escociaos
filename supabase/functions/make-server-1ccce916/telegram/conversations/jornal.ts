@@ -63,6 +63,18 @@ function calcContratistaCost(tarifaJornal: number, fraccion: number): number {
   return Math.round(tarifaJornal * fraccion * 100) / 100;
 }
 
+// valor_jornal_empleado = la tarifa de UN jornal completo, nunca el salario mensual
+// crudo ni la fracción trabajada (eso es calcEmpleadoCost). Hallazgo #45 de la
+// operación de mantenimiento: esta columna guardaba el salario mensual, ~30 veces
+// el valor real de un jornal.
+function calcValorJornalEmpleado(
+  salario: number,
+  prestaciones: number,
+  auxilios: number,
+): number {
+  return Math.round(((salario + prestaciones + auxilios) / DIAS_LABORALES_MES) * 100) / 100;
+}
+
 // ---------------------------------------------------------------------------
 // Date helpers
 // ---------------------------------------------------------------------------
@@ -767,7 +779,9 @@ export async function jornalConversation(
         fecha_trabajo: fechaISO,
         fraccion_jornal: fraccion,
         observaciones: observaciones,
-        valor_jornal_empleado: isEmp ? (w.salario ?? 0) : null,
+        valor_jornal_empleado: isEmp
+          ? calcValorJornalEmpleado(w.salario ?? 0, w.prestaciones_sociales ?? 0, w.auxilios_no_salariales ?? 0)
+          : null,
         costo_jornal: costoJornal,
       };
     });
@@ -838,7 +852,9 @@ export async function jornalConversation(
           fecha_trabajo: fechaISO,
           fraccion_jornal: fraccion,
           observaciones: observaciones,
-          valor_jornal_empleado: isEmp ? (w.salario ?? 0) : null,
+          valor_jornal_empleado: isEmp
+            ? calcValorJornalEmpleado(w.salario ?? 0, w.prestaciones_sociales ?? 0, w.auxilios_no_salariales ?? 0)
+            : null,
           costo_jornal: costoJornal,
         };
       });
