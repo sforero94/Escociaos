@@ -379,17 +379,116 @@ es exactamente el caso de uso que justifica la corrida del jueves.**
 Esta es **la** lista. No duplicar en los briefs. Si un nombre no resuelve, es un P1
 contra la operacion y la especialidad que dependia de el va bajo NO CORRIO.
 
+**OBSOLETA desde el 2026-09-14 — ver la seccion "Migracion a Composio..." mas
+abajo para la tabla vigente.** Se deja la version anterior por historia:
+
 | Conector | Tools |
 |---|---|
-| `Supabase` (solo lectura, `1e08d12f-…`) | `execute_sql` · `list_tables` · `list_migrations` · `list_extensions` · `get_advisors` · **`query_logs`** · `list_edge_functions` · `get_edge_function` · `get_project_url` · `generate_typescript_types` · `list_branches` · `search_docs` |
-| `Supabase_Escritura` (`1eeabe38-…`) | `apply_migration` — y nada mas, a proposito |
-| `Notion` (`af1e5776-…`) | `notion-search` · `notion-fetch` · `notion-query-data-sources` · `notion-get-users` · `notion-get-comments` · `notion-create-pages` · `notion-update-page` · `notion-create-comment` |
-| `Composio` (`2982c4d2-…`) | `COMPOSIO_SEARCH_TOOLS` · `COMPOSIO_GET_TOOL_SCHEMAS` · `COMPOSIO_MULTI_EXECUTE_TOOL` — **solo para leer Vercel**, slugs `VERCEL_GET_*`. Sin `REMOTE_BASH`/`REMOTE_WORKBENCH`/`MANAGE_CONNECTIONS`, a proposito |
-| `Vercel` directo (`159f73fd-…`) | **retirado.** Estaba autenticado como `thinksid`, que no ve el proyecto — 6 corridas de ruido. Si alguna vez se re-autentica con la cuenta personal, es el camino *preferible*: sus 10 tools de lectura acotan el radio mecanicamente, cosa que Composio no hace |
+| ~~`Supabase` (solo lectura, `1e08d12f-…`)~~ | ~~`execute_sql` · `list_tables` · `list_migrations` · `list_extensions` · `get_advisors` · `query_logs` · `list_edge_functions` · `get_edge_function` · `get_project_url` · `generate_typescript_types` · `list_branches` · `search_docs`~~ **retirado 2026-09-14, ver abajo** |
+| `Supabase_Escritura` (`1eeabe38-…`) | `apply_migration` — y nada mas, a proposito. **SIN CAMBIOS el 2026-09-14** |
+| ~~`Notion` (`af1e5776-…`)~~ | ~~`notion-search` · `notion-fetch` · `notion-query-data-sources` · `notion-get-users` · `notion-get-comments` · `notion-create-pages` · `notion-update-page` · `notion-create-comment`~~ **retirado 2026-09-14, ver abajo** |
+| `Composio` (`2982c4d2-…`) | `COMPOSIO_SEARCH_TOOLS` · `COMPOSIO_GET_TOOL_SCHEMAS` · `COMPOSIO_MULTI_EXECUTE_TOOL` — desde 2026-09-14 tambien lee Supabase y Notion, no solo Vercel. Sin `REMOTE_BASH`/`REMOTE_WORKBENCH`/`MANAGE_CONNECTIONS`, a proposito (aunque `MANAGE_CONNECTIONS action:list` es de solo lectura y valdria la pena sumarlo al preflight — pendiente) |
+| `Vercel` directo (`159f73fd-…`) | **retirado.** Estaba autenticado como `thinksid`, que no ve el proyecto — 6 corridas de ruido |
 
 **El nombre del tool va como lo expone el conector, sin prefijo.** `get_logs` **NO
 existe** y costo dos corridas enteras; el real es `query_logs`.
 `notion-query-database-view` esta deprecado y se quito de la allowlist.
+
+## Migracion a Composio para Supabase-lectura y Notion (2026-09-14, sesion interactiva)
+
+Decision de Santiago, fuera del ciclo normal de corridas: consolidar los
+conectores de la operacion sobre Composio, que ya es el camino general para
+conectores nuevos (ver `~/.claude/CLAUDE.md`, seccion Connectors). Verificado
+en vivo antes de tocar nada — **las tres rutinas estaban SANAS** (las tres
+corrieron con exito esta semana, `Supabase` y `Notion` directos funcionando) —
+asi que esto es consolidacion deliberada, no reparacion de una rotura.
+
+**Lo que cambio en las tres rutinas (`RemoteTrigger update`, verificado
+despues con `RemoteTrigger get`):**
+- Se **quito** el conector `Supabase` directo (`1e08d12f-…`). Lecturas de
+  Supabase ahora van por Composio, `tool_slug: SUPABASE_RUN_READ_ONLY_QUERY`,
+  `account: supabase_bitis-coward` (alias `escocia-os`). Verificado en vivo:
+  `SELECT current_user, now()` devuelve `supabase_read_only_user` — la misma
+  garantia mecanica que el conector directo (Supabase la impone del lado del
+  servidor, no es una regla de prompt).
+- Se **quito** el conector `Notion` directo (`af1e5776-…`). Lecturas/escrituras
+  de Notion ahora van por Composio, `account: notion_awork-knit` (alias
+  `thinksid`). Verificado: `NOTION_SEARCH_NOTION_PAGE` encuentra la base
+  "Escocia OS — Mantenimiento", id `c52d9258-fed7-466d-8e70-0fa92980d3df`
+  (**ojo: es un UUID de base de datos plano, NO el id `collection://…` que
+  usaba `notion-query-data-sources` del conector viejo** — son dos sistemas de
+  ids distintos para el mismo objeto).
+- **`Supabase_Escritura` (`1eeabe38-…`) NO se toco.** Sigue siendo el unico
+  camino de escritura, `apply_migration` y nada mas, `always_ask` en
+  lunes/jueves y `always_allow` en viernes. Ver el porque abajo.
+- El conector `Composio` (`2982c4d2-…`) tampoco cambio de configuracion — ya
+  tenia los 3 meta-tools en `always_allow`; lo que cambia es que Supabase-lectura
+  y Notion ahora tambien pasan por el.
+- `job_config` de lunes y jueves: se corrigio la unica frase que nombraba el
+  conector retirado ("through the read-only `Supabase` connector" →
+  "through Composio (`SUPABASE_RUN_READ_ONLY_QUERY`, account `escocia-os`)").
+  Viernes no nombraba el conector por nombre, no necesito cambio.
+
+**Por que `Supabase_Escritura` se dejo AFUERA de la migracion — la decision
+central de la sesion.** Composio si tiene un tool de escritura acotado
+(`SUPABASE_APPLY_A_MIGRATION`, distinto de `SUPABASE_BETA_RUN_SQL_QUERY`, el
+ejecutor generico), pero **la politica `permitted_tools`/`tool_policy_overrides`
+de la rutina opera sobre el nombre PELADO del tool MCP — `COMPOSIO_MULTI_EXECUTE_TOOL`
+— nunca sobre el `tool_slug` que viaja adentro como argumento JSON.** O sea que
+`always_ask` en lunes/jueves no puede aplicarse a "aplicar una migracion via
+Composio" sin aplicarse tambien a "leer via Composio", porque desde la capa de
+permisos de la rutina son el MISMO tool. Mover la escritura a Composio habria
+dejado lunes y jueves **mecanicamente capaces** de aplicar una migracion — hoy
+NO lo son, porque `Supabase_Escritura` en `always_ask` bloquea cualquier intento
+en una corrida desatendida. Santiago vio el tradeoff explicito (via
+`AskUserQuestion`, dos preguntas) y eligio conservar `Supabase_Escritura` como
+la unica excepcion — **exactamente el mismo tipo de riesgo que ya se acepto para
+Vercel el 2026-08-21** (`COMPOSIO_MULTI_EXECUTE_TOOL` es generico y ya podia
+alcanzar cualquier toolkit conectado, Supabase incluido — este riesgo YA
+estaba latente desde esa fecha, esta migracion no lo crea, lo hace explicito
+para lecturas y lo evita a proposito para escrituras).
+
+**Slugs pineados (verificados 2026-09-14):**
+- Lectura Supabase: `SUPABASE_RUN_READ_ONLY_QUERY` (`ref`+`query`, corre como
+  `supabase_read_only_user`). Relacionados: `SUPABASE_LIST_TABLES`,
+  `SUPABASE_LIST_ALL_PROJECTS`, `SUPABASE_GET_TABLE_SCHEMAS`,
+  `SUPABASE_GET_PROJECT_LOGS` (reemplaza `query_logs`),
+  `SUPABASE_GET_SECURITY_ADVISORS` (reemplaza `get_advisors`; su propia
+  descripcion dice "deprecated, may be removed"), `SUPABASE_LIST_MIGRATION_HISTORY`
+  (reemplaza `list_migrations`).
+- **PROHIBIDO en cualquier fase: `SUPABASE_BETA_RUN_SQL_QUERY`.** Ejecutor
+  generico, sin enforcement de solo-lectura, alcanzable por el mismo camino
+  que el tool seguro. Ver §6 del CLAUDE.md de la operacion.
+- Notion: `NOTION_SEARCH_NOTION_PAGE`, `NOTION_FETCH_DATABASE`,
+  `NOTION_QUERY_DATABASE_WITH_FILTER`, `NOTION_INSERT_ROW_DATABASE`,
+  `NOTION_UPDATE_ROW_DATABASE`. La propiedad `Estado` es tipo `status` en el
+  esquema real (no `select`) — pasar `type: "status"` al escribir.
+
+**Trampa de cuentas — nueva, especifica de Supabase.** Composio tiene **TRES**
+cuentas Supabase conectadas: `supabase_varve-mentor` (alias `sforero94`, **es
+la `is_default: true`**), `supabase_hiller-jass` (alias `quickcook`),
+`supabase_bitis-coward` (alias `escocia-os`, la correcta — **NO es la
+default**). Llamar sin `account` explicito usa `sforero94`, que es una cuenta
+personal distinta. Comprobacion de una linea antes de confiar en cualquier
+lectura: `SUPABASE_LIST_ALL_PROJECTS` con `account: supabase_bitis-coward`
+tiene que devolver exactamente 1 proyecto, `name: "Escocia OS"`,
+`ref: ywhtjwawnkeqlwxbvgup`. Notion tiene una trampa mas leve: DOS cuentas
+(`notion_awork-knit` alias `thinksid`, default; `notion_triact-lord`, sin
+alias) pero son el mismo workspace/integracion — redundantes, no conflictivas
+— usar la default por consistencia, no hace falta pinear.
+
+**Estado 2026-09-14: cableado y verificado en las tres rutinas.** Confirmado
+por `RemoteTrigger get` en las tres despues del update: `mcp_connections` con
+2 entradas (`Supabase_Escritura` sin cambios, `Composio` sin cambios de config),
+`Supabase` y `Notion` directos ausentes. `job_config` de lunes/jueves con la
+frase corregida; viernes sin tocar. Prueba de humo antes de aplicar: la misma
+query de solo-lectura y la misma busqueda de Notion que se usaron para
+verificar tambien corrieron desde esta sesion interactiva contra las cuentas
+pineadas, con resultado correcto los dos.
+
+**Actualizar tambien si esto se vuelve a tocar**: `memory/po-routines-mecanica-edicion.md`
+(mecanica de `RemoteTrigger`, ya tiene su propia entrada 2026-09-14) y
+`escociaos-po/CLAUDE.md` §4/§6/§12 (ya actualizados en el mismo cambio).
 
 ## Estado de la operacion (corrida 2026-08-24-lunes)
 - Ultima corrida: **2026-08-24-lunes** (barrido semanal, roster de 6). Modo: **full write · Notion OPERATIVO**.
