@@ -1561,3 +1561,37 @@ producir fila porque **no existe ninguna tabla de liquidaciones**), dos cifras s
 corrigieron (143 y no 142; denominador ~39 y no 35 ni 65 — **dos agentes distintos dieron
 dos números distintos y los dos estaban mal**) y dos hallazgos se agravaron. **Verificar no
 es votar sí o no: es reescribir la afirmación.**
+
+### CAUSA RAIZ 2026-09-14 (sesion en vivo) — EL CARRIL edge-runtime -> PostgREST, no la plataforma entera
+La hipotesis cruzada de esta manana (un problema de plataforma, tres sintomas) quedo
+**CONFIRMADA con una correccion que importa**: el fallo esta **confinado a las peticiones que
+nacen en el Edge Runtime**. Partir `edge_logs` por User-Agent es lo que lo decide, y es la
+consulta que hay que guardar:
+
+```sql
+select case when log_attributes['request.headers.user_agent'] like 'Deno/%' then 'edge-runtime'
+            when log_attributes['request.headers.user_agent'] like 'Mozilla/%' then 'browser'
+            else 'otro' end as origen,
+       log_attributes['response.status_code'] as status, count(*)
+from logs where source='edge_logs' and log_attributes['request.url'] like '%/rest/v1/%'
+group by 1,2;
+```
+Resultado 2026-09-13T12:00Z -> 09-14T12:00Z: **navegador 263 peticiones / 0 fallos**;
+**edge-runtime 416 / 153 fallos (36,8%)**, 152 de ellos `504`. Mismo PostgREST, misma ventana.
+`source='postgrest_logs'` lo nombra: `Warp server error: Thread killed by timeout manager`.
+
+**LA LECCION DE METODO: «la base esta ociosa, luego es la plataforma» es una conclusion
+DEMASIADO ANCHA.** Antes de escribir «el gateway esta caido», partir el trafico por ORIGEN.
+Si el navegador esta limpio, la aplicacion web funciona perfecta mientras los crons se
+desangran — y el ticket de soporte que hay que abrir es otro completamente distinto.
+
+**COROLARIO QUE EXPLICA POR QUE UNOS ENDPOINTS CAEN Y OTROS NO: cuenta las llamadas
+SECUENCIALES a PostgREST antes de la primera escritura.** Con p=0,63 por llamada:
+`/clima/sync` hace 1 (sobrevive ~60%, y se midio 49,7% de fallo), el tick del hato hace
+**9** (`hato-alertas-tick.ts` 252, 267, 281, 308, 346, 356, 391, 437, 449) -> 0,63^9 ~ **2%**,
+tres dias sin completarse. `acciones/tick` habla sobre todo con OpenRouter y respondio 200.
+**La fragilidad de un endpoint ante un carril con perdidas es exponencial en su numero de
+round-trips, no lineal.**
+
+**PALANCA DEL LADO DEL CLIENTE**: Dashboard -> Settings -> General -> Restart project (recicla
+PostgREST/Kong). Solo la puede accionar Santiago.

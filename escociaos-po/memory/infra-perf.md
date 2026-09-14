@@ -467,3 +467,24 @@ No es fallo de allowlist y no se vuelve a filar.**
 - **Consulta de aplicación más lenta: ninguna.** El top por media son las consultas del
   propio barrido contra `cron.job_run_details` (~19 MB) — **descontarla del top** como ya se
   descuenta `pg_net`.
+
+### 2026-09-14 (sesion en vivo) — la causa raiz, y DOS refutaciones de lo filado esta manana
+- **El fallo es del carril edge-runtime -> PostgREST, NO de la plataforma entera.** Navegador
+  263 peticiones / 0 fallos contra edge-runtime 416 / 153 fallos en la misma ventana. Ver la
+  consulta canonica en `_compartida.md`. **Partir `edge_logs` por User-Agent antes de culpar
+  al gateway.**
+- **REFUTADA la serie de duracion del tick del hato como sintoma de degradacion.** `duracion_ms`
+  no sigue al volumen de datos sino a los **mensajes de Telegram** (~280 ms por `sendMessage`
+  secuencial): 09-07 = 108 mensajes / 31.054 ms; 09-11 = **3 mensajes / 3.293 ms**.
+  `animales_evaluados` es **179 en las 18 corridas** y no se mueve. **El dia antes de la caida
+  el tick corrio en 3,3 s.** La lectura de «degradacion lenta que termino en caida dura», que
+  el verificador de la manana dio por buena, es falsa.
+- **REFUTADO el diagnostico de que un INSERT de una fila tarda >6 s.** La base esta sana:
+  `v_hato_estado_actual`, la lectura mas pesada del tick, corre en **123 ms** (`EXPLAIN ANALYZE`,
+  796 buffers, todos aciertos). 22 conexiones, 1 activa, transaccion mas larga 00:00:00.
+  **Un ticket de soporte redactado como «INSERT lento» manda a Supabase a mirar la base, que
+  esta bien.** El sintoma que se reporta es el reparto navegador-contra-edge-runtime.
+- **Un handler que devuelve error sin registrarlo es invisible tres dias.**
+  `respuestaError` de `hato-alertas-tick.ts` descarta el mensaje, y `registrarCorridaTick` es
+  la ULTIMA sentencia — asi que un fallo temprano no deja ni log ni fila. **Al auditar un
+  endpoint, mirar si su camino de error escribe algo ANTES de confiar en el silencio.**
